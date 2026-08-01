@@ -2,11 +2,12 @@
 
 <!-- Written at ship time by $gsd-path-review final. The archive's table of
      contents: a future audit must be able to reconstruct the milestone
-     from this file. Append-only once written. -->
+     from this file. Append-only once written. The validator requires
+     "Final verdict:" to be exactly the string shown below. -->
 
 Milestone: <name>
 Shipped: <date>
-Final verdict: <all criteria met; project verify passed — one line>
+Final verdict: all criteria met; project verify passed
 Waves: <n>  Tasks: <n> done / <n> total  Review cycles used: <per wave, e.g. 1/2/1>
 Carried forward: <none, or "N DOCS-AUDIT ruling(s)">
 

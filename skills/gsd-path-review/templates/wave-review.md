@@ -1,9 +1,11 @@
 # Review — wave <N>, cycle <C>
 
-<!-- Written by the reviewer role in wave mode. File: wave-N.cycleC.md -->
+<!-- Written by the reviewer role in wave mode. File: wave-N.cycleC.md.
+     Keep validated fields on their own lines: Cycle holds only the number
+     (C > 1 means re-review after fixes; see previous cycle file). -->
 
 Wave verdict: <pass | blocked — blocked if any task fails>
-Cycle: <C>          <!-- C > 1: re-review after fixes; see previous cycle file -->
+Cycle: <C>
 Tasks reviewed: <count>
 
 ## T001 — <title>: <pass | fail>
