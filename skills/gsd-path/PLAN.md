@@ -50,9 +50,8 @@ a plan wholesale without the user seeing the list.
 1. Read the local [plan template](templates/plan.md) and
    [task template](templates/task.md); resolve both to absolute paths.
 2. Read the local [planner role](references/planner.md), then follow the
-   shared [Codex dispatch contract](references/dispatch.md) with built-in
-   `agent_type: default`, `fork_turns: "none"`, and deterministic
-   `task_name: plan`. Give it absolute role, input, template, and output paths.
+   local [runtime dispatch contract](references/dispatch.md) with deterministic
+   logical task name `plan`. Give it absolute role, input, template, and output paths.
    The outputs are exactly `.project/plan/PLAN.md` and one task
    file per task at `.project/tasks/T###-slug.md` — no other location is
    canonical, and `.project/PLAN.md` is never written.
@@ -73,7 +72,8 @@ a plan wholesale without the user seeing the list.
      that match the existing codebase.
    - Prove every intent constraint and synthesis decision is covered, and that
      no scope-out veto appears in a task.
-4. Send all gate failures to the same planner in one corrective follow-up.
+4. Redispatch one complete corrected brief under logical task name `plan`,
+   following the runtime dispatch contract and including all gate failures.
    Allow one revision round. If it still fails, set STATE.md to
    `phase: plan`, `status: blocked`, append the failures to its log, surface
    them, and stop.
@@ -111,8 +111,8 @@ unruled findings → send them back for rulings first.
 1. Set STATE.md `phase: plan`, `status: active` and note the patch reopening in
    the state log. A shipped milestone cannot reopen because its plan is
    archived; start a new milestone instead.
-2. Dispatch the planner per the standard contract with deterministic
-   `task_name: plan_patch`, adding: the findings
+2. Dispatch the planner per the standard contract with deterministic logical
+   task name `plan_patch`, adding: the findings
    source paths and selected rows, the existing PLAN.md and task files, and the instruction to
    append wave W+1 (highest existing wave + 1) without modifying completed
    waves or existing tasks. One task per accepted finding, carrying the

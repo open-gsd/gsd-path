@@ -18,15 +18,15 @@ Require `pipeline: gsd-path/v1` in `.project/STATE.md`; a missing or different
 marker returns to `$gsd-path` for ownership checking. Read the local
 [reviewer role](references/reviewer.md) and
 [dispatch contract](references/dispatch.md), resolve them to absolute paths,
-and use built-in `agent_type: default` with `fork_turns: "none"`.
+and follow that runtime-specific dispatch contract.
 
 ## Wave mode
 
 1. Require STATE `build/active`, a wave number, and review cycle 1 unless the
    caller supplies C. Any other phase blocks rather than rewinding state.
 2. Resolve the local [wave-review template](templates/wave-review.md).
-3. Spawn one reviewer with deterministic
-   `task_name: review_wave_<wave>_cycle_<cycle>`, mode `wave`, the wave and
+3. Spawn one reviewer with deterministic logical task name
+   `review_wave_<wave>_cycle_<cycle>`, mode `wave`, the wave and
    cycle, exact repository root, and every task-file path in the wave. Each
    task must carry valid full `base` and `commit` SHAs. Before dispatch, the
    orchestrator creates one disposable detached worktree at each task base and
@@ -70,9 +70,10 @@ blocks without mutation. Otherwise:
    [gap-review template](templates/gap-review.md).
 3. Dispatch through the shared capacity-aware contract at the exact reviewed
    HEAD:
-   - one integration reviewer with `task_name: review_final`, writing only
+   - one integration reviewer with logical task name `review_final`, writing only
      `.project/review/FINAL.md`;
-   - one reviewer per numbered risk with `task_name: review_gap_<number>`, each
+   - one reviewer per numbered risk with logical task name
+     `review_gap_<number>`, each
      writing only `.project/review/final-gap-N.md`.
    Before dispatch, the orchestrator creates a distinct disposable detached
    worktree at exact reviewed HEAD for each reviewer and supplies its path.
@@ -84,8 +85,9 @@ blocks without mutation. Otherwise:
    HEAD, and each numbered gap heading and Risk value must match its dispatch
    risk. Re-run PLAN.md's project Verify in a fresh disposable detached
    worktree at that same exact HEAD.
-5. Give a missing or invalid reviewer artifact one corrective follow-up to its
-   same deterministic target. If it remains invalid, set `review/blocked` with
+5. Redispatch one complete corrected brief for a missing or invalid reviewer
+   artifact under the same logical task name, following the runtime dispatch
+   contract. If it remains invalid, set `review/blocked` with
    the exact contract failure and a `NEEDS-USER` dispatch-failure entry, then
    stop; do not invent a patch finding. A
    failed orchestrator Verify must agree with the mandatory project-Verify gap

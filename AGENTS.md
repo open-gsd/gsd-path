@@ -28,11 +28,11 @@ If two sources disagree, stop and surface the conflict. Never average.
   `pipeline: gsd-path/v1`; never consume an ambiguous or differently owned
   state file. Artifacts outrank summaries; reconcile STATE.md or BOARD.md when
   they disagree.
-- Spawned agents have isolated context. Brief them with exact input and output
-  paths, constraints, a deterministic `task_name`, explicit built-in agent
-  type, `fork_turns: "none"`, and a bounded responsibility. Independent briefs
-  may run in parallel up to available child capacity; dependencies run in
-  layers.
+- Spawned agents have isolated context. Follow the installed runtime dispatch
+  contract and brief them with exact input and output paths, constraints, a
+  deterministic logical task name, and a bounded responsibility. Independent
+  briefs may run in parallel up to available child capacity; dependencies run
+  in layers.
 
 ## Evidence and honesty
 
@@ -116,7 +116,7 @@ or STATE.md.
 
 | Path | Purpose |
 |------|---------|
-| `skills/` | Nine `$gsd-path*` skills |
+| `skills/` | Nine `gsd-path*` skills |
 | `skills/gsd-path/templates/` | Required artifact formats |
 | `skills/gsd-path/references/` | Agent role and dispatch contracts |
 | `WORKFLOW.md` | Phase-by-phase SOP |

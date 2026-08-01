@@ -1,18 +1,18 @@
 # WORKFLOW.md — GSD Path Pipeline SOP
 
-Idea to shipped code in six gated phases. `$gsd-path` reads
+Idea to shipped code in six gated phases. The `gsd-path` router reads
 `.project/STATE.md`, reports the current state, and invokes the next skill.
 Every handoff is on disk; AGENTS.md supplies the shared operating rules.
 
 ## Agent and concurrency contract
 
-Use Codex's built-in `default` and `worker` agents through `spawn_agent`, with
-the role briefs bundled in the `$gsd-path` skill. Spawn independent work up to the
-available child capacity and batch any remainder. Every spawned agent has
-isolated context, so its brief must include the absolute role path, exact input
-paths, one distinct output path, relevant constraints, the output contract,
-an explicit agent type, `fork_turns: "none"`, and the deterministic task name
-defined by the dispatch contract. Do not rely on conversation context.
+Use the host-specific child-agent tool defined by the runtime dispatch contract
+bundled in the `gsd-path` skill. Spawn independent work up to the available
+child capacity and batch any remainder. Every spawned agent has isolated
+context, so its brief must include the absolute role path, exact input paths,
+one distinct output path, relevant constraints, the output contract, and the
+deterministic logical task name defined by the dispatch contract. Do not rely
+on conversation context.
 
 Within a wave, compute dependency layers. Every parallel coder receives a
 distinct linked worktree at one clean layer-base SHA. Collect and integrate
@@ -21,7 +21,7 @@ before its same-wave dependencies are done. Task verification reconstructs
 the layer base plus only that task patch; combined branch-tip evidence does
 not count.
 
-## Phase 0 — Onboard (`$gsd-path-onboard`, brownfield only)
+## Phase 0 — Onboard (`gsd-path-onboard`, brownfield only)
 
 **Input:** an existing codebase with no `.project/STATE.md`. **Output:**
 `.project/research/evidence-codebase.md` and
@@ -56,7 +56,7 @@ grill in brownfield mode. Onboarding changes nothing outside `.project/`.
 **Gate:** both artifacts match their templates; every inventoried doc has a
 verdict; ground truth was presented before any question was asked.
 
-## Phase 1 — Grill (`$gsd-path-grill`)
+## Phase 1 — Grill (`gsd-path-grill`)
 
 **Input:** a raw idea — or, brownfield, the onboarding artifacts. **Output:**
 `.project/intent/INTENT.md`.
@@ -78,7 +78,7 @@ vetoes and corrections verbatim. Unresolved items remain tagged `RESEARCH` or
 
 **Gate:** the user approves the playback summary.
 
-## Phase 2 — Research (`$gsd-path-research`)
+## Phase 2 — Research (`gsd-path-research`)
 
 **Input:** INTENT.md. **Output:** the four standard evidence files:
 
@@ -101,7 +101,7 @@ confidence, and a tie-back to INTENT.md.
 at least one finding, and answer their assigned `RESEARCH` questions. One
 failed agent may be respawned once.
 
-## Phase 3 — Synthesize (`$gsd-path-synthesize`)
+## Phase 3 — Synthesize (`gsd-path-synthesize`)
 
 **Input:** INTENT.md and all four standard evidence files. **Output:**
 `.project/research/SYNTHESIS.md`.
@@ -117,7 +117,7 @@ files were considered; the planner brief is complete; and every `NEEDS-USER`
 item has a recorded user ruling. Any missing, optional, or unresolved decision
 blocks advancement.
 
-## Phase 4 — Plan (`$gsd-path-plan`)
+## Phase 4 — Plan (`gsd-path-plan`)
 
 **Input:** both `.project/intent/INTENT.md` and
 `.project/research/SYNTHESIS.md`, plus relevant existing code. **Output:**
@@ -142,7 +142,7 @@ file-scope rules hold; criteria and verifies can fail meaningfully; task size
 is bounded; INTENT and SYNTHESIS are honored; and the user approves the wave
 summary.
 
-## Phase 5 — Build (`$gsd-path-build`)
+## Phase 5 — Build (`gsd-path-build`)
 
 **Input:** the approved plan and tasks. **Output:** committed code,
 `.project/BOARD.md`, updated task files, and wave reviews.
@@ -211,7 +211,7 @@ HEAD. Never redispatch a dirty failed worktree against divergent task history.
 **Gate:** every wave and project Verify pass; the build orchestrator commits
 the transition directly to `review/active`, leaving a clean primary worktree.
 
-## Phase 6 — Final review (`$gsd-path-review final`)
+## Phase 6 — Final review (`gsd-path-review final`)
 
 **Input:** INTENT.md success criteria and the running system. **Output:**
 `.project/review/FINAL.md` plus one distinct
@@ -231,7 +231,7 @@ by the patch build may be replaced only when its findings were copied verbatim
 into approved, now-done patch tasks; otherwise a stale committed output blocks.
 
 **Gate:** `not-met`, `unverifiable`, or any blocked gap blocks shipment. Turn
-the findings into a user-approved patch wave via `$gsd-path-plan` patch mode and
+the findings into a user-approved patch wave via `gsd-path-plan` patch mode and
 return through the build/review loop. Passing the final gate leaves STATE.md at
 `review/active` while the archive transaction runs; `shipped/done` is written
 only after the archive and manifest validate.
@@ -293,7 +293,7 @@ archive and manifest, valid carry-forward, clean worktree, exact ship subject,
 and `.project/`-only commit before the router reports shipped or starts a new
 milestone.
 
-## Standing process — Docs audit (`$gsd-path-docs-audit`)
+## Standing process — Docs audit (`gsd-path-docs-audit`)
 
 Runs inside onboarding and standalone only at a stable pre-build phase boundary
 or `review/blocked` with no active task. It requires owned v1 STATE and blocks
@@ -314,8 +314,8 @@ rules `fix-code`, `fix-doc`, or `accept-drift` on each queue item, recorded
 verbatim in DOCS-AUDIT.md (`accept-drift` suppresses the item in future
 audits). Actionable rulings are queued, not executed: each sits in
 DOCS-AUDIT.md marked `planned: no` until the user is ready. The audit
-offers alignment once at close; after that, `$gsd-path` mentions the queue in
-its status line and `$gsd-path-plan` offers — per item, before any planning —
+offers alignment once at close; after that, the `gsd-path` router mentions the queue in
+its status line and `gsd-path-plan` offers — per item, before any planning —
 to absorb queued rulings: folded into a normal plan as ordinary tasks, or
 appended via **patch mode** as one gated wave on the approved PLAN.md (one
 full task per finding, evidence inlined, `fix-doc` tasks verified by
@@ -350,7 +350,7 @@ with their exact ordered source-file and row list.
 At ship, everything except `STATE.md` and `archive/` moves into the numbered
 archive; active paths above describe the current milestone only.
 
-Artifact formats are bundled with the installed `$gsd-path` skill. Each phase
+Artifact formats are bundled with the installed `gsd-path` skill. Each phase
 resolves and passes their absolute paths. A missing or malformed artifact
 fails its phase gate.
 

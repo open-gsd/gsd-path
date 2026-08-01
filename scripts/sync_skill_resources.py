@@ -77,7 +77,14 @@ PHASE_CONTRACT_TARGETS = (
     ("skills/gsd-path-synthesize/SKILL.md", "skills/gsd-path/SYNTHESIZE.md"),
 )
 
+SHARED_DISPATCH_TARGETS = (
+    ("platforms/shared-agents/dispatch.md", "skills/gsd-path/references/dispatch.md"),
+)
+
+
 def resource_pairs(root: Path) -> Iterable[Tuple[Path, Path]]:
+    for source, destination in SHARED_DISPATCH_TARGETS:
+        yield root / source, root / destination
     canonical = root / "skills" / "gsd-path"
     for skill, resources in PHASE_RESOURCES.items():
         for relative in resources:

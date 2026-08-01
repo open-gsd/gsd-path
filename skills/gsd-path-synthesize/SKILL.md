@@ -30,9 +30,8 @@ If a standard file is missing or invalid, route to `$gsd-path-research`.
 1. Read the local [synthesis template](templates/synthesis.md) and
    resolve it to an absolute path.
 2. Read the local [synthesizer role](references/synthesizer.md), then follow
-   the shared [Codex dispatch contract](references/dispatch.md) with built-in
-   `agent_type: default`, `fork_turns: "none"`, and deterministic
-   `task_name: synthesize`. Give it absolute paths to the role,
+   the local [runtime dispatch contract](references/dispatch.md) with
+   deterministic logical task name `synthesize`. Give it absolute paths to the role,
    INTENT.md, every evidence file, the template, and the required output
    `.project/research/SYNTHESIS.md`.
 3. Validate SYNTHESIS.md. Require one decision block for every open choice in
@@ -40,8 +39,9 @@ If a standard file is missing or invalid, route to `$gsd-path-research`.
    build-vs-buy where applicable. Require Decision, Runner-up, Evidence, and
    Confidence in every block. Require `## For the planner` with wave-1
    blockers, walking skeleton, and pitfall-to-task guidance.
-4. If structural validation fails, send one specific corrective follow-up to
-   the same agent and validate again. If it still fails, set STATE.md to
+4. If structural validation fails, redispatch one complete corrected brief
+   under logical task name `synthesize`, following the runtime dispatch
+   contract, and validate again. If it still fails, set STATE.md to
    `phase: synthesize`, `status: blocked`, append the failures to its log, and
    stop.
 5. Present the decision list and every `NEEDS-USER` item. Use an interactive

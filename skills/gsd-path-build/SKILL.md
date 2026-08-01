@@ -100,8 +100,9 @@ For each wave in PLAN.md order:
    appends make the cherry-pick ambiguous. Reuse a retained worktree only when
    its recorded base, branch, and task agree exactly.
 
-4. **Dispatch the layer.** Following the local dispatch contract, spawn one
-   built-in `worker` per task with deterministic `task_name: build_<task_id>`.
+4. **Dispatch the layer.** Following the local runtime dispatch contract,
+   spawn one implementation-capable child per task with deterministic logical
+   task name `build_<task_id>`.
    Its brief contains the absolute isolated-worktree root, coder role, task
    file, and task template. Add no hidden implementation context; repair a
    defective task contract before establishing the layer base. Run ready work
@@ -136,9 +137,9 @@ For each wave in PLAN.md order:
      rule. Preserve the isolated worktree unless and until the explicit clean
      retry-retirement procedure in step 2 owns and removes it.
 
-6. **Review the wave.** Only after every wave task is done, spawn one built-in
-   `default` reviewer using deterministic
-   `task_name: review_wave_<wave>_cycle_<cycle>`. Supply every task path, its
+6. **Review the wave.** Only after every wave task is done, spawn one
+   independent reviewer using deterministic logical task name
+   `review_wave_<wave>_cycle_<cycle>`. Supply every task path, its
    recorded base and commit, the reviewer role, and wave-review template. The
    reviewer reconstructs each task alone in a disposable worktree and writes
    `.project/review/wave-N.cycleC.md`.

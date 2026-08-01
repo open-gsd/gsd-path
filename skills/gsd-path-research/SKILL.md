@@ -28,12 +28,11 @@ dispatch; if unavailable, block rather than allowing memory-based citations.
 ## Dispatch contract
 
 Read the local [researcher role](references/researcher.md), then follow the
-shared [Codex dispatch contract](references/dispatch.md) with built-in
-`agent_type: default` and `fork_turns: "none"`. Resolve the local
+local [runtime dispatch contract](references/dispatch.md). Resolve the local
 [evidence template](templates/evidence.md) to an absolute path and
 include it, the absolute role and INTENT.md paths, the dimension, assigned
-questions, deterministic `task_name: research_<dimension>`, and exact output
-path in every brief. When `evidence-codebase.md` exists, include its absolute
+questions, deterministic logical task name `research_<dimension>`, and exact
+output path in every brief. When `evidence-codebase.md` exists, include its absolute
 path in every brief as settled brownfield input.
 
 ## Process
@@ -65,10 +64,11 @@ path in every brief as settled brownfield input.
    every extracted `RESEARCH` question was assigned and answered. Require at
    least one `## Finding`, and require Claim, Source, Confidence, and Why it
    matters fields for every finding.
-5. Send one corrective follow-up to an agent whose file is missing or invalid.
-   If any expected file still fails, set STATE.md to `phase: research`,
-   `status: blocked`, list the failures in the log, and stop. Never advance
-   with partial research.
+5. Redispatch one complete corrected brief under the same logical task name for
+   each missing or invalid file, following the runtime dispatch contract. If
+   any expected file still fails, set STATE.md to `phase: research`, `status:
+   blocked`, list the failures in the log, and stop. Never advance with partial
+   research.
 6. When all expected files pass, set STATE.md to `phase: research`,
    `status: done`, and append the transition log. When routed by an active
    `$gsd-path`, return control to that router. When invoked directly, stop and

@@ -1,57 +1,95 @@
 # GSD Path
 
-A disk-backed project pipeline for Codex. It turns a raw idea into shipped
-code through six gated phases. Each phase writes a fixed artifact that the
-next phase reads, so a fresh task can resume from `.project/` alone.
+A disk-backed project pipeline for AI coding agents. It supports Codex, Claude
+Code, Grok, OpenCode, GitHub Copilot CLI, Qwen Code, Antigravity CLI, Cursor,
+Zed, and Kiro. It turns a raw idea into shipped code through six gated phases.
+Each phase writes a fixed artifact that the next phase reads, so a fresh task
+can resume from `.project/` alone.
 
 ## The flow
 
 ```text
-$gsd-path  (router: detects project state, then runs the next phase)
+gsd-path  (router: detects project state, then runs the next phase)
   |
-  |-- 0. $gsd-path-onboard     brownfield scan + audit  -> research/evidence-codebase.md
-  |                                                    research/DOCS-AUDIT.md
-  |-- 1. $gsd-path-grill       interactive intent       -> intent/INTENT.md
-  |-- 2. $gsd-path-research    4 evidence researchers   -> research/evidence-*.md
-  |-- 3. $gsd-path-synthesize  evidence to decisions    -> research/SYNTHESIS.md
-  |-- 4. $gsd-path-plan        waves and task contracts -> plan/PLAN.md + tasks/T*.md
-  |-- 5. $gsd-path-build       parallel coder agents    -> code, commits, BOARD.md
-  `-- 6. $gsd-path-review      wave and final gates     -> review/*.md
+  |-- 0. gsd-path-onboard     brownfield scan + audit  -> research/evidence-codebase.md
+  |                                                   research/DOCS-AUDIT.md
+  |-- 1. gsd-path-grill       interactive intent       -> intent/INTENT.md
+  |-- 2. gsd-path-research    4 evidence researchers   -> research/evidence-*.md
+  |-- 3. gsd-path-synthesize  evidence to decisions    -> research/SYNTHESIS.md
+  |-- 4. gsd-path-plan        waves and task contracts -> plan/PLAN.md + tasks/T*.md
+  |-- 5. gsd-path-build       parallel coder agents    -> code, commits, BOARD.md
+  `-- 6. gsd-path-review      wave and final gates     -> review/*.md
 ```
 
-Invoke a skill by naming it in a Codex prompt, for example `$gsd-path`. The
-router reports the current state and continues the pipeline. Invoke a phase
-skill directly, such as `$gsd-path-plan`, when you intentionally want that
-phase. A direct phase run stops at its handoff; explicitly invoke `$gsd-path`
-or the named next phase to continue. Only an active router may auto-advance
+Invoke the router as `$gsd-path` in Codex and `/gsd-path` in Claude Code, Grok,
+OpenCode v2, GitHub Copilot CLI, Qwen Code, Antigravity CLI, Cursor, Zed, or
+Kiro. In stable OpenCode, explicitly ask it to load and use the `gsd-path`
+skill. The shared Codex/Zed bundle keeps its installed skill text
+syntax-neutral while each host UI exposes its own invocation form. The router
+reports the current state and continues the pipeline. Invoke a phase skill
+directly, such as `$gsd-path-plan` or `/gsd-path-plan`, when you intentionally
+want that phase. A direct phase run stops at its handoff; explicitly invoke the
+router or named next phase to continue. Only an active router may auto-advance
 through its bundled phase contracts.
-All nine skills disable implicit invocation, so generic requests such as
-"continue the project" do not inject this pipeline accidentally.
+All nine skills request explicit-only invocation, so generic requests such as
+"continue the project" do not inject this pipeline accidentally. Codex,
+Claude Code, Grok, OpenCode v2, GitHub Copilot CLI, Qwen Code, Cursor, and Zed
+enforce that request in host metadata. Stable OpenCode, Antigravity CLI, and
+Kiro do not expose a documented hard explicit-only gate; their limitations are
+documented under Install.
 The router carries synchronized copies of all eight phase contracts, so an
-explicit `$gsd-path` can auto-advance without relying on hidden phase skills
+explicit router invocation can auto-advance without relying on hidden phase skills
 being present in the ordinary catalog.
 
 With no `.project/STATE.md`, the router detects the project kind before
-asking anything. Existing code or docs → brownfield: `$gsd-path-onboard` maps
+asking anything. Existing code or docs → brownfield: `gsd-path-onboard` maps
 the codebase and audits every Markdown doc against reality, presents ground
 truth, then the grill asks only delta questions. Empty directory →
-greenfield: straight to the grill. `$gsd-path-docs-audit` also runs standalone
+greenfield: straight to the grill. `gsd-path-docs-audit` also runs standalone
 at the safe pre-build checkpoints documented by that skill.
 
 ## Agent execution
 
 The grill and build orchestrator run in the main task. Researchers,
-synthesizer, planner, coders, and reviewers use Codex's built-in `default` and
-`worker` agent types with role briefs bundled under
-`skills/gsd-path/references/`. No custom-agent registration is required.
+synthesizer, planner, coders, and reviewers use a host-specific dispatch
+adapter installed with each skill bundle:
 
-The orchestrator uses `spawn_agent` for bounded work. Every dispatch has an
-explicit built-in agent type, `fork_turns: "none"`, and a deterministic task
-name. Independent briefs run
-in parallel up to the available child capacity; larger fan-outs run in
-batches. Dependencies run in layers. A spawned agent has isolated context, so
-every brief names its input paths, output path, acceptance contract, and
-allowed scope. Durable context belongs in `.project/`, not chat history.
+| Host | Child-agent API | Built-in child |
+| --- | --- | --- |
+| Codex | collaboration | `default` / `worker` |
+| Claude Code | `Agent` | `general-purpose` |
+| Grok | `spawn_subagent` | `general-purpose` |
+| OpenCode | `Task` or v2 `subagent` | `general` |
+| GitHub Copilot CLI | `task` | `general-purpose` |
+| Qwen Code | `agent` | `general-purpose` |
+| Antigravity CLI | `invoke_subagent` | `self` |
+| Cursor | `Task` | installed `gsd-path` custom subagent |
+| Zed | `spawn_agent` | isolated full-capability child |
+| Kiro | subagent facility | default general-purpose child |
+
+No manual custom-agent registration is required; the installer supplies
+Cursor's required `gsd-path` child. Independent briefs run in parallel up to
+the available child capacity; larger fan-outs run in batches.
+Dependencies run in layers. A spawned agent has isolated context, so every
+brief names its input paths, output path, acceptance contract, and allowed
+scope. Durable context belongs in `.project/`, not chat history.
+
+### Platform adapters
+
+`platforms/` is build-time compatibility source for the installer, not a set
+of skills users invoke directly. It keeps the shared workflow independent of
+each host's child-agent tool names and schemas.
+
+- `platforms/<host>/dispatch.md` maps GSD Path delegation onto that host's
+  child API, including isolation, concurrency, retry, and resume behavior.
+- `platforms/shared-agents/dispatch.md` safely selects among Codex, Zed, Grok,
+  OpenCode, Cursor, and Copilot when they discover `~/.agents/skills`.
+- `platforms/cursor/agent.md` defines the full-capability `gsd-path` child that
+  Cursor requires; the installer places it beside Cursor's installed skills.
+
+The installer stages the canonical skills, replaces each staged
+`references/dispatch.md` with the selected adapter, and applies host-specific
+invocation metadata. It does not install the `platforms/` directory wholesale.
 
 ## Handoff contract
 
@@ -82,58 +120,96 @@ milestone starts clean instead of overwriting history.
 
 ## Install
 
-Each phase skill is self-contained. Before installing, verify the generated
-copies match the canonical router resources:
+The dependency-free installer validates the synchronized package before it
+writes anything. Preview an all-host install, then apply it:
 
 ```bash
-python3 scripts/sync_skill_resources.py --check
+python3 scripts/install.py --all --dry-run
+python3 scripts/install.py --all
 ```
 
-For every install—fresh or upgrade—first quit Codex and move any legacy
-`ogsd*` skills and previous `gsd-path*` install to a recoverable backup. Legacy
-O-GSD uses broad triggers and overlapping `.project/STATE.md` paths; a machine
-can have it installed even when GSD Path itself is new.
+Install only selected hosts by combining their flags:
 
 ```bash
-gsd_path_codex_root="${CODEX_HOME:-$HOME/.codex}"
-gsd_path_project_root="/path/to/project"
-gsd_path_backup="$gsd_path_codex_root/disabled-gsd-skills-$(date +%Y%m%d-%H%M%S)"
-mkdir -p "$gsd_path_codex_root/skills" "$gsd_path_backup"
-
-find "$gsd_path_codex_root/skills" -mindepth 1 -maxdepth 1 -type d \
-  \( -name 'ogsd' -o -name 'ogsd-*' -o -name 'gsd-path' -o -name 'gsd-path-*' \) \
-  -exec mv {} "$gsd_path_backup/" \;
-
-for gsd_path_source in skills/gsd-path*; do
-  cp -R "$gsd_path_source" "$gsd_path_codex_root/skills/"
-done
+python3 scripts/install.py --codex --claude --cursor
 ```
 
-For a brand-new target with neither project contract, copy them with a
-fail-loud guard:
+| Flag | Native user skill root | Explicit invocation |
+| --- | --- | --- |
+| `--codex` | `~/.agents/skills` | `$gsd-path` |
+| `--claude` | `${CLAUDE_CONFIG_DIR:-~/.claude}/skills` | `/gsd-path` |
+| `--grok` | `${GROK_HOME:-~/.grok}/skills` | `/gsd-path` |
+| `--opencode` | `${OPENCODE_CONFIG_DIR:-${XDG_CONFIG_HOME:-~/.config}/opencode}/skills` | `/gsd-path` on v2; request the skill on stable |
+| `--copilot` | `${COPILOT_HOME:-~/.copilot}/skills` | `/gsd-path` |
+| `--qwen` | `${QWEN_HOME:-~/.qwen}/skills` | `/gsd-path` |
+| `--antigravity` | `~/.gemini/antigravity-cli/skills` | `/gsd-path` |
+| `--cursor` | `~/.cursor/skills` | `/gsd-path` |
+| `--zed` | `~/.agents/skills` | `/gsd-path` |
+| `--kiro` | `${KIRO_HOME:-~/.kiro}/skills` | `/gsd-path` |
+
+These defaults follow the current host documentation for
+[Codex](https://learn.chatgpt.com/docs/build-skills),
+[Claude Code](https://code.claude.com/docs/en/slash-commands),
+[Grok](https://docs.x.ai/build/features/skills-plugins-marketplaces), and
+[OpenCode](https://opencode.ai/docs/skills), plus the published guidance for
+[GitHub Copilot CLI](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-command-reference),
+[Qwen Code](https://qwenlm.github.io/qwen-code-docs/en/users/features/skills/),
+[Antigravity CLI](https://antigravity.google/docs/gcli-migration),
+[Cursor](https://cursor.com/docs/skills.md),
+[Zed](https://zed.dev/docs/ai/skills), and
+[Kiro](https://kiro.dev/docs/cli/skills/).
+
+Each physical target receives compatible dispatch and invocation metadata.
+Existing `ogsd*` and `gsd-path*` entries move to a uniquely named recoverable
+backup; unrelated skills are untouched. The Codex migration also backs up
+copies under the former `${CODEX_HOME:-~/.codex}/skills` location. A
+multi-host failure rolls every selected target back. Codex and Zed share
+`~/.agents/skills`, so `--all` prepares and commits that physical root once
+with their shared, syntax-neutral bundle instead of running two competing
+transactions. Grok, OpenCode, Cursor, and Copilot may also discover that
+compatibility root, so the shared bundle selects each host's documented child
+schema at runtime; dedicated host roots still receive narrower adapters.
+
+The Cursor target also installs a model-inheriting `gsd-path` subagent at
+`~/.cursor/agents/gsd-path.md` (or beside an overridden Cursor skills root).
+That file participates in the same backup and rollback transaction as the
+Cursor skills.
+
+Stable OpenCode discovers the installed skills through its `skill` tool but
+does not document a slash command or hard explicit-only switch. Ask it to load
+and use `gsd-path` explicitly. [OpenCode
+v2](https://opencode.ai/v2/docs/skills) honors the installer's
+`opencode/autoinvoke: "false"` metadata and exposes `/gsd-path`.
+Antigravity CLI and Kiro expose `/gsd-path`, but neither documents a hard
+host-level switch that prevents implicit skill selection. Treat explicit
+invocation as an operating rule on those hosts. Codex, Claude Code, Grok,
+OpenCode v2, GitHub Copilot CLI, Qwen Code, Cursor, and Zed enforce
+explicit-only invocation with native metadata.
+
+For a brand-new project, install the shared project contracts in the same
+transaction:
 
 ```bash
-if [ -e "$gsd_path_project_root/AGENTS.md" ] || [ -e "$gsd_path_project_root/WORKFLOW.md" ]; then
-  echo "project contracts already exist; review and merge them explicitly" >&2
-  exit 1
-fi
-cp AGENTS.md WORKFLOW.md "$gsd_path_project_root/"
+python3 scripts/install.py --all --project /path/to/project
 ```
 
-Never run that copy command for a contract upgrade. Review `diff -u` for
-AGENTS.md and merge the new rules without overwriting project-specific
-instructions; replace or deliberately merge WORKFLOW.md. The state contract now carries
-`pipeline: gsd-path/v1`, `branch`, and crash-resumable `archive` fields; tasks
-also carry `base`, `worktree`, and `task_branch`. Pre-marker state is not
-auto-stamped as v1 because those values cannot be reconstructed safely.
+This writes `AGENTS.md` and `WORKFLOW.md`; when Claude is selected it also
+writes `.claude/CLAUDE.md` that imports both. If any managed contract already
+exists, the installer stops before changing any host. For an upgrade, review
+and merge the new rules explicitly instead of overwriting project-specific
+instructions. Pre-marker state is not auto-stamped as v1 because its branch,
+worktree, and archive identity cannot be reconstructed safely.
 
-Reload or restart Codex after copying. Then explicitly invoke `$gsd-path`.
+Restart active host sessions if the new skills do not appear, then invoke the
+router explicitly.
 
 ## Repository layout
 
-- `skills/` — the nine `$gsd-path*` skills
+- `skills/` — the nine canonical `gsd-path*` skills
+- `platforms/` — installer-only host dispatch adapters and Cursor child definition
 - `skills/gsd-path/templates/` — canonical artifact formats
 - `skills/gsd-path/references/` — canonical role and dispatch contracts
+- `scripts/install.py` — safe multi-host installer
 - `scripts/sync_skill_resources.py` — refreshes/checks phase resources and router contracts
 - `scripts/archive_milestone.py` — prepares and validates the ship transaction
 - `AGENTS.md` — shared operating rules to install in the project root
