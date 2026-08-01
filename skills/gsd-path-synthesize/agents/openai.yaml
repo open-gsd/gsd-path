@@ -1,0 +1,6 @@
+interface:
+  display_name: "GSD Path Synthesize"
+  short_description: "Turn evidence into settled project decisions"
+  default_prompt: "Use $gsd-path-synthesize to turn the project evidence into settled implementation decisions."
+policy:
+  allow_implicit_invocation: false

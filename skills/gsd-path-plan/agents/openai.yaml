@@ -1,0 +1,6 @@
+interface:
+  display_name: "GSD Path Plan"
+  short_description: "Create validated dependency-ordered plans"
+  default_prompt: "Use $gsd-path-plan to create and validate dependency-ordered build waves."
+policy:
+  allow_implicit_invocation: false

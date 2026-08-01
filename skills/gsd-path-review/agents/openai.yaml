@@ -1,0 +1,6 @@
+interface:
+  display_name: "GSD Path Review"
+  short_description: "Audit build waves and final project outcomes"
+  default_prompt: "Use $gsd-path-review to review the current wave or audit the completed build."
+policy:
+  allow_implicit_invocation: false

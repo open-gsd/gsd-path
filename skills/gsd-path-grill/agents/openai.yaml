@@ -1,0 +1,6 @@
+interface:
+  display_name: "GSD Path Grill"
+  short_description: "Turn a project idea into approved intent"
+  default_prompt: "Use $gsd-path-grill to turn this project idea into an approved intent artifact."
+policy:
+  allow_implicit_invocation: false

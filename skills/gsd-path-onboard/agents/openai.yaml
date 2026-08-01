@@ -1,0 +1,6 @@
+interface:
+  display_name: "GSD Path Onboard"
+  short_description: "Scan an existing codebase before questioning"
+  default_prompt: "Use $gsd-path-onboard to scan this existing project and establish ground truth before the grill session."
+policy:
+  allow_implicit_invocation: false

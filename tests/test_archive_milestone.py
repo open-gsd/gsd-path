@@ -1,0 +1,1053 @@
+import json
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+ARCHIVE_SCRIPT = PROJECT_ROOT / "scripts" / "archive_milestone.py"
+
+
+class ArchiveMilestoneTests(unittest.TestCase):
+    def run_command(self, *args: str, cwd: Path) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            args,
+            cwd=cwd,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+    def git(self, repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
+        return self.run_command("git", *args, cwd=repo)
+
+    def make_repo(self, root: Path) -> None:
+        self.git(root, "init", "-q", "-b", "main")
+        self.git(root, "config", "user.name", "Validation")
+        self.git(root, "config", "user.email", "validation@example.invalid")
+
+        project = root / ".project"
+        for directory in ("intent", "research", "plan", "tasks", "review"):
+            (project / directory).mkdir(parents=True, exist_ok=True)
+
+        (project / "STATE.md").write_text(
+            """---
+pipeline: gsd-path/v1
+project: demo
+milestone: demo
+phase: review
+status: active
+branch: main
+archive: null
+---
+
+# Project State
+
+## Log
+- 2026-08-01 — review — final review passed
+"""
+        )
+        (project / "intent" / "INTENT.md").write_text("# Intent\n")
+        for evidence in ("domain", "stack", "pitfalls", "similar"):
+            (project / "research" / f"evidence-{evidence}.md").write_text("# Evidence\n")
+        (project / "research" / "SYNTHESIS.md").write_text("# Synthesis\n")
+        (project / "research" / "DOCS-AUDIT.md").write_text(
+            """# Docs Audit
+
+## User rulings
+
+| Queue # | Ruling | User's words | Planned |
+|---------|--------|--------------|---------|
+| 1 | fix-doc | "keep this queued" | no |
+"""
+        )
+        (project / "plan" / "PLAN.md").write_text("# Plan\n\n## Wave 1 — demo\n")
+        (project / "tasks" / "T001-demo.md").write_text("# Task\n")
+        (project / "review" / "FINAL.md").write_text("Overall verdict: pass\n")
+        (project / "review" / "wave-1.cycle1.md").write_text(
+            "# Review — wave 1, cycle 1\n\nWave verdict: pass\nCycle: 1\n"
+        )
+        (project / "BOARD.md").write_text("# Board\n")
+
+        self.git(root, "add", ".project")
+        baseline = self.git(root, "commit", "-q", "-m", "baseline")
+        self.assertEqual(baseline.returncode, 0, baseline.stderr)
+        reviewed_head = self.git(root, "rev-parse", "HEAD").stdout.strip()
+        (project / "review" / "FINAL.md").write_text(
+            f"""# Final Review — demo
+
+Reviewed HEAD: {reviewed_head}
+Overall verdict: pass
+
+## Success criteria
+
+### SC1 — demo works
+
+- **Verdict**: met
+- **Check**: `python -m unittest`
+- **Observed**: focused tests passed
+- **Reference**: tests
+- **Finding**: none
+- **Fix direction**: none
+"""
+        )
+        (project / "review" / "final-gap-1.md").write_text(
+            f"""# Gap Review — 1: project verify
+
+Reviewed HEAD: {reviewed_head}
+Gap verdict: pass
+Risk: project Verify command
+Waves checked: 1
+"""
+        )
+
+    def write_manifest(self, archive: Path) -> None:
+        contents = sorted(
+            path.relative_to(archive).as_posix()
+            for path in archive.rglob("*")
+            if path.is_file() and path.name != "MANIFEST.md"
+        )
+        listed_contents = "\n".join(f"- {path}" for path in contents)
+        (archive / "MANIFEST.md").write_text(
+            f"""# Archive — {archive.name}
+
+Milestone: demo
+Shipped: 2026-08-01
+Final verdict: all criteria met; project verify passed
+Waves: 1  Tasks: 1 done / 1 total  Review cycles used: 1
+Carried forward: 1 DOCS-AUDIT ruling(s)
+
+## Success criteria at ship
+
+| Criterion | Verdict | Evidence |
+|-----------|---------|----------|
+| demo works | met | tests |
+
+## Contents
+
+{listed_contents}
+
+## Notes
+
+- none
+"""
+        )
+
+    def prepare_archive(self, repo: Path, slug: str = "demo") -> Path:
+        prepare = self.run_command(
+            sys.executable,
+            str(ARCHIVE_SCRIPT),
+            "prepare",
+            "--repo",
+            str(repo),
+            "--slug",
+            slug,
+            cwd=PROJECT_ROOT,
+        )
+        self.assertEqual(prepare.returncode, 0, prepare.stderr)
+        return repo / json.loads(prepare.stdout)["archive"]
+
+    def preflight(self, repo: Path) -> subprocess.CompletedProcess[str]:
+        return self.run_command(
+            sys.executable,
+            str(ARCHIVE_SCRIPT),
+            "preflight",
+            "--repo",
+            str(repo),
+            cwd=PROJECT_ROOT,
+        )
+
+    def mark_shipped(self, repo: Path) -> None:
+        state_path = repo / ".project" / "STATE.md"
+        state = state_path.read_text().replace("phase: review", "phase: shipped")
+        state_path.write_text(state.replace("status: active", "status: done"))
+
+    def snapshot_worktree(self, repo: Path) -> dict:
+        snapshot = {}
+        for path in sorted(repo.rglob("*")):
+            relative = path.relative_to(repo)
+            if relative.parts[0] == ".git":
+                continue
+            if path.is_symlink():
+                snapshot[relative.as_posix()] = ("symlink", os.readlink(path))
+            elif path.is_dir():
+                snapshot[relative.as_posix()] = ("directory", None)
+            else:
+                snapshot[relative.as_posix()] = ("file", path.read_bytes())
+        return snapshot
+
+    def test_prepare_is_idempotent_and_validate_requires_ship_commit(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+
+            prepare = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "prepare",
+                "--repo",
+                str(repo),
+                "--slug",
+                "demo",
+                cwd=PROJECT_ROOT,
+            )
+            self.assertEqual(prepare.returncode, 0, prepare.stderr)
+            result = json.loads(prepare.stdout)
+            self.assertEqual(result["archive"], ".project/archive/001-demo")
+            self.assertEqual(result["carried_forward"], 1)
+
+            archive = repo / result["archive"]
+            self.assertTrue((archive / "intent" / "INTENT.md").is_file())
+            self.assertTrue((archive / "research" / "DOCS-AUDIT.md").is_file())
+            self.assertTrue((repo / ".project" / "research" / "DOCS-AUDIT.md").is_file())
+
+            retry = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "prepare",
+                "--repo",
+                str(repo),
+                "--slug",
+                "demo",
+                cwd=PROJECT_ROOT,
+            )
+            self.assertEqual(retry.returncode, 0, retry.stderr)
+            self.assertEqual(json.loads(retry.stdout)["archive"], result["archive"])
+            archive_directories = sorted((repo / ".project" / "archive").iterdir())
+            self.assertEqual([path.name for path in archive_directories], ["001-demo"])
+
+            state_path = repo / ".project" / "STATE.md"
+            state = state_path.read_text().replace("phase: review", "phase: shipped")
+            state = state.replace("status: active", "status: done")
+            state_path.write_text(state)
+            self.write_manifest(archive)
+
+            before_commit = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "validate",
+                "--repo",
+                str(repo),
+                cwd=PROJECT_ROOT,
+            )
+            self.assertNotEqual(before_commit.returncode, 0)
+
+            self.git(repo, "add", ".project")
+            ship = self.git(repo, "commit", "-q", "-m", "ship: 001-demo")
+            self.assertEqual(ship.returncode, 0, ship.stderr)
+
+            after_commit = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "validate",
+                "--repo",
+                str(repo),
+                cwd=PROJECT_ROOT,
+            )
+            self.assertEqual(after_commit.returncode, 0, after_commit.stderr)
+            self.assertEqual(json.loads(after_commit.stdout)["archive"], result["archive"])
+
+            empty_ship = self.git(repo, "commit", "--allow-empty", "-q", "-m", "ship: 001-demo")
+            self.assertEqual(empty_ship.returncode, 0, empty_ship.stderr)
+            inherited = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "validate",
+                "--repo",
+                str(repo),
+                cwd=PROJECT_ROOT,
+            )
+            self.assertNotEqual(inherited.returncode, 0)
+            self.assertIn("does not record", inherited.stderr)
+
+    def test_prepare_recovers_an_interrupted_carry_forward_copy(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            prepare = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "prepare",
+                "--repo",
+                str(repo),
+                "--slug",
+                "demo",
+                cwd=PROJECT_ROOT,
+            )
+            self.assertEqual(prepare.returncode, 0, prepare.stderr)
+
+            active_research = repo / ".project" / "research"
+            (active_research / "DOCS-AUDIT.md").unlink()
+            (active_research / ".DOCS-AUDIT.md.gsd-path-tmp").write_text("partial\n")
+
+            retry = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "prepare",
+                "--repo",
+                str(repo),
+                "--slug",
+                "demo",
+                cwd=PROJECT_ROOT,
+            )
+
+            self.assertEqual(retry.returncode, 0, retry.stderr)
+            self.assertTrue((active_research / "DOCS-AUDIT.md").is_file())
+            self.assertFalse((active_research / ".DOCS-AUDIT.md.gsd-path-tmp").exists())
+
+    def test_prepare_rejects_an_incomplete_active_milestone(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            (repo / ".project" / "plan" / "PLAN.md").unlink()
+            (repo / ".project" / "plan").rmdir()
+
+            prepare = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "prepare",
+                "--repo",
+                str(repo),
+                "--slug",
+                "demo",
+                cwd=PROJECT_ROOT,
+            )
+
+            self.assertNotEqual(prepare.returncode, 0)
+            self.assertIn("missing both active and archived plan", prepare.stderr)
+
+    def test_prepare_rejects_state_owned_by_another_pipeline(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            state_path = repo / ".project" / "STATE.md"
+            state_path.write_text(
+                state_path.read_text().replace("pipeline: gsd-path/v1", "pipeline: legacy/v1")
+            )
+
+            prepare = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "prepare",
+                "--repo",
+                str(repo),
+                "--slug",
+                "demo",
+                cwd=PROJECT_ROOT,
+            )
+
+            self.assertNotEqual(prepare.returncode, 0)
+            self.assertIn("pipeline marker", prepare.stderr)
+
+    def test_prepare_rejects_wrong_phase_without_moving_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            state_path = repo / ".project" / "STATE.md"
+            state_path.write_text(state_path.read_text().replace("phase: review", "phase: build"))
+
+            prepare = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "prepare",
+                "--repo",
+                str(repo),
+                "--slug",
+                "demo",
+                cwd=PROJECT_ROOT,
+            )
+
+            self.assertNotEqual(prepare.returncode, 0)
+            self.assertIn("phase", prepare.stderr)
+            self.assertTrue((repo / ".project" / "intent" / "INTENT.md").is_file())
+
+    def test_prepare_rejects_symlinked_archive_root(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            repo = root / "repo"
+            repo.mkdir()
+            self.make_repo(repo)
+            outside = root / "outside"
+            outside.mkdir()
+            (repo / ".project" / "archive").symlink_to(outside, target_is_directory=True)
+
+            prepare = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "prepare",
+                "--repo",
+                str(repo),
+                "--slug",
+                "demo",
+                cwd=PROJECT_ROOT,
+            )
+
+            self.assertNotEqual(prepare.returncode, 0)
+            self.assertIn("symlink", prepare.stderr)
+            self.assertTrue((repo / ".project" / "intent" / "INTENT.md").is_file())
+            self.assertFalse(list(outside.iterdir()))
+
+    def test_validate_rejects_product_code_in_ship_commit(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            prepare = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "prepare",
+                "--repo",
+                str(repo),
+                "--slug",
+                "demo",
+                cwd=PROJECT_ROOT,
+            )
+            self.assertEqual(prepare.returncode, 0, prepare.stderr)
+            archive = repo / json.loads(prepare.stdout)["archive"]
+
+            state_path = repo / ".project" / "STATE.md"
+            state = state_path.read_text().replace("phase: review", "phase: shipped")
+            state_path.write_text(state.replace("status: active", "status: done"))
+            self.write_manifest(archive)
+            (repo / "product.txt").write_text("must not ship in the archive commit\n")
+            self.git(repo, "add", ".project", "product.txt")
+            ship = self.git(repo, "commit", "-q", "-m", "ship: 001-demo")
+            self.assertEqual(ship.returncode, 0, ship.stderr)
+
+            validate = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "validate",
+                "--repo",
+                str(repo),
+                cwd=PROJECT_ROOT,
+            )
+
+            self.assertNotEqual(validate.returncode, 0)
+            self.assertIn("outside .project", validate.stderr)
+
+    def test_validate_rejects_an_incomplete_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            prepare = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "prepare",
+                "--repo",
+                str(repo),
+                "--slug",
+                "demo",
+                cwd=PROJECT_ROOT,
+            )
+            self.assertEqual(prepare.returncode, 0, prepare.stderr)
+            archive = repo / json.loads(prepare.stdout)["archive"]
+
+            state_path = repo / ".project" / "STATE.md"
+            state = state_path.read_text().replace("phase: review", "phase: shipped")
+            state_path.write_text(state.replace("status: active", "status: done"))
+            (archive / "MANIFEST.md").write_text("# Archive — 001-demo\n")
+            self.git(repo, "add", ".project")
+            ship = self.git(repo, "commit", "-q", "-m", "ship: 001-demo")
+            self.assertEqual(ship.returncode, 0, ship.stderr)
+
+            validate = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "validate",
+                "--repo",
+                str(repo),
+                cwd=PROJECT_ROOT,
+            )
+
+            self.assertNotEqual(validate.returncode, 0)
+            self.assertIn("manifest", validate.stderr.lower())
+
+    def test_preflight_rejects_missing_canonical_artifact_and_extra_active_path(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            prepare = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "prepare",
+                "--repo",
+                str(repo),
+                "--slug",
+                "demo",
+                cwd=PROJECT_ROOT,
+            )
+            self.assertEqual(prepare.returncode, 0, prepare.stderr)
+            archive = repo / json.loads(prepare.stdout)["archive"]
+            (archive / "intent" / "INTENT.md").unlink()
+            self.write_manifest(archive)
+            (repo / ".project" / "EXTRA.md").write_text("unexpected\n")
+
+            preflight = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "preflight",
+                "--repo",
+                str(repo),
+                cwd=PROJECT_ROOT,
+            )
+
+            self.assertNotEqual(preflight.returncode, 0)
+            self.assertIn("canonical", preflight.stderr)
+
+            (archive / "intent" / "INTENT.md").write_text("# Intent\n")
+            self.write_manifest(archive)
+            extra_only = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "preflight",
+                "--repo",
+                str(repo),
+                cwd=PROJECT_ROOT,
+            )
+            self.assertNotEqual(extra_only.returncode, 0)
+            self.assertIn("unexpected active", extra_only.stderr)
+
+    def test_preflight_validates_manifest_metadata_before_commit(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            prepare = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "prepare",
+                "--repo",
+                str(repo),
+                "--slug",
+                "demo",
+                cwd=PROJECT_ROOT,
+            )
+            self.assertEqual(prepare.returncode, 0, prepare.stderr)
+            archive = repo / json.loads(prepare.stdout)["archive"]
+            self.write_manifest(archive)
+
+            valid = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "preflight",
+                "--repo",
+                str(repo),
+                cwd=PROJECT_ROOT,
+            )
+            self.assertEqual(valid.returncode, 0, valid.stderr)
+
+            manifest = archive / "MANIFEST.md"
+            manifest.write_text(manifest.read_text().replace("Milestone: demo", "Milestone: wrong"))
+            invalid = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "preflight",
+                "--repo",
+                str(repo),
+                cwd=PROJECT_ROOT,
+            )
+            self.assertNotEqual(invalid.returncode, 0)
+            self.assertIn("milestone", invalid.stderr.lower())
+
+    def test_validate_rejects_mutation_of_an_older_archive(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            older = repo / ".project" / "archive" / "000-older" / "locked.md"
+            older.parent.mkdir(parents=True)
+            older.write_text("read only\n")
+            self.git(repo, "add", str(older.relative_to(repo)))
+            prior = self.git(repo, "commit", "-q", "-m", "older archive")
+            self.assertEqual(prior.returncode, 0, prior.stderr)
+
+            prepare = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "prepare",
+                "--repo",
+                str(repo),
+                "--slug",
+                "demo",
+                cwd=PROJECT_ROOT,
+            )
+            self.assertEqual(prepare.returncode, 0, prepare.stderr)
+            archive = repo / json.loads(prepare.stdout)["archive"]
+            state_path = repo / ".project" / "STATE.md"
+            state = state_path.read_text().replace("phase: review", "phase: shipped")
+            state_path.write_text(state.replace("status: active", "status: done"))
+            self.write_manifest(archive)
+            older.write_text("mutated during ship\n")
+            self.git(repo, "add", ".project")
+            ship = self.git(repo, "commit", "-q", "-m", f"ship: {archive.name}")
+            self.assertEqual(ship.returncode, 0, ship.stderr)
+
+            validate = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "validate",
+                "--repo",
+                str(repo),
+                cwd=PROJECT_ROOT,
+            )
+
+            self.assertNotEqual(validate.returncode, 0)
+            self.assertIn("older archive", validate.stderr)
+
+    def test_validate_requires_a_single_parent_ship_commit(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            archive = self.prepare_archive(repo)
+            self.write_manifest(archive)
+            self.mark_shipped(repo)
+            self.git(repo, "add", ".project")
+            ship = self.git(repo, "commit", "-q", "-m", f"ship: {archive.name}")
+            self.assertEqual(ship.returncode, 0, ship.stderr)
+
+            baseline = self.git(repo, "rev-parse", "HEAD^").stdout.strip()
+            tree = self.git(repo, "rev-parse", f"{baseline}^{{tree}}").stdout.strip()
+            side = self.git(repo, "commit-tree", tree, "-p", baseline, "-m", "side").stdout.strip()
+            merge = self.git(repo, "merge", "--no-ff", "-q", "-m", f"ship: {archive.name}", side)
+            self.assertEqual(merge.returncode, 0, merge.stderr)
+
+            validate = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "validate",
+                "--repo",
+                str(repo),
+                cwd=PROJECT_ROOT,
+            )
+            self.assertNotEqual(validate.returncode, 0)
+            self.assertIn("exactly one parent", validate.stderr)
+
+    def test_preflight_allows_uncommitted_shipped_state_and_prepare_rejects_committed_target(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            archive = self.prepare_archive(repo)
+            self.write_manifest(archive)
+            self.mark_shipped(repo)
+
+            before_commit = self.preflight(repo)
+            self.assertEqual(before_commit.returncode, 0, before_commit.stderr)
+
+            self.git(repo, "add", ".project")
+            ship = self.git(repo, "commit", "-q", "-m", f"ship: {archive.name}")
+            self.assertEqual(ship.returncode, 0, ship.stderr)
+            manifest_before = (archive / "MANIFEST.md").read_bytes()
+            state_temporary = repo / ".project" / ".STATE.md.gsd-path-tmp"
+            state_temporary.write_text("preserve on refusal\n")
+
+            committed_preflight = self.preflight(repo)
+            self.assertNotEqual(committed_preflight.returncode, 0)
+            self.assertIn("validate", committed_preflight.stderr)
+            retry = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "prepare",
+                "--repo",
+                str(repo),
+                "--slug",
+                "demo",
+                cwd=PROJECT_ROOT,
+            )
+            self.assertNotEqual(retry.returncode, 0)
+            self.assertIn("validate", retry.stderr)
+            self.assertEqual((archive / "MANIFEST.md").read_bytes(), manifest_before)
+            self.assertEqual(state_temporary.read_text(), "preserve on refusal\n")
+
+    def test_committed_target_commands_do_not_recreate_a_deleted_archive_root(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            archive = self.prepare_archive(repo)
+            self.write_manifest(archive)
+            self.mark_shipped(repo)
+            self.git(repo, "add", ".project")
+            ship = self.git(repo, "commit", "-q", "-m", f"ship: {archive.name}")
+            self.assertEqual(ship.returncode, 0, ship.stderr)
+
+            archive_root = repo / ".project" / "archive"
+            for command in ("prepare", "preflight", "validate"):
+                with self.subTest(command=command):
+                    if archive_root.exists():
+                        shutil.rmtree(archive_root)
+                    before = self.snapshot_worktree(repo)
+                    arguments = [
+                        sys.executable,
+                        str(ARCHIVE_SCRIPT),
+                        command,
+                        "--repo",
+                        str(repo),
+                    ]
+                    if command == "prepare":
+                        arguments.extend(("--slug", "demo"))
+                    result = self.run_command(*arguments, cwd=PROJECT_ROOT)
+
+                    self.assertNotEqual(result.returncode, 0)
+                    if command != "validate":
+                        self.assertIn("validate", result.stderr)
+                    self.assertEqual(self.snapshot_worktree(repo), before)
+
+    def test_preflight_rejects_dirty_older_archives_including_ignored_files(self) -> None:
+        for status_kind in ("tracked", "untracked", "ignored"):
+            with self.subTest(status_kind=status_kind), tempfile.TemporaryDirectory() as temporary_directory:
+                repo = Path(temporary_directory)
+                self.make_repo(repo)
+                older = repo / ".project" / "archive" / "000-older" / "locked.md"
+                if status_kind == "tracked":
+                    older.parent.mkdir(parents=True)
+                    older.write_text("original\n")
+                    self.git(repo, "add", str(older.relative_to(repo)))
+                    commit = self.git(repo, "commit", "-q", "-m", "older archive")
+                    self.assertEqual(commit.returncode, 0, commit.stderr)
+                    reviewed_head = self.git(repo, "rev-parse", "HEAD").stdout.strip()
+                    final = repo / ".project" / "review" / "FINAL.md"
+                    final_content = final.read_text()
+                    final.write_text(
+                        final_content.replace(
+                            final_content.split("Reviewed HEAD: ", 1)[1].splitlines()[0],
+                            reviewed_head,
+                        )
+                    )
+                    gap = repo / ".project" / "review" / "final-gap-1.md"
+                    gap_content = gap.read_text()
+                    gap.write_text(
+                        gap_content.replace(
+                            gap_content.split("Reviewed HEAD: ", 1)[1].splitlines()[0],
+                            reviewed_head,
+                        )
+                    )
+
+                archive = self.prepare_archive(repo)
+                self.write_manifest(archive)
+                if status_kind != "tracked":
+                    older.parent.mkdir(parents=True)
+                if status_kind == "ignored":
+                    (repo / ".git" / "info" / "exclude").write_text(
+                        ".project/archive/000-older/\n"
+                    )
+                older.write_text(f"{status_kind} mutation\n")
+
+                preflight = self.preflight(repo)
+                self.assertNotEqual(preflight.returncode, 0)
+                self.assertIn("older archive", preflight.stderr)
+
+    def test_preflight_rejects_ignored_files_in_the_current_archive(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            archive = self.prepare_archive(repo)
+            self.write_manifest(archive)
+            relative_archive = archive.relative_to(repo).as_posix()
+            (repo / ".git" / "info" / "exclude").write_text(f"{relative_archive}/review/FINAL.md\n")
+
+            preflight = self.preflight(repo)
+            self.assertNotEqual(preflight.returncode, 0)
+            self.assertIn("ignored current archive", preflight.stderr)
+
+    def test_ignored_untracked_carry_forward_fails_preflight_and_committed_validation(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            carry_path = ".project/research/DOCS-AUDIT.md"
+            untrack = self.git(repo, "rm", "--cached", "-q", carry_path)
+            self.assertEqual(untrack.returncode, 0, untrack.stderr)
+            commit = self.git(repo, "commit", "-q", "-m", "untrack carry queue")
+            self.assertEqual(commit.returncode, 0, commit.stderr)
+
+            reviewed_head = self.git(repo, "rev-parse", "HEAD").stdout.strip()
+            for name in ("FINAL.md", "final-gap-1.md"):
+                artifact = repo / ".project" / "review" / name
+                content = artifact.read_text()
+                old_head = content.split("Reviewed HEAD: ", 1)[1].splitlines()[0]
+                artifact.write_text(content.replace(old_head, reviewed_head))
+            (repo / ".git" / "info" / "exclude").write_text(f"/{carry_path}\n")
+
+            archive = self.prepare_archive(repo)
+            self.write_manifest(archive)
+            preflight = self.preflight(repo)
+            self.assertNotEqual(preflight.returncode, 0)
+            self.assertIn("ignored active carry-forward", preflight.stderr)
+
+            self.mark_shipped(repo)
+            self.git(repo, "add", ".project")
+            ship = self.git(repo, "commit", "-q", "-m", f"ship: {archive.name}")
+            self.assertEqual(ship.returncode, 0, ship.stderr)
+            validate = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "validate",
+                "--repo",
+                str(repo),
+                cwd=PROJECT_ROOT,
+            )
+            self.assertNotEqual(validate.returncode, 0)
+            self.assertIn("committed carry-forward", validate.stderr)
+
+    def test_validate_rejects_a_committed_carry_forward_with_different_bytes(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            archive = self.prepare_archive(repo)
+            self.write_manifest(archive)
+            active_audit = repo / ".project" / "research" / "DOCS-AUDIT.md"
+            archived_audit = archive / "research" / "DOCS-AUDIT.md"
+            active_audit.write_text("different committed queue\n")
+            self.mark_shipped(repo)
+            self.git(repo, "add", ".project")
+            ship = self.git(repo, "commit", "-q", "-m", f"ship: {archive.name}")
+            self.assertEqual(ship.returncode, 0, ship.stderr)
+
+            active_audit.write_bytes(archived_audit.read_bytes())
+            assume_unchanged = self.git(
+                repo,
+                "update-index",
+                "--assume-unchanged",
+                ".project/research/DOCS-AUDIT.md",
+            )
+            self.assertEqual(assume_unchanged.returncode, 0, assume_unchanged.stderr)
+            validate = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "validate",
+                "--repo",
+                str(repo),
+                cwd=PROJECT_ROOT,
+            )
+            self.assertNotEqual(validate.returncode, 0)
+            self.assertIn("committed carry-forward differs", validate.stderr)
+
+    def test_prepare_requires_normalized_milestone_slug_without_persisting_a_target(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            state_path = repo / ".project" / "STATE.md"
+            state_path.write_text(state_path.read_text().replace("milestone: demo", "milestone: Demo App"))
+
+            prepare = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "prepare",
+                "--repo",
+                str(repo),
+                "--slug",
+                "demo",
+                cwd=PROJECT_ROOT,
+            )
+
+            self.assertNotEqual(prepare.returncode, 0)
+            self.assertIn("slug", prepare.stderr)
+            self.assertIn("archive: null", state_path.read_text())
+
+    def test_prepare_normalizes_the_cli_milestone_and_binds_a_persisted_archive(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            state_path = repo / ".project" / "STATE.md"
+            state_path.write_text(state_path.read_text().replace("milestone: demo", "milestone: Demo App"))
+
+            archive = self.prepare_archive(repo, "Demo App")
+            self.assertEqual(archive.name, "001-demo-app")
+
+            state_path.write_text(state_path.read_text().replace("milestone: Demo App", "milestone: Other"))
+            retry = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "prepare",
+                "--repo",
+                str(repo),
+                "--slug",
+                "Other",
+                cwd=PROJECT_ROOT,
+            )
+            self.assertNotEqual(retry.returncode, 0)
+            self.assertIn("persisted archive slug", retry.stderr)
+
+    def test_prepare_rejects_symlinked_canonical_files_and_malformed_wave_names(self) -> None:
+        cases = ("singleton", "task", "malformed-wave")
+        for case in cases:
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as temporary_directory:
+                repo = Path(temporary_directory)
+                self.make_repo(repo)
+                project = repo / ".project"
+                if case == "singleton":
+                    intent = project / "intent" / "INTENT.md"
+                    intent.unlink()
+                    (project / "intent" / "actual.md").write_text("# Intent\n")
+                    intent.symlink_to("actual.md")
+                elif case == "task":
+                    task = project / "tasks" / "T001-demo.md"
+                    task.unlink()
+                    (project / "tasks" / "actual.md").write_text("# Task\n")
+                    task.symlink_to("actual.md")
+                else:
+                    (project / "review" / "wave-1cycle2.md").write_text("Wave verdict: pass\n")
+
+                prepare = self.run_command(
+                    sys.executable,
+                    str(ARCHIVE_SCRIPT),
+                    "prepare",
+                    "--repo",
+                    str(repo),
+                    "--slug",
+                    "demo",
+                    cwd=PROJECT_ROOT,
+                )
+                self.assertNotEqual(prepare.returncode, 0)
+                self.assertIn("canonical", prepare.stderr)
+
+    def test_preflight_derives_contiguous_cycles_and_requires_the_last_to_pass(self) -> None:
+        for case in ("manifest-count", "cycle-gap", "last-blocked", "wrong-heading", "wrong-cycle"):
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as temporary_directory:
+                repo = Path(temporary_directory)
+                self.make_repo(repo)
+                archive = self.prepare_archive(repo)
+                wave = archive / "review" / "wave-1.cycle1.md"
+                if case == "cycle-gap":
+                    cycle_two = archive / "review" / "wave-1.cycle2.md"
+                    wave.rename(cycle_two)
+                    cycle_two.write_text(
+                        "# Review — wave 1, cycle 2\n\nWave verdict: pass\nCycle: 2\n"
+                    )
+                elif case == "last-blocked":
+                    wave.write_text(wave.read_text().replace("Wave verdict: pass", "Wave verdict: blocked"))
+                elif case == "wrong-heading":
+                    wave.write_text(wave.read_text().replace("wave 1, cycle 1", "wave 2, cycle 1"))
+                elif case == "wrong-cycle":
+                    wave.write_text(wave.read_text().replace("Cycle: 1", "Cycle: 2"))
+                self.write_manifest(archive)
+                if case in {"manifest-count", "cycle-gap"}:
+                    manifest = archive / "MANIFEST.md"
+                    manifest.write_text(
+                        manifest.read_text().replace("Review cycles used: 1", "Review cycles used: 2")
+                    )
+
+                preflight = self.preflight(repo)
+                self.assertNotEqual(preflight.returncode, 0)
+                self.assertIn("cycle", preflight.stderr.lower())
+
+    def test_preflight_requires_final_pass_matching_criteria_and_complete_notes(self) -> None:
+        for case in (
+            "blocked-final",
+            "wrong-evidence",
+            "empty-notes",
+            "placeholder-note",
+            "manifest-placeholder",
+        ):
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as temporary_directory:
+                repo = Path(temporary_directory)
+                self.make_repo(repo)
+                archive = self.prepare_archive(repo)
+                self.write_manifest(archive)
+                manifest = archive / "MANIFEST.md"
+                final = archive / "review" / "FINAL.md"
+                if case == "blocked-final":
+                    final.write_text(final.read_text().replace("Overall verdict: pass", "Overall verdict: blocked"))
+                elif case == "wrong-evidence":
+                    manifest.write_text(
+                        manifest.read_text().replace(
+                            "| demo works | met | tests |",
+                            "| demo works | met | wrong |",
+                        )
+                    )
+                elif case == "empty-notes":
+                    manifest.write_text(manifest.read_text().replace("\n- none\n", "\n"))
+                elif case == "placeholder-note":
+                    manifest.write_text(manifest.read_text().replace("- none", "- <note>"))
+                else:
+                    manifest.write_text(manifest.read_text() + "\n<!-- <unfinished> -->\n")
+
+                preflight = self.preflight(repo)
+                self.assertNotEqual(preflight.returncode, 0)
+                expected = "final" if case == "blocked-final" else "criteria" if case == "wrong-evidence" else "notes"
+                if case in {"placeholder-note", "manifest-placeholder"}:
+                    expected = "placeholder"
+                self.assertIn(expected, preflight.stderr.lower())
+
+    def test_preflight_requires_contiguous_passing_gap_reviews_at_the_reviewed_head(self) -> None:
+        for case in ("missing", "symlink", "number", "heading", "head", "risk", "blocked"):
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as temporary_directory:
+                repo = Path(temporary_directory)
+                self.make_repo(repo)
+                archive = self.prepare_archive(repo)
+                gap = archive / "review" / "final-gap-1.md"
+                if case == "missing":
+                    gap.unlink()
+                elif case == "symlink":
+                    content = gap.read_text()
+                    gap.unlink()
+                    (archive / "review" / "gap-target.md").write_text(content)
+                    gap.symlink_to("gap-target.md")
+                elif case == "number":
+                    gap.rename(archive / "review" / "final-gap-2.md")
+                elif case == "heading":
+                    gap.write_text(gap.read_text().replace("Gap Review — 1", "Gap Review — 2"))
+                elif case == "head":
+                    reviewed = gap.read_text().split("Reviewed HEAD: ", 1)[1].splitlines()[0]
+                    gap.write_text(gap.read_text().replace(reviewed, "0" * 40))
+                elif case == "risk":
+                    gap.write_text(gap.read_text().replace("Risk: project Verify command", "Risk: <risk>"))
+                else:
+                    gap.write_text(gap.read_text().replace("Gap verdict: pass", "Gap verdict: blocked"))
+                self.write_manifest(archive)
+
+                preflight = self.preflight(repo)
+                self.assertNotEqual(preflight.returncode, 0)
+                self.assertIn("gap", preflight.stderr.lower())
+
+    def test_manifest_evidence_falls_back_from_final_reference_to_check(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            archive = self.prepare_archive(repo)
+            final = archive / "review" / "FINAL.md"
+            final.write_text(final.read_text().replace("**Reference**: tests", "**Reference**: none"))
+            self.write_manifest(archive)
+            manifest = archive / "MANIFEST.md"
+            manifest.write_text(
+                manifest.read_text().replace(
+                    "| demo works | met | tests |",
+                    "| demo works | met | python -m unittest |",
+                )
+            )
+
+            preflight = self.preflight(repo)
+            self.assertEqual(preflight.returncode, 0, preflight.stderr)
+
+    def test_reviewed_head_must_match_preflight_head_and_ship_parent(self) -> None:
+        for command in ("preflight", "validate"):
+            with self.subTest(command=command), tempfile.TemporaryDirectory() as temporary_directory:
+                repo = Path(temporary_directory)
+                self.make_repo(repo)
+                final = repo / ".project" / "review" / "FINAL.md"
+                reviewed_head = final.read_text().split("Reviewed HEAD: ", 1)[1].splitlines()[0]
+                final.write_text(final.read_text().replace(reviewed_head, "0" * 40))
+                archive = self.prepare_archive(repo)
+                self.write_manifest(archive)
+                if command == "preflight":
+                    result = self.preflight(repo)
+                else:
+                    self.mark_shipped(repo)
+                    self.git(repo, "add", ".project")
+                    ship = self.git(repo, "commit", "-q", "-m", f"ship: {archive.name}")
+                    self.assertEqual(ship.returncode, 0, ship.stderr)
+                    result = self.run_command(
+                        sys.executable,
+                        str(ARCHIVE_SCRIPT),
+                        "validate",
+                        "--repo",
+                        str(repo),
+                        cwd=PROJECT_ROOT,
+                    )
+
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("reviewed head", result.stderr.lower())
+
+
+if __name__ == "__main__":
+    unittest.main()

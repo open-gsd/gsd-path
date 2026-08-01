@@ -1,0 +1,6 @@
+interface:
+  display_name: "GSD Path Research"
+  short_description: "Gather cited evidence for project decisions"
+  default_prompt: "Use $gsd-path-research to gather cited evidence for the approved project intent."
+policy:
+  allow_implicit_invocation: false
