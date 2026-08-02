@@ -63,7 +63,9 @@ blocks without mutation. Otherwise:
    are now done; otherwise it blocks. Git history preserves the superseded
    finding, while final review itself still creates no pre-ship commit.
 2. Derive a stable numbered list of cross-wave integration risks from
-   interfaces and flows that span waves. Always include PLAN.md's project
+   interfaces and flows that span waves. List only genuine risks that could
+   plausibly fail; never pad the list — a small milestone may carry only the
+   project-Verify risk. Always include PLAN.md's project
    Verify command as a numbered risk so a failure has a reviewer-owned gap
    artifact with reproduced evidence and fix direction. Resolve the local
    [final-review template](templates/final-review.md) and
@@ -127,7 +129,13 @@ field is the transaction identity.
    artifact, permits active and archived `research/` together only for the
    byte-identical pending DOCS-AUDIT carry-forward, and recreates its parent
    before an atomic copy. Any other collision or missing artifact blocks.
-3. Render MANIFEST.md from the template using actual archive contents, final
+3. Append milestone lessons to `.project/LESSONS.md` (create it when
+   missing): one line per repeat-offender criterion across this milestone's
+   wave reviews and one per BOARD.md escalation, formatted
+   `- <NNN>-<slug> — <lesson>`. Skip the file entirely when there are none.
+   LESSONS.md stays in the active root across milestones — it ships inside
+   the ship commit but never archives — and the planner reads it.
+   Then render MANIFEST.md from the template using actual archive contents, final
    verdicts, wave/task/cycle counts, and carry-forward count. Write it through
    the deterministic same-directory path `.MANIFEST.md.gsd-path-tmp`, then
    atomically rename it to MANIFEST.md. `prepare` removes that exact temporary
@@ -150,8 +158,11 @@ field is the transaction identity.
    exception and no product or older-archive path may enter this commit.
 6. Immediately run `python3 <absolute-script> validate --repo <root>`. It requires
    the committed shipped state, exact archive and manifest, valid carry-forward,
-   no active milestone artifacts, a clean worktree, the exact HEAD subject,
-   and only `.project/` paths in the ship commit. Report shipped only when this
+   no active milestone artifacts, a clean worktree, the newest commit with exact
+   subject `ship: <NNN>-<milestone-slug>` in HEAD history, only `.project/`
+   paths in that commit, and no `.project` change after it. The ship commit
+   need not be HEAD: later product commits do not disturb a validated
+   shipment. Report shipped only when this
    command passes, including its returned archive path and full commit SHA.
 7. If a crash occurs before STATE's atomic rename, discard only the exact
    deterministic state temp through `prepare`. If it occurs after STATE becomes

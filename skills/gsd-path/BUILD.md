@@ -137,20 +137,31 @@ For each wave in PLAN.md order:
      rule. Preserve the isolated worktree unless and until the explicit clean
      retry-retirement procedure in step 2 owns and removes it.
 
-6. **Review the wave.** Only after every wave task is done, spawn one
-   independent reviewer using deterministic logical task name
-   `review_wave_<wave>_cycle_<cycle>`. Supply every task path, its
-   recorded base and commit, the reviewer role, and wave-review template. The
-   reviewer reconstructs each task alone in a disposable worktree and writes
-   `.project/review/wave-N.cycleC.md`.
+6. **Review the wave.** Only after every wave task is done, read the wave's
+   `Review depth` from PLAN.md (default `full`).
+   - `full`: spawn one independent reviewer using deterministic logical task
+     name `review_wave_<wave>_cycle_<cycle>`. Supply every task path, its
+     recorded base and commit, the reviewer role, and wave-review template.
+     The reviewer reconstructs each task alone in a disposable worktree and
+     writes `.project/review/wave-N.cycleC.md`.
+   - `verify-only`: spawn no reviewer. The orchestrator writes
+     `.project/review/wave-N.cycleC.md` itself from evidence it already
+     holds — per task, the isolated Verify rerun and the declared-files diff
+     check — recording `Depth: verify-only`. It checks each acceptance
+     criterion against that evidence and the diff; anything it cannot
+     confirm from them is a finding, not a pass.
 
 7. **Fix or advance.** A valid `pass` advances. On `blocked`, read
-   `max_review_cycles` from PLAN.md (default 3). Before the cap, create one
-   complete fix task per finding from the task template, including the failed
-   criterion and observed evidence verbatim, and run it through the same
-   isolated layer loop. At the cap, record all attempts in BOARD.md and
-   STATE.md and ask the user to relax, redirect, or raise the cap. Never choose
-   silently. On pass, commit the review artifact, BOARD.md, STATE.md, and wave
+   `max_review_cycles` from PLAN.md (default 3). Before the cap, batch the
+   findings into complete fix tasks from the task template — one task per
+   disjoint file scope, not one per finding — each carrying its findings'
+   failed criteria and observed evidence verbatim, and run them through the
+   same isolated layer loop. At the cap, record all attempts in BOARD.md and
+   STATE.md and ask the user — through an interactive user-input tool when
+   available — whether to relax the criterion, redirect the approach, or
+   raise the cap, listing the orchestrator's recommended option first marked
+   `(recommended)` with a one-line reason drawn from the review evidence.
+   Never choose silently. On pass, commit the review artifact, BOARD.md, STATE.md, and wave
    bookkeeping, then report `wave N/M done, C review cycle(s)`.
 
 ## Completion

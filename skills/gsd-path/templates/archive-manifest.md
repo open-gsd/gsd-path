@@ -13,6 +13,9 @@ Carried forward: <none, or "N DOCS-AUDIT ruling(s)">
 
 ## Success criteria at ship
 
+<!-- Evidence is copied verbatim from FINAL.md; escape a literal pipe as
+     \| so the row keeps its three cells. -->
+
 | Criterion | Verdict | Evidence |
 |-----------|---------|----------|
 | <criterion copied from FINAL.md> | met | <FINAL Reference; else Check; else Observed> |

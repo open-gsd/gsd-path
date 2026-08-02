@@ -74,13 +74,25 @@ start at `planned: no`; accepted
 Cover the problem, users, observable success, scope in, scope out, constraints,
 and risks. Chase contradictions and challenge the core assumption. Record
 vetoes and corrections verbatim. Unresolved items remain tagged `RESEARCH` or
-`NEEDS-USER`.
+`NEEDS-USER`. A user-supplied document (PRD, issue, design doc) is read
+first and presented as settled coverage for correction; the interview covers
+only its gaps and contradictions.
 
-**Gate:** the user approves the playback summary.
+At approval the grill classifies the milestone lane in INTENT.md: `quick`
+when scope fits at most two deliverable-sized tasks in one wave with no open
+questions and no cross-wave risk; otherwise `standard`. The quick lane skips
+research and synthesize — planning enters directly from `grill/done`, writes
+a Settled-only SYNTHESIS.md and a single wave (verify-only review depth
+permitted, at most two tasks) without a planner agent, and the rest of the
+pipeline runs unchanged. A quick plan that outgrows those bounds corrects the
+lane to `standard` and reroutes through research.
+
+**Gate:** the user approves the playback summary, including the lane.
 
 ## Phase 2 — Research (`gsd-path-research`)
 
-**Input:** INTENT.md. **Output:** the four standard evidence files:
+**Input:** INTENT.md. **Output:** one evidence file per dispatched dimension,
+drawn from the four standard dimensions:
 
 - `research/evidence-domain.md`
 - `research/evidence-stack.md`
@@ -92,27 +104,36 @@ fifth standard input downstream — researchers read it so recommendations
 fit the code that exists (the stack researcher weighs migration cost, the
 pitfalls researcher checks which traps are already sprung).
 
-Run all four researchers with separate briefs and output paths, batching when
-runtime capacity is lower than four children. An optional fifth dimension may
-supplement them but never replaces one. Every finding needs a checked source,
-confidence, and a tie-back to INTENT.md.
+Dispatch a researcher only for a dimension with something to answer — an
+assigned `RESEARCH` question, an unsettled choice, or an intent risk. Skip the
+rest and record each skip with its reason in the STATE.md log; never spawn a
+researcher to fill a file. Run dispatched researchers with separate briefs and
+output paths, batching when runtime capacity is lower than the dispatched
+count. An optional fifth dimension may supplement them but never replaces a
+dispatched one. Every finding needs a checked source, confidence, and a
+tie-back to INTENT.md.
 
-**Gate:** all four standard files exist, match the evidence template, contain
-at least one finding, and answer their assigned `RESEARCH` questions. One
-failed agent may be respawned once.
+**Gate:** every dispatched file exists, matches the evidence template,
+contains at least one finding, and answers its assigned `RESEARCH` questions;
+every skipped dimension is recorded with its reason. One failed agent may be
+respawned once.
 
 ## Phase 3 — Synthesize (`gsd-path-synthesize`)
 
-**Input:** INTENT.md and all four standard evidence files. **Output:**
+**Input:** INTENT.md and every dispatched evidence file. **Output:**
 `.project/research/SYNTHESIS.md`.
 
-The synthesizer turns evidence into commitments. Each applicable decision
-names the selection, runner-up and why it lost, cited evidence, and confidence.
+The synthesizer turns evidence into commitments. Each genuinely open decision
+names the selection, runner-up and why it lost, cited evidence, and
+confidence. A choice already settled by an intent constraint or the existing
+codebase is one line under Settled citing the settling source — never a full
+block with an invented runner-up.
 Conflicts are ruled on or escalated; unanswered intent questions remain
 visible. `## For the planner` identifies wave-one blockers, the walking
 skeleton, and pitfall-to-task guidance.
 
-**Gate:** all required decision areas are resolved and cited; all evidence
+**Gate:** all required decision areas are resolved and cited — as a decision
+block or a Settled line naming its source; all evidence
 files were considered; the planner brief is complete; and every `NEEDS-USER`
 item has a recorded user ruling. Any missing, optional, or unresolved decision
 blocks advancement.
@@ -129,18 +150,25 @@ Order work by risk and dependency:
 2. Wave two delivers the thinnest running end-to-end slice.
 3. Later waves add features, then polish.
 
-Every task contains inlined context, real paths, concrete steps, observable
-acceptance criteria, a meaningful `verify` command, declared files, deps, and
+Tasks are deliverable-sized: each is the largest coherent vertical slice —
+feature plus its tests and wiring — one agent run can complete, split only
+when file scopes, dependencies, or capacity force it. Every task contains
+inlined context, real paths, approach constraints, observable acceptance
+criteria, a meaningful `verify` command, declared files, deps, and
 orchestrator-owned `base`/`worktree`/`task_branch`/`commit` fields initialized
-to null.
+to null. Acceptance criteria and Verify are the contract; the coder owns
+implementation decisions inside the stated constraints. The planner reads
+`.project/LESSONS.md` when present and assigns each wave a `Review depth` —
+`full`, or `verify-only` for low-risk waves; wave 1 and any wave touching
+authentication, payments, data migration, or concurrency stays `full`.
 Same-wave tasks may depend on each other only when their file scopes do not
 overlap; the build executes those tasks in dependency layers. No two tasks
 that can run concurrently may share a file.
 
 **Gate:** both required inputs exist; deps resolve without cycles; layer and
-file-scope rules hold; criteria and verifies can fail meaningfully; task size
-is bounded; INTENT and SYNTHESIS are honored; and the user approves the wave
-summary.
+file-scope rules hold; criteria and verifies can fail meaningfully; tasks are
+deliverable-sized with no unforced splits; INTENT and SYNTHESIS are honored;
+and the user approves the wave summary.
 
 ## Phase 5 — Build (`gsd-path-build`)
 
@@ -185,15 +213,19 @@ For each wave:
    bookkeeping when necessary, then remove a retained clean worktree and
    branch only when both still belong to that task. Already-absent resources
    mean cleanup completed; partial or mismatched cleanup blocks.
-5. **Review the wave.** The reviewer receives task `base` and `commit` plus
+5. **Review the wave.** At `Review depth: full`, the reviewer receives task
+   `base` and `commit` plus
    orchestrator-created disposable worktrees. For each task it applies only
    `commit^..commit` product-file patch to the recorded base, re-runs Verify,
    and checks every criterion. Paths outside declared files plus the assigned
    task file block; that task file may change only orchestrator fields and its
-   append-only Log.
-6. **Fix and re-review.** Create one complete fix task per finding and execute
-   it through the same isolated loop. Stop for a user ruling at the configured
-   cycle cap.
+   append-only Log. At `verify-only`, no reviewer is spawned: the
+   orchestrator writes the wave-review file from its own isolated Verify and
+   diff evidence, and anything it cannot confirm from that evidence is a
+   finding.
+6. **Fix and re-review.** Batch findings into complete fix tasks — one per
+   disjoint file scope, not one per finding — and execute them through the
+   same isolated loop. Stop for a user ruling at the configured cycle cap.
 7. **Advance.** Only a passing wave permits the next. Commit review artifacts
    and BOARD/STATE bookkeeping at the boundary.
 
@@ -221,7 +253,9 @@ Run an integration reviewer and independent gap reviewers through the shared
 capacity-aware dispatch contract. The integration reviewer marks each success
 criterion `met`, `not-met`, or `unverifiable` with checked evidence. Each gap
 reviewer records `pass` or `blocked` for its assigned end-to-end or cross-wave
-risk; PLAN.md's project Verify is always one numbered risk. The orchestrator
+risk; PLAN.md's project Verify is always one numbered risk. List only genuine
+risks that could plausibly fail — a small milestone may carry only the
+project-Verify risk; never pad the list. The orchestrator
 creates one disposable worktree at exact reviewed HEAD
 per reviewer; project commands never run in the primary worktree. Every final
 artifact records that full reviewed HEAD. Retry may reuse an uncommitted output
@@ -289,9 +323,11 @@ orchestrator. The commit must contain only `.project/` paths. There is no
 untracked-project fallback.
 
 **Gate:** the bundled validator proves the committed shipped state, complete
-archive and manifest, valid carry-forward, clean worktree, exact ship subject,
-and `.project/`-only commit before the router reports shipped or starts a new
-milestone.
+archive and manifest, valid carry-forward, clean worktree, the newest commit
+with the exact ship subject in HEAD history, `.project/`-only paths in that
+commit, and no `.project` change after it before the router reports shipped or
+starts a new milestone. Product commits after shipping do not disturb a
+validated shipment.
 
 ## Standing process — Docs audit (`gsd-path-docs-audit`)
 
@@ -333,6 +369,7 @@ with their exact ordered source-file and row list.
 ```text
 .project/
   STATE.md                   pipeline owner, phase, branch, archive transaction, log
+  LESSONS.md                 cross-milestone lessons; appended at ship, read by the planner
   intent/INTENT.md           approved intent and hard constraints
   research/evidence-codebase.md   brownfield ground truth (onboard)
   research/DOCS-AUDIT.md     doc-vs-code verdicts and remediation queue
@@ -347,8 +384,10 @@ with their exact ordered source-file and row list.
   archive/<NNN>-<slug>/      read-only shipped milestones, each with MANIFEST.md
 ```
 
-At ship, everything except `STATE.md` and `archive/` moves into the numbered
-archive; active paths above describe the current milestone only.
+At ship, everything except `STATE.md`, `LESSONS.md`, and `archive/` moves
+into the numbered archive; active paths above describe the current milestone
+only. The ship step appends one lesson line per repeat-offender criterion and
+BOARD escalation to LESSONS.md before committing.
 
 Artifact formats are bundled with the installed `gsd-path` skill. Each phase
 resolves and passes their absolute paths. A missing or malformed artifact
@@ -359,5 +398,8 @@ fails its phase gate.
 - Missing precondition: route to the phase that produces it.
 - Missing or empty agent output: respawn once, then surface the failure.
 - Conflicting sources of truth: stop and report; never average.
-- Cycle cap, threatened veto, or checkpoint `NEEDS-USER`: ask the user.
+- Cycle cap, threatened veto, or checkpoint `NEEDS-USER`: ask the user —
+  through an interactive user-input tool when available, with the
+  recommended option listed first and justified in one line, alongside the
+  real alternatives.
 - Otherwise handle the problem, record it on disk, and continue.

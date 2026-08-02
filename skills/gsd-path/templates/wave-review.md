@@ -6,6 +6,8 @@
 
 Wave verdict: <pass | blocked — blocked if any task fails>
 Cycle: <C>
+Depth: <full | verify-only — verify-only is orchestrator-written from its
+        isolated Verify evidence; no independent reviewer ran>
 Tasks reviewed: <count>
 
 ## T001 — <title>: <pass | fail>
@@ -31,6 +33,7 @@ Contract violations (blocking):
 
 ## Summary for orchestrator
 
-- blocked → fix tasks needed: <T00xF<C>: one-line brief, ...>
+- blocked → fix tasks needed: <one per disjoint file scope, findings
+  batched: T00xF<C> — scope + findings covered, ...>
 - repeat offenders: <criteria failing across cycles — possible plan defect>
 - warnings worth a human eye: <...or none>

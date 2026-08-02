@@ -40,7 +40,12 @@ path in every brief as settled brownfield input.
 1. Read INTENT.md. Extract constraints, vetoes, risks, and `RESEARCH`
    questions. Assign every research question to at least one dimension and
    record that assignment before dispatch; no question may remain unassigned.
-2. Spawn the four standard dimensions:
+2. Decide which standard dimensions have work: dispatch a dimension only when
+   it has at least one assigned question, an unsettled choice (for example, no
+   stack decision yet), or an intent risk to investigate. Skip a dimension
+   with nothing to answer — never spawn a researcher to fill a file — and
+   record every skipped dimension with its reason in the STATE.md log at phase
+   completion. The standard dimensions:
 
    | Dimension | Output file | Focus |
    | --- | --- | --- |
@@ -50,7 +55,7 @@ path in every brief as settled brownfield input.
    | similar | `evidence-similar.md` | comparable products and reusable lessons |
 
    Dispatch up to the available child capacity, then dispatch each remaining
-   dimension when a slot opens. Keep all four briefs independent.
+   dimension when a slot opens. Keep all briefs independent.
 
    In brownfield work, require stack research to weigh migration cost and
    pitfalls research to check which failure modes already exist in the mapped
@@ -60,7 +65,7 @@ path in every brief as settled brownfield input.
    Derive its filename deterministically as `evidence-<dimension-slug>.md`:
    lowercase the label, replace non-alphanumeric runs with one hyphen, and
    trim hyphens. Append `-2` only if it collides with an existing dimension.
-4. Validate every expected evidence file after all agents finish. Confirm
+4. Validate every dispatched evidence file after all agents finish. Confirm
    every extracted `RESEARCH` question was assigned and answered. Require at
    least one `## Finding`, and require Claim, Source, Confidence, and Why it
    matters fields for every finding.
@@ -69,8 +74,9 @@ path in every brief as settled brownfield input.
    any expected file still fails, set STATE.md to `phase: research`, `status:
    blocked`, list the failures in the log, and stop. Never advance with partial
    research.
-6. When all expected files pass, set STATE.md to `phase: research`,
-   `status: done`, and append the transition log. When routed by an active
+6. When all dispatched files pass, set STATE.md to `phase: research`,
+   `status: done`, and append a transition log naming the dispatched and
+   skipped dimensions. When routed by an active
    `$gsd-path`, return control to that router. When invoked directly, stop and
    tell the user to explicitly invoke `$gsd-path` or `$gsd-path-synthesize`;
    do not invoke an explicit-only sibling skill yourself.

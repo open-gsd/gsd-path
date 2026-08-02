@@ -20,12 +20,12 @@ files:              # every file this task may touch — dispatch checks overlap
 <!-- 3–5 sentences. Everything the coder needs from INTENT/SYNTHESIS,
      inlined. The coder reads ONLY this file plus the codebase. -->
 
-## Steps
+## Approach
 
-<!-- Concrete and ordered. Real paths, function names, schemas.
-     Include applicable pitfalls from research. No judgment calls left open. -->
-1. <step>
-2. <step>
+<!-- Constraints, applicable pitfalls from research, and pointers to real
+     paths, symbols, and schemas. Not an edit script — the coder owns the
+     how within these constraints and the acceptance criteria. -->
+- <constraint or pointer>
 
 ## Acceptance criteria
 

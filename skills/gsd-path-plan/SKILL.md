@@ -18,7 +18,9 @@ explicitly invokes it.
 
 Require `pipeline: gsd-path/v1` in `.project/STATE.md`; a missing or different
 marker returns to `$gsd-path` for ownership checking. Normal-mode legal entry
-is `synthesize/done` (transition to `plan/active`) or `plan/active|blocked`.
+is `synthesize/done` (transition to `plan/active`) or `plan/active|blocked`;
+quick mode additionally enters from `grill/done` when INTENT.md records
+`Lane: quick` (see Quick mode below).
 Any later phase blocks instead of replacing an approved plan. Patch mode is
 the only reopen exception: require an approved plan, no in-progress task, and
 state `plan/done` or `review/blocked`; any other state blocks. `build/done` is
@@ -26,8 +28,8 @@ reserved exclusively for the build orchestrator's transition recovery and
 must return there instead of reopening planning.
 Require both
 `.project/intent/INTENT.md` and
-`.project/research/SYNTHESIS.md`. Require a non-empty `## Decisions` section
-and no unresolved `NEEDS-USER` items. Route to the producing phase when a
+`.project/research/SYNTHESIS.md`. Require a non-empty `## Decisions` or
+`## Settled` section and no unresolved `NEEDS-USER` items. Route to the producing phase when a
 precondition fails.
 
 ## Alignment queue check
@@ -43,7 +45,10 @@ rulings marked `planned: no`. If any exist, offer once to include them:
 
 Declined items stay `planned: no` and will be offered again next time. The
 user picks per item or "all"/"none" — a stale backlog must never sneak into
-a plan wholesale without the user seeing the list.
+a plan wholesale without the user seeing the list. Offer through an
+interactive user-input tool when available, marking the planner's
+recommended choice per item `(recommended)` with a one-line reason (age,
+severity, or fit with this milestone's scope).
 
 ## Process
 
@@ -51,7 +56,8 @@ a plan wholesale without the user seeing the list.
    [task template](templates/task.md); resolve both to absolute paths.
 2. Read the local [planner role](references/planner.md), then follow the
    local [runtime dispatch contract](references/dispatch.md) with deterministic
-   logical task name `plan`. Give it absolute role, input, template, and output paths.
+   logical task name `plan`. Give it absolute role, input, template, and output paths,
+   including `.project/LESSONS.md` when it exists.
    The outputs are exactly `.project/plan/PLAN.md` and one task
    file per task at `.project/tasks/T###-slug.md` — no other location is
    canonical, and `.project/PLAN.md` is never written.
@@ -66,10 +72,17 @@ a plan wholesale without the user seeing the list.
      detect cycles, and forbid file overlap between planned tasks in the same
      wave. Same-wave dependency chains are allowed only when their files do
      not overlap; the build executes them in dependency layers.
-   - Require non-empty Context, ordered Steps, observable Acceptance criteria,
+   - Require non-empty Context and Approach, observable Acceptance criteria,
      a Verify command that can fail when work is skipped, and Log sections.
-   - Require each task to fit one focused agent assignment and name real paths
-     that match the existing codebase.
+   - Require deliverable-sized tasks naming real paths that match the existing
+     codebase: each task is the largest coherent vertical slice — feature plus
+     its tests and wiring — one agent run can complete. Reject a plan that
+     splits one deliverable across tasks when no file-scope, dependency, or
+     capacity conflict forces the split.
+   - Require a `Review depth` value (`full` or `verify-only`) on every wave.
+     Wave 1 and any wave touching authentication, authorization, payments,
+     data migration, or concurrency requires `full`; quick-lane single waves
+     may use `verify-only`.
    - Prove every intent constraint and synthesis decision is covered, and that
      no scope-out veto appears in a task.
 4. Redispatch one complete corrected brief under logical task name `plan`,
@@ -92,6 +105,26 @@ a plan wholesale without the user seeing the list.
 - Put plan-invalidating assumptions in wave 1.
 - Produce the thinnest runnable end-to-end slice in wave 2.
 - Order later features by dependency, then polish.
+
+## Quick mode
+
+Legal entry: `grill/done` where INTENT.md records `Lane: quick` (transition
+to `plan/active`, logging that research and synthesize were skipped for the
+quick lane). Quick mode dispatches no planner agent — the orchestrator writes
+the artifacts directly:
+
+1. Write `.project/research/SYNTHESIS.md` containing only `## Settled` lines
+   citing INTENT.md constraints (and, brownfield, `evidence-codebase.md`)
+   plus a minimal `## For the planner` naming the walking skeleton. No
+   invented decisions or runner-ups.
+2. Write `.project/plan/PLAN.md` with exactly one wave — `Review depth:
+   verify-only` permitted — and at most two deliverable-sized task files,
+   honoring every task-contract rule above and `.project/LESSONS.md` when it
+   exists.
+3. Gate exactly as step 3 above and ask the same single approval question.
+   A quick plan that cannot satisfy the gates — more than two tasks, an open
+   choice, a cross-wave risk — corrects INTENT.md's `Lane:` to `standard`,
+   tells the user why, and returns to the standard pipeline at `grill/done`.
 
 ## Patch mode
 

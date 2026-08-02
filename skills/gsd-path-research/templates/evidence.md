@@ -12,7 +12,7 @@ Questions assigned: <RESEARCH-tagged questions from INTENT.md, or "none">
 - **Confidence**: <high | medium | low>
 - **Why it matters here**: <one line tying this to INTENT.md>
 
-<!-- 5–10 findings. Repeat the block. -->
+<!-- One block per load-bearing finding — no quota. Repeat as needed. -->
 
 ## Assigned questions — answers
 

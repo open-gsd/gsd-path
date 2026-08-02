@@ -91,7 +91,8 @@ and must not delay routing.
 | `onboard`, not done | bundled [onboard contract](ONBOARD.md) |
 | `onboard`, done | bundled [grill contract](GRILL.md), brownfield mode |
 | `grill`, not done | bundled [grill contract](GRILL.md) |
-| `grill`, done | bundled [research contract](RESEARCH.md) |
+| `grill`, done, INTENT `Lane: standard` (or no Lane line) | bundled [research contract](RESEARCH.md) |
+| `grill`, done, INTENT `Lane: quick` | bundled [plan contract](PLAN.md), quick mode |
 | `research`, not done | bundled [research contract](RESEARCH.md) |
 | `research`, done | bundled [synthesis contract](SYNTHESIZE.md) |
 | `synthesize`, not done | bundled [synthesis contract](SYNTHESIZE.md) |

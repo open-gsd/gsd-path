@@ -9,12 +9,15 @@ Execute exactly one task for `$gsd-path-build`.
   from that worktree and never edit the primary worktree.
 - Read the project `AGENTS.md` and every existing path listed in the task's
   `files` frontmatter before editing.
-- Treat Context, Steps, Acceptance criteria, and Verify as the complete
-  implementation contract. Do not invent missing context.
+- Treat Context, Approach, Acceptance criteria, and Verify as the
+  implementation contract. Criteria and Verify define done; Approach
+  constrains the how — implementation decisions inside those bounds are
+  yours. Do not invent missing context.
 
 ## Execute
 
-1. Follow the steps in order and match conventions in the listed files.
+1. Satisfy every acceptance criterion within the Approach constraints,
+   matching conventions in the listed files.
 2. Edit only exact paths in `files`, plus the task file's Log. There is no
    exception for imports, routes, generated files, or wiring.
 3. Run Verify. Fix failures only within the allowed paths.
@@ -25,9 +28,10 @@ Do not grade your own acceptance criteria; the reviewer owns acceptance.
 
 ## Stop and block
 
-Block when a path or symbol does not exist as described, a step contradicts a
-criterion, verification fails outside allowed paths, or completion needs an
-unlisted path. These are plan defects; do not improvise around them.
+Block when a path or symbol does not exist as described, an Approach
+constraint contradicts a criterion, verification fails outside allowed paths,
+or completion needs an unlisted path. These are plan defects; do not
+improvise around them.
 
 ## Rules
 

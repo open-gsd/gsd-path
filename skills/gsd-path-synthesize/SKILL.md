@@ -20,10 +20,11 @@ marker returns to `$gsd-path` for ownership checking. Legal entry is
 `research/done` (transition to `synthesize/active`) or
 `synthesize/active|blocked`; `synthesize/done` or any later phase blocks rather
 than replacing decisions beneath an existing plan. Require
-`.project/intent/INTENT.md` and all four standard evidence files:
-`evidence-domain.md`, `evidence-stack.md`, `evidence-pitfalls.md`, and
-`evidence-similar.md`. Include every additional `evidence-*.md` file present.
-If a standard file is missing or invalid, route to `$gsd-path-research`.
+`.project/intent/INTENT.md` and every `evidence-*.md` file the research phase
+dispatched. A standard file may be absent only when the research phase's
+STATE.md log records that dimension as skipped; a missing or invalid
+dispatched file routes to `$gsd-path-research`. Include every additional
+`evidence-*.md` file present.
 
 ## Process
 
@@ -34,10 +35,13 @@ If a standard file is missing or invalid, route to `$gsd-path-research`.
    deterministic logical task name `synthesize`. Give it absolute paths to the role,
    INTENT.md, every evidence file, the template, and the required output
    `.project/research/SYNTHESIS.md`.
-3. Validate SYNTHESIS.md. Require one decision block for every open choice in
-   INTENT.md and the evidence, including stack and architecture shape plus
-   build-vs-buy where applicable. Require Decision, Runner-up, Evidence, and
-   Confidence in every block. Require `## For the planner` with wave-1
+3. Validate SYNTHESIS.md. Require one decision block for every genuinely open
+   choice in INTENT.md and the evidence, including stack and architecture
+   shape plus build-vs-buy when open. A choice already settled by an intent
+   constraint or the existing codebase belongs under `## Settled` as one line
+   citing the settling source — never a full block with an invented
+   runner-up. Require Decision, Runner-up, Evidence, and
+   Confidence in every decision block. Require `## For the planner` with wave-1
    blockers, walking skeleton, and pitfall-to-task guidance.
 4. If structural validation fails, redispatch one complete corrected brief
    under logical task name `synthesize`, following the runtime dispatch
@@ -45,7 +49,10 @@ If a standard file is missing or invalid, route to `$gsd-path-research`.
    `phase: synthesize`, `status: blocked`, append the failures to its log, and
    stop.
 5. Present the decision list and every `NEEDS-USER` item. Use an interactive
-   user-input tool when available; otherwise ask in chat and wait. For each
+   user-input tool when available; otherwise ask in chat and wait. Present
+   each item's options with the evidence-preferred option first, marked
+   `(recommended)` and justified in one line; a pure values call with no
+   evidence either way carries no recommendation, stated as such. For each
    answer, append the ruling under `## User rulings`, revise every affected
    decision so it reflects the ruling, and only then remove its tag.
 6. Re-run the structural gate. When it passes with no unresolved user items,
@@ -57,7 +64,8 @@ If a standard file is missing or invalid, route to `$gsd-path-research`.
 
 ## Rules
 
-- Make commitments, not option lists. Name the runner-up and why it lost.
+- Make commitments, not option lists. Name the runner-up and why it lost
+  when a real alternative was weighed; never invent one.
 - Cite evidence by file and finding heading for every decision.
 - Route low-confidence decisions to wave 1 for verification. Reject uncited
   decisions.

@@ -3,6 +3,11 @@
 <!-- Written by $gsd-path-grill. Every downstream agent reads this first.
      Constraints and vetoes here override everything downstream. -->
 
+Lane: standard   <!-- standard | quick — quick: at most two deliverable-sized
+                      tasks in one wave, no RESEARCH or NEEDS-USER items, no
+                      cross-wave risk; set by the grill at approval. Quick
+                      skips research and synthesize. -->
+
 ## Summary
 
 <3–5 sentences: the problem, who has it, what the first release does. This is the

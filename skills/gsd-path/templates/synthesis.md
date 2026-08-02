@@ -2,9 +2,15 @@
 
 <!-- Written by the synthesizer role. The planner treats Decisions as settled. -->
 
+## Settled
+
+<!-- Choices closed by an intent constraint or the existing codebase.
+     One line each, citing the settling source. No invented runner-ups. -->
+- <area> — <what stands> (<settling source>)
+
 ## Decisions
 
-<!-- One block per resolved choice. -->
+<!-- One block per genuinely open choice the evidence resolved. -->
 ### <decision area, e.g. Stack>
 
 - **Decision**: <what we're doing>

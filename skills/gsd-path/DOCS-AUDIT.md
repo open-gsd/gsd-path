@@ -50,7 +50,11 @@ would dirty execution, invalidate review, or mutate shipped history.
    claims), and the remediation queue. Do not fix anything in this skill.
 4. **Collect rulings** (standalone runs; during `$gsd-path-onboard` the grill
    owns this). Walk the remediation queue with the user — batches of three,
-   an interactive input tool when available. Each item gets one ruling:
+   an interactive input tool when available. Present the auditor's
+   classification as the first option marked `(recommended)` with its
+   recorded evidence as the one-line reason; a `NEEDS-USER` item where the
+   auditor cannot tell which side is wrong carries no recommendation, stated
+   as such. Each item gets one ruling:
    - `fix-code` — the doc is the contract; the code must catch up
    - `fix-doc` — reality is right; the doc must be corrected
    - `accept-drift` — known and tolerated; recorded so the next audit

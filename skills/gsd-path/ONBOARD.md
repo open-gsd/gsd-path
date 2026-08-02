@@ -59,7 +59,8 @@ overwriting it. Re-running onboarding would overwrite established context.
    dirty. Otherwise no project command may run. The orchestrator removes only
    those exact worktrees after collecting both agents.
 3. Gate both artifacts against their templates: the codebase evidence needs
-   a filled `## Map` plus at least three findings; the docs audit's document
+   a filled `## Map` plus findings as observed — no quota, but an empty
+   findings section must say why; the docs audit's document
    path set must equal the frozen inventory exactly and every path needs a
    verdict. Redispatch one complete corrected brief under the same logical task
    name, following the runtime dispatch contract, then set `status: blocked`

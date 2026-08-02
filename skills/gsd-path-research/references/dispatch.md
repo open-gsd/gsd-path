@@ -41,8 +41,12 @@ For every branch:
 - Resolve the phase's linked role brief to an absolute path, include it in the
   prompt, and require the child to read it before acting. The role brief
   supplies the read-only boundary for auditors and reviewers.
-- Do not override the model or ask the host to create a worktree. Give the
-  child the exact repository or linked-worktree root supplied by GSD Path.
+- Tier hints: when the host advertises model or reasoning-effort selection,
+  request `heavy` for `plan`, `plan_patch`, and `synthesize`, `light` for
+  `onboard_docs` and `docs_audit`, and the session default for every other
+  role. When the host offers no such selection, do not override the model.
+  Never ask the host to create a worktree. Give the child the exact
+  repository or linked-worktree root supplied by GSD Path.
 - Send a self-contained prompt with absolute input, template, and output paths
   plus the child's bounded responsibility. A coder prompt also names its
   isolated linked-worktree root; no child may infer the primary worktree.

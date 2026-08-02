@@ -44,6 +44,16 @@ Obtain a confident answer in every area before finishing:
 6. **Constraints** — stack, deadline, budget, code, integrations, compliance.
 7. **Risks** — the assumptions and unknowns research must investigate.
 
+## Supplied-spec mode
+
+When the user supplies a document at entry — a PRD, issue, or design doc —
+read it fully before the first question and map it against the coverage
+checklist. Present what the document settles per checklist area for
+correction — stated, not asked, exactly like brownfield ground truth — then
+interview only the gaps and contradictions. Note the source document path in
+INTENT.md's Summary. A supplied spec composes with brownfield mode: ground
+truth first, then the spec, then delta questions only.
+
 ## Brownfield mode
 
 When `.project/research/evidence-codebase.md` exists (the router ran
@@ -74,7 +84,9 @@ first question. The rules change:
 2. Ask rounds of two or three questions aimed at the weakest checklist areas.
    Use an interactive user-input tool when available. Otherwise ask concise
    numbered questions in chat and stop for the reply. Never send more than
-   three questions in one round.
+   three questions in one round. When a question offers options, list the
+   recommended one first marked `(recommended)` with a one-line reason;
+   leave open questions open.
 3. Surface contradictions immediately and ask the user to choose. Never
    average incompatible answers.
 4. Challenge the largest assumption at least once: ask what happens if it is
@@ -88,13 +100,21 @@ first question. The rules change:
 
 ## Output contract
 
+At approval, classify the milestone lane and record it in INTENT.md's
+`Lane:` line, stating it in the playback with a one-line reason: `quick`
+when scope fits at most two deliverable-sized tasks in one wave with no
+`RESEARCH` or `NEEDS-USER` items and no cross-wave integration risk;
+otherwise `standard`.
+
 After approval, finalize `.project/intent/INTENT.md` and update STATE.md to
 `phase: grill`, `status: done`, set its `milestone` field to this
-milestone's slug, and append the transition to its log. Report
-that research is next. When routed by an active `$gsd-path`, return control to
-that router so its bundled research contract can auto-advance. When invoked
-directly, stop and tell the user to explicitly invoke `$gsd-path` or
-`$gsd-path-research`; do not invoke an explicit-only sibling skill yourself.
+milestone's slug, and append the transition to its log. Report that research
+is next — or, quick lane, that planning is next and research and synthesize
+are skipped. When routed by an active `$gsd-path`, return control to
+that router so its bundled next contract can auto-advance (research, or plan
+in quick mode). When invoked directly, stop and tell the user to explicitly
+invoke `$gsd-path`, `$gsd-path-research`, or — quick lane — `$gsd-path-plan`;
+do not invoke an explicit-only sibling skill yourself.
 
 ## Rules
 
