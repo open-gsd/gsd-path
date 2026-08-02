@@ -80,6 +80,12 @@ DOCS-AUDIT.md has `planned: no` rulings, add one alignment-queue line and offer
 once to route them through the bundled [plan contract](PLAN.md); declining
 does not block.
 
+Once per conversation, before the status report, run the bundled update check
+`python3 <skill-dir>/scripts/check_update.py`. It is cached, offline-safe, and
+prints either nothing or one notice line; append that line verbatim to the
+report. Ignore any failure and never block or retry — the check is advisory
+and must not delay routing.
+
 | State | Next action |
 | --- | --- |
 | `onboard`, not done | bundled [onboard contract](ONBOARD.md) |

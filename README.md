@@ -6,6 +6,8 @@ Zed, and Kiro. It turns a raw idea into shipped code through six gated phases.
 Each phase writes a fixed artifact that the next phase reads, so a fresh task
 can resume from `.project/` alone.
 
+New here? Read [GUIDE.md](GUIDE.md) for the install-to-ship walkthrough.
+
 ## The flow
 
 ```text
@@ -124,15 +126,72 @@ The dependency-free installer validates the synchronized package before it
 writes anything. Preview an all-host install, then apply it:
 
 ```bash
-python3 scripts/install.py --all --dry-run
-python3 scripts/install.py --all
+node scripts/install.mjs --all --dry-run
+node scripts/install.mjs --all
 ```
 
 Install only selected hosts by combining their flags:
 
 ```bash
-python3 scripts/install.py --codex --claude --cursor
+node scripts/install.mjs --codex --claude --cursor
 ```
+
+The installer needs Node 18.17+ and, when published to npm, also runs as
+`npx gsd-path --all`. `scripts/install.py` is the equivalent Python
+installer for global installs — identical validation, transactions, and
+results; the `--local` mode and interactive output below are Node-only.
+
+### Global or per-project
+
+The default is a global install into each host's user-level skills root
+(table below). Add `--local` to instead install into the current project's
+documented per-host skill directories:
+
+```bash
+node scripts/install.mjs --all --local
+```
+
+| Host | Project skills root |
+| --- | --- |
+| Codex, Zed | `.agents/skills` (one shared bundle) |
+| Claude Code | `.claude/skills` |
+| Grok | `.grok/skills` |
+| OpenCode | `.opencode/skills` |
+| GitHub Copilot CLI | `.github/skills` |
+| Qwen Code | `.qwen/skills` |
+| Cursor | `.cursor/skills` (+ subagent at `.cursor/agents/gsd-path.md`) |
+| Kiro | `.kiro/skills` |
+
+Antigravity also reads the project `.agents/skills` directory; when Codex or
+Zed is selected alongside it, the installer skips Antigravity's own bundle
+and notes that the shared one covers the path. `--local` never touches the
+legacy `~/.codex` migration. Per-target `--<target>-root` overrides win over
+both modes.
+
+### Updating
+
+`--update` refreshes existing installs in place. It detects which hosts
+already have GSD Path skills — global roots by default, the current
+project's roots with `--local` — and reruns the transactional install for
+exactly those, leaving uninstalled hosts untouched. Each replaced copy
+lands in that root's `disabled-gsd-skills` backup.
+
+```bash
+node scripts/install.mjs --update
+node scripts/install.mjs --update --local
+```
+
+Running from npm, `npx gsd-path@latest --update` fetches and applies the
+newest published version; from a clone, `git pull` first. Add target flags
+to narrow the update, or `--dry-run` to preview it.
+
+Installed routers also surface updates on their own: both installers stamp
+the package version into `gsd-path/VERSION`, and the router's status report
+runs the bundled `scripts/check_update.py` once per conversation. The check
+compares the stamp against the npm registry with a 24-hour cache and a
+3-second timeout, prints at most one notice line with the update command,
+and stays silent on any failure (offline, unpublished, no stamp) so it can
+never block routing.
 
 | Flag | Native user skill root | Explicit invocation |
 | --- | --- | --- |
@@ -190,7 +249,7 @@ For a brand-new project, install the shared project contracts in the same
 transaction:
 
 ```bash
-python3 scripts/install.py --all --project /path/to/project
+node scripts/install.mjs --all --project /path/to/project
 ```
 
 This writes `AGENTS.md` and `WORKFLOW.md`; when Claude is selected it also
@@ -209,9 +268,11 @@ router explicitly.
 - `platforms/` — installer-only host dispatch adapters and Cursor child definition
 - `skills/gsd-path/templates/` — canonical artifact formats
 - `skills/gsd-path/references/` — canonical role and dispatch contracts
-- `scripts/install.py` — safe multi-host installer
+- `scripts/install.mjs` — safe multi-host installer (Node, npm `gsd-path` bin)
+- `scripts/install.py` — the same installer in Python
 - `scripts/sync_skill_resources.py` — refreshes/checks phase resources and router contracts
 - `scripts/archive_milestone.py` — prepares and validates the ship transaction
+- `GUIDE.md` — install-to-ship how-to walkthrough
 - `AGENTS.md` — shared operating rules to install in the project root
 - `WORKFLOW.md` — phase-by-phase SOP to install in the project root
 - `LICENSE` — MIT

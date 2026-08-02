@@ -185,6 +185,20 @@ class InstallerTests(unittest.TestCase):
         self.assertIn("shared dispatch for gsd-path", dispatch)
         self.assertTrue((staged / "gsd-path" / "agents" / "openai.yaml").is_file())
 
+    def test_stage_target_stamps_version_from_package_manifest(self):
+        staged = self.root / "staged-unstamped"
+        staged.mkdir()
+        install.stage_target(self.source, "claude", staged)
+        self.assertFalse((staged / "gsd-path" / "VERSION").exists())
+
+        (self.source / "package.json").write_text('{"version": "9.9.9"}', encoding="utf-8")
+        staged = self.root / "staged-version"
+        staged.mkdir()
+        install.stage_target(self.source, "claude", staged)
+        self.assertEqual(
+            "9.9.9\n", (staged / "gsd-path" / "VERSION").read_text(encoding="utf-8")
+        )
+
     def test_all_installs_each_target(self):
         roots = {target: self.root / target / "skills" for target in install.TARGETS}
         roots["zed"] = roots["codex"]

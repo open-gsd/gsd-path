@@ -2,6 +2,7 @@
 """Install GSD Path skills for supported coding agents."""
 
 import argparse
+import json
 import os
 import shutil
 import sys
@@ -267,6 +268,17 @@ def stage_target(source_root: Path, target: str, staged_root: Path) -> None:
     skills_root = source_root / "skills"
     for name in SKILL_NAMES:
         shutil.copytree(skills_root / name, staged_root / name)
+
+    manifest = source_root / "package.json"
+    if manifest.is_file():
+        try:
+            version = json.loads(manifest.read_text(encoding="utf-8")).get("version")
+        except (json.JSONDecodeError, AttributeError):
+            version = None
+        if version:
+            (staged_root / "gsd-path" / "VERSION").write_text(
+                f"{version}\n", encoding="utf-8"
+            )
 
     adapter = (source_root / "platforms" / target / "dispatch.md").read_text(
         encoding="utf-8"
