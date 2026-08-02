@@ -29,6 +29,15 @@ use exactly one matching branch:
 - A `task` tool advertising the `general-purpose` child is GitHub Copilot CLI.
   Use that child. Keep its returned ID for follow-up while the host exposes
   it; otherwise retry with a fresh child and a complete prompt.
+- An `invoke_sub_agent` tool with a `general-purpose` subagent is Kiro. Use
+  that child for every role; there is no worker/default type split. Start a
+  fresh general-purpose child for every correction, retry, post-patch review,
+  repeated audit, or later milestone — Kiro subagents are not resumable and
+  disk artifacts are the source of truth. Supply the logical task name as the
+  task description. Set the child working directory to the exact repository or
+  linked-worktree root supplied by GSD Path; do not ask Kiro or the child to
+  create another worktree. Encode task dependencies explicitly; launch no more
+  than four subagents at once.
 
 For every branch:
 
