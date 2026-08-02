@@ -31,10 +31,9 @@ would dirty execution, invalidate review, or mutate shipped history.
 1. Before writing the output, freeze the sorted Markdown inventory. Exclude
    vendored/generated trees, `node_modules`, `.git`, `.project/archive/**`,
    and the assigned output itself; include other `.project/` Markdown only in
-   alignment mode. Dispatch one docs auditor with built-in
-   `agent_type: default`, `fork_turns: "none"`, deterministic
-   `task_name: docs_audit`, and the shared
-   [dispatch contract](references/dispatch.md): local role
+   alignment mode. Dispatch one docs auditor with deterministic logical task
+   name `docs_audit`, following the local
+   [runtime dispatch contract](references/dispatch.md): local role
    [docs-auditor](references/docs-auditor.md), template
    [docs-audit](templates/docs-audit.md), absolute repo root, exact frozen
    inventory, alignment flag, prior audit as carry-forward input, and output
@@ -45,13 +44,17 @@ would dirty execution, invalidate review, or mutate shipped history.
    project command may run.
 2. Gate the artifact: every inventoried doc has a claims table, every claim
    a verdict with evidence, and its path set equals the frozen inventory
-   exactly. One corrective follow-up to the same `docs_audit` target, then
-   surface failure.
+   exactly. Redispatch one complete corrected brief under logical task name
+   `docs_audit`, following the runtime dispatch contract, then surface failure.
 3. Report to the user: verdict counts, the drift list (stale + aspirational
    claims), and the remediation queue. Do not fix anything in this skill.
 4. **Collect rulings** (standalone runs; during `$gsd-path-onboard` the grill
    owns this). Walk the remediation queue with the user — batches of three,
-   an interactive input tool when available. Each item gets one ruling:
+   an interactive input tool when available. Present the auditor's
+   classification as the first option marked `(recommended)` with its
+   recorded evidence as the one-line reason; a `NEEDS-USER` item where the
+   auditor cannot tell which side is wrong carries no recommendation, stated
+   as such. Each item gets one ruling:
    - `fix-code` — the doc is the contract; the code must catch up
    - `fix-doc` — reality is right; the doc must be corrected
    - `accept-drift` — known and tolerated; recorded so the next audit

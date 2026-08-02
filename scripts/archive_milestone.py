@@ -33,17 +33,49 @@ MANIFEST_HEADINGS = ("## Success criteria at ship", "## Contents", "## Notes")
 CARRY_TEMP_NAME = ".DOCS-AUDIT.md.gsd-path-tmp"
 STATE_TEMP_NAME = ".STATE.md.gsd-path-tmp"
 MANIFEST_TEMP_NAME = ".MANIFEST.md.gsd-path-tmp"
+# Evidence files are per-dispatched-dimension: the research phase gate owns
+# their existence, so the archive requires only the always-produced core.
 REQUIRED_ARCHIVE_FILES = (
     "intent/INTENT.md",
-    "research/evidence-domain.md",
-    "research/evidence-stack.md",
-    "research/evidence-pitfalls.md",
-    "research/evidence-similar.md",
     "research/SYNTHESIS.md",
     "plan/PLAN.md",
     "review/FINAL.md",
     "BOARD.md",
 )
+
+# Template placeholders look like <name> or <one line>. Comparison text such
+# as "120ms < 200ms" or "a -> b" is legitimate evidence, not a placeholder.
+PLACEHOLDER_PATTERN = re.compile(r"<[a-zA-Z][^<>\n]*>")
+
+
+def contains_placeholder(value: str) -> bool:
+    return PLACEHOLDER_PATTERN.search(value) is not None
+
+
+def split_manifest_row(line: str) -> Sequence[str]:
+    """Split a manifest table row, honoring \\| as an escaped literal pipe."""
+    text = line.strip()
+    if text.startswith("|"):
+        text = text[1:]
+    if text.endswith("|") and not text.endswith("\\|"):
+        text = text[:-1]
+    cells = []
+    current = []
+    index = 0
+    while index < len(text):
+        char = text[index]
+        if char == "\\" and index + 1 < len(text) and text[index + 1] == "|":
+            current.append("|")
+            index += 2
+            continue
+        if char == "|":
+            cells.append("".join(current).strip())
+            current = []
+        else:
+            current.append(char)
+        index += 1
+    cells.append("".join(current).strip())
+    return cells
 
 
 class ArchiveError(RuntimeError):
@@ -392,7 +424,7 @@ def require_transaction_context(project: Path, state: str, phases: Sequence[str]
 
 def completed_field(lines: Sequence[str], field: str, artifact: str) -> str:
     values = [line.removeprefix(field).strip() for line in lines if line.startswith(field)]
-    if len(values) != 1 or not values[0] or "<" in values[0] or ">" in values[0]:
+    if len(values) != 1 or not values[0] or contains_placeholder(values[0]):
         raise ArchiveError(f"{artifact} requires one completed {field} field")
     return values[0]
 
@@ -440,7 +472,7 @@ def parse_final_review(archive: Path) -> tuple:
                 raise ArchiveError(f"FINAL.md repeats {key} for {criterion}")
             values[key] = value.strip().strip("`")
         if tuple(values) != expected_fields or any(
-            not value or "<" in value or ">" in value for value in values.values()
+            not value or contains_placeholder(value) for value in values.values()
         ):
             raise ArchiveError(f"FINAL.md criterion is incomplete: {criterion}")
         if values["Verdict"] != "met":
@@ -478,8 +510,7 @@ def validate_gap_reviews(archive: Path, reviewed_head: str) -> None:
         if (
             len(headings) != 1
             or int(headings[0].group(1)) != number
-            or "<" in headings[0].group(2)
-            or ">" in headings[0].group(2)
+            or contains_placeholder(headings[0].group(2))
         ):
             raise ArchiveError(f"{path.name} heading does not match its number")
         gap_head = completed_field(lines, "Reviewed HEAD:", path.name).lower()
@@ -542,7 +573,7 @@ def validate_manifest(archive: Path, state: str) -> tuple:
         raise ArchiveError("archive MANIFEST.md must be a real file")
     content = manifest.read_text(encoding="utf-8")
     placeholder_content = content.replace("<!--", "").replace("-->", "")
-    if re.search(r"<[^>\n]+>", placeholder_content):
+    if contains_placeholder(placeholder_content):
         raise ArchiveError("manifest contains an unfinished template placeholder")
     lines = content.splitlines()
 
@@ -598,7 +629,7 @@ def validate_manifest(archive: Path, state: str) -> tuple:
             break
         if not line.startswith("|"):
             continue
-        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+        cells = split_manifest_row(line)
         if cells and (cells[0] == "Criterion" or set(cells[0]) <= {"-", ":"}):
             continue
         criteria_rows.append(cells)
@@ -608,7 +639,7 @@ def validate_manifest(archive: Path, state: str) -> tuple:
         or row[1] != "met"
         or not row[2]
         or row[2] == "none"
-        or any("<" in cell or ">" in cell for cell in row)
+        or any(contains_placeholder(cell) for cell in row)
         for row in criteria_rows
     ):
         raise ArchiveError("manifest success-criteria rows are incomplete")
@@ -651,7 +682,7 @@ def validate_manifest(archive: Path, state: str) -> tuple:
             break
         if line.startswith("- "):
             notes.append(line[2:].strip())
-    if not notes or any(not note or "<" in note or ">" in note for note in notes):
+    if not notes or any(not note or contains_placeholder(note) for note in notes):
         raise ArchiveError("manifest Notes section is incomplete")
     return actual, reviewed_head
 
@@ -804,7 +835,8 @@ def require_canonical_archive(archive: Path) -> None:
 def require_clean_active_root(active_root: Path, archive: Path) -> None:
     archived_audit = archive / "research" / "DOCS-AUDIT.md"
     carried_forward = pending_ruling_count(archived_audit)
-    allowed = {"STATE.md", "archive"}
+    # LESSONS.md stays active across milestones; it ships but never archives.
+    allowed = {"STATE.md", "archive", "LESSONS.md"}
     active_research = active_root / "research"
 
     if carried_forward:
@@ -843,11 +875,11 @@ def require_stageable_carry_forward(project: Path, archive: Path) -> None:
         require_git_success(ignored, "inspect active carry-forward ignore status")
 
 
-def require_committed_carry_forward(project: Path, configured: str, archive: Path) -> None:
+def require_committed_carry_forward(project: Path, configured: str, archive: Path, ref: str) -> None:
     if pending_ruling_count(archive / "research" / "DOCS-AUDIT.md") == 0:
         return
     active_blob = require_git_success(
-        run_git(project, "rev-parse", "--verify", "HEAD:.project/research/DOCS-AUDIT.md"),
+        run_git(project, "rev-parse", "--verify", f"{ref}:.project/research/DOCS-AUDIT.md"),
         "verify committed carry-forward",
     )
     archived_blob = require_git_success(
@@ -855,7 +887,7 @@ def require_committed_carry_forward(project: Path, configured: str, archive: Pat
             project,
             "rev-parse",
             "--verify",
-            f"HEAD:{configured}/research/DOCS-AUDIT.md",
+            f"{ref}:{configured}/research/DOCS-AUDIT.md",
         ),
         "verify archived carry-forward",
     )
@@ -919,6 +951,26 @@ def preflight(repo: Path) -> dict:
     }
 
 
+def find_ship_commit(project: Path, archive_name: str) -> str:
+    expected_subject = f"ship: {archive_name}"
+    log = require_git_success(
+        run_git(project, "log", "--format=%H%x00%s", "HEAD"),
+        "inspect HEAD history for the ship commit",
+    )
+    matches = []
+    for record in log.splitlines():
+        if "\x00" not in record:
+            continue
+        commit, subject = record.split("\x00", 1)
+        if subject == expected_subject:
+            matches.append(commit)
+    if not matches:
+        raise ArchiveError(f"no commit with exact subject {expected_subject!r} in HEAD history")
+    # git log is newest-first: the most recent ship subject owns the
+    # transaction, so an empty or malformed duplicate cannot inherit validity.
+    return matches[0]
+
+
 def validate(repo: Path) -> dict:
     project, _, state, configured, archive, archived_files, reviewed_head = prepared_transaction(
         repo,
@@ -929,19 +981,18 @@ def validate(repo: Path) -> dict:
 
     project_status = require_git_success(run_git(project, "status", "--porcelain"), "inspect worktree status")
     if project_status:
-        raise ArchiveError("ship transaction is not committed")
+        raise ArchiveError("ship transaction worktree is not clean")
+
+    # The ship commit must be reachable from HEAD but need not be HEAD:
+    # product commits after shipping do not disturb a validated shipment.
+    ship_commit = find_ship_commit(project, archive.name)
 
     parents = require_git_success(
-        run_git(project, "rev-list", "--parents", "-n", "1", "HEAD"),
+        run_git(project, "rev-list", "--parents", "-n", "1", ship_commit),
         "inspect ship commit parents",
     ).split()
     if len(parents) != 2:
         raise ArchiveError("ship commit must have exactly one parent")
-
-    expected_subject = f"ship: {archive.name}"
-    subject = require_git_success(run_git(project, "show", "-s", "--format=%s", "HEAD"), "read HEAD")
-    if subject != expected_subject:
-        raise ArchiveError(f"HEAD subject is {subject!r}, expected {expected_subject!r}")
 
     changed_paths = require_git_success(
         run_git(
@@ -952,7 +1003,7 @@ def validate(repo: Path) -> dict:
             "--name-only",
             "--no-renames",
             "-r",
-            "HEAD",
+            ship_commit,
         ),
         "inspect ship commit paths",
     ).splitlines()
@@ -975,6 +1026,7 @@ def validate(repo: Path) -> dict:
         for path in changed_paths
         if path != ".project/STATE.md"
         and path != ".project/BOARD.md"
+        and path != ".project/LESSONS.md"
         and not path.startswith(archive_prefix)
         and not path.startswith(allowed_active_prefixes)
     ]
@@ -993,20 +1045,20 @@ def validate(repo: Path) -> dict:
         raise ArchiveError(
             f"ship commit does not record the complete transaction: {', '.join(missing_from_commit)}"
         )
-    require_committed_carry_forward(project, configured, archive)
+    require_committed_carry_forward(project, configured, archive, ship_commit)
 
-    ship_parent = require_git_success(run_git(project, "rev-parse", "HEAD^"), "resolve ship parent")
+    ship_parent = require_git_success(run_git(project, "rev-parse", f"{ship_commit}^"), "resolve ship parent")
     if reviewed_head != ship_parent:
         raise ArchiveError(
             f"FINAL.md Reviewed HEAD {reviewed_head} does not match ship parent {ship_parent}"
         )
 
-    archive_in_parent = run_git(project, "cat-file", "-e", f"HEAD^:{configured}")
+    archive_in_parent = run_git(project, "cat-file", "-e", f"{ship_commit}^:{configured}")
     if archive_in_parent.returncode == 0:
         raise ArchiveError("current archive was already committed before the ship commit")
 
     committed_state = require_git_success(
-        run_git(project, "show", "HEAD:.project/STATE.md"),
+        run_git(project, "show", f"{ship_commit}:.project/STATE.md"),
         "read committed STATE.md",
     )
     if (
@@ -1014,12 +1066,16 @@ def validate(repo: Path) -> dict:
         or frontmatter_value(committed_state, "status") != "done"
         or frontmatter_value(committed_state, "archive") != configured
     ):
-        raise ArchiveError("HEAD does not contain the shipped state transaction")
+        raise ArchiveError("ship commit does not contain the shipped state transaction")
 
-    manifest_path = f"HEAD:{configured}/MANIFEST.md"
+    manifest_path = f"{ship_commit}:{configured}/MANIFEST.md"
     require_git_success(run_git(project, "cat-file", "-e", manifest_path), "verify committed manifest")
-    commit = require_git_success(run_git(project, "rev-parse", "HEAD"), "resolve ship commit")
-    return {"archive": configured, "commit": commit}
+
+    project_drift = run_git(project, "diff", "--quiet", ship_commit, "HEAD", "--", ".project")
+    if project_drift.returncode != 0:
+        raise ArchiveError(".project changed in history after the ship commit")
+
+    return {"archive": configured, "commit": ship_commit}
 
 
 def parser() -> argparse.ArgumentParser:

@@ -251,6 +251,31 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
             self.assertEqual(after_commit.returncode, 0, after_commit.stderr)
             self.assertEqual(json.loads(after_commit.stdout)["archive"], result["archive"])
 
+    def test_ship_accepts_active_lessons_file(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            archive = self.prepare_archive(repo)
+            (repo / ".project" / "LESSONS.md").write_text(
+                "# Lessons\n\n- 001-demo — verify commands must fail on skipped work\n"
+            )
+            self.mark_shipped(repo)
+            self.write_manifest(archive)
+            self.git(repo, "add", ".project")
+            ship = self.git(repo, "commit", "-q", "-m", "ship: 001-demo")
+            self.assertEqual(ship.returncode, 0, ship.stderr)
+
+            validate = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "validate",
+                "--repo",
+                str(repo),
+                cwd=PROJECT_ROOT,
+            )
+            self.assertEqual(validate.returncode, 0, validate.stderr)
+            self.assertFalse((archive / "LESSONS.md").exists())
+
             empty_ship = self.git(repo, "commit", "--allow-empty", "-q", "-m", "ship: 001-demo")
             self.assertEqual(empty_ship.returncode, 0, empty_ship.stderr)
             inherited = self.run_command(
@@ -1047,6 +1072,134 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
 
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn("reviewed head", result.stderr.lower())
+
+    def test_validate_accepts_product_commits_after_shipping(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            archive = self.prepare_archive(repo)
+            self.write_manifest(archive)
+            self.mark_shipped(repo)
+            self.git(repo, "add", ".project")
+            ship = self.git(repo, "commit", "-q", "-m", f"ship: {archive.name}")
+            self.assertEqual(ship.returncode, 0, ship.stderr)
+            ship_sha = self.git(repo, "rev-parse", "HEAD").stdout.strip()
+
+            (repo / "feature.py").write_text("print('product work')\n")
+            self.git(repo, "add", "feature.py")
+            product = self.git(repo, "commit", "-q", "-m", "product work after shipping")
+            self.assertEqual(product.returncode, 0, product.stderr)
+
+            validate = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "validate",
+                "--repo",
+                str(repo),
+                cwd=PROJECT_ROOT,
+            )
+            self.assertEqual(validate.returncode, 0, validate.stderr)
+            self.assertEqual(json.loads(validate.stdout)["commit"], ship_sha)
+
+    def test_validate_rejects_project_history_changes_after_shipping(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            archive = self.prepare_archive(repo)
+            self.write_manifest(archive)
+            self.mark_shipped(repo)
+            self.git(repo, "add", ".project")
+            ship = self.git(repo, "commit", "-q", "-m", f"ship: {archive.name}")
+            self.assertEqual(ship.returncode, 0, ship.stderr)
+
+            plan = archive / "plan" / "PLAN.md"
+            plan.write_text(plan.read_text() + "\nPost-ship edit.\n")
+            self.git(repo, "add", ".project")
+            tamper = self.git(repo, "commit", "-q", "-m", "edit archived plan")
+            self.assertEqual(tamper.returncode, 0, tamper.stderr)
+
+            validate = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "validate",
+                "--repo",
+                str(repo),
+                cwd=PROJECT_ROOT,
+            )
+            self.assertNotEqual(validate.returncode, 0)
+            self.assertIn("changed in history", validate.stderr)
+
+    def test_evidence_allows_comparison_operators_and_escaped_pipes(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            reviewed_head = self.git(repo, "rev-parse", "HEAD").stdout.strip()
+            (repo / ".project" / "review" / "FINAL.md").write_text(
+                f"""# Final Review — demo
+
+Reviewed HEAD: {reviewed_head}
+Overall verdict: pass
+
+## Success criteria
+
+### SC1 — latency budget
+
+- **Verdict**: met
+- **Check**: `grep p95 bench.log | awk '{{print $2}}'`
+- **Observed**: p95 120ms < 200ms target
+- **Reference**: none
+- **Finding**: none
+- **Fix direction**: none
+"""
+            )
+            archive = self.prepare_archive(repo)
+            contents = sorted(
+                path.relative_to(archive).as_posix()
+                for path in archive.rglob("*")
+                if path.is_file() and path.name != "MANIFEST.md"
+            )
+            listed_contents = "\n".join(f"- {path}" for path in contents)
+            (archive / "MANIFEST.md").write_text(
+                f"""# Archive — {archive.name}
+
+Milestone: demo
+Shipped: 2026-08-01
+Final verdict: all criteria met; project verify passed
+Waves: 1  Tasks: 1 done / 1 total  Review cycles used: 1
+Carried forward: 1 DOCS-AUDIT ruling(s)
+
+## Success criteria at ship
+
+| Criterion | Verdict | Evidence |
+|-----------|---------|----------|
+| latency budget | met | grep p95 bench.log \\| awk '{{print $2}}' |
+
+## Contents
+
+{listed_contents}
+
+## Notes
+
+- none
+"""
+            )
+
+            preflight = self.preflight(repo)
+            self.assertEqual(preflight.returncode, 0, preflight.stderr)
+
+            self.mark_shipped(repo)
+            self.git(repo, "add", ".project")
+            ship = self.git(repo, "commit", "-q", "-m", f"ship: {archive.name}")
+            self.assertEqual(ship.returncode, 0, ship.stderr)
+            validate = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "validate",
+                "--repo",
+                str(repo),
+                cwd=PROJECT_ROOT,
+            )
+            self.assertEqual(validate.returncode, 0, validate.stderr)
 
 
 if __name__ == "__main__":

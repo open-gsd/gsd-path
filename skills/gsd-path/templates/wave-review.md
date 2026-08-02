@@ -1,9 +1,13 @@
 # Review — wave <N>, cycle <C>
 
-<!-- Written by the reviewer role in wave mode. File: wave-N.cycleC.md -->
+<!-- Written by the reviewer role in wave mode. File: wave-N.cycleC.md.
+     Keep validated fields on their own lines: Cycle holds only the number
+     (C > 1 means re-review after fixes; see previous cycle file). -->
 
 Wave verdict: <pass | blocked — blocked if any task fails>
-Cycle: <C>          <!-- C > 1: re-review after fixes; see previous cycle file -->
+Cycle: <C>
+Depth: <full | verify-only — verify-only is orchestrator-written from its
+        isolated Verify evidence; no independent reviewer ran>
 Tasks reviewed: <count>
 
 ## T001 — <title>: <pass | fail>
@@ -29,6 +33,7 @@ Contract violations (blocking):
 
 ## Summary for orchestrator
 
-- blocked → fix tasks needed: <T00xF<C>: one-line brief, ...>
+- blocked → fix tasks needed: <one per disjoint file scope, findings
+  batched: T00xF<C> — scope + findings covered, ...>
 - repeat offenders: <criteria failing across cycles — possible plan defect>
 - warnings worth a human eye: <...or none>

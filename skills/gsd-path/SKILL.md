@@ -80,12 +80,19 @@ DOCS-AUDIT.md has `planned: no` rulings, add one alignment-queue line and offer
 once to route them through the bundled [plan contract](PLAN.md); declining
 does not block.
 
+Once per conversation, before the status report, run the bundled update check
+`python3 <skill-dir>/scripts/check_update.py`. It is cached, offline-safe, and
+prints either nothing or one notice line; append that line verbatim to the
+report. Ignore any failure and never block or retry — the check is advisory
+and must not delay routing.
+
 | State | Next action |
 | --- | --- |
 | `onboard`, not done | bundled [onboard contract](ONBOARD.md) |
 | `onboard`, done | bundled [grill contract](GRILL.md), brownfield mode |
 | `grill`, not done | bundled [grill contract](GRILL.md) |
-| `grill`, done | bundled [research contract](RESEARCH.md) |
+| `grill`, done, INTENT `Lane: standard` (or no Lane line) | bundled [research contract](RESEARCH.md) |
+| `grill`, done, INTENT `Lane: quick` | bundled [plan contract](PLAN.md), quick mode |
 | `research`, not done | bundled [research contract](RESEARCH.md) |
 | `research`, done | bundled [synthesis contract](SYNTHESIZE.md) |
 | `synthesize`, not done | bundled [synthesis contract](SYNTHESIZE.md) |

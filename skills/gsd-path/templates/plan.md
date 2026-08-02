@@ -11,6 +11,8 @@ Project verify: `<command that builds + tests the whole project>`
 ## Wave 1 — risk burn-down
 
 Goal: <what this wave proves; if it fails, what changes>
+Review depth: full   <!-- full | verify-only. Wave 1 and auth/payments/data
+                          migration/concurrency waves must be full. -->
 
 | Task | Title | Deps | Files |
 |------|-------|------|-------|
@@ -19,6 +21,7 @@ Goal: <what this wave proves; if it fails, what changes>
 ## Wave 2 — walking skeleton
 
 Goal: <the end-to-end slice that runs>
+Review depth: <full | verify-only>
 
 | Task | Title | Deps | Files |
 |------|-------|------|-------|

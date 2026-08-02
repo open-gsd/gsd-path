@@ -37,9 +37,9 @@ overwriting it. Re-running onboarding would overwrite established context.
    `milestone: null`, `pipeline: gsd-path/v1`, `phase: onboard`,
    `status: active`, `branch: null`, and `archive: null`; no template
    placeholder may remain.
-2. Dispatch two independent agents in parallel, following the shared
-   [Codex dispatch contract](references/dispatch.md) with explicit built-in
-   `agent_type: default`, `fork_turns: "none"`:
+2. Dispatch two independent agents in parallel, following the local
+   [runtime dispatch contract](references/dispatch.md) and its deterministic
+   task-name rules:
    - **Codebase mapper** — role
      [codebase-mapper](references/codebase-mapper.md), template
      [codebase](templates/codebase.md), output
@@ -59,10 +59,12 @@ overwriting it. Re-running onboarding would overwrite established context.
    dirty. Otherwise no project command may run. The orchestrator removes only
    those exact worktrees after collecting both agents.
 3. Gate both artifacts against their templates: the codebase evidence needs
-   a filled `## Map` plus at least three findings; the docs audit's document
+   a filled `## Map` plus findings as observed — no quota, but an empty
+   findings section must say why; the docs audit's document
    path set must equal the frozen inventory exactly and every path needs a
-   verdict. One corrective follow-up to the same deterministic target, then
-   `status: blocked` and stop.
+   verdict. Redispatch one complete corrected brief under the same logical task
+   name, following the runtime dispatch contract, then set `status: blocked`
+   and stop if it still fails.
 4. Present the ground truth to the user, at most one screen:
    - what the project is (stack, architecture, entry points, maturity);
    - what demonstrably works (verified claims, passing verifies);

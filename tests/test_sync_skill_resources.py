@@ -43,6 +43,17 @@ class SyncSkillResourcesTests(unittest.TestCase):
             clean = self.run_sync(root, "--check")
             self.assertEqual(clean.returncode, 0, clean.stderr)
 
+            canonical_dispatch = (
+                root / "skills" / "gsd-path" / "references" / "dispatch.md"
+            )
+            shared_dispatch = root / "platforms" / "shared-agents" / "dispatch.md"
+            canonical_dispatch.write_text("stale shared dispatch\n")
+            stale_shared = self.run_sync(root, "--check")
+            self.assertNotEqual(stale_shared.returncode, 0)
+            repaired_shared = self.run_sync(root)
+            self.assertEqual(repaired_shared.returncode, 0, repaired_shared.stderr)
+            self.assertEqual(shared_dispatch.read_bytes(), canonical_dispatch.read_bytes())
+
             generated.write_text("corrupt\n")
             corrupt = self.run_sync(root, "--check")
             self.assertNotEqual(corrupt.returncode, 0)
@@ -69,6 +80,15 @@ class SyncSkillResourcesTests(unittest.TestCase):
             skill_text = (skill_directory / "SKILL.md").read_text()
             self.assertNotIn("../gsd-path/", skill_text, skill_directory.name)
             self.assertIn("Use only when", skill_text, skill_directory.name)
+            for codex_only_term in (
+                "Codex dispatch contract",
+                "agent_type:",
+                "fork_turns",
+                "task_name:",
+                "built-in `worker`",
+                "built-in `default`",
+            ):
+                self.assertNotIn(codex_only_term, skill_text, skill_directory.name)
             if skill_directory.name != "gsd-path":
                 self.assertIn(
                     "caller handoff, not permission to trigger an explicit-only skill",
@@ -143,6 +163,58 @@ class SyncSkillResourcesTests(unittest.TestCase):
             "SYNTHESIZE.md",
         ):
             self.assertTrue((PROJECT_ROOT / "skills" / "gsd-path" / contract).is_file(), contract)
+
+        adapters = {
+            "codex": "Codex collaboration tool",
+            "claude": "Claude Code's `Agent` tool",
+            "grok": "Grok's `spawn_subagent` tool",
+            "opencode": "OpenCode",
+            "copilot": "Copilot CLI's `task` tool",
+            "qwen": "Qwen Code's `agent` tool",
+            "antigravity": "Antigravity's `invoke_subagent` tool",
+            "cursor": "custom `gsd-path` subagent",
+            "zed": "Zed's `spawn_agent` tool",
+            "kiro": "default general-purpose subagent",
+            "shared-agents": "Shared Agent Skills",
+        }
+        for runtime, required_text in adapters.items():
+            adapter = PROJECT_ROOT / "platforms" / runtime / "dispatch.md"
+            self.assertTrue(adapter.is_file(), runtime)
+            self.assertIn(required_text, adapter.read_text(), runtime)
+        claude_adapter = (
+            PROJECT_ROOT / "platforms" / "claude" / "dispatch.md"
+        ).read_text()
+        self.assertNotIn("SendMessage", claude_adapter)
+        self.assertIn("otherwise start a fresh `general-purpose`", claude_adapter)
+        cursor_agent = PROJECT_ROOT / "platforms" / "cursor" / "agent.md"
+        self.assertTrue(cursor_agent.is_file())
+        self.assertIn("model: inherit", cursor_agent.read_text())
+        self.assertEqual(
+            (PROJECT_ROOT / "platforms" / "shared-agents" / "dispatch.md").read_bytes(),
+            (PROJECT_ROOT / "skills" / "gsd-path" / "references" / "dispatch.md").read_bytes(),
+        )
+
+    def test_shared_agent_dispatch_has_unambiguous_current_runtime_branches(self) -> None:
+        dispatch = (PROJECT_ROOT / "platforms" / "shared-agents" / "dispatch.md").read_text()
+
+        for required_text in (
+            "`spawn_subagent` tool",
+            "`subagent_type: general-purpose`",
+            "`capability_mode: all`",
+            "`resume_from`",
+            "`background: true`",
+            "`wait_commands_or_subagents`",
+            "`Task` tool advertising the built-in `general` subagent",
+            "OpenCode v2 host exposes the renamed `subagent`",
+            "fresh `general` child",
+            "`spawn_agent` tool exposing",
+            "`spawn_agent` tool without",
+            "custom `gsd-path` subagent",
+            "`task` tool advertising the `general-purpose` child",
+            "use exactly one matching branch",
+            "If the tool schema is ambiguous",
+        ):
+            self.assertIn(required_text, dispatch)
 
 
 if __name__ == "__main__":

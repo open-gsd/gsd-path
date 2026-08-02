@@ -28,11 +28,11 @@ If two sources disagree, stop and surface the conflict. Never average.
   `pipeline: gsd-path/v1`; never consume an ambiguous or differently owned
   state file. Artifacts outrank summaries; reconcile STATE.md or BOARD.md when
   they disagree.
-- Spawned agents have isolated context. Brief them with exact input and output
-  paths, constraints, a deterministic `task_name`, explicit built-in agent
-  type, `fork_turns: "none"`, and a bounded responsibility. Independent briefs
-  may run in parallel up to available child capacity; dependencies run in
-  layers.
+- Spawned agents have isolated context. Follow the installed runtime dispatch
+  contract and brief them with exact input and output paths, constraints, a
+  deterministic logical task name, and a bounded responsibility. Independent
+  briefs may run in parallel up to available child capacity; dependencies run
+  in layers.
 
 ## Evidence and honesty
 
@@ -53,12 +53,14 @@ If two sources disagree, stop and surface the conflict. Never average.
   roles run project commands only in orchestrator-created disposable worktrees
   at a recorded revision; otherwise they use static evidence or mark the check
   unverifiable. They never create worktrees or run commands in the source tree.
-- Researchers gather evidence; they do not decide. All four standard evidence
-  files are required; brownfield adds `evidence-codebase.md` as settled input.
+- Researchers gather evidence; they do not decide. A dimension is researched
+  only when it has open questions; the research phase records dispatched and
+  skipped dimensions. Brownfield adds `evidence-codebase.md` as settled input.
 - The synthesizer decides from existing evidence; it does not re-research. An
   unresolved or uncited required decision fails the synthesis gate.
-- The planner reads both INTENT.md and SYNTHESIS.md and leaves no judgment call
-  open in a task file.
+- The planner reads both INTENT.md and SYNTHESIS.md and specs
+  deliverable-sized outcomes and constraints; coders own implementation
+  decisions inside them.
 - Coders implement only their full task contract and append their result to the
   task Log. They never change task state, review acceptance, stage, commit, or
   freelance outside declared files.
@@ -94,6 +96,16 @@ If two sources disagree, stop and surface the conflict. Never average.
   validator; report shipped only after the exact `.project/`-only ship commit
   passes the postcommit validator.
 
+## Asking the user
+
+- Ask through an interactive user-input tool when the runtime provides one;
+  otherwise ask concise numbered questions in chat and stop for the reply.
+- Every choice offered to the user names a recommended option — listed first
+  and marked `(recommended)` — with a one-line reason grounded in evidence,
+  intent, or the codebase, followed by the real alternatives. A pure values
+  call with no evidence either way carries no recommendation; say so
+  explicitly instead of inventing one.
+
 ## Escalation
 
 Stop and ask the user only when:
@@ -116,7 +128,7 @@ or STATE.md.
 
 | Path | Purpose |
 |------|---------|
-| `skills/` | Nine `$gsd-path*` skills |
+| `skills/` | Nine `gsd-path*` skills |
 | `skills/gsd-path/templates/` | Required artifact formats |
 | `skills/gsd-path/references/` | Agent role and dispatch contracts |
 | `WORKFLOW.md` | Phase-by-phase SOP |

@@ -3,81 +3,35 @@
 
 import argparse
 import json
+import os
 import shutil
 import sys
 from pathlib import Path
 from typing import Iterable, Optional, Sequence, Tuple
 
 
+# Single source of truth for the resource tables, shared with install.mjs.
+_MANIFEST = json.loads(
+    (Path(__file__).resolve().parent / "skill-resources.json").read_text(
+        encoding="utf-8"
+    )
+)
 PHASE_RESOURCES = {
-    "gsd-path-build": (
-        "references/coder.md",
-        "references/dispatch.md",
-        "references/reviewer.md",
-        "templates/board.md",
-        "templates/task.md",
-        "templates/wave-review.md",
-    ),
-    "gsd-path-docs-audit": (
-        "references/dispatch.md",
-        "references/docs-auditor.md",
-        "templates/docs-audit.md",
-    ),
-    "gsd-path-grill": (
-        "templates/intent.md",
-        "templates/state.md",
-    ),
-    "gsd-path-onboard": (
-        "references/codebase-mapper.md",
-        "references/dispatch.md",
-        "references/docs-auditor.md",
-        "templates/codebase.md",
-        "templates/docs-audit.md",
-        "templates/state.md",
-    ),
-    "gsd-path-plan": (
-        "references/dispatch.md",
-        "references/planner.md",
-        "templates/plan.md",
-        "templates/task.md",
-    ),
-    "gsd-path-research": (
-        "references/dispatch.md",
-        "references/researcher.md",
-        "templates/evidence.md",
-    ),
-    "gsd-path-review": (
-        "references/dispatch.md",
-        "references/reviewer.md",
-        "templates/archive-manifest.md",
-        "templates/final-review.md",
-        "templates/gap-review.md",
-        "templates/wave-review.md",
-    ),
-    "gsd-path-synthesize": (
-        "references/dispatch.md",
-        "references/synthesizer.md",
-        "templates/synthesis.md",
-    ),
+    skill: tuple(resources)
+    for skill, resources in _MANIFEST["phase_resources"].items()
 }
-
-SCRIPT_TARGETS = (
-    ("scripts/archive_milestone.py", "skills/gsd-path/scripts/archive_milestone.py"),
-    ("scripts/archive_milestone.py", "skills/gsd-path-review/scripts/archive_milestone.py"),
+SCRIPT_TARGETS = tuple(tuple(pair) for pair in _MANIFEST["script_targets"])
+PHASE_CONTRACT_TARGETS = tuple(
+    tuple(pair) for pair in _MANIFEST["phase_contract_targets"]
+)
+SHARED_DISPATCH_TARGETS = tuple(
+    tuple(pair) for pair in _MANIFEST["shared_dispatch_targets"]
 )
 
-PHASE_CONTRACT_TARGETS = (
-    ("skills/gsd-path-build/SKILL.md", "skills/gsd-path/BUILD.md"),
-    ("skills/gsd-path-docs-audit/SKILL.md", "skills/gsd-path/DOCS-AUDIT.md"),
-    ("skills/gsd-path-grill/SKILL.md", "skills/gsd-path/GRILL.md"),
-    ("skills/gsd-path-onboard/SKILL.md", "skills/gsd-path/ONBOARD.md"),
-    ("skills/gsd-path-plan/SKILL.md", "skills/gsd-path/PLAN.md"),
-    ("skills/gsd-path-research/SKILL.md", "skills/gsd-path/RESEARCH.md"),
-    ("skills/gsd-path-review/SKILL.md", "skills/gsd-path/REVIEW.md"),
-    ("skills/gsd-path-synthesize/SKILL.md", "skills/gsd-path/SYNTHESIZE.md"),
-)
 
 def resource_pairs(root: Path) -> Iterable[Tuple[Path, Path]]:
+    for source, destination in SHARED_DISPATCH_TARGETS:
+        yield root / source, root / destination
     canonical = root / "skills" / "gsd-path"
     for skill, resources in PHASE_RESOURCES.items():
         for relative in resources:
@@ -89,7 +43,11 @@ def resource_pairs(root: Path) -> Iterable[Tuple[Path, Path]]:
 
 
 def package_metadata(root: Path) -> Iterable[Path]:
-    yield from root.rglob(".DS_Store")
+    for directory, names, files in os.walk(root):
+        names[:] = [name for name in names if name not in (".git", "node_modules")]
+        for name in names + files:
+            if name == ".DS_Store":
+                yield Path(directory) / name
 
 
 def mismatches(root: Path) -> Sequence[str]:
