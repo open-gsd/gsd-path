@@ -19,6 +19,7 @@ export const TARGETS = [
   "cursor",
   "zed",
   "kiro",
+  "kimi",
 ];
 export const SKILL_NAMES = [
   "gsd-path",
@@ -51,6 +52,7 @@ export const EXPLICIT_ONLY_TARGETS = new Set([
   "qwen",
   "cursor",
   "zed",
+  "kimi",
   "shared-agents",
 ]);
 const SHARED_AGENT_TARGETS = new Set(["codex", "zed"]);
@@ -163,6 +165,9 @@ export function defaultRoot(target, env = process.env) {
   if (target === "zed") return absolutePath("~/.agents/skills");
   if (target === "kiro") {
     return absolutePath(path.join(env.KIRO_HOME || expandUser("~/.kiro"), "skills"));
+  }
+  if (target === "kimi") {
+    return absolutePath(path.join(env.KIMI_CODE_HOME || expandUser("~/.kimi-code"), "skills"));
   }
   throw new Error(`unsupported target: ${target}`);
 }
@@ -962,6 +967,7 @@ export const LOCAL_ROOTS = {
   cursor: ".cursor/skills",
   zed: ".agents/skills",
   kiro: ".kiro/skills",
+  kimi: ".kimi-code/skills",
 };
 
 export function localRoot(target, projectDir) {

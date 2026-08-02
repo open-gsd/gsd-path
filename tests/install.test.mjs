@@ -77,6 +77,8 @@ test("default path resolution", () => {
   assert.equal(installer.defaultRoot("copilot", { COPILOT_HOME: "/tmp/copilot" }), path.resolve("/tmp/copilot/skills"));
   assert.equal(installer.defaultRoot("qwen", { QWEN_HOME: "/tmp/qwen" }), path.resolve("/tmp/qwen/skills"));
   assert.equal(installer.defaultRoot("kiro", { KIRO_HOME: "/tmp/kiro" }), path.resolve("/tmp/kiro/skills"));
+  assert.equal(installer.defaultRoot("kimi", { KIMI_CODE_HOME: "/tmp/kimi-code" }), path.resolve("/tmp/kimi-code/skills"));
+  assert.equal(installer.defaultRoot("kimi", {}), path.join(home, ".kimi-code", "skills"));
   assert.equal(installer.defaultRoot("antigravity", {}), path.join(home, ".gemini", "antigravity-cli", "skills"));
   assert.equal(installer.defaultRoot("cursor", {}), path.join(home, ".cursor", "skills"));
   for (const [target, variable] of [
@@ -85,6 +87,7 @@ test("default path resolution", () => {
     ["copilot", "COPILOT_HOME"],
     ["qwen", "QWEN_HOME"],
     ["kiro", "KIRO_HOME"],
+    ["kimi", "KIMI_CODE_HOME"],
   ]) {
     assert.equal(installer.defaultRoot(target, {}), installer.defaultRoot(target, { [variable]: "" }));
   }
@@ -105,6 +108,7 @@ test("local root resolution", () => {
     cursor: ".cursor/skills",
     zed: ".agents/skills",
     kiro: ".kiro/skills",
+    kimi: ".kimi-code/skills",
   });
   assert.equal(installer.localRoot("claude", project), path.join(project, ".claude", "skills"));
   assert.throws(() => installer.localRoot("bogus", project));
@@ -158,7 +162,7 @@ test("all targets install with shared codex+zed root", async () => {
   const plans = installer.TARGETS.map((target) => installer.targetPlan(target, roots[target]));
   const results = await runInstall(plans);
   const distinct = new Set(Object.values(roots));
-  assert.equal(distinct.size, 9);
+  assert.equal(distinct.size, 10);
   for (const targetRoot of distinct) {
     assert.deepEqual(fs.readdirSync(targetRoot).sort(), [...installer.SKILL_NAMES].sort());
   }

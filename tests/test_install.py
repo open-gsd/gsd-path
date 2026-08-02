@@ -108,6 +108,14 @@ class InstallerTests(unittest.TestCase):
             install.default_root("kiro", {"KIRO_HOME": "/tmp/kiro"}),
         )
         self.assertEqual(
+            Path("/tmp/kimi-code/skills"),
+            install.default_root("kimi", {"KIMI_CODE_HOME": "/tmp/kimi-code"}),
+        )
+        self.assertEqual(
+            Path.home() / ".kimi-code" / "skills",
+            install.default_root("kimi", {}),
+        )
+        self.assertEqual(
             Path.home() / ".gemini" / "antigravity-cli" / "skills",
             install.default_root("antigravity", {}),
         )
@@ -120,6 +128,7 @@ class InstallerTests(unittest.TestCase):
             "copilot": "COPILOT_HOME",
             "qwen": "QWEN_HOME",
             "kiro": "KIRO_HOME",
+            "kimi": "KIMI_CODE_HOME",
         }
         for target, variable in empty_variables.items():
             with self.subTest(target=target, variable=variable):
@@ -207,7 +216,7 @@ class InstallerTests(unittest.TestCase):
             arguments.extend([f"--{target}-root", str(root)])
         status, output, error = self.run_main(arguments)
         self.assertEqual(0, status, error)
-        self.assertEqual(9, len(set(roots.values())))
+        self.assertEqual(10, len(set(roots.values())))
         for root in set(roots.values()):
             self.assertEqual(set(install.SKILL_NAMES), {entry.name for entry in root.iterdir()})
         cursor_agent = roots["cursor"].parent / "agents" / install.CURSOR_AGENT_FILENAME

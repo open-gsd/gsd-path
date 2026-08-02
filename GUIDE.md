@@ -53,7 +53,7 @@ node scripts/install.mjs --update
 ```
 
 Supported flags: `--codex`, `--claude`, `--grok`, `--opencode`, `--copilot`,
-`--qwen`, `--antigravity`, `--cursor`, `--zed`, `--kiro`. The installer
+`--qwen`, `--antigravity`, `--cursor`, `--zed`, `--kiro`, `--kimi`. The installer
 validates the package before writing, backs up any existing `gsd-path*` or
 `ogsd*` skills, and rolls every selected host back if any one fails. Restart
 your agent session afterward if the skills don't show up.

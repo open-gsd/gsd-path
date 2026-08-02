@@ -28,6 +28,7 @@ TARGETS = (
     "cursor",
     "zed",
     "kiro",
+    "kimi",
 )
 SKILL_NAMES = (
     "gsd-path",
@@ -60,7 +61,7 @@ HOST_NOTES = {
     "kiro": KIRO_NOTE,
 }
 EXPLICIT_ONLY_TARGETS = frozenset(
-    {"claude", "grok", "copilot", "qwen", "cursor", "zed", "shared-agents"}
+    {"claude", "grok", "copilot", "qwen", "cursor", "zed", "kimi", "shared-agents"}
 )
 SHARED_AGENT_TARGETS = frozenset({"codex", "zed"})
 SHARED_AGENT_PROFILE = "shared-agents"
@@ -135,6 +136,10 @@ def default_root(target: str, environ: Optional[Mapping[str, str]] = None) -> Pa
         return absolute_path(Path("~/.agents/skills"))
     if target == "kiro":
         return absolute_path(Path(env.get("KIRO_HOME") or "~/.kiro") / "skills")
+    if target == "kimi":
+        return absolute_path(
+            Path(env.get("KIMI_CODE_HOME") or "~/.kimi-code") / "skills"
+        )
     raise ValueError(f"unsupported target: {target}")
 
 

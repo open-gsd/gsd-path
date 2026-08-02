@@ -161,6 +161,7 @@ node scripts/install.mjs --all --local
 | Qwen Code | `.qwen/skills` |
 | Cursor | `.cursor/skills` (+ subagent at `.cursor/agents/gsd-path.md`) |
 | Kiro | `.kiro/skills` |
+| Kimi Code | `.kimi-code/skills` |
 
 Antigravity also reads the project `.agents/skills` directory; when Codex or
 Zed is selected alongside it, the installer skips Antigravity's own bundle
@@ -205,6 +206,7 @@ never block routing.
 | `--cursor` | `~/.cursor/skills` | `/gsd-path` |
 | `--zed` | `~/.agents/skills` | `/gsd-path` |
 | `--kiro` | `${KIRO_HOME:-~/.kiro}/skills` | `/gsd-path` |
+| `--kimi` | `${KIMI_CODE_HOME:-~/.kimi-code}/skills` | `/gsd-path` |
 
 These defaults follow the current host documentation for
 [Codex](https://learn.chatgpt.com/docs/build-skills),
@@ -215,8 +217,9 @@ These defaults follow the current host documentation for
 [Qwen Code](https://qwenlm.github.io/qwen-code-docs/en/users/features/skills/),
 [Antigravity CLI](https://antigravity.google/docs/gcli-migration),
 [Cursor](https://cursor.com/docs/skills.md),
-[Zed](https://zed.dev/docs/ai/skills), and
-[Kiro](https://kiro.dev/docs/cli/skills/).
+[Zed](https://zed.dev/docs/ai/skills),
+[Kiro](https://kiro.dev/docs/cli/skills/), and
+[Kimi Code](https://github.com/MoonshotAI/kimi-code).
 
 Each physical target receives compatible dispatch and invocation metadata.
 Existing `ogsd*` and `gsd-path*` entries move to a uniquely named recoverable
