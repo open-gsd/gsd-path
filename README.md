@@ -262,6 +262,13 @@ and merge the new rules explicitly instead of overwriting project-specific
 instructions. Pre-marker state is not auto-stamped as v1 because its branch,
 worktree, and archive identity cannot be reconstructed safely.
 
+Add `--hooks` to a `--project` install to also write deterministic guard
+hooks: pre-tool-use guards in `.gsd-path/`, a `commit-msg` git hook, and —
+with the Claude target — `.claude/settings.json` wiring. They enforce
+archive immutability and block the destructive git commands the pipeline
+forbids. See [HOOKS.md](HOOKS.md) for what is blocked and how to wire the
+guard into other hosts.
+
 Restart active host sessions if the new skills do not appear, then invoke the
 router explicitly.
 

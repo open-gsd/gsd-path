@@ -41,6 +41,10 @@ function makeSource(base) {
     "---\nname: gsd-path\ndescription: test\nmodel: inherit\n---\ncursor agent\n"
   );
   fs.writeFileSync(path.join(src, "package.json"), '{"version": "9.9.9"}\n');
+  fs.mkdirSync(path.join(src, "scripts"), { recursive: true });
+  for (const name of installer.GUARD_SCRIPTS) {
+    fs.writeFileSync(path.join(src, "scripts", name), `# ${name}\n`);
+  }
   return src;
 }
 
@@ -568,4 +572,84 @@ test("cli parses target flags and requires a selection", () => {
     assert.ok(target in values);
   }
   assert.throws(() => installer.parseCli(["--bogus"]));
+});
+
+test("hooks require a project", async () => {
+  const target = path.join(root, "claude", "skills");
+  await assert.rejects(
+    runInstall([installer.targetPlan("claude", target)], { hooks: true }),
+    /--hooks requires --project/
+  );
+  assert.ok(!fs.existsSync(target));
+});
+
+test("hooks install guard scripts, settings, and git hook", async () => {
+  const project = path.join(root, "project");
+  fs.mkdirSync(path.join(project, ".git"), { recursive: true });
+  const target = path.join(root, "claude", "skills");
+  const results = await runInstall([installer.targetPlan("claude", target)], {
+    project,
+    hooks: true,
+  });
+  for (const name of installer.GUARD_SCRIPTS) {
+    assert.equal(
+      fs.readFileSync(path.join(project, installer.HOOKS_DIRECTORY, name), "utf8"),
+      `# ${name}\n`
+    );
+  }
+  const settings = JSON.parse(
+    fs.readFileSync(path.join(project, ".claude", "settings.json"), "utf8")
+  );
+  assert.ok(settings.hooks.PreToolUse);
+  const commitMsg = path.join(project, ".git", "hooks", "commit-msg");
+  assert.equal(fs.readFileSync(commitMsg, "utf8"), installer.COMMIT_MSG_HOOK);
+  if (process.platform !== "win32") {
+    assert.ok(fs.statSync(commitMsg).mode & 0o100);
+  }
+  const projectLine = results.find((line) => line.startsWith("project:"));
+  assert.match(projectLine, /\.gsd-path\/guard_hook\.py/);
+  assert.match(projectLine, /\.git\/hooks\/commit-msg/);
+});
+
+test("hooks skip the git hook without a repository", async () => {
+  const project = path.join(root, "project");
+  const target = path.join(root, "claude", "skills");
+  const results = await runInstall([installer.targetPlan("claude", target)], {
+    project,
+    hooks: true,
+  });
+  assert.ok(!fs.existsSync(path.join(project, ".git")));
+  assert.ok(fs.existsSync(path.join(project, ".claude", "settings.json")));
+  const projectLine = results.find((line) => line.startsWith("project:"));
+  assert.ok(!/commit-msg/.test(projectLine));
+});
+
+test("hooks collision rolls back cleanly", async () => {
+  const project = path.join(root, "project");
+  fs.mkdirSync(path.join(project, ".claude"), { recursive: true });
+  fs.writeFileSync(path.join(project, ".claude", "settings.json"), "{}");
+  const target = path.join(root, "claude", "skills");
+  await assert.rejects(
+    runInstall([installer.targetPlan("claude", target)], { project, hooks: true }),
+    /already exists/
+  );
+  assert.ok(!fs.existsSync(target));
+  assert.ok(!fs.existsSync(path.join(project, "AGENTS.md")));
+  assert.equal(fs.readFileSync(path.join(project, ".claude", "settings.json"), "utf8"), "{}");
+});
+
+test("hooks dry run lists files without writing", async () => {
+  const project = path.join(root, "project");
+  fs.mkdirSync(path.join(project, ".git"), { recursive: true });
+  const target = path.join(root, "claude", "skills");
+  const results = await runInstall([installer.targetPlan("claude", target)], {
+    project,
+    hooks: true,
+    dryRun: true,
+  });
+  const projectLine = results.find((line) => line.startsWith("project:"));
+  assert.match(projectLine, /\.gsd-path\/guard_hook\.py/);
+  assert.match(projectLine, /\.git\/hooks\/commit-msg/);
+  assert.ok(!fs.existsSync(target));
+  assert.ok(!fs.existsSync(path.join(project, installer.HOOKS_DIRECTORY)));
 });

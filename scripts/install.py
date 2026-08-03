@@ -42,6 +42,38 @@ SKILL_NAMES = (
     "gsd-path-synthesize",
 )
 CLAUDE_BRIDGE = "@../AGENTS.md\n@../WORKFLOW.md\n"
+HOOKS_DIRECTORY = ".gsd-path"
+GUARD_SCRIPTS = ("guard_hook.py", "git_guard.py")
+CLAUDE_HOOKS_SETTINGS = (
+    json.dumps(
+        {
+            "hooks": {
+                "PreToolUse": [
+                    {
+                        "matcher": "Edit|Write|MultiEdit|NotebookEdit|Bash",
+                        "hooks": [
+                            {
+                                "type": "command",
+                                "command": (
+                                    "python3 \"$CLAUDE_PROJECT_DIR/"
+                                    f"{HOOKS_DIRECTORY}/guard_hook.py\""
+                                ),
+                            }
+                        ],
+                    }
+                ]
+            }
+        },
+        indent=2,
+    )
+    + "\n"
+)
+COMMIT_MSG_HOOK = (
+    "#!/bin/sh\n"
+    "# GSD Path guard: archive immutability and ship-commit purity.\n"
+    "exec python3 \"$(git rev-parse --show-toplevel)/"
+    f"{HOOKS_DIRECTORY}/git_guard.py\" \"$1\"\n"
+)
 OPENCODE_NOTE = (
     "note: OpenCode stable discovers the skills but has no documented hard "
     'explicit-only switch; OpenCode v2 honors opencode/autoinvoke="false" '
@@ -419,28 +451,62 @@ def _rollback_target(transaction: TargetTransaction) -> None:
     _remove_empty_directories(transaction.created_directories)
 
 
-def _project_destinations(project: Path, include_claude: bool) -> List[Tuple[Path, str]]:
-    destinations = [
-        (project / "AGENTS.md", "AGENTS.md"),
-        (project / "WORKFLOW.md", "WORKFLOW.md"),
+def _project_destinations(
+    project: Path, include_claude: bool, hooks: bool
+) -> List[Tuple[Path, Optional[str], Optional[str], bool]]:
+    """(destination, source name, literal content, executable) per file."""
+    destinations: List[Tuple[Path, Optional[str], Optional[str], bool]] = [
+        (project / "AGENTS.md", "AGENTS.md", None, False),
+        (project / "WORKFLOW.md", "WORKFLOW.md", None, False),
     ]
     if include_claude:
-        destinations.append((project / ".claude" / "CLAUDE.md", ""))
+        destinations.append(
+            (project / ".claude" / "CLAUDE.md", None, CLAUDE_BRIDGE, False)
+        )
+    if hooks:
+        for name in GUARD_SCRIPTS:
+            destinations.append(
+                (project / HOOKS_DIRECTORY / name, f"scripts/{name}", None, False)
+            )
+        if include_claude:
+            destinations.append(
+                (
+                    project / ".claude" / "settings.json",
+                    None,
+                    CLAUDE_HOOKS_SETTINGS,
+                    False,
+                )
+            )
+        if (project / ".git").is_dir():
+            destinations.append(
+                (project / ".git" / "hooks" / "commit-msg", None, COMMIT_MSG_HOOK, True)
+            )
     return destinations
+
+
+def _project_files(project: Path, include_claude: bool, hooks: bool) -> str:
+    return ", ".join(
+        destination.relative_to(project).as_posix()
+        for destination, _, _, _ in _project_destinations(project, include_claude, hooks)
+    )
 
 
 def _validate_project(
     source_root: Path,
     project: Path,
     include_claude: bool,
+    hooks: bool,
     reserved_roots: Sequence[Tuple[str, Path]],
 ) -> None:
     _validate_directory_destination(project, "project path")
-    for source_name in ("AGENTS.md", "WORKFLOW.md"):
+    sources = ["AGENTS.md", "WORKFLOW.md"]
+    if hooks:
+        sources.extend(f"scripts/{name}" for name in GUARD_SCRIPTS)
+    for source_name in sources:
         source = source_root / source_name
         if source.is_symlink() or not source.is_file():
             raise InstallerError(f"missing project contract: {source}")
-    for destination, _ in _project_destinations(project, include_claude):
+    for destination, _, _, _ in _project_destinations(project, include_claude, hooks):
         if _lexists(destination):
             raise InstallerError(f"project contract already exists: {destination}")
         for label, root in reserved_roots:
@@ -459,12 +525,14 @@ def _apply_project(
     source_root: Path,
     project: Path,
     include_claude: bool,
+    hooks: bool,
     transaction: ProjectTransaction,
 ) -> None:
     _create_directory(project, transaction.created_directories)
-    if include_claude:
-        _create_directory(project / ".claude", transaction.created_directories)
-    for destination, source_name in _project_destinations(project, include_claude):
+    for destination, source_name, content, executable in _project_destinations(
+        project, include_claude, hooks
+    ):
+        _create_directory(destination.parent, transaction.created_directories)
         created = False
         try:
             if source_name:
@@ -475,7 +543,9 @@ def _apply_project(
             else:
                 with destination.open("x", encoding="utf-8") as output:
                     created = True
-                    output.write(CLAUDE_BRIDGE)
+                    output.write(content)
+            if executable:
+                destination.chmod(0o755)
             transaction.copied.append(destination)
         except FileExistsError as error:
             raise InstallerError(
@@ -638,7 +708,10 @@ def install(
     plans: Sequence[TargetPlan],
     project: Optional[Path] = None,
     dry_run: bool = False,
+    hooks: bool = False,
 ) -> List[str]:
+    if hooks and project is None:
+        raise InstallerError("--hooks requires --project")
     selected = [plan.name for plan in plans]
     deployments = _deployment_plans(plans)
     adapters = list(selected)
@@ -707,6 +780,7 @@ def install(
             source_root,
             project,
             include_claude,
+            hooks,
             [*mutation_roots, *planned_backups],
         )
 
@@ -734,9 +808,7 @@ def install(
                 suffix = f"; would back up {count} entries" if count else ""
                 results.append(_install_result(plan, dry_run=True) + suffix)
             if project is not None:
-                files = "AGENTS.md, WORKFLOW.md"
-                if include_claude:
-                    files += ", .claude/CLAUDE.md"
+                files = _project_files(project, include_claude, hooks)
                 results.append(f"project: would copy {files} to {project}")
             _append_host_notes(results, selected)
             return results
@@ -766,10 +838,10 @@ def install(
                         f"to {transaction.backup}"
                     )
             if project is not None:
-                _apply_project(source_root, project, include_claude, project_transaction)
-                files = "AGENTS.md, WORKFLOW.md"
-                if include_claude:
-                    files += ", .claude/CLAUDE.md"
+                _apply_project(
+                    source_root, project, include_claude, hooks, project_transaction
+                )
+                files = _project_files(project, include_claude, hooks)
                 results.append(f"project: copied {files} to {project}")
         except (Exception, KeyboardInterrupt) as error:
             rollback_errors = []
@@ -801,6 +873,7 @@ def parser() -> argparse.ArgumentParser:
     argument_parser.add_argument("--all", action="store_true", dest="all_targets")
     argument_parser.add_argument("--dry-run", action="store_true")
     argument_parser.add_argument("--project", type=Path)
+    argument_parser.add_argument("--hooks", action="store_true")
     argument_parser.add_argument(
         "--source-root",
         type=Path,
@@ -829,7 +902,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         plans.append(TargetPlan(target, root))
     project = absolute_path(arguments.project) if arguments.project is not None else None
     try:
-        for result in install(source_root, plans, project, arguments.dry_run):
+        for result in install(
+            source_root, plans, project, arguments.dry_run, arguments.hooks
+        ):
             print(result)
     except InstallerError as error:
         print(f"error: {error}", file=sys.stderr)
