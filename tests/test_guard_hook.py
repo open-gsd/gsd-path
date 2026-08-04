@@ -86,9 +86,54 @@ class GuardHookTests(unittest.TestCase):
             "rm -rf .project/archive/001-mvp",
             "mv .project/archive/001-mvp /tmp/x",
             "echo broken > .project/archive/001-mvp/MANIFEST.md",
+            "cp foo .project/archive/001-mvp/MANIFEST.md",
+            "tee .project/archive/001-mvp/x",
+            "git checkout -- .project/archive/001-mvp/MANIFEST.md",
+            "git restore .project/archive/001-mvp/MANIFEST.md",
         ):
             with self.subTest(command=command):
                 self.assert_denied(
+                    {"tool_name": "Bash", "tool_input": {"command": command}}
+                )
+
+    def test_denies_archive_path_via_any_tool_name(self):
+        self.assert_denied(
+            {
+                "tool_name": "StrReplace",
+                "tool_input": {
+                    "relative_path": ".project/archive/001-mvp/plan/PLAN.md",
+                },
+            }
+        )
+
+    def test_denies_archive_path_with_traversal(self):
+        self.assert_denied(
+            {
+                "tool_name": "Write",
+                "tool_input": {
+                    "file_path": "foo/../../.project/archive/001-mvp/MANIFEST.md",
+                },
+            }
+        )
+
+    def test_denies_archive_path_with_backslashes(self):
+        self.assert_denied(
+            {
+                "tool_name": "Edit",
+                "tool_input": {
+                    "file_path": ".project\\archive\\001-mvp\\MANIFEST.md",
+                },
+            }
+        )
+
+    def test_allows_cp_and_checkout_outside_archive(self):
+        for command in (
+            "cp foo .project/plan/PLAN.md",
+            "git checkout -- app.py",
+            "git restore app.py",
+        ):
+            with self.subTest(command=command):
+                self.assert_allowed(
                     {"tool_name": "Bash", "tool_input": {"command": command}}
                 )
 
@@ -125,6 +170,23 @@ class GuardHookTests(unittest.TestCase):
             [sys.executable, str(SCRIPT)],
             input=json.dumps(
                 {"tool_name": "Bash", "tool_input": {"command": "git reset --hard"}}
+            ),
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 2)
+        self.assertEqual(json.loads(result.stdout)["permissionDecision"], "deny")
+
+    def test_subprocess_denies_cp_into_archive(self):
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT)],
+            input=json.dumps(
+                {
+                    "tool_name": "Bash",
+                    "tool_input": {
+                        "command": "cp foo .project/archive/001-mvp/MANIFEST.md",
+                    },
+                }
             ),
             capture_output=True,
             text=True,

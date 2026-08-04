@@ -142,8 +142,10 @@ For each wave in PLAN.md order:
    - `full`: spawn one independent reviewer using deterministic logical task
      name `review_wave_<wave>_cycle_<cycle>`. Supply every task path, its
      recorded base and commit, the reviewer role, and wave-review template.
-     The reviewer reconstructs each task alone in a disposable worktree and
-     writes `.project/review/wave-N.cycleC.md`.
+     Create and supply one disposable detached worktree at the recorded review
+     base. The reviewer stages `.project/review/wave-N.cycleC.md` there; the
+     orchestrator validates it, atomically copies it to the primary canonical
+     path, and only then removes that exact worktree.
    - `verify-only`: spawn no reviewer. The orchestrator writes
      `.project/review/wave-N.cycleC.md` itself from evidence it already
      holds — per task, the isolated Verify rerun and the declared-files diff
@@ -155,7 +157,10 @@ For each wave in PLAN.md order:
    `max_review_cycles` from PLAN.md (default 3). Before the cap, batch the
    findings into complete fix tasks from the task template — one task per
    disjoint file scope, not one per finding — each carrying its findings'
-   failed criteria and observed evidence verbatim, and run them through the
+   failed criteria and observed evidence verbatim. Add every fix task to the
+   current or newly appended PLAN.md wave table and `.project/tasks/` before
+   dispatch, preserving the one-row/one-file contract; do not create an
+   unlisted task that the next recovery cannot discover. Run them through the
    same isolated layer loop. At the cap, record all attempts in BOARD.md and
    STATE.md and ask the user — through an interactive user-input tool when
    available — whether to relax the criterion, redirect the approach, or

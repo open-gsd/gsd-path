@@ -54,7 +54,9 @@ class InstallerTests(unittest.TestCase):
         scripts = self.source / "scripts"
         scripts.mkdir(exist_ok=True)
         for name in install.GUARD_SCRIPTS:
-            (scripts / name).write_text(f"# {name}\n", encoding="utf-8")
+            (scripts / name).write_text(
+                f"# {name}\n{install.GUARD_MARKER}\n", encoding="utf-8"
+            )
         self.sync_patch = mock.patch.object(
             install.sync_skill_resources, "mismatches", return_value=[]
         )
@@ -792,17 +794,21 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(0, status, error)
         for name in install.GUARD_SCRIPTS:
             self.assertEqual(
-                f"# {name}\n",
+                f"# {name}\n{install.GUARD_MARKER}\n",
                 (project / install.HOOKS_DIRECTORY / name).read_text(encoding="utf-8"),
             )
         settings = json.loads(
             (project / ".claude" / "settings.json").read_text(encoding="utf-8")
         )
         self.assertIn("PreToolUse", settings["hooks"])
+        self.assertEqual(settings["hooks"]["PreToolUse"][0]["matcher"], install.CLAUDE_MATCHER)
+        pre_commit = project / ".git" / "hooks" / "pre-commit"
         commit_msg = project / ".git" / "hooks" / "commit-msg"
+        self.assertEqual(install.PRE_COMMIT_HOOK, pre_commit.read_text(encoding="utf-8"))
         self.assertEqual(install.COMMIT_MSG_HOOK, commit_msg.read_text(encoding="utf-8"))
         self.assertTrue(os.access(commit_msg, os.X_OK))
         self.assertIn(".gsd-path/guard_hook.py", output)
+        self.assertIn(".git/hooks/pre-commit", output)
         self.assertIn(".git/hooks/commit-msg", output)
 
     def test_hooks_skip_git_hook_without_repository(self):
@@ -840,6 +846,50 @@ class InstallerTests(unittest.TestCase):
         self.assertIn(".git/hooks/commit-msg", output)
         self.assertFalse(target.exists())
         self.assertFalse((project / install.HOOKS_DIRECTORY).exists())
+
+    def test_hooks_refresh_updates_managed_guard_scripts(self):
+        project = self.root / "project"
+        (project / ".git").mkdir(parents=True)
+        target = self.root / "claude" / "skills"
+        self.run_main(self.hooks_arguments(project, target))
+        (self.source / "scripts" / "guard_hook.py").write_text(
+            f"# guard v2\n{install.GUARD_MARKER}\n", encoding="utf-8"
+        )
+        status, output, error = self.run_main(
+            [
+                "--hooks-refresh",
+                "--project",
+                str(project),
+                "--source-root",
+                str(self.source),
+            ]
+        )
+        self.assertEqual(0, status, error)
+        self.assertIn(
+            "guard v2",
+            (project / install.HOOKS_DIRECTORY / "guard_hook.py").read_text(
+                encoding="utf-8"
+            ),
+        )
+        self.assertTrue(target.exists())
+
+    def test_hooks_refresh_rejects_unmanaged_guard_scripts(self):
+        project = self.root / "project"
+        (project / install.HOOKS_DIRECTORY).mkdir(parents=True)
+        (project / install.HOOKS_DIRECTORY / "guard_hook.py").write_text(
+            "custom\n", encoding="utf-8"
+        )
+        status, _, error = self.run_main(
+            [
+                "--hooks-refresh",
+                "--project",
+                str(project),
+                "--source-root",
+                str(self.source),
+            ]
+        )
+        self.assertEqual(1, status)
+        self.assertIn("not a managed GSD Path guard script", error)
 
 
 if __name__ == "__main__":

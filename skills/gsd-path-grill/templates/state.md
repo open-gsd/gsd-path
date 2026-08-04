@@ -4,7 +4,7 @@ project: <slug>
 milestone: null     # set by the grill; names the archive directory at ship
 phase: grill        # onboard | grill | research | synthesize | plan | build | review | shipped
                     # onboard only for brownfield projects; greenfield starts at grill
-status: active      # active | done | blocked
+status: active      # active | done | blocked; shipped is only phase: shipped + status: done
 branch: null        # bound once at build; reset for the next milestone
 archive: null       # persisted archive transaction path; never recomputed
 ---

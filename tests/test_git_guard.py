@@ -40,6 +40,12 @@ class ViolationRuleTests(unittest.TestCase):
         self.assertIn("only touch .project/", found[0])
         self.assertEqual(git_guard.violations(entries, "feat: change app"), [])
 
+    def test_ship_subject_is_case_insensitive(self):
+        entries = [("M", "app.py", None)]
+        found = git_guard.violations(entries, "Ship: 002-next")
+        self.assertEqual(len(found), 1)
+        self.assertIn("only touch .project/", found[0])
+
 
 class GitGuardEndToEndTests(unittest.TestCase):
     def setUp(self):
@@ -90,6 +96,45 @@ class GitGuardEndToEndTests(unittest.TestCase):
         self.git("add", "-A")
         result = self.run_guard("feat: change app")
         self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_blocks_ship_commit_with_non_project_paths(self):
+        (self.repo / "app.py").write_text("print('ship')\n", encoding="utf-8")
+        (self.repo / ".project" / "STATE.md").parent.mkdir(parents=True, exist_ok=True)
+        (self.repo / ".project" / "STATE.md").write_text("state\n", encoding="utf-8")
+        self.git("add", "-A")
+        result = self.run_guard("ship: 002-next")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("only touch .project/", result.stderr)
+
+    def test_pre_commit_blocks_staged_archive_tamper(self):
+        (self.repo / ".project" / "archive" / "001-mvp" / "MANIFEST.md").write_text(
+            "tampered\n", encoding="utf-8"
+        )
+        self.git("add", "-A")
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT), "pre-commit"],
+            cwd=self.repo,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("read-only", result.stderr)
+
+    def test_pre_commit_blocks_ship_case_insensitive(self):
+        (self.repo / "app.py").write_text("print('ship')\n", encoding="utf-8")
+        self.git("add", "-A")
+        message = self.repo / "COMMIT_MSG"
+        message.write_text("Ship: 002-next\n", encoding="utf-8")
+        edit_msg = self.repo / ".git" / "COMMIT_EDITMSG"
+        edit_msg.write_text("Ship: 002-next\n", encoding="utf-8")
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT), "pre-commit"],
+            cwd=self.repo,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("only touch .project/", result.stderr)
 
     def test_fails_open_outside_git(self):
         with tempfile.TemporaryDirectory() as empty:

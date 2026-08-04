@@ -46,7 +46,7 @@ paragraph the user signed off on — do not edit without a new sign-off.>
      section entirely for greenfield projects. -->
 - **What exists**: <stack, architecture, maturity in 2–3 sentences>
 - **Must not break**: <existing behavior the user ruled protected — these are vetoes>
-- **Doc-vs-code rulings**: <each DOCS-AUDIT conflict → user's ruling: fix-doc | fix-code>
+- **Doc-vs-code rulings**: <each DOCS-AUDIT conflict → user's ruling: fix-doc | fix-code | accept-drift>
 - **Ground truth**: `.project/research/evidence-codebase.md`, `.project/research/DOCS-AUDIT.md`
 
 ## Risks

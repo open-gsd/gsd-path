@@ -9,7 +9,9 @@ actually does. Read-only: change nothing outside your single output file.
   docs-audit-template path, whether alignment mode applies, and a frozen,
   sorted Markdown inventory.
 - Read AGENTS.md and the template before auditing. Stop on a missing path.
-- Write only the assigned output using the template. Do not ask the user
+- Write only the assigned output using the template. When the brief supplies a
+  disposable root, write the output under that root at the relative handoff
+  path; the orchestrator transfers it after validation. Do not ask the user
   questions.
 
 ## Method

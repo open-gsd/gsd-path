@@ -44,13 +44,17 @@ SKILL_NAMES = (
 CLAUDE_BRIDGE = "@../AGENTS.md\n@../WORKFLOW.md\n"
 HOOKS_DIRECTORY = ".gsd-path"
 GUARD_SCRIPTS = ("guard_hook.py", "git_guard.py")
+GUARD_MARKER = "gsd-path guard"
+CLAUDE_MATCHER = (
+    "Edit|Write|MultiEdit|NotebookEdit|Delete|StrReplace|ApplyPatch|Create|Shell|Bash"
+)
 CLAUDE_HOOKS_SETTINGS = (
     json.dumps(
         {
             "hooks": {
                 "PreToolUse": [
                     {
-                        "matcher": "Edit|Write|MultiEdit|NotebookEdit|Bash",
+                        "matcher": CLAUDE_MATCHER,
                         "hooks": [
                             {
                                 "type": "command",
@@ -68,11 +72,17 @@ CLAUDE_HOOKS_SETTINGS = (
     )
     + "\n"
 )
+PRE_COMMIT_HOOK = (
+    "#!/bin/sh\n"
+    "# gsd-path guard: archive immutability before commit.\n"
+    "exec python3 \"$(git rev-parse --show-toplevel)/"
+    f"{HOOKS_DIRECTORY}/git_guard.py\" pre-commit\n"
+)
 COMMIT_MSG_HOOK = (
     "#!/bin/sh\n"
-    "# GSD Path guard: archive immutability and ship-commit purity.\n"
+    "# gsd-path guard: archive immutability and ship-commit purity.\n"
     "exec python3 \"$(git rev-parse --show-toplevel)/"
-    f"{HOOKS_DIRECTORY}/git_guard.py\" \"$1\"\n"
+    f"{HOOKS_DIRECTORY}/git_guard.py\" commit-msg \"$1\"\n"
 )
 OPENCODE_NOTE = (
     "note: OpenCode stable discovers the skills but has no documented hard "
@@ -479,6 +489,9 @@ def _project_destinations(
             )
         if (project / ".git").is_dir():
             destinations.append(
+                (project / ".git" / "hooks" / "pre-commit", None, PRE_COMMIT_HOOK, True)
+            )
+            destinations.append(
                 (project / ".git" / "hooks" / "commit-msg", None, COMMIT_MSG_HOOK, True)
             )
     return destinations
@@ -561,6 +574,85 @@ def _rollback_project(transaction: ProjectTransaction) -> None:
     for destination in reversed(transaction.copied):
         _remove_path(destination)
     _remove_empty_directories(transaction.created_directories)
+
+
+def _is_managed_guard_script(destination: Path) -> bool:
+    if not destination.is_file():
+        return False
+    return GUARD_MARKER in destination.read_text(encoding="utf-8")
+
+
+def _is_managed_git_hook(destination: Path) -> bool:
+    if not destination.is_file():
+        return False
+    text = destination.read_text(encoding="utf-8")
+    return GUARD_MARKER in text and "git_guard.py" in text
+
+
+def _is_managed_claude_settings(destination: Path) -> bool:
+    if not destination.is_file():
+        return False
+    text = destination.read_text(encoding="utf-8")
+    return "guard_hook.py" in text and HOOKS_DIRECTORY in text
+
+
+def _validate_hooks_refresh(source_root: Path, project: Path, full: bool) -> None:
+    _validate_directory_destination(project, "project path")
+    for name in GUARD_SCRIPTS:
+        destination = project / HOOKS_DIRECTORY / name
+        if not _is_managed_guard_script(destination):
+            raise InstallerError(f"not a managed GSD Path guard script: {destination}")
+        source = source_root / "scripts" / name
+        if source.is_symlink() or not source.is_file():
+            raise InstallerError(f"missing guard script source: {source}")
+    if full:
+        settings = project / ".claude" / "settings.json"
+        if _lexists(settings) and not _is_managed_claude_settings(settings):
+            raise InstallerError(
+                f"not a managed GSD Path hook settings file: {settings}"
+            )
+        for hook_name in ("pre-commit", "commit-msg"):
+            hook_path = project / ".git" / "hooks" / hook_name
+            if _lexists(hook_path) and not _is_managed_git_hook(hook_path):
+                raise InstallerError(f"not a managed GSD Path git hook: {hook_path}")
+
+
+def refresh_hooks(
+    source_root: Path, project: Path, full: bool, dry_run: bool = False
+) -> List[str]:
+    _validate_hooks_refresh(source_root, project, full)
+    refreshed: List[str] = []
+    for name in GUARD_SCRIPTS:
+        destination = project / HOOKS_DIRECTORY / name
+        source = source_root / "scripts" / name
+        if dry_run:
+            refreshed.append(destination.relative_to(project).as_posix())
+        else:
+            shutil.copyfile(source, destination)
+            refreshed.append(destination.relative_to(project).as_posix())
+    if full:
+        settings = project / ".claude" / "settings.json"
+        if _lexists(settings):
+            if dry_run:
+                refreshed.append(settings.relative_to(project).as_posix())
+            else:
+                settings.write_text(CLAUDE_HOOKS_SETTINGS, encoding="utf-8")
+                refreshed.append(settings.relative_to(project).as_posix())
+        if (project / ".git").is_dir():
+            for hook_name, content in (
+                ("pre-commit", PRE_COMMIT_HOOK),
+                ("commit-msg", COMMIT_MSG_HOOK),
+            ):
+                hook_path = project / ".git" / "hooks" / hook_name
+                if not _lexists(hook_path):
+                    continue
+                if dry_run:
+                    refreshed.append(hook_path.relative_to(project).as_posix())
+                else:
+                    hook_path.write_text(content, encoding="utf-8")
+                    hook_path.chmod(0o755)
+                    refreshed.append(hook_path.relative_to(project).as_posix())
+    return refreshed
 
 
 def _comparison_path(path: Path) -> Path:
@@ -874,6 +966,8 @@ def parser() -> argparse.ArgumentParser:
     argument_parser.add_argument("--dry-run", action="store_true")
     argument_parser.add_argument("--project", type=Path)
     argument_parser.add_argument("--hooks", action="store_true")
+    argument_parser.add_argument("--hooks-refresh", action="store_true")
+    argument_parser.add_argument("--hooks-refresh-full", action="store_true")
     argument_parser.add_argument(
         "--source-root",
         type=Path,
@@ -886,6 +980,27 @@ def parser() -> argparse.ArgumentParser:
 def main(argv: Optional[Sequence[str]] = None) -> int:
     argument_parser = parser()
     arguments = argument_parser.parse_args(argv)
+    source_root = absolute_path(arguments.source_root)
+    project = (
+        absolute_path(arguments.project) if arguments.project is not None else None
+    )
+    if arguments.hooks_refresh or arguments.hooks_refresh_full:
+        if project is None:
+            print("error: --hooks-refresh requires --project", file=sys.stderr)
+            return 2
+        try:
+            refreshed = refresh_hooks(
+                source_root,
+                project,
+                arguments.hooks_refresh_full,
+                arguments.dry_run,
+            )
+            prefix = "would refresh" if arguments.dry_run else "refreshed"
+            print(f"hooks: {prefix} {', '.join(refreshed)}")
+        except InstallerError as error:
+            print(f"error: {error}", file=sys.stderr)
+            return 1
+        return 0
     selected = [
         target
         for target in TARGETS
@@ -894,13 +1009,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if not selected:
         argument_parser.error("select at least one target or --all")
 
-    source_root = absolute_path(arguments.source_root)
     plans = []
     for target in selected:
         override = getattr(arguments, f"{target}_root")
         root = absolute_path(override) if override is not None else default_root(target)
         plans.append(TargetPlan(target, root))
-    project = absolute_path(arguments.project) if arguments.project is not None else None
     try:
         for result in install(
             source_root, plans, project, arguments.dry_run, arguments.hooks

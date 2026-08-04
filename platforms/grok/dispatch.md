@@ -32,3 +32,10 @@ Apply this contract whenever a GSD Path skill delegates work:
 - If `spawn_subagent` or the `general-purpose` type is unavailable, stop and
   report the missing capability. Do not silently collapse an independence
   boundary into the main context.
+
+## Parent lifecycle
+
+The parent owns lifecycle: wait for terminal completion, enforce timeout and
+cancellation, transfer staged outputs from disposable roots, clean up every
+child and temporary root before the phase gate, and never let a child delegate
+another GSD Path child. A timeout or cancellation is a blocked result.

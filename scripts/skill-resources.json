@@ -28,13 +28,15 @@
     "gsd-path-plan": [
       "references/dispatch.md",
       "references/planner.md",
+      "templates/patch-findings.md",
       "templates/plan.md",
       "templates/task.md"
     ],
     "gsd-path-research": [
       "references/dispatch.md",
       "references/researcher.md",
-      "templates/evidence.md"
+      "templates/evidence.md",
+      "templates/research-handoff.md"
     ],
     "gsd-path-review": [
       "references/dispatch.md",
@@ -42,6 +44,7 @@
       "templates/archive-manifest.md",
       "templates/final-review.md",
       "templates/gap-review.md",
+      "templates/patch-findings.md",
       "templates/wave-review.md"
     ],
     "gsd-path-synthesize": [
@@ -53,6 +56,11 @@
   "script_targets": [
     ["scripts/archive_milestone.py", "skills/gsd-path/scripts/archive_milestone.py"],
     ["scripts/archive_milestone.py", "skills/gsd-path-review/scripts/archive_milestone.py"],
+    ["scripts/check_handoffs.py", "skills/gsd-path/scripts/check_handoffs.py"],
+    ["scripts/check_handoffs.py", "skills/gsd-path-plan/scripts/check_handoffs.py"],
+    ["scripts/check_handoffs.py", "skills/gsd-path-research/scripts/check_handoffs.py"],
+    ["scripts/check_handoffs.py", "skills/gsd-path-review/scripts/check_handoffs.py"],
+    ["scripts/check_handoffs.py", "skills/gsd-path-synthesize/scripts/check_handoffs.py"],
     ["scripts/check_update.py", "skills/gsd-path/scripts/check_update.py"]
   ],
   "phase_contract_targets": [

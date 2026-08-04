@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Git commit-msg guard for GSD Path projects.
+"""Git commit-msg and pre-commit guard for GSD Path projects.
 
 Blocks a commit that modifies, deletes, or renames away any path under a
 committed .project/archive/ tree, and blocks a ship commit (subject
@@ -8,7 +8,11 @@ archive stays allowed: the ship transaction moves artifacts in.
 
 Installed as .git/hooks/commit-msg:
 
-    exec python3 "$(git rev-parse --show-toplevel)/.gsd-path/git_guard.py" "$1"
+    exec python3 "$(git rev-parse --show-toplevel)/.gsd-path/git_guard.py" commit-msg "$1"
+
+Installed as .git/hooks/pre-commit:
+
+    exec python3 "$(git rev-parse --show-toplevel)/.gsd-path/git_guard.py" pre-commit
 
 A git failure skips the guard (exit 0) so a broken environment can never
 brick commits; violations exit 1 with the offending paths on stderr.
@@ -19,7 +23,7 @@ import sys
 from pathlib import Path
 
 ARCHIVE_PREFIX = ".project/archive/"
-SHIP_PREFIX = "ship: "
+GUARD_MARKER = "gsd-path guard"
 
 
 def staged_entries():
@@ -55,13 +59,17 @@ def subject_of(message_file):
     return ""
 
 
+def is_ship_commit(subject):
+    return subject.strip().casefold().startswith("ship:")
+
+
 def violations(entries, subject):
     found = []
     for code, old, new in entries:
         if code in "MDTR" and old.startswith(ARCHIVE_PREFIX):
             label = f"{code} {old}" + (f" -> {new}" if new else "")
             found.append(f"{label}: committed archives are read-only")
-    if subject.startswith(SHIP_PREFIX):
+    if is_ship_commit(subject):
         for code, old, new in entries:
             for path in (old, new):
                 if path and not path.startswith(".project/"):
@@ -71,10 +79,33 @@ def violations(entries, subject):
     return found
 
 
+def git_toplevel():
+    result = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return Path(result.stdout.strip())
+
+
+def commit_subject(argv):
+    if len(argv) <= 1:
+        return ""
+    if argv[1] == "pre-commit":
+        edit_msg = git_toplevel() / ".git" / "COMMIT_EDITMSG"
+        if edit_msg.is_file():
+            return subject_of(edit_msg)
+        return ""
+    if argv[1] == "commit-msg" and len(argv) > 2:
+        return subject_of(argv[2])
+    return subject_of(argv[1])
+
+
 def main(argv):
     try:
         entries = staged_entries()
-        subject = subject_of(argv[1]) if len(argv) > 1 else ""
+        subject = commit_subject(argv)
     except Exception as error:
         print(f"gsd-path guard: skipped ({error})", file=sys.stderr)
         return 0

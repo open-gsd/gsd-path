@@ -26,16 +26,18 @@ the only reopen exception: require an approved plan, no in-progress task, and
 state `plan/done` or `review/blocked`; any other state blocks. `build/done` is
 reserved exclusively for the build orchestrator's transition recovery and
 must return there instead of reopening planning.
-Require both
-`.project/intent/INTENT.md` and
-`.project/research/SYNTHESIS.md`. Require a non-empty `## Decisions` or
-`## Settled` section and no unresolved `NEEDS-USER` items. Route to the producing phase when a
+Require `.project/intent/INTENT.md`. Normal mode also requires
+`.project/research/SYNTHESIS.md`; quick mode may enter without it because this
+phase creates the Settled-only synthesis before gating. Require a non-empty
+`## Decisions` or `## Settled` section and no unresolved `NEEDS-USER` items
+before dispatching the planner. Route to the producing phase when a
 precondition fails.
 
 ## Alignment queue check
 
-Before planning (either mode), read `.project/research/DOCS-AUDIT.md` for
-rulings marked `planned: no`. If any exist, offer once to include them:
+Before planning (either mode), read `.project/research/DOCS-AUDIT.md` when it
+exists for rulings marked `planned: no`. An absent audit means an empty
+alignment queue. If queued rulings exist, offer once to include them:
 
 - **Normal planning** — accepted items fold into the plan as ordinary
   tasks in dependency order (evidence inlined, `fix-doc` verifies re-run
@@ -52,12 +54,16 @@ severity, or fit with this milestone's scope).
 
 ## Process
 
-1. Read the local [plan template](templates/plan.md) and
-   [task template](templates/task.md); resolve both to absolute paths.
+1. Read the local [plan template](templates/plan.md), [task template](templates/task.md),
+   and `scripts/check_handoffs.py`; resolve them to absolute paths.
 2. Read the local [planner role](references/planner.md), then follow the
    local [runtime dispatch contract](references/dispatch.md) with deterministic
-   logical task name `plan`. Give it absolute role, input, template, and output paths,
-   including `.project/LESSONS.md` when it exists.
+   logical task name `plan`. Give it absolute role, `AGENTS.md`, `WORKFLOW.md`,
+   input, template, and output paths, including `.project/LESSONS.md` when it
+   exists. In final-review patch mode also include
+   `.project/review/PATCH-FINDINGS.md` and every source artifact it names; in
+   docs-audit patch mode include the selected `DOCS-AUDIT.md` rows and user
+   rulings.
    The outputs are exactly `.project/plan/PLAN.md` and one task
    file per task at `.project/tasks/T###-slug.md` — no other location is
    canonical, and `.project/PLAN.md` is never written.
@@ -83,8 +89,9 @@ severity, or fit with this milestone's scope).
      Wave 1 and any wave touching authentication, authorization, payments,
      data migration, or concurrency requires `full`; quick-lane single waves
      may use `verify-only`.
-   - Prove every intent constraint and synthesis decision is covered, and that
-     no scope-out veto appears in a task.
+   - Prove every intent constraint and synthesis decision is covered, that no
+     scope-out veto appears in a task, and that `Project verify` is a real,
+     non-placeholder command in PLAN.md.
 4. Redispatch one complete corrected brief under logical task name `plan`,
    following the runtime dispatch contract and including all gate failures.
    Allow one revision round. If it still fails, set STATE.md to
@@ -133,20 +140,26 @@ Invoked by `$gsd-path-docs-audit` (remediation rulings) or `$gsd-path-review fin
 (`not-met` criteria); the invoker names the exact ordered list of one or more
 findings source files and rows.
 
-**Preconditions.** An existing approved `.project/plan/PLAN.md`, and findings sources
-whose selected items carry evidence plus — for audit findings — a recorded user
-ruling. No `.project/plan/PLAN.md` → decline and route to the normal pipeline
-(this includes an archived ship, whose plan moved into `.project/archive/`);
-unruled findings → send them back for rulings first.
+**Preconditions.** An existing approved `.project/plan/PLAN.md`. For a
+final-review patch, require a valid `.project/review/PATCH-FINDINGS.md` and the
+source artifacts named there. For a docs-audit patch, require the selected
+`DOCS-AUDIT.md` rows and their recorded user rulings instead. Each selected
+item must carry evidence. No `.project/plan/PLAN.md` → decline and route to
+the normal pipeline (this includes an archived ship, whose plan moved into
+`.project/archive/`); unruled audit findings → send them back for rulings
+first.
 
 **Process.**
 
 1. Set STATE.md `phase: plan`, `status: active` and note the patch reopening in
    the state log. A shipped milestone cannot reopen because its plan is
    archived; start a new milestone instead.
-2. Dispatch the planner per the standard contract with deterministic logical
-   task name `plan_patch`, adding: the findings
-   source paths and selected rows, the existing PLAN.md and task files, and the instruction to
+2. In final-review patch mode, run `python3 <absolute check_handoffs.py> patch
+   --repo <absolute repo root>`. In docs-audit patch mode, use the selected
+   `DOCS-AUDIT.md` rows and rulings as the source hand-off. Dispatch the planner
+   per the standard contract with deterministic logical task name `plan_patch`,
+   adding: the applicable hand-off path, its exact ordered findings, source
+   paths and selected rows, the existing PLAN.md and task files, and the instruction to
    append wave W+1 (highest existing wave + 1) without modifying completed
    waves or existing tasks. One task per accepted finding, carrying the
    finding's evidence verbatim in its Context; `fix-doc` findings are tasks

@@ -3,9 +3,11 @@
 Apply this contract whenever a GSD Path skill delegates work:
 
 - Use Antigravity's `invoke_subagent` tool with `TypeName: self` and
-  `Workspace: inherit`. The `self` child retains the required tool access; the
-  linked role brief supplies the read-only boundary for auditors and
-  reviewers.
+  `Workspace` bound to the exact repository or linked-worktree root named in
+  the brief. Do not use `Workspace: inherit` for a parallel task: if the host
+  cannot resolve the supplied root exactly, stop before dispatch. The `self`
+  child retains the required tool access; the linked role brief supplies the
+  read-only boundary for auditors and reviewers.
 - Supply the deterministic logical task name as the subagent `Role`:
   `onboard_codebase`, `onboard_docs`, `docs_audit`,
   `research_<dimension>`, `synthesize`, `plan`, `plan_patch`,
@@ -20,10 +22,10 @@ Apply this contract whenever a GSD Path skill delegates work:
   create a colliding logical target.
 - Resolve the phase's linked role brief to an absolute path. Include that path
   in the prompt and require the child to read it before acting.
-- Do not override the model. Use the parent's exact workspace and never ask
-  Antigravity to create a branch workspace or another worktree. GSD Path
-  supplies the exact repository or linked-worktree root, and the child must
-  work only there.
+- Do not override the model or ask Antigravity to create a branch workspace or
+  another worktree. GSD Path supplies the exact repository or linked-worktree
+  root, and the child must work only there; the parent asserts the resolved
+  path before launch and rejects a primary-workspace fallback.
 - Give every child a self-contained prompt with absolute input, template, and
   output paths plus its bounded responsibility. A coder prompt also names its
   isolated linked-worktree root; no child may infer the primary worktree.
@@ -33,3 +35,10 @@ Apply this contract whenever a GSD Path skill delegates work:
 - If `invoke_subagent`, `send_message`, or the full-capability `self` child is
   unavailable, stop and report the missing capability. Do not silently
   collapse an independence boundary into the main context.
+
+## Parent lifecycle
+
+The parent owns lifecycle: wait for terminal completion, enforce timeout and
+cancellation, transfer staged outputs from disposable roots, clean up every
+child and temporary root before the phase gate, and never let a child delegate
+another GSD Path child. A timeout or cancellation is a blocked result.

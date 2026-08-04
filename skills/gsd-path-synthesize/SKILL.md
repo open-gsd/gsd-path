@@ -20,21 +20,23 @@ marker returns to `$gsd-path` for ownership checking. Legal entry is
 `research/done` (transition to `synthesize/active`) or
 `synthesize/active|blocked`; `synthesize/done` or any later phase blocks rather
 than replacing decisions beneath an existing plan. Require
-`.project/intent/INTENT.md` and every `evidence-*.md` file the research phase
-dispatched. A standard file may be absent only when the research phase's
-STATE.md log records that dimension as skipped; a missing or invalid
-dispatched file routes to `$gsd-path-research`. Include every additional
-`evidence-*.md` file present.
+`.project/intent/INTENT.md`, `.project/research/RESEARCH.md`, and every
+`evidence-*.md` file named as `dispatched` there. A standard file may be absent
+only when the handoff manifest records that dimension as skipped; a missing or
+invalid manifest or dispatched file routes to `$gsd-path-research`. Include
+every additional `evidence-*.md` file present only when the manifest names it.
 
 ## Process
 
-1. Read the local [synthesis template](templates/synthesis.md) and
-   resolve it to an absolute path.
+1. Read the local [synthesis template](templates/synthesis.md),
+   `.project/research/RESEARCH.md`, and the bundled `scripts/check_handoffs.py`;
+   resolve each to an absolute path. Run the research hand-off validator before
+   dispatch so synthesis receives a complete, intentional evidence set.
 2. Read the local [synthesizer role](references/synthesizer.md), then follow
    the local [runtime dispatch contract](references/dispatch.md) with
    deterministic logical task name `synthesize`. Give it absolute paths to the role,
-   INTENT.md, every evidence file, the template, and the required output
-   `.project/research/SYNTHESIS.md`.
+   `AGENTS.md`, `WORKFLOW.md`, INTENT.md, RESEARCH.md, every evidence file, the
+   template, and the required output `.project/research/SYNTHESIS.md`.
 3. Validate SYNTHESIS.md. Require one decision block for every genuinely open
    choice in INTENT.md and the evidence, including stack and architecture
    shape plus build-vs-buy when open. A choice already settled by an intent

@@ -1,6 +1,6 @@
 # WORKFLOW.md — GSD Path Pipeline SOP
 
-Idea to shipped code in six gated phases. The `gsd-path` router reads
+Idea to shipped code through a gated pipeline. The `gsd-path` router reads
 `.project/STATE.md`, reports the current state, and invokes the next skill.
 Every handoff is on disk; AGENTS.md supplies the shared operating rules.
 
@@ -20,6 +20,28 @@ the layer serially, then unlock the next layer. A same-wave task never runs
 before its same-wave dependencies are done. Task verification reconstructs
 the layer base plus only that task patch; combined branch-tip evidence does
 not count.
+
+The parent orchestrator owns dispatch and lifecycle. It binds one structured
+run when the host provides one, creates one task per independent brief, waits
+for terminal results, validates provenance, transfers staged artifacts from
+disposable roots, and cleans up every child and temporary root before applying
+a gate. Children never delegate another GSD Path child. A timeout or
+cancellation is a blocked result, not a skipped result.
+
+| Stage | Independent children | Scheduling | Parent hand-off |
+| --- | --- | --- | --- |
+| onboard | codebase mapper, docs auditor | two concurrent briefs | validate and transfer both artifacts |
+| grill | none | coordinator-led user gate | write approved INTENT.md |
+| research | assigned dimensions | concurrent up to capacity, then batches | validate RESEARCH.md and evidence |
+| synthesize | one synthesizer | serial | validate SYNTHESIS.md |
+| plan | one planner; zero in quick mode | serial | validate PLAN.md and task mapping |
+| build | dependency-ready coders | parallel layers, serial integration | commit code and wave artifacts |
+| review | wave reviewer; final integration and gap reviewers | independent reviewers concurrent | validate and transfer review artifacts |
+| archive | none | coordinator-led transaction | validate the `.project`-only ship commit |
+
+Non-interactive phases auto-advance when their artifacts pass their gates.
+User approval remains required at grill, synthesis, plan, final-review patch
+selection, and final shipping checkpoints.
 
 ## Phase 0 — Onboard (`gsd-path-onboard`, brownfield only)
 
@@ -91,8 +113,8 @@ lane to `standard` and reroutes through research.
 
 ## Phase 2 — Research (`gsd-path-research`)
 
-**Input:** INTENT.md. **Output:** one evidence file per dispatched dimension,
-drawn from the four standard dimensions:
+**Input:** INTENT.md. **Output:** `research/RESEARCH.md` plus one evidence
+file per dispatched dimension, drawn from the four standard dimensions:
 
 - `research/evidence-domain.md`
 - `research/evidence-stack.md`
@@ -109,14 +131,16 @@ assigned `RESEARCH` question, an unsettled choice, or an intent risk. Skip the
 rest and record each skip with its reason in the STATE.md log; never spawn a
 researcher to fill a file. Run dispatched researchers with separate briefs and
 output paths, batching when runtime capacity is lower than the dispatched
-count. An optional fifth dimension may supplement them but never replaces a
-dispatched one. Every finding needs a checked source, confidence, and a
-tie-back to INTENT.md.
+count. An optional fifth dimension may supplement at least one dispatched
+standard dimension but never replaces the standard set. RESEARCH.md records
+every standard dimension exactly once as dispatched or skipped, every question
+assignment, and the exact evidence path. Every finding needs a checked source,
+confidence, and a tie-back to INTENT.md.
 
-**Gate:** every dispatched file exists, matches the evidence template,
-contains at least one finding, and answers its assigned `RESEARCH` questions;
-every skipped dimension is recorded with its reason. One failed agent may be
-respawned once.
+**Gate:** RESEARCH.md records every standard dimension exactly once, every
+dispatched file exists, matches the evidence template, contains at least one
+finding, and answers its assigned `RESEARCH` questions; every skipped
+dimension is recorded with its reason. One failed agent may be respawned once.
 
 ## Phase 3 — Synthesize (`gsd-path-synthesize`)
 
@@ -224,8 +248,10 @@ For each wave:
    diff evidence, and anything it cannot confirm from that evidence is a
    finding.
 6. **Fix and re-review.** Batch findings into complete fix tasks — one per
-   disjoint file scope, not one per finding — and execute them through the
-   same isolated loop. Stop for a user ruling at the configured cycle cap.
+   disjoint file scope, not one per finding — add every fix task to the current
+   or next PLAN wave and create its complete task file before dispatch, then
+   execute them through the same isolated loop. Stop for a user ruling at the
+   configured cycle cap.
 7. **Advance.** Only a passing wave permits the next. Commit review artifacts
    and BOARD/STATE bookkeeping at the boundary.
 
@@ -246,8 +272,8 @@ the transition directly to `review/active`, leaving a clean primary worktree.
 ## Phase 6 — Final review (`gsd-path-review final`)
 
 **Input:** INTENT.md success criteria and the running system. **Output:**
-`.project/review/FINAL.md` plus one distinct
-`.project/review/final-gap-N.md` per cross-wave risk.
+`.project/review/FINAL.md`, one distinct `.project/review/final-gap-N.md` per
+cross-wave risk, and (when blocked) `.project/review/PATCH-FINDINGS.md`.
 
 Run an integration reviewer and independent gap reviewers through the shared
 capacity-aware dispatch contract. The integration reviewer marks each success
@@ -258,7 +284,9 @@ risks that could plausibly fail — a small milestone may carry only the
 project-Verify risk; never pad the list. The orchestrator
 creates one disposable worktree at exact reviewed HEAD
 per reviewer; project commands never run in the primary worktree. Every final
-artifact records that full reviewed HEAD. Retry may reuse an uncommitted output
+artifact records that full reviewed HEAD. The parent validates and atomically
+transfers each staged reviewer output to the canonical `.project/review/` path
+before removing its exact disposable root. Retry may reuse an uncommitted output
 only when its SHA and complete numbered risk mapping still match. Stale
 uncommitted assigned outputs are regenerated. A prior blocked output committed
 by the patch build may be replaced only when its findings were copied verbatim
@@ -274,8 +302,9 @@ A missing or malformed reviewer output gets one corrective follow-up, then a
 `NEEDS-USER` block rather than a fabricated patch. The orchestrator's project
 Verify and its mandatory gap review must agree; repeat both once on conflict,
 then surface the conflicting evidence. Only valid evidenced FINAL/gap findings
-enter patch planning, and the build orchestrator commits that finding set with
-the approved patch artifacts before executing the new wave.
+enter PATCH-FINDINGS.md and patch planning, and the build orchestrator commits
+that finding set with the approved patch artifacts before executing the new
+wave.
 
 ## Phase 7 — Archive (automatic at ship)
 
@@ -373,6 +402,7 @@ with their exact ordered source-file and row list.
   intent/INTENT.md           approved intent and hard constraints
   research/evidence-codebase.md   brownfield ground truth (onboard)
   research/DOCS-AUDIT.md     doc-vs-code verdicts and remediation queue
+  research/RESEARCH.md       research dispatch/question/output manifest
   research/evidence-*.md     four required evidence dimensions
   research/SYNTHESIS.md      settled, fully gated decisions
   plan/PLAN.md               waves, config, and project verify
@@ -381,6 +411,7 @@ with their exact ordered source-file and row list.
   review/wave-N.cycleC.md    per-wave verdicts
   review/final-gap-N.md      cross-wave gap verdicts
   review/FINAL.md            success-criteria verdicts
+  review/PATCH-FINDINGS.md   ordered evidenced findings for patch planning
   archive/<NNN>-<slug>/      read-only shipped milestones, each with MANIFEST.md
 ```
 
