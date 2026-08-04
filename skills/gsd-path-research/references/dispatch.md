@@ -57,11 +57,29 @@ For every branch:
   Never ask the host to create a worktree. Give the child the exact
   repository or linked-worktree root supplied by GSD Path.
 - Send a self-contained prompt with absolute input, template, and output paths
-  plus the child's bounded responsibility. A coder prompt also names its
-  isolated linked-worktree root; no child may infer the primary worktree.
+  plus the child's bounded responsibility. Every brief also names the absolute
+  `AGENTS.md` and `WORKFLOW.md` paths (or explicitly says they are absent), the
+  next phase that consumes the output, the gate it must satisfy, and the
+  terminal result it must return. A coder prompt also names its isolated
+  linked-worktree root; no child may infer the primary worktree.
+- The parent is the sole dispatcher and lifecycle owner. If the runtime exposes
+  structured Run/Task/Dispatch orchestration, bind one Run, create one Task per
+  independent brief with explicit dependencies, inject the brief, and wait for
+  every `worker_done`, `escalation`, or question before applying the gate.
+  Verify the task and dispatch records before reporting the work as
+  orchestrated. On runtimes without that layer, use the host adapter's
+  equivalent and preserve the same logical name, completion state,
+  timeout/cancellation, and cleanup rules; never silently delegate again from a
+  child.
+- A child that receives a disposable worktree stages its assigned artifact
+  under that root. The parent validates it and atomically transfers it to the
+  canonical project path before removing the exact disposable root. A child
+  never writes a disposable-review output directly into the primary worktree.
 - Launch independent briefs concurrently up to the advertised child capacity,
   batch any remainder without combining briefs, and collect every result
-  before applying the phase gate.
+  before applying the phase gate. Do not leave an active child, logical task, or
+  temporary worktree after collection; a timeout or cancellation is a blocked
+  result, not a silent success.
 - If the tool schema is ambiguous or the required full-capability child is
   unavailable, stop and report the missing capability. Do not guess the host
   or silently collapse an independence boundary into the main context.

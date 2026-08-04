@@ -151,7 +151,7 @@ class SyncSkillResourcesTests(unittest.TestCase):
 
         readme = (PROJECT_ROOT / "README.md").read_text()
         self.assertNotIn("cp -n AGENTS.md WORKFLOW.md", readme)
-        self.assertIn("A direct phase run stops at its handoff", readme)
+        self.assertIn("Phase skills stop at their handoff", readme)
         for contract in (
             "BUILD.md",
             "DOCS-AUDIT.md",

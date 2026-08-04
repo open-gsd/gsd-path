@@ -24,7 +24,9 @@ and follow that runtime-specific dispatch contract.
 
 1. Require STATE `build/active`, a wave number, and review cycle 1 unless the
    caller supplies C. Any other phase blocks rather than rewinding state.
-2. Resolve the local [wave-review template](templates/wave-review.md).
+2. Resolve the local [wave-review template](templates/wave-review.md) and
+   require the reviewer to stage its output inside the supplied disposable root
+   at `.project/review/wave-N.cycleC.md`.
 3. Spawn one reviewer with deterministic logical task name
    `review_wave_<wave>_cycle_<cycle>`, mode `wave`, the wave and
    cycle, exact repository root, and every task-file path in the wave. Each
@@ -33,9 +35,10 @@ and follow that runtime-specific dispatch contract.
    supplies its exact path; it removes those exact worktrees after collection.
 4. Require `.project/review/wave-N.cycleC.md` with a task verdict for every
    input and an overall `pass` or `blocked`. The reviewer reconstructs and
-   verifies each task alone at its recorded base. Return the validated verdict
-   to the build orchestrator. A blocked reviewer supplies work orders; it does
-   not edit code.
+   verifies each task alone at its recorded base. The orchestrator validates the
+   staged file, atomically copies it to the primary `.project/review/` path,
+   and only then removes the exact disposable root. A blocked reviewer supplies
+   work orders; it does not edit code.
 
 ## Final mode
 
@@ -68,8 +71,9 @@ blocks without mutation. Otherwise:
    project-Verify risk. Always include PLAN.md's project
    Verify command as a numbered risk so a failure has a reviewer-owned gap
    artifact with reproduced evidence and fix direction. Resolve the local
-   [final-review template](templates/final-review.md) and
-   [gap-review template](templates/gap-review.md).
+   [final-review template](templates/final-review.md),
+   [gap-review template](templates/gap-review.md), [patch-findings
+   template](templates/patch-findings.md), and `scripts/check_handoffs.py`.
 3. Dispatch through the shared capacity-aware contract at the exact reviewed
    HEAD:
    - one integration reviewer with logical task name `review_final`, writing only
@@ -79,8 +83,10 @@ blocks without mutation. Otherwise:
      writing only `.project/review/final-gap-N.md`.
    Before dispatch, the orchestrator creates a distinct disposable detached
    worktree at exact reviewed HEAD for each reviewer and supplies its path.
-   Review commands run only there, never in the primary worktree; the
-   orchestrator removes only those exact worktrees after collection.
+   Review commands and staged outputs run only there, never in the primary
+   worktree; the orchestrator validates and atomically copies each assigned
+   output to its canonical primary path before removing only those exact
+   worktrees after collection.
 4. Validate every artifact. Every success criterion is `met`, `not-met`, or
    `unverifiable` with checked evidence; every gap is `pass` or `blocked` with
    checked evidence. Every output must record the same exact full reviewed
@@ -95,8 +101,11 @@ blocks without mutation. Otherwise:
    failed orchestrator Verify must agree with the mandatory project-Verify gap
    review; repeat both once on disagreement, then block and surface the
    conflicting evidence as `NEEDS-USER` instead of planning from it. A `not-met`,
-   `unverifiable`, or blocked gap with valid evidence sets `review/blocked` and
-   selects exactly those FINAL.md and gap rows as patch findings. When routed
+   `unverifiable`, or blocked gap with valid evidence sets `review/blocked`,
+   writes `.project/review/PATCH-FINDINGS.md` from the patch-findings template,
+   and runs `python3 <absolute check_handoffs.py> patch --repo <absolute repo
+   root>`. The manifest contains exactly those FINAL.md and gap rows; when
+   routed
    by an active `$gsd-path`, return control so its bundled plan contract opens
    patch mode. When invoked directly, stop and tell the user to explicitly
    invoke `$gsd-path` or `$gsd-path-plan` with those sources; do not invoke an

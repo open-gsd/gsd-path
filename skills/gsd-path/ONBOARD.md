@@ -56,8 +56,10 @@ overwriting it. Re-running onboarding would overwrite established context.
    changes, the orchestrator creates a separate disposable detached worktree at
    that exact HEAD for each agent and includes its path and revision for
    project commands; expected new pipeline artifacts do not make product code
-   dirty. Otherwise no project command may run. The orchestrator removes only
-   those exact worktrees after collecting both agents.
+   dirty. Each agent stages its assigned output under that worktree; the
+   orchestrator validates and atomically transfers both files to the primary
+   `.project/` paths before removing only those exact worktrees. Otherwise no
+   project command may run.
 3. Gate both artifacts against their templates: the codebase evidence needs
    a filled `## Map` plus findings as observed — no quota, but an empty
    findings section must say why; the docs audit's document

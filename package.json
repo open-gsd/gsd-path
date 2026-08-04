@@ -1,7 +1,7 @@
 {
   "name": "gsd-path",
   "version": "1.0.0",
-  "description": "Disk-backed project pipeline skills for AI coding agents, with a safe multi-host installer",
+  "description": "Disk-backed AI agent pipeline. Docs: DOCS.md (start here), QUICK.md, FULL.md, UPDATE.md",
   "license": "MIT",
   "type": "module",
   "bin": {
@@ -11,12 +11,21 @@
     "scripts/install.mjs",
     "scripts/skill-resources.json",
     "scripts/archive_milestone.py",
+    "scripts/check_handoffs.py",
     "scripts/check_update.py",
+    "scripts/guard_hook.py",
+    "scripts/git_guard.py",
+    "README.md",
+    "DOCS.md",
+    "HOOKS.md",
+    "QUICK.md",
+    "FULL.md",
+    "UPDATE.md",
+    "GUIDE.md",
     "skills/",
     "platforms/",
     "AGENTS.md",
-    "WORKFLOW.md",
-    "GUIDE.md"
+    "WORKFLOW.md"
   ],
   "engines": {
     "node": ">=18.17"

@@ -24,7 +24,8 @@ Checks run: <exact commands run and their results, e.g. `npm test` → 37/40 pas
 - **Confidence**: <high | medium | low>
 - **Why it matters here**: <what onboarding/planning gets wrong without this>
 
-<!-- ≥3 findings. Prioritize load-bearing surprises and half-built areas. -->
+<!-- Record every load-bearing surprise or half-built area observed. There is
+     no minimum finding quota; explain an empty section if none were found. -->
 
 ## Apparent intent
 

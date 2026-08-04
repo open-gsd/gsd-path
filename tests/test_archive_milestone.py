@@ -69,7 +69,17 @@ archive: null
         (project / "tasks" / "T001-demo.md").write_text("# Task\n")
         (project / "review" / "FINAL.md").write_text("Overall verdict: pass\n")
         (project / "review" / "wave-1.cycle1.md").write_text(
-            "# Review — wave 1, cycle 1\n\nWave verdict: pass\nCycle: 1\n"
+            """# Review — wave 1, cycle 1
+
+Wave verdict: pass
+Cycle: 1
+Depth: full
+Tasks reviewed: 1
+
+## T001 — demo: pass
+
+- ✅ demo works — focused Verify passed
+"""
         )
         (project / "BOARD.md").write_text("# Board\n")
 
@@ -102,6 +112,17 @@ Reviewed HEAD: {reviewed_head}
 Gap verdict: pass
 Risk: project Verify command
 Waves checked: 1
+
+## Checked evidence
+
+- **Check**: `python -m unittest`
+- **Observed**: focused project verification passed.
+- **Reference**: `tests/test_archive_milestone.py`
+
+## Finding
+
+- **Found**: The project Verify command passed at the reviewed HEAD.
+- **Fix direction**: none
 """
         )
 
@@ -1024,6 +1045,77 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                 preflight = self.preflight(repo)
                 self.assertNotEqual(preflight.returncode, 0)
                 self.assertIn("gap", preflight.stderr.lower())
+
+    def test_preflight_rejects_an_evidence_free_passing_gap(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            archive = self.prepare_archive(repo)
+            gap = archive / "review" / "final-gap-1.md"
+            reviewed_head = gap.read_text().split("Reviewed HEAD: ", 1)[1].splitlines()[0]
+            gap.write_text(
+                f"""# Gap Review — 1: project verify
+
+Reviewed HEAD: {reviewed_head}
+Gap verdict: pass
+Risk: project Verify command
+
+## Checked evidence
+
+- **Check**: none
+- **Observed**: none
+- **Reference**: none
+
+## Finding
+
+- **Found**: No checked result was recorded.
+- **Fix direction**: none
+"""
+            )
+            self.write_manifest(archive)
+
+            preflight = self.preflight(repo)
+
+            self.assertNotEqual(preflight.returncode, 0)
+            self.assertIn("evidence", preflight.stderr.lower())
+
+    def test_preflight_rejects_a_passing_wave_without_task_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            archive = self.prepare_archive(repo)
+            wave = archive / "review" / "wave-1.cycle1.md"
+            wave.write_text(
+                """# Review — wave 1, cycle 1
+
+Wave verdict: pass
+Cycle: 1
+Depth: full
+Tasks reviewed: 1
+
+## T001 — demo: pass
+"""
+            )
+            self.write_manifest(archive)
+
+            preflight = self.preflight(repo)
+
+            self.assertNotEqual(preflight.returncode, 0)
+            self.assertIn("evidence", preflight.stderr.lower())
+
+    def test_preflight_rejects_a_passing_wave_for_an_unknown_task(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            archive = self.prepare_archive(repo)
+            wave = archive / "review" / "wave-1.cycle1.md"
+            wave.write_text(wave.read_text().replace("T001 — demo", "T999 — demo"))
+            self.write_manifest(archive)
+
+            preflight = self.preflight(repo)
+
+            self.assertNotEqual(preflight.returncode, 0)
+            self.assertIn("task", preflight.stderr.lower())
 
     def test_manifest_evidence_falls_back_from_final_reference_to_check(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

@@ -4,12 +4,15 @@ Verify written GSD Path expectations and block failures. Never fix code.
 
 ## Brief contract
 
-- Require the mode, all inputs, exact output path, applicable template,
-  repository root, and orchestrator-created disposable verification roots by
-  absolute path.
+- Require the mode, all inputs, exact canonical output path, applicable
+  template, repository root, and orchestrator-created disposable verification
+  root by absolute path. The brief must also name the staged output path under
+  that disposable root.
 - Read AGENTS.md and the template before reviewing.
-- Persist only the exact assigned review output in the primary
-  `.project/review/` path. Temporary patch/test effects are allowed solely
+- Write only the exact assigned review output under the supplied disposable
+  root at its staged `.project/review/` path. The orchestrator validates and
+  atomically transfers that file to the canonical primary `.project/review/`
+  path after collection. Temporary patch/test effects are allowed solely
   inside supplied disposable roots. Never edit a product path or any other
   primary-worktree path. Stop on a missing input or template.
 

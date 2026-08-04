@@ -8,7 +8,9 @@ change nothing outside your single output file.
 - Require the absolute repo root, exclusion rule, output path, and absolute
   codebase-template path.
 - Read AGENTS.md and the template before scanning. Stop on a missing path.
-- Write only the assigned output using the template. Do not ask the user
+- Write only the assigned output using the template. When the brief supplies a
+  disposable root, write the output under that root at the relative handoff
+  path; the orchestrator transfers it after validation. Do not ask the user
   questions.
 
 ## What to establish

@@ -42,6 +42,48 @@ SKILL_NAMES = (
     "gsd-path-synthesize",
 )
 CLAUDE_BRIDGE = "@../AGENTS.md\n@../WORKFLOW.md\n"
+HOOKS_DIRECTORY = ".gsd-path"
+GUARD_SCRIPTS = ("guard_hook.py", "git_guard.py")
+GUARD_MARKER = "gsd-path guard"
+CLAUDE_MATCHER = (
+    "Edit|Write|MultiEdit|NotebookEdit|Delete|StrReplace|ApplyPatch|Create|Shell|Bash"
+)
+CLAUDE_HOOKS_SETTINGS = (
+    json.dumps(
+        {
+            "hooks": {
+                "PreToolUse": [
+                    {
+                        "matcher": CLAUDE_MATCHER,
+                        "hooks": [
+                            {
+                                "type": "command",
+                                "command": (
+                                    "python3 \"$CLAUDE_PROJECT_DIR/"
+                                    f"{HOOKS_DIRECTORY}/guard_hook.py\""
+                                ),
+                            }
+                        ],
+                    }
+                ]
+            }
+        },
+        indent=2,
+    )
+    + "\n"
+)
+PRE_COMMIT_HOOK = (
+    "#!/bin/sh\n"
+    "# gsd-path guard: archive immutability before commit.\n"
+    "exec python3 \"$(git rev-parse --show-toplevel)/"
+    f"{HOOKS_DIRECTORY}/git_guard.py\" pre-commit\n"
+)
+COMMIT_MSG_HOOK = (
+    "#!/bin/sh\n"
+    "# gsd-path guard: archive immutability and ship-commit purity.\n"
+    "exec python3 \"$(git rev-parse --show-toplevel)/"
+    f"{HOOKS_DIRECTORY}/git_guard.py\" commit-msg \"$1\"\n"
+)
 OPENCODE_NOTE = (
     "note: OpenCode stable discovers the skills but has no documented hard "
     'explicit-only switch; OpenCode v2 honors opencode/autoinvoke="false" '
@@ -419,28 +461,65 @@ def _rollback_target(transaction: TargetTransaction) -> None:
     _remove_empty_directories(transaction.created_directories)
 
 
-def _project_destinations(project: Path, include_claude: bool) -> List[Tuple[Path, str]]:
-    destinations = [
-        (project / "AGENTS.md", "AGENTS.md"),
-        (project / "WORKFLOW.md", "WORKFLOW.md"),
+def _project_destinations(
+    project: Path, include_claude: bool, hooks: bool
+) -> List[Tuple[Path, Optional[str], Optional[str], bool]]:
+    """(destination, source name, literal content, executable) per file."""
+    destinations: List[Tuple[Path, Optional[str], Optional[str], bool]] = [
+        (project / "AGENTS.md", "AGENTS.md", None, False),
+        (project / "WORKFLOW.md", "WORKFLOW.md", None, False),
     ]
     if include_claude:
-        destinations.append((project / ".claude" / "CLAUDE.md", ""))
+        destinations.append(
+            (project / ".claude" / "CLAUDE.md", None, CLAUDE_BRIDGE, False)
+        )
+    if hooks:
+        for name in GUARD_SCRIPTS:
+            destinations.append(
+                (project / HOOKS_DIRECTORY / name, f"scripts/{name}", None, False)
+            )
+        if include_claude:
+            destinations.append(
+                (
+                    project / ".claude" / "settings.json",
+                    None,
+                    CLAUDE_HOOKS_SETTINGS,
+                    False,
+                )
+            )
+        if (project / ".git").is_dir():
+            destinations.append(
+                (project / ".git" / "hooks" / "pre-commit", None, PRE_COMMIT_HOOK, True)
+            )
+            destinations.append(
+                (project / ".git" / "hooks" / "commit-msg", None, COMMIT_MSG_HOOK, True)
+            )
     return destinations
+
+
+def _project_files(project: Path, include_claude: bool, hooks: bool) -> str:
+    return ", ".join(
+        destination.relative_to(project).as_posix()
+        for destination, _, _, _ in _project_destinations(project, include_claude, hooks)
+    )
 
 
 def _validate_project(
     source_root: Path,
     project: Path,
     include_claude: bool,
+    hooks: bool,
     reserved_roots: Sequence[Tuple[str, Path]],
 ) -> None:
     _validate_directory_destination(project, "project path")
-    for source_name in ("AGENTS.md", "WORKFLOW.md"):
+    sources = ["AGENTS.md", "WORKFLOW.md"]
+    if hooks:
+        sources.extend(f"scripts/{name}" for name in GUARD_SCRIPTS)
+    for source_name in sources:
         source = source_root / source_name
         if source.is_symlink() or not source.is_file():
             raise InstallerError(f"missing project contract: {source}")
-    for destination, _ in _project_destinations(project, include_claude):
+    for destination, _, _, _ in _project_destinations(project, include_claude, hooks):
         if _lexists(destination):
             raise InstallerError(f"project contract already exists: {destination}")
         for label, root in reserved_roots:
@@ -459,12 +538,14 @@ def _apply_project(
     source_root: Path,
     project: Path,
     include_claude: bool,
+    hooks: bool,
     transaction: ProjectTransaction,
 ) -> None:
     _create_directory(project, transaction.created_directories)
-    if include_claude:
-        _create_directory(project / ".claude", transaction.created_directories)
-    for destination, source_name in _project_destinations(project, include_claude):
+    for destination, source_name, content, executable in _project_destinations(
+        project, include_claude, hooks
+    ):
+        _create_directory(destination.parent, transaction.created_directories)
         created = False
         try:
             if source_name:
@@ -475,7 +556,9 @@ def _apply_project(
             else:
                 with destination.open("x", encoding="utf-8") as output:
                     created = True
-                    output.write(CLAUDE_BRIDGE)
+                    output.write(content)
+            if executable:
+                destination.chmod(0o755)
             transaction.copied.append(destination)
         except FileExistsError as error:
             raise InstallerError(
@@ -491,6 +574,85 @@ def _rollback_project(transaction: ProjectTransaction) -> None:
     for destination in reversed(transaction.copied):
         _remove_path(destination)
     _remove_empty_directories(transaction.created_directories)
+
+
+def _is_managed_guard_script(destination: Path) -> bool:
+    if not destination.is_file():
+        return False
+    return GUARD_MARKER in destination.read_text(encoding="utf-8")
+
+
+def _is_managed_git_hook(destination: Path) -> bool:
+    if not destination.is_file():
+        return False
+    text = destination.read_text(encoding="utf-8")
+    return GUARD_MARKER in text and "git_guard.py" in text
+
+
+def _is_managed_claude_settings(destination: Path) -> bool:
+    if not destination.is_file():
+        return False
+    text = destination.read_text(encoding="utf-8")
+    return "guard_hook.py" in text and HOOKS_DIRECTORY in text
+
+
+def _validate_hooks_refresh(source_root: Path, project: Path, full: bool) -> None:
+    _validate_directory_destination(project, "project path")
+    for name in GUARD_SCRIPTS:
+        destination = project / HOOKS_DIRECTORY / name
+        if not _is_managed_guard_script(destination):
+            raise InstallerError(f"not a managed GSD Path guard script: {destination}")
+        source = source_root / "scripts" / name
+        if source.is_symlink() or not source.is_file():
+            raise InstallerError(f"missing guard script source: {source}")
+    if full:
+        settings = project / ".claude" / "settings.json"
+        if _lexists(settings) and not _is_managed_claude_settings(settings):
+            raise InstallerError(
+                f"not a managed GSD Path hook settings file: {settings}"
+            )
+        for hook_name in ("pre-commit", "commit-msg"):
+            hook_path = project / ".git" / "hooks" / hook_name
+            if _lexists(hook_path) and not _is_managed_git_hook(hook_path):
+                raise InstallerError(f"not a managed GSD Path git hook: {hook_path}")
+
+
+def refresh_hooks(
+    source_root: Path, project: Path, full: bool, dry_run: bool = False
+) -> List[str]:
+    _validate_hooks_refresh(source_root, project, full)
+    refreshed: List[str] = []
+    for name in GUARD_SCRIPTS:
+        destination = project / HOOKS_DIRECTORY / name
+        source = source_root / "scripts" / name
+        if dry_run:
+            refreshed.append(destination.relative_to(project).as_posix())
+        else:
+            shutil.copyfile(source, destination)
+            refreshed.append(destination.relative_to(project).as_posix())
+    if full:
+        settings = project / ".claude" / "settings.json"
+        if _lexists(settings):
+            if dry_run:
+                refreshed.append(settings.relative_to(project).as_posix())
+            else:
+                settings.write_text(CLAUDE_HOOKS_SETTINGS, encoding="utf-8")
+                refreshed.append(settings.relative_to(project).as_posix())
+        if (project / ".git").is_dir():
+            for hook_name, content in (
+                ("pre-commit", PRE_COMMIT_HOOK),
+                ("commit-msg", COMMIT_MSG_HOOK),
+            ):
+                hook_path = project / ".git" / "hooks" / hook_name
+                if not _lexists(hook_path):
+                    continue
+                if dry_run:
+                    refreshed.append(hook_path.relative_to(project).as_posix())
+                else:
+                    hook_path.write_text(content, encoding="utf-8")
+                    hook_path.chmod(0o755)
+                    refreshed.append(hook_path.relative_to(project).as_posix())
+    return refreshed
 
 
 def _comparison_path(path: Path) -> Path:
@@ -638,7 +800,10 @@ def install(
     plans: Sequence[TargetPlan],
     project: Optional[Path] = None,
     dry_run: bool = False,
+    hooks: bool = False,
 ) -> List[str]:
+    if hooks and project is None:
+        raise InstallerError("--hooks requires --project")
     selected = [plan.name for plan in plans]
     deployments = _deployment_plans(plans)
     adapters = list(selected)
@@ -707,6 +872,7 @@ def install(
             source_root,
             project,
             include_claude,
+            hooks,
             [*mutation_roots, *planned_backups],
         )
 
@@ -734,9 +900,7 @@ def install(
                 suffix = f"; would back up {count} entries" if count else ""
                 results.append(_install_result(plan, dry_run=True) + suffix)
             if project is not None:
-                files = "AGENTS.md, WORKFLOW.md"
-                if include_claude:
-                    files += ", .claude/CLAUDE.md"
+                files = _project_files(project, include_claude, hooks)
                 results.append(f"project: would copy {files} to {project}")
             _append_host_notes(results, selected)
             return results
@@ -766,10 +930,10 @@ def install(
                         f"to {transaction.backup}"
                     )
             if project is not None:
-                _apply_project(source_root, project, include_claude, project_transaction)
-                files = "AGENTS.md, WORKFLOW.md"
-                if include_claude:
-                    files += ", .claude/CLAUDE.md"
+                _apply_project(
+                    source_root, project, include_claude, hooks, project_transaction
+                )
+                files = _project_files(project, include_claude, hooks)
                 results.append(f"project: copied {files} to {project}")
         except (Exception, KeyboardInterrupt) as error:
             rollback_errors = []
@@ -801,6 +965,9 @@ def parser() -> argparse.ArgumentParser:
     argument_parser.add_argument("--all", action="store_true", dest="all_targets")
     argument_parser.add_argument("--dry-run", action="store_true")
     argument_parser.add_argument("--project", type=Path)
+    argument_parser.add_argument("--hooks", action="store_true")
+    argument_parser.add_argument("--hooks-refresh", action="store_true")
+    argument_parser.add_argument("--hooks-refresh-full", action="store_true")
     argument_parser.add_argument(
         "--source-root",
         type=Path,
@@ -813,6 +980,27 @@ def parser() -> argparse.ArgumentParser:
 def main(argv: Optional[Sequence[str]] = None) -> int:
     argument_parser = parser()
     arguments = argument_parser.parse_args(argv)
+    source_root = absolute_path(arguments.source_root)
+    project = (
+        absolute_path(arguments.project) if arguments.project is not None else None
+    )
+    if arguments.hooks_refresh or arguments.hooks_refresh_full:
+        if project is None:
+            print("error: --hooks-refresh requires --project", file=sys.stderr)
+            return 2
+        try:
+            refreshed = refresh_hooks(
+                source_root,
+                project,
+                arguments.hooks_refresh_full,
+                arguments.dry_run,
+            )
+            prefix = "would refresh" if arguments.dry_run else "refreshed"
+            print(f"hooks: {prefix} {', '.join(refreshed)}")
+        except InstallerError as error:
+            print(f"error: {error}", file=sys.stderr)
+            return 1
+        return 0
     selected = [
         target
         for target in TARGETS
@@ -821,15 +1009,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if not selected:
         argument_parser.error("select at least one target or --all")
 
-    source_root = absolute_path(arguments.source_root)
     plans = []
     for target in selected:
         override = getattr(arguments, f"{target}_root")
         root = absolute_path(override) if override is not None else default_root(target)
         plans.append(TargetPlan(target, root))
-    project = absolute_path(arguments.project) if arguments.project is not None else None
     try:
-        for result in install(source_root, plans, project, arguments.dry_run):
+        for result in install(
+            source_root, plans, project, arguments.dry_run, arguments.hooks
+        ):
             print(result)
     except InstallerError as error:
         print(f"error: {error}", file=sys.stderr)

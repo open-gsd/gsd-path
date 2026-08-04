@@ -40,8 +40,10 @@ would dirty execution, invalidate review, or mutate shipped history.
    `.project/research/DOCS-AUDIT.md`. When Git has a resolvable HEAD and no
    non-`.project` worktree changes, the orchestrator creates and supplies an
    agent-specific disposable detached worktree at that exact HEAD for project
-   commands, then removes that exact worktree after collection. Otherwise no
-   project command may run.
+   commands. The auditor stages its assigned output under that worktree; the
+   orchestrator validates and atomically transfers it to the primary canonical
+   path before removing that exact worktree. Otherwise no project command may
+   run.
 2. Gate the artifact: every inventoried doc has a claims table, every claim
    a verdict with evidence, and its path set equals the frozen inventory
    exactly. Redispatch one complete corrected brief under logical task name

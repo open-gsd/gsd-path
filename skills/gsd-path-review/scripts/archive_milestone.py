@@ -20,6 +20,7 @@ WAVE_FILE_PATTERN = re.compile(r"^wave-([1-9]\d*)\.cycle([1-9]\d*)\.md$")
 FINAL_CRITERION_PATTERN = re.compile(r"^### SC([1-9]\d*) — (.+)$")
 FINAL_GAP_FILE_PATTERN = re.compile(r"^final-gap-([1-9]\d*)\.md$")
 FINAL_GAP_HEADING_PATTERN = re.compile(r"^# Gap Review — ([1-9]\d*): (.+)$")
+WAVE_TASK_HEADING_PATTERN = re.compile(r"^## (T\d{3}) — (.+): (pass|fail)$")
 DIRECTORIES_TO_ARCHIVE = ("intent", "research", "plan", "tasks", "review")
 FILES_TO_ARCHIVE = ("BOARD.md",)
 MANIFEST_FIELDS = (
@@ -429,6 +430,29 @@ def completed_field(lines: Sequence[str], field: str, artifact: str) -> str:
     return values[0]
 
 
+def completed_bullet_field(lines: Sequence[str], field: str, artifact: str) -> str:
+    pattern = re.compile(rf"^- \*\*{re.escape(field)}\*\*:\s*(.*)$")
+    values = []
+    for line in lines:
+        match = pattern.fullmatch(line)
+        if match:
+            values.append(match.group(1).strip().strip("`"))
+    if len(values) != 1 or not values[0] or contains_placeholder(values[0]):
+        raise ArchiveError(f"{artifact} requires one completed {field} field")
+    return values[0]
+
+
+def section_lines(lines: Sequence[str], heading: str, artifact: str) -> Sequence[str]:
+    if lines.count(heading) != 1:
+        raise ArchiveError(f"{artifact} requires one {heading} section")
+    start = lines.index(heading) + 1
+    end = next(
+        (index for index in range(start, len(lines)) if lines[index].startswith("## ")),
+        len(lines),
+    )
+    return lines[start:end]
+
+
 def parse_final_review(archive: Path) -> tuple:
     final = archive / "review" / "FINAL.md"
     if not is_real_file(final):
@@ -520,6 +544,63 @@ def validate_gap_reviews(archive: Path, reviewed_head: str) -> None:
             raise ArchiveError(f"{path.name} gap review did not pass")
         if completed_field(lines, "Risk:", path.name) == "none":
             raise ArchiveError(f"{path.name} does not name a completed risk")
+        evidence = section_lines(lines, "## Checked evidence", path.name)
+        check = completed_bullet_field(evidence, "Check", path.name)
+        observed = completed_bullet_field(evidence, "Observed", path.name)
+        reference = completed_bullet_field(evidence, "Reference", path.name)
+        if observed.casefold() == "none":
+            raise ArchiveError(f"{path.name} checked evidence has no observed result")
+        if check.casefold() == "none" and reference.casefold() == "none":
+            raise ArchiveError(f"{path.name} checked evidence has no command or reference")
+        finding = section_lines(lines, "## Finding", path.name)
+        found = completed_bullet_field(finding, "Found", path.name)
+        completed_bullet_field(finding, "Fix direction", path.name)
+        if found.casefold() == "none":
+            raise ArchiveError(f"{path.name} finding has no observed result")
+
+
+def validate_wave_review(
+    path: Path, known_task_ids: Optional[Sequence[str]] = None
+) -> Sequence[str]:
+    lines = path.read_text(encoding="utf-8").splitlines()
+    depth = completed_field(lines, "Depth:", path.name)
+    if depth not in {"full", "verify-only"}:
+        raise ArchiveError(f"{path.name} has an invalid review depth")
+    reviewed = completed_field(lines, "Tasks reviewed:", path.name)
+    if not reviewed.isdigit() or int(reviewed) < 1:
+        raise ArchiveError(f"{path.name} requires a positive task count")
+
+    headings = []
+    for index, line in enumerate(lines):
+        match = WAVE_TASK_HEADING_PATTERN.fullmatch(line)
+        if match:
+            headings.append((index, match.group(1), match.group(3)))
+    if len(headings) != int(reviewed):
+        raise ArchiveError(f"{path.name} task count does not match Tasks reviewed")
+    task_ids = [task_id for _, task_id, _ in headings]
+    if len(task_ids) != len(set(task_ids)):
+        raise ArchiveError(f"{path.name} repeats a reviewed task")
+    known_ids = set(known_task_ids) if known_task_ids is not None else None
+    if known_ids is not None:
+        unknown = sorted(set(task_ids) - known_ids)
+        if unknown:
+            raise ArchiveError(
+                f"{path.name} reviews task(s) not present in the archive: {', '.join(unknown)}"
+            )
+
+    verdicts = []
+    for position, (heading_index, _task_id, verdict) in enumerate(headings):
+        section_end = (
+            headings[position + 1][0]
+            if position + 1 < len(headings)
+            else len(lines)
+        )
+        task_lines = lines[heading_index + 1 : section_end]
+        marker = "✅" if verdict == "pass" else "❌"
+        if not any(line.lstrip().startswith(f"- {marker}") for line in task_lines):
+            raise ArchiveError(f"{path.name} task {task_ids[position]} lacks evidence")
+        verdicts.append(verdict)
+    return verdicts
 
 
 def review_cycle_counts(archive: Path) -> Sequence[int]:
@@ -530,6 +611,9 @@ def review_cycle_counts(archive: Path) -> Sequence[int]:
     ]
     if not wave_numbers or wave_numbers != list(range(1, len(wave_numbers) + 1)):
         raise ArchiveError("plan wave numbers must be ordered and contiguous")
+    known_task_ids = [
+        path.name.split("-", 1)[0] for path in canonical_task_files(archive / "tasks")
+    ]
 
     artifacts = {}
     for path in canonical_wave_files(archive / "review"):
@@ -555,6 +639,9 @@ def review_cycle_counts(archive: Path) -> Sequence[int]:
         cycles = artifacts[wave]
         if sorted(cycles) != list(range(1, max(cycles) + 1)):
             raise ArchiveError(f"review cycles for wave {wave} are not contiguous")
+        task_verdicts = {}
+        for cycle, path in cycles.items():
+            task_verdicts[cycle] = validate_wave_review(path, known_task_ids)
         last = cycles[max(cycles)]
         verdict = completed_field(
             last.read_text(encoding="utf-8").splitlines(),
@@ -563,6 +650,8 @@ def review_cycle_counts(archive: Path) -> Sequence[int]:
         )
         if verdict != "pass":
             raise ArchiveError(f"last review cycle for wave {wave} did not pass")
+        if any(task_verdict != "pass" for task_verdict in task_verdicts[max(cycles)]):
+            raise ArchiveError(f"last review cycle for wave {wave} has a failed task")
         counts.append(max(cycles))
     return counts
 
