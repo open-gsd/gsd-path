@@ -779,6 +779,154 @@ function refreshHooks(sourceRoot, project, full, dryRun) {
   return refreshed;
 }
 
+const PIPELINE_MARKER = "gsd-path/v1";
+
+function stateFrontmatter(text) {
+  const lines = splitLines(text);
+  if (lines[0] !== "---") return null;
+  const values = {};
+  for (const line of lines.slice(1)) {
+    if (line === "---") return values;
+    const match = /^([a-z_]+):\s*([^#]*?)(?:\s+#.*)?$/.exec(line);
+    if (match) values[match[1]] = match[2].trim().replace(/^["']|["']$/g, "");
+  }
+  return null;
+}
+
+function hasManagedInstall(root) {
+  return isDirectory(root) && fs.readdirSync(root).some((name) => isManagedName(name));
+}
+
+function isExecutable(candidate) {
+  try {
+    return (fs.statSync(candidate).mode & 0o111) !== 0;
+  } catch {
+    return false;
+  }
+}
+
+// Read-only health check: host installs, project contracts, guard hooks,
+// and pipeline state. Never writes.
+export function doctor(sourceRoot, { targets, rootFor, project = null }) {
+  const findings = [];
+  const push = (level, text) => findings.push({ level, text });
+  const version = readPackageVersion(path.join(sourceRoot, "package.json"));
+
+  const seen = [];
+  for (const target of targets) {
+    const root = rootFor(target);
+    const prior = seen.find(([, other]) => samePath(other, root));
+    if (prior) {
+      push("note", `${target}: shares ${prior[0]}'s skills root`);
+      continue;
+    }
+    seen.push([target, root]);
+    if (!hasManagedInstall(root)) {
+      push("note", `${target}: not installed (${root})`);
+      continue;
+    }
+    const missing = SKILL_NAMES.filter((name) => !isDirectory(path.join(root, name)));
+    if (missing.length) {
+      push("fail", `${target}: incomplete install at ${root} — missing ${missing.join(", ")}`);
+      continue;
+    }
+    let stamp = null;
+    try {
+      stamp = fs.readFileSync(path.join(root, "gsd-path", "VERSION"), "utf8").trim();
+    } catch {
+      // No stamp; reported below.
+    }
+    if (!stamp) {
+      push("warn", `${target}: ${SKILL_NAMES.length} skills at ${root}, no VERSION stamp — run --update`);
+    } else if (version && stamp !== version) {
+      push("warn", `${target}: stale install at ${root} (v${stamp}, current v${version}) — run --update`);
+    } else {
+      push("ok", `${target}: ${SKILL_NAMES.length} skills at ${root} (v${stamp})`);
+    }
+  }
+
+  if (project === null) return findings;
+
+  for (const name of ["AGENTS.md", "WORKFLOW.md"]) {
+    if (isFile(path.join(project, name))) push("ok", `project: ${name} present`);
+    else push("fail", `project: missing contract ${name} — run --project "${project}"`);
+  }
+  const bridge = path.join(project, ".claude", "CLAUDE.md");
+  if (!isFile(bridge)) {
+    push("note", "project: no .claude/CLAUDE.md bridge (only written for --claude installs)");
+  } else if (fs.readFileSync(bridge, "utf8") === CLAUDE_BRIDGE) {
+    push("ok", "project: .claude/CLAUDE.md bridge present");
+  } else {
+    push("note", "project: .claude/CLAUDE.md exists but is not the managed bridge");
+  }
+
+  if (!isDirectory(path.join(project, HOOKS_DIRECTORY))) {
+    push("note", "hooks: guard hooks not installed (opt in with --hooks; see HOOKS.md)");
+  } else {
+    for (const name of GUARD_SCRIPTS) {
+      const destination = path.join(project, HOOKS_DIRECTORY, name);
+      if (!isFile(destination)) {
+        push("fail", `hooks: missing ${HOOKS_DIRECTORY}/${name} — run --hooks-refresh`);
+        continue;
+      }
+      const content = fs.readFileSync(destination);
+      if (!content.toString("utf8").includes(GUARD_MARKER)) {
+        push("warn", `hooks: ${HOOKS_DIRECTORY}/${name} is not a managed guard script`);
+      } else if (!content.equals(fs.readFileSync(path.join(sourceRoot, "scripts", name)))) {
+        push("warn", `hooks: ${HOOKS_DIRECTORY}/${name} is stale — run --hooks-refresh`);
+      } else {
+        push("ok", `hooks: ${HOOKS_DIRECTORY}/${name} current`);
+      }
+    }
+    const settings = path.join(project, ".claude", "settings.json");
+    if (!isFile(settings)) {
+      push("note", "hooks: no .claude/settings.json guard wiring");
+    } else if (!isManagedClaudeSettings(settings)) {
+      push("warn", "hooks: .claude/settings.json is not the managed guard wiring");
+    } else if (fs.readFileSync(settings, "utf8") !== CLAUDE_HOOKS_SETTINGS) {
+      push("warn", "hooks: .claude/settings.json is stale — run --hooks-refresh-full");
+    } else {
+      push("ok", "hooks: .claude/settings.json guard wiring present");
+    }
+    if (isDirectory(path.join(project, ".git"))) {
+      for (const [hookName, expected] of [
+        ["pre-commit", PRE_COMMIT_HOOK],
+        ["commit-msg", COMMIT_MSG_HOOK],
+      ]) {
+        const hookPath = path.join(project, ".git", "hooks", hookName);
+        if (!isManagedGitHook(hookPath)) {
+          push("warn", `hooks: .git/hooks/${hookName} is missing or unmanaged — run --hooks-refresh-full`);
+        } else if (fs.readFileSync(hookPath, "utf8") !== expected) {
+          push("warn", `hooks: .git/hooks/${hookName} is stale — run --hooks-refresh-full`);
+        } else if (!isExecutable(hookPath)) {
+          push("warn", `hooks: .git/hooks/${hookName} is not executable`);
+        } else {
+          push("ok", `hooks: .git/hooks/${hookName} wired`);
+        }
+      }
+    }
+  }
+
+  const stateFile = path.join(project, ".project", "STATE.md");
+  if (!isDirectory(path.join(project, ".project"))) {
+    push("note", "state: no .project/ pipeline state (nothing started yet)");
+  } else if (!isFile(stateFile)) {
+    push("warn", "state: .project/ exists but STATE.md is missing");
+  } else {
+    const values = stateFrontmatter(fs.readFileSync(stateFile, "utf8"));
+    if (values === null) {
+      push("fail", "state: STATE.md frontmatter is malformed");
+    } else if (values.pipeline !== PIPELINE_MARKER) {
+      push("fail", `state: STATE.md has the wrong pipeline marker (${values.pipeline || "<missing>"})`);
+    } else if (!values.phase || !values.status) {
+      push("fail", "state: STATE.md is missing phase or status");
+    } else {
+      push("ok", `state: ${values.phase}/${values.status}`);
+    }
+  }
+  return findings;
+}
+
 export function deploymentPlans(plans) {
   const names = plans.map((plan) => plan.name);
   if (new Set(names).size !== plans.length) {
@@ -1151,7 +1299,7 @@ export function detectInstalls(targets, rootFor) {
   const plans = [];
   for (const target of targets) {
     const root = rootFor(target);
-    if (isDirectory(root) && fs.readdirSync(root).some((name) => isManagedName(name))) {
+    if (hasManagedInstall(root)) {
       plans.push(targetPlan(target, root));
     }
   }
@@ -1165,6 +1313,7 @@ export function parseCli(argv) {
     "dry-run": { type: "boolean", default: false },
     local: { type: "boolean", default: false },
     project: { type: "string" },
+    doctor: { type: "boolean", default: false },
     hooks: { type: "boolean", default: false },
     "hooks-refresh": { type: "boolean", default: false },
     "hooks-refresh-full": { type: "boolean", default: false },
@@ -1249,6 +1398,7 @@ function usage() {
     "  --update              refresh existing installs in place\n" +
     "  --local               install into this project's per-host skill dirs\n" +
     "  --project PATH        also write AGENTS.md and WORKFLOW.md into PATH\n" +
+    "  --doctor              read-only health check of installs, hooks, and state\n" +
     "  --hooks               with --project: install guard hooks (see HOOKS.md)\n" +
     "  --hooks-refresh       with --project: overwrite managed .gsd-path scripts\n" +
     "  --hooks-refresh-full  also refresh managed Claude settings and git hooks\n" +
@@ -1276,6 +1426,25 @@ export async function main(argv, env = process.env) {
     : path.resolve(SCRIPT_DIRECTORY, "..");
   const project =
     values.project !== undefined ? absolutePath(values.project) : null;
+  const local = values.local;
+  const rootFor = (target) => {
+    const override = values[`${target}-root`];
+    if (override !== undefined) return absolutePath(override);
+    return local ? localRoot(target, process.cwd()) : defaultRoot(target, env);
+  };
+  if (values.doctor) {
+    const named = TARGETS.filter((target) => values[target]);
+    const targets = named.length && !values.all ? named : [...TARGETS];
+    ui.banner(`doctor · ${local ? "project" : "global"} installs${project ? ` · ${project}` : ""}`);
+    const findings = doctor(sourceRoot, { targets, rootFor, project });
+    for (const { level, text } of findings) {
+      if (level === "fail") ui.error(text);
+      else ui.result(level === "ok" ? text : `note: ${text}`);
+    }
+    const failed = findings.filter(({ level }) => level === "fail").length;
+    console.log(`\n  ${ui.dim(failed ? `${failed} problem${failed === 1 ? "" : "s"} found.` : "Healthy.")}\n`);
+    return failed ? 1 : 0;
+  }
   const hooksRefresh = values["hooks-refresh"] || values["hooks-refresh-full"];
   if (hooksRefresh) {
     if (project === null) {
@@ -1327,12 +1496,6 @@ export async function main(argv, env = process.env) {
       return 2;
     }
   }
-  const local = values.local;
-  const rootFor = (target) => {
-    const override = values[`${target}-root`];
-    if (override !== undefined) return absolutePath(override);
-    return local ? localRoot(target, process.cwd()) : defaultRoot(target, env);
-  };
   const extraNotes = [];
   if (
     selected.includes("antigravity") &&

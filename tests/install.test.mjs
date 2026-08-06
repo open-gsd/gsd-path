@@ -714,3 +714,78 @@ test("hooks dry run lists files without writing", async () => {
   assert.ok(!fs.existsSync(target));
   assert.ok(!fs.existsSync(path.join(project, installer.HOOKS_DIRECTORY)));
 });
+
+test("doctor reports a healthy install, hooks, and project", async () => {
+  const project = path.join(root, "project");
+  fs.mkdirSync(path.join(project, ".git"), { recursive: true });
+  const target = path.join(root, "claude", "skills");
+  await runInstall([installer.targetPlan("claude", target)], { project, hooks: true });
+  const findings = installer.doctor(source, {
+    targets: ["claude"],
+    rootFor: () => target,
+    project,
+  });
+  assert.ok(!findings.some((finding) => finding.level === "fail"));
+  assert.ok(findings.some((finding) => finding.text.includes("(v9.9.9)")));
+  assert.ok(findings.some((finding) => /guard_hook\.py current/.test(finding.text)));
+  assert.ok(findings.some((finding) => /pre-commit wired/.test(finding.text)));
+});
+
+test("doctor flags stale versions and incomplete installs", async () => {
+  const target = path.join(root, "claude", "skills");
+  await runInstall([installer.targetPlan("claude", target)]);
+  fs.writeFileSync(path.join(target, "gsd-path", "VERSION"), "0.0.1\n");
+  let findings = installer.doctor(source, { targets: ["claude"], rootFor: () => target });
+  assert.ok(findings.some((finding) => finding.level === "warn" && /stale install/.test(finding.text)));
+  fs.rmSync(path.join(target, "gsd-path-build"), { recursive: true });
+  findings = installer.doctor(source, { targets: ["claude"], rootFor: () => target });
+  assert.ok(findings.some((finding) => finding.level === "fail" && /gsd-path-build/.test(finding.text)));
+});
+
+test("doctor flags stale guard scripts", async () => {
+  const project = path.join(root, "project");
+  fs.mkdirSync(path.join(project, ".git"), { recursive: true });
+  const target = path.join(root, "claude", "skills");
+  await runInstall([installer.targetPlan("claude", target)], { project, hooks: true });
+  fs.writeFileSync(
+    path.join(source, "scripts", "guard_hook.py"),
+    "# guard v2\n" + installer.GUARD_MARKER + "\n"
+  );
+  const findings = installer.doctor(source, {
+    targets: ["claude"],
+    rootFor: () => target,
+    project,
+  });
+  assert.ok(
+    findings.some(
+      (finding) => finding.level === "warn" && /guard_hook\.py is stale/.test(finding.text)
+    )
+  );
+});
+
+test("doctor validates pipeline state frontmatter", async () => {
+  const project = path.join(root, "project");
+  fs.mkdirSync(path.join(project, ".project"), { recursive: true });
+  fs.writeFileSync(path.join(project, "AGENTS.md"), "a\n");
+  fs.writeFileSync(path.join(project, "WORKFLOW.md"), "w\n");
+  fs.writeFileSync(
+    path.join(project, ".project", "STATE.md"),
+    "---\npipeline: gsd-path/v1\nphase: plan\nstatus: done\n---\n"
+  );
+  let findings = installer.doctor(source, { targets: [], rootFor: () => "", project });
+  assert.ok(findings.some((finding) => finding.level === "ok" && finding.text === "state: plan/done"));
+  fs.writeFileSync(path.join(project, ".project", "STATE.md"), "---\npipeline: other\n---\n");
+  findings = installer.doctor(source, { targets: [], rootFor: () => "", project });
+  assert.ok(
+    findings.some((finding) => finding.level === "fail" && /pipeline marker/.test(finding.text))
+  );
+});
+
+test("doctor cli exits zero when healthy and nonzero on problems", async () => {
+  const target = path.join(root, "claude", "skills");
+  await runInstall([installer.targetPlan("claude", target)]);
+  const cli = ["--doctor", "--claude", "--claude-root", target, "--source-root", source, "--no-color"];
+  assert.equal(await installer.main(cli, env), 0);
+  fs.rmSync(path.join(target, "gsd-path-plan"), { recursive: true });
+  assert.equal(await installer.main(cli, env), 1);
+});
