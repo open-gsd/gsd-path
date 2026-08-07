@@ -36,12 +36,14 @@ npm: `npx gsd-path --all` · Help: `node scripts/install.mjs --help`
 
 ## Skills
 
-Nine explicit-only skills. Invoke the **router** by default; use phase skills for
-one step only.
+Ten explicit-only skills. Invoke the **router** by default; use phase skills for
+one step only, or use the discussion sidecar to talk through a question at any
+non-shipped phase.
 
 | Skill | Role |
 | --- | --- |
 | `gsd-path` | Router — detects state, runs next phase |
+| `gsd-path-discuss` | Any-phase discussion with durable dialogue and answers |
 | `gsd-path-onboard` | Brownfield codebase map + doc audit |
 | `gsd-path-grill` | Intent interview |
 | `gsd-path-research` | Parallel evidence researchers |
@@ -67,17 +69,31 @@ gsd-path  (router)
   `-- 6. review       gates       -> review/*.md -> ship -> archive/
 ```
 
+At any non-shipped phase, `/gsd-path-discuss` (or `$gsd-path-discuss` in
+Codex) records the conversation in `.project/discuss/` without advancing or
+editing the phase handoff. Required decisions carry a named owner and remain
+pending until that phase records how it applied them; the router will not
+advance past an unresolved required follow-up.
+
 Invoke the router explicitly. It does not run on generic “continue the project”
 prompts. Phase skills stop at their handoff; invoke the router again to continue.
+The discussion sidecar is the exception: it can be invoked at any non-shipped
+phase and returns only a durable conversation record.
 
 **Brownfield** (existing code/docs) → onboard then grill. **Greenfield** → grill.
 **Quick lane** (tiny scope) may skip research/synthesize — see [FULL.md](FULL.md).
+
+For an explicit new-GitHub request, the router previews the owner, visibility,
+default checkout, `gsd-path/<project>` branch, and sibling linked worktree. A
+journaled helper performs the approved creation and safely resumes a matching
+partial remote/clone/worktree transaction; the default checkout stays clean.
 
 ## Handoff contract
 
 ```text
 .project/
   STATE.md                    phase, branch, archive transaction
+  REPOSITORY.md               persistent new-GitHub checkout/worktree binding
   intent/INTENT.md            goal, vetoes, constraints
   research/
     evidence-codebase.md      brownfield ground truth (onboard)
@@ -95,10 +111,13 @@ prompts. Phase skills stop at their handoff; invoke the router again to continue
   review/final-gap-N.md       gap review
   review/FINAL.md             success-criteria audit
   review/PATCH-FINDINGS.md    patch-wave findings (when review blocks)
+  discuss/DIALOGUE.md         any-phase dialogue transcript
+  discuss/ANSWERS.md          durable discussion answers and decisions
   archive/<NNN>-<slug>/       shipped milestones (read-only after ship)
 ```
 
-Shipping moves artifacts (except active `STATE.md`) into `archive/` with a MANIFEST.
+Shipping moves milestone artifacts into `archive/` with a MANIFEST. `STATE.md`,
+`REPOSITORY.md`, and `LESSONS.md` remain active project metadata.
 
 ## Install (summary)
 
@@ -167,7 +186,7 @@ on disk in `.project/`, not chat.
 | `FULL.md` | Full guide |
 | `UPDATE.md` | Updating |
 | `HOOKS.md` | Guard hooks |
-| `skills/` | Nine `gsd-path*` skills |
+| `skills/` | Ten `gsd-path*` skills |
 | `platforms/` | Host dispatch adapters |
 | `scripts/install.mjs` | Installer (npm `gsd-path` bin) |
 | `scripts/install.py` | Python installer |

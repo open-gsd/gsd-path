@@ -15,6 +15,11 @@ router or orchestrator supplied this contract, return control to it. On a
 direct invocation, report the exact next skill and stop until the user
 explicitly invokes it.
 
+Before audit work and again before completion, apply AGENTS.md's pending
+discussion-answer contract. Resolve an answer owned by docs audit in
+DOCS-AUDIT.md and append a disposition receipt; otherwise block with links to
+ANSWERS.md and the target artifact rather than publishing stale findings.
+
 Require an existing `.project/STATE.md` with `pipeline: gsd-path/v1`; never
 create pipeline state or write into an unowned `.project/`. A missing state
 stops and offers explicit `$gsd-path` initialization; do not invoke it
@@ -47,9 +52,13 @@ would dirty execution, invalidate review, or mutate shipped history.
 2. Gate the artifact: every inventoried doc has a claims table, every claim
    a verdict with evidence, and its path set equals the frozen inventory
    exactly. Redispatch one complete corrected brief under logical task name
-   `docs_audit`, following the runtime dispatch contract, then surface failure.
+   `docs_audit`, following the runtime dispatch contract. If it still fails,
+   present **Outcome** with the failed gate, **Review** linking DOCS-AUDIT.md or
+   STATE.md when it is missing, and **Next** naming the required correction.
 3. Report to the user: verdict counts, the drift list (stale + aspirational
-   claims), and the remediation queue. Do not fix anything in this skill.
+   claims), and the remediation queue. Link the resolved absolute
+   `.project/research/DOCS-AUDIT.md` path before asking for any ruling. Do not
+   fix anything in this skill.
 4. **Collect rulings** (standalone runs; during `$gsd-path-onboard` the grill
    owns this). Walk the remediation queue with the user — batches of three,
    an interactive input tool when available. Present the auditor's
@@ -75,6 +84,8 @@ would dirty execution, invalidate review, or mutate shipped history.
    `$gsd-path-plan` with that source. On hold — the default — report the queue
    size and that `$gsd-path` and `$gsd-path-plan` will offer alignment until the
    queue is drained. Only `accept-drift` rulings → nothing queued, done.
+   After the choice, link the updated DOCS-AUDIT.md and state whether planning
+   starts now or the queue remains for a later router pass.
 
 ## The verification methodology
 

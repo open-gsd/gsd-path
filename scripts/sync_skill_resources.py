@@ -11,22 +11,24 @@ from typing import Iterable, Optional, Sequence, Tuple
 
 
 # Single source of truth for the resource tables, shared with install.mjs.
-_MANIFEST = json.loads(
+RESOURCE_MANIFEST = json.loads(
     (Path(__file__).resolve().parent / "skill-resources.json").read_text(
         encoding="utf-8"
     )
 )
 PHASE_RESOURCES = {
     skill: tuple(resources)
-    for skill, resources in _MANIFEST["phase_resources"].items()
+    for skill, resources in RESOURCE_MANIFEST["phase_resources"].items()
 }
-SCRIPT_TARGETS = tuple(tuple(pair) for pair in _MANIFEST["script_targets"])
+SCRIPT_TARGETS = tuple(tuple(pair) for pair in RESOURCE_MANIFEST["script_targets"])
 PHASE_CONTRACT_TARGETS = tuple(
-    tuple(pair) for pair in _MANIFEST["phase_contract_targets"]
+    tuple(pair) for pair in RESOURCE_MANIFEST["phase_contract_targets"]
 )
 SHARED_DISPATCH_TARGETS = tuple(
-    tuple(pair) for pair in _MANIFEST["shared_dispatch_targets"]
+    tuple(pair) for pair in RESOURCE_MANIFEST["shared_dispatch_targets"]
 )
+SKILL_NAMES = tuple(RESOURCE_MANIFEST["skills"])
+PACKAGE_FILES = tuple(RESOURCE_MANIFEST["package_files"])
 
 
 def resource_pairs(root: Path) -> Iterable[Tuple[Path, Path]]:
@@ -52,6 +54,15 @@ def package_metadata(root: Path) -> Iterable[Path]:
 
 def mismatches(root: Path) -> Sequence[str]:
     problems = []
+    if SKILL_NAMES != ("gsd-path", *sorted(PHASE_RESOURCES)):
+        problems.append("manifest skills must be root gsd-path plus every phase resource key")
+    package_path = root / "package.json"
+    try:
+        package_files = tuple(json.loads(package_path.read_text(encoding="utf-8"))["files"])
+    except (OSError, json.JSONDecodeError, KeyError, TypeError):
+        package_files = ()
+    if package_files != PACKAGE_FILES:
+        problems.append("package.json files do not match manifest package_files")
     for source, destination in resource_pairs(root):
         if not source.is_file():
             problems.append(f"missing canonical resource: {source.relative_to(root)}")
@@ -80,6 +91,10 @@ def synchronize(root: Path) -> int:
             return 1
         path.unlink()
         removed_metadata += 1
+    package_path = root / "package.json"
+    package = json.loads(package_path.read_text(encoding="utf-8"))
+    package["files"] = list(PACKAGE_FILES)
+    package_path.write_text(json.dumps(package, indent=2) + "\n", encoding="utf-8")
     print(json.dumps({"removed_metadata": removed_metadata, "resources": copied}, sort_keys=True))
     return 0
 

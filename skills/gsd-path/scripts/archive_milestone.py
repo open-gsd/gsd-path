@@ -21,7 +21,30 @@ FINAL_CRITERION_PATTERN = re.compile(r"^### SC([1-9]\d*) — (.+)$")
 FINAL_GAP_FILE_PATTERN = re.compile(r"^final-gap-([1-9]\d*)\.md$")
 FINAL_GAP_HEADING_PATTERN = re.compile(r"^# Gap Review — ([1-9]\d*): (.+)$")
 WAVE_TASK_HEADING_PATTERN = re.compile(r"^## (T\d{3}) — (.+): (pass|fail)$")
+DIALOGUE_HEADING_PATTERN = re.compile(
+    r"^### D(\d{3}) — (\d{4}-\d{2}-\d{2}) — "
+    r"([a-z-]+)/(active|blocked|done) — .+$"
+)
+ANSWER_HEADING_PATTERN = re.compile(
+    r"^## Answer A(\d{3}) — (\d{4}-\d{2}-\d{2}) — .+$"
+)
+DISPOSITION_HEADING_PATTERN = re.compile(
+    r"^## Disposition X(\d{3}) — (\d{4}-\d{2}-\d{2})$"
+)
+DISCUSSION_PHASES = {
+    "onboard",
+    "grill",
+    "research",
+    "synthesize",
+    "plan",
+    "build",
+    "review",
+}
+DISCUSSION_FILES = ("DIALOGUE.md", "ANSWERS.md")
+DISCUSSION_TRANSACTION_NAME = ".discussion-archive-transaction.json"
 DIRECTORIES_TO_ARCHIVE = ("intent", "research", "plan", "tasks", "review")
+OPTIONAL_DIRECTORIES_TO_ARCHIVE = ("discuss",)
+TRANSACTION_DIRECTORIES = (*DIRECTORIES_TO_ARCHIVE, *OPTIONAL_DIRECTORIES_TO_ARCHIVE)
 FILES_TO_ARCHIVE = ("BOARD.md",)
 MANIFEST_FIELDS = (
     "Milestone:",
@@ -295,6 +318,15 @@ def require_complete_transaction_inputs(active_root: Path, archive: Path) -> Non
         if not source.exists() and not destination.exists():
             raise ArchiveError(f"missing both active and archived {name}")
 
+    for name in OPTIONAL_DIRECTORIES_TO_ARCHIVE:
+        source = active_root / name
+        destination = archive / name
+        if source.exists() and destination.exists():
+            if name == "discuss":
+                require_append_only_discussion(source, destination)
+                continue
+            raise ArchiveError(f"archive collision: both {source} and {destination} exist")
+
     for name in FILES_TO_ARCHIVE:
         source = active_root / name
         destination = archive / name
@@ -349,11 +381,14 @@ def require_canonical_transaction_inputs(active_root: Path, archive: Path) -> No
         missing.append("review/wave-N.cycleC.md")
     if missing:
         raise ArchiveError(f"canonical milestone artifacts are missing: {', '.join(missing)}")
+    discussion = selected_transaction_path(active_root, archive, "discuss")
+    if discussion.exists():
+        validate_discussion_directory(discussion)
 
 
 def require_safe_move_inputs(active_root: Path, archive: Path) -> None:
     archive_device = archive.stat().st_dev
-    for name in (*DIRECTORIES_TO_ARCHIVE, *FILES_TO_ARCHIVE):
+    for name in (*TRANSACTION_DIRECTORIES, *FILES_TO_ARCHIVE):
         source = active_root / name
         destination = archive / name
         if source.is_symlink() or destination.is_symlink():
@@ -361,9 +396,9 @@ def require_safe_move_inputs(active_root: Path, archive: Path) -> None:
         if source.exists() and source.stat().st_dev != archive_device:
             raise ArchiveError(f"archive move crosses filesystems: {source}")
 
-def atomic_copy(source: Path, destination: Path) -> None:
+def atomic_copy(source: Path, destination: Path, temporary_name: str = CARRY_TEMP_NAME) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
-    temporary_path = destination.parent / CARRY_TEMP_NAME
+    temporary_path = destination.parent / temporary_name
     try:
         if temporary_path.exists() or temporary_path.is_symlink():
             temporary_path.unlink()
@@ -372,6 +407,350 @@ def atomic_copy(source: Path, destination: Path) -> None:
     finally:
         if temporary_path.exists() or temporary_path.is_symlink():
             temporary_path.unlink()
+
+
+def record_sections(
+    lines: Sequence[str], pattern: re.Pattern, boundaries: Sequence[re.Pattern]
+) -> Sequence[tuple]:
+    headings = []
+    for index, line in enumerate(lines):
+        match = pattern.fullmatch(line)
+        if match:
+            headings.append((index, match))
+    sections = []
+    for start, match in headings:
+        end = next(
+            (
+                index
+                for index in range(start + 1, len(lines))
+                if any(boundary.fullmatch(lines[index]) for boundary in boundaries)
+            ),
+            len(lines),
+        )
+        sections.append((match, lines[start + 1 : end]))
+    return sections
+
+
+def required_dialogue_block(
+    lines: Sequence[str],
+    marker: str,
+    end_marker: str,
+    artifact: str,
+    quote: bool = False,
+    end_from_last: bool = False,
+) -> None:
+    if lines.count(marker) != 1:
+        raise ArchiveError(f"{artifact} requires one {marker.removeprefix('- **').removesuffix('**:')} block")
+    start = lines.index(marker) + 1
+    boundaries = [
+        index for index in range(start, len(lines)) if lines[index] == end_marker
+    ]
+    if not boundaries:
+        end = len(lines)
+    elif end_from_last:
+        end = boundaries[-1]
+    else:
+        end = boundaries[0]
+    content = "\n".join(lines[start:end]).strip()
+    if quote:
+        content = "\n".join(
+            line.lstrip().removeprefix(">").strip() for line in content.splitlines()
+        ).strip()
+    if not content:
+        label = "verbatim user" if quote else "assistant"
+        raise ArchiveError(f"{artifact} requires a non-empty {label} block")
+
+
+def require_contiguous_ids(values: Sequence[int], artifact: str) -> None:
+    if not values or list(values) != list(range(1, len(values) + 1)):
+        raise ArchiveError(f"{artifact} record ids must be contiguous from 001")
+
+
+def require_iso_date(value: str, artifact: str) -> None:
+    try:
+        parsed = date.fromisoformat(value)
+    except ValueError as error:
+        raise ArchiveError(f"{artifact} date must be YYYY-MM-DD") from error
+    if parsed.isoformat() != value:
+        raise ArchiveError(f"{artifact} date must be YYYY-MM-DD")
+
+
+def require_bullet_fields(
+    lines: Sequence[str], artifact: str, fields: Sequence[str]
+) -> dict:
+    return {
+        field: completed_bullet_field(lines, field, artifact) for field in fields
+    }
+
+
+def validate_discussion_directory(
+    directory: Path, require_dispositions: bool = True
+) -> None:
+    if directory.is_symlink() or not directory.is_dir():
+        raise ArchiveError("discussion archive must be a real directory")
+    entries = sorted(path.name for path in directory.iterdir())
+    if entries != sorted(DISCUSSION_FILES):
+        raise ArchiveError("discussion archive must contain exactly DIALOGUE.md and ANSWERS.md")
+    dialogue, answers = (directory / name for name in DISCUSSION_FILES)
+    if not is_real_file(dialogue) or not is_real_file(answers):
+        raise ArchiveError("discussion archive records must be real files")
+
+    dialogue_lines = dialogue.read_text(encoding="utf-8").splitlines()
+    answer_lines = answers.read_text(encoding="utf-8").splitlines()
+    if contains_placeholder("\n".join((*dialogue_lines, *answer_lines))):
+        raise ArchiveError("discussion archive records contain placeholders")
+
+    dialogue_sections = record_sections(
+        dialogue_lines, DIALOGUE_HEADING_PATTERN, (DIALOGUE_HEADING_PATTERN,)
+    )
+    answer_boundaries = (ANSWER_HEADING_PATTERN, DISPOSITION_HEADING_PATTERN)
+    answer_sections = record_sections(answer_lines, ANSWER_HEADING_PATTERN, answer_boundaries)
+    dialogue_ids = [int(match.group(1)) for match, _ in dialogue_sections]
+    answer_ids = [int(match.group(1)) for match, _ in answer_sections]
+    require_contiguous_ids(dialogue_ids, "DIALOGUE.md")
+    require_contiguous_ids(answer_ids, "ANSWERS.md")
+    if dialogue_ids != answer_ids:
+        raise ArchiveError("discussion dialogue and answer ids do not correspond")
+
+    dialogue_threads = {}
+    dialogue_phases = {}
+    dialogue_dates = {}
+    for match, section in dialogue_sections:
+        identifier = int(match.group(1))
+        require_iso_date(match.group(2), "DIALOGUE.md")
+        if match.group(3) not in DISCUSSION_PHASES:
+            raise ArchiveError("DIALOGUE.md has an invalid phase")
+        thread = completed_bullet_field(section, "Thread", "DIALOGUE.md")
+        if not re.fullmatch(r"T\d{3}", thread):
+            raise ArchiveError("DIALOGUE.md Thread must be T###")
+        reply_to = completed_bullet_field(section, "Reply to", "DIALOGUE.md")
+        if reply_to != "none" and not re.fullmatch(r"D\d{3}", reply_to):
+            raise ArchiveError("DIALOGUE.md Reply to must be none or D###")
+        if reply_to != "none" and int(reply_to[1:]) >= identifier:
+            raise ArchiveError("DIALOGUE.md Reply to must reference an earlier turn")
+        if reply_to != "none" and dialogue_threads[int(reply_to[1:])] != thread:
+            raise ArchiveError("DIALOGUE.md Reply to must stay in the same thread")
+        values = require_bullet_fields(
+            section,
+            "DIALOGUE.md",
+            ("Evidence checked", "Research", "Thread status"),
+        )
+        thread_status = values["Thread status"]
+        if thread_status not in {"working", "NEEDS-USER", "final"}:
+            raise ArchiveError("DIALOGUE.md has an invalid Thread status")
+        required_dialogue_block(
+            section,
+            "- **User (verbatim)**:",
+            "- **Assistant**:",
+            "DIALOGUE.md",
+            quote=True,
+        )
+        required_dialogue_block(
+            section,
+            "- **Assistant**:",
+            "- **Evidence checked**:",
+            "DIALOGUE.md",
+            end_from_last=True,
+        )
+        dialogue_threads[identifier] = thread
+        dialogue_phases[identifier] = f"{match.group(3)}/{match.group(4)}"
+        dialogue_dates[identifier] = match.group(2)
+
+    answer_threads = {}
+    pending_answers = set()
+    answer_receipts = {}
+    for match, section in answer_sections:
+        identifier = int(match.group(1))
+        require_iso_date(match.group(2), "ANSWERS.md")
+        if match.group(2) != dialogue_dates[identifier]:
+            raise ArchiveError("discussion answer date does not match its dialogue turn")
+        thread = completed_bullet_field(section, "Thread", "ANSWERS.md")
+        if thread != dialogue_threads[identifier]:
+            raise ArchiveError("discussion answer Thread does not match its dialogue turn")
+        if completed_bullet_field(section, "Turn", "ANSWERS.md") != f"D{identifier:03d}":
+            raise ArchiveError("discussion answer Turn does not match its id")
+        supersedes = completed_bullet_field(section, "Supersedes", "ANSWERS.md")
+        if supersedes != "none" and not re.fullmatch(r"A\d{3}", supersedes):
+            raise ArchiveError("ANSWERS.md Supersedes must be none or A###")
+        if supersedes != "none" and int(supersedes[1:]) >= identifier:
+            raise ArchiveError("ANSWERS.md Supersedes must reference an earlier answer")
+        if supersedes != "none" and answer_threads[int(supersedes[1:])] != thread:
+            raise ArchiveError("ANSWERS.md Supersedes must stay in the same thread")
+        values = require_bullet_fields(
+            section,
+            "ANSWERS.md",
+            (
+                "Question",
+                "Status",
+                "Phase/status",
+                "Conclusion",
+                "Reasoning / pushback",
+                "Evidence",
+                "Research",
+                "Confidence",
+                "Unresolved",
+                "Next owner",
+                "Target artifact",
+                "Follow-up",
+            ),
+        )
+        status = values["Status"]
+        if status not in {"working", "NEEDS-USER", "final"}:
+            raise ArchiveError("ANSWERS.md has an invalid Status")
+        phase_status = values["Phase/status"]
+        if not re.fullmatch(r"[a-z-]+/(active|blocked|done)", phase_status):
+            raise ArchiveError("ANSWERS.md has an invalid Phase/status")
+        if phase_status != dialogue_phases[identifier]:
+            raise ArchiveError("discussion answer Phase/status does not match its dialogue turn")
+        confidence = values["Confidence"]
+        if confidence not in {"high", "medium", "low", "unverifiable"}:
+            raise ArchiveError("ANSWERS.md has an invalid Confidence")
+        follow_up = values["Follow-up"]
+        if follow_up not in {"none", "required"}:
+            raise ArchiveError("ANSWERS.md has an invalid Follow-up")
+        next_owner = values["Next owner"]
+        target = values["Target artifact"]
+        answer_key = f"A{identifier:03d}"
+        answer_receipts[answer_key] = (next_owner, target)
+        if follow_up == "required":
+            if status not in {"final", "NEEDS-USER"}:
+                raise ArchiveError("required discussion follow-up must be final or NEEDS-USER")
+            if next_owner in {"none", "user"}:
+                raise ArchiveError("required discussion follow-up needs a phase owner")
+            if target == "none":
+                raise ArchiveError("required discussion follow-up needs a target artifact")
+            pending_answers.add(answer_key)
+        answer_threads[identifier] = thread
+
+    disposition_sections = record_sections(
+        answer_lines, DISPOSITION_HEADING_PATTERN, answer_boundaries
+    )
+    disposition_ids = [int(match.group(1)) for match, _ in disposition_sections]
+    if disposition_ids:
+        require_contiguous_ids(disposition_ids, "ANSWERS.md dispositions")
+    seen_answers = set()
+    for match, section in disposition_sections:
+        require_iso_date(match.group(2), "ANSWERS.md disposition")
+        answer = completed_bullet_field(section, "Answer", "ANSWERS.md")
+        if not re.fullmatch(r"A\d{3}", answer) or int(answer[1:]) not in answer_ids:
+            raise ArchiveError("discussion disposition references an unknown answer")
+        if answer in seen_answers:
+            raise ArchiveError("discussion answer has multiple dispositions")
+        seen_answers.add(answer)
+        disposition = completed_bullet_field(section, "Status", "ANSWERS.md")
+        if disposition not in {
+            "applied",
+            "acknowledged-no-change",
+            "superseded",
+            "rejected-by-user",
+        }:
+            raise ArchiveError("discussion disposition has an invalid Status")
+        receipt = require_bullet_fields(
+            section, "ANSWERS.md", ("Owner", "Artifact", "Evidence")
+        )
+        expected_owner, expected_artifact = answer_receipts[answer]
+        expected_owner = (
+            "user" if disposition == "rejected-by-user" else expected_owner
+        )
+        if receipt["Owner"] != expected_owner:
+            raise ArchiveError(
+                f"discussion disposition owner must be {expected_owner} for {answer}"
+            )
+        if receipt["Artifact"] != expected_artifact:
+            raise ArchiveError(
+                "discussion disposition artifact must match the answer target "
+                f"for {answer}"
+            )
+    unresolved = sorted(pending_answers - seen_answers)
+    if require_dispositions and unresolved:
+        raise ArchiveError(
+            f"discussion follow-up lacks a disposition receipt: {', '.join(unresolved)}"
+        )
+
+
+def require_append_only_discussion(source: Path, destination: Path) -> None:
+    validate_discussion_directory(source)
+    validate_discussion_directory(destination)
+    for name in DISCUSSION_FILES:
+        active = (source / name).read_bytes()
+        archived = (destination / name).read_bytes()
+        if not active.startswith(archived):
+            raise ArchiveError(f"active discussion is not an append-only extension of archived {name}")
+
+
+def reconcile_append_only_discussion(active_root: Path, archive: Path) -> None:
+    source = active_root / "discuss"
+    destination = archive / "discuss"
+    if not source.exists() or not destination.exists():
+        return
+    require_append_only_discussion(source, destination)
+    transaction = active_root / DISCUSSION_TRANSACTION_NAME
+    payload = {
+        "schema": "gsd-path/discussion-archive/v1",
+        "archive": str(archive.resolve()),
+        "files": {
+            name: (source / name).read_text(encoding="utf-8")
+            for name in DISCUSSION_FILES
+        },
+    }
+    atomic_write(transaction, json.dumps(payload, sort_keys=True) + "\n")
+    finish_discussion_reconciliation(active_root, archive)
+
+
+def finish_discussion_reconciliation(active_root: Path, archive: Path) -> None:
+    transaction = active_root / DISCUSSION_TRANSACTION_NAME
+    if not transaction.exists():
+        return
+    if transaction.is_symlink() or not transaction.is_file():
+        raise ArchiveError("discussion reconciliation journal must be a real file")
+    try:
+        payload = json.loads(transaction.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise ArchiveError(f"discussion reconciliation journal is unreadable: {error}") from error
+    if payload.get("schema") != "gsd-path/discussion-archive/v1":
+        raise ArchiveError("discussion reconciliation journal has the wrong schema")
+    if payload.get("archive") != str(archive.resolve()):
+        raise ArchiveError("discussion reconciliation journal targets another archive")
+    files = payload.get("files")
+    if (
+        not isinstance(files, dict)
+        or set(files) != set(DISCUSSION_FILES)
+        or any(not isinstance(files[name], str) for name in DISCUSSION_FILES)
+    ):
+        raise ArchiveError("discussion reconciliation journal has invalid files")
+    source = active_root / "discuss"
+    if source.exists():
+        validate_discussion_directory(source)
+        active_files = {
+            name: (source / name).read_text(encoding="utf-8")
+            for name in DISCUSSION_FILES
+        }
+        if any(not active_files[name].startswith(files[name]) for name in DISCUSSION_FILES):
+            raise ArchiveError("active discussion diverged during archive reconciliation")
+        if active_files != files:
+            files = active_files
+            payload["files"] = files
+            atomic_write(transaction, json.dumps(payload, sort_keys=True) + "\n")
+    destination = archive / "discuss"
+    for name in DISCUSSION_FILES:
+        temporary = destination / f".{name}.gsd-path-tmp"
+        temporary.parent.mkdir(parents=True, exist_ok=True)
+        temporary.write_text(files[name], encoding="utf-8")
+        os.replace(temporary, destination / name)
+    validate_discussion_directory(destination)
+    if source.exists():
+        shutil.rmtree(source)
+    transaction.unlink()
+
+
+def remove_interrupted_discussion_copies(active_root: Path, archive: Path) -> None:
+    if not (active_root / "discuss").exists():
+        return
+    directory = archive / "discuss"
+    for name in DISCUSSION_FILES:
+        temporary = directory / f".{name}.gsd-path-tmp"
+        if temporary.exists() or temporary.is_symlink():
+            temporary.unlink()
 
 
 def remove_interrupted_carry_copy(active_root: Path, archive: Path) -> None:
@@ -813,10 +1192,13 @@ def prepare(repo: Path, slug: str) -> dict:
         manifest_temporary.unlink()
 
     remove_interrupted_carry_copy(active_root, archive)
+    remove_interrupted_discussion_copies(active_root, archive)
+    finish_discussion_reconciliation(active_root, archive)
     require_complete_transaction_inputs(active_root, archive)
     require_canonical_transaction_inputs(active_root, archive)
     require_safe_move_inputs(active_root, archive)
-    for name in DIRECTORIES_TO_ARCHIVE:
+    reconcile_append_only_discussion(active_root, archive)
+    for name in TRANSACTION_DIRECTORIES:
         move_directory(active_root / name, archive / name)
     for name in FILES_TO_ARCHIVE:
         move_file(active_root / name, archive / name)
@@ -919,13 +1301,16 @@ def require_canonical_archive(archive: Path) -> None:
         missing.append("BOARD.md")
     if missing:
         raise ArchiveError(f"canonical archive artifacts are missing: {', '.join(sorted(set(missing)))}")
+    discussion = archive / "discuss"
+    if discussion.exists() or discussion.is_symlink():
+        validate_discussion_directory(discussion)
 
 
 def require_clean_active_root(active_root: Path, archive: Path) -> None:
     archived_audit = archive / "research" / "DOCS-AUDIT.md"
     carried_forward = pending_ruling_count(archived_audit)
-    # LESSONS.md stays active across milestones; it ships but never archives.
-    allowed = {"STATE.md", "archive", "LESSONS.md"}
+    # Persistent project metadata ships but never archives with a milestone.
+    allowed = {"STATE.md", "REPOSITORY.md", "archive", "LESSONS.md"}
     active_research = active_root / "research"
 
     if carried_forward:
@@ -1109,7 +1494,7 @@ def validate(repo: Path) -> dict:
     if older_archive_changes:
         raise ArchiveError(f"ship commit mutates an older archive: {', '.join(older_archive_changes)}")
 
-    allowed_active_prefixes = tuple(f".project/{name}/" for name in DIRECTORIES_TO_ARCHIVE)
+    allowed_active_prefixes = tuple(f".project/{name}/" for name in TRANSACTION_DIRECTORIES)
     unexpected_project_paths = [
         path
         for path in changed_paths

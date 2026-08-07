@@ -22,7 +22,7 @@ function makeSource(base) {
     fs.mkdirSync(path.join(skill, "agents"));
     fs.writeFileSync(
       path.join(skill, "SKILL.md"),
-      `---\nname: ${name}\ndescription: test\n---\nRun $gsd-path and $gsd-path-build.\n`
+      `---\nname: ${name}\ndescription: test\n---\nRun $gsd-path, $gsd-path-build, and $gsd-path-discuss.\n`
     );
     fs.writeFileSync(path.join(skill, "guide.md"), "Use $gsd-path.\n");
     fs.writeFileSync(path.join(skill, "agents", "openai.yaml"), 'default_prompt: "Use $gsd-path."\n');
@@ -102,6 +102,29 @@ test("default path resolution", () => {
   assert.equal(installer.legacyCodexRoot({ CODEX_HOME: "" }), path.join(home, ".codex", "skills"));
 });
 
+test("skill names are derived from resource manifest", () => {
+  const manifest = {
+    skills: ["gsd-path", "gsd-path-alpha", "gsd-path-zeta"],
+  };
+
+  assert.deepEqual(installer.skillNamesForManifest(manifest), [
+    "gsd-path",
+    "gsd-path-alpha",
+    "gsd-path-zeta",
+  ]);
+});
+
+test("discussion skill is installed and invocable", async () => {
+  assert.ok(installer.SKILL_NAMES.includes("gsd-path-discuss"));
+  const target = path.join(root, "discussion", "skills");
+
+  await runInstall([installer.targetPlan("claude", target)]);
+
+  const discussion = path.join(target, "gsd-path-discuss", "SKILL.md");
+  assert.ok(fs.existsSync(discussion));
+  assert.match(fs.readFileSync(discussion, "utf8"), /\/gsd-path-discuss/);
+});
+
 test("local root resolution", () => {
   const project = path.join(root, "proj");
   assert.deepEqual(installer.LOCAL_ROOTS, {
@@ -135,12 +158,12 @@ test("all platform transforms", () => {
       assert.match(dispatch, /codex dispatch for \$gsd-path/);
       assert.ok(agentsKept);
     } else if (target === "opencode") {
-      assert.match(content, /Run gsd-path and gsd-path-build/);
+      assert.match(content, /Run gsd-path, gsd-path-build, and gsd-path-discuss/);
       assert.doesNotMatch(content, /[$/]gsd-path/);
       assert.match(dispatch, /opencode dispatch for gsd-path/);
       assert.ok(!agentsKept);
     } else if (target === installer.SHARED_AGENT_PROFILE) {
-      assert.match(content, /Run gsd-path and gsd-path-build/);
+      assert.match(content, /Run gsd-path, gsd-path-build, and gsd-path-discuss/);
       assert.doesNotMatch(content, /[$/]gsd-path/);
       assert.match(dispatch, /shared dispatch for gsd-path/);
       assert.ok(agentsKept);
@@ -176,7 +199,7 @@ test("all targets install with shared codex+zed root", async () => {
   const cursorAgent = path.join(path.dirname(roots.cursor), "agents", installer.CURSOR_AGENT_FILENAME);
   assert.ok(fs.readFileSync(cursorAgent, "utf8").endsWith("cursor agent\n"));
   const joined = results.join("\n");
-  assert.match(joined, /codex\+zed: installed 9 shared skills/);
+  assert.match(joined, /codex\+zed: installed 10 shared skills/);
   assert.match(joined, /custom subagent/);
   assert.match(joined, /OpenCode stable discovers/);
   assert.match(joined, /Antigravity discovers/);
@@ -220,7 +243,7 @@ test("local install via main uses project roots and skips legacy migration", asy
     path.join(project, ".agents", "skills", "gsd-path", "SKILL.md"),
     "utf8"
   );
-  assert.match(sharedSkill, /Run gsd-path and gsd-path-build/);
+  assert.match(sharedSkill, /Run gsd-path, gsd-path-build, and gsd-path-discuss/);
   assert.ok(fs.existsSync(path.join(project, ".cursor", "agents", installer.CURSOR_AGENT_FILENAME)));
   assert.ok(fs.existsSync(legacy), "legacy migration must not run for --local");
   assert.ok(!fs.existsSync(path.join(root, "legacy", "disabled-gsd-skills")));
@@ -242,12 +265,12 @@ test("codex and zed share one deployment and back up existing entries", async ()
     installer.targetPlan("zed", shared),
   ]);
   const joined = results.join("\n");
-  assert.equal((joined.match(/installed 9 shared skills/g) || []).length, 1);
+  assert.equal((joined.match(/installed 10 shared skills/g) || []).length, 1);
   assert.equal((joined.match(/backed up 1 entries/g) || []).length, 1);
   assert.ok(fs.statSync(path.join(path.dirname(shared), "disabled-gsd-skills", "gsd-path-old")).isDirectory());
   const content = fs.readFileSync(path.join(shared, "gsd-path", "SKILL.md"), "utf8");
   assert.match(content, /disable-model-invocation: true/);
-  assert.match(content, /Run gsd-path and gsd-path-build/);
+  assert.match(content, /Run gsd-path, gsd-path-build, and gsd-path-discuss/);
   assert.ok(fs.existsSync(path.join(shared, "gsd-path", "agents", "openai.yaml")));
 });
 
@@ -345,8 +368,26 @@ test("dry run makes no destination changes", async () => {
   assert.ok(!fs.existsSync(target));
   assert.ok(!fs.existsSync(project));
   const joined = results.join("\n");
-  assert.match(joined, /would install 9 skills/);
+  assert.match(joined, /would install 10 skills/);
   assert.match(joined, /\.claude\/CLAUDE\.md/);
+});
+
+test("dry run reports the registered skill count", async () => {
+  const extraName = "gsd-path-extra";
+  fs.cpSync(
+    path.join(source, "skills", "gsd-path"),
+    path.join(source, "skills", extraName),
+    { recursive: true }
+  );
+  installer.SKILL_NAMES.push(extraName);
+  try {
+    const results = await runInstall([installer.targetPlan("claude", path.join(root, "dynamic"))], {
+      dryRun: true,
+    });
+    assert.match(results.join("\n"), /would install 11 skills/);
+  } finally {
+    installer.SKILL_NAMES.pop();
+  }
 });
 
 test("project collision fails before install mutation", async () => {
@@ -536,7 +577,10 @@ test("update refreshes only detected local installs", async () => {
       await installer.main(["--update", "--local", "--source-root", source, "--no-color"], env),
       0
     );
-    assert.match(fs.readFileSync(skillFile, "utf8"), /Run \/gsd-path and \/gsd-path-build/);
+    assert.match(
+      fs.readFileSync(skillFile, "utf8"),
+      /Run \/gsd-path, \/gsd-path-build, and \/gsd-path-discuss/
+    );
     const backup = path.join(project, ".claude", "disabled-gsd-skills");
     assert.equal(
       fs.readFileSync(path.join(backup, "gsd-path", "SKILL.md"), "utf8"),

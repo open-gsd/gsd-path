@@ -16,6 +16,11 @@ router or orchestrator supplied this contract, return control to it. On a
 direct invocation, report the exact next skill and stop until the user
 explicitly invokes it.
 
+Before phase work and again before completion, apply AGENTS.md's pending
+discussion-answer contract. Resolve an answer owned by onboarding through its
+legal artifact gate and append a disposition receipt; otherwise block with
+links to ANSWERS.md and the target artifact rather than advancing stale input.
+
 ## Preconditions
 
 An existing project: source files, git history, or substantive docs. If the
@@ -66,13 +71,19 @@ overwriting it. Re-running onboarding would overwrite established context.
    path set must equal the frozen inventory exactly and every path needs a
    verdict. Redispatch one complete corrected brief under the same logical task
    name, following the runtime dispatch contract, then set `status: blocked`
-   and stop if it still fails.
+   if it still fails. Present **Outcome** with the failed gate, **Review**
+   linking each malformed output that exists or STATE.md when an output is
+   missing, and **Next** naming the one correction or user decision required;
+   then stop.
 4. Present the ground truth to the user, at most one screen:
    - what the project is (stack, architecture, entry points, maturity);
    - what demonstrably works (verified claims, passing verifies);
    - drift: what the docs claim that the code contradicts, and what exists
      with no documentation at all;
    - the mapper's open questions about apparent intent.
+   Lead with the outcome, then provide absolute-path Markdown links to
+   `.project/research/evidence-codebase.md` and
+   `.project/research/DOCS-AUDIT.md`, then state that the grill is next.
 5. Set STATE.md to `phase: onboard`, `status: done`, log the transition,
    and identify `$gsd-path-grill` as next. When this phase was routed by an
    active `$gsd-path`, return control to that router so its bundled grill

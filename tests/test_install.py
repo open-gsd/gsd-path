@@ -2,6 +2,7 @@ import contextlib
 import io
 import json
 import os
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -23,7 +24,7 @@ class InstallerTests(unittest.TestCase):
             (skill / "references").mkdir(parents=True)
             (skill / "agents").mkdir()
             (skill / "SKILL.md").write_text(
-                f"---\nname: {name}\ndescription: test\n---\nRun $gsd-path and $gsd-path-build.\n",
+                f"---\nname: {name}\ndescription: test\n---\nRun $gsd-path, $gsd-path-build, and $gsd-path-discuss.\n",
                 encoding="utf-8",
             )
             (skill / "guide.md").write_text("Use $gsd-path.\n", encoding="utf-8")
@@ -90,6 +91,7 @@ class InstallerTests(unittest.TestCase):
             self.root / "skills",
             install.default_root("opencode", {"OPENCODE_CONFIG": str(config)}),
         )
+
         self.assertEqual(
             self.root / "future" / "skills",
             install.default_root(
@@ -152,6 +154,35 @@ class InstallerTests(unittest.TestCase):
             install.legacy_codex_root({"CODEX_HOME": ""}),
         )
 
+    def test_skill_names_are_derived_from_resource_manifest(self):
+        manifest = {
+            "skills": ["gsd-path", "gsd-path-alpha", "gsd-path-zeta"],
+        }
+
+        self.assertEqual(
+            install.skill_names_for_manifest(manifest),
+            ("gsd-path", "gsd-path-alpha", "gsd-path-zeta"),
+        )
+
+    def test_discussion_skill_is_installed_and_invocable(self):
+        self.assertIn("gsd-path-discuss", install.SKILL_NAMES)
+        target = self.root / "discussion" / "skills"
+
+        status, _, error = self.run_main(
+            [
+                "--claude",
+                "--claude-root",
+                str(target),
+                "--source-root",
+                str(self.source),
+            ]
+        )
+
+        self.assertEqual(0, status, error)
+        discussion = target / "gsd-path-discuss" / "SKILL.md"
+        self.assertTrue(discussion.is_file())
+        self.assertIn("/gsd-path-discuss", discussion.read_text(encoding="utf-8"))
+
     def test_all_platform_transforms(self):
         for target in install.TARGETS:
             with self.subTest(target=target):
@@ -169,7 +200,9 @@ class InstallerTests(unittest.TestCase):
                     self.assertIn("codex dispatch for $gsd-path", dispatch)
                     self.assertTrue((staged / "gsd-path" / "agents" / "openai.yaml").is_file())
                 elif target == "opencode":
-                    self.assertIn("Run gsd-path and gsd-path-build", content)
+                    self.assertIn(
+                        "Run gsd-path, gsd-path-build, and gsd-path-discuss", content
+                    )
                     self.assertNotIn("$gsd-path", content)
                     self.assertNotIn("/gsd-path", content)
                     self.assertIn("opencode dispatch for gsd-path", dispatch)
@@ -192,7 +225,9 @@ class InstallerTests(unittest.TestCase):
         dispatch = (
             staged / "gsd-path" / "references" / "dispatch.md"
         ).read_text(encoding="utf-8")
-        self.assertIn("Run gsd-path and gsd-path-build", content)
+        self.assertIn(
+            "Run gsd-path, gsd-path-build, and gsd-path-discuss", content
+        )
         self.assertNotIn("$gsd-path", content)
         self.assertNotIn("/gsd-path", content)
         self.assertIn("disable-model-invocation: true", content)
@@ -230,7 +265,7 @@ class InstallerTests(unittest.TestCase):
         self.assertTrue(
             cursor_agent.read_text(encoding="utf-8").endswith("cursor agent\n")
         )
-        self.assertIn("codex+zed: installed 9 shared skills", output)
+        self.assertIn("codex+zed: installed 10 shared skills", output)
         self.assertIn("custom subagent", output)
         self.assertIn("OpenCode stable discovers", output)
         self.assertIn("Antigravity discovers", output)
@@ -267,14 +302,16 @@ class InstallerTests(unittest.TestCase):
             ]
         )
         self.assertEqual(0, status, error)
-        self.assertEqual(1, output.count("installed 9 shared skills"))
+        self.assertEqual(1, output.count("installed 10 shared skills"))
         self.assertEqual(1, output.count("backed up 1 entries"))
         self.assertTrue(
             (root.parent / "disabled-gsd-skills" / "gsd-path-old").is_dir()
         )
         content = (root / "gsd-path" / "SKILL.md").read_text(encoding="utf-8")
         self.assertIn("disable-model-invocation: true", content)
-        self.assertIn("Run gsd-path and gsd-path-build", content)
+        self.assertIn(
+            "Run gsd-path, gsd-path-build, and gsd-path-discuss", content
+        )
         self.assertTrue((root / "gsd-path" / "agents" / "openai.yaml").is_file())
 
     def test_distinct_codex_and_zed_roots_each_use_the_shared_profile(self):
@@ -442,8 +479,30 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(0, status, error)
         self.assertFalse(target.exists())
         self.assertFalse(project.exists())
-        self.assertIn("would install 9 skills", output)
+        self.assertIn("would install 10 skills", output)
         self.assertIn(".claude/CLAUDE.md", output)
+
+    def test_dry_run_reports_the_registered_skill_count(self):
+        extra_name = "gsd-path-extra"
+        shutil.copytree(
+            self.source / "skills" / "gsd-path",
+            self.source / "skills" / extra_name,
+        )
+        skill_names = (*install.SKILL_NAMES, extra_name)
+        with mock.patch.object(install, "SKILL_NAMES", skill_names):
+            status, output, error = self.run_main(
+                [
+                    "--claude",
+                    "--claude-root",
+                    str(self.root / "dynamic" / "skills"),
+                    "--source-root",
+                    str(self.source),
+                    "--dry-run",
+                ]
+            )
+
+        self.assertEqual(0, status, error)
+        self.assertIn("would install 11 skills", output)
 
     def test_project_collision_fails_before_install_mutation(self):
         project = self.root / "project"

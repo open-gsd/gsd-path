@@ -14,6 +14,11 @@ router or orchestrator supplied this contract, return control to it. On a
 direct invocation, report the exact next skill and stop until the user
 explicitly invokes it.
 
+Before planning and again before approval, apply AGENTS.md's pending
+discussion-answer contract. Resolve an answer owned by planning in PLAN/tasks
+and append a disposition receipt; otherwise block with links to ANSWERS.md and
+the target artifact rather than approving stale work.
+
 ## Preconditions
 
 Require `pipeline: gsd-path/v1` in `.project/STATE.md`; a missing or different
@@ -95,13 +100,20 @@ severity, or fit with this milestone's scope).
 4. Redispatch one complete corrected brief under logical task name `plan`,
    following the runtime dispatch contract and including all gate failures.
    Allow one revision round. If it still fails, set STATE.md to
-   `phase: plan`, `status: blocked`, append the failures to its log, surface
-   them, and stop.
-5. Show the wave number, goal, and task count for every wave. Ask one explicit
-   question: whether to approve this plan and start the build. If the user
-   requests changes, keep `phase: plan`, `status: active`, revise, and re-gate.
+   `phase: plan`, `status: blocked`, append the failures to its log, then
+   present **Outcome** with the failed gate, **Review** linking the resolved
+   absolute PLAN.md path (or STATE.md when PLAN.md is missing), and **Next**
+   naming the one correction or user decision required. Stop.
+5. Show the wave number, goal, and task count for every wave as the outcome.
+   Link the resolved absolute `.project/plan/PLAN.md` path and summarize the
+   linked `.project/tasks/` task set, then ask one explicit next question:
+   whether to approve this plan and start the build. List `Approve and start
+   build (recommended)` first when every gate passed, with `Request changes` as
+   the alternative. If the user requests changes, keep `phase: plan`, `status:
+   active`, revise, and re-gate.
 6. On approval, set STATE.md to `phase: plan`, `status: done`, record the
-   approval in the log. Do not add another approval gate. When routed by an
+   approval in the log. Confirm approval, link PLAN.md again, and state that
+   build starts next. Do not add another approval gate. When routed by an
    active `$gsd-path`, return control to that router so its bundled build
    contract starts. When invoked directly, stop and tell the user to explicitly
    invoke `$gsd-path` or `$gsd-path-build`; do not invoke an explicit-only
@@ -128,7 +140,8 @@ the artifacts directly:
    verify-only` permitted — and at most two deliverable-sized task files,
    honoring every task-contract rule above and `.project/LESSONS.md` when it
    exists.
-3. Gate exactly as step 3 above and ask the same single approval question.
+3. Gate exactly as step 3 above and use the same outcome, Review link, and
+   single approval question as normal mode.
    A quick plan that cannot satisfy the gates — more than two tasks, an open
    choice, a cross-wave risk — corrects INTENT.md's `Lane:` to `standard`,
    tells the user why, and returns to the standard pipeline at `grill/done`.
@@ -170,8 +183,9 @@ first.
    check: patch tasks must not touch a scope-out veto or contradict a
    SYNTHESIS decision — a finding that requires either goes back to the
    user, not into the wave.
-4. Show the patch wave summary (finding → task mapping) and ask one
-   approval question. On approval, mark `phase: plan`, `status: done`, log
+4. Show the patch wave outcome (finding → task mapping), link the resolved
+   absolute PLAN.md and task set, and ask the same two-option approval question.
+   On approval, relink the approved plan, mark `phase: plan`, `status: done`, log
    it, and use the same provenance rule as normal mode: an active router
    resumes its bundled build contract, while a direct invocation stops and
    tells the user to explicitly invoke `$gsd-path` or `$gsd-path-build`. The

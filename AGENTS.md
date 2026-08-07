@@ -1,8 +1,8 @@
 # AGENTS.md — Operating Rules for the GSD Path Pipeline
 
 These rules govern the router, onboarding scanners, grill, researchers,
-synthesizer, planner, orchestrator, coders, and reviewers. Role briefs are bundled with the installed
-skills. These rules win over role instructions except where the user says
+synthesizer, planner, orchestrator, coders, reviewers, and the discussion
+sidecar. Role briefs are bundled with the installed skills. These rules win over role instructions except where the user says
 otherwise.
 
 ## Authority order
@@ -20,6 +20,25 @@ If two sources disagree, stop and surface the conflict. Never average.
 
 - Start from disk, not conversation. If an input is absent from `.project/`,
   report it instead of inventing it.
+- `.project/discuss/DIALOGUE.md` and `.project/discuss/ANSWERS.md` are the
+  append-only memory for any-phase discussion. Read them before continuing an
+  existing thread; never treat chat history alone as durable context.
+- The discussion skill never commits. Every phase orchestrator treats only
+  complete append-only discussion records as expected bookkeeping and includes
+  them in its next normal `.project/` checkpoint; build does so before its next
+  clean layer base, and review includes them in the ship transaction.
+- A discussion answer with `Status: final` or `NEEDS-USER`, `Follow-up:
+  required`, and no later `Disposition X###` receipt is pending. Before phase
+  work and again before a phase gate, the router and current phase run the
+  active skill's bundled `scripts/discussion_records.py pending --repo
+  <absolute-root>` helper; do not parse IDs, pair records, recover writes, or
+  route pending receipts through model reasoning. The named owner either
+  updates the target artifact through a legal current-phase gate and uses the
+  helper's `dispose` command to append an `applied` disposition, or appends
+  `acknowledged-no-change` with evidence. If applying it would rewrite an
+  approved earlier-phase contract or the owner cannot legally enter, block the
+  current phase and ask the user; never auto-advance or archive it. Only the
+  user may authorize `rejected-by-user`.
 - Write every output to the handoff path in WORKFLOW.md, using the absolute
   bundled template path supplied by the active phase skill. An output that
   needs verbal explanation is defective.
@@ -72,6 +91,14 @@ If two sources disagree, stop and surface the conflict. Never average.
   belongs to the orchestrator.
 - Reviewers verify and block; they never fix. A block names the criterion,
   observed result, evidence location, and concrete fix direction.
+- The discussion sidecar may run during any non-shipped phase. It grounds
+  answers in code and phase artifacts, may perform focused research when
+  needed, and writes only its discussion artifacts; it never changes phase
+  state or bypasses a phase gate.
+- During an uncommitted archive transaction, discussion writes a complete
+  active copy that extends the archived pair. Review reruns `prepare`; the
+  helper validates the prefix and atomically reconciles both files. Discussion
+  never edits an archive directly or writes after shipment.
 - Fix tasks use the complete task template, not an abbreviated finding.
 
 ## Gates
@@ -100,11 +127,52 @@ If two sources disagree, stop and surface the conflict. Never average.
 
 - Ask through an interactive user-input tool when the runtime provides one;
   otherwise ask concise numbered questions in chat and stop for the reply.
+- Before any approval, ruling, `NEEDS-USER` question, blocked escalation, or
+  phase-completion handoff, present three things in order: **Outcome** — what
+  was produced or learned; **Review** — a Markdown link to the primary
+  canonical artifact using its resolved absolute path; **Next** — the one
+  question or action now required. If the host cannot render local links, print
+  the resolved absolute path immediately after the link. On an output failure,
+  link the malformed artifact when it exists; otherwise link STATE.md or the
+  canonical log that proves the failure and say the expected artifact is
+  missing. Never ask for approval before its reviewable artifact exists on
+  disk, and never ask a bare "approve?" without its outcome and link.
 - Every choice offered to the user names a recommended option — listed first
   and marked `(recommended)` — with a one-line reason grounded in evidence,
   intent, or the codebase, followed by the real alternatives. A pure values
   call with no evidence either way carries no recommendation; say so
   explicitly instead of inventing one.
+- After a user decision, confirm what changed, link the updated artifact again,
+  and state whether the active router continues automatically or which exact
+  explicit skill the user should invoke next.
+
+## New GitHub repositories
+
+- Create a GitHub repository only from an explicit user request followed by an
+  approval of the exact owner/name, visibility, default-checkout path,
+  `gsd-path/<project-slug>` branch, and linked primary-worktree path. Before the
+  external action produces an artifact, present those proposed targets as the
+  inline **Review** surface and mark them not yet created. Do not write a
+  preview file into the invocation directory or another repository. Run the
+  bundled bootstrap helper's read-only `preview` command for this evidence.
+- After approval, the bootstrap helper persists the exact targets under the
+  approved workspace before the first external mutation. Its `create` command
+  creates or verifies the remote, checkout, branch, and linked worktree one
+  stage at a time. A matching journal permits explicit resume and adoption; a
+  collision without that journal blocks. The helper removes the journal only
+  after writing owned STATE.md and fixed-format `.project/REPOSITORY.md` in the
+  linked worktree.
+- The router has one narrow exception to build's branch ownership: during an
+  approved new-repository transaction, it may create the GSD Path branch and
+  linked primary worktree at the verified remote-default SHA and persist that
+  branch in STATE.md and REPOSITORY.md. Build must verify and adopt that exact
+  binding from REPOSITORY.md, never a free-form log. Task branches and task
+  worktrees remain exclusively build-orchestrator owned.
+- Keep the cloned default checkout clean on the remote default branch. Run the
+  pipeline from the linked GSD Path worktree; never initialize `.project/` in
+  the default checkout, reuse an existing branch or path, move an existing
+  repository, or recover a partial GitHub creation without the exact approved
+  journal and re-verification.
 
 ## Escalation
 
@@ -128,7 +196,7 @@ or STATE.md.
 
 | Path | Purpose |
 |------|---------|
-| `skills/` | Nine `gsd-path*` skills |
+| `skills/` | Ten `gsd-path*` skills |
 | `skills/gsd-path/templates/` | Required artifact formats |
 | `skills/gsd-path/references/` | Agent role and dispatch contracts |
 | `WORKFLOW.md` | Phase-by-phase SOP |

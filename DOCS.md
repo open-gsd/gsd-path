@@ -124,6 +124,7 @@ Run one phase only; stops at handoff:
 | Skill | Invoke (slash hosts) | Purpose |
 | --- | --- | --- |
 | `gsd-path` | `/gsd-path` | Router — default |
+| `gsd-path-discuss` | `/gsd-path-discuss` | Any-phase discussion and durable answers |
 | `gsd-path-onboard` | `/gsd-path-onboard` | Brownfield scan only |
 | `gsd-path-grill` | `/gsd-path-grill` | Intent interview only |
 | `gsd-path-research` | `/gsd-path-research` | Evidence gathering |
@@ -135,6 +136,17 @@ Run one phase only; stops at handoff:
 
 Codex: use `$` instead of `/` (e.g. `$gsd-path-plan`).
 
+### Discuss at any phase
+
+Invoke `/gsd-path-discuss` (or `$gsd-path-discuss` in Codex) whenever you need
+to question a decision, inspect progress, challenge an assumption, or resolve
+an open issue without advancing the pipeline. The skill reads the current
+phase artifacts and relevant code, pushes back with evidence when needed, and
+uses focused research for unresolved external or technical questions. It
+appends the verbatim dialogue to `.project/discuss/DIALOGUE.md` and the
+answer/decision record to `.project/discuss/ANSWERS.md`; it never edits phase
+state or bypasses a gate.
+
 ### Gates (what you approve)
 
 | Phase | You do |
@@ -143,7 +155,7 @@ Codex: use `$` instead of `/` (e.g. `$gsd-path-plan`).
 | Synthesize | Resolve `NEEDS-USER` decisions |
 | Plan | **Approve wave summary** before any code is written |
 | Build | Usually nothing — escalations only |
-| Review | Approve patch waves if review blocks shipping |
+| Review | Approve patch waves if blocked and approve final shipping when green |
 
 ### Cheat sheet
 
@@ -186,6 +198,7 @@ onboard (brownfield only)
 | Path | Role |
 | --- | --- |
 | `STATE.md` | Phase, branch, milestone, archive id |
+| `REPOSITORY.md` | Persistent new-GitHub checkout/worktree binding |
 | `intent/INTENT.md` | Goal, vetoes, constraints |
 | `research/RESEARCH.md` | Which dimensions were researched / skipped |
 | `research/SYNTHESIS.md` | Decisions for planner |
@@ -194,6 +207,8 @@ onboard (brownfield only)
 | `BOARD.md` | Build status |
 | `review/FINAL.md` | Ship gate verdicts |
 | `review/PATCH-FINDINGS.md` | Evidence for patch waves (when review blocks) |
+| `discuss/DIALOGUE.md` | Any-phase discussion transcript |
+| `discuss/ANSWERS.md` | Durable answers, pending owners, and disposition receipts |
 | `archive/<NNN>-slug/` | Shipped milestone — do not edit |
 
 Full tree: [README.md](README.md#handoff-contract).

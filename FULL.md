@@ -53,6 +53,10 @@ gsd-path  (router: reads STATE.md, runs the next valid phase)
   contracts in one conversation when you want the full flow.
 - **Phase skills** (`gsd-path-plan`, `/gsd-path-build`, …): run one phase and
   stop at its handoff. Invoke the router or the next phase explicitly to continue.
+- **Discussion sidecar** (`gsd-path-discuss`, `/gsd-path-discuss`): can run at
+  any non-shipped phase to answer a question, ground it in code and artifacts,
+  use focused research when needed, and save the dialogue and answer without
+  changing phase state.
 
 All skills are **explicit-only** on most hosts — generic “continue the project”
 does not inject the pipeline. On OpenCode stable, Antigravity CLI, and Kiro,
@@ -213,7 +217,12 @@ After intent approval, the router walks phases and stops at gates.
 | **Synthesize** | `research/SYNTHESIS.md` | Resolve `NEEDS-USER` at checkpoint |
 | **Plan** | `plan/PLAN.md`, `tasks/T###-slug.md` | **Approve wave summary** |
 | **Build** | code, commits, `BOARD.md` | Escalations only |
-| **Review** | `review/wave-*.md`, `review/FINAL.md` | Approve patch waves if blocked |
+| **Review** | `review/wave-*.md`, `review/FINAL.md` | Approve patch waves if blocked and final shipping when green |
+
+The discussion sidecar is available alongside every row above. It writes
+`discuss/DIALOGUE.md` and `discuss/ANSWERS.md`; a `final` answer records context
+but does not approve or advance a phase. A required follow-up blocks automatic
+advancement until its named owner appends a disposition receipt.
 
 ### Research
 
@@ -268,6 +277,7 @@ Everything durable lives in `.project/`:
 ```text
 .project/
   STATE.md                 phase, branch, archive transaction id
+  REPOSITORY.md            persistent new-GitHub checkout/worktree binding
   intent/INTENT.md
   research/RESEARCH.md     dispatch manifest
   research/SYNTHESIS.md
@@ -275,6 +285,8 @@ Everything durable lives in `.project/`:
   tasks/T###-slug.md       base SHA, worktree, status, commit
   BOARD.md
   review/…
+  discuss/DIALOGUE.md       any-phase discussion transcript
+  discuss/ANSWERS.md        durable discussion answers and decisions
   archive/<NNN>-slug>/     read-only shipped milestones
 ```
 

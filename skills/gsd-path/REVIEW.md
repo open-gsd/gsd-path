@@ -49,7 +49,12 @@ null, and the only otherwise-unexpected path is the deterministic
 `.project/.STATE.md.gsd-path-tmp`; `prepare` removes that interrupted temp
 before safely persisting a transaction identity. Moved artifacts are
 transaction state, not missing inputs. A concrete archive in any other phase
-blocks without mutation. Otherwise:
+blocks without mutation. Otherwise, first scan ANSWERS.md for pending required
+follow-ups under AGENTS.md. Apply an answer addressed to review only through
+current review artifacts and append its disposition receipt. If it changes
+approved intent/plan or names another owner, keep `review/blocked`, link
+ANSWERS.md and the target artifact, and ask the user before dispatch or ship.
+Then:
 
 1. Require STATE `review/active` produced and committed by the build
    orchestrator, `.project/intent/INTENT.md`,
@@ -96,26 +101,34 @@ blocks without mutation. Otherwise:
 5. Redispatch one complete corrected brief for a missing or invalid reviewer
    artifact under the same logical task name, following the runtime dispatch
    contract. If it remains invalid, set `review/blocked` with
-   the exact contract failure and a `NEEDS-USER` dispatch-failure entry, then
-   stop; do not invent a patch finding. A
+   the exact contract failure and a `NEEDS-USER` dispatch-failure entry. Present
+   **Outcome** with the invalid output, **Review** linking that output or
+   STATE.md when it is missing, and **Next** naming the required correction;
+   then stop and do not invent a patch finding. A
    failed orchestrator Verify must agree with the mandatory project-Verify gap
    review; repeat both once on disagreement, then block and surface the
    conflicting evidence as `NEEDS-USER` instead of planning from it. A `not-met`,
    `unverifiable`, or blocked gap with valid evidence sets `review/blocked`,
    writes `.project/review/PATCH-FINDINGS.md` from the patch-findings template,
    and runs `python3 <absolute check_handoffs.py> patch --repo <absolute repo
-   root>`. The manifest contains exactly those FINAL.md and gap rows; when
-   routed
-   by an active `$gsd-path`, return control so its bundled plan contract opens
-   patch mode. When invoked directly, stop and tell the user to explicitly
-   invoke `$gsd-path` or `$gsd-path-plan` with those sources; do not invoke an
+   root>`. Present the blocked outcome, link the resolved absolute
+   PATCH-FINDINGS.md path, and state that patch planning is next. The manifest
+   contains exactly those FINAL.md and gap rows. When routed by an active
+   `$gsd-path`, return control so its bundled plan contract opens patch mode.
+   When invoked directly, stop and tell the user to explicitly invoke
+   `$gsd-path` or `$gsd-path-plan` with those sources; do not invoke an
    explicit-only sibling skill yourself. Review never writes tasks or PLAN.md.
    The patch build commits this prior finding set with the approved patch
    artifacts before execution.
-6. Only when every criterion is `met`, every gap passes, and project Verify
-   passes, keep STATE.md at `phase: review`, `status: active`, append
-   `final gate passed; archive pending`, and begin the transaction below. Do
-   not mark or report `shipped` yet.
+6. Only when every criterion is `met`, every gap passes, project Verify passes,
+   and no required discussion follow-up is pending, keep STATE.md at `phase:
+   review`, `status: active`, append `final gate passed; shipping approval
+   pending`. Present **Outcome** with the final verdict, **Review** linking the
+   resolved absolute FINAL.md path and summarizing the gap artifacts, and
+   **Next** asking whether to `Archive and ship (recommended)` or `Stop for
+   review`. The recommendation is grounded in the passing gates. Begin the
+   transaction below only after approval; declining leaves review active and
+   makes no archive mutation. Do not mark or report `shipped` yet.
 
 ## Archive transaction
 
@@ -157,7 +170,10 @@ field is the transaction identity.
    HEAD, immutable older archives, canonical real files, exact active-root
    allowlist and carry-forward, reviewed revision, manifest metadata and
    criteria against FINAL.md, actual cycle counts, completed Notes, and the
-   exact file inventory. Do not commit when it fails.
+   exact file inventory. Immediately before this command, recheck for an active
+   `discuss/` copy created after prepare; if present, rerun `prepare`, regenerate
+   MANIFEST.md from the reconciled archive, and only then preflight. Do not
+   commit when it fails.
 5. Set STATE.md to `phase: shipped`, `status: done` and append the archive path
    only after preflight passes. Stage only
    `.project/` paths, inspect the staged path list against the transaction and
@@ -173,6 +189,7 @@ field is the transaction identity.
    need not be HEAD: later product commits do not disturb a validated
    shipment. Report shipped only when this
    command passes, including its returned archive path and full commit SHA.
+   Link the archived MANIFEST.md as the final review surface.
 7. If a crash occurs before STATE's atomic rename, discard only the exact
    deterministic state temp through `prepare`. If it occurs after STATE becomes
    `shipped/done` but before commit, run `prepare` and `preflight` under the
