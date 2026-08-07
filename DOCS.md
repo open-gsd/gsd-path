@@ -216,6 +216,7 @@ Full tree: [README.md](README.md#handoff-contract).
 | From npm | `npx gsd-path@latest --update` |
 | Guard scripts | `node scripts/install.mjs --hooks-refresh --project PATH` |
 | `AGENTS.md` / `WORKFLOW.md` | Manual merge — installer refuses overwrite |
+| Health check | `node scripts/install.mjs --doctor [--project PATH]` — read-only; flags missing/stale skills, hook drift, and bad pipeline state |
 
 Full guide: **[UPDATE.md](UPDATE.md)**. Router may print a one-line npm update notice.
 

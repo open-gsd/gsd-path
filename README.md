@@ -132,6 +132,9 @@ node scripts/install.mjs --update
 
 Optional **`--hooks`** with `--project` — [HOOKS.md](HOOKS.md).
 
+Something off? `node scripts/install.mjs --doctor [--project PATH]` — read-only
+health check of installs, guard hooks, and pipeline state.
+
 ## Agent execution
 
 Grill and build orchestrator run in the main task. Researchers, synthesizer,
