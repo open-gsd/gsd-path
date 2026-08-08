@@ -60,6 +60,16 @@ class BootstrapRepositoryTests(unittest.TestCase):
                     print("HTTP 404: Not Found", file=sys.stderr)
                     raise SystemExit(1)
 
+                if args[:1] == ["api"] and args[-2:] == ["--jq", ".visibility"]:
+                    repository = args[1].removeprefix("repos/")
+                    remote = root / f"{repository}.git"
+                    visibility = remote / "gsd-path-visibility"
+                    if visibility.is_file():
+                        print(visibility.read_text().strip())
+                        raise SystemExit(0)
+                    print("repository visibility unavailable", file=sys.stderr)
+                    raise SystemExit(1)
+
                 if args[:2] == ["repo", "create"]:
                     repository = args[2]
                     remote = root / f"{repository}.git"
@@ -73,6 +83,12 @@ class BootstrapRepositoryTests(unittest.TestCase):
                         subprocess.run(["git", "add", "README.md"], cwd=seed, check=True)
                         subprocess.run(["git", "commit", "-q", "-m", "Initial commit"], cwd=seed, check=True)
                         subprocess.run(["git", "clone", "-q", "--bare", str(seed), str(remote)], check=True)
+                    visibility = next(
+                        value.removeprefix("--")
+                        for value in args[3:]
+                        if value in {"--public", "--private", "--internal"}
+                    )
+                    (remote / "gsd-path-visibility").write_text(visibility + "\\n")
                     raise SystemExit(0)
 
                 if args[:2] == ["repo", "clone"]:
@@ -141,6 +157,7 @@ class BootstrapRepositoryTests(unittest.TestCase):
 
 Kind: <kind>
 Remote: <remote>
+Visibility: <visibility>
 Remote default: <remote-default>
 Remote default SHA: <remote-default-sha>
 Default checkout: <default-checkout>
@@ -212,6 +229,7 @@ Primary worktree: <primary-worktree>
             self.assertIn("branch: gsd-path/demo", state)
             self.assertIn(f"Default checkout: {checkout.resolve()}", binding)
             self.assertIn(f"Primary worktree: {worktree.resolve()}", binding)
+            self.assertIn("Visibility: private", binding)
             self.assertFalse(journals[0].exists())
             self.assertEqual(self.git(checkout, "status", "--porcelain").stdout, "")
             self.assertEqual(
@@ -221,6 +239,21 @@ Primary worktree: <primary-worktree>
 
             repeated = self.run_command(*command, cwd=workspace, env=environment)
             self.assertEqual(repeated.returncode, 0, repeated.stderr)
+
+            public_command = list(command)
+            public_command[public_command.index("private")] = "public"
+            wrong_request = self.run_command(
+                *public_command, cwd=workspace, env=environment
+            )
+            self.assertNotEqual(wrong_request.returncode, 0)
+            self.assertIn("Visibility", wrong_request.stderr)
+
+            visibility = remote / "gsd-path-visibility"
+            visibility.write_text("public\n")
+            changed_remote = self.run_command(*command, cwd=workspace, env=environment)
+            self.assertNotEqual(changed_remote.returncode, 0)
+            self.assertIn("visibility", changed_remote.stderr.lower())
+            visibility.write_text("private\n")
 
             binding_path = worktree / ".project" / "REPOSITORY.md"
             binding_path.write_text(
@@ -251,6 +284,7 @@ Primary worktree: <primary-worktree>
             repository_template = root / "repository.md"
             repository_template.write_text(
                 "Kind: <kind>\nRemote: <remote>\nRemote default: <remote-default>\n"
+                "Visibility: <visibility>\n"
                 "Remote default SHA: <remote-default-sha>\n"
                 "Default checkout: <default-checkout>\nGSD Path branch: <branch>\n"
                 "Primary worktree: <primary-worktree>\n"
@@ -279,6 +313,105 @@ Primary worktree: <primary-worktree>
 
             self.assertFalse((worktree / ".project").exists())
             self.assertFalse((worktree / ".project.gsd-path-tmp").exists())
+
+    def test_resume_rejects_a_checkout_behind_the_live_remote_default(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            workspace = root / "workspace"
+            workspace.mkdir()
+            binary, remotes = self.write_fake_gh(root)
+            checkout = workspace / "demo"
+            worktree = workspace / "demo-gsd-path"
+            repository_template = root / "repository.md"
+            repository_template.write_text(
+                "Kind: <kind>\nRemote: <remote>\nVisibility: <visibility>\n"
+                "Remote default: <remote-default>\n"
+                "Remote default SHA: <remote-default-sha>\n"
+                "Default checkout: <default-checkout>\nGSD Path branch: <branch>\n"
+                "Primary worktree: <primary-worktree>\n"
+            )
+            environment = os.environ.copy()
+            environment["PATH"] = f"{binary}{os.pathsep}{environment['PATH']}"
+            environment["FAKE_GH_ROOT"] = str(remotes)
+            environment["FAKE_GH_FAIL_CLONE"] = "1"
+            command = self.bootstrap_command(
+                workspace, checkout, worktree, repository_template
+            )
+            interrupted = self.run_command(*command, cwd=workspace, env=environment)
+            self.assertNotEqual(interrupted.returncode, 0)
+            remote = remotes / "acme" / "demo.git"
+            clone = self.run_command(
+                "git", "clone", "-q", str(remote), str(checkout), cwd=workspace
+            )
+            self.assertEqual(clone.returncode, 0, clone.stderr)
+            base = self.git(checkout, "rev-parse", "HEAD").stdout.strip()
+            worktree_result = self.git(
+                checkout,
+                "worktree",
+                "add",
+                "-q",
+                "-b",
+                "gsd-path/demo",
+                str(worktree),
+                base,
+            )
+            self.assertEqual(worktree_result.returncode, 0, worktree_result.stderr)
+            with tempfile.TemporaryDirectory() as updater_directory:
+                updater = Path(updater_directory)
+                update_clone = self.run_command(
+                    "git", "clone", "-q", str(remote), str(updater), cwd=root
+                )
+                self.assertEqual(update_clone.returncode, 0, update_clone.stderr)
+                self.git(updater, "config", "user.name", "Updater")
+                self.git(updater, "config", "user.email", "updater@example.invalid")
+                (updater / "README.md").write_text("# Updated\n")
+                self.git(updater, "add", "README.md")
+                commit = self.git(updater, "commit", "-q", "-m", "Advance default")
+                self.assertEqual(commit.returncode, 0, commit.stderr)
+                push = self.git(updater, "push", "-q", "origin", "main")
+                self.assertEqual(push.returncode, 0, push.stderr)
+            environment.pop("FAKE_GH_FAIL_CLONE")
+
+            resumed = self.run_command(*command, cwd=workspace, env=environment)
+
+            self.assertNotEqual(resumed.returncode, 0)
+            self.assertIn("remote-default SHA", resumed.stderr)
+
+    def test_create_rejects_symlinked_transaction_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            workspace = root / "workspace"
+            workspace.mkdir()
+            outside = root / "outside"
+            outside.mkdir()
+            (workspace / ".gsd-path-transactions").symlink_to(
+                outside, target_is_directory=True
+            )
+            binary, remotes = self.write_fake_gh(root)
+            repository_template = root / "repository.md"
+            repository_template.write_text(
+                "Kind: <kind>\nRemote: <remote>\nVisibility: <visibility>\n"
+                "Remote default: <remote-default>\n"
+                "Remote default SHA: <remote-default-sha>\n"
+                "Default checkout: <default-checkout>\nGSD Path branch: <branch>\n"
+                "Primary worktree: <primary-worktree>\n"
+            )
+            environment = os.environ.copy()
+            environment["PATH"] = f"{binary}{os.pathsep}{environment['PATH']}"
+            environment["FAKE_GH_ROOT"] = str(remotes)
+            environment["FAKE_GH_FAIL_CLONE"] = "1"
+            command = self.bootstrap_command(
+                workspace,
+                workspace / "demo",
+                workspace / "demo-gsd-path",
+                repository_template,
+            )
+
+            result = self.run_command(*command, cwd=workspace, env=environment)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("transaction directory", result.stderr)
+            self.assertEqual(list(outside.iterdir()), [])
 
 
 if __name__ == "__main__":

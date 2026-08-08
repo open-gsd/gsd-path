@@ -134,11 +134,27 @@ def atomic_write(path: Path, content: str) -> None:
             temporary.unlink()
 
 
+def transaction_directory(request: BootstrapRequest, create: bool = False) -> Path:
+    directory = request.journal_path.parent
+    if directory.is_symlink():
+        raise BootstrapError(f"transaction directory must be real: {directory}")
+    if directory.exists() and not directory.is_dir():
+        raise BootstrapError(f"transaction directory must be real: {directory}")
+    if directory.exists():
+        expected_parent = request.workspace_path.resolve()
+        if directory.resolve().parent != expected_parent:
+            raise BootstrapError(f"transaction directory escapes workspace: {directory}")
+    elif create:
+        directory.mkdir()
+    return directory
+
+
 def request_payload(request: BootstrapRequest) -> dict:
     return {"schema": "gsd-path/new-github/v1", **asdict(request)}
 
 
 def read_journal(request: BootstrapRequest) -> Optional[dict]:
+    transaction_directory(request)
     journal = request.journal_path
     if not journal.exists():
         return None
@@ -158,6 +174,7 @@ def read_journal(request: BootstrapRequest) -> Optional[dict]:
 
 
 def write_journal(request: BootstrapRequest) -> None:
+    transaction_directory(request, create=True)
     atomic_write(
         request.journal_path,
         json.dumps(request_payload(request), indent=2, sort_keys=True) + "\n",
@@ -176,6 +193,23 @@ def remote_exists(request: BootstrapRequest) -> bool:
     if re.search(r"\b404\b", detail):
         return False
     raise BootstrapError(f"GitHub repository lookup was ambiguous: {detail.strip()}")
+
+
+def verify_remote_visibility(request: BootstrapRequest) -> None:
+    visibility = require_success(
+        run(
+            "gh",
+            "api",
+            f"repos/{request.repository}",
+            "--jq",
+            ".visibility",
+        ),
+        "verify GitHub repository visibility",
+    ).casefold()
+    if visibility != request.visibility:
+        raise BootstrapError(
+            f"GitHub repository visibility is {visibility}, not {request.visibility}"
+        )
 
 
 def binding_field(content: str, name: str) -> str:
@@ -215,6 +249,7 @@ def completed_binding(request: BootstrapRequest) -> Optional[tuple[str, str]]:
     expected = {
         "Kind": "new-github",
         "Remote": f"https://github.com/{request.repository}",
+        "Visibility": request.visibility,
         "Default checkout": request.default_checkout,
         "GSD Path branch": request.branch,
         "Primary worktree": request.worktree,
@@ -301,9 +336,7 @@ def verify_origin(request: BootstrapRequest) -> None:
         )
 
 
-def verify_checkout(
-    request: BootstrapRequest, repair_remote_head: bool
-) -> tuple[str, str]:
+def verify_checkout(request: BootstrapRequest) -> tuple[str, str]:
     checkout = request.checkout_path
     require_real_directory(checkout, "default checkout")
     top_level = Path(git_output(checkout, "rev-parse", "--show-toplevel")).resolve()
@@ -313,6 +346,14 @@ def verify_checkout(
     if git_output(checkout, "status", "--porcelain"):
         raise BootstrapError("default checkout is not clean")
 
+    require_success(
+        run("git", "-C", str(checkout), "fetch", "--prune", "origin"),
+        "refresh remote default branch",
+    )
+    require_success(
+        run("git", "-C", str(checkout), "remote", "set-head", "origin", "--auto"),
+        "resolve remote default branch",
+    )
     remote_head = run(
         "git",
         "-C",
@@ -322,20 +363,6 @@ def verify_checkout(
         "--short",
         "refs/remotes/origin/HEAD",
     )
-    if remote_head.returncode != 0 and repair_remote_head:
-        require_success(
-            run("git", "-C", str(checkout), "remote", "set-head", "origin", "--auto"),
-            "resolve remote default branch",
-        )
-        remote_head = run(
-            "git",
-            "-C",
-            str(checkout),
-            "symbolic-ref",
-            "--quiet",
-            "--short",
-            "refs/remotes/origin/HEAD",
-        )
     remote_ref = require_success(remote_head, "resolve remote default branch")
     if not remote_ref.startswith("origin/"):
         raise BootstrapError(f"remote default ref is invalid: {remote_ref}")
@@ -355,7 +382,7 @@ def clone_or_verify_checkout(request: BootstrapRequest) -> tuple[str, str]:
             run("gh", "repo", "clone", request.repository, str(checkout)),
             "clone GitHub repository",
         )
-    return verify_checkout(request, repair_remote_head=True)
+    return verify_checkout(request)
 
 
 def git_common_directory(repository: Path) -> Path:
@@ -435,7 +462,8 @@ def verify_completed_binding(request: BootstrapRequest) -> tuple[str, str]:
     if binding is None:
         raise BootstrapError("completed repository binding is missing")
     expected_default, expected_base = binding
-    remote_default, base = verify_checkout(request, repair_remote_head=False)
+    verify_remote_visibility(request)
+    remote_default, base = verify_checkout(request)
     if remote_default != expected_default or base != expected_base:
         raise BootstrapError("completed repository binding does not match the checkout")
     verify_worktree(request, base)
@@ -468,6 +496,7 @@ def render_binding(
     replacements = {
         "<kind>": "new-github",
         "<remote>": f"https://github.com/{request.repository}",
+        "<visibility>": request.visibility,
         "<remote-default>": remote_default,
         "<remote-default-sha>": base,
         "<default-checkout>": request.default_checkout,
@@ -528,6 +557,7 @@ def initialize_pipeline(
 
 
 def remove_journal(request: BootstrapRequest) -> None:
+    transaction_directory(request)
     request.journal_path.unlink()
     directory = request.journal_path.parent
     if not any(directory.iterdir()):
@@ -561,6 +591,7 @@ def create(
 
     if not remote_exists(request):
         create_remote(request)
+    verify_remote_visibility(request)
     remote_default, base = clone_or_verify_checkout(request)
     create_or_verify_worktree(request, base)
     initialize_pipeline(

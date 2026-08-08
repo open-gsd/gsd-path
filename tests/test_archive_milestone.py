@@ -1,3 +1,4 @@
+import fcntl
 import json
 import os
 import shutil
@@ -366,6 +367,57 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
             )
             self.assertEqual(validate.returncode, 0, validate.stderr)
 
+    def test_prepare_accepts_canonical_empty_discussion_records(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            discussion = repo / ".project" / "discuss"
+            discussion.mkdir()
+            dialogue_template = (
+                PROJECT_ROOT / "skills" / "gsd-path" / "templates" / "dialogue.md"
+            ).read_text()
+            answers_template = (
+                PROJECT_ROOT / "skills" / "gsd-path" / "templates" / "answers.md"
+            ).read_text()
+            (discussion / "DIALOGUE.md").write_text(
+                dialogue_template.split("\n### D001", 1)[0].rstrip() + "\n"
+            )
+            (discussion / "ANSWERS.md").write_text(
+                answers_template.split("\n## Answer A001", 1)[0].rstrip() + "\n"
+            )
+
+            archive = self.prepare_archive(repo)
+
+            self.assertFalse(discussion.exists())
+            self.assertEqual(
+                (archive / "discuss" / "DIALOGUE.md").read_text(),
+                dialogue_template.split("\n### D001", 1)[0].rstrip() + "\n",
+            )
+
+    def test_prepare_holds_discussion_lock_while_reconciling(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            original = archive_milestone.reconcile_append_only_discussion
+
+            def assert_locked(active_root, archive):
+                descriptor = os.open(active_root, os.O_RDONLY)
+                try:
+                    with self.assertRaises(BlockingIOError):
+                        fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                finally:
+                    os.close(descriptor)
+                return original(active_root, archive)
+
+            with mock.patch.object(
+                archive_milestone,
+                "reconcile_append_only_discussion",
+                side_effect=assert_locked,
+            ):
+                result = archive_milestone.prepare(repo, "demo")
+
+            self.assertEqual(result["archive"], ".project/archive/001-demo")
+
     def test_prepare_reconciles_append_only_discussion_after_archive_started(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             repo = Path(temporary_directory)
@@ -635,6 +687,47 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
             self.assertEqual(resumed.returncode, 0, resumed.stderr)
             self.assertFalse(discussion.exists())
             self.assertIn("Answer A002", (archive / "discuss" / "ANSWERS.md").read_text())
+
+    def test_discussion_recovery_rejects_symlinked_archive_destination(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            discussion = repo / ".project" / "discuss"
+            self.write_discussion(discussion)
+            archive = self.prepare_archive(repo)
+            self.write_discussion(discussion, turn=2)
+            outside = repo / "outside-discuss"
+            self.write_discussion(outside)
+            before = {
+                name: (outside / name).read_bytes()
+                for name in archive_milestone.DISCUSSION_FILES
+            }
+            shutil.rmtree(archive / "discuss")
+            (archive / "discuss").symlink_to(outside, target_is_directory=True)
+            payload = {
+                "schema": "gsd-path/discussion-archive/v1",
+                "archive": str(archive.resolve()),
+                "files": {
+                    name: (discussion / name).read_text()
+                    for name in archive_milestone.DISCUSSION_FILES
+                },
+            }
+            (repo / ".project" / archive_milestone.DISCUSSION_TRANSACTION_NAME).write_text(
+                json.dumps(payload) + "\n"
+            )
+
+            with self.assertRaises(archive_milestone.ArchiveError):
+                archive_milestone.finish_discussion_reconciliation(
+                    repo / ".project", archive
+                )
+
+            self.assertEqual(
+                {
+                    name: (outside / name).read_bytes()
+                    for name in archive_milestone.DISCUSSION_FILES
+                },
+                before,
+            )
 
     def test_ship_accepts_active_lessons_file(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

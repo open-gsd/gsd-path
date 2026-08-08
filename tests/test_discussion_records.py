@@ -1,4 +1,5 @@
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -6,8 +7,12 @@ import unittest
 from pathlib import Path
 from typing import Optional
 
-
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "scripts"))
+
+import discussion_records
+
+
 SCRIPT = ROOT / "scripts" / "discussion_records.py"
 DIALOGUE_TEMPLATE = ROOT / "skills" / "gsd-path" / "templates" / "dialogue.md"
 ANSWERS_TEMPLATE = ROOT / "skills" / "gsd-path" / "templates" / "answers.md"
@@ -176,6 +181,46 @@ archive: null
             self.assertNotEqual(appended.returncode, 0)
             self.assertIn("YYYY-MM-DD", appended.stderr)
             self.assertFalse((repo / ".project" / ".discussion-append-transaction.json").exists())
+
+    def test_append_recovery_rejects_symlinked_discussion_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            prepared = self.command(repo, "prepare")
+            self.assertEqual(prepared.returncode, 0, prepared.stderr)
+            discussion = repo / ".project" / "discuss"
+            files = {
+                name: (discussion / name).read_text()
+                for name in discussion_records.FILES
+            }
+            shutil.rmtree(discussion)
+            outside = repo / "outside-discuss"
+            outside.mkdir()
+            for name in discussion_records.FILES:
+                (outside / name).write_text(f"sentinel {name}\n")
+            discussion.symlink_to(outside, target_is_directory=True)
+            transaction = repo / ".project" / discussion_records.APPEND_TRANSACTION
+            transaction.write_text(
+                json.dumps(
+                    {"schema": "gsd-path/discussion-append/v1", "files": files}
+                )
+                + "\n"
+            )
+            before = {
+                name: (outside / name).read_bytes()
+                for name in discussion_records.FILES
+            }
+
+            with self.assertRaises(discussion_records.DiscussionError):
+                discussion_records.finish_append(repo / ".project", discussion)
+
+            self.assertEqual(
+                {
+                    name: (outside / name).read_bytes()
+                    for name in discussion_records.FILES
+                },
+                before,
+            )
 
 
 if __name__ == "__main__":

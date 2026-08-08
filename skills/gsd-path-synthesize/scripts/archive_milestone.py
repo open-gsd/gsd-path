@@ -2,6 +2,7 @@
 """Prepare and validate a crash-resumable GSD Path milestone archive."""
 
 import argparse
+import fcntl
 import filecmp
 import json
 import os
@@ -9,9 +10,10 @@ import re
 import shutil
 import subprocess
 import sys
+from contextlib import contextmanager
 from datetime import date
 from pathlib import Path, PurePosixPath
-from typing import Optional, Sequence
+from typing import Iterator, Optional, Sequence
 
 
 ARCHIVE_PATTERN = re.compile(r"^(\d{3,})-([a-z0-9][a-z0-9-]*)$")
@@ -41,6 +43,18 @@ DISCUSSION_PHASES = {
     "review",
 }
 DISCUSSION_FILES = ("DIALOGUE.md", "ANSWERS.md")
+EMPTY_DISCUSSION_FILES = {
+    "DIALOGUE.md": """# GSD Path Discussion — Dialogue
+
+<!-- Written by $gsd-path-discuss. Append turns; never rewrite prior turns. -->
+
+## Turns
+""",
+    "ANSWERS.md": """# GSD Path Discussion — Answers
+
+<!-- Written by $gsd-path-discuss. Append one record per turn; never rewrite prior answers. -->
+""",
+}
 DISCUSSION_TRANSACTION_NAME = ".discussion-archive-transaction.json"
 DIRECTORIES_TO_ARCHIVE = ("intent", "research", "plan", "tasks", "review")
 OPTIONAL_DIRECTORIES_TO_ARCHIVE = ("discuss",)
@@ -107,6 +121,17 @@ class ArchiveError(RuntimeError):
 
 
 PIPELINE_MARKER = "gsd-path/v1"
+
+
+@contextmanager
+def discussion_lock(active_root: Path) -> Iterator[None]:
+    descriptor = os.open(active_root, os.O_RDONLY)
+    try:
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        yield
+    finally:
+        fcntl.flock(descriptor, fcntl.LOCK_UN)
+        os.close(descriptor)
 
 
 def atomic_write(path: Path, content: str) -> None:
@@ -495,8 +520,10 @@ def validate_discussion_directory(
     if not is_real_file(dialogue) or not is_real_file(answers):
         raise ArchiveError("discussion archive records must be real files")
 
-    dialogue_lines = dialogue.read_text(encoding="utf-8").splitlines()
-    answer_lines = answers.read_text(encoding="utf-8").splitlines()
+    dialogue_content = dialogue.read_text(encoding="utf-8")
+    answer_content = answers.read_text(encoding="utf-8")
+    dialogue_lines = dialogue_content.splitlines()
+    answer_lines = answer_content.splitlines()
     if contains_placeholder("\n".join((*dialogue_lines, *answer_lines))):
         raise ArchiveError("discussion archive records contain placeholders")
 
@@ -507,6 +534,14 @@ def validate_discussion_directory(
     answer_sections = record_sections(answer_lines, ANSWER_HEADING_PATTERN, answer_boundaries)
     dialogue_ids = [int(match.group(1)) for match, _ in dialogue_sections]
     answer_ids = [int(match.group(1)) for match, _ in answer_sections]
+    if not dialogue_ids and not answer_ids:
+        actual = {
+            "DIALOGUE.md": dialogue_content,
+            "ANSWERS.md": answer_content,
+        }
+        if actual != EMPTY_DISCUSSION_FILES:
+            raise ArchiveError("empty discussion records must use canonical headers")
+        return
     require_contiguous_ids(dialogue_ids, "DIALOGUE.md")
     require_contiguous_ids(answer_ids, "ANSWERS.md")
     if dialogue_ids != answer_ids:
@@ -697,6 +732,24 @@ def reconcile_append_only_discussion(active_root: Path, archive: Path) -> None:
     finish_discussion_reconciliation(active_root, archive)
 
 
+def require_safe_discussion_destination(
+    active_root: Path, archive: Path, destination: Path
+) -> None:
+    archive_root = active_root / "archive"
+    if active_root.is_symlink() or not active_root.is_dir():
+        raise ArchiveError("discussion reconciliation requires a real .project directory")
+    if archive_root.is_symlink() or not archive_root.is_dir():
+        raise ArchiveError("discussion reconciliation requires a real archive root")
+    if archive.is_symlink() or not archive.is_dir():
+        raise ArchiveError("discussion reconciliation requires a real archive directory")
+    if archive.resolve().parent != archive_root.resolve():
+        raise ArchiveError("discussion reconciliation archive escapes the archive root")
+    if destination.is_symlink() or not destination.is_dir():
+        raise ArchiveError("discussion reconciliation destination must be a real directory")
+    if destination.resolve().parent != archive.resolve():
+        raise ArchiveError("discussion reconciliation destination escapes the archive")
+
+
 def finish_discussion_reconciliation(active_root: Path, archive: Path) -> None:
     transaction = active_root / DISCUSSION_TRANSACTION_NAME
     if not transaction.exists():
@@ -732,6 +785,7 @@ def finish_discussion_reconciliation(active_root: Path, archive: Path) -> None:
             payload["files"] = files
             atomic_write(transaction, json.dumps(payload, sort_keys=True) + "\n")
     destination = archive / "discuss"
+    require_safe_discussion_destination(active_root, archive, destination)
     for name in DISCUSSION_FILES:
         temporary = destination / f".{name}.gsd-path-tmp"
         temporary.parent.mkdir(parents=True, exist_ok=True)
@@ -747,6 +801,8 @@ def remove_interrupted_discussion_copies(active_root: Path, archive: Path) -> No
     if not (active_root / "discuss").exists():
         return
     directory = archive / "discuss"
+    if directory.exists() or directory.is_symlink():
+        require_safe_discussion_destination(active_root, archive, directory)
     for name in DISCUSSION_FILES:
         temporary = directory / f".{name}.gsd-path-tmp"
         if temporary.exists() or temporary.is_symlink():
@@ -1158,6 +1214,11 @@ def validate_manifest(archive: Path, state: str) -> tuple:
 def prepare(repo: Path, slug: str) -> dict:
     project = repo.resolve()
     active_root = require_project_layout(project)
+    with discussion_lock(active_root):
+        return prepare_locked(project, active_root, slug)
+
+
+def prepare_locked(project: Path, active_root: Path, slug: str) -> dict:
     state_path = active_root / "STATE.md"
     state_temporary = active_root / STATE_TEMP_NAME
 

@@ -2,7 +2,6 @@
 """Manage GSD Path discussion records as a recoverable paired transaction."""
 
 import argparse
-import fcntl
 import json
 import os
 import shutil
@@ -50,12 +49,8 @@ def project_root(repo: Path) -> tuple[Path, Path, Path]:
 
 @contextmanager
 def state_lock(state: Path) -> Iterator[None]:
-    with state.open("r", encoding="utf-8") as handle:
-        fcntl.flock(handle, fcntl.LOCK_EX)
-        try:
-            yield
-        finally:
-            fcntl.flock(handle, fcntl.LOCK_UN)
+    with archive_milestone.discussion_lock(state.parent):
+        yield
 
 
 def state_context(state: Path) -> tuple[str, str, str]:
@@ -126,6 +121,14 @@ def finish_append(project: Path, discussion: Path) -> None:
         or any(not isinstance(files[name], str) for name in FILES)
     ):
         raise DiscussionError("discussion append journal has invalid files")
+    if project.is_symlink() or not project.is_dir():
+        raise DiscussionError("discussion recovery requires a real .project directory")
+    if discussion.is_symlink() or (
+        discussion.exists() and not discussion.is_dir()
+    ):
+        raise DiscussionError("discussion recovery destination must be a real directory")
+    if discussion.resolve(strict=False).parent != project.resolve():
+        raise DiscussionError("discussion recovery destination escapes .project")
     discussion.mkdir(exist_ok=True)
     for name in FILES:
         atomic_write(discussion / name, files[name])

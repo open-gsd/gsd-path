@@ -6,6 +6,7 @@
 
 Kind: <kind>
 Remote: <remote>
+Visibility: <visibility>
 Remote default: <remote-default>
 Remote default SHA: <remote-default-sha>
 Default checkout: <default-checkout>
