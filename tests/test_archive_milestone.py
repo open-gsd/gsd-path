@@ -4,8 +4,15 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import textwrap
 import unittest
 from pathlib import Path
+from unittest import mock
+
+from scripts import archive_milestone
+
+if sys.platform != "win32":
+    import fcntl
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -158,6 +165,63 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
 """
         )
 
+    def write_discussion(
+        self, directory: Path, turn: int = 1, final: bool = True
+    ) -> None:
+        directory.mkdir(parents=True, exist_ok=True)
+        dialogue_turns = []
+        answer_records = []
+        for number in range(1, turn + 1):
+            previous = f"D{number - 1:03d}" if number > 1 else "none"
+            supersedes = f"A{number - 1:03d}" if number > 1 else "none"
+            status = "final" if final and number == turn else "working"
+            dialogue_turns.append(
+                f"""### D{number:03d} — 2026-08-01 — review/active — demo
+
+- **Thread**: T001
+- **Reply to**: {previous}
+- **User (verbatim)**:
+
+  > question {number}
+
+- **Assistant**:
+
+  answer {number}
+
+- **Evidence checked**: tests/test_archive_milestone.py
+- **Research**: not needed — local behavior
+- **Thread status**: {status}
+"""
+            )
+            answer_records.append(
+                f"""## Answer A{number:03d} — 2026-08-01 — demo
+
+- **Thread**: T001
+- **Turn**: D{number:03d}
+- **Supersedes**: {supersedes}
+- **Question**: question {number}
+- **Status**: {status}
+- **Phase/status**: review/active
+- **Conclusion**: answer {number}
+- **Reasoning / pushback**: evidence supports the answer
+- **Evidence**: tests/test_archive_milestone.py
+- **Research**: not needed — local behavior
+- **Confidence**: high
+- **Unresolved**: none
+- **Next owner**: none
+- **Target artifact**: none
+- **Follow-up**: none
+"""
+            )
+
+        (directory / "DIALOGUE.md").write_text(
+            "# GSD Path Discussion — Dialogue\n\n## Turns\n\n"
+            + "\n".join(dialogue_turns)
+        )
+        (directory / "ANSWERS.md").write_text(
+            "# GSD Path Discussion — Answers\n\n" + "\n".join(answer_records)
+        )
+
     def prepare_archive(self, repo: Path, slug: str = "demo") -> Path:
         prepare = self.run_command(
             sys.executable,
@@ -272,6 +336,475 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
             self.assertEqual(after_commit.returncode, 0, after_commit.stderr)
             self.assertEqual(json.loads(after_commit.stdout)["archive"], result["archive"])
 
+    def test_prepare_archives_optional_discussion_records(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            discussion = repo / ".project" / "discuss"
+            self.write_discussion(discussion)
+            expected_dialogue = (discussion / "DIALOGUE.md").read_text()
+
+            archive = self.prepare_archive(repo)
+
+            self.assertFalse(discussion.exists())
+            self.assertEqual(
+                (archive / "discuss" / "DIALOGUE.md").read_text(),
+                expected_dialogue,
+            )
+            self.assertIn("## Answer A001", (archive / "discuss" / "ANSWERS.md").read_text())
+            self.write_manifest(archive)
+            preflight = self.preflight(repo)
+            self.assertEqual(preflight.returncode, 0, preflight.stderr)
+
+            self.mark_shipped(repo)
+            self.git(repo, "add", ".project")
+            ship = self.git(repo, "commit", "-q", "-m", f"ship: {archive.name}")
+            self.assertEqual(ship.returncode, 0, ship.stderr)
+            validate = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "validate",
+                "--repo",
+                str(repo),
+                cwd=PROJECT_ROOT,
+            )
+            self.assertEqual(validate.returncode, 0, validate.stderr)
+
+    def test_prepare_accepts_canonical_empty_discussion_records(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            discussion = repo / ".project" / "discuss"
+            discussion.mkdir()
+            dialogue_template = (
+                PROJECT_ROOT / "skills" / "gsd-path" / "templates" / "dialogue.md"
+            ).read_text()
+            answers_template = (
+                PROJECT_ROOT / "skills" / "gsd-path" / "templates" / "answers.md"
+            ).read_text()
+            (discussion / "DIALOGUE.md").write_text(
+                dialogue_template.split("\n### D001", 1)[0].rstrip() + "\n"
+            )
+            (discussion / "ANSWERS.md").write_text(
+                answers_template.split("\n## Answer A001", 1)[0].rstrip() + "\n"
+            )
+
+            archive = self.prepare_archive(repo)
+
+            self.assertFalse(discussion.exists())
+            self.assertEqual(
+                (archive / "discuss" / "DIALOGUE.md").read_text(),
+                dialogue_template.split("\n### D001", 1)[0].rstrip() + "\n",
+            )
+
+    @unittest.skipIf(sys.platform == "win32", "POSIX lock contention check")
+    def test_prepare_holds_discussion_lock_while_reconciling(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            original = archive_milestone.reconcile_append_only_discussion
+
+            def assert_locked(active_root, archive):
+                descriptor = os.open(active_root, os.O_RDONLY)
+                try:
+                    with self.assertRaises(BlockingIOError):
+                        fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                finally:
+                    os.close(descriptor)
+                return original(active_root, archive)
+
+            with mock.patch.object(
+                archive_milestone,
+                "reconcile_append_only_discussion",
+                side_effect=assert_locked,
+            ):
+                result = archive_milestone.prepare(repo, "demo")
+
+            self.assertEqual(result["archive"], ".project/archive/001-demo")
+
+    def test_discussion_lock_uses_windows_locking_without_fcntl(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            program = textwrap.dedent(
+                f"""
+                import json
+                import runpy
+                import subprocess
+                import sys
+                import types
+                from pathlib import Path
+
+                calls = []
+                locking = types.ModuleType("msvcrt")
+                locking.LK_LOCK = 1
+                locking.LK_UNLCK = 2
+                locking.locking = lambda descriptor, mode, size: calls.append(mode)
+                sys.modules["fcntl"] = None
+                sys.modules["msvcrt"] = locking
+                sys.platform = "win32"
+                module = runpy.run_path({str(ARCHIVE_SCRIPT)!r}, run_name="archive_portability")
+                with module["discussion_lock"](Path({str(repo / ".project")!r})):
+                    calls.append("inside")
+                print(json.dumps(calls))
+                """
+            )
+
+            result = self.run_command(
+                sys.executable,
+                "-c",
+                program,
+                cwd=PROJECT_ROOT,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(json.loads(result.stdout), [1, "inside", 2])
+
+    def test_prepare_reconciles_append_only_discussion_after_archive_started(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            discussion = repo / ".project" / "discuss"
+            self.write_discussion(discussion, final=False)
+
+            archive = self.prepare_archive(repo)
+            self.write_discussion(discussion, turn=2)
+
+            resumed = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "prepare",
+                "--repo",
+                str(repo),
+                "--slug",
+                "demo",
+                cwd=PROJECT_ROOT,
+            )
+
+            self.assertEqual(resumed.returncode, 0, resumed.stderr)
+            self.assertFalse(discussion.exists())
+            self.assertIn("### D002", (archive / "discuss" / "DIALOGUE.md").read_text())
+            self.assertIn("## Answer A002", (archive / "discuss" / "ANSWERS.md").read_text())
+
+    def test_prepare_rejects_incomplete_discussion_archive(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            discussion = repo / ".project" / "discuss"
+            self.write_discussion(discussion)
+            (discussion / "ANSWERS.md").unlink()
+
+            prepare = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "prepare",
+                "--repo",
+                str(repo),
+                "--slug",
+                "demo",
+                cwd=PROJECT_ROOT,
+            )
+
+            self.assertNotEqual(prepare.returncode, 0)
+            self.assertIn("discussion archive", prepare.stderr)
+
+    def test_prepare_rejects_empty_dialogue_blocks(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            discussion = repo / ".project" / "discuss"
+            self.write_discussion(discussion)
+            dialogue = discussion / "DIALOGUE.md"
+            dialogue.write_text(
+                dialogue.read_text().replace("  > question 1", "  >   "),
+                encoding="utf-8",
+            )
+
+            prepare = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "prepare",
+                "--repo",
+                str(repo),
+                "--slug",
+                "demo",
+                cwd=PROJECT_ROOT,
+            )
+
+            self.assertNotEqual(prepare.returncode, 0)
+            self.assertIn("verbatim user block", prepare.stderr)
+
+    def test_prepare_accepts_markdown_headings_inside_dialogue(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            discussion = repo / ".project" / "discuss"
+            self.write_discussion(discussion)
+            dialogue = discussion / "DIALOGUE.md"
+            dialogue.write_text(
+                dialogue.read_text().replace(
+                    "  answer 1",
+                    "- **Decision:** keep it\n\n### Result\n\nanswer 1",
+                ),
+                encoding="utf-8",
+            )
+
+            archive = self.prepare_archive(repo)
+
+            self.assertIn(
+                "### Result", (archive / "discuss" / "DIALOGUE.md").read_text()
+            )
+
+    def test_prepare_rejects_cross_thread_reply_and_supersession(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            discussion = repo / ".project" / "discuss"
+            self.write_discussion(discussion, turn=2)
+            for name in ("DIALOGUE.md", "ANSWERS.md"):
+                path = discussion / name
+                content = path.read_text()
+                marker = "### D002" if name == "DIALOGUE.md" else "## Answer A002"
+                before, after = content.split(marker, 1)
+                path.write_text(before + marker + after.replace("T001", "T002", 1))
+
+            prepare = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "prepare",
+                "--repo",
+                str(repo),
+                "--slug",
+                "demo",
+                cwd=PROJECT_ROOT,
+            )
+
+            self.assertNotEqual(prepare.returncode, 0)
+            self.assertIn("same thread", prepare.stderr)
+
+    def test_prepare_rejects_required_follow_up_without_disposition(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            discussion = repo / ".project" / "discuss"
+            self.write_discussion(discussion)
+            answers = discussion / "ANSWERS.md"
+            answers.write_text(
+                answers.read_text()
+                .replace("- **Next owner**: none", "- **Next owner**: gsd-path-review")
+                .replace(
+                    "- **Target artifact**: none",
+                    "- **Target artifact**: .project/review/FINAL.md",
+                )
+                .replace("- **Follow-up**: none", "- **Follow-up**: required")
+            )
+
+            prepare = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "prepare",
+                "--repo",
+                str(repo),
+                "--slug",
+                "demo",
+                cwd=PROJECT_ROOT,
+            )
+
+            self.assertNotEqual(prepare.returncode, 0)
+            self.assertIn("disposition", prepare.stderr)
+
+    def test_prepare_rejects_disposition_from_wrong_owner_or_artifact(self) -> None:
+        cases = (
+            ("gsd-path-review", ".project/plan/PLAN.md", "owner"),
+            ("gsd-path-plan", ".project/review/FINAL.md", "artifact"),
+        )
+        for owner, artifact, expected_error in cases:
+            with self.subTest(expected_error=expected_error):
+                with tempfile.TemporaryDirectory() as temporary_directory:
+                    repo = Path(temporary_directory)
+                    self.make_repo(repo)
+                    discussion = repo / ".project" / "discuss"
+                    self.write_discussion(discussion)
+                    answers = discussion / "ANSWERS.md"
+                    content = (
+                        answers.read_text()
+                        .replace(
+                            "- **Next owner**: none",
+                            "- **Next owner**: gsd-path-plan",
+                        )
+                        .replace(
+                            "- **Target artifact**: none",
+                            "- **Target artifact**: .project/plan/PLAN.md",
+                        )
+                        .replace(
+                            "- **Follow-up**: none", "- **Follow-up**: required"
+                        )
+                    )
+                    answers.write_text(
+                        content
+                        + f"""
+
+## Disposition X001 — 2026-08-01
+
+- **Answer**: A001
+- **Status**: applied
+- **Owner**: {owner}
+- **Artifact**: {artifact}
+- **Evidence**: unrelated review change
+"""
+                    )
+
+                    prepare = self.run_command(
+                        sys.executable,
+                        str(ARCHIVE_SCRIPT),
+                        "prepare",
+                        "--repo",
+                        str(repo),
+                        "--slug",
+                        "demo",
+                        cwd=PROJECT_ROOT,
+                    )
+
+                    self.assertNotEqual(prepare.returncode, 0)
+                    self.assertIn(expected_error, prepare.stderr)
+
+    def test_prepare_rejects_unknown_discussion_phase(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            discussion = repo / ".project" / "discuss"
+            self.write_discussion(discussion)
+            for name in ("DIALOGUE.md", "ANSWERS.md"):
+                path = discussion / name
+                path.write_text(path.read_text().replace("review/active", "bogus/active"))
+
+            prepare = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "prepare",
+                "--repo",
+                str(repo),
+                "--slug",
+                "demo",
+                cwd=PROJECT_ROOT,
+            )
+
+            self.assertNotEqual(prepare.returncode, 0)
+            self.assertIn("phase", prepare.stderr.lower())
+
+    def test_prepare_recovers_half_written_discussion_reconciliation(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            discussion = repo / ".project" / "discuss"
+            self.write_discussion(discussion, final=False)
+            archive = self.prepare_archive(repo)
+            self.write_discussion(discussion, turn=2)
+            original_replace = archive_milestone.os.replace
+
+            def fail_answer_replace(source, destination):
+                if Path(destination).name == "ANSWERS.md":
+                    raise OSError("injected second-copy failure")
+                return original_replace(source, destination)
+
+            with mock.patch.object(
+                archive_milestone.os, "replace", side_effect=fail_answer_replace
+            ):
+                with self.assertRaises(OSError):
+                    archive_milestone.reconcile_append_only_discussion(
+                        repo / ".project", archive
+                    )
+
+            resumed = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "prepare",
+                "--repo",
+                str(repo),
+                "--slug",
+                "demo",
+                cwd=PROJECT_ROOT,
+            )
+
+            self.assertEqual(resumed.returncode, 0, resumed.stderr)
+            self.assertFalse(discussion.exists())
+            self.assertIn("Answer A002", (archive / "discuss" / "ANSWERS.md").read_text())
+
+    def test_discussion_recovery_rejects_symlinked_archive_destination(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            discussion = repo / ".project" / "discuss"
+            self.write_discussion(discussion)
+            archive = self.prepare_archive(repo)
+            self.write_discussion(discussion, turn=2)
+            outside = repo / "outside-discuss"
+            self.write_discussion(outside)
+            before = {
+                name: (outside / name).read_bytes()
+                for name in archive_milestone.DISCUSSION_FILES
+            }
+            shutil.rmtree(archive / "discuss")
+            (archive / "discuss").symlink_to(outside, target_is_directory=True)
+            payload = {
+                "schema": "gsd-path/discussion-archive/v1",
+                "archive": str(archive.resolve()),
+                "files": {
+                    name: (discussion / name).read_text()
+                    for name in archive_milestone.DISCUSSION_FILES
+                },
+            }
+            (repo / ".project" / archive_milestone.DISCUSSION_TRANSACTION_NAME).write_text(
+                json.dumps(payload) + "\n"
+            )
+
+            with self.assertRaises(archive_milestone.ArchiveError):
+                archive_milestone.finish_discussion_reconciliation(
+                    repo / ".project", archive
+                )
+
+            self.assertEqual(
+                {
+                    name: (outside / name).read_bytes()
+                    for name in archive_milestone.DISCUSSION_FILES
+                },
+                before,
+            )
+
+    def test_discussion_recovery_does_not_follow_temporary_symlinks(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            discussion = repo / ".project" / "discuss"
+            self.write_discussion(discussion)
+            archive = self.prepare_archive(repo)
+            self.write_discussion(discussion, turn=2)
+            payload = {
+                "schema": "gsd-path/discussion-archive/v1",
+                "archive": str(archive.resolve()),
+                "files": {
+                    name: (discussion / name).read_text()
+                    for name in archive_milestone.DISCUSSION_FILES
+                },
+            }
+            (repo / ".project" / archive_milestone.DISCUSSION_TRANSACTION_NAME).write_text(
+                json.dumps(payload) + "\n"
+            )
+            outside = repo / "outside-record.md"
+            outside.write_text("outside sentinel\n")
+            temporary = archive / "discuss" / ".DIALOGUE.md.gsd-path-tmp"
+            temporary.symlink_to(outside)
+
+            archive_milestone.finish_discussion_reconciliation(
+                repo / ".project", archive
+            )
+
+            self.assertEqual(outside.read_text(), "outside sentinel\n")
+            self.assertFalse((archive / "discuss" / "DIALOGUE.md").is_symlink())
+            self.assertIn(
+                "### D002", (archive / "discuss" / "DIALOGUE.md").read_text()
+            )
+
     def test_ship_accepts_active_lessons_file(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             repo = Path(temporary_directory)
@@ -309,6 +842,20 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
             )
             self.assertNotEqual(inherited.returncode, 0)
             self.assertIn("does not record", inherited.stderr)
+
+    def test_preflight_accepts_persistent_repository_binding(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            (repo / ".project" / "REPOSITORY.md").write_text(
+                "# Repository Binding\n\nKind: new-github\n"
+            )
+
+            archive = self.prepare_archive(repo)
+            self.write_manifest(archive)
+            preflight = self.preflight(repo)
+
+            self.assertEqual(preflight.returncode, 0, preflight.stderr)
 
     def test_prepare_recovers_an_interrupted_carry_forward_copy(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

@@ -34,7 +34,18 @@ explicitly invokes it.
   binding. On an approved patch re-entry, the exact review findings, appended
   plan/tasks, approval state, and no other changes are also expected; the build
   orchestrator commits them with the `build/active` transition before a layer
-  base. Never discard, stash, or absorb another change.
+  base. Append-only `.project/discuss/DIALOGUE.md` and `ANSWERS.md` records are
+  also expected bookkeeping: verify that their diff only appends complete
+  records, then include them in the next normal orchestrator bookkeeping commit
+  before establishing a layer base. Never discard, stash, or absorb another
+  change.
+- Before recovery or dispatch and again before each layer/wave gate, scan
+  ANSWERS.md for pending required follow-ups under AGENTS.md. Apply an answer
+  addressed to build only through PLAN/task/BOARD bookkeeping that is legal in
+  the current build state and append its disposition receipt. If it changes an
+  approved upstream contract or names another owner, set `build/blocked`, link
+  ANSWERS.md and the target artifact, and ask the user; never establish a new
+  layer base from stale inputs.
 - Fetch the configured remote and resolve its default ref and exact SHA without
   checking out, pulling, or updating the local default branch. When
   `STATE.branch` is null, bind either the current clean, unmerged non-default
@@ -42,6 +53,13 @@ explicitly invokes it.
   that remote-default SHA. When `STATE.branch` is set, require the current
   symbolic branch to equal it. A mismatch, an already merged active branch, or
   a branch owned by another worktree blocks; never silently rebind it.
+- When `.project/REPOSITORY.md` records `Kind: new-github`, parse its required
+  fixed fields and verify the current root is the recorded linked primary
+  worktree, its branch equals both the artifact and STATE.branch, and its
+  pre-planning base was the recorded remote-default SHA. Also require the
+  recorded default checkout to remain clean on its recorded remote default
+  branch. Adopt that proven binding; do not parse STATE log prose or create
+  another branch or primary worktree.
 - Persist the branch in STATE.md. On entry from `plan/done`, set STATE to
   `build/active`, append `build started`, and commit that transition with the
   expected initial `.project/` artifacts before dispatch. From then on, every
@@ -163,7 +181,8 @@ For each wave in PLAN.md order:
    unlisted task that the next recovery cannot discover. Run them through the
    same isolated layer loop. At the cap, record all attempts in BOARD.md and
    STATE.md and ask the user — through an interactive user-input tool when
-   available — whether to relax the criterion, redirect the approach, or
+   available — after linking the resolved absolute BOARD.md and blocking wave
+   review, whether to relax the criterion, redirect the approach, or
    raise the cap, listing the orchestrator's recommended option first marked
    `(recommended)` with a one-line reason drawn from the review evidence.
    Never choose silently. On pass, commit the review artifact, BOARD.md, STATE.md, and wave
@@ -177,7 +196,12 @@ review pending`, set STATE.md directly to `phase: review`, `status: active`,
 and commit that transition as the build orchestrator's final bookkeeping. This
 keeps the primary worktree clean and avoids a separate review-phase transition
 commit. Report waves, exact task commits, fixed findings, and remaining risk.
+Link the resolved absolute BOARD.md as the review surface and state that final
+review is next.
 On failure, set build state to `blocked`, record the exact output, and do not
-claim success. Remove only the disposable worktree created for this check. If
+claim success. Present **Outcome** with the failed Verify, **Review** linking
+the resolved absolute BOARD.md path and its recorded failure, and **Next** with
+the one required recovery action or question. Remove only the disposable
+worktree created for this check. If
 a crash leaves `build/done`, finish and commit this transition before returning
 to the router.

@@ -28,6 +28,55 @@ invocations. Do not depend on another skill being implicitly injected. When a
 phase contract says to return to or invoke the router, resume this file's
 routing loop.
 
+## New GitHub repository creation
+
+Enter this transaction only when the user explicitly asks to create a new
+GitHub repository and no owned `.project/STATE.md` is active for that request.
+
+1. Resolve the repository name and normalized project slug. Obtain the GitHub
+   owner, one supported visibility (`public`, `private`, or `internal`), and a
+   local workspace when absent; do not infer account ownership or visibility.
+   Derive `gsd-path/<project-slug>` as the branch. The default checkout is
+   `<resolved-workspace>/<repo-name>`; propose the distinct sibling
+   `<resolved-workspace>/<repo-name>-gsd-path` as the linked worktree. The user
+   may choose another workspace or worktree path before approval.
+2. Resolve the bundled `scripts/bootstrap_repository.py` to an absolute path.
+   Run its `preview` command with the exact owner, repository, visibility,
+   workspace, default checkout, linked worktree, and optional description. The
+   helper checks authentication, remote state, path parents, and any matching
+   transaction journal without mutation. `mode: create` means every target is
+   absent; `mode: resume` means the exact approved journal exists and the helper
+   can verify and adopt completed stages; `mode: complete` names an already
+   initialized binding. Any ambiguity or unowned collision blocks.
+3. Present **Outcome** as a repository-creation preview. Present **Review** with
+   the proposed GitHub URL, visibility, default-checkout path, GSD Path branch,
+   and linked-worktree path, all marked not yet created. Present **Next** as one
+   choice: `Create repository and worktree (recommended)` for `mode: create`, or
+   `Resume verified repository transaction (recommended)` for `mode: resume`,
+   followed by `Change details` and `Cancel`. Present this review inline; do not
+   create a preview file or journal before approval. For `mode: complete`, do
+   not ask to create again: link the existing REPOSITORY.md, rebase to the
+   returned worktree, and continue normal routing.
+4. Only after approval, run the helper's `create` command with those same exact
+   arguments plus the resolved bundled `templates/state.md` and
+   `templates/repository.md` paths. The helper first persists the approved
+   journal, then creates or verifies the remote, clone, remote-default SHA,
+   branch, and linked worktree one stage at a time. It writes STATE.md at
+   `grill/active` with the branch bound and writes fixed-format REPOSITORY.md;
+   only then does it remove the journal. It never pushes, deletes, force-reuses,
+   or adopts a target that does not match the journal.
+5. On failure, present **Outcome** with the failed stage, **Review** with the
+   approved targets and journal path returned or reported by the helper, and
+   **Next** offering an explicit verified resume first. Rerun `preview` before
+   retrying; never substitute manual cleanup or a second transaction.
+6. On success, rebase the project root to the returned linked worktree. Treat
+   its verified bootstrap README as greenfield. Continue with the bundled grill
+   contract; it reads REPOSITORY.md and records the binding under INTENT.md's
+   Constraints.
+
+Never apply this transaction to an existing repository. Ordinary existing-repo
+runs keep the build contract's current branch-binding behavior.
+
 ## State ownership and initialization
 
 1. Read `.project/STATE.md` when present. Require
@@ -73,12 +122,22 @@ Before ordinary routing, inspect `STATE.archive`.
   transaction identity exists. Block and request explicit pre-v1 migration;
   never guess an archive number or move artifacts.
 
+Before ordinary phase routing, also inspect `.project/discuss/ANSWERS.md` when
+present by running the bundled `scripts/discussion_records.py pending --repo
+<absolute-root>` helper. Apply the returned pending-answer contract in
+AGENTS.md and use its `dispose` command for receipts. Never auto-advance a
+required follow-up without its disposition receipt; when the named owner cannot
+legally enter from current state, link ANSWERS.md and the target artifact and
+ask the user how to reconcile the upstream change.
+
 ## Normal routing
 
-Report the phase, completed work, and next action in at most three lines. If
-DOCS-AUDIT.md has `planned: no` rulings, add one alignment-queue line and offer
-once to route them through the bundled [plan contract](PLAN.md); declining
-does not block.
+Report normal progress in three labeled lines: **Outcome** names the phase and
+completed work, **Review** links the newest canonical artifact using its
+resolved absolute path when one exists, and **Next** names the action the
+router is taking or the single action required from the user. If DOCS-AUDIT.md
+has `planned: no` rulings, add one alignment-queue line and offer once to route
+them through the bundled [plan contract](PLAN.md); declining does not block.
 
 Once per conversation, before the status report, run the bundled update check
 `python3 <skill-dir>/scripts/check_update.py`. It is cached, offline-safe, and

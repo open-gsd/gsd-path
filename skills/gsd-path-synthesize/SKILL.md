@@ -13,6 +13,11 @@ router or orchestrator supplied this contract, return control to it. On a
 direct invocation, report the exact next skill and stop until the user
 explicitly invokes it.
 
+Before dispatch and again before completion, apply AGENTS.md's pending
+discussion-answer contract. Resolve an answer owned by synthesis in
+SYNTHESIS.md and append a disposition receipt; otherwise block with links to
+ANSWERS.md and the target artifact rather than settling stale decisions.
+
 ## Preconditions
 
 Require `pipeline: gsd-path/v1` in `.project/STATE.md`; a missing or different
@@ -49,9 +54,13 @@ every additional `evidence-*.md` file present only when the manifest names it.
    under logical task name `synthesize`, following the runtime dispatch
    contract, and validate again. If it still fails, set STATE.md to
    `phase: synthesize`, `status: blocked`, append the failures to its log, and
-   stop.
-5. Present the decision list and every `NEEDS-USER` item. Use an interactive
-   user-input tool when available; otherwise ask in chat and wait. Present
+   present **Outcome** with the failed gate, **Review** linking SYNTHESIS.md or
+   STATE.md when it is missing, and **Next** naming the one correction or user
+   decision required; then stop.
+5. Present the decision-list outcome and a Markdown link to the resolved
+   absolute `.project/research/SYNTHESIS.md` path before every `NEEDS-USER`
+   item. Use an interactive user-input tool when available; otherwise ask in
+   chat and wait. Present
    each item's options with the evidence-preferred option first, marked
    `(recommended)` and justified in one line; a pure values call with no
    evidence either way carries no recommendation, stated as such. For each
@@ -59,10 +68,11 @@ every additional `evidence-*.md` file present only when the manifest names it.
    decision so it reflects the ruling, and only then remove its tag.
 6. Re-run the structural gate. When it passes with no unresolved user items,
    set STATE.md to `phase: synthesize`, `status: done`, append the transition
-   to its log. When routed by an active `$gsd-path`, return control to that
-   router. When invoked directly, stop and tell the user to explicitly invoke
-   `$gsd-path` or `$gsd-path-plan`; do not invoke an explicit-only sibling skill
-   yourself.
+   to its log. Confirm the settled outcome, link SYNTHESIS.md again, and name
+   planning as next. When routed by an active `$gsd-path`, return control to
+   that router. When invoked directly, stop and tell the user to explicitly
+   invoke `$gsd-path` or `$gsd-path-plan`; do not invoke an explicit-only
+   sibling skill yourself.
 
 ## Rules
 

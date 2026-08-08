@@ -32,6 +32,10 @@ class SyncSkillResourcesTests(unittest.TestCase):
             generated = root / "skills" / "gsd-path-build" / "references" / "coder.md"
             if generated.exists():
                 generated.unlink()
+            discussion_template = (
+                root / "skills" / "gsd-path-discuss" / "templates" / "dialogue.md"
+            )
+            discussion_template.unlink()
 
             missing = self.run_sync(root, "--check")
             self.assertNotEqual(missing.returncode, 0)
@@ -39,6 +43,10 @@ class SyncSkillResourcesTests(unittest.TestCase):
             sync = self.run_sync(root)
             self.assertEqual(sync.returncode, 0, sync.stderr)
             self.assertTrue(generated.is_file())
+            self.assertEqual(
+                discussion_template.read_bytes(),
+                (root / "skills" / "gsd-path" / "templates" / "dialogue.md").read_bytes(),
+            )
 
             clean = self.run_sync(root, "--check")
             self.assertEqual(clean.returncode, 0, clean.stderr)
@@ -73,7 +81,7 @@ class SyncSkillResourcesTests(unittest.TestCase):
 
     def test_distribution_is_self_contained_and_explicit_only(self) -> None:
         skill_directories = sorted((PROJECT_ROOT / "skills").glob("gsd-path*"))
-        self.assertEqual(len(skill_directories), 9)
+        self.assertEqual(len(skill_directories), 10)
 
         link_pattern = re.compile(r"\[[^]]+\]\(([^)#]+)(?:#[^)]*)?\)")
         for skill_directory in skill_directories:
@@ -138,6 +146,7 @@ class SyncSkillResourcesTests(unittest.TestCase):
         review_contract = (PROJECT_ROOT / "skills" / "gsd-path-review" / "SKILL.md").read_text()
         self.assertIn("Always include PLAN.md's project", review_contract)
         self.assertIn("blocked gap with valid evidence", review_contract)
+        self.assertIn("Archive and ship (recommended)", review_contract)
         docs_audit_contract = (
             PROJECT_ROOT / "skills" / "gsd-path-docs-audit" / "SKILL.md"
         ).read_text()
@@ -145,9 +154,22 @@ class SyncSkillResourcesTests(unittest.TestCase):
         self.assertIn("`shipped/done`", docs_audit_contract)
         grill_contract = (PROJECT_ROOT / "skills" / "gsd-path-grill" / "SKILL.md").read_text()
         self.assertIn("appended to DOCS-AUDIT.md's `## User rulings` table", grill_contract)
+        self.assertIn("Classify the proposed milestone lane before writing", grill_contract)
         router_contract = (PROJECT_ROOT / "skills" / "gsd-path" / "SKILL.md").read_text()
         self.assertIn("treat it as orphaned active pipeline", router_contract)
         self.assertIn("artifacts or foreign state", router_contract)
+        self.assertIn("bootstrap_repository.py", router_contract)
+        self.assertIn("REPOSITORY.md", router_contract)
+
+        discussion_contract = (
+            PROJECT_ROOT / "skills" / "gsd-path-discuss" / "SKILL.md"
+        ).read_text()
+        self.assertIn("Accept any active milestone phase except `shipped`", discussion_contract)
+        self.assertIn(".project/discuss/DIALOGUE.md", discussion_contract)
+        self.assertIn(".project/discuss/ANSWERS.md", discussion_contract)
+        self.assertIn("Do not launch the full `$gsd-path-research` phase", discussion_contract)
+        self.assertIn("stable thread id", discussion_contract)
+        self.assertIn("Disposition X###", discussion_contract)
 
         readme = (PROJECT_ROOT / "README.md").read_text()
         self.assertNotIn("cp -n AGENTS.md WORKFLOW.md", readme)

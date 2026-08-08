@@ -21,17 +21,6 @@ export const TARGETS = [
   "kiro",
   "kimi",
 ];
-export const SKILL_NAMES = [
-  "gsd-path",
-  "gsd-path-build",
-  "gsd-path-docs-audit",
-  "gsd-path-grill",
-  "gsd-path-onboard",
-  "gsd-path-plan",
-  "gsd-path-research",
-  "gsd-path-review",
-  "gsd-path-synthesize",
-];
 export const CLAUDE_BRIDGE = "@../AGENTS.md\n@../WORKFLOW.md\n";
 export const HOOKS_DIRECTORY = ".gsd-path";
 export const GUARD_SCRIPTS = ["guard_hook.py", "git_guard.py"];
@@ -100,6 +89,11 @@ const SCRIPT_DIRECTORY = path.dirname(new URL(import.meta.url).pathname);
 const MANIFEST = JSON.parse(
   fs.readFileSync(path.join(SCRIPT_DIRECTORY, "skill-resources.json"), "utf8")
 );
+export function skillNamesForManifest(manifest) {
+  return [...manifest.skills];
+}
+
+export const SKILL_NAMES = skillNamesForManifest(MANIFEST);
 const PHASE_RESOURCES = MANIFEST.phase_resources;
 const SCRIPT_TARGETS = MANIFEST.script_targets;
 const PHASE_CONTRACT_TARGETS = MANIFEST.phase_contract_targets;
@@ -335,7 +329,8 @@ function validateSource(sourceRoot, profiles) {
   const expected = new Set(SKILL_NAMES);
   if (found.length !== expected.size || !found.every((name) => expected.has(name))) {
     throw new InstallerError(
-      "expected exactly nine GSD Path skills; found " + [...found].sort().join(", ")
+      `expected exactly ${SKILL_NAMES.length} GSD Path skills; found ` +
+        [...found].sort().join(", ")
     );
   }
   for (const name of SKILL_NAMES) {
@@ -1017,12 +1012,13 @@ function installResult(plan, dryRun = false, update = false) {
   const verb = update ? "update" : "install";
   const action = dryRun ? `would ${verb}` : `${verb}${update ? "d" : "ed"}`;
   const label = plan.targets.join("+");
+  const skillCount = SKILL_NAMES.length;
   if (plan.profile === "cursor") {
     const agent = path.join(path.dirname(plan.root), "agents", CURSOR_AGENT_FILENAME);
-    return `${label}: ${action} 9 skills to ${plan.root} and custom subagent to ${agent}`;
+    return `${label}: ${action} ${skillCount} skills to ${plan.root} and custom subagent to ${agent}`;
   }
   const shared = plan.profile === SHARED_AGENT_PROFILE ? " shared" : "";
-  return `${label}: ${action} 9${shared} skills to ${plan.root}`;
+  return `${label}: ${action} ${skillCount}${shared} skills to ${plan.root}`;
 }
 
 function managedEntryCount(plan) {

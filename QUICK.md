@@ -90,6 +90,8 @@ In the **project directory**, type explicitly:
 Not triggered by “continue the project.”
 
 **One phase only?** e.g. `/gsd-path-plan` — see skill table in [DOCS.md](DOCS.md#using).
+Need to talk through a question without advancing? Use `/gsd-path-discuss`;
+Codex invokes it as `$gsd-path-discuss`.
 
 ---
 
@@ -101,7 +103,7 @@ Not triggered by “continue the project.”
 | Synthesize | Resolve `NEEDS-USER` |
 | Plan | **Approve wave summary** before build |
 | Build | Escalations only |
-| Review | Approve patch wave if blocked |
+| Review | Approve patch waves if blocked; approve archive and ship when green |
 
 ---
 

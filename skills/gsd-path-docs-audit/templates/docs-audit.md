@@ -25,8 +25,17 @@ Worst drift: <one sentence — the most misleading claim found>
 |-------|------|---------|----------|
 | "<claim, short-quoted>" | command \| feature \| structure \| status \| config \| integration | verified \| stale \| aspirational \| unverifiable | <file:line or command → result> |
 
-<!-- One section per inventoried doc. Descriptive docs get a one-line
-     section: "descriptive — no testable claims." -->
+<!-- One section per doc that has at least one testable claim. Docs without
+     testable claims go in the Descriptive docs list below, never in their
+     own section. -->
+
+## Descriptive docs
+
+<!-- Every inventoried doc with no testable claims, one path per line.
+     The union of this list and the Doc section paths must equal the frozen
+     inventory exactly. -->
+
+- <path/to/doc.md>
 
 ## Alignment (alignment mode only)
 

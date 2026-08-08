@@ -14,6 +14,11 @@ router or orchestrator supplied this contract, return control to it. On a
 direct invocation, report the exact next skill and stop until the user
 explicitly invokes it.
 
+Before interview work and again before approval, apply AGENTS.md's pending
+discussion-answer contract. Resolve an answer owned by the grill in INTENT.md
+and append a disposition receipt; otherwise block with links to ANSWERS.md and
+the target artifact rather than approving stale intent.
+
 ## State ownership
 
 If STATE.md exists, require `pipeline: gsd-path/v1`; a missing or different
@@ -31,6 +36,15 @@ may initialize STATE.md directly from the local
 the working-directory name, `pipeline: gsd-path/v1`, `phase: grill`,
 `status: active`, `milestone: null`, `branch: null`, `archive: null`, and an
 initialization Log entry. No template placeholder may remain.
+
+The router's verified new-GitHub-repository transaction is the sole greenfield
+exception: STATE.md already exists at `grill/active`, `branch` is the approved
+`gsd-path/<project-slug>` branch, and `.project/REPOSITORY.md` contains the
+fixed-format remote, remote-default SHA, clean default checkout, branch, and
+primary worktree. Verify that artifact and the current branch/worktree before
+interviewing. The bootstrap README does not make this routed project
+brownfield. A missing or mismatched binding returns to `$gsd-path`; never infer
+it from STATE log prose or repair it inside the grill.
 
 ## Coverage checklist
 
@@ -93,28 +107,35 @@ first question. The rules change:
    false.
 5. Stop when coverage is complete or the user says `enough`. Record remaining
    uncertainty under `## Open questions` with `RESEARCH` or `NEEDS-USER`.
-6. Read the local [intent template](templates/intent.md), draft
-   `.project/intent/INTENT.md`, show the Summary section, and obtain explicit
-   approval. Record corrections verbatim under `## Corrections` before asking
-   again.
+6. Classify the proposed milestone lane before writing the approval draft:
+   `quick` when scope fits at most two deliverable-sized tasks in one wave with
+   no `RESEARCH` or `NEEDS-USER` items and no cross-wave integration risk;
+   otherwise `standard`. Read the local [intent template](templates/intent.md),
+   write that proposed lane and the complete draft to
+   `.project/intent/INTENT.md`, then ask for approval. Present an
+   **Outcome** playback of the Summary and proposed lane, a **Review** Markdown
+   link to the resolved absolute INTENT.md path, and one **Next** approval
+   question with approve first as `(recommended)` only when the evidence
+   supports it. Record corrections verbatim under `## Corrections`, update the
+   file, and present the new link before asking again. When STATE records a new
+   new-GitHub REPOSITORY.md binding, include its remote, default checkout, GSD
+   Path branch, and primary worktree under `## Constraints`. Recompute and write
+   the lane after every correction before relinking the file.
 
 ## Output contract
 
-At approval, classify the milestone lane and record it in INTENT.md's
-`Lane:` line, stating it in the playback with a one-line reason: `quick`
-when scope fits at most two deliverable-sized tasks in one wave with no
-`RESEARCH` or `NEEDS-USER` items and no cross-wave integration risk;
-otherwise `standard`.
+At approval, retain the already reviewed `Lane:` value and its one-line reason.
 
 After approval, finalize `.project/intent/INTENT.md` and update STATE.md to
 `phase: grill`, `status: done`, set its `milestone` field to this
 milestone's slug, and append the transition to its log. Report that research
 is next — or, quick lane, that planning is next and research and synthesize
-are skipped. When routed by an active `$gsd-path`, return control to
-that router so its bundled next contract can auto-advance (research, or plan
-in quick mode). When invoked directly, stop and tell the user to explicitly
-invoke `$gsd-path`, `$gsd-path-research`, or — quick lane — `$gsd-path-plan`;
-do not invoke an explicit-only sibling skill yourself.
+are skipped. Confirm the approved outcome, link the final INTENT.md again, and
+name that next phase before routing. When routed by an active `$gsd-path`,
+return control to that router so its bundled next contract can auto-advance
+(research, or plan in quick mode). When invoked directly, stop and tell the
+user to explicitly invoke `$gsd-path`, `$gsd-path-research`, or — quick lane —
+`$gsd-path-plan`; do not invoke an explicit-only sibling skill yourself.
 
 ## Rules
 

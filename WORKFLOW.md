@@ -2,7 +2,8 @@
 
 Idea to shipped code through a gated pipeline. The `gsd-path` router reads
 `.project/STATE.md`, reports the current state, and invokes the next skill.
-Every handoff is on disk; AGENTS.md supplies the shared operating rules.
+Every handoff is on disk; the any-phase discussion sidecar also records its
+dialogue and answers on disk. AGENTS.md supplies the shared operating rules.
 
 ## Agent and concurrency contract
 
@@ -40,8 +41,39 @@ cancellation is a blocked result, not a skipped result.
 | archive | none | coordinator-led transaction | validate the `.project`-only ship commit |
 
 Non-interactive phases auto-advance when their artifacts pass their gates.
-User approval remains required at grill, synthesis, plan, final-review patch
-selection, and final shipping checkpoints.
+User approval remains required at grill, plan, final-review patch selection,
+and final shipping checkpoints. Synthesis auto-advances after its evidence gate
+unless a `NEEDS-USER` decision remains.
+
+Every user-facing checkpoint follows one handoff shape: **Outcome** states what
+was produced or learned, **Review** links the primary canonical artifact by its
+resolved absolute path, and **Next** asks the single required question or names
+the next action. Supporting artifacts are summarized or linked only when they
+help the decision. Write the artifact before asking, never present a bare
+approval question, and after the answer relink the updated artifact before the
+router continues or a direct invocation names its exact next skill.
+
+### New GitHub repository creation
+
+An explicit request to create a GitHub repository enters a pre-initialization
+gate. Resolve and preview the GitHub owner/name, visibility, normal default
+checkout, `gsd-path/<project-slug>` branch, and a distinct linked-worktree path.
+Create no repository, checkout, worktree, pipeline state, journal, or preview
+file until the user approves every target; present the pre-creation review
+inline from the bootstrap helper's read-only `preview` result.
+
+After approval, the bundled bootstrap helper writes an exact transaction
+journal under the approved workspace before mutation. Its `create` command
+creates or verifies the GitHub repository and bootstrap README, clones the
+default branch, resolves its exact SHA, creates or adopts the approved GSD Path
+branch and linked worktree at that SHA, then publishes STATE.md and a
+fixed-format `.project/REPOSITORY.md` together with one same-filesystem
+`.project/` directory rename. The default checkout remains clean,
+and all pipeline artifacts live only in the linked worktree. A retry with the
+same approved targets resumes from the first missing stage; any mismatch or
+unowned collision blocks without deletion. The journal is removed only after
+both artifacts are durable. Existing repositories do not pass through this
+transaction.
 
 ## Phase 0 — Onboard (`gsd-path-onboard`, brownfield only)
 
@@ -75,8 +107,10 @@ The orchestrator presents ground truth in one screen — what the project is,
 what demonstrably works, where docs and code disagree — then enters the
 grill in brownfield mode. Onboarding changes nothing outside `.project/`.
 
-**Gate:** both artifacts match their templates; every inventoried doc has a
-verdict; ground truth was presented before any question was asked.
+**Gate:** both artifacts match their templates; every claim has a verdict and
+every claimless doc appears once in the descriptive list, together covering
+the frozen inventory exactly; ground truth was presented before any question
+was asked.
 
 ## Phase 1 — Grill (`gsd-path-grill`)
 
@@ -109,7 +143,8 @@ permitted, at most two tasks) without a planner agent, and the rest of the
 pipeline runs unchanged. A quick plan that outgrows those bounds corrects the
 lane to `standard` and reroutes through research.
 
-**Gate:** the user approves the playback summary, including the lane.
+**Gate:** the user receives the playback summary, lane, and absolute-path
+Markdown link to INTENT.md before approving it.
 
 ## Phase 2 — Research (`gsd-path-research`)
 
@@ -315,7 +350,8 @@ STATE.archive is a write-ahead transaction id. The bundled Python archive helper
 chooses one plus the maximum numeric prefix, persists the exact target before
 creating or moving, and reuses it on every retry. Shipping moves — never
 deletes — every supporting document into that numbered archive: `intent/`,
-`research/`, `plan/`, `tasks/`, `review/`, and `BOARD.md`. MANIFEST.md is
+`research/`, `plan/`, `tasks/`, `review/`, optional `discuss/`, and `BOARD.md`.
+REPOSITORY.md and LESSONS.md remain active project metadata. MANIFEST.md is
 written by same-directory temporary file plus atomic rename and lists actual
 archive contents, ship date, final verdicts, wave/task/cycle counts, and
 carried-forward items. A precommit helper gate validates canonical files, the
@@ -344,6 +380,12 @@ write-ahead rename is removed only by `prepare`. A crash after STATE becomes
 target is absent from HEAD, then creates the single ship commit without
 rewriting the transition.
 
+If discussion resumes after `prepare` but before the ship commit, it copies the
+archived pair back to active storage and appends there. A repeated `prepare`
+accepts only a complete, valid active pair whose bytes extend both archived
+files, atomically replaces the archived records, removes the active copy, and
+forces manifest regeneration. Divergence or an incomplete pair blocks.
+
 The review phase closes the milestone with its only commit: the shipped
 STATE.md, the final-review artifacts, and the archive move with its
 MANIFEST.md, staged from `.project/` only, subject
@@ -357,6 +399,56 @@ with the exact ship subject in HEAD history, `.project/`-only paths in that
 commit, and no `.project` change after it before the router reports shipped or
 starts a new milestone. Product commits after shipping do not disturb a
 validated shipment.
+
+## Standing process — Discussion (`gsd-path-discuss`)
+
+Runs as an explicit sidecar from any active non-shipped phase: `onboard`,
+`grill`, `research`, `synthesize`, `plan`, `build`, or `review`. It does not
+advance the pipeline, own STATE.md, or edit a phase handoff. A shipped
+milestone is archived and must not be reopened for discussion; start a new
+milestone first.
+
+**Input:** the current user question, `AGENTS.md`, `WORKFLOW.md`,
+`.project/STATE.md`, the existing `.project/discuss/` records, and the
+phase-specific artifacts and code needed to answer it. **Output:**
+`.project/discuss/DIALOGUE.md` and `.project/discuss/ANSWERS.md`.
+
+The discussion skill never commits. The current phase orchestrator verifies
+that each change is append-only and includes it in the next normal `.project/`
+checkpoint. During build this happens before the next clean layer base; during
+review the records move into the archive and enter the single ship commit.
+
+The discussion skill reads intent vetoes, settled synthesis decisions, and
+current plan/task contracts as governing constraints. It checks the smallest
+relevant code paths, callers, tests, and artifacts, distinguishes fact from
+inference, and pushes back on unsupported premises with cited reasoning. It
+records the user's corrections, vetoes, decisions, evidence, confidence,
+unresolved `RESEARCH`/`NEEDS-USER` items, and the phase owner for follow-up.
+
+Use existing research evidence first. If a current external fact, unfamiliar
+library behavior, or unresolved risk requires more evidence, perform focused
+research and record its query, sources, and confidence. Do not launch the full
+research phase from an arbitrary phase: its STATE transition and RESEARCH.md
+handoff belong to the router and research skill. If the answer needs formal
+milestone evidence, leave a tagged follow-up for that owner.
+
+Append one verbatim user turn and assistant answer to DIALOGUE.md, plus one
+self-contained answer record to ANSWERS.md, before returning the response.
+The bundled deterministic helper locks STATE, validates or recovers the pair,
+allocates IDs and lineage, journals the paired publication, reports pending
+receipts, and appends dispositions; the model supplies only the grounded
+semantic fields.
+Every record carries stable `T###` thread identity, `D###`/`A###` linkage, and
+supersession. Mark a bounded resolved answer `final`; use `working` only for an
+explicitly provisional turn. A required formal follow-up remains pending until
+the named owner appends a `Disposition X###` receipt. The router and every phase
+scan pending receipts before work and before advancement; they apply the answer
+through a legal gate or block visibly rather than continuing from stale input.
+A final discussion answer is durable context, not approval by itself.
+
+**Gate:** the two append-only records exist, include the current phase/status,
+and contain the evidence, research status, confidence, unresolved items, and
+next owner needed to resume without chat history.
 
 ## Standing process — Docs audit (`gsd-path-docs-audit`)
 
@@ -398,6 +490,7 @@ with their exact ordered source-file and row list.
 ```text
 .project/
   STATE.md                   pipeline owner, phase, branch, archive transaction, log
+  REPOSITORY.md              persistent new-GitHub checkout/worktree binding
   LESSONS.md                 cross-milestone lessons; appended at ship, read by the planner
   intent/INTENT.md           approved intent and hard constraints
   research/evidence-codebase.md   brownfield ground truth (onboard)
@@ -412,12 +505,14 @@ with their exact ordered source-file and row list.
   review/final-gap-N.md      cross-wave gap verdicts
   review/FINAL.md            success-criteria verdicts
   review/PATCH-FINDINGS.md   ordered evidenced findings for patch planning
+  discuss/DIALOGUE.md        append-only any-phase discussion transcript
+  discuss/ANSWERS.md         append-only discussion answers and decisions
   archive/<NNN>-<slug>/      read-only shipped milestones, each with MANIFEST.md
 ```
 
-At ship, everything except `STATE.md`, `LESSONS.md`, and `archive/` moves
+At ship, everything except `STATE.md`, `REPOSITORY.md`, `LESSONS.md`, and `archive/` moves
 into the numbered archive; active paths above describe the current milestone
-only. The ship step appends one lesson line per repeat-offender criterion and
+only, including the discussion records. The ship step appends one lesson line per repeat-offender criterion and
 BOARD escalation to LESSONS.md before committing.
 
 Artifact formats are bundled with the installed `gsd-path` skill. Each phase

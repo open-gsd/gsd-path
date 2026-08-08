@@ -30,17 +30,13 @@ TARGETS = (
     "kiro",
     "kimi",
 )
-SKILL_NAMES = (
-    "gsd-path",
-    "gsd-path-build",
-    "gsd-path-docs-audit",
-    "gsd-path-grill",
-    "gsd-path-onboard",
-    "gsd-path-plan",
-    "gsd-path-research",
-    "gsd-path-review",
-    "gsd-path-synthesize",
-)
+
+
+def skill_names_for_manifest(manifest: Mapping) -> Tuple[str, ...]:
+    return tuple(manifest["skills"])
+
+
+SKILL_NAMES = skill_names_for_manifest(sync_skill_resources.RESOURCE_MANIFEST)
 CLAUDE_BRIDGE = "@../AGENTS.md\n@../WORKFLOW.md\n"
 HOOKS_DIRECTORY = ".gsd-path"
 GUARD_SCRIPTS = ("guard_hook.py", "git_guard.py")
@@ -239,7 +235,8 @@ def validate_source(source_root: Path, profiles: Sequence[str]) -> Tuple[str, ..
     }
     if found != set(SKILL_NAMES):
         raise InstallerError(
-            "expected exactly nine GSD Path skills; found " + ", ".join(sorted(found))
+            f"expected exactly {len(SKILL_NAMES)} GSD Path skills; found "
+            + ", ".join(sorted(found))
         )
     for name in SKILL_NAMES:
         skill = skills_root / name
@@ -749,14 +746,15 @@ def _append_host_notes(results: List[str], selected: Sequence[str]) -> None:
 def _install_result(plan: DeploymentPlan, dry_run: bool = False) -> str:
     action = "would install" if dry_run else "installed"
     label = "+".join(plan.targets)
+    skill_count = len(SKILL_NAMES)
     if plan.profile == "cursor":
         agent = plan.root.parent / "agents" / CURSOR_AGENT_FILENAME
         return (
-            f"{label}: {action} 9 skills to {plan.root} "
+            f"{label}: {action} {skill_count} skills to {plan.root} "
             f"and custom subagent to {agent}"
         )
     shared = " shared" if plan.profile == SHARED_AGENT_PROFILE else ""
-    return f"{label}: {action} 9{shared} skills to {plan.root}"
+    return f"{label}: {action} {skill_count}{shared} skills to {plan.root}"
 
 
 def _managed_entry_count(plan: DeploymentPlan) -> int:

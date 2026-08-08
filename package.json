@@ -11,6 +11,8 @@
     "scripts/install.mjs",
     "scripts/skill-resources.json",
     "scripts/archive_milestone.py",
+    "scripts/bootstrap_repository.py",
+    "scripts/discussion_records.py",
     "scripts/check_handoffs.py",
     "scripts/check_update.py",
     "scripts/guard_hook.py",

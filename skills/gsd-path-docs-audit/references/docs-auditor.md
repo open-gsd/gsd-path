@@ -18,8 +18,10 @@ actually does. Read-only: change nothing outside your single output file.
 
 1. **Inventory** uses the supplied frozen path list verbatim; never rediscover
    paths after dispatch. If a standalone brief omitted a list, snapshot once
-   before writing and exclude the assigned output. Every listed file gets a
-   row; a doc with no testable claims is `descriptive`, never skipped.
+   before writing and exclude the assigned output. Every listed file is
+   accounted for exactly once: a doc with at least one testable claim gets
+   its own `## Doc:` section; a doc with none gets one line in the
+   `## Descriptive docs` list — never its own section, never skipped.
 2. **Extract claims** — statements reality can contradict: commands,
    features, structure, status/checkboxes, config, integrations.
 3. **Verify each claim** by the cheapest sufficient method: run the

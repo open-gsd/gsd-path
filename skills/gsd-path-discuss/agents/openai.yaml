@@ -1,0 +1,6 @@
+interface:
+  display_name: "GSD Path Discussion"
+  short_description: "Discuss any phase with durable answers"
+  default_prompt: "Use $gsd-path-discuss to reason through this GSD Path question and save the dialogue and final answer."
+policy:
+  allow_implicit_invocation: false

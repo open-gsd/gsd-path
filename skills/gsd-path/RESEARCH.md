@@ -15,6 +15,11 @@ router or orchestrator supplied this contract, return control to it. On a
 direct invocation, report the exact next skill and stop until the user
 explicitly invokes it.
 
+Before dispatch and again before completion, apply AGENTS.md's pending
+discussion-answer contract. Resolve an answer owned by research through its
+evidence handoff and append a disposition receipt; otherwise block with links
+to ANSWERS.md and the target artifact rather than advancing stale evidence.
+
 ## Preconditions
 
 Require `pipeline: gsd-path/v1` in `.project/STATE.md`; a missing or different
@@ -84,13 +89,17 @@ settled brownfield input.
 5. Redispatch one complete corrected brief under the same logical task name for
    each missing or invalid file, following the runtime dispatch contract. If
    any expected file still fails, set STATE.md to `phase: research`, `status:
-   blocked`, list the failures in the log, and stop. Never advance with partial
-   research.
+   blocked`, list the failures in the log, then present **Outcome** with the
+   failed gate, **Review** linking RESEARCH.md or STATE.md when the manifest is
+   missing, and **Next** naming the one correction or user decision required.
+   Stop; never advance with partial research.
 6. When all dispatched files and `RESEARCH.md` pass, set STATE.md to
    `phase: research`, `status: done`, and append a transition log naming the
    manifest path, dispatched dimensions, skipped dimensions, and question
-   count. Synthesis reads the manifest; it must not infer dispatch state from a
-   glob or free-form log. When routed by an active
+   count. Report the outcome, link the resolved absolute `RESEARCH.md` path,
+   summarize the dispatched evidence files, and name synthesis as next.
+   Synthesis reads the manifest; it must not infer dispatch state from a glob
+   or free-form log. When routed by an active
    `$gsd-path`, return control to that router. When invoked directly, stop and
    tell the user to explicitly invoke `$gsd-path` or `$gsd-path-synthesize`;
    do not invoke an explicit-only sibling skill yourself.

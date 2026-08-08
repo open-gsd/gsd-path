@@ -53,6 +53,10 @@ gsd-path  (router: reads STATE.md, runs the next valid phase)
   contracts in one conversation when you want the full flow.
 - **Phase skills** (`gsd-path-plan`, `/gsd-path-build`, …): run one phase and
   stop at its handoff. Invoke the router or the next phase explicitly to continue.
+- **Discussion sidecar** (`gsd-path-discuss`, `/gsd-path-discuss`): can run at
+  any non-shipped phase to answer a question, ground it in code and artifacts,
+  use focused research when needed, and save the dialogue and answer without
+  changing phase state.
 
 All skills are **explicit-only** on most hosts — generic “continue the project”
 does not inject the pipeline. On OpenCode stable, Antigravity CLI, and Kiro,
@@ -173,11 +177,16 @@ Open your agent in the project directory. Invoke the router explicitly.
 
 ### Greenfield (empty or new milestone)
 
-No `.project/STATE.md` in an empty tree → **grill** immediately.
+No `.project/STATE.md` in an existing empty checkout → **grill** immediately.
+For an explicit request to create a new GitHub repository, the router first
+previews the repository and linked-worktree targets for approval as described
+in [README.md](README.md#the-flow).
 
 The grill interviews across: problem, users, observable success, scope in,
-scope out (vetoes), constraints, risks. It challenges contradictions and ends
-with a **playback summary** you approve → `.project/intent/INTENT.md`.
+scope out (vetoes), constraints, risks. It challenges contradictions, writes a
+complete `.project/intent/INTENT.md` draft with the proposed `quick` or
+`standard` lane, and links that draft alongside its **playback summary** before
+asking for approval.
 
 Vetoes in INTENT.md are hard limits for every later phase.
 
@@ -213,7 +222,12 @@ After intent approval, the router walks phases and stops at gates.
 | **Synthesize** | `research/SYNTHESIS.md` | Resolve `NEEDS-USER` at checkpoint |
 | **Plan** | `plan/PLAN.md`, `tasks/T###-slug.md` | **Approve wave summary** |
 | **Build** | code, commits, `BOARD.md` | Escalations only |
-| **Review** | `review/wave-*.md`, `review/FINAL.md` | Approve patch waves if blocked |
+| **Review** | `review/wave-*.md`, `review/FINAL.md` | Approve patch waves if blocked and final shipping when green |
+
+The discussion sidecar is available alongside every row above. It writes
+`discuss/DIALOGUE.md` and `discuss/ANSWERS.md`; a `final` answer records context
+but does not approve or advance a phase. A required follow-up blocks automatic
+advancement until its named owner appends a disposition receipt.
 
 ### Research
 
@@ -249,9 +263,11 @@ Wave reviews after each build wave; final review audits every success criterion
 
 ## Shipping
 
-Passing the final gate triggers **archive**:
+Passing the final gate produces a final review surface. After you explicitly
+approve **Archive and ship**, the archive transaction begins:
 
-- Artifacts (except active `STATE.md`) move to `.project/archive/<NNN>-<slug>/`
+- Milestone artifacts move to `.project/archive/<NNN>-<slug>/`; `STATE.md`,
+  `REPOSITORY.md`, and `LESSONS.md` remain active project metadata
 - `MANIFEST.md` records contents and ship metadata
 - One **ship commit** (subject `ship: …`) touches only `.project/`
 - Archives are **read-only** — guard hooks enforce this if installed
@@ -268,6 +284,7 @@ Everything durable lives in `.project/`:
 ```text
 .project/
   STATE.md                 phase, branch, archive transaction id
+  REPOSITORY.md            persistent new-GitHub checkout/worktree binding
   intent/INTENT.md
   research/RESEARCH.md     dispatch manifest
   research/SYNTHESIS.md
@@ -275,6 +292,8 @@ Everything durable lives in `.project/`:
   tasks/T###-slug.md       base SHA, worktree, status, commit
   BOARD.md
   review/…
+  discuss/DIALOGUE.md       any-phase discussion transcript
+  discuss/ANSWERS.md        durable discussion answers and decisions
   archive/<NNN>-slug>/     read-only shipped milestones
 ```
 
