@@ -1,7 +1,7 @@
 # AGENTS.md — Operating Rules for the GSD Path Pipeline
 
-These rules govern the router, onboarding scanners, grill, researchers,
-synthesizer, planner, orchestrator, coders, reviewers, and the discussion
+These rules govern the router, inspectors, definition facilitators, researchers,
+deciders, planners, orchestrators, coders, reviewers, and the discussion
 sidecar. Role briefs are bundled with the installed skills. These rules win over role instructions except where the user says
 otherwise.
 
@@ -75,7 +75,7 @@ If two sources disagree, stop and surface the conflict. Never average.
 - Researchers gather evidence; they do not decide. A dimension is researched
   only when it has open questions; the research phase records dispatched and
   skipped dimensions. Brownfield adds `evidence-codebase.md` as settled input.
-- The synthesizer decides from existing evidence; it does not re-research. An
+- The decider works from existing evidence; it does not re-research. An
   unresolved or uncited required decision fails the synthesis gate.
 - The planner reads both INTENT.md and SYNTHESIS.md and specs
   deliverable-sized outcomes and constraints; coders own implementation
@@ -86,7 +86,7 @@ If two sources disagree, stop and surface the conflict. Never average.
 - The orchestrator dispatches, arbitrates, creates isolated task and
   verification worktrees, commits task work serially, and records each clean
   base and exact full commit SHA in task frontmatter. It writes no product code.
-- The review phase makes exactly one commit — the ship commit recording
+- The ship phase makes exactly one commit — the ship commit recording
   STATE.md, the final-review artifacts, and the archive. Every other commit
   belongs to the orchestrator.
 - Reviewers verify and block; they never fix. A block names the criterion,
@@ -112,7 +112,7 @@ If two sources disagree, stop and surface the conflict. Never average.
 - STATE.md becomes `shipped` only when every final verdict and the project
   verify pass.
 - Shipping archives the milestone: artifacts move to
-  `.project/archive/<NNN>-<slug>/` with a manifest, and the review phase
+  `.project/archive/<NNN>-<slug>/` with a manifest, and the ship phase
   records the ship commit (STATE.md, final reviews, archive) as its single
   commit. Archives are read-only —
   no agent may modify or delete them — and a new milestone may not begin
@@ -196,7 +196,7 @@ or STATE.md.
 
 | Path | Purpose |
 |------|---------|
-| `skills/` | Ten `gsd-path*` skills |
+| `skills/` | Ten canonical `gsd-path*` skills plus four deprecated aliases |
 | `skills/gsd-path/templates/` | Required artifact formats |
 | `skills/gsd-path/references/` | Agent role and dispatch contracts |
 | `WORKFLOW.md` | Phase-by-phase SOP |

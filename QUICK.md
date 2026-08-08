@@ -10,8 +10,8 @@
 
 ## What you get
 
-One router skill drives a gated pipeline: interview → research → plan → build →
-review → ship. Every handoff lives in `.project/` so any session can resume from disk.
+One router skill drives a gated pipeline: inspect → define → research → decide →
+plan → build → ship. Every handoff lives in `.project/` so any session can resume from disk.
 
 **Hosts:** Codex, Claude Code, Grok, OpenCode, Copilot CLI, Qwen, Antigravity,
 Cursor, Zed, Kiro, Kimi Code.
@@ -99,11 +99,11 @@ Codex invokes it as `$gsd-path-discuss`.
 
 | When | You |
 | --- | --- |
-| Grill | Answer; approve playback |
-| Synthesize | Resolve `NEEDS-USER` |
+| Define | Answer; approve playback |
+| Decide | Resolve `NEEDS-USER` |
 | Plan | **Approve wave summary** before build |
 | Build | Escalations only |
-| Review | Approve patch waves if blocked; approve archive and ship when green |
+| Ship | Approve patch waves if blocked; approve archive and ship when green |
 
 ---
 
@@ -127,7 +127,7 @@ node scripts/install.mjs --hooks-refresh --project "$(pwd)"  # guard scripts
 ## Phase map
 
 ```text
-onboard (brownfield) → grill → research → synthesize → plan → build → review → ship
+inspect (brownfield) → define → research → decide → plan → build → ship
 ```
 
 Artifacts: [README.md](README.md#handoff-contract)

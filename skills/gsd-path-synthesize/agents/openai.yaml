@@ -1,6 +1,6 @@
 interface:
-  display_name: "GSD Path Synthesize"
-  short_description: "Turn evidence into settled project decisions"
-  default_prompt: "Use $gsd-path-synthesize to turn the project evidence into settled implementation decisions."
+  display_name: "GSD Path Synthesize (Deprecated)"
+  short_description: "Compatibility alias for GSD Path Decide"
+  default_prompt: "Use $gsd-path-synthesize as the deprecated alias for $gsd-path-decide."
 policy:
   allow_implicit_invocation: false

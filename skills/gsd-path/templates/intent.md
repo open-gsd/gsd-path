@@ -1,12 +1,12 @@
 # Intent — <project name>
 
-<!-- Written by $gsd-path-grill. Every downstream agent reads this first.
+<!-- Written by $gsd-path-define. Every downstream agent reads this first.
      Constraints and vetoes here override everything downstream. -->
 
 Lane: standard   <!-- standard | quick — quick: at most two deliverable-sized
                       tasks in one wave, no RESEARCH or NEEDS-USER items, no
-                      cross-wave risk; set by the grill at approval. Quick
-                      skips research and synthesize. -->
+                      cross-wave risk; set by define at approval. Quick
+                      skips research and decide. -->
 
 ## Summary
 
@@ -42,7 +42,7 @@ paragraph the user signed off on — do not edit without a new sign-off.>
 
 ## Current state (brownfield only)
 
-<!-- Filled from evidence-codebase.md during a brownfield grill. Omit the
+<!-- Filled from evidence-codebase.md during brownfield define. Omit the
      section entirely for greenfield projects. -->
 - **What exists**: <stack, architecture, maturity in 2–3 sentences>
 - **Must not break**: <existing behavior the user ruled protected — these are vetoes>
@@ -56,7 +56,7 @@ paragraph the user signed off on — do not edit without a new sign-off.>
 
 ## Open questions
 
-<!-- Unresolved at grill end. Tags: RESEARCH (research phase answers it),
+<!-- Unresolved at define end. Tags: RESEARCH (research phase answers it),
      NEEDS-USER (a human decision, surface at next checkpoint). -->
 - [RESEARCH] <question>
 - [NEEDS-USER] <question>

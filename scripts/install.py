@@ -37,6 +37,7 @@ def skill_names_for_manifest(manifest: Mapping) -> Tuple[str, ...]:
 
 
 SKILL_NAMES = skill_names_for_manifest(sync_skill_resources.RESOURCE_MANIFEST)
+SKILL_ALIASES = dict(sync_skill_resources.RESOURCE_MANIFEST["skill_aliases"])
 CLAUDE_BRIDGE = "@../AGENTS.md\n@../WORKFLOW.md\n"
 HOOKS_DIRECTORY = ".gsd-path"
 GUARD_SCRIPTS = ("guard_hook.py", "git_guard.py")

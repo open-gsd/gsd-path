@@ -1,9 +1,9 @@
 ---
-name: gsd-path-grill
-description: Interview the user and turn an idea into an approved .project/intent/INTENT.md. Use only when the user explicitly invokes $gsd-path-grill or an active $gsd-path router explicitly routes to this phase.
+name: gsd-path-define
+description: Define and approve project intent in .project/intent/INTENT.md through a focused user interview. Use only when the user explicitly invokes $gsd-path-define or an active $gsd-path router explicitly routes to this phase.
 ---
 
-# GSD Path Grill Session
+# GSD Path Define Phase
 
 Turn a vague idea into `.project/intent/INTENT.md`. Run this phase in the
 main conversation; never delegate the interview.
@@ -15,7 +15,7 @@ direct invocation, report the exact next skill and stop until the user
 explicitly invokes it.
 
 Before interview work and again before approval, apply AGENTS.md's pending
-discussion-answer contract. Resolve an answer owned by the grill in INTENT.md
+discussion-answer contract. Resolve an answer owned by define in INTENT.md
 and append a disposition receipt; otherwise block with links to ANSWERS.md and
 the target artifact rather than approving stale intent.
 
@@ -30,7 +30,7 @@ STATE.md is missing and `.project/` contains any artifact, return to
 `$gsd-path` for orphaned-state recovery; existing evidence does not prove its
 pipeline version or phase and must not be reused or overwritten by inference.
 Otherwise perform the router's brownfield detection before interviewing. Any
-brownfield signal routes to `$gsd-path-onboard`. Only a greenfield directory
+brownfield signal routes to `$gsd-path-inspect`. Only a greenfield directory
 may initialize STATE.md directly from the local
 [state template](templates/state.md), with a deterministic project slug from
 the working-directory name, `pipeline: gsd-path/v1`, `phase: grill`,
@@ -44,7 +44,9 @@ fixed-format remote, remote-default SHA, clean default checkout, branch, and
 primary worktree. Verify that artifact and the current branch/worktree before
 interviewing. The bootstrap README does not make this routed project
 brownfield. A missing or mismatched binding returns to `$gsd-path`; never infer
-it from STATE log prose or repair it inside the grill.
+it from STATE log prose or repair it inside define.
+
+`grill` is the persisted v1 state token for this canonical define phase.
 
 ## Coverage checklist
 
@@ -71,14 +73,14 @@ truth first, then the spec, then delta questions only.
 ## Brownfield mode
 
 When `.project/research/evidence-codebase.md` exists (the router ran
-`$gsd-path-onboard`), read it and `.project/research/DOCS-AUDIT.md` before the
+`$gsd-path-inspect`), read it and `.project/research/DOCS-AUDIT.md` before the
 first question. The rules change:
 
 - Established facts are not questions. Never ask what the stack is or what
   the code does — the map answers that. State it and let the user correct.
 - The interview centers on deltas: what should change, what must not break,
   and the goal of THIS milestone against the code that already exists.
-- Work through the mapper's `## Open questions for the grill` and the
+- Work through the mapper's `## Open questions for define` and the
   audit's `NEEDS-USER` remediation rows — each doc-vs-code conflict gets a
   ruling (`fix-doc`, `fix-code`, or `accept-drift`) recorded verbatim in
   INTENT.md and appended to DOCS-AUDIT.md's `## User rulings` table.
@@ -94,7 +96,7 @@ first question. The rules change:
 
 1. Ask for a one-paragraph idea description if the user has not supplied one.
    In brownfield mode, instead present the one-screen ground truth (from
-   onboarding) and ask what this milestone should achieve.
+   inspection) and ask what this milestone should achieve.
 2. Ask rounds of two or three questions aimed at the weakest checklist areas.
    Use an interactive user-input tool when available. Otherwise ask concise
    numbered questions in chat and stop for the reply. Never send more than
@@ -129,13 +131,13 @@ At approval, retain the already reviewed `Lane:` value and its one-line reason.
 After approval, finalize `.project/intent/INTENT.md` and update STATE.md to
 `phase: grill`, `status: done`, set its `milestone` field to this
 milestone's slug, and append the transition to its log. Report that research
-is next — or, quick lane, that planning is next and research and synthesize
+  is next — or, quick lane, that planning is next and research and decide
 are skipped. Confirm the approved outcome, link the final INTENT.md again, and
 name that next phase before routing. When routed by an active `$gsd-path`,
 return control to that router so its bundled next contract can auto-advance
 (research, or plan in quick mode). When invoked directly, stop and tell the
-user to explicitly invoke `$gsd-path`, `$gsd-path-research`, or — quick lane —
-`$gsd-path-plan`; do not invoke an explicit-only sibling skill yourself.
+user to explicitly invoke `$gsd-path`, which selects that next phase; do not
+invoke an explicit-only sibling skill yourself.
 
 ## Rules
 

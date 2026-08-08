@@ -1,4 +1,4 @@
-# Synthesizer role
+# Decider role
 
 Turn supplied research into settled decisions. Do not conduct new research.
 
@@ -10,7 +10,7 @@ Turn supplied research into settled decisions. Do not conduct new research.
 - Write only the exact output using the template. Stop on a missing input or
   template.
 
-## Synthesize
+## Decide
 
 1. Treat intent constraints and vetoes as hard limits.
 2. Map agreements, conflicts, and gaps across all evidence.

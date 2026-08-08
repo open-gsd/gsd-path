@@ -38,13 +38,13 @@ without your approval.
 ```text
 gsd-path  (router: reads STATE.md, runs the next valid phase)
   |
-  |-- 0. onboard      brownfield only — map code + audit docs
-  |-- 1. grill        interactive intent interview
+  |-- 0. inspect      brownfield only — map code + audit docs
+  |-- 1. define       interactive intent interview
   |-- 2. research     parallel evidence researchers
-  |-- 3. synthesize   evidence → cited decisions
+  |-- 3. decide       evidence → cited decisions
   |-- 4. plan         waves + task contracts
   |-- 5. build        parallel coders, serial integration
-  `-- 6. review       wave + final gates → ship
+  `-- 6. ship         verify + final approval → archive
 ```
 
 ### Router vs phase skills
@@ -177,12 +177,12 @@ Open your agent in the project directory. Invoke the router explicitly.
 
 ### Greenfield (empty or new milestone)
 
-No `.project/STATE.md` in an existing empty checkout → **grill** immediately.
+No `.project/STATE.md` in an existing empty checkout → **define** immediately.
 For an explicit request to create a new GitHub repository, the router first
 previews the repository and linked-worktree targets for approval as described
 in [README.md](README.md#the-flow).
 
-The grill interviews across: problem, users, observable success, scope in,
+Define interviews across: problem, users, observable success, scope in,
 scope out (vetoes), constraints, risks. It challenges contradictions, writes a
 complete `.project/intent/INTENT.md` draft with the proposed `quick` or
 `standard` lane, and links that draft alongside its **playback summary** before
@@ -192,21 +192,21 @@ Vetoes in INTENT.md are hard limits for every later phase.
 
 ### Brownfield (existing code or docs)
 
-Router detects existing work → **onboard** first:
+Router detects existing work → **inspect** first:
 
 1. Codebase mapper — what actually exists (stack, architecture, surprises)
 2. Docs auditor — every `.md` claim verified, stale, aspirational, or unverifiable
 
-You get **ground truth on one screen** before any questions. The grill then
+You get **ground truth on one screen** before any questions. Define then
 asks only **deltas**: this milestone’s goal, what changes, what must not break.
 
 Each doc-vs-code conflict gets your ruling: `fix-doc`, `fix-code`, or
-`accept-drift`. Onboarding writes nothing outside `.project/`.
+`accept-drift`. Inspect writes nothing outside `.project/`.
 
 ### Quick lane
 
-If scope fits ≤2 deliverable tasks in one wave with no open questions, the grill
-may classify the milestone as `quick` — skipping research/synthesize with a
+If scope fits ≤2 deliverable tasks in one wave with no open questions, define
+may classify the milestone as `quick` — skipping research/decide with a
 Settled-only SYNTHESIS and a single build wave. If the plan outgrows that,
 the lane corrects to `standard` and reroutes through research.
 
@@ -219,10 +219,10 @@ After intent approval, the router walks phases and stops at gates.
 | Phase | Output (under `.project/`) | Your role |
 | --- | --- | --- |
 | **Research** | `research/evidence-*.md` | Usually nothing |
-| **Synthesize** | `research/SYNTHESIS.md` | Resolve `NEEDS-USER` at checkpoint |
+| **Decide** | `research/SYNTHESIS.md` | Resolve `NEEDS-USER` at checkpoint |
 | **Plan** | `plan/PLAN.md`, `tasks/T###-slug.md` | **Approve wave summary** |
 | **Build** | code, commits, `BOARD.md` | Escalations only |
-| **Review** | `review/wave-*.md`, `review/FINAL.md` | Approve patch waves if blocked and final shipping when green |
+| **Ship** | `review/wave-*.md`, `review/FINAL.md` | Approve patch waves if blocked and final shipping when green |
 
 The discussion sidecar is available alongside every row above. It writes
 `discuss/DIALOGUE.md` and `discuss/ANSWERS.md`; a `final` answer records context
@@ -232,10 +232,10 @@ advancement until its named owner appends a disposition receipt.
 ### Research
 
 Up to four parallel researchers (domain, stack, pitfalls, similar projects).
-Brownfield adds `evidence-codebase.md` from onboard as input. Dimensions with
+Brownfield adds `evidence-codebase.md` from inspect as input. Dimensions with
 nothing to answer are skipped and recorded in STATE.
 
-### Synthesize
+### Decide
 
 Turns evidence into cited decisions with runners-up. Unresolved values choices
 surface as `NEEDS-USER` — never guessed.
@@ -253,7 +253,7 @@ Orchestrator runs in the main task. Parallel **coders** get isolated linked
 worktrees at one clean layer base; integration is **serial** per layer. Each
 task gets one atomic commit; task frontmatter records exact SHA for recovery.
 
-### Review
+### Ship
 
 Wave reviews after each build wave; final review audits every success criterion
 (`met` / `not-met` / `unverifiable`) and cross-wave gaps. Failed criteria become
@@ -272,7 +272,7 @@ approve **Archive and ship**, the archive transaction begins:
 - One **ship commit** (subject `ship: …`) touches only `.project/`
 - Archives are **read-only** — guard hooks enforce this if installed
 
-The next milestone starts clean. Invoke the router again; brownfield onboard
+The next milestone starts clean. Invoke the router again; brownfield inspect
 runs against the now-shipped codebase.
 
 ---
@@ -316,8 +316,8 @@ or patch wave with approval). Never blocks the pipeline silently.
 
 ## Agent execution (how work is delegated)
 
-Grill and build orchestrator run in the main task. Researchers, synthesizer,
-planner, coders, and reviewers use the host dispatch adapter installed with
+Define and build orchestrators run in the main task. Researchers, deciders,
+planners, coders, and reviewers use the host dispatch adapter installed with
 your skills:
 
 | Host | Child API | Notes |

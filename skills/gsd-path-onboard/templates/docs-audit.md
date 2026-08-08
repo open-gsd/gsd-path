@@ -1,6 +1,6 @@
 # Docs Audit
 
-<!-- Written by the docs auditor ($gsd-path-docs-audit or $gsd-path-onboard).
+<!-- Written by the docs auditor ($gsd-path-docs-audit or $gsd-path-inspect).
      Every verdict carries evidence; a verdict without evidence is a defect. -->
 
 Repo root: <absolute path>

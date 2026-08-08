@@ -7,7 +7,7 @@ description: Verify Markdown claims against the actual code, commands, and GSD P
 
 Answer one question with evidence: **does the project do what its documents
 say it does?** Runs standalone at the safe checkpoints below, and as half of
-`$gsd-path-onboard`. Output: `.project/research/DOCS-AUDIT.md`.
+`$gsd-path-inspect`. Output: `.project/research/DOCS-AUDIT.md`.
 
 Any instruction below to route, return, or invoke another GSD Path phase is a
 caller handoff, not permission to trigger an explicit-only skill. If an active
@@ -24,7 +24,7 @@ Require an existing `.project/STATE.md` with `pipeline: gsd-path/v1`; never
 create pipeline state or write into an unowned `.project/`. A missing state
 stops and offers explicit `$gsd-path` initialization; do not invoke it
 automatically. A different marker blocks and reports ownership without writing.
-Embedded onboarding mode is legal only at `onboard/active|blocked`.
+Embedded inspect mode is legal only at `onboard/active|blocked`.
 Standalone mode is legal only at a stable pre-build boundary
 `onboard|grill|research|synthesize|plan` with `status: done`, or at
 `review/blocked` with no in-progress task. `build/*`, `review/active`,
@@ -65,7 +65,7 @@ would dirty execution, invalidate review, or mutate shipped history.
    claims), and the remediation queue. Link the resolved absolute
    `.project/research/DOCS-AUDIT.md` path before asking for any ruling. Do not
    fix anything in this skill.
-4. **Collect rulings** (standalone runs; during `$gsd-path-onboard` the grill
+4. **Collect rulings** (standalone runs; during `$gsd-path-inspect` define
    owns this). Walk the remediation queue with the user — batches of three,
    an interactive input tool when available. Present the auditor's
    classification as the first option marked `(recommended)` with its
@@ -86,9 +86,9 @@ would dirty execution, invalidate review, or mutate shipped history.
    patch wave now, or hold. If an active `$gsd-path` routed this audit and the
    user chooses now, return control with DOCS-AUDIT.md as the patch findings
    source. When invoked directly, do not invoke an explicit-only sibling;
-   tell a user who chooses now to explicitly invoke `$gsd-path` or
-   `$gsd-path-plan` with that source. On hold — the default — report the queue
-   size and that `$gsd-path` and `$gsd-path-plan` will offer alignment until the
+   tell a user who chooses now to explicitly invoke `$gsd-path`, which will
+   offer the queued source to plan. On hold — the default — report the queue
+   size and that `$gsd-path` will offer alignment until the
    queue is drained. Only `accept-drift` rulings → nothing queued, done.
    After the choice, link the updated DOCS-AUDIT.md and state whether planning
    starts now or the queue remains for a later router pass.
@@ -140,7 +140,7 @@ git history. Verdicts:
 classified `fix-doc` (reality is right, doc lies) or `fix-code`
 (doc is the contract, code fell short) or `NEEDS-USER` when the auditor
 cannot tell which side is wrong. The queue is input for the user's ruling —
-during onboarding it feeds the grill; mid-project, accepted `fix-code`
+during inspection it feeds define; mid-project, accepted `fix-code`
 items become a patch wave through `$gsd-path-plan`.
 
 ## Rules

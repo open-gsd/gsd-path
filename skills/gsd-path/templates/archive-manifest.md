@@ -1,6 +1,6 @@
 # Archive — <NNN>-<milestone-slug>
 
-<!-- Written at ship time by $gsd-path-review final. The archive's table of
+<!-- Written at ship time by $gsd-path-ship final. The archive's table of
      contents: a future audit must be able to reconstruct the milestone
      from this file. Append-only once written. The validator requires
      "Final verdict:" to be exactly the string shown below. -->

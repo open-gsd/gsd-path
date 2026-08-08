@@ -20,9 +20,10 @@ user which phase owns the follow-up; do not invoke a sibling phase implicitly.
    `pipeline: gsd-path/v1`. If it is missing, foreign, legacy, malformed, or a
    symlink, stop and tell the user to invoke `$gsd-path` for ownership recovery.
    Do not create state merely to hold a discussion.
-3. Accept any active milestone phase except `shipped`: `onboard`, `grill`,
-   `research`, `synthesize`, `plan`, `build`, or `review`, with the state status
-   currently recorded on disk. A shipped milestone is archived and must not be
+3. Accept any active milestone phase except `shipped`: inspect (`onboard`),
+   define (`grill`), research, decide (`synthesize`), plan, build, or ship
+   (`review`). The parenthesized names are persisted v1 state tokens. Use the
+   state status currently recorded on disk. A shipped milestone is archived and must not be
    reopened by this sidecar; start a new milestone first.
 4. Resolve the bundled `scripts/discussion_records.py`,
    [dialogue template](templates/dialogue.md), and
@@ -39,9 +40,10 @@ user which phase owns the follow-up; do not invoke a sibling phase implicitly.
    phase must apply it through its normal gate.
 
 The helper serializes writers and rechecks STATE immediately before a paired
-publication. Never commit the records: the current phase orchestrator owns them
-as append-only bookkeeping and includes them in its next normal `.project/`
-checkpoint.
+publication. Never commit the records: the current phase orchestrator is their
+checkpoint owner and includes them as append-only bookkeeping in its next
+normal `.project/` checkpoint. The answer's named next owner separately owns
+the target artifact and disposition receipt.
 
 ## Grounding and pushback
 
@@ -62,15 +64,15 @@ Use the authority order from `AGENTS.md`:
 
 Read only the phase-specific inputs needed for the question:
 
-| Phase | Start with |
+| Public phase (v1 state token) | Start with |
 | --- | --- |
-| `onboard` | codebase map and docs audit |
-| `grill` | intent and onboarding evidence |
-| `research` | intent, research manifest, and relevant evidence |
-| `synthesize` | intent, evidence, and synthesis |
+| inspect (`onboard`) | codebase map and docs audit |
+| define (`grill`) | intent and inspection evidence |
+| research | intent, research manifest, and relevant evidence |
+| decide (`synthesize`) | intent, evidence, and synthesis |
 | `plan` | intent, synthesis, plan, and affected task contracts |
 | `build` | intent, synthesis, plan, board, and affected task/log |
-| `review` | intent, plan, board, and relevant review artifacts |
+| ship (`review`) | intent, plan, board, and relevant review artifacts |
 
 Then inspect the code that can prove or disprove the claim. Do not reread the
 whole repository when a focused path set answers the question.
@@ -103,8 +105,11 @@ For each invocation:
    when needed. Record conflicts and uncertainty before forming a conclusion.
 3. Answer in the main conversation. State the conclusion first, then the
    reasoning, evidence, pushback or alternatives, confidence, and the phase
-   owner for any action. Ask only the next question required to resolve the
-   user's decision; use the host's interactive input facility when available.
+   owner for any action. When a formal follow-up is required, tell the user to
+   invoke `$gsd-path`; the router will route the pending answer to that owner.
+   Do not leave the user with only an owner name or direct phase command. Ask
+   only the next question required to resolve the user's decision; use the
+   host's interactive input facility when available.
 4. Before returning, provide the semantic turn fields to the helper's `append`
    command as one JSON input. Pass `thread: new` for a distinct topic or the
    existing stable `T###` for a continuation. The helper allocates D/A/X ids,
@@ -140,5 +145,7 @@ conclusion, reasoning or pushback, evidence/citations, research used or why it
 was not needed, confidence, unresolved tags, next owner, target artifact, and
 follow-up state. Do not duplicate a formal phase handoff or silently edit one
 on the user's behalf. End the user response with **Outcome**, Markdown
-**Review** links to the resolved absolute DIALOGUE.md and ANSWERS.md paths, and
-**Next** naming the pending owner or next discussion question.
+**Review** links to the resolved absolute DIALOGUE.md and ANSWERS.md paths. For
+a required follow-up, **Next** names the pending owner and tells the user to
+invoke `$gsd-path`; otherwise it gives the next discussion question or says
+that no action is required.

@@ -28,6 +28,7 @@ SHARED_DISPATCH_TARGETS = tuple(
     tuple(pair) for pair in RESOURCE_MANIFEST["shared_dispatch_targets"]
 )
 SKILL_NAMES = tuple(RESOURCE_MANIFEST["skills"])
+SKILL_ALIASES = dict(RESOURCE_MANIFEST["skill_aliases"])
 PACKAGE_FILES = tuple(RESOURCE_MANIFEST["package_files"])
 
 
@@ -42,6 +43,17 @@ def resource_pairs(root: Path) -> Iterable[Tuple[Path, Path]]:
         yield root / source, root / destination
     for source, destination in PHASE_CONTRACT_TARGETS:
         yield root / source, root / destination
+    for legacy, canonical_skill in SKILL_ALIASES.items():
+        canonical_directory = root / "skills" / canonical_skill
+        legacy_directory = root / "skills" / legacy
+        yield canonical_directory / "SKILL.md", legacy_directory / "CANONICAL.md"
+        for relative in PHASE_RESOURCES.get(canonical_skill, ()):
+            yield canonical / relative, legacy_directory / relative
+        canonical_prefix = f"skills/{canonical_skill}/"
+        for source, destination in SCRIPT_TARGETS:
+            if destination.startswith(canonical_prefix):
+                relative = destination.removeprefix(canonical_prefix)
+                yield root / source, legacy_directory / relative
 
 
 def package_metadata(root: Path) -> Iterable[Path]:
@@ -54,8 +66,16 @@ def package_metadata(root: Path) -> Iterable[Path]:
 
 def mismatches(root: Path) -> Sequence[str]:
     problems = []
-    if SKILL_NAMES != ("gsd-path", *sorted(PHASE_RESOURCES)):
-        problems.append("manifest skills must be root gsd-path plus every phase resource key")
+    expected_skills = ("gsd-path", *sorted((*PHASE_RESOURCES, *SKILL_ALIASES)))
+    if SKILL_NAMES != expected_skills:
+        problems.append(
+            "manifest skills must be root gsd-path plus every canonical skill and alias"
+        )
+    if set(SKILL_ALIASES) & set(PHASE_RESOURCES):
+        problems.append("skill aliases cannot also own phase resources")
+    for legacy, canonical in SKILL_ALIASES.items():
+        if canonical not in PHASE_RESOURCES:
+            problems.append(f"skill alias target is not canonical: {legacy} -> {canonical}")
     package_path = root / "package.json"
     try:
         package_files = tuple(json.loads(package_path.read_text(encoding="utf-8"))["files"])

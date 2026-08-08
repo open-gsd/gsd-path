@@ -116,7 +116,7 @@ severity, or fit with this milestone's scope).
    build starts next. Do not add another approval gate. When routed by an
    active `$gsd-path`, return control to that router so its bundled build
    contract starts. When invoked directly, stop and tell the user to explicitly
-   invoke `$gsd-path` or `$gsd-path-build`; do not invoke an explicit-only
+   invoke `$gsd-path`, which routes to build; do not invoke an explicit-only
    sibling skill yourself.
 
 ## Ordering rules
@@ -128,7 +128,7 @@ severity, or fit with this milestone's scope).
 ## Quick mode
 
 Legal entry: `grill/done` where INTENT.md records `Lane: quick` (transition
-to `plan/active`, logging that research and synthesize were skipped for the
+to `plan/active`, logging that research and decide were skipped for the
 quick lane). Quick mode dispatches no planner agent — the orchestrator writes
 the artifacts directly:
 
@@ -149,7 +149,7 @@ the artifacts directly:
 ## Patch mode
 
 Turn verified findings into one appended wave instead of replanning.
-Invoked by `$gsd-path-docs-audit` (remediation rulings) or `$gsd-path-review final`
+Invoked by `$gsd-path-docs-audit` (remediation rulings) or `$gsd-path-ship final`
 (`not-met` criteria); the invoker names the exact ordered list of one or more
 findings source files and rows.
 

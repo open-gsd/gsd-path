@@ -1,6 +1,6 @@
 # Evidence — codebase
 
-<!-- Written by the codebase mapper during $gsd-path-onboard. Read by the grill
+<!-- Written by the codebase mapper during $gsd-path-inspect. Read by define
      (brownfield mode), researchers (fifth standard dimension), the planner
      (conventions are binding), and reviewers. -->
 
@@ -22,7 +22,7 @@ Checks run: <exact commands run and their results, e.g. `npm test` → 37/40 pas
 - **Claim**: <one specific, falsifiable statement about this codebase>
 - **Source**: <file:line or command actually run>
 - **Confidence**: <high | medium | low>
-- **Why it matters here**: <what onboarding/planning gets wrong without this>
+- **Why it matters here**: <what inspection/planning gets wrong without this>
 
 <!-- Record every load-bearing surprise or half-built area observed. There is
      no minimum finding quota; explain an empty section if none were found. -->
@@ -33,7 +33,7 @@ Checks run: <exact commands run and their results, e.g. `npm test` → 37/40 pas
 
 - <inference> — based on <evidence>
 
-## Open questions for the grill
+## Open questions for define
 
 <!-- What only the user can settle about this codebase. -->
 

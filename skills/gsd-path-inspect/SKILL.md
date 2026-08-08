@@ -1,14 +1,13 @@
 ---
-name: gsd-path-onboard
-description: Scan an existing codebase and its documentation before any project questions are asked. Use only when the user explicitly invokes $gsd-path-onboard or an active $gsd-path router explicitly routes to this phase.
+name: gsd-path-inspect
+description: Inspect an existing codebase and its documentation to establish brownfield ground truth before intent is defined. Use only when the user explicitly invokes $gsd-path-inspect or an active $gsd-path router explicitly routes to this phase.
 ---
 
-# GSD Path Onboarding Phase
+# GSD Path Inspect Phase
 
-Establish ground truth about an existing project before the grill session.
-Detect, scan, and audit first; recommend and question only after the
-evidence is on disk. Never grill a user about a codebase the pipeline has
-not read.
+Establish ground truth about an existing project before intent is defined.
+Detect, scan, and audit first; recommend and question only after the evidence
+is on disk. Never question a user about a codebase the pipeline has not read.
 
 Any instruction below to route, return, or invoke another GSD Path phase is a
 caller handoff, not permission to trigger an explicit-only skill. If an active
@@ -17,20 +16,22 @@ direct invocation, report the exact next skill and stop until the user
 explicitly invokes it.
 
 Before phase work and again before completion, apply AGENTS.md's pending
-discussion-answer contract. Resolve an answer owned by onboarding through its
+discussion-answer contract. Resolve an answer owned by inspect through its
 legal artifact gate and append a disposition receipt; otherwise block with
 links to ANSWERS.md and the target artifact rather than advancing stale input.
 
 ## Preconditions
 
 An existing project: source files, git history, or substantive docs. If the
-directory is effectively empty, skip onboarding — route to `$gsd-path-grill`.
+directory is effectively empty, skip inspection — route to `$gsd-path-define`.
 If `.project/STATE.md` exists, require `pipeline: gsd-path/v1`; a missing or
 different marker returns to `$gsd-path` for ownership checking. Legal entry is
-`onboard/active|blocked`; `onboard/done` routes to grill, and any later phase
+`onboard/active|blocked`; `onboard/done` routes to define, and any later phase
 stops. If STATE.md is absent but `.project/` already contains any artifact,
 return to `$gsd-path` for orphaned-state recovery instead of initializing or
-overwriting it. Re-running onboarding would overwrite established context.
+overwriting it. Re-running inspection would overwrite established context.
+
+`onboard` is the persisted v1 state token for this canonical inspect phase.
 
 ## Process
 
@@ -48,11 +49,11 @@ overwriting it. Re-running onboarding would overwrite established context.
    - **Codebase mapper** — role
      [codebase-mapper](references/codebase-mapper.md), template
      [codebase](templates/codebase.md), output
-     `.project/research/evidence-codebase.md`, task name `onboard_codebase`.
+     `.project/research/evidence-codebase.md`, task name `inspect_codebase`.
    - **Docs auditor** — role
      [docs-auditor](references/docs-auditor.md), template
      [docs-audit](templates/docs-audit.md), output
-     `.project/research/DOCS-AUDIT.md`, task name `onboard_docs`.
+     `.project/research/DOCS-AUDIT.md`, task name `inspect_docs`.
    Give each the absolute repo root and exclusion rule. Give the auditor the
    exact frozen inventory and `alignment mode: false`; it audits only that
    list and never rediscovers paths. The frozen inventory travels inside the
@@ -84,24 +85,24 @@ overwriting it. Re-running onboarding would overwrite established context.
    - the mapper's open questions about apparent intent.
    Lead with the outcome, then provide absolute-path Markdown links to
    `.project/research/evidence-codebase.md` and
-   `.project/research/DOCS-AUDIT.md`, then state that the grill is next.
+     `.project/research/DOCS-AUDIT.md`, then state that define is next.
 5. Set STATE.md to `phase: onboard`, `status: done`, log the transition,
-   and identify `$gsd-path-grill` as next. When this phase was routed by an
-   active `$gsd-path`, return control to that router so its bundled grill
+   and identify `$gsd-path-define` as next. When this phase was routed by an
+   active `$gsd-path`, return control to that router so its bundled define
    contract runs in brownfield mode. When invoked directly, stop and tell the
-   user to explicitly invoke `$gsd-path` or `$gsd-path-grill`; do not invoke an
-   explicit-only sibling skill yourself.
+   user to explicitly invoke `$gsd-path`, which routes to define; do not invoke
+   an explicit-only sibling skill yourself.
 
 ## Rules
 
-- Scanning is read-only. Onboarding changes nothing outside `.project/`.
+- Scanning is read-only. Inspection changes nothing outside `.project/`.
 - Project commands run only in agent-specific disposable verification
   worktrees at a recorded clean revision; otherwise checks use static evidence
   or are `unverifiable`. They never run in the source worktree.
 - Report reality, not judgment: "tests exist but 3 fail" — never "test
   hygiene is poor". The user may know exactly why those 3 fail.
 - Doc-vs-code conflicts are surfaced, never auto-resolved; whether the doc
-  or the code is wrong is the user's ruling, captured during the grill.
-- Onboarding evidence feeds the whole pipeline: researchers treat
+  or the code is wrong is the user's ruling, captured while defining intent.
+- Inspection evidence feeds the whole pipeline: researchers treat
   `evidence-codebase.md` as a fifth standard dimension when it exists, the
   planner must match its conventions, and reviewers may cite it.

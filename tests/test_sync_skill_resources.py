@@ -36,6 +36,12 @@ class SyncSkillResourcesTests(unittest.TestCase):
                 root / "skills" / "gsd-path-discuss" / "templates" / "dialogue.md"
             )
             discussion_template.unlink()
+            alias_contract = root / "skills" / "gsd-path-onboard" / "CANONICAL.md"
+            alias_resource = (
+                root / "skills" / "gsd-path-onboard" / "templates" / "codebase.md"
+            )
+            alias_contract.unlink()
+            alias_resource.write_text("stale alias resource\n")
 
             missing = self.run_sync(root, "--check")
             self.assertNotEqual(missing.returncode, 0)
@@ -43,6 +49,14 @@ class SyncSkillResourcesTests(unittest.TestCase):
             sync = self.run_sync(root)
             self.assertEqual(sync.returncode, 0, sync.stderr)
             self.assertTrue(generated.is_file())
+            self.assertEqual(
+                alias_contract.read_bytes(),
+                (root / "skills" / "gsd-path-inspect" / "SKILL.md").read_bytes(),
+            )
+            self.assertEqual(
+                alias_resource.read_bytes(),
+                (root / "skills" / "gsd-path" / "templates" / "codebase.md").read_bytes(),
+            )
             self.assertEqual(
                 discussion_template.read_bytes(),
                 (root / "skills" / "gsd-path" / "templates" / "dialogue.md").read_bytes(),
@@ -81,7 +95,7 @@ class SyncSkillResourcesTests(unittest.TestCase):
 
     def test_distribution_is_self_contained_and_explicit_only(self) -> None:
         skill_directories = sorted((PROJECT_ROOT / "skills").glob("gsd-path*"))
-        self.assertEqual(len(skill_directories), 10)
+        self.assertEqual(len(skill_directories), 14)
 
         link_pattern = re.compile(r"\[[^]]+\]\(([^)#]+)(?:#[^)]*)?\)")
         for skill_directory in skill_directories:
@@ -143,18 +157,18 @@ class SyncSkillResourcesTests(unittest.TestCase):
         plan_contract = (PROJECT_ROOT / "skills" / "gsd-path-plan" / "SKILL.md").read_text()
         self.assertIn("`build/done` is", plan_contract)
         self.assertIn("reserved exclusively", plan_contract)
-        review_contract = (PROJECT_ROOT / "skills" / "gsd-path-review" / "SKILL.md").read_text()
-        self.assertIn("Always include PLAN.md's project", review_contract)
-        self.assertIn("blocked gap with valid evidence", review_contract)
-        self.assertIn("Archive and ship (recommended)", review_contract)
+        ship_contract = (PROJECT_ROOT / "skills" / "gsd-path-ship" / "SKILL.md").read_text()
+        self.assertIn("Always include PLAN.md's project", ship_contract)
+        self.assertIn("blocked gap with valid evidence", ship_contract)
+        self.assertIn("Archive and ship (recommended)", ship_contract)
         docs_audit_contract = (
             PROJECT_ROOT / "skills" / "gsd-path-docs-audit" / "SKILL.md"
         ).read_text()
         self.assertIn("Require an existing `.project/STATE.md`", docs_audit_contract)
         self.assertIn("`shipped/done`", docs_audit_contract)
-        grill_contract = (PROJECT_ROOT / "skills" / "gsd-path-grill" / "SKILL.md").read_text()
-        self.assertIn("appended to DOCS-AUDIT.md's `## User rulings` table", grill_contract)
-        self.assertIn("Classify the proposed milestone lane before writing", grill_contract)
+        define_contract = (PROJECT_ROOT / "skills" / "gsd-path-define" / "SKILL.md").read_text()
+        self.assertIn("appended to DOCS-AUDIT.md's `## User rulings` table", define_contract)
+        self.assertIn("Classify the proposed milestone lane before writing", define_contract)
         router_contract = (PROJECT_ROOT / "skills" / "gsd-path" / "SKILL.md").read_text()
         self.assertIn("treat it as orphaned active pipeline", router_contract)
         self.assertIn("artifacts or foreign state", router_contract)
@@ -170,21 +184,46 @@ class SyncSkillResourcesTests(unittest.TestCase):
         self.assertIn("Do not launch the full `$gsd-path-research` phase", discussion_contract)
         self.assertIn("stable thread id", discussion_contract)
         self.assertIn("Disposition X###", discussion_contract)
+        self.assertIn(
+            "invoke `$gsd-path`; the router will route the pending answer",
+            discussion_contract,
+        )
+
+        inspect_contract = (
+            PROJECT_ROOT / "skills" / "gsd-path-inspect" / "SKILL.md"
+        ).read_text()
+        self.assertIn("task name `inspect_codebase`", inspect_contract)
+        self.assertIn("task name `inspect_docs`", inspect_contract)
+        self.assertIn("invoke `$gsd-path`, which routes to define", inspect_contract)
 
         readme = (PROJECT_ROOT / "README.md").read_text()
         self.assertNotIn("cp -n AGENTS.md WORKFLOW.md", readme)
         self.assertIn("Phase skills stop at their handoff", readme)
         for contract in (
             "BUILD.md",
+            "DECIDE.md",
+            "DEFINE.md",
             "DOCS-AUDIT.md",
-            "GRILL.md",
-            "ONBOARD.md",
+            "INSPECT.md",
             "PLAN.md",
             "RESEARCH.md",
-            "REVIEW.md",
-            "SYNTHESIZE.md",
+            "SHIP.md",
         ):
             self.assertTrue((PROJECT_ROOT / "skills" / "gsd-path" / contract).is_file(), contract)
+
+        aliases = {
+            "gsd-path-onboard": "gsd-path-inspect",
+            "gsd-path-grill": "gsd-path-define",
+            "gsd-path-synthesize": "gsd-path-decide",
+            "gsd-path-review": "gsd-path-ship",
+        }
+        for legacy, canonical in aliases.items():
+            alias_directory = PROJECT_ROOT / "skills" / legacy
+            self.assertIn("Deprecated Alias", (alias_directory / "SKILL.md").read_text())
+            self.assertEqual(
+                (alias_directory / "CANONICAL.md").read_bytes(),
+                (PROJECT_ROOT / "skills" / canonical / "SKILL.md").read_bytes(),
+            )
 
         adapters = {
             "codex": "Codex collaboration tool",
@@ -202,7 +241,13 @@ class SyncSkillResourcesTests(unittest.TestCase):
         for runtime, required_text in adapters.items():
             adapter = PROJECT_ROOT / "platforms" / runtime / "dispatch.md"
             self.assertTrue(adapter.is_file(), runtime)
-            self.assertIn(required_text, adapter.read_text(), runtime)
+            adapter_text = adapter.read_text()
+            self.assertIn(required_text, adapter_text, runtime)
+            self.assertIn("inspect_codebase", adapter_text, runtime)
+            self.assertIn("inspect_docs", adapter_text, runtime)
+            self.assertIn("`decide`", adapter_text, runtime)
+            self.assertNotIn("onboard_codebase", adapter_text, runtime)
+            self.assertNotIn("onboard_docs", adapter_text, runtime)
         claude_adapter = (
             PROJECT_ROOT / "platforms" / "claude" / "dispatch.md"
         ).read_text()

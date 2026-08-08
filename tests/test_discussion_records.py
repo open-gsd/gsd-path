@@ -114,7 +114,7 @@ archive: null
                     {
                         "answer": "A001",
                         "status": "applied",
-                        "owner": "gsd-path-review",
+                        "owner": "gsd-path-ship",
                         "artifact": ".project/review/FINAL.md",
                         "evidence": "wrong owner",
                         "date": "2026-08-07",

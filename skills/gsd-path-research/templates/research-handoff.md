@@ -1,6 +1,6 @@
 # Research Handoff
 
-<!-- Written by the research orchestrator and consumed by synthesis. -->
+<!-- Written by the research orchestrator and consumed by decide. -->
 
 Phase: research
 Status: complete

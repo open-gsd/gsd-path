@@ -23,10 +23,22 @@ class InstallerTests(unittest.TestCase):
             skill = self.source / "skills" / name
             (skill / "references").mkdir(parents=True)
             (skill / "agents").mkdir()
+            canonical = install.SKILL_ALIASES.get(name)
+            body = (
+                f"# Deprecated alias\n\nInvoke ${name}, then read "
+                "[the canonical skill](CANONICAL.md).\n"
+                if canonical
+                else "Run $gsd-path, $gsd-path-build, and $gsd-path-discuss.\n"
+            )
             (skill / "SKILL.md").write_text(
-                f"---\nname: {name}\ndescription: test\n---\nRun $gsd-path, $gsd-path-build, and $gsd-path-discuss.\n",
+                f"---\nname: {name}\ndescription: test\n---\n{body}",
                 encoding="utf-8",
             )
+            if canonical:
+                (skill / "CANONICAL.md").write_text(
+                    f"---\nname: {canonical}\ndescription: test\n---\nUse ${canonical}.\n",
+                    encoding="utf-8",
+                )
             (skill / "guide.md").write_text("Use $gsd-path.\n", encoding="utf-8")
             (skill / "agents" / "openai.yaml").write_text(
                 'default_prompt: "Use $gsd-path."\n', encoding="utf-8"
@@ -183,6 +195,44 @@ class InstallerTests(unittest.TestCase):
         self.assertTrue(discussion.is_file())
         self.assertIn("/gsd-path-discuss", discussion.read_text(encoding="utf-8"))
 
+    def test_v2_canonical_skills_and_legacy_aliases_are_installed(self):
+        expected_aliases = {
+            "gsd-path-onboard": "gsd-path-inspect",
+            "gsd-path-grill": "gsd-path-define",
+            "gsd-path-synthesize": "gsd-path-decide",
+            "gsd-path-review": "gsd-path-ship",
+        }
+        self.assertEqual(expected_aliases, install.SKILL_ALIASES)
+        self.assertTrue(set(expected_aliases.values()).issubset(install.SKILL_NAMES))
+
+        target = self.root / "terminology" / "skills"
+        status, _, error = self.run_main(
+            [
+                "--claude",
+                "--claude-root",
+                str(target),
+                "--source-root",
+                str(self.source),
+            ]
+        )
+
+        self.assertEqual(0, status, error)
+        for legacy, canonical in expected_aliases.items():
+            with self.subTest(legacy=legacy, canonical=canonical):
+                legacy_skill = target / legacy / "SKILL.md"
+                canonical_skill = target / canonical / "SKILL.md"
+                self.assertTrue(legacy_skill.is_file())
+                self.assertTrue(canonical_skill.is_file())
+                alias_text = legacy_skill.read_text(encoding="utf-8")
+                self.assertIn(f"name: {legacy}", alias_text)
+                self.assertIn("CANONICAL.md", alias_text)
+                canonical_copy = target / legacy / "CANONICAL.md"
+                self.assertTrue(canonical_copy.is_file())
+                self.assertIn(
+                    f"name: {canonical}", canonical_copy.read_text(encoding="utf-8")
+                )
+                self.assertIn("Deprecated alias", alias_text)
+
     def test_all_platform_transforms(self):
         for target in install.TARGETS:
             with self.subTest(target=target):
@@ -194,10 +244,18 @@ class InstallerTests(unittest.TestCase):
                 dispatch = (staged / "gsd-path" / "references" / "dispatch.md").read_text(
                     encoding="utf-8"
                 )
+                alias_text = (staged / "gsd-path-onboard" / "SKILL.md").read_text(
+                    encoding="utf-8"
+                )
+                alias_contract = (
+                    staged / "gsd-path-onboard" / "CANONICAL.md"
+                ).read_text(encoding="utf-8")
                 if target == "codex":
                     self.assertIn("$gsd-path", content)
                     self.assertNotIn("disable-model-invocation", content)
                     self.assertIn("codex dispatch for $gsd-path", dispatch)
+                    self.assertIn("$gsd-path-onboard", alias_text)
+                    self.assertIn("$gsd-path-inspect", alias_contract)
                     self.assertTrue((staged / "gsd-path" / "agents" / "openai.yaml").is_file())
                 elif target == "opencode":
                     self.assertIn(
@@ -206,11 +264,15 @@ class InstallerTests(unittest.TestCase):
                     self.assertNotIn("$gsd-path", content)
                     self.assertNotIn("/gsd-path", content)
                     self.assertIn("opencode dispatch for gsd-path", dispatch)
+                    self.assertIn("Invoke gsd-path-onboard", alias_text)
+                    self.assertIn("Use gsd-path-inspect", alias_contract)
                     self.assertFalse((staged / "gsd-path" / "agents").exists())
                 else:
                     self.assertIn("/gsd-path", content)
                     self.assertNotIn("$gsd-path", content)
                     self.assertIn(f"{target} dispatch for /gsd-path", dispatch)
+                    self.assertIn("/gsd-path-onboard", alias_text)
+                    self.assertIn("/gsd-path-inspect", alias_contract)
                     self.assertFalse((staged / "gsd-path" / "agents").exists())
                 if target in install.EXPLICIT_ONLY_TARGETS:
                     self.assertIn("disable-model-invocation: true", content)
@@ -265,7 +327,10 @@ class InstallerTests(unittest.TestCase):
         self.assertTrue(
             cursor_agent.read_text(encoding="utf-8").endswith("cursor agent\n")
         )
-        self.assertIn("codex+zed: installed 10 shared skills", output)
+        self.assertIn(
+            f"codex+zed: installed {len(install.SKILL_NAMES)} shared skills",
+            output,
+        )
         self.assertIn("custom subagent", output)
         self.assertIn("OpenCode stable discovers", output)
         self.assertIn("Antigravity discovers", output)
@@ -302,7 +367,10 @@ class InstallerTests(unittest.TestCase):
             ]
         )
         self.assertEqual(0, status, error)
-        self.assertEqual(1, output.count("installed 10 shared skills"))
+        self.assertEqual(
+            1,
+            output.count(f"installed {len(install.SKILL_NAMES)} shared skills"),
+        )
         self.assertEqual(1, output.count("backed up 1 entries"))
         self.assertTrue(
             (root.parent / "disabled-gsd-skills" / "gsd-path-old").is_dir()
@@ -479,7 +547,7 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(0, status, error)
         self.assertFalse(target.exists())
         self.assertFalse(project.exists())
-        self.assertIn("would install 10 skills", output)
+        self.assertIn(f"would install {len(install.SKILL_NAMES)} skills", output)
         self.assertIn(".claude/CLAUDE.md", output)
 
     def test_dry_run_reports_the_registered_skill_count(self):
@@ -502,7 +570,7 @@ class InstallerTests(unittest.TestCase):
             )
 
         self.assertEqual(0, status, error)
-        self.assertIn("would install 11 skills", output)
+        self.assertIn(f"would install {len(skill_names)} skills", output)
 
     def test_project_collision_fails_before_install_mutation(self):
         project = self.root / "project"

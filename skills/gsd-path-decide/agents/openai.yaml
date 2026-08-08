@@ -1,0 +1,6 @@
+interface:
+  display_name: "GSD Path Decide"
+  short_description: "Turn evidence into settled decisions"
+  default_prompt: "Use $gsd-path-decide to settle implementation decisions from the available evidence."
+policy:
+  allow_implicit_invocation: false

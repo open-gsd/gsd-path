@@ -9,8 +9,8 @@ Apply this contract whenever a GSD Path skill delegates work:
   artifact; the linked role brief supplies the read-only boundary for auditors
   and reviewers.
 - Supply the deterministic logical task name as the child description:
-  `onboard_codebase`, `onboard_docs`, `docs_audit`,
-  `research_<dimension>`, `synthesize`, `plan`, `plan_patch`,
+  `inspect_codebase`, `inspect_docs`, `docs_audit`,
+  `research_<dimension>`, `decide`, `plan`, `plan_patch`,
   `build_<task_id>`, `review_wave_<wave>_cycle_<cycle>`, `review_final`, or
   `review_gap_<number>`. Normalize variable parts to lowercase ASCII and
   replace non-alphanumeric runs with one underscore. Never add a random

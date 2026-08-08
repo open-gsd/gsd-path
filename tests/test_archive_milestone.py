@@ -591,7 +591,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
             answers = discussion / "ANSWERS.md"
             answers.write_text(
                 answers.read_text()
-                .replace("- **Next owner**: none", "- **Next owner**: gsd-path-review")
+                .replace("- **Next owner**: none", "- **Next owner**: gsd-path-ship")
                 .replace(
                     "- **Target artifact**: none",
                     "- **Target artifact**: .project/review/FINAL.md",
@@ -615,7 +615,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
 
     def test_prepare_rejects_disposition_from_wrong_owner_or_artifact(self) -> None:
         cases = (
-            ("gsd-path-review", ".project/plan/PLAN.md", "owner"),
+            ("gsd-path-ship", ".project/plan/PLAN.md", "owner"),
             ("gsd-path-plan", ".project/review/FINAL.md", "artifact"),
         )
         for owner, artifact, expected_error in cases:
