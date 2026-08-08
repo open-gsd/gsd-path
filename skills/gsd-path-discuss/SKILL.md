@@ -114,13 +114,16 @@ For each invocation:
    host's interactive input facility when available.
 4. Before returning, provide the semantic turn fields to the helper's `append`
    command as one JSON object via `--input`, passing the same absolute template
-   paths as `prepare`. The object requires exactly these non-empty fields:
-   `thread` (`new` or an existing `T###`), `topic`, `user`, `assistant`,
+   paths as `prepare`. The object requires these non-empty fields:
+   `topic`, `user`, `assistant`,
    `question`, `status`, `thread_status`, `conclusion`, `reasoning`,
    `evidence`, `research`, `confidence`, `unresolved`, `next_owner`,
-   `target_artifact`, and `follow_up`. Every field except `user` and
+   `target_artifact`, and `follow_up`. `thread` is optional: pass an existing
+   `T###` id to continue a thread, or omit it (or pass `new`) to let the
+   helper allocate the next thread id. An optional `date` field overrides the
+   record date (`YYYY-MM-DD`). Every listed field except `user` and
    `assistant` must be a single line; the helper rejects an incomplete payload
-   and names every missing or multi-line field in one error. The helper allocates D/A/X ids,
+   and names every missing or multi-line field in one error. The helper allocates D/A ids,
    reply and supersession links, records the current phase/status, and publishes
    DIALOGUE.md and ANSWERS.md as a recoverable pair. Preserve the user's message
    and returned assistant answer verbatim in `user` and `assistant`.

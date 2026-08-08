@@ -29,7 +29,7 @@ FINAL_GAP_HEADING_PATTERN = re.compile(r"^# Gap Review — ([1-9]\d*): (.+)$")
 WAVE_TASK_HEADING_PATTERN = re.compile(r"^## (T\d{3}) — (.+): (pass|fail)$")
 DIALOGUE_HEADING_PATTERN = re.compile(
     r"^### D(\d{3}) — (\d{4}-\d{2}-\d{2}) — "
-    r"([a-z-]+)/(active|blocked|done) — .+$"
+    r"([a-z-]+)/(active|blocked|done) — (.+)$"
 )
 ANSWER_HEADING_PATTERN = re.compile(
     r"^## Answer A(\d{3}) — (\d{4}-\d{2}-\d{2}) — .+$"

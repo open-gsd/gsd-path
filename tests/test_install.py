@@ -1018,6 +1018,102 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(1, status)
         self.assertIn("not a managed GSD Path guard script", error)
 
+    def refresh_full_arguments(self, project):
+        return [
+            "--hooks-refresh-full",
+            "--project",
+            str(project),
+            "--source-root",
+            str(self.source),
+        ]
+
+    def test_hooks_refresh_full_merges_settings_preserving_user_keys(self):
+        project = self.root / "project"
+        (project / ".git").mkdir(parents=True)
+        target = self.root / "claude" / "skills"
+        self.run_main(self.hooks_arguments(project, target))
+        settings_path = project / ".claude" / "settings.json"
+        settings = json.loads(settings_path.read_text(encoding="utf-8"))
+        settings["hooks"]["PreToolUse"][0]["matcher"] = "old"
+        settings["permissions"] = {"allow": ["Bash(npm test)"]}
+        settings["model"] = "opus"
+        settings_path.write_text(json.dumps(settings) + "\n", encoding="utf-8")
+        status, _, error = self.run_main(self.refresh_full_arguments(project))
+        self.assertEqual(0, status, error)
+        refreshed = json.loads(settings_path.read_text(encoding="utf-8"))
+        self.assertEqual(
+            install.CLAUDE_MATCHER, refreshed["hooks"]["PreToolUse"][0]["matcher"]
+        )
+        self.assertEqual({"allow": ["Bash(npm test)"]}, refreshed["permissions"])
+        self.assertEqual("opus", refreshed["model"])
+
+    def test_hooks_refresh_full_rejects_malformed_managed_settings(self):
+        project = self.root / "project"
+        (project / ".git").mkdir(parents=True)
+        target = self.root / "claude" / "skills"
+        self.run_main(self.hooks_arguments(project, target))
+        settings_path = project / ".claude" / "settings.json"
+        settings_path.write_text("{ guard_hook.py .gsd-path\n", encoding="utf-8")
+        status, _, error = self.run_main(self.refresh_full_arguments(project))
+        self.assertEqual(1, status)
+        self.assertIn("not valid JSON", error)
+        self.assertEqual(
+            "{ guard_hook.py .gsd-path\n", settings_path.read_text(encoding="utf-8")
+        )
+
+    def test_hooks_refresh_full_recreates_missing_git_hooks_and_modes(self):
+        project = self.root / "project"
+        (project / ".git").mkdir(parents=True)
+        target = self.root / "claude" / "skills"
+        self.run_main(self.hooks_arguments(project, target))
+        pre_commit = project / ".git" / "hooks" / "pre-commit"
+        commit_msg = project / ".git" / "hooks" / "commit-msg"
+        pre_commit.unlink()
+        commit_msg.chmod(0o644)
+        status, _, error = self.run_main(self.refresh_full_arguments(project))
+        self.assertEqual(0, status, error)
+        self.assertEqual(
+            install.PRE_COMMIT_HOOK, pre_commit.read_text(encoding="utf-8")
+        )
+        self.assertTrue(os.access(pre_commit, os.X_OK))
+        self.assertTrue(os.access(commit_msg, os.X_OK))
+
+    def test_hooks_refresh_full_rejects_symlinked_settings(self):
+        project = self.root / "project"
+        (project / ".git").mkdir(parents=True)
+        target = self.root / "claude" / "skills"
+        self.run_main(self.hooks_arguments(project, target))
+        settings_path = project / ".claude" / "settings.json"
+        outside = self.root / "outside-settings.json"
+        settings_path.rename(outside)
+        settings_path.symlink_to(outside)
+        before = outside.read_text(encoding="utf-8")
+        status, _, error = self.run_main(self.refresh_full_arguments(project))
+        self.assertEqual(1, status)
+        self.assertIn("symlink", error)
+        self.assertEqual(before, outside.read_text(encoding="utf-8"))
+
+    def test_hooks_refresh_rejects_non_utf8_guard_script_without_traceback(self):
+        project = self.root / "project"
+        (project / ".git").mkdir(parents=True)
+        target = self.root / "claude" / "skills"
+        self.run_main(self.hooks_arguments(project, target))
+        (project / install.HOOKS_DIRECTORY / "guard_hook.py").write_bytes(
+            b"\xff\xfe binary\n"
+        )
+        status, _, error = self.run_main(
+            [
+                "--hooks-refresh",
+                "--project",
+                str(project),
+                "--source-root",
+                str(self.source),
+            ]
+        )
+        self.assertEqual(1, status)
+        self.assertIn("not a managed GSD Path guard script", error)
+        self.assertNotIn("Traceback", error)
+
 
 if __name__ == "__main__":
     unittest.main()

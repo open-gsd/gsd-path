@@ -218,7 +218,7 @@ def field(lines: Sequence[str], name: str) -> str:
         raise DiscussionError(str(error)) from error
 
 
-def disposed_answers(answer_lines: Sequence[str]) -> set:
+def disposed_answers(answer_lines: Sequence[str]) -> set[str]:
     boundaries = (
         archive_milestone.ANSWER_HEADING_PATTERN,
         archive_milestone.DISPOSITION_HEADING_PATTERN,
@@ -229,13 +229,13 @@ def disposed_answers(answer_lines: Sequence[str]) -> set:
     return {field(section, "Answer") for _, section in dispositions}
 
 
-def dialogue_threads(dialogue_lines: Sequence[str]) -> dict:
+def dialogue_threads(dialogue_lines: Sequence[str]) -> dict[str, list[tuple]]:
     sections = numbered_sections(
         dialogue_lines,
         archive_milestone.DIALOGUE_HEADING_PATTERN,
         (archive_milestone.DIALOGUE_HEADING_PATTERN,),
     )
-    threads = {}
+    threads: dict[str, list[tuple]] = {}
     for match, section in sections:
         threads.setdefault(field(section, "Thread"), []).append((match, section))
     return threads
@@ -249,8 +249,7 @@ def thread_records(discussion: Path) -> list[dict]:
         records.append(
             {
                 "thread": thread,
-                # DIALOGUE_HEADING_PATTERN does not capture the topic segment.
-                "topic": match.group(0).split(" — ", 3)[3],
+                "topic": match.group(5),
                 "last_turn": f"D{int(match.group(1)):03d}",
                 "status": field(section, "Thread status"),
             }
@@ -350,6 +349,7 @@ def append_disposition(discussion: Path, project: Path, payload: dict) -> dict:
 MULTILINE_FIELDS = ("user", "assistant")
 SINGLE_LINE_FIELDS = (
     "topic",
+    "thread",
     "question",
     "status",
     "thread_status",
@@ -417,14 +417,15 @@ def append_record(discussion: Path, project: Path, phase: str, status: str, payl
     number = count + 1
     dialogue_id = f"D{number:03d}"
     answer_id = f"A{number:03d}"
-    dialogue_lines = (discussion / "DIALOGUE.md").read_text(encoding="utf-8").splitlines()
+    dialogue_text = (discussion / "DIALOGUE.md").read_text(encoding="utf-8")
+    dialogue_lines = dialogue_text.splitlines()
     if count:
         archive_milestone.validate_discussion_directory(
             discussion, require_dispositions=False
         )
     validate_payload_fields(payload)
     answers_text = (discussion / "ANSWERS.md").read_text(encoding="utf-8")
-    requested_thread = payload.get("thread", "new")
+    requested_thread = payload["thread"]
     existing_threads = dialogue_threads(dialogue_lines) if count else {}
     if requested_thread == "new":
         thread_number = max((int(value[1:]) for value in existing_threads), default=0) + 1
@@ -488,7 +489,7 @@ def append_record(discussion: Path, project: Path, phase: str, status: str, payl
 - **Follow-up**: {single_line(payload, "follow_up")}
 """
     files = {
-        "DIALOGUE.md": (discussion / "DIALOGUE.md").read_text(encoding="utf-8").rstrip() + "\n" + dialogue,
+        "DIALOGUE.md": dialogue_text.rstrip() + "\n" + dialogue,
         "ANSWERS.md": answers_text.rstrip() + "\n" + answer,
     }
     validate_contents(project, files)

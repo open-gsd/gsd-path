@@ -223,16 +223,61 @@ archive: null
             self.make_repo(repo)
             payload = repo / "turn.json"
             payload.write_text(
-                json.dumps({"topic": "scope", "conclusion": "two\nlines"}),
+                json.dumps(
+                    {
+                        "topic": "scope",
+                        "conclusion": "two\nlines",
+                        "reasoning": "two\rlines",
+                    }
+                ),
                 encoding="utf-8",
             )
 
             appended = self.command(repo, "append", payload)
 
             self.assertNotEqual(appended.returncode, 0)
-            for name in ("user", "assistant", "question", "follow_up"):
+            provided = {"topic", "conclusion", "reasoning"}
+            declared = (
+                discussion_records.MULTILINE_FIELDS
+                + discussion_records.SINGLE_LINE_FIELDS
+            )
+            for name in declared:
+                if name in provided:
+                    continue
                 self.assertIn(f"{name} (missing or empty)", appended.stderr)
             self.assertIn("conclusion (must be one line)", appended.stderr)
+            self.assertIn("reasoning (must be one line)", appended.stderr)
+            self.assertNotIn("topic", appended.stderr)
+            self.assertFalse(
+                (repo / ".project" / ".discussion-append-transaction.json").exists()
+            )
+
+    def test_append_requires_single_line_thread(self) -> None:
+        cases = ((None, "missing or empty"), ("new\nT001", "must be one line"))
+        for thread, expected in cases:
+            with self.subTest(thread=thread):
+                with tempfile.TemporaryDirectory() as temporary_directory:
+                    repo = Path(temporary_directory)
+                    self.make_repo(repo)
+                    payload_path = self.turn_payload(repo, "turn.json")
+                    payload = json.loads(payload_path.read_text(encoding="utf-8"))
+                    if thread is None:
+                        del payload["thread"]
+                    else:
+                        payload["thread"] = thread
+                    payload_path.write_text(json.dumps(payload), encoding="utf-8")
+
+                    appended = self.command(repo, "append", payload_path)
+
+                    self.assertNotEqual(appended.returncode, 0)
+                    self.assertIn(f"thread ({expected})", appended.stderr)
+                    self.assertFalse(
+                        (
+                            repo
+                            / ".project"
+                            / ".discussion-append-transaction.json"
+                        ).exists()
+                    )
 
     def test_append_recovery_rejects_symlinked_discussion_directory(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

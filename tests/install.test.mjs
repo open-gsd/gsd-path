@@ -1,10 +1,14 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, test } from "node:test";
+import { fileURLToPath } from "node:url";
 
 import * as installer from "../scripts/install.mjs";
+
+const REPO_ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 
 let root;
 let source;
@@ -777,6 +781,90 @@ test("hooks refresh rejects unmanaged guard scripts", async () => {
     ["--hooks-refresh", "--project", project, "--source-root", source, "--no-color"]
   );
   assert.equal(status, 1);
+});
+
+test("hooks refresh full merges settings preserving unrelated keys", async () => {
+  const project = path.join(root, "project");
+  fs.mkdirSync(path.join(project, ".git"), { recursive: true });
+  const target = path.join(root, "claude", "skills");
+  await runInstall([installer.targetPlan("claude", target)], { project, hooks: true });
+  const settingsPath = path.join(project, ".claude", "settings.json");
+  const settings = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
+  settings.hooks.PreToolUse[0].matcher = "old";
+  settings.permissions = { allow: ["Bash(npm test)"] };
+  settings.model = "opus";
+  fs.writeFileSync(settingsPath, JSON.stringify(settings) + "\n");
+  const status = await installer.main(
+    ["--hooks-refresh-full", "--project", project, "--source-root", source, "--no-color"]
+  );
+  assert.equal(status, 0);
+  const refreshed = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
+  assert.equal(refreshed.hooks.PreToolUse[0].matcher, installer.CLAUDE_MATCHER);
+  assert.deepEqual(refreshed.permissions, { allow: ["Bash(npm test)"] });
+  assert.equal(refreshed.model, "opus");
+});
+
+test("hooks refresh full rejects a malformed managed settings file", async () => {
+  const project = path.join(root, "project");
+  fs.mkdirSync(path.join(project, ".git"), { recursive: true });
+  const target = path.join(root, "claude", "skills");
+  await runInstall([installer.targetPlan("claude", target)], { project, hooks: true });
+  const settingsPath = path.join(project, ".claude", "settings.json");
+  fs.writeFileSync(settingsPath, "{ guard_hook.py .gsd-path\n");
+  const status = await installer.main(
+    ["--hooks-refresh-full", "--project", project, "--source-root", source, "--no-color"]
+  );
+  assert.equal(status, 1);
+  assert.equal(fs.readFileSync(settingsPath, "utf8"), "{ guard_hook.py .gsd-path\n");
+});
+
+test("hooks refresh full recreates missing git hooks and fixes modes", async () => {
+  const project = path.join(root, "project");
+  fs.mkdirSync(path.join(project, ".git"), { recursive: true });
+  const target = path.join(root, "claude", "skills");
+  await runInstall([installer.targetPlan("claude", target)], { project, hooks: true });
+  const preCommit = path.join(project, ".git", "hooks", "pre-commit");
+  const commitMsg = path.join(project, ".git", "hooks", "commit-msg");
+  fs.rmSync(preCommit);
+  if (process.platform !== "win32") fs.chmodSync(commitMsg, 0o644);
+  const status = await installer.main(
+    ["--hooks-refresh-full", "--project", project, "--source-root", source, "--no-color"]
+  );
+  assert.equal(status, 0);
+  assert.equal(fs.readFileSync(preCommit, "utf8"), installer.PRE_COMMIT_HOOK);
+  if (process.platform !== "win32") {
+    assert.ok(fs.statSync(preCommit).mode & 0o100);
+    assert.ok(fs.statSync(commitMsg).mode & 0o100);
+  }
+});
+
+test("hooks refresh full rejects a symlinked settings file", async () => {
+  const project = path.join(root, "project");
+  fs.mkdirSync(path.join(project, ".git"), { recursive: true });
+  const target = path.join(root, "claude", "skills");
+  await runInstall([installer.targetPlan("claude", target)], { project, hooks: true });
+  const settingsPath = path.join(project, ".claude", "settings.json");
+  const outside = path.join(root, "outside-settings.json");
+  fs.renameSync(settingsPath, outside);
+  fs.symlinkSync(outside, settingsPath);
+  const before = fs.readFileSync(outside, "utf8");
+  const status = await installer.main(
+    ["--hooks-refresh-full", "--project", project, "--source-root", source, "--no-color"]
+  );
+  assert.equal(status, 1);
+  assert.equal(fs.readFileSync(outside, "utf8"), before);
+});
+
+test("cli loads from an install path containing spaces", () => {
+  const spaced = path.join(root, "dir with spaces");
+  fs.mkdirSync(spaced, { recursive: true });
+  for (const name of ["install.mjs", "skill-resources.json"]) {
+    fs.copyFileSync(path.join(REPO_ROOT, "scripts", name), path.join(spaced, name));
+  }
+  const result = spawnSync(process.execPath, [path.join(spaced, "install.mjs"), "--help"], {
+    encoding: "utf8",
+  });
+  assert.equal(result.status, 0, result.stderr);
 });
 
 test("hooks skip the git hook without a repository", async () => {
