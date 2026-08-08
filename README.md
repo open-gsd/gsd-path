@@ -163,23 +163,9 @@ health check of installs, guard hooks, and pipeline state.
 ## Agent execution
 
 Define and build orchestrators run in the main task. Researchers, deciders,
-planners, coders, and reviewers delegate via host-specific adapters:
-
-| Host | Child-agent API |
-| --- | --- |
-| Codex | collaboration |
-| Claude Code | `Agent` |
-| Grok | `spawn_subagent` |
-| OpenCode | `Task` / v2 `subagent` |
-| GitHub Copilot CLI | `task` |
-| Qwen Code | `agent` |
-| Antigravity CLI | `invoke_subagent` |
-| Cursor | `Task` (`gsd-path` subagent) |
-| Zed | `spawn_agent` |
-| Kiro | subagent facility |
-
-Parallel work up to child capacity; same-wave dependencies in layers. Context
-on disk in `.project/`, not chat.
+planners, coders, and reviewers delegate via host-specific adapters. See
+[FULL.md — Agent execution](FULL.md#agent-execution-how-work-is-delegated) for
+the authoritative host API table and delegation rules.
 
 `platforms/` is installer-only — not user-invoked skills.
 

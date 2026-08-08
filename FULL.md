@@ -332,6 +332,7 @@ your skills:
 | Cursor | `Task` | installed `gsd-path` subagent |
 | Zed | `spawn_agent` | |
 | Kiro | subagent facility | |
+| Kimi | `Agent` | `coder` child type |
 
 Independent briefs run in parallel up to child capacity; dependencies run in
 layers. Every child brief names absolute input/output paths and bounded scope.
