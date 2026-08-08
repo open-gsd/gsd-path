@@ -2,7 +2,6 @@
 """Prepare and validate a crash-resumable GSD Path milestone archive."""
 
 import argparse
-import fcntl
 import filecmp
 import json
 import os
@@ -14,6 +13,11 @@ from contextlib import contextmanager
 from datetime import date
 from pathlib import Path, PurePosixPath
 from typing import Iterator, Optional, Sequence
+
+if sys.platform == "win32":
+    import msvcrt
+else:
+    import fcntl
 
 
 ARCHIVE_PATTERN = re.compile(r"^(\d{3,})-([a-z0-9][a-z0-9-]*)$")
@@ -125,6 +129,34 @@ PIPELINE_MARKER = "gsd-path/v1"
 
 @contextmanager
 def discussion_lock(active_root: Path) -> Iterator[None]:
+    if sys.platform == "win32":
+        lock_value = require_git_success(
+            run_git(
+                active_root.parent,
+                "rev-parse",
+                "--git-path",
+                "gsd-path-discussion.lock",
+            ),
+            "resolve discussion lock",
+        )
+        lock_path = Path(lock_value)
+        if not lock_path.is_absolute():
+            lock_path = active_root.parent / lock_path
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        with lock_path.open("a+b") as handle:
+            handle.seek(0, os.SEEK_END)
+            if handle.tell() == 0:
+                handle.write(b"\0")
+                handle.flush()
+            handle.seek(0)
+            msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
+            try:
+                yield
+            finally:
+                handle.seek(0)
+                msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+        return
+
     descriptor = os.open(active_root, os.O_RDONLY)
     try:
         fcntl.flock(descriptor, fcntl.LOCK_EX)
@@ -134,17 +166,31 @@ def discussion_lock(active_root: Path) -> Iterator[None]:
         os.close(descriptor)
 
 
-def atomic_write(path: Path, content: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary_path = path.parent / STATE_TEMP_NAME
+def atomic_replace(path: Path, temporary_path: Path, content: str) -> None:
+    temporary_path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor = None
     try:
         if temporary_path.exists() or temporary_path.is_symlink():
             temporary_path.unlink()
-        temporary_path.write_text(content, encoding="utf-8")
+        descriptor = os.open(
+            temporary_path,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+            0o666,
+        )
+        handle = os.fdopen(descriptor, "w", encoding="utf-8")
+        descriptor = None
+        with handle:
+            handle.write(content)
         os.replace(temporary_path, path)
     finally:
+        if descriptor is not None:
+            os.close(descriptor)
         if temporary_path.exists() or temporary_path.is_symlink():
             temporary_path.unlink()
+
+
+def atomic_write(path: Path, content: str) -> None:
+    atomic_replace(path, path.parent / STATE_TEMP_NAME, content)
 
 
 def frontmatter_value(content: str, key: str) -> Optional[str]:
@@ -788,9 +834,7 @@ def finish_discussion_reconciliation(active_root: Path, archive: Path) -> None:
     require_safe_discussion_destination(active_root, archive, destination)
     for name in DISCUSSION_FILES:
         temporary = destination / f".{name}.gsd-path-tmp"
-        temporary.parent.mkdir(parents=True, exist_ok=True)
-        temporary.write_text(files[name], encoding="utf-8")
-        os.replace(temporary, destination / name)
+        atomic_replace(destination / name, temporary, files[name])
     validate_discussion_directory(destination)
     if source.exists():
         shutil.rmtree(source)

@@ -1,15 +1,18 @@
-import fcntl
 import json
 import os
 import shutil
 import subprocess
 import sys
 import tempfile
+import textwrap
 import unittest
 from pathlib import Path
 from unittest import mock
 
 from scripts import archive_milestone
+
+if sys.platform != "win32":
+    import fcntl
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -394,6 +397,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                 dialogue_template.split("\n### D001", 1)[0].rstrip() + "\n",
             )
 
+    @unittest.skipIf(sys.platform == "win32", "POSIX lock contention check")
     def test_prepare_holds_discussion_lock_while_reconciling(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             repo = Path(temporary_directory)
@@ -417,6 +421,44 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                 result = archive_milestone.prepare(repo, "demo")
 
             self.assertEqual(result["archive"], ".project/archive/001-demo")
+
+    def test_discussion_lock_uses_windows_locking_without_fcntl(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            program = textwrap.dedent(
+                f"""
+                import json
+                import runpy
+                import subprocess
+                import sys
+                import types
+                from pathlib import Path
+
+                calls = []
+                locking = types.ModuleType("msvcrt")
+                locking.LK_LOCK = 1
+                locking.LK_UNLCK = 2
+                locking.locking = lambda descriptor, mode, size: calls.append(mode)
+                sys.modules["fcntl"] = None
+                sys.modules["msvcrt"] = locking
+                sys.platform = "win32"
+                module = runpy.run_path({str(ARCHIVE_SCRIPT)!r}, run_name="archive_portability")
+                with module["discussion_lock"](Path({str(repo / ".project")!r})):
+                    calls.append("inside")
+                print(json.dumps(calls))
+                """
+            )
+
+            result = self.run_command(
+                sys.executable,
+                "-c",
+                program,
+                cwd=PROJECT_ROOT,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(json.loads(result.stdout), [1, "inside", 2])
 
     def test_prepare_reconciles_append_only_discussion_after_archive_started(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -727,6 +769,40 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                     for name in archive_milestone.DISCUSSION_FILES
                 },
                 before,
+            )
+
+    def test_discussion_recovery_does_not_follow_temporary_symlinks(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            discussion = repo / ".project" / "discuss"
+            self.write_discussion(discussion)
+            archive = self.prepare_archive(repo)
+            self.write_discussion(discussion, turn=2)
+            payload = {
+                "schema": "gsd-path/discussion-archive/v1",
+                "archive": str(archive.resolve()),
+                "files": {
+                    name: (discussion / name).read_text()
+                    for name in archive_milestone.DISCUSSION_FILES
+                },
+            }
+            (repo / ".project" / archive_milestone.DISCUSSION_TRANSACTION_NAME).write_text(
+                json.dumps(payload) + "\n"
+            )
+            outside = repo / "outside-record.md"
+            outside.write_text("outside sentinel\n")
+            temporary = archive / "discuss" / ".DIALOGUE.md.gsd-path-tmp"
+            temporary.symlink_to(outside)
+
+            archive_milestone.finish_discussion_reconciliation(
+                repo / ".project", archive
+            )
+
+            self.assertEqual(outside.read_text(), "outside sentinel\n")
+            self.assertFalse((archive / "discuss" / "DIALOGUE.md").is_symlink())
+            self.assertIn(
+                "### D002", (archive / "discuss" / "DIALOGUE.md").read_text()
             )
 
     def test_ship_accepts_active_lessons_file(self) -> None:

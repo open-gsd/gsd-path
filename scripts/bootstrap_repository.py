@@ -336,7 +336,7 @@ def verify_origin(request: BootstrapRequest) -> None:
         )
 
 
-def verify_checkout(request: BootstrapRequest) -> tuple[str, str]:
+def verify_checkout_location(request: BootstrapRequest) -> Path:
     checkout = request.checkout_path
     require_real_directory(checkout, "default checkout")
     top_level = Path(git_output(checkout, "rev-parse", "--show-toplevel")).resolve()
@@ -345,6 +345,18 @@ def verify_checkout(request: BootstrapRequest) -> tuple[str, str]:
     verify_origin(request)
     if git_output(checkout, "status", "--porcelain"):
         raise BootstrapError("default checkout is not clean")
+    return checkout
+
+
+def verify_checkout_revision(checkout: Path, remote_default: str, base: str) -> None:
+    if git_output(checkout, "branch", "--show-current") != remote_default:
+        raise BootstrapError("default checkout is not on the remote default branch")
+    if git_output(checkout, "rev-parse", "HEAD") != base:
+        raise BootstrapError("default checkout does not match the remote-default SHA")
+
+
+def verify_checkout(request: BootstrapRequest) -> tuple[str, str]:
+    checkout = verify_checkout_location(request)
 
     require_success(
         run("git", "-C", str(checkout), "fetch", "--prune", "origin"),
@@ -368,10 +380,7 @@ def verify_checkout(request: BootstrapRequest) -> tuple[str, str]:
         raise BootstrapError(f"remote default ref is invalid: {remote_ref}")
     remote_default = remote_ref.removeprefix("origin/")
     base = git_output(checkout, "rev-parse", remote_ref)
-    if git_output(checkout, "branch", "--show-current") != remote_default:
-        raise BootstrapError("default checkout is not on the remote default branch")
-    if git_output(checkout, "rev-parse", "HEAD") != base:
-        raise BootstrapError("default checkout does not match the remote-default SHA")
+    verify_checkout_revision(checkout, remote_default, base)
     return remote_default, base
 
 
@@ -463,11 +472,15 @@ def verify_completed_binding(request: BootstrapRequest) -> tuple[str, str]:
         raise BootstrapError("completed repository binding is missing")
     expected_default, expected_base = binding
     verify_remote_visibility(request)
-    remote_default, base = verify_checkout(request)
-    if remote_default != expected_default or base != expected_base:
-        raise BootstrapError("completed repository binding does not match the checkout")
-    verify_worktree(request, base)
-    return remote_default, base
+    checkout = verify_checkout_location(request)
+    try:
+        verify_checkout_revision(checkout, expected_default, expected_base)
+    except BootstrapError as error:
+        raise BootstrapError(
+            "completed repository binding does not match the checkout"
+        ) from error
+    verify_worktree(request, expected_base)
+    return expected_default, expected_base
 
 
 def render_state(template: Path, request: BootstrapRequest) -> str:

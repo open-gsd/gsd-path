@@ -24,16 +24,8 @@ PHASES = {"onboard", "grill", "research", "synthesize", "plan", "build", "review
 
 
 def atomic_write(path: Path, content: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.parent / f".{path.name}.gsd-path-tmp"
-    try:
-        if temporary.exists() or temporary.is_symlink():
-            temporary.unlink()
-        temporary.write_text(content, encoding="utf-8")
-        os.replace(temporary, path)
-    finally:
-        if temporary.exists() or temporary.is_symlink():
-            temporary.unlink()
+    archive_milestone.atomic_replace(path, temporary, content)
 
 
 def project_root(repo: Path) -> tuple[Path, Path, Path]:

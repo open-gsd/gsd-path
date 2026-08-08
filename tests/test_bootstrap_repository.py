@@ -143,6 +143,45 @@ class BootstrapRepositoryTests(unittest.TestCase):
             str(repository_template),
         )
 
+    def complete_bootstrap(self, root: Path):
+        workspace = root / "workspace"
+        workspace.mkdir()
+        binary, remotes = self.write_fake_gh(root)
+        checkout = workspace / "demo"
+        worktree = workspace / "demo-gsd-path"
+        repository_template = root / "repository.md"
+        repository_template.write_text(
+            "Kind: <kind>\nRemote: <remote>\nVisibility: <visibility>\n"
+            "Remote default: <remote-default>\n"
+            "Remote default SHA: <remote-default-sha>\n"
+            "Default checkout: <default-checkout>\nGSD Path branch: <branch>\n"
+            "Primary worktree: <primary-worktree>\n"
+        )
+        environment = os.environ.copy()
+        environment["PATH"] = f"{binary}{os.pathsep}{environment['PATH']}"
+        environment["FAKE_GH_ROOT"] = str(remotes)
+        command = self.bootstrap_command(
+            workspace, checkout, worktree, repository_template
+        )
+        created = self.run_command(*command, cwd=workspace, env=environment)
+        self.assertEqual(created.returncode, 0, created.stderr)
+        return workspace, checkout, worktree, remotes, environment, command
+
+    def advance_remote(self, root: Path, remote: Path) -> None:
+        updater = root / "updater"
+        cloned = self.run_command(
+            "git", "clone", "-q", str(remote), str(updater), cwd=root
+        )
+        self.assertEqual(cloned.returncode, 0, cloned.stderr)
+        self.git(updater, "config", "user.name", "Updater")
+        self.git(updater, "config", "user.email", "updater@example.invalid")
+        (updater / "README.md").write_text("# Updated\n")
+        self.git(updater, "add", "README.md")
+        committed = self.git(updater, "commit", "-q", "-m", "Advance default")
+        self.assertEqual(committed.returncode, 0, committed.stderr)
+        pushed = self.git(updater, "push", "-q", "origin", "main")
+        self.assertEqual(pushed.returncode, 0, pushed.stderr)
+
     def test_recovers_existing_remote_checkout_and_worktree_before_state(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
@@ -376,6 +415,43 @@ Primary worktree: <primary-worktree>
 
             self.assertNotEqual(resumed.returncode, 0)
             self.assertIn("remote-default SHA", resumed.stderr)
+
+    def test_completed_preview_does_not_fetch_an_advanced_remote(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            workspace, checkout, _, remotes, environment, command = (
+                self.complete_bootstrap(root)
+            )
+            self.advance_remote(root, remotes / "acme" / "demo.git")
+            refs_before = self.git(checkout, "show-ref").stdout
+            preview_command = list(command)
+            preview_command[2] = "preview"
+
+            preview = self.run_command(
+                *preview_command, cwd=workspace, env=environment
+            )
+
+            self.assertEqual(preview.returncode, 0, preview.stderr)
+            self.assertEqual(json.loads(preview.stdout)["mode"], "complete")
+            self.assertEqual(self.git(checkout, "show-ref").stdout, refs_before)
+
+    def test_completed_create_keeps_the_creation_time_binding(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            workspace, checkout, worktree, remotes, environment, command = (
+                self.complete_bootstrap(root)
+            )
+            base = self.git(checkout, "rev-parse", "HEAD").stdout.strip()
+            self.advance_remote(root, remotes / "acme" / "demo.git")
+
+            repeated = self.run_command(*command, cwd=workspace, env=environment)
+
+            self.assertEqual(repeated.returncode, 0, repeated.stderr)
+            result = json.loads(repeated.stdout)
+            self.assertEqual(result["remote_default_sha"], base)
+            self.assertEqual(
+                self.git(worktree, "rev-parse", "HEAD").stdout.strip(), base
+            )
 
     def test_create_rejects_symlinked_transaction_directory(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
