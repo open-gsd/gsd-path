@@ -8,6 +8,7 @@
     "gsd-path": "scripts/install.mjs"
   },
   "files": [
+    "plugin.json",
     "scripts/install.mjs",
     "scripts/skill-resources.json",
     "scripts/archive_milestone.py",

@@ -196,6 +196,7 @@ or STATE.md.
 
 | Path | Purpose |
 |------|---------|
+| `plugin.json` | Agent Plugins manifest (`agent-plugins.org` 1.0.0 schema) |
 | `skills/` | Ten canonical `gsd-path*` skills plus four deprecated aliases |
 | `skills/gsd-path/templates/` | Required artifact formats |
 | `skills/gsd-path/references/` | Agent role and dispatch contracts |
