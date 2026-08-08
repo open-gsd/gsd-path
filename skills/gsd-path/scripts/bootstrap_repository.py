@@ -348,11 +348,22 @@ def verify_checkout_location(request: BootstrapRequest) -> Path:
     return checkout
 
 
-def verify_checkout_revision(checkout: Path, remote_default: str, base: str) -> None:
+def verify_checkout_branch(checkout: Path, remote_default: str) -> None:
     if git_output(checkout, "branch", "--show-current") != remote_default:
         raise BootstrapError("default checkout is not on the remote default branch")
+
+
+def verify_checkout_revision(checkout: Path, remote_default: str, base: str) -> None:
+    verify_checkout_branch(checkout, remote_default)
     if git_output(checkout, "rev-parse", "HEAD") != base:
         raise BootstrapError("default checkout does not match the remote-default SHA")
+
+
+def verify_completed_checkout_revision(
+    checkout: Path, remote_default: str, creation_sha: str
+) -> None:
+    verify_checkout_branch(checkout, remote_default)
+    verify_creation_ancestry(checkout, creation_sha, "completed default checkout")
 
 
 def verify_checkout(request: BootstrapRequest) -> tuple[str, str]:
@@ -400,6 +411,24 @@ def git_common_directory(repository: Path) -> Path:
     if not path.is_absolute():
         path = repository / path
     return path.resolve()
+
+
+def verify_creation_ancestry(
+    repository: Path, creation_sha: str, label: str
+) -> None:
+    ancestry = run(
+        "git",
+        "-C",
+        str(repository),
+        "merge-base",
+        "--is-ancestor",
+        creation_sha,
+        "HEAD",
+    )
+    if ancestry.returncode != 0:
+        raise BootstrapError(
+            f"{label} does not descend from the recorded creation SHA"
+        )
 
 
 def allowed_partial_project_status(worktree: Path) -> bool:
@@ -472,19 +501,7 @@ def verify_worktree_location(request: BootstrapRequest) -> Path:
 
 def verify_completed_worktree(request: BootstrapRequest, creation_sha: str) -> None:
     worktree = verify_worktree_location(request)
-    ancestry = run(
-        "git",
-        "-C",
-        str(worktree),
-        "merge-base",
-        "--is-ancestor",
-        creation_sha,
-        "HEAD",
-    )
-    if ancestry.returncode != 0:
-        raise BootstrapError(
-            "completed linked worktree does not descend from the recorded creation SHA"
-        )
+    verify_creation_ancestry(worktree, creation_sha, "completed linked worktree")
 
 
 def verify_completed_binding(request: BootstrapRequest) -> tuple[str, str]:
@@ -495,10 +512,12 @@ def verify_completed_binding(request: BootstrapRequest) -> tuple[str, str]:
     verify_remote_visibility(request)
     checkout = verify_checkout_location(request)
     try:
-        verify_checkout_revision(checkout, expected_default, expected_base)
+        verify_completed_checkout_revision(
+            checkout, expected_default, expected_base
+        )
     except BootstrapError as error:
         raise BootstrapError(
-            "completed repository binding does not match the checkout"
+            f"completed repository binding does not match the checkout: {error}"
         ) from error
     verify_completed_worktree(request, expected_base)
     return expected_default, expected_base

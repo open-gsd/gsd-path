@@ -453,6 +453,38 @@ Primary worktree: <primary-worktree>
                 self.git(worktree, "rev-parse", "HEAD").stdout.strip(), base
             )
 
+    def test_completed_preview_accepts_only_descendant_checkout_tips(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            workspace, checkout, _, remotes, environment, command = (
+                self.complete_bootstrap(root)
+            )
+            self.advance_remote(root, remotes / "acme" / "demo.git")
+            pulled = self.git(checkout, "pull", "--ff-only", "origin", "main")
+            self.assertEqual(pulled.returncode, 0, pulled.stderr)
+            preview_command = list(command)
+            preview_command[2] = "preview"
+
+            preview = self.run_command(
+                *preview_command, cwd=workspace, env=environment
+            )
+
+            self.assertEqual(preview.returncode, 0, preview.stderr)
+            self.assertEqual(json.loads(preview.stdout)["mode"], "complete")
+
+            tree = self.git(checkout, "rev-parse", "HEAD^{tree}").stdout.strip()
+            unrelated = self.git(checkout, "commit-tree", tree, "-m", "Unrelated")
+            self.assertEqual(unrelated.returncode, 0, unrelated.stderr)
+            reset = self.git(checkout, "reset", "--hard", unrelated.stdout.strip())
+            self.assertEqual(reset.returncode, 0, reset.stderr)
+
+            rejected = self.run_command(
+                *preview_command, cwd=workspace, env=environment
+            )
+
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertIn("creation SHA", rejected.stderr)
+
     def test_completed_preview_accepts_only_descendants_of_the_creation_sha(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
