@@ -4,8 +4,8 @@ Apply this contract whenever a GSD Path skill delegates work:
 
 - Use the Codex collaboration tool with an explicit built-in `agent_type` and
   `fork_turns: "none"`. Coders use `worker`; every other role uses `default`.
-- Supply a deterministic `task_name`: `onboard_codebase`, `onboard_docs`,
-  `docs_audit`, `research_<dimension>`, `synthesize`, `plan`, `plan_patch`,
+- Supply a deterministic `task_name`: `inspect_codebase`, `inspect_docs`,
+  `docs_audit`, `research_<dimension>`, `decide`, `plan`, `plan_patch`,
   `build_<task_id>`, `review_wave_<wave>_cycle_<cycle>`, `review_final`, or
   `review_gap_<number>`. Normalize variable parts to lowercase ASCII and
   replace non-alphanumeric runs with one underscore. Never add a random

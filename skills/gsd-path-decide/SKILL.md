@@ -1,11 +1,11 @@
 ---
-name: gsd-path-synthesize
-description: Convert approved GSD Path intent and complete research evidence into settled implementation decisions. Use only when the user explicitly invokes $gsd-path-synthesize or an active $gsd-path router explicitly routes to this phase.
+name: gsd-path-decide
+description: Decide implementation direction from approved intent and complete research evidence, recording settled choices in SYNTHESIS.md. Use only when the user explicitly invokes $gsd-path-decide or an active $gsd-path router explicitly routes to this phase.
 ---
 
-# GSD Path Synthesis Phase
+# GSD Path Decide Phase
 
-Dispatch one reasoning-intensive synthesizer and validate its decision artifact.
+Dispatch one reasoning-intensive decider and validate its decision artifact.
 
 Any instruction below to route, return, or invoke another GSD Path phase is a
 caller handoff, not permission to trigger an explicit-only skill. If an active
@@ -14,7 +14,7 @@ direct invocation, report the exact next skill and stop until the user
 explicitly invokes it.
 
 Before dispatch and again before completion, apply AGENTS.md's pending
-discussion-answer contract. Resolve an answer owned by synthesis in
+discussion-answer contract. Resolve an answer owned by decide in
 SYNTHESIS.md and append a disposition receipt; otherwise block with links to
 ANSWERS.md and the target artifact rather than settling stale decisions.
 
@@ -31,15 +31,17 @@ only when the handoff manifest records that dimension as skipped; a missing or
 invalid manifest or dispatched file routes to `$gsd-path-research`. Include
 every additional `evidence-*.md` file present only when the manifest names it.
 
+`synthesize` is the persisted v1 state token for this canonical decide phase.
+
 ## Process
 
 1. Read the local [synthesis template](templates/synthesis.md),
    `.project/research/RESEARCH.md`, and the bundled `scripts/check_handoffs.py`;
    resolve each to an absolute path. Run the research hand-off validator before
-   dispatch so synthesis receives a complete, intentional evidence set.
-2. Read the local [synthesizer role](references/synthesizer.md), then follow
+   dispatch so decide receives a complete, intentional evidence set.
+2. Read the local [decider role](references/synthesizer.md), then follow
    the local [runtime dispatch contract](references/dispatch.md) with
-   deterministic logical task name `synthesize`. Give it absolute paths to the role,
+   deterministic logical task name `decide`. Give it absolute paths to the role,
    `AGENTS.md`, `WORKFLOW.md`, INTENT.md, RESEARCH.md, every evidence file, the
    template, and the required output `.project/research/SYNTHESIS.md`.
 3. Validate SYNTHESIS.md. Require one decision block for every genuinely open
@@ -51,7 +53,7 @@ every additional `evidence-*.md` file present only when the manifest names it.
    Confidence in every decision block. Require `## For the planner` with wave-1
    blockers, walking skeleton, and pitfall-to-task guidance.
 4. If structural validation fails, redispatch one complete corrected brief
-   under logical task name `synthesize`, following the runtime dispatch
+   under logical task name `decide`, following the runtime dispatch
    contract, and validate again. If it still fails, set STATE.md to
    `phase: synthesize`, `status: blocked`, append the failures to its log, and
    present **Outcome** with the failed gate, **Review** linking SYNTHESIS.md or
@@ -71,7 +73,7 @@ every additional `evidence-*.md` file present only when the manifest names it.
    to its log. Confirm the settled outcome, link SYNTHESIS.md again, and name
    planning as next. When routed by an active `$gsd-path`, return control to
    that router. When invoked directly, stop and tell the user to explicitly
-   invoke `$gsd-path` or `$gsd-path-plan`; do not invoke an explicit-only
+   invoke `$gsd-path`, which routes to plan; do not invoke an explicit-only
    sibling skill yourself.
 
 ## Rules

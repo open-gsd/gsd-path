@@ -1,9 +1,9 @@
 ---
-name: gsd-path-review
-description: Independently review a GSD Path wave or completed milestone against its written criteria. Use only when the user explicitly invokes $gsd-path-review or an active $gsd-path router or build orchestrator explicitly routes to this phase.
+name: gsd-path-ship
+description: Verify a completed GSD Path milestone, manage evidence-backed patch decisions, request final shipping approval, and archive the validated result. Use only when the user explicitly invokes $gsd-path-ship or an active $gsd-path router or build orchestrator explicitly routes to this phase.
 ---
 
-# GSD Path Review Phase
+# GSD Path Ship Phase
 
 Dispatch independent reviewers. They inspect and report; they never fix
 product code.
@@ -19,6 +19,9 @@ marker returns to `$gsd-path` for ownership checking. Read the local
 [reviewer role](references/reviewer.md) and
 [dispatch contract](references/dispatch.md), resolve them to absolute paths,
 and follow that runtime-specific dispatch contract.
+
+`review` is the persisted v1 state token for this canonical ship phase. The
+skill verifies first and never archives or ships before explicit final approval.
 
 ## Wave mode
 
@@ -50,11 +53,13 @@ null, and the only otherwise-unexpected path is the deterministic
 before safely persisting a transaction identity. Moved artifacts are
 transaction state, not missing inputs. A concrete archive in any other phase
 blocks without mutation. Otherwise, first scan ANSWERS.md for pending required
-follow-ups under AGENTS.md. Apply an answer addressed to review only through
-current review artifacts and append its disposition receipt. If it changes
-approved intent/plan or names another owner, keep `review/blocked`, link
-ANSWERS.md and the target artifact, and ask the user before dispatch or ship.
-Then:
+follow-ups under AGENTS.md. Apply an answer addressed to canonical
+`gsd-path-ship` or legacy `gsd-path-review` only through current review
+artifacts. Pass the record's exact stored owner to `dispose` so the disposition
+receipt preserves that durable owner name; use `gsd-path-ship` for new records.
+If it changes approved intent/plan or names another owner, keep
+`review/blocked`, link ANSWERS.md and the target artifact, and ask the user
+before dispatch or ship. Then:
 
 1. Require STATE `review/active` produced and committed by the build
    orchestrator, `.project/intent/INTENT.md`,
@@ -116,8 +121,8 @@ Then:
    contains exactly those FINAL.md and gap rows. When routed by an active
    `$gsd-path`, return control so its bundled plan contract opens patch mode.
    When invoked directly, stop and tell the user to explicitly invoke
-   `$gsd-path` or `$gsd-path-plan` with those sources; do not invoke an
-   explicit-only sibling skill yourself. Review never writes tasks or PLAN.md.
+   `$gsd-path`, which routes those sources to plan patch mode; do not invoke an
+   explicit-only sibling skill yourself. Ship never writes tasks or PLAN.md.
    The patch build commits this prior finding set with the approved patch
    artifacts before execution.
 6. Only when every criterion is `met`, every gap passes, project Verify passes,
@@ -177,7 +182,7 @@ field is the transaction identity.
 5. Set STATE.md to `phase: shipped`, `status: done` and append the archive path
    only after preflight passes. Stage only
    `.project/` paths, inspect the staged path list against the transaction and
-   create the review phase's one commit with exact subject
+   create the ship phase's one commit with exact subject
    `ship: <NNN>-<milestone-slug>`. When recovery already has `shipped/done`, do
    not append or rewrite the transition again. There is no untracked-project
    exception and no product or older-archive path may enter this commit.

@@ -1,6 +1,6 @@
 # Evidence — <dimension>
 
-<!-- Written by one researcher role. Consumed by the synthesizer. -->
+<!-- Written by one researcher role. Consumed by the decider. -->
 
 Dimension: <domain | stack | pitfalls | similar | custom>
 Questions assigned: <RESEARCH-tagged questions from INTENT.md, or "none">

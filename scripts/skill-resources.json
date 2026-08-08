@@ -2,15 +2,25 @@
   "skills": [
     "gsd-path",
     "gsd-path-build",
+    "gsd-path-decide",
+    "gsd-path-define",
     "gsd-path-discuss",
     "gsd-path-docs-audit",
     "gsd-path-grill",
+    "gsd-path-inspect",
     "gsd-path-onboard",
     "gsd-path-plan",
     "gsd-path-research",
     "gsd-path-review",
+    "gsd-path-ship",
     "gsd-path-synthesize"
   ],
+  "skill_aliases": {
+    "gsd-path-grill": "gsd-path-define",
+    "gsd-path-onboard": "gsd-path-inspect",
+    "gsd-path-review": "gsd-path-ship",
+    "gsd-path-synthesize": "gsd-path-decide"
+  },
   "package_files": [
     "scripts/install.mjs",
     "scripts/skill-resources.json",
@@ -51,11 +61,11 @@
       "references/docs-auditor.md",
       "templates/docs-audit.md"
     ],
-    "gsd-path-grill": [
+    "gsd-path-define": [
       "templates/intent.md",
       "templates/state.md"
     ],
-    "gsd-path-onboard": [
+    "gsd-path-inspect": [
       "references/codebase-mapper.md",
       "references/dispatch.md",
       "references/docs-auditor.md",
@@ -76,7 +86,7 @@
       "templates/evidence.md",
       "templates/research-handoff.md"
     ],
-    "gsd-path-review": [
+    "gsd-path-ship": [
       "references/dispatch.md",
       "references/reviewer.md",
       "templates/archive-manifest.md",
@@ -85,7 +95,7 @@
       "templates/patch-findings.md",
       "templates/wave-review.md"
     ],
-    "gsd-path-synthesize": [
+    "gsd-path-decide": [
       "references/dispatch.md",
       "references/synthesizer.md",
       "templates/synthesis.md"
@@ -96,39 +106,39 @@
     ["scripts/archive_milestone.py", "skills/gsd-path-build/scripts/archive_milestone.py"],
     ["scripts/archive_milestone.py", "skills/gsd-path-discuss/scripts/archive_milestone.py"],
     ["scripts/archive_milestone.py", "skills/gsd-path-docs-audit/scripts/archive_milestone.py"],
-    ["scripts/archive_milestone.py", "skills/gsd-path-grill/scripts/archive_milestone.py"],
-    ["scripts/archive_milestone.py", "skills/gsd-path-onboard/scripts/archive_milestone.py"],
+    ["scripts/archive_milestone.py", "skills/gsd-path-define/scripts/archive_milestone.py"],
+    ["scripts/archive_milestone.py", "skills/gsd-path-inspect/scripts/archive_milestone.py"],
     ["scripts/archive_milestone.py", "skills/gsd-path-plan/scripts/archive_milestone.py"],
     ["scripts/archive_milestone.py", "skills/gsd-path-research/scripts/archive_milestone.py"],
-    ["scripts/archive_milestone.py", "skills/gsd-path-review/scripts/archive_milestone.py"],
-    ["scripts/archive_milestone.py", "skills/gsd-path-synthesize/scripts/archive_milestone.py"],
+    ["scripts/archive_milestone.py", "skills/gsd-path-ship/scripts/archive_milestone.py"],
+    ["scripts/archive_milestone.py", "skills/gsd-path-decide/scripts/archive_milestone.py"],
     ["scripts/bootstrap_repository.py", "skills/gsd-path/scripts/bootstrap_repository.py"],
     ["scripts/discussion_records.py", "skills/gsd-path/scripts/discussion_records.py"],
     ["scripts/discussion_records.py", "skills/gsd-path-build/scripts/discussion_records.py"],
     ["scripts/discussion_records.py", "skills/gsd-path-discuss/scripts/discussion_records.py"],
     ["scripts/discussion_records.py", "skills/gsd-path-docs-audit/scripts/discussion_records.py"],
-    ["scripts/discussion_records.py", "skills/gsd-path-grill/scripts/discussion_records.py"],
-    ["scripts/discussion_records.py", "skills/gsd-path-onboard/scripts/discussion_records.py"],
+    ["scripts/discussion_records.py", "skills/gsd-path-define/scripts/discussion_records.py"],
+    ["scripts/discussion_records.py", "skills/gsd-path-inspect/scripts/discussion_records.py"],
     ["scripts/discussion_records.py", "skills/gsd-path-plan/scripts/discussion_records.py"],
     ["scripts/discussion_records.py", "skills/gsd-path-research/scripts/discussion_records.py"],
-    ["scripts/discussion_records.py", "skills/gsd-path-review/scripts/discussion_records.py"],
-    ["scripts/discussion_records.py", "skills/gsd-path-synthesize/scripts/discussion_records.py"],
+    ["scripts/discussion_records.py", "skills/gsd-path-ship/scripts/discussion_records.py"],
+    ["scripts/discussion_records.py", "skills/gsd-path-decide/scripts/discussion_records.py"],
     ["scripts/check_handoffs.py", "skills/gsd-path/scripts/check_handoffs.py"],
     ["scripts/check_handoffs.py", "skills/gsd-path-plan/scripts/check_handoffs.py"],
     ["scripts/check_handoffs.py", "skills/gsd-path-research/scripts/check_handoffs.py"],
-    ["scripts/check_handoffs.py", "skills/gsd-path-review/scripts/check_handoffs.py"],
-    ["scripts/check_handoffs.py", "skills/gsd-path-synthesize/scripts/check_handoffs.py"],
+    ["scripts/check_handoffs.py", "skills/gsd-path-ship/scripts/check_handoffs.py"],
+    ["scripts/check_handoffs.py", "skills/gsd-path-decide/scripts/check_handoffs.py"],
     ["scripts/check_update.py", "skills/gsd-path/scripts/check_update.py"]
   ],
   "phase_contract_targets": [
     ["skills/gsd-path-build/SKILL.md", "skills/gsd-path/BUILD.md"],
     ["skills/gsd-path-docs-audit/SKILL.md", "skills/gsd-path/DOCS-AUDIT.md"],
-    ["skills/gsd-path-grill/SKILL.md", "skills/gsd-path/GRILL.md"],
-    ["skills/gsd-path-onboard/SKILL.md", "skills/gsd-path/ONBOARD.md"],
+    ["skills/gsd-path-define/SKILL.md", "skills/gsd-path/DEFINE.md"],
+    ["skills/gsd-path-inspect/SKILL.md", "skills/gsd-path/INSPECT.md"],
     ["skills/gsd-path-plan/SKILL.md", "skills/gsd-path/PLAN.md"],
     ["skills/gsd-path-research/SKILL.md", "skills/gsd-path/RESEARCH.md"],
-    ["skills/gsd-path-review/SKILL.md", "skills/gsd-path/REVIEW.md"],
-    ["skills/gsd-path-synthesize/SKILL.md", "skills/gsd-path/SYNTHESIZE.md"]
+    ["skills/gsd-path-ship/SKILL.md", "skills/gsd-path/SHIP.md"],
+    ["skills/gsd-path-decide/SKILL.md", "skills/gsd-path/DECIDE.md"]
   ],
   "shared_dispatch_targets": [
     ["platforms/shared-agents/dispatch.md", "skills/gsd-path/references/dispatch.md"]

@@ -1,8 +1,8 @@
 # GSD Path
 
 A disk-backed project pipeline for AI coding agents. It turns a raw idea into
-shipped code through gated phases — interview, research, decisions, plan, parallel
-build, review, ship — with every handoff written to `.project/` so any session
+shipped code through gated phases — inspect, define, research, decide, plan,
+build, and ship — with every handoff written to `.project/` so any session
 can resume from disk alone.
 
 **Supported hosts:** Codex, Claude Code, Grok, OpenCode, GitHub Copilot CLI,
@@ -36,21 +36,21 @@ npm: `npx gsd-path --all` · Help: `node scripts/install.mjs --help`
 
 ## Skills
 
-Ten explicit-only skills. Invoke the **router** by default; use phase skills for
-one step only, or use the discussion sidecar to talk through a question at any
-non-shipped phase.
+Ten canonical explicit-only skills plus four deprecated aliases are installed.
+Invoke the **router** by default; use phase skills for one step only, or use the
+discussion sidecar to talk through a question at any non-shipped phase.
 
 | Skill | Role |
 | --- | --- |
 | `gsd-path` | Router — detects state, runs next phase |
 | `gsd-path-discuss` | Any-phase discussion with durable dialogue and answers |
-| `gsd-path-onboard` | Brownfield codebase map + doc audit |
-| `gsd-path-grill` | Intent interview |
+| `gsd-path-inspect` | Brownfield codebase map + doc audit |
+| `gsd-path-define` | Intent interview |
 | `gsd-path-research` | Parallel evidence researchers |
-| `gsd-path-synthesize` | Evidence → decisions |
+| `gsd-path-decide` | Evidence → decisions |
 | `gsd-path-plan` | Waves and task contracts |
 | `gsd-path-build` | Parallel coders + integration |
-| `gsd-path-review` | Wave and final review → ship |
+| `gsd-path-ship` | Verify, approve, archive, and ship |
 | `gsd-path-docs-audit` | Standalone doc-vs-code drift check |
 
 Codex: `$gsd-path`, `$gsd-path-plan`, … · Other hosts: `/gsd-path`, `/gsd-path-plan`, …
@@ -60,13 +60,13 @@ Codex: `$gsd-path`, `$gsd-path-plan`, … · Other hosts: `/gsd-path`, `/gsd-pat
 ```text
 gsd-path  (router)
   |
-  |-- 0. onboard      brownfield  -> evidence-codebase.md, DOCS-AUDIT.md
-  |-- 1. grill        intent      -> intent/INTENT.md
+  |-- 0. inspect      brownfield  -> evidence-codebase.md, DOCS-AUDIT.md
+  |-- 1. define       intent      -> intent/INTENT.md
   |-- 2. research     evidence    -> RESEARCH.md, evidence-*.md
-  |-- 3. synthesize   decisions   -> research/SYNTHESIS.md
+  |-- 3. decide       decisions   -> research/SYNTHESIS.md
   |-- 4. plan         tasks       -> plan/PLAN.md, tasks/T*.md
   |-- 5. build        code        -> commits, BOARD.md
-  `-- 6. review       gates       -> review/*.md -> ship -> archive/
+  `-- 6. ship         verify      -> review/*.md -> archive/
 ```
 
 At any non-shipped phase, `/gsd-path-discuss` (or `$gsd-path-discuss` in
@@ -80,8 +80,14 @@ prompts. Phase skills stop at their handoff; invoke the router again to continue
 The discussion sidecar is the exception: it can be invoked at any non-shipped
 phase and returns only a durable conversation record.
 
-**Brownfield** (existing code/docs) → onboard then grill. **Greenfield** → grill.
-**Quick lane** (tiny scope) may skip research/synthesize — see [FULL.md](FULL.md).
+**Brownfield** (existing code/docs) → inspect then define. **Greenfield** → define.
+**Quick lane** (tiny scope) may skip research/decide — see [FULL.md](FULL.md).
+
+Deprecated compatibility aliases remain for existing invocations; removing
+them requires a separately approved breaking change:
+`onboard → inspect`, `grill → define`, `synthesize → decide`, and
+`review → ship`. Persisted v1 STATE phase tokens do not change, so active
+projects resume without migration.
 
 For an explicit new-GitHub request, the router previews the owner, visibility,
 default checkout, `gsd-path/<project>` branch, and sibling linked worktree. A
@@ -96,7 +102,7 @@ partial remote/clone/worktree transaction; the default checkout stays clean.
   REPOSITORY.md               persistent new-GitHub checkout/worktree binding
   intent/INTENT.md            goal, vetoes, constraints
   research/
-    evidence-codebase.md      brownfield ground truth (onboard)
+    evidence-codebase.md      brownfield ground truth (inspect)
     DOCS-AUDIT.md             doc verdicts + remediation queue
     RESEARCH.md               dispatch manifest (dimensions researched/skipped)
     evidence-domain.md        domain evidence
@@ -156,24 +162,10 @@ health check of installs, guard hooks, and pipeline state.
 
 ## Agent execution
 
-Grill and build orchestrator run in the main task. Researchers, synthesizer,
-planner, coders, and reviewers delegate via host-specific adapters:
-
-| Host | Child-agent API |
-| --- | --- |
-| Codex | collaboration |
-| Claude Code | `Agent` |
-| Grok | `spawn_subagent` |
-| OpenCode | `Task` / v2 `subagent` |
-| GitHub Copilot CLI | `task` |
-| Qwen Code | `agent` |
-| Antigravity CLI | `invoke_subagent` |
-| Cursor | `Task` (`gsd-path` subagent) |
-| Zed | `spawn_agent` |
-| Kiro | subagent facility |
-
-Parallel work up to child capacity; same-wave dependencies in layers. Context
-on disk in `.project/`, not chat.
+Define and build orchestrators run in the main task. Researchers, deciders,
+planners, coders, and reviewers delegate via host-specific adapters. See
+[FULL.md — Agent execution](FULL.md#agent-execution-how-work-is-delegated) for
+the authoritative host API table and delegation rules.
 
 `platforms/` is installer-only — not user-invoked skills.
 
@@ -186,7 +178,7 @@ on disk in `.project/`, not chat.
 | `FULL.md` | Full guide |
 | `UPDATE.md` | Updating |
 | `HOOKS.md` | Guard hooks |
-| `skills/` | Ten `gsd-path*` skills |
+| `skills/` | Ten canonical `gsd-path*` skills plus four deprecated aliases |
 | `platforms/` | Host dispatch adapters |
 | `scripts/install.mjs` | Installer (npm `gsd-path` bin) |
 | `scripts/install.py` | Python installer |

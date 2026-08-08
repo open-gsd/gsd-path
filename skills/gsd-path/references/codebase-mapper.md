@@ -26,7 +26,7 @@ docs' description of them (the docs auditor checks those separately):
 - activity: recent git history — where the work has been happening.
 
 Then report findings to the evidence standard: claim, source (file:line or
-command actually run), confidence, and why it matters to onboarding. Give
+command actually run), confidence, and why it matters to inspection. Give
 special weight to:
 
 - **load-bearing surprises** — things a planner would guess wrong from the
@@ -34,7 +34,7 @@ special weight to:
 - **half-built areas** — code that exists but is unreachable, unused, or
   failing;
 - **apparent intent** — what the project seems to be trying to become,
-  flagged as inference, with the open questions a grill session should put
+  flagged as inference, with the open questions a define session should put
   to the user.
 
 ## Rules

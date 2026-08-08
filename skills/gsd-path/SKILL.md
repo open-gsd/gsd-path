@@ -14,13 +14,13 @@ All phase skills are explicit-only, so their catalog entries may be absent
 while this router is active. Before executing a route, read its bundled
 contract fully and follow it in the same conversation:
 
-- [onboard](ONBOARD.md)
-- [grill](GRILL.md)
+- [inspect](INSPECT.md)
+- [define](DEFINE.md)
 - [research](RESEARCH.md)
-- [synthesize](SYNTHESIZE.md)
+- [decide](DECIDE.md)
 - [plan](PLAN.md)
 - [build](BUILD.md)
-- [review](REVIEW.md)
+- [ship](SHIP.md)
 - [docs audit](DOCS-AUDIT.md)
 
 These synchronized files are the same contracts used by direct `$gsd-path-*`
@@ -70,7 +70,7 @@ GitHub repository and no owned `.project/STATE.md` is active for that request.
    **Next** offering an explicit verified resume first. Rerun `preview` before
    retrying; never substitute manual cleanup or a second transaction.
 6. On success, rebase the project root to the returned linked worktree. Treat
-   its verified bootstrap README as greenfield. Continue with the bundled grill
+   its verified bootstrap README as greenfield. Continue with the bundled define
    contract; it reads REPOSITORY.md and records the binding under INTENT.md's
    Constraints.
 
@@ -99,10 +99,14 @@ runs keep the build contract's current branch-binding behavior.
      [state template](templates/state.md) with deterministic project slug,
      `pipeline: gsd-path/v1`, `phase: onboard`, `status: active`,
      `milestone: null`, `branch: null`, and `archive: null`; report the signal and route to
-     the bundled [onboard contract](ONBOARD.md).
+     the bundled [inspect contract](INSPECT.md).
    - No signal is greenfield: initialize the same template with
      `phase: grill`, `milestone: null`, report that no brownfield signal fired, and route to
-     the bundled [grill contract](GRILL.md).
+     the bundled [define contract](DEFINE.md).
+
+The persisted v1 state tokens remain `onboard`, `grill`, `synthesize`, and
+`review` so active projects resume without migration. User-facing phase names
+and direct skills are `inspect`, `define`, `decide`, and `ship`.
 
 ## Transaction recovery first
 
@@ -113,7 +117,7 @@ Before ordinary routing, inspect `STATE.archive`.
   `python3 <absolute-bundled-script> validate --repo <root>`. Report shipped
   only when it returns the same archive path and exact ship SHA.
 - If validation fails, or state is still `review`, invoke
-  the bundled [review contract](REVIEW.md) in final archive-recovery mode. It bypasses moved
+  the bundled [ship contract](SHIP.md) in final archive-recovery mode. It bypasses moved
   final-review inputs, reuses the persisted path, and completes or validates
   the transaction. Never select another sequence number.
 - A concrete archive path in any phase other than `review` or `shipped` is
@@ -147,20 +151,20 @@ and must not delay routing.
 
 | State | Next action |
 | --- | --- |
-| `onboard`, not done | bundled [onboard contract](ONBOARD.md) |
-| `onboard`, done | bundled [grill contract](GRILL.md), brownfield mode |
-| `grill`, not done | bundled [grill contract](GRILL.md) |
+| `onboard`, not done | bundled [inspect contract](INSPECT.md) |
+| `onboard`, done | bundled [define contract](DEFINE.md), brownfield mode |
+| `grill`, not done | bundled [define contract](DEFINE.md) |
 | `grill`, done, INTENT `Lane: standard` (or no Lane line) | bundled [research contract](RESEARCH.md) |
 | `grill`, done, INTENT `Lane: quick` | bundled [plan contract](PLAN.md), quick mode |
 | `research`, not done | bundled [research contract](RESEARCH.md) |
-| `research`, done | bundled [synthesis contract](SYNTHESIZE.md) |
-| `synthesize`, not done | bundled [synthesis contract](SYNTHESIZE.md) |
+| `research`, done | bundled [decide contract](DECIDE.md) |
+| `synthesize`, not done | bundled [decide contract](DECIDE.md) |
 | `synthesize`, done | bundled [plan contract](PLAN.md) |
 | `plan`, not done | bundled [plan contract](PLAN.md) |
 | `plan`, done | bundled [build contract](BUILD.md); approval already authorizes execution |
 | `build`, active or blocked | bundled [build contract](BUILD.md), recovery mode |
-| `build`, done | bundled [build contract](BUILD.md) transition recovery, then review |
-| `review`, active | bundled [review contract](REVIEW.md), final mode |
+| `build`, done | bundled [build contract](BUILD.md) transition recovery, then ship |
+| `review`, active | bundled [ship contract](SHIP.md), final mode |
 | `review`, blocked with valid finding sources | bundled [plan contract](PLAN.md), patch mode |
 | `review`, blocked without a valid finding source or with conflicting evidence | stop at its `NEEDS-USER` item |
 | `shipped`, validated archive | report archive path and exact ship SHA; stop |
@@ -175,7 +179,7 @@ Start only from a ship transaction that passes the bundled validator. Preserve
 the previous archive path, ship SHA, and build branch in the state Log, then
 reset `phase: onboard`, `status: active`, `milestone: null`, `branch: null`, and
 `archive: null`.
-The project is now brownfield, so onboarding rescans current code and docs.
+The project is now brownfield, so inspect rescans current code and docs.
 Committed archives are read-only.
 
 ## Rules

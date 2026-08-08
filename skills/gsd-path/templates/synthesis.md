@@ -1,6 +1,6 @@
 # Synthesis
 
-<!-- Written by the synthesizer role. The planner treats Decisions as settled. -->
+<!-- Written by the decider role. The planner treats Decisions as settled. -->
 
 ## Settled
 

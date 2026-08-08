@@ -81,7 +81,7 @@ node scripts/install.mjs --update --claude --cursor
 ### After updating
 
 1. Restart your agent session (hosts reload skills on session start).
-2. Invoke the router — should report current phase or start grill/onboard.
+2. Invoke the router — should report the current phase or start define/inspect.
 3. Optional: `ls ~/.claude/skills/gsd-path/SKILL.md` (adjust path for your host).
 
 ---

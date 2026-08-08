@@ -94,6 +94,7 @@ export function skillNamesForManifest(manifest) {
 }
 
 export const SKILL_NAMES = skillNamesForManifest(MANIFEST);
+export const SKILL_ALIASES = { ...MANIFEST.skill_aliases };
 const PHASE_RESOURCES = MANIFEST.phase_resources;
 const SCRIPT_TARGETS = MANIFEST.script_targets;
 const PHASE_CONTRACT_TARGETS = MANIFEST.phase_contract_targets;
@@ -284,6 +285,21 @@ function rejectSourceSymlinks(root) {
 export function mismatches(root) {
   const problems = [];
   const pairs = [];
+  const expectedSkills = [
+    "gsd-path",
+    ...[...Object.keys(PHASE_RESOURCES), ...Object.keys(SKILL_ALIASES)].sort(),
+  ];
+  if (JSON.stringify(SKILL_NAMES) !== JSON.stringify(expectedSkills)) {
+    problems.push("manifest skills must be root gsd-path plus every canonical skill and alias");
+  }
+  for (const [legacy, canonicalSkill] of Object.entries(SKILL_ALIASES)) {
+    if (Object.hasOwn(PHASE_RESOURCES, legacy)) {
+      problems.push("skill aliases cannot also own phase resources");
+    }
+    if (!Object.hasOwn(PHASE_RESOURCES, canonicalSkill)) {
+      problems.push(`skill alias target is not canonical: ${legacy} -> ${canonicalSkill}`);
+    }
+  }
   for (const [source, destination] of SHARED_DISPATCH_TARGETS) {
     pairs.push([path.join(root, source), path.join(root, destination)]);
   }
@@ -295,6 +311,25 @@ export function mismatches(root) {
   }
   for (const [source, destination] of [...SCRIPT_TARGETS, ...PHASE_CONTRACT_TARGETS]) {
     pairs.push([path.join(root, source), path.join(root, destination)]);
+  }
+  for (const [legacy, canonicalSkill] of Object.entries(SKILL_ALIASES)) {
+    const legacyDirectory = path.join(root, "skills", legacy);
+    pairs.push([
+      path.join(root, "skills", canonicalSkill, "SKILL.md"),
+      path.join(legacyDirectory, "CANONICAL.md"),
+    ]);
+    for (const relative of PHASE_RESOURCES[canonicalSkill] || []) {
+      pairs.push([path.join(canonical, relative), path.join(legacyDirectory, relative)]);
+    }
+    const canonicalPrefix = `skills/${canonicalSkill}/`;
+    for (const [source, destination] of SCRIPT_TARGETS) {
+      if (destination.startsWith(canonicalPrefix)) {
+        pairs.push([
+          path.join(root, source),
+          path.join(legacyDirectory, destination.slice(canonicalPrefix.length)),
+        ]);
+      }
+    }
   }
   for (const [source, destination] of pairs) {
     if (!isFile(source)) {

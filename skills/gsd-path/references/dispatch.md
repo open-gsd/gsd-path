@@ -41,8 +41,8 @@ use exactly one matching branch:
 
 For every branch:
 
-- Supply the deterministic logical task name: `onboard_codebase`,
-  `onboard_docs`, `docs_audit`, `research_<dimension>`, `synthesize`, `plan`,
+- Supply the deterministic logical task name: `inspect_codebase`,
+  `inspect_docs`, `docs_audit`, `research_<dimension>`, `decide`, `plan`,
   `plan_patch`, `build_<task_id>`, `review_wave_<wave>_cycle_<cycle>`,
   `review_final`, or `review_gap_<number>`. Normalize variable parts to
   lowercase ASCII and replace non-alphanumeric runs with one underscore.
@@ -51,8 +51,8 @@ For every branch:
   prompt, and require the child to read it before acting. The role brief
   supplies the read-only boundary for auditors and reviewers.
 - Tier hints: when the host advertises model or reasoning-effort selection,
-  request `heavy` for `plan`, `plan_patch`, and `synthesize`, `light` for
-  `onboard_docs` and `docs_audit`, and the session default for every other
+  request `heavy` for `plan`, `plan_patch`, and `decide`, `light` for
+  `inspect_docs` and `docs_audit`, and the session default for every other
   role. When the host offers no such selection, do not override the model.
   Never ask the host to create a worktree. Give the child the exact
   repository or linked-worktree root supplied by GSD Path.

@@ -18,6 +18,13 @@ test("npm package includes the repository bootstrap helper", () => {
 
   assert.ok(packagedPaths.has("scripts/bootstrap_repository.py"));
   assert.ok(packagedPaths.has("skills/gsd-path/scripts/bootstrap_repository.py"));
+  for (const canonical of ["inspect", "define", "decide", "ship"]) {
+    assert.ok(packagedPaths.has(`skills/gsd-path-${canonical}/SKILL.md`));
+  }
+  for (const alias of ["onboard", "grill", "synthesize", "review"]) {
+    assert.ok(packagedPaths.has(`skills/gsd-path-${alias}/SKILL.md`));
+    assert.ok(packagedPaths.has(`skills/gsd-path-${alias}/CANONICAL.md`));
+  }
 });
 
 test("npm package file policy is owned by the resource manifest", () => {

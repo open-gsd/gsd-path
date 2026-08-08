@@ -31,18 +31,17 @@ cancellation is a blocked result, not a skipped result.
 
 | Stage | Independent children | Scheduling | Parent hand-off |
 | --- | --- | --- | --- |
-| onboard | codebase mapper, docs auditor | two concurrent briefs | validate and transfer both artifacts |
-| grill | none | coordinator-led user gate | write approved INTENT.md |
+| inspect | codebase mapper, docs auditor | two concurrent briefs | validate and transfer both artifacts |
+| define | none | coordinator-led user gate | write approved INTENT.md |
 | research | assigned dimensions | concurrent up to capacity, then batches | validate RESEARCH.md and evidence |
-| synthesize | one synthesizer | serial | validate SYNTHESIS.md |
+| decide | one decider | serial | validate SYNTHESIS.md |
 | plan | one planner; zero in quick mode | serial | validate PLAN.md and task mapping |
 | build | dependency-ready coders | parallel layers, serial integration | commit code and wave artifacts |
-| review | wave reviewer; final integration and gap reviewers | independent reviewers concurrent | validate and transfer review artifacts |
-| archive | none | coordinator-led transaction | validate the `.project`-only ship commit |
+| ship | wave reviewer; final integration and gap reviewers | independent reviewers concurrent | verify, approve, archive, and ship |
 
 Non-interactive phases auto-advance when their artifacts pass their gates.
-User approval remains required at grill, plan, final-review patch selection,
-and final shipping checkpoints. Synthesis auto-advances after its evidence gate
+User approval remains required at define, plan, final-review patch selection,
+and final shipping checkpoints. Decide auto-advances after its evidence gate
 unless a `NEEDS-USER` decision remains.
 
 Every user-facing checkpoint follows one handoff shape: **Outcome** states what
@@ -75,15 +74,16 @@ unowned collision blocks without deletion. The journal is removed only after
 both artifacts are durable. Existing repositories do not pass through this
 transaction.
 
-## Phase 0 — Onboard (`gsd-path-onboard`, brownfield only)
+## Phase 0 — Inspect (`gsd-path-inspect`, persisted state: `onboard`)
 
-**Input:** an existing codebase with no `.project/STATE.md`. **Output:**
+**Input:** an existing codebase with no `.project/STATE.md`, or owned v1 state
+at `onboard/active|blocked`. **Output:**
 `.project/research/evidence-codebase.md` and
 `.project/research/DOCS-AUDIT.md`.
 
 The router detects brownfield before asking anything: a package manifest,
 source layout, git history, or substantive docs means existing project.
-Detection routes here; a truly empty directory skips to the grill.
+Detection routes here; a truly empty directory skips to define.
 
 Before either agent writes `.project/`, freeze a sorted Markdown inventory
 that excludes `.project/**` and all vendored/generated trees. Two read-only
@@ -105,16 +105,16 @@ run project commands in the source worktree.
 
 The orchestrator presents ground truth in one screen — what the project is,
 what demonstrably works, where docs and code disagree — then enters the
-grill in brownfield mode. Onboarding changes nothing outside `.project/`.
+define in brownfield mode. Inspect changes nothing outside `.project/`.
 
 **Gate:** both artifacts match their templates; every claim has a verdict and
 every claimless doc appears once in the descriptive list, together covering
 the frozen inventory exactly; ground truth was presented before any question
 was asked.
 
-## Phase 1 — Grill (`gsd-path-grill`)
+## Phase 1 — Define (`gsd-path-define`, persisted state: `grill`)
 
-**Input:** a raw idea — or, brownfield, the onboarding artifacts. **Output:**
+**Input:** a raw idea — or, brownfield, the inspection artifacts. **Output:**
 `.project/intent/INTENT.md`.
 
 Brownfield mode inverts the opening: present ground truth first, then
@@ -134,10 +134,10 @@ vetoes and corrections verbatim. Unresolved items remain tagged `RESEARCH` or
 first and presented as settled coverage for correction; the interview covers
 only its gaps and contradictions.
 
-At approval the grill classifies the milestone lane in INTENT.md: `quick`
+At approval define classifies the milestone lane in INTENT.md: `quick`
 when scope fits at most two deliverable-sized tasks in one wave with no open
 questions and no cross-wave risk; otherwise `standard`. The quick lane skips
-research and synthesize — planning enters directly from `grill/done`, writes
+research and decide — planning enters directly from `grill/done`, writes
 a Settled-only SYNTHESIS.md and a single wave (verify-only review depth
 permitted, at most two tasks) without a planner agent, and the rest of the
 pipeline runs unchanged. A quick plan that outgrows those bounds corrects the
@@ -156,7 +156,7 @@ file per dispatched dimension, drawn from the four standard dimensions:
 - `research/evidence-pitfalls.md`
 - `research/evidence-similar.md`
 
-Brownfield: `research/evidence-codebase.md` from onboarding counts as a
+Brownfield: `research/evidence-codebase.md` from inspect counts as a
 fifth standard input downstream — researchers read it so recommendations
 fit the code that exists (the stack researcher weighs migration cost, the
 pitfalls researcher checks which traps are already sprung).
@@ -177,12 +177,12 @@ dispatched file exists, matches the evidence template, contains at least one
 finding, and answers its assigned `RESEARCH` questions; every skipped
 dimension is recorded with its reason. One failed agent may be respawned once.
 
-## Phase 3 — Synthesize (`gsd-path-synthesize`)
+## Phase 3 — Decide (`gsd-path-decide`)
 
 **Input:** INTENT.md and every dispatched evidence file. **Output:**
 `.project/research/SYNTHESIS.md`.
 
-The synthesizer turns evidence into commitments. Each genuinely open decision
+The decider turns evidence into commitments. Each genuinely open decision
 names the selection, runner-up and why it lost, cited evidence, and
 confidence. A choice already settled by an intent constraint or the existing
 codebase is one line under Settled citing the settling source — never a full
@@ -304,7 +304,9 @@ HEAD. Never redispatch a dirty failed worktree against divergent task history.
 **Gate:** every wave and project Verify pass; the build orchestrator commits
 the transition directly to `review/active`, leaving a clean primary worktree.
 
-## Phase 6 — Final review (`gsd-path-review final`)
+## Phase 6 — Ship (`gsd-path-ship`)
+
+### Final review (`gsd-path-ship final`)
 
 **Input:** INTENT.md success criteria and the running system. **Output:**
 `.project/review/FINAL.md`, one distinct `.project/review/final-gap-N.md` per
@@ -341,7 +343,7 @@ enter PATCH-FINDINGS.md and patch planning, and the build orchestrator commits
 that finding set with the approved patch artifacts before executing the new
 wave.
 
-## Phase 7 — Archive (automatic at ship)
+### Archive transaction
 
 **Input:** the shipped milestone's `.project/` artifacts. **Output:**
 `.project/archive/<NNN>-<milestone-slug>/` with a MANIFEST.md.
@@ -371,7 +373,7 @@ the archived original keeps full history. Active and archived research may
 coexist only for that byte-identical carry-forward.
 
 Archives become read-only when committed. No phase may modify a committed
-archive; the next milestone's onboarding may read it. A retry with a persisted
+archive; the next milestone's inspection may read it. A retry with a persisted
 archive path bypasses missing active review preconditions and resumes that
 same transaction. The router validates every shipped state before reporting
 or starting new work. An exact `.STATE.md.gsd-path-tmp` left before the
@@ -386,7 +388,7 @@ accepts only a complete, valid active pair whose bytes extend both archived
 files, atomically replaces the archived records, removes the active copy, and
 forces manifest regeneration. Divergence or an incomplete pair blocks.
 
-The review phase closes the milestone with its only commit: the shipped
+The ship phase closes the milestone with its only commit: the shipped
 STATE.md, the final-review artifacts, and the archive move with its
 MANIFEST.md, staged from `.project/` only, subject
 `ship: <NNN>-<milestone-slug>`. Every other commit belongs to the build
@@ -402,8 +404,9 @@ validated shipment.
 
 ## Standing process — Discussion (`gsd-path-discuss`)
 
-Runs as an explicit sidecar from any active non-shipped phase: `onboard`,
-`grill`, `research`, `synthesize`, `plan`, `build`, or `review`. It does not
+Runs as an explicit sidecar from any active non-shipped phase: inspect
+(`onboard`), define (`grill`), research, decide (`synthesize`), plan, build, or
+ship (`review`). The parenthesized values are persisted v1 state tokens. It does not
 advance the pipeline, own STATE.md, or edit a phase handoff. A shipped
 milestone is archived and must not be reopened for discussion; start a new
 milestone first.
@@ -416,7 +419,7 @@ phase-specific artifacts and code needed to answer it. **Output:**
 The discussion skill never commits. The current phase orchestrator verifies
 that each change is append-only and includes it in the next normal `.project/`
 checkpoint. During build this happens before the next clean layer base; during
-review the records move into the archive and enter the single ship commit.
+ship the records move into the archive and enter the single ship commit.
 
 The discussion skill reads intent vetoes, settled synthesis decisions, and
 current plan/task contracts as governing constraints. It checks the smallest
@@ -452,7 +455,7 @@ next owner needed to resume without chat history.
 
 ## Standing process — Docs audit (`gsd-path-docs-audit`)
 
-Runs inside onboarding and standalone only at a stable pre-build phase boundary
+Runs inside inspection and standalone only at a stable pre-build phase boundary
 or `review/blocked` with no active task. It requires owned v1 STATE and blocks
 during build, active review, or shipped history. Answers one question with
 evidence: does the project do what its documents say?
@@ -480,7 +483,7 @@ re-running the audit's claim check). Absorbed rulings get their task id in
 the queue row; declined ones stay queued and are offered again. The queue
 never blocks the pipeline and never enters a plan wholesale unseen. Builds
 from patch waves run the normal review-gate loop. A shipped milestone never
-reopens because its plan is archived; start and onboard a new milestone, then
+reopens because its plan is archived; start and inspect a new milestone, then
 offer carried-forward rulings during its normal planning. Final review's
 evidenced `not-met` criteria and blocked gaps travel the same patch-mode road,
 with their exact ordered source-file and row list.
@@ -493,11 +496,11 @@ with their exact ordered source-file and row list.
   REPOSITORY.md              persistent new-GitHub checkout/worktree binding
   LESSONS.md                 cross-milestone lessons; appended at ship, read by the planner
   intent/INTENT.md           approved intent and hard constraints
-  research/evidence-codebase.md   brownfield ground truth (onboard)
+  research/evidence-codebase.md   brownfield ground truth (inspect)
   research/DOCS-AUDIT.md     doc-vs-code verdicts and remediation queue
   research/RESEARCH.md       research dispatch/question/output manifest
   research/evidence-*.md     four required evidence dimensions
-  research/SYNTHESIS.md      settled, fully gated decisions
+  research/SYNTHESIS.md      decision artifact; authoritative after decide gate
   plan/PLAN.md               waves, config, and project verify
   tasks/T###-slug.md         full contract, clean base SHA, status, exact commit SHA
   BOARD.md                   wave and escalation summary

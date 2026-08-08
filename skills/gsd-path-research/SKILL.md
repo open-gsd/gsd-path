@@ -28,7 +28,7 @@ marker returns to `$gsd-path` for ownership checking. Legal entry is
 `research/done` or any later phase blocks rather than replacing settled
 evidence beneath downstream artifacts. Require
 `.project/intent/INTENT.md`. If it is missing, stop and route to
-`$gsd-path-grill`. Confirm live search or web-reading capability before
+`$gsd-path-define`. Confirm live search or web-reading capability before
 dispatch; if unavailable, block rather than allowing memory-based citations.
 
 ## Dispatch contract
@@ -97,12 +97,12 @@ settled brownfield input.
    `phase: research`, `status: done`, and append a transition log naming the
    manifest path, dispatched dimensions, skipped dimensions, and question
    count. Report the outcome, link the resolved absolute `RESEARCH.md` path,
-   summarize the dispatched evidence files, and name synthesis as next.
-   Synthesis reads the manifest; it must not infer dispatch state from a glob
-   or free-form log. When routed by an active
+   summarize the dispatched evidence files, and name the decide phase as next.
+   The decide phase reads the manifest; it must not infer dispatch state from
+   a glob or free-form log. When routed by an active
    `$gsd-path`, return control to that router. When invoked directly, stop and
-   tell the user to explicitly invoke `$gsd-path` or `$gsd-path-synthesize`;
-   do not invoke an explicit-only sibling skill yourself.
+   tell the user to explicitly invoke `$gsd-path`, which routes to decide; do
+   not invoke an explicit-only sibling skill yourself.
 
 ## Rules
 
@@ -110,4 +110,4 @@ settled brownfield input.
   and a one-line tie-back to this project's intent.
 - Record conflicting sources rather than resolving them here.
 - Preserve dead ends and explicit `no reliable source found` answers.
-- Do not summarize the evidence; `$gsd-path-synthesize` owns that work.
+- Do not summarize the evidence; `$gsd-path-decide` owns that work.

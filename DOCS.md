@@ -117,7 +117,7 @@ Work **in the project directory**. Invoke **explicitly**:
 The router reads `.project/STATE.md`, reports phase, runs the next valid step.
 It does **not** run on “continue the project” or similar vague chat.
 
-### Phase skills (optional)
+### Skills (optional)
 
 Run one phase only; stops at handoff:
 
@@ -125,16 +125,22 @@ Run one phase only; stops at handoff:
 | --- | --- | --- |
 | `gsd-path` | `/gsd-path` | Router — default |
 | `gsd-path-discuss` | `/gsd-path-discuss` | Any-phase discussion and durable answers |
-| `gsd-path-onboard` | `/gsd-path-onboard` | Brownfield scan only |
-| `gsd-path-grill` | `/gsd-path-grill` | Intent interview only |
+| `gsd-path-inspect` | `/gsd-path-inspect` | Brownfield scan only |
+| `gsd-path-define` | `/gsd-path-define` | Intent interview only |
 | `gsd-path-research` | `/gsd-path-research` | Evidence gathering |
-| `gsd-path-synthesize` | `/gsd-path-synthesize` | Decisions |
+| `gsd-path-decide` | `/gsd-path-decide` | Decisions |
 | `gsd-path-plan` | `/gsd-path-plan` | Waves + tasks |
 | `gsd-path-build` | `/gsd-path-build` | Parallel build |
-| `gsd-path-review` | `/gsd-path-review` | Review + ship gate |
+| `gsd-path-ship` | `/gsd-path-ship` | Review + ship gate |
 | `gsd-path-docs-audit` | `/gsd-path-docs-audit` | Standalone doc drift check |
 
 Codex: use `$` instead of `/` (e.g. `$gsd-path-plan`).
+
+Deprecated compatibility aliases remain available for existing invocations:
+`onboard → inspect`, `grill → define`, `synthesize → decide`, and
+`review → ship`. Their old names also remain the persisted `gsd-path/v1`
+STATE phase tokens, so an active v1 milestone resumes without migration while
+the router and user-facing lifecycle use the canonical names.
 
 ### Discuss at any phase
 
@@ -151,17 +157,17 @@ state or bypasses a gate.
 
 | Phase | You do |
 | --- | --- |
-| Grill | Answer questions; approve intent playback |
-| Synthesize | Resolve `NEEDS-USER` decisions |
+| Define | Answer questions; approve intent playback |
+| Decide | Resolve `NEEDS-USER` decisions |
 | Plan | **Approve wave summary** before any code is written |
 | Build | Usually nothing — escalations only |
-| Review | Approve patch waves if blocked and approve final shipping when green |
+| Ship | Approve patch waves if blocked and approve final shipping when green |
 
 ### Cheat sheet
 
 ```text
-Empty repo, new milestone       → router → grill
-Existing code, new milestone    → router → onboard → grill
+Empty repo, new milestone       → router → define
+Existing code, new milestone    → router → inspect → define
 Already mid-pipeline            → router (continues)
 Doc drift between phases        → /gsd-path-docs-audit
 Closed laptop, came back        → router (reads .project/)
@@ -184,13 +190,13 @@ Details: [FULL.md](FULL.md) (phases, shipping, troubleshooting).
 ### Pipeline
 
 ```text
-onboard (brownfield only)
-  → grill → research → synthesize → plan
+inspect (brownfield only)
+  → define → research → decide → plan
   → build (parallel coders, serial merge)
-  → review → ship (archive)
+  → ship (verify and archive)
 ```
 
-**Quick lane:** ≤2 tasks, one wave, no open questions — may skip research/synthesize
+**Quick lane:** ≤2 tasks, one wave, no open questions — may skip research/decide
 ([FULL.md](FULL.md)).
 
 ### Key artifacts
@@ -258,7 +264,7 @@ No, if it already exists. Merge template updates manually ([UPDATE.md](UPDATE.md
 Restore from `disabled-gsd-skills` beside the skills root ([UPDATE.md](UPDATE.md)).
 
 **Brownfield vs greenfield?**
-Brownfield = existing code/docs → onboard first. Greenfield = empty → grill first.
+Brownfield = existing code/docs → inspect first. Greenfield = empty → define first.
 
 ---
 
