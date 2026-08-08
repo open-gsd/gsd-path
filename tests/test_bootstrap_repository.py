@@ -453,6 +453,41 @@ Primary worktree: <primary-worktree>
                 self.git(worktree, "rev-parse", "HEAD").stdout.strip(), base
             )
 
+    def test_completed_preview_accepts_only_descendants_of_the_creation_sha(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            workspace, _, worktree, _, environment, command = (
+                self.complete_bootstrap(root)
+            )
+            self.git(worktree, "config", "user.name", "Builder")
+            self.git(worktree, "config", "user.email", "builder@example.invalid")
+            (worktree / "PROJECT.md").write_text("# Project\n", encoding="utf-8")
+            self.git(worktree, "add", "PROJECT.md")
+            committed = self.git(worktree, "commit", "-q", "-m", "Build project")
+            self.assertEqual(committed.returncode, 0, committed.stderr)
+            preview_command = list(command)
+            preview_command[2] = "preview"
+
+            preview = self.run_command(
+                *preview_command, cwd=workspace, env=environment
+            )
+
+            self.assertEqual(preview.returncode, 0, preview.stderr)
+            self.assertEqual(json.loads(preview.stdout)["mode"], "complete")
+
+            tree = self.git(worktree, "rev-parse", "HEAD^{tree}").stdout.strip()
+            unrelated = self.git(worktree, "commit-tree", tree, "-m", "Unrelated")
+            self.assertEqual(unrelated.returncode, 0, unrelated.stderr)
+            reset = self.git(worktree, "reset", "--hard", unrelated.stdout.strip())
+            self.assertEqual(reset.returncode, 0, reset.stderr)
+
+            rejected = self.run_command(
+                *preview_command, cwd=workspace, env=environment
+            )
+
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertIn("creation SHA", rejected.stderr)
+
     def test_create_rejects_symlinked_transaction_directory(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)

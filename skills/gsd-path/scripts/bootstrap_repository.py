@@ -449,21 +449,42 @@ def create_or_verify_worktree(request: BootstrapRequest, base: str) -> None:
 
 
 def verify_worktree(request: BootstrapRequest, base: str) -> None:
-    checkout = request.checkout_path
+    worktree = verify_worktree_location(request)
+    if git_output(worktree, "rev-parse", "HEAD") != base:
+        raise BootstrapError("linked worktree is not at the approved base SHA")
+    if not allowed_partial_project_status(worktree):
+        raise BootstrapError("linked worktree contains unexpected changes")
+
+
+def verify_worktree_location(request: BootstrapRequest) -> Path:
     worktree = request.worktree_path
 
     require_real_directory(worktree, "linked GSD Path worktree")
     top_level = Path(git_output(worktree, "rev-parse", "--show-toplevel")).resolve()
     if top_level != worktree:
         raise BootstrapError(f"linked worktree is not its Git root: {worktree}")
-    if git_common_directory(checkout) != git_common_directory(worktree):
+    if git_common_directory(request.checkout_path) != git_common_directory(worktree):
         raise BootstrapError("linked worktree belongs to another repository")
     if git_output(worktree, "branch", "--show-current") != request.branch:
         raise BootstrapError("linked worktree is on the wrong branch")
-    if git_output(worktree, "rev-parse", "HEAD") != base:
-        raise BootstrapError("linked worktree is not at the approved base SHA")
-    if not allowed_partial_project_status(worktree):
-        raise BootstrapError("linked worktree contains unexpected changes")
+    return worktree
+
+
+def verify_completed_worktree(request: BootstrapRequest, creation_sha: str) -> None:
+    worktree = verify_worktree_location(request)
+    ancestry = run(
+        "git",
+        "-C",
+        str(worktree),
+        "merge-base",
+        "--is-ancestor",
+        creation_sha,
+        "HEAD",
+    )
+    if ancestry.returncode != 0:
+        raise BootstrapError(
+            "completed linked worktree does not descend from the recorded creation SHA"
+        )
 
 
 def verify_completed_binding(request: BootstrapRequest) -> tuple[str, str]:
@@ -479,7 +500,7 @@ def verify_completed_binding(request: BootstrapRequest) -> tuple[str, str]:
         raise BootstrapError(
             "completed repository binding does not match the checkout"
         ) from error
-    verify_worktree(request, expected_base)
+    verify_completed_worktree(request, expected_base)
     return expected_default, expected_base
 
 
