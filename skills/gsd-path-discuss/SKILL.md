@@ -96,7 +96,9 @@ answer `NEEDS-USER` or `unverifiable` instead of filling the gap from memory.
 
 For each invocation:
 
-1. Identify the current phase/status and discussion thread. Reuse its stable thread id
+1. Identify the current phase/status and discussion thread. Run the helper's
+   `threads` command to list existing thread ids, topics, and statuses; do not
+   parse DIALOGUE.md for them. Reuse a stable thread id
    (`T###`) when the user is continuing a topic; request `new` for a
    distinct topic and let the helper allocate its id. Classify the
    request as a fact check, diagnosis, decision, challenge, progress question,
@@ -111,11 +113,17 @@ For each invocation:
    only the next question required to resolve the user's decision; use the
    host's interactive input facility when available.
 4. Before returning, provide the semantic turn fields to the helper's `append`
-   command as one JSON input. Pass `thread: new` for a distinct topic or the
-   existing stable `T###` for a continuation. The helper allocates D/A/X ids,
+   command as one JSON object via `--input`, passing the same absolute template
+   paths as `prepare`. The object requires exactly these non-empty fields:
+   `thread` (`new` or an existing `T###`), `topic`, `user`, `assistant`,
+   `question`, `status`, `thread_status`, `conclusion`, `reasoning`,
+   `evidence`, `research`, `confidence`, `unresolved`, `next_owner`,
+   `target_artifact`, and `follow_up`. Every field except `user` and
+   `assistant` must be a single line; the helper rejects an incomplete payload
+   and names every missing or multi-line field in one error. The helper allocates D/A/X ids,
    reply and supersession links, records the current phase/status, and publishes
    DIALOGUE.md and ANSWERS.md as a recoverable pair. Preserve the user's message
-   and returned assistant answer in that input.
+   and returned assistant answer verbatim in `user` and `assistant`.
 5. Use `working` only when the answer is explicitly
    provisional or asks another question, `NEEDS-USER` when a human choice or
    missing evidence blocks it, and `final` when it resolves the bounded question
