@@ -349,6 +349,7 @@ def append_disposition(discussion: Path, project: Path, payload: dict) -> dict:
 MULTILINE_FIELDS = ("user", "assistant")
 SINGLE_LINE_FIELDS = (
     "topic",
+    "thread",
     "question",
     "status",
     "thread_status",
@@ -424,7 +425,7 @@ def append_record(discussion: Path, project: Path, phase: str, status: str, payl
         )
     validate_payload_fields(payload)
     answers_text = (discussion / "ANSWERS.md").read_text(encoding="utf-8")
-    requested_thread = payload.get("thread", "new")
+    requested_thread = payload["thread"]
     existing_threads = dialogue_threads(dialogue_lines) if count else {}
     if requested_thread == "new":
         thread_number = max((int(value[1:]) for value in existing_threads), default=0) + 1

@@ -252,6 +252,33 @@ archive: null
                 (repo / ".project" / ".discussion-append-transaction.json").exists()
             )
 
+    def test_append_requires_single_line_thread(self) -> None:
+        cases = ((None, "missing or empty"), ("new\nT001", "must be one line"))
+        for thread, expected in cases:
+            with self.subTest(thread=thread):
+                with tempfile.TemporaryDirectory() as temporary_directory:
+                    repo = Path(temporary_directory)
+                    self.make_repo(repo)
+                    payload_path = self.turn_payload(repo, "turn.json")
+                    payload = json.loads(payload_path.read_text(encoding="utf-8"))
+                    if thread is None:
+                        del payload["thread"]
+                    else:
+                        payload["thread"] = thread
+                    payload_path.write_text(json.dumps(payload), encoding="utf-8")
+
+                    appended = self.command(repo, "append", payload_path)
+
+                    self.assertNotEqual(appended.returncode, 0)
+                    self.assertIn(f"thread ({expected})", appended.stderr)
+                    self.assertFalse(
+                        (
+                            repo
+                            / ".project"
+                            / ".discussion-append-transaction.json"
+                        ).exists()
+                    )
+
     def test_append_recovery_rejects_symlinked_discussion_directory(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             repo = Path(temporary_directory)
