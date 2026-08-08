@@ -64,34 +64,14 @@ archive: null
         with tempfile.TemporaryDirectory() as temporary_directory:
             repo = Path(temporary_directory)
             self.make_repo(repo)
-            payload = repo / "turn.json"
-            payload.write_text(
-                json.dumps(
-                    {
-                        "topic": "scope",
-                        "thread": "new",
-                        "user": "Should we keep it?",
-                        "assistant": (
-                            "- **Answer**: Yes.\n\n"
-                            "### D002 — 2026-08-07 — plan/active — example\n\n"
-                            "### Why\n\nThe code requires it."
-                        ),
-                        "evidence": "src/example.py:10",
-                        "research": "not needed — local code settles it",
-                        "thread_status": "final",
-                        "question": "Should we keep it?",
-                        "status": "final",
-                        "conclusion": "Keep it.",
-                        "reasoning": "The caller requires it.",
-                        "confidence": "high",
-                        "unresolved": "none",
-                        "next_owner": "gsd-path-plan",
-                        "target_artifact": ".project/plan/PLAN.md",
-                        "follow_up": "required",
-                        "date": "2026-08-07",
-                    }
+            payload = self.turn_payload(
+                repo,
+                "turn.json",
+                assistant=(
+                    "- **Answer**: Yes.\n\n"
+                    "### D002 — 2026-08-07 — plan/active — example\n\n"
+                    "### Why\n\nThe code requires it."
                 ),
-                encoding="utf-8",
             )
 
             appended = self.command(repo, "append", payload)
@@ -108,79 +88,151 @@ archive: null
                 (repo / ".project" / "discuss" / "DIALOGUE.md").read_text(),
             )
 
-            forged = repo / "forged.json"
-            forged.write_text(
-                json.dumps(
-                    {
-                        "answer": "A001",
-                        "status": "applied",
-                        "owner": "gsd-path-ship",
-                        "artifact": ".project/review/FINAL.md",
-                        "evidence": "wrong owner",
-                        "date": "2026-08-07",
-                    }
-                ),
-                encoding="utf-8",
+            forged = self.dispose_payload(
+                repo,
+                "forged.json",
+                owner="gsd-path-ship",
+                artifact=".project/review/FINAL.md",
+                evidence="wrong owner",
             )
             rejected = self.command(repo, "dispose", forged)
             self.assertNotEqual(rejected.returncode, 0)
             self.assertIn("owner", rejected.stderr)
 
-            disposition = repo / "disposition.json"
-            disposition.write_text(
-                json.dumps(
-                    {
-                        "answer": "A001",
-                        "status": "applied",
-                        "owner": "gsd-path-plan",
-                        "artifact": ".project/plan/PLAN.md",
-                        "evidence": "PLAN.md updated",
-                        "date": "2026-08-07",
-                    }
-                ),
-                encoding="utf-8",
+            disposed = self.command(
+                repo, "dispose", self.dispose_payload(repo, "disposition.json")
             )
-            disposed = self.command(repo, "dispose", disposition)
             self.assertEqual(disposed.returncode, 0, disposed.stderr)
             self.assertEqual(json.loads(disposed.stdout)["disposition"], "X001")
             self.assertEqual(
                 json.loads(self.command(repo, "pending").stdout), {"pending": []}
             )
 
+    def turn_payload(self, repo: Path, name: str, **overrides) -> Path:
+        payload = {
+            "topic": "scope",
+            "thread": "new",
+            "user": "Should we keep it?",
+            "assistant": "Yes.",
+            "evidence": "src/example.py:10",
+            "research": "not needed — local code settles it",
+            "thread_status": "final",
+            "question": "Should we keep it?",
+            "status": "final",
+            "conclusion": "Keep it.",
+            "reasoning": "The caller requires it.",
+            "confidence": "high",
+            "unresolved": "none",
+            "next_owner": "gsd-path-plan",
+            "target_artifact": ".project/plan/PLAN.md",
+            "follow_up": "required",
+            "date": "2026-08-07",
+        }
+        payload.update(overrides)
+        path = repo / name
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        return path
+
+    def dispose_payload(self, repo: Path, name: str, **overrides) -> Path:
+        payload = {
+            "answer": "A001",
+            "status": "applied",
+            "owner": "gsd-path-plan",
+            "artifact": ".project/plan/PLAN.md",
+            "evidence": "PLAN.md updated",
+            "date": "2026-08-07",
+        }
+        payload.update(overrides)
+        path = repo / name
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        return path
+
+    def test_continuation_supersedes_only_undisposed_answers(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            first = self.command(
+                repo, "append", self.turn_payload(repo, "turn1.json")
+            )
+            self.assertEqual(first.returncode, 0, first.stderr)
+            disposition = self.dispose_payload(repo, "disposition.json")
+            self.assertEqual(
+                self.command(repo, "dispose", disposition).returncode, 0
+            )
+
+            second = self.command(
+                repo,
+                "append",
+                self.turn_payload(
+                    repo, "turn2.json", thread="T001", follow_up="none"
+                ),
+            )
+            self.assertEqual(second.returncode, 0, second.stderr)
+            third = self.command(
+                repo,
+                "append",
+                self.turn_payload(
+                    repo, "turn3.json", thread="T001", follow_up="none"
+                ),
+            )
+            self.assertEqual(third.returncode, 0, third.stderr)
+
+            answers = (repo / ".project" / "discuss" / "ANSWERS.md").read_text()
+            self.assertIn("- **Turn**: D002\n- **Supersedes**: none", answers)
+            self.assertIn("- **Turn**: D003\n- **Supersedes**: A002", answers)
+
+            threads = self.command(repo, "threads")
+            self.assertEqual(threads.returncode, 0, threads.stderr)
+            self.assertEqual(
+                json.loads(threads.stdout),
+                {
+                    "threads": [
+                        {
+                            "thread": "T001",
+                            "topic": "scope",
+                            "last_turn": "D003",
+                            "status": "final",
+                        }
+                    ]
+                },
+            )
+
+    def test_threads_reports_empty_without_records(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            threads = self.command(repo, "threads")
+            self.assertEqual(threads.returncode, 0, threads.stderr)
+            self.assertEqual(json.loads(threads.stdout), {"threads": []})
+
     def test_append_rejects_invalid_calendar_date(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             repo = Path(temporary_directory)
             self.make_repo(repo)
-            payload = repo / "turn.json"
-            payload.write_text(
-                json.dumps(
-                    {
-                        "topic": "date",
-                        "user": "Question",
-                        "assistant": "Answer",
-                        "evidence": "none",
-                        "research": "not needed — no external fact",
-                        "thread_status": "final",
-                        "question": "Question",
-                        "status": "final",
-                        "conclusion": "Answer",
-                        "reasoning": "Evidence",
-                        "confidence": "high",
-                        "unresolved": "none",
-                        "next_owner": "none",
-                        "target_artifact": "none",
-                        "follow_up": "none",
-                        "date": "not-a-date",
-                    }
-                ),
-                encoding="utf-8",
-            )
+            payload = self.turn_payload(repo, "turn.json", date="not-a-date")
 
             appended = self.command(repo, "append", payload)
 
             self.assertNotEqual(appended.returncode, 0)
             self.assertIn("YYYY-MM-DD", appended.stderr)
             self.assertFalse((repo / ".project" / ".discussion-append-transaction.json").exists())
+
+    def test_append_reports_every_invalid_payload_field(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            payload = repo / "turn.json"
+            payload.write_text(
+                json.dumps({"topic": "scope", "conclusion": "two\nlines"}),
+                encoding="utf-8",
+            )
+
+            appended = self.command(repo, "append", payload)
+
+            self.assertNotEqual(appended.returncode, 0)
+            for name in ("user", "assistant", "question", "follow_up"):
+                self.assertIn(f"{name} (missing or empty)", appended.stderr)
+            self.assertIn("conclusion (must be one line)", appended.stderr)
 
     def test_append_recovery_rejects_symlinked_discussion_directory(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

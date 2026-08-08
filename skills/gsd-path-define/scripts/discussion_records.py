@@ -218,6 +218,46 @@ def field(lines: Sequence[str], name: str) -> str:
         raise DiscussionError(str(error)) from error
 
 
+def disposed_answers(answer_lines: Sequence[str]) -> set:
+    boundaries = (
+        archive_milestone.ANSWER_HEADING_PATTERN,
+        archive_milestone.DISPOSITION_HEADING_PATTERN,
+    )
+    dispositions = numbered_sections(
+        answer_lines, archive_milestone.DISPOSITION_HEADING_PATTERN, boundaries
+    )
+    return {field(section, "Answer") for _, section in dispositions}
+
+
+def dialogue_threads(dialogue_lines: Sequence[str]) -> dict:
+    sections = numbered_sections(
+        dialogue_lines,
+        archive_milestone.DIALOGUE_HEADING_PATTERN,
+        (archive_milestone.DIALOGUE_HEADING_PATTERN,),
+    )
+    threads = {}
+    for match, section in sections:
+        threads.setdefault(field(section, "Thread"), []).append((match, section))
+    return threads
+
+
+def thread_records(discussion: Path) -> list[dict]:
+    lines = (discussion / "DIALOGUE.md").read_text(encoding="utf-8").splitlines()
+    records = []
+    for thread, sections in dialogue_threads(lines).items():
+        match, section = sections[-1]
+        records.append(
+            {
+                "thread": thread,
+                # DIALOGUE_HEADING_PATTERN does not capture the topic segment.
+                "topic": match.group(0).split(" — ", 3)[3],
+                "last_turn": f"D{int(match.group(1)):03d}",
+                "status": field(section, "Thread status"),
+            }
+        )
+    return records
+
+
 def pending_records(discussion: Path) -> list[dict]:
     if record_count(discussion) == 0:
         return []
@@ -227,10 +267,7 @@ def pending_records(discussion: Path) -> list[dict]:
         archive_milestone.DISPOSITION_HEADING_PATTERN,
     )
     answers = numbered_sections(lines, archive_milestone.ANSWER_HEADING_PATTERN, boundaries)
-    dispositions = numbered_sections(
-        lines, archive_milestone.DISPOSITION_HEADING_PATTERN, boundaries
-    )
-    resolved = {field(section, "Answer") for _, section in dispositions}
+    resolved = disposed_answers(lines)
     pending = []
     for match, section in answers:
         identifier = f"A{int(match.group(1)):03d}"
@@ -310,6 +347,36 @@ def append_disposition(discussion: Path, project: Path, payload: dict) -> dict:
     return {"answer": answer, "disposition": f"X{number:03d}"}
 
 
+MULTILINE_FIELDS = ("user", "assistant")
+SINGLE_LINE_FIELDS = (
+    "topic",
+    "question",
+    "status",
+    "thread_status",
+    "conclusion",
+    "reasoning",
+    "evidence",
+    "research",
+    "confidence",
+    "unresolved",
+    "next_owner",
+    "target_artifact",
+    "follow_up",
+)
+
+
+def validate_payload_fields(payload: dict) -> None:
+    problems = []
+    for name in MULTILINE_FIELDS + SINGLE_LINE_FIELDS:
+        value = payload.get(name)
+        if not isinstance(value, str) or not value.strip():
+            problems.append(f"{name} (missing or empty)")
+        elif name in SINGLE_LINE_FIELDS and ("\n" in value or "\r" in value):
+            problems.append(f"{name} (must be one line)")
+    if problems:
+        raise DiscussionError("append payload invalid: " + ", ".join(problems))
+
+
 def required_text(payload: dict, name: str) -> str:
     value = payload.get(name)
     if not isinstance(value, str) or not value.strip():
@@ -355,25 +422,25 @@ def append_record(discussion: Path, project: Path, phase: str, status: str, payl
         archive_milestone.validate_discussion_directory(
             discussion, require_dispositions=False
         )
+    validate_payload_fields(payload)
+    answers_text = (discussion / "ANSWERS.md").read_text(encoding="utf-8")
     requested_thread = payload.get("thread", "new")
-    existing_threads = {}
-    if count:
-        sections = numbered_sections(
-            dialogue_lines,
-            archive_milestone.DIALOGUE_HEADING_PATTERN,
-            (archive_milestone.DIALOGUE_HEADING_PATTERN,),
-        )
-        for match, section in sections:
-            existing_threads.setdefault(field(section, "Thread"), []).append(int(match.group(1)))
+    existing_threads = dialogue_threads(dialogue_lines) if count else {}
     if requested_thread == "new":
         thread_number = max((int(value[1:]) for value in existing_threads), default=0) + 1
         thread = f"T{thread_number:03d}"
         reply_to = supersedes = "none"
     elif requested_thread in existing_threads:
         thread = requested_thread
-        prior = existing_threads[thread][-1]
+        prior = int(existing_threads[thread][-1][0].group(1))
         reply_to = f"D{prior:03d}"
-        supersedes = f"A{prior:03d}"
+        prior_answer = f"A{prior:03d}"
+        # A disposed answer is settled; a continuation replies without superseding it.
+        supersedes = (
+            "none"
+            if prior_answer in disposed_answers(answers_text.splitlines())
+            else prior_answer
+        )
     else:
         raise DiscussionError("thread must be new or an existing T### id")
     record_date = iso_date(payload)
@@ -422,7 +489,7 @@ def append_record(discussion: Path, project: Path, phase: str, status: str, payl
 """
     files = {
         "DIALOGUE.md": (discussion / "DIALOGUE.md").read_text(encoding="utf-8").rstrip() + "\n" + dialogue,
-        "ANSWERS.md": (discussion / "ANSWERS.md").read_text(encoding="utf-8").rstrip() + "\n" + answer,
+        "ANSWERS.md": answers_text.rstrip() + "\n" + answer,
     }
     validate_contents(project, files)
     transaction = project / APPEND_TRANSACTION
@@ -453,7 +520,7 @@ def load_payload(path: Path) -> dict:
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(description=__doc__)
     result.add_argument(
-        "command", choices=("prepare", "append", "pending", "dispose")
+        "command", choices=("prepare", "append", "pending", "dispose", "threads")
     )
     result.add_argument("--repo", type=Path, required=True)
     result.add_argument("--dialogue-template", type=Path)
@@ -467,17 +534,19 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         arguments = parser().parse_args(argv)
         root, project, state = project_root(arguments.repo)
         with state_lock(state):
-            if arguments.command in {"pending", "dispose"}:
+            if arguments.command in {"pending", "dispose", "threads"}:
                 discussion = project / "discuss"
                 finish_append(project, discussion)
                 if not discussion.exists():
                     if arguments.command == "dispose":
                         raise DiscussionError("discussion records do not exist")
-                    result = {"pending": []}
+                    result = {arguments.command: []}
                 else:
                     validate_or_empty(discussion)
                     if arguments.command == "pending":
                         result = {"pending": pending_records(discussion)}
+                    elif arguments.command == "threads":
+                        result = {"threads": thread_records(discussion)}
                     else:
                         if arguments.input is None:
                             raise DiscussionError("dispose requires --input")
