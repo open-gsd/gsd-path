@@ -26,7 +26,7 @@ If two sources disagree, stop and surface the conflict. Never average.
 - The discussion skill never commits. Every phase orchestrator treats only
   complete append-only discussion records as expected bookkeeping and includes
   them in its next normal `.project/` checkpoint; build does so before its next
-  clean layer base, and review includes them in the ship transaction.
+  clean layer base, and ship includes them in its transaction.
 - A discussion answer with `Status: final` or `NEEDS-USER`, `Follow-up:
   required`, and no later `Disposition X###` receipt is pending. Before phase
   work and again before a phase gate, the router and current phase run the
@@ -96,9 +96,9 @@ If two sources disagree, stop and surface the conflict. Never average.
   needed, and writes only its discussion artifacts; it never changes phase
   state or bypasses a phase gate.
 - During an uncommitted archive transaction, discussion writes a complete
-  active copy that extends the archived pair. Review reruns `prepare`; the
-  helper validates the prefix and atomically reconciles both files. Discussion
-  never edits an archive directly or writes after shipment.
+  active copy that extends the archived pair. The ship phase reruns `prepare`;
+  the helper validates the prefix and atomically reconciles both files.
+  Discussion never edits an archive directly or writes after shipment.
 - Fix tasks use the complete task template, not an abbreviated finding.
 
 ## Gates

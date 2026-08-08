@@ -196,8 +196,8 @@ review pending`, set STATE.md directly to `phase: review`, `status: active`,
 and commit that transition as the build orchestrator's final bookkeeping. This
 keeps the primary worktree clean and avoids a separate review-phase transition
 commit. Report waves, exact task commits, fixed findings, and remaining risk.
-Link the resolved absolute BOARD.md as the review surface and state that final
-review is next. When invoked directly, stop and tell the user to explicitly
+Link the resolved absolute BOARD.md as the review surface and state that ship
+is next. When invoked directly, stop and tell the user to explicitly
 invoke `$gsd-path`, which routes to ship; do not invoke an explicit-only sibling
 skill yourself.
 On failure, set build state to `blocked`, record the exact output, and do not

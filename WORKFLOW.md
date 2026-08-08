@@ -38,7 +38,6 @@ cancellation is a blocked result, not a skipped result.
 | plan | one planner; zero in quick mode | serial | validate PLAN.md and task mapping |
 | build | dependency-ready coders | parallel layers, serial integration | commit code and wave artifacts |
 | ship | wave reviewer; final integration and gap reviewers | independent reviewers concurrent | verify, approve, archive, and ship |
-| archive | none | coordinator-led transaction | validate the `.project`-only ship commit |
 
 Non-interactive phases auto-advance when their artifacts pass their gates.
 User approval remains required at define, plan, final-review patch selection,
@@ -305,7 +304,9 @@ HEAD. Never redispatch a dirty failed worktree against divergent task history.
 **Gate:** every wave and project Verify pass; the build orchestrator commits
 the transition directly to `review/active`, leaving a clean primary worktree.
 
-## Phase 6 — Final review (`gsd-path-ship final`)
+## Phase 6 — Ship (`gsd-path-ship`)
+
+### Final review (`gsd-path-ship final`)
 
 **Input:** INTENT.md success criteria and the running system. **Output:**
 `.project/review/FINAL.md`, one distinct `.project/review/final-gap-N.md` per
@@ -342,7 +343,7 @@ enter PATCH-FINDINGS.md and patch planning, and the build orchestrator commits
 that finding set with the approved patch artifacts before executing the new
 wave.
 
-## Phase 7 — Archive (automatic at ship)
+### Archive transaction
 
 **Input:** the shipped milestone's `.project/` artifacts. **Output:**
 `.project/archive/<NNN>-<milestone-slug>/` with a MANIFEST.md.

@@ -97,9 +97,9 @@ settled brownfield input.
    `phase: research`, `status: done`, and append a transition log naming the
    manifest path, dispatched dimensions, skipped dimensions, and question
    count. Report the outcome, link the resolved absolute `RESEARCH.md` path,
-   summarize the dispatched evidence files, and name synthesis as next.
-   Synthesis reads the manifest; it must not infer dispatch state from a glob
-   or free-form log. When routed by an active
+   summarize the dispatched evidence files, and name the decide phase as next.
+   The decide phase reads the manifest; it must not infer dispatch state from
+   a glob or free-form log. When routed by an active
    `$gsd-path`, return control to that router. When invoked directly, stop and
    tell the user to explicitly invoke `$gsd-path`, which routes to decide; do
    not invoke an explicit-only sibling skill yourself.

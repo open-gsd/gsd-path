@@ -53,11 +53,11 @@ null, and the only otherwise-unexpected path is the deterministic
 before safely persisting a transaction identity. Moved artifacts are
 transaction state, not missing inputs. A concrete archive in any other phase
 blocks without mutation. Otherwise, first scan ANSWERS.md for pending required
-follow-ups under AGENTS.md. Apply an answer addressed to review only through
-current review artifacts and append its disposition receipt. If it changes
-approved intent/plan or names another owner, keep `review/blocked`, link
-ANSWERS.md and the target artifact, and ask the user before dispatch or ship.
-Then:
+follow-ups under AGENTS.md. Apply an answer addressed to `gsd-path-ship` only
+through current review artifacts and append its disposition receipt. If it
+changes approved intent/plan or names another owner, keep `review/blocked`,
+link ANSWERS.md and the target artifact, and ask the user before dispatch or
+ship. Then:
 
 1. Require STATE `review/active` produced and committed by the build
    orchestrator, `.project/intent/INTENT.md`,
