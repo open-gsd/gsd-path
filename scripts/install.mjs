@@ -6,7 +6,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { parseArgs } from "node:util";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 export const TARGETS = [
   "codex",
@@ -82,7 +82,7 @@ export const SHARED_AGENT_PROFILE = "shared-agents";
 export const CURSOR_AGENT_FILENAME = "gsd-path.md";
 export const CURSOR_AGENT_BACKUP_NAME = "cursor-agent-gsd-path.md";
 
-const SCRIPT_DIRECTORY = path.dirname(new URL(import.meta.url).pathname);
+const SCRIPT_DIRECTORY = path.dirname(fileURLToPath(import.meta.url));
 
 // Single source of truth for the resource tables, shared with
 // sync_skill_resources.py and shipped in the npm package.
@@ -741,10 +741,65 @@ function isManagedClaudeSettings(destination) {
   return text.includes("guard_hook.py") && text.includes(HOOKS_DIRECTORY);
 }
 
+function temporaryPathFor(destination) {
+  return path.join(
+    path.dirname(destination),
+    `.${path.basename(destination)}.gsd-path-tmp`
+  );
+}
+
+function writeFileAtomic(destination, content, mode) {
+  const temporary = temporaryPathFor(destination);
+  try {
+    fs.writeFileSync(temporary, content);
+    if (mode !== undefined) {
+      fs.chmodSync(temporary, mode);
+    } else if (isFile(destination) && !isSymlink(destination)) {
+      fs.chmodSync(temporary, fs.statSync(destination).mode & 0o777);
+    }
+    fs.renameSync(temporary, destination);
+  } catch (error) {
+    removePath(temporary);
+    throw error;
+  }
+}
+
+function copyFileAtomic(source, destination) {
+  const temporary = temporaryPathFor(destination);
+  try {
+    fs.copyFileSync(source, temporary);
+    fs.renameSync(temporary, destination);
+  } catch (error) {
+    removePath(temporary);
+    throw error;
+  }
+}
+
+function mergedClaudeSettings(settings) {
+  let parsed;
+  try {
+    parsed = JSON.parse(fs.readFileSync(settings, "utf8"));
+  } catch {
+    throw new InstallerError(
+      `managed hook settings file is not valid JSON: ${settings}`
+    );
+  }
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new InstallerError(
+      `managed hook settings file is not a JSON object: ${settings}`
+    );
+  }
+  parsed.hooks = JSON.parse(CLAUDE_HOOKS_SETTINGS).hooks;
+  return JSON.stringify(parsed, null, 2) + "\n";
+}
+
 function validateHooksRefresh(sourceRoot, project, full) {
   validateDirectoryDestination(project, "project path");
   for (const name of GUARD_SCRIPTS) {
     const destination = path.join(project, HOOKS_DIRECTORY, name);
+    if (isSymlink(destination)) {
+      throw new InstallerError(`refusing to refresh a symlink: ${destination}`);
+    }
     if (!isManagedGuardScript(destination)) {
       throw new InstallerError(`not a managed GSD Path guard script: ${destination}`);
     }
@@ -755,11 +810,17 @@ function validateHooksRefresh(sourceRoot, project, full) {
   }
   if (full) {
     const settings = path.join(project, ".claude", "settings.json");
+    if (isSymlink(settings)) {
+      throw new InstallerError(`refusing to refresh a symlink: ${settings}`);
+    }
     if (lexists(settings) && !isManagedClaudeSettings(settings)) {
       throw new InstallerError(`not a managed GSD Path hook settings file: ${settings}`);
     }
     for (const hookName of ["pre-commit", "commit-msg"]) {
       const hookPath = path.join(project, ".git", "hooks", hookName);
+      if (isSymlink(hookPath)) {
+        throw new InstallerError(`refusing to refresh a symlink: ${hookPath}`);
+      }
       if (lexists(hookPath) && !isManagedGitHook(hookPath)) {
         throw new InstallerError(`not a managed GSD Path git hook: ${hookPath}`);
       }
@@ -776,7 +837,7 @@ function refreshHooks(sourceRoot, project, full, dryRun) {
     if (dryRun) {
       refreshed.push(path.relative(project, destination).split(path.sep).join("/"));
     } else {
-      fs.copyFileSync(source, destination);
+      copyFileAtomic(source, destination);
       refreshed.push(path.relative(project, destination).split(path.sep).join("/"));
     }
   }
@@ -786,7 +847,7 @@ function refreshHooks(sourceRoot, project, full, dryRun) {
       if (dryRun) {
         refreshed.push(path.relative(project, settings).split(path.sep).join("/"));
       } else {
-        fs.writeFileSync(settings, CLAUDE_HOOKS_SETTINGS);
+        writeFileAtomic(settings, mergedClaudeSettings(settings));
         refreshed.push(path.relative(project, settings).split(path.sep).join("/"));
       }
     }
@@ -796,11 +857,11 @@ function refreshHooks(sourceRoot, project, full, dryRun) {
         ["commit-msg", COMMIT_MSG_HOOK],
       ]) {
         const hookPath = path.join(project, ".git", "hooks", hookName);
-        if (!lexists(hookPath)) continue;
         if (dryRun) {
           refreshed.push(path.relative(project, hookPath).split(path.sep).join("/"));
         } else {
-          fs.writeFileSync(hookPath, content, { mode: 0o755 });
+          fs.mkdirSync(path.dirname(hookPath), { recursive: true });
+          writeFileAtomic(hookPath, content, 0o755);
           refreshed.push(path.relative(project, hookPath).split(path.sep).join("/"));
         }
       }
@@ -913,10 +974,23 @@ export function doctor(sourceRoot, { targets, rootFor, project = null }) {
       push("note", "hooks: no .claude/settings.json guard wiring");
     } else if (!isManagedClaudeSettings(settings)) {
       push("warn", "hooks: .claude/settings.json is not the managed guard wiring");
-    } else if (fs.readFileSync(settings, "utf8") !== CLAUDE_HOOKS_SETTINGS) {
-      push("warn", "hooks: .claude/settings.json is stale — run --hooks-refresh-full");
     } else {
-      push("ok", "hooks: .claude/settings.json guard wiring present");
+      let hooksCurrent = false;
+      try {
+        const parsed = JSON.parse(fs.readFileSync(settings, "utf8"));
+        hooksCurrent =
+          parsed !== null &&
+          typeof parsed === "object" &&
+          JSON.stringify(parsed.hooks) ===
+            JSON.stringify(JSON.parse(CLAUDE_HOOKS_SETTINGS).hooks);
+      } catch {
+        hooksCurrent = false;
+      }
+      if (hooksCurrent) {
+        push("ok", "hooks: .claude/settings.json guard wiring present");
+      } else {
+        push("warn", "hooks: .claude/settings.json guard wiring is stale — run --hooks-refresh-full");
+      }
     }
     if (isDirectory(path.join(project, ".git"))) {
       for (const [hookName, expected] of [
@@ -924,12 +998,14 @@ export function doctor(sourceRoot, { targets, rootFor, project = null }) {
         ["commit-msg", COMMIT_MSG_HOOK],
       ]) {
         const hookPath = path.join(project, ".git", "hooks", hookName);
-        if (!isManagedGitHook(hookPath)) {
-          push("warn", `hooks: .git/hooks/${hookName} is missing or unmanaged — run --hooks-refresh-full`);
+        if (!lexists(hookPath)) {
+          push("warn", `hooks: .git/hooks/${hookName} is missing — run --hooks-refresh-full`);
+        } else if (!isManagedGitHook(hookPath)) {
+          push("warn", `hooks: .git/hooks/${hookName} is not a managed GSD Path git hook`);
         } else if (fs.readFileSync(hookPath, "utf8") !== expected) {
           push("warn", `hooks: .git/hooks/${hookName} is stale — run --hooks-refresh-full`);
         } else if (!isExecutable(hookPath)) {
-          push("warn", `hooks: .git/hooks/${hookName} is not executable`);
+          push("warn", `hooks: .git/hooks/${hookName} is not executable — run --hooks-refresh-full`);
         } else {
           push("ok", `hooks: .git/hooks/${hookName} wired`);
         }

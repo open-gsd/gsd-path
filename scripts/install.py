@@ -577,27 +577,74 @@ def _rollback_project(transaction: ProjectTransaction) -> None:
 def _is_managed_guard_script(destination: Path) -> bool:
     if not destination.is_file():
         return False
-    return GUARD_MARKER in destination.read_text(encoding="utf-8")
+    return GUARD_MARKER in destination.read_text(encoding="utf-8", errors="replace")
 
 
 def _is_managed_git_hook(destination: Path) -> bool:
     if not destination.is_file():
         return False
-    text = destination.read_text(encoding="utf-8")
+    text = destination.read_text(encoding="utf-8", errors="replace")
     return GUARD_MARKER in text and "git_guard.py" in text
 
 
 def _is_managed_claude_settings(destination: Path) -> bool:
     if not destination.is_file():
         return False
-    text = destination.read_text(encoding="utf-8")
+    text = destination.read_text(encoding="utf-8", errors="replace")
     return "guard_hook.py" in text and HOOKS_DIRECTORY in text
+
+
+def _temporary_path(destination: Path) -> Path:
+    return destination.parent / f".{destination.name}.gsd-path-tmp"
+
+
+def _atomic_write(
+    destination: Path, content: str, mode: Optional[int] = None
+) -> None:
+    temporary = _temporary_path(destination)
+    try:
+        temporary.write_text(content, encoding="utf-8")
+        if mode is not None:
+            temporary.chmod(mode)
+        elif destination.is_file() and not destination.is_symlink():
+            temporary.chmod(destination.stat().st_mode & 0o777)
+        os.replace(temporary, destination)
+    except BaseException:
+        _remove_path(temporary)
+        raise
+
+
+def _atomic_copy(source: Path, destination: Path) -> None:
+    temporary = _temporary_path(destination)
+    try:
+        shutil.copyfile(source, temporary)
+        os.replace(temporary, destination)
+    except BaseException:
+        _remove_path(temporary)
+        raise
+
+
+def _merged_claude_settings(settings: Path) -> str:
+    try:
+        parsed = json.loads(settings.read_text(encoding="utf-8", errors="replace"))
+    except json.JSONDecodeError as error:
+        raise InstallerError(
+            f"managed hook settings file is not valid JSON: {settings}"
+        ) from error
+    if not isinstance(parsed, dict):
+        raise InstallerError(
+            f"managed hook settings file is not a JSON object: {settings}"
+        )
+    parsed["hooks"] = json.loads(CLAUDE_HOOKS_SETTINGS)["hooks"]
+    return json.dumps(parsed, indent=2) + "\n"
 
 
 def _validate_hooks_refresh(source_root: Path, project: Path, full: bool) -> None:
     _validate_directory_destination(project, "project path")
     for name in GUARD_SCRIPTS:
         destination = project / HOOKS_DIRECTORY / name
+        if destination.is_symlink():
+            raise InstallerError(f"refusing to refresh a symlink: {destination}")
         if not _is_managed_guard_script(destination):
             raise InstallerError(f"not a managed GSD Path guard script: {destination}")
         source = source_root / "scripts" / name
@@ -605,12 +652,16 @@ def _validate_hooks_refresh(source_root: Path, project: Path, full: bool) -> Non
             raise InstallerError(f"missing guard script source: {source}")
     if full:
         settings = project / ".claude" / "settings.json"
+        if settings.is_symlink():
+            raise InstallerError(f"refusing to refresh a symlink: {settings}")
         if _lexists(settings) and not _is_managed_claude_settings(settings):
             raise InstallerError(
                 f"not a managed GSD Path hook settings file: {settings}"
             )
         for hook_name in ("pre-commit", "commit-msg"):
             hook_path = project / ".git" / "hooks" / hook_name
+            if hook_path.is_symlink():
+                raise InstallerError(f"refusing to refresh a symlink: {hook_path}")
             if _lexists(hook_path) and not _is_managed_git_hook(hook_path):
                 raise InstallerError(f"not a managed GSD Path git hook: {hook_path}")
 
@@ -626,7 +677,7 @@ def refresh_hooks(
         if dry_run:
             refreshed.append(destination.relative_to(project).as_posix())
         else:
-            shutil.copyfile(source, destination)
+            _atomic_copy(source, destination)
             refreshed.append(destination.relative_to(project).as_posix())
     if full:
         settings = project / ".claude" / "settings.json"
@@ -634,7 +685,7 @@ def refresh_hooks(
             if dry_run:
                 refreshed.append(settings.relative_to(project).as_posix())
             else:
-                settings.write_text(CLAUDE_HOOKS_SETTINGS, encoding="utf-8")
+                _atomic_write(settings, _merged_claude_settings(settings))
                 refreshed.append(settings.relative_to(project).as_posix())
         if (project / ".git").is_dir():
             for hook_name, content in (
@@ -642,13 +693,11 @@ def refresh_hooks(
                 ("commit-msg", COMMIT_MSG_HOOK),
             ):
                 hook_path = project / ".git" / "hooks" / hook_name
-                if not _lexists(hook_path):
-                    continue
                 if dry_run:
                     refreshed.append(hook_path.relative_to(project).as_posix())
                 else:
-                    hook_path.write_text(content, encoding="utf-8")
-                    hook_path.chmod(0o755)
+                    hook_path.parent.mkdir(parents=True, exist_ok=True)
+                    _atomic_write(hook_path, content, mode=0o755)
                     refreshed.append(hook_path.relative_to(project).as_posix())
     return refreshed
 
