@@ -223,16 +223,34 @@ archive: null
             self.make_repo(repo)
             payload = repo / "turn.json"
             payload.write_text(
-                json.dumps({"topic": "scope", "conclusion": "two\nlines"}),
+                json.dumps(
+                    {
+                        "topic": "scope",
+                        "conclusion": "two\nlines",
+                        "reasoning": "two\rlines",
+                    }
+                ),
                 encoding="utf-8",
             )
 
             appended = self.command(repo, "append", payload)
 
             self.assertNotEqual(appended.returncode, 0)
-            for name in ("user", "assistant", "question", "follow_up"):
+            provided = {"topic", "conclusion", "reasoning"}
+            declared = (
+                discussion_records.MULTILINE_FIELDS
+                + discussion_records.SINGLE_LINE_FIELDS
+            )
+            for name in declared:
+                if name in provided:
+                    continue
                 self.assertIn(f"{name} (missing or empty)", appended.stderr)
             self.assertIn("conclusion (must be one line)", appended.stderr)
+            self.assertIn("reasoning (must be one line)", appended.stderr)
+            self.assertNotIn("topic", appended.stderr)
+            self.assertFalse(
+                (repo / ".project" / ".discussion-append-transaction.json").exists()
+            )
 
     def test_append_recovery_rejects_symlinked_discussion_directory(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
