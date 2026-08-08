@@ -103,7 +103,7 @@ Codex invokes it as `$gsd-path-discuss`.
 | Synthesize | Resolve `NEEDS-USER` |
 | Plan | **Approve wave summary** before build |
 | Build | Escalations only |
-| Review | Approve patch wave if blocked |
+| Review | Approve patch waves if blocked; approve archive and ship when green |
 
 ---
 

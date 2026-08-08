@@ -177,11 +177,16 @@ Open your agent in the project directory. Invoke the router explicitly.
 
 ### Greenfield (empty or new milestone)
 
-No `.project/STATE.md` in an empty tree → **grill** immediately.
+No `.project/STATE.md` in an existing empty checkout → **grill** immediately.
+For an explicit request to create a new GitHub repository, the router first
+previews the repository and linked-worktree targets for approval as described
+in [README.md](README.md#the-flow).
 
 The grill interviews across: problem, users, observable success, scope in,
-scope out (vetoes), constraints, risks. It challenges contradictions and ends
-with a **playback summary** you approve → `.project/intent/INTENT.md`.
+scope out (vetoes), constraints, risks. It challenges contradictions, writes a
+complete `.project/intent/INTENT.md` draft with the proposed `quick` or
+`standard` lane, and links that draft alongside its **playback summary** before
+asking for approval.
 
 Vetoes in INTENT.md are hard limits for every later phase.
 
@@ -258,9 +263,11 @@ Wave reviews after each build wave; final review audits every success criterion
 
 ## Shipping
 
-Passing the final gate triggers **archive**:
+Passing the final gate produces a final review surface. After you explicitly
+approve **Archive and ship**, the archive transaction begins:
 
-- Artifacts (except active `STATE.md`) move to `.project/archive/<NNN>-<slug>/`
+- Milestone artifacts move to `.project/archive/<NNN>-<slug>/`; `STATE.md`,
+  `REPOSITORY.md`, and `LESSONS.md` remain active project metadata
 - `MANIFEST.md` records contents and ship metadata
 - One **ship commit** (subject `ship: …`) touches only `.project/`
 - Archives are **read-only** — guard hooks enforce this if installed
