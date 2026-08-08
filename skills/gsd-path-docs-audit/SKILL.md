@@ -36,7 +36,12 @@ would dirty execution, invalidate review, or mutate shipped history.
 1. Before writing the output, freeze the sorted Markdown inventory. Exclude
    vendored/generated trees, `node_modules`, `.git`, `.project/archive/**`,
    and the assigned output itself; include other `.project/` Markdown only in
-   alignment mode. Dispatch one docs auditor with deterministic logical task
+   alignment mode. The frozen inventory travels inside the dispatch brief and
+   the gate below; never persist it as a `.project/` sidecar file — the
+   audit's own path records are the durable copy. If a previous run left an
+   inventory sidecar under `.project/research/`, the orchestrator deletes it
+   when transferring the new audit — a leftover sidecar blocks the archive
+   transaction. Dispatch one docs auditor with deterministic logical task
    name `docs_audit`, following the local
    [runtime dispatch contract](references/dispatch.md): local role
    [docs-auditor](references/docs-auditor.md), template
@@ -49,9 +54,10 @@ would dirty execution, invalidate review, or mutate shipped history.
    orchestrator validates and atomically transfers it to the primary canonical
    path before removing that exact worktree. Otherwise no project command may
    run.
-2. Gate the artifact: every inventoried doc has a claims table, every claim
-   a verdict with evidence, and its path set equals the frozen inventory
-   exactly. Redispatch one complete corrected brief under logical task name
+2. Gate the artifact: every doc with at least one testable claim has a claims
+   table, every claim a verdict with evidence, every claimless doc appears
+   once in the `## Descriptive docs` list, and the section paths and that
+   list are disjoint and together equal the frozen inventory exactly. Redispatch one complete corrected brief under logical task name
    `docs_audit`, following the runtime dispatch contract. If it still fails,
    present **Outcome** with the failed gate, **Review** linking DOCS-AUDIT.md or
    STATE.md when it is missing, and **Next** naming the required correction.
@@ -96,8 +102,9 @@ filled-in checklist, so the method and the artifact stay one thing.
 `.project/` artifacts when present. Excluded: `node_modules`, build output,
 vendored code, `.project/archive/`, and the output audit itself — archives are
 read-only history and are never audited. The orchestrator freezes this list
-before dispatch; the auditor uses it verbatim. Every file gets a row — a doc
-with no testable claims is recorded as `descriptive`, not skipped. Rewriting DOCS-AUDIT.md preserves any
+before dispatch; the auditor uses it verbatim. Every file is accounted for —
+a doc with no testable claims gets one line in `## Descriptive docs`, not its
+own section and not skipped. Rewriting DOCS-AUDIT.md preserves any
 existing `## User rulings` rows: rulings and `planned` markers carry forward
 verbatim, so a re-audit never wipes the alignment queue.
 

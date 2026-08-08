@@ -107,8 +107,10 @@ The orchestrator presents ground truth in one screen — what the project is,
 what demonstrably works, where docs and code disagree — then enters the
 grill in brownfield mode. Onboarding changes nothing outside `.project/`.
 
-**Gate:** both artifacts match their templates; every inventoried doc has a
-verdict; ground truth was presented before any question was asked.
+**Gate:** both artifacts match their templates; every claim has a verdict and
+every claimless doc appears once in the descriptive list, together covering
+the frozen inventory exactly; ground truth was presented before any question
+was asked.
 
 ## Phase 1 — Grill (`gsd-path-grill`)
 

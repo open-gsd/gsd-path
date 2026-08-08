@@ -55,7 +55,8 @@ overwriting it. Re-running onboarding would overwrite established context.
      `.project/research/DOCS-AUDIT.md`, task name `onboard_docs`.
    Give each the absolute repo root and exclusion rule. Give the auditor the
    exact frozen inventory and `alignment mode: false`; it audits only that
-   list and never rediscovers paths. Pass an existing DOCS-AUDIT.md separately
+   list and never rediscovers paths. The frozen inventory travels inside the
+   dispatch brief; never persist it as a `.project/` sidecar file. Pass an existing DOCS-AUDIT.md separately
    as carry-forward input so its `## User rulings` and `planned` values remain
    verbatim. When Git has a resolvable HEAD and no non-`.project` worktree
    changes, the orchestrator creates a separate disposable detached worktree at
@@ -67,9 +68,9 @@ overwriting it. Re-running onboarding would overwrite established context.
    project command may run.
 3. Gate both artifacts against their templates: the codebase evidence needs
    a filled `## Map` plus findings as observed — no quota, but an empty
-   findings section must say why; the docs audit's document
-   path set must equal the frozen inventory exactly and every path needs a
-   verdict. Redispatch one complete corrected brief under the same logical task
+   findings section must say why; the docs audit's `## Doc:` sections and
+   `## Descriptive docs` list must be disjoint and together equal the frozen
+   inventory exactly, and every claim needs a verdict with evidence. Redispatch one complete corrected brief under the same logical task
    name, following the runtime dispatch contract, then set `status: blocked`
    if it still fails. Present **Outcome** with the failed gate, **Review**
    linking each malformed output that exists or STATE.md when an output is
