@@ -13,7 +13,11 @@ Supporting assets (local clone):
 - `docs/trust-validation/evidence-mapping.md`
 - `docs/trust-validation/manual-dogfood-evidence-bar.md`
 
-**Important:** Automated tests (53 Node + 178 Python as of 2026-08-11) and **manual dogfood** (2026-08-05) recorded in `TRUST-EVIDENCE.md`. Build wave and full ship still not executed. The 2026-08-05 dispatch-smoke runs were later reclassified as top-level CLI checks, not child-spawn proof — see the 2026-08-11 reconciliation in `TRUST-EVIDENCE.md`.
+**Important:** Automated suites and **manual dogfood** (2026-08-05) are
+recorded in `TRUST-EVIDENCE.md`. Build wave and full ship still not executed.
+The 2026-08-05 dispatch-smoke runs were later reclassified as top-level CLI
+checks, not child-spawn proof — see the 2026-08-11 reconciliation in
+`TRUST-EVIDENCE.md`.
 
 ---
 
@@ -21,14 +25,14 @@ Supporting assets (local clone):
 
 | Dimension | Worst open gap | Severity | Posture today |
 |-----------|----------------|----------|---------------|
-| Install & update | No CI; `install.py` lacks `--local`/`--update`; npm unpublished | High / Medium | **Use with checks** |
+| Install & update | `install.py` lacks `--local`/`--update`; npm unpublished | Medium | **Use with checks** |
 | Invoke & route | No automated STATE/router/recovery tests | High | **Prove first** |
 | Phase execution | Handoffs tested; full SOP not automated | High | **Prove first** |
 | Build orchestration | No automated or manual proof in this effort | High | **Prove first** |
 | Guards | Claude guards manually proven; Codex/Cursor pre-tool-use manual | Low | **OK to use** (Claude hooks); **Use with checks** (Codex/Cursor pre-tool-use) |
 | Ship & archive | — | — | **OK to use** (validators) |
 | Host dispatch | Child-agent spawn unverified — 2026-08-05 smoke runs exercised the top-level CLI only | High | **Prove first** |
-| Docs fidelity | No CI doc-audit runner; minor README drift | Low / Medium | **Use with checks** |
+| Docs fidelity | No automated docs claim audit | Medium | **Use with checks** |
 | Live dogfood | Cursor slice done; build/ship not run | Medium | **Use with checks** |
 
 ---
@@ -39,11 +43,11 @@ Supporting assets (local clone):
 
 Use these **without** waiting on manual dogfood — still run `npm test` + Python unittest before upgrades:
 
-- **Ship & archive validators** — `scripts/archive_milestone.py` (62 tests), `git_guard.py` ship-commit rules
+- **Ship & archive validators** — `scripts/archive_milestone.py`, `git_guard.py` ship-commit rules
 - **Guard script logic** — `guard_hook.py` / `git_guard.py` unit + subprocess tests
 - **Node installer** — dry-run, apply, rollback, `--local`, `--update`, hooks install/refresh (`install.test.mjs` + `test_install.py`)
 - **Handoff validator** — `scripts/check_handoffs.py` (research + patch-findings)
-- **Skill sync integrity** — 82 resource pairs (`sync_skill_resources.py --check`)
+- **Skill sync integrity** — `sync_skill_resources.py --check`
 - **Static dispatch artifacts** — installer stages `platforms/*/dispatch.md` + Cursor `gsd-path` subagent file
 
 ### Prove first (before trusting end-to-end pipeline)
@@ -56,7 +60,7 @@ Complete manual bar (`docs/trust-validation/manual-dogfood-evidence-bar.md`) and
 | Dispatch smoke | **Codex, Claude** | One docs-audit spawn + `DOCS-AUDIT.md` |
 | Router / STATE / recovery | **Cursor** (proxy for pipeline) | Covered by pipeline slice |
 | Live child APIs | **Codex, Claude, Cursor** | Spawn success recorded per host |
-| CI regression | — | Add CI or run both test suites before every merge |
+| CI regression | — | GitHub Actions runs Node, Python, and resource-sync checks on pull requests |
 | `npx gsd-path` | — | Wait for npm publish or record clone path only |
 | **Build orchestration** | — | Optional follow-on: one task, one worktree, one orchestrator commit |
 
@@ -85,7 +89,6 @@ Record explicit acceptance here if you rely on something despite a High gap:
 
 | Sev | ID | Gap | Evidence | Fix / proof direction |
 |-----|-----|-----|----------|----------------------|
-| **High** | G1 | No CI workflows | No `.github/` | Add Node + Python + `sync --check` CI |
 | **High** | G2 | Router/STATE/recovery untested | No test files | Cursor pipeline slice + future router tests |
 | **High** | G3 | Full phase SOP untested | Only `test_handoffs.py` | Pipeline slice + phase dogfood |
 | **High** | G4 | Build orchestration unproven | No tests; deferred from bar | One-task build wave dogfood |
@@ -96,21 +99,20 @@ Record explicit acceptance here if you rely on something despite a High gap:
 | **Medium** | G9 | `npm test` omits Python suite | `package.json` scripts | Run both suites manually |
 | **Medium** | G10 | Codex/Cursor pre-tool-use not auto-installed | HOOKS.md | Wire manually or accept git-hook-only |
 | **Medium** | G11 | No automated doc-audit runner in CI | doc gaps catalog | Onboard/docs-audit or CI step |
-| **Low** | G12 | README Agent table missing Kimi row | README.md (out-of-scope host) | fix-doc when convenient |
 | **Info** | G13 | Onboard DOCS-AUDIT remediation queue stale | `.project/research/DOCS-AUDIT.md` | Refresh on next onboard |
 
 ---
 
 ## 4. Evidence table (condensed)
 
-Full 40-row automation map: `docs/trust-validation/evidence-mapping.md`
+Full automation map: `docs/trust-validation/evidence-mapping.md`
 
 | Criterion | Dimension | Status | Posture |
 |-----------|-----------|--------|---------|
 | Node installer core paths | Install & update | met | OK |
 | `install.py` parity | Install & update | partial (tested; no `--local`/`--update`) | Use with checks |
 | npm publish | Install & update | unmet | Prove first |
-| CI gate | Install & update | unmet | Prove first |
+| CI gate | Install & update | met | OK |
 | Explicit-only skill links | Invoke & route | met | OK |
 | STATE/router/recovery | Invoke & route | unmet | Prove first |
 | Codex implicit catalog | Invoke & route | partial | Prove first |
@@ -123,7 +125,7 @@ Full 40-row automation map: `docs/trust-validation/evidence-mapping.md`
 | `archive_milestone.py` suite | Ship & archive | met | OK |
 | Dispatch files on install | Host dispatch | met (static) | OK |
 | Live spawn Codex/Claude/Cursor | Host dispatch | unverifiable | Prove first |
-| Sync 82 resources | Docs fidelity | met | OK |
+| Resource synchronization | Docs fidelity | met | OK |
 | Cursor pipeline slice | Live dogfood | unverifiable | Prove first |
 | Codex/Claude dispatch smoke | Live dogfood | unverifiable | Prove first |
 
@@ -143,7 +145,7 @@ Full 40-row automation map: `docs/trust-validation/evidence-mapping.md`
 1. Run manual dogfood bar; paste evidence into a `TRUST-EVIDENCE.md` or issue comment.
 2. Re-run `npm test` && `python3 -m unittest discover -s tests` after any `git pull`.
 3. Before relying on **build**: one trivial task through `gsd-path-build`.
-4. Optional engineering: CI workflow, npm publish, README Kimi row, `install.py` parity decision.
+4. Optional engineering: npm publish and the `install.py` parity decision.
 
 ---
 
