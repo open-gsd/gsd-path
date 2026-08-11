@@ -11,7 +11,14 @@ from datetime import date
 from pathlib import Path
 from typing import Iterator, Optional, Sequence
 
-import archive_milestone
+try:
+    import archive_milestone
+except ModuleNotFoundError as error:
+    if error.name != "archive_milestone":
+        raise
+    shared_scripts = Path(__file__).resolve().parents[2] / "gsd-path" / "scripts"
+    sys.path.insert(0, str(shared_scripts))
+    import archive_milestone
 
 
 class DiscussionError(RuntimeError):

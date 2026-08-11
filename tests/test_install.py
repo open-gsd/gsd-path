@@ -12,6 +12,9 @@ from unittest import mock
 from scripts import install
 
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+
 class InstallerTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
@@ -346,6 +349,24 @@ class InstallerTests(unittest.TestCase):
         self.assertIn("OpenCode stable discovers", output)
         self.assertIn("Antigravity discovers", output)
         self.assertIn("Kiro discovers", output)
+
+    def test_codex_dry_run_validates_resolved_shared_profile_from_real_repository(self):
+        target = self.root / "real-codex" / "skills"
+
+        status, output, error = self.run_main(
+            [
+                "--codex",
+                "--codex-root",
+                str(target),
+                "--dry-run",
+                "--source-root",
+                str(PROJECT_ROOT),
+            ]
+        )
+
+        self.assertEqual(0, status, error)
+        self.assertIn("codex: would install", output)
+        self.assertFalse(target.exists())
 
     def test_codex_and_zed_share_one_deployment_at_the_same_root(self):
         root = self.root / "shared" / "skills"

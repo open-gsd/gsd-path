@@ -1,5 +1,6 @@
-import re
+import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -237,6 +238,37 @@ class SyncSkillResourcesTests(unittest.TestCase):
             (PROJECT_ROOT / "skills" / "gsd-path" / "references" / "dispatch.md").read_bytes(),
         )
 
+    def test_every_skill_can_run_its_bundled_pending_discussion_gate(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            project = repo / ".project"
+            project.mkdir()
+            (project / "STATE.md").write_text(
+                """---
+pipeline: gsd-path/v2
+project: demo
+milestone: demo
+phase: plan
+status: active
+branch: main
+archive: null
+---
+""",
+                encoding="utf-8",
+            )
+
+            for skill_directory in sorted((PROJECT_ROOT / "skills").glob("gsd-path*")):
+                script = skill_directory / "scripts" / "discussion_records.py"
+                result = subprocess.run(
+                    [sys.executable, str(script), "pending", "--repo", str(repo)],
+                    cwd=repo,
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                )
+                self.assertEqual(0, result.returncode, f"{skill_directory.name}: {result.stderr}")
+                self.assertEqual({"pending": []}, json.loads(result.stdout), skill_directory.name)
+
     def test_shared_agent_dispatch_has_unambiguous_current_runtime_branches(self) -> None:
         dispatch = (PROJECT_ROOT / "platforms" / "shared-agents" / "dispatch.md").read_text()
 
@@ -258,6 +290,11 @@ class SyncSkillResourcesTests(unittest.TestCase):
             "If the tool schema is ambiguous",
         ):
             self.assertIn(required_text, dispatch)
+        normalized = re.sub(r"\s+", " ", dispatch)
+        self.assertIn(
+            "`high` for the portable `heavy` tier and `low` for the portable `light` tier",
+            normalized,
+        )
 
 
 if __name__ == "__main__":

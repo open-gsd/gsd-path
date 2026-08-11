@@ -7,7 +7,10 @@ use exactly one matching branch:
 - A `spawn_agent` tool exposing `task_name`, `agent_type`, and `fork_turns` is
   Codex. Use `fork_turns: "none"`; coders use the built-in `worker` type and
   every other role uses `default`. Reuse a completed logical target with
-  `followup_task`.
+  `followup_task`. For Codex reasoning effort, use `high` for the portable
+  `heavy` tier and `low` for the portable `light` tier; leave reasoning effort
+  unset for the session-default tier, and never pass `heavy` or `light` as a
+  literal Codex value.
 - A `spawn_agent` tool without those Codex fields is Zed. Spawn one isolated,
   full-capability child per brief. Zed children are not resumable, so retries
   use a fresh child and a complete prompt.
@@ -54,11 +57,12 @@ For every branch:
 - Resolve the phase's linked role brief to an absolute path, include it in the
   prompt, and require the child to read it before acting. The role brief
   supplies the read-only boundary for auditors and reviewers.
-- Tier hints: when the host advertises model or reasoning-effort selection,
-  request `heavy` for `plan`, `plan_patch`, `decide`, and `roadmap`, `light`
-  for
-  `inspect_docs` and `docs_audit`, and the session default for every other
-  role. When the host offers no such selection, do not override the model.
+- Tier hints: use the portable `heavy` tier for `plan`, `plan_patch`, `decide`,
+  and `roadmap`, the portable `light` tier for `inspect_docs` and `docs_audit`,
+  and the session-default tier for every other role. Apply the Codex mapping
+  above when its schema advertises reasoning-effort selection. On every other
+  host, use only an exact native equivalent advertised by that host; otherwise
+  do not override the model or reasoning effort.
   Never ask the host to create a worktree. Give the child the exact
   repository or linked-worktree root supplied by GSD Path.
 - Send a self-contained prompt with absolute input, template, and output paths
