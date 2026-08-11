@@ -36,7 +36,7 @@ cd your-repo && node scripts/install.mjs --all --project "$(pwd)"
 node scripts/install.mjs --update
 ```
 
-npm: `npx gsd-path --all` · Help: `node scripts/install.mjs --help`
+npm (once published to npm): `npx gsd-path --all` · Help: `node scripts/install.mjs --help`
 
 ## Skills
 

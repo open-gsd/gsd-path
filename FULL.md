@@ -79,7 +79,7 @@ treat explicit invocation as an operating rule.
 
 ### Requirements
 
-- **Node 18.17+** for `scripts/install.mjs` (recommended; also the npm `gsd-path` bin)
+- **Node 18.17+** for `scripts/install.mjs` (recommended; also the npm `gsd-path` bin once the package is published to npm)
 - **Python 3** optional — `scripts/install.py` mirrors global install validation and transactions (no `--local` UI)
 
 ### Global install (default)
@@ -155,7 +155,7 @@ See [UPDATE.md](UPDATE.md) for the full updating guide. Quick reference:
 ```bash
 node scripts/install.mjs --update              # global roots with existing install
 node scripts/install.mjs --update --local      # current project only
-npx gsd-path@latest --update                   # from npm
+npx gsd-path@latest --update                   # from npm, once published
 ```
 
 Previous copies move to `disabled-gsd-skills` beside each root. The router may
@@ -236,7 +236,9 @@ advancement until its named owner appends a disposition receipt.
 
 ### Research
 
-Up to four parallel researchers (domain, stack, pitfalls, similar projects).
+Up to five parallel researchers — the four standard dimensions (domain,
+stack, pitfalls, similar projects) plus an optional risk-driven custom
+dimension.
 Brownfield adds `evidence-codebase.md` from inspect as input. Dimensions with
 nothing to answer are skipped and recorded in STATE.
 
@@ -420,7 +422,7 @@ node scripts/install.mjs --update [--local]
 node scripts/install.mjs --hooks-refresh --project /path/to/repo
 node scripts/install.mjs --hooks-refresh-full --project /path/to/repo
 
-# From npm
+# From npm (once the package is published to npm)
 npx gsd-path --all
 npx gsd-path@latest --update
 ```
