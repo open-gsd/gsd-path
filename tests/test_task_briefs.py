@@ -289,6 +289,65 @@ class TaskBriefTests(unittest.TestCase):
             self.assertEqual(exit_code, 1)
             self.assertIn("missing frontmatter field: task_branch", stderr)
 
+    def test_empty_tasks_dir_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.init_repo(root)
+            (root / ".project" / "tasks").mkdir(parents=True)
+            base = self.commit(root)
+
+            exit_code, _stdout, stderr = self.lint(root, base)
+
+            self.assertEqual(exit_code, 1)
+            self.assertIn("no task briefs found", stderr)
+
+    def test_missing_tasks_dir_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.init_repo(root)
+            base = self.commit(root)
+
+            exit_code, _stdout, stderr = self.lint(root, base)
+
+            self.assertEqual(exit_code, 1)
+            self.assertIn("tasks directory not found", stderr)
+
+    def test_unindented_block_list_items_are_parsed(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.init_repo(root)
+            self.write_happy_tasks(root)
+            task_path = root / ".project/tasks/T001-demo.md"
+            task_path.write_text(
+                task_path.read_text(encoding="utf-8").replace("\n  - ", "\n- "),
+                encoding="utf-8",
+            )
+            base = self.commit(root)
+
+            exit_code, stdout, stderr = self.lint(root, base)
+
+            self.assertEqual(exit_code, 0, stderr)
+            summary = json.loads(stdout)
+            self.assertEqual(summary["tasks"], 2)
+
+    def test_block_list_items_strip_quotes_like_inline_items(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.init_repo(root)
+            self.write_happy_tasks(root)
+            # Quoting a missing path must still be caught: quotes are
+            # stripped before the layer-base existence check.
+            self.write_task(
+                root, "T003", files=('"newpkg/mod.py"',), contract="- None",
+                context="The task adds a module.",
+            )
+            base = self.commit(root)
+
+            exit_code, _stdout, stderr = self.lint(root, base)
+
+            self.assertEqual(exit_code, 1)
+            self.assertIn("newpkg/mod.py has no parent directory newpkg", stderr)
+
     def test_unresolvable_base_fails(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

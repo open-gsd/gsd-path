@@ -326,6 +326,26 @@ State: ship/blocked
             with self.assertRaises(check_handoffs.HandoffError):
                 check_handoffs.validate_patch_findings(root)
 
+    def test_patch_findings_reject_a_malformed_finding_heading(self) -> None:
+        for malformed in ("### P02 — project verify", "### P002 project verify"):
+            with self.subTest(malformed=malformed), \
+                    tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                self.write_state(root, "ship", "blocked")
+                self.write_review_sources(root)
+                self.write_patch_findings(root)
+                patch = root / ".project/review/PATCH-FINDINGS.md"
+                patch.write_text(
+                    patch.read_text(encoding="utf-8").replace(
+                        "### P002 — project verify", malformed
+                    ),
+                    encoding="utf-8",
+                )
+
+                with self.assertRaises(check_handoffs.HandoffError) as failure:
+                    check_handoffs.validate_patch_findings(root)
+                self.assertIn("P### ids", str(failure.exception))
+
     def test_research_handoff_passes_under_next_project_dir(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

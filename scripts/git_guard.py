@@ -79,23 +79,13 @@ def violations(entries, subject):
     return found
 
 
-def git_toplevel():
-    result = subprocess.run(
-        ["git", "rev-parse", "--show-toplevel"],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    return Path(result.stdout.strip())
-
-
 def commit_subject(argv):
     if len(argv) <= 1:
         return ""
     if argv[1] == "pre-commit":
-        edit_msg = git_toplevel() / ".git" / "COMMIT_EDITMSG"
-        if edit_msg.is_file():
-            return subject_of(edit_msg)
+        # At pre-commit time .git/COMMIT_EDITMSG still holds the PREVIOUS
+        # commit's message, so subject rules cannot be enforced here; the
+        # commit-msg hook enforces them with the real message.
         return ""
     if argv[1] == "commit-msg" and len(argv) > 2:
         return subject_of(argv[2])

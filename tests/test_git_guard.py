@@ -120,15 +120,46 @@ class GitGuardEndToEndTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn("read-only", result.stderr)
 
-    def test_pre_commit_blocks_ship_case_insensitive(self):
+    def install_hooks(self):
+        hooks = self.repo / ".git" / "hooks"
+        pre_commit = hooks / "pre-commit"
+        pre_commit.write_text(
+            f'#!/bin/sh\nexec "{sys.executable}" "{SCRIPT}" pre-commit\n',
+            encoding="utf-8",
+        )
+        commit_msg = hooks / "commit-msg"
+        commit_msg.write_text(
+            f'#!/bin/sh\nexec "{sys.executable}" "{SCRIPT}" commit-msg "$1"\n',
+            encoding="utf-8",
+        )
+        pre_commit.chmod(0o755)
+        commit_msg.chmod(0o755)
+
+    def test_commit_after_ship_commit_is_not_blocked_at_pre_commit(self):
+        self.install_hooks()
+        (self.repo / ".project" / "STATE.md").write_text("state\n", encoding="utf-8")
+        self.git("add", "-A")
+        self.commit("ship: 001-mvp")
+
+        # The next commit runs pre-commit while .git/COMMIT_EDITMSG still
+        # holds the previous `ship:` subject; it must not be blocked.
+        (self.repo / "app.py").write_text("print('changed')\n", encoding="utf-8")
+        self.git("add", "-A")
+        result = subprocess.run(
+            ["git", "-c", "user.email=test@example.com", "-c", "user.name=Test",
+             "commit", "-q", "-m", "feat: change app"],
+            cwd=self.repo,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+        # A real ship-scope violation is still blocked at commit-msg.
         (self.repo / "app.py").write_text("print('ship')\n", encoding="utf-8")
         self.git("add", "-A")
-        message = self.repo / "COMMIT_MSG"
-        message.write_text("Ship: 002-next\n", encoding="utf-8")
-        edit_msg = self.repo / ".git" / "COMMIT_EDITMSG"
-        edit_msg.write_text("Ship: 002-next\n", encoding="utf-8")
         result = subprocess.run(
-            [sys.executable, str(SCRIPT), "pre-commit"],
+            ["git", "-c", "user.email=test@example.com", "-c", "user.name=Test",
+             "commit", "-q", "-m", "ship: 002-next"],
             cwd=self.repo,
             capture_output=True,
             text=True,

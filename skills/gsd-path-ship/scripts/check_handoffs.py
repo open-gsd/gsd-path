@@ -217,7 +217,10 @@ def validate_research(
 
 
 def _finding_blocks(text: str) -> List[Tuple[str, str]]:
-    matches = list(re.finditer(r"(?m)^### P\d{3} — .+$", text))
+    # Match any `### P` heading so a malformed finding id becomes its own
+    # block and fails FINDING_PATTERN instead of vanishing into the
+    # previous block unvalidated.
+    matches = list(re.finditer(r"(?m)^### P.*$", text))
     return [
         (match.group(0), text[match.end() : next_match.start() if next_match else len(text)])
         for match, next_match in zip(matches, matches[1:] + [None])

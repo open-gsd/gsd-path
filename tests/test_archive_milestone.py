@@ -1526,6 +1526,44 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                 self.assertNotEqual(prepare.returncode, 0)
                 self.assertIn("canonical", prepare.stderr)
 
+    def test_archive_accepts_deep_review_lens_files(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            review = repo / ".project" / "review"
+            (review / "wave-1.cycle1.contract.md").write_text("# Contract lens\n")
+            (review / "wave-1.cycle1.adversarial.md").write_text("# Adversarial lens\n")
+
+            archive = self.prepare_archive(repo)
+
+            self.assertTrue((archive / "review" / "wave-1.cycle1.contract.md").is_file())
+            self.assertTrue((archive / "review" / "wave-1.cycle1.adversarial.md").is_file())
+            self.write_manifest(archive)
+            preflight = self.preflight(repo)
+            self.assertEqual(preflight.returncode, 0, preflight.stderr)
+
+    def test_lens_files_do_not_replace_the_base_wave_review(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            review = repo / ".project" / "review"
+            (review / "wave-1.cycle1.md").unlink()
+            (review / "wave-1.cycle1.contract.md").write_text("# Contract lens\n")
+
+            prepare = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "prepare",
+                "--repo",
+                str(repo),
+                "--slug",
+                "demo",
+                cwd=PROJECT_ROOT,
+            )
+
+            self.assertNotEqual(prepare.returncode, 0)
+            self.assertIn("wave-N.cycleC.md", prepare.stderr)
+
     def test_preflight_derives_contiguous_cycles_and_requires_the_last_to_pass(self) -> None:
         for case in ("manifest-count", "cycle-gap", "last-blocked", "wrong-heading", "wrong-cycle"):
             with self.subTest(case=case), tempfile.TemporaryDirectory() as temporary_directory:
@@ -1985,6 +2023,21 @@ Tasks reviewed: 1
             self.assertIn(
                 "archive: .project/archive/001-demo",
                 (project / "STATE.md").read_text(),
+            )
+
+    def test_abandon_accepts_deep_review_lens_files(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_build_repo(repo)
+            review = repo / ".project" / "review"
+            (review / "wave-1.cycle1.adversarial.md").write_text("# Adversarial lens\n")
+
+            result = self.run_abandon(repo)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            archive = repo / ".project" / "archive" / "001-demo"
+            self.assertTrue(
+                (archive / "review" / "wave-1.cycle1.adversarial.md").is_file()
             )
 
     def test_abandon_accepts_active_status(self) -> None:
