@@ -72,7 +72,9 @@ archive: null
 | 1 | fix-doc | "keep this queued" | no |
 """
         )
-        (project / "plan" / "PLAN.md").write_text("# Plan\n\n## Wave 1 — demo\n")
+        (project / "plan" / "PLAN.md").write_text(
+            "# Plan\n\n## Wave 1 — demo\n\nReview depth: full\n"
+        )
         (project / "tasks" / "T001-demo.md").write_text("# Task\n")
         (project / "review" / "FINAL.md").write_text("Overall verdict: pass\n")
         (project / "review" / "wave-1.cycle1.md").write_text(
@@ -1536,6 +1538,10 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
         with tempfile.TemporaryDirectory() as temporary_directory:
             repo = Path(temporary_directory)
             self.make_repo(repo)
+            plan = repo / ".project" / "plan" / "PLAN.md"
+            plan.write_text(
+                plan.read_text().replace("Review depth: full", "Review depth: deep")
+            )
             review = repo / ".project" / "review"
             (review / "wave-1.cycle1.md").unlink()
             for lens in ("contract", "adversarial"):
@@ -1562,13 +1568,54 @@ Tasks reviewed: 1
             preflight = self.preflight(repo)
             self.assertEqual(preflight.returncode, 0, preflight.stderr)
 
+    def test_preflight_rejects_base_review_for_deep_plan_wave(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            plan = repo / ".project" / "plan" / "PLAN.md"
+            plan.write_text(
+                plan.read_text().replace("Review depth: full", "Review depth: deep")
+            )
+
+            archive = self.prepare_archive(repo)
+            self.write_manifest(archive)
+            preflight = self.preflight(repo)
+
+            self.assertNotEqual(preflight.returncode, 0)
+            self.assertIn("deep", preflight.stderr)
+            self.assertIn("contract and adversarial", preflight.stderr)
+
+    def test_preflight_accepts_verify_only_review_declared_by_plan(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            project = repo / ".project"
+            plan = project / "plan" / "PLAN.md"
+            plan.write_text(
+                plan.read_text().replace(
+                    "Review depth: full", "Review depth: verify-only"
+                )
+            )
+            review = project / "review" / "wave-1.cycle1.md"
+            review.write_text(
+                review.read_text().replace("Depth: full", "Depth: verify-only")
+            )
+
+            archive = self.prepare_archive(repo)
+            self.write_manifest(archive)
+            preflight = self.preflight(repo)
+
+            self.assertEqual(preflight.returncode, 0, preflight.stderr)
+
     def test_deep_review_lens_content_is_validated(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             archive = Path(temporary_directory)
             (archive / "plan").mkdir()
             (archive / "tasks").mkdir()
             (archive / "review").mkdir()
-            (archive / "plan" / "PLAN.md").write_text("# Plan\n\n## Wave 1 — demo\n")
+            (archive / "plan" / "PLAN.md").write_text(
+                "# Plan\n\n## Wave 1 — demo\n\nReview depth: deep\n"
+            )
             (archive / "tasks" / "T001-demo.md").write_text("# Task\n")
             (archive / "review" / "wave-1.cycle1.contract.md").write_text(
                 """# Review — wave 1, cycle 1

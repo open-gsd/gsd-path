@@ -1121,12 +1121,30 @@ def validate_wave_review(
 
 def review_cycle_counts(archive: Path) -> Sequence[int]:
     plan = archive / "plan" / "PLAN.md"
-    wave_numbers = [
-        int(match.group(1))
-        for match in re.finditer(r"^## Wave (\d+)\b", plan.read_text(encoding="utf-8"), re.MULTILINE)
-    ]
+    plan_text = plan.read_text(encoding="utf-8")
+    wave_matches = list(re.finditer(r"^## Wave (\d+)\b", plan_text, re.MULTILINE))
+    wave_numbers = [int(match.group(1)) for match in wave_matches]
     if not wave_numbers or wave_numbers != list(range(1, len(wave_numbers) + 1)):
         raise ArchiveError("plan wave numbers must be ordered and contiguous")
+    wave_depths = {}
+    for index, match in enumerate(wave_matches):
+        section_end = (
+            wave_matches[index + 1].start()
+            if index + 1 < len(wave_matches)
+            else len(plan_text)
+        )
+        depths = re.findall(
+            r"^Review depth:\s*(\S+)",
+            plan_text[match.end() : section_end],
+            re.MULTILINE,
+        )
+        wave = int(match.group(1))
+        if len(depths) > 1:
+            raise ArchiveError(f"plan wave {wave} has multiple review depths")
+        depth = depths[0] if depths else "full"
+        if depth not in {"full", "deep", "verify-only"}:
+            raise ArchiveError(f"plan wave {wave} has an invalid review depth")
+        wave_depths[wave] = depth
     known_task_ids = [
         path.name.split("-", 1)[0] for path in canonical_task_files(archive / "tasks")
     ]
@@ -1155,22 +1173,23 @@ def review_cycle_counts(archive: Path) -> Sequence[int]:
         wave_verdicts = {}
         task_verdicts = {}
         for cycle, reviews in cycles.items():
-            if set(reviews) == {None}:
-                path = reviews[None]
-                depth = completed_field(
-                    path.read_text(encoding="utf-8").splitlines(), "Depth:", path.name
-                )
-                if depth not in {"full", "verify-only"}:
-                    raise ArchiveError(f"{path.name} has an invalid review depth")
-                expected = ((path, depth, None),)
-            elif set(reviews) == {"contract", "adversarial"}:
+            depth = wave_depths[wave]
+            if depth == "deep":
+                if set(reviews) != {"contract", "adversarial"}:
+                    raise ArchiveError(
+                        f"wave {wave} cycle {cycle} requires contract and adversarial "
+                        "reviews for PLAN depth deep"
+                    )
                 expected = tuple(
-                    (reviews[lens], "deep", lens) for lens in ("contract", "adversarial")
+                    (reviews[lens], depth, lens) for lens in ("contract", "adversarial")
                 )
             else:
-                raise ArchiveError(
-                    f"wave {wave} cycle {cycle} requires one base review or both deep-review lenses"
-                )
+                if set(reviews) != {None}:
+                    raise ArchiveError(
+                        f"wave {wave} cycle {cycle} requires one base review "
+                        f"for PLAN depth {depth}"
+                    )
+                expected = ((reviews[None], depth, None),)
 
             wave_verdicts[cycle] = []
             task_verdicts[cycle] = []
