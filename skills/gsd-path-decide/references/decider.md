@@ -20,7 +20,8 @@ Turn supplied research into settled decisions. Do not conduct new research.
    one line under Settled, citing the settling source; do not invent a
    runner-up for it.
 4. Resolve conflicts by source quality and fit to intent. Preserve a user
-   values choice as `NEEDS-USER` with two or three options; never guess.
+   values choice as `NEEDS-USER` with the genuinely viable options; never
+   guess.
    When the evidence leans one way, order that option first with a one-line
    reason so the checkpoint can mark it recommended; note when it is a pure
    values call with no lean.

@@ -256,7 +256,6 @@ class SyncSkillResourcesTests(unittest.TestCase):
             self.assertFalse((PROJECT_ROOT / "skills" / removed).exists())
 
         adapters = {
-            "codex": "Codex collaboration tool",
             "claude": "Claude Code's `Agent` tool",
             "grok": "Grok's `spawn_subagent` tool",
             "opencode": "OpenCode",
@@ -264,10 +263,17 @@ class SyncSkillResourcesTests(unittest.TestCase):
             "qwen": "Qwen Code's `agent` tool",
             "antigravity": "Antigravity's `invoke_subagent` tool",
             "cursor": "custom `gsd-path` subagent",
-            "zed": "Zed's `spawn_agent` tool",
             "kiro": "default general-purpose subagent",
             "shared-agents": "Shared Agent Skills",
         }
+        # Codex and Zed deploy the shared-agents profile (see deploymentPlans in
+        # scripts/install.mjs and scripts/install.py); they have no per-platform
+        # adapter of their own.
+        for shared_profile_runtime in ("codex", "zed"):
+            self.assertFalse(
+                (PROJECT_ROOT / "platforms" / shared_profile_runtime).exists(),
+                shared_profile_runtime,
+            )
         for runtime, required_text in adapters.items():
             adapter = PROJECT_ROOT / "platforms" / runtime / "dispatch.md"
             self.assertTrue(adapter.is_file(), runtime)

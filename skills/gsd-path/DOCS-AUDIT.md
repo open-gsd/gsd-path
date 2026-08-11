@@ -15,10 +15,12 @@ router or orchestrator supplied this contract, return control to it. On a
 direct invocation, report the exact next skill and stop until the user
 explicitly invokes it.
 
-Before audit work and again before completion, apply AGENTS.md's pending
-discussion-answer contract. Resolve an answer owned by docs audit in
-DOCS-AUDIT.md and append a disposition receipt; otherwise block with links to
-ANSWERS.md and the target artifact rather than publishing stale findings.
+Before audit work and again before completion, run the bundled
+`scripts/discussion_records.py pending --repo <absolute-root>`; when
+`.project/discuss/ANSWERS.md` is absent, continue. Resolve a reported
+required follow-up owned by docs audit in DOCS-AUDIT.md and record its
+disposition with the helper's `dispose` command; otherwise block with links
+to ANSWERS.md and the target artifact rather than publishing stale findings.
 
 Require an existing `.project/STATE.md` with `pipeline: gsd-path/v2`; never
 create pipeline state or write into an unowned `.project/`. A missing state

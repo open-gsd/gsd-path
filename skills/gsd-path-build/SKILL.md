@@ -31,6 +31,11 @@ explicitly invokes it.
   [task template](templates/task.md), [board template](templates/board.md), and
   [wave-review template](templates/wave-review.md). Resolve them to absolute
   paths before briefing agents.
+- Before the first dispatch, create `.project/BOARD.md` from the bundled
+  board template when it is absent — `.project/BOARD.md` is the canonical
+  board path — and include it in the next orchestrator bookkeeping commit.
+  Update BOARD.md at every task state change so it always mirrors task
+  frontmatter.
 - Require a Git worktree with no unrelated changes. Roadmap and plan
   approval checkpoints normally leave `.project/` fully committed; expected
   uncommitted `.project/` planning artifacts may remain only through initial
@@ -194,7 +199,8 @@ For each wave in PLAN.md order:
      rule. Preserve the isolated worktree unless and until the explicit clean
      retry-retirement procedure in step 2 owns and removes it.
 
-6. **Review the wave.** Only after every wave task is done, read the wave's
+6. **Review the wave.** The build orchestrator owns wave reviews; ship never
+   runs them. Only after every wave task is done, read the wave's
    `Review depth` from PLAN.md (default `full`).
    - `full`: spawn one independent reviewer using deterministic logical task
      name `review_wave_<wave>_cycle_<cycle>`. Supply every task path, its

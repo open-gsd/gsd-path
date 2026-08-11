@@ -13,10 +13,12 @@ router or orchestrator supplied this contract, return control to it. On a
 direct invocation, report the exact next skill and stop until the user
 explicitly invokes it.
 
-Before dispatch and again before completion, apply AGENTS.md's pending
-discussion-answer contract. Resolve an answer owned by decide in
-SYNTHESIS.md and append a disposition receipt; otherwise block with links to
-ANSWERS.md and the target artifact rather than settling stale decisions.
+Before dispatch and again before completion, run the bundled
+`scripts/discussion_records.py pending --repo <absolute-root>`; when
+`.project/discuss/ANSWERS.md` is absent, continue. Resolve a reported
+required follow-up owned by decide in SYNTHESIS.md and record its disposition
+with the helper's `dispose` command; otherwise block with links to ANSWERS.md
+and the target artifact rather than settling stale decisions.
 
 ## Preconditions
 

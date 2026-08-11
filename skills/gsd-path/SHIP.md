@@ -23,25 +23,7 @@ and follow that runtime-specific dispatch contract.
 This skill
 verifies first and never archives or ships before explicit final approval.
 
-## Wave mode
-
-1. Require STATE `build/active`, a wave number, and review cycle 1 unless the
-   caller supplies C. Any other phase blocks rather than rewinding state.
-2. Resolve the local [wave-review template](templates/wave-review.md) and
-   require the reviewer to stage its output inside the supplied disposable root
-   at `.project/review/wave-N.cycleC.md`.
-3. Spawn one reviewer with deterministic logical task name
-   `review_wave_<wave>_cycle_<cycle>`, mode `wave`, the wave and
-   cycle, exact repository root, and every task-file path in the wave. Each
-   task must carry valid full `base` and `commit` SHAs. Before dispatch, the
-   orchestrator creates one disposable detached worktree at each task base and
-   supplies its exact path; it removes those exact worktrees after collection.
-4. Require `.project/review/wave-N.cycleC.md` with a task verdict for every
-   input and an overall `pass` or `blocked`. The reviewer reconstructs and
-   verifies each task alone at its recorded base. The orchestrator validates the
-   staged file, atomically copies it to the primary `.project/review/` path,
-   and only then removes the exact disposable root. A blocked reviewer supplies
-   work orders; it does not edit code.
+Wave reviews are owned by the build orchestrator; this phase never runs them.
 
 ## Final mode
 
@@ -213,8 +195,7 @@ field is the transaction identity.
 
 ## Rules
 
-- Judge written expectations only: task criteria in wave mode and INTENT.md
-  criteria in final mode.
+- Judge written expectations only: INTENT.md criteria in final mode.
 - Require criterion, observed result, exact file or command evidence, and fix
   direction for every failure.
 - Warn on ambiguity, but do not invent stronger requirements.

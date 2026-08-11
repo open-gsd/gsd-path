@@ -15,10 +15,13 @@ router or orchestrator supplied this contract, return control to it. On a
 direct invocation, report the exact next skill and stop until the user
 explicitly invokes it.
 
-Before dispatch and again before completion, apply AGENTS.md's pending
-discussion-answer contract. Resolve an answer owned by research through its
-evidence handoff and append a disposition receipt; otherwise block with links
-to ANSWERS.md and the target artifact rather than advancing stale evidence.
+Before dispatch and again before completion, run the bundled
+`scripts/discussion_records.py pending --repo <absolute-root>`; when
+`.project/discuss/ANSWERS.md` is absent, continue. Resolve a reported
+required follow-up owned by research through its evidence handoff and record
+its disposition with the helper's `dispose` command; otherwise block with
+links to ANSWERS.md and the target artifact rather than advancing stale
+evidence.
 
 ## Preconditions
 
@@ -101,14 +104,17 @@ settled brownfield input.
    pitfalls research to check which failure modes already exist in the mapped
    codebase.
 
-3. If a risk needs a distinct dimension, add one researcher, up to five total.
+3. If a risk needs a distinct dimension, add one researcher, up to five total
+   (project policy).
    Derive its filename deterministically as `evidence-<dimension-slug>.md`:
    lowercase the label, replace non-alphanumeric runs with one hyphen, and
    trim hyphens. Append `-2` only if it collides with an existing dimension.
 4. Validate every dispatched evidence file after all agents finish. Confirm
    every extracted `RESEARCH` question was assigned and answered. Require at
-   least one `## Finding`, and require Claim, Source, Confidence, and Why it
-   matters fields for every finding. Then run:
+   least one `## Finding` — a documented `no reliable source found` null
+   result recorded as a finding satisfies this gate, with the searches that
+   came up empty noted as its evidence — and require Claim, Source,
+   Confidence, and Why it matters fields for every finding. Then run:
 
    `python3 <absolute check_handoffs.py> research --repo <absolute repo root>`
 
