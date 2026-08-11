@@ -429,8 +429,14 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
             self.make_repo(repo)
             program = textwrap.dedent(
                 f"""
+                # Import the script's platform-sensitive standard library
+                # modules before faking sys.platform: shutil imports _winapi
+                # on "win32", which does not exist on POSIX interpreters.
+                import argparse
+                import filecmp
                 import json
                 import runpy
+                import shutil
                 import subprocess
                 import sys
                 import types
