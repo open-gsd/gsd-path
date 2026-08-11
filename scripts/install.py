@@ -5,6 +5,7 @@ import argparse
 import json
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
 from dataclasses import dataclass, field
@@ -45,42 +46,114 @@ GUARD_MARKER = "gsd-path guard"
 CLAUDE_MATCHER = (
     "Edit|Write|MultiEdit|NotebookEdit|Delete|StrReplace|ApplyPatch|Create|Shell|Bash"
 )
-CLAUDE_HOOKS_SETTINGS = (
-    json.dumps(
-        {
-            "hooks": {
-                "PreToolUse": [
-                    {
-                        "matcher": CLAUDE_MATCHER,
-                        "hooks": [
-                            {
-                                "type": "command",
-                                "command": (
-                                    "python3 \"$CLAUDE_PROJECT_DIR/"
-                                    f"{HOOKS_DIRECTORY}/guard_hook.py\""
-                                ),
-                            }
-                        ],
-                    }
-                ]
+def _claude_guard_entry(interpreter: str) -> dict:
+    """The managed PreToolUse guard entry, as an object."""
+    return {
+        "matcher": CLAUDE_MATCHER,
+        "hooks": [
+            {
+                "type": "command",
+                "command": (
+                    f"{interpreter} \"$CLAUDE_PROJECT_DIR/"
+                    f"{HOOKS_DIRECTORY}/guard_hook.py\""
+                ),
             }
-        },
-        indent=2,
+        ],
+    }
+
+
+def claude_hooks_settings(interpreter: str) -> str:
+    return (
+        json.dumps(
+            {"hooks": {"PreToolUse": [_claude_guard_entry(interpreter)]}},
+            indent=2,
+        )
+        + "\n"
     )
-    + "\n"
-)
-PRE_COMMIT_HOOK = (
-    "#!/bin/sh\n"
-    "# gsd-path guard: archive immutability before commit.\n"
-    "exec python3 \"$(git rev-parse --show-toplevel)/"
-    f"{HOOKS_DIRECTORY}/git_guard.py\" pre-commit\n"
-)
-COMMIT_MSG_HOOK = (
-    "#!/bin/sh\n"
-    "# gsd-path guard: archive immutability and ship-commit purity.\n"
-    "exec python3 \"$(git rev-parse --show-toplevel)/"
-    f"{HOOKS_DIRECTORY}/git_guard.py\" commit-msg \"$1\"\n"
-)
+
+
+def pre_commit_hook(interpreter: str) -> str:
+    return (
+        "#!/bin/sh\n"
+        "# gsd-path guard: archive immutability before commit.\n"
+        f"exec {interpreter} \"$(git rev-parse --show-toplevel)/"
+        f"{HOOKS_DIRECTORY}/git_guard.py\" pre-commit\n"
+    )
+
+
+def commit_msg_hook(interpreter: str) -> str:
+    return (
+        "#!/bin/sh\n"
+        "# gsd-path guard: archive immutability and ship-commit purity.\n"
+        f"exec {interpreter} \"$(git rev-parse --show-toplevel)/"
+        f"{HOOKS_DIRECTORY}/git_guard.py\" commit-msg \"$1\"\n"
+    )
+
+
+def _detect_python_interpreter() -> Optional[str]:
+    """Probe for a runnable interpreter (python3, then python).
+
+    Emitted hooks must never hard-code an interpreter that does not exist on
+    this machine (python3 is typically absent on Windows).
+    """
+    for candidate in ("python3", "python"):
+        try:
+            result = subprocess.run(
+                [candidate, "--version"], capture_output=True, check=False
+            )
+        except OSError:
+            continue
+        if result.returncode == 0:
+            return candidate
+    return None
+
+
+def _effective_interpreter() -> Optional[str]:
+    """Single owner of the interpreter probe and its policy.
+
+    Returns the probed interpreter, or None when no interpreter works —
+    callers must then skip writing hook content instead of pinning a
+    nonexistent python3.
+    """
+    return _detect_python_interpreter()
+
+
+def _resolve_git_hooks_path(project: "Path") -> Optional["Path"]:
+    """Effective hooks dir via `git rev-parse --git-path hooks`.
+
+    Honors core.hooksPath and linked worktrees. Returns None when git cannot
+    resolve it for this project.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel", "--git-path", "hooks"],
+            cwd=os.fspath(project),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return None
+    if result.returncode != 0:
+        return None
+    lines = [line for line in result.stdout.splitlines() if line]
+    if len(lines) != 2:
+        return None
+    toplevel, hooks_path = lines
+    if not _same_path(Path(toplevel), project):
+        return None
+    return Path(os.path.abspath(os.path.join(os.fspath(project), hooks_path)))
+
+
+def _git_hooks_directory(project: "Path") -> Optional["Path"]:
+    dot_git = project / ".git"
+    if not _lexists(dot_git):
+        return None
+    resolved = _resolve_git_hooks_path(project)
+    if resolved is not None:
+        return resolved
+    # Fallback when git is not runnable: only a plain .git directory is safe.
+    return dot_git / "hooks" if dot_git.is_dir() else None
 OPENCODE_NOTE = (
     "note: OpenCode stable discovers the skills but has no documented hard "
     'explicit-only switch; OpenCode v2 honors opencode/autoinvoke="false" '
@@ -460,9 +533,17 @@ def _rollback_target(transaction: TargetTransaction) -> None:
 
 
 def _project_destinations(
-    project: Path, include_claude: bool, hooks: bool
+    project: Path,
+    include_claude: bool,
+    hooks: bool,
+    interpreter: str,
+    hooks_dir: Optional[Path],
 ) -> List[Tuple[Path, Optional[str], Optional[str], bool]]:
-    """(destination, source name, literal content, executable) per file."""
+    """(destination, source name, literal content, executable) per file.
+
+    hooks_dir is the pre-resolved git hooks directory (or None); resolving
+    it once per run avoids repeated `git rev-parse` spawns.
+    """
     destinations: List[Tuple[Path, Optional[str], Optional[str], bool]] = [
         (project / "AGENTS.md", "AGENTS.md", None, False),
         (project / "WORKFLOW.md", "WORKFLOW.md", None, False),
@@ -481,24 +562,47 @@ def _project_destinations(
                 (
                     project / ".claude" / "settings.json",
                     None,
-                    CLAUDE_HOOKS_SETTINGS,
+                    claude_hooks_settings(interpreter),
                     False,
                 )
             )
-        if (project / ".git").is_dir():
+        if hooks_dir is not None:
             destinations.append(
-                (project / ".git" / "hooks" / "pre-commit", None, PRE_COMMIT_HOOK, True)
+                (hooks_dir / "pre-commit", None, pre_commit_hook(interpreter), True)
             )
             destinations.append(
-                (project / ".git" / "hooks" / "commit-msg", None, COMMIT_MSG_HOOK, True)
+                (hooks_dir / "commit-msg", None, commit_msg_hook(interpreter), True)
             )
     return destinations
 
 
-def _project_files(project: Path, include_claude: bool, hooks: bool) -> str:
+def _describe_project_path(project: Path, destination: Path) -> str:
+    try:
+        return destination.relative_to(project).as_posix()
+    except ValueError:
+        return destination.as_posix()
+
+
+def _project_files(
+    project: Path,
+    include_claude: bool,
+    hooks: bool,
+    interpreter: str,
+    hooks_dir: Optional[Path],
+) -> str:
     return ", ".join(
-        destination.relative_to(project).as_posix()
-        for destination, _, _, _ in _project_destinations(project, include_claude, hooks)
+        _describe_project_path(project, destination)
+        for destination, _, _, _ in _project_destinations(
+            project, include_claude, hooks, interpreter, hooks_dir
+        )
+    )
+
+
+def _existing_contract_error(destination: Path) -> "InstallerError":
+    return InstallerError(
+        f"project contract already exists: {destination} — the installer never "
+        "overwrites project files; merge template changes manually "
+        "(see UPDATE.md)."
     )
 
 
@@ -508,6 +612,8 @@ def _validate_project(
     include_claude: bool,
     hooks: bool,
     reserved_roots: Sequence[Tuple[str, Path]],
+    interpreter: str,
+    hooks_dir: Optional[Path],
 ) -> None:
     _validate_directory_destination(project, "project path")
     sources = ["AGENTS.md", "WORKFLOW.md"]
@@ -517,9 +623,11 @@ def _validate_project(
         source = source_root / source_name
         if source.is_symlink() or not source.is_file():
             raise InstallerError(f"missing project contract: {source}")
-    for destination, _, _, _ in _project_destinations(project, include_claude, hooks):
+    for destination, _, _, _ in _project_destinations(
+        project, include_claude, hooks, interpreter, hooks_dir
+    ):
         if _lexists(destination):
-            raise InstallerError(f"project contract already exists: {destination}")
+            raise _existing_contract_error(destination)
         for label, root in reserved_roots:
             if _paths_overlap(destination, root):
                 raise InstallerError(
@@ -538,10 +646,12 @@ def _apply_project(
     include_claude: bool,
     hooks: bool,
     transaction: ProjectTransaction,
+    interpreter: str,
+    hooks_dir: Optional[Path],
 ) -> None:
     _create_directory(project, transaction.created_directories)
     for destination, source_name, content, executable in _project_destinations(
-        project, include_claude, hooks
+        project, include_claude, hooks, interpreter, hooks_dir
     ):
         _create_directory(destination.parent, transaction.created_directories)
         created = False
@@ -559,9 +669,7 @@ def _apply_project(
                 destination.chmod(0o755)
             transaction.copied.append(destination)
         except FileExistsError as error:
-            raise InstallerError(
-                f"project contract already exists: {destination}"
-            ) from error
+            raise _existing_contract_error(destination) from error
         except (Exception, KeyboardInterrupt):
             if created:
                 _remove_path(destination)
@@ -624,7 +732,22 @@ def _atomic_copy(source: Path, destination: Path) -> None:
         raise
 
 
-def _merged_claude_settings(settings: Path) -> str:
+def _is_managed_hook_entry(entry) -> bool:
+    """A PreToolUse entry is ours when one of its commands runs the guard."""
+    if not isinstance(entry, dict):
+        return False
+    hooks_list = entry.get("hooks")
+    if not isinstance(hooks_list, list):
+        return False
+    return any(
+        isinstance(hook, dict)
+        and isinstance(hook.get("command"), str)
+        and f"{HOOKS_DIRECTORY}/guard_hook.py" in hook["command"]
+        for hook in hooks_list
+    )
+
+
+def _merged_claude_settings(settings: Path, interpreter: str) -> str:
     try:
         parsed = json.loads(settings.read_text(encoding="utf-8", errors="replace"))
     except json.JSONDecodeError as error:
@@ -635,11 +758,34 @@ def _merged_claude_settings(settings: Path) -> str:
         raise InstallerError(
             f"managed hook settings file is not a JSON object: {settings}"
         )
-    parsed["hooks"] = json.loads(CLAUDE_HOOKS_SETTINGS)["hooks"]
+    # Merge: replace only the managed PreToolUse guard entry; preserve every
+    # other hook event (Stop, PostToolUse, ...) and user PreToolUse entries.
+    managed_entry = _claude_guard_entry(interpreter)
+    hooks_object = parsed.get("hooks")
+    if not isinstance(hooks_object, dict):
+        hooks_object = {}
+    existing = hooks_object.get("PreToolUse")
+    if not isinstance(existing, list):
+        existing = []
+    merged = []
+    replaced = False
+    for entry in existing:
+        if _is_managed_hook_entry(entry):
+            if not replaced:
+                merged.append(managed_entry)
+                replaced = True
+        else:
+            merged.append(entry)
+    if not replaced:
+        merged.append(managed_entry)
+    hooks_object["PreToolUse"] = merged
+    parsed["hooks"] = hooks_object
     return json.dumps(parsed, indent=2) + "\n"
 
 
-def _validate_hooks_refresh(source_root: Path, project: Path, full: bool) -> None:
+def _validate_hooks_refresh(
+    source_root: Path, project: Path, full: bool, hooks_dir: Optional[Path]
+) -> None:
     _validate_directory_destination(project, "project path")
     for name in GUARD_SCRIPTS:
         destination = project / HOOKS_DIRECTORY / name
@@ -658,47 +804,59 @@ def _validate_hooks_refresh(source_root: Path, project: Path, full: bool) -> Non
             raise InstallerError(
                 f"not a managed GSD Path hook settings file: {settings}"
             )
-        for hook_name in ("pre-commit", "commit-msg"):
-            hook_path = project / ".git" / "hooks" / hook_name
-            if hook_path.is_symlink():
-                raise InstallerError(f"refusing to refresh a symlink: {hook_path}")
-            if _lexists(hook_path) and not _is_managed_git_hook(hook_path):
-                raise InstallerError(f"not a managed GSD Path git hook: {hook_path}")
+        if hooks_dir is not None:
+            for hook_name in ("pre-commit", "commit-msg"):
+                hook_path = hooks_dir / hook_name
+                if hook_path.is_symlink():
+                    raise InstallerError(
+                        f"refusing to refresh a symlink: {hook_path}"
+                    )
+                if _lexists(hook_path) and not _is_managed_git_hook(hook_path):
+                    raise InstallerError(
+                        f"not a managed GSD Path git hook: {hook_path}"
+                    )
 
 
 def refresh_hooks(
     source_root: Path, project: Path, full: bool, dry_run: bool = False
 ) -> List[str]:
-    _validate_hooks_refresh(source_root, project, full)
+    """Refreshed project-relative paths; "note:"-prefixed entries are
+    user-facing notes rather than refreshed files."""
+    hooks_dir = _git_hooks_directory(project) if full else None
+    _validate_hooks_refresh(source_root, project, full, hooks_dir)
     refreshed: List[str] = []
     for name in GUARD_SCRIPTS:
         destination = project / HOOKS_DIRECTORY / name
         source = source_root / "scripts" / name
-        if dry_run:
-            refreshed.append(destination.relative_to(project).as_posix())
-        else:
+        if not dry_run:
             _atomic_copy(source, destination)
-            refreshed.append(destination.relative_to(project).as_posix())
+        refreshed.append(_describe_project_path(project, destination))
     if full:
+        # Dry-run only lists paths, so it never needs the interpreter probe.
+        interpreter = None if dry_run else _effective_interpreter()
+        if not dry_run and interpreter is None:
+            refreshed.append(
+                "note: hooks: no working python3 or python interpreter found "
+                "on PATH; skipped Claude settings and git hook refresh"
+            )
+            return refreshed
         settings = project / ".claude" / "settings.json"
         if _lexists(settings):
-            if dry_run:
-                refreshed.append(settings.relative_to(project).as_posix())
-            else:
-                _atomic_write(settings, _merged_claude_settings(settings))
-                refreshed.append(settings.relative_to(project).as_posix())
-        if (project / ".git").is_dir():
-            for hook_name, content in (
-                ("pre-commit", PRE_COMMIT_HOOK),
-                ("commit-msg", COMMIT_MSG_HOOK),
-            ):
-                hook_path = project / ".git" / "hooks" / hook_name
-                if dry_run:
-                    refreshed.append(hook_path.relative_to(project).as_posix())
-                else:
+            if not dry_run:
+                _atomic_write(settings, _merged_claude_settings(settings, interpreter))
+            refreshed.append(_describe_project_path(project, settings))
+        if hooks_dir is not None:
+            for hook_name in ("pre-commit", "commit-msg"):
+                hook_path = hooks_dir / hook_name
+                if not dry_run:
+                    content = (
+                        pre_commit_hook(interpreter)
+                        if hook_name == "pre-commit"
+                        else commit_msg_hook(interpreter)
+                    )
                     hook_path.parent.mkdir(parents=True, exist_ok=True)
                     _atomic_write(hook_path, content, mode=0o755)
-                    refreshed.append(hook_path.relative_to(project).as_posix())
+                refreshed.append(_describe_project_path(project, hook_path))
     return refreshed
 
 
@@ -852,6 +1010,29 @@ def install(
 ) -> List[str]:
     if hooks and project is None:
         raise InstallerError("--hooks requires --project")
+    # Resolve per-run environment facts (interpreter, git hooks directory)
+    # once here and thread them down.
+    effective_hooks = hooks
+    interpreter = "python3"
+    hooks_dir: Optional[Path] = None
+    hook_notes: List[str] = []
+    if hooks:
+        probed = _effective_interpreter()
+        if probed is None:
+            effective_hooks = False
+            hook_notes.append(
+                "note: hooks: no working python3 or python interpreter found "
+                "on PATH; skipped guard hook install"
+            )
+        else:
+            interpreter = probed
+    if effective_hooks:
+        hooks_dir = _git_hooks_directory(project)
+        if hooks_dir is None and _lexists(project / ".git"):
+            hook_notes.append(
+                "note: hooks: found .git but could not resolve the git hooks "
+                "directory (is git runnable?); git hooks were not installed"
+            )
     selected = [plan.name for plan in plans]
     deployments = _deployment_plans(plans)
     adapters = list(selected)
@@ -920,8 +1101,10 @@ def install(
             source_root,
             project,
             include_claude,
-            hooks,
+            effective_hooks,
             [*mutation_roots, *planned_backups],
+            interpreter,
+            hooks_dir,
         )
 
     results = []
@@ -948,8 +1131,11 @@ def install(
                 suffix = f"; would back up {count} entries" if count else ""
                 results.append(_install_result(plan, dry_run=True) + suffix)
             if project is not None:
-                files = _project_files(project, include_claude, hooks)
+                files = _project_files(
+                    project, include_claude, effective_hooks, interpreter, hooks_dir
+                )
                 results.append(f"project: would copy {files} to {project}")
+            results.extend(hook_notes)
             _append_host_notes(results, selected)
             return results
 
@@ -979,10 +1165,19 @@ def install(
                     )
             if project is not None:
                 _apply_project(
-                    source_root, project, include_claude, hooks, project_transaction
+                    source_root,
+                    project,
+                    include_claude,
+                    effective_hooks,
+                    project_transaction,
+                    interpreter,
+                    hooks_dir,
                 )
-                files = _project_files(project, include_claude, hooks)
+                files = _project_files(
+                    project, include_claude, effective_hooks, interpreter, hooks_dir
+                )
                 results.append(f"project: copied {files} to {project}")
+            results.extend(hook_notes)
         except (Exception, KeyboardInterrupt) as error:
             rollback_errors = []
             try:
@@ -1043,8 +1238,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 arguments.hooks_refresh_full,
                 arguments.dry_run,
             )
+            notes = [line for line in refreshed if line.startswith("note:")]
+            files = [line for line in refreshed if not line.startswith("note:")]
             prefix = "would refresh" if arguments.dry_run else "refreshed"
-            print(f"hooks: {prefix} {', '.join(refreshed)}")
+            print(f"hooks: {prefix} {', '.join(files)}")
+            for note in notes:
+                print(note)
         except InstallerError as error:
             print(f"error: {error}", file=sys.stderr)
             return 1

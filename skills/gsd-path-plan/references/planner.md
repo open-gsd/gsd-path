@@ -31,10 +31,12 @@ the how.
 4. Prefer the fewest waves that respect dependencies — every wave costs a
    full review cycle. Merge a wave into its neighbor unless it adds
    parallelism or isolates a risk.
-5. Assign each wave `Review depth: full` or `verify-only`. Wave 1 and any
-   wave touching authentication, authorization, payments, data migration,
-   or concurrency requires `full`; `verify-only` suits polish and low-risk
-   feature waves whose Verify commands meaningfully cover the criteria.
+5. Assign each wave `Review depth: full`, `deep`, or `verify-only`. Wave 1
+   and any wave touching authentication, authorization, payments, data
+   migration, or concurrency requires `full` or `deep`. Assign `deep`
+   sparingly, only to waves where a wrong merge is irreversible or
+   security-critical; `verify-only` suits polish and low-risk feature waves
+   whose Verify commands meaningfully cover the criteria.
 
 Every dependency must be in an earlier wave or in the same wave with no file
 overlap. Produce an acyclic graph; same-wave chains execute in layers.
@@ -67,4 +69,5 @@ Put the full-project build-and-test command in PLAN.md. Before returning,
 check veto exclusion, decision coverage, dependencies, file overlap, task
 size, criteria, and Verify commands.
 
-Return wave count, task count, and the wave-1 risk list in at most five lines.
+Return a brief structured summary: wave count, task count, and the wave-1
+risk list.

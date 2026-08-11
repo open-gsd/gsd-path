@@ -115,6 +115,14 @@ Include Claude settings and git hooks:
 node scripts/install.mjs --hooks-refresh-full --project /path/to/repo
 ```
 
+`--hooks-refresh-full` **merges** `.claude/settings.json` instead of replacing
+it: only the managed PreToolUse guard entry (the one whose command runs
+`.gsd-path/guard_hook.py`) is refreshed. Your other hook events (`Stop`,
+`PostToolUse`, …), your own PreToolUse entries, and all other settings keys are
+preserved. Git hooks are refreshed in the repository's effective hooks
+directory (`git rev-parse --git-path hooks`), so `core.hooksPath` setups and
+linked worktrees are handled.
+
 Details: [HOOKS.md](HOOKS.md)
 
 ---

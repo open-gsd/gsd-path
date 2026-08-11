@@ -472,6 +472,8 @@ Primary worktree: <primary-worktree>
             self.assertEqual(preview.returncode, 0, preview.stderr)
             self.assertEqual(json.loads(preview.stdout)["mode"], "complete")
 
+            self.git(checkout, "config", "user.name", "Rewriter")
+            self.git(checkout, "config", "user.email", "rewriter@example.invalid")
             tree = self.git(checkout, "rev-parse", "HEAD^{tree}").stdout.strip()
             unrelated = self.git(checkout, "commit-tree", tree, "-m", "Unrelated")
             self.assertEqual(unrelated.returncode, 0, unrelated.stderr)

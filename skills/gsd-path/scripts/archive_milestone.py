@@ -12,7 +12,7 @@ import sys
 from contextlib import contextmanager
 from datetime import date
 from pathlib import Path, PurePosixPath
-from typing import Iterator, Optional, Sequence
+from typing import Iterator, NamedTuple, Optional, Sequence
 
 if sys.platform == "win32":
     import msvcrt
@@ -22,7 +22,9 @@ else:
 
 ARCHIVE_PATTERN = re.compile(r"^(\d{3,})-([a-z0-9][a-z0-9-]*)$")
 TASK_FILE_PATTERN = re.compile(r"^T\d{3}-[a-z0-9][a-z0-9-]*\.md$")
-WAVE_FILE_PATTERN = re.compile(r"^wave-([1-9]\d*)\.cycle([1-9]\d*)\.md$")
+WAVE_FILE_PATTERN = re.compile(
+    r"^wave-([1-9]\d*)\.cycle([1-9]\d*)(\.(?:contract|adversarial))?\.md$"
+)
 FINAL_CRITERION_PATTERN = re.compile(r"^### SC([1-9]\d*) — (.+)$")
 FINAL_GAP_FILE_PATTERN = re.compile(r"^final-gap-([1-9]\d*)\.md$")
 FINAL_GAP_HEADING_PATTERN = re.compile(r"^# Gap Review — ([1-9]\d*): (.+)$")
@@ -438,13 +440,29 @@ def canonical_task_files(tasks: Path) -> Sequence[Path]:
     return candidates
 
 
-def canonical_wave_files(reviews: Path) -> Sequence[Path]:
+class WaveArtifact(NamedTuple):
+    path: Path
+    wave: int
+    cycle: int
+
+
+def canonical_wave_files(reviews: Path) -> Sequence[WaveArtifact]:
     if reviews.is_symlink() or not reviews.is_dir():
         return ()
     candidates = sorted(path for path in reviews.iterdir() if path.name.startswith("wave-"))
-    if any(not WAVE_FILE_PATTERN.fullmatch(path.name) or not is_real_file(path) for path in candidates):
-        raise ArchiveError("canonical wave artifacts must be real wave-N.cycleC.md files")
-    return candidates
+    matches = [(path, WAVE_FILE_PATTERN.fullmatch(path.name)) for path in candidates]
+    if any(match is None or not is_real_file(path) for path, match in matches):
+        raise ArchiveError(
+            "canonical wave artifacts must be real wave-N.cycleC.md files "
+            "(a .contract or .adversarial lens suffix is allowed)"
+        )
+    # Deep-review lens files supplement a wave review; only the base
+    # wave-N.cycleC.md files are the canonical cycle artifacts.
+    return [
+        WaveArtifact(path, int(match.group(1)), int(match.group(2)))
+        for path, match in matches
+        if match.group(3) is None
+    ]
 
 
 def require_canonical_transaction_inputs(active_root: Path, archive: Path) -> None:
@@ -1104,10 +1122,7 @@ def review_cycle_counts(archive: Path) -> Sequence[int]:
     ]
 
     artifacts = {}
-    for path in canonical_wave_files(archive / "review"):
-        match = WAVE_FILE_PATTERN.fullmatch(path.name)
-        assert match is not None
-        wave, cycle = (int(value) for value in match.groups())
+    for path, wave, cycle in canonical_wave_files(archive / "review"):
         lines = path.read_text(encoding="utf-8").splitlines()
         expected_heading = f"# Review — wave {wave}, cycle {cycle}"
         if lines.count(expected_heading) != 1:

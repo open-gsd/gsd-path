@@ -14,10 +14,12 @@ router or orchestrator supplied this contract, return control to it. On a
 direct invocation, report the exact next skill and stop until the user
 explicitly invokes it.
 
-Before planning and again before approval, apply AGENTS.md's pending
-discussion-answer contract. Resolve an answer owned by planning in PLAN/tasks
-and append a disposition receipt; otherwise block with links to ANSWERS.md and
-the target artifact rather than approving stale work.
+Before planning and again before approval, run the bundled
+`scripts/discussion_records.py pending --repo <absolute-root>`; when
+`.project/discuss/ANSWERS.md` is absent, continue. Resolve a reported
+required follow-up owned by planning in PLAN/tasks and record its disposition
+with the helper's `dispose` command; otherwise block with links to ANSWERS.md
+and the target artifact rather than approving stale work.
 
 ## Preconditions
 
@@ -162,7 +164,8 @@ the artifacts directly:
    plus a minimal `## For the planner` naming the walking skeleton. No
    invented decisions or runner-ups.
 2. Write `.project/plan/PLAN.md` with exactly one wave — `Review depth:
-   verify-only` permitted — and at most two deliverable-sized task files,
+   verify-only` permitted — and at most two deliverable-sized task files
+   (project policy),
    honoring every task-contract rule above and `.project/LESSONS.md` when it
    exists.
 3. Gate exactly as step 3 above and use the same outcome, Review link, and

@@ -35,7 +35,7 @@ REQUIRED_SECTIONS = (
 PROSE_SECTIONS = ("Context", "Approach", "Interface contract")
 FIELD_PATTERN = re.compile(r"^(?P<key>[a-z_]+):\s*(?P<value>[^#]*?)(?:\s+#.*)?$")
 INLINE_LIST_PATTERN = re.compile(r"^\[(?P<body>.*)\]$")
-LIST_ITEM_PATTERN = re.compile(r"^\s+-\s+(?P<value>.*?)\s*(?:\s+#.*)?$")
+LIST_ITEM_PATTERN = re.compile(r"^\s*-\s+(?P<value>.*?)\s*(?:\s+#.*)?$")
 HEADING_PATTERN = re.compile(r"(?m)^## (?P<name>.+?)\s*$")
 COMMENT_PATTERN = re.compile(r"<!--.*?-->", re.DOTALL)
 BACKTICK_PATTERN = re.compile(r"`([^`\n]+)`")
@@ -67,6 +67,10 @@ def _base_exists(repo: Path, base: str, path: str) -> bool:
     return _run_git(repo, "cat-file", "-e", f"{base}:{path}").returncode == 0
 
 
+def _unquote(value: str) -> str:
+    return value.strip().strip("\"'")
+
+
 def _frontmatter(text: str) -> Tuple[Optional[Dict[str, object]], Optional[str]]:
     lines = text.splitlines()
     if not lines or lines[0] != "---":
@@ -85,14 +89,14 @@ def _frontmatter(text: str) -> Tuple[Optional[Dict[str, object]], Optional[str]]
             if inline is not None:
                 body = inline.group("body").strip()
                 fields[key] = [
-                    item.strip().strip("\"'")
+                    _unquote(item)
                     for item in body.split(",")
                     if item.strip()
                 ]
                 index += 1
                 continue
             if value:
-                fields[key] = value.strip("\"'")
+                fields[key] = _unquote(value)
                 index += 1
                 continue
             items: List[str] = []
@@ -101,7 +105,7 @@ def _frontmatter(text: str) -> Tuple[Optional[Dict[str, object]], Optional[str]]
                 item = LIST_ITEM_PATTERN.match(lines[cursor])
                 if not item:
                     break
-                items.append(item.group("value"))
+                items.append(_unquote(item.group("value")))
                 cursor += 1
             fields[key] = items
             index = cursor
@@ -248,6 +252,8 @@ def validate_task_briefs(
     contracts: Dict[str, str] = {}
     checked = 0
     task_files = sorted(tasks_path.glob("*.md"))
+    if not task_files:
+        raise BriefError(f"no task briefs found in {tasks_dir}")
     for path in task_files:
         task_id, task_problems, contract, task_checked = _lint_task(
             root, resolved_base, path

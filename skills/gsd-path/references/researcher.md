@@ -21,7 +21,7 @@ Give every finding:
 - `high`, `medium`, or `low` confidence based on source quality; and
 - one direct explanation of why it matters to this intent.
 
-Search broadly, then investigate the three to six most load-bearing threads.
+Search broadly, then investigate the most load-bearing threads.
 Prefer primary sources and treat secondary articles as leads. Never cite
 memory.
 
@@ -38,5 +38,5 @@ under Dead ends.
 Respect all intent constraints and vetoes. Do not research or revive vetoed
 options. Drop findings that cannot be tied to this project.
 
-Return the output path, finding count, and most decision-relevant finding in
-at most three lines.
+Return a brief structured summary: the output path, finding count, and most
+decision-relevant finding.

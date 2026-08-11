@@ -48,5 +48,5 @@ special weight to:
 - Observations, not judgments: "3 of 40 tests fail (list)" — not "poor
   test hygiene". The user may know exactly why.
 - Unreadable or ambiguous areas are findings too — say what blocked you.
-- Return the output path, finding count, and the single biggest surprise in
-  at most three lines.
+- Return a brief structured summary: the output path, finding count, and the
+  single biggest surprise.

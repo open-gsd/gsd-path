@@ -152,6 +152,66 @@ class GuardHookTests(unittest.TestCase):
                     {"tool_name": "Bash", "tool_input": {"command": command}}
                 )
 
+    def test_denies_argv_array_commands(self):
+        self.assert_denied(
+            {
+                "tool_name": "Bash",
+                "tool_input": {
+                    "command": ["bash", "-lc", "rm -rf .project/archive"],
+                },
+            }
+        )
+        self.assert_denied(
+            {
+                "tool_name": "Bash",
+                "tool_input": {"command": ["git", "reset", "--hard", "HEAD~2"]},
+            }
+        )
+
+    def test_allows_safe_argv_array_commands(self):
+        self.assert_allowed(
+            {
+                "tool_name": "Bash",
+                "tool_input": {"command": ["git", "status"]},
+            }
+        )
+
+    def test_denies_case_variant_archive_paths(self):
+        self.assert_denied(
+            {
+                "tool_name": "Edit",
+                "tool_input": {"file_path": ".Project/Archive/001-mvp/MANIFEST.md"},
+            }
+        )
+
+    def test_denies_case_variant_archive_commands(self):
+        for command in (
+            "rm -rf .Project/Archive/001-mvp",
+            "RM -rf .project/archive/001-mvp",
+            "echo broken > .Project/Archive/001-mvp/MANIFEST.md",
+        ):
+            with self.subTest(command=command):
+                self.assert_denied(
+                    {"tool_name": "Bash", "tool_input": {"command": command}}
+                )
+
+    def test_allows_safe_branch_delete_despite_casefolding(self):
+        self.assert_allowed(
+            {"tool_name": "Bash", "tool_input": {"command": "git branch -d merged"}}
+        )
+
+    def test_write_tool_containing_read_verb_is_not_read_only(self):
+        for tool in ("get_and_write", "CatEdit", "list_then_delete"):
+            with self.subTest(tool=tool):
+                self.assert_denied(
+                    {
+                        "tool_name": tool,
+                        "tool_input": {
+                            "file_path": ".project/archive/001-mvp/MANIFEST.md",
+                        },
+                    }
+                )
+
     def test_segment_boundary_blocks_joining_across_operators(self):
         self.assert_allowed(
             {

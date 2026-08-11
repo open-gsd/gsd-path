@@ -13,15 +13,15 @@
 | **Unverifiable** (needs live host) | 10 | High for host dispatch |
 | **Resolved since Aug 02 audit** | 5 | — |
 
-The pipeline **skill contracts and sync manifest** align with code (53 resource pairs pass `--check`). Worst trust gaps are **live host adapter proof**, **no CI**, and **Node vs Python installer split**.
+The pipeline **skill contracts and sync manifest** align with code (82 resource pairs pass `--check`). Worst trust gaps are **live host adapter proof**, **no CI**, and **Node vs Python installer split**.
 
-## Commands run (2026-08-05)
+## Commands run (2026-08-05; counts updated 2026-08-11)
 
 | Command | Result |
 |---------|--------|
-| `python3 scripts/sync_skill_resources.py --check` | exit 0, `{"resources": 53}` |
+| `python3 scripts/sync_skill_resources.py --check` | exit 0, `{"resources": 82}` |
 | `GET https://registry.npmjs.org/gsd-path` | HTTP **404** (not published) |
-| `npm test` + `python3 -m unittest discover -s tests` | 36 + 107 pass (see test inventory) |
+| `npm test` + `python3 -m unittest discover -s tests` | 53 + 178 tests (see test inventory) |
 
 ## Resolved since DOCS-AUDIT (2026-08-02)
 
@@ -47,7 +47,7 @@ The pipeline **skill contracts and sync manifest** align with code (53 resource 
 | C1 | **Installer parity** | DOCS/README: Python installer mirrors global install; Node has `--local`/`--update` | `install.py` has no `--local` or `--update`; project skill roots are Node-only | `install.mjs --help` vs `install.py --help`; evidence-codebase.md Finding | **Medium** — use with checks |
 | C2 | **npm package contents** | `npx gsd-path` as install path in README/DOCS | `package.json files` omits `scripts/install.py`, `LICENSE`; bin is Node only | package.json:10-28 | **Medium** |
 | C3 | **npm publication** | README/UPDATE imply `npx gsd-path` / registry update | Package not on npm (404) | registry HTTP 404; DOCS-AUDIT aspirational | **Medium** — prove first for npx path |
-| C4 | **Test surface in package.json** | Implied "run tests" for quality | `"test"` script runs **only** `tests/*.test.mjs`; Python suite separate | package.json:33-35; 107 Python tests not in npm script | **Medium** |
+| C4 | **Test surface in package.json** | Implied "run tests" for quality | `"test"` script runs **only** `tests/*.test.mjs`; Python suite separate | package.json:33-35; 178 Python tests not in npm script | **Medium** |
 | C5 | **CI** | None claimed | No `.github/` workflows | no CI directory | **High** for regression trust |
 | C6 | **Guard hooks on non-Claude hosts** | HOOKS.md: only Claude auto-wired; manual for others | Installer tests cover Claude settings + git hooks; no auto Codex/Cursor hook install | HOOKS.md:72-86; install tests | **High** if relying on guards off-Claude |
 
@@ -65,21 +65,21 @@ Static dispatch contracts are **verified** (files exist, installer copies them).
 |------|---------------|------------|----------|
 | Antigravity | `platforms/antigravity/dispatch.md` | `invoke_subagent` works at runtime | DOCS-AUDIT unverifiable |
 | Claude | `platforms/claude/dispatch.md` | `Agent` tool/schema | same |
-| Codex | `platforms/codex/dispatch.md` | collaboration worker | same; implicit test only when `codex` CLI present |
+| Codex | `platforms/shared-agents/dispatch.md` (Codex installs the shared-agents profile) | collaboration worker | same; implicit test only when `codex` CLI present |
 | Copilot | `platforms/copilot/dispatch.md` | `task` tool | same |
 | Grok | `platforms/grok/dispatch.md` | `spawn_subagent` | same |
 | Kimi | `platforms/kimi/dispatch.md` | `Agent` + `coder` | same |
 | Kiro | `platforms/kiro/dispatch.md` | subagent facility | same |
 | OpenCode | `platforms/opencode/dispatch.md` | Task / v2 subagent | same |
 | Qwen | `platforms/qwen/dispatch.md` | `agent` tool | same |
-| Zed | `platforms/zed/dispatch.md` | `spawn_agent` | same |
+| Zed | `platforms/shared-agents/dispatch.md` (Zed installs the shared-agents profile) | `spawn_agent` | same |
 | Cursor | `platforms/cursor/dispatch.md` | Task + `gsd-path` subagent | same + installer copies `platforms/cursor/agent.md` |
 
 **Suggested severity:** **High** per host you actually use until dogfood confirms spawn works.
 
 ## Verified alignments (high confidence)
 
-- Nine `gsd-path*` skills; phase contracts byte-synced (`sync --check` → 53 resources).
+- Eleven `gsd-path*` skills; phase contracts byte-synced (`sync --check` → 82 resources).
 - `HOOKS.md` matches `guard_hook.py` / `git_guard.py` (archive path-first, cp/tee/checkout, case-insensitive `ship:`).
 - `WORKFLOW.md` phase SOP matches skill contracts (handoffs, archive script, explicit-only router).
 - Multi-host install targets in code match README install table (11 targets + shared codex/zed profile).

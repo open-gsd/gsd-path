@@ -19,7 +19,7 @@ node scripts/install.mjs --cursor --project /path/to/test-repo --hooks
 
 **Required steps:**
 
-1. Explicit `/gsd-path` — router reads/creates `STATE.md` with `pipeline: gsd-path/v1` and routes to a valid phase.
+1. Explicit `/gsd-path` — router reads/creates `STATE.md` with `pipeline: gsd-path/v2` and routes to a valid phase.
 2. **One successful child spawn** — e.g. `/gsd-path-docs-audit` or brownfield onboard read-only child.
 3. **Valid handoff on disk** — phase output matches template (e.g. `.project/research/DOCS-AUDIT.md` or `.project/intent/INTENT.md`).
 4. Record spawn tool (`Task` + `gsd-path` subagent), paths, verdict.

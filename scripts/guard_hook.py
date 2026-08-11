@@ -34,7 +34,29 @@ PATH_KEYS = frozenset(
     }
 )
 COMMAND_KEYS = frozenset({"command", "cmd", "script"})
-READ_TOOLS = re.compile(r"read|grep|search|view|list|get|cat", re.IGNORECASE)
+# A tool skips path checks only when its name carries a read-only verb and
+# no write-capable verb: `get_and_write` must still be path-checked.
+READ_VERBS = frozenset({"read", "grep", "search", "view", "list", "get", "cat"})
+WRITE_VERBS = frozenset(
+    {
+        "write",
+        "edit",
+        "create",
+        "delete",
+        "remove",
+        "update",
+        "set",
+        "put",
+        "post",
+        "patch",
+        "move",
+        "rename",
+        "append",
+        "insert",
+        "replace",
+    }
+)
+TOOL_TOKEN_PATTERN = re.compile(r"[A-Z]?[a-z]+|[A-Z]+(?![a-z])|\d+")
 
 ARCHIVE_REASON = (
     "committed GSD Path archives under .project/archive/ are read-only; "
@@ -44,45 +66,42 @@ ARCHIVE_MARKER = ".project/archive"
 # Stay inside one shell command segment so `git status && rm x` cannot
 # join tokens across `|`, `;`, or `&`.
 SEGMENT = r"[^|;&]*"
+# Program names and the archive path match case-insensitively: on APFS and
+# Windows `RM .Project/Archive` works. Flags stay case-sensitive so a safe
+# `git branch -d` is never confused with `-D`.
+GIT = r"\b(?i:git)\b"
+ARCHIVE_PATH = r"(?i:\.project/archive)"
 COMMAND_RULES = (
     (
-        re.compile(rf"\bgit\b{SEGMENT}\breset\b{SEGMENT}\s--hard\b"),
+        re.compile(rf"{GIT}{SEGMENT}\breset\b{SEGMENT}\s--hard\b"),
         "git reset --hard discards work the build recovery protocol needs",
     ),
     (
-        re.compile(rf"\bgit\b{SEGMENT}\bclean\b{SEGMENT}(\s-[A-Za-z]*f|\s--force\b)"),
+        re.compile(rf"{GIT}{SEGMENT}\bclean\b{SEGMENT}(\s-[A-Za-z]*f|\s--force\b)"),
         "git clean -f deletes untracked evidence and retained task worktrees",
     ),
     (
-        re.compile(rf"\bgit\b{SEGMENT}\bpush\b{SEGMENT}(\s--force(-with-lease)?\b|\s-f\b)"),
+        re.compile(rf"{GIT}{SEGMENT}\bpush\b{SEGMENT}(\s--force(-with-lease)?\b|\s-f\b)"),
         "force pushes rewrite build-branch history the pipeline resumes from",
     ),
     (
-        re.compile(rf"\bgit\b{SEGMENT}\bbranch\b{SEGMENT}\s-D\b"),
+        re.compile(rf"{GIT}{SEGMENT}\bbranch\b{SEGMENT}\s-D\b"),
         "git branch -D destroys task branches the recovery protocol inspects",
     ),
     (
-        re.compile(rf"\b(rm|rmdir|mv)\b{SEGMENT}\.project/archive"),
+        re.compile(rf"\b(?i:rm|rmdir|mv|cp|tee)\b{SEGMENT}{ARCHIVE_PATH}"),
         ARCHIVE_REASON,
     ),
     (
-        re.compile(rf"\bcp\b{SEGMENT}\.project/archive"),
+        re.compile(rf"{GIT}{SEGMENT}\bcheckout\b{SEGMENT}{ARCHIVE_PATH}"),
         ARCHIVE_REASON,
     ),
     (
-        re.compile(rf"\btee\b{SEGMENT}\.project/archive"),
+        re.compile(rf"{GIT}{SEGMENT}\brestore\b{SEGMENT}{ARCHIVE_PATH}"),
         ARCHIVE_REASON,
     ),
     (
-        re.compile(rf"\bgit\b{SEGMENT}\bcheckout\b{SEGMENT}\.project/archive"),
-        ARCHIVE_REASON,
-    ),
-    (
-        re.compile(rf"\bgit\b{SEGMENT}\brestore\b{SEGMENT}\.project/archive"),
-        ARCHIVE_REASON,
-    ),
-    (
-        re.compile(r">>?\s*\S*\.project/archive"),
+        re.compile(rf">>?\s*\S*{ARCHIVE_PATH}"),
         ARCHIVE_REASON,
     ),
 )
@@ -91,12 +110,21 @@ COMMAND_RULES = (
 def collect(node, paths, commands):
     if isinstance(node, dict):
         for key, value in node.items():
+            lowered = key.lower()
             if isinstance(value, str):
-                lowered = key.lower()
                 if lowered in PATH_KEYS:
                     paths.append(value)
                 elif lowered in COMMAND_KEYS:
                     commands.append(value)
+            elif isinstance(value, list):
+                # Argv-style values ({"command": ["bash", "-lc", "..."]})
+                # must be inspected like their joined string form.
+                strings = [item for item in value if isinstance(item, str)]
+                if strings and lowered in PATH_KEYS:
+                    paths.extend(strings)
+                elif strings and lowered in COMMAND_KEYS:
+                    commands.append(" ".join(strings))
+                collect(value, paths, commands)
             else:
                 collect(value, paths, commands)
     elif isinstance(node, list):
@@ -123,8 +151,14 @@ def normalize_posix(path):
     return "/" + "/".join(parts)
 
 
+def is_read_tool(tool):
+    tokens = {token.casefold() for token in TOOL_TOKEN_PATTERN.findall(tool)}
+    return bool(tokens & READ_VERBS) and not tokens & WRITE_VERBS
+
+
 def in_archive(path):
-    normalized = normalize_posix(path)
+    # Casefold: APFS and Windows resolve `.Project/Archive` to the archive.
+    normalized = normalize_posix(path).casefold()
     marker = "/" + ARCHIVE_MARKER
     if marker not in normalized:
         return False
@@ -171,7 +205,7 @@ def main():
     )
     paths, commands = [], []
     collect(event, paths, commands)
-    if not READ_TOOLS.search(tool):
+    if not is_read_tool(tool):
         for path in paths:
             if in_archive(path):
                 deny(ARCHIVE_REASON)

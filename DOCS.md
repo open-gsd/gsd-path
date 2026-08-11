@@ -62,14 +62,14 @@ Want archive / destructive-git enforcement?
 
 ### Commands
 
-**Clone** (this repository):
+**Clone** (this repository — primary path):
 
 ```bash
 node scripts/install.mjs --all --dry-run   # preview — safe to run anytime
 node scripts/install.mjs --all             # apply
 ```
 
-**npm** (no clone):
+**npm** (no clone — once the package is published to npm):
 
 ```bash
 npx gsd-path --all --dry-run
@@ -250,7 +250,7 @@ Full tree: [README.md](README.md#handoff-contract).
 | --- | --- |
 | Global skills | `node scripts/install.mjs --update` |
 | Project-local skills | `node scripts/install.mjs --update --local` |
-| From npm | `npx gsd-path@latest --update` |
+| From npm (once published) | `npx gsd-path@latest --update` |
 | Guard scripts | `node scripts/install.mjs --hooks-refresh --project PATH` |
 | `AGENTS.md` / `WORKFLOW.md` | Manual merge — installer refuses overwrite |
 | Health check | `node scripts/install.mjs --doctor [--project PATH]` — read-only; flags missing/stale skills, hook drift, and bad pipeline state |
@@ -271,7 +271,9 @@ Restart the host session. Confirm with `ls ~/.claude/skills/gsd-path` (or your h
 Yes: `node scripts/install.mjs --cursor` (add other flags as needed).
 
 **Will install overwrite my `AGENTS.md`?**
-No, if it already exists. Merge template updates manually ([UPDATE.md](UPDATE.md)).
+No — if managed project files already exist, the installer refuses and installs
+nothing for that project. Use `--update` to refresh skills; merge project
+contract updates manually ([UPDATE.md](UPDATE.md)).
 
 **Where is pipeline state?**
 `.project/` in your repo — not chat history.

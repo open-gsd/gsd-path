@@ -35,11 +35,11 @@ Cursor, Zed, Kiro, Kimi Code.
 **Node 18.17+.** Preview first (never writes files):
 
 ```bash
-# From a clone
+# From a clone of this repository (primary path)
 node scripts/install.mjs --all --dry-run
 node scripts/install.mjs --all
 
-# From npm (no clone)
+# From npm, no clone — once the package is published to npm
 npx gsd-path --all --dry-run
 npx gsd-path --all
 ```
@@ -64,7 +64,9 @@ node scripts/install.mjs --all --project "$(pwd)"
 ```
 
 Installs `AGENTS.md` + `WORKFLOW.md` (+ `.claude/CLAUDE.md` if Claude selected).
-Skips if those files already exist — merge upgrades by hand ([UPDATE.md](UPDATE.md)).
+If those managed files already exist, the installer **refuses and installs
+nothing** — use `--update` to refresh skills, and merge project-contract
+changes by hand ([UPDATE.md](UPDATE.md)).
 
 **Optional** archive/git guards:
 

@@ -1,6 +1,6 @@
 # GSD Path — Trust Evidence Log
 
-**Date:** 2026-08-05  
+**Date:** 2026-08-05 (reconciled 2026-08-11 — dispatch-smoke rows downgraded; see notes)  
 **Executor:** Cursor agent session (automated + CLI where noted)  
 **Test repo:** `/tmp/gsd-trust-evidence-25642`  
 **Source repo:** `/Users/jeremymcspadden/github/open-gsd/gsd-path`
@@ -19,8 +19,8 @@ node /Users/jeremymcspadden/github/open-gsd/gsd-path/scripts/install.mjs \
 
 **Result:** PASS
 
-- codex → `.agents/skills` (9 skills)
-- claude → `.claude/skills` (9 skills)
+- codex → `.agents/skills` (9 skills at the time of this run; the package now installs 11)
+- claude → `.claude/skills` (9 skills at the time of this run; the package now installs 11)
 - cursor → `.cursor/skills` + `.cursor/agents/gsd-path.md`
 - project → `AGENTS.md`, `WORKFLOW.md`, `.claude/CLAUDE.md`, `.gsd-path/*`, Claude settings, git hooks
 
@@ -76,9 +76,11 @@ codex exec --skip-git-repo-check \
   "Write .../DOCS-AUDIT-codex.md minimal audit of README.md ..."
 ```
 
-**Result:** PASS — `SPAWN_OK`  
+**Result:** UNVERIFIABLE (downgraded 2026-08-11; originally recorded PASS) —
+the command exercised the top-level `codex exec` CLI, not a child-agent spawn
+through the dispatch contract, so it does not evidence child dispatch.  
 **Artifact:** `.project/research/DOCS-AUDIT-codex.md` (verdict table, aspirational claim on missing install.mjs)  
-**Spawn API:** Codex `exec` non-interactive
+**Spawn API:** Codex `exec` non-interactive (top-level CLI, no child spawn)
 
 ---
 
@@ -90,9 +92,12 @@ claude -p --dangerously-skip-permissions \
   "Write .../DOCS-AUDIT-claude.md ..."
 ```
 
-**Result:** PASS — `SPAWN_OK`  
+**Result:** UNVERIFIABLE (downgraded 2026-08-11; originally recorded PASS) —
+the command exercised the top-level `claude -p` CLI, not the `Agent` tool
+child spawn the dispatch contract requires, so it does not evidence child
+dispatch.  
 **Artifact:** `.project/research/DOCS-AUDIT-claude.md` (verdict summary, unverifiable under README-only scope)  
-**Spawn API:** Claude Code `-p` (print mode)
+**Spawn API:** Claude Code `-p` (print mode; top-level CLI, no child spawn)
 
 ---
 
@@ -100,7 +105,7 @@ claude -p --dangerously-skip-permissions \
 
 ### 6a Router read (STATE → next action)
 
-**STATE:** `phase: grill`, `status: done`, `pipeline: gsd-path/v1`  
+**STATE:** `phase: grill`, `status: done`, `pipeline: gsd-path/v1` (pipeline id at the time of this run; current pipeline is `gsd-path/v2` and the `grill` phase no longer exists)  
 **Router table** (`skills/gsd-path/SKILL.md`): → bundled **research** contract (standard lane default)
 
 **Result:** PASS — routing logic applied from installed router skill; no mutation errors on STATE
@@ -109,7 +114,11 @@ claude -p --dangerously-skip-permissions \
 
 **Method:** Cursor `Task` subagent (`generalPurpose`) — native `subagent_type: gsd-path` **not available** in Cursor Task API enum (2026-08-05).
 
-**Result:** PASS with caveat — child wrote audit artifact  
+**Result:** PARTIAL (reconciled 2026-08-11; originally "PASS with caveat") —
+a child wrote the audit artifact, but via the generic `generalPurpose`
+subagent, not the contract's `gsd-path` subagent type, which the same run
+recorded as unavailable. The dispatch contract itself remains unverified on
+Cursor.  
 **Artifact:** `.project/research/DOCS-AUDIT.md` (full template: summary counts, claim row, remediation queue)  
 **Spawn API:** Cursor Task → `generalPurpose` (project `.cursor/agents/gsd-path.md` exists but not used via Task enum)
 
@@ -126,7 +135,8 @@ cd /Users/jeremymcspadden/github/open-gsd/gsd-path
 npm test && python3 -m unittest discover -s tests -q
 ```
 
-**Result:** PASS — 36 Node + 107 Python
+**Result:** PASS — 36 Node + 107 Python (2026-08-05 run; the suites have
+since grown to 53 Node + 178 Python — see automated-test-inventory.md)
 
 ---
 
@@ -136,9 +146,9 @@ npm test && python3 -m unittest discover -s tests -q
 |--------|------|--------|----------|
 | Install + hooks | All 3 | **PASS** | §1 |
 | Guard deny/allow | Claude (+ git hooks all) | **PASS** | §2 |
-| Dispatch smoke | Codex | **PASS** | §4 |
-| Dispatch smoke | Claude | **PASS** | §5 |
-| Pipeline slice | Cursor | **PASS*** | §6 (*Task API lacks `gsd-path` subagent type) |
+| Dispatch smoke | Codex | **UNVERIFIABLE** | §4 (top-level CLI run; no child spawn — downgraded 2026-08-11) |
+| Dispatch smoke | Claude | **UNVERIFIABLE** | §5 (top-level CLI run; no child spawn — downgraded 2026-08-11) |
+| Pipeline slice | Cursor | **PARTIAL** | §6 (Task API lacks `gsd-path` subagent type; child ran as `generalPurpose`) |
 | Codex implicit catalog | Codex | **PASS** | §3 |
 | Build orchestration | — | **NOT RUN** | deferred per spec |
 | Full milestone ship | — | **NOT RUN** | deferred per spec |
@@ -149,8 +159,8 @@ npm test && python3 -m unittest discover -s tests -q
 
 | Dimension | Prior | After manual runs |
 |-----------|-------|-------------------|
-| Host dispatch (Codex, Claude, Cursor) | Prove first | **Met smoke bar** — spawn + artifact each |
-| Live dogfood (Cursor slice) | Prove first | **Partial met** — router read + child spawn; not full UI `/gsd-path` session |
+| Host dispatch (Codex, Claude, Cursor) | Prove first | **Still prove first** (reconciled 2026-08-11) — recorded runs were top-level CLI invocations, not child-agent spawns through the dispatch contract |
+| Live dogfood (Cursor slice) | Prove first | **Partial met** — router read + a `generalPurpose` child; contract's `gsd-path` subagent unavailable; not full UI `/gsd-path` session |
 | Guards (Claude) | Use with checks | **OK to use** — deny/allow reproduced in test repo |
 | Guards (Codex/Cursor pre-tool-use) | Use with checks | unchanged — git hooks proven; pre-tool-use not wired |
 | Build orchestration | Prove first | unchanged — not run |

@@ -15,10 +15,13 @@ router or orchestrator supplied this contract, return control to it. On a
 direct invocation, report the exact next skill and stop until the user
 explicitly invokes it.
 
-Before phase work and again before completion, apply AGENTS.md's pending
-discussion-answer contract. Resolve an answer owned by inspect through its
-legal artifact gate and append a disposition receipt; otherwise block with
-links to ANSWERS.md and the target artifact rather than advancing stale input.
+Before phase work and again before completion, run the bundled
+`scripts/discussion_records.py pending --repo <absolute-root>`; when
+`.project/discuss/ANSWERS.md` is absent, continue. Resolve a reported
+required follow-up owned by inspect through its legal artifact gate and
+record its disposition with the helper's `dispose` command; otherwise block
+with links to ANSWERS.md and the target artifact rather than advancing stale
+input.
 
 ## Preconditions
 
@@ -75,7 +78,7 @@ overwriting it. Re-running inspection would overwrite established context.
    linking each malformed output that exists or STATE.md when an output is
    missing, and **Next** naming the one correction or user decision required;
    then stop.
-4. Present the ground truth to the user, at most one screen:
+4. Present the ground truth to the user, brief — a summary, not a dump:
    - what the project is (stack, architecture, entry points, maturity);
    - what demonstrably works (verified claims, passing verifies);
    - drift: what the docs claim that the code contradicts, and what exists

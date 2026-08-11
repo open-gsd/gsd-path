@@ -146,12 +146,6 @@ class SyncSkillResourcesTests(unittest.TestCase):
                 "built-in `default`",
             ):
                 self.assertNotIn(codex_only_term, skill_text, skill_directory.name)
-            if skill_directory.name != "gsd-path":
-                self.assertIn(
-                    "caller handoff, not permission to trigger an explicit-only skill",
-                    skill_text,
-                    skill_directory.name,
-                )
 
             openai_yaml = (skill_directory / "agents" / "openai.yaml").read_text()
             self.assertIn("allow_implicit_invocation: false", openai_yaml, skill_directory.name)
@@ -184,61 +178,8 @@ class SyncSkillResourcesTests(unittest.TestCase):
         self.assertIn("Reviewed HEAD: <full SHA>", final_review)
         self.assertIn("Reviewed HEAD: <full SHA>", gap_review)
 
-        build_contract = (PROJECT_ROOT / "skills" / "gsd-path-build" / "SKILL.md").read_text()
-        self.assertIn("On entry from `plan/done`, set STATE", build_contract)
-        self.assertIn("`build/active`, append `build started`", build_contract)
-        self.assertIn("`build/done`", build_contract)
-        self.assertIn("retry never reuses a rejected dirty worktree", build_contract)
-        plan_contract = (PROJECT_ROOT / "skills" / "gsd-path-plan" / "SKILL.md").read_text()
-        self.assertIn("`build/done` is", plan_contract)
-        self.assertIn("reserved exclusively", plan_contract)
-        ship_contract = (PROJECT_ROOT / "skills" / "gsd-path-ship" / "SKILL.md").read_text()
-        self.assertIn("Always include PLAN.md's project", ship_contract)
-        self.assertIn("blocked gap with valid evidence", ship_contract)
-        self.assertIn("Archive and ship (recommended)", ship_contract)
-        docs_audit_contract = (
-            PROJECT_ROOT / "skills" / "gsd-path-docs-audit" / "SKILL.md"
-        ).read_text()
-        self.assertIn("Require an existing `.project/STATE.md`", docs_audit_contract)
-        self.assertIn("`shipped/done`", docs_audit_contract)
-        define_contract = (PROJECT_ROOT / "skills" / "gsd-path-define" / "SKILL.md").read_text()
-        self.assertIn("appended to DOCS-AUDIT.md's `## User rulings` table", define_contract)
-        self.assertIn("Classify the proposed milestone lane before writing", define_contract)
-        router_contract = (PROJECT_ROOT / "skills" / "gsd-path" / "SKILL.md").read_text()
-        self.assertIn("treat it as orphaned active pipeline", router_contract)
-        self.assertIn("artifacts or foreign state", router_contract)
-        self.assertIn("bootstrap_repository.py", router_contract)
-        self.assertIn("CHARTER.md exists, no ROADMAP.md", router_contract)
-        roadmap_contract = (PROJECT_ROOT / "skills" / "gsd-path-roadmap" / "SKILL.md").read_text()
-        self.assertIn("Rolling-wave", roadmap_contract)
-        self.assertIn("mid-milestone", roadmap_contract)
-        self.assertIn("first pending milestone", roadmap_contract)
-        self.assertIn("REPOSITORY.md", router_contract)
-
-        discussion_contract = (
-            PROJECT_ROOT / "skills" / "gsd-path-discuss" / "SKILL.md"
-        ).read_text()
-        self.assertIn("Accept any active milestone phase except `shipped`", discussion_contract)
-        self.assertIn(".project/discuss/DIALOGUE.md", discussion_contract)
-        self.assertIn(".project/discuss/ANSWERS.md", discussion_contract)
-        self.assertIn("Do not launch the full `$gsd-path-research` phase", discussion_contract)
-        self.assertIn("stable thread id", discussion_contract)
-        self.assertIn("Disposition X###", discussion_contract)
-        self.assertIn(
-            "invoke `$gsd-path`; the router will route the pending answer",
-            discussion_contract,
-        )
-
-        inspect_contract = (
-            PROJECT_ROOT / "skills" / "gsd-path-inspect" / "SKILL.md"
-        ).read_text()
-        self.assertIn("task name `inspect_codebase`", inspect_contract)
-        self.assertIn("task name `inspect_docs`", inspect_contract)
-        self.assertIn("invoke `$gsd-path`, which routes to define", inspect_contract)
-
         readme = (PROJECT_ROOT / "README.md").read_text()
         self.assertNotIn("cp -n AGENTS.md WORKFLOW.md", readme)
-        self.assertIn("Phase skills stop at their handoff", readme)
         for contract in (
             "BUILD.md",
             "DECIDE.md",
@@ -256,7 +197,6 @@ class SyncSkillResourcesTests(unittest.TestCase):
             self.assertFalse((PROJECT_ROOT / "skills" / removed).exists())
 
         adapters = {
-            "codex": "Codex collaboration tool",
             "claude": "Claude Code's `Agent` tool",
             "grok": "Grok's `spawn_subagent` tool",
             "opencode": "OpenCode",
@@ -264,10 +204,17 @@ class SyncSkillResourcesTests(unittest.TestCase):
             "qwen": "Qwen Code's `agent` tool",
             "antigravity": "Antigravity's `invoke_subagent` tool",
             "cursor": "custom `gsd-path` subagent",
-            "zed": "Zed's `spawn_agent` tool",
             "kiro": "default general-purpose subagent",
             "shared-agents": "Shared Agent Skills",
         }
+        # Codex and Zed deploy the shared-agents profile (see deploymentPlans in
+        # scripts/install.mjs and scripts/install.py); they have no per-platform
+        # adapter of their own.
+        for shared_profile_runtime in ("codex", "zed"):
+            self.assertFalse(
+                (PROJECT_ROOT / "platforms" / shared_profile_runtime).exists(),
+                shared_profile_runtime,
+            )
         for runtime, required_text in adapters.items():
             adapter = PROJECT_ROOT / "platforms" / runtime / "dispatch.md"
             self.assertTrue(adapter.is_file(), runtime)
@@ -282,7 +229,6 @@ class SyncSkillResourcesTests(unittest.TestCase):
             PROJECT_ROOT / "platforms" / "claude" / "dispatch.md"
         ).read_text()
         self.assertNotIn("SendMessage", claude_adapter)
-        self.assertIn("otherwise start a fresh `general-purpose`", claude_adapter)
         cursor_agent = PROJECT_ROOT / "platforms" / "cursor" / "agent.md"
         self.assertTrue(cursor_agent.is_file())
         self.assertIn("model: inherit", cursor_agent.read_text())

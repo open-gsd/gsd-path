@@ -2,6 +2,7 @@
 // Install GSD Path skills for supported coding agents (Node port of install.py).
 // Dependency-free; requires Node >= 18.17.
 
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -27,34 +28,84 @@ export const GUARD_SCRIPTS = ["guard_hook.py", "git_guard.py"];
 export const GUARD_MARKER = "gsd-path guard";
 export const CLAUDE_MATCHER =
   "Edit|Write|MultiEdit|NotebookEdit|Delete|StrReplace|ApplyPatch|Create|Shell|Bash";
-export const CLAUDE_HOOKS_SETTINGS =
-  JSON.stringify(
-    {
-      hooks: {
-        PreToolUse: [
-          {
-            matcher: CLAUDE_MATCHER,
-            hooks: [
-              {
-                type: "command",
-                command: `python3 "$CLAUDE_PROJECT_DIR/${HOOKS_DIRECTORY}/guard_hook.py"`,
-              },
-            ],
-          },
-        ],
+// The managed PreToolUse guard entry, as an object.
+export function claudeGuardEntry(interpreter) {
+  return {
+    matcher: CLAUDE_MATCHER,
+    hooks: [
+      {
+        type: "command",
+        command: `${interpreter} "$CLAUDE_PROJECT_DIR/${HOOKS_DIRECTORY}/guard_hook.py"`,
       },
-    },
-    null,
-    2
-  ) + "\n";
-export const PRE_COMMIT_HOOK =
-  "#!/bin/sh\n" +
-  "# gsd-path guard: archive immutability before commit.\n" +
-  `exec python3 "$(git rev-parse --show-toplevel)/${HOOKS_DIRECTORY}/git_guard.py" pre-commit\n`;
-export const COMMIT_MSG_HOOK =
-  "#!/bin/sh\n" +
-  "# gsd-path guard: archive immutability and ship-commit purity.\n" +
-  `exec python3 "$(git rev-parse --show-toplevel)/${HOOKS_DIRECTORY}/git_guard.py" commit-msg "$1"\n`;
+    ],
+  };
+}
+export function claudeHooksSettings(interpreter) {
+  return (
+    JSON.stringify({ hooks: { PreToolUse: [claudeGuardEntry(interpreter)] } }, null, 2) + "\n"
+  );
+}
+export function preCommitHook(interpreter) {
+  return (
+    "#!/bin/sh\n" +
+    "# gsd-path guard: archive immutability before commit.\n" +
+    `exec ${interpreter} "$(git rev-parse --show-toplevel)/${HOOKS_DIRECTORY}/git_guard.py" pre-commit\n`
+  );
+}
+export function commitMsgHook(interpreter) {
+  return (
+    "#!/bin/sh\n" +
+    "# gsd-path guard: archive immutability and ship-commit purity.\n" +
+    `exec ${interpreter} "$(git rev-parse --show-toplevel)/${HOOKS_DIRECTORY}/git_guard.py" commit-msg "$1"\n`
+  );
+}
+
+// Every interpreter a managed hook may legitimately be pinned to.
+const INTERPRETER_CANDIDATES = ["python3", "python"];
+
+// Probe for a runnable Python interpreter (python3, then python) so emitted
+// hooks never hard-code an interpreter that does not exist on this machine
+// (python3 is typically absent on Windows).
+export function detectPythonInterpreter() {
+  for (const candidate of INTERPRETER_CANDIDATES) {
+    const result = spawnSync(candidate, ["--version"], { stdio: "ignore" });
+    if (!result.error && result.status === 0) return candidate;
+  }
+  return null;
+}
+
+// Single owner of the interpreter probe and its policy: returns the probed
+// interpreter, or null when no interpreter works — callers must then skip
+// writing hook content instead of pinning a nonexistent python3.
+function effectiveInterpreter() {
+  return hooks.detectPythonInterpreter();
+}
+
+// Resolve the repository's effective hooks directory via
+// `git rev-parse --git-path hooks`, which honors core.hooksPath and linked
+// worktrees. Returns null when git cannot resolve it for this project.
+export function resolveGitHooksPath(project) {
+  const result = spawnSync(
+    "git",
+    ["rev-parse", "--show-toplevel", "--git-path", "hooks"],
+    { cwd: project, encoding: "utf8" }
+  );
+  if (result.error || result.status !== 0) return null;
+  const lines = result.stdout.split(/\r?\n/).filter((line) => line !== "");
+  if (lines.length !== 2) return null;
+  const [toplevel, hooksPath] = lines;
+  if (!samePath(toplevel, project)) return null;
+  return path.resolve(project, hooksPath);
+}
+
+function gitHooksDirectory(project) {
+  const dotGit = path.join(project, ".git");
+  if (!lexists(dotGit)) return null;
+  const resolved = hooks.resolveGitHooksPath(project);
+  if (resolved !== null) return resolved;
+  // Fallback when git is not runnable: only a plain .git directory is safe.
+  return isDirectory(dotGit) ? path.join(dotGit, "hooks") : null;
+}
 const HOST_NOTES = {
   opencode:
     "note: OpenCode stable discovers the skills but has no documented hard " +
@@ -606,7 +657,9 @@ function rollbackTarget(transaction) {
 }
 
 // Each entry: [destination, sourceName, literalContent, executable].
-function projectDestinations(project, includeClaude, hooksEnabled) {
+// hooksDir is the pre-resolved git hooks directory (or null); resolving it
+// once per run avoids repeated `git rev-parse` spawns.
+function projectDestinations(project, includeClaude, hooksEnabled, interpreter, hooksDir) {
   const destinations = [
     [path.join(project, "AGENTS.md"), "AGENTS.md", null, false],
     [path.join(project, "WORKFLOW.md"), "WORKFLOW.md", null, false],
@@ -627,21 +680,21 @@ function projectDestinations(project, includeClaude, hooksEnabled) {
       destinations.push([
         path.join(project, ".claude", "settings.json"),
         null,
-        CLAUDE_HOOKS_SETTINGS,
+        claudeHooksSettings(interpreter),
         false,
       ]);
     }
-    if (isDirectory(path.join(project, ".git"))) {
+    if (hooksDir !== null) {
       destinations.push([
-        path.join(project, ".git", "hooks", "pre-commit"),
+        path.join(hooksDir, "pre-commit"),
         null,
-        PRE_COMMIT_HOOK,
+        preCommitHook(interpreter),
         true,
       ]);
       destinations.push([
-        path.join(project, ".git", "hooks", "commit-msg"),
+        path.join(hooksDir, "commit-msg"),
         null,
-        COMMIT_MSG_HOOK,
+        commitMsgHook(interpreter),
         true,
       ]);
     }
@@ -649,13 +702,29 @@ function projectDestinations(project, includeClaude, hooksEnabled) {
   return destinations;
 }
 
-function projectFiles(project, includeClaude, hooksEnabled) {
-  return projectDestinations(project, includeClaude, hooksEnabled)
-    .map(([destination]) => path.relative(project, destination).split(path.sep).join("/"))
+function describeProjectPath(project, destination) {
+  const relative = path.relative(project, destination);
+  if (relative.startsWith("..") || path.isAbsolute(relative)) {
+    return destination.split(path.sep).join("/");
+  }
+  return relative.split(path.sep).join("/");
+}
+
+function projectFiles(project, includeClaude, hooksEnabled, interpreter, hooksDir) {
+  return projectDestinations(project, includeClaude, hooksEnabled, interpreter, hooksDir)
+    .map(([destination]) => describeProjectPath(project, destination))
     .join(", ");
 }
 
-function validateProject(sourceRoot, project, includeClaude, hooksEnabled, reservedRoots) {
+function existingContractError(destination) {
+  return new InstallerError(
+    `project contract already exists: ${destination} — the installer never ` +
+      "overwrites project files. Run --update to refresh installed skills; " +
+      "merge template changes manually (see UPDATE.md)."
+  );
+}
+
+function validateProject(sourceRoot, project, includeClaude, hooksEnabled, reservedRoots, interpreter, hooksDir) {
   validateDirectoryDestination(project, "project path");
   const sources = ["AGENTS.md", "WORKFLOW.md"];
   if (hooksEnabled) {
@@ -667,9 +736,9 @@ function validateProject(sourceRoot, project, includeClaude, hooksEnabled, reser
       throw new InstallerError(`missing project contract: ${source}`);
     }
   }
-  for (const [destination] of projectDestinations(project, includeClaude, hooksEnabled)) {
+  for (const [destination] of projectDestinations(project, includeClaude, hooksEnabled, interpreter, hooksDir)) {
     if (lexists(destination)) {
-      throw new InstallerError(`project contract already exists: ${destination}`);
+      throw existingContractError(destination);
     }
     for (const [label, root] of reservedRoots) {
       if (pathsOverlap(destination, root)) {
@@ -687,12 +756,14 @@ function validateProject(sourceRoot, project, includeClaude, hooksEnabled, reser
   }
 }
 
-function applyProject(sourceRoot, project, includeClaude, hooksEnabled, transaction) {
+function applyProject(sourceRoot, project, includeClaude, hooksEnabled, transaction, interpreter, hooksDir) {
   createDirectory(project, transaction.createdDirectories);
   for (const [destination, sourceName, literal, executable] of projectDestinations(
     project,
     includeClaude,
-    hooksEnabled
+    hooksEnabled,
+    interpreter,
+    hooksDir
   )) {
     createDirectory(path.dirname(destination), transaction.createdDirectories);
     const content = sourceName
@@ -709,7 +780,7 @@ function applyProject(sourceRoot, project, includeClaude, hooksEnabled, transact
     } catch (error) {
       if (fd !== null) fs.closeSync(fd);
       if (error && error.code === "EEXIST") {
-        throw new InstallerError(`project contract already exists: ${destination}`);
+        throw existingContractError(destination);
       }
       removePath(destination);
       throw error;
@@ -775,7 +846,23 @@ function copyFileAtomic(source, destination) {
   }
 }
 
-function mergedClaudeSettings(settings) {
+// A PreToolUse entry is ours when one of its commands runs the guard hook.
+function isManagedHookEntry(entry) {
+  return Boolean(
+    entry &&
+      typeof entry === "object" &&
+      !Array.isArray(entry) &&
+      Array.isArray(entry.hooks) &&
+      entry.hooks.some(
+        (hook) =>
+          hook &&
+          typeof hook.command === "string" &&
+          hook.command.includes(`${HOOKS_DIRECTORY}/guard_hook.py`)
+      )
+  );
+}
+
+function mergedClaudeSettings(settings, interpreter) {
   let parsed;
   try {
     parsed = JSON.parse(fs.readFileSync(settings, "utf8"));
@@ -789,11 +876,33 @@ function mergedClaudeSettings(settings) {
       `managed hook settings file is not a JSON object: ${settings}`
     );
   }
-  parsed.hooks = JSON.parse(CLAUDE_HOOKS_SETTINGS).hooks;
+  // Merge: replace only the managed PreToolUse guard entry; preserve every
+  // other hook event (Stop, PostToolUse, ...) and user PreToolUse entries.
+  const managedEntry = claudeGuardEntry(interpreter);
+  const hooksObject =
+    parsed.hooks && typeof parsed.hooks === "object" && !Array.isArray(parsed.hooks)
+      ? parsed.hooks
+      : {};
+  const existing = Array.isArray(hooksObject.PreToolUse) ? hooksObject.PreToolUse : [];
+  const merged = [];
+  let replaced = false;
+  for (const entry of existing) {
+    if (isManagedHookEntry(entry)) {
+      if (!replaced) {
+        merged.push(managedEntry);
+        replaced = true;
+      }
+    } else {
+      merged.push(entry);
+    }
+  }
+  if (!replaced) merged.push(managedEntry);
+  hooksObject.PreToolUse = merged;
+  parsed.hooks = hooksObject;
   return JSON.stringify(parsed, null, 2) + "\n";
 }
 
-function validateHooksRefresh(sourceRoot, project, full) {
+function validateHooksRefresh(sourceRoot, project, full, hooksDir) {
   validateDirectoryDestination(project, "project path");
   for (const name of GUARD_SCRIPTS) {
     const destination = path.join(project, HOOKS_DIRECTORY, name);
@@ -816,54 +925,57 @@ function validateHooksRefresh(sourceRoot, project, full) {
     if (lexists(settings) && !isManagedClaudeSettings(settings)) {
       throw new InstallerError(`not a managed GSD Path hook settings file: ${settings}`);
     }
-    for (const hookName of ["pre-commit", "commit-msg"]) {
-      const hookPath = path.join(project, ".git", "hooks", hookName);
-      if (isSymlink(hookPath)) {
-        throw new InstallerError(`refusing to refresh a symlink: ${hookPath}`);
-      }
-      if (lexists(hookPath) && !isManagedGitHook(hookPath)) {
-        throw new InstallerError(`not a managed GSD Path git hook: ${hookPath}`);
+    if (hooksDir !== null) {
+      for (const hookName of ["pre-commit", "commit-msg"]) {
+        const hookPath = path.join(hooksDir, hookName);
+        if (isSymlink(hookPath)) {
+          throw new InstallerError(`refusing to refresh a symlink: ${hookPath}`);
+        }
+        if (lexists(hookPath) && !isManagedGitHook(hookPath)) {
+          throw new InstallerError(`not a managed GSD Path git hook: ${hookPath}`);
+        }
       }
     }
   }
 }
 
+// Returns refreshed project-relative paths; entries prefixed "note:" are
+// user-facing notes rather than refreshed files.
 function refreshHooks(sourceRoot, project, full, dryRun) {
-  validateHooksRefresh(sourceRoot, project, full);
+  const hooksDir = full ? gitHooksDirectory(project) : null;
+  validateHooksRefresh(sourceRoot, project, full, hooksDir);
   const refreshed = [];
   for (const name of GUARD_SCRIPTS) {
     const destination = path.join(project, HOOKS_DIRECTORY, name);
     const source = path.join(sourceRoot, "scripts", name);
-    if (dryRun) {
-      refreshed.push(path.relative(project, destination).split(path.sep).join("/"));
-    } else {
-      copyFileAtomic(source, destination);
-      refreshed.push(path.relative(project, destination).split(path.sep).join("/"));
-    }
+    if (!dryRun) copyFileAtomic(source, destination);
+    refreshed.push(describeProjectPath(project, destination));
   }
   if (full) {
+    // Dry-run only lists paths, so it never needs the interpreter probe.
+    const interpreter = dryRun ? null : effectiveInterpreter();
+    if (!dryRun && interpreter === null) {
+      refreshed.push(
+        "note: hooks: no working python3 or python interpreter found on PATH; " +
+          "skipped Claude settings and git hook refresh"
+      );
+      return refreshed;
+    }
     const settings = path.join(project, ".claude", "settings.json");
     if (lexists(settings)) {
-      if (dryRun) {
-        refreshed.push(path.relative(project, settings).split(path.sep).join("/"));
-      } else {
-        writeFileAtomic(settings, mergedClaudeSettings(settings));
-        refreshed.push(path.relative(project, settings).split(path.sep).join("/"));
-      }
+      if (!dryRun) writeFileAtomic(settings, mergedClaudeSettings(settings, interpreter));
+      refreshed.push(describeProjectPath(project, settings));
     }
-    if (isDirectory(path.join(project, ".git"))) {
-      for (const [hookName, content] of [
-        ["pre-commit", PRE_COMMIT_HOOK],
-        ["commit-msg", COMMIT_MSG_HOOK],
-      ]) {
-        const hookPath = path.join(project, ".git", "hooks", hookName);
-        if (dryRun) {
-          refreshed.push(path.relative(project, hookPath).split(path.sep).join("/"));
-        } else {
+    if (hooksDir !== null) {
+      for (const hookName of ["pre-commit", "commit-msg"]) {
+        const hookPath = path.join(hooksDir, hookName);
+        if (!dryRun) {
+          const content =
+            hookName === "pre-commit" ? preCommitHook(interpreter) : commitMsgHook(interpreter);
           fs.mkdirSync(path.dirname(hookPath), { recursive: true });
           writeFileAtomic(hookPath, content, 0o755);
-          refreshed.push(path.relative(project, hookPath).split(path.sep).join("/"));
         }
+        refreshed.push(describeProjectPath(project, hookPath));
       }
     }
   }
@@ -969,6 +1081,11 @@ export function doctor(sourceRoot, { targets, rootFor, project = null }) {
         push("ok", `hooks: ${HOOKS_DIRECTORY}/${name} current`);
       }
     }
+    // Staleness must not depend on which interpreter wins today's probe: a
+    // hook legitimately installed with any known interpreter is current.
+    const managedVariants = INTERPRETER_CANDIDATES.map((candidate) =>
+      JSON.stringify(claudeGuardEntry(candidate))
+    );
     const settings = path.join(project, ".claude", "settings.json");
     if (!isFile(settings)) {
       push("note", "hooks: no .claude/settings.json guard wiring");
@@ -978,11 +1095,13 @@ export function doctor(sourceRoot, { targets, rootFor, project = null }) {
       let hooksCurrent = false;
       try {
         const parsed = JSON.parse(fs.readFileSync(settings, "utf8"));
+        const entries =
+          parsed && typeof parsed === "object" && parsed.hooks
+            ? parsed.hooks.PreToolUse
+            : null;
         hooksCurrent =
-          parsed !== null &&
-          typeof parsed === "object" &&
-          JSON.stringify(parsed.hooks) ===
-            JSON.stringify(JSON.parse(CLAUDE_HOOKS_SETTINGS).hooks);
+          Array.isArray(entries) &&
+          entries.some((entry) => managedVariants.includes(JSON.stringify(entry)));
       } catch {
         hooksCurrent = false;
       }
@@ -992,22 +1111,50 @@ export function doctor(sourceRoot, { targets, rootFor, project = null }) {
         push("warn", "hooks: .claude/settings.json guard wiring is stale — run --hooks-refresh-full");
       }
     }
-    if (isDirectory(path.join(project, ".git"))) {
-      for (const [hookName, expected] of [
-        ["pre-commit", PRE_COMMIT_HOOK],
-        ["commit-msg", COMMIT_MSG_HOOK],
-      ]) {
-        const hookPath = path.join(project, ".git", "hooks", hookName);
-        if (!lexists(hookPath)) {
-          push("warn", `hooks: .git/hooks/${hookName} is missing — run --hooks-refresh-full`);
-        } else if (!isManagedGitHook(hookPath)) {
-          push("warn", `hooks: .git/hooks/${hookName} is not a managed GSD Path git hook`);
-        } else if (fs.readFileSync(hookPath, "utf8") !== expected) {
-          push("warn", `hooks: .git/hooks/${hookName} is stale — run --hooks-refresh-full`);
-        } else if (!isExecutable(hookPath)) {
-          push("warn", `hooks: .git/hooks/${hookName} is not executable — run --hooks-refresh-full`);
-        } else {
-          push("ok", `hooks: .git/hooks/${hookName} wired`);
+    const dotGit = path.join(project, ".git");
+    if (lexists(dotGit)) {
+      const hooksDir = gitHooksDirectory(project);
+      if (hooksDir === null) {
+        push(
+          "warn",
+          "hooks: cannot resolve the git hooks directory (is git runnable?); git hooks unverified"
+        );
+      } else {
+        const custom = !samePath(hooksDir, path.join(dotGit, "hooks"));
+        let missingFromCustom = false;
+        for (const [hookName, generator] of [
+          ["pre-commit", preCommitHook],
+          ["commit-msg", commitMsgHook],
+        ]) {
+          const hookPath = path.join(hooksDir, hookName);
+          const label = describeProjectPath(project, hookPath);
+          if (!lexists(hookPath)) {
+            push(
+              "fail",
+              `hooks: ${hookName} is missing from the effective git hooks directory ` +
+                `${hooksDir} — run --hooks-refresh-full`
+            );
+            if (custom) missingFromCustom = true;
+          } else if (!isManagedGitHook(hookPath)) {
+            push("warn", `hooks: ${label} is not a managed GSD Path git hook`);
+          } else if (
+            !INTERPRETER_CANDIDATES.some(
+              (candidate) => fs.readFileSync(hookPath, "utf8") === generator(candidate)
+            )
+          ) {
+            push("warn", `hooks: ${label} is stale — run --hooks-refresh-full`);
+          } else if (!isExecutable(hookPath)) {
+            push("warn", `hooks: ${label} is not executable — run --hooks-refresh-full`);
+          } else {
+            push("ok", `hooks: ${label} wired`);
+          }
+        }
+        if (missingFromCustom) {
+          push(
+            "warn",
+            `hooks: core.hooksPath points this repository at ${hooksDir}, ` +
+              "but the guard hooks are not wired there"
+          );
         }
       }
     }
@@ -1172,7 +1319,13 @@ function plannedBackupRoots(legacyRoot, deployments) {
 }
 
 // Test-injection points; production callers never touch these.
-export const hooks = { mismatches, applyTarget, rename: fs.renameSync.bind(fs) };
+export const hooks = {
+  mismatches,
+  applyTarget,
+  rename: fs.renameSync.bind(fs),
+  detectPythonInterpreter,
+  resolveGitHooksPath,
+};
 
 export async function install(sourceRoot, plans, options = {}) {
   const {
@@ -1186,6 +1339,33 @@ export async function install(sourceRoot, plans, options = {}) {
   } = options;
   if (hooksEnabled && project === null) {
     throw new InstallerError("--hooks requires --project");
+  }
+  // Resolve per-run environment facts (interpreter, git hooks directory)
+  // once here and thread them down.
+  let effectiveHooks = hooksEnabled;
+  let interpreter = "python3";
+  let hooksDir = null;
+  const hookNotes = [];
+  if (hooksEnabled) {
+    const probed = effectiveInterpreter();
+    if (probed === null) {
+      effectiveHooks = false;
+      hookNotes.push(
+        "note: hooks: no working python3 or python interpreter found on PATH; " +
+          "skipped guard hook install"
+      );
+    } else {
+      interpreter = probed;
+    }
+  }
+  if (effectiveHooks) {
+    hooksDir = gitHooksDirectory(project);
+    if (hooksDir === null && lexists(path.join(project, ".git"))) {
+      hookNotes.push(
+        "note: hooks: found .git but could not resolve the git hooks directory " +
+          "(is git runnable?); git hooks were not installed"
+      );
+    }
   }
   const progress = async (text) => {
     if (onProgress) onProgress(text);
@@ -1267,10 +1447,15 @@ export async function install(sourceRoot, plans, options = {}) {
   }
 
   if (project !== null) {
-    validateProject(sourceRoot, project, includeClaude, hooksEnabled, [
-      ...mutationRoots,
-      ...plannedBackups,
-    ]);
+    validateProject(
+      sourceRoot,
+      project,
+      includeClaude,
+      effectiveHooks,
+      [...mutationRoots, ...plannedBackups],
+      interpreter,
+      hooksDir
+    );
   }
 
   const results = [];
@@ -1298,9 +1483,10 @@ export async function install(sourceRoot, plans, options = {}) {
         results.push(installResult(plan, true, update) + suffix);
       }
       if (project !== null) {
-        const files = projectFiles(project, includeClaude, hooksEnabled);
+        const files = projectFiles(project, includeClaude, effectiveHooks, interpreter, hooksDir);
         results.push(`project: would copy ${files} to ${project}`);
       }
+      results.push(...hookNotes);
       appendHostNotes(results, selected);
       return results;
     }
@@ -1347,10 +1533,19 @@ export async function install(sourceRoot, plans, options = {}) {
       }
       if (project !== null) {
         await progress("Writing project contracts");
-        applyProject(sourceRoot, project, includeClaude, hooksEnabled, projectTransaction);
-        const files = projectFiles(project, includeClaude, hooksEnabled);
+        applyProject(
+          sourceRoot,
+          project,
+          includeClaude,
+          effectiveHooks,
+          projectTransaction,
+          interpreter,
+          hooksDir
+        );
+        const files = projectFiles(project, includeClaude, effectiveHooks, interpreter, hooksDir);
         results.push(`project: copied ${files} to ${project}`);
       }
+      results.push(...hookNotes);
     } catch (error) {
       const rollbackErrors = [];
       try {
@@ -1575,11 +1770,14 @@ export async function main(argv, env = process.env) {
         values["dry-run"]
       );
       spin.stop();
+      const notes = refreshed.filter((line) => line.startsWith("note:"));
+      const files = refreshed.filter((line) => !line.startsWith("note:"));
       ui.result(
         values["dry-run"]
-          ? `hooks: would refresh ${refreshed.join(", ")}`
-          : `hooks: refreshed ${refreshed.join(", ")}`
+          ? `hooks: would refresh ${files.join(", ")}`
+          : `hooks: refreshed ${files.join(", ")}`
       );
+      for (const note of notes) ui.result(note);
       console.log(
         `\n  ${ui.dim(values["dry-run"] ? "Dry run — nothing was written." : "Done.")}\n`
       );

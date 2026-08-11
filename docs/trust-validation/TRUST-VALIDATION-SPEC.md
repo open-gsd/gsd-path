@@ -13,7 +13,7 @@ Supporting assets (local clone):
 - `docs/trust-validation/evidence-mapping.md`
 - `docs/trust-validation/manual-dogfood-evidence-bar.md`
 
-**Important:** Automated tests (36 Node + 107 Python) and **manual dogfood** (2026-08-05) recorded in `TRUST-EVIDENCE.md`. Build wave and full ship still not executed.
+**Important:** Automated tests (53 Node + 178 Python as of 2026-08-11) and **manual dogfood** (2026-08-05) recorded in `TRUST-EVIDENCE.md`. Build wave and full ship still not executed. The 2026-08-05 dispatch-smoke runs were later reclassified as top-level CLI checks, not child-spawn proof — see the 2026-08-11 reconciliation in `TRUST-EVIDENCE.md`.
 
 ---
 
@@ -21,13 +21,13 @@ Supporting assets (local clone):
 
 | Dimension | Worst open gap | Severity | Posture today |
 |-----------|----------------|----------|---------------|
-| Install & update | No CI; `install.py` untested; npm unpublished | High / Medium | **Use with checks** |
+| Install & update | No CI; `install.py` lacks `--local`/`--update`; npm unpublished | High / Medium | **Use with checks** |
 | Invoke & route | No automated STATE/router/recovery tests | High | **Prove first** |
 | Phase execution | Handoffs tested; full SOP not automated | High | **Prove first** |
 | Build orchestration | No automated or manual proof in this effort | High | **Prove first** |
 | Guards | Claude guards manually proven; Codex/Cursor pre-tool-use manual | Low | **OK to use** (Claude hooks); **Use with checks** (Codex/Cursor pre-tool-use) |
 | Ship & archive | — | — | **OK to use** (validators) |
-| Host dispatch | Live spawn smoke passed (Codex, Claude, Cursor) | — | **OK to use** (smoke bar) |
+| Host dispatch | Child-agent spawn unverified — 2026-08-05 smoke runs exercised the top-level CLI only | High | **Prove first** |
 | Docs fidelity | No CI doc-audit runner; minor README drift | Low / Medium | **Use with checks** |
 | Live dogfood | Cursor slice done; build/ship not run | Medium | **Use with checks** |
 
@@ -39,11 +39,11 @@ Supporting assets (local clone):
 
 Use these **without** waiting on manual dogfood — still run `npm test` + Python unittest before upgrades:
 
-- **Ship & archive validators** — `scripts/archive_milestone.py` (33 tests), `git_guard.py` ship-commit rules
+- **Ship & archive validators** — `scripts/archive_milestone.py` (62 tests), `git_guard.py` ship-commit rules
 - **Guard script logic** — `guard_hook.py` / `git_guard.py` unit + subprocess tests
 - **Node installer** — dry-run, apply, rollback, `--local`, `--update`, hooks install/refresh (`install.test.mjs` + `test_install.py`)
 - **Handoff validator** — `scripts/check_handoffs.py` (research + patch-findings)
-- **Skill sync integrity** — 53 resource pairs (`sync_skill_resources.py --check`)
+- **Skill sync integrity** — 82 resource pairs (`sync_skill_resources.py --check`)
 - **Static dispatch artifacts** — installer stages `platforms/*/dispatch.md` + Cursor `gsd-path` subagent file
 
 ### Prove first (before trusting end-to-end pipeline)
@@ -108,7 +108,7 @@ Full 40-row automation map: `docs/trust-validation/evidence-mapping.md`
 | Criterion | Dimension | Status | Posture |
 |-----------|-----------|--------|---------|
 | Node installer core paths | Install & update | met | OK |
-| `install.py` parity | Install & update | unmet | Use with checks |
+| `install.py` parity | Install & update | partial (tested; no `--local`/`--update`) | Use with checks |
 | npm publish | Install & update | unmet | Prove first |
 | CI gate | Install & update | unmet | Prove first |
 | Explicit-only skill links | Invoke & route | met | OK |
@@ -123,7 +123,7 @@ Full 40-row automation map: `docs/trust-validation/evidence-mapping.md`
 | `archive_milestone.py` suite | Ship & archive | met | OK |
 | Dispatch files on install | Host dispatch | met (static) | OK |
 | Live spawn Codex/Claude/Cursor | Host dispatch | unverifiable | Prove first |
-| Sync 53 resources | Docs fidelity | met | OK |
+| Sync 82 resources | Docs fidelity | met | OK |
 | Cursor pipeline slice | Live dogfood | unverifiable | Prove first |
 | Codex/Claude dispatch smoke | Live dogfood | unverifiable | Prove first |
 

@@ -19,10 +19,12 @@ router or orchestrator supplied this contract, return control to it. On a
 direct invocation, report the exact next skill and stop until the user
 explicitly invokes it.
 
-Before interview work and again before approval, apply AGENTS.md's pending
-discussion-answer contract. Resolve an answer owned by define in INTENT.md
-and append a disposition receipt; otherwise block with links to ANSWERS.md and
-the target artifact rather than approving stale intent.
+Before interview work and again before approval, run the bundled
+`scripts/discussion_records.py pending --repo <absolute-root>`; when
+`.project/discuss/ANSWERS.md` is absent, continue. Resolve a reported
+required follow-up owned by define in INTENT.md and record its disposition
+with the helper's `dispose` command; otherwise block with links to ANSWERS.md
+and the target artifact rather than approving stale intent.
 
 ## State ownership
 
@@ -161,10 +163,10 @@ first question. The rules change:
 1. Ask for a one-paragraph idea description if the user has not supplied one.
    In brownfield mode, instead present the one-screen ground truth (from
    inspection) and ask what this milestone should achieve.
-2. Ask rounds of two or three questions aimed at the weakest checklist areas.
+2. Ask small rounds of questions aimed at the weakest checklist areas.
    Use an interactive user-input tool when available. Otherwise ask concise
-   numbered questions in chat and stop for the reply. Never send more than
-   three questions in one round. When a question offers options, list the
+   numbered questions in chat and stop for the reply. Keep each round small
+   enough to answer in one reply. When a question offers options, list the
    recommended one first marked `(recommended)` with a one-line reason;
    leave open questions open.
 3. Surface contradictions immediately and ask the user to choose. Never
@@ -174,7 +176,8 @@ first question. The rules change:
 5. Stop when coverage is complete or the user says `enough`. Record remaining
    uncertainty under `## Open questions` with `RESEARCH` or `NEEDS-USER`.
 6. Classify the proposed milestone lane before writing the approval draft:
-   `quick` when scope fits at most two deliverable-sized tasks in one wave with
+   `quick` when scope fits at most two deliverable-sized tasks (project
+   policy) in one wave with
    no `RESEARCH` or `NEEDS-USER` items and no cross-wave integration risk;
    otherwise `standard`. Read the local [intent template](templates/intent.md),
    write that proposed lane and the complete draft to
@@ -208,4 +211,5 @@ invoke an explicit-only sibling skill yourself.
 - Trace every question to a checklist gap; omit curiosity questions.
 - Treat solution-shaped problems as hypotheses and uncover the underlying pain.
 - Preserve vetoes and corrections verbatim.
-- Aim for three to five rounds. After six, wrap up and tag remaining gaps.
+- Wrap up when every coverage-checklist area is answered or the user signals
+  done, and tag remaining gaps.

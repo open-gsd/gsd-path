@@ -38,8 +38,22 @@ node scripts/install.mjs --claude --project /path/to/repo --hooks
 | `.git/hooks/commit-msg` | Runs `git_guard.py` with commit message |
 | `.claude/settings.json` | Claude PreToolUse wiring (`claude` target only) |
 
+Git hooks are written to the repository's **effective** hooks directory,
+resolved with `git rev-parse --git-path hooks`. That honors `core.hooksPath`
+setups (Husky and friends) and linked worktrees (where `.git` is a file). Only
+when git itself is not runnable does the installer fall back to a plain
+`.git/hooks` directory; if neither works, it reports that git hooks were
+skipped instead of dropping them silently.
+
 Git hooks work for **any** agent that commits. Guards **fail open** on crash or
 bad input — they never brick the host or git permanently.
+
+**Windows / interpreter caveat:** hooks and the Claude settings command invoke a
+Python interpreter that the installer probes at install time — `python3` first,
+then `python` (plain `python3` usually does not exist on Windows). If neither
+runs, hook install is skipped with a warning rather than wiring an interpreter
+that would make every commit fail. The `sh` hook scripts themselves need a
+POSIX shell (Git for Windows provides one).
 
 ### Updating after package upgrade
 
@@ -47,6 +61,11 @@ bad input — they never brick the host or git permanently.
 npx gsd-path --hooks-refresh --project /path/to/repo
 npx gsd-path --hooks-refresh-full --project /path/to/repo   # + settings/git hooks
 ```
+
+`--hooks-refresh-full` **merges** `.claude/settings.json`: it replaces only the
+managed PreToolUse guard entry (identified by its `.gsd-path/guard_hook.py`
+command) and preserves every other hook event (`Stop`, `PostToolUse`, …) and
+any PreToolUse entries you added yourself.
 
 See [UPDATE.md](UPDATE.md).
 

@@ -36,8 +36,9 @@ use exactly one matching branch:
   disk artifacts are the source of truth. Supply the logical task name as the
   task description. Set the child working directory to the exact repository or
   linked-worktree root supplied by GSD Path; do not ask Kiro or the child to
-  create another worktree. Encode task dependencies explicitly; launch no more
-  than four subagents at once.
+  create another worktree. Encode task dependencies explicitly; launch
+  independent children concurrently up to the host's advertised
+  concurrent-subagent capacity.
 
 For every branch:
 

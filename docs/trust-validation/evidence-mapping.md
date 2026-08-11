@@ -10,7 +10,7 @@
 
 | Dimension | Criteria with automation | Worst gap | Draft posture |
 |-----------|--------------------------|-----------|---------------|
-| 1 Install & update | 7 met, 3 partial/unmet | No CI; `install.py` untested; npm unpublished | **Use with checks** |
+| 1 Install & update | 8 met, 1 partial, 2 unmet | No CI; `install.py` lacks `--local`/`--update`; npm unpublished | **Use with checks** |
 | 2 Invoke & route | 1 partial, 4 unmet | No STATE/router/recovery tests | **Prove first** |
 | 3 Phase execution | 2 met, 2 unmet | Handoffs only; no full phase SOP tests | **Prove first** |
 | 4 Build orchestration | 0 met, 3 unmet | No worktree/wave tests | **Prove first** |
@@ -32,7 +32,7 @@
 | Hooks install (scripts, Claude settings, git hooks) | Install & update | `install.test.mjs`, `test_install.py` | met | — | OK |
 | Hooks refresh paths | Install & update | `install.test.mjs` | met | — | OK |
 | `check_update.py` version compare + cache | Install & update | `test_check_update.py` | met | — | OK |
-| `scripts/install.py` matches Node `--local`/`--update` | Install & update | `install.py --help`; no test module | unmet | Medium | Use with checks |
+| `scripts/install.py` matches Node `--local`/`--update` | Install & update | `tests/test_install.py` (44 tests); `install.py --help` has no `--local`/`--update` | partial | Medium | Use with checks |
 | `npx gsd-path` published on npm | Install & update | registry 404 | unmet | Medium | Prove first |
 | CI runs test suites on push/PR | Install & update | no `.github/workflows` | unmet | High | Prove first |
 | Codex router absent from ordinary catalog | Invoke & route | `test_implicit_invocation.py` (skips w/o CLI) | partial | High | Prove first |
@@ -61,7 +61,7 @@
 | Live Codex collaboration child spawn | Host dispatch | none (static only) | unverifiable | High | Prove first |
 | Live Claude `Agent` child spawn | Host dispatch | none | unverifiable | High | Prove first |
 | Live Cursor `Task` + gsd-path subagent | Host dispatch | none | unverifiable | High | Prove first |
-| `sync --check` 53 resources byte-identical | Docs fidelity | command + `test_sync_skill_resources.py` | met | — | OK |
+| `sync --check` 82 resources byte-identical | Docs fidelity | command + `test_sync_skill_resources.py` | met | — | OK |
 | Phase skills self-contained links (explicit-only) | Docs fidelity | `test_sync_skill_resources.py` | met | — | OK |
 | Automated DOCS/README claim audit | Docs fidelity | none in CI | unmet | Medium | Use with checks |
 | README Agent table vs install table (Kimi row) | Docs fidelity | README.md (out-of-scope host) | partial | Low | OK |
