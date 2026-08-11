@@ -1,0 +1,6 @@
+interface:
+  display_name: "GSD Path Docs Audit"
+  short_description: "Verify docs against what the code actually does"
+  default_prompt: "Use $gsd-path-docs-audit to verify this project's documentation against the actual code."
+policy:
+  allow_implicit_invocation: false

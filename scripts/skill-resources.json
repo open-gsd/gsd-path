@@ -1,0 +1,150 @@
+{
+  "skills": [
+    "gsd-path",
+    "gsd-path-build",
+    "gsd-path-decide",
+    "gsd-path-define",
+    "gsd-path-discuss",
+    "gsd-path-docs-audit",
+    "gsd-path-inspect",
+    "gsd-path-plan",
+    "gsd-path-research",
+    "gsd-path-roadmap",
+    "gsd-path-ship"
+  ],
+  "skill_aliases": {},
+  "package_files": [
+    "plugin.json",
+    "scripts/install.mjs",
+    "scripts/skill-resources.json",
+    "scripts/archive_milestone.py",
+    "scripts/bootstrap_repository.py",
+    "scripts/discussion_records.py",
+    "scripts/check_handoffs.py",
+    "scripts/check_task_briefs.py",
+    "scripts/check_update.py",
+    "scripts/guard_hook.py",
+    "scripts/git_guard.py",
+    "README.md",
+    "DOCS.md",
+    "HOOKS.md",
+    "QUICK.md",
+    "FULL.md",
+    "UPDATE.md",
+    "GUIDE.md",
+    "skills/",
+    "platforms/",
+    "AGENTS.md",
+    "WORKFLOW.md"
+  ],
+  "phase_resources": {
+    "gsd-path-build": [
+      "references/coder.md",
+      "references/dispatch.md",
+      "references/reviewer.md",
+      "templates/board.md",
+      "templates/task.md",
+      "templates/wave-review.md"
+    ],
+    "gsd-path-discuss": [
+      "templates/answers.md",
+      "templates/dialogue.md"
+    ],
+    "gsd-path-docs-audit": [
+      "references/dispatch.md",
+      "references/docs-auditor.md",
+      "templates/docs-audit.md"
+    ],
+    "gsd-path-define": [
+      "templates/charter.md",
+      "templates/intent.md",
+      "templates/state.md"
+    ],
+    "gsd-path-inspect": [
+      "references/codebase-mapper.md",
+      "references/dispatch.md",
+      "references/docs-auditor.md",
+      "templates/codebase.md",
+      "templates/docs-audit.md",
+      "templates/state.md"
+    ],
+    "gsd-path-plan": [
+      "references/dispatch.md",
+      "references/planner.md",
+      "templates/patch-findings.md",
+      "templates/plan.md",
+      "templates/task.md"
+    ],
+    "gsd-path-research": [
+      "references/dispatch.md",
+      "references/researcher.md",
+      "templates/evidence.md",
+      "templates/research-handoff.md"
+    ],
+    "gsd-path-roadmap": [
+      "references/dispatch.md",
+      "references/roadmapper.md",
+      "templates/roadmap.md"
+    ],
+    "gsd-path-ship": [
+      "references/dispatch.md",
+      "references/reviewer.md",
+      "templates/archive-manifest.md",
+      "templates/final-review.md",
+      "templates/gap-review.md",
+      "templates/patch-findings.md",
+      "templates/wave-review.md"
+    ],
+    "gsd-path-decide": [
+      "references/dispatch.md",
+      "references/decider.md",
+      "templates/synthesis.md"
+    ]
+  },
+  "script_targets": [
+    ["scripts/archive_milestone.py", "skills/gsd-path/scripts/archive_milestone.py"],
+    ["scripts/archive_milestone.py", "skills/gsd-path-build/scripts/archive_milestone.py"],
+    ["scripts/archive_milestone.py", "skills/gsd-path-discuss/scripts/archive_milestone.py"],
+    ["scripts/archive_milestone.py", "skills/gsd-path-docs-audit/scripts/archive_milestone.py"],
+    ["scripts/archive_milestone.py", "skills/gsd-path-define/scripts/archive_milestone.py"],
+    ["scripts/archive_milestone.py", "skills/gsd-path-inspect/scripts/archive_milestone.py"],
+    ["scripts/archive_milestone.py", "skills/gsd-path-plan/scripts/archive_milestone.py"],
+    ["scripts/archive_milestone.py", "skills/gsd-path-research/scripts/archive_milestone.py"],
+    ["scripts/archive_milestone.py", "skills/gsd-path-ship/scripts/archive_milestone.py"],
+    ["scripts/archive_milestone.py", "skills/gsd-path-decide/scripts/archive_milestone.py"],
+    ["scripts/bootstrap_repository.py", "skills/gsd-path/scripts/bootstrap_repository.py"],
+    ["scripts/discussion_records.py", "skills/gsd-path/scripts/discussion_records.py"],
+    ["scripts/discussion_records.py", "skills/gsd-path-build/scripts/discussion_records.py"],
+    ["scripts/discussion_records.py", "skills/gsd-path-discuss/scripts/discussion_records.py"],
+    ["scripts/discussion_records.py", "skills/gsd-path-docs-audit/scripts/discussion_records.py"],
+    ["scripts/discussion_records.py", "skills/gsd-path-define/scripts/discussion_records.py"],
+    ["scripts/discussion_records.py", "skills/gsd-path-inspect/scripts/discussion_records.py"],
+    ["scripts/discussion_records.py", "skills/gsd-path-plan/scripts/discussion_records.py"],
+    ["scripts/discussion_records.py", "skills/gsd-path-research/scripts/discussion_records.py"],
+    ["scripts/discussion_records.py", "skills/gsd-path-roadmap/scripts/discussion_records.py"],
+    ["scripts/discussion_records.py", "skills/gsd-path-ship/scripts/discussion_records.py"],
+    ["scripts/discussion_records.py", "skills/gsd-path-decide/scripts/discussion_records.py"],
+    ["scripts/check_handoffs.py", "skills/gsd-path/scripts/check_handoffs.py"],
+    ["scripts/check_handoffs.py", "skills/gsd-path-plan/scripts/check_handoffs.py"],
+    ["scripts/check_handoffs.py", "skills/gsd-path-research/scripts/check_handoffs.py"],
+    ["scripts/check_handoffs.py", "skills/gsd-path-ship/scripts/check_handoffs.py"],
+    ["scripts/check_handoffs.py", "skills/gsd-path-decide/scripts/check_handoffs.py"],
+    ["scripts/check_task_briefs.py", "skills/gsd-path/scripts/check_task_briefs.py"],
+    ["scripts/check_task_briefs.py", "skills/gsd-path-build/scripts/check_task_briefs.py"],
+    ["scripts/check_update.py", "skills/gsd-path/scripts/check_update.py"]
+  ],
+  "phase_contract_targets": [
+    ["skills/gsd-path-build/SKILL.md", "skills/gsd-path/BUILD.md"],
+    ["skills/gsd-path-docs-audit/SKILL.md", "skills/gsd-path/DOCS-AUDIT.md"],
+    ["skills/gsd-path-define/SKILL.md", "skills/gsd-path/DEFINE.md"],
+    ["skills/gsd-path-inspect/SKILL.md", "skills/gsd-path/INSPECT.md"],
+    ["skills/gsd-path-plan/SKILL.md", "skills/gsd-path/PLAN.md"],
+    ["skills/gsd-path-research/SKILL.md", "skills/gsd-path/RESEARCH.md"],
+    ["skills/gsd-path-roadmap/SKILL.md", "skills/gsd-path/ROADMAP.md"],
+    ["skills/gsd-path-ship/SKILL.md", "skills/gsd-path/SHIP.md"],
+    ["skills/gsd-path-decide/SKILL.md", "skills/gsd-path/DECIDE.md"]
+  ],
+  "shared_dispatch_targets": [
+    ["platforms/shared-agents/dispatch.md", "skills/gsd-path/references/dispatch.md"]
+  ]
+}

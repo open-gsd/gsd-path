@@ -1,0 +1,14 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "gsd-path",
+  "description": "Disk-backed AI agent pipeline with phased skills for coding agents.",
+  "homepage": "https://github.com/open-gsd/gsd-path",
+  "repository": "https://github.com/open-gsd/gsd-path",
+  "license": "MIT",
+  "keywords": [
+    "agent",
+    "skills",
+    "pipeline",
+    "gsd"
+  ]
+}

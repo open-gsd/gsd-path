@@ -1,0 +1,40 @@
+{
+  "name": "gsd-path",
+  "version": "1.0.0",
+  "description": "Disk-backed AI agent pipeline. Docs: DOCS.md (start here), QUICK.md, FULL.md, UPDATE.md",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "gsd-path": "scripts/install.mjs"
+  },
+  "files": [
+    "plugin.json",
+    "scripts/install.mjs",
+    "scripts/skill-resources.json",
+    "scripts/archive_milestone.py",
+    "scripts/bootstrap_repository.py",
+    "scripts/discussion_records.py",
+    "scripts/check_handoffs.py",
+    "scripts/check_task_briefs.py",
+    "scripts/check_update.py",
+    "scripts/guard_hook.py",
+    "scripts/git_guard.py",
+    "README.md",
+    "DOCS.md",
+    "HOOKS.md",
+    "QUICK.md",
+    "FULL.md",
+    "UPDATE.md",
+    "GUIDE.md",
+    "skills/",
+    "platforms/",
+    "AGENTS.md",
+    "WORKFLOW.md"
+  ],
+  "engines": {
+    "node": ">=18.17"
+  },
+  "scripts": {
+    "test": "node --test \"tests/*.test.mjs\""
+  }
+}

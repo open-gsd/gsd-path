@@ -1,0 +1,6 @@
+interface:
+  display_name: "GSD Path Roadmap"
+  short_description: "Slice a program charter into a milestone roadmap"
+  default_prompt: "Use $gsd-path-roadmap to slice an approved program charter into dependency-ordered milestones."
+policy:
+  allow_implicit_invocation: false

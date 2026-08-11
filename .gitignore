@@ -1,0 +1,5 @@
+.DS_Store
+.memdb/
+.worktrees/
+__pycache__/
+node_modules/

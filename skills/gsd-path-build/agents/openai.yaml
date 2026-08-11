@@ -1,0 +1,6 @@
+interface:
+  display_name: "GSD Path Build"
+  short_description: "Execute approved plans with gated GPT agents"
+  default_prompt: "Use $gsd-path-build to execute or resume the approved GSD Path build plan."
+policy:
+  allow_implicit_invocation: false
