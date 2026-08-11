@@ -1116,7 +1116,7 @@ export function doctor(sourceRoot, { targets, rootFor, project = null }) {
       const hooksDir = gitHooksDirectory(project);
       if (hooksDir === null) {
         push(
-          "warn",
+          "fail",
           "hooks: cannot resolve the git hooks directory (is git runnable?); git hooks unverified"
         );
       } else {
@@ -1373,10 +1373,7 @@ export async function install(sourceRoot, plans, options = {}) {
   };
   const selected = plans.map((plan) => plan.name);
   const deployments = deploymentPlans(plans);
-  const adapters = [...selected];
-  for (const deployment of deployments) {
-    if (!adapters.includes(deployment.profile)) adapters.push(deployment.profile);
-  }
+  const adapters = [...new Set(deployments.map((deployment) => deployment.profile))];
   await progress("Validating synchronized package");
   validateSource(sourceRoot, adapters);
   validateDistinctRoots(deployments);

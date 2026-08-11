@@ -80,7 +80,7 @@ If `guard_hook.py` manually wired: one archive-path deny test counts as bonus ev
 |------|---------|
 | **Build orchestration** | Prove first — optional follow-on: one task, one worktree, one orchestrator commit |
 | **Full milestone to ship** | Not required for trust spec closure |
-| **CI regression** | Not in manual bar; gap remains until CI exists |
+| **CI regression** | Covered separately by `.github/workflows/ci.yml` |
 | **Out-of-scope hosts** | No manual runs |
 
 ## Fail criteria

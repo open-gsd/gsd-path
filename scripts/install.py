@@ -1035,10 +1035,7 @@ def install(
             )
     selected = [plan.name for plan in plans]
     deployments = _deployment_plans(plans)
-    adapters = list(selected)
-    for deployment in deployments:
-        if deployment.profile not in adapters:
-            adapters.append(deployment.profile)
+    adapters = list(dict.fromkeys(deployment.profile for deployment in deployments))
     validate_source(source_root, adapters)
     _validate_distinct_roots(deployments)
     for plan in plans:

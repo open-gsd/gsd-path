@@ -444,6 +444,7 @@ class WaveArtifact(NamedTuple):
     path: Path
     wave: int
     cycle: int
+    lens: Optional[str]
 
 
 def canonical_wave_files(reviews: Path) -> Sequence[WaveArtifact]:
@@ -456,12 +457,14 @@ def canonical_wave_files(reviews: Path) -> Sequence[WaveArtifact]:
             "canonical wave artifacts must be real wave-N.cycleC.md files "
             "(a .contract or .adversarial lens suffix is allowed)"
         )
-    # Deep-review lens files supplement a wave review; only the base
-    # wave-N.cycleC.md files are the canonical cycle artifacts.
     return [
-        WaveArtifact(path, int(match.group(1)), int(match.group(2)))
+        WaveArtifact(
+            path,
+            int(match.group(1)),
+            int(match.group(2)),
+            match.group(3).removeprefix(".") if match.group(3) else None,
+        )
         for path, match in matches
-        if match.group(3) is None
     ]
 
 
@@ -1066,12 +1069,19 @@ def validate_gap_reviews(archive: Path, reviewed_head: str) -> None:
 
 
 def validate_wave_review(
-    path: Path, known_task_ids: Optional[Sequence[str]] = None
+    path: Path,
+    known_task_ids: Optional[Sequence[str]],
+    expected_depth: str,
+    expected_lens: Optional[str] = None,
 ) -> Sequence[str]:
     lines = path.read_text(encoding="utf-8").splitlines()
     depth = completed_field(lines, "Depth:", path.name)
-    if depth not in {"full", "verify-only"}:
+    if depth != expected_depth:
         raise ArchiveError(f"{path.name} has an invalid review depth")
+    if expected_lens is not None:
+        lens = completed_field(lines, "Lens:", path.name)
+        if lens != expected_lens:
+            raise ArchiveError(f"{path.name} Lens field does not match its filename")
     reviewed = completed_field(lines, "Tasks reviewed:", path.name)
     if not reviewed.isdigit() or int(reviewed) < 1:
         raise ArchiveError(f"{path.name} requires a positive task count")
@@ -1111,18 +1121,36 @@ def validate_wave_review(
 
 def review_cycle_counts(archive: Path) -> Sequence[int]:
     plan = archive / "plan" / "PLAN.md"
-    wave_numbers = [
-        int(match.group(1))
-        for match in re.finditer(r"^## Wave (\d+)\b", plan.read_text(encoding="utf-8"), re.MULTILINE)
-    ]
+    plan_text = plan.read_text(encoding="utf-8")
+    wave_matches = list(re.finditer(r"^## Wave (\d+)\b", plan_text, re.MULTILINE))
+    wave_numbers = [int(match.group(1)) for match in wave_matches]
     if not wave_numbers or wave_numbers != list(range(1, len(wave_numbers) + 1)):
         raise ArchiveError("plan wave numbers must be ordered and contiguous")
+    wave_depths = {}
+    for index, match in enumerate(wave_matches):
+        section_end = (
+            wave_matches[index + 1].start()
+            if index + 1 < len(wave_matches)
+            else len(plan_text)
+        )
+        depths = re.findall(
+            r"^Review depth:\s*(\S+)",
+            plan_text[match.end() : section_end],
+            re.MULTILINE,
+        )
+        wave = int(match.group(1))
+        if len(depths) > 1:
+            raise ArchiveError(f"plan wave {wave} has multiple review depths")
+        depth = depths[0] if depths else "full"
+        if depth not in {"full", "deep", "verify-only"}:
+            raise ArchiveError(f"plan wave {wave} has an invalid review depth")
+        wave_depths[wave] = depth
     known_task_ids = [
         path.name.split("-", 1)[0] for path in canonical_task_files(archive / "tasks")
     ]
 
     artifacts = {}
-    for path, wave, cycle in canonical_wave_files(archive / "review"):
+    for path, wave, cycle, lens in canonical_wave_files(archive / "review"):
         lines = path.read_text(encoding="utf-8").splitlines()
         expected_heading = f"# Review — wave {wave}, cycle {cycle}"
         if lines.count(expected_heading) != 1:
@@ -1133,7 +1161,7 @@ def review_cycle_counts(archive: Path) -> Sequence[int]:
         verdict = completed_field(lines, "Wave verdict:", path.name)
         if verdict not in {"pass", "blocked"}:
             raise ArchiveError(f"{path.name} has an invalid wave verdict")
-        artifacts.setdefault(wave, {})[cycle] = path
+        artifacts.setdefault(wave, {}).setdefault(cycle, {})[lens] = path
     if sorted(artifacts) != wave_numbers:
         raise ArchiveError("review cycle waves do not match PLAN.md")
 
@@ -1142,20 +1170,42 @@ def review_cycle_counts(archive: Path) -> Sequence[int]:
         cycles = artifacts[wave]
         if sorted(cycles) != list(range(1, max(cycles) + 1)):
             raise ArchiveError(f"review cycles for wave {wave} are not contiguous")
+        wave_verdicts = {}
         task_verdicts = {}
-        for cycle, path in cycles.items():
-            task_verdicts[cycle] = validate_wave_review(path, known_task_ids)
-        last = cycles[max(cycles)]
-        verdict = completed_field(
-            last.read_text(encoding="utf-8").splitlines(),
-            "Wave verdict:",
-            last.name,
-        )
-        if verdict != "pass":
+        for cycle, reviews in cycles.items():
+            depth = wave_depths[wave]
+            if depth == "deep":
+                if set(reviews) != {"contract", "adversarial"}:
+                    raise ArchiveError(
+                        f"wave {wave} cycle {cycle} requires contract and adversarial "
+                        "reviews for PLAN depth deep"
+                    )
+                expected = tuple(
+                    (reviews[lens], depth, lens) for lens in ("contract", "adversarial")
+                )
+            else:
+                if set(reviews) != {None}:
+                    raise ArchiveError(
+                        f"wave {wave} cycle {cycle} requires one base review "
+                        f"for PLAN depth {depth}"
+                    )
+                expected = ((reviews[None], depth, None),)
+
+            wave_verdicts[cycle] = []
+            task_verdicts[cycle] = []
+            for path, depth, lens in expected:
+                lines = path.read_text(encoding="utf-8").splitlines()
+                wave_verdicts[cycle].append(completed_field(lines, "Wave verdict:", path.name))
+                task_verdicts[cycle].extend(
+                    validate_wave_review(path, known_task_ids, depth, lens)
+                )
+
+        last_cycle = max(cycles)
+        if any(verdict != "pass" for verdict in wave_verdicts[last_cycle]):
             raise ArchiveError(f"last review cycle for wave {wave} did not pass")
-        if any(task_verdict != "pass" for task_verdict in task_verdicts[max(cycles)]):
+        if any(task_verdict != "pass" for task_verdict in task_verdicts[last_cycle]):
             raise ArchiveError(f"last review cycle for wave {wave} has a failed task")
-        counts.append(max(cycles))
+        counts.append(last_cycle)
     return counts
 
 

@@ -135,8 +135,8 @@ cd /Users/jeremymcspadden/github/open-gsd/gsd-path
 npm test && python3 -m unittest discover -s tests -q
 ```
 
-**Result:** PASS — 36 Node + 107 Python (2026-08-05 run; the suites have
-since grown to 53 Node + 178 Python — see automated-test-inventory.md)
+**Result:** PASS — 36 Node + 107 Python (2026-08-05 run; see
+`automated-test-inventory.md` for the current suite inventory)
 
 ---
 
@@ -164,4 +164,4 @@ since grown to 53 Node + 178 Python — see automated-test-inventory.md)
 | Guards (Claude) | Use with checks | **OK to use** — deny/allow reproduced in test repo |
 | Guards (Codex/Cursor pre-tool-use) | Use with checks | unchanged — git hooks proven; pre-tool-use not wired |
 | Build orchestration | Prove first | unchanged — not run |
-| CI | Prove first | unchanged — no CI added |
+| CI | Prove first | **Automated** — `.github/workflows/ci.yml` now runs Node, Python, and resource-sync checks; this was not part of the 2026-08-05 manual run |

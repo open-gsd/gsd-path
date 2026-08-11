@@ -1,15 +1,15 @@
 # GSD Path — Automated Test & CI Inventory
 
-**Generated:** 2026-08-05; **counts updated 2026-08-11**  
-**Repo:** `open-gsd/gsd-path` @ local workspace  
-**Runs:** `npm test` → 53 tests; `python3 -m unittest discover -s tests` → 178 tests
+**Generated:** 2026-08-05; **inventory updated 2026-08-11**
+**Repo:** `open-gsd/gsd-path` @ local workspace
+**Suites:** `npm test`; `python3 -m unittest discover -s tests`
 
 ## CI
 
 | Item | Status |
 |------|--------|
-| `.github/workflows/` | **Absent** — no GitHub Actions (or other) CI in repo |
-| Pre-merge gate | **None in repo** — trust depends on local/ manual runs |
+| `.github/workflows/ci.yml` | **Present** — runs Node and Python suites plus resource synchronization on pushes and pull requests |
+| Pre-merge gate | **Configured in repo** through GitHub Actions |
 
 ## How to run
 
@@ -22,27 +22,24 @@ Node requires **≥18.17**. Python 3 with no extra deps for unittest modules.
 
 ## Suite inventory
 
-| File | Runner | Tests | Primary subject |
-|------|--------|-------|----------------|
-| `tests/install.test.mjs` | `node --test` | 50 | `scripts/install.mjs` — paths, all targets, dry-run, rollback, `--local`, `--update`, hooks + refresh |
-| `tests/package.test.mjs` | `node --test` | 3 | npm package manifest / packaging checks |
-| `tests/test_install.py` | unittest | 44 | `scripts/install.py` — Python installer (global install, dry-run, rollback, hooks) |
-| `tests/test_archive_milestone.py` | unittest | 62 | `scripts/archive_milestone.py` — prepare, preflight, validate, ship commit, carry-forward |
-| `tests/test_guard_hook.py` | unittest | 20 | `scripts/guard_hook.py` — archive deny, git commands, path normalization, subprocess E2E |
-| `tests/test_handoffs.py` | unittest | 17 | `scripts/check_handoffs.py` — research handoff + patch-findings validation |
-| `tests/test_task_briefs.py` | unittest | 14 | `scripts/check_task_briefs.py` — task-brief lint against the base tree |
-| `tests/test_git_guard.py` | unittest | 9 | `scripts/git_guard.py` — violations matrix, pre-commit/commit-msg E2E |
-| `tests/test_bootstrap_repository.py` | unittest | 8 | `scripts/bootstrap_repository.py` — new-GitHub journaled creation/resume |
-| `tests/test_discussion_records.py` | unittest | 8 | `scripts/discussion_records.py` — discuss dialogue/answers records |
-| `tests/test_check_update.py` | unittest | 5 | `scripts/check_update.py` — version compare, cache, notice |
-| `tests/test_sync_skill_resources.py` | unittest | 4 | `scripts/sync_skill_resources.py` — generated resources, explicit-only links, dispatch branches |
-| `tests/test_implicit_invocation.py` | unittest | 1 | Codex CLI — router absent from ordinary skill catalog (**skips if `codex` not on PATH**) |
+| File | Runner | Primary subject |
+|------|--------|----------------|
+| `tests/install.test.mjs` | `node --test` | `scripts/install.mjs` — paths, all targets, dry-run, rollback, `--local`, `--update`, hooks + refresh |
+| `tests/package.test.mjs` | `node --test` | npm package manifest / packaging checks |
+| `tests/test_install.py` | unittest | `scripts/install.py` — Python installer (global install, dry-run, rollback, hooks) |
+| `tests/test_archive_milestone.py` | unittest | `scripts/archive_milestone.py` — prepare, preflight, validate, ship commit, carry-forward |
+| `tests/test_guard_hook.py` | unittest | `scripts/guard_hook.py` — archive deny, git commands, path normalization, subprocess E2E |
+| `tests/test_handoffs.py` | unittest | `scripts/check_handoffs.py` — research handoff + patch-findings validation |
+| `tests/test_task_briefs.py` | unittest | `scripts/check_task_briefs.py` — task-brief lint against the base tree |
+| `tests/test_git_guard.py` | unittest | `scripts/git_guard.py` — violations matrix, pre-commit/commit-msg E2E |
+| `tests/test_bootstrap_repository.py` | unittest | `scripts/bootstrap_repository.py` — new-GitHub journaled creation/resume |
+| `tests/test_discussion_records.py` | unittest | `scripts/discussion_records.py` — discuss dialogue/answers records |
+| `tests/test_check_update.py` | unittest | `scripts/check_update.py` — version compare, cache, notice |
+| `tests/test_sync_skill_resources.py` | unittest | `scripts/sync_skill_resources.py` — generated resources, explicit-only links, dispatch branches |
+| `tests/test_implicit_invocation.py` | unittest | Codex CLI — router absent from ordinary skill catalog (**skips if `codex` not on PATH**) |
 
-Per-module counts include cases inherited from shared base classes, so they
-can sum above the 178 executed by a single full-suite discovery run.
-
-**Note:** `scripts/install.py` is covered by `tests/test_install.py` (44
-tests). The remaining parity gap is that `install.py` has no `--local` or
+**Note:** `scripts/install.py` is covered by `tests/test_install.py`. The
+remaining parity gap is that `install.py` has no `--local` or
 `--update` flags — those flows are Node-only.
 
 ## Coverage by trust dimension (journey order)
@@ -67,7 +64,6 @@ tests). The remaining parity gap is that `install.py` has no `--local` or
 - Per-host runtime dispatch (Cursor Task, Claude subagents, etc.) beyond install artifacts
 - `scripts/install.py` parity for `--local` / `--update` (Node-only flags; the rest of `install.py` is covered by `test_install.py`)
 - Non-Claude guard hook wiring (only Claude settings + git hooks tested via installer)
-- CI regression on push/PR
 - Networked `check_update` fetch (mocked in tests only)
 - OpenCode v2, Kiro, Kimi implicit-invocation behavior (installer notes warnings; no tests)
 

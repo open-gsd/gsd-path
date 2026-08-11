@@ -10,14 +10,14 @@
 
 | Dimension | Criteria with automation | Worst gap | Draft posture |
 |-----------|--------------------------|-----------|---------------|
-| 1 Install & update | 8 met, 1 partial, 2 unmet | No CI; `install.py` lacks `--local`/`--update`; npm unpublished | **Use with checks** |
+| 1 Install & update | 9 met, 1 partial, 1 unmet | `install.py` lacks `--local`/`--update`; npm unpublished | **Use with checks** |
 | 2 Invoke & route | 1 partial, 4 unmet | No STATE/router/recovery tests | **Prove first** |
 | 3 Phase execution | 2 met, 2 unmet | Handoffs only; no full phase SOP tests | **Prove first** |
 | 4 Build orchestration | 0 met, 3 unmet | No worktree/wave tests | **Prove first** |
 | 5 Guards | 6 met, 2 partial | Codex/Cursor pre-tool-use not auto-installed | **Use with checks** (Claude **OK** via tests) |
 | 6 Ship & archive | 5 met | — | **OK to use** (automation) |
 | 7 Host dispatch | 4 met static, 3 unverifiable live | Live spawn on Codex/Claude/Cursor | **Prove first** |
-| 8 Docs fidelity | 3 met, 2 partial | No automated doc audit runner | **Use with checks** |
+| 8 Docs fidelity | 4 met, 1 partial | No automated doc audit runner | **Use with checks** |
 | 9 Live dogfood | 0 met | No automation | **Prove first** (manual #9) |
 
 ## Evidence table (automated criteria)
@@ -32,9 +32,9 @@
 | Hooks install (scripts, Claude settings, git hooks) | Install & update | `install.test.mjs`, `test_install.py` | met | — | OK |
 | Hooks refresh paths | Install & update | `install.test.mjs` | met | — | OK |
 | `check_update.py` version compare + cache | Install & update | `test_check_update.py` | met | — | OK |
-| `scripts/install.py` matches Node `--local`/`--update` | Install & update | `tests/test_install.py` (44 tests); `install.py --help` has no `--local`/`--update` | partial | Medium | Use with checks |
+| `scripts/install.py` matches Node `--local`/`--update` | Install & update | `tests/test_install.py`; `install.py --help` has no `--local`/`--update` | partial | Medium | Use with checks |
 | `npx gsd-path` published on npm | Install & update | registry 404 | unmet | Medium | Prove first |
-| CI runs test suites on push/PR | Install & update | no `.github/workflows` | unmet | High | Prove first |
+| CI runs test suites on push/PR | Install & update | `.github/workflows/ci.yml` | met | — | OK |
 | Codex router absent from ordinary catalog | Invoke & route | `test_implicit_invocation.py` (skips w/o CLI) | partial | High | Prove first |
 | Router reads `STATE.md` v1 and routes phases | Invoke & route | none | unmet | High | Prove first |
 | `STATE.archive` recovery + validate | Invoke & route | none | unmet | High | Prove first |
@@ -52,7 +52,7 @@
 | Installer deploys Claude PreToolUse wiring | Guards | `install.test.mjs` | met | — | OK (Claude) |
 | HOOKS.md matches guard script behavior | Guards | code read + tests | met | — | OK |
 | Codex/Cursor pre-tool-use auto-installed | Guards | HOOKS.md; installer tests | partial | Medium | Use with checks |
-| `archive_milestone.py` prepare/preflight/validate | Ship & archive | `test_archive_milestone.py` (33) | met | — | OK |
+| `archive_milestone.py` prepare/preflight/validate | Ship & archive | `test_archive_milestone.py` | met | — | OK |
 | Ship commit `.project/` only + case-insensitive `ship:` | Ship & archive | `test_git_guard.py`, archive tests | met | — | OK |
 | Carry-forward + manifest integrity | Ship & archive | `test_archive_milestone.py` | met | — | OK |
 | Install stages `platforms/*/dispatch.md` for in-scope hosts | Host dispatch | installer tests | met | — | OK |
@@ -61,10 +61,10 @@
 | Live Codex collaboration child spawn | Host dispatch | none (static only) | unverifiable | High | Prove first |
 | Live Claude `Agent` child spawn | Host dispatch | none | unverifiable | High | Prove first |
 | Live Cursor `Task` + gsd-path subagent | Host dispatch | none | unverifiable | High | Prove first |
-| `sync --check` 82 resources byte-identical | Docs fidelity | command + `test_sync_skill_resources.py` | met | — | OK |
+| `sync --check` keeps declared resources byte-identical | Docs fidelity | command + `test_sync_skill_resources.py` | met | — | OK |
 | Phase skills self-contained links (explicit-only) | Docs fidelity | `test_sync_skill_resources.py` | met | — | OK |
 | Automated DOCS/README claim audit | Docs fidelity | none in CI | unmet | Medium | Use with checks |
-| README Agent table vs install table (Kimi row) | Docs fidelity | README.md (out-of-scope host) | partial | Low | OK |
+| FULL child-agent API table vs install table (Kimi row) | Docs fidelity | FULL.md | met | — | OK |
 | Full milestone on Cursor | Live dogfood | none | unverifiable | High | Prove first |
 | Dispatch smoke Codex + Claude | Live dogfood | none | unverifiable | High | Prove first |
 

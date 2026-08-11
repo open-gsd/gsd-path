@@ -319,6 +319,26 @@ test("local install via main uses project roots and skips legacy migration", asy
   assert.ok(!fs.existsSync(path.join(root, "legacy", "disabled-gsd-skills")));
 });
 
+test("codex dry run validates the resolved shared profile from the real repository", async () => {
+  const target = path.join(root, "real-codex", "skills");
+
+  const status = await installer.main(
+    [
+      "--codex",
+      "--codex-root",
+      target,
+      "--dry-run",
+      "--source-root",
+      REPO_ROOT,
+      "--no-color",
+    ],
+    env
+  );
+
+  assert.equal(status, 0);
+  assert.ok(!fs.existsSync(target));
+});
+
 test("codex and zed share one deployment and back up existing entries", async () => {
   const shared = path.join(root, "shared", "skills");
   const deployments = installer.deploymentPlans([
@@ -1227,4 +1247,37 @@ test("doctor cli exits zero when healthy and nonzero on problems", async () => {
   assert.equal(await installer.main(cli, env), 0);
   fs.rmSync(path.join(target, "gsd-path-plan"), { recursive: true });
   assert.equal(await installer.main(cli, env), 1);
+});
+
+test("doctor cli fails when a linked worktree hooks directory cannot be resolved", async () => {
+  const project = path.join(root, "unresolved-worktree");
+  const target = path.join(root, "uninstalled-claude", "skills");
+  fs.mkdirSync(path.join(project, installer.HOOKS_DIRECTORY), { recursive: true });
+  fs.writeFileSync(path.join(project, "AGENTS.md"), "agents\n");
+  fs.writeFileSync(path.join(project, "WORKFLOW.md"), "workflow\n");
+  fs.writeFileSync(path.join(project, ".git"), "gitdir: /unavailable\n");
+  for (const name of installer.GUARD_SCRIPTS) {
+    fs.copyFileSync(
+      path.join(source, "scripts", name),
+      path.join(project, installer.HOOKS_DIRECTORY, name)
+    );
+  }
+  installer.hooks.resolveGitHooksPath = () => null;
+
+  const status = await installer.main(
+    [
+      "--doctor",
+      "--claude",
+      "--claude-root",
+      target,
+      "--project",
+      project,
+      "--source-root",
+      source,
+      "--no-color",
+    ],
+    env
+  );
+
+  assert.equal(status, 1);
 });
