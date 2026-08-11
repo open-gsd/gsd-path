@@ -946,6 +946,200 @@ test("doctor validates pipeline state frontmatter", async () => {
   );
 });
 
+function git(...args) {
+  const result = spawnSync("git", args, { encoding: "utf8" });
+  assert.equal(result.status, 0, result.stderr);
+  return result.stdout;
+}
+
+test("hooks install into a core.hooksPath directory", async () => {
+  installer.hooks.detectPythonInterpreter = () => "python3";
+  const project = path.join(root, "hookspath-project");
+  fs.mkdirSync(project);
+  git("init", "-q", project);
+  git("-C", project, "config", "core.hooksPath", ".husky");
+  const target = path.join(root, "claude", "skills");
+  const results = await runInstall([installer.targetPlan("claude", target)], {
+    project,
+    hooks: true,
+  });
+  assert.equal(
+    fs.readFileSync(path.join(project, ".husky", "pre-commit"), "utf8"),
+    installer.PRE_COMMIT_HOOK
+  );
+  assert.equal(
+    fs.readFileSync(path.join(project, ".husky", "commit-msg"), "utf8"),
+    installer.COMMIT_MSG_HOOK
+  );
+  assert.ok(!fs.existsSync(path.join(project, ".git", "hooks", "pre-commit")));
+  const projectLine = results.find((line) => line.startsWith("project:"));
+  assert.match(projectLine, /\.husky\/pre-commit/);
+});
+
+test("hooks follow a linked worktree's resolved hooks directory", async () => {
+  installer.hooks.detectPythonInterpreter = () => "python3";
+  const main = path.join(root, "wt-main");
+  fs.mkdirSync(main);
+  git("init", "-q", main);
+  git(
+    "-C", main,
+    "-c", "user.email=t@test", "-c", "user.name=t",
+    "commit", "--allow-empty", "-m", "init", "-q"
+  );
+  const project = path.join(root, "wt-project");
+  git("-C", main, "worktree", "add", "--detach", "-q", project);
+  assert.ok(fs.statSync(path.join(project, ".git")).isFile());
+  const target = path.join(root, "claude", "skills");
+  await runInstall([installer.targetPlan("claude", target)], { project, hooks: true });
+  assert.equal(
+    fs.readFileSync(path.join(main, ".git", "hooks", "pre-commit"), "utf8"),
+    installer.PRE_COMMIT_HOOK
+  );
+  assert.equal(
+    fs.readFileSync(path.join(main, ".git", "hooks", "commit-msg"), "utf8"),
+    installer.COMMIT_MSG_HOOK
+  );
+});
+
+test("hooks report cleanly when a .git file cannot be resolved", async () => {
+  installer.hooks.detectPythonInterpreter = () => "python3";
+  installer.hooks.resolveGitHooksPath = () => null;
+  const project = path.join(root, "gitfile-project");
+  fs.mkdirSync(project);
+  fs.writeFileSync(path.join(project, ".git"), "gitdir: /nonexistent\n");
+  const target = path.join(root, "claude", "skills");
+  const results = await runInstall([installer.targetPlan("claude", target)], {
+    project,
+    hooks: true,
+  });
+  assert.ok(
+    results.some((line) => /could not resolve the git hooks directory/.test(line))
+  );
+  const projectLine = results.find((line) => line.startsWith("project:"));
+  assert.doesNotMatch(projectLine, /pre-commit/);
+  assert.ok(fs.existsSync(path.join(project, installer.HOOKS_DIRECTORY, "guard_hook.py")));
+  assert.ok(fs.existsSync(path.join(project, ".claude", "settings.json")));
+});
+
+test("hooks refresh full preserves user hook events and entries", async () => {
+  const project = path.join(root, "project");
+  fs.mkdirSync(path.join(project, ".git"), { recursive: true });
+  const target = path.join(root, "claude", "skills");
+  await runInstall([installer.targetPlan("claude", target)], { project, hooks: true });
+  const settingsPath = path.join(project, ".claude", "settings.json");
+  const settings = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
+  settings.hooks.PreToolUse[0].matcher = "old";
+  settings.hooks.PreToolUse.push({
+    matcher: "WebFetch",
+    hooks: [{ type: "command", command: "echo user" }],
+  });
+  settings.hooks.Stop = [{ hooks: [{ type: "command", command: "echo done" }] }];
+  fs.writeFileSync(settingsPath, JSON.stringify(settings) + "\n");
+  const status = await installer.main(
+    ["--hooks-refresh-full", "--project", project, "--source-root", source, "--no-color"]
+  );
+  assert.equal(status, 0);
+  const refreshed = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
+  assert.deepEqual(refreshed.hooks.Stop, [
+    { hooks: [{ type: "command", command: "echo done" }] },
+  ]);
+  assert.equal(refreshed.hooks.PreToolUse.length, 2);
+  assert.equal(refreshed.hooks.PreToolUse[0].matcher, installer.CLAUDE_MATCHER);
+  assert.deepEqual(refreshed.hooks.PreToolUse[1], {
+    matcher: "WebFetch",
+    hooks: [{ type: "command", command: "echo user" }],
+  });
+});
+
+test("emitted hooks use the probed interpreter token", async () => {
+  installer.hooks.detectPythonInterpreter = () => "pythonX";
+  const project = path.join(root, "project");
+  fs.mkdirSync(path.join(project, ".git"), { recursive: true });
+  const target = path.join(root, "claude", "skills");
+  await runInstall([installer.targetPlan("claude", target)], { project, hooks: true });
+  const preCommit = fs.readFileSync(
+    path.join(project, ".git", "hooks", "pre-commit"),
+    "utf8"
+  );
+  assert.match(preCommit, /exec pythonX "/);
+  const settings = JSON.parse(
+    fs.readFileSync(path.join(project, ".claude", "settings.json"), "utf8")
+  );
+  assert.ok(
+    settings.hooks.PreToolUse[0].hooks[0].command.startsWith('pythonX "')
+  );
+});
+
+test("hook install is skipped with a note when no interpreter works", async () => {
+  installer.hooks.detectPythonInterpreter = () => null;
+  const project = path.join(root, "project");
+  fs.mkdirSync(path.join(project, ".git"), { recursive: true });
+  const target = path.join(root, "claude", "skills");
+  const results = await runInstall([installer.targetPlan("claude", target)], {
+    project,
+    hooks: true,
+  });
+  assert.ok(results.some((line) => /no working python3 or python interpreter/.test(line)));
+  assert.ok(!fs.existsSync(path.join(project, installer.HOOKS_DIRECTORY)));
+  assert.ok(!fs.existsSync(path.join(project, ".claude", "settings.json")));
+  assert.ok(!fs.existsSync(path.join(project, ".git", "hooks", "pre-commit")));
+  assert.ok(fs.existsSync(path.join(project, "AGENTS.md")));
+});
+
+test("doctor fails when expected git hooks are missing from the effective dir", async () => {
+  const project = path.join(root, "project");
+  fs.mkdirSync(path.join(project, ".git"), { recursive: true });
+  const target = path.join(root, "claude", "skills");
+  await runInstall([installer.targetPlan("claude", target)], { project, hooks: true });
+  fs.rmSync(path.join(project, ".git", "hooks", "pre-commit"));
+  const findings = installer.doctor(source, {
+    targets: ["claude"],
+    rootFor: () => target,
+    project,
+  });
+  assert.ok(
+    findings.some(
+      (finding) =>
+        finding.level === "fail" &&
+        /pre-commit is missing from the effective git hooks directory/.test(finding.text)
+    )
+  );
+});
+
+test("doctor checks hooks at the core.hooksPath directory", async () => {
+  installer.hooks.detectPythonInterpreter = () => "python3";
+  const project = path.join(root, "hookspath-doctor");
+  fs.mkdirSync(project);
+  git("init", "-q", project);
+  git("-C", project, "config", "core.hooksPath", ".husky");
+  const target = path.join(root, "claude", "skills");
+  await runInstall([installer.targetPlan("claude", target)], { project, hooks: true });
+  let findings = installer.doctor(source, {
+    targets: ["claude"],
+    rootFor: () => target,
+    project,
+  });
+  assert.ok(!findings.some((finding) => finding.level === "fail"));
+  assert.ok(findings.some((finding) => /\.husky\/pre-commit wired/.test(finding.text)));
+
+  fs.rmSync(path.join(project, ".husky", "pre-commit"));
+  findings = installer.doctor(source, {
+    targets: ["claude"],
+    rootFor: () => target,
+    project,
+  });
+  assert.ok(
+    findings.some(
+      (finding) => finding.level === "fail" && /pre-commit is missing/.test(finding.text)
+    )
+  );
+  assert.ok(
+    findings.some(
+      (finding) => finding.level === "warn" && /core\.hooksPath/.test(finding.text)
+    )
+  );
+});
+
 test("doctor cli exits zero when healthy and nonzero on problems", async () => {
   const target = path.join(root, "claude", "skills");
   await runInstall([installer.targetPlan("claude", target)]);
