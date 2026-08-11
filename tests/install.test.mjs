@@ -171,42 +171,82 @@ test("local root resolution", () => {
   assert.throws(() => installer.localRoot("bogus", project));
 });
 
+function stagedSkillDirectories(staged) {
+  return fs
+    .readdirSync(staged, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort();
+}
+
 test("all platform transforms", () => {
   for (const target of [...installer.TARGETS, installer.SHARED_AGENT_PROFILE]) {
     const staged = path.join(root, `staged-${target}`);
     fs.mkdirSync(staged);
     installer.stageTarget(source, target, staged);
-    const content = fs.readFileSync(path.join(staged, "gsd-path", "SKILL.md"), "utf8");
-    const dispatch = fs.readFileSync(path.join(staged, "gsd-path", "references", "dispatch.md"), "utf8");
-    const agentsKept = fs.existsSync(path.join(staged, "gsd-path", "agents", "openai.yaml"));
-    if (target === "codex") {
-      assert.match(content, /\$gsd-path/);
-      assert.doesNotMatch(content, /disable-model-invocation/);
-      assert.match(dispatch, /codex dispatch for \$gsd-path/);
-      assert.ok(agentsKept);
-    } else if (target === "opencode") {
-      assert.match(content, /Run gsd-path, gsd-path-build, and gsd-path-discuss/);
-      assert.doesNotMatch(content, /[$/]gsd-path/);
-      assert.match(dispatch, /opencode dispatch for gsd-path/);
-      assert.ok(!agentsKept);
-    } else if (target === installer.SHARED_AGENT_PROFILE) {
-      assert.match(content, /Run gsd-path, gsd-path-build, and gsd-path-discuss/);
-      assert.doesNotMatch(content, /[$/]gsd-path/);
-      assert.match(dispatch, /shared dispatch for gsd-path/);
-      assert.ok(agentsKept);
-    } else {
-      assert.match(content, /\/gsd-path/);
-      assert.doesNotMatch(content, /\$gsd-path/);
-      assert.match(dispatch, new RegExp(`${target} dispatch for /gsd-path`));
-      assert.ok(!agentsKept);
+    const stagedSkills = stagedSkillDirectories(staged);
+    assert.deepEqual(stagedSkills, [...installer.SKILL_NAMES].sort(), target);
+    for (const name of stagedSkills) {
+      const label = `${target}/${name}`;
+      const content = fs.readFileSync(path.join(staged, name, "SKILL.md"), "utf8");
+      const dispatchPath = path.join(staged, name, "references", "dispatch.md");
+      assert.ok(fs.existsSync(dispatchPath), label);
+      const dispatch = fs.readFileSync(dispatchPath, "utf8");
+      const agentsKept = fs.existsSync(path.join(staged, name, "agents", "openai.yaml"));
+      if (target === "codex") {
+        assert.match(content, /\$gsd-path/, label);
+        assert.doesNotMatch(content, /disable-model-invocation/, label);
+        assert.match(dispatch, /codex dispatch for \$gsd-path/, label);
+        assert.ok(agentsKept, label);
+      } else if (target === "opencode") {
+        assert.match(content, /Run gsd-path, gsd-path-build, and gsd-path-discuss/, label);
+        assert.doesNotMatch(content, /[$/]gsd-path/, label);
+        assert.match(dispatch, /opencode dispatch for gsd-path/, label);
+        assert.ok(!agentsKept, label);
+      } else if (target === installer.SHARED_AGENT_PROFILE) {
+        assert.match(content, /Run gsd-path, gsd-path-build, and gsd-path-discuss/, label);
+        assert.doesNotMatch(content, /[$/]gsd-path/, label);
+        assert.match(dispatch, /shared dispatch for gsd-path/, label);
+        assert.ok(agentsKept, label);
+      } else {
+        assert.match(content, /\/gsd-path/, label);
+        assert.doesNotMatch(content, /\$gsd-path/, label);
+        assert.match(dispatch, new RegExp(`${target} dispatch for /gsd-path`), label);
+        assert.ok(!agentsKept, label);
+      }
+      if (installer.EXPLICIT_ONLY_TARGETS.has(target)) {
+        assert.match(content, /disable-model-invocation: true/, label);
+      }
+      if (target === "opencode" || target === installer.SHARED_AGENT_PROFILE) {
+        assert.match(content, /opencode\/autoinvoke: "false"/, label);
+        assert.match(content, /opencode\/slash: "true"/, label);
+      }
     }
-    if (installer.EXPLICIT_ONLY_TARGETS.has(target)) {
-      assert.match(content, /disable-model-invocation: true/);
+  }
+});
+
+test("staging from the real repo applies the real platform adapter to every skill", () => {
+  const cases = [
+    ["claude", path.join(REPO_ROOT, "platforms", "claude", "dispatch.md"), "/gsd-path"],
+    [
+      installer.SHARED_AGENT_PROFILE,
+      path.join(REPO_ROOT, "platforms", installer.SHARED_AGENT_PROFILE, "dispatch.md"),
+      "gsd-path",
+    ],
+  ];
+  for (const [target, adapterPath, invocation] of cases) {
+    const staged = path.join(root, `staged-real-${target}`);
+    fs.mkdirSync(staged);
+    installer.stageTarget(REPO_ROOT, target, staged);
+    const expected = fs.readFileSync(adapterPath, "utf8").replaceAll("$gsd-path", invocation);
+    let checked = 0;
+    for (const name of stagedSkillDirectories(staged)) {
+      const dispatch = path.join(staged, name, "references", "dispatch.md");
+      if (!fs.existsSync(dispatch)) continue;
+      checked += 1;
+      assert.equal(fs.readFileSync(dispatch, "utf8"), expected, `${target}/${name}`);
     }
-    if (target === "opencode" || target === installer.SHARED_AGENT_PROFILE) {
-      assert.match(content, /opencode\/autoinvoke: "false"/);
-      assert.match(content, /opencode\/slash: "true"/);
-    }
+    assert.ok(checked >= 2, `expected multiple dispatch-bearing skills, saw ${checked}`);
   }
 });
 

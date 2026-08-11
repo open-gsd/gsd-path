@@ -222,58 +222,101 @@ class InstallerTests(unittest.TestCase):
             self.assertTrue(skill.is_file())
             self.assertIn(f"name: {canonical}", skill.read_text(encoding="utf-8"))
 
+    @staticmethod
+    def staged_skill_directories(staged):
+        return sorted(entry.name for entry in staged.iterdir() if entry.is_dir())
+
     def test_all_platform_transforms(self):
         for target in install.TARGETS:
             with self.subTest(target=target):
                 staged = self.root / f"staged-{target}"
                 staged.mkdir()
                 install.stage_target(self.source, target, staged)
-                skill = staged / "gsd-path" / "SKILL.md"
-                content = skill.read_text(encoding="utf-8")
-                dispatch = (staged / "gsd-path" / "references" / "dispatch.md").read_text(
-                    encoding="utf-8"
-                )
-                if target == "codex":
-                    self.assertIn("$gsd-path", content)
-                    self.assertNotIn("disable-model-invocation", content)
-                    self.assertIn("codex dispatch for $gsd-path", dispatch)
-                    self.assertTrue((staged / "gsd-path" / "agents" / "openai.yaml").is_file())
-                elif target == "opencode":
-                    self.assertIn(
-                        "Run gsd-path, gsd-path-build, and gsd-path-discuss", content
-                    )
-                    self.assertNotIn("$gsd-path", content)
-                    self.assertNotIn("/gsd-path", content)
-                    self.assertIn("opencode dispatch for gsd-path", dispatch)
-                    self.assertFalse((staged / "gsd-path" / "agents").exists())
-                else:
-                    self.assertIn("/gsd-path", content)
-                    self.assertNotIn("$gsd-path", content)
-                    self.assertIn(f"{target} dispatch for /gsd-path", dispatch)
-                    self.assertFalse((staged / "gsd-path" / "agents").exists())
-                if target in install.EXPLICIT_ONLY_TARGETS:
-                    self.assertIn("disable-model-invocation: true", content)
-                if target == "opencode":
-                    self.assertIn('opencode/autoinvoke: "false"', content)
-                    self.assertIn('opencode/slash: "true"', content)
+                staged_skills = self.staged_skill_directories(staged)
+                self.assertEqual(sorted(install.SKILL_NAMES), staged_skills)
+                for name in staged_skills:
+                    skill = staged / name / "SKILL.md"
+                    content = skill.read_text(encoding="utf-8")
+                    dispatch_path = staged / name / "references" / "dispatch.md"
+                    self.assertTrue(dispatch_path.is_file(), name)
+                    dispatch = dispatch_path.read_text(encoding="utf-8")
+                    if target == "codex":
+                        self.assertIn("$gsd-path", content, name)
+                        self.assertNotIn("disable-model-invocation", content, name)
+                        self.assertIn("codex dispatch for $gsd-path", dispatch, name)
+                        self.assertTrue(
+                            (staged / name / "agents" / "openai.yaml").is_file(), name
+                        )
+                    elif target == "opencode":
+                        self.assertIn(
+                            "Run gsd-path, gsd-path-build, and gsd-path-discuss",
+                            content,
+                            name,
+                        )
+                        self.assertNotIn("$gsd-path", content, name)
+                        self.assertNotIn("/gsd-path", content, name)
+                        self.assertIn("opencode dispatch for gsd-path", dispatch, name)
+                        self.assertFalse((staged / name / "agents").exists(), name)
+                    else:
+                        self.assertIn("/gsd-path", content, name)
+                        self.assertNotIn("$gsd-path", content, name)
+                        self.assertIn(f"{target} dispatch for /gsd-path", dispatch, name)
+                        self.assertFalse((staged / name / "agents").exists(), name)
+                    if target in install.EXPLICIT_ONLY_TARGETS:
+                        self.assertIn("disable-model-invocation: true", content, name)
+                    if target == "opencode":
+                        self.assertIn('opencode/autoinvoke: "false"', content, name)
+                        self.assertIn('opencode/slash: "true"', content, name)
 
         staged = self.root / "staged-shared"
         staged.mkdir()
         install.stage_target(self.source, install.SHARED_AGENT_PROFILE, staged)
-        content = (staged / "gsd-path" / "SKILL.md").read_text(encoding="utf-8")
-        dispatch = (
-            staged / "gsd-path" / "references" / "dispatch.md"
-        ).read_text(encoding="utf-8")
-        self.assertIn(
-            "Run gsd-path, gsd-path-build, and gsd-path-discuss", content
+        staged_skills = self.staged_skill_directories(staged)
+        self.assertEqual(sorted(install.SKILL_NAMES), staged_skills)
+        for name in staged_skills:
+            content = (staged / name / "SKILL.md").read_text(encoding="utf-8")
+            dispatch_path = staged / name / "references" / "dispatch.md"
+            self.assertTrue(dispatch_path.is_file(), name)
+            dispatch = dispatch_path.read_text(encoding="utf-8")
+            self.assertIn(
+                "Run gsd-path, gsd-path-build, and gsd-path-discuss", content, name
+            )
+            self.assertNotIn("$gsd-path", content, name)
+            self.assertNotIn("/gsd-path", content, name)
+            self.assertIn("disable-model-invocation: true", content, name)
+            self.assertIn('opencode/autoinvoke: "false"', content, name)
+            self.assertIn('opencode/slash: "true"', content, name)
+            self.assertIn("shared dispatch for gsd-path", dispatch, name)
+            self.assertTrue((staged / name / "agents" / "openai.yaml").is_file(), name)
+
+    def test_real_repo_staging_applies_real_adapter_to_every_skill(self):
+        repo = Path(install.__file__).resolve().parents[1]
+        cases = (
+            ("claude", "claude", "/gsd-path"),
+            (install.SHARED_AGENT_PROFILE, install.SHARED_AGENT_PROFILE, "gsd-path"),
         )
-        self.assertNotIn("$gsd-path", content)
-        self.assertNotIn("/gsd-path", content)
-        self.assertIn("disable-model-invocation: true", content)
-        self.assertIn('opencode/autoinvoke: "false"', content)
-        self.assertIn('opencode/slash: "true"', content)
-        self.assertIn("shared dispatch for gsd-path", dispatch)
-        self.assertTrue((staged / "gsd-path" / "agents" / "openai.yaml").is_file())
+        for target, adapter_directory, invocation in cases:
+            with self.subTest(target=target):
+                staged = self.root / f"staged-real-{target}"
+                staged.mkdir()
+                install.stage_target(repo, target, staged)
+                expected = (
+                    (repo / "platforms" / adapter_directory / "dispatch.md")
+                    .read_text(encoding="utf-8")
+                    .replace("$gsd-path", invocation)
+                )
+                checked = 0
+                for name in self.staged_skill_directories(staged):
+                    dispatch = staged / name / "references" / "dispatch.md"
+                    if not dispatch.exists():
+                        continue
+                    checked += 1
+                    self.assertEqual(
+                        expected, dispatch.read_text(encoding="utf-8"), name
+                    )
+                self.assertGreaterEqual(
+                    checked, 2, "expected multiple dispatch-bearing skills"
+                )
 
     def test_stage_target_stamps_version_from_package_manifest(self):
         staged = self.root / "staged-unstamped"
