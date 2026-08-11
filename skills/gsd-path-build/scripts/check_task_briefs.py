@@ -67,6 +67,10 @@ def _base_exists(repo: Path, base: str, path: str) -> bool:
     return _run_git(repo, "cat-file", "-e", f"{base}:{path}").returncode == 0
 
 
+def _unquote(value: str) -> str:
+    return value.strip().strip("\"'")
+
+
 def _frontmatter(text: str) -> Tuple[Optional[Dict[str, object]], Optional[str]]:
     lines = text.splitlines()
     if not lines or lines[0] != "---":
@@ -85,14 +89,14 @@ def _frontmatter(text: str) -> Tuple[Optional[Dict[str, object]], Optional[str]]
             if inline is not None:
                 body = inline.group("body").strip()
                 fields[key] = [
-                    item.strip().strip("\"'")
+                    _unquote(item)
                     for item in body.split(",")
                     if item.strip()
                 ]
                 index += 1
                 continue
             if value:
-                fields[key] = value.strip("\"'")
+                fields[key] = _unquote(value)
                 index += 1
                 continue
             items: List[str] = []
@@ -101,7 +105,7 @@ def _frontmatter(text: str) -> Tuple[Optional[Dict[str, object]], Optional[str]]
                 item = LIST_ITEM_PATTERN.match(lines[cursor])
                 if not item:
                     break
-                items.append(item.group("value").strip().strip("\"'"))
+                items.append(_unquote(item.group("value")))
                 cursor += 1
             fields[key] = items
             index = cursor

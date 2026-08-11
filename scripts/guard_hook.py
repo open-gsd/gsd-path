@@ -89,15 +89,7 @@ COMMAND_RULES = (
         "git branch -D destroys task branches the recovery protocol inspects",
     ),
     (
-        re.compile(rf"\b(?i:rm|rmdir|mv)\b{SEGMENT}{ARCHIVE_PATH}"),
-        ARCHIVE_REASON,
-    ),
-    (
-        re.compile(rf"\b(?i:cp)\b{SEGMENT}{ARCHIVE_PATH}"),
-        ARCHIVE_REASON,
-    ),
-    (
-        re.compile(rf"\b(?i:tee)\b{SEGMENT}{ARCHIVE_PATH}"),
+        re.compile(rf"\b(?i:rm|rmdir|mv|cp|tee)\b{SEGMENT}{ARCHIVE_PATH}"),
         ARCHIVE_REASON,
     ),
     (

@@ -728,8 +728,8 @@ test("hooks install guard scripts, settings, and git hook", async () => {
   assert.equal(settings.hooks.PreToolUse[0].matcher, installer.CLAUDE_MATCHER);
   const preCommit = path.join(project, ".git", "hooks", "pre-commit");
   const commitMsg = path.join(project, ".git", "hooks", "commit-msg");
-  assert.equal(fs.readFileSync(preCommit, "utf8"), installer.PRE_COMMIT_HOOK);
-  assert.equal(fs.readFileSync(commitMsg, "utf8"), installer.COMMIT_MSG_HOOK);
+  assert.equal(fs.readFileSync(preCommit, "utf8"), installer.preCommitHook("python3"));
+  assert.equal(fs.readFileSync(commitMsg, "utf8"), installer.commitMsgHook("python3"));
   if (process.platform !== "win32") {
     assert.ok(fs.statSync(commitMsg).mode & 0o100);
   }
@@ -841,7 +841,7 @@ test("hooks refresh full recreates missing git hooks and fixes modes", async () 
     ["--hooks-refresh-full", "--project", project, "--source-root", source, "--no-color"]
   );
   assert.equal(status, 0);
-  assert.equal(fs.readFileSync(preCommit, "utf8"), installer.PRE_COMMIT_HOOK);
+  assert.equal(fs.readFileSync(preCommit, "utf8"), installer.preCommitHook("python3"));
   if (process.platform !== "win32") {
     assert.ok(fs.statSync(preCommit).mode & 0o100);
     assert.ok(fs.statSync(commitMsg).mode & 0o100);
@@ -1005,11 +1005,11 @@ test("hooks install into a core.hooksPath directory", async () => {
   });
   assert.equal(
     fs.readFileSync(path.join(project, ".husky", "pre-commit"), "utf8"),
-    installer.PRE_COMMIT_HOOK
+    installer.preCommitHook("python3")
   );
   assert.equal(
     fs.readFileSync(path.join(project, ".husky", "commit-msg"), "utf8"),
-    installer.COMMIT_MSG_HOOK
+    installer.commitMsgHook("python3")
   );
   assert.ok(!fs.existsSync(path.join(project, ".git", "hooks", "pre-commit")));
   const projectLine = results.find((line) => line.startsWith("project:"));
@@ -1033,11 +1033,11 @@ test("hooks follow a linked worktree's resolved hooks directory", async () => {
   await runInstall([installer.targetPlan("claude", target)], { project, hooks: true });
   assert.equal(
     fs.readFileSync(path.join(main, ".git", "hooks", "pre-commit"), "utf8"),
-    installer.PRE_COMMIT_HOOK
+    installer.preCommitHook("python3")
   );
   assert.equal(
     fs.readFileSync(path.join(main, ".git", "hooks", "commit-msg"), "utf8"),
-    installer.COMMIT_MSG_HOOK
+    installer.commitMsgHook("python3")
   );
 });
 
@@ -1124,6 +1124,46 @@ test("hook install is skipped with a note when no interpreter works", async () =
   assert.ok(!fs.existsSync(path.join(project, ".claude", "settings.json")));
   assert.ok(!fs.existsSync(path.join(project, ".git", "hooks", "pre-commit")));
   assert.ok(fs.existsSync(path.join(project, "AGENTS.md")));
+});
+
+test("hooks refresh full skips settings and git hooks without an interpreter", async () => {
+  const project = path.join(root, "project");
+  fs.mkdirSync(path.join(project, ".git"), { recursive: true });
+  const target = path.join(root, "claude", "skills");
+  await runInstall([installer.targetPlan("claude", target)], { project, hooks: true });
+  const settingsPath = path.join(project, ".claude", "settings.json");
+  const settingsBefore = fs.readFileSync(settingsPath, "utf8");
+  const preCommit = path.join(project, ".git", "hooks", "pre-commit");
+  const hookBefore = fs.readFileSync(preCommit, "utf8");
+  fs.writeFileSync(
+    path.join(source, "scripts", "guard_hook.py"),
+    "# guard v2\n" + installer.GUARD_MARKER + "\n"
+  );
+  installer.hooks.detectPythonInterpreter = () => null;
+  const status = await installer.main(
+    ["--hooks-refresh-full", "--project", project, "--source-root", source, "--no-color"]
+  );
+  assert.equal(status, 0);
+  assert.match(
+    fs.readFileSync(path.join(project, installer.HOOKS_DIRECTORY, "guard_hook.py"), "utf8"),
+    /guard v2/
+  );
+  assert.equal(fs.readFileSync(settingsPath, "utf8"), settingsBefore);
+  assert.equal(fs.readFileSync(preCommit, "utf8"), hookBefore);
+});
+
+test("hooks refresh dry run never probes the interpreter", async () => {
+  const project = path.join(root, "project");
+  fs.mkdirSync(path.join(project, ".git"), { recursive: true });
+  const target = path.join(root, "claude", "skills");
+  await runInstall([installer.targetPlan("claude", target)], { project, hooks: true });
+  installer.hooks.detectPythonInterpreter = () => {
+    throw new Error("dry-run refresh must not probe the interpreter");
+  };
+  const status = await installer.main(
+    ["--hooks-refresh-full", "--dry-run", "--project", project, "--source-root", source, "--no-color"]
+  );
+  assert.equal(status, 0);
 });
 
 test("doctor fails when expected git hooks are missing from the effective dir", async () => {

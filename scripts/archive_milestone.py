@@ -12,7 +12,7 @@ import sys
 from contextlib import contextmanager
 from datetime import date
 from pathlib import Path, PurePosixPath
-from typing import Iterator, Optional, Sequence
+from typing import Iterator, NamedTuple, Optional, Sequence
 
 if sys.platform == "win32":
     import msvcrt
@@ -440,7 +440,13 @@ def canonical_task_files(tasks: Path) -> Sequence[Path]:
     return candidates
 
 
-def canonical_wave_files(reviews: Path) -> Sequence[Path]:
+class WaveArtifact(NamedTuple):
+    path: Path
+    wave: int
+    cycle: int
+
+
+def canonical_wave_files(reviews: Path) -> Sequence[WaveArtifact]:
     if reviews.is_symlink() or not reviews.is_dir():
         return ()
     candidates = sorted(path for path in reviews.iterdir() if path.name.startswith("wave-"))
@@ -452,7 +458,11 @@ def canonical_wave_files(reviews: Path) -> Sequence[Path]:
         )
     # Deep-review lens files supplement a wave review; only the base
     # wave-N.cycleC.md files are the canonical cycle artifacts.
-    return [path for path, match in matches if match.group(3) is None]
+    return [
+        WaveArtifact(path, int(match.group(1)), int(match.group(2)))
+        for path, match in matches
+        if match.group(3) is None
+    ]
 
 
 def require_canonical_transaction_inputs(active_root: Path, archive: Path) -> None:
@@ -1112,10 +1122,7 @@ def review_cycle_counts(archive: Path) -> Sequence[int]:
     ]
 
     artifacts = {}
-    for path in canonical_wave_files(archive / "review"):
-        match = WAVE_FILE_PATTERN.fullmatch(path.name)
-        assert match is not None
-        wave, cycle = int(match.group(1)), int(match.group(2))
+    for path, wave, cycle in canonical_wave_files(archive / "review"):
         lines = path.read_text(encoding="utf-8").splitlines()
         expected_heading = f"# Review — wave {wave}, cycle {cycle}"
         if lines.count(expected_heading) != 1:

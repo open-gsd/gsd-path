@@ -227,7 +227,7 @@ class InstallerTests(unittest.TestCase):
         return sorted(entry.name for entry in staged.iterdir() if entry.is_dir())
 
     def test_all_platform_transforms(self):
-        for target in install.TARGETS:
+        for target in (*install.TARGETS, install.SHARED_AGENT_PROFILE):
             with self.subTest(target=target):
                 staged = self.root / f"staged-{target}"
                 staged.mkdir()
@@ -257,6 +257,18 @@ class InstallerTests(unittest.TestCase):
                         self.assertNotIn("/gsd-path", content, name)
                         self.assertIn("opencode dispatch for gsd-path", dispatch, name)
                         self.assertFalse((staged / name / "agents").exists(), name)
+                    elif target == install.SHARED_AGENT_PROFILE:
+                        self.assertIn(
+                            "Run gsd-path, gsd-path-build, and gsd-path-discuss",
+                            content,
+                            name,
+                        )
+                        self.assertNotIn("$gsd-path", content, name)
+                        self.assertNotIn("/gsd-path", content, name)
+                        self.assertIn("shared dispatch for gsd-path", dispatch, name)
+                        self.assertTrue(
+                            (staged / name / "agents" / "openai.yaml").is_file(), name
+                        )
                     else:
                         self.assertIn("/gsd-path", content, name)
                         self.assertNotIn("$gsd-path", content, name)
@@ -264,30 +276,9 @@ class InstallerTests(unittest.TestCase):
                         self.assertFalse((staged / name / "agents").exists(), name)
                     if target in install.EXPLICIT_ONLY_TARGETS:
                         self.assertIn("disable-model-invocation: true", content, name)
-                    if target == "opencode":
+                    if target in ("opencode", install.SHARED_AGENT_PROFILE):
                         self.assertIn('opencode/autoinvoke: "false"', content, name)
                         self.assertIn('opencode/slash: "true"', content, name)
-
-        staged = self.root / "staged-shared"
-        staged.mkdir()
-        install.stage_target(self.source, install.SHARED_AGENT_PROFILE, staged)
-        staged_skills = self.staged_skill_directories(staged)
-        self.assertEqual(sorted(install.SKILL_NAMES), staged_skills)
-        for name in staged_skills:
-            content = (staged / name / "SKILL.md").read_text(encoding="utf-8")
-            dispatch_path = staged / name / "references" / "dispatch.md"
-            self.assertTrue(dispatch_path.is_file(), name)
-            dispatch = dispatch_path.read_text(encoding="utf-8")
-            self.assertIn(
-                "Run gsd-path, gsd-path-build, and gsd-path-discuss", content, name
-            )
-            self.assertNotIn("$gsd-path", content, name)
-            self.assertNotIn("/gsd-path", content, name)
-            self.assertIn("disable-model-invocation: true", content, name)
-            self.assertIn('opencode/autoinvoke: "false"', content, name)
-            self.assertIn('opencode/slash: "true"', content, name)
-            self.assertIn("shared dispatch for gsd-path", dispatch, name)
-            self.assertTrue((staged / name / "agents" / "openai.yaml").is_file(), name)
 
     def test_real_repo_staging_applies_real_adapter_to_every_skill(self):
         repo = Path(install.__file__).resolve().parents[1]
@@ -951,8 +942,8 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(settings["hooks"]["PreToolUse"][0]["matcher"], install.CLAUDE_MATCHER)
         pre_commit = project / ".git" / "hooks" / "pre-commit"
         commit_msg = project / ".git" / "hooks" / "commit-msg"
-        self.assertEqual(install.PRE_COMMIT_HOOK, pre_commit.read_text(encoding="utf-8"))
-        self.assertEqual(install.COMMIT_MSG_HOOK, commit_msg.read_text(encoding="utf-8"))
+        self.assertEqual(install.pre_commit_hook("python3"), pre_commit.read_text(encoding="utf-8"))
+        self.assertEqual(install.commit_msg_hook("python3"), commit_msg.read_text(encoding="utf-8"))
         self.assertTrue(os.access(commit_msg, os.X_OK))
         self.assertIn(".gsd-path/guard_hook.py", output)
         self.assertIn(".git/hooks/pre-commit", output)
@@ -1093,7 +1084,7 @@ class InstallerTests(unittest.TestCase):
         status, _, error = self.run_main(self.refresh_full_arguments(project))
         self.assertEqual(0, status, error)
         self.assertEqual(
-            install.PRE_COMMIT_HOOK, pre_commit.read_text(encoding="utf-8")
+            install.pre_commit_hook("python3"), pre_commit.read_text(encoding="utf-8")
         )
         self.assertTrue(os.access(pre_commit, os.X_OK))
         self.assertTrue(os.access(commit_msg, os.X_OK))
@@ -1133,11 +1124,11 @@ class InstallerTests(unittest.TestCase):
             )
         self.assertEqual(0, status, error)
         self.assertEqual(
-            install.PRE_COMMIT_HOOK,
+            install.pre_commit_hook("python3"),
             (project / ".husky" / "pre-commit").read_text(encoding="utf-8"),
         )
         self.assertEqual(
-            install.COMMIT_MSG_HOOK,
+            install.commit_msg_hook("python3"),
             (project / ".husky" / "commit-msg").read_text(encoding="utf-8"),
         )
         self.assertFalse((project / ".git" / "hooks" / "pre-commit").exists())
@@ -1226,6 +1217,50 @@ class InstallerTests(unittest.TestCase):
         self.assertFalse((project / ".claude" / "settings.json").exists())
         self.assertFalse((project / ".git" / "hooks" / "pre-commit").exists())
         self.assertTrue((project / "AGENTS.md").is_file())
+
+    def test_hooks_refresh_full_skips_without_interpreter(self):
+        project = self.root / "project"
+        (project / ".git").mkdir(parents=True)
+        target = self.root / "claude" / "skills"
+        self.run_main(self.hooks_arguments(project, target))
+        settings_path = project / ".claude" / "settings.json"
+        settings_before = settings_path.read_text(encoding="utf-8")
+        pre_commit = project / ".git" / "hooks" / "pre-commit"
+        hook_before = pre_commit.read_text(encoding="utf-8")
+        (self.source / "scripts" / "guard_hook.py").write_text(
+            f"# guard v2\n{install.GUARD_MARKER}\n", encoding="utf-8"
+        )
+        with mock.patch.object(
+            install, "_detect_python_interpreter", return_value=None
+        ):
+            status, output, error = self.run_main(
+                self.refresh_full_arguments(project)
+            )
+        self.assertEqual(0, status, error)
+        self.assertIn(
+            "guard v2",
+            (project / install.HOOKS_DIRECTORY / "guard_hook.py").read_text(
+                encoding="utf-8"
+            ),
+        )
+        self.assertIn("no working python3 or python interpreter", output)
+        self.assertEqual(settings_before, settings_path.read_text(encoding="utf-8"))
+        self.assertEqual(hook_before, pre_commit.read_text(encoding="utf-8"))
+
+    def test_hooks_refresh_dry_run_never_probes_interpreter(self):
+        project = self.root / "project"
+        (project / ".git").mkdir(parents=True)
+        target = self.root / "claude" / "skills"
+        self.run_main(self.hooks_arguments(project, target))
+        with mock.patch.object(
+            install,
+            "_detect_python_interpreter",
+            side_effect=AssertionError("dry-run refresh must not probe"),
+        ):
+            status, _, error = self.run_main(
+                [*self.refresh_full_arguments(project), "--dry-run"]
+            )
+        self.assertEqual(0, status, error)
 
     def test_hooks_refresh_rejects_non_utf8_guard_script_without_traceback(self):
         project = self.root / "project"
