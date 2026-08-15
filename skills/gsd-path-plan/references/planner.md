@@ -41,6 +41,14 @@ the how.
 Every dependency must be in an earlier wave or in the same wave with no file
 overlap. Produce an acyclic graph; same-wave chains execute in layers.
 
+Declare a dependency only when something real crosses it: data — the dependent
+consumes a symbol, signature, schema, endpoint, file format, or path named in
+that dependency's Interface contract, or the two tasks' `files` overlap — or a
+prerequisite effect the dependent needs already landed, named in Dependency
+notes with the evidence a reviewer would see. Test each edge separately.
+Narrative order is not a dependency: drop that edge and place both tasks by the
+plan order above, which still keeps plan-invalidating risk in wave 1.
+
 ## Task contract
 
 - Size tasks as deliverables, not edits: one task is the largest coherent

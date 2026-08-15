@@ -278,7 +278,8 @@ Same-wave tasks may depend on each other only when their file scopes do not
 overlap; the build executes those tasks in dependency layers. No two tasks
 that can run concurrently may share a file.
 
-**Gate:** both required inputs exist; deps resolve without cycles; layer and
+**Gate:** both required inputs exist; deps resolve without cycles and each one
+carries named data or a named prerequisite effect; layer and
 file-scope rules hold; criteria and verifies can fail meaningfully; tasks are
 deliverable-sized with no unforced splits; INTENT and SYNTHESIS are honored;
 and the user approves the wave summary. Approval is checkpointed the same
