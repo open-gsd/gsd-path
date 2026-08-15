@@ -36,4 +36,5 @@ Review depth: <full | deep | verify-only>
 
 ## Dependency notes
 
-<Anything non-obvious about ordering — why X must precede Y.>
+<Per non-obvious edge: the exact data or landed effect that makes X precede Y,
+and how a reviewer sees it. Narrative order is not a dependency.>

@@ -95,6 +95,15 @@ severity, or fit with this milestone's scope).
      detect cycles, and forbid file overlap between planned tasks in the same
      wave. Same-wave dependency chains are allowed only when their files do
      not overlap; the build executes them in dependency layers.
+   - Reject a declared dependency that carries neither data nor a prerequisite
+     effect. A `deps` edge is valid only when the dependent consumes a symbol,
+     signature, schema, endpoint, file format, or path named in that
+     dependency's Interface contract, the two tasks' `files` overlap, or
+     PLAN.md's Dependency notes name the exact landed effect the dependent
+     requires — a removal, a migration, a cutover — and how a reviewer sees it.
+     Judge each edge separately when a task lists several deps. Anything else
+     is narrative order, not a dependency: drop that edge and place both tasks
+     by the wave-order rules.
    - Require non-empty Context and Approach, observable Acceptance criteria,
      a Verify command that can fail when work is skipped, and Log sections.
    - Require an Interface contract section in every task: `None` for

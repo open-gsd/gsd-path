@@ -2,7 +2,7 @@
 id: T001
 title: <imperative, specific>
 wave: 1
-deps: []            # task ids that must be done first
+deps: []            # task ids whose output or landed effect this task needs
 status: pending     # orchestrator-owned: pending | in-progress | done | failed | blocked
 agent: null         # orchestrator-owned: set at dispatch
 commit: null        # orchestrator-owned: exact task commit SHA
