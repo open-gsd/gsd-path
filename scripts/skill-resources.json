@@ -22,9 +22,11 @@
     "scripts/discussion_records.py",
     "scripts/check_handoffs.py",
     "scripts/check_task_briefs.py",
+    "scripts/review_panel.py",
     "scripts/check_update.py",
     "scripts/guard_hook.py",
     "scripts/git_guard.py",
+    "scripts/isolation.py",
     "README.md",
     "DOCS.md",
     "HOOKS.md",
@@ -44,7 +46,8 @@
       "references/reviewer.md",
       "templates/board.md",
       "templates/task.md",
-      "templates/wave-review.md"
+      "templates/wave-review.md",
+      "templates/wave-panel.md"
     ],
     "gsd-path-discuss": [
       "templates/answers.md",
@@ -73,6 +76,7 @@
       "references/planner.md",
       "templates/patch-findings.md",
       "templates/plan.md",
+      "templates/plan-panel.md",
       "templates/task.md"
     ],
     "gsd-path-research": [
@@ -124,7 +128,15 @@
     ["scripts/check_handoffs.py", "skills/gsd-path-decide/scripts/check_handoffs.py"],
     ["scripts/check_task_briefs.py", "skills/gsd-path/scripts/check_task_briefs.py"],
     ["scripts/check_task_briefs.py", "skills/gsd-path-build/scripts/check_task_briefs.py"],
-    ["scripts/check_update.py", "skills/gsd-path/scripts/check_update.py"]
+    ["scripts/check_update.py", "skills/gsd-path/scripts/check_update.py"],
+    ["scripts/review_panel.py", "skills/gsd-path/scripts/review_panel.py"],
+    ["scripts/review_panel.py", "skills/gsd-path-plan/scripts/review_panel.py"],
+    ["scripts/review_panel.py", "skills/gsd-path-build/scripts/review_panel.py"],
+    ["scripts/isolation.py", "skills/gsd-path/scripts/isolation.py"],
+    ["scripts/isolation.py", "skills/gsd-path-build/scripts/isolation.py"],
+    ["scripts/isolation.py", "skills/gsd-path-inspect/scripts/isolation.py"],
+    ["scripts/isolation.py", "skills/gsd-path-docs-audit/scripts/isolation.py"],
+    ["scripts/isolation.py", "skills/gsd-path-ship/scripts/isolation.py"]
   ],
   "phase_contract_targets": [
     ["skills/gsd-path-build/SKILL.md", "skills/gsd-path/BUILD.md"],

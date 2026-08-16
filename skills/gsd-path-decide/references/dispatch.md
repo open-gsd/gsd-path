@@ -50,7 +50,9 @@ For every branch:
   `plan`,
   `plan_patch`, `build_<task_id>`, `review_wave_<wave>_cycle_<cycle>`
   (a `deep` wave review appends the lens suffix `_contract` or
-  `_adversarial`),
+  `_adversarial`; an optional review panel uses
+  `review_wave_<wave>_cycle_<cycle>_panel_<family>`),
+  `review_plan_panel_<family>`,
   `review_final`, or `review_gap_<number>`. Normalize variable parts to
   lowercase ASCII and replace non-alphanumeric runs with one underscore.
   Never add a random suffix or collide with a running logical target.
@@ -62,8 +64,14 @@ For every branch:
   and the session-default tier for every other role. Apply the Codex mapping
   above when its schema advertises reasoning-effort selection. On every other
   host, use only an exact native equivalent advertised by that host; otherwise
-  do not override the model or reasoning effort.
-  Never ask the host to create a worktree. Give the child the exact
+  do not override the model or reasoning effort. The only exception is a
+  review-panel child: when the host advertises model selection, pass the exact
+  slug returned by `scripts/review_panel.py resolve` for that family. Never
+  override the model on the canonical reviewer, planner, coder, or any other
+  role.
+  Host isolation: none. The child's working directory is the exact absolute
+  root GSD Path supplied; a host SHA checkout or extra worktree is a contract
+  failure. Never ask the host to create a worktree. Give the child the exact
   repository or linked-worktree root supplied by GSD Path.
 - Send a self-contained prompt with absolute input, template, and output paths
   plus the child's bounded responsibility. Every brief also names the absolute

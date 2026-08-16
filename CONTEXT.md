@@ -60,3 +60,23 @@ The router-visible "this milestone is complete" state. True when the ship
 commit validates and the landing pointer exists. The router may start the
 next milestone then; it does not wait for default ancestry.
 _Avoid_: archived, merged, done, integrated
+
+**Dispatch round**:
+The set of ready tasks isolated together at one recorded base SHA.
+_Avoid_: wave, layer
+
+**Task isolation**:
+The checkout a coder uses for one task until task landing. A parallel
+dispatch round uses a named branch distinct from the bound branch. A serial
+dispatch round (one ready task) uses the bound branch itself.
+_Avoid_: detached HEAD, feature branch, worktree (bare)
+
+**Task landing**:
+The orchestrator-owned commit that records one task's product on the bound
+branch.
+_Avoid_: integration, ship commit, cherry-pick
+
+**Verify sidecar**:
+A named throwaway checkout at a recorded revision used only for review,
+inspect, or project Verify. It is never the bound branch.
+_Avoid_: detached HEAD, disposable worktree (unless you mean the filesystem path)

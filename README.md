@@ -103,8 +103,11 @@ advance past an unresolved required follow-up.
   before any agent is dispatched, and every coder runs a preflight — paths
   exist or are declared, interface contracts match siblings verbatim — so a
   wrong map dies in the first minute.
+- Task isolation and landing go through `isolation.py`: named branches only,
+  never a detached HEAD. A serial dispatch round works on the bound branch;
+  a parallel round gets `gsd-path-task/<id>`.
 - Dispatch streams: a dependent task starts the moment its dependencies
-  integrate, never idling behind unrelated in-flight tasks. Integration
+  land, never idling behind unrelated in-flight tasks. Task landing
   stays serial and every Verify reruns in the isolated worktree.
 - Wave review depth is `full`, `verify-only`, or `deep` — two independent
   fresh-context reviewers (contract + adversarial lenses) that must both
@@ -152,6 +155,8 @@ partial remote/clone/worktree transaction; the default checkout stays clean.
   tasks/T###-slug.md          task contract: files, interface, criteria, base SHA, commit
   BOARD.md                    build summary
   review/wave-N.cycleC.md     wave review (deep: .contract.md + .adversarial.md)
+  review/wave-N.cycleC.panel.md  optional cross-model wave panel
+  review/PLAN-PANEL.md        optional cross-model plan panel
   review/final-gap-N.md       gap review
   review/FINAL.md             success-criteria audit
   review/PATCH-FINDINGS.md    patch-wave findings (when review blocks)

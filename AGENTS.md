@@ -89,18 +89,42 @@ If two sources disagree, stop and surface the conflict. Never average.
 - Coders implement only their full task contract and append their result to the
   task Log. They never change task state, review acceptance, stage, commit, or
   freelance outside declared files.
-- The orchestrator dispatches, arbitrates, creates isolated task and
-  verification worktrees, commits task work serially, and records each clean
-  base and exact full commit SHA in task frontmatter. It writes no product code.
-- The ship phase makes exactly one commit — the ship commit recording
-  STATE.md, the final-review artifacts, and the archive. The roadmap and
+- The orchestrator dispatches, arbitrates, and creates task isolation and
+  verify sidecars through the bundled `scripts/isolation.py` helper — named
+  branches only, never a detached HEAD — lands task work serially, and
+  records each clean base and exact full commit SHA in task frontmatter. It
+  writes no product code.
+- All pipeline work lives on one long-lived `gsd-path/<slug>` branch bound in
+  STATE.branch and re-bound per milestone; milestones never get their own
+  branches. Integration at ship is the only path from the bound branch to the
+  default branch — the bound branch never receives merges or back-merges, and
+  nothing else merges, pushes, or tags on its behalf.
+- Build binds the branch recorded in STATE.branch / REPOSITORY.md, never
+  whatever is current when a recorded branch exists. The newest `ship:`
+  commit on the bound branch must be an ancestor of origin/<default>; if it
+  is not, the previous milestone's integration is incomplete and control
+  routes to ship, not build. A branch merged into the default branch without
+  a corresponding `integrate: <NNN>-<slug>` commit is externally polluted
+  and blocks.
+- The ship phase makes exactly one commit on the bound branch — the
+  `.project/`-only ship commit recording
+  STATE.md, the final-review artifacts, and the archive — and additionally
+  owns the integration leg: one `integrate: <NNN>-<slug>` merge commit on the
+  default branch, one annotated `milestone/<NNN>-<slug>` tag, and the pushes.
+  The roadmap and
   plan phases each make exactly one approval checkpoint commit
   (`.project/`-only, deferred to the build transition commit during a
   new-repository transaction or before Git exists). The router makes one
   bookkeeping commit when promoting a lookahead track at a milestone
   boundary. Every other commit belongs to the orchestrator.
 - Reviewers verify and block; they never fix. A block names the criterion,
-  observed result, evidence location, and concrete fix direction.
+  observed result, evidence location, and concrete fix direction. An optional
+  review panel is advisory: the inherit reviewer remains the only wave
+  pass/fail, and panel findings never average or auto-replan. Resolve panel
+  membership with the bundled `scripts/review_panel.py` helper; do not invent
+  model families or slugs. Create task isolation and verify sidecars with the
+  bundled `scripts/isolation.py` helper; do not invent `git worktree add` or
+  `--detach`.
 - The discussion sidecar may run during any non-shipped phase. It grounds
   answers in code and phase artifacts, may perform focused research when
   needed, and writes only its discussion artifacts; it never changes phase
@@ -114,27 +138,33 @@ If two sources disagree, stop and surface the conflict. Never average.
 ## Gates
 
 - Same-wave dependencies execute in dependency order; a task dispatches as
-  soon as its dependencies integrate, never idling behind unrelated
+  soon as its dependencies land, never idling behind unrelated
   in-flight tasks. Only ready tasks run.
-- Parallel coders use distinct linked worktrees, each created at the clean
-  primary HEAD recorded as its task base at dispatch. Task
-  and reviewer Verify run against that recorded base plus only the task patch;
-  evidence from a shared worktree or combined branch tip does not count.
+- Parallel dispatch rounds use distinct linked worktrees, each created at the
+  clean primary HEAD recorded as its task base at dispatch. A serial dispatch
+  round (one ready task) works and lands on the bound branch in the primary
+  worktree. Task and reviewer Verify run against that recorded base plus only
+  the task patch; evidence from a shared worktree or combined branch tip does
+  not count.
 - A wave advances only after every task and the wave review pass.
 - Final review blocks on any `not-met`, `unverifiable`, or blocked gap verdict.
 - STATE.md becomes `shipped` only when every final verdict and the project
-  verify pass.
+  verify pass; the router reports shipped only after the integration
+  validator (`validate-integrated`) passes.
 - Shipping archives the milestone: artifacts move to
   `.project/archive/<NNN>-<slug>/` with a manifest, and the ship phase
   records the ship commit (STATE.md, final reviews, archive) as its single
-  commit. Archives are read-only —
+  commit on the bound branch. Archives are read-only —
   no agent may modify or delete them — and a new milestone may not begin
   while an un-archived shipped milestone's artifacts sit in the active paths.
 - STATE.archive is the crash-recovery transaction id. It is persisted before
   moves and never recomputed. Keep review active until the prepared archive,
   canonical contents, carry-forward, and manifest pass the bundled precommit
   validator; report shipped only after the exact `.project/`-only ship commit
-  passes the postcommit validator.
+  passes the postcommit validator and `validate-integrated` proves the
+  integration merge commit, its tag, and its ancestry on origin/<default> —
+  while integration is pending the router routes back to ship instead of
+  reporting shipped or starting the next milestone.
 
 ## Asking the user
 
