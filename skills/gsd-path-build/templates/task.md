@@ -8,7 +8,7 @@ agent: null         # orchestrator-owned: set at dispatch
 commit: null        # orchestrator-owned: exact task commit SHA
 base: null          # orchestrator-owned: clean layer SHA for isolated Verify
 worktree: null      # orchestrator-owned: isolated task worktree while active
-task_branch: null   # orchestrator-owned: isolated task branch while active
+task_branch: null   # orchestrator-owned: gsd-path-task/<id> while parallel; null when serial
 files:              # every file this task may touch — dispatch checks overlap
   - <path>
 ---

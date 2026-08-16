@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Prepare, validate, and abandon crash-resumable GSD Path milestone archives."""
+"""Prepare, validate, and abandon crash-resumable GSD Path milestone archives.
+
+Also validates milestone integration: the read-only validate-integrated
+command checks the shipped transaction, the integration merge commit on the
+remote default branch, and the milestone tag without any network access.
+"""
 
 import argparse
 import filecmp
@@ -23,7 +28,7 @@ else:
 ARCHIVE_PATTERN = re.compile(r"^(\d{3,})-([a-z0-9][a-z0-9-]*)$")
 TASK_FILE_PATTERN = re.compile(r"^T\d{3}-[a-z0-9][a-z0-9-]*\.md$")
 WAVE_FILE_PATTERN = re.compile(
-    r"^wave-([1-9]\d*)\.cycle([1-9]\d*)(\.(?:contract|adversarial))?\.md$"
+    r"^wave-([1-9]\d*)\.cycle([1-9]\d*)(\.(?:contract|adversarial|panel))?\.md$"
 )
 FINAL_CRITERION_PATTERN = re.compile(r"^### SC([1-9]\d*) — (.+)$")
 FINAL_GAP_FILE_PATTERN = re.compile(r"^final-gap-([1-9]\d*)\.md$")
@@ -103,6 +108,17 @@ PLACEHOLDER_PATTERN = re.compile(r"<[a-zA-Z][^<>\n]*>")
 
 def contains_placeholder(value: str) -> bool:
     return PLACEHOLDER_PATTERN.search(value) is not None
+
+
+REVIEW_PANEL_LINE = re.compile(r"^-\s*review_panel:\s*(\S+)", re.MULTILINE)
+
+
+def plan_review_panel_enabled(plan_text: str) -> bool:
+    matches = REVIEW_PANEL_LINE.findall(plan_text)
+    if not matches:
+        return False
+    token = matches[-1].split()[0].strip().strip("`.")
+    return token.casefold() != "off"
 
 
 def split_manifest_row(line: str) -> Sequence[str]:
@@ -455,7 +471,7 @@ def canonical_wave_files(reviews: Path) -> Sequence[WaveArtifact]:
     if any(match is None or not is_real_file(path) for path, match in matches):
         raise ArchiveError(
             "canonical wave artifacts must be real wave-N.cycleC.md files "
-            "(a .contract or .adversarial lens suffix is allowed)"
+            "(a .contract, .adversarial, or .panel lens suffix is allowed)"
         )
     return [
         WaveArtifact(
@@ -480,6 +496,11 @@ def require_canonical_transaction_inputs(active_root: Path, archive: Path) -> No
         missing.append("tasks/T###-slug.md")
     if not canonical_wave_files(reviews):
         missing.append("review/wave-N.cycleC.md")
+    plan = selected_transaction_path(active_root, archive, "plan/PLAN.md")
+    if is_real_file(plan) and plan_review_panel_enabled(plan.read_text(encoding="utf-8")):
+        panel = selected_transaction_path(active_root, archive, "review/PLAN-PANEL.md")
+        if not is_real_file(panel):
+            missing.append("review/PLAN-PANEL.md")
     if missing:
         raise ArchiveError(f"canonical milestone artifacts are missing: {', '.join(missing)}")
     discussion = selected_transaction_path(active_root, archive, "discuss")
@@ -1150,7 +1171,11 @@ def review_cycle_counts(archive: Path) -> Sequence[int]:
     ]
 
     artifacts = {}
+    panel_enabled = plan_review_panel_enabled(plan_text)
     for path, wave, cycle, lens in canonical_wave_files(archive / "review"):
+        if lens == "panel":
+            artifacts.setdefault(wave, {}).setdefault(cycle, {})[lens] = path
+            continue
         lines = path.read_text(encoding="utf-8").splitlines()
         expected_heading = f"# Review — wave {wave}, cycle {cycle}"
         if lines.count(expected_heading) != 1:
@@ -1174,22 +1199,28 @@ def review_cycle_counts(archive: Path) -> Sequence[int]:
         task_verdicts = {}
         for cycle, reviews in cycles.items():
             depth = wave_depths[wave]
+            gate = {lens: path for lens, path in reviews.items() if lens != "panel"}
             if depth == "deep":
-                if set(reviews) != {"contract", "adversarial"}:
+                if set(gate) != {"contract", "adversarial"}:
                     raise ArchiveError(
                         f"wave {wave} cycle {cycle} requires contract and adversarial "
                         "reviews for PLAN depth deep"
                     )
                 expected = tuple(
-                    (reviews[lens], depth, lens) for lens in ("contract", "adversarial")
+                    (gate[lens], depth, lens) for lens in ("contract", "adversarial")
                 )
             else:
-                if set(reviews) != {None}:
+                if set(gate) != {None}:
                     raise ArchiveError(
                         f"wave {wave} cycle {cycle} requires one base review "
                         f"for PLAN depth {depth}"
                     )
-                expected = ((reviews[None], depth, None),)
+                expected = ((gate[None], depth, None),)
+            if panel_enabled and depth in {"full", "deep"} and "panel" not in reviews:
+                raise ArchiveError(
+                    f"wave {wave} cycle {cycle} requires wave-{wave}.cycle{cycle}.panel.md "
+                    "because PLAN.md enables review_panel"
+                )
 
             wave_verdicts[cycle] = []
             task_verdicts[cycle] = []
@@ -1629,6 +1660,10 @@ def require_canonical_archive(archive: Path) -> None:
         missing.append("tasks/T###-slug.md")
     if not canonical_wave_files(archive / "review"):
         missing.append("review/wave-N.cycleC.md")
+    plan = archive / "plan" / "PLAN.md"
+    if is_real_file(plan) and plan_review_panel_enabled(plan.read_text(encoding="utf-8")):
+        if not is_real_file(archive / "review" / "PLAN-PANEL.md"):
+            missing.append("review/PLAN-PANEL.md")
     for directory in DIRECTORIES_TO_ARCHIVE:
         path = archive / directory
         if path.is_symlink() or not path.is_dir():
@@ -1768,7 +1803,7 @@ def preflight(repo: Path) -> dict:
 def find_ship_commit(project: Path, archive_name: str) -> str:
     expected_subject = f"ship: {archive_name}"
     log = require_git_success(
-        run_git(project, "log", "--format=%H%x00%s", "HEAD"),
+        run_git(project, "log", "--first-parent", "--format=%H%x00%s", "HEAD"),
         "inspect HEAD history for the ship commit",
     )
     matches = []
@@ -1782,6 +1817,8 @@ def find_ship_commit(project: Path, archive_name: str) -> str:
         raise ArchiveError(f"no commit with exact subject {expected_subject!r} in HEAD history")
     # git log is newest-first: the most recent ship subject owns the
     # transaction, so an empty or malformed duplicate cannot inherit validity.
+    # The bound branch stays linear; --first-parent keeps discovery robust if
+    # merges ever appear in ancestry, so only mainline ship commits match.
     return matches[0]
 
 
@@ -1900,6 +1937,105 @@ def validate(repo: Path) -> dict:
     return {"archive": configured, "commit": ship_commit}
 
 
+def resolve_remote_default(project: Path) -> str:
+    result = run_git(project, "symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD")
+    remote_default = result.stdout.strip()
+    if result.returncode != 0 or not remote_default:
+        raise ArchiveError("origin/HEAD is unresolved; fetch before validating integration")
+    return remote_default
+
+
+def find_integrate_commit(
+    project: Path,
+    remote_default: str,
+    archive_name: str,
+    ship_commit: str,
+) -> str:
+    expected_subject = f"integrate: {archive_name}"
+    log = require_git_success(
+        run_git(project, "log", "--first-parent", "--format=%H%x00%s", remote_default),
+        f"inspect {remote_default} first-parent history for the integration merge",
+    )
+    matches = []
+    for record in log.splitlines():
+        if "\x00" not in record:
+            continue
+        commit, subject = record.split("\x00", 1)
+        if subject == expected_subject:
+            matches.append(commit)
+    if not matches:
+        raise ArchiveError(
+            f"no commit with exact subject {expected_subject!r} "
+            f"in {remote_default} first-parent history"
+        )
+    # Newest-first: the most recent integrate subject owns the integration.
+    merge_commit = matches[0]
+    parents = require_git_success(
+        run_git(project, "rev-list", "--parents", "-n", "1", merge_commit),
+        "inspect integration merge parents",
+    ).split()
+    if len(parents) != 3:
+        raise ArchiveError(f"integration commit for {archive_name} is not a merge commit")
+    if parents[2] != ship_commit:
+        raise ArchiveError("integration merge second parent is not the ship commit")
+    return merge_commit
+
+
+def validate_integrated(repo: Path, slug: str) -> dict:
+    project = repo.resolve()
+    active_root = require_project_layout(project)
+    state = (active_root / "STATE.md").read_text(encoding="utf-8")
+    expected_slug = milestone_slug(state)
+    if normalized_slug(slug) != expected_slug:
+        raise ArchiveError(
+            f"--slug {slug!r} does not match normalized STATE.milestone {expected_slug!r}"
+        )
+
+    # (a) The shipped transaction itself must still validate.
+    shipped = validate(repo)
+    configured = shipped["archive"]
+    ship_commit = shipped["commit"]
+    archive_name = PurePosixPath(configured).name
+
+    # Read-only and network-free: only existing origin/* refs are consulted;
+    # fetching is the phase's job.
+    remote_default = resolve_remote_default(project)
+
+    # (b) The integration merge must sit on the remote default's first-parent
+    # history with the ship commit as its second parent.
+    merge_commit = find_integrate_commit(project, remote_default, archive_name, ship_commit)
+
+    # (c) The milestone tag must be annotated and point at the merge commit.
+    tag_name = f"milestone/{archive_name}"
+    tag_ref = f"refs/tags/{tag_name}"
+    if run_git(project, "rev-parse", "--verify", "--quiet", tag_ref).returncode != 0:
+        raise ArchiveError(f"missing milestone tag: {tag_name}")
+    tag_type = require_git_success(
+        run_git(project, "cat-file", "-t", tag_ref),
+        "inspect milestone tag type",
+    )
+    if tag_type != "tag":
+        raise ArchiveError(f"milestone tag {tag_name} must be annotated")
+    tag_target = require_git_success(
+        run_git(project, "rev-parse", f"{tag_ref}^{{commit}}"),
+        "resolve milestone tag target",
+    )
+    if tag_target != merge_commit:
+        raise ArchiveError(f"milestone tag {tag_name} does not point at the integration merge")
+
+    # (d) The remote default must contain the merge commit.
+    contains = run_git(project, "merge-base", "--is-ancestor", merge_commit, remote_default)
+    if contains.returncode != 0:
+        raise ArchiveError(f"{remote_default} does not contain the integration merge")
+
+    return {
+        "archive": configured,
+        "commit": ship_commit,
+        "integrate": merge_commit,
+        "tag": tag_name,
+    }
+
+
 def parser() -> argparse.ArgumentParser:
     argument_parser = argparse.ArgumentParser(description=__doc__)
     subparsers = argument_parser.add_subparsers(dest="command", required=True)
@@ -1916,6 +2052,13 @@ def parser() -> argparse.ArgumentParser:
 
     validate_parser = subparsers.add_parser("validate", help="validate the committed ship transaction")
     validate_parser.add_argument("--repo", required=True, type=Path)
+
+    validate_integrated_parser = subparsers.add_parser(
+        "validate-integrated",
+        help="validate the committed ship transaction and its default-branch integration",
+    )
+    validate_integrated_parser.add_argument("--repo", required=True, type=Path)
+    validate_integrated_parser.add_argument("--slug", required=True)
 
     abandon_parser = subparsers.add_parser(
         "abandon",
@@ -1936,6 +2079,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             result = preflight(arguments.repo)
         elif arguments.command == "abandon":
             result = abandon(arguments.repo, arguments.slug, arguments.reason)
+        elif arguments.command == "validate-integrated":
+            result = validate_integrated(arguments.repo, arguments.slug)
         else:
             result = validate(arguments.repo)
     except (ArchiveError, OSError) as error:

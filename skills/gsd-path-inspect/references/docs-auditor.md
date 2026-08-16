@@ -46,7 +46,7 @@ actually does. Read-only: change nothing outside your single output file.
   recorded evidence is a defect.
 - Build, test, lint, and help commands are not presumed read-safe. Never run a
   project command in the source worktree. Run it only in the pre-created,
-  agent-specific disposable worktree named in the brief at its recorded clean
+  agent-specific verify sidecar named in the brief at its recorded clean
   Git revision. Do not create or remove Git worktrees yourself. Otherwise use
   static evidence or mark the claim `unverifiable`. Never deploy, publish,
   migrate, or mutate external state.

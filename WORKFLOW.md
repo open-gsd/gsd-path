@@ -31,14 +31,16 @@ one distinct output path, relevant constraints, the output contract, and the
 deterministic logical task name defined by the dispatch contract. Do not rely
 on conversation context.
 
-Within a wave, readiness is continuous: every parallel coder receives a
-distinct linked worktree at the clean primary HEAD recorded as its task base,
-and a dependent task dispatches in a fresh round as soon as its dependencies
-integrate — never idling behind unrelated in-flight tasks. Integration stays
-serial, processing completions as they arrive. A same-wave task never runs
-before its same-wave dependencies are done. Task verification reconstructs
-the recorded base plus only that task patch; combined branch-tip evidence
-does not count.
+Within a wave, readiness is continuous: a parallel dispatch round gives every
+coder a distinct linked worktree at the clean primary HEAD recorded as its
+task base; a serial round (one ready task) uses the bound branch in the
+primary worktree. A dependent task dispatches in a fresh round as soon as its
+dependencies land — never idling behind unrelated in-flight tasks. Task
+landing stays serial, processing completions as they arrive. A same-wave task
+never runs before its same-wave dependencies are done. Task verification
+reconstructs the recorded base plus only that task patch; combined branch-tip
+evidence does not count. The orchestrator calls `scripts/isolation.py` for
+isolate, land, and retire; it never invents `git worktree add` or `--detach`.
 
 The parent orchestrator owns dispatch and lifecycle. It binds one structured
 run when the host provides one, creates one task per independent brief, waits
@@ -55,7 +57,7 @@ cancellation is a blocked result, not a skipped result.
 | decide | one decider | serial | validate SYNTHESIS.md |
 | roadmap | one roadmapper | serial; program flow only | validate ROADMAP.md |
 | plan | one planner; zero in quick mode | serial | validate PLAN.md and task mapping |
-| build | dependency-ready coders | parallel layers, serial integration | commit code and wave artifacts |
+| build | dependency-ready coders | parallel rounds, serial task landing | commit code and wave artifacts |
 | ship | wave reviewer; final integration and gap reviewers | independent reviewers concurrent | verify, approve, archive, and ship |
 
 Non-interactive phases auto-advance when their artifacts pass their gates.
@@ -237,7 +239,7 @@ total: every `Full scope: in` item maps to a milestone, and silent scope cuts
 are forbidden (`NEEDS-USER` instead). A non-empty `Open questions` entry
 inserts milestone-scoped research and decide before that milestone's
 planning. An approved roadmap may be re-sliced only at a milestone boundary;
-`shipped` entries are immutable except Status/Archive.
+`shipped` entries are immutable except Status/Archive/Integrated.
 
 **Gate:** total charter coverage, unique ordered ids, acyclic earlier-id
 dependencies, complete entry fields, no task-level detail, no vetoed scope —
@@ -273,7 +275,14 @@ implementation decisions inside the stated constraints. The planner reads
 `full`, `verify-only` for low-risk waves, or sparingly `deep` for
 irreversible or security-critical waves; wave 1 and any wave touching
 authentication, payments, data migration, or concurrency stays `full` or
-`deep`.
+`deep`. PLAN.md Config may name an optional `review_panel` (`off` by
+default, or `detected` / a named family list). In program flow CHARTER.md
+holds the durable default; each milestone INTENT copies it and may
+override. After the structural gate
+and before approval, the planner runs `scripts/review_panel.py` against
+advertised host model slugs and may write `.project/review/PLAN-PANEL.md`.
+The panel is advisory: it never averages findings or replaces user
+approval. Quick lane stays `off`.
 Same-wave tasks may depend on each other only when their file scopes do not
 overlap; the build executes those tasks in dependency layers. No two tasks
 that can run concurrently may share a file.
@@ -294,10 +303,17 @@ build's re-entry transition instead).
 `.project/BOARD.md`, updated task files, and wave reviews.
 
 At first entry, fetch and resolve the remote default SHA without checking out
-or updating the local default branch. Bind STATE.branch once: use the current
-clean unmerged non-default branch, or create `gsd-path/<slug>` directly at the
-remote-default SHA. Resume requires that exact symbolic branch; a mismatch or
-merged active branch blocks. The initial binding commit changes `plan/done` to
+or updating the local default branch. Bind the branch recorded in STATE.branch
+(and REPOSITORY.md when present) — never whatever is current when a recorded
+branch exists. Validate the binding: the current symbolic branch must equal
+STATE.branch, and a mismatch blocks. The newest `ship:` commit on the branch,
+if any, must be an ancestor of origin/<default>; if it is not, the previous
+milestone's integration is incomplete and control routes to ship, not build.
+A branch merged into the default branch without a corresponding
+`integrate: <NNN>-<slug>` commit is externally polluted and blocks. A fresh
+branch (no ship commits) follows the original rule: use the current clean
+unmerged non-default branch, or create `gsd-path/<slug>` directly at the
+remote-default SHA. The initial binding commit changes `plan/done` to
 `build/active` before any task dispatch. Recovering a resolved `build/blocked`
 state likewise commits `build/active` before a new dispatch-round base.
 
@@ -306,41 +322,44 @@ For each wave:
 1. **Establish a clean round base.** Reconcile task state, commit pending
    bookkeeping, select dependency-ready tasks with disjoint files, and record
    exact HEAD in every ready task's `base` field. Readiness is continuous: a
-   task becomes ready the moment its dependencies integrate, and each new
+   task becomes ready the moment its dependencies land, and each new
    dispatch round records the then-current clean HEAD.
 2. **Isolate and dispatch.** Lint every ready task's brief at the recorded
    base with `check_task_briefs.py`; a failure is a plan defect repaired
-   before any worktree exists. Create one linked worktree and temporary branch
-   per task at that round's base. Record its path and branch, mark the task
+   before any worktree exists. Isolate each ready task with `isolation.py
+   isolate-task` at that round's base (`--round-size` is the ready-set size).
+   Serial rounds return the primary worktree and `task_branch: null`. Parallel
+   rounds create a named `gsd-path-task/<id>` branch — never a detached HEAD.
+   Record the helper's path and branch, mark the task
    in-progress in orchestrator-owned frontmatter without appending its Log,
    commit dispatch bookkeeping, then send one `worker` to each worktree with
    deterministic `build_<task_id>` identity.
-3. **Verify and integrate serially.** Process each result as it arrives —
+3. **Verify and land serially.** Process each result as it arrives —
    when several wait, in task-id order — never idling behind slower in-flight
    tasks. For each ready result,
    compare its complete base diff against declared files plus append-only task
-   Log changes and re-run Verify inside that isolated worktree. Commit there
-   with exact subject `<id>: <title>`, cherry-pick onto the clean primary
-   branch, capture the resulting primary full SHA, and commit that SHA plus
+   Log changes and re-run Verify inside that isolated worktree. Land with
+   `isolation.py land`; do not invent commit or cherry-pick commands. Capture
+   the returned primary full SHA, and commit that SHA plus
    `done` state before any later Git operation. A conflict, unexpected path,
    or failed Verify creates no product commit and blocks or fails the task with
-   exact evidence. Every completed integration re-opens step 1 for newly
+   exact evidence. Every completed task landing re-opens step 1 for newly
    ready dependents.
 4. **Recover deterministically.** For an in-progress/null-commit task, inspect
-   its retained worktree first. If integration may have occurred, search only
+   its retained worktree first. If task landing may have occurred, search only
    first-parent commits in `base..STATE.branch` for exact subject equality,
    required task path, append-only Log change, allowed path set, and passing
    isolated Verify. Its binary patch and Log delta must equal the retained
    source commit/diff byte-for-byte. Exactly one proven candidate is
    recoverable; missing proof or ambiguity blocks. Never use loose grep or
    reset unknown work. A `done` task with a recorded SHA is also reconciled:
-   prove that exact integration and its isolated source, commit sole pending
-   bookkeeping when necessary, then remove a retained clean worktree and
-   branch only when both still belong to that task. Already-absent resources
+   prove that exact landing and its isolated source, commit sole pending
+   bookkeeping when necessary, then retire a retained clean worktree with
+   `isolation.py retire` only when both still belong to that task. Already-absent resources
    mean cleanup completed; partial or mismatched cleanup blocks.
 5. **Review the wave.** At `Review depth: full`, the reviewer receives task
    `base` and `commit` plus
-   orchestrator-created disposable worktrees. For each task it applies only
+   orchestrator-created verify sidecars. For each task it applies only
    `commit^..commit` product-file patch to the recorded base, re-runs Verify,
    and checks every criterion. Paths outside declared files plus the assigned
    task file block; that task file may change only orchestrator fields and its
@@ -352,7 +371,12 @@ For each wave:
    contract lens (`full`'s checks) staging `wave-N.cycleC.contract.md` and the
    adversarial lens (security, edge cases, failure modes, data loss) staging
    `wave-N.cycleC.adversarial.md`; both must pass, and any blocked lens blocks
-   the wave with both files' findings feeding fix tasks. A wave review is a
+   the wave with both files' findings feeding fix tasks. When PLAN.md enables
+   `review_panel`, `full` and `deep` waves also spawn family-specific panel
+   children (deep: adversarial lens only) and merge them into
+   `wave-N.cycleC.panel.md`. The inherit reviewer remains the only Wave
+   verdict; actionable panel findings (high + written criterion) require a
+   user ruling before advance. A wave review is a
    single reader of the whole wave's diffs (two at `deep`), so keep waves
    narrow enough for one reviewer context (≲12 tasks) and split wider work
    into more waves at plan time.
@@ -394,8 +418,9 @@ orchestrator retires the recorded task worktrees, runs the archive helper's
 `abandon` command to archive the partial artifacts without review gates,
 marks the roadmap entry `abandoned`, logs the ruling verbatim to LESSONS.md,
 and commits the transition to `roadmap/active` for a re-slice. Abandoned
-roadmap entries are immutable; the abandoned code stays on the branch and
-the re-slice plans around it.
+roadmap entries are immutable; the abandoned code stays on the branch until
+the next integration, when it reaches the default branch as inert history,
+and the re-slice plans around it.
 
 **Lookahead (program flow).** While a milestone builds, the router may offer
 to plan the next dependency-ready milestone in parallel under
@@ -496,18 +521,51 @@ accepts only a complete, valid active pair whose bytes extend both archived
 files, atomically replaces the archived records, removes the active copy, and
 forces manifest regeneration. Divergence or an incomplete pair blocks.
 
-The ship phase closes the milestone with its only commit: the shipped
-STATE.md, the final-review artifacts, and the archive move with its
-MANIFEST.md, staged from `.project/` only, subject
-`ship: <NNN>-<milestone-slug>`. Every other commit belongs to the build
-orchestrator. The commit must contain only `.project/` paths. There is no
-untracked-project fallback.
+The ship phase closes the milestone with exactly one commit on the bound
+branch: the shipped STATE.md, the final-review artifacts, and the archive
+move with its MANIFEST.md, staged from `.project/` only, subject
+`ship: <NNN>-<milestone-slug>`. Every other commit on the bound branch
+belongs to the build orchestrator. The commit must contain only `.project/`
+paths. There is no untracked-project fallback.
+
+### Integration
+
+After the postcommit validator passes, ship performs integration — the only
+path from the bound branch to the default branch. The bound branch never
+receives merges or back-merges, and the default checkout is never entered;
+the local default branch ref may lag origin, which is harmless because
+binding resolves remote SHAs. Ship fetches origin, resolves the
+remote-default SHA, and requires
+`git merge-base --is-ancestor <remote-default-sha> <ship-commit>` — the
+default branch must have no commits the ship commit lacks. A diverged default
+blocks and escalates to the user; never auto-merge. It then creates a
+temporary detached worktree at the remote-default SHA, merges the ship commit
+with `--no-ff` under the subject `integrate: <NNN>-<slug>` (never
+`ship:` — the guard restricts those subjects to `.project/`-only paths),
+pushes in order the merge to the default branch, the gsd-path branch, and an
+annotated tag `milestone/<NNN>-<slug>` pointing at the merge commit, and
+removes the temporary worktree. NNN always comes from the persisted
+STATE.archive sequence — never recomputed.
+
+Integration is pending from the ship commit until a commit with exact subject
+`integrate: <NNN>-<slug>` exists whose second parent is the ship commit and
+which is an ancestor of origin/<default>. The ship commit itself is the
+crash-recovery transaction id, discoverable via `find_ship_commit`; no new
+STATE field. Resume is idempotent: merge only if the ship commit is not yet
+an ancestor of origin/<default>, tag only if absent, and retry pushes freely.
+The router must not report shipped or start the next milestone while
+integration is pending — it routes back to ship.
 
 **Gate:** the bundled validator proves the committed shipped state, complete
 archive and manifest, valid carry-forward, clean worktree, the newest commit
 with the exact ship subject in HEAD history, `.project/`-only paths in that
-commit, and no `.project` change after it before the router reports shipped or
-starts a new milestone. Product commits after shipping do not disturb a
+commit, and no `.project` change after it; the bundled `validate-integrated`
+command then proves the `integrate: <NNN>-<slug>` merge commit, its
+`milestone/<NNN>-<slug>` tag, and the merge on origin/<default> before the
+router reports shipped or starts a new milestone. `integrate:` subjects in
+HEAD history are expected; the no-`.project`-change-after-ship drift rule
+lives on the gsd-path branch, which receives no further `.project` commits
+before the next milestone. Product commits after shipping do not disturb a
 validated shipment.
 
 ## Standing process — Discussion (`gsd-path-discuss`)
@@ -617,6 +675,8 @@ with their exact ordered source-file and row list.
   tasks/T###-slug.md         full contract, clean base SHA, status, exact commit SHA
   BOARD.md                   wave and escalation summary
   review/wave-N.cycleC.md    per-wave verdicts
+  review/wave-N.cycleC.panel.md  optional cross-model wave panel
+  review/PLAN-PANEL.md       optional cross-model plan panel
   review/final-gap-N.md      cross-wave gap verdicts
   review/FINAL.md            success-criteria verdicts
   review/PATCH-FINDINGS.md   ordered evidenced findings for patch planning

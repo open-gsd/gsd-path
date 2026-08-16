@@ -10,7 +10,10 @@ Apply this contract whenever a GSD Path skill delegates work:
   `inspect_codebase`, `inspect_docs`, `docs_audit`,
   `research_<dimension>`, `decide`, `roadmap`, `plan`, `plan_patch`,
   `build_<task_id>`, `review_wave_<wave>_cycle_<cycle>` (a `deep` wave review
-  appends the lens suffix `_contract` or `_adversarial`), `review_final`, or
+  appends the lens suffix `_contract` or `_adversarial`; an optional review
+  panel uses `review_wave_<wave>_cycle_<cycle>_panel_<family>`),
+  `review_plan_panel_<family>`,
+  `review_final`, or
   `review_gap_<number>`. Normalize variable parts to lowercase ASCII and
   replace non-alphanumeric runs with one underscore. Never add a random
   suffix.
@@ -25,9 +28,10 @@ Apply this contract whenever a GSD Path skill delegates work:
 - Tier hints: when the host advertises model or reasoning-effort selection,
   request `heavy` for `plan`, `plan_patch`, `decide`, and `roadmap`, and
   `light` for `inspect_docs` and `docs_audit`; when it offers no such
-  selection, do not override the model. Do not ask Claude Code to create
+  selection, do not override the model except on a review-panel child, which receives the exact slug from `scripts/review_panel.py resolve`. Do not ask Claude Code to create
   another worktree: GSD Path supplies the exact repository or
   linked-worktree root in the brief, and the child must work only there.
+  Host isolation: none.
 - Give every child a self-contained prompt with absolute input, template, and
   output paths plus its bounded responsibility. A coder prompt also names its
   isolated linked-worktree root; no child may infer the primary worktree.

@@ -5,15 +5,15 @@ Verify written GSD Path expectations and block failures. Never fix code.
 ## Brief contract
 
 - Require the mode, all inputs, exact canonical output path, applicable
-  template, repository root, and orchestrator-created disposable verification
+  template, repository root, and orchestrator-created verify sidecar
   root by absolute path. The brief must also name the staged output path under
-  that disposable root.
+  that sidecar.
 - Read AGENTS.md and the template before reviewing.
-- Write only the exact assigned review output under the supplied disposable
-  root at its staged `.project/review/` path. The orchestrator validates and
+- Write only the exact assigned review output under the supplied verify sidecar
+  at its staged `.project/review/` path. The orchestrator validates and
   atomically transfers that file to the canonical primary `.project/review/`
   path after collection. Temporary patch/test effects are allowed solely
-  inside supplied disposable roots. Never edit a product path or any other
+  inside supplied sidecars. Never edit a product path or any other
   primary-worktree path. Stop on a missing input or template.
 
 ## Wave mode
@@ -24,7 +24,7 @@ Use task acceptance criteria as the complete rubric. For each task:
    Never infer either SHA from task ids, branch position, or nearby history.
 2. Fail a missing, malformed, or invalid SHA. Inspect the commit with
    `git show --format=fuller --stat --patch <commit> --`.
-3. In the supplied disposable worktree at `base`, apply only the complete
+3. In the supplied verify sidecar at `base`, apply only the complete
    binary patch from `commit^..commit` for the task's declared product files,
    and run Verify there. Never use the primary worktree or branch tip as task
    evidence. Do not create or remove Git worktrees yourself.
@@ -45,7 +45,7 @@ a different reason. Use only the wave-review template.
 ## Deep review lenses
 
 A `deep` wave spawns two independent reviewers in parallel, each with a fresh
-context and its own disposable worktree at the recorded review base. Every
+context and its own verify sidecar at the recorded review base. Every
 Wave mode rule above applies to both lenses.
 
 - **Contract** — logical task name
@@ -67,14 +67,32 @@ blocks the wave.
 Use only final-review.md. Treat INTENT.md success criteria as the rubric.
 Exercise the running system and record `met`, `not-met`, or `unverifiable`
 with checked command output or a precise file reference. Run project commands
-only in the supplied disposable worktree at the exact reviewed HEAD. `pass`
+only in the supplied verify sidecar at the exact reviewed HEAD. `pass`
 requires every criterion to be `met`.
 
 ## Final gap mode
 
 Use only gap-review.md. Check the one cross-wave risk in the brief against the
-running system in the supplied disposable worktree at the exact reviewed HEAD.
+running system in the supplied verify sidecar at the exact reviewed HEAD.
 Record evidence and `pass` or `blocked`; an unverified risk is blocked.
+
+## Plan panel mode
+
+Use only plan-panel.md. Review `.project/plan/PLAN.md` and every task file
+against INTENT.md and SYNTHESIS.md. Do not edit those files. Write one
+finding block per issue, or `- none`. Mark `Kind: criterion` only when the
+finding names a written plan/task criterion; alternate designs are
+`Kind: preference`. This output is advisory. The structural plan gate and
+the user's approval remain the only plan gates.
+
+## Wave panel mode
+
+Use only wave-panel.md. Apply every Wave mode evidence rule (recorded SHAs,
+isolated patch, Verify) when the brief supplies a verify sidecar.
+On a `deep` wave the brief is the adversarial lens only. Record findings
+the same way as plan panel mode. Do not write a Wave verdict and do not
+edit the canonical wave-review file. The inherit reviewer remains the only
+pass/fail.
 
 ## Rules
 

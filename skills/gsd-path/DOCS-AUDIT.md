@@ -50,12 +50,12 @@ would dirty execution, invalidate review, or mutate shipped history.
    [docs-audit](templates/docs-audit.md), absolute repo root, exact frozen
    inventory, alignment flag, prior audit as carry-forward input, and output
    `.project/research/DOCS-AUDIT.md`. When Git has a resolvable HEAD and no
-   non-`.project` worktree changes, the orchestrator creates and supplies an
-   agent-specific disposable detached worktree at that exact HEAD for project
-   commands. The auditor stages its assigned output under that worktree; the
-   orchestrator validates and atomically transfers it to the primary canonical
-   path before removing that exact worktree. Otherwise no project command may
-   run.
+   non-`.project` worktree changes, the orchestrator creates a verify sidecar
+   with `python3 <absolute isolation.py> isolate-verify --repo <absolute
+   primary> --base <HEAD> --name docs-audit` for project commands. The auditor
+   stages its assigned output under that sidecar; the orchestrator validates
+   and atomically transfers it to the primary canonical path before retiring
+   that sidecar. Otherwise no project command may run.
 2. Gate the artifact: every doc with at least one testable claim has a claims
    table, every claim a verdict with evidence, every claimless doc appears
    once in the `## Descriptive docs` list, and the section paths and that
@@ -148,8 +148,8 @@ items become a patch wave through `$gsd-path-plan`.
 ## Rules
 
 - Audit is read-only; the auditor never edits docs or code.
-- Build, test, lint, and help commands run only in an agent-specific disposable
-  detached worktree at a recorded clean revision. If that cannot faithfully
+- Build, test, lint, and help commands run only in an agent-specific verify
+  sidecar at a recorded clean revision. If that cannot faithfully
   represent the claim, use static evidence or mark it `unverifiable`; never run
   project commands in the source worktree.
 - A verdict without recorded evidence is itself a defect — the audit must

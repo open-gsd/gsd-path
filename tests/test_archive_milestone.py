@@ -1607,6 +1607,64 @@ Tasks reviewed: 1
 
             self.assertEqual(preflight.returncode, 0, preflight.stderr)
 
+    def test_preflight_accepts_optional_panel_when_review_panel_is_off(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            (repo / ".project" / "review" / "wave-1.cycle1.panel.md").write_text(
+                "# Panel — wave 1, cycle 1\n"
+            )
+
+            archive = self.prepare_archive(repo)
+            self.write_manifest(archive)
+            preflight = self.preflight(repo)
+
+            self.assertEqual(preflight.returncode, 0, preflight.stderr)
+
+    def test_preflight_requires_panel_when_review_panel_is_on(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            plan = repo / ".project" / "plan" / "PLAN.md"
+            plan.write_text(plan.read_text() + "\n## Config\n- review_panel: detected\n")
+
+            prepare = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "prepare",
+                "--repo",
+                str(repo),
+                "--slug",
+                "demo",
+                cwd=PROJECT_ROOT,
+            )
+            self.assertNotEqual(prepare.returncode, 0)
+            self.assertIn("PLAN-PANEL.md", prepare.stderr)
+
+    def test_preflight_accepts_enabled_review_panel_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            plan = repo / ".project" / "plan" / "PLAN.md"
+            plan.write_text(
+                "# Plan\n\n## Config\n- review_panel: detected\n\n"
+                "## Wave 1 — demo\n\nReview depth: full\n"
+            )
+            (repo / ".project" / "review" / "PLAN-PANEL.md").write_text(
+                "# Plan panel\n\nActionable: 0\n"
+            )
+            (repo / ".project" / "review" / "wave-1.cycle1.panel.md").write_text(
+                "# Panel — wave 1, cycle 1\n"
+            )
+
+            archive = self.prepare_archive(repo)
+            self.write_manifest(archive)
+            preflight = self.preflight(repo)
+
+            self.assertEqual(preflight.returncode, 0, preflight.stderr)
+            self.assertTrue((archive / "review" / "PLAN-PANEL.md").is_file())
+            self.assertTrue((archive / "review" / "wave-1.cycle1.panel.md").is_file())
+
     def test_deep_review_lens_content_is_validated(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             archive = Path(temporary_directory)
@@ -1994,6 +2052,210 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                 cwd=PROJECT_ROOT,
             )
             self.assertEqual(validate.returncode, 0, validate.stderr)
+
+    def make_bound_repo(self, root: Path, branch: str = "gsd-path/demo") -> None:
+        self.make_repo(root)
+        baseline = self.git(root, "rev-parse", "HEAD").stdout.strip()
+        updated = self.git(root, "update-ref", "refs/remotes/origin/main", baseline)
+        self.assertEqual(updated.returncode, 0, updated.stderr)
+        linked = self.git(
+            root, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main"
+        )
+        self.assertEqual(linked.returncode, 0, linked.stderr)
+        checkout = self.git(root, "checkout", "-q", "-b", branch)
+        self.assertEqual(checkout.returncode, 0, checkout.stderr)
+        state_path = root / ".project" / "STATE.md"
+        state_path.write_text(
+            state_path.read_text().replace("branch: main", f"branch: {branch}")
+        )
+
+    def ship_bound(self, repo: Path) -> tuple:
+        archive = self.prepare_archive(repo)
+        self.write_manifest(archive)
+        self.mark_shipped(repo)
+        self.git(repo, "add", ".project")
+        ship = self.git(repo, "commit", "-q", "-m", f"ship: {archive.name}")
+        self.assertEqual(ship.returncode, 0, ship.stderr)
+        ship_sha = self.git(repo, "rev-parse", "HEAD").stdout.strip()
+        return archive.name, ship_sha
+
+    def integrate_bound(
+        self,
+        repo: Path,
+        archive_name: str,
+        merged_sha: str,
+        branch: str = "gsd-path/demo",
+        tag: bool = True,
+        tag_sha=None,
+        update_origin: bool = True,
+    ) -> str:
+        remote_default = self.git(repo, "rev-parse", "refs/remotes/origin/main").stdout.strip()
+        detach = self.git(repo, "checkout", "-q", "--detach", remote_default)
+        self.assertEqual(detach.returncode, 0, detach.stderr)
+        merge = self.git(repo, "merge", "--no-ff", "-m", f"integrate: {archive_name}", merged_sha)
+        self.assertEqual(merge.returncode, 0, merge.stderr)
+        merge_sha = self.git(repo, "rev-parse", "HEAD").stdout.strip()
+        back = self.git(repo, "checkout", "-q", branch)
+        self.assertEqual(back.returncode, 0, back.stderr)
+        if tag:
+            tagged = self.git(
+                repo,
+                "tag",
+                "-a",
+                "-m",
+                f"milestone {archive_name}",
+                f"milestone/{archive_name}",
+                tag_sha or merge_sha,
+            )
+            self.assertEqual(tagged.returncode, 0, tagged.stderr)
+        if update_origin:
+            updated = self.git(repo, "update-ref", "refs/remotes/origin/main", merge_sha)
+            self.assertEqual(updated.returncode, 0, updated.stderr)
+        return merge_sha
+
+    def validate_integrated(self, repo: Path, slug: str = "demo") -> subprocess.CompletedProcess[str]:
+        return self.run_command(
+            sys.executable,
+            str(ARCHIVE_SCRIPT),
+            "validate-integrated",
+            "--repo",
+            str(repo),
+            "--slug",
+            slug,
+            cwd=PROJECT_ROOT,
+        )
+
+    def test_validate_integrated_accepts_integrated_ship(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_bound_repo(repo)
+            archive_name, ship_sha = self.ship_bound(repo)
+            merge_sha = self.integrate_bound(repo, archive_name, ship_sha)
+
+            result = self.validate_integrated(repo)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            payload = json.loads(result.stdout)
+            self.assertEqual(payload["archive"], f".project/archive/{archive_name}")
+            self.assertEqual(payload["commit"], ship_sha)
+            self.assertEqual(payload["integrate"], merge_sha)
+            self.assertEqual(payload["tag"], f"milestone/{archive_name}")
+
+    def test_validate_integrated_rejects_a_missing_merge_commit(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_bound_repo(repo)
+            archive_name, _ = self.ship_bound(repo)
+
+            result = self.validate_integrated(repo)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(
+                f"no commit with exact subject 'integrate: {archive_name}'", result.stderr
+            )
+
+    def test_validate_integrated_rejects_a_missing_tag(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_bound_repo(repo)
+            archive_name, ship_sha = self.ship_bound(repo)
+            self.integrate_bound(repo, archive_name, ship_sha, tag=False)
+
+            result = self.validate_integrated(repo)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(f"missing milestone tag: milestone/{archive_name}", result.stderr)
+
+    def test_validate_integrated_rejects_a_tag_pointing_elsewhere(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_bound_repo(repo)
+            archive_name, ship_sha = self.ship_bound(repo)
+            baseline = self.git(repo, "rev-parse", "main").stdout.strip()
+            self.integrate_bound(repo, archive_name, ship_sha, tag_sha=baseline)
+
+            result = self.validate_integrated(repo)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("does not point at the integration merge", result.stderr)
+
+    def test_validate_integrated_rejects_a_wrong_second_parent(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_bound_repo(repo)
+            archive_name, ship_sha = self.ship_bound(repo)
+            base = self.git(repo, "rev-parse", "refs/remotes/origin/main").stdout.strip()
+            self.git(repo, "checkout", "-q", "-b", "decoy", base)
+            (repo / "decoy.txt").write_text("decoy\n")
+            self.git(repo, "add", "decoy.txt")
+            decoy = self.git(repo, "commit", "-q", "-m", "decoy product work")
+            self.assertEqual(decoy.returncode, 0, decoy.stderr)
+            decoy_sha = self.git(repo, "rev-parse", "HEAD").stdout.strip()
+            back = self.git(repo, "checkout", "-q", "gsd-path/demo")
+            self.assertEqual(back.returncode, 0, back.stderr)
+            self.integrate_bound(repo, archive_name, decoy_sha)
+
+            result = self.validate_integrated(repo)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("integration merge second parent is not the ship commit", result.stderr)
+
+    def test_validate_integrated_rejects_a_merge_not_on_the_remote_default(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_bound_repo(repo)
+            archive_name, ship_sha = self.ship_bound(repo)
+            self.integrate_bound(repo, archive_name, ship_sha, update_origin=False)
+
+            result = self.validate_integrated(repo)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(
+                f"no commit with exact subject 'integrate: {archive_name}' "
+                "in origin/main first-parent history",
+                result.stderr,
+            )
+
+    def test_find_ship_commit_uses_first_parent(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.git(repo, "init", "-q", "-b", "gsd-path/demo")
+            self.git(repo, "config", "user.name", "Validation")
+            self.git(repo, "config", "user.email", "validation@example.invalid")
+
+            def dated_commit(filename: str, message: str, date: str) -> str:
+                (repo / filename).write_text(f"{message}\n")
+                self.git(repo, "add", filename)
+                env = dict(os.environ, GIT_AUTHOR_DATE=date, GIT_COMMITTER_DATE=date)
+                committed = subprocess.run(
+                    ("git", "commit", "-q", "-m", message),
+                    cwd=repo,
+                    env=env,
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                )
+                self.assertEqual(committed.returncode, 0, committed.stderr)
+                return self.git(repo, "rev-parse", "HEAD").stdout.strip()
+
+            dated_commit("base.txt", "base", "2026-07-01T00:00:00")
+            ship_sha = dated_commit("ship.txt", "ship: 001-demo", "2026-08-01T00:00:00")
+            self.git(repo, "checkout", "-q", "-b", "side", "HEAD~1")
+            decoy_sha = dated_commit("decoy.txt", "ship: 001-demo", "2026-08-03T00:00:00")
+            self.git(repo, "checkout", "-q", "gsd-path/demo")
+            env = dict(
+                os.environ,
+                GIT_AUTHOR_DATE="2026-08-04T00:00:00",
+                GIT_COMMITTER_DATE="2026-08-04T00:00:00",
+            )
+            merged = subprocess.run(
+                ("git", "merge", "--no-ff", "-m", "merge side", "side"),
+                cwd=repo,
+                env=env,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(merged.returncode, 0, merged.stderr)
+            self.assertNotEqual(ship_sha, decoy_sha)
+
+            found = archive_milestone.find_ship_commit(repo.resolve(), "001-demo")
+            self.assertEqual(found, ship_sha)
+
     def make_build_repo(self, root: Path, status: str = "blocked") -> None:
         self.git(root, "init", "-q", "-b", "main")
         self.git(root, "config", "user.name", "Validation")

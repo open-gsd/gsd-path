@@ -227,7 +227,7 @@ After intent approval, the router walks phases and stops at gates.
 | **Roadmap** (program) | `ROADMAP.md` | **Approve milestone slicing** |
 | **Plan** | `plan/PLAN.md`, `tasks/T###-slug.md` | **Approve wave summary** |
 | **Build** | code, commits, `BOARD.md` | Escalations only |
-| **Ship** | `review/wave-*.md`, `review/FINAL.md` | Approve patch waves if blocked and final shipping when green |
+| **Ship** | `review/wave-*.md`, `review/PLAN-PANEL.md`, `review/FINAL.md` | Approve patch waves if blocked and final shipping when green |
 
 The discussion sidecar is available alongside every row above. It writes
 `discuss/DIALOGUE.md` and `discuss/ANSWERS.md`; a `final` answer records context
@@ -256,11 +256,13 @@ plan approval.
 
 ### Build
 
-Orchestrator runs in the main task. Parallel **coders** get isolated linked
-worktrees at one clean layer base; integration is **serial** per layer. Before
+Orchestrator runs in the main task. A parallel dispatch round gives **coders**
+isolated named-branch worktrees at one clean layer base; a serial round works
+on the bound branch. Task landing is **serial**. Before
 any worktree exists, the orchestrator lints every ready brief against the
 recorded base with `check_task_briefs.py`; a failure is a plan defect repaired
-before the layer proceeds. Each coder preflights its brief first — every named
+before the layer proceeds. Isolate, land, and retire go through
+`isolation.py` — never a detached HEAD. Each coder preflights its brief first — every named
 path exists at the base or is declared, and the interface contract matches its
 siblings verbatim — blocking immediately on a mismatch. Each
 task gets one atomic commit; task frontmatter records exact SHA for recovery.

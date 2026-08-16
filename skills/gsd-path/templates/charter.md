@@ -5,6 +5,11 @@
      explicit user ruling recorded under Corrections. Lives at .project/
      top level and persists across milestones; it never archives. -->
 
+Review panel: off   <!-- off | detected | claude,gpt,grok,composer — durable
+                      program default for optional cross-model plan and
+                      wave review. Milestone INTENT copies this value and
+                      may override it. off is the default. -->
+
 ## Vision
 
 <2–4 sentences: the program's end state and why it matters.>

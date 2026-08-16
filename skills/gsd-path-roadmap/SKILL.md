@@ -63,7 +63,7 @@ precondition fails.
    instead — template, and output
    paths, including `.project/LESSONS.md` when it exists. On a re-slice, also
    give the existing ROADMAP.md with the instruction to preserve `shipped`
-   entries byte-for-byte except Status/Archive fields and to never modify
+   entries byte-for-byte except Status/Archive/Integrated fields and to never modify
    `abandoned` entries at all.
    The output is exactly `.project/ROADMAP.md` — no other location is
    canonical.
@@ -79,8 +79,8 @@ precondition fails.
    - Rolling-wave: no waves, tasks, or file lists anywhere in the roadmap.
    - No scope-out veto appears in any milestone; every synthesis decision is
      honored by at least one milestone's scope.
-   - `shipped` entries differ from the prior roadmap only in Status/Archive;
-     `abandoned` entries are byte-for-byte identical.
+   - `shipped` entries differ from the prior roadmap only in
+     Status/Archive/Integrated; `abandoned` entries are byte-for-byte identical.
 4. Redispatch one complete corrected brief under logical task name `roadmap`,
    following the runtime dispatch contract and including all gate failures.
    Allow one revision round. If it still fails, set STATE.md to

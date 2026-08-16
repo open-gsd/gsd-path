@@ -5,8 +5,11 @@ Execute exactly one task for `$gsd-path-build`.
 ## Input
 
 - Require the brief to name the assigned task file and task template by
-  absolute path and the isolated linked-worktree root. Read both files fully
-  from that worktree and never edit the primary worktree.
+  absolute path and the isolated linked-worktree root returned by
+  `isolation.py isolate-task`. Read both files fully from that worktree.
+  On a serial dispatch round that root is the primary worktree on the bound
+  branch; still never edit a sibling task's files. On a parallel round never
+  edit the primary worktree.
 - Read the project `AGENTS.md` and every existing path listed in the task's
   `files` frontmatter before editing.
 - Treat Context, Approach, Interface contract, Acceptance criteria, and
@@ -67,8 +70,8 @@ them.
 
 ## Rules
 
-- You are not alone in the repository. Other agents use sibling worktrees; do
-  not inspect, revert, or overwrite their changes.
+- You are not alone in the repository. Other agents may use sibling worktrees;
+  do not inspect, revert, or overwrite their changes.
 - Never edit `base`, `worktree`, `task_branch`, `status`, `agent`, or `commit`.
   The orchestrator owns them.
 - Never stage, commit, amend, rebase, reset, or otherwise mutate Git.

@@ -61,12 +61,14 @@ overwriting it. Re-running inspection would overwrite established context.
    dispatch brief; never persist it as a `.project/` sidecar file. Pass an existing DOCS-AUDIT.md separately
    as carry-forward input so its `## User rulings` and `planned` values remain
    verbatim. When Git has a resolvable HEAD and no non-`.project` worktree
-   changes, the orchestrator creates a separate disposable detached worktree at
-   that exact HEAD for each agent and includes its path and revision for
-   project commands; expected new pipeline artifacts do not make product code
-   dirty. Each agent stages its assigned output under that worktree; the
-   orchestrator validates and atomically transfers both files to the primary
-   `.project/` paths before removing only those exact worktrees. Otherwise no
+   changes, the orchestrator creates a verify sidecar for each agent with
+   `python3 <absolute isolation.py> isolate-verify --repo <absolute primary>
+   --base <HEAD> --name inspect-codebase` and `--name inspect-docs`, and
+   includes its path and revision for project commands; expected new pipeline
+   artifacts do not make product code dirty. Each agent stages its assigned
+   output under that sidecar; the orchestrator validates and atomically
+   transfers both files to the primary `.project/` paths before retiring only
+   those sidecars with `isolation.py retire`. Otherwise no
    project command may run.
 3. Gate both artifacts against their templates: the codebase evidence needs
    a filled `## Map` plus findings as observed — no quota, but an empty

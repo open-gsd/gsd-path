@@ -111,8 +111,14 @@ Before ordinary routing, inspect `STATE.archive`.
 
 - A concrete archive path is an in-progress or completed ship transaction.
   If state is `shipped/done`, run the bundled
-  `python3 <absolute-bundled-script> validate --repo <root>`. Report shipped
-  only when it returns the same archive path and exact ship SHA.
+  `python3 <absolute-bundled-script> validate --repo <root>`. When it returns
+  the same archive path and exact ship SHA, run the bundled
+  `python3 <absolute-bundled-script> validate-integrated --repo <root> --slug <slug>`
+  with the shipped milestone slug from STATE.milestone. Report shipped only
+  when both pass.
+  When archive validation passes but integration is pending, invoke the
+  bundled [ship contract](SHIP.md) to complete integration; never report
+  shipped or advance to the next milestone while integration is pending.
 - If validation fails, or state is still `ship`, invoke
   the bundled [ship contract](SHIP.md) in final archive-recovery mode. It bypasses moved
   final-review inputs, reuses the persisted path, and completes or validates
@@ -175,7 +181,7 @@ and must not delay routing.
 | `ship`, active | bundled [ship contract](SHIP.md), final mode |
 | `ship`, blocked with valid finding sources | bundled [plan contract](PLAN.md), patch mode |
 | `ship`, blocked without a valid finding source or with conflicting evidence | stop at its `NEEDS-USER` item |
-| `shipped`, validated archive | report archive path and exact ship SHA; stop |
+| `shipped`, validated archive and completed integration | report archive path, exact ship SHA, and integration merge SHA; stop |
 
 Auto-advance after a non-interactive phase completes unless blocked or waiting
 on `NEEDS-USER`. Planning owns the single build-approval gate; never ask a
@@ -210,7 +216,9 @@ Declining does not block; offer again only at the next milestone's build.
 
 ## Next milestone
 
-Start only from a ship transaction that passes the bundled validator. Preserve
+Start only from a ship transaction that passes the bundled validator and the
+bundled integration check (`validate-integrated`); pending integration routes
+back to ship, never here. Preserve
 the previous archive path, ship SHA, and build branch in the state Log, then:
 
 - **Program** (ROADMAP.md exists): while `pending` entries remain, first
@@ -220,7 +228,9 @@ the previous archive path, ship SHA, and build branch in the state Log, then:
   idempotent — resume an interrupted promotion by moving what remains),
   copy the track's `phase`, `status`, and `milestone` into STATE.md with
   `branch: null` and `archive: null`, mark that entry `active` in
-  ROADMAP.md, remove `.project/next/`, and commit the promotion with exact
+  ROADMAP.md, fill the previously shipped entry's `Integrated:` field with
+  the merge SHA of the just-completed `integrate: <NNN>-<slug>` commit,
+  remove `.project/next/`, and commit the promotion with exact
   subject `router: promote lookahead milestone <slug>` — the router's only
   bookkeeping commit outside the new-repository transaction. Then route by
   the promoted state (a promoted `plan/done` goes straight to the bundled
@@ -228,7 +238,9 @@ the previous archive path, ship SHA, and build branch in the state Log, then:
   track, reset
   `phase: define`, `status: active`, `milestone` to the next dependency-ready
   `pending` slug, `branch: null`, and `archive: null`; mark that entry
-  `active` in ROADMAP.md and route to the bundled [define
+  `active` in ROADMAP.md, fill the previously shipped entry's `Integrated:`
+  field with the merge SHA of the just-completed `integrate: <NNN>-<slug>`
+  commit, and route to the bundled [define
   contract](DEFINE.md) in milestone mode. When every entry is `shipped`,
   report the program complete against CHARTER.md's program success criteria
   and stop.

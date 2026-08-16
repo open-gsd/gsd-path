@@ -73,9 +73,14 @@ plan order above, which still keeps plan-invalidating risk in wave 1.
   guidance.
 - Preserve every template field and its required initial value.
 
-Put the full-project build-and-test command in PLAN.md. Before returning,
-check veto exclusion, decision coverage, dependencies, file overlap, task
-size, criteria, and Verify commands.
+Put the full-project build-and-test command in PLAN.md. Copy `Review panel:`
+from INTENT.md into PLAN.md Config as `review_panel:` when INTENT names one;
+otherwise copy CHARTER.md's durable default when that file is supplied;
+otherwise write `review_panel: off`. Never invent `detected` or a named
+family list. Quick-lane plans always write `off`.
+
+Before returning, check veto exclusion, decision coverage, dependencies,
+file overlap, task size, criteria, and Verify commands.
 
 Return a brief structured summary: wave count, task count, and the wave-1
 risk list.

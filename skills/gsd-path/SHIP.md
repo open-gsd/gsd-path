@@ -18,7 +18,8 @@ Require `pipeline: gsd-path/v2` in `.project/STATE.md`; a missing or different
 marker returns to `$gsd-path` for ownership checking. Read the local
 [reviewer role](references/reviewer.md) and
 [dispatch contract](references/dispatch.md), resolve them to absolute paths,
-and follow that runtime-specific dispatch contract.
+and follow that runtime-specific dispatch contract. Resolve
+`scripts/isolation.py` for verify sidecars; do not invent detached checkouts.
 
 This skill
 verifies first and never archives or ships before explicit final approval.
@@ -73,18 +74,21 @@ before dispatch or ship. Then:
    - one reviewer per numbered risk with logical task name
      `review_gap_<number>`, each
      writing only `.project/review/final-gap-N.md`.
-   Before dispatch, the orchestrator creates a distinct disposable detached
-   worktree at exact reviewed HEAD for each reviewer and supplies its path.
+   Before dispatch, the orchestrator creates a distinct verify sidecar at
+   exact reviewed HEAD for each reviewer with
+   `python3 <absolute isolation.py> isolate-verify --repo <absolute primary>
+   --base <HEAD> --name review-final` or `--name review-gap-<number>` and
+   supplies its path.
    Review commands and staged outputs run only there, never in the primary
    worktree; the orchestrator validates and atomically copies each assigned
-   output to its canonical primary path before removing only those exact
-   worktrees after collection.
+   output to its canonical primary path before retiring only those sidecars
+   after collection.
 4. Validate every artifact. Every success criterion is `met`, `not-met`, or
    `unverifiable` with checked evidence; every gap is `pass` or `blocked` with
    checked evidence. Every output must record the same exact full reviewed
    HEAD, and each numbered gap heading and Risk value must match its dispatch
-   risk. Re-run PLAN.md's project Verify in a fresh disposable detached
-   worktree at that same exact HEAD.
+   risk. Re-run PLAN.md's project Verify in a fresh verify sidecar from
+   `isolate-verify --name project-verify` at that same exact HEAD.
 5. Redispatch one complete corrected brief for a missing or invalid reviewer
    artifact under the same logical task name, following the runtime dispatch
    contract. If it remains invalid, set `ship/blocked` with
@@ -181,10 +185,32 @@ field is the transaction identity.
    subject `ship: <NNN>-<milestone-slug>` in HEAD history, only `.project/`
    paths in that commit, and no `.project` change after it. The ship commit
    need not be HEAD: later product commits do not disturb a validated
-   shipment. Report shipped only when this
-   command passes, including its returned archive path and full commit SHA.
-   Link the archived MANIFEST.md as the final review surface.
-7. If a crash occurs before STATE's atomic rename, discard only the exact
+   shipment. A passing validate completes the
+   archive transaction; record its returned archive path and full commit
+   SHA, and link the archived MANIFEST.md as the final review surface. The
+   milestone is not shipped until integration below passes.
+7. Integrate only after the postcommit `validate` passes, with the recorded
+   ship commit and the exact reviewed HEAD unchanged; otherwise block. Run
+   `git fetch origin`, resolve the remote-default SHA, and require
+   `git merge-base --is-ancestor <remote-default-sha> <ship-commit>` — the
+   default branch must have no commits the ship commit lacks. On failure,
+   block and escalate to the user; never auto-merge a diverged default.
+   Create a temporary detached worktree at the remote-default SHA, run
+   `git merge --no-ff -m "integrate: <NNN>-<slug>" <ship-commit>`, then push
+   in order: the merge commit to the default branch, the bound gsd-path
+   branch, and the annotated tag `milestone/<NNN>-<slug>` pointing at the
+   merge commit. Remove the temporary worktree. The merge subject must be
+   exactly `integrate: <NNN>-<slug>` and must not start with `ship:` —
+   `git_guard.py` restricts `ship:`-subject commits to `.project/`-only
+   paths. NNN always comes from the persisted STATE.archive, never
+   recomputed. The bound branch never receives merges or back-merges;
+   integration is the only path from it to the default branch. The default
+   checkout is never entered, and its local default branch ref may lag
+   origin harmlessly. Then run
+   `python3 <absolute-script> validate-integrated --repo <root> --slug <slug>`
+   as the post-integration gate; it is read-only and uses the existing
+   `origin/*` refs without fetching. Report shipped only when it passes.
+8. If a crash occurs before STATE's atomic rename, discard only the exact
    deterministic state temp through `prepare`. If it occurs after STATE becomes
    `shipped/done` but before commit, run `prepare` and `preflight` under the
    explicit uncommitted exception, then create the one ship commit. Resume the
@@ -192,6 +218,18 @@ field is the transaction identity.
    target exists in HEAD, validate it rather than running `prepare` or creating
    another commit. Any inconsistent committed transaction blocks; never
    mutate a committed archive.
+   The fourth crash window is integration: it is pending from the ship
+   commit until a commit with exact subject `integrate: <NNN>-<slug>` exists
+   whose second parent is the ship commit and which is an ancestor of
+   `origin/<default>`. The transaction id is the ship commit itself,
+   discoverable via `find_ship_commit`; no new STATE field. Resumable
+   partial states are merged-not-tagged, tagged-not-pushed, and
+   pushed-branch-not-tag. Resume is idempotent: merge only when the ship
+   commit is not yet an ancestor of `origin/<default>`, tag only when
+   `milestone/<NNN>-<slug>` is absent, and retry pushes freely; NNN is
+   always reused from STATE.archive, never recomputed. While integration is
+   pending, never report shipped or start the next milestone; route back to
+   ship.
 
 ## Rules
 
@@ -201,3 +239,6 @@ field is the transaction identity.
 - Warn on ambiguity, but do not invent stronger requirements.
 - Never count `unverifiable`, an unreviewed risk, or an unvalidated archive as
   shipped.
+- Never merge or back-merge into the bound branch; ship's integration is its
+  only path to the default branch. Never enter the default checkout; its
+  local default branch ref may lag origin.

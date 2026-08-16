@@ -80,10 +80,15 @@ the charter instead of the single-milestone checklist:
 3. **Vetoes** — what no milestone may include.
 4. **Constraints** — program-level stack, budget, deadline, integrations.
 5. **Program success criteria** — observable when the last milestone ships.
+6. **Review panel** — optional durable default (`off` | `detected` | named
+   families). Default `off`. This value persists on CHARTER.md; later
+   milestone INTENT files copy it and may override.
 
 Read the local [charter template](templates/charter.md), write the approval
-draft to `.project/CHARTER.md`, and run the same playback-approval loop as the
-standard Process. On approval, update STATE.md to `phase: define`,
+draft to `.project/CHARTER.md` including `Review panel:` (default `off`;
+never invent `detected` or a named list), and run the same playback-approval
+loop as the standard Process. On approval, retain the reviewed
+`Review panel:` value on CHARTER.md, update STATE.md to `phase: define`,
 `status: done`, leave `milestone: null`, and report that research (program
 scope) is next. Research, decide, and the roadmap phase slice the program;
 per-milestone INTENT.md files come later, in milestone mode. Do not write
@@ -98,7 +103,9 @@ with `.project/ROADMAP.md` present. There is no re-interview:
 2. Draft INTENT.md from them: Summary from the entry's Goal, Scope in/out and
    Success criteria from the entry, Constraints inherited from the charter,
    Risks and Open questions from the entry (tagged `RESEARCH`/`NEEDS-USER`),
-   and `Lane: milestone`.
+   `Lane: milestone`, and `Review panel:` copied from CHARTER.md (default
+   `off` when CHARTER omits it). The confirmation may override the copied
+   panel value; do not invent `detected` or a named list.
 3. Present one confirmation, not an interview: playback the derivation, link
    the resolved absolute INTENT.md path, and ask approve or adjust. A requested
    change that contradicts the charter or the approved roadmap entry is a
@@ -194,6 +201,9 @@ first question. The rules change:
 ## Output contract
 
 At approval, retain the already reviewed `Lane:` value and its one-line reason.
+Retain `Review panel:` as reviewed: the CHARTER copy or the user's override
+in milestone/lookahead mode, the CHARTER value in program mode, or `off`
+when the user did not choose a panel and no CHARTER default exists.
 
 After approval, finalize `.project/intent/INTENT.md` and update STATE.md to
 `phase: define`, `status: done`, set its `milestone` field to this

@@ -68,7 +68,8 @@ severity, or fit with this milestone's scope).
 ## Process
 
 1. Read the local [plan template](templates/plan.md), [task template](templates/task.md),
-   and `scripts/check_handoffs.py`; resolve them to absolute paths.
+   [plan-panel template](templates/plan-panel.md), `scripts/check_handoffs.py`,
+   and `scripts/review_panel.py`; resolve them to absolute paths.
 2. Read the local [planner role](references/planner.md), then follow the
    local [runtime dispatch contract](references/dispatch.md) with deterministic
    logical task name `plan`. Give it absolute role, `AGENTS.md`, `WORKFLOW.md`,
@@ -124,6 +125,10 @@ severity, or fit with this milestone's scope).
    - Prove every intent constraint and synthesis decision is covered, that no
      scope-out veto appears in a task, and that `Project verify` is a real,
      non-placeholder command in PLAN.md.
+   - Run `python3 <absolute review_panel.py> validate-plan --plan <absolute
+     PLAN.md> --intent <absolute INTENT.md>` and `--charter <absolute
+     .project/CHARTER.md>` when that file exists. A non-zero exit is a gate
+     failure. Quick mode requires `review_panel: off`.
 4. Redispatch one complete corrected brief under logical task name `plan`,
    following the runtime dispatch contract and including all gate failures.
    Allow one revision round. If it still fails, set STATE.md to
@@ -133,15 +138,42 @@ severity, or fit with this milestone's scope).
    naming the one correction or user decision required. Stop.
 5. Show the wave number, goal, and task count for every wave as the outcome.
    Link the resolved absolute `.project/plan/PLAN.md` path and summarize the
-   linked `.project/tasks/` task set, then ask one explicit next question:
-   whether to approve this plan and start the build. List `Approve and start
-   build (recommended)` first when every gate passed, with `Request changes` as
-   the alternative. If the user requests changes, keep `phase: plan`, `status:
-   active`, revise, and re-gate.
+   linked `.project/tasks/` task set. Then run the optional review panel
+   before the approval question:
+   - Inspect the host child-agent schema for advertised model slugs. Do not
+     guess slugs. Pass them to `python3 <absolute review_panel.py> resolve
+     --plan <absolute PLAN.md> --intent <absolute INTENT.md> --advertised
+     <comma slugs> --parent-slug <current model slug when known>` and
+     `--charter <absolute .project/CHARTER.md>` when that file exists.
+   - `status: off` — skip the panel. The approval question may include
+     `Approve with review panel (detected)` as an alternative; if chosen,
+     write `review_panel: detected` into PLAN.md Config, re-run resolve, and
+     continue this step.
+   - `status: skipped` — record the helper reason in the state log and
+     continue without a panel. Do not treat this as a gate failure.
+   - `status: error` or exit 2 — set `plan/blocked`, link PLAN.md, and stop.
+     A named family that is not advertised is an assertion failure.
+   - `status: ready` — for each selected family, spawn one independent child
+     with logical task name `review_plan_panel_<family>`, the reviewer role
+     in plan-panel mode, the plan-panel template, and the exact helper-returned
+     model slug when the host advertises model selection. Never override the
+     model on the planner. Each child stages its family file under a
+     disposable root; the parent validates and copies those files, then runs
+     `python3 <absolute review_panel.py> merge --kind plan --inputs <family
+     files> --output <absolute .project/review/PLAN-PANEL.md> --mode
+     <detected|named>`. Do not average findings or auto-replan.
+   Ask one explicit next question: whether to approve this plan and start the
+   build. When PLAN-PANEL.md has `Actionable: 0` or the panel did not run,
+   list `Approve and start build (recommended)` first, with `Request changes`
+   as the alternative. When `Actionable` is greater than 0, list `Address
+   panel findings first (recommended)` first, then `Approve and start build`,
+   then `Request changes`. Link PLAN-PANEL.md when it exists. If the user
+   requests changes, keep `phase: plan`, `status: active`, revise, and re-gate.
 6. On approval, set STATE.md to `phase: plan`, `status: done`, record the
    approval in the log. Then checkpoint the approval in Git: stage
    `.project/` in full — INTENT.md, research artifacts, the approved PLAN.md
-   and task set, STATE.md, and complete append-only discussion records — and
+   and task set, STATE.md, PLAN-PANEL.md when present, and complete
+   append-only discussion records — and
    commit with exact subject `plan: build plan approved`. Defer the
    checkpoint to the build orchestrator's transition commit only when the
    directory is not yet a Git repository or `.project/REPOSITORY.md` records
@@ -176,7 +208,7 @@ the artifacts directly:
    verify-only` permitted — and at most two deliverable-sized task files
    (project policy),
    honoring every task-contract rule above and `.project/LESSONS.md` when it
-   exists.
+   exists. Write `review_panel: off` regardless of INTENT.md.
 3. Gate exactly as step 3 above and use the same outcome, Review link, and
    single approval question as normal mode.
    A quick plan that cannot satisfy the gates — more than two tasks, an open

@@ -59,6 +59,8 @@ class DispatchContractTests(unittest.TestCase):
         self.assertIn("review_wave_<wave>_cycle_<cycle>", names)
         self.assertIn("review_wave_<wave>_cycle_<cycle>_contract", names)
         self.assertIn("review_wave_<wave>_cycle_<cycle>_adversarial", names)
+        self.assertIn("review_plan_panel_<family>", names)
+        self.assertIn("review_wave_<wave>_cycle_<cycle>_panel_<family>", names)
         self.assertIn("inspect_codebase", names)
         self.assertIn("inspect_docs", names)
 
@@ -81,6 +83,16 @@ class DispatchContractTests(unittest.TestCase):
                     f"{adapter.parent.name}/dispatch.md is missing mandated "
                     f"logical task name {name!r}",
                 )
+
+    def test_every_adapter_states_host_isolation_none(self):
+        for adapter in dispatch_adapters():
+            adapter_text = adapter.read_text(encoding="utf-8")
+            self.assertIn(
+                "Host isolation: none.",
+                adapter_text,
+                f"{adapter.parent.name}/dispatch.md is missing the host "
+                "isolation contract",
+            )
 
     def test_every_adapter_permits_the_review_lens_suffixes(self):
         for adapter in dispatch_adapters():

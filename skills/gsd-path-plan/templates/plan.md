@@ -7,6 +7,12 @@ Project verify: `<command that builds + tests the whole project>`
 ## Config
 
 - max_review_cycles: 3   <!-- review→fix→re-review loops per wave before escalating -->
+- review_panel: off      <!-- off | detected | claude,gpt,grok — optional
+                             cross-model panel. off is default. detected uses
+                             advertised host families except the parent, cap 3.
+                             Named families are an assertion. Quick lane stays
+                             off. The planner copies INTENT.md; it does not
+                             invent a non-off value. -->
 
 ## Wave 1 — risk burn-down
 

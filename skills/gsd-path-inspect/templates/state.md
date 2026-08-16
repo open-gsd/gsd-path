@@ -7,6 +7,8 @@ phase: define       # v2 tokens: inspect | define | research | decide | roadmap 
                     # roadmap only in program flow (CHARTER.md exists)
 status: active      # active | done | blocked; shipped is only phase: shipped + status: done
 branch: null        # bound once at build; reset for the next milestone
+                    # an integrated branch is EXPECTED merged into the default
+                    # branch; the binding guard validates ancestry, not merged-ness
 archive: null       # persisted archive transaction path; never recomputed
 ---
 

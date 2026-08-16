@@ -2,8 +2,9 @@
 
 <!-- Written and owned by $gsd-path-roadmap. Rolling-wave: milestone-granularity
      scope for EVERY milestone; waves and tasks are planned only for the active
-     milestone. Never edit a shipped entry except its Status and Archive
-     fields; never edit an abandoned entry at all. Lives at .project/ top
+     milestone. Never edit a shipped entry except its Status, Archive, and
+     Integrated fields; never edit an abandoned entry at all. Lives at
+     .project/ top
      level and persists across milestones; it never archives. -->
 
 ## Milestones
@@ -14,6 +15,8 @@ Goal: <one sentence — the independently shippable outcome>
 Depends on: []        # milestone ids; acyclic; earlier ids only
 Status: pending       # pending | active | shipped | abandoned
 Archive: null         # .project/archive/<NNN>-<slug>/ recorded at ship
+Integrated: null      # optional; merge SHA of integrate: <NNN>-<slug>,
+                      # filled at the milestone boundary after integration
 
 Scope: in
 - <deliverable sized capability>

@@ -41,9 +41,9 @@ special weight to:
 
 - Build, test, lint, and help commands are not presumed read-safe. Never run a
   project command in the source worktree. Run it only in the pre-created,
-  agent-specific disposable worktree named in the brief at its recorded clean
+  agent-specific verify sidecar named in the brief at its recorded clean
   Git revision. Do not create or remove Git worktrees yourself. If no faithful
-  disposable revision is supplied, use static evidence or record the check as
+  sidecar revision is supplied, use static evidence or record the check as
   `unverifiable`. Never run deploy, publish, or migration commands.
 - Observations, not judgments: "3 of 40 tests fail (list)" — not "poor
   test hygiene". The user may know exactly why.
