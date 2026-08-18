@@ -22,17 +22,21 @@ from typing import Iterator, NamedTuple, Optional, Sequence
 try:
     from pipeline_git import (
         default_branch_name,
+        integrate_commit_body,
         integrate_subject,
         is_integrate_subject,
         is_ship_subject,
+        ship_commit_body,
         ship_subject,
     )
 except ImportError:  # pragma: no cover - package import used by tests
     from scripts.pipeline_git import (
         default_branch_name,
+        integrate_commit_body,
         integrate_subject,
         is_integrate_subject,
         is_ship_subject,
+        ship_commit_body,
         ship_subject,
     )
 
@@ -1817,6 +1821,24 @@ def preflight(repo: Path) -> dict:
     }
 
 
+def require_canonical_commit_body(
+    project: Path,
+    commit: str,
+    canonical_subject: str,
+    expected_body: str,
+    label: str,
+) -> None:
+    message = require_git_success(
+        run_git(project, "show", "-s", "--format=%s%x00%b", commit),
+        f"inspect {label} commit message",
+    )
+    subject, separator, body = message.partition("\x00")
+    if not separator:
+        raise ArchiveError(f"{label} commit message is malformed")
+    if subject == canonical_subject and body.strip() != expected_body.strip():
+        raise ArchiveError(f"{label} commit body does not match required fields")
+
+
 def find_ship_commit(project: Path, archive_name: str) -> str:
     expected_subject = ship_subject(archive_name)
     log = require_git_success(
@@ -1928,6 +1950,13 @@ def validate(repo: Path) -> dict:
         raise ArchiveError(
             f"FINAL.md Reviewed HEAD {reviewed_head} does not match ship parent {ship_parent}"
         )
+    require_canonical_commit_body(
+        project,
+        ship_commit,
+        ship_subject(archive.name),
+        ship_commit_body(configured, reviewed_head),
+        "ship",
+    )
 
     archive_in_parent = run_git(project, "cat-file", "-e", f"{ship_commit}^:{configured}")
     if archive_in_parent.returncode == 0:
@@ -2025,12 +2054,21 @@ def validate_integrated(repo: Path, slug: str) -> dict:
     if bound_branch == default_name:
         raise ArchiveError(
             f"bound branch {bound_branch!r} is the remote default; "
-            "ship merges onto main (or the existing default), never onto the work branch"
+            "ship merges onto main, never onto the work branch"
         )
+    if default_name != "main":
+        raise ArchiveError(f"remote default must be main, got {default_name!r}")
 
     # (b) The integration merge must sit on the remote default's first-parent
     # history with the ship commit as its second parent.
     merge_commit = find_integrate_commit(project, remote_default, archive_name, ship_commit)
+    require_canonical_commit_body(
+        project,
+        merge_commit,
+        integrate_subject(archive_name, default_name),
+        integrate_commit_body(configured, ship_commit, default_name, bound_branch),
+        "integration",
+    )
 
     # (c) The milestone tag must be annotated and point at the merge commit.
     tag_name = f"milestone/{archive_name}"

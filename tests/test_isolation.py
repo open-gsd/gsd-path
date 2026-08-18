@@ -153,6 +153,29 @@ class IsolationTests(unittest.TestCase):
                 git(source, "branch", "--show-current"), "gsd-path-task/T001"
             )
 
+    def test_parallel_land_rejects_a_bodyless_source_commit(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            base = self.init_bound_repo(repo)
+            isolated = isolation.isolate_task(repo, base, "T001", 2)
+            source = Path(isolated["worktree"])
+            self.write(source, "src/app.py", "print('done')\n")
+            self.write(source, ".project/tasks/T001.md", "task T001\nlog\n")
+            git(source, "add", "src/app.py", ".project/tasks/T001.md")
+            git(source, "commit", "-q", "-m", "T001: add greeting")
+
+            with self.assertRaisesRegex(isolation.IsolationError, "commit body"):
+                isolation.land(
+                    repo,
+                    source,
+                    base,
+                    "T001",
+                    "add greeting",
+                    ".project/tasks/T001.md",
+                    ["src/app.py"],
+                )
+
     def test_land_rejects_unexpected_paths(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary) / "repo"

@@ -76,7 +76,8 @@ class BootstrapRepositoryTests(unittest.TestCase):
                     remote.parent.mkdir(parents=True, exist_ok=True)
                     with tempfile.TemporaryDirectory() as temporary:
                         seed = Path(temporary)
-                        subprocess.run(["git", "init", "-q", "-b", "main"], cwd=seed, check=True)
+                        default_branch = os.environ.get("FAKE_GH_DEFAULT_BRANCH", "main")
+                        subprocess.run(["git", "init", "-q", "-b", default_branch], cwd=seed, check=True)
                         subprocess.run(["git", "config", "user.name", "Fixture"], cwd=seed, check=True)
                         subprocess.run(["git", "config", "user.email", "fixture@example.invalid"], cwd=seed, check=True)
                         (seed / "README.md").write_text("# Demo\\n")
@@ -178,6 +179,35 @@ class BootstrapRepositoryTests(unittest.TestCase):
             self.git(checkout, "branch", "--show-current").stdout.strip(),
         )
         return workspace, checkout, worktree, remotes, environment, command
+
+    def test_create_rejects_remote_default_other_than_main(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            workspace = root / "workspace"
+            workspace.mkdir()
+            binary, remotes = self.write_fake_gh(root)
+            checkout = workspace / "demo"
+            worktree = workspace / "demo-gsd-path"
+            repository_template = root / "repository.md"
+            repository_template.write_text(
+                "Kind: <kind>\nRemote: <remote>\nVisibility: <visibility>\n"
+                "Remote default: <remote-default>\n"
+                "Remote default SHA: <remote-default-sha>\n"
+                "Default checkout: <default-checkout>\nGSD Path branch: <branch>\n"
+                "Primary worktree: <primary-worktree>\n"
+            )
+            environment = os.environ.copy()
+            environment["PATH"] = f"{binary}{os.pathsep}{environment['PATH']}"
+            environment["FAKE_GH_ROOT"] = str(remotes)
+            environment["FAKE_GH_DEFAULT_BRANCH"] = "master"
+            command = self.bootstrap_command(
+                workspace, checkout, worktree, repository_template
+            )
+
+            result = self.run_command(*command, cwd=workspace, env=environment)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("remote default must be main", result.stderr)
 
     def advance_remote(self, root: Path, remote: Path) -> None:
         updater = root / "updater"

@@ -395,6 +395,8 @@ def verify_checkout(request: BootstrapRequest) -> tuple[str, str]:
             f"remote default {remote_default!r} must stay a trunk; "
             "the GSD Path branch cannot be the GitHub default"
         )
+    if remote_default != "main":
+        raise BootstrapError(f"remote default must be main, got {remote_default!r}")
     base = git_output(checkout, "rev-parse", remote_ref)
     verify_checkout_revision(checkout, remote_default, base)
     return remote_default, base

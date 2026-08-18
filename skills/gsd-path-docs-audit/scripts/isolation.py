@@ -341,6 +341,13 @@ def land(
             raise IsolationError(
                 f"source commit subject is {source_subject!r}, expected {subject!r}"
             )
+        changed_paths = committed_paths_since(source, resolved_base)
+        expected_body = task_commit_body(
+            relative_posix(task_file), changed_paths
+        ).strip()
+        source_body = git_output(source, "log", "-1", "--format=%b", source_commit)
+        if source_body != expected_body:
+            raise IsolationError("source commit body does not match expected task fields")
     picked = run_git(primary, "cherry-pick", source_commit)
     if picked.returncode != 0:
         run_git(primary, "cherry-pick", "--abort")
