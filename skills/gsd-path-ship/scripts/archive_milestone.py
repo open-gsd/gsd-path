@@ -21,21 +21,27 @@ from typing import Iterator, NamedTuple, Optional, Sequence
 
 try:
     from pipeline_git import (
+        bound_branch_name,
         default_branch_name,
         integrate_commit_body,
         integrate_subject,
+        is_bound_branch,
         is_integrate_subject,
         is_ship_subject,
+        milestone_number,
         ship_commit_body,
         ship_subject,
     )
 except ImportError:  # pragma: no cover - package import used by tests
     from scripts.pipeline_git import (
+        bound_branch_name,
         default_branch_name,
         integrate_commit_body,
         integrate_subject,
+        is_bound_branch,
         is_integrate_subject,
         is_ship_subject,
+        milestone_number,
         ship_commit_body,
         ship_subject,
     )
@@ -2051,6 +2057,12 @@ def validate_integrated(repo: Path, slug: str) -> dict:
     bound_branch = frontmatter_value(state, "branch")
     if is_unset(bound_branch):
         raise ArchiveError("STATE.md does not name a bound build branch")
+    expected_branch = bound_branch_name(milestone_number(archive_name))
+    if bound_branch and is_bound_branch(bound_branch) and bound_branch != expected_branch:
+        expected_milestone = expected_branch.removeprefix("gsd-path/")
+        raise ArchiveError(
+            f"bound branch {bound_branch} does not match archive milestone {expected_milestone}"
+        )
     if bound_branch == default_name:
         raise ArchiveError(
             f"bound branch {bound_branch!r} is the remote default; "

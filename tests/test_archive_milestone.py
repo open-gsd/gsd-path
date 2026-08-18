@@ -18,6 +18,7 @@ if sys.platform != "win32":
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 ARCHIVE_SCRIPT = PROJECT_ROOT / "scripts" / "archive_milestone.py"
+PIPELINE_GIT_SCRIPT = PROJECT_ROOT / "scripts" / "pipeline_git.py"
 
 
 class ArchiveMilestoneTests(unittest.TestCase):
@@ -2276,18 +2277,16 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
             archive = self.prepare_archive(repo)
             self.write_manifest(archive)
             self.mark_shipped(repo)
+            reviewed_head = self.git(repo, "rev-parse", "HEAD").stdout.strip()
             self.git(repo, "add", ".project")
             ship = self.git(
                 repo,
                 "commit",
                 "-q",
                 "-m",
-                pipeline_git.ship_subject(archive.name),
+                "ship: M001 — demo",
                 "-m",
-                pipeline_git.ship_commit_body(
-                    f".project/archive/{archive.name}",
-                    self.git(repo, "rev-parse", "HEAD").stdout.strip(),
-                ),
+                f"Archive: .project/archive/001-demo\nReviewed-HEAD: {reviewed_head}",
             )
             self.assertEqual(ship.returncode, 0, ship.stderr)
             ship_sha = self.git(repo, "rev-parse", "HEAD").stdout.strip()
@@ -2296,12 +2295,12 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                 archive.name,
                 ship_sha,
                 branch="gsd-path/M001",
-                subject=pipeline_git.integrate_subject(archive.name, "main"),
-                body=pipeline_git.integrate_commit_body(
-                    f".project/archive/{archive.name}",
-                    ship_sha,
-                    "main",
-                    "gsd-path/M001",
+                subject="integrate: M001 — merge gsd-path/M001 into main",
+                body=(
+                    "Archive: .project/archive/001-demo\n"
+                    f"Ship: {ship_sha}\n"
+                    "Default: main\n"
+                    "Branch: gsd-path/M001"
                 ),
             )
 
@@ -2311,7 +2310,70 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
             self.assertEqual(payload["commit"], ship_sha)
             self.assertEqual(payload["integrate"], merge_sha)
 
-    def test_validate_rejects_canonical_ship_without_field_body(self) -> None:
+            bind = self.run_command(
+                sys.executable,
+                str(PIPELINE_GIT_SCRIPT),
+                "bind-next",
+                "--repo",
+                str(repo),
+                "--branch",
+                "gsd-path/M002",
+                "--previous-branch",
+                "gsd-path/M001",
+                "--ship",
+                ship_sha,
+                "--remote-default",
+                "origin/main",
+                "--base",
+                merge_sha,
+                cwd=PROJECT_ROOT,
+            )
+            self.assertEqual(bind.returncode, 0, bind.stderr)
+            self.assertTrue(bind.stdout.strip(), "bind-next returned no JSON")
+            self.assertEqual(
+                json.loads(bind.stdout),
+                {
+                    "base": merge_sha,
+                    "branch": "gsd-path/M002",
+                    "previous_branch": "gsd-path/M001",
+                },
+            )
+            self.assertEqual(
+                self.git(repo, "symbolic-ref", "--short", "refs/remotes/origin/HEAD")
+                .stdout.strip(),
+                "origin/main",
+            )
+            self.assertEqual(
+                self.git(repo, "branch", "--show-current").stdout.strip(),
+                "gsd-path/M002",
+            )
+            self.assertEqual(
+                self.git(repo, "rev-parse", "refs/heads/gsd-path/M001").stdout.strip(),
+                ship_sha,
+            )
+            self.assertEqual(
+                self.git(repo, "rev-parse", "refs/heads/gsd-path/M002").stdout.strip(),
+                merge_sha,
+            )
+            self.assertEqual(
+                self.git(repo, "rev-parse", "refs/remotes/origin/main").stdout.strip(),
+                merge_sha,
+            )
+            self.assertEqual(
+                self.git(repo, "rev-list", "--parents", "-n", "1", merge_sha)
+                .stdout.split()[2],
+                ship_sha,
+            )
+            self.assertEqual(
+                self.git(
+                    repo,
+                    "rev-parse",
+                    "refs/tags/milestone/001-demo^{commit}",
+                ).stdout.strip(),
+                merge_sha,
+            )
+
+    def test_validate_rejects_canonical_ship_without_required_field_body(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             repo = Path(temporary_directory)
             self.make_bound_repo(repo, branch="gsd-path/M001")
@@ -2325,6 +2387,8 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                 "-q",
                 "-m",
                 pipeline_git.ship_subject(archive.name),
+                "-m",
+                "Notes: not the required ship fields",
             )
             self.assertEqual(ship.returncode, 0, ship.stderr)
 
@@ -2340,7 +2404,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("ship commit body", result.stderr)
 
-    def test_validate_integrated_rejects_canonical_merge_without_field_body(
+    def test_validate_integrated_rejects_canonical_merge_without_required_field_body(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -2370,6 +2434,12 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                 ship_sha,
                 branch="gsd-path/M001",
                 subject=pipeline_git.integrate_subject(archive.name, "main"),
+                body=(
+                    "Archive: wrong\n"
+                    "Ship: wrong\n"
+                    "Default: main\n"
+                    "Branch: gsd-path/M001"
+                ),
             )
 
             result = self.validate_integrated(repo)
@@ -2397,6 +2467,50 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
             result = self.validate_integrated(repo)
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("is the remote default", result.stderr)
+
+    def test_validate_integrated_rejects_branch_number_not_matching_archive(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_bound_repo(repo, branch="gsd-path/M002")
+            archive = self.prepare_archive(repo)
+            self.write_manifest(archive)
+            self.mark_shipped(repo)
+            reviewed_head = self.git(repo, "rev-parse", "HEAD").stdout.strip()
+            self.git(repo, "add", ".project")
+            ship = self.git(
+                repo,
+                "commit",
+                "-q",
+                "-m",
+                "ship: M001 — demo",
+                "-m",
+                f"Archive: .project/archive/001-demo\nReviewed-HEAD: {reviewed_head}",
+            )
+            self.assertEqual(ship.returncode, 0, ship.stderr)
+            ship_sha = self.git(repo, "rev-parse", "HEAD").stdout.strip()
+            self.integrate_bound(
+                repo,
+                archive.name,
+                ship_sha,
+                branch="gsd-path/M002",
+                subject="integrate: M001 — merge gsd-path/M001 into main",
+                body=(
+                    "Archive: .project/archive/001-demo\n"
+                    f"Ship: {ship_sha}\n"
+                    "Default: main\n"
+                    "Branch: gsd-path/M002"
+                ),
+            )
+
+            result = self.validate_integrated(repo)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(
+                "bound branch gsd-path/M002 does not match archive milestone M001",
+                result.stderr,
+            )
 
     def test_validate_integrated_rejects_remote_default_other_than_main(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

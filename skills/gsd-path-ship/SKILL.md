@@ -194,9 +194,10 @@ field is the transaction identity.
    milestone is not shipped until integration below passes.
 7. Integrate only after the postcommit `validate` passes, with the recorded
    ship commit and the exact reviewed HEAD unchanged; otherwise block. Run
-   `git fetch origin`, resolve the remote-default name and SHA, and require
-   that name is not STATE.branch — the bound `gsd-path/M00N` branch is never
-   the GitHub default. Require
+   `git fetch origin`, then resolve the remote-default name and SHA. Before
+   any integration worktree, merge, tag, or push, require that the name is
+   exactly `main`; otherwise block. Also require that name is not STATE.branch
+   — the bound `gsd-path/M00N` branch is never the GitHub default. Require
    `git merge-base --is-ancestor <remote-default-sha> <ship-commit>` — the
    default branch must have no commits the ship commit lacks. On failure,
    block and escalate to the user; never auto-merge a diverged default.
