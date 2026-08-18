@@ -107,6 +107,15 @@ runs keep the build contract's current branch-binding behavior.
 
 ## Transaction recovery first
 
+Before archive recovery, compare the current symbolic branch with
+STATE.branch. A mismatch normally blocks. The one recoverable mismatch is an
+interrupted next-milestone handoff: state is `shipped/done` on the previous
+`gsd-path/M00N`, the current branch is the selected later `gsd-path/M00N`, and
+HEAD is the exact current `origin/main` SHA. Rerun the `bind-next` command from
+Next milestone with the logged previous branch and ship SHA. Resume that
+handoff only when the helper confirms every invariant and any worktree dirt is
+limited to the router's expected partial promotion paths; otherwise block.
+
 Before ordinary routing, inspect `STATE.archive`.
 
 - A concrete archive path is an in-progress or completed ship transaction.
@@ -219,7 +228,28 @@ Declining does not block; offer again only at the next milestone's build.
 Start only from a ship transaction that passes the bundled validator and the
 bundled integration check (`validate-integrated`); pending integration routes
 back to ship, never here. Preserve
-the previous archive path, ship SHA, and build branch in the state Log, then:
+the previous archive path, ship SHA, integration SHA, and build branch in the
+state Log. When another milestone remains, select its roadmap M00N id (or one
+plus the maximum archive prefix for a single-milestone restart), fetch origin,
+and resolve the exact current `origin/main` SHA. Before changing any
+next-milestone file, run:
+
+```text
+python3 <absolute-bundled-pipeline-git.py> bind-next \
+  --repo <absolute-primary-root> \
+  --branch gsd-path/M00N \
+  --previous-branch <STATE.branch> \
+  --ship <exact-ship-sha> \
+  --remote-default origin/main \
+  --base <exact-origin-main-sha>
+```
+
+The helper requires the previous branch to remain at the ship SHA, proves it
+is integrated into the exact base, rejects local or remote branch collisions,
+and switches the clean primary worktree without tracking main. Repeating the
+same command while the new branch is current at the unchanged base is the
+only idempotent recovery. Record the returned branch and base in the state
+Log, then:
 
 - **Program** (ROADMAP.md exists): while `pending` entries remain, first
   promote any lookahead track. When `.project/next/STATE.md` exists, move
@@ -227,7 +257,7 @@ the previous archive path, ship SHA, and build branch in the state Log, then:
   `next/tasks/` exist to their active `.project/` paths (promotion is
   idempotent — resume an interrupted promotion by moving what remains),
   copy the track's `phase`, `status`, and `milestone` into STATE.md with
-  `branch: null` and `archive: null`, mark that entry `active` in
+  `branch: gsd-path/M00N` and `archive: null`, mark that entry `active` in
   ROADMAP.md, fill the previously shipped entry's `Integrated:` field with
   the merge SHA of the just-completed integrate commit,
   remove `.project/next/`, and commit the promotion with exact
@@ -239,7 +269,7 @@ the previous archive path, ship SHA, and build branch in the state Log, then:
   build contract, subject to the re-validation below). With no lookahead
   track, reset
   `phase: define`, `status: active`, `milestone` to the next dependency-ready
-  `pending` slug, `branch: null`, and `archive: null`; mark that entry
+  `pending` slug, `branch: gsd-path/M00N`, and `archive: null`; mark that entry
   `active` in ROADMAP.md, fill the previously shipped entry's `Integrated:`
   field with the merge SHA of the just-completed integrate
   commit, and route to the bundled [define]
@@ -247,7 +277,8 @@ the previous archive path, ship SHA, and build branch in the state Log, then:
   report the program complete against CHARTER.md's program success criteria
   and stop.
 - **Single milestone** (no ROADMAP.md): reset `phase: inspect`,
-  `status: active`, `milestone: null`, `branch: null`, and `archive: null`.
+  `status: active`, `milestone: null`, `branch: gsd-path/M00N`, and
+  `archive: null`.
   The project is now brownfield, so inspect rescans current code and docs.
 
 Re-validate a promoted `plan/done` before routing to build: diff

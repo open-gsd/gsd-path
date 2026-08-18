@@ -218,6 +218,9 @@ field is the transaction identity.
    `python3 <absolute-script> validate-integrated --repo <root> --slug <slug>`
    as the post-integration gate; it is read-only and uses the existing
    `origin/*` refs without fetching. Report shipped only when it passes.
+   Leave the primary worktree and STATE.branch on the shipped
+   `gsd-path/M00N` at the ship commit. The router owns the later handoff to a
+   new milestone branch after this gate.
 8. If a crash occurs before STATE's atomic rename, discard only the exact
    deterministic state temp through `prepare`. If it occurs after STATE becomes
    `shipped/done` but before commit, run `prepare` and `preflight` under the

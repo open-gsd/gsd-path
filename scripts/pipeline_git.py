@@ -8,7 +8,12 @@ the default; the next milestone binds a new unused `gsd-path/M00N`.
 
 from __future__ import annotations
 
+import argparse
+import json
 import re
+import subprocess
+import sys
+from pathlib import Path
 from typing import Iterable, Optional, Sequence
 
 
@@ -169,3 +174,188 @@ def active_roadmap_milestone_id(roadmap_text: str) -> Optional[str]:
                 return current_id
             current_id = None
     return None
+
+
+def _run_git(
+    repo: Path,
+    *args: str,
+    check: bool = True,
+) -> subprocess.CompletedProcess[str]:
+    result = subprocess.run(
+        ["git", "-C", str(repo), *args],
+        capture_output=True,
+        text=True,
+    )
+    if check and result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip()
+        raise PipelineGitError(f"git {' '.join(args)} failed: {detail}")
+    return result
+
+
+def _ref_exists(repo: Path, ref: str) -> bool:
+    result = _run_git(
+        repo,
+        "show-ref",
+        "--verify",
+        "--quiet",
+        ref,
+        check=False,
+    )
+    if result.returncode not in {0, 1}:
+        raise PipelineGitError(f"could not inspect bound branch: {ref}")
+    return result.returncode == 0
+
+
+def bind_next_milestone_branch(
+    repo: Path,
+    branch: str,
+    previous_branch: str,
+    ship: str,
+    remote_default: str,
+    base: str,
+) -> dict[str, str]:
+    """Move a clean primary worktree onto a new bound branch after integration."""
+    if not is_bound_branch(branch):
+        raise PipelineGitError(f"invalid bound branch: {branch}")
+    if not is_bound_branch(previous_branch):
+        raise PipelineGitError(f"invalid previous bound branch: {previous_branch}")
+    if milestone_number(branch) <= milestone_number(previous_branch):
+        raise PipelineGitError(f"next branch {branch} must follow {previous_branch}")
+    if remote_default != "origin/main":
+        raise PipelineGitError(f"remote default must be origin/main, got {remote_default}")
+
+    default_sha = _run_git(
+        repo,
+        "rev-parse",
+        "--verify",
+        f"{remote_default}^{{commit}}",
+    ).stdout.strip()
+    base_sha = _run_git(
+        repo,
+        "rev-parse",
+        "--verify",
+        f"{base}^{{commit}}",
+    ).stdout.strip()
+    if base != base_sha:
+        raise PipelineGitError(f"base must be the full commit SHA: {base}")
+    if base_sha != default_sha:
+        raise PipelineGitError(
+            f"validated base is stale: {base_sha} != {remote_default} {default_sha}"
+        )
+    previous_sha = _run_git(
+        repo,
+        "rev-parse",
+        "--verify",
+        f"refs/heads/{previous_branch}^{{commit}}",
+    ).stdout.strip()
+    ship_sha = _run_git(
+        repo,
+        "rev-parse",
+        "--verify",
+        f"{ship}^{{commit}}",
+    ).stdout.strip()
+    if ship != ship_sha:
+        raise PipelineGitError(f"ship must be the full commit SHA: {ship}")
+    if previous_sha != ship_sha:
+        raise PipelineGitError(
+            f"previous branch moved after ship: {previous_sha} != {ship_sha}"
+        )
+    integrated = _run_git(
+        repo,
+        "merge-base",
+        "--is-ancestor",
+        previous_sha,
+        base_sha,
+        check=False,
+    )
+    if integrated.returncode == 1:
+        raise PipelineGitError(f"{previous_branch} is not integrated into {remote_default}")
+    if integrated.returncode != 0:
+        detail = integrated.stderr.strip() or integrated.stdout.strip()
+        raise PipelineGitError(f"could not verify integrated branch: {detail}")
+
+    symbolic_branch = _run_git(
+        repo,
+        "symbolic-ref",
+        "--quiet",
+        "--short",
+        "HEAD",
+        check=False,
+    )
+    if symbolic_branch.returncode != 0:
+        raise PipelineGitError("primary worktree must be on a named branch")
+    current = symbolic_branch.stdout.strip()
+    remote_branch_ref = f"refs/remotes/origin/{branch}"
+    if _ref_exists(repo, remote_branch_ref):
+        raise PipelineGitError(f"bound branch already exists: {remote_branch_ref}")
+
+    if current == branch:
+        head = _run_git(repo, "rev-parse", "HEAD").stdout.strip()
+        if head != base_sha:
+            raise PipelineGitError(
+                f"existing {branch} is not at {remote_default}: {head} != {default_sha}"
+            )
+        return {
+            "base": default_sha,
+            "branch": branch,
+            "previous_branch": previous_branch,
+        }
+
+    if current != previous_branch:
+        raise PipelineGitError(
+            f"current branch {current} does not match previous branch {previous_branch}"
+        )
+    if _run_git(repo, "status", "--porcelain").stdout:
+        raise PipelineGitError("primary worktree is not clean")
+
+    local_branch_ref = f"refs/heads/{branch}"
+    if _ref_exists(repo, local_branch_ref):
+        raise PipelineGitError(f"bound branch already exists: {local_branch_ref}")
+
+    _run_git(repo, "switch", "--no-track", "-c", branch, base_sha)
+    return {
+        "base": default_sha,
+        "branch": branch,
+        "previous_branch": previous_branch,
+    }
+
+
+def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    subparsers = parser.add_subparsers(dest="command", required=True)
+    bind_next = subparsers.add_parser(
+        "bind-next",
+        help="bind the next milestone branch at the integrated remote default",
+    )
+    bind_next.add_argument("--repo", required=True, type=Path)
+    bind_next.add_argument("--branch", required=True)
+    bind_next.add_argument("--previous-branch", required=True)
+    bind_next.add_argument("--ship", required=True)
+    bind_next.add_argument("--remote-default", required=True)
+    bind_next.add_argument("--base", required=True)
+    return parser.parse_args(argv)
+
+
+def main(argv: Optional[Sequence[str]] = None) -> int:
+    args = parse_args(argv)
+    try:
+        if args.command == "bind-next":
+            result = bind_next_milestone_branch(
+                args.repo,
+                args.branch,
+                args.previous_branch,
+                args.ship,
+                args.remote_default,
+                args.base,
+            )
+        else:  # pragma: no cover - argparse rejects unknown commands
+            raise PipelineGitError(f"unknown command: {args.command}")
+    except PipelineGitError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    print(json.dumps(result, sort_keys=True))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

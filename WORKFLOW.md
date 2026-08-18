@@ -306,15 +306,17 @@ At first entry, fetch and resolve the remote default SHA without checking out
 or updating the local default branch. Bind the branch recorded in STATE.branch
 (and REPOSITORY.md when present) — never whatever is current when a recorded
 branch exists. Validate the binding: the current symbolic branch must equal
-STATE.branch, and a mismatch blocks. The newest `ship:` commit on the branch,
-if any, must be an ancestor of origin/<default>; if it is not, the previous
-milestone's integration is incomplete and control routes to ship, not build.
-A branch merged into the default branch without a corresponding
-`integrate:` commit is externally polluted and blocks. A fresh
-branch (no ship commits) follows the original rule: use the current clean
-unmerged non-default `gsd-path/M00N` branch, or create `gsd-path/M00N`
-directly at the remote-default SHA. The bound branch must not be the remote
-default. The initial binding commit changes `plan/done` to
+STATE.branch, and a mismatch blocks. Ignore older milestone ship and integrate
+commits inherited through main. A ship for STATE.branch's M00N, if any, must
+be an ancestor of origin/main and have its matching integrate commit there;
+otherwise control routes to ship or blocks as externally polluted. A newly
+prebound branch at the exact remote-default SHA is valid. A fresh initial
+branch with no shipped archive or current-milestone ship follows the original
+rule: use the current clean unmerged non-default `gsd-path/M00N` branch, or
+create `gsd-path/M00N` directly at the remote-default SHA. The bound branch
+must not be the remote default. A null branch after shipped history returns to
+the router for its incomplete milestone handoff. The initial binding commit
+changes `plan/done` to
 `build/active` before any task dispatch. Recovering a resolved `build/blocked`
 state likewise commits `build/active` before a new dispatch-round base.
 
@@ -430,10 +432,16 @@ questions, decide, and plan run there under their normal gates, reading
 program artifacts from their active paths. The track never writes an
 active-path artifact, never binds a branch, and advances only on explicit
 user direction. At the milestone boundary the router promotes `next/` to
-the active paths in one bookkeeping commit and routes by the promoted
-state. Promotion re-validates a completed lookahead plan's task paths
-against the new HEAD (diff since the approval checkpoint commit); drifted
-tasks return to `plan/active` for re-gating and re-approval before build.
+the active paths in one bookkeeping commit and routes by the promoted state.
+After integration validation and before that promotion, the router uses the
+bundled `pipeline_git.py bind-next` helper to move the clean primary worktree
+from the shipped branch to the new unused `gsd-path/M00N` branch at the exact
+current `origin/main` SHA. STATE.branch records the new branch, so the
+promotion commit is the first commit on it. The same handoff precedes a normal
+next-milestone define or single-milestone inspect. Promotion re-validates a
+completed lookahead plan's task paths against the new HEAD (diff since the
+approval checkpoint commit); drifted tasks return to `plan/active` for
+re-gating and re-approval before build.
 
 ## Phase 6 — Ship (`gsd-path-ship`)
 
@@ -550,7 +558,9 @@ SHA, merges the ship commit with `--no-ff` under the subject
 `ship:` — the guard restricts those subjects to `.project/`-only paths),
 pushes in order the merge to the default branch, the bound branch, and an
 annotated tag `milestone/<NNN>-<slug>` pointing at the merge commit, and
-removes the temporary worktree. NNN always comes from the persisted
+removes the temporary worktree. Ship leaves the primary worktree and
+STATE.branch on the shipped `gsd-path/M00N`; the router owns the later branch
+handoff. NNN always comes from the persisted
 STATE.archive sequence — never recomputed. The remote default must not be
 the bound branch.
 
@@ -562,7 +572,8 @@ crash-recovery transaction id, discoverable via `find_ship_commit`; no new
 STATE field. Resume is idempotent: merge only if the ship commit is not yet
 an ancestor of origin/<default>, tag only if absent, and retry pushes freely.
 The router must not report shipped or start the next milestone while
-integration is pending — it routes back to ship.
+integration is pending — it routes back to ship. Once validation passes, the
+router binds the next milestone branch before any next-milestone file change.
 
 **Gate:** the bundled validator proves the committed shipped state, complete
 archive and manifest, valid carry-forward, clean worktree, the newest commit

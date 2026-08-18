@@ -22,5 +22,6 @@ After final-review approval, ship:
    annotated tag `milestone/<NNN>-<slug>` pointing at the merge.
 4. Reports shipped only after `validate-integrated` passes.
 
-The bound branch is never the GitHub default. The next milestone binds a new
-`gsd-path/M00N` at the updated remote default.
+The bound branch is never the GitHub default. After integration validation,
+the router moves the primary worktree to a new `gsd-path/M00N` at the exact
+updated `origin/main` SHA before changing any next-milestone files.

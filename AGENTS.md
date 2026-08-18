@@ -100,15 +100,24 @@ If two sources disagree, stop and surface the conflict. Never average.
   Integration at ship is the only path from the bound branch to the default
   branch — the bound branch never receives merges or back-merges, is never
   the GitHub default, and nothing else merges, pushes, or tags on its behalf.
-- Build binds the branch recorded in STATE.branch, never whatever is current
+- After `validate-integrated` passes and before any next-milestone file
+  changes, the router calls the bundled `scripts/pipeline_git.py bind-next`
+  helper with the previous bound branch, exact ship SHA, and exact current
+  `origin/main` SHA. The helper moves the clean primary worktree to the new
+  unused `gsd-path/M00N` branch at that SHA without moving the previous
+  branch or entering the default checkout. The router persists the new branch
+  in STATE; a wrong-SHA or colliding branch blocks. This handoff and the
+  approved new-repository bootstrap are the router's only bound-branch
+  creation authority.
+- Build adopts the branch recorded in STATE.branch, never whatever is current
   when a recorded branch exists. A new-GitHub REPOSITORY.md proves the
   default checkout and first bound branch; later milestones may rebind
-  `gsd-path/M00N` without rewriting that artifact. The newest `ship:`
-  commit on the bound branch must be an ancestor of origin/<default>; if it
-  is not, the previous milestone's integration is incomplete and control
-  routes to ship, not build. A branch merged into the default branch without
-  a corresponding `integrate:` commit is externally polluted
-  and blocks.
+  `gsd-path/M00N` without rewriting that artifact. Build ignores older
+  milestone ship and integrate commits inherited through main. A ship commit
+  for the current STATE.branch milestone must be an ancestor of origin/main;
+  if it is not, that milestone's integration is incomplete and control routes
+  to ship, not build. A current-milestone ship on main without its matching
+  `integrate:` commit is externally polluted and blocks.
 - The ship phase makes exactly one commit on the bound branch — the
   `.project/`-only ship commit recording
   STATE.md, the final-review artifacts, and the archive — and additionally
@@ -209,12 +218,12 @@ If two sources disagree, stop and surface the conflict. Never average.
   collision without that journal blocks. The helper removes the journal only
   after writing owned STATE.md and fixed-format `.project/REPOSITORY.md` in the
   linked worktree.
-- The router has one narrow exception to build's branch ownership: during an
-  approved new-repository transaction, it may create the GSD Path branch and
-  linked primary worktree at the verified remote-default SHA and persist that
-  branch in STATE.md and REPOSITORY.md. Build must verify and adopt that exact
-  binding from REPOSITORY.md, never a free-form log. Task branches and task
-  worktrees remain exclusively build-orchestrator owned.
+- During an approved new-repository transaction, the router may create the
+  first GSD Path branch and linked primary worktree at the verified
+  remote-default SHA and persist that branch in STATE.md and REPOSITORY.md.
+  Build must verify and adopt that exact binding from REPOSITORY.md, never a
+  free-form log. Task branches and task worktrees remain exclusively
+  build-orchestrator owned.
 - Keep the cloned default checkout clean on the remote default branch. Run the
   pipeline from the linked GSD Path worktree; never initialize `.project/` in
   the default checkout, reuse an existing branch or path, move an existing

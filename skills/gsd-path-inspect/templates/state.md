@@ -6,9 +6,9 @@ phase: define       # v2 tokens: inspect | define | research | decide | roadmap 
                     # inspect only for brownfield; greenfield starts at define
                     # roadmap only in program flow (CHARTER.md exists)
 status: active      # active | done | blocked; shipped is only phase: shipped + status: done
-branch: null        # bound per milestone as gsd-path/M00N; reset after ship
-                    # the bound branch is never the remote default; ship merges
-                    # it onto main (or the existing default)
+branch: null        # bound per milestone as gsd-path/M00N; after integration
+                    # the router rebinds before any next-milestone file change
+                    # the bound branch is never main; ship merges it there
 archive: null       # persisted archive transaction path; never recomputed
 ---
 

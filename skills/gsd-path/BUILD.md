@@ -64,19 +64,22 @@ explicitly invokes it.
   checking out, pulling, or updating the local default branch. When
   `STATE.branch` is set, bind that recorded branch — never whatever clean
   unmerged non-default branch happens to be current: require the current
-  symbolic branch to equal it. On the bound branch, find the newest commit
-  whose subject starts with `ship:`, if any. If one exists and is not an
-  ancestor of the resolved remote-default SHA, the previous milestone's
-  integration is incomplete: stop and return to `$gsd-path`, which routes to
-  ship, not build. If the branch is merged into the default branch without a
-  corresponding `integrate:` commit, block as externally polluted. When
-  `STATE.branch` is null and the current branch carries no `ship:` commit,
+  symbolic branch to equal it. Ignore ship and integrate commits for older
+  milestones inherited from main. Find only a ship subject whose M00N matches
+  STATE.branch (including its legacy sequence form). If one exists and is not
+  an ancestor of the resolved remote-default SHA, this milestone's integration
+  is incomplete: stop and return to `$gsd-path`, which routes to ship, not
+  build. If that current-milestone ship is on the default without its matching
+  `integrate:` commit, block as externally polluted. A newly prebound branch
+  whose HEAD equals the resolved remote-default SHA is valid. When
+  `STATE.branch` is null and neither archive nor shipped history exists,
   bind a `gsd-path/M00N` branch at that remote-default SHA: the active
   ROADMAP.md entry id when one exists, otherwise one plus the maximum
   existing archive prefix, otherwise M001. Use the current clean unmerged
   non-default branch only when it already has that exact name. The bound
   branch must not equal the remote default. A mismatch or a branch owned by
-  another worktree blocks; never silently rebind it.
+  another worktree blocks; never silently rebind it. A null branch after
+  shipped history is an incomplete router handoff and returns to `$gsd-path`.
 - When `.project/REPOSITORY.md` records `Kind: new-github`, parse its required
   fixed fields and verify the current root is the recorded linked primary
   worktree and the recorded default checkout stays clean on the remote
