@@ -16,6 +16,11 @@ import sys
 from pathlib import Path, PurePosixPath
 from typing import Dict, Optional, Sequence, Set
 
+try:
+    from pipeline_git import task_commit_body, task_commit_subject
+except ImportError:  # pragma: no cover - package import used by tests
+    from scripts.pipeline_git import task_commit_body, task_commit_subject
+
 
 TASK_BRANCH_PREFIX = "gsd-path-task/"
 VERIFY_BRANCH_PREFIX = "gsd-path-verify/"
@@ -239,6 +244,7 @@ def commit_allowed_changes(
     base: str,
     subject: str,
     allowed: Set[str],
+    body: str,
 ) -> str:
     require_attached(repo)
     pending = uncommitted_paths(repo)
@@ -260,7 +266,7 @@ def commit_allowed_changes(
     )
     if staged != pending:
         raise IsolationError("staged paths do not match the uncommitted change set")
-    committed = run_git(repo, "commit", "-q", "-m", subject)
+    committed = run_git(repo, "commit", "-q", "-m", subject, "-m", body)
     if committed.returncode != 0:
         raise IsolationError(
             (committed.stderr or committed.stdout).strip() or "commit failed"
@@ -289,9 +295,10 @@ def land(
     source_branch = require_attached(source)
     resolved_base = require_commit(primary, require_full_sha(base))
     validate_task_id(task_id)
-    if not title.strip():
-        raise IsolationError("title is empty")
-    subject = f"{task_id}: {title.strip()}"
+    try:
+        subject = task_commit_subject(task_id, title)
+    except ValueError as error:
+        raise IsolationError(str(error)) from error
     allowed = {relative_posix(task_file)}
     for path in allow_paths:
         allowed.add(relative_posix(path))
@@ -299,7 +306,9 @@ def land(
     if serial:
         if source_branch != bound:
             raise IsolationError("serial landing requires the bound branch")
-        commit = commit_allowed_changes(primary, resolved_base, subject, allowed)
+        pending = uncommitted_paths(primary)
+        body = task_commit_body(relative_posix(task_file), pending)
+        commit = commit_allowed_changes(primary, resolved_base, subject, allowed, body)
         return {
             "bound_branch": bound,
             "commit": commit,
@@ -318,7 +327,11 @@ def land(
     if status:
         raise IsolationError("primary worktree is dirty; refusing to cherry-pick")
     if uncommitted_paths(source):
-        source_commit = commit_allowed_changes(source, resolved_base, subject, allowed)
+        pending = uncommitted_paths(source)
+        body = task_commit_body(relative_posix(task_file), pending)
+        source_commit = commit_allowed_changes(
+            source, resolved_base, subject, allowed, body
+        )
     else:
         source_commit = current_sha(source)
         if source_commit == resolved_base:

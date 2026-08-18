@@ -100,7 +100,8 @@ precondition fails.
    checkpoint the approval in Git: stage `.project/` in full — the approved
    CHARTER.md, program SYNTHESIS.md, ROADMAP.md, research artifacts, STATE.md,
    and complete append-only discussion records — and commit with exact
-   subject `roadmap: program roadmap approved`. Defer the checkpoint to the
+   subject `roadmap: program roadmap approved` and body
+   `Why: approved roadmap checkpoint`. Defer the checkpoint to the
    build orchestrator's transition commit only when the directory is not yet
    a Git repository or `.project/REPOSITORY.md` records `Kind: new-github`
    (the router owns the branch during that transaction). Confirm

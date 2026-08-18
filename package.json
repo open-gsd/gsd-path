@@ -21,6 +21,7 @@
     "scripts/guard_hook.py",
     "scripts/git_guard.py",
     "scripts/isolation.py",
+    "scripts/pipeline_git.py",
     "README.md",
     "DOCS.md",
     "HOOKS.md",

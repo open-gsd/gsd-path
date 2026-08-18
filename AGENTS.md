@@ -94,23 +94,27 @@ If two sources disagree, stop and surface the conflict. Never average.
   branches only, never a detached HEAD — lands task work serially, and
   records each clean base and exact full commit SHA in task frontmatter. It
   writes no product code.
-- All pipeline work lives on one long-lived `gsd-path/<slug>` branch bound in
-  STATE.branch and re-bound per milestone; milestones never get their own
-  branches. Integration at ship is the only path from the bound branch to the
-  default branch — the bound branch never receives merges or back-merges, and
-  nothing else merges, pushes, or tags on its behalf.
-- Build binds the branch recorded in STATE.branch / REPOSITORY.md, never
-  whatever is current when a recorded branch exists. The newest `ship:`
+- All pipeline work for a milestone lives on `gsd-path/M00N` (M001, M002,
+  …) bound in STATE.branch. The next milestone binds a new unused
+  `gsd-path/M00N` at the remote default after the previous ship integrates.
+  Integration at ship is the only path from the bound branch to the default
+  branch — the bound branch never receives merges or back-merges, is never
+  the GitHub default, and nothing else merges, pushes, or tags on its behalf.
+- Build binds the branch recorded in STATE.branch, never whatever is current
+  when a recorded branch exists. A new-GitHub REPOSITORY.md proves the
+  default checkout and first bound branch; later milestones may rebind
+  `gsd-path/M00N` without rewriting that artifact. The newest `ship:`
   commit on the bound branch must be an ancestor of origin/<default>; if it
   is not, the previous milestone's integration is incomplete and control
   routes to ship, not build. A branch merged into the default branch without
-  a corresponding `integrate: <NNN>-<slug>` commit is externally polluted
+  a corresponding `integrate:` commit is externally polluted
   and blocks.
 - The ship phase makes exactly one commit on the bound branch — the
   `.project/`-only ship commit recording
   STATE.md, the final-review artifacts, and the archive — and additionally
-  owns the integration leg: one `integrate: <NNN>-<slug>` merge commit on the
-  default branch, one annotated `milestone/<NNN>-<slug>` tag, and the pushes.
+  owns the integration leg: one `--no-ff` merge onto the remote default
+  (usually `main`) with subject `integrate: M00N — merge gsd-path/M00N into
+  <default>`, one annotated `milestone/<NNN>-<slug>` tag, and the pushes.
   The roadmap and
   plan phases each make exactly one approval checkpoint commit
   (`.project/`-only, deferred to the build transition commit during a
@@ -193,7 +197,7 @@ If two sources disagree, stop and surface the conflict. Never average.
 
 - Create a GitHub repository only from an explicit user request followed by an
   approval of the exact owner/name, visibility, default-checkout path,
-  `gsd-path/<project-slug>` branch, and linked primary-worktree path. Before the
+  `gsd-path/M001` branch, and linked primary-worktree path. Before the
   external action produces an artifact, present those proposed targets as the
   inline **Review** surface and mark them not yet created. Do not write a
   preview file into the invocation directory or another repository. Run the

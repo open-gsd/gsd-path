@@ -19,6 +19,23 @@ from datetime import date
 from pathlib import Path, PurePosixPath
 from typing import Iterator, NamedTuple, Optional, Sequence
 
+try:
+    from pipeline_git import (
+        default_branch_name,
+        integrate_subject,
+        is_integrate_subject,
+        is_ship_subject,
+        ship_subject,
+    )
+except ImportError:  # pragma: no cover - package import used by tests
+    from scripts.pipeline_git import (
+        default_branch_name,
+        integrate_subject,
+        is_integrate_subject,
+        is_ship_subject,
+        ship_subject,
+    )
+
 if sys.platform == "win32":
     import msvcrt
 else:
@@ -1801,7 +1818,7 @@ def preflight(repo: Path) -> dict:
 
 
 def find_ship_commit(project: Path, archive_name: str) -> str:
-    expected_subject = f"ship: {archive_name}"
+    expected_subject = ship_subject(archive_name)
     log = require_git_success(
         run_git(project, "log", "--first-parent", "--format=%H%x00%s", "HEAD"),
         "inspect HEAD history for the ship commit",
@@ -1811,7 +1828,7 @@ def find_ship_commit(project: Path, archive_name: str) -> str:
         if "\x00" not in record:
             continue
         commit, subject = record.split("\x00", 1)
-        if subject == expected_subject:
+        if is_ship_subject(subject, archive_name):
             matches.append(commit)
     if not matches:
         raise ArchiveError(f"no commit with exact subject {expected_subject!r} in HEAD history")
@@ -1951,7 +1968,8 @@ def find_integrate_commit(
     archive_name: str,
     ship_commit: str,
 ) -> str:
-    expected_subject = f"integrate: {archive_name}"
+    default_name = default_branch_name(remote_default)
+    expected_subject = integrate_subject(archive_name, default_name)
     log = require_git_success(
         run_git(project, "log", "--first-parent", "--format=%H%x00%s", remote_default),
         f"inspect {remote_default} first-parent history for the integration merge",
@@ -1961,7 +1979,7 @@ def find_integrate_commit(
         if "\x00" not in record:
             continue
         commit, subject = record.split("\x00", 1)
-        if subject == expected_subject:
+        if is_integrate_subject(subject, archive_name, default_name):
             matches.append(commit)
     if not matches:
         raise ArchiveError(
@@ -2000,6 +2018,15 @@ def validate_integrated(repo: Path, slug: str) -> dict:
     # Read-only and network-free: only existing origin/* refs are consulted;
     # fetching is the phase's job.
     remote_default = resolve_remote_default(project)
+    default_name = default_branch_name(remote_default)
+    bound_branch = frontmatter_value(state, "branch")
+    if is_unset(bound_branch):
+        raise ArchiveError("STATE.md does not name a bound build branch")
+    if bound_branch == default_name:
+        raise ArchiveError(
+            f"bound branch {bound_branch!r} is the remote default; "
+            "ship merges onto main (or the existing default), never onto the work branch"
+        )
 
     # (b) The integration merge must sit on the remote default's first-parent
     # history with the ship commit as its second parent.

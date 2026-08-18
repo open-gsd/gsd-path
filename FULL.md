@@ -291,10 +291,12 @@ approve **Archive and ship**, the archive transaction begins:
   `REPOSITORY.md`, `LESSONS.md`, and program artifacts (`CHARTER.md`,
   `ROADMAP.md`, top-level `SYNTHESIS.md`) remain active project metadata
 - `MANIFEST.md` records contents and ship metadata
-- One **ship commit** (subject `ship: …`) touches only `.project/`
+- One **ship commit** (subject `ship: M00N — <slug>`) touches only `.project/`
+- Ship then merges `gsd-path/M00N` onto `main` (the remote default) and tags
+  `milestone/<NNN>-<slug>`
 - Archives are **read-only** — guard hooks enforce this if installed
 
-The next milestone starts clean. Invoke the router again; brownfield inspect
+The next milestone starts clean on a new `gsd-path/M00N` cut from `main`. Invoke the router again; brownfield inspect
 runs against the now-shipped codebase. In program flow the router instead
 pulls the next pending roadmap entry and resumes at define (milestone mode);
 when every entry is shipped it reports the program complete against the

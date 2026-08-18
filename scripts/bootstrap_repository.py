@@ -116,7 +116,7 @@ def request_from_arguments(arguments: argparse.Namespace) -> BootstrapRequest:
         visibility=arguments.visibility,
         default_checkout=str(checkout),
         worktree=str(worktree),
-        branch=f"gsd-path/{slug}",
+        branch="gsd-path/M001",
         description=arguments.description,
     )
 
@@ -390,6 +390,11 @@ def verify_checkout(request: BootstrapRequest) -> tuple[str, str]:
     if not remote_ref.startswith("origin/"):
         raise BootstrapError(f"remote default ref is invalid: {remote_ref}")
     remote_default = remote_ref.removeprefix("origin/")
+    if remote_default == request.branch:
+        raise BootstrapError(
+            f"remote default {remote_default!r} must stay a trunk; "
+            "the GSD Path branch cannot be the GitHub default"
+        )
     base = git_output(checkout, "rev-parse", remote_ref)
     verify_checkout_revision(checkout, remote_default, base)
     return remote_default, base

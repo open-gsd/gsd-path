@@ -50,7 +50,7 @@ initialization Log entry. No template placeholder may remain.
 
 The router's verified new-GitHub-repository transaction is the sole greenfield
 exception: STATE.md already exists at `define/active`, `branch` is the approved
-`gsd-path/<project-slug>` branch, and `.project/REPOSITORY.md` contains the
+`gsd-path/M001` branch, and `.project/REPOSITORY.md` contains the
 fixed-format remote, remote-default SHA, clean default checkout, branch, and
 primary worktree. Verify that artifact and the current branch/worktree before
 interviewing. The bootstrap README does not make this routed project

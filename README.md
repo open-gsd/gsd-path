@@ -127,7 +127,7 @@ phase and returns only a durable conversation record.
 **Quick lane** (tiny scope) may skip research/decide — see [FULL.md](FULL.md).
 
 For an explicit new-GitHub request, the router previews the owner, visibility,
-default checkout, `gsd-path/<project>` branch, and sibling linked worktree. A
+default checkout, `gsd-path/M001` branch, and sibling linked worktree. A
 journaled helper performs the approved creation and safely resumes a matching
 partial remote/clone/worktree transaction; the default checkout stays clean.
 

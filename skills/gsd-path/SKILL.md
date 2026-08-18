@@ -37,7 +37,7 @@ GitHub repository and no owned `.project/STATE.md` is active for that request.
 1. Resolve the repository name and normalized project slug. Obtain the GitHub
    owner, one supported visibility (`public`, `private`, or `internal`), and a
    local workspace when absent; do not infer account ownership or visibility.
-   Derive `gsd-path/<project-slug>` as the branch. The default checkout is
+   Derive `gsd-path/M001` as the branch. The default checkout is
    `<resolved-workspace>/<repo-name>`; propose the distinct sibling
    `<resolved-workspace>/<repo-name>-gsd-path` as the linked worktree. The user
    may choose another workspace or worktree path before approval.
@@ -229,9 +229,11 @@ the previous archive path, ship SHA, and build branch in the state Log, then:
   copy the track's `phase`, `status`, and `milestone` into STATE.md with
   `branch: null` and `archive: null`, mark that entry `active` in
   ROADMAP.md, fill the previously shipped entry's `Integrated:` field with
-  the merge SHA of the just-completed `integrate: <NNN>-<slug>` commit,
+  the merge SHA of the just-completed integrate commit,
   remove `.project/next/`, and commit the promotion with exact
-  subject `router: promote lookahead milestone <slug>` — the router's only
+  subject `router: promote lookahead milestone <slug>` and body
+  `Why: promote lookahead track` plus `Milestone: <slug>` and
+  `Integrate: <merge SHA>` — the router's only
   bookkeeping commit outside the new-repository transaction. Then route by
   the promoted state (a promoted `plan/done` goes straight to the bundled
   build contract, subject to the re-validation below). With no lookahead
@@ -239,8 +241,8 @@ the previous archive path, ship SHA, and build branch in the state Log, then:
   `phase: define`, `status: active`, `milestone` to the next dependency-ready
   `pending` slug, `branch: null`, and `archive: null`; mark that entry
   `active` in ROADMAP.md, fill the previously shipped entry's `Integrated:`
-  field with the merge SHA of the just-completed `integrate: <NNN>-<slug>`
-  commit, and route to the bundled [define
+  field with the merge SHA of the just-completed integrate
+  commit, and route to the bundled [define]
   contract](DEFINE.md) in milestone mode. When every entry is `shipped`,
   report the program complete against CHARTER.md's program success criteria
   and stop.

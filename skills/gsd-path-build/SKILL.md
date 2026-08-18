@@ -71,24 +71,30 @@ explicitly invokes it.
   ship, not build. If the branch is merged into the default branch without a
   corresponding `integrate:` commit, block as externally polluted. When
   `STATE.branch` is null and the current branch carries no `ship:` commit,
-  bind either the current clean, unmerged non-default branch or a new unused
-  `gsd-path/<project-slug>` branch created directly at that remote-default
-  SHA. A mismatch or a branch owned by another worktree blocks; never
-  silently rebind it.
+  bind a `gsd-path/M00N` branch at that remote-default SHA: the active
+  ROADMAP.md entry id when one exists, otherwise one plus the maximum
+  existing archive prefix, otherwise M001. Use the current clean unmerged
+  non-default branch only when it already has that exact name. The bound
+  branch must not equal the remote default. A mismatch or a branch owned by
+  another worktree blocks; never silently rebind it.
 - When `.project/REPOSITORY.md` records `Kind: new-github`, parse its required
   fixed fields and verify the current root is the recorded linked primary
-  worktree, its branch equals both the artifact and STATE.branch, and its
-  pre-planning base was the recorded remote-default SHA. Also require the
-  recorded default checkout to remain clean on its recorded remote default
-  branch; its local default ref may lag origin as integrations advance the
+  worktree and the recorded default checkout stays clean on the remote
+  default. Its local default ref may lag origin as integrations advance the
   remote default — that lag is not a violation, and the checkout is never
-  entered or updated. Adopt that proven binding; do not parse STATE log prose
-  or create another branch or primary worktree.
+  entered or updated. The artifact's `GSD Path branch` is the first bound
+  branch (`gsd-path/M001`); after a shipped milestone STATE.branch may be a
+  later `gsd-path/M00N` created at the then-current remote-default SHA. Adopt
+  the proven worktree and default checkout; do not parse STATE log prose or
+  create another primary worktree.
 - Persist the branch in STATE.md. On entry from `plan/done`, set STATE to
   `build/active`, append `build started`, and commit that transition with the
   expected initial `.project/` artifacts before dispatch. From then on, every
   dispatch round starts from a clean primary worktree and exact full `HEAD`
-  SHA.
+  SHA. Every orchestrator bookkeeping commit uses subject `build: <what
+  changed>` plus a body that starts with `Why: <one sentence>` and may add
+  `Wave:`, `Tasks:`, and `Base:` field lines. Task landing still goes
+  through `isolation.py land`; do not invent those commit messages.
 
 ## Wave loop
 
@@ -363,7 +369,8 @@ path — stop and let the user decide how to restart.
    null`, `archive: null`, logging the abandoned archive path and the
    ruling verbatim.
 4. Commit the abandon bookkeeping — archive moves, ROADMAP.md, LESSONS.md,
-   STATE.md — with exact subject `build: abandon milestone <slug>`. A crash
+   STATE.md — with exact subject `build: abandon milestone <slug>` and body
+   `Why: <user ruling, verbatim>`. A crash
    before this commit leaves STATE.archive set under `build/*`; recovery
    resumes from step 2.
 5. Return to the router, which routes `roadmap/active` to the roadmap

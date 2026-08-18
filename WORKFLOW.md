@@ -77,7 +77,7 @@ router continues or a direct invocation names its exact next skill.
 
 An explicit request to create a GitHub repository enters a pre-initialization
 gate. Resolve and preview the GitHub owner/name, visibility, normal default
-checkout, `gsd-path/<project-slug>` branch, and a distinct linked-worktree path.
+checkout, `gsd-path/M001` branch, and a distinct linked-worktree path.
 Create no repository, checkout, worktree, pipeline state, journal, or preview
 file until the user approves every target; present the pre-creation review
 inline from the bootstrap helper's read-only `preview` result.
@@ -310,10 +310,11 @@ STATE.branch, and a mismatch blocks. The newest `ship:` commit on the branch,
 if any, must be an ancestor of origin/<default>; if it is not, the previous
 milestone's integration is incomplete and control routes to ship, not build.
 A branch merged into the default branch without a corresponding
-`integrate: <NNN>-<slug>` commit is externally polluted and blocks. A fresh
+`integrate:` commit is externally polluted and blocks. A fresh
 branch (no ship commits) follows the original rule: use the current clean
-unmerged non-default branch, or create `gsd-path/<slug>` directly at the
-remote-default SHA. The initial binding commit changes `plan/done` to
+unmerged non-default `gsd-path/M00N` branch, or create `gsd-path/M00N`
+directly at the remote-default SHA. The bound branch must not be the remote
+default. The initial binding commit changes `plan/done` to
 `build/active` before any task dispatch. Recovering a resolved `build/blocked`
 state likewise commits `build/active` before a new dispatch-round base.
 
@@ -524,9 +525,13 @@ forces manifest regeneration. Divergence or an incomplete pair blocks.
 The ship phase closes the milestone with exactly one commit on the bound
 branch: the shipped STATE.md, the final-review artifacts, and the archive
 move with its MANIFEST.md, staged from `.project/` only, subject
-`ship: <NNN>-<milestone-slug>`. Every other commit on the bound branch
+`ship: M00N — <milestone-slug>` and a body naming `Archive:` and
+`Reviewed-HEAD:`. Every other commit on the bound branch
 belongs to the build orchestrator. The commit must contain only `.project/`
-paths. There is no untracked-project fallback.
+paths. There is no untracked-project fallback. Every pipeline commit —
+task land, build bookkeeping, plan/roadmap/router checkpoints, ship, and
+integrate — carries that subject plus a field body (`Task:`/`Files:`,
+`Why:`, `Archive:`, or the integrate fields).
 
 ### Integration
 
@@ -539,16 +544,19 @@ remote-default SHA, and requires
 `git merge-base --is-ancestor <remote-default-sha> <ship-commit>` — the
 default branch must have no commits the ship commit lacks. A diverged default
 blocks and escalates to the user; never auto-merge. It then creates a
-temporary detached worktree at the remote-default SHA, merges the ship commit
-with `--no-ff` under the subject `integrate: <NNN>-<slug>` (never
+temporary named worktree (`gsd-path-integrate/M00N`) at the remote-default
+SHA, merges the ship commit with `--no-ff` under the subject
+`integrate: M00N — merge gsd-path/M00N into <default>` (never
 `ship:` — the guard restricts those subjects to `.project/`-only paths),
-pushes in order the merge to the default branch, the gsd-path branch, and an
+pushes in order the merge to the default branch, the bound branch, and an
 annotated tag `milestone/<NNN>-<slug>` pointing at the merge commit, and
 removes the temporary worktree. NNN always comes from the persisted
-STATE.archive sequence — never recomputed.
+STATE.archive sequence — never recomputed. The remote default must not be
+the bound branch.
 
-Integration is pending from the ship commit until a commit with exact subject
-`integrate: <NNN>-<slug>` exists whose second parent is the ship commit and
+Integration is pending from the ship commit until a commit with subject
+`integrate: M00N — merge gsd-path/M00N into <default>` exists whose second
+parent is the ship commit and
 which is an ancestor of origin/<default>. The ship commit itself is the
 crash-recovery transaction id, discoverable via `find_ship_commit`; no new
 STATE field. Resume is idempotent: merge only if the ship commit is not yet
@@ -560,7 +568,8 @@ integration is pending — it routes back to ship.
 archive and manifest, valid carry-forward, clean worktree, the newest commit
 with the exact ship subject in HEAD history, `.project/`-only paths in that
 commit, and no `.project` change after it; the bundled `validate-integrated`
-command then proves the `integrate: <NNN>-<slug>` merge commit, its
+command then proves the `integrate: M00N — merge gsd-path/M00N into
+<default>` merge commit, its
 `milestone/<NNN>-<slug>` tag, and the merge on origin/<default> before the
 router reports shipped or starts a new milestone. `integrate:` subjects in
 HEAD history are expected; the no-`.project`-change-after-ship drift rule

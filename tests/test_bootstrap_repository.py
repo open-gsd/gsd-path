@@ -165,6 +165,18 @@ class BootstrapRepositoryTests(unittest.TestCase):
         )
         created = self.run_command(*command, cwd=workspace, env=environment)
         self.assertEqual(created.returncode, 0, created.stderr)
+        self.assertEqual(
+            self.git(worktree, "branch", "--show-current").stdout.strip(),
+            "gsd-path/M001",
+        )
+        self.assertEqual(
+            self.git(checkout, "branch", "--show-current").stdout.strip(),
+            "main",
+        )
+        self.assertNotEqual(
+            json.loads(created.stdout)["branch"],
+            self.git(checkout, "branch", "--show-current").stdout.strip(),
+        )
         return workspace, checkout, worktree, remotes, environment, command
 
     def advance_remote(self, root: Path, remote: Path) -> None:
@@ -250,7 +262,7 @@ Primary worktree: <primary-worktree>
                 "add",
                 "-q",
                 "-b",
-                "gsd-path/demo",
+                "gsd-path/M001",
                 str(worktree),
                 base,
             )
@@ -262,10 +274,10 @@ Primary worktree: <primary-worktree>
             self.assertEqual(resumed.returncode, 0, resumed.stderr)
             result = json.loads(resumed.stdout)
             self.assertEqual(result["status"], "complete")
-            self.assertEqual(result["branch"], "gsd-path/demo")
+            self.assertEqual(result["branch"], "gsd-path/M001")
             state = (worktree / ".project" / "STATE.md").read_text()
             binding = (worktree / ".project" / "REPOSITORY.md").read_text()
-            self.assertIn("branch: gsd-path/demo", state)
+            self.assertIn("branch: gsd-path/M001", state)
             self.assertIn(f"Default checkout: {checkout.resolve()}", binding)
             self.assertIn(f"Primary worktree: {worktree.resolve()}", binding)
             self.assertIn("Visibility: private", binding)
@@ -273,7 +285,7 @@ Primary worktree: <primary-worktree>
             self.assertEqual(self.git(checkout, "status", "--porcelain").stdout, "")
             self.assertEqual(
                 self.git(worktree, "branch", "--show-current").stdout.strip(),
-                "gsd-path/demo",
+                "gsd-path/M001",
             )
 
             repeated = self.run_command(*command, cwd=workspace, env=environment)
@@ -390,7 +402,7 @@ Primary worktree: <primary-worktree>
                 "add",
                 "-q",
                 "-b",
-                "gsd-path/demo",
+                "gsd-path/M001",
                 str(worktree),
                 base,
             )

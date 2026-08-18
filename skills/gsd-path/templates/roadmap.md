@@ -15,8 +15,8 @@ Goal: <one sentence — the independently shippable outcome>
 Depends on: []        # milestone ids; acyclic; earlier ids only
 Status: pending       # pending | active | shipped | abandoned
 Archive: null         # .project/archive/<NNN>-<slug>/ recorded at ship
-Integrated: null      # optional; merge SHA of integrate: <NNN>-<slug>,
-                      # filled at the milestone boundary after integration
+Integrated: null      # optional; merge SHA of the integrate commit onto
+                      # the remote default, filled after integration
 
 Scope: in
 - <deliverable sized capability>

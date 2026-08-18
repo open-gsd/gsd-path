@@ -176,13 +176,16 @@ field is the transaction identity.
    STATE log. Stage only
    `.project/` paths, inspect the staged path list against the transaction and
    create the ship phase's one commit with exact subject
-   `ship: <NNN>-<milestone-slug>`. When recovery already has `shipped/done`, do
+   `ship: M00N — <milestone-slug>` and body
+   `Archive: .project/archive/<NNN>-<slug>` plus
+   `Reviewed-HEAD: <reviewed SHA>`. M00N and NNN come from STATE.archive.
+   When recovery already has `shipped/done`, do
    not append or rewrite the transition again. There is no untracked-project
    exception and no product or older-archive path may enter this commit.
 6. Immediately run `python3 <absolute-script> validate --repo <root>`. It requires
    the committed shipped state, exact archive and manifest, valid carry-forward,
    no active milestone artifacts, a clean worktree, the newest commit with exact
-   subject `ship: <NNN>-<milestone-slug>` in HEAD history, only `.project/`
+   subject `ship: M00N — <milestone-slug>` in HEAD history, only `.project/`
    paths in that commit, and no `.project` change after it. The ship commit
    need not be HEAD: later product commits do not disturb a validated
    shipment. A passing validate completes the
@@ -191,16 +194,21 @@ field is the transaction identity.
    milestone is not shipped until integration below passes.
 7. Integrate only after the postcommit `validate` passes, with the recorded
    ship commit and the exact reviewed HEAD unchanged; otherwise block. Run
-   `git fetch origin`, resolve the remote-default SHA, and require
+   `git fetch origin`, resolve the remote-default name and SHA, and require
+   that name is not STATE.branch — the bound `gsd-path/M00N` branch is never
+   the GitHub default. Require
    `git merge-base --is-ancestor <remote-default-sha> <ship-commit>` — the
    default branch must have no commits the ship commit lacks. On failure,
    block and escalate to the user; never auto-merge a diverged default.
-   Create a temporary detached worktree at the remote-default SHA, run
-   `git merge --no-ff -m "integrate: <NNN>-<slug>" <ship-commit>`, then push
-   in order: the merge commit to the default branch, the bound gsd-path
+   Create a temporary named worktree `gsd-path-integrate/M00N` at the
+   remote-default SHA (never detach HEAD), run
+   `git merge --no-ff` of the ship commit with subject
+   `integrate: M00N — merge gsd-path/M00N into <default>` and body
+   `Archive:`, `Ship:`, `Default:`, `Branch:`, then push
+   in order: the merge commit to the default branch, the bound
    branch, and the annotated tag `milestone/<NNN>-<slug>` pointing at the
-   merge commit. Remove the temporary worktree. The merge subject must be
-   exactly `integrate: <NNN>-<slug>` and must not start with `ship:` —
+   merge commit. Remove the temporary worktree. The merge subject must
+   not start with `ship:` —
    `git_guard.py` restricts `ship:`-subject commits to `.project/`-only
    paths. NNN always comes from the persisted STATE.archive, never
    recomputed. The bound branch never receives merges or back-merges;
@@ -219,7 +227,8 @@ field is the transaction identity.
    another commit. Any inconsistent committed transaction blocks; never
    mutate a committed archive.
    The fourth crash window is integration: it is pending from the ship
-   commit until a commit with exact subject `integrate: <NNN>-<slug>` exists
+   commit until a commit with subject
+   `integrate: M00N — merge gsd-path/M00N into <default>` exists
    whose second parent is the ship commit and which is an ancestor of
    `origin/<default>`. The transaction id is the ship commit itself,
    discoverable via `find_ship_commit`; no new STATE field. Resumable
