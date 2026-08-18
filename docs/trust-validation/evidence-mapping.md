@@ -43,7 +43,7 @@
 | Patch-findings validates sources + reviewed head | Phase execution | `test_handoffs.py` | met | — | OK |
 | Full WORKFLOW phase contracts executable | Phase execution | none | unmet | High | Prove first |
 | Orchestrator worktree isolation per task | Build orchestration | none | unmet | High | Prove first |
-| Parallel wave / serial integrate commits | Build orchestration | none | unmet | High | Prove first |
+| Parallel wave / serial task landing commits | Build orchestration | none | unmet | High | Prove first |
 | Coder does not commit (contract) | Build orchestration | none (static docs only) | unmet | Medium | Prove first |
 | `guard_hook.py` denies archive paths (path-first) | Guards | `test_guard_hook.py` | met | — | OK |
 | `guard_hook.py` denies destructive git + cp/tee/checkout | Guards | `test_guard_hook.py` | met | — | OK |

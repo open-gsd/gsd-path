@@ -184,8 +184,8 @@ field is the transaction identity.
    exception and no product or older-archive path may enter this commit.
 6. Immediately run `python3 <absolute-script> validate --repo <root>`. It requires
    the committed shipped state, exact archive and manifest, valid carry-forward,
-   no active milestone artifacts, a clean worktree, the newest commit with exact
-   subject `ship: M00N — <milestone-slug>` in HEAD history, only `.project/`
+   no active milestone artifacts, a clean worktree, the newest commit with a
+   recognized ship subject for this archive in HEAD history, only `.project/`
    paths in that commit, and no `.project` change after it. The ship commit
    need not be HEAD: later product commits do not disturb a validated
    shipment. A passing validate completes the
@@ -204,9 +204,9 @@ field is the transaction identity.
    Create a temporary named worktree `gsd-path-integrate/M00N` at the
    remote-default SHA (never detach HEAD), run
    `git merge --no-ff` of the ship commit with subject
-   `integrate: M00N — merge gsd-path/M00N into <default>` and body
-   `Archive:`, `Ship:`, `Default:`, `Branch:`, then push
-   in order: the merge commit to the default branch, the bound
+   `integrate: M00N — merge gsd-path/M00N into main` and body
+   `Archive:`, `Ship:`, `Default: main`, `Branch:`, then push
+   in order: the merge commit to `main`, the bound
    branch, and the annotated tag `milestone/<NNN>-<slug>` pointing at the
    merge commit. Remove the temporary worktree. The merge subject must
    not start with `ship:` —
@@ -231,18 +231,22 @@ field is the transaction identity.
    another commit. Any inconsistent committed transaction blocks; never
    mutate a committed archive.
    The fourth crash window is integration: it is pending from the ship
-   commit until a commit with subject
-   `integrate: M00N — merge gsd-path/M00N into <default>` exists
-   whose second parent is the ship commit and which is an ancestor of
-   `origin/<default>`. The transaction id is the ship commit itself,
+   commit until a commit with a recognized integration subject exists whose
+   second parent is the ship commit and which is an ancestor of `origin/main`.
+   The transaction id is the ship commit itself,
    discoverable via `find_ship_commit`; no new STATE field. Resumable
    partial states are merged-not-tagged, tagged-not-pushed, and
    pushed-branch-not-tag. Resume is idempotent: merge only when the ship
-   commit is not yet an ancestor of `origin/<default>`, tag only when
+   commit is not yet an ancestor of `origin/main`, tag only when
    `milestone/<NNN>-<slug>` is absent, and retry pushes freely; NNN is
    always reused from STATE.archive, never recomputed. While integration is
    pending, never report shipped or start the next milestone; route back to
    ship.
+
+Legacy compatibility is validation-only. Existing shipped history may use the
+exact subjects `ship: <NNN>-<slug>` and `integrate: <NNN>-<slug>` without the
+canonical field bodies. Every new ship and integration commit uses the
+canonical subject and body above; never generate a legacy subject.
 
 ## Rules
 

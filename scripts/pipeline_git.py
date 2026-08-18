@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Deterministic GSD Path branch names and pipeline commit messages.
 
-Bound work lives on `gsd-path/M00N` for that milestone. The remote default
-(usually `main`) stays a separate trunk. Ship merges the bound branch onto
-the default; the next milestone binds a new unused `gsd-path/M00N`.
+Bound work lives on `gsd-path/M00N` for that milestone. The required remote
+default `main` stays a separate trunk. Ship merges the bound branch onto main;
+the next milestone binds a new unused `gsd-path/M00N`.
 """
 
 from __future__ import annotations

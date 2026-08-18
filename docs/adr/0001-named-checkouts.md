@@ -14,5 +14,6 @@ the cherry-pick tax for one coder); commit serial tasks on the bound branch
 (matches "work then commit", loses a retained task branch).
 
 **Consequences:** `task_branch` is null on a serial round so retirement cannot
-delete the bound branch. Ship's old detached merge onto default is out of
-scope — `docs/milestone-close-git.md` already replaces that path.
+delete the bound branch. Ship integration follows the same rule in a named
+`gsd-path-integrate/M00N` worktree; its procedure lives in the
+[ship contract](../../skills/gsd-path/SHIP.md).

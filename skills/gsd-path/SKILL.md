@@ -272,8 +272,8 @@ Log, then:
   `pending` slug, `branch: gsd-path/M00N`, and `archive: null`; mark that entry
   `active` in ROADMAP.md, fill the previously shipped entry's `Integrated:`
   field with the merge SHA of the just-completed integrate
-  commit, and route to the bundled [define]
-  contract](DEFINE.md) in milestone mode. When every entry is `shipped`,
+  commit, and route to the bundled [define contract](DEFINE.md) in milestone
+  mode. When every entry is `shipped`,
   report the program complete against CHARTER.md's program success criteria
   and stop.
 - **Single milestone** (no ROADMAP.md): reset `phase: inspect`,

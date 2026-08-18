@@ -9,7 +9,7 @@ is for the product domain, not for any one implementation of git.
 The ship-phase sequence after final-review approval: the archive, the ship
 commit, and whatever git makes that close durable. It is not task-end landing
 and not abandon.
-_Avoid_: end of work, ship (the whole phase), integration (one optional leg)
+_Avoid_: end of work, ship (the whole phase), integration (the merge leg)
 
 **Ship commit**:
 The single `.project/`-only commit on the bound branch, subject
@@ -23,8 +23,8 @@ Ship creates it at close and pushes it to origin. It names that close.
 _Avoid_: release, GitHub Release, lightweight tag
 
 **Integration**:
-Ship merging the bound branch onto the remote default with `--no-ff`,
-subject `integrate: M00N — merge gsd-path/M00N into <default>`. The
+Ship merging the bound branch onto the remote default `main` with `--no-ff`,
+subject `integrate: M00N — merge gsd-path/M00N into main`. The
 pipeline performs this merge; a human does not.
 _Avoid_: ship, land (unless you mean this)
 
@@ -49,8 +49,8 @@ commits for that milestone live here. It is never the GitHub default.
 _Avoid_: feature branch, worktree branch, `gsd-path/<project-slug>`
 
 **Default branch**:
-The repository's remote default (usually `main`). New repositories keep
-GitHub's `main`. Ship merges onto it.
+The repository's remote default, required to be `main`. New repositories keep
+GitHub's `main`, and ship merges onto it.
 _Avoid_: production branch
 
 **Shipped**:

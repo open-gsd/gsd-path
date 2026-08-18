@@ -110,18 +110,20 @@ For each wave in PLAN.md order:
    may already have happened,
    inspect only first-parent commits in `base..STATE.branch` whose subject
    equals `<task-id>: <task title>`. A candidate must touch the task file, have
-   no path outside `files` plus that task file, preserve the task contract with
-   an append-only Log delta, and pass isolated Verify. The retained task branch
-   or worktree must still prove the candidate's complete binary product patch
-   and task-Log delta byte-for-byte equal the isolated source commit/diff.
+   no path outside `files` plus that task file, carry a body whose `Task:` field
+   names the task file and whose sorted `Files:` list exactly matches the changed
+   paths, preserve the task contract with an append-only Log delta, and pass
+   isolated Verify. The retained task branch or worktree must still prove the
+   candidate's complete binary product patch and task-Log delta byte-for-byte
+   equal the isolated source commit/diff.
    Exactly one proven candidate recovers its full SHA and `done` state; zero
    candidates resumes the retained isolated diff or returns it to `pending`
    only when ownership is clear; missing proof, multiple candidates, or any
    inconsistency blocks. For a task already carrying `status: done` and a full
-   `commit`, prove that exact commit by the same subject, path, source-patch,
-   Log-delta, and Verify checks. If its metadata is the sole uncommitted
-   primary change, commit that bookkeeping; if the metadata is already in
-   HEAD, leave it untouched. Then retire a still-present recorded worktree with
+   `commit`, prove that exact commit by the same subject, body, path,
+   source-patch, Log-delta, and Verify checks. If its metadata is the sole
+   uncommitted primary change, commit that bookkeeping; if the metadata is
+   already in HEAD, leave it untouched. Then retire a still-present recorded worktree with
    `isolation.py retire` only when both the worktree and branch resolve to that
    proven task source and are clean. It
    is valid for both to be absent after earlier cleanup; one missing, a dirty

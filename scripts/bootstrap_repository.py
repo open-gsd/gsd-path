@@ -108,7 +108,7 @@ def request_from_arguments(arguments: argparse.Namespace) -> BootstrapRequest:
     if checkout == worktree:
         raise BootstrapError("default checkout and linked worktree must be distinct")
 
-    slug = normalized_slug(arguments.repo)
+    _ = normalized_slug(arguments.repo)
     return BootstrapRequest(
         workspace=str(workspace),
         owner=arguments.owner,

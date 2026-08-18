@@ -53,7 +53,7 @@ discussion sidecar to talk through a question at any non-shipped phase.
 | `gsd-path-decide` | Phase 3 — evidence → decisions |
 | `gsd-path-roadmap` | Phase 3.5 — program: slice charter into milestone roadmap |
 | `gsd-path-plan` | Phase 4 — waves and task contracts |
-| `gsd-path-build` | Phase 5 — parallel coders + integration |
+| `gsd-path-build` | Phase 5 — parallel coders + serial task landing |
 | `gsd-path-ship` | Phase 6 — verify, approve, archive, and ship |
 | `gsd-path-discuss` | Any-phase discussion with durable dialogue and answers |
 | `gsd-path-docs-audit` | Standalone doc-vs-code drift check |
@@ -77,7 +77,7 @@ flowchart TD
     P -->|"approved → checkpoint commit"| B["5 · build"]
     B --> W{"wave loop"}
     W -->|"briefs linted at base SHA"| C["parallel coders, isolated worktrees"]
-    C -->|"streaming: dependents dispatch as deps integrate"| V{"wave review"}
+    C -->|"streaming: dependents dispatch as deps land"| V{"wave review"}
     V -->|"full — or deep: contract + adversarial lenses"| F{"verdict"}
     F -->|"blocked → fix tasks (findings deduped by criterion)"| W
     F -->|"pass → next wave"| W
@@ -87,8 +87,11 @@ flowchart TD
     B -.->|"lookahead: next milestone planned in .project/next/"| P
     B -->|"explicit ruling: abandon milestone"| AB["archive partial work → re-slice roadmap"]
     AB --> RM
-    S -->|"approved → ship commit"| A["archive/ · next milestone"]
-    A --> DM
+    S -->|"approved → archive + ship commit"| MG["merge gsd-path/M00N into main + tag"]
+    MG -->|"validate-integrated passes"| A["shipped"]
+    A -->|"another program milestone → bind next gsd-path/M00N"| DM
+    A -->|"single-milestone restart → bind next gsd-path/M00N"| I
+    A -->|"program complete"| PC["stop"]
 ```
 
 At any non-shipped phase, `/gsd-path-discuss` (or `$gsd-path-discuss` in
@@ -166,9 +169,12 @@ partial remote/clone/worktree transaction; the default checkout stays clean.
   archive/<NNN>-<slug>/       shipped milestones (read-only after ship)
 ```
 
-Shipping moves milestone artifacts into `archive/` with a MANIFEST. `STATE.md`,
-`REPOSITORY.md`, `LESSONS.md`, `next/`, and the program artifacts (`CHARTER.md`,
-`ROADMAP.md`, top-level `SYNTHESIS.md`) remain active project metadata.
+Shipping moves milestone artifacts into `archive/` with a MANIFEST, merges the
+milestone's `gsd-path/M00N` branch into `main`, and reports shipped only after
+integration validates. Before any next-milestone files change, the router binds
+a new `gsd-path/M00N` at the updated `origin/main`. `STATE.md`, `REPOSITORY.md`,
+`LESSONS.md`, `next/`, and the program artifacts (`CHARTER.md`, `ROADMAP.md`,
+top-level `SYNTHESIS.md`) remain active project metadata.
 
 ## Install (summary)
 

@@ -121,9 +121,9 @@ If two sources disagree, stop and surface the conflict. Never average.
 - The ship phase makes exactly one commit on the bound branch — the
   `.project/`-only ship commit recording
   STATE.md, the final-review artifacts, and the archive — and additionally
-  owns the integration leg: one `--no-ff` merge onto the remote default
-  (usually `main`) with subject `integrate: M00N — merge gsd-path/M00N into
-  <default>`, one annotated `milestone/<NNN>-<slug>` tag, and the pushes.
+  owns the integration leg: one `--no-ff` merge onto `main` with subject
+  `integrate: M00N — merge gsd-path/M00N into main`, one annotated
+  `milestone/<NNN>-<slug>` tag, and the pushes.
   The roadmap and
   plan phases each make exactly one approval checkpoint commit
   (`.project/`-only, deferred to the build transition commit during a
@@ -175,7 +175,7 @@ If two sources disagree, stop and surface the conflict. Never average.
   canonical contents, carry-forward, and manifest pass the bundled precommit
   validator; report shipped only after the exact `.project/`-only ship commit
   passes the postcommit validator and `validate-integrated` proves the
-  integration merge commit, its tag, and its ancestry on origin/<default> —
+  integration merge commit, its tag, and its ancestry on origin/main —
   while integration is pending the router routes back to ship instead of
   reporting shipped or starting the next milestone.
 
