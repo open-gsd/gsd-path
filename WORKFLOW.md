@@ -549,7 +549,8 @@ After the postcommit validator passes, ship performs integration — the only
 path from the bound branch to the default branch. The bound branch never
 receives merges or back-merges, and the default checkout is never entered;
 the local default branch ref may lag origin, which is harmless because
-binding resolves remote SHAs. Ship fetches origin, resolves the remote-default
+binding resolves remote SHAs. Ship runs `refresh-origin` (fetch, refresh
+`origin/HEAD`, mirror published milestone tags), resolves the remote-default
 name and SHA, and requires the name to be exactly `main` and different from
 the bound branch. It then requires
 `git merge-base --is-ancestor <remote-default-sha> <ship-commit>` — the

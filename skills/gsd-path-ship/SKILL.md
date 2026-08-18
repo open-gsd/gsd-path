@@ -194,7 +194,9 @@ field is the transaction identity.
    milestone is not shipped until integration below passes.
 7. Integrate only after the postcommit `validate` passes, with the recorded
    ship commit and the exact reviewed HEAD unchanged; otherwise block. Run
-   `git fetch origin`, then resolve the remote-default name and SHA. Before
+   `python3 <absolute-script> refresh-origin --repo <root>` (fetch, refresh
+   `origin/HEAD`, and mirror published `milestone/*` tags), then resolve the
+   remote-default name and SHA. Before
    any integration worktree, merge, tag, or push, require that the name is
    exactly `main`; otherwise block. Also require that name is not STATE.branch
    — the bound `gsd-path/M00N` branch is never the GitHub default. Require
@@ -218,7 +220,9 @@ field is the transaction identity.
    origin harmlessly. Then run
    `python3 <absolute-script> validate-integrated --repo <root> --slug <slug>`
    as the post-integration gate; it is read-only and uses the existing
-   `origin/*` refs without fetching. Report shipped only when it passes.
+   `origin/*` refs without fetching, including `origin/<bound-branch>` at
+   the ship commit and `refs/remotes/origin/tags/milestone/<NNN>-<slug>`.
+   Report shipped only when it passes.
    Leave the primary worktree and STATE.branch on the shipped
    `gsd-path/M00N` at the ship commit. The router owns the later handoff to a
    new milestone branch after this gate.

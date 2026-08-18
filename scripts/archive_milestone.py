@@ -1997,6 +1997,28 @@ def resolve_remote_default(project: Path) -> str:
     return remote_default
 
 
+def refresh_origin(repo: Path) -> dict:
+    """Fetch origin, refresh origin/HEAD, and mirror milestone tags."""
+    project = repo.resolve()
+    require_git_success(run_git(project, "fetch", "--prune", "origin"), "fetch origin")
+    require_git_success(
+        run_git(project, "remote", "set-head", "origin", "--auto"),
+        "refresh origin/HEAD",
+    )
+    mirrored = run_git(
+        project,
+        "fetch",
+        "origin",
+        "refs/tags/milestone/*:refs/remotes/origin/tags/milestone/*",
+    )
+    if mirrored.returncode != 0:
+        detail = (mirrored.stderr or mirrored.stdout).strip()
+        if "couldn't find remote ref" not in detail.casefold() and detail:
+            raise ArchiveError(f"could not refresh published milestone tags: {detail}")
+    remote_default = resolve_remote_default(project)
+    return {"remote_default": remote_default}
+
+
 def find_integrate_commit(
     project: Path,
     remote_default: str,
@@ -2058,7 +2080,14 @@ def validate_integrated(repo: Path, slug: str) -> dict:
     if is_unset(bound_branch):
         raise ArchiveError("STATE.md does not name a bound build branch")
     expected_branch = bound_branch_name(milestone_number(archive_name))
-    if bound_branch and is_bound_branch(bound_branch) and bound_branch != expected_branch:
+    ship_subject_text = require_git_success(
+        run_git(project, "log", "-1", "--format=%s", ship_commit),
+        "read ship commit subject",
+    )
+    canonical_ship = ship_subject_text == ship_subject(archive_name)
+    if canonical_ship and not is_bound_branch(bound_branch):
+        raise ArchiveError(f"bound branch {bound_branch!r} is not gsd-path/M00N")
+    if is_bound_branch(bound_branch) and bound_branch != expected_branch:
         expected_milestone = expected_branch.removeprefix("gsd-path/")
         raise ArchiveError(
             f"bound branch {bound_branch} does not match archive milestone {expected_milestone}"
@@ -2105,12 +2134,59 @@ def validate_integrated(repo: Path, slug: str) -> dict:
     if contains.returncode != 0:
         raise ArchiveError(f"{remote_default} does not contain the integration merge")
 
+    # (e) The bound branch tip and annotated tag must be published on origin.
+    require_published_integration(
+        project,
+        bound_branch,
+        ship_commit,
+        tag_name,
+        merge_commit,
+    )
+
     return {
         "archive": configured,
         "commit": ship_commit,
         "integrate": merge_commit,
         "tag": tag_name,
     }
+
+
+def require_published_integration(
+    project: Path,
+    bound_branch: str,
+    ship_commit: str,
+    tag_name: str,
+    merge_commit: str,
+) -> None:
+    bound_ref = f"refs/remotes/origin/{bound_branch}"
+    if run_git(project, "rev-parse", "--verify", "--quiet", bound_ref).returncode != 0:
+        raise ArchiveError(f"missing published bound branch: origin/{bound_branch}")
+    published_ship = require_git_success(
+        run_git(project, "rev-parse", bound_ref),
+        "resolve published bound branch",
+    )
+    if published_ship != ship_commit:
+        raise ArchiveError(
+            f"origin/{bound_branch} is {published_ship}, expected ship commit {ship_commit}"
+        )
+
+    remote_tag = f"refs/remotes/origin/tags/{tag_name}"
+    if run_git(project, "rev-parse", "--verify", "--quiet", remote_tag).returncode != 0:
+        raise ArchiveError(f"missing published milestone tag: origin/tags/{tag_name}")
+    remote_tag_type = require_git_success(
+        run_git(project, "cat-file", "-t", remote_tag),
+        "inspect published milestone tag type",
+    )
+    if remote_tag_type != "tag":
+        raise ArchiveError(f"published milestone tag {tag_name} must be annotated")
+    remote_tag_target = require_git_success(
+        run_git(project, "rev-parse", f"{remote_tag}^{{commit}}"),
+        "resolve published milestone tag target",
+    )
+    if remote_tag_target != merge_commit:
+        raise ArchiveError(
+            f"published milestone tag {tag_name} does not point at the integration merge"
+        )
 
 
 def parser() -> argparse.ArgumentParser:
@@ -2137,6 +2213,12 @@ def parser() -> argparse.ArgumentParser:
     validate_integrated_parser.add_argument("--repo", required=True, type=Path)
     validate_integrated_parser.add_argument("--slug", required=True)
 
+    refresh_parser = subparsers.add_parser(
+        "refresh-origin",
+        help="fetch origin, refresh origin/HEAD, and mirror published milestone tags",
+    )
+    refresh_parser.add_argument("--repo", required=True, type=Path)
+
     abandon_parser = subparsers.add_parser(
         "abandon",
         help="abandon the active build milestone and archive its partial artifacts",
@@ -2158,6 +2240,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             result = abandon(arguments.repo, arguments.slug, arguments.reason)
         elif arguments.command == "validate-integrated":
             result = validate_integrated(arguments.repo, arguments.slug)
+        elif arguments.command == "refresh-origin":
+            result = refresh_origin(arguments.repo)
         else:
             result = validate(arguments.repo)
     except (ArchiveError, OSError) as error:
