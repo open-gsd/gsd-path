@@ -44,8 +44,8 @@ gsd-path  (router: reads STATE.md, runs the next valid phase)
   |-- 3. decide       evidence → cited decisions
   |-- 3.5 roadmap     program flow: charter → milestone slicing
   |-- 4. plan         waves + task contracts
-  |-- 5. build        parallel coders, serial integration
-  `-- 6. ship         verify + final approval → archive
+  |-- 5. build        parallel coders, serial task landing
+  `-- 6. ship         verify + final approval → archive + merge to main
 ```
 
 ### Router vs phase skills
@@ -291,13 +291,16 @@ approve **Archive and ship**, the archive transaction begins:
   `REPOSITORY.md`, `LESSONS.md`, and program artifacts (`CHARTER.md`,
   `ROADMAP.md`, top-level `SYNTHESIS.md`) remain active project metadata
 - `MANIFEST.md` records contents and ship metadata
-- One **ship commit** (subject `ship: …`) touches only `.project/`
+- One **ship commit** (subject `ship: M00N — <slug>`) touches only `.project/`
+- Ship then merges `gsd-path/M00N` onto `main` (the remote default) and tags
+  `milestone/<NNN>-<slug>`
 - Archives are **read-only** — guard hooks enforce this if installed
 
-The next milestone starts clean. Invoke the router again; brownfield inspect
-runs against the now-shipped codebase. In program flow the router instead
-pulls the next pending roadmap entry and resumes at define (milestone mode);
-when every entry is shipped it reports the program complete against the
+After `validate-integrated` passes, the next milestone starts clean on a new
+`gsd-path/M00N` cut from `origin/main`. Invoke the router again; brownfield
+inspect runs against the now-shipped codebase. In program flow the router
+instead pulls the next pending roadmap entry and resumes at define (milestone
+mode); when every entry is shipped it reports the program complete against the
 charter's success criteria.
 
 Two program-flow refinements:

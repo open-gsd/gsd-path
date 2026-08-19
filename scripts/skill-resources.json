@@ -27,6 +27,7 @@
     "scripts/guard_hook.py",
     "scripts/git_guard.py",
     "scripts/isolation.py",
+    "scripts/pipeline_git.py",
     "README.md",
     "DOCS.md",
     "HOOKS.md",
@@ -136,7 +137,12 @@
     ["scripts/isolation.py", "skills/gsd-path-build/scripts/isolation.py"],
     ["scripts/isolation.py", "skills/gsd-path-inspect/scripts/isolation.py"],
     ["scripts/isolation.py", "skills/gsd-path-docs-audit/scripts/isolation.py"],
-    ["scripts/isolation.py", "skills/gsd-path-ship/scripts/isolation.py"]
+    ["scripts/isolation.py", "skills/gsd-path-ship/scripts/isolation.py"],
+    ["scripts/pipeline_git.py", "skills/gsd-path/scripts/pipeline_git.py"],
+    ["scripts/pipeline_git.py", "skills/gsd-path-build/scripts/pipeline_git.py"],
+    ["scripts/pipeline_git.py", "skills/gsd-path-inspect/scripts/pipeline_git.py"],
+    ["scripts/pipeline_git.py", "skills/gsd-path-docs-audit/scripts/pipeline_git.py"],
+    ["scripts/pipeline_git.py", "skills/gsd-path-ship/scripts/pipeline_git.py"]
   ],
   "phase_contract_targets": [
     ["skills/gsd-path-build/SKILL.md", "skills/gsd-path/BUILD.md"],

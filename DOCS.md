@@ -190,8 +190,8 @@ Details: [FULL.md](FULL.md) (phases, shipping, troubleshooting).
 ```text
 inspect (brownfield only)
   → define → research → decide → plan
-  → build (parallel coders, serial merge)
-  → ship (verify and archive)
+  → build (parallel coders, serial task landing)
+  → ship (verify, archive, and merge to main)
 
 Program flow inserts roadmap between decide and plan: define
 (program mode) writes CHARTER.md, roadmap slices it into ROADMAP.md,
@@ -203,7 +203,7 @@ explicit ruling, archiving partial work and re-slicing the roadmap.
 
 Build mechanics: task briefs are linted against the base tree before
 dispatch and coders preflight them on arrival; dispatch streams (a
-dependent starts when its deps integrate); wave review depth is `full`,
+dependent starts when its deps land); wave review depth is `full`,
 `verify-only`, or `deep` (contract + adversarial reviewers, both must
 pass); coder contract questions route through `NEEDS-ORCHESTRATOR` instead
 of guesses.

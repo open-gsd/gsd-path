@@ -64,31 +64,40 @@ explicitly invokes it.
   checking out, pulling, or updating the local default branch. When
   `STATE.branch` is set, bind that recorded branch — never whatever clean
   unmerged non-default branch happens to be current: require the current
-  symbolic branch to equal it. On the bound branch, find the newest commit
-  whose subject starts with `ship:`, if any. If one exists and is not an
-  ancestor of the resolved remote-default SHA, the previous milestone's
-  integration is incomplete: stop and return to `$gsd-path`, which routes to
-  ship, not build. If the branch is merged into the default branch without a
-  corresponding `integrate:` commit, block as externally polluted. When
-  `STATE.branch` is null and the current branch carries no `ship:` commit,
-  bind either the current clean, unmerged non-default branch or a new unused
-  `gsd-path/<project-slug>` branch created directly at that remote-default
-  SHA. A mismatch or a branch owned by another worktree blocks; never
-  silently rebind it.
+  symbolic branch to equal it. Ignore ship and integrate commits for older
+  milestones inherited from main. Find only a ship subject whose M00N matches
+  STATE.branch (including its legacy sequence form). If one exists and is not
+  an ancestor of the resolved remote-default SHA, this milestone's integration
+  is incomplete: stop and return to `$gsd-path`, which routes to ship, not
+  build. If that current-milestone ship is on the default without its matching
+  `integrate:` commit, block as externally polluted. A newly prebound branch
+  whose HEAD equals the resolved remote-default SHA is valid. When
+  `STATE.branch` is null and neither archive nor shipped history exists,
+  bind a `gsd-path/M00N` branch at that remote-default SHA: the active
+  ROADMAP.md entry id when one exists, otherwise one plus the maximum
+  existing archive prefix, otherwise M001. Use the current clean unmerged
+  non-default branch only when it already has that exact name. The bound
+  branch must not equal the remote default. A mismatch or a branch owned by
+  another worktree blocks; never silently rebind it. A null branch after
+  shipped history is an incomplete router handoff and returns to `$gsd-path`.
 - When `.project/REPOSITORY.md` records `Kind: new-github`, parse its required
   fixed fields and verify the current root is the recorded linked primary
-  worktree, its branch equals both the artifact and STATE.branch, and its
-  pre-planning base was the recorded remote-default SHA. Also require the
-  recorded default checkout to remain clean on its recorded remote default
-  branch; its local default ref may lag origin as integrations advance the
+  worktree and the recorded default checkout stays clean on the remote
+  default. Its local default ref may lag origin as integrations advance the
   remote default — that lag is not a violation, and the checkout is never
-  entered or updated. Adopt that proven binding; do not parse STATE log prose
-  or create another branch or primary worktree.
+  entered or updated. The artifact's `GSD Path branch` is the first bound
+  branch (`gsd-path/M001`); after a shipped milestone STATE.branch may be a
+  later `gsd-path/M00N` created at the then-current remote-default SHA. Adopt
+  the proven worktree and default checkout; do not parse STATE log prose or
+  create another primary worktree.
 - Persist the branch in STATE.md. On entry from `plan/done`, set STATE to
   `build/active`, append `build started`, and commit that transition with the
   expected initial `.project/` artifacts before dispatch. From then on, every
   dispatch round starts from a clean primary worktree and exact full `HEAD`
-  SHA.
+  SHA. Every orchestrator bookkeeping commit uses subject `build: <what
+  changed>` plus a body that starts with `Why: <one sentence>` and may add
+  `Wave:`, `Tasks:`, and `Base:` field lines. Task landing still goes
+  through `isolation.py land`; do not invent those commit messages.
 
 ## Wave loop
 
@@ -101,18 +110,20 @@ For each wave in PLAN.md order:
    may already have happened,
    inspect only first-parent commits in `base..STATE.branch` whose subject
    equals `<task-id>: <task title>`. A candidate must touch the task file, have
-   no path outside `files` plus that task file, preserve the task contract with
-   an append-only Log delta, and pass isolated Verify. The retained task branch
-   or worktree must still prove the candidate's complete binary product patch
-   and task-Log delta byte-for-byte equal the isolated source commit/diff.
+   no path outside `files` plus that task file, carry a body whose `Task:` field
+   names the task file and whose sorted `Files:` list exactly matches the changed
+   paths, preserve the task contract with an append-only Log delta, and pass
+   isolated Verify. The retained task branch or worktree must still prove the
+   candidate's complete binary product patch and task-Log delta byte-for-byte
+   equal the isolated source commit/diff.
    Exactly one proven candidate recovers its full SHA and `done` state; zero
    candidates resumes the retained isolated diff or returns it to `pending`
    only when ownership is clear; missing proof, multiple candidates, or any
    inconsistency blocks. For a task already carrying `status: done` and a full
-   `commit`, prove that exact commit by the same subject, path, source-patch,
-   Log-delta, and Verify checks. If its metadata is the sole uncommitted
-   primary change, commit that bookkeeping; if the metadata is already in
-   HEAD, leave it untouched. Then retire a still-present recorded worktree with
+   `commit`, prove that exact commit by the same subject, body, path,
+   source-patch, Log-delta, and Verify checks. If its metadata is the sole
+   uncommitted primary change, commit that bookkeeping; if the metadata is
+   already in HEAD, leave it untouched. Then retire a still-present recorded worktree with
    `isolation.py retire` only when both the worktree and branch resolve to that
    proven task source and are clean. It
    is valid for both to be absent after earlier cleanup; one missing, a dirty
@@ -363,7 +374,8 @@ path — stop and let the user decide how to restart.
    null`, `archive: null`, logging the abandoned archive path and the
    ruling verbatim.
 4. Commit the abandon bookkeeping — archive moves, ROADMAP.md, LESSONS.md,
-   STATE.md — with exact subject `build: abandon milestone <slug>`. A crash
+   STATE.md — with exact subject `build: abandon milestone <slug>` and body
+   `Why: <user ruling, verbatim>`. A crash
    before this commit leaves STATE.archive set under `build/*`; recovery
    resumes from step 2.
 5. Return to the router, which routes `roadmap/active` to the roadmap

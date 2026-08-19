@@ -174,7 +174,9 @@ severity, or fit with this milestone's scope).
    `.project/` in full — INTENT.md, research artifacts, the approved PLAN.md
    and task set, STATE.md, PLAN-PANEL.md when present, and complete
    append-only discussion records — and
-   commit with exact subject `plan: build plan approved`. Defer the
+   commit with exact subject `plan: build plan approved` and body
+   `Why: approved plan checkpoint` plus `Milestone: <STATE.milestone or none>`.
+   Defer the
    checkpoint to the build orchestrator's transition commit only when the
    directory is not yet a Git repository or `.project/REPOSITORY.md` records
    `Kind: new-github` (the router owns the branch during that transaction).

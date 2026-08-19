@@ -32,7 +32,9 @@ different marker returns to `$gsd-path` for ownership checking. Legal entry is
 `inspect/active|blocked`; `inspect/done` routes to define, and any later phase
 stops. If STATE.md is absent but `.project/` already contains any artifact,
 return to `$gsd-path` for orphaned-state recovery instead of initializing or
-overwriting it. Re-running inspection would overwrite established context.
+overwriting it. When an existing state records a bound branch for a
+single-milestone restart, require the current symbolic branch to match and
+preserve it. Re-running inspection would overwrite established context.
 
 ## Process
 
@@ -42,8 +44,9 @@ overwriting it. Re-running inspection would overwrite established context.
    `.project/STATE.md` from the local [state template](templates/state.md) if
    missing. Set `project` to the normalized working-directory basename,
    `milestone: null`, `pipeline: gsd-path/v2`, `phase: inspect`,
-   `status: active`, `branch: null`, and `archive: null`; no template
-   placeholder may remain.
+   `status: active`, `branch: null`, and `archive: null` only for a newly
+   created state; no template placeholder may remain. Preserve an existing
+   router-bound branch.
 2. Dispatch two independent agents in parallel, following the local
    [runtime dispatch contract](references/dispatch.md) and its deterministic
    task-name rules:

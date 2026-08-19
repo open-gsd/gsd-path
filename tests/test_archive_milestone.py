@@ -7,9 +7,10 @@ import tempfile
 import textwrap
 import unittest
 from pathlib import Path
+from typing import Optional
 from unittest import mock
 
-from scripts import archive_milestone
+from scripts import archive_milestone, pipeline_git
 
 if sys.platform != "win32":
     import fcntl
@@ -17,6 +18,7 @@ if sys.platform != "win32":
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 ARCHIVE_SCRIPT = PROJECT_ROOT / "scripts" / "archive_milestone.py"
+PIPELINE_GIT_SCRIPT = PROJECT_ROOT / "scripts" / "pipeline_git.py"
 
 
 class ArchiveMilestoneTests(unittest.TestCase):
@@ -2088,11 +2090,23 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
         tag: bool = True,
         tag_sha=None,
         update_origin: bool = True,
+        subject: Optional[str] = None,
+        body: Optional[str] = None,
+        default_branch: str = "main",
     ) -> str:
-        remote_default = self.git(repo, "rev-parse", "refs/remotes/origin/main").stdout.strip()
+        remote_ref = f"refs/remotes/origin/{default_branch}"
+        remote_default = self.git(repo, "rev-parse", remote_ref).stdout.strip()
         detach = self.git(repo, "checkout", "-q", "--detach", remote_default)
         self.assertEqual(detach.returncode, 0, detach.stderr)
-        merge = self.git(repo, "merge", "--no-ff", "-m", f"integrate: {archive_name}", merged_sha)
+        arguments = [
+            "merge",
+            "--no-ff",
+            "-m",
+            subject or f"integrate: {archive_name}",
+        ]
+        if body is not None:
+            arguments.extend(("-m", body))
+        merge = self.git(repo, *arguments, merged_sha)
         self.assertEqual(merge.returncode, 0, merge.stderr)
         merge_sha = self.git(repo, "rev-parse", "HEAD").stdout.strip()
         back = self.git(repo, "checkout", "-q", branch)
@@ -2109,8 +2123,23 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
             )
             self.assertEqual(tagged.returncode, 0, tagged.stderr)
         if update_origin:
-            updated = self.git(repo, "update-ref", "refs/remotes/origin/main", merge_sha)
+            updated = self.git(repo, "update-ref", remote_ref, merge_sha)
             self.assertEqual(updated.returncode, 0, updated.stderr)
+            published_branch = self.git(
+                repo, "update-ref", f"refs/remotes/origin/{branch}", merged_sha
+            )
+            self.assertEqual(published_branch.returncode, 0, published_branch.stderr)
+            if tag:
+                tag_object = self.git(
+                    repo, "rev-parse", f"refs/tags/milestone/{archive_name}"
+                ).stdout.strip()
+                published_tag = self.git(
+                    repo,
+                    "update-ref",
+                    f"refs/remotes/origin/tags/milestone/{archive_name}",
+                    tag_object,
+                )
+                self.assertEqual(published_tag.returncode, 0, published_tag.stderr)
         return merge_sha
 
     def validate_integrated(self, repo: Path, slug: str = "demo") -> subprocess.CompletedProcess[str]:
@@ -2148,9 +2177,8 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
 
             result = self.validate_integrated(repo)
             self.assertNotEqual(result.returncode, 0)
-            self.assertIn(
-                f"no commit with exact subject 'integrate: {archive_name}'", result.stderr
-            )
+            expected = pipeline_git.integrate_subject(archive_name, "main")
+            self.assertIn(f"no commit with exact subject {expected!r}", result.stderr)
 
     def test_validate_integrated_rejects_a_missing_tag(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -2204,8 +2232,9 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
 
             result = self.validate_integrated(repo)
             self.assertNotEqual(result.returncode, 0)
+            expected = pipeline_git.integrate_subject(archive_name, "main")
             self.assertIn(
-                f"no commit with exact subject 'integrate: {archive_name}' "
+                f"no commit with exact subject {expected!r} "
                 "in origin/main first-parent history",
                 result.stderr,
             )
@@ -2255,6 +2284,488 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
 
             found = archive_milestone.find_ship_commit(repo.resolve(), "001-demo")
             self.assertEqual(found, ship_sha)
+
+    def test_validate_integrated_accepts_m00n_subjects(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_bound_repo(repo, branch="gsd-path/M001")
+            archive = self.prepare_archive(repo)
+            self.write_manifest(archive)
+            self.mark_shipped(repo)
+            reviewed_head = self.git(repo, "rev-parse", "HEAD").stdout.strip()
+            self.git(repo, "add", ".project")
+            ship = self.git(
+                repo,
+                "commit",
+                "-q",
+                "-m",
+                "ship: M001 — demo",
+                "-m",
+                f"Archive: .project/archive/001-demo\nReviewed-HEAD: {reviewed_head}",
+            )
+            self.assertEqual(ship.returncode, 0, ship.stderr)
+            ship_sha = self.git(repo, "rev-parse", "HEAD").stdout.strip()
+            merge_sha = self.integrate_bound(
+                repo,
+                archive.name,
+                ship_sha,
+                branch="gsd-path/M001",
+                subject="integrate: M001 — merge gsd-path/M001 into main",
+                body=(
+                    "Archive: .project/archive/001-demo\n"
+                    f"Ship: {ship_sha}\n"
+                    "Default: main\n"
+                    "Branch: gsd-path/M001"
+                ),
+            )
+
+            result = self.validate_integrated(repo)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            payload = json.loads(result.stdout)
+            self.assertEqual(payload["commit"], ship_sha)
+            self.assertEqual(payload["integrate"], merge_sha)
+
+            bind = self.run_command(
+                sys.executable,
+                str(PIPELINE_GIT_SCRIPT),
+                "bind-next",
+                "--repo",
+                str(repo),
+                "--branch",
+                "gsd-path/M002",
+                "--previous-branch",
+                "gsd-path/M001",
+                "--ship",
+                ship_sha,
+                "--remote-default",
+                "origin/main",
+                "--base",
+                merge_sha,
+                cwd=PROJECT_ROOT,
+            )
+            self.assertEqual(bind.returncode, 0, bind.stderr)
+            self.assertTrue(bind.stdout.strip(), "bind-next returned no JSON")
+            self.assertEqual(
+                json.loads(bind.stdout),
+                {
+                    "base": merge_sha,
+                    "branch": "gsd-path/M002",
+                    "previous_branch": "gsd-path/M001",
+                },
+            )
+            self.assertEqual(
+                self.git(repo, "symbolic-ref", "--short", "refs/remotes/origin/HEAD")
+                .stdout.strip(),
+                "origin/main",
+            )
+            self.assertEqual(
+                self.git(repo, "branch", "--show-current").stdout.strip(),
+                "gsd-path/M002",
+            )
+            self.assertEqual(
+                self.git(repo, "rev-parse", "refs/heads/gsd-path/M001").stdout.strip(),
+                ship_sha,
+            )
+            self.assertEqual(
+                self.git(repo, "rev-parse", "refs/heads/gsd-path/M002").stdout.strip(),
+                merge_sha,
+            )
+            self.assertEqual(
+                self.git(repo, "rev-parse", "refs/remotes/origin/main").stdout.strip(),
+                merge_sha,
+            )
+            self.assertEqual(
+                self.git(repo, "rev-list", "--parents", "-n", "1", merge_sha)
+                .stdout.split()[2],
+                ship_sha,
+            )
+            self.assertEqual(
+                self.git(
+                    repo,
+                    "rev-parse",
+                    "refs/tags/milestone/001-demo^{commit}",
+                ).stdout.strip(),
+                merge_sha,
+            )
+
+    def test_validate_rejects_canonical_ship_without_required_field_body(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_bound_repo(repo, branch="gsd-path/M001")
+            archive = self.prepare_archive(repo)
+            self.write_manifest(archive)
+            self.mark_shipped(repo)
+            self.git(repo, "add", ".project")
+            ship = self.git(
+                repo,
+                "commit",
+                "-q",
+                "-m",
+                pipeline_git.ship_subject(archive.name),
+                "-m",
+                "Notes: not the required ship fields",
+            )
+            self.assertEqual(ship.returncode, 0, ship.stderr)
+
+            result = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "validate",
+                "--repo",
+                str(repo),
+                cwd=PROJECT_ROOT,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("ship commit body", result.stderr)
+
+    def test_validate_integrated_rejects_canonical_merge_without_required_field_body(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_bound_repo(repo, branch="gsd-path/M001")
+            archive = self.prepare_archive(repo)
+            self.write_manifest(archive)
+            self.mark_shipped(repo)
+            self.git(repo, "add", ".project")
+            ship = self.git(
+                repo,
+                "commit",
+                "-q",
+                "-m",
+                pipeline_git.ship_subject(archive.name),
+                "-m",
+                pipeline_git.ship_commit_body(
+                    f".project/archive/{archive.name}",
+                    self.git(repo, "rev-parse", "HEAD").stdout.strip(),
+                ),
+            )
+            self.assertEqual(ship.returncode, 0, ship.stderr)
+            ship_sha = self.git(repo, "rev-parse", "HEAD").stdout.strip()
+            self.integrate_bound(
+                repo,
+                archive.name,
+                ship_sha,
+                branch="gsd-path/M001",
+                subject=pipeline_git.integrate_subject(archive.name, "main"),
+                body=(
+                    "Archive: wrong\n"
+                    "Ship: wrong\n"
+                    "Default: main\n"
+                    "Branch: gsd-path/M001"
+                ),
+            )
+
+            result = self.validate_integrated(repo)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("integration commit body", result.stderr)
+
+    def test_validate_integrated_rejects_bound_branch_as_default(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_bound_repo(repo, branch="gsd-path/M001")
+            archive_name, ship_sha = self.ship_bound(repo)
+            pointed = self.git(
+                repo, "update-ref", "refs/remotes/origin/gsd-path/M001", ship_sha
+            )
+            self.assertEqual(pointed.returncode, 0, pointed.stderr)
+            linked = self.git(
+                repo,
+                "symbolic-ref",
+                "refs/remotes/origin/HEAD",
+                "refs/remotes/origin/gsd-path/M001",
+            )
+            self.assertEqual(linked.returncode, 0, linked.stderr)
+
+            result = self.validate_integrated(repo)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("is the remote default", result.stderr)
+
+    def test_validate_integrated_rejects_branch_number_not_matching_archive(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_bound_repo(repo, branch="gsd-path/M002")
+            archive = self.prepare_archive(repo)
+            self.write_manifest(archive)
+            self.mark_shipped(repo)
+            reviewed_head = self.git(repo, "rev-parse", "HEAD").stdout.strip()
+            self.git(repo, "add", ".project")
+            ship = self.git(
+                repo,
+                "commit",
+                "-q",
+                "-m",
+                "ship: M001 — demo",
+                "-m",
+                f"Archive: .project/archive/001-demo\nReviewed-HEAD: {reviewed_head}",
+            )
+            self.assertEqual(ship.returncode, 0, ship.stderr)
+            ship_sha = self.git(repo, "rev-parse", "HEAD").stdout.strip()
+            self.integrate_bound(
+                repo,
+                archive.name,
+                ship_sha,
+                branch="gsd-path/M002",
+                subject="integrate: M001 — merge gsd-path/M001 into main",
+                body=(
+                    "Archive: .project/archive/001-demo\n"
+                    f"Ship: {ship_sha}\n"
+                    "Default: main\n"
+                    "Branch: gsd-path/M002"
+                ),
+            )
+
+            result = self.validate_integrated(repo)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(
+                "bound branch gsd-path/M002 does not match archive milestone M001",
+                result.stderr,
+            )
+
+    def test_validate_integrated_rejects_remote_default_other_than_main(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_bound_repo(repo, branch="gsd-path/M001")
+            default_sha = self.git(
+                repo, "rev-parse", "refs/remotes/origin/main"
+            ).stdout.strip()
+            pointed = self.git(
+                repo, "update-ref", "refs/remotes/origin/master", default_sha
+            )
+            self.assertEqual(pointed.returncode, 0, pointed.stderr)
+            linked = self.git(
+                repo,
+                "symbolic-ref",
+                "refs/remotes/origin/HEAD",
+                "refs/remotes/origin/master",
+            )
+            self.assertEqual(linked.returncode, 0, linked.stderr)
+            archive_name, ship_sha = self.ship_bound(repo)
+            self.integrate_bound(
+                repo,
+                archive_name,
+                ship_sha,
+                branch="gsd-path/M001",
+                subject=pipeline_git.integrate_subject(archive_name, "master"),
+                body=pipeline_git.integrate_commit_body(
+                    f".project/archive/{archive_name}",
+                    ship_sha,
+                    "master",
+                    "gsd-path/M001",
+                ),
+                default_branch="master",
+            )
+
+            result = self.validate_integrated(repo)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("remote default must be main", result.stderr)
+
+    def test_validate_integrated_rejects_canonical_non_m00n_branch(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_bound_repo(repo, branch="feature/not-a-bound-branch")
+            archive = self.prepare_archive(repo)
+            self.write_manifest(archive)
+            self.mark_shipped(repo)
+            reviewed_head = self.git(repo, "rev-parse", "HEAD").stdout.strip()
+            self.git(repo, "add", ".project")
+            ship = self.git(
+                repo,
+                "commit",
+                "-q",
+                "-m",
+                pipeline_git.ship_subject(archive.name),
+                "-m",
+                pipeline_git.ship_commit_body(
+                    f".project/archive/{archive.name}",
+                    reviewed_head,
+                ),
+            )
+            self.assertEqual(ship.returncode, 0, ship.stderr)
+            ship_sha = self.git(repo, "rev-parse", "HEAD").stdout.strip()
+            self.integrate_bound(
+                repo,
+                archive.name,
+                ship_sha,
+                branch="feature/not-a-bound-branch",
+                subject=pipeline_git.integrate_subject(archive.name, "main"),
+                body=pipeline_git.integrate_commit_body(
+                    f".project/archive/{archive.name}",
+                    ship_sha,
+                    "main",
+                    "feature/not-a-bound-branch",
+                ),
+            )
+
+            result = self.validate_integrated(repo)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("is not gsd-path/M00N", result.stderr)
+
+    def test_validate_integrated_rejects_unpublished_bound_branch(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_bound_repo(repo, branch="gsd-path/M001")
+            archive = self.prepare_archive(repo)
+            self.write_manifest(archive)
+            self.mark_shipped(repo)
+            reviewed_head = self.git(repo, "rev-parse", "HEAD").stdout.strip()
+            self.git(repo, "add", ".project")
+            ship = self.git(
+                repo,
+                "commit",
+                "-q",
+                "-m",
+                pipeline_git.ship_subject(archive.name),
+                "-m",
+                pipeline_git.ship_commit_body(
+                    f".project/archive/{archive.name}",
+                    reviewed_head,
+                ),
+            )
+            self.assertEqual(ship.returncode, 0, ship.stderr)
+            ship_sha = self.git(repo, "rev-parse", "HEAD").stdout.strip()
+            self.integrate_bound(
+                repo,
+                archive.name,
+                ship_sha,
+                branch="gsd-path/M001",
+                subject=pipeline_git.integrate_subject(archive.name, "main"),
+                body=pipeline_git.integrate_commit_body(
+                    f".project/archive/{archive.name}",
+                    ship_sha,
+                    "main",
+                    "gsd-path/M001",
+                ),
+            )
+            deleted = self.git(
+                repo, "update-ref", "-d", "refs/remotes/origin/gsd-path/M001"
+            )
+            self.assertEqual(deleted.returncode, 0, deleted.stderr)
+
+            result = self.validate_integrated(repo)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("missing published bound branch", result.stderr)
+
+    def test_validate_integrated_rejects_unpublished_milestone_tag(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_bound_repo(repo, branch="gsd-path/M001")
+            archive = self.prepare_archive(repo)
+            self.write_manifest(archive)
+            self.mark_shipped(repo)
+            reviewed_head = self.git(repo, "rev-parse", "HEAD").stdout.strip()
+            self.git(repo, "add", ".project")
+            ship = self.git(
+                repo,
+                "commit",
+                "-q",
+                "-m",
+                pipeline_git.ship_subject(archive.name),
+                "-m",
+                pipeline_git.ship_commit_body(
+                    f".project/archive/{archive.name}",
+                    reviewed_head,
+                ),
+            )
+            self.assertEqual(ship.returncode, 0, ship.stderr)
+            ship_sha = self.git(repo, "rev-parse", "HEAD").stdout.strip()
+            self.integrate_bound(
+                repo,
+                archive.name,
+                ship_sha,
+                branch="gsd-path/M001",
+                subject=pipeline_git.integrate_subject(archive.name, "main"),
+                body=pipeline_git.integrate_commit_body(
+                    f".project/archive/{archive.name}",
+                    ship_sha,
+                    "main",
+                    "gsd-path/M001",
+                ),
+            )
+            deleted = self.git(
+                repo, "update-ref", "-d", "refs/remotes/origin/tags/milestone/001-demo"
+            )
+            self.assertEqual(deleted.returncode, 0, deleted.stderr)
+
+            result = self.validate_integrated(repo)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("missing published milestone tag", result.stderr)
+
+    def test_refresh_origin_updates_stale_origin_head(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            remote = root / "remote.git"
+            remote.mkdir()
+            self.git(remote, "init", "-q", "--bare", "-b", "main")
+            clone = root / "clone"
+            cloned = self.run_command(
+                "git", "clone", "-q", str(remote), str(clone), cwd=root
+            )
+            self.assertEqual(cloned.returncode, 0, cloned.stderr)
+            self.git(clone, "config", "user.name", "Validation")
+            self.git(clone, "config", "user.email", "validation@example.invalid")
+            (clone / "README").write_text("main\n")
+            self.git(clone, "add", "README")
+            self.git(clone, "commit", "-q", "-m", "seed main")
+            pushed = self.git(clone, "push", "-q", "-u", "origin", "main")
+            self.assertEqual(pushed.returncode, 0, pushed.stderr)
+            self.git(clone, "checkout", "-q", "-b", "gsd-path/M001")
+            (clone / "work.txt").write_text("work\n")
+            self.git(clone, "add", "work.txt")
+            self.git(clone, "commit", "-q", "-m", "bound work")
+            self.git(clone, "push", "-q", "-u", "origin", "gsd-path/M001")
+            defaulted = self.run_command(
+                "git",
+                "--git-dir",
+                str(remote),
+                "symbolic-ref",
+                "HEAD",
+                "refs/heads/gsd-path/M001",
+                cwd=root,
+            )
+            self.assertEqual(defaulted.returncode, 0, defaulted.stderr)
+            fetched = self.git(clone, "fetch", "-q", "origin")
+            self.assertEqual(fetched.returncode, 0, fetched.stderr)
+            stale = self.git(
+                clone,
+                "symbolic-ref",
+                "refs/remotes/origin/HEAD",
+                "refs/remotes/origin/main",
+            )
+            self.assertEqual(stale.returncode, 0, stale.stderr)
+            self.assertEqual(
+                self.git(clone, "symbolic-ref", "--short", "refs/remotes/origin/HEAD")
+                .stdout.strip(),
+                "origin/main",
+            )
+
+            refreshed = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "refresh-origin",
+                "--repo",
+                str(clone),
+                cwd=PROJECT_ROOT,
+            )
+            self.assertEqual(refreshed.returncode, 0, refreshed.stderr)
+            self.assertEqual(
+                json.loads(refreshed.stdout)["remote_default"],
+                "origin/gsd-path/M001",
+            )
+            self.assertEqual(
+                self.git(clone, "symbolic-ref", "--short", "refs/remotes/origin/HEAD")
+                .stdout.strip(),
+                "origin/gsd-path/M001",
+            )
 
     def make_build_repo(self, root: Path, status: str = "blocked") -> None:
         self.git(root, "init", "-q", "-b", "main")

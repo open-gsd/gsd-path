@@ -9,35 +9,33 @@ is for the product domain, not for any one implementation of git.
 The ship-phase sequence after final-review approval: the archive, the ship
 commit, and whatever git makes that close durable. It is not task-end landing
 and not abandon.
-_Avoid_: end of work, ship (the whole phase), integration (one optional leg)
+_Avoid_: end of work, ship (the whole phase), integration (the merge leg)
 
 **Ship commit**:
 The single `.project/`-only commit on the bound branch, subject
-`ship: <NNN>-<slug>`, that records shipped state, final reviews, and the
-archive.
+`ship: M00N — <slug>` with an `Archive:` / `Reviewed-HEAD:` body, that
+records shipped state, final reviews, and the archive.
 _Avoid_: ship merge, integrate commit
 
 **Milestone tag**:
-An annotated tag `milestone/<NNN>-<slug>` pointing at the ship commit. Ship
-creates it at close and pushes it to origin. It names that close; it is not
-the landing pointer.
+An annotated tag `milestone/<NNN>-<slug>` pointing at the integration merge.
+Ship creates it at close and pushes it to origin. It names that close.
 _Avoid_: release, GitHub Release, lightweight tag
 
 **Integration**:
-A write-access human creating default ancestry from the landing pointer. On
-GitHub they merge the PR (button, `gh pr merge`, auto-merge, or merge queue).
-The pipeline never merges or enqueues.
+Ship merging the bound branch onto the remote default `main` with `--no-ff`,
+subject `integrate: M00N — merge gsd-path/M00N into main`. The
+pipeline performs this merge; a human does not.
 _Avoid_: ship, land (unless you mean this)
 
 **Default ancestry**:
-The milestone's product commits and the ship commit are ancestors of the remote
-default branch. Required eventually; not what completes close.
-_Avoid_: merged, shipped, landed (unless you mean this)
+The milestone's product commits, the ship commit, and the integrate merge
+are ancestors of the remote default branch. Required before the router
+reports shipped.
+_Avoid_: landed (unless you mean this)
 
 **Landing pointer**:
-The durable handle created at close that lets a human create default ancestry
-later. On a GitHub remote, ship opens a pull request (base = default, head =
-bound branch). Elsewhere it is the pushed bound branch.
+Not used. Close lands by merging onto the remote default.
 _Avoid_: pointer (bare)
 
 **GitHub remote**:
@@ -46,20 +44,20 @@ _Avoid_: GitHub (bare, unless you mean the host family), github.com (unless you
 mean that host only)
 
 **Bound branch**:
-The long-lived `gsd-path/<slug>` branch recorded in `STATE.branch`. Pipeline
-commits live here.
-_Avoid_: feature branch, milestone branch, worktree branch
+The per-milestone `gsd-path/M00N` branch recorded in `STATE.branch`. Pipeline
+commits for that milestone live here. It is never the GitHub default.
+_Avoid_: feature branch, worktree branch, `gsd-path/<project-slug>`
 
 **Default branch**:
-The repository's remote default (usually `main`). This effort treats mutating
-it as a trust boundary.
-_Avoid_: main (unless you mean that specific name), production branch
+The repository's remote default, required to be `main`. New repositories keep
+GitHub's `main`, and ship merges onto it.
+_Avoid_: production branch
 
 **Shipped**:
 The router-visible "this milestone is complete" state. True when the ship
-commit validates and the landing pointer exists. The router may start the
-next milestone then; it does not wait for default ancestry.
-_Avoid_: archived, merged, done, integrated
+commit validates and `validate-integrated` proves the merge, tag, and
+default ancestry. The router may start the next milestone then.
+_Avoid_: archived, done
 
 **Dispatch round**:
 The set of ready tasks isolated together at one recorded base SHA.

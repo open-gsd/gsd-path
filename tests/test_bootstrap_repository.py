@@ -76,7 +76,8 @@ class BootstrapRepositoryTests(unittest.TestCase):
                     remote.parent.mkdir(parents=True, exist_ok=True)
                     with tempfile.TemporaryDirectory() as temporary:
                         seed = Path(temporary)
-                        subprocess.run(["git", "init", "-q", "-b", "main"], cwd=seed, check=True)
+                        default_branch = os.environ.get("FAKE_GH_DEFAULT_BRANCH", "main")
+                        subprocess.run(["git", "init", "-q", "-b", default_branch], cwd=seed, check=True)
                         subprocess.run(["git", "config", "user.name", "Fixture"], cwd=seed, check=True)
                         subprocess.run(["git", "config", "user.email", "fixture@example.invalid"], cwd=seed, check=True)
                         (seed / "README.md").write_text("# Demo\\n")
@@ -165,7 +166,48 @@ class BootstrapRepositoryTests(unittest.TestCase):
         )
         created = self.run_command(*command, cwd=workspace, env=environment)
         self.assertEqual(created.returncode, 0, created.stderr)
+        self.assertEqual(
+            self.git(worktree, "branch", "--show-current").stdout.strip(),
+            "gsd-path/M001",
+        )
+        self.assertEqual(
+            self.git(checkout, "branch", "--show-current").stdout.strip(),
+            "main",
+        )
+        self.assertNotEqual(
+            json.loads(created.stdout)["branch"],
+            self.git(checkout, "branch", "--show-current").stdout.strip(),
+        )
         return workspace, checkout, worktree, remotes, environment, command
+
+    def test_create_rejects_remote_default_other_than_main(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            workspace = root / "workspace"
+            workspace.mkdir()
+            binary, remotes = self.write_fake_gh(root)
+            checkout = workspace / "demo"
+            worktree = workspace / "demo-gsd-path"
+            repository_template = root / "repository.md"
+            repository_template.write_text(
+                "Kind: <kind>\nRemote: <remote>\nVisibility: <visibility>\n"
+                "Remote default: <remote-default>\n"
+                "Remote default SHA: <remote-default-sha>\n"
+                "Default checkout: <default-checkout>\nGSD Path branch: <branch>\n"
+                "Primary worktree: <primary-worktree>\n"
+            )
+            environment = os.environ.copy()
+            environment["PATH"] = f"{binary}{os.pathsep}{environment['PATH']}"
+            environment["FAKE_GH_ROOT"] = str(remotes)
+            environment["FAKE_GH_DEFAULT_BRANCH"] = "master"
+            command = self.bootstrap_command(
+                workspace, checkout, worktree, repository_template
+            )
+
+            result = self.run_command(*command, cwd=workspace, env=environment)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("remote default must be main", result.stderr)
 
     def advance_remote(self, root: Path, remote: Path) -> None:
         updater = root / "updater"
@@ -250,7 +292,7 @@ Primary worktree: <primary-worktree>
                 "add",
                 "-q",
                 "-b",
-                "gsd-path/demo",
+                "gsd-path/M001",
                 str(worktree),
                 base,
             )
@@ -262,10 +304,10 @@ Primary worktree: <primary-worktree>
             self.assertEqual(resumed.returncode, 0, resumed.stderr)
             result = json.loads(resumed.stdout)
             self.assertEqual(result["status"], "complete")
-            self.assertEqual(result["branch"], "gsd-path/demo")
+            self.assertEqual(result["branch"], "gsd-path/M001")
             state = (worktree / ".project" / "STATE.md").read_text()
             binding = (worktree / ".project" / "REPOSITORY.md").read_text()
-            self.assertIn("branch: gsd-path/demo", state)
+            self.assertIn("branch: gsd-path/M001", state)
             self.assertIn(f"Default checkout: {checkout.resolve()}", binding)
             self.assertIn(f"Primary worktree: {worktree.resolve()}", binding)
             self.assertIn("Visibility: private", binding)
@@ -273,7 +315,7 @@ Primary worktree: <primary-worktree>
             self.assertEqual(self.git(checkout, "status", "--porcelain").stdout, "")
             self.assertEqual(
                 self.git(worktree, "branch", "--show-current").stdout.strip(),
-                "gsd-path/demo",
+                "gsd-path/M001",
             )
 
             repeated = self.run_command(*command, cwd=workspace, env=environment)
@@ -390,7 +432,7 @@ Primary worktree: <primary-worktree>
                 "add",
                 "-q",
                 "-b",
-                "gsd-path/demo",
+                "gsd-path/M001",
                 str(worktree),
                 base,
             )

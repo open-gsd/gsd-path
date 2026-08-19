@@ -19,6 +19,33 @@ from datetime import date
 from pathlib import Path, PurePosixPath
 from typing import Iterator, NamedTuple, Optional, Sequence
 
+try:
+    from pipeline_git import (
+        bound_branch_name,
+        default_branch_name,
+        integrate_commit_body,
+        integrate_subject,
+        is_bound_branch,
+        is_integrate_subject,
+        is_ship_subject,
+        milestone_number,
+        ship_commit_body,
+        ship_subject,
+    )
+except ImportError:  # pragma: no cover - package import used by tests
+    from scripts.pipeline_git import (
+        bound_branch_name,
+        default_branch_name,
+        integrate_commit_body,
+        integrate_subject,
+        is_bound_branch,
+        is_integrate_subject,
+        is_ship_subject,
+        milestone_number,
+        ship_commit_body,
+        ship_subject,
+    )
+
 if sys.platform == "win32":
     import msvcrt
 else:
@@ -1800,8 +1827,26 @@ def preflight(repo: Path) -> dict:
     }
 
 
+def require_canonical_commit_body(
+    project: Path,
+    commit: str,
+    canonical_subject: str,
+    expected_body: str,
+    label: str,
+) -> None:
+    message = require_git_success(
+        run_git(project, "show", "-s", "--format=%s%x00%b", commit),
+        f"inspect {label} commit message",
+    )
+    subject, separator, body = message.partition("\x00")
+    if not separator:
+        raise ArchiveError(f"{label} commit message is malformed")
+    if subject == canonical_subject and body.strip() != expected_body.strip():
+        raise ArchiveError(f"{label} commit body does not match required fields")
+
+
 def find_ship_commit(project: Path, archive_name: str) -> str:
-    expected_subject = f"ship: {archive_name}"
+    expected_subject = ship_subject(archive_name)
     log = require_git_success(
         run_git(project, "log", "--first-parent", "--format=%H%x00%s", "HEAD"),
         "inspect HEAD history for the ship commit",
@@ -1811,7 +1856,7 @@ def find_ship_commit(project: Path, archive_name: str) -> str:
         if "\x00" not in record:
             continue
         commit, subject = record.split("\x00", 1)
-        if subject == expected_subject:
+        if is_ship_subject(subject, archive_name):
             matches.append(commit)
     if not matches:
         raise ArchiveError(f"no commit with exact subject {expected_subject!r} in HEAD history")
@@ -1911,6 +1956,13 @@ def validate(repo: Path) -> dict:
         raise ArchiveError(
             f"FINAL.md Reviewed HEAD {reviewed_head} does not match ship parent {ship_parent}"
         )
+    require_canonical_commit_body(
+        project,
+        ship_commit,
+        ship_subject(archive.name),
+        ship_commit_body(configured, reviewed_head),
+        "ship",
+    )
 
     archive_in_parent = run_git(project, "cat-file", "-e", f"{ship_commit}^:{configured}")
     if archive_in_parent.returncode == 0:
@@ -1945,13 +1997,36 @@ def resolve_remote_default(project: Path) -> str:
     return remote_default
 
 
+def refresh_origin(repo: Path) -> dict:
+    """Fetch origin, refresh origin/HEAD, and mirror milestone tags."""
+    project = repo.resolve()
+    require_git_success(run_git(project, "fetch", "--prune", "origin"), "fetch origin")
+    require_git_success(
+        run_git(project, "remote", "set-head", "origin", "--auto"),
+        "refresh origin/HEAD",
+    )
+    mirrored = run_git(
+        project,
+        "fetch",
+        "origin",
+        "refs/tags/milestone/*:refs/remotes/origin/tags/milestone/*",
+    )
+    if mirrored.returncode != 0:
+        detail = (mirrored.stderr or mirrored.stdout).strip()
+        if "couldn't find remote ref" not in detail.casefold() and detail:
+            raise ArchiveError(f"could not refresh published milestone tags: {detail}")
+    remote_default = resolve_remote_default(project)
+    return {"remote_default": remote_default}
+
+
 def find_integrate_commit(
     project: Path,
     remote_default: str,
     archive_name: str,
     ship_commit: str,
 ) -> str:
-    expected_subject = f"integrate: {archive_name}"
+    default_name = default_branch_name(remote_default)
+    expected_subject = integrate_subject(archive_name, default_name)
     log = require_git_success(
         run_git(project, "log", "--first-parent", "--format=%H%x00%s", remote_default),
         f"inspect {remote_default} first-parent history for the integration merge",
@@ -1961,7 +2036,7 @@ def find_integrate_commit(
         if "\x00" not in record:
             continue
         commit, subject = record.split("\x00", 1)
-        if subject == expected_subject:
+        if is_integrate_subject(subject, archive_name, default_name):
             matches.append(commit)
     if not matches:
         raise ArchiveError(
@@ -2000,10 +2075,41 @@ def validate_integrated(repo: Path, slug: str) -> dict:
     # Read-only and network-free: only existing origin/* refs are consulted;
     # fetching is the phase's job.
     remote_default = resolve_remote_default(project)
+    default_name = default_branch_name(remote_default)
+    bound_branch = frontmatter_value(state, "branch")
+    if is_unset(bound_branch):
+        raise ArchiveError("STATE.md does not name a bound build branch")
+    expected_branch = bound_branch_name(milestone_number(archive_name))
+    ship_subject_text = require_git_success(
+        run_git(project, "log", "-1", "--format=%s", ship_commit),
+        "read ship commit subject",
+    )
+    canonical_ship = ship_subject_text == ship_subject(archive_name)
+    if canonical_ship and not is_bound_branch(bound_branch):
+        raise ArchiveError(f"bound branch {bound_branch!r} is not gsd-path/M00N")
+    if is_bound_branch(bound_branch) and bound_branch != expected_branch:
+        expected_milestone = expected_branch.removeprefix("gsd-path/")
+        raise ArchiveError(
+            f"bound branch {bound_branch} does not match archive milestone {expected_milestone}"
+        )
+    if bound_branch == default_name:
+        raise ArchiveError(
+            f"bound branch {bound_branch!r} is the remote default; "
+            "ship merges onto main, never onto the work branch"
+        )
+    if default_name != "main":
+        raise ArchiveError(f"remote default must be main, got {default_name!r}")
 
     # (b) The integration merge must sit on the remote default's first-parent
     # history with the ship commit as its second parent.
     merge_commit = find_integrate_commit(project, remote_default, archive_name, ship_commit)
+    require_canonical_commit_body(
+        project,
+        merge_commit,
+        integrate_subject(archive_name, default_name),
+        integrate_commit_body(configured, ship_commit, default_name, bound_branch),
+        "integration",
+    )
 
     # (c) The milestone tag must be annotated and point at the merge commit.
     tag_name = f"milestone/{archive_name}"
@@ -2028,12 +2134,59 @@ def validate_integrated(repo: Path, slug: str) -> dict:
     if contains.returncode != 0:
         raise ArchiveError(f"{remote_default} does not contain the integration merge")
 
+    # (e) The bound branch tip and annotated tag must be published on origin.
+    require_published_integration(
+        project,
+        bound_branch,
+        ship_commit,
+        tag_name,
+        merge_commit,
+    )
+
     return {
         "archive": configured,
         "commit": ship_commit,
         "integrate": merge_commit,
         "tag": tag_name,
     }
+
+
+def require_published_integration(
+    project: Path,
+    bound_branch: str,
+    ship_commit: str,
+    tag_name: str,
+    merge_commit: str,
+) -> None:
+    bound_ref = f"refs/remotes/origin/{bound_branch}"
+    if run_git(project, "rev-parse", "--verify", "--quiet", bound_ref).returncode != 0:
+        raise ArchiveError(f"missing published bound branch: origin/{bound_branch}")
+    published_ship = require_git_success(
+        run_git(project, "rev-parse", bound_ref),
+        "resolve published bound branch",
+    )
+    if published_ship != ship_commit:
+        raise ArchiveError(
+            f"origin/{bound_branch} is {published_ship}, expected ship commit {ship_commit}"
+        )
+
+    remote_tag = f"refs/remotes/origin/tags/{tag_name}"
+    if run_git(project, "rev-parse", "--verify", "--quiet", remote_tag).returncode != 0:
+        raise ArchiveError(f"missing published milestone tag: origin/tags/{tag_name}")
+    remote_tag_type = require_git_success(
+        run_git(project, "cat-file", "-t", remote_tag),
+        "inspect published milestone tag type",
+    )
+    if remote_tag_type != "tag":
+        raise ArchiveError(f"published milestone tag {tag_name} must be annotated")
+    remote_tag_target = require_git_success(
+        run_git(project, "rev-parse", f"{remote_tag}^{{commit}}"),
+        "resolve published milestone tag target",
+    )
+    if remote_tag_target != merge_commit:
+        raise ArchiveError(
+            f"published milestone tag {tag_name} does not point at the integration merge"
+        )
 
 
 def parser() -> argparse.ArgumentParser:
@@ -2060,6 +2213,12 @@ def parser() -> argparse.ArgumentParser:
     validate_integrated_parser.add_argument("--repo", required=True, type=Path)
     validate_integrated_parser.add_argument("--slug", required=True)
 
+    refresh_parser = subparsers.add_parser(
+        "refresh-origin",
+        help="fetch origin, refresh origin/HEAD, and mirror published milestone tags",
+    )
+    refresh_parser.add_argument("--repo", required=True, type=Path)
+
     abandon_parser = subparsers.add_parser(
         "abandon",
         help="abandon the active build milestone and archive its partial artifacts",
@@ -2081,6 +2240,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             result = abandon(arguments.repo, arguments.slug, arguments.reason)
         elif arguments.command == "validate-integrated":
             result = validate_integrated(arguments.repo, arguments.slug)
+        elif arguments.command == "refresh-origin":
+            result = refresh_origin(arguments.repo)
         else:
             result = validate(arguments.repo)
     except (ArchiveError, OSError) as error:
