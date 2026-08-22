@@ -244,11 +244,15 @@ python3 <absolute-bundled-pipeline-git.py> bind-next \
   --base <exact-origin-main-sha>
 ```
 
-The helper requires the previous branch to remain at the ship SHA, proves it
-is integrated into the exact base, rejects local or remote branch collisions,
-and switches the clean primary worktree without tracking main. Repeating the
+The helper requires the previous branch, while it still exists locally, to
+remain at the ship SHA, proves the ship commit is integrated into the exact
+base, rejects local or remote branch collisions,
+and switches the clean primary worktree without tracking main. It then
+retires the integrated previous branch — deleted locally and on origin; the
+ship commit stays reachable from the integration merge and its tag. Repeating the
 same command while the new branch is current at the unchanged base is the
-only idempotent recovery. Record the returned branch and base in the state
+only idempotent recovery, and it completes any retirement left unfinished by
+a crash. Record the returned branch and base in the state
 Log, then:
 
 - **Program** (ROADMAP.md exists): while `pending` entries remain, first
