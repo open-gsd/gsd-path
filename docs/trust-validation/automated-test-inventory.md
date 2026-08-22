@@ -1,6 +1,6 @@
 # GSD Path — Automated Test & CI Inventory
 
-**Generated:** 2026-08-05; **inventory updated 2026-08-11**
+**Generated:** 2026-08-05; **inventory updated 2026-08-21**
 **Repo:** `open-gsd/gsd-path` @ local workspace
 **Suites:** `npm test`; `python3 -m unittest discover -s tests`
 
@@ -37,6 +37,11 @@ Node requires **≥18.17**. Python 3 with no extra deps for unittest modules.
 | `tests/test_check_update.py` | unittest | `scripts/check_update.py` — version compare, cache, notice |
 | `tests/test_sync_skill_resources.py` | unittest | `scripts/sync_skill_resources.py` — generated resources, explicit-only links, dispatch branches |
 | `tests/test_implicit_invocation.py` | unittest | Codex CLI — router absent from ordinary skill catalog (**skips if `codex` not on PATH**) |
+| `tests/wizard.test.mjs` | `node --test` | `scripts/wizard.mjs` — interactive installer flow driven by a fake key stream → argv |
+| `tests/test_wizard_tty.py` | unittest | `gsd-path` with no flags on a real pty opens the wizard and hands off to the installer (dry run, quit) |
+| `tests/test_router_contract.py` | unittest | `skills/gsd-path/SKILL.md` state table — every phase routed in-progress and done, every contract file exists, STATE template tokens match |
+| `tests/test_full_cycle.py` | unittest | One milestone define → research → decide → plan → build → ship → integrate → bind-next on disk, every gate script and git hook run in order |
+| `tests/dogfood.py` | script (`--host claude\|codex`) | **Live** host run: local install, headless `/gsd-path-docs-audit`, DOCS-AUDIT.md shape, guard deny/allow; writes an evidence record. `.github/workflows/dogfood.yml` runs it on dispatch/weekly with API secrets |
 
 **Note:** `scripts/install.py` is covered by `tests/test_install.py`. The
 remaining parity gap is that `install.py` has no `--local` or
@@ -47,19 +52,19 @@ remaining parity gap is that `install.py` has no `--local` or
 | Dimension | Automated signal | Strength |
 |-----------|------------------|----------|
 | **1. Install & update** | `install.test.mjs`, `test_install.py`, `test_check_update.py`, hook install/refresh tests | **Strong** for both installers; `--local`/`--update` flows remain Node-only |
-| **2. Invoke & route** | `test_implicit_invocation.py` only (Codex-only, optional) | **Weak** — no STATE.md routing, recovery, or router contract tests |
-| **3. Phase execution** | `test_handoffs.py` | **Partial** — handoff validator only, not full phase SOP |
-| **4. Build orchestration** | `test_isolation.py` | **Partial** — isolate/land/retire helper; no live wave orchestration |
+| **2. Invoke & route** | `test_router_contract.py`, `test_full_cycle.py` (STATE transitions), `test_implicit_invocation.py` | **Partial** — state table and transitions proven; live routing by a host only via dogfood |
+| **3. Phase execution** | `test_full_cycle.py`, `test_handoffs.py`, `test_task_briefs.py` | **Strong** for the disk contract — every phase's output passes the next phase's gate |
+| **4. Build orchestration** | `test_isolation.py`, `test_full_cycle.py` (isolate → land → verify → review) | **Partial** — helper chain proven; no live wave scheduling |
 | **5. Guards** | `test_guard_hook.py`, `test_git_guard.py`, hook installer tests | **Strong** |
 | **6. Ship & archive** | `test_archive_milestone.py` | **Strong** |
-| **7. Host dispatch** | Installer platform transforms; `test_sync_skill_resources` dispatch branches | **Partial** — no live subagent/Task spawn on any host |
+| **7. Host dispatch** | Installer platform transforms; `test_sync_skill_resources` dispatch branches; `dogfood.py` | **Partial** — live top-level skill invocation proven for Claude; child spawn still manual evidence |
 | **8. Docs fidelity** | Self-contained link checks in sync tests | **Partial** — no automated DOCS/README vs code audit |
-| **9. Live dogfood** | — | **None** |
+| **9. Live dogfood** | `tests/dogfood.py` + `dogfood.yml`; evidence in `docs/trust-validation/evidence/` | **Partial** — Claude docs-audit + guards pass (2026-08-21); Codex wired, unrecorded; opt-in CI |
 
 ## What automation explicitly does NOT cover
 
-- Full milestone run on any AI host (router → ship)
-- Router routing logic (`skills/gsd-path/SKILL.md` phase selection, `STATE.archive` recovery)
+- Full milestone run on any AI host (router → ship) — only the disk contract is automated (`test_full_cycle.py`)
+- Router archive/branch recovery branches (`STATE.archive` paths) beyond the state table
 - Orchestrator build phase (wave scheduling, parallel coder dispatch)
 - Per-host runtime dispatch (Cursor Task, Claude subagents, etc.) beyond install artifacts
 - `scripts/install.py` parity for `--local` / `--update` (Node-only flags; the rest of `install.py` is covered by `test_install.py`)
