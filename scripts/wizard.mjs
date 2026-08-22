@@ -29,11 +29,12 @@ const WORDMARK = [
 
 export function makeTheme(colored) {
   const esc = (code) => (text) => (colored ? `\u001b[${code}m${text}\u001b[0m` : text);
-  const gradient = [51, 45, 39, 33, 99, 135, 171, 207]; // cyan → violet → magenta
+  const gradient = [51, 45, 39, 215, 209, 202]; // opengsd.net brand: cyan #00e5ff → orange #ff4500
   return {
     dim: esc("2"),
     bold: esc("1"),
-    accent: esc("38;5;45"),
+    accent: esc("38;5;45"), // brand cyan #00c4ff
+    flame: esc("38;5;202"), // brand orange #ff5b37
     ok: esc("38;5;84"),
     warn: esc("38;5;214"),
     err: esc("38;5;203"),
@@ -88,7 +89,7 @@ async function select(io, theme, title, items, { multi = false, preselected = ne
   const draw = () => {
     const rows = items.map((item, index) => {
       const active = index === cursor;
-      const mark = multi ? (chosen.has(index) ? theme.accent("◉") : theme.dim("○")) : active ? theme.accent("›") : " ";
+      const mark = multi ? (chosen.has(index) ? theme.accent("◉") : theme.dim("○")) : active ? theme.flame("›") : " ";
       const label = active ? theme.bold(item.label) : item.label;
       const note = item.note ? `  ${theme.dim(item.note)}` : "";
       return `    ${mark} ${label}${note}`;
