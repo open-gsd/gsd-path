@@ -510,12 +510,18 @@ The task implements the demo.
         self.write_state(root, "plan", "active", project_dir)
         self.write_intent_criteria(root, project_dir)
         self.write_plan_coverage(root, project_dir=project_dir)
-        self.write_coverage_task(root, "T001", "- SC1", project_dir=project_dir)
+        self.write_coverage_task(
+            root,
+            "T001",
+            "- SC1",
+            acceptance="1. The demo command prints hello.",
+            project_dir=project_dir,
+        )
         self.write_coverage_task(
             root,
             "T002",
             "- SC2",
-            acceptance="1. The demo tests pass.",
+            acceptance="1. The demo test suite is green.",
             project_dir=project_dir,
         )
 
@@ -546,7 +552,12 @@ The task implements the demo.
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             self.write_plan_handoff(root)
-            self.write_coverage_task(root, "T001", "- None")
+            self.write_coverage_task(
+                root,
+                "T001",
+                "- None",
+                acceptance="1. The demo command prints hello.",
+            )
 
             with self.assertRaises(check_handoffs.HandoffError) as failure:
                 check_handoffs.validate_plan(root)
@@ -582,6 +593,213 @@ The task implements the demo.
 
             with self.assertRaises(check_handoffs.HandoffError):
                 check_handoffs.validate_plan(root, ".project/next")
+
+    def test_plan_coverage_rejects_an_acceptance_that_drops_the_sc_text(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_plan_handoff(root)
+            self.write_coverage_task(
+                root, "T001", "- SC1", acceptance="1. Static proof only."
+            )
+
+            with self.assertRaises(check_handoffs.HandoffError) as failure:
+                check_handoffs.validate_plan(root)
+            self.assertIn("T001 AC1 does not carry SC1", str(failure.exception))
+
+    def write_settled_synthesis(
+        self, root: Path, project_dir: str = ".project", extra: str = ""
+    ) -> None:
+        self.write(
+            root,
+            f"{project_dir}/research/SYNTHESIS.md",
+            f"""# Synthesis
+
+## Settled
+- SC1 — The demo command prints hello. (INTENT.md)
+- SC2 — The demo test suite is green. (INTENT.md)
+
+## Decisions
+{extra or "- none yet"}
+
+## For the planner
+- **Wave-1 blockers**: none
+- **Walking skeleton**: demo CLI
+- **Pitfalls → tasks**: none
+
+## User rulings
+
+## Still unknown
+""",
+        )
+
+    def test_decide_requires_settled_sc_copies(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_state(root, "decide", "active")
+            self.write_intent_criteria(root)
+            self.write_settled_synthesis(root)
+
+            result = check_handoffs.validate_decide(root)
+
+            self.assertEqual(result["phase"], "decide")
+            self.assertEqual(result["criteria"], ["SC1", "SC2"])
+
+    def test_decide_rejects_a_restated_sc(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_state(root, "decide", "active")
+            self.write_intent_criteria(root)
+            self.write_settled_synthesis(
+                root,
+                extra="- SC1 — Static AST proof instead of hello.",
+            )
+
+            with self.assertRaises(check_handoffs.HandoffError) as failure:
+                check_handoffs.validate_decide(root)
+            self.assertIn("restates SC1", str(failure.exception))
+
+    def write_wave_review(
+        self,
+        root: Path,
+        *,
+        sc1: str = "pass",
+        sc2: str = "pass",
+        verdict: str = "pass",
+        extra: str = "",
+        project_dir: str = ".project",
+    ) -> str:
+        relative = f"{project_dir}/review/wave-1.cycle1.md"
+        self.write(
+            root,
+            relative,
+            f"""# Review — wave 1, cycle 1
+
+Wave verdict: {verdict}
+Cycle: 1
+Depth: verify-only
+Tasks reviewed: 2
+
+## T001 — demo: pass
+
+- ✅ The demo command prints hello. — ran hello.py
+
+## T002 — demo: pass
+
+- ✅ The demo test suite is green. — unittest OK
+
+## Intent coverage
+
+### SC1 — The demo command prints hello.: {sc1}
+- ✅ hello.py output
+### SC2 — The demo test suite is green.: {sc2}
+- ✅ unittest
+{extra}
+""",
+        )
+        return relative
+
+    def test_wave_requires_owned_sc_headings(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_plan_handoff(root)
+            relative = self.write_wave_review(root)
+
+            result = check_handoffs.validate_wave(root, review=relative)
+
+            self.assertEqual(result["owned"], ["SC1", "SC2"])
+            self.assertEqual(result["verdict"], "pass")
+
+    def test_wave_rejects_pass_while_an_owned_sc_failed(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_plan_handoff(root)
+            relative = self.write_wave_review(root, sc1="fail", verdict="pass")
+
+            with self.assertRaises(check_handoffs.HandoffError) as failure:
+                check_handoffs.validate_wave(root, review=relative)
+            self.assertIn("owned SC failed", str(failure.exception))
+
+    def test_wave_rejects_task_log_as_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_plan_handoff(root)
+            relative = self.write_wave_review(
+                root, extra="- ✅ cited the task Log\n"
+            )
+
+            with self.assertRaises(check_handoffs.HandoffError) as failure:
+                check_handoffs.validate_wave(root, review=relative)
+            self.assertIn("task Log", str(failure.exception))
+
+    def write_final_review(
+        self,
+        root: Path,
+        *,
+        verdict: str = "pass",
+        sc1: str = "met",
+        check: str = "`python3 hello.py`",
+        project_dir: str = ".project",
+    ) -> None:
+        self.write(
+            root,
+            f"{project_dir}/review/FINAL.md",
+            f"""# Final Review — demo
+
+Reviewed HEAD: {RESEARCH_HEAD}
+Overall verdict: {verdict}
+
+## Success criteria
+
+### SC1 — The demo command prints hello.
+
+- **Verdict**: {sc1}
+- **Check**: {check}
+- **Observed**: hello
+- **Reference**: hello.py:1
+- **Finding**: none
+- **Fix direction**: none
+
+### SC2 — The demo test suite is green.
+
+- **Verdict**: met
+- **Check**: `python3 -m unittest`
+- **Observed**: OK
+- **Reference**: tests/test_app.py
+- **Finding**: none
+- **Fix direction**: none
+""",
+        )
+
+    def test_final_requires_verbatim_intent_criteria(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_state(root, "ship", "active")
+            self.write_intent_criteria(root)
+            self.write_final_review(root)
+
+            result = check_handoffs.validate_final(root)
+
+            self.assertEqual(result["criteria"], ["SC1", "SC2"])
+            self.assertEqual(result["verdict"], "pass")
+
+    def test_final_rejects_pass_without_a_check_or_reference(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_state(root, "ship", "active")
+            self.write_intent_criteria(root)
+            self.write_final_review(root, check="none")
+            final = root / ".project/review/FINAL.md"
+            final.write_text(
+                final.read_text(encoding="utf-8").replace(
+                    "- **Reference**: hello.py:1",
+                    "- **Reference**: none",
+                ),
+                encoding="utf-8",
+            )
+
+            with self.assertRaises(check_handoffs.HandoffError) as failure:
+                check_handoffs.validate_final(root)
+            self.assertIn("SC1 lacks a Check or Reference", str(failure.exception))
 
 
 if __name__ == "__main__":

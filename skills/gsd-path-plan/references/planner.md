@@ -60,7 +60,9 @@ plan order above, which still keeps plan-invalidating risk in wave 1.
 - Inline necessary synthesis context. Map every INTENT.md success criterion
   into PLAN.md `## Intent coverage` (SCn → task id → ACn) and list those SCn
   ids in each task's `## Intent coverage` (`- None` when a task owns none).
-  The named task's Verify command is what must fail if that SC is skipped.
+  The mapped ACn text must contain the INTENT criterion verbatim. The named
+  task's Verify command is what must fail if that SC is skipped. Surface an
+  INTENT↔SYNTHESIS conflict; do not cover both.
 - In Approach, give constraints, applicable pitfalls, and pointers to real
   paths, symbols, endpoints, and schemas — not an ordered edit script. The
   coder owns implementation decisions inside those constraints.

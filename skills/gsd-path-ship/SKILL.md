@@ -87,8 +87,13 @@ before dispatch or ship. Then:
    `unverifiable` with checked evidence; every gap is `pass` or `blocked` with
    checked evidence. Every output must record the same exact full reviewed
    HEAD, and each numbered gap heading and Risk value must match its dispatch
-   risk. Re-run PLAN.md's project Verify in a fresh verify sidecar from
-   `isolate-verify --name project-verify` at that same exact HEAD.
+   risk. Run
+   `python3 <absolute check_handoffs.py> final --repo <absolute repo root>`
+   before any archive question: FINAL.md must copy every INTENT success
+   criterion verbatim, and `Overall verdict: pass` requires every verdict
+   `met` with a non-`none` Check or Reference. A non-zero exit is
+   `ship/blocked`. Re-run PLAN.md's project Verify in a fresh verify sidecar
+   from `isolate-verify --name project-verify` at that same exact HEAD.
 5. Redispatch one complete corrected brief for a missing or invalid reviewer
    artifact under the same logical task name, following the runtime dispatch
    contract. If it remains invalid, set `ship/blocked` with

@@ -47,9 +47,10 @@ Review depth: <full | deep | verify-only>
 ## Intent coverage
 
 <!-- Every INTENT.md success criterion, as SCn, maps to at least one task
-     acceptance item. The named task's Verify command is what must fail if
-     that criterion is skipped. `scripts/check_handoffs.py plan` gates this
-     table against INTENT.md and each task's Intent coverage section. -->
+     acceptance item whose text contains the criterion verbatim. The named
+     task's Verify command is what must fail if that criterion is skipped.
+     `scripts/check_handoffs.py plan` gates this table against INTENT.md and
+     each task's Intent coverage section. -->
 
 | Criterion | Task | Acceptance |
 |-----------|------|------------|

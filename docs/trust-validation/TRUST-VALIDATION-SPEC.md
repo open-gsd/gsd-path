@@ -46,7 +46,7 @@ Use these **without** waiting on manual dogfood — still run `npm test` + Pytho
 - **Ship & archive validators** — `scripts/archive_milestone.py`, `git_guard.py` ship-commit rules
 - **Guard script logic** — `guard_hook.py` / `git_guard.py` unit + subprocess tests
 - **Node installer** — dry-run, apply, rollback, `--local`, `--update`, hooks install/refresh (`install.test.mjs` + `test_install.py`)
-- **Handoff validator** — `scripts/check_handoffs.py` (research + plan coverage + patch-findings)
+- **Handoff validator** — `scripts/check_handoffs.py` (research, plan coverage, decide SC copies, wave/final INTENT gates, patch-findings)
 - **Skill sync integrity** — `sync_skill_resources.py --check`
 - **Static dispatch artifacts** — installer stages `platforms/*/dispatch.md` + Cursor `gsd-path` subagent file
 

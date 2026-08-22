@@ -77,6 +77,11 @@ rules are unchanged; never write an active-path artifact.
    runner-up. Require Decision, Runner-up, Evidence, and
    Confidence in every decision block. Require `## For the planner` with wave-1
    blockers, walking skeleton, and pitfall-to-task guidance.
+   When milestone INTENT.md exists, run
+   `python3 <absolute check_handoffs.py> decide --repo <absolute repo root>`
+   (and `--project-dir .project/next` in lookahead). A non-zero exit is a
+   gate failure: Settled must copy each INTENT success criterion verbatim as
+   `- SCn — <criterion> (INTENT.md)`, and SYNTHESIS may not restate an SC.
 4. If structural validation fails, redispatch one complete corrected brief
    under logical task name `decide`, following the runtime dispatch
    contract, and validate again. If it still fails, set STATE.md to

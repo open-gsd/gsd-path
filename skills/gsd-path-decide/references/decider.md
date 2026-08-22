@@ -12,7 +12,11 @@ Turn supplied research into settled decisions. Do not conduct new research.
 
 ## Decide
 
-1. Treat intent constraints and vetoes as hard limits.
+1. Treat intent constraints, vetoes, and success criteria as hard limits.
+   Copy each INTENT success criterion into Settled as
+   `- SCn — <verbatim criterion> (INTENT.md)`. Do not restate an SC
+   elsewhere. A different proof is a conflict: surface it as `NEEDS-USER`,
+   do not substitute it.
 2. Map agreements, conflicts, and gaps across all evidence.
 3. For every genuinely open choice, select one decision, name the runner-up
    and why it lost, and cite the evidence file and finding heading. Record a

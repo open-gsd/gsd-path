@@ -272,7 +272,10 @@ declared files, deps, and
 orchestrator-owned `base`/`worktree`/`task_branch`/`commit` fields initialized
 to null. PLAN.md Intent coverage maps every INTENT.md success criterion to a
 task AC; that task's Verify must fail if the SC is skipped.
-`scripts/check_handoffs.py plan` gates the table. Acceptance criteria,
+`scripts/check_handoffs.py plan` gates the table and requires each mapped
+AC to contain the INTENT criterion verbatim. `decide` copies each SC into
+SYNTHESIS Settled; `wave` and `final` reject reviews that omit or restate
+them. Acceptance criteria,
 owned SCs, and Verify are the contract; the coder owns
 implementation decisions inside the stated constraints. The planner reads
 `.project/LESSONS.md` when present and assigns each wave a `Review depth` —
