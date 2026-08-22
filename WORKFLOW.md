@@ -266,10 +266,14 @@ feature plus its tests and wiring — one agent run can complete, split only
 when file scopes, dependencies, or capacity force it. Every task contains
 inlined context, real paths, approach constraints, an interface contract
 naming the exact shapes exchanged with other tasks (`None` when
-independent), observable acceptance criteria, a meaningful `verify` command,
+independent), an Intent coverage section, observable acceptance criteria, a
+meaningful `verify` command,
 declared files, deps, and
 orchestrator-owned `base`/`worktree`/`task_branch`/`commit` fields initialized
-to null. Acceptance criteria and Verify are the contract; the coder owns
+to null. PLAN.md Intent coverage maps every INTENT.md success criterion to a
+task AC; that task's Verify must fail if the SC is skipped.
+`scripts/check_handoffs.py plan` gates the table. Acceptance criteria,
+owned SCs, and Verify are the contract; the coder owns
 implementation decisions inside the stated constraints. The planner reads
 `.project/LESSONS.md` when present and assigns each wave a `Review depth` —
 `full`, `verify-only` for low-risk waves, or sparingly `deep` for
@@ -289,7 +293,8 @@ that can run concurrently may share a file.
 
 **Gate:** both required inputs exist; deps resolve without cycles and each one
 carries named data or a named prerequisite effect; layer and
-file-scope rules hold; criteria and verifies can fail meaningfully; tasks are
+file-scope rules hold; criteria and verifies can fail meaningfully; every
+INTENT success criterion is in the Intent coverage table; tasks are
 deliverable-sized with no unforced splits; INTENT and SYNTHESIS are honored;
 and the user approves the wave summary. Approval is checkpointed the same
 way — a `.project/`-only commit carrying the approved PLAN.md, task set, and
@@ -328,7 +333,8 @@ For each wave:
    task becomes ready the moment its dependencies land, and each new
    dispatch round records the then-current clean HEAD.
 2. **Isolate and dispatch.** Lint every ready task's brief at the recorded
-   base with `check_task_briefs.py`; a failure is a plan defect repaired
+   base with `check_task_briefs.py` and re-check Intent coverage with
+   `check_handoffs.py plan`; a failure is a plan defect repaired
    before any worktree exists. Isolate each ready task with `isolation.py
    isolate-task` at that round's base (`--round-size` is the ready-set size).
    Serial rounds return the primary worktree and `task_branch: null`. Parallel
@@ -336,7 +342,8 @@ For each wave:
    Record the helper's path and branch, mark the task
    in-progress in orchestrator-owned frontmatter without appending its Log,
    commit dispatch bookkeeping, then send one `worker` to each worktree with
-   deterministic `build_<task_id>` identity.
+   deterministic `build_<task_id>` identity. The coder brief includes
+   INTENT.md; owned success criteria are part of done.
 3. **Verify and land serially.** Process each result as it arrives —
    when several wait, in task-id order — never idling behind slower in-flight
    tasks. For each ready result,
@@ -363,10 +370,11 @@ For each wave:
    Already-absent resources mean cleanup completed; partial or mismatched
    cleanup blocks.
 5. **Review the wave.** At `Review depth: full`, the reviewer receives task
-   `base` and `commit` plus
+   `base` and `commit`, INTENT.md, plus
    orchestrator-created verify sidecars. For each task it applies only
    `commit^..commit` product-file patch to the recorded base, re-runs Verify,
-   and checks every criterion. Paths outside declared files plus the assigned
+   and checks every acceptance criterion and each INTENT success criterion
+   owned by the wave. Paths outside declared files plus the assigned
    task file block; that task file may change only orchestrator fields and its
    append-only Log. At `verify-only`, no reviewer is spawned: the
    orchestrator writes the wave-review file from its own isolated Verify and

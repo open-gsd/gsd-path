@@ -106,7 +106,8 @@ severity, or fit with this milestone's scope).
      is narrative order, not a dependency: drop that edge and place both tasks
      by the wave-order rules.
    - Require non-empty Context and Approach, observable Acceptance criteria,
-     a Verify command that can fail when work is skipped, and Log sections.
+     a Verify command that can fail when work is skipped, an Intent coverage
+     section (`- None` or owned SCn ids), and Log sections.
    - Require an Interface contract section in every task: `None` for
      independent tasks; when tasks exchange a symbol, schema, endpoint, file
      format, or path, exact shared shapes with identical text in every
@@ -125,6 +126,12 @@ severity, or fit with this milestone's scope).
    - Prove every intent constraint and synthesis decision is covered, that no
      scope-out veto appears in a task, and that `Project verify` is a real,
      non-placeholder command in PLAN.md.
+   - Run `python3 <absolute check_handoffs.py> plan --repo <absolute repo
+     root>` and `--project-dir .project/next` when the router supplied the
+     lookahead track. A non-zero exit is a gate failure: every INTENT.md
+     success criterion must appear in PLAN.md Intent coverage mapped to a
+     real task AC, and each task's Intent coverage section must match that
+     table.
    - Run `python3 <absolute review_panel.py> validate-plan --plan <absolute
      PLAN.md> --intent <absolute INTENT.md>` and `--charter <absolute
      .project/CHARTER.md>` when that file exists. A non-zero exit is a gate
@@ -299,7 +306,10 @@ first.
    waves or existing tasks. One task per accepted finding, carrying the
    finding's evidence verbatim in its Context; `fix-doc` findings are tasks
    too — their Verify re-runs the audit's claim check so the corrected doc
-   is proven, not assumed. Cross-finding dependencies stay inside the patch
+   is proven, not assumed. A patch task that repairs an SC finding lists that
+   SCn in its Intent coverage and adds a coverage row; other patch tasks
+   write `- None`. Do not edit existing coverage rows or existing task Owns.
+   Cross-finding dependencies stay inside the patch
    wave, split into further waves only if file scopes force it.
 3. Gate exactly as in step 3 above, scoped to the new tasks plus one extra
    check: patch tasks must not touch a scope-out veto or contradict a

@@ -6,7 +6,7 @@ import json
 import re
 import sys
 from pathlib import Path, PurePosixPath
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence, Set, Tuple
 
 
 PIPELINE = "gsd-path/v2"
@@ -20,6 +20,15 @@ DISPATCH_PATTERN = re.compile(
 QUESTION_PATTERN = re.compile(r"^- `\[RESEARCH\] (?P<question>[^`]+)` → `(?P<dimension>[^`]+)`$")
 FINDING_PATTERN = re.compile(r"^### (?P<id>P\d{3}) — (?P<title>.+)$")
 CRITERION_LOCATOR_PATTERN = re.compile(r"^SC[1-9]\d*$")
+COMMENT_PATTERN = re.compile(r"<!--.*?-->", re.DOTALL)
+NUMBERED_ITEM_PATTERN = re.compile(r"^(\d+)\.\s+(\S.*)$")
+COVERAGE_ROW_PATTERN = re.compile(
+    r"^\|\s*(?P<criterion>SC[1-9]\d*)\s*\|\s*(?P<task>T\d{3})\s*"
+    r"\|\s*(?P<acceptance>AC[1-9]\d*)\s*\|"
+)
+TASK_ID_PATTERN = re.compile(r"(?m)^id:\s*(T\d{3})\s*(?:#.*)?$")
+OWNED_CRITERION_PATTERN = re.compile(r"^- (None|SC[1-9]\d*)$")
+VERIFY_BLOCK_PATTERN = re.compile(r"```bash[ \t]*\n(?P<block>.*?)```", re.DOTALL)
 
 
 def _source_pattern(project_dir: str) -> "re.Pattern[str]":
@@ -68,10 +77,15 @@ def _frontmatter(state: str) -> Dict[str, str]:
     raise HandoffError("STATE.md frontmatter is not closed")
 
 
-def _require_state(root: Path, phase: str, status: str, project_dir: str) -> None:
+def _require_pipeline(root: Path, project_dir: str) -> Dict[str, str]:
     values = _frontmatter(_read(root, f"{project_dir}/STATE.md"))
     if values.get("pipeline") != PIPELINE:
         raise HandoffError("STATE.md has the wrong pipeline marker")
+    return values
+
+
+def _require_state(root: Path, phase: str, status: str, project_dir: str) -> None:
+    values = _require_pipeline(root, project_dir)
     if values.get("phase") != phase or values.get("status") != status:
         raise HandoffError(
             f"STATE.md must be {phase}/{status}, found "
@@ -282,6 +296,157 @@ def _reviewed_head(text: str, source: str) -> str:
     return value
 
 
+def _strip_comments(text: str) -> str:
+    return COMMENT_PATTERN.sub("", text)
+
+
+def _numbered_items(section: str) -> Dict[int, str]:
+    items: Dict[int, str] = {}
+    for line in _strip_comments(section).splitlines():
+        match = NUMBERED_ITEM_PATTERN.fullmatch(line.strip())
+        if not match:
+            continue
+        number = int(match.group(1))
+        if number in items:
+            raise HandoffError(f"repeated numbered item {number}")
+        items[number] = match.group(2).strip()
+    return items
+
+
+def _success_criteria(intent: str) -> Dict[str, str]:
+    items = _numbered_items(_section(intent, "Success criteria"))
+    if not items:
+        raise HandoffError("INTENT.md has no success criteria")
+    expected = list(range(1, max(items) + 1))
+    if sorted(items) != expected:
+        raise HandoffError("INTENT.md success criteria must be contiguous from 1")
+    return {f"SC{number}": text for number, text in items.items()}
+
+
+def _coverage_rows(plan: str) -> List[Tuple[str, str, str]]:
+    body = _section(plan, "Intent coverage")
+    rows: List[Tuple[str, str, str]] = []
+    seen = set()
+    for line in _strip_comments(body).splitlines():
+        match = COVERAGE_ROW_PATTERN.match(line.strip())
+        if not match:
+            continue
+        row = (
+            match.group("criterion"),
+            match.group("task"),
+            match.group("acceptance"),
+        )
+        if row in seen:
+            raise HandoffError(
+                f"Intent coverage repeats {row[0]} {row[1]} {row[2]}"
+            )
+        seen.add(row)
+        rows.append(row)
+    if not rows:
+        raise HandoffError("PLAN.md Intent coverage has no rows")
+    return rows
+
+
+def _task_texts(root: Path, project_dir: str) -> Dict[str, str]:
+    tasks_dir = root / project_dir / "tasks"
+    if not tasks_dir.is_dir():
+        raise HandoffError(f"missing {project_dir}/tasks")
+    tasks: Dict[str, str] = {}
+    for path in sorted(tasks_dir.glob("*.md")):
+        if not path.is_file() or path.is_symlink():
+            continue
+        text = path.read_text(encoding="utf-8")
+        match = TASK_ID_PATTERN.search(text)
+        if not match:
+            raise HandoffError(f"{path.name} is missing an id")
+        task_id = match.group(1)
+        if task_id in tasks:
+            raise HandoffError(f"duplicate task id {task_id}")
+        tasks[task_id] = text
+    if not tasks:
+        raise HandoffError(f"no task files in {project_dir}/tasks")
+    return tasks
+
+
+def _owned_criteria(task_text: str, task_id: str) -> List[str]:
+    body = _section(task_text, "Intent coverage")
+    owned: List[str] = []
+    saw_none = False
+    for line in _strip_comments(body).splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        match = OWNED_CRITERION_PATTERN.fullmatch(stripped)
+        if not match:
+            raise HandoffError(f"{task_id} Intent coverage has an invalid line")
+        value = match.group(1)
+        if value == "None":
+            saw_none = True
+            continue
+        owned.append(value)
+    if saw_none and owned:
+        raise HandoffError(f"{task_id} Intent coverage mixes None with SCs")
+    if saw_none:
+        return []
+    if not owned:
+        raise HandoffError(f"{task_id} Intent coverage is empty")
+    if len(owned) != len(set(owned)):
+        raise HandoffError(f"{task_id} repeats an owned criterion")
+    return owned
+
+
+def _acceptance_ids(task_text: str, task_id: str) -> Set[str]:
+    items = _numbered_items(_section(task_text, "Acceptance criteria"))
+    if not items:
+        raise HandoffError(f"{task_id} has no acceptance criteria")
+    return {f"AC{number}" for number in items}
+
+
+def _has_verify(task_text: str) -> bool:
+    body = _section(task_text, "Verify")
+    block = VERIFY_BLOCK_PATTERN.search(body)
+    return bool(block and block.group("block").strip())
+
+
+def validate_plan(
+    root: Path, project_dir: str = DEFAULT_PROJECT_DIR
+) -> Dict[str, object]:
+    """Validate INTENT success criteria against PLAN.md coverage and tasks."""
+
+    _require_pipeline(root, project_dir)
+    intent = _read(root, f"{project_dir}/intent/INTENT.md")
+    plan = _read(root, f"{project_dir}/plan/PLAN.md")
+    criteria = _success_criteria(intent)
+    rows = _coverage_rows(plan)
+    tasks = _task_texts(root, project_dir)
+    assigned: Dict[str, Set[str]] = {task_id: set() for task_id in tasks}
+    covered = set()
+    for criterion, task_id, acceptance in rows:
+        if criterion not in criteria:
+            raise HandoffError(f"Intent coverage names unknown {criterion}")
+        if task_id not in tasks:
+            raise HandoffError(f"Intent coverage names unknown {task_id}")
+        if acceptance not in _acceptance_ids(tasks[task_id], task_id):
+            raise HandoffError(f"{task_id} has no {acceptance}")
+        if not _has_verify(tasks[task_id]):
+            raise HandoffError(f"{task_id} Verify is empty")
+        assigned[task_id].add(criterion)
+        covered.add(criterion)
+    missing = [criterion for criterion in criteria if criterion not in covered]
+    if missing:
+        raise HandoffError("Intent coverage omits " + ", ".join(missing))
+    for task_id, text in tasks.items():
+        owned = set(_owned_criteria(text, task_id))
+        if owned != assigned[task_id]:
+            raise HandoffError(f"{task_id} Intent coverage does not match PLAN.md")
+    return {
+        "phase": "plan",
+        "criteria": sorted(criteria),
+        "rows": len(rows),
+        "tasks": len(tasks),
+    }
+
+
 def validate_patch_findings(
     root: Path, project_dir: str = DEFAULT_PROJECT_DIR
 ) -> Dict[str, object]:
@@ -344,7 +509,7 @@ def validate_patch_findings(
 
 def parser() -> argparse.ArgumentParser:
     argument_parser = argparse.ArgumentParser(description=__doc__)
-    argument_parser.add_argument("phase", choices=("research", "patch"))
+    argument_parser.add_argument("phase", choices=("research", "patch", "plan"))
     argument_parser.add_argument("--repo", type=Path, required=True)
     argument_parser.add_argument(
         "--project-dir",
@@ -361,10 +526,13 @@ def parser() -> argparse.ArgumentParser:
 def main(argv: Optional[Sequence[str]] = None) -> int:
     arguments = parser().parse_args(argv)
     try:
-        result = (
-            validate_research(arguments.repo.resolve(), arguments.project_dir)
-            if arguments.phase == "research"
-            else validate_patch_findings(arguments.repo.resolve(), arguments.project_dir)
+        validators = {
+            "research": validate_research,
+            "patch": validate_patch_findings,
+            "plan": validate_plan,
+        }
+        result = validators[arguments.phase](
+            arguments.repo.resolve(), arguments.project_dir
         )
     except HandoffError as error:
         print(f"handoff validation failed: {error}", file=sys.stderr)

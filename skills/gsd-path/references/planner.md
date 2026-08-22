@@ -57,7 +57,10 @@ plan order above, which still keeps plan-invalidating risk in wave 1.
   layer, or agent-run capacity forces it; merge tasks that share files or a
   deliverable. A task whose expected diff is smaller than its own task file
   is too small.
-- Inline necessary intent and synthesis context.
+- Inline necessary synthesis context. Map every INTENT.md success criterion
+  into PLAN.md `## Intent coverage` (SCn → task id → ACn) and list those SCn
+  ids in each task's `## Intent coverage` (`- None` when a task owns none).
+  The named task's Verify command is what must fail if that SC is skipped.
 - In Approach, give constraints, applicable pitfalls, and pointers to real
   paths, symbols, endpoints, and schemas — not an ordered edit script. The
   coder owns implementation decisions inside those constraints.
@@ -79,8 +82,8 @@ otherwise copy CHARTER.md's durable default when that file is supplied;
 otherwise write `review_panel: off`. Never invent `detected` or a named
 family list. Quick-lane plans always write `off`.
 
-Before returning, check veto exclusion, decision coverage, dependencies,
-file overlap, task size, criteria, and Verify commands.
+Before returning, check veto exclusion, decision coverage, Intent coverage,
+dependencies, file overlap, task size, criteria, and Verify commands.
 
 Return a brief structured summary: wave count, task count, and the wave-1
 risk list.

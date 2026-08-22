@@ -41,6 +41,10 @@ files:
 
 {contract}
 
+## Intent coverage
+
+- None
+
 ## Acceptance criteria
 
 1. The demo behavior holds.

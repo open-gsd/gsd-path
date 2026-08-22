@@ -17,8 +17,8 @@ files:              # every file this task may touch — dispatch checks overlap
 
 ## Context
 
-<!-- 3–5 sentences. Everything the coder needs from INTENT/SYNTHESIS,
-     inlined. The coder reads ONLY this file plus the codebase. -->
+<!-- 3–5 sentences. Everything the coder needs from SYNTHESIS, inlined.
+     The coder reads this file, INTENT.md, and the codebase. -->
 
 ## Approach
 
@@ -36,6 +36,12 @@ files:              # every file this task may touch — dispatch checks overlap
      write `None`. Binding like the acceptance criteria: needing to deviate
      is a plan defect — block, never negotiate or improvise. -->
 - None
+
+## Intent coverage
+
+<!-- SCn ids this task owns, matching PLAN.md Intent coverage. Write
+     `- None` when this task owns no INTENT success criterion. -->
+- SC1
 
 ## Acceptance criteria
 

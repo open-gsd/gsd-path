@@ -29,6 +29,16 @@ Contract violations (blocking):
 
 <!-- Repeat per task. -->
 
+## Intent coverage
+
+<!-- One heading per INTENT.md success criterion owned by a task in this
+     wave. Omit this section when no task in the wave owns an SC. -->
+
+### SC1 — <criterion copied verbatim from INTENT.md>: <pass | fail>
+- ✅ <evidence: verify output / file:line checked>
+- ❌ <criterion> — found: <what exists instead, file:line>
+  fix: <concrete direction a coder can execute without re-investigating>
+
 ## Fixed since last cycle
 
 <!-- C > 1 only: previously failed criteria now confirmed fixed (re-checked,

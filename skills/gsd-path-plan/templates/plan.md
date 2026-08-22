@@ -44,6 +44,17 @@ Review depth: <full | deep | verify-only>
      - no two same-wave tasks share files
      - nothing from INTENT.md scope-out appears anywhere -->
 
+## Intent coverage
+
+<!-- Every INTENT.md success criterion, as SCn, maps to at least one task
+     acceptance item. The named task's Verify command is what must fail if
+     that criterion is skipped. `scripts/check_handoffs.py plan` gates this
+     table against INTENT.md and each task's Intent coverage section. -->
+
+| Criterion | Task | Acceptance |
+|-----------|------|------------|
+| SC1 | T001 | AC1 |
+
 ## Dependency notes
 
 <Per non-obvious edge: the exact data or landed effect that makes X precede Y,

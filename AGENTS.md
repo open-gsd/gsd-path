@@ -84,9 +84,11 @@ If two sources disagree, stop and surface the conflict. Never average.
 - The decider works from existing evidence; it does not re-research. An
   unresolved or uncited required decision fails the synthesis gate.
 - The planner reads both INTENT.md and SYNTHESIS.md and specs
-  deliverable-sized outcomes and constraints; coders own implementation
-  decisions inside them.
-- Coders implement only their full task contract and append their result to the
+  deliverable-sized outcomes and constraints; every INTENT success criterion
+  maps to a task AC and Verify in PLAN.md Intent coverage. Coders own
+  implementation decisions inside those bounds.
+- Coders implement only their full task contract, including owned INTENT
+  success criteria read from INTENT.md, and append their result to the
   task Log. They never change task state, review acceptance, stage, commit, or
   freelance outside declared files.
 - The orchestrator dispatches, arbitrates, and creates task isolation and

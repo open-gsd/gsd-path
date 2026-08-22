@@ -4,18 +4,20 @@ Execute exactly one task for `$gsd-path-build`.
 
 ## Input
 
-- Require the brief to name the assigned task file and task template by
-  absolute path and the isolated linked-worktree root returned by
-  `isolation.py isolate-task`. Read both files fully from that worktree.
+- Require the brief to name the assigned task file, task template, and
+  `.project/intent/INTENT.md` by absolute path, plus the isolated
+  linked-worktree root returned by `isolation.py isolate-task`. Read the
+  task file, template, and INTENT.md fully from that worktree.
   On a serial dispatch round that root is the primary worktree on the bound
   branch; still never edit a sibling task's files. On a parallel round never
   edit the primary worktree.
 - Read the project `AGENTS.md` and every existing path listed in the task's
   `files` frontmatter before editing.
-- Treat Context, Approach, Interface contract, Acceptance criteria, and
-  Verify as the implementation contract. Criteria, Verify, and the Interface
-  contract define done; Approach constrains the how — implementation
-  decisions inside those bounds are yours. Do not invent missing context.
+- Treat Context, Approach, Interface contract, owned INTENT success
+  criteria, Acceptance criteria, and Verify as the implementation contract.
+  Owned SCs, Criteria, Verify, and the Interface contract define done;
+  Approach constrains the how — implementation decisions inside those
+  bounds are yours. Do not invent missing context.
 
 ## Preflight
 
@@ -24,6 +26,8 @@ reality:
 
 - Confirm every path named in Context, Approach, and the Interface contract
   exists in your isolated worktree or is declared in the task's `files`.
+- Confirm every owned SCn in `## Intent coverage` exists as that numbered
+  item in INTENT.md `## Success criteria`.
 - Confirm your Interface contract text appears verbatim in every sibling
   task file it exchanges with. Sibling task files under `.project/tasks/`
   are readable in your worktree — read-only; never edit them.
@@ -39,8 +43,9 @@ costs the run.
 ## Execute
 
 1. Run the Preflight; on any mismatch, stop per its routing.
-2. Satisfy every acceptance criterion within the Approach constraints,
-   matching conventions in the listed files.
+2. Satisfy every acceptance criterion and every owned INTENT success
+   criterion within the Approach constraints, matching conventions in the
+   listed files.
 3. Edit only exact paths in `files`, plus the task file's Log. There is no
    exception for imports, routes, generated files, or wiring.
 4. Run Verify. Fix failures only within the allowed paths.

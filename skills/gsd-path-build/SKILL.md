@@ -32,7 +32,8 @@ explicitly invokes it.
   [wave-review template](templates/wave-review.md), and
   [wave-panel template](templates/wave-panel.md). Resolve them to absolute
   paths before briefing agents. Resolve `scripts/review_panel.py` when
-  PLAN.md Config names a review panel. Resolve `scripts/isolation.py` for
+  PLAN.md Config names a review panel. Resolve `scripts/check_handoffs.py`
+  for Intent coverage. Resolve `scripts/isolation.py` for
   task isolation, verify sidecars, and task landing; do not invent
   `git worktree add`, `--detach`, commit, or cherry-pick commands.
 - Before the first dispatch, create `.project/BOARD.md` from the bundled
@@ -157,7 +158,9 @@ For each wave in PLAN.md order:
    a later round unlocked by fresh landings records the later HEAD — and
    lint every ready task's brief with the bundled
    `scripts/check_task_briefs.py --repo <absolute repo root> --base <recorded
-   base>` before creating any worktree; a lint failure is a documented plan
+   base>` and re-check Intent coverage with
+   `python3 <absolute check_handoffs.py> plan --repo <absolute repo root>`
+   before creating any worktree; a lint or coverage failure is a documented plan
    defect — repair it against INTENT.md and SYNTHESIS.md, then re-establish
    the base. Then isolate each ready task with
    `python3 <absolute isolation.py> isolate-task --repo <absolute primary>
@@ -177,7 +180,8 @@ For each wave in PLAN.md order:
    spawn one implementation-capable child per task with deterministic logical
    task name `build_<task_id>`.
    Its brief contains the absolute isolated-worktree root, coder role, task
-   file, and task template. Add no hidden implementation context; repair a
+   file, task template, and the absolute INTENT.md path in that worktree.
+   Add no hidden implementation context; repair a
    defective task contract before establishing the round base. Run ready work
    up to capacity. Do not wait for the whole round before unlocking
    dependents: each task landing in step 5 re-opens step 2, and a newly ready
@@ -242,7 +246,8 @@ For each wave in PLAN.md order:
    `Review depth` from PLAN.md (default `full`).
    - `full`: spawn one independent reviewer using deterministic logical task
      name `review_wave_<wave>_cycle_<cycle>`. Supply every task path, its
-     recorded base and commit, the reviewer role, and wave-review template.
+     recorded base and commit, the reviewer role, wave-review template, and
+     the absolute INTENT.md path.
      Create and supply one verify sidecar with
      `python3 <absolute isolation.py> isolate-verify --repo <absolute primary>
      --base <recorded review base> --name wave-<N>-cycle-<C>`. The reviewer
@@ -253,11 +258,13 @@ For each wave in PLAN.md order:
      isolated context and its own verify sidecar from `isolate-verify` at the
      recorded review base (`--name wave-<N>-cycle-<C>-contract` and
      `wave-<N>-cycle-<C>-adversarial`). Supply both every task path, its recorded base and commit,
-     the reviewer role, and the wave-review template. The contract lens —
+     the reviewer role, the wave-review template, and the absolute INTENT.md
+     path. The contract lens —
      logical task name `review_wave_<wave>_cycle_<cycle>_contract` — does the
      full review: apply each task's `commit^..commit` product patch to the
-     recorded base, re-run Verify, and check every acceptance criterion and
-     interface contract. The adversarial lens — logical task name
+     recorded base, re-run Verify, and check every acceptance criterion,
+     owned INTENT success criterion, and interface contract. The adversarial
+     lens — logical task name
      `review_wave_<wave>_cycle_<cycle>_adversarial` — tries to kill the work:
      security holes, unhandled edge cases, failure modes, data-loss and
      concurrency risks, and missing error handling. Each stages its own file
@@ -271,7 +278,8 @@ For each wave in PLAN.md order:
      `.project/review/wave-N.cycleC.md` itself from evidence it already
      holds — per task, the isolated Verify rerun and the declared-files diff
      check — recording `Depth: verify-only`. It checks each acceptance
-     criterion against that evidence and the diff; anything it cannot
+     criterion and each INTENT success criterion owned by the wave's tasks
+     against that evidence and the diff; anything it cannot
      confirm from them is a finding, not a pass. Never spawn a review panel
      at `verify-only`.
    - After the canonical inherit reviewer (or orchestrator-written

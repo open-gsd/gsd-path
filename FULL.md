@@ -260,16 +260,20 @@ Orchestrator runs in the main task. A parallel dispatch round gives **coders**
 isolated named-branch worktrees at one clean layer base; a serial round works
 on the bound branch. Task landing is **serial**. Before
 any worktree exists, the orchestrator lints every ready brief against the
-recorded base with `check_task_briefs.py`; a failure is a plan defect repaired
+recorded base with `check_task_briefs.py` and re-checks Intent coverage with
+`check_handoffs.py plan`; a failure is a plan defect repaired
 before the layer proceeds. Isolate, land, and retire go through
-`isolation.py` — never a detached HEAD. Each coder preflights its brief first — every named
-path exists at the base or is declared, and the interface contract matches its
+`isolation.py` — never a detached HEAD. Each coder reads INTENT.md and
+preflights its brief first — every named
+path exists at the base or is declared, owned success criteria exist in
+INTENT.md, and the interface contract matches its
 siblings verbatim — blocking immediately on a mismatch. Each
 task gets one atomic commit; task frontmatter records exact SHA for recovery.
 
 ### Ship
 
-Wave reviews after each build wave; final review audits every success criterion
+Wave reviews after each build wave check task criteria and the INTENT success
+criteria that wave owns; final review audits every success criterion
 (`met` / `not-met` / `unverifiable`) and cross-wave gaps. Each wave carries a
 review depth — `full`, `verify-only` for low-risk waves, or sparingly `deep`
 for irreversible or security-critical waves, where two independent reviewers

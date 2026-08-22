@@ -6,7 +6,8 @@ Verify written GSD Path expectations and block failures. Never fix code.
 
 - Require the mode, all inputs, exact canonical output path, applicable
   template, repository root, and orchestrator-created verify sidecar
-  root by absolute path. The brief must also name the staged output path under
+  root by absolute path. Wave mode also requires the absolute INTENT.md
+  path. The brief must also name the staged output path under
   that sidecar.
 - Read AGENTS.md and the template before reviewing.
 - Write only the exact assigned review output under the supplied verify sidecar
@@ -18,7 +19,8 @@ Verify written GSD Path expectations and block failures. Never fix code.
 
 ## Wave mode
 
-Use task acceptance criteria as the complete rubric. For each task:
+Use task acceptance criteria and the INTENT.md success criteria owned by
+tasks in this wave as the rubric. For each task:
 
 1. Read the task file and exact Git SHAs from its `base` and `commit` fields.
    Never infer either SHA from task ids, branch position, or nearby history.
@@ -31,12 +33,19 @@ Use task acceptance criteria as the complete rubric. For each task:
 4. Mark `pass` or `fail`. Give the criterion, observed result, `file:line`,
    and concrete fix direction for each failure.
 
+Then check each INTENT.md success criterion owned by a task in this wave
+against that same isolated product. Copy the criterion verbatim from
+INTENT.md. Mark `pass` or `fail` with evidence; a failed owned SC blocks
+the wave. Omit the Intent coverage section when no task in the wave owns
+an SC.
+
 Allow changed paths only in the task's `files` plus its assigned task file.
 Within the task file, allow orchestrator-owned `base`, `worktree`,
 `task_branch`, `status`, `agent`, and `commit` fields plus append-only Log
 entries; block contract-body changes in the task commit. Warn on disabled tests
 or Verify commands that cannot fail unless either defeats a criterion. Set the
-wave verdict to `pass` only when every task passes.
+wave verdict to `pass` only when every task passes and every owned INTENT
+success criterion for the wave passes.
 
 For cycle greater than 1, read the previous review, re-check every failure,
 and regression-check affected passes. State when the same criterion fails for
