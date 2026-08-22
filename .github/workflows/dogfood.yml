@@ -31,10 +31,6 @@ jobs:
       - name: Install host CLI
         run: |
           if [ "$HOST" = claude ]; then npm i -g @anthropic-ai/claude-code; else npm i -g @openai/codex; fi
-      - name: Require credentials
-        run: |
-          if [ "$HOST" = claude ] && [ -z "$ANTHROPIC_API_KEY" ]; then echo "ANTHROPIC_API_KEY secret missing"; exit 1; fi
-          if [ "$HOST" = codex ] && [ -z "$OPENAI_API_KEY" ]; then echo "OPENAI_API_KEY secret missing"; exit 1; fi
       - name: Run dogfood
         run: python3 tests/dogfood.py --host "$HOST" --evidence evidence
       - uses: actions/upload-artifact@v4

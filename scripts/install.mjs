@@ -1688,8 +1688,8 @@ function usage() {
   return (
     "GSD Path installer — multi-host skills and project contracts.\n" +
     "Docs: DOCS.md (hub) · QUICK.md (first run) · FULL.md · UPDATE.md\n\n" +
-    "usage: gsd-path            (no flags on a terminal opens the interactive wizard)\n"
-    + "       gsd-path [--all] [--update] [--local] [--dry-run] [--project PATH]\n" +
+    "usage: gsd-path            (no flags on a terminal opens the interactive wizard)\n" +
+    "       gsd-path [--all] [--update] [--local] [--dry-run] [--project PATH]\n" +
     "              [--hooks] [--hooks-refresh] [--hooks-refresh-full] [target flags]\n\n" +
     "  First install:  gsd-path --all --dry-run && gsd-path --all\n" +
     "  New repo:       gsd-path --all --project /path/to/repo\n" +

@@ -20,14 +20,14 @@ function run(keys, options = {}) {
 test("wizard builds an --all install argv", async () => {
   // global → all hosts → write contracts → hooks yes → install
   const { argv, text } = await run(["enter", "a", "enter", "enter", "enter", "enter"]);
-  assert.deepEqual(argv, ["--all", "--project", "/repo", "--hooks", "--no-color"]);
+  assert.deepEqual(argv, ["--all", "--project", "/repo", "--hooks"]);
   assert.match(text, /Equivalent command:/);
 });
 
 test("wizard builds a per-host local dry run", async () => {
   // local → toggle claude (2nd) → no contracts → dry run
   const { argv } = await run(["down", "enter", "down", "space", "enter", "down", "enter", "down", "enter"]);
-  assert.deepEqual(argv, ["--claude", "--local", "--no-color", "--dry-run"]);
+  assert.deepEqual(argv, ["--claude", "--local", "--dry-run"]);
 });
 
 test("wizard offers update when installs exist and honors quit", async () => {

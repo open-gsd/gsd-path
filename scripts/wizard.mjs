@@ -60,13 +60,15 @@ function keyReader(input) {
   input.resume();
   const queue = [];
   const waiters = [];
-  input.on("keypress", (_, key) => {
+  const onKey = (_, key) => {
     if (waiters.length) waiters.shift()(key);
     else queue.push(key);
-  });
+  };
+  input.on("keypress", onKey);
   return {
     next: () => (queue.length ? Promise.resolve(queue.shift()) : new Promise((resolve) => waiters.push(resolve))),
     close() {
+      input.off("keypress", onKey);
       if (input.isTTY) input.setRawMode(false);
       input.pause();
     },
@@ -81,42 +83,37 @@ function render(output, frame, previousLines) {
   return frame.split("\n").length - 1;
 }
 
-async function select(io, theme, title, items, { multi = false, preselected = new Set() } = {}) {
+async function select(io, theme, title, items, { multi = false } = {}) {
   const { keys, output } = io;
   let cursor = 0;
-  const chosen = new Set(preselected);
+  const chosen = new Set(items.filter((item) => item.checked).map((item) => item.value));
   let drawn = 0;
   const draw = () => {
     const rows = items.map((item, index) => {
       const active = index === cursor;
-      const mark = multi ? (chosen.has(index) ? theme.accent("◉") : theme.dim("○")) : active ? theme.flame("›") : " ";
+      const mark = multi ? (chosen.has(item.value) ? theme.accent("◉") : theme.dim("○")) : active ? theme.flame("›") : " ";
       const label = active ? theme.bold(item.label) : item.label;
       const note = item.note ? `  ${theme.dim(item.note)}` : "";
       return `    ${mark} ${label}${note}`;
     });
     drawn = render(output, `\n  ${theme.accent("?")} ${theme.bold(title)}\n${rows.join("\n")}\n`, drawn);
   };
-  draw();
   for (;;) {
+    draw();
     const key = await keys.next();
     if (!key) continue;
+    const current = items[cursor].value;
     if (key.name === "q" || key.name === "escape" || (key.ctrl && key.name === "c")) throw new Cancelled();
     if (key.name === "up" || key.name === "k") cursor = (cursor - 1 + items.length) % items.length;
     else if (key.name === "down" || key.name === "j" || key.name === "tab") cursor = (cursor + 1) % items.length;
-    else if (multi && key.name === "space") chosen.has(cursor) ? chosen.delete(cursor) : chosen.add(cursor);
+    else if (multi && key.name === "space") chosen.has(current) ? chosen.delete(current) : chosen.add(current);
     else if (multi && key.name === "a") {
       if (chosen.size === items.length) chosen.clear();
-      else items.forEach((_, index) => chosen.add(index));
+      else items.forEach((item) => chosen.add(item.value));
     } else if (key.name === "return") {
-      if (multi) {
-        if (!chosen.size) continue;
-        draw();
-        return [...chosen].sort((left, right) => left - right).map((index) => items[index].value);
-      }
-      draw();
-      return items[cursor].value;
+      if (!multi) return current;
+      if (chosen.size) return items.filter((item) => chosen.has(item.value)).map((item) => item.value);
     }
-    draw();
   }
 }
 
@@ -140,17 +137,14 @@ export async function wizard({ input, output, colored = true, version = "", cwd 
     ]);
     const local = scope === "local";
 
-    const existing = targets.filter((target) => installed(target, local));
-    const hostItems = targets.map((target) => ({
-      label: HOST_LABELS[target] || target,
-      value: target,
-      note: existing.includes(target) ? "installed" : "",
-    }));
-    const preselected = new Set(existing.map((target) => targets.indexOf(target)));
-    const hosts = await select(io, theme, "Which agents should get GSD Path?", hostItems, { multi: true, preselected });
+    const hostItems = targets.map((target) => {
+      const checked = installed(target, local);
+      return { label: HOST_LABELS[target] || target, value: target, checked, note: checked ? "installed" : "" };
+    });
+    const hosts = await select(io, theme, "Which agents should get GSD Path?", hostItems, { multi: true });
 
     const update =
-      hosts.some((host) => existing.includes(host)) &&
+      hostItems.some((item) => item.checked && hosts.includes(item.value)) &&
       (await confirm(io, theme, "Existing installs found. What do you want to do?", "Update in place", "Fresh install"));
 
     const project = await confirm(io, theme, "Write AGENTS.md + WORKFLOW.md contracts into this repo?", `Yes — ${cwd}`, "Not now");
@@ -163,9 +157,8 @@ export async function wizard({ input, output, colored = true, version = "", cwd 
     if (local) argv.push("--local");
     if (project) argv.push("--project", cwd);
     if (hooks) argv.push("--hooks");
-    if (!colored) argv.push("--no-color");
 
-    output.write(`\n  ${theme.dim("Equivalent command:")}\n  ${theme.accent("$")} gsd-path ${argv.filter((arg) => arg !== "--no-color").join(" ")}\n`);
+    output.write(`\n  ${theme.dim("Equivalent command:")}\n  ${theme.accent("$")} gsd-path ${argv.join(" ")}\n`);
     const go = await select(io, theme, "Ready?", [
       { label: "Install", value: "install" },
       { label: "Dry run first", value: "dry", note: "preview, write nothing" },

@@ -19,7 +19,6 @@ and exits nonzero on any failed check.
 
 import argparse
 import datetime as dt
-import json
 import os
 import re
 import shutil
@@ -133,12 +132,14 @@ def check_audit(repo):
         re.M,
     )
     findings.append(("claims carry verdict + evidence", bool(claim_rows), f"{len(claim_rows)} claim rows"))
-    # The fixture README has one aspirational claim (--json flag). Soft signal, not a gate.
-    verdicts = {v for v, _ in claim_rows}
-    findings.append(
-        ("aspirational --json claim detected (advisory)", bool(verdicts & {"aspirational", "stale"}), sorted(verdicts))
-    )
     return findings
+
+
+def audit_notes(repo):
+    """Advisory signal, not a gate: the fixture README plants one aspirational claim (--json)."""
+    text = (repo / ".project" / "research" / "DOCS-AUDIT.md").read_text(encoding="utf-8")
+    verdicts = sorted(set(re.findall(r"\| (verified|stale|aspirational|unverifiable) \|", text)))
+    return [f"verdicts seen: {', '.join(verdicts) or 'none'}"]
 
 
 def check_guards(repo):
@@ -177,9 +178,12 @@ def main(argv=None):
     install_cmd = ["node", str(INSTALLER), f"--{args.host}", "--local", "--project", str(repo), "--hooks", "--no-color"]
     code, install_out = run(install_cmd, repo)
     commands.append({"command": " ".join(install_cmd), "exit": code, "output": install_out})
-    findings = [("install succeeded", code == 0, install_out.strip()[-300:])]
-    findings.append(("skills installed locally", (repo / host["skill_root"] / "gsd-path-docs-audit" / "SKILL.md").is_file(), host["skill_root"]))
-    findings.append(("guard files present", all((repo / p).exists() for p in [".gsd-path/guard_hook.py", ".gsd-path/git_guard.py", ".git/hooks/pre-commit"]), ".gsd-path/, .git/hooks/"))
+    findings = [
+        ("install succeeded", code == 0, install_out.strip()[-300:]),
+        ("skills installed locally", (repo / host["skill_root"] / "gsd-path-docs-audit" / "SKILL.md").is_file(), host["skill_root"]),
+        ("guard files present", all((repo / p).exists() for p in [".gsd-path/guard_hook.py", ".gsd-path/git_guard.py", ".git/hooks/pre-commit"]), ".gsd-path/, .git/hooks/"),
+    ]
+    notes = []
     git(repo, "add", "-A")
     git(repo, "commit", "-qm", "install gsd-path")
 
@@ -193,33 +197,27 @@ def main(argv=None):
         commands.append({"command": " ".join(host_cmd[:3]) + " …", "exit": code, "output": host_out[-4000:]})
         findings.append(("host run exited 0", code == 0, host_out.strip()[-300:]))
         findings.extend(check_audit(repo))
+        if findings[-1][1]:
+            notes.extend(audit_notes(repo))
     findings.extend(check_guards(repo))
 
-    gates = [f for f in findings if "advisory" not in f[0]]
-    passed = all(ok for _, ok, _ in gates)
-    record = {
-        "date": today,
-        "host": args.host,
-        "spawn_api": host["spawn_api"],
-        "fixture": str(repo),
-        "verdict": "pass" if passed else "fail",
-        "checks": [{"check": c, "ok": ok, "detail": d} for c, ok, d in findings],
-        "commands": commands,
-    }
+    passed = all(ok for _, ok, _ in findings)
     for check, ok, detail in findings:
         print(f"  {'✓' if ok else '✗'} {check}  {detail if not ok else ''}".rstrip())
+    for note in notes:
+        print(f"  · {note}")
     print(f"\n{args.host}: {'PASS' if passed else 'FAIL'}  ({repo if args.keep else 'fixture removed'})")
 
     if args.evidence:
         args.evidence.mkdir(parents=True, exist_ok=True)
-        stem = args.evidence / f"{today}-{args.host}"
-        stem.with_suffix(".json").write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
+        path = args.evidence / f"{today}-{args.host}.md"
         lines = [
             f"# Dogfood — {args.host} — {today}",
             "",
-            f"- Verdict: **{record['verdict']}**",
+            f"- Verdict: **{'pass' if passed else 'fail'}**",
             f"- Spawn API: {host['spawn_api']}",
             f"- Fixture: `{repo}`",
+            *[f"- Note: {note}" for note in notes],
             "",
             "| Check | Pass | Detail |",
             "|---|---|---|",
@@ -235,8 +233,8 @@ def main(argv=None):
             host_out[-3000:],
             "```",
         ]
-        stem.with_suffix(".md").write_text("\n".join(lines) + "\n", encoding="utf-8")
-        print(f"evidence: {stem}.md")
+        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        print(f"evidence: {path}")
 
     if not args.keep:
         shutil.rmtree(base, ignore_errors=True)

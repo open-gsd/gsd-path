@@ -58,11 +58,9 @@ class WizardTtyTests(unittest.TestCase):
             pump(0.3)
         while exited is None and time.time() < deadline and pump(0.2):
             pass
-        pump(0.3)
         if exited is None:
             _, exited = os.waitpid(pid, 0)
-        status = exited
-        return os.waitstatus_to_exitcode(status), ANSI.sub(b"", out).decode("utf-8", "replace")
+        return os.waitstatus_to_exitcode(exited), ANSI.sub(b"", out).decode("utf-8", "replace")
 
     def test_wizard_dry_run_hands_off_to_installer(self):
         with tempfile.TemporaryDirectory() as tmp:

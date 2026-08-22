@@ -305,9 +305,8 @@ Carried forward: none
 
     def test_define_to_integrated_ship(self):
         with tempfile.TemporaryDirectory() as temporary:
-            self.repo = Path(temporary) / "repo"
-            self.repo.mkdir()
-            repo = self.repo
+            repo = self.repo = Path(temporary) / "repo"
+            repo.mkdir()
             git(repo, "init", "-q", "-b", "main")
             git(repo, "config", "user.email", "cycle@example.invalid")
             git(repo, "config", "user.name", "Cycle")
@@ -352,8 +351,7 @@ Carried forward: none
 
             # --- build: isolate → implement → land → retire, then wave review
             self.state("build", "active")
-            self.commit("build: start")
-            base = git(repo, "rev-parse", "HEAD").stdout.strip()
+            base = self.commit("build: start")
             isolated = isolation.isolate_task(repo, base, "T001", 1)
             self.assertEqual(isolated["mode"], "serial")
             self.write("src/app.py", "def render(name):\n    return f'Hello, {name}'\n")
