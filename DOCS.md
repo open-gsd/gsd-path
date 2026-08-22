@@ -134,6 +134,7 @@ Run one phase only; stops at handoff:
 | `gsd-path-build` | `/gsd-path-build` | Parallel build |
 | `gsd-path-ship` | `/gsd-path-ship` | Review + ship gate |
 | `gsd-path-docs-audit` | `/gsd-path-docs-audit` | Standalone doc drift check |
+| `gsd-path-loop` | `/gsd-path-loop` | Bounded loop runner driven by a LOOP.md spec |
 
 Codex: use `$` instead of `/` (e.g. `$gsd-path-plan`).
 

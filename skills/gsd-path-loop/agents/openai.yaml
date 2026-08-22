@@ -1,0 +1,6 @@
+interface:
+  display_name: "GSD Path Loop"
+  short_description: "Run one bounded loop pass from a LOOP.md spec"
+  default_prompt: "Use $gsd-path-loop to run one bounded loop pass from a LOOP.md spec."
+policy:
+  allow_implicit_invocation: false

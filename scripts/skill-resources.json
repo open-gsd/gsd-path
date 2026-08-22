@@ -7,6 +7,7 @@
     "gsd-path-discuss",
     "gsd-path-docs-audit",
     "gsd-path-inspect",
+    "gsd-path-loop",
     "gsd-path-plan",
     "gsd-path-research",
     "gsd-path-roadmap",
@@ -28,6 +29,7 @@
     "scripts/git_guard.py",
     "scripts/isolation.py",
     "scripts/pipeline_git.py",
+    "scripts/loop_run.py",
     "README.md",
     "DOCS.md",
     "HOOKS.md",
@@ -71,6 +73,9 @@
       "templates/codebase.md",
       "templates/docs-audit.md",
       "templates/state.md"
+    ],
+    "gsd-path-loop": [
+      "templates/loop.md"
     ],
     "gsd-path-plan": [
       "references/dispatch.md",
@@ -118,6 +123,7 @@
     ["scripts/discussion_records.py", "skills/gsd-path-discuss/scripts/discussion_records.py"],
     ["scripts/discussion_records.py", "skills/gsd-path-docs-audit/scripts/discussion_records.py"],
     ["scripts/discussion_records.py", "skills/gsd-path-inspect/scripts/discussion_records.py"],
+    ["scripts/discussion_records.py", "skills/gsd-path-loop/scripts/discussion_records.py"],
     ["scripts/discussion_records.py", "skills/gsd-path-plan/scripts/discussion_records.py"],
     ["scripts/discussion_records.py", "skills/gsd-path-research/scripts/discussion_records.py"],
     ["scripts/discussion_records.py", "skills/gsd-path-roadmap/scripts/discussion_records.py"],
@@ -133,6 +139,7 @@
     ["scripts/review_panel.py", "skills/gsd-path/scripts/review_panel.py"],
     ["scripts/review_panel.py", "skills/gsd-path-plan/scripts/review_panel.py"],
     ["scripts/review_panel.py", "skills/gsd-path-build/scripts/review_panel.py"],
+    ["scripts/loop_run.py", "skills/gsd-path-loop/scripts/loop_run.py"],
     ["scripts/isolation.py", "skills/gsd-path/scripts/isolation.py"],
     ["scripts/isolation.py", "skills/gsd-path-build/scripts/isolation.py"],
     ["scripts/isolation.py", "skills/gsd-path-inspect/scripts/isolation.py"],

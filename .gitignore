@@ -2,5 +2,6 @@
 .scratch/
 .memdb/
 .worktrees/
+.project/
 __pycache__/
 node_modules/

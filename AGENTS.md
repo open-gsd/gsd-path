@@ -153,6 +153,9 @@ If two sources disagree, stop and surface the conflict. Never average.
   active copy that extends the archived pair. The ship phase reruns `prepare`;
   the helper validates the prefix and atomically reconciles both files.
   Discussion never edits an archive directly or writes after shipment.
+- The loop runner wraps explicit skills in a bounded check → verify → fix →
+  verify pass driven by a LOOP.md spec. It never advances a phase gate
+  itself and never commits or pushes.
 - Fix tasks use the complete task template, not an abbreviated finding.
 
 ## Gates
@@ -260,7 +263,7 @@ or STATE.md.
 | Path | Purpose |
 |------|---------|
 | `plugin.json` | Agent Plugins manifest (`agent-plugins.org` 1.0.0 schema) |
-| `skills/` | Eleven canonical `gsd-path*` skills |
+| `skills/` | Twelve canonical `gsd-path*` skills |
 | `skills/gsd-path/templates/` | Required artifact formats |
 | `skills/gsd-path/references/` | Agent role and dispatch contracts |
 | `WORKFLOW.md` | Phase-by-phase SOP |

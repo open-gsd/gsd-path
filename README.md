@@ -40,7 +40,7 @@ npm (once published to npm): `npx gsd-path --all` · Help: `node scripts/install
 
 ## Skills
 
-Eleven canonical explicit-only skills are installed.
+Twelve canonical explicit-only skills are installed.
 Invoke the **router** by default; use phase skills for one step only, or use the
 discussion sidecar to talk through a question at any non-shipped phase.
 
@@ -57,6 +57,7 @@ discussion sidecar to talk through a question at any non-shipped phase.
 | `gsd-path-ship` | Phase 6 — verify, approve, archive, and ship |
 | `gsd-path-discuss` | Any-phase discussion with durable dialogue and answers |
 | `gsd-path-docs-audit` | Standalone doc-vs-code drift check |
+| `gsd-path-loop` | Standalone bounded loop runner driven by a LOOP.md spec |
 
 Codex: `$gsd-path`, `$gsd-path-plan`, … · Other hosts: `/gsd-path`, `/gsd-path-plan`, …
 
@@ -229,7 +230,7 @@ the authoritative host API table and delegation rules.
 | `FULL.md` | Full guide |
 | `UPDATE.md` | Updating |
 | `HOOKS.md` | Guard hooks |
-| `skills/` | Eleven canonical `gsd-path*` skills |
+| `skills/` | Twelve canonical `gsd-path*` skills |
 | `platforms/` | Host dispatch adapters |
 | `scripts/install.mjs` | Installer (npm `gsd-path` bin) |
 | `scripts/install.py` | Python installer |
