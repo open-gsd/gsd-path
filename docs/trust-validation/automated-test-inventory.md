@@ -40,8 +40,9 @@ Node requires **≥18.17**. Python 3 with no extra deps for unittest modules.
 | `tests/wizard.test.mjs` | `node --test` | `scripts/wizard.mjs` — interactive installer flow driven by a fake key stream → argv |
 | `tests/test_wizard_tty.py` | unittest | `gsd-path` with no flags on a real pty opens the wizard and hands off to the installer (dry run, quit) |
 | `tests/test_router_contract.py` | unittest | `skills/gsd-path/SKILL.md` state table — every phase routed in-progress and done, every contract file exists, STATE template tokens match |
+| `tests/test_check_docs_audit.py` | unittest | `scripts/check_docs_audit.py` — docs-audit artifact gate (inventory equality, verdicts + evidence, summary counts, remediation queue) |
 | `tests/test_full_cycle.py` | unittest | One milestone define → research → decide → plan → build → ship → integrate → bind-next on disk, every gate script and git hook run in order |
-| `tests/dogfood.py` | script (`--host claude\|codex`) | **Live** host run: local install, headless `/gsd-path-docs-audit`, DOCS-AUDIT.md shape, guard deny/allow; writes an evidence record. `.github/workflows/dogfood.yml` runs it on dispatch/weekly with API secrets |
+| `tests/dogfood.py` | script (`--host claude\|codex`) | **Live** host run: local install, headless `/gsd-path-docs-audit`, `check_docs_audit.py` gate, guard deny/allow; writes an evidence record. `.github/workflows/dogfood.yml` runs it on dispatch/weekly with API secrets |
 
 **Note:** `scripts/install.py` is covered by `tests/test_install.py`. The
 remaining parity gap is that `install.py` has no `--local` or

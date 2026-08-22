@@ -9,8 +9,8 @@ docs/trust-validation/manual-dogfood-evidence-bar.md.
 
 Installs GSD Path *locally* into a throwaway repo (never touches global
 skill roots), invokes the docs-audit skill headlessly, then asserts:
-  1. .project/research/DOCS-AUDIT.md exists with a Summary verdict table
-  2. every audited doc section carries a claims table with evidence
+  1. .project/research/DOCS-AUDIT.md exists
+  2. it passes scripts/check_docs_audit.py (the contract's artifact gate)
   3. git pre-commit guard blocks a staged archive modification
   4. a commit outside the archive succeeds
 Writes an evidence record (date, host, commands, pass/fail, paths, output)
@@ -116,23 +116,13 @@ def make_fixture(repo, today):
 
 def check_audit(repo):
     audit = repo / ".project" / "research" / "DOCS-AUDIT.md"
-    findings = []
     if not audit.is_file():
         return [("DOCS-AUDIT.md exists", False, str(audit))]
-    text = audit.read_text(encoding="utf-8")
-    findings.append(("DOCS-AUDIT.md exists", True, str(audit)))
-    summary = re.search(r"## Summary.*?\| verified \| *(\d+) *\|", text, re.S)
-    findings.append(("Summary verdict table present", bool(summary), "## Summary with counts"))
-    sections = re.findall(r"^## Doc: (.+)$", text, re.M)
-    findings.append(("at least one doc section", bool(sections), ", ".join(sections)))
-    claim_rows = re.findall(
-        r"^\| \"?.+?\"? \| (?:command|feature|structure|status|config|integration) \| "
-        r"(verified|stale|aspirational|unverifiable) \| (.+?) \|$",
-        text,
-        re.M,
-    )
-    findings.append(("claims carry verdict + evidence", bool(claim_rows), f"{len(claim_rows)} claim rows"))
-    return findings
+    code, out = run([sys.executable, str(ROOT / "scripts" / "check_docs_audit.py"), "--repo", str(repo)], repo)
+    return [
+        ("DOCS-AUDIT.md exists", True, str(audit)),
+        ("DOCS-AUDIT.md passes check_docs_audit.py", code == 0, out.strip()[-300:]),
+    ]
 
 
 def audit_notes(repo):

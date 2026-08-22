@@ -75,9 +75,11 @@ preserve it. Re-running inspection would overwrite established context.
    project command may run.
 3. Gate both artifacts against their templates: the codebase evidence needs
    a filled `## Map` plus findings as observed — no quota, but an empty
-   findings section must say why; the docs audit's `## Doc:` sections and
-   `## Descriptive docs` list must be disjoint and together equal the frozen
-   inventory exactly, and every claim needs a verdict with evidence. Redispatch one complete corrected brief under the same logical task
+   findings section must say why; the docs audit must pass the bundled
+   `python3 <absolute check_docs_audit.py> --repo <absolute root> --inventory <frozen inventory file>`
+   (disjoint `## Doc:` sections and `## Descriptive docs` equal to the frozen
+   inventory, every claim a valid verdict with evidence, Summary counts and
+   remediation queue consistent). Redispatch one complete corrected brief under the same logical task
    name, following the runtime dispatch contract, then set `status: blocked`
    if it still fails. Present **Outcome** with the failed gate, **Review**
    linking each malformed output that exists or STATE.md when an output is
