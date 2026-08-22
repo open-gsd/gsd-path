@@ -17,6 +17,7 @@
   "package_files": [
     "plugin.json",
     "scripts/install.mjs",
+    "scripts/wizard.mjs",
     "scripts/skill-resources.json",
     "scripts/archive_milestone.py",
     "scripts/bootstrap_repository.py",
