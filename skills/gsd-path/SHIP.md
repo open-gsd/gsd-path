@@ -199,15 +199,19 @@ field is the transaction identity.
    remote-default name and SHA. Before
    any integration worktree, merge, tag, or push, require that the name is
    exactly `main`; otherwise block. Also require that name is not STATE.branch
-   — the bound `gsd-path/M00N` branch is never the GitHub default. Require
-   `git merge-base --is-ancestor <remote-default-sha> <ship-commit>` — the
-   default branch must have no commits the ship commit lacks. On failure,
-   block and escalate to the user; never auto-merge a diverged default.
+   — the bound `gsd-path/M00N` branch is never the GitHub default.
    Create a temporary named worktree `gsd-path-integrate/M00N` at the
    remote-default SHA (never detach HEAD), run
    `git merge --no-ff` of the ship commit with subject
    `integrate: M00N — merge gsd-path/M00N into main` and body
-   `Archive:`, `Ship:`, `Default: main`, `Branch:`, then push
+   `Archive:`, `Ship:`, `Default: main`, `Branch:`.
+   When the default has no commits the ship commit lacks
+   (`git merge-base --is-ancestor <remote-default-sha> <ship-commit>`), the
+   merge is trivial. When the default has diverged, still attempt the merge
+   and let Git decide: a conflict-free merge proceeds, and any conflict
+   aborts — run `git merge --abort`, remove the temporary worktree, block,
+   and escalate to the user. Never auto-resolve a diverged default's
+   conflicts. Then push
    in order: the merge commit to `main`, the bound
    branch, and the annotated tag `milestone/<NNN>-<slug>` pointing at the
    merge commit. Remove the temporary worktree. The merge subject must

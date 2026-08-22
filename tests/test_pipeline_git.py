@@ -178,16 +178,123 @@ class PipelineGitTests(unittest.TestCase):
                 run_git(primary, "rev-parse", "HEAD").stdout.strip(),
                 integrated_main,
             )
-            self.assertEqual(
-                run_git(primary, "rev-parse", "gsd-path/M001").stdout.strip(),
-                m001_ship,
+            retired_local = subprocess.run(
+                ["git", "-C", str(primary), "show-ref", "--verify", "--quiet",
+                 "refs/heads/gsd-path/M001"],
+                capture_output=True,
+                text=True,
             )
+            self.assertEqual(retired_local.returncode, 1, "gsd-path/M001 not retired")
             self.assertEqual(
                 run_git(default_checkout, "branch", "--show-current").stdout.strip(),
                 "main",
             )
             self.assertEqual(
                 run_git(default_checkout, "rev-parse", "HEAD").stdout.strip(),
+                integrated_main,
+            )
+
+            retry = subprocess.run(bind_next, capture_output=True, text=True)
+            self.assertEqual(retry.returncode, 0, retry.stderr)
+
+    def test_bind_next_retires_previous_branch_on_origin(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            origin = Path(tmp) / "origin.git"
+            default_checkout = Path(tmp) / "repo"
+            primary = Path(tmp) / "repo-gsd-path"
+            run_git(Path(tmp), "init", "--bare", "-b", "main", str(origin))
+            run_git(Path(tmp), "init", "-b", "main", str(default_checkout))
+            run_git(default_checkout, "config", "user.name", "GSD Path Test")
+            run_git(default_checkout, "config", "user.email", "test@example.com")
+            (default_checkout / "product.txt").write_text("base\n", encoding="utf-8")
+            run_git(default_checkout, "add", "product.txt")
+            run_git(default_checkout, "commit", "-m", "base")
+            run_git(
+                default_checkout,
+                "worktree",
+                "add",
+                "-b",
+                "gsd-path/M001",
+                str(primary),
+                "main",
+            )
+
+            project = primary / ".project"
+            project.mkdir()
+            (project / "STATE.md").write_text("status: shipped\n", encoding="utf-8")
+            run_git(primary, "add", ".project/STATE.md")
+            run_git(
+                primary,
+                "commit",
+                "-m",
+                "ship: M001 — first",
+                "-m",
+                "Archive: .project/archive/001-first/\nReviewed-HEAD: base",
+            )
+            m001_ship = run_git(primary, "rev-parse", "HEAD").stdout.strip()
+
+            run_git(
+                default_checkout,
+                "merge",
+                "--no-ff",
+                "gsd-path/M001",
+                "-m",
+                "integrate: M001 — merge gsd-path/M001 into main",
+                "-m",
+                f"Ship: {m001_ship}\nDefault: main\nBranch: gsd-path/M001",
+            )
+            integrated_main = run_git(
+                default_checkout,
+                "rev-parse",
+                "HEAD",
+            ).stdout.strip()
+            run_git(default_checkout, "remote", "add", "origin", str(origin))
+            run_git(default_checkout, "push", "origin", "main")
+            run_git(primary, "push", "origin", "gsd-path/M001")
+
+            bind_next = [
+                sys.executable,
+                str(PIPELINE_GIT),
+                "bind-next",
+                "--repo",
+                str(primary),
+                "--branch",
+                "gsd-path/M002",
+                "--previous-branch",
+                "gsd-path/M001",
+                "--ship",
+                m001_ship,
+                "--remote-default",
+                "origin/main",
+                "--base",
+                integrated_main,
+            ]
+            result = subprocess.run(bind_next, capture_output=True, text=True)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(
+                run_git(primary, "branch", "--show-current").stdout.strip(),
+                "gsd-path/M002",
+            )
+            for ref in (
+                f"refs/heads/gsd-path/M001",
+                f"refs/remotes/origin/gsd-path/M001",
+            ):
+                gone = subprocess.run(
+                    ["git", "-C", str(primary), "show-ref", "--verify", "--quiet", ref],
+                    capture_output=True,
+                    text=True,
+                )
+                self.assertEqual(gone.returncode, 1, f"{ref} not retired")
+            remote_gone = subprocess.run(
+                ["git", "-C", str(origin), "show-ref", "--verify", "--quiet",
+                 "refs/heads/gsd-path/M001"],
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(remote_gone.returncode, 1, "origin branch not retired")
+            self.assertEqual(
+                run_git(origin, "rev-parse", "refs/heads/main").stdout.strip(),
                 integrated_main,
             )
 

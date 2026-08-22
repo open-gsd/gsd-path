@@ -438,7 +438,8 @@ the active paths in one bookkeeping commit and routes by the promoted state.
 After integration validation and before that promotion, the router uses the
 bundled `pipeline_git.py bind-next` helper to move the clean primary worktree
 from the shipped branch to the new unused `gsd-path/M00N` branch at the exact
-current `origin/main` SHA. STATE.branch records the new branch, so the
+current `origin/main` SHA; the helper also retires the integrated previous
+branch locally and on origin. STATE.branch records the new branch, so the
 promotion commit is the first commit on it. The same handoff precedes a normal
 next-milestone define or single-milestone inspect. Promotion re-validates a
 completed lookahead plan's task paths against the new HEAD (diff since the
@@ -552,14 +553,17 @@ the local default branch ref may lag origin, which is harmless because
 binding resolves remote SHAs. Ship runs `refresh-origin` (fetch, refresh
 `origin/HEAD`, mirror published milestone tags), resolves the remote-default
 name and SHA, and requires the name to be exactly `main` and different from
-the bound branch. It then requires
-`git merge-base --is-ancestor <remote-default-sha> <ship-commit>` — the
-default branch must have no commits the ship commit lacks. A diverged default
-blocks and escalates to the user; never auto-merge. It then creates a
+the bound branch. It then creates a
 temporary named worktree (`gsd-path-integrate/M00N`) at the remote-default
-SHA, merges the ship commit with `--no-ff` under the subject
+SHA and merges the ship commit with `--no-ff` under the subject
 `integrate: M00N — merge gsd-path/M00N into main` (never
-`ship:` — the guard restricts those subjects to `.project/`-only paths),
+`ship:` — the guard restricts those subjects to `.project/`-only paths).
+When the default has no commits the ship commit lacks
+(`git merge-base --is-ancestor <remote-default-sha> <ship-commit>`), the merge
+is trivial; when the default has diverged, ship still attempts the merge and
+lets Git decide — a conflict-free merge proceeds, and any conflict aborts the
+merge, removes the temporary worktree, blocks, and escalates to the user.
+Ship never auto-resolves a diverged default's conflicts. It
 pushes in order the merge to `main`, the bound branch, and an
 annotated tag `milestone/<NNN>-<slug>` pointing at the merge commit, and
 removes the temporary worktree. Ship leaves the primary worktree and

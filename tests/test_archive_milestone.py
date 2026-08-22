@@ -2362,10 +2362,10 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                 self.git(repo, "branch", "--show-current").stdout.strip(),
                 "gsd-path/M002",
             )
-            self.assertEqual(
-                self.git(repo, "rev-parse", "refs/heads/gsd-path/M001").stdout.strip(),
-                ship_sha,
+            retired = self.git(
+                repo, "show-ref", "--verify", "--quiet", "refs/heads/gsd-path/M001"
             )
+            self.assertEqual(retired.returncode, 1, "gsd-path/M001 not retired")
             self.assertEqual(
                 self.git(repo, "rev-parse", "refs/heads/gsd-path/M002").stdout.strip(),
                 merge_sha,

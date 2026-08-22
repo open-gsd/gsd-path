@@ -105,10 +105,13 @@ If two sources disagree, stop and surface the conflict. Never average.
   helper with the previous bound branch, exact ship SHA, and exact current
   `origin/main` SHA. The helper moves the clean primary worktree to the new
   unused `gsd-path/M00N` branch at that SHA without moving the previous
-  branch or entering the default checkout. The router persists the new branch
-  in STATE; a wrong-SHA or colliding branch blocks. This handoff and the
-  approved new-repository bootstrap are the router's only bound-branch
-  creation authority.
+  branch or entering the default checkout, then retires the integrated
+  previous branch — deleted locally and on origin; the ship commit stays
+  reachable from the integration merge and its annotated tag. The router
+  persists the new branch in STATE; a wrong-SHA or colliding branch blocks.
+  This handoff and the approved new-repository bootstrap are the router's
+  only bound-branch creation authority, and the handoff's retirement push is
+  the router's only bound-branch deletion authority.
 - Build adopts the branch recorded in STATE.branch, never whatever is current
   when a recorded branch exists. A new-GitHub REPOSITORY.md proves the
   default checkout and first bound branch; later milestones may rebind

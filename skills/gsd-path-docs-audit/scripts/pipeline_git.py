@@ -3,7 +3,8 @@
 
 Bound work lives on `gsd-path/M00N` for that milestone. The required remote
 default `main` stays a separate trunk. Ship merges the bound branch onto main;
-the next milestone binds a new unused `gsd-path/M00N`.
+the next milestone binds a new unused `gsd-path/M00N` and retires the
+integrated previous branch, locally and on origin.
 """
 
 from __future__ import annotations
@@ -206,6 +207,42 @@ def _ref_exists(repo: Path, ref: str) -> bool:
     return result.returncode == 0
 
 
+def _origin_remote_exists(repo: Path) -> bool:
+    result = _run_git(repo, "remote", "get-url", "origin", check=False)
+    return result.returncode == 0
+
+
+def retire_previous_branch(repo: Path, previous_branch: str) -> None:
+    """Delete an integrated previous bound branch, locally and on origin.
+
+    Retirement is hygiene, never reachability: callers prove the branch tip is
+    an ancestor of the validated remote default first, and the milestone tag
+    preserves the integration merge. Both deletions are idempotent so a
+    repeated bind-next after a crash converges.
+    """
+    local_ref = f"refs/heads/{previous_branch}"
+    if _ref_exists(repo, local_ref):
+        _run_git(repo, "branch", "-d", previous_branch)
+    remote_ref = f"refs/remotes/origin/{previous_branch}"
+    if not _ref_exists(repo, remote_ref) or not _origin_remote_exists(repo):
+        return
+    push = _run_git(
+        repo,
+        "push",
+        "origin",
+        "--delete",
+        previous_branch,
+        check=False,
+    )
+    if push.returncode != 0:
+        detail = f"{push.stdout}\n{push.stderr}"
+        if "remote ref does not exist" not in detail:
+            raise PipelineGitError(
+                f"could not delete origin/{previous_branch}: {detail.strip()}"
+            )
+        _run_git(repo, "update-ref", "-d", remote_ref)
+
+
 def bind_next_milestone_branch(
     repo: Path,
     branch: str,
@@ -242,12 +279,6 @@ def bind_next_milestone_branch(
         raise PipelineGitError(
             f"validated base is stale: {base_sha} != {remote_default} {default_sha}"
         )
-    previous_sha = _run_git(
-        repo,
-        "rev-parse",
-        "--verify",
-        f"refs/heads/{previous_branch}^{{commit}}",
-    ).stdout.strip()
     ship_sha = _run_git(
         repo,
         "rev-parse",
@@ -256,15 +287,25 @@ def bind_next_milestone_branch(
     ).stdout.strip()
     if ship != ship_sha:
         raise PipelineGitError(f"ship must be the full commit SHA: {ship}")
-    if previous_sha != ship_sha:
-        raise PipelineGitError(
-            f"previous branch moved after ship: {previous_sha} != {ship_sha}"
-        )
+    # A retired previous branch is absent locally; the ship SHA alone then
+    # carries the integration proof so a repeated bind-next still converges.
+    previous_ref = f"refs/heads/{previous_branch}"
+    if _ref_exists(repo, previous_ref):
+        previous_sha = _run_git(
+            repo,
+            "rev-parse",
+            "--verify",
+            f"{previous_ref}^{{commit}}",
+        ).stdout.strip()
+        if previous_sha != ship_sha:
+            raise PipelineGitError(
+                f"previous branch moved after ship: {previous_sha} != {ship_sha}"
+            )
     integrated = _run_git(
         repo,
         "merge-base",
         "--is-ancestor",
-        previous_sha,
+        ship_sha,
         base_sha,
         check=False,
     )
@@ -295,24 +336,21 @@ def bind_next_milestone_branch(
             raise PipelineGitError(
                 f"existing {branch} is not at {remote_default}: {head} != {default_sha}"
             )
-        return {
-            "base": default_sha,
-            "branch": branch,
-            "previous_branch": previous_branch,
-        }
+    else:
+        if current != previous_branch:
+            raise PipelineGitError(
+                f"current branch {current} does not match previous branch {previous_branch}"
+            )
+        if _run_git(repo, "status", "--porcelain").stdout:
+            raise PipelineGitError("primary worktree is not clean")
 
-    if current != previous_branch:
-        raise PipelineGitError(
-            f"current branch {current} does not match previous branch {previous_branch}"
-        )
-    if _run_git(repo, "status", "--porcelain").stdout:
-        raise PipelineGitError("primary worktree is not clean")
+        local_branch_ref = f"refs/heads/{branch}"
+        if _ref_exists(repo, local_branch_ref):
+            raise PipelineGitError(f"bound branch already exists: {local_branch_ref}")
 
-    local_branch_ref = f"refs/heads/{branch}"
-    if _ref_exists(repo, local_branch_ref):
-        raise PipelineGitError(f"bound branch already exists: {local_branch_ref}")
+        _run_git(repo, "switch", "--no-track", "-c", branch, base_sha)
 
-    _run_git(repo, "switch", "--no-track", "-c", branch, base_sha)
+    retire_previous_branch(repo, previous_branch)
     return {
         "base": default_sha,
         "branch": branch,
@@ -325,7 +363,10 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     subparsers = parser.add_subparsers(dest="command", required=True)
     bind_next = subparsers.add_parser(
         "bind-next",
-        help="bind the next milestone branch at the integrated remote default",
+        help=(
+            "bind the next milestone branch at the integrated remote default "
+            "and retire the previous bound branch"
+        ),
     )
     bind_next.add_argument("--repo", required=True, type=Path)
     bind_next.add_argument("--branch", required=True)
