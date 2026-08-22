@@ -136,7 +136,11 @@ If two sources disagree, stop and surface the conflict. Never average.
 - Reviewers verify and block; they never fix. A block names the criterion,
   observed result, evidence location, and concrete fix direction. An optional
   review panel is advisory: the inherit reviewer remains the only wave
-  pass/fail, and panel findings never average or auto-replan. Resolve panel
+  pass/fail, and panel findings never average or auto-replan. Same-model
+  agreement is not independent verification: matching verdicts from one
+  model family count as a single evidence path. Independence comes from
+  re-run commands, reconstructed patches, different sources, or a
+  different model family. Resolve panel
   membership with the bundled `scripts/review_panel.py` helper; do not invent
   model families or slugs. Create task isolation and verify sidecars with the
   bundled `scripts/isolation.py` helper; do not invent `git worktree add` or

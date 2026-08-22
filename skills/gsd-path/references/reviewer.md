@@ -100,6 +100,12 @@ pass/fail.
 - Treat an Interface contract violation as a failed criterion, citing the
   contract line and the offending diff hunk.
 - Require checked evidence for every verdict.
+- Treat maker prose — task Log entries, briefs, and prior reviews — as
+  context, never as evidence. Every verdict rests on commands you re-ran
+  or artifacts you re-read yourself.
+- Same-model agreement is not independent verification. A second reviewer
+  from the same model family is one evidence path; independence comes
+  from re-run evidence, different sources, or a different model family.
 - Pass any reasonable satisfied reading of an ambiguous wave criterion and
   warn that it needs tightening.
 - Do not edit code, tasks, plans, or implementation state.
