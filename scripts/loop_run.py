@@ -130,10 +130,8 @@ def command_check(fields: dict) -> dict:
     if fields["status"] != "active":
         return {"decision": "skip", "reason": f"status {fields['status']}"}
     if "skip_when" in fields:
-        matched = subprocess.run(
-            fields["skip_when"], shell=True, capture_output=True, text=True, check=False
-        )
-        if matched.returncode == 0:
+        exit_code, _ = run_shell(fields["skip_when"], fields["wall_clock"])
+        if exit_code == 0:
             return {"decision": "skip", "reason": "skip_when matched"}
     path = log_path(fields)
     records = load_log(fields)
@@ -173,19 +171,29 @@ def command_check(fields: dict) -> dict:
     }
 
 
+def run_shell(command: str, timeout: int) -> tuple[Optional[int], str]:
+    """Run one spec command; a hung command counts as failed (exit None)."""
+    try:
+        completed = subprocess.run(
+            command, shell=True, capture_output=True, text=True, check=False, timeout=timeout
+        )
+    except subprocess.TimeoutExpired as expired:
+        output = (expired.stdout or b"").decode(errors="replace") + (expired.stderr or b"").decode(errors="replace")
+        return None, f"{output}\ntimed out after {timeout}s"
+    return completed.returncode, completed.stdout + completed.stderr
+
+
 def command_verify(fields: dict) -> dict:
     failures = []
     for command in fields["verify"]:
-        completed = subprocess.run(
-            command, shell=True, capture_output=True, text=True, check=False
-        )
-        if completed.returncode != 0:
-            output = (completed.stdout + completed.stderr).splitlines()
+        exit_code, output = run_shell(command, fields["wall_clock"])
+        if exit_code != 0:
+            lines = output.splitlines()
             failures.append(
                 {
                     "command": command,
-                    "exit_code": completed.returncode,
-                    "output_tail": "\n".join(output[-OUTPUT_TAIL_LINES:]),
+                    "exit_code": exit_code,
+                    "output_tail": "\n".join(lines[-OUTPUT_TAIL_LINES:]),
                 }
             )
     if failures:

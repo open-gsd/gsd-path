@@ -211,6 +211,21 @@ class LoopRunTests(unittest.TestCase):
             self.assertEqual(3, payload["failures"][0]["exit_code"])
             self.assertIn("boom", payload["failures"][0]["output_tail"])
 
+    def test_verify_hung_command_fails_at_wall_clock(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            spec = write_spec(
+                root,
+                BASE_SPEC.replace("verify: exit 0", "verify: sleep 5").replace(
+                    "wall_clock: 30m", "wall_clock: 1s"
+                ),
+            )
+            result = self.command(spec, "verify")
+            self.assertEqual(1, result.returncode)
+            failure = json.loads(result.stdout)["failures"][0]
+            self.assertIsNone(failure["exit_code"])
+            self.assertIn("timed out after 1s", failure["output_tail"])
+
     def test_record_then_status_round_trip(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
