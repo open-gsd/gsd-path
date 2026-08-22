@@ -7,6 +7,10 @@ Project verify: `<command that builds + tests the whole project>`
 ## Config
 
 - max_review_cycles: 3   <!-- review→fix→re-review loops per wave before escalating -->
+- wave_budget: none      <!-- none | optional per-wave resource cap: wall-clock,
+                             tokens, or cost (e.g. 2h, 500k tokens). Reaching the
+                             cap blocks the wave like an exhausted cycle cap and
+                             escalates to the user. none is default. -->
 - review_panel: off      <!-- off | detected | claude,gpt,grok — optional
                              cross-model panel. off is default. detected uses
                              advertised host families except the parent, cap 3.

@@ -136,7 +136,11 @@ If two sources disagree, stop and surface the conflict. Never average.
 - Reviewers verify and block; they never fix. A block names the criterion,
   observed result, evidence location, and concrete fix direction. An optional
   review panel is advisory: the inherit reviewer remains the only wave
-  pass/fail, and panel findings never average or auto-replan. Resolve panel
+  pass/fail, and panel findings never average or auto-replan. Same-model
+  agreement is not independent verification: matching verdicts from one
+  model family count as a single evidence path. Independence comes from
+  re-run commands, reconstructed patches, different sources, or a
+  different model family. Resolve panel
   membership with the bundled `scripts/review_panel.py` helper; do not invent
   model families or slugs. Create task isolation and verify sidecars with the
   bundled `scripts/isolation.py` helper; do not invent `git worktree add` or
@@ -149,6 +153,9 @@ If two sources disagree, stop and surface the conflict. Never average.
   active copy that extends the archived pair. The ship phase reruns `prepare`;
   the helper validates the prefix and atomically reconciles both files.
   Discussion never edits an archive directly or writes after shipment.
+- The loop runner wraps explicit skills in a bounded check → verify → fix →
+  verify pass driven by a LOOP.md spec. It never advances a phase gate
+  itself and never commits or pushes.
 - Fix tasks use the complete task template, not an abbreviated finding.
 
 ## Gates
@@ -256,7 +263,7 @@ or STATE.md.
 | Path | Purpose |
 |------|---------|
 | `plugin.json` | Agent Plugins manifest (`agent-plugins.org` 1.0.0 schema) |
-| `skills/` | Eleven canonical `gsd-path*` skills |
+| `skills/` | Twelve canonical `gsd-path*` skills |
 | `skills/gsd-path/templates/` | Required artifact formats |
 | `skills/gsd-path/references/` | Agent role and dispatch contracts |
 | `WORKFLOW.md` | Phase-by-phase SOP |
