@@ -259,6 +259,19 @@ def validate_allowed_changes(
         raise IsolationError("unexpected paths: " + ", ".join(unexpected))
 
 
+def _clean_blob_oid(repo: Path, path: str, text: str, *, write: bool) -> str:
+    arguments = ["hash-object"]
+    if write:
+        arguments.append("-w")
+    arguments.extend((f"--path={path}", "--stdin"))
+    result = run_git(repo, *arguments, input=text)
+    oid = result.stdout.strip()
+    if result.returncode != 0 or not re.fullmatch(r"[0-9a-f]{40,64}", oid):
+        detail = (result.stderr or result.stdout).strip() or "clean filter failed"
+        raise IsolationError(detail)
+    return oid
+
+
 def commit_allowed_changes(
     repo: Path,
     base: str,
@@ -493,9 +506,16 @@ def _stamp_and_commit(
     task_path = worktree / task_file
     task_text, task_mode = _read_task_text(task_path)
     task_bytes = task_text.encode("utf-8")
-    stamped = _landed_task_text(task_text, base).encode("utf-8")
+    stamped_text = _landed_task_text(task_text, base)
+    stamped = stamped_text.encode("utf-8")
     _, landing_error = _landing_state(
-        worktree, base, task_file, stamped.decode("utf-8"), subject, allowed
+        worktree,
+        base,
+        task_file,
+        stamped_text,
+        subject,
+        allowed,
+        clean_after=True,
     )
     if landing_error:
         raise IsolationError(landing_error)
@@ -509,7 +529,7 @@ def _stamp_and_commit(
         _replace_regular_file(task_path, stamped, task_mode)
         body = task_commit_body(task_file, uncommitted_paths(worktree), base)
         return commit_allowed_changes(worktree, base, subject, allowed, body)
-    except Exception as error:
+    except BaseException as error:
         if current_sha(worktree) != original_head:
             raise IsolationError("landing failed after HEAD changed; refusing rollback") from error
         try:
@@ -553,6 +573,8 @@ def land(
     if serial:
         if source_branch != bound:
             raise IsolationError("serial landing requires the bound branch")
+        if current_sha(primary) != resolved_base:
+            raise IsolationError("serial landing requires HEAD to equal the recorded base")
         commit = _stamp_and_commit(primary, resolved_base, subject, relative_posix(task_file), allowed)
         return {
             "bound_branch": bound,
@@ -691,9 +713,20 @@ def _declared_task_paths(
         return None, str(error)
 
 
+def _regular_blob_oid(repo: Path, revision: str, path: str) -> str:
+    entries = git_output(repo, "ls-tree", revision, "--", path).splitlines()
+    if len(entries) != 1:
+        raise IsolationError(f"task path is not a regular file in {revision}: {path}")
+    parts = entries[0].split(maxsplit=3)
+    if len(parts) != 4 or parts[0] not in {"100644", "100755"} or parts[1] != "blob":
+        raise IsolationError(f"task path is not a regular file in {revision}: {path}")
+    return parts[2]
+
+
 def _base_task_contract(
     repo: Path, base: str, task_file: str
 ) -> tuple[list[str], str, Dict[str, object], Set[str]]:
+    _regular_blob_oid(repo, base, task_file)
     text = git_text(repo, "show", f"{base}:{task_file}")
     head, body = split_frontmatter(text)
     fields, error = task_frontmatter(text)
@@ -705,6 +738,15 @@ def _base_task_contract(
     return head, body, fields, {task_file, *files}
 
 
+def _clean_task_text(repo: Path, path: str, text: str) -> str:
+    oid = _clean_blob_oid(repo, path, text, write=True)
+    return git_text(repo, "cat-file", "blob", oid)
+
+
+def _normalize_newlines(text: str) -> str:
+    return text.replace("\r\n", "\n").replace("\r", "\n")
+
+
 def _landing_state(
     repo: Path,
     base: str,
@@ -712,11 +754,15 @@ def _landing_state(
     after_text: str,
     subject: str,
     allowed: Optional[Set[str]],
+    *,
+    clean_after: bool = False,
 ) -> tuple[Optional[Set[str]], Optional[str]]:
     try:
         before_head, before_body, before_fields, contract_paths = _base_task_contract(
             repo, base, task_file
         )
+        if clean_after:
+            after_text = _clean_task_text(repo, task_file, after_text)
         after_head, after_body = split_frontmatter(after_text)
     except IsolationError as error:
         return None, str(error)
@@ -751,9 +797,29 @@ def _landing_state(
     )
     if transition_error:
         return contract_paths, transition_error
-    if not after_body.startswith(before_body):
+    if not _normalize_newlines(after_body).startswith(
+        _normalize_newlines(before_body)
+    ):
         return contract_paths, "task file body is not append-only"
     return contract_paths, None
+
+
+def _landing_retry_error(
+    repo: Path, base: str, task_file: str, task_text: str, subject: str
+) -> Optional[str]:
+    contract_paths, error = _landing_state(
+        repo, base, task_file, task_text, subject, None
+    )
+    if error or contract_paths is None:
+        return error or "base task contract is unreadable"
+    pending = uncommitted_paths(repo)
+    if task_file not in pending:
+        return "interrupted landing does not retain the task change"
+    try:
+        validate_allowed_changes(repo, base, pending, contract_paths)
+    except IsolationError as validation_error:
+        return str(validation_error)
+    return None
 
 
 def _prove_task_commit(
@@ -777,6 +843,7 @@ def _prove_task_commit(
     if run_git(repo, "merge-base", "--is-ancestor", base, parent).returncode != 0:
         return None, "commit does not descend from its Base:"
     try:
+        after_oid = _regular_blob_oid(repo, sha, task_file)
         after_text = git_text(repo, "show", f"{sha}:{task_file}")
     except IsolationError as error:
         return None, str(error)
@@ -800,8 +867,16 @@ def _prove_task_commit(
         return None, landing_error
     if body != task_commit_body(task_file, changed, base).strip():
         return None, "body Task:/Files: fields do not match the changed paths"
-    if current_task_text is not None and after_text != current_task_text:
-        return None, "current done task differs from its landing commit"
+    if current_task_text is not None:
+        try:
+            current_head_oid = _regular_blob_oid(repo, "HEAD", task_file)
+            current_oid = _clean_blob_oid(
+                repo, task_file, current_task_text, write=False
+            )
+        except IsolationError as error:
+            return None, str(error)
+        if after_oid != current_head_oid or after_oid != current_oid:
+            return None, "current done task differs from its landing commit"
     return base, None
 
 
@@ -856,6 +931,76 @@ def _worktree_report(
         return None, f"invalid sidecar worktree {path}: {error}"
 
 
+def _retained_task_contract_error(
+    current_text: str, isolate_text: str
+) -> Optional[str]:
+    try:
+        current_head, current_body = split_frontmatter(current_text)
+        isolate_head, isolate_body = split_frontmatter(isolate_text)
+    except IsolationError as error:
+        return str(error)
+    current_contract = [
+        line
+        for line in current_head
+        if _frontmatter_key(line) not in LANDING_MUTABLE_FIELDS
+    ]
+    isolate_contract = [
+        line
+        for line in isolate_head
+        if _frontmatter_key(line) not in LANDING_MUTABLE_FIELDS
+    ]
+    if isolate_contract != current_contract:
+        return "retained task contract differs from the current task"
+    if not _normalize_newlines(isolate_body).startswith(
+        _normalize_newlines(current_body)
+    ):
+        return "retained task body does not extend the current task"
+    return None
+
+
+def _resume_task_error(
+    current_text: str,
+    isolate_text: str,
+    task_id: str,
+    title: str,
+    base: str,
+    worktree: str,
+    task_branch: str,
+) -> Optional[str]:
+    isolate_head, _ = split_frontmatter(isolate_text)
+    isolate_fields, fields_error = task_frontmatter(isolate_text)
+    if fields_error or isolate_fields is None:
+        return fields_error or "retained task frontmatter is unreadable"
+    expected = {
+        "id": task_id,
+        "title": title,
+        "status": "in-progress",
+        "base": base,
+        "task_branch": task_branch,
+    }
+    for key, value in expected.items():
+        if (
+            sum(_frontmatter_key(line) == key for line in isolate_head) != 1
+            or isolate_fields.get(key) != value
+        ):
+            return f"retained task has invalid {key}"
+    recorded_worktree = isolate_fields.get("worktree")
+    if (
+        sum(_frontmatter_key(line) == "worktree" for line in isolate_head) != 1
+        or not isinstance(recorded_worktree, str)
+        or Path(recorded_worktree).resolve() != Path(worktree).resolve()
+    ):
+        return "retained task has invalid worktree"
+    agent = isolate_fields.get("agent")
+    if (
+        sum(_frontmatter_key(line) == "agent" for line in isolate_head) != 1
+        or not isinstance(agent, str)
+        or agent in {"", "null"}
+    ):
+        return "retained task has no assigned agent"
+    return _retained_task_contract_error(current_text, isolate_text)
+
+
 def _recover_task(
     primary: Path,
     path: Path,
@@ -904,26 +1049,132 @@ def _recover_task(
 
     retained = branch_exists or report["worktree"] is not None
 
-    def recovery_base() -> tuple[Optional[str], Optional[str]]:
-        try:
-            if branch_exists:
-                return git_output(primary, "merge-base", head, task_branch), None
-            recorded_base = str(fields.get("base", ""))
-            return require_commit(primary, require_full_sha(recorded_base)), None
-        except IsolationError as error:
-            return None, f"{status} task has invalid base: {error}"
-
     if status in {"pending", "in-progress"}:
         if status == "pending" and not retained:
             return result("none", reason="pending task has no retained isolate")
-        base, base_error = recovery_base()
-        if base_error or base is None:
-            return result("block", reason=base_error or "task base is unreadable")
-        if not retained:
+        if retained:
+            if not branch_exists:
+                return result("block", reason="sidecar worktree has no retained branch")
+            try:
+                base = git_output(primary, "merge-base", head, task_branch)
+                branch_head = require_commit(primary, task_branch)
+            except IsolationError as error:
+                return result("block", reason=f"{status} task has invalid base: {error}")
+            if worktree is None:
+                if branch_head != base:
+                    return result("block", reason="retained task branch advanced past its base")
+                return result("resume", base=base)
+            sidecar = Path(str(worktree["path"]))
+            isolate_path = sidecar / task_file
+            try:
+                isolate_text, _ = _read_task_text(isolate_path)
+            except IsolationError as error:
+                return result("block", reason=str(error))
+            isolate_fields, isolate_error = task_frontmatter(isolate_text)
+            if isolate_error or isolate_fields is None:
+                return result(
+                    "block",
+                    reason=isolate_error or "retained task frontmatter is unreadable",
+                )
+            if isolate_fields.get("status") == "done":
+                contract_error = _retained_task_contract_error(
+                    task_text, isolate_text
+                )
+                if contract_error:
+                    return result("block", reason=contract_error)
+                if branch_head == base:
+                    retry_error = _landing_retry_error(
+                        sidecar,
+                        base,
+                        task_file,
+                        isolate_text,
+                        subject,
+                    )
+                    source_commit = None
+                else:
+                    source_commit = branch_head
+                    try:
+                        parent, parent_error = _single_parent(primary, branch_head)
+                        if parent_error or parent != base:
+                            retry_error = parent_error or (
+                                "retained task commit parent differs from its base"
+                            )
+                        elif not bool(worktree["clean"]):
+                            retry_error = (
+                                "retained task commit has uncommitted changes"
+                            )
+                        else:
+                            body = git_output(
+                                primary, "log", "-1", "--format=%b", branch_head
+                            )
+                            _, retry_error = _prove_task_commit(
+                                primary,
+                                branch_head,
+                                body,
+                                task_file,
+                                base,
+                                None,
+                            )
+                            if retry_error is None:
+                                committed_oid = _regular_blob_oid(
+                                    primary, branch_head, task_file
+                                )
+                                checkout_oid = _clean_blob_oid(
+                                    sidecar,
+                                    task_file,
+                                    isolate_text,
+                                    write=False,
+                                )
+                                if committed_oid != checkout_oid:
+                                    retry_error = (
+                                        "retained task differs from its commit"
+                                    )
+                    except IsolationError as error:
+                        retry_error = str(error)
+                if retry_error:
+                    return result("block", reason=retry_error)
+                return result(
+                    "resume",
+                    reason="landing was interrupted; retry land without redispatch",
+                    landing_retry=True,
+                    source_commit=source_commit,
+                    base=base,
+                )
+            if branch_head != base:
+                return result("block", reason="retained task branch advanced past its base")
+            resume_error = _resume_task_error(
+                task_text,
+                isolate_text,
+                task_id,
+                title,
+                base,
+                str(sidecar),
+                task_branch,
+            )
+        else:
+            try:
+                base = require_commit(
+                    primary, require_full_sha(str(fields.get("base", "")))
+                )
+            except IsolationError as error:
+                return result("block", reason=f"{status} task has invalid base: {error}")
+            if head != base:
+                return result("block", reason=f"{status} serial task advanced past its base")
             primary_worktree, primary_error = _worktree_report(primary, primary, bound)
             if primary_error:
                 return result("block", reason=primary_error)
             report["worktree"] = primary_worktree
+            resume_error = _resume_task_error(
+                task_text,
+                task_text,
+                task_id,
+                title,
+                base,
+                str(primary),
+                "null",
+            )
+        if resume_error:
+            return result("block", reason=resume_error)
         return result("resume", base=base)
 
     if status in {"failed", "blocked"}:
@@ -983,7 +1234,32 @@ def _recover_task(
             branch_error = _task_branch_proof_error(primary, task_branch, base, commit)
             if branch_error:
                 return result("block", reason=branch_error)
+        if worktree is not None and not bool(worktree["clean"]):
+            return result(
+                "block",
+                reason="proven task retains a dirty worktree",
+                commit=commit,
+                base=base,
+            )
         return result("recovered", commit=commit, base=base)
+    if not retained and head == recorded_base:
+        retry_error = _landing_retry_error(
+            primary, recorded_base, task_file, task_text, subject
+        )
+        if retry_error is None:
+            primary_worktree, primary_error = _worktree_report(
+                primary, primary, bound
+            )
+            if primary_error:
+                return result("block", reason=primary_error)
+            report["worktree"] = primary_worktree
+            return result(
+                "resume",
+                reason="landing was interrupted; retry land without redispatch",
+                landing_retry=True,
+                source_commit=None,
+                base=recorded_base,
+            )
     return result("block", reason="done but no landing commit proves it")
 
 
@@ -991,10 +1267,11 @@ def recover(primary: Path, tasks_dir: Path) -> Dict[str, object]:
     """Prove each task's landing state from git. Read-only.
 
     Verdicts: `recovered` (exactly one proven landing commit; `commit` and
-    `base` returned), `resume` (pending or in progress), `reconcile` (a failed
-    or blocked task retains isolation), `block` (missing or conflicting proof),
-    and `none` (nothing to recover). Retained `task_branch` and worktree state
-    are returned. Verify is not rerun: a proven landing commit is its own evidence.
+    `base` returned), `resume` (pending, in progress, or an exact interrupted
+    landing), `reconcile` (a failed or blocked task retains isolation), `block`
+    (missing or conflicting proof), and `none` (nothing to recover). Retained
+    `task_branch` and worktree state are returned. Verify is not rerun: a proven
+    landing commit is its own evidence.
     """
     primary = require_directory(primary, "primary worktree")
     if worktree_root(primary) != primary:
