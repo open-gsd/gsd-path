@@ -101,6 +101,10 @@ flowchart TD
     A -->|"program complete"| PC["stop"]
 ```
 
+For an existing Git repository, the router first fetches `origin/main` and
+creates or adopts `gsd-path/M001` there before writing `.project/` artifacts.
+Build only uses that recorded milestone branch; it never creates or selects one.
+
 At any non-shipped phase, `/gsd-path-discuss` (or `$gsd-path-discuss` in
 Codex) records the conversation in `.project/discuss/` without advancing or
 editing the phase handoff. Required decisions carry a named owner and remain

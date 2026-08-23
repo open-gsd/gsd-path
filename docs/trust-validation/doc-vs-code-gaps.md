@@ -80,7 +80,7 @@ Static dispatch contracts are **verified** (files exist, installer copies them).
 
 ## Verified alignments (high confidence)
 
-- Eleven `gsd-path*` skills; phase contracts are checked by `sync --check`.
+- Declared `gsd-path*` skills align with the sync manifest and `sync --check`.
 - `HOOKS.md` matches `guard_hook.py` / `git_guard.py` (archive path-first, cp/tee/checkout, case-insensitive `ship:`).
 - `WORKFLOW.md` phase SOP matches skill contracts (handoffs, archive script, explicit-only router).
 - Multi-host install targets in code match README install table (11 targets + shared codex/zed profile).
