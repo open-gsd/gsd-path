@@ -60,10 +60,9 @@ before dispatch or ship. Then:
    finding, while final review itself still creates no pre-ship commit.
 2. Derive a stable numbered list of cross-wave integration risks from
    interfaces and flows that span waves. List only genuine risks that could
-   plausibly fail; never pad the list — a small milestone may carry only the
-   project-Verify risk. Always include PLAN.md's project
-   Verify command as a numbered risk so a failure has a reviewer-owned gap
-   artifact with reproduced evidence and fix direction. Resolve the local
+   plausibly fail; never pad the list. Include PLAN.md's project Verify as
+   numbered risk 1. The orchestrator runs that command once in step 4 and
+   writes its gap artifact; do not dispatch a gap reviewer for it. Resolve the local
    [final-review template](templates/final-review.md),
    [gap-review template](templates/gap-review.md), [patch-findings
    template](templates/patch-findings.md), and `scripts/check_handoffs.py`.
@@ -71,8 +70,8 @@ before dispatch or ship. Then:
    HEAD:
    - one integration reviewer with logical task name `review_final`, writing only
      `.project/review/FINAL.md`;
-   - one reviewer per numbered risk with logical task name
-     `review_gap_<number>`, each
+   - one reviewer per numbered risk other than project Verify, with
+     logical task name `review_gap_<number>`, each
      writing only `.project/review/final-gap-N.md`.
    Before dispatch, the orchestrator creates a distinct verify sidecar at
    exact reviewed HEAD for each reviewer with
@@ -87,18 +86,22 @@ before dispatch or ship. Then:
    `unverifiable` with checked evidence; every gap is `pass` or `blocked` with
    checked evidence. Every output must record the same exact full reviewed
    HEAD, and each numbered gap heading and Risk value must match its dispatch
-   risk. Re-run PLAN.md's project Verify in a fresh verify sidecar from
-   `isolate-verify --name project-verify` at that same exact HEAD.
+   risk. Run
+   `python3 <absolute check_handoffs.py> final --repo <absolute repo root>`
+   before any archive question: FINAL.md needs one `### SCn — ...` block per
+   INTENT success criterion, and `Overall verdict: pass` requires every
+   verdict `met` with a non-`none` Check or Reference. A non-zero exit is
+   `ship/blocked`. Run PLAN.md's project Verify once in a fresh verify
+   sidecar from `isolate-verify --name project-verify` at that same exact
+   HEAD. Write `.project/review/final-gap-1.md` from that output (risk:
+   project Verify). Do not run it again. A non-zero exit is `ship/blocked`.
 5. Redispatch one complete corrected brief for a missing or invalid reviewer
    artifact under the same logical task name, following the runtime dispatch
    contract. If it remains invalid, set `ship/blocked` with
    the exact contract failure and a `NEEDS-USER` dispatch-failure entry. Present
    **Outcome** with the invalid output, **Review** linking that output or
    STATE.md when it is missing, and **Next** naming the required correction;
-   then stop and do not invent a patch finding. A
-   failed orchestrator Verify must agree with the mandatory project-Verify gap
-   review; repeat both once on disagreement, then block and surface the
-   conflicting evidence as `NEEDS-USER` instead of planning from it. A `not-met`,
+   then stop and do not invent a patch finding. A `not-met`,
    `unverifiable`, or blocked gap with valid evidence sets `ship/blocked`,
    writes `.project/review/PATCH-FINDINGS.md` from the patch-findings template,
    and runs `python3 <absolute check_handoffs.py> patch --repo <absolute repo

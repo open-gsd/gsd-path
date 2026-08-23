@@ -3,6 +3,9 @@
 <!-- Written by the planner role. Executed wave-by-wave by $gsd-path-build. -->
 
 Project verify: `<command that builds + tests the whole project>`
+<!-- Run once at ship. A task Verify must not copy this command unless an
+     owned INTENT success criterion names it. Otherwise the task Verify
+     names a path from that task's files. -->
 
 ## Config
 
@@ -43,6 +46,17 @@ Review depth: <full | deep | verify-only>
      - deps only in earlier waves, or same wave with no file overlap
      - no two same-wave tasks share files
      - nothing from INTENT.md scope-out appears anywhere -->
+
+## Intent coverage
+
+<!-- Every INTENT.md success criterion, as SCn, maps to at least one task
+     acceptance item. The named task's Verify command is what must fail if
+     that criterion is skipped. `scripts/check_handoffs.py plan` gates this
+     table against INTENT.md and each task's Intent coverage section. -->
+
+| Criterion | Task | Acceptance |
+|-----------|------|------------|
+| SC1 | T001 | AC1 |
 
 ## Dependency notes
 

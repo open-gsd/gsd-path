@@ -33,7 +33,9 @@ paragraph the user signed off on — do not edit without a new sign-off.>
 
 ## Success criteria
 
-<!-- Observable statements. The final review checks these one by one. -->
+<!-- Observable statements, numbered from 1. PLAN.md maps each to a task
+     AC and Verify as SC1, SC2, …. Wave review checks the SCs a wave owns.
+     Final review checks every SC. -->
 1. <criterion — a thing you can run/measure/see>
 2. ...
 

@@ -409,6 +409,419 @@ State: ship/blocked
         with self.assertRaises(SystemExit):
             check_handoffs.main(["research", "--repo", ".", "--project-dir", "../x"])
 
+    def write_intent_criteria(
+        self, root: Path, project_dir: str = ".project"
+    ) -> None:
+        self.write(
+            root,
+            f"{project_dir}/intent/INTENT.md",
+            """# Intent — demo
+
+## Success criteria
+
+1. The demo command prints hello.
+2. The demo test suite is green.
+""",
+        )
+
+    def write_plan_coverage(
+        self,
+        root: Path,
+        rows: str = "| SC1 | T001 | AC1 |\n| SC2 | T002 | AC1 |\n",
+        project_dir: str = ".project",
+    ) -> None:
+        self.write(
+            root,
+            f"{project_dir}/plan/PLAN.md",
+            f"""# Plan — demo
+
+Project verify: `python3 -m unittest discover`
+
+## Intent coverage
+
+| Criterion | Task | Acceptance |
+|-----------|------|------------|
+{rows}
+""",
+        )
+
+    def write_coverage_task(
+        self,
+        root: Path,
+        task_id: str,
+        owns: str,
+        acceptance: str = "1. The demo behavior holds.",
+        verify: str = "python3 src/app.py",
+        project_dir: str = ".project",
+    ) -> None:
+        self.write(
+            root,
+            f"{project_dir}/tasks/{task_id}-demo.md",
+            f"""---
+id: {task_id}
+title: Demo task {task_id}
+wave: 1
+deps: []
+status: pending
+agent: null
+commit: null
+base: null
+worktree: null
+task_branch: null
+files:
+  - src/app.py
+---
+
+# {task_id} — demo
+
+## Context
+
+The task implements the demo.
+
+## Approach
+
+- Keep the existing command.
+
+## Interface contract
+
+- None
+
+## Intent coverage
+
+{owns}
+
+## Acceptance criteria
+
+{acceptance}
+
+## Verify
+
+```bash
+{verify}
+```
+
+## Log
+
+- 2026-08-22 — created by planner
+""",
+        )
+
+    def write_plan_handoff(self, root: Path, project_dir: str = ".project") -> None:
+        self.write_state(root, "plan", "active", project_dir)
+        self.write_intent_criteria(root, project_dir)
+        self.write_plan_coverage(root, project_dir=project_dir)
+        self.write_coverage_task(
+            root,
+            "T001",
+            "- SC1",
+            acceptance="1. The demo command prints hello.",
+            project_dir=project_dir,
+        )
+        self.write_coverage_task(
+            root,
+            "T002",
+            "- SC2",
+            acceptance="1. The demo test suite is green.",
+            project_dir=project_dir,
+        )
+
+    def test_plan_coverage_maps_each_success_criterion(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_plan_handoff(root)
+
+            result = check_handoffs.validate_plan(root)
+
+            self.assertEqual(result["phase"], "plan")
+            self.assertEqual(result["criteria"], ["SC1", "SC2"])
+            self.assertEqual(result["rows"], 2)
+            self.assertEqual(result["tasks"], 2)
+
+    def test_plan_coverage_rejects_an_omitted_criterion(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_plan_handoff(root)
+            self.write_plan_coverage(root, rows="| SC1 | T001 | AC1 |\n")
+            self.write_coverage_task(root, "T002", "- None")
+
+            with self.assertRaises(check_handoffs.HandoffError) as failure:
+                check_handoffs.validate_plan(root)
+            self.assertIn("omits SC2", str(failure.exception))
+
+    def test_plan_coverage_rejects_a_task_owns_mismatch(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_plan_handoff(root)
+            self.write_coverage_task(
+                root,
+                "T001",
+                "- None",
+                acceptance="1. The demo command prints hello.",
+            )
+
+            with self.assertRaises(check_handoffs.HandoffError) as failure:
+                check_handoffs.validate_plan(root)
+            self.assertIn("T001 Intent coverage does not match PLAN.md", str(failure.exception))
+
+    def test_plan_coverage_rejects_a_missing_acceptance_item(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_plan_handoff(root)
+            self.write_plan_coverage(
+                root, rows="| SC1 | T001 | AC2 |\n| SC2 | T002 | AC1 |\n"
+            )
+
+            with self.assertRaises(check_handoffs.HandoffError) as failure:
+                check_handoffs.validate_plan(root)
+            self.assertIn("T001 has no AC2", str(failure.exception))
+
+    def test_plan_coverage_passes_under_next_project_dir(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_plan_handoff(root, ".project/next")
+
+            exit_code = check_handoffs.main(
+                ["plan", "--repo", str(root), "--project-dir", ".project/next"]
+            )
+
+            self.assertEqual(exit_code, 0)
+
+    def test_plan_coverage_ignores_default_project_dir_in_lookahead(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_plan_handoff(root)
+
+            with self.assertRaises(check_handoffs.HandoffError):
+                check_handoffs.validate_plan(root, ".project/next")
+
+    def test_plan_rejects_a_task_verify_that_copies_project_verify(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_plan_handoff(root)
+            self.write_coverage_task(
+                root,
+                "T001",
+                "- SC1",
+                acceptance="1. The demo command prints hello.",
+                verify="python3 -m unittest discover",
+            )
+
+            with self.assertRaises(check_handoffs.HandoffError) as failure:
+                check_handoffs.validate_plan(root)
+            self.assertIn("T001 Verify must not copy Project verify", str(failure.exception))
+
+    def test_plan_allows_project_verify_when_an_owned_sc_names_it(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_state(root, "plan", "active")
+            self.write(
+                root,
+                ".project/intent/INTENT.md",
+                """# Intent — demo
+
+## Success criteria
+
+1. python3 -m unittest discover is green at cutover.
+2. The demo test suite is green.
+""",
+            )
+            self.write_plan_coverage(root)
+            self.write_coverage_task(
+                root,
+                "T001",
+                "- SC1",
+                acceptance="1. python3 -m unittest discover is green at cutover.",
+                verify="python3 -m unittest discover",
+            )
+            self.write_coverage_task(
+                root,
+                "T002",
+                "- SC2",
+                acceptance="1. The demo test suite is green.",
+            )
+
+            result = check_handoffs.validate_plan(root)
+
+            self.assertEqual(result["tasks"], 2)
+
+    def test_plan_rejects_a_task_verify_that_names_no_files_path(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_plan_handoff(root)
+            self.write_coverage_task(
+                root,
+                "T001",
+                "- SC1",
+                acceptance="1. The demo command prints hello.",
+                verify="pnpm test",
+            )
+
+            with self.assertRaises(check_handoffs.HandoffError) as failure:
+                check_handoffs.validate_plan(root)
+            self.assertIn("T001 Verify must name a path from files", str(failure.exception))
+
+    def test_plan_allows_a_task_verify_with_a_pytest_node_id(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_plan_handoff(root)
+            self.write_coverage_task(
+                root,
+                "T001",
+                "- SC1",
+                acceptance="1. The demo command prints hello.",
+                verify="pytest src/app.py::test_hello",
+            )
+
+            result = check_handoffs.validate_plan(root)
+
+            self.assertEqual(result["tasks"], 2)
+
+    def write_wave_review(
+        self,
+        root: Path,
+        *,
+        sc1: str = "pass",
+        sc2: str = "pass",
+        verdict: str = "pass",
+        extra: str = "",
+        project_dir: str = ".project",
+    ) -> str:
+        relative = f"{project_dir}/review/wave-1.cycle1.md"
+        self.write(
+            root,
+            relative,
+            f"""# Review — wave 1, cycle 1
+
+Wave verdict: {verdict}
+Cycle: 1
+Depth: verify-only
+Tasks reviewed: 2
+
+## T001 — demo: pass
+
+- ✅ The demo command prints hello. — ran hello.py
+
+## T002 — demo: pass
+
+- ✅ The demo test suite is green. — unittest OK
+
+## Intent coverage
+
+### SC1 — hello prints: {sc1}
+- ✅ hello.py output
+### SC2 — The demo test suite is green.: {sc2}
+- ✅ unittest
+{extra}
+""",
+        )
+        return relative
+
+    def test_wave_requires_owned_sc_headings(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_plan_handoff(root)
+            relative = self.write_wave_review(root)
+
+            result = check_handoffs.validate_wave(root, review=relative)
+
+            self.assertEqual(result["owned"], ["SC1", "SC2"])
+            self.assertEqual(result["verdict"], "pass")
+
+    def test_wave_rejects_pass_while_an_owned_sc_failed(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_plan_handoff(root)
+            relative = self.write_wave_review(root, sc1="fail", verdict="pass")
+
+            with self.assertRaises(check_handoffs.HandoffError) as failure:
+                check_handoffs.validate_wave(root, review=relative)
+            self.assertIn("owned SC failed", str(failure.exception))
+
+    def test_wave_rejects_a_missing_owned_sc(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_plan_handoff(root)
+            relative = self.write_wave_review(root)
+            review = root / relative
+            review.write_text(
+                review.read_text(encoding="utf-8").replace("### SC2 —", "### SC9 —"),
+                encoding="utf-8",
+            )
+
+            with self.assertRaises(check_handoffs.HandoffError) as failure:
+                check_handoffs.validate_wave(root, review=relative)
+            self.assertIn("exactly SC1, SC2", str(failure.exception))
+
+    def write_final_review(
+        self,
+        root: Path,
+        *,
+        verdict: str = "pass",
+        sc1: str = "met",
+        check: str = "`python3 hello.py`",
+        project_dir: str = ".project",
+    ) -> None:
+        self.write(
+            root,
+            f"{project_dir}/review/FINAL.md",
+            f"""# Final Review — demo
+
+Reviewed HEAD: {RESEARCH_HEAD}
+Overall verdict: {verdict}
+
+## Success criteria
+
+### SC1 — hello prints
+
+- **Verdict**: {sc1}
+- **Check**: {check}
+- **Observed**: hello
+- **Reference**: hello.py:1
+- **Finding**: none
+- **Fix direction**: none
+
+### SC2 — The demo test suite is green.
+
+- **Verdict**: met
+- **Check**: `python3 -m unittest`
+- **Observed**: OK
+- **Reference**: tests/test_app.py
+- **Finding**: none
+- **Fix direction**: none
+""",
+        )
+
+    def test_final_requires_a_verdict_per_intent_criterion(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_state(root, "ship", "active")
+            self.write_intent_criteria(root)
+            self.write_final_review(root)
+
+            result = check_handoffs.validate_final(root)
+
+            self.assertEqual(result["criteria"], ["SC1", "SC2"])
+            self.assertEqual(result["verdict"], "pass")
+
+    def test_final_rejects_pass_without_a_check_or_reference(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_state(root, "ship", "active")
+            self.write_intent_criteria(root)
+            self.write_final_review(root, check="none")
+            final = root / ".project/review/FINAL.md"
+            final.write_text(
+                final.read_text(encoding="utf-8").replace(
+                    "- **Reference**: hello.py:1",
+                    "- **Reference**: none",
+                ),
+                encoding="utf-8",
+            )
+
+            with self.assertRaises(check_handoffs.HandoffError) as failure:
+                check_handoffs.validate_final(root)
+            self.assertIn("SC1 lacks a Check or Reference", str(failure.exception))
+
 
 if __name__ == "__main__":
     unittest.main()

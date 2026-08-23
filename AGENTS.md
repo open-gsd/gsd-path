@@ -11,14 +11,24 @@ otherwise.
 2. `.project/CHARTER.md` (program flow): program scope, vetoes, and
    corrections bind every milestone. Vetoes may not be researched, planned,
    or built.
-3. `.project/intent/INTENT.md`: constraints, vetoes, and corrections are hard
-   limits. Vetoes may not be researched, planned, or built.
+3. `.project/intent/INTENT.md`: constraints, vetoes, corrections, and success
+   criteria are hard limits. Vetoes may not be researched, planned, or built.
+   Only `$gsd-path-define` changes a success criterion, by appending
+   `## Corrections`; a task Log or review cannot waive one.
 4. `.project/SYNTHESIS.md` (program flow, top level) or
    `.project/research/SYNTHESIS.md` (single milestone): gated decisions are
    settled. Report conflicts; do not override them.
 5. The current phase brief or task file.
 
 If two sources disagree, stop and surface the conflict. Never average.
+
+The orchestrator's isolated rerun of a task Verify is that task's evidence.
+Wave and ship reviewers read that recorded output plus the isolated diff;
+they do not re-run the task command. PLAN.md's project Verify runs once, at
+ship, in one sidecar. A task Verify must not copy that command unless an
+owned success criterion names it. Any other task Verify must name a path
+from that task's `files`. INTENT constraints about not running the
+full-repo suite on a tiny edit outrank the phase brief.
 
 ## Files are the only memory
 
@@ -84,9 +94,11 @@ If two sources disagree, stop and surface the conflict. Never average.
 - The decider works from existing evidence; it does not re-research. An
   unresolved or uncited required decision fails the synthesis gate.
 - The planner reads both INTENT.md and SYNTHESIS.md and specs
-  deliverable-sized outcomes and constraints; coders own implementation
-  decisions inside them.
-- Coders implement only their full task contract and append their result to the
+  deliverable-sized outcomes and constraints; every INTENT success criterion
+  maps to a task AC and Verify in PLAN.md Intent coverage. Coders own
+  implementation decisions inside those bounds.
+- Coders implement only their full task contract, including owned INTENT
+  success criteria read from INTENT.md, and append their result to the
   task Log. They never change task state, review acceptance, stage, commit, or
   freelance outside declared files.
 - The orchestrator dispatches, arbitrates, and creates task isolation and

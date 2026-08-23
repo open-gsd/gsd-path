@@ -130,6 +130,7 @@
     ["scripts/discussion_records.py", "skills/gsd-path-ship/scripts/discussion_records.py"],
     ["scripts/check_handoffs.py", "skills/gsd-path/scripts/check_handoffs.py"],
     ["scripts/check_handoffs.py", "skills/gsd-path-plan/scripts/check_handoffs.py"],
+    ["scripts/check_handoffs.py", "skills/gsd-path-build/scripts/check_handoffs.py"],
     ["scripts/check_handoffs.py", "skills/gsd-path-research/scripts/check_handoffs.py"],
     ["scripts/check_handoffs.py", "skills/gsd-path-ship/scripts/check_handoffs.py"],
     ["scripts/check_handoffs.py", "skills/gsd-path-decide/scripts/check_handoffs.py"],

@@ -17,8 +17,8 @@ files:              # every file this task may touch — dispatch checks overlap
 
 ## Context
 
-<!-- 3–5 sentences. Everything the coder needs from INTENT/SYNTHESIS,
-     inlined. The coder reads ONLY this file plus the codebase. -->
+<!-- 3–5 sentences. Everything the coder needs from SYNTHESIS, inlined.
+     The coder reads this file, INTENT.md, and the codebase. -->
 
 ## Approach
 
@@ -37,6 +37,12 @@ files:              # every file this task may touch — dispatch checks overlap
      is a plan defect — block, never negotiate or improvise. -->
 - None
 
+## Intent coverage
+
+<!-- SCn ids this task owns, matching PLAN.md Intent coverage. Write
+     `- None` when this task owns no INTENT success criterion. -->
+- SC1
+
 ## Acceptance criteria
 
 <!-- Observable. The reviewer checks the diff against exactly these. -->
@@ -45,7 +51,7 @@ files:              # every file this task may touch — dispatch checks overlap
 ## Verify
 
 ```bash
-<one command that fails if this task wasn't done>
+<one command that fails if this task wasn't done; names a path from files>
 ```
 
 ## Log

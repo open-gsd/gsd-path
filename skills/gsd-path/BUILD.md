@@ -24,15 +24,16 @@ explicitly invokes it.
   rather than rewinding state. A concrete STATE.archive during `build/*`
   marks an interrupted milestone-abandon transaction: resume the Milestone
   abandon procedure below before any recovery or dispatch. `build/done` is never a normal execution state:
-  re-prove all wave gates and project Verify at current HEAD, then finish the
-  committed transition to `ship/active`.
+  re-prove all wave gates at current HEAD, then finish the
+  committed transition to `ship/active`. Project Verify waits for ship.
 - Read the local [coder role](references/coder.md),
   [reviewer role](references/reviewer.md), [dispatch contract](references/dispatch.md),
   [task template](templates/task.md), [board template](templates/board.md),
   [wave-review template](templates/wave-review.md), and
   [wave-panel template](templates/wave-panel.md). Resolve them to absolute
   paths before briefing agents. Resolve `scripts/review_panel.py` when
-  PLAN.md Config names a review panel. Resolve `scripts/isolation.py` for
+  PLAN.md Config names a review panel. Resolve `scripts/check_handoffs.py`
+  for Intent coverage. Resolve `scripts/isolation.py` for
   task isolation, verify sidecars, and task landing; do not invent
   `git worktree add`, `--detach`, commit, or cherry-pick commands.
 - Before the first dispatch, create `.project/BOARD.md` from the bundled
@@ -137,7 +138,10 @@ For each wave in PLAN.md order:
    `NEEDS-ORCHESTRATOR` block stays unselectable until its
    `Orchestrator answer` is recorded in the task Log. A documented plan
    defect may be repaired against INTENT.md and SYNTHESIS.md and logged before
-   a new clean base. One failed implementation gets one logged redispatch when
+   a new clean base. A user ruling that changes a success criterion,
+   constraint, or veto is not a plan defect: set `build/blocked`, do not
+   rewrite the AC, and send `$gsd-path-define` to append INTENT.md
+   `## Corrections` before plan re-gates. A task Log is not that record. One failed implementation gets one logged redispatch when
    its contract remains valid. Repeated failure, ambiguous ownership, a user
    ruling, or a dependency deadlock sets build state to `blocked` and stops.
    Concurrent tasks must have disjoint `files`; serialize overlapping fix
@@ -157,7 +161,9 @@ For each wave in PLAN.md order:
    a later round unlocked by fresh landings records the later HEAD — and
    lint every ready task's brief with the bundled
    `scripts/check_task_briefs.py --repo <absolute repo root> --base <recorded
-   base>` before creating any worktree; a lint failure is a documented plan
+   base>` and re-check Intent coverage with
+   `python3 <absolute check_handoffs.py> plan --repo <absolute repo root>`
+   before creating any worktree; a lint or coverage failure is a documented plan
    defect — repair it against INTENT.md and SYNTHESIS.md, then re-establish
    the base. Then isolate each ready task with
    `python3 <absolute isolation.py> isolate-task --repo <absolute primary>
@@ -177,7 +183,8 @@ For each wave in PLAN.md order:
    spawn one implementation-capable child per task with deterministic logical
    task name `build_<task_id>`.
    Its brief contains the absolute isolated-worktree root, coder role, task
-   file, and task template. Add no hidden implementation context; repair a
+   file, task template, and the absolute INTENT.md path in that worktree.
+   Add no hidden implementation context; repair a
    defective task contract before establishing the round base. Run ready work
    up to capacity. Do not wait for the whole round before unlocking
    dependents: each task landing in step 5 re-opens step 2, and a newly ready
@@ -227,7 +234,9 @@ For each wave in PLAN.md order:
      the artifacts admit more than one reading, ask the user through an
      interactive user-input tool when available, record the ruling verbatim
      as the answer, and repair the task contract as a documented plan defect
-     when the ruling changes it. A question block creates no product commit
+     when the ruling changes it — except a ruling that changes a success
+     criterion, constraint, or veto, which follows the define-Corrections
+     path above. A question block creates no product commit
      and preserves the isolated worktree under the same retirement rule.
    - A blocked report, invalid diff, or failed Verify creates no product
      commit. Validate and copy the isolated task's append-only Log delta once;
@@ -242,10 +251,14 @@ For each wave in PLAN.md order:
    `Review depth` from PLAN.md (default `full`).
    - `full`: spawn one independent reviewer using deterministic logical task
      name `review_wave_<wave>_cycle_<cycle>`. Supply every task path, its
-     recorded base and commit, the reviewer role, and wave-review template.
+     recorded base and commit, the reviewer role, wave-review template, and
+     the absolute INTENT.md path.
      Create and supply one verify sidecar with
      `python3 <absolute isolation.py> isolate-verify --repo <absolute primary>
-     --base <recorded review base> --name wave-<N>-cycle-<C>`. The reviewer
+     --base <recorded review base> --name wave-<N>-cycle-<C>`. Brief the
+     recorded isolated Verify output per task (the Log entry the
+     orchestrator appended at landing). The reviewer must not re-run that
+     command or PLAN.md's project Verify. The reviewer
      stages `.project/review/wave-N.cycleC.md` there; the
      orchestrator validates it, atomically copies it to the primary canonical
      path, and only then retires that sidecar with `retire`.
@@ -253,11 +266,14 @@ For each wave in PLAN.md order:
      isolated context and its own verify sidecar from `isolate-verify` at the
      recorded review base (`--name wave-<N>-cycle-<C>-contract` and
      `wave-<N>-cycle-<C>-adversarial`). Supply both every task path, its recorded base and commit,
-     the reviewer role, and the wave-review template. The contract lens —
+     the reviewer role, the wave-review template, and the absolute INTENT.md
+     path. The contract lens —
      logical task name `review_wave_<wave>_cycle_<cycle>_contract` — does the
      full review: apply each task's `commit^..commit` product patch to the
-     recorded base, re-run Verify, and check every acceptance criterion and
-     interface contract. The adversarial lens — logical task name
+     recorded base, check the recorded Verify plus the isolated diff, and
+     check every acceptance criterion,
+     owned INTENT success criterion, and interface contract. The adversarial
+     lens — logical task name
      `review_wave_<wave>_cycle_<cycle>_adversarial` — tries to kill the work:
      security holes, unhandled edge cases, failure modes, data-loss and
      concurrency risks, and missing error handling. Each stages its own file
@@ -271,7 +287,8 @@ For each wave in PLAN.md order:
      `.project/review/wave-N.cycleC.md` itself from evidence it already
      holds — per task, the isolated Verify rerun and the declared-files diff
      check — recording `Depth: verify-only`. It checks each acceptance
-     criterion against that evidence and the diff; anything it cannot
+     criterion and each INTENT success criterion owned by the wave's tasks
+     against that evidence and the diff; anything it cannot
      confirm from them is a finding, not a pass. Never spawn a review panel
      at `verify-only`.
    - After the canonical inherit reviewer (or orchestrator-written
@@ -296,6 +313,12 @@ For each wave in PLAN.md order:
      <detected|named>`. The inherit reviewer remains the only Wave verdict.
      Do not average panel findings into that verdict or auto-create fix
      tasks from preference findings.
+   - After the canonical inherit reviewer file (and each deep lens file) is
+     on the primary path, run
+     `python3 <absolute check_handoffs.py> wave --repo <absolute primary>
+     --review <canonical wave-review path>`. A non-zero exit is a blocked
+     wave, not a pass, including `verify-only`. Do not advance on helper
+     failure.
 
 7. **Fix or advance.** A valid canonical `pass` advances unless an
    actionable review-panel finding is waiting for a user ruling. On `blocked`, read
@@ -314,8 +337,9 @@ For each wave in PLAN.md order:
    same isolated layer loop. At the cap, record all attempts in BOARD.md and
    STATE.md and ask the user — through an interactive user-input tool when
    available — after linking the resolved absolute BOARD.md and blocking wave
-   review, whether to relax the criterion, redirect the approach, or
-   raise the cap — or, in program flow (ROADMAP.md exists), to abandon the
+   review, whether to redirect the approach, raise the cap, or send define
+   to amend INTENT.md `## Corrections` — never rewrite an AC from a Log
+   waiver — or, in program flow (ROADMAP.md exists), to abandon the
    milestone under the Milestone abandon procedure — listing the
    orchestrator's recommended option first marked
    `(recommended)` with a one-line reason drawn from the review evidence.
@@ -331,23 +355,19 @@ For each wave in PLAN.md order:
 
 ## Completion
 
-After every wave passes, create a verify sidecar with
-`python3 <absolute isolation.py> isolate-verify --repo <absolute primary>
---base <exact HEAD> --name project-verify` and run PLAN.md's project Verify
-there. On success, retire that sidecar, append `build done; final
-review pending`, set STATE.md directly to `phase: ship`, `status: active`,
-and commit that transition as the build orchestrator's final bookkeeping. This
+After every wave passes, append `build done; final review pending`, set
+STATE.md directly to `phase: ship`, `status: active`, and commit that
+transition as the build orchestrator's final bookkeeping. Do not run
+PLAN.md's project Verify here — ship runs it once. This
 keeps the primary worktree clean and avoids a separate review-phase transition
 commit. Report waves, exact task commits, fixed findings, and remaining risk.
 Link the resolved absolute BOARD.md as the review surface and state that ship
-is next. When invoked directly, stop and tell the user to explicitly
+is next. Do not merge to the default branch, tag, mark `shipped`, or
+integrate; ship owns FINAL.md, project Verify, and those steps. When invoked
+directly, stop and tell the user to explicitly
 invoke `$gsd-path`, which routes to ship; do not invoke an explicit-only sibling
 skill yourself.
-On failure, set build state to `blocked`, record the exact output, and do not
-claim success. Present **Outcome** with the failed Verify, **Review** linking
-the resolved absolute BOARD.md path and its recorded failure, and **Next** with
-the one required recovery action or question. Retire only the verify sidecar
-created for this check. If
+If
 a crash leaves `build/done`, finish and commit this transition before returning
 to the router.
 

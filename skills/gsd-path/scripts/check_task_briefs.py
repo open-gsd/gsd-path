@@ -28,6 +28,7 @@ REQUIRED_SECTIONS = (
     "Context",
     "Approach",
     "Interface contract",
+    "Intent coverage",
     "Acceptance criteria",
     "Verify",
     "Log",
