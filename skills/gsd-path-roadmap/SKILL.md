@@ -122,9 +122,11 @@ precondition fails.
    state that the preserved inspect or define phase resumes; otherwise state
    that define (milestone mode) is next. Do not add another approval gate.
    When routed by an active `$gsd-path`, return control to that router so its
-   state table routes the resulting STATE.md. When invoked directly, stop and
-   tell the user to explicitly invoke `$gsd-path`, which routes the resulting
-   STATE.md; do not invoke an explicit-only sibling skill yourself.
+   state table routes the preserved STATE.md — `inspect/active` resumes
+   inspect, `define/active` resumes define; never name define as next when
+   inspect was preserved. When invoked directly, stop and tell the user to
+   explicitly invoke `$gsd-path`, which routes that same preserved state; do
+   not invoke an explicit-only sibling skill yourself.
 
 ## Rules
 

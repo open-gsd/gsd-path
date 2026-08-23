@@ -29,6 +29,7 @@ import re
 import stat
 import subprocess
 import sys
+from datetime import date
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Iterable, Optional, Sequence
 
@@ -179,6 +180,17 @@ ANCHORED_EVIDENCE_SUPPORTED = (
     and os.stat in os.supports_dir_fd
     and os.stat in os.supports_follow_symlinks
 )
+LISTDIR_DIR_FD_SUPPORTED = os.listdir in getattr(os, "supports_dir_fd", [])
+GIT_OVERRIDE_VARS = (
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_INDEX_FILE",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+    "GIT_COMMON_DIR",
+    "GIT_PREFIX",
+    "GIT_NAMESPACE",
+)
 
 
 class DetectError(RuntimeError):
@@ -193,48 +205,58 @@ def is_ignored(relative: str) -> bool:
     return any(part in IGNORE_DIRS for part in PurePosixPath(relative).parts)
 
 
-def is_managed_pipeline_path(parts: tuple[str, ...], *, descendant: bool) -> bool:
-    return any(
-        (
-            MANAGED_BACKUP.fullmatch(part)
-            and (not descendant or index + 1 < len(parts))
-        )
-        or (
-            (
-                part.casefold() in ("ogsd", "gsd-path")
-                or part.casefold().startswith(("ogsd-", "gsd-path-"))
-            )
-            and (not descendant or index + 1 < len(parts))
-        )
-        for index, part in enumerate(parts)
-    )
+def is_skill_bundle_name(name: str) -> bool:
+    folded = name.casefold()
+    return folded in {"ogsd", "gsd-path"} or folded.startswith(("ogsd-", "gsd-path-"))
 
 
-def is_managed_pipeline_directory(relative: str) -> bool:
-    return is_managed_pipeline_path(
-        PurePosixPath(relative).parts,
-        descendant=False,
-    )
-
-
-def is_managed_pipeline_artifact(relative: str) -> bool:
+def is_verified_skill_bundle(relative: str, root: Path) -> bool:
     parts = PurePosixPath(relative).parts
-    if relative in MANAGED_EXACT_FILES or is_managed_pipeline_path(
-        parts,
-        descendant=True,
-    ):
+    if not parts:
+        return False
+    name = parts[-1]
+    if MANAGED_BACKUP.fullmatch(name):
         return True
+    if not is_skill_bundle_name(name):
+        return False
+    if len(parts) >= 2 and parts[-2].casefold() == "skills":
+        return True
+    skill = root.joinpath(*parts) / "SKILL.md"
+    status = lstat_evidence(skill, missing_ok=True)
+    return status is not None and stat.S_ISREG(status.st_mode)
+
+
+def is_managed_pipeline_directory(relative: str, root: Path) -> bool:
+    return is_verified_skill_bundle(relative, root)
+
+
+def is_managed_pipeline_artifact(relative: str, root: Path) -> bool:
+    if relative in MANAGED_EXACT_FILES:
+        return True
+    parts = PurePosixPath(relative).parts
     if (
         len(parts) >= 2
         and parts[-2].casefold() == "agents"
         and parts[-1].casefold() == "gsd-path.md"
     ):
         return True
-    return (
+    if (
         len(parts) == 2
         and parts[0] == ".gsd-path"
         and PurePosixPath(parts[1]).suffix.casefold() == ".py"
+    ):
+        return True
+    return any(
+        is_verified_skill_bundle("/".join(parts[:end]), root)
+        for end in range(1, len(parts))
     )
+
+
+def git_environment() -> dict[str, str]:
+    env = os.environ.copy()
+    for key in GIT_OVERRIDE_VARS:
+        env.pop(key, None)
+    return env
 
 
 def lstat_evidence(path: Path, *, missing_ok: bool) -> Optional[os.stat_result]:
@@ -265,25 +287,51 @@ def read_regular_evidence(
         ) from error
     if not relative.parts:
         raise DetectError(f"{evidence_name} evidence path is empty: {path}")
-    if not ANCHORED_EVIDENCE_SUPPORTED:
-        raise DetectError(
-            f"secure {evidence_name} evidence reads are unavailable"
+    if ANCHORED_EVIDENCE_SUPPORTED:
+        return read_anchored_evidence(
+            relative,
+            root,
+            missing_ok=missing_ok,
+            evidence_name=evidence_name,
         )
-    directory_flags = (
+    return read_lstat_open_evidence(
+        relative,
+        root,
+        missing_ok=missing_ok,
+        evidence_name=evidence_name,
+    )
+
+
+def directory_flags() -> int:
+    return (
         os.O_RDONLY
-        | os.O_DIRECTORY
-        | os.O_NOFOLLOW
+        | getattr(os, "O_DIRECTORY", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
         | getattr(os, "O_NONBLOCK", 0)
     )
-    file_flags = (
+
+
+def file_flags() -> int:
+    return (
         os.O_RDONLY
-        | os.O_NOFOLLOW
+        | getattr(os, "O_NOFOLLOW", 0)
         | getattr(os, "O_BINARY", 0)
         | getattr(os, "O_NONBLOCK", 0)
     )
+
+
+def read_anchored_evidence(
+    relative: Path,
+    root: Path,
+    *,
+    missing_ok: bool,
+    evidence_name: str,
+) -> Optional[str]:
+    directory_open = directory_flags()
+    file_open = file_flags()
     descriptors = []
     try:
-        descriptors.append(os.open(root, directory_flags))
+        descriptors.append(os.open(root, directory_open))
         if not stat.S_ISDIR(os.fstat(descriptors[-1]).st_mode):
             raise DetectError(f"repo evidence is not a directory: {root}")
         for index, part in enumerate(relative.parts):
@@ -306,7 +354,7 @@ def read_regular_evidence(
                 raise DetectError(
                     f"{evidence_name} evidence is not a regular file: {current}"
                 )
-            flags = file_flags if final else directory_flags
+            flags = file_open if final else directory_open
             descriptor = os.open(part, flags, dir_fd=descriptors[-1])
             descriptors.append(descriptor)
             actual = os.fstat(descriptor)
@@ -323,18 +371,78 @@ def read_regular_evidence(
     except FileNotFoundError as error:
         if missing_ok:
             return None
-        raise DetectError(f"filesystem evidence disappeared: {path}") from error
+        raise DetectError(f"filesystem evidence disappeared: {root / relative}") from error
     except DetectError:
         raise
     except OSError as error:
-        raise DetectError(f"cannot read {evidence_name} evidence: {path}") from error
+        raise DetectError(
+            f"cannot read {evidence_name} evidence: {root / relative}"
+        ) from error
     finally:
         for descriptor in reversed(descriptors):
             os.close(descriptor)
     try:
         return data.decode("utf-8")
     except UnicodeDecodeError as error:
-        raise DetectError(f"cannot read {evidence_name} evidence: {path}") from error
+        raise DetectError(
+            f"cannot read {evidence_name} evidence: {root / relative}"
+        ) from error
+
+
+def read_lstat_open_evidence(
+    relative: Path,
+    root: Path,
+    *,
+    missing_ok: bool,
+    evidence_name: str,
+) -> Optional[str]:
+    current = root
+    expected = None
+    try:
+        for index, part in enumerate(relative.parts):
+            current = current / part
+            expected = os.stat(current, follow_symlinks=False)
+            if stat.S_ISLNK(expected.st_mode):
+                raise DetectError(
+                    f"symlinked {evidence_name} evidence is not allowed: {current}"
+                )
+            final = index == len(relative.parts) - 1
+            if not final and not stat.S_ISDIR(expected.st_mode):
+                raise DetectError(
+                    f"{evidence_name} evidence parent is not a directory: {current}"
+                )
+            if final and not stat.S_ISREG(expected.st_mode):
+                raise DetectError(
+                    f"{evidence_name} evidence is not a regular file: {current}"
+                )
+        descriptor = os.open(current, file_flags())
+        try:
+            actual = os.fstat(descriptor)
+            if not stat.S_ISREG(actual.st_mode) or not os.path.samestat(
+                expected,
+                actual,
+            ):
+                raise DetectError(
+                    f"{evidence_name} evidence changed while reading: {current}"
+                )
+            with os.fdopen(descriptor, "rb") as stream:
+                descriptor = None
+                data = stream.read()
+        finally:
+            if descriptor is not None:
+                os.close(descriptor)
+    except FileNotFoundError as error:
+        if missing_ok:
+            return None
+        raise DetectError(f"filesystem evidence disappeared: {current}") from error
+    except DetectError:
+        raise
+    except OSError as error:
+        raise DetectError(f"cannot read {evidence_name} evidence: {current}") from error
+    try:
+        return data.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise DetectError(f"cannot read {evidence_name} evidence: {current}") from error
 
 
 def is_thematic_break(line: str) -> bool:
@@ -366,28 +474,27 @@ def strip_standalone_html_comments(text: str) -> str:
     output = []
     in_comment = False
     for line in text.splitlines(keepends=True):
-        remaining = line
         if in_comment:
-            closing = remaining.find("-->")
+            closing = line.find("-->")
             if closing < 0:
                 continue
-            remaining = remaining[closing + 3 :]
+            remainder = line[closing + 3 :]
             in_comment = False
-        while True:
-            stripped = remaining.lstrip(" ")
-            indentation = len(remaining) - len(stripped)
-            if indentation > 3 or not stripped.startswith("<!--"):
-                break
+            if remainder.strip():
+                output.append(remainder)
+            continue
+        stripped = line.lstrip(" ")
+        indentation = len(line) - len(stripped)
+        if indentation <= 3 and stripped.startswith("<!--"):
             closing = stripped.find("-->", 4)
             if closing < 0:
                 in_comment = True
-                remaining = ""
-                break
-            remaining = stripped[closing + 3 :]
-        if remaining.strip():
-            output.append(remaining)
-        elif remaining and not in_comment:
-            output.append(remaining)
+                continue
+            after = stripped[closing + 3 :]
+            if not after.strip():
+                output.append("\n")
+                continue
+        output.append(line)
     return "".join(output)
 
 
@@ -417,7 +524,7 @@ def markdown_has_body(text: str) -> bool:
 def file_kind(relative: str, root: Path, *, tracked: bool) -> Optional[str]:
     if (
         is_ignored(relative)
-        or is_managed_pipeline_artifact(relative)
+        or is_managed_pipeline_artifact(relative, root)
         or relative == ".project"
         or relative.startswith(".project/")
     ):
@@ -440,6 +547,8 @@ def file_kind(relative: str, root: Path, *, tracked: bool) -> Optional[str]:
             missing_ok=tracked,
             evidence_name="Markdown",
         )
+        if text is None and tracked:
+            text = read_git_index_blob(root, relative)
         if text is None:
             return None
         if not markdown_has_body(text):
@@ -448,11 +557,32 @@ def file_kind(relative: str, root: Path, *, tracked: bool) -> Optional[str]:
     return None
 
 
+def read_git_index_blob(root: Path, relative: str) -> Optional[str]:
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(root), "cat-file", "-p", f":{relative}"],
+            capture_output=True,
+            check=False,
+            env=git_environment(),
+        )
+    except OSError as error:
+        raise DetectError(f"git cat-file failed: {error}") from error
+    if result.returncode != 0:
+        return None
+    try:
+        return result.stdout.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise DetectError(f"cannot read Markdown evidence: {relative}") from error
+
+
 def raise_walk_error(error: OSError) -> None:
     raise DetectError(f"cannot traverse filesystem evidence: {error}") from error
 
 
 def iter_worktree_files(root: Path) -> Iterable[str]:
+    if ANCHORED_EVIDENCE_SUPPORTED and LISTDIR_DIR_FD_SUPPORTED:
+        yield from iter_worktree_files_anchored(root)
+        return
     for dirpath, dirnames, filenames in os.walk(
         root,
         followlinks=False,
@@ -466,7 +596,7 @@ def iter_worktree_files(root: Path) -> Iterable[str]:
             if (
                 is_ignored(relative)
                 or name == ".project"
-                or is_managed_pipeline_directory(relative)
+                or is_managed_pipeline_directory(relative, root)
             ):
                 continue
             status = lstat_evidence(current / name, missing_ok=False)
@@ -479,12 +609,56 @@ def iter_worktree_files(root: Path) -> Iterable[str]:
         for name in filenames:
             path = current / name
             relative = f"{relative_dir}/{name}" if relative_dir else name
-            if is_ignored(relative) or is_managed_pipeline_artifact(relative):
+            if is_ignored(relative) or is_managed_pipeline_artifact(relative, root):
                 continue
             status = lstat_evidence(path, missing_ok=False)
             if stat.S_ISLNK(status.st_mode) or not stat.S_ISREG(status.st_mode):
                 continue
             yield relative
+
+
+def iter_worktree_files_anchored(root: Path) -> Iterable[str]:
+    flags = directory_flags()
+    root_fd = os.open(root, flags)
+    try:
+        yield from iter_from_dir_fd(root_fd, "", root)
+    finally:
+        os.close(root_fd)
+
+
+def iter_from_dir_fd(
+    dir_fd: int, relative_dir: str, root: Path
+) -> Iterable[str]:
+    try:
+        names = os.listdir(dir_fd)
+    except OSError as error:
+        raise DetectError(f"cannot traverse filesystem evidence: {error}") from error
+    for name in names:
+        relative = f"{relative_dir}/{name}" if relative_dir else name
+        if is_ignored(relative) or name == ".project":
+            continue
+        try:
+            status = os.stat(name, dir_fd=dir_fd, follow_symlinks=False)
+        except OSError as error:
+            raise DetectError(
+                f"cannot inspect filesystem evidence: {relative}: {error}"
+            ) from error
+        if stat.S_ISLNK(status.st_mode):
+            continue
+        if stat.S_ISDIR(status.st_mode):
+            if is_managed_pipeline_directory(relative, root):
+                continue
+            child = os.open(name, directory_flags(), dir_fd=dir_fd)
+            try:
+                yield from iter_from_dir_fd(child, relative, root)
+            finally:
+                os.close(child)
+            continue
+        if not stat.S_ISREG(status.st_mode):
+            continue
+        if is_managed_pipeline_artifact(relative, root):
+            continue
+        yield relative
 
 
 def validated_git_path(relative: str) -> str:
@@ -511,6 +685,7 @@ def git_tracked_files(root: Path) -> tuple[str, ...]:
             ["git", "-C", str(root), "ls-files", "-z"],
             capture_output=True,
             check=False,
+            env=git_environment(),
         )
     except OSError as error:
         raise DetectError(f"git ls-files failed: {error}") from error
@@ -655,6 +830,119 @@ def classify(repo: Path) -> dict:
     }
 
 
+def project_slug(root: Path) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", root.name.casefold()).strip("-")
+    return slug or "project"
+
+
+def filled_state_template(template: str, slug: str, phase: str) -> str:
+    if "<slug>" not in template:
+        raise DetectError("state template missing slug placeholder")
+    text = template.replace("<slug>", slug)
+    text, count = re.subn(r"(?m)^phase: define\b", f"phase: {phase}", text, count=1)
+    if count != 1:
+        raise DetectError("state template missing phase: define line")
+    stamp = f"{date.today().isoformat()} — {phase} — project initialized"
+    text = text.replace("YYYY-MM-DD — <phase> — project initialized", stamp)
+    if "<slug>" in text or "YYYY-MM-DD" in text:
+        raise DetectError("state template placeholder remains")
+    return text
+
+
+def write_state_anchored(root: Path, content: str) -> None:
+    payload = content.encode("utf-8")
+    if ANCHORED_EVIDENCE_SUPPORTED:
+        flags = directory_flags()
+        root_fd = os.open(root, flags)
+        project_fd = None
+        state_fd = None
+        try:
+            try:
+                os.mkdir(".project", dir_fd=root_fd)
+            except FileExistsError:
+                pass
+            project_fd = os.open(".project", flags, dir_fd=root_fd)
+            status = os.fstat(project_fd)
+            if stat.S_ISLNK(status.st_mode) or not stat.S_ISDIR(status.st_mode):
+                raise DetectError("cannot create state through a non-directory .project")
+            create = (
+                os.O_CREAT
+                | os.O_EXCL
+                | os.O_WRONLY
+                | getattr(os, "O_NOFOLLOW", 0)
+                | getattr(os, "O_BINARY", 0)
+            )
+            state_fd = os.open("STATE.md", create, 0o644, dir_fd=project_fd)
+            os.write(state_fd, payload)
+        except FileExistsError as error:
+            raise DetectError("STATE.md already exists") from error
+        except OSError as error:
+            raise DetectError(f"cannot create STATE.md: {error}") from error
+        finally:
+            if state_fd is not None:
+                os.close(state_fd)
+            if project_fd is not None:
+                os.close(project_fd)
+            os.close(root_fd)
+        return
+    project = root / ".project"
+    try:
+        project.mkdir(exist_ok=True)
+    except OSError as error:
+        raise DetectError(f"cannot create .project: {error}") from error
+    status = lstat_evidence(project, missing_ok=False)
+    if stat.S_ISLNK(status.st_mode) or not stat.S_ISDIR(status.st_mode):
+        raise DetectError("cannot create state through a non-directory .project")
+    state = project / "STATE.md"
+    flags = (
+        os.O_CREAT
+        | os.O_EXCL
+        | os.O_WRONLY
+        | getattr(os, "O_NOFOLLOW", 0)
+        | getattr(os, "O_BINARY", 0)
+    )
+    descriptor = None
+    try:
+        descriptor = os.open(state, flags, 0o644)
+        os.write(descriptor, payload)
+    except FileExistsError as error:
+        raise DetectError("STATE.md already exists") from error
+    except OSError as error:
+        raise DetectError(f"cannot create STATE.md: {error}") from error
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+
+
+def initialize(
+    repo: Path, template: Path, phase: Optional[str] = None
+) -> dict:
+    if phase is not None and phase not in {"inspect", "define"}:
+        raise DetectError(f"initialize phase must be inspect or define: {phase}")
+    try:
+        raw = template.read_text(encoding="utf-8")
+    except OSError as error:
+        raise DetectError(f"cannot read state template: {error}") from error
+    payload = classify(repo)
+    if payload["verdict"] not in {"brownfield", "greenfield"}:
+        payload["wrote_state"] = False
+        return payload
+    expected = "inspect" if payload["verdict"] == "brownfield" else "define"
+    if phase is None:
+        phase = expected
+    elif phase != expected:
+        raise DetectError(
+            f"initialize phase {phase} does not match verdict {payload['verdict']}"
+        )
+    root = repo.resolve()
+    write_state_anchored(
+        root,
+        filled_state_template(raw, project_slug(root), phase),
+    )
+    payload["wrote_state"] = True
+    return payload
+
+
 def emit(payload: dict) -> int:
     json.dump(payload, sys.stdout, indent=2, sort_keys=True)
     sys.stdout.write("\n")
@@ -663,8 +951,10 @@ def emit(payload: dict) -> int:
 
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(description=__doc__)
-    result.add_argument("command", choices=("classify",))
+    result.add_argument("command", choices=("classify", "initialize"))
     result.add_argument("--repo", type=Path, required=True)
+    result.add_argument("--template", type=Path)
+    result.add_argument("--phase", choices=("inspect", "define"))
     return result
 
 
@@ -673,6 +963,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     try:
         if arguments.command == "classify":
             return emit(classify(arguments.repo))
+        if arguments.command == "initialize":
+            if arguments.template is None:
+                raise DetectError("initialize requires --template")
+            return emit(
+                initialize(arguments.repo, arguments.template, arguments.phase)
+            )
         raise DetectError(f"unknown command: {arguments.command}")
     except DetectError as error:
         json.dump({"status": "error", "error": str(error)}, sys.stdout, indent=2)

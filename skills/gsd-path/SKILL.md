@@ -88,22 +88,23 @@ runs keep the build contract's current branch-binding behavior.
    Report the missing marker and ask for an explicit recovery or a new
    milestone; never stamp the marker onto unowned state.
 2. With no STATE.md, run the bundled
-   `python3 <absolute-bundled-script> classify --repo <absolute-root>` helper
+   `python3 <absolute-bundled-script> initialize --repo <absolute-root>
+   --template <absolute-state-template>` helper
    (`scripts/detect_project.py`) before asking anything. Do not classify
    brownfield, greenfield, or orphaned `.project/` from a directory listing or
-   conversation. Follow the JSON `verdict` / `route` exactly:
+   conversation. Follow the JSON `verdict` / `route` exactly. `initialize`
+   classifies and, for brownfield or greenfield, writes STATE.md through an
+   anchored no-follow create — never create STATE.md yourself after classify:
    - `owned` — STATE.md exists; continue at step 1.
    - `orphan` (`route: recover-orphan`) — block without mutation. List the
      returned `orphan_paths` and ask for an explicit recovery, migration, or
      new location; existing evidence and archives do not prove a safe v2 phase.
-   - `brownfield` (`route: inspect`) — create STATE.md from the local
-     [state template](templates/state.md) with deterministic project slug,
-     `pipeline: gsd-path/v2`, `phase: inspect`, `status: active`,
-     `milestone: null`, `branch: null`, and `archive: null`; report the
-     returned `signals` and route to the bundled [inspect contract](INSPECT.md).
-   - `greenfield` (`route: define`) — initialize the same template with
-     `phase: define`, `milestone: null`, report that no brownfield signal
-     fired, and route to the bundled [define contract](DEFINE.md).
+   - `brownfield` (`route: inspect`) — the helper wrote STATE.md at
+     `inspect/active`; report the returned `signals` and route to the bundled
+     [inspect contract](INSPECT.md).
+   - `greenfield` (`route: define`) — the helper wrote STATE.md at
+     `define/active`; report that no brownfield signal fired, and route to
+     the bundled [define contract](DEFINE.md).
 
 ## Transaction recovery first
 

@@ -699,6 +699,97 @@ class DetectProjectTests(unittest.TestCase):
             payload = json.loads(result.stdout)
             self.assertEqual(payload["status"], "error")
 
+    def test_product_source_under_gsd_path_named_dir_is_brownfield(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            source = repo / "src" / "gsd-path-app" / "main.py"
+            source.parent.mkdir(parents=True)
+            source.write_text("print(1)\n", encoding="utf-8")
+            payload = self.classify(repo)
+            self.assertEqual(payload["verdict"], "brownfield")
+            self.assertEqual(
+                payload["signals"],
+                [{"kind": "source", "path": "src/gsd-path-app/main.py"}],
+            )
+
+    def test_comment_sharing_line_with_heading_is_body(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            (repo / "README.md").write_text(
+                "<!-- scaffold --># Demo\n",
+                encoding="utf-8",
+            )
+            payload = self.classify(repo)
+            self.assertEqual(payload["verdict"], "brownfield")
+            self.assertEqual(
+                payload["signals"],
+                [{"kind": "docs", "path": "README.md"}],
+            )
+
+    def test_deleted_tracked_readme_with_body_is_git_signal(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            self.git(repo, "init", "-q", "-b", "main")
+            self.git(repo, "config", "user.email", "dev@example.test")
+            self.git(repo, "config", "user.name", "Dev")
+            (repo / "README.md").write_text(
+                "# Widget\n\nAn existing project.\n",
+                encoding="utf-8",
+            )
+            self.git(repo, "add", "README.md")
+            self.git(repo, "commit", "-q", "-m", "docs")
+            (repo / "README.md").unlink()
+            payload = self.classify(repo)
+            self.assertEqual(payload["verdict"], "brownfield")
+            self.assertEqual(
+                payload["signals"],
+                [{"kind": "git", "path": "README.md"}],
+            )
+
+    def test_git_index_override_is_ignored(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = Path(temporary)
+            repo = workspace / "repo"
+            other = workspace / "other"
+            repo.mkdir()
+            other.mkdir()
+            self.git(repo, "init", "-q", "-b", "main")
+            self.git(other, "init", "-q", "-b", "main")
+            (other / "app.py").write_text("print(1)\n", encoding="utf-8")
+            self.git(other, "add", "app.py")
+            env = os.environ.copy()
+            env["GIT_DIR"] = str(other / ".git")
+            env["GIT_WORK_TREE"] = str(other)
+            with mock.patch.dict(os.environ, env, clear=False):
+                payload = self.classify(repo)
+            self.assertEqual(payload["verdict"], "greenfield")
+            self.assertEqual(payload["signals"], [])
+
+    def test_initialize_writes_state_for_greenfield(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            template = (
+                ROOT / "skills" / "gsd-path" / "templates" / "state.md"
+            )
+            payload = detect_project.initialize(repo, template)
+            self.assertEqual(payload["verdict"], "greenfield")
+            self.assertTrue(payload["wrote_state"])
+            state = (repo / ".project" / "STATE.md").read_text(encoding="utf-8")
+            self.assertIn("phase: define", state)
+            self.assertIn("pipeline: gsd-path/v2", state)
+
+    def test_initialize_rejects_symlinked_project(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = Path(temporary)
+            repo = workspace / "repo"
+            target = workspace / "target"
+            repo.mkdir()
+            target.mkdir()
+            (repo / "package.json").write_text("{}\n", encoding="utf-8")
+            (repo / ".project").symlink_to(target, target_is_directory=True)
+            payload = detect_project.classify(repo)
+            self.assertEqual(payload["verdict"], "orphan")
+
 
 if __name__ == "__main__":
     unittest.main()

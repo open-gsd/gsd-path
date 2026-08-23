@@ -50,11 +50,9 @@ classify from a directory listing or conversation.
   evidence does not prove its pipeline version or phase and must not be reused
   or overwritten by inference.
 - `brownfield` — route to `$gsd-path-inspect`.
-- `greenfield` — initialize STATE.md from the local
-  [state template](templates/state.md), with a deterministic project slug from
-  the working-directory name, `pipeline: gsd-path/v2`, `phase: define`,
-  `status: active`, `milestone: null`, `branch: null`, `archive: null`, and an
-  initialization Log entry. No template placeholder may remain.
+- `greenfield` — run `initialize --repo <absolute-root> --template
+  <absolute-state-template>` so the helper writes STATE.md at
+  `define/active`. Do not create STATE.md yourself after classify.
 
 The router's verified new-GitHub-repository transaction is the sole greenfield
 exception: STATE.md already exists at `define/active`, `branch` is the approved
@@ -122,6 +120,9 @@ re-interview of charter or roadmap scope:
    panel value; do not invent `detected` or a named list. When brownfield,
    fill `## Current state` from the map, record doc-vs-code rulings as in
    Brownfield mode, and add protected existing behavior under Scope out.
+   Write Ground truth paths from the track root: `.project` normally, or
+   `.project/next` in Lookahead mode — never the building milestone's
+   active `research/` paths.
 3. Present one confirmation, not an interview: playback the derivation (and
    brownfield ground truth when present), link the resolved absolute INTENT.md
    path, and ask approve or adjust. A requested change that contradicts the
@@ -187,7 +188,9 @@ question. The rules change for every primary mode:
 - Existing behavior the user wants preserved is recorded under Scope out as
   a veto ("do not break X"); accepted `fix-code` items become scope.
 - Fill INTENT.md's `## Current state` from the codebase map so downstream
-  phases inherit ground truth without re-scanning. Omit that section for
+  phases inherit ground truth without re-scanning. Set Ground truth to the
+  track's `research/evidence-codebase.md` and `research/DOCS-AUDIT.md`
+  (`.project/next/research/` in Lookahead mode). Omit that section for
   greenfield. Do not add it to CHARTER.md.
 
 ## Process

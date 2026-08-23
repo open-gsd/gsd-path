@@ -33,7 +33,9 @@ classify from a directory listing or conversation.
 - `orphan` — return to `$gsd-path` for orphaned-state recovery instead of
   initializing or overwriting it.
 - `greenfield` — skip inspection; route to `$gsd-path-define`.
-- `brownfield` — continue; create STATE.md in Process step 1 if missing.
+- `brownfield` — continue; if STATE.md is still missing, run
+  `initialize --repo <absolute-root> --template <absolute-state-template>`
+  instead of creating STATE.md yourself.
 If `.project/STATE.md` exists, require `pipeline: gsd-path/v2`; a missing or
 different marker returns to `$gsd-path` for ownership checking. Legal entry is
 `inspect/active|blocked`; `inspect/done` routes to define, and any later phase
@@ -47,12 +49,8 @@ same milestone; a later milestone's `inspect/active` is a new scan.
 1. Before creating or changing `.project/` Markdown, freeze the sorted set of
    in-scope repository Markdown paths. Exclude `.project/**`, `.git`, vendored
    and generated trees, `node_modules`, and build output. Then create
-   `.project/STATE.md` from the local [state template](templates/state.md) if
-   missing. Set `project` to the normalized working-directory basename,
-   `milestone: null`, `pipeline: gsd-path/v2`, `phase: inspect`,
-   `status: active`, `branch: null`, and `archive: null` only for a newly
-   created state; no template placeholder may remain. Preserve an existing
-   router-bound branch and milestone.
+   `.project/STATE.md` with `initialize --template <absolute-state-template>`
+   if missing. Preserve an existing router-bound branch and milestone.
 2. Dispatch two independent agents in parallel, following the local
    [runtime dispatch contract](references/dispatch.md) and its deterministic
    task-name rules:
