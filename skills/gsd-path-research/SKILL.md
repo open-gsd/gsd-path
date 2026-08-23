@@ -25,9 +25,13 @@ evidence.
 
 ## Preconditions
 
-Require `pipeline: gsd-path/v2` in `.project/STATE.md`; a missing or different
-marker returns to `$gsd-path` for ownership checking. Legal entry is
-`define/done` (transition to `research/active`) or `research/active|blocked`;
+Require `pipeline_state.py validate --repo <absolute root> [--project-dir
+.project/next]` to pass; otherwise return to `$gsd-path` for ownership
+checking. Legal entry is `define/done` or `research/active|blocked`. On
+`define/done`, enter with `pipeline_state.py transition`, expected phase/status
+`define/done`, exact branch and archive values, event `research started`, and
+set phase/status `research/active` (plus the same `--project-dir` in
+lookahead); never edit STATE directly. `research/done`
 `research/done` or any later phase blocks rather than replacing settled
 evidence beneath downstream artifacts. When an active router supplies the
 lookahead track root `.project/next/`, evaluate these preconditions against
@@ -124,15 +128,20 @@ settled brownfield input.
    the STATE log records only a human-readable summary.
 5. Redispatch one complete corrected brief under the same logical task name for
    each missing or invalid file, following the runtime dispatch contract. If
-   any expected file still fails, set STATE.md to `phase: research`, `status:
-   blocked`, list the failures in the log, then present **Outcome** with the
+   any expected file still fails, run `pipeline_state.py transition` with
+   expected `research/active`, exact branch and archive values,
+   `--set-status blocked`, and an event listing the failed evidence gate; then
+   present **Outcome** with the
    failed gate, **Review** linking RESEARCH.md or STATE.md when the manifest is
    missing, and **Next** naming the one correction or user decision required.
    Stop; never advance with partial research.
-6. When all dispatched files and `RESEARCH.md` pass, set STATE.md to
-   `phase: research`, `status: done`, and append a transition log naming the
-   manifest path, dispatched dimensions, skipped dimensions, and question
-   count. Report the outcome, link the resolved absolute `RESEARCH.md` path,
+6. When all dispatched files and `RESEARCH.md` pass, run
+   `pipeline_state.py transition` with expected `research/active`, exact
+   branch and archive values, `--set-phase research --set-status done`, and
+   an event naming the manifest path, dispatched dimensions, skipped
+   dimensions, and question count. Include `--project-dir .project/next` for
+   lookahead. Require the returned state to be `research/done`. Report the
+   outcome, link the resolved absolute `RESEARCH.md` path,
    summarize the dispatched evidence files, and name the decide phase as next.
    The decide phase reads the manifest; it must not infer dispatch state from
    a glob or free-form log. When routed by an active

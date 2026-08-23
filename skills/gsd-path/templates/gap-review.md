@@ -1,11 +1,11 @@
-# Gap Review — <N>: <short risk name>
+# Gap Review — <N>: <risk identity>
 
 <!-- Written by one final gap reviewer. This file covers exactly one
      cross-wave integration risk named in the review brief. -->
 
 Reviewed HEAD: <full SHA>
 Gap verdict: <pass | blocked>
-Risk: <one cross-wave interface or end-to-end risk>
+Risk: <same risk identity as the heading>
 Waves checked: <wave numbers>
 
 ## Checked evidence

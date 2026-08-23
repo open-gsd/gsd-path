@@ -1,7 +1,7 @@
 # Milestone-close git
 
 **Status:** Superseded  
-**Map:** [Wayfinder: Milestone-close git](https://github.com/open-gsd/gsd-path/issues/21)
+**Tracking issue:** [Milestone-close Git](https://github.com/open-gsd/gsd-path/issues/21)
 
 Issues 22–30 locked a PR-only close that left default ancestry to a human.
 The owner reversed that on 2026-08-17. This file preserves only the superseded

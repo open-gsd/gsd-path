@@ -149,6 +149,6 @@ Full automation map: `docs/trust-validation/evidence-mapping.md`
 
 ---
 
-## Wayfinder map
+## Workstream tracking
 
-All planning tickets closed. Map: [Wayfinder: Trust validation for GSD Path skill set](https://github.com/open-gsd/gsd-path/issues/3).
+All planning tickets closed. Tracking issue: [Trust validation for GSD Path skill set](https://github.com/open-gsd/gsd-path/issues/3).

@@ -9,6 +9,7 @@ G4 (build helper orchestration) from docs/trust-validation/TRUST-VALIDATION-SPEC
 without an AI host. Live child-spawn (G5/G6) is covered by tests/dogfood.py.
 """
 
+import hashlib
 import json
 import subprocess
 import sys
@@ -60,7 +61,7 @@ Review panel: off
 Add a greeting renderer.
 
 ## Success criteria
-- SC1 — `render("x")` returns a greeting.
+1. `render("x")` returns a greeting.
 
 ## Scope: in
 - src/app.py
@@ -99,12 +100,23 @@ Intent: `.project/intent/INTENT.md`
 
 EVIDENCE = """# Evidence — domain
 
+Dimension: domain
+Questions assigned: Which domain applies?
+
 ## Finding: domain finding
 
 - **Claim**: Greetings are plain strings.
 - **Source**: https://example.test/domain
 - **Confidence**: high
 - **Why it matters here**: It settles the render contract.
+
+## Assigned questions — answers
+
+- Which domain applies? → Greetings are plain strings; source: https://example.test/domain
+
+## Dead ends
+
+- none
 """
 
 SYNTHESIS = """# Synthesis
@@ -113,13 +125,19 @@ SYNTHESIS = """# Synthesis
 - Greetings are plain strings.
 
 ## Decisions
-- **Decision**: render returns `Hello, <name>`.
-- **Runner-up**: none
-- **Evidence**: evidence-domain.md
-- **Confidence**: high
+
+### Greeting format
+
+- **Decision**: render returns a greeting with the supplied name.
+- **Runner-up**: Return the supplied name unchanged.
+- **Evidence**: `.project/research/evidence-domain.md`
+- **Confidence**: high — the research settles the return type.
 
 ## For the planner
-- Wave 1: implement render.
+
+- **Wave-1 blockers**: No blockers remain after research.
+- **Walking skeleton**: One task implements and verifies the renderer.
+- **Pitfalls → tasks**: T001 owns the renderer and its focused test.
 
 ## User rulings
 - none
@@ -135,6 +153,12 @@ Project verify: `python3 tests/test_app.py`
 ## Config
 - max_review_cycles: 2
 - review_panel: off
+
+## Intent coverage
+
+| Criterion | Task | Acceptance |
+|-----------|------|------------|
+| SC1 | T001 | AC1 |
 
 ## Wave 1 — demo
 
@@ -174,7 +198,7 @@ The task changes `src/app.py` and `tests/test_app.py`.
 
 ## Approach
 
-- Return `Hello, <name>` from render.
+- Prefix the supplied name with `Hello, `.
 
 ## Interface contract
 
@@ -182,7 +206,7 @@ None
 
 ## Intent coverage
 
-- SC1 — `render("x")` returns a greeting.
+- SC1
 
 ## Acceptance criteria
 
@@ -191,7 +215,7 @@ None
 ## Verify
 
 ```bash
-python3 tests/test_app.py
+python3 tests/test_app.py && python3 -m py_compile src/app.py
 ```
 
 ## Log
@@ -209,6 +233,12 @@ Tasks reviewed: 1
 ## T001 — render greeting: pass
 
 - ✅ render works — focused Verify passed
+
+## Intent coverage
+
+### SC1 — `render("x")` returns a greeting.: pass
+
+- ✅ Project verification exercised the implemented renderer.
 """
 
 FINAL = """# Final Review — demo
@@ -218,7 +248,7 @@ Overall verdict: pass
 
 ## Success criteria
 
-### SC1 — render works
+### SC1 — `render("x")` returns a greeting.
 
 - **Verdict**: met
 - **Check**: `python3 tests/test_app.py`
@@ -228,7 +258,7 @@ Overall verdict: pass
 - **Fix direction**: none
 """
 
-GAP = """# Gap Review — 1: project verify
+GAP = """# Gap Review — 1: project Verify command
 
 Reviewed HEAD: {head}
 Gap verdict: pass
@@ -270,36 +300,42 @@ class FullCycleTests(unittest.TestCase):
         self.assertEqual(result.returncode, expect, f"{name} {' '.join(args)}\n{result.stdout}{result.stderr}")
         return json.loads(result.stdout) if result.stdout.strip().startswith("{") else result.stdout
 
-    def write_manifest(self, archive):
-        contents = sorted(
-            p.relative_to(archive).as_posix() for p in archive.rglob("*") if p.is_file() and p.name != "MANIFEST.md"
-        )
-        listing = "\n".join(f"- {p}" for p in contents)
-        (archive / "MANIFEST.md").write_text(
-            f"""# Archive — {archive.name}
-
-Milestone: {SLUG}
-Shipped: {TODAY}
-Final verdict: all criteria met; project verify passed
-Waves: 1  Tasks: 1 done / 1 total  Review cycles used: 1
-Carried forward: none
-
-## Success criteria at ship
-
-| Criterion | Verdict | Evidence |
-|-----------|---------|----------|
-| render works | met | tests/test_app.py |
-
-## Contents
-
-{listing}
-
-## Notes
-
-- none
-""",
-            encoding="utf-8",
-        )
+    def transition(
+        self,
+        event,
+        expect_phase,
+        expect_status,
+        *,
+        set_phase=None,
+        set_status=None,
+        expect_archive="null",
+    ):
+        arguments = [
+            "transition",
+            "--repo",
+            str(self.repo),
+            "--event",
+            event,
+            "--expect-pipeline",
+            "gsd-path/v2",
+            "--expect-project",
+            SLUG,
+            "--expect-milestone",
+            SLUG,
+            "--expect-phase",
+            expect_phase,
+            "--expect-status",
+            expect_status,
+            "--expect-branch",
+            BRANCH,
+            "--expect-archive",
+            expect_archive,
+        ]
+        if set_phase is not None:
+            arguments.extend(("--set-phase", set_phase))
+        if set_status is not None:
+            arguments.extend(("--set-status", set_status))
+        return self.gate("pipeline_state.py", *arguments)
 
     def install_hooks(self):
         result = subprocess.run(
@@ -311,8 +347,12 @@ Carried forward: none
     def test_define_to_integrated_ship(self):
         with tempfile.TemporaryDirectory() as temporary:
             repo = self.repo = Path(temporary) / "repo"
+            origin = Path(temporary) / "origin.git"
             repo.mkdir()
+            origin.mkdir()
             git(repo, "init", "-q", "-b", "main")
+            bare = git(origin, "init", "--bare", "-q", "-b", "main")
+            self.assertEqual(bare.returncode, 0, bare.stderr)
             git(repo, "config", "user.email", "cycle@example.invalid")
             git(repo, "config", "user.name", "Cycle")
 
@@ -321,42 +361,108 @@ Carried forward: none
             self.write("tests/test_app.py", "import sys, pathlib\nsys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))\nfrom src.app import render\nassert render('x') == 'Hello, x'\n")
             self.write("src/__init__.py", "")
             self.state("define", "active")
+            self.commit("router: initialize project")
             self.install_hooks()
-            baseline = self.commit("router: initialize project")
-            git(repo, "update-ref", "refs/remotes/origin/main", baseline)
-            git(repo, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main")
-            self.assertEqual(git(repo, "checkout", "-q", "-b", BRANCH).returncode, 0)
+            baseline = self.commit("router: install guard hooks")
+            self.assertEqual(git(repo, "remote", "add", "origin", str(origin)).returncode, 0)
+            published = git(repo, "push", "-q", "-u", "origin", "main")
+            self.assertEqual(published.returncode, 0, published.stderr)
+            self.assertEqual(git(repo, "remote", "set-head", "origin", "--auto").returncode, 0)
+            bound = self.gate(
+                "pipeline_git.py", "bind-initial", "--repo", str(repo), "--branch", BRANCH,
+                "--remote-default", "origin/main", "--base", baseline,
+            )
+            self.assertEqual(bound["status"], "bound")
             self.assertEqual(self.gate("discussion_records.py", "pending", "--repo", str(repo))["pending"], [])
 
             # --- define
             self.write(".project/intent/INTENT.md", INTENT)
-            self.state("define", "done")
+            self.transition("milestone intent approved", "define", "active", set_status="done")
             self.commit("define: intent")
 
             # --- research → handoff gate
+            self.transition(
+                "research started",
+                "define",
+                "done",
+                set_phase="research",
+                set_status="active",
+            )
             self.write(".project/research/RESEARCH.md", RESEARCH)
             self.write(".project/research/evidence-domain.md", EVIDENCE)
-            self.state("research", "done")
             handoff = self.gate("check_handoffs.py", "research", "--repo", str(repo))
             self.assertEqual(handoff["dispatched"], ["domain"])
+            self.transition(
+                "research handoff validated: .project/research/RESEARCH.md",
+                "research",
+                "active",
+                set_status="done",
+            )
             self.commit("research: handoff")
 
             # --- decide
+            self.transition(
+                "decision synthesis started",
+                "research",
+                "done",
+                set_phase="decide",
+                set_status="active",
+            )
             self.write(".project/research/SYNTHESIS.md", SYNTHESIS)
-            self.state("decide", "done")
+            decide = self.gate("check_handoffs.py", "decide", "--repo", str(repo))
+            self.assertEqual(decide["decisions"], ["Greeting format"])
+            self.transition(
+                "validated synthesis: .project/research/SYNTHESIS.md",
+                "decide",
+                "active",
+                set_status="done",
+            )
             self.commit("decide: synthesis")
 
-            # --- plan → task brief gate against the layer base
+            # --- plan → intent/task graph gate, then task brief gate against the layer base
+            self.transition(
+                "planning started",
+                "decide",
+                "done",
+                set_phase="plan",
+                set_status="active",
+            )
             self.write(".project/plan/PLAN.md", PLAN)
             self.write(".project/tasks/T001-demo.md", TASK.format(today=TODAY))
-            self.state("plan", "done")
-            base = self.commit("plan: wave 1")
+            plan = self.gate("check_handoffs.py", "plan", "--repo", str(repo))
+            self.assertEqual(plan["criteria"], ["SC1"])
+            self.assertEqual(plan["rows"], 1)
+            plan_head = git(repo, "rev-parse", "HEAD").stdout.strip()
+            approval = self.gate(
+                "pipeline_state.py",
+                "approve",
+                "--repo",
+                str(repo),
+                "--kind",
+                "plan",
+                "--expected-head",
+                plan_head,
+            )
+            base = approval["commit"]
             briefs = self.gate("check_task_briefs.py", "--repo", str(repo), "--base", base)
             self.assertEqual(briefs["tasks"], 1)
 
             # --- build: isolate → implement → land → retire, then wave review
-            self.state("build", "active")
-            base = self.commit("build: start")
+            self.transition(
+                "build started",
+                "plan",
+                "done",
+                set_phase="build",
+                set_status="active",
+            )
+            build_entry = isolation.checkpoint(
+                repo,
+                base,
+                "build: start",
+                "Why: build started",
+                [".project"],
+            )
+            base = build_entry["commit"]
             isolated = isolation.isolate_task(repo, base, "T001", 1)
             self.assertEqual(isolated["mode"], "serial")
             self.write("src/app.py", "def render(name):\n    return f'Hello, {name}'\n")
@@ -382,20 +488,98 @@ Carried forward: none
             verify = subprocess.run([sys.executable, "tests/test_app.py"], cwd=repo, capture_output=True, text=True)
             self.assertEqual(verify.returncode, 0, verify.stderr)
             self.write(".project/review/wave-1.cycle1.md", WAVE_REVIEW)
-            self.state("build", "done")
-            self.commit("build: wave 1 reviewed")
+            wave = self.gate(
+                "check_handoffs.py", "wave", "--repo", str(repo),
+                "--review", ".project/review/wave-1.cycle1.md",
+            )
+            self.assertEqual(wave["owned"], ["SC1"])
+            wave_checkpoint = isolation.checkpoint(
+                repo,
+                landed["commit"],
+                "build: wave 1 reviewed",
+                (
+                    "Why: wave review passed\n"
+                    "Wave: 1\n"
+                    "Tasks: T001\n"
+                    f"Base: {landed['commit']}"
+                ),
+                [".project"],
+            )
+            self.transition(
+                "build done; final review pending",
+                "build",
+                "active",
+                set_phase="ship",
+                set_status="active",
+            )
+            ship_entry = isolation.checkpoint(
+                repo,
+                wave_checkpoint["commit"],
+                "build: final review",
+                "Why: build done; final review pending",
+                [".project"],
+            )
 
             # --- ship: final review at reviewed HEAD, archive transaction, ship commit via hooks
-            self.state("ship", "active")
-            reviewed = self.commit("ship: start final review")
+            reviewed = ship_entry["commit"]
             self.write(".project/review/FINAL.md", FINAL.format(head=reviewed))
-            self.write(".project/review/final-gap-1.md", GAP.format(head=reviewed))
+            first_sidecar = isolation.isolate_verify(repo, reviewed, "review-gap-1")
+            first_source = Path(first_sidecar["worktree"])
+            self.write(
+                first_source / ".project/review/final-gap-1.md",
+                GAP.format(head=reviewed).replace("Gap verdict: pass", "Gap verdict: invalid"),
+            )
+            first_collection = isolation.collect_artifact(
+                repo,
+                first_source,
+                reviewed,
+                first_sidecar["branch"],
+                ".project/review/final-gap-1.md",
+                ".project/review/final-gap-1.md",
+            )
+            self.assertFalse(first_collection["replaced"])
+            isolation.retire(repo, first_source, first_sidecar["branch"], False)
+            invalid = script("check_handoffs.py", "final", "--repo", str(repo))
+            self.assertNotEqual(invalid.returncode, 0)
+
+            destination = repo / ".project/review/final-gap-1.md"
+            expected_destination = hashlib.sha256(destination.read_bytes()).hexdigest()
+            retry_sidecar = isolation.isolate_verify(repo, reviewed, "review-gap-1")
+            retry_source = Path(retry_sidecar["worktree"])
+            self.write(retry_source / ".project/review/final-gap-1.md", GAP.format(head=reviewed))
+            retry_collection = isolation.collect_artifact(
+                repo,
+                retry_source,
+                reviewed,
+                retry_sidecar["branch"],
+                ".project/review/final-gap-1.md",
+                ".project/review/final-gap-1.md",
+                expected_destination,
+            )
+            self.assertTrue(retry_collection["replaced"])
+            self.assertEqual(retry_collection["previous_sha256"], expected_destination)
+            isolation.retire(repo, retry_source, retry_sidecar["branch"], False)
+            final = self.gate("check_handoffs.py", "final", "--repo", str(repo))
+            self.assertEqual(final["reviewed_head"], reviewed)
+            self.assertEqual(final["gaps"], [1])
             prepared = self.gate("archive_milestone.py", "prepare", "--repo", str(repo), "--slug", SLUG)
             archive = repo / prepared["archive"]
             self.assertTrue(archive.is_dir())
-            self.write_manifest(archive)
+            manifest = self.gate("archive_milestone.py", "render-manifest", "--repo", str(repo))
+            self.assertEqual(manifest["archive"], prepared["archive"])
+            self.assertTrue((archive / "MANIFEST.md").is_file())
             self.gate("archive_milestone.py", "preflight", "--repo", str(repo))
-            self.state("shipped", "done", archive=prepared["archive"])
+            shipment = self.gate(
+                "pipeline_state.py",
+                "record-shipment",
+                "--repo",
+                str(repo),
+                "--archive",
+                prepared["archive"],
+                "--event",
+                "archive preflight passed; shipment recorded",
+            )
+            self.assertEqual(shipment["state"]["phase"], "shipped")
             git(repo, "add", "-A")
             ship = git(repo, "commit", "-q", "-m", f"ship: M001 — {SLUG}", "-m",
                        f"Archive: {prepared['archive']}\nReviewed-HEAD: {reviewed}")
@@ -404,21 +588,23 @@ Carried forward: none
             self.gate("archive_milestone.py", "validate", "--repo", str(repo))
             self.assertFalse((repo / ".project" / "plan").exists(), "ship moves plan into the archive")
 
-            # --- integrate onto main, tag, publish origin refs → validate-integrated
-            git(repo, "checkout", "-q", "--detach", "refs/remotes/origin/main")
-            merge = git(repo, "merge", "--no-ff", "-m", f"integrate: M001 — merge {BRANCH} into main", "-m",
-                        f"Archive: {prepared['archive']}\nShip: {ship_sha}\nDefault: main\nBranch: {BRANCH}", ship_sha)
-            self.assertEqual(merge.returncode, 0, merge.stderr)
-            merge_sha = git(repo, "rev-parse", "HEAD").stdout.strip()
-            git(repo, "checkout", "-q", BRANCH)
-            git(repo, "tag", "-a", "-m", "milestone", f"milestone/{archive.name}", merge_sha)
-            git(repo, "update-ref", "refs/remotes/origin/main", merge_sha)
-            git(repo, "update-ref", f"refs/remotes/origin/{BRANCH}", ship_sha)
-            tag_obj = git(repo, "rev-parse", f"refs/tags/milestone/{archive.name}").stdout.strip()
-            git(repo, "update-ref", f"refs/remotes/origin/tags/milestone/{archive.name}", tag_obj)
-            integrated = self.gate("archive_milestone.py", "validate-integrated", "--repo", str(repo), "--slug", SLUG)
-            self.assertEqual(integrated["integrate"], merge_sha)
+            # --- integrate through the named-worktree transaction; a retry converges
+            integrated = self.gate(
+                "archive_milestone.py", "integrate", "--repo", str(repo), "--slug", SLUG,
+            )
+            merge_sha = integrated["integrate"]
             self.assertEqual(integrated["commit"], ship_sha)
+            self.assertEqual(git(repo, "branch", "--show-current").stdout.strip(), BRANCH)
+            retry = self.gate(
+                "archive_milestone.py", "integrate", "--repo", str(repo), "--slug", SLUG,
+            )
+            self.assertEqual(retry, integrated)
+            integration_branch = git(
+                repo, "show-ref", "--verify", "--quiet", "refs/heads/gsd-path-integrate/M001",
+            )
+            self.assertNotEqual(integration_branch.returncode, 0)
+            worktrees = git(repo, "worktree", "list", "--porcelain")
+            self.assertEqual(worktrees.stdout.count("worktree "), 1)
 
             # --- next milestone binds at integrated main and retires the old branch
             bound = self.gate(

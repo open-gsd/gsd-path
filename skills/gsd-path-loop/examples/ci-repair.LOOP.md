@@ -9,7 +9,7 @@ status: active
 trigger: manual
 cooldown: 10m
 verify: python3 -m pytest tests/ -q
-verify: node --test tests/install.test.mjs tests/package.test.mjs
+verify: npm test
 verify: python3 scripts/sync_skill_resources.py --check
 max_iterations: 3
 wall_clock: 30m
@@ -56,6 +56,6 @@ suite.
 
 ## Output
 
-One JSON record appended to `.project/loop/ci-repair.LOG.jsonl` via
-`loop_run.py record`, then the Outcome / Review / Next report naming the
-verify result, iterations used, and the log path.
+Append-only claim, verify, and finish records in
+`.project/loop/ci-repair.LOG.jsonl`, then the Outcome / Review / Next report
+naming the verify result, helper-counted iterations, and the log path.

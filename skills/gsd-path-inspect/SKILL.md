@@ -25,26 +25,27 @@ input.
 
 ## Preconditions
 
-Before reading STATE.md, run the bundled `python3
-<absolute-bundled-script> classify --repo <absolute-root>` helper
-(`scripts/detect_project.py`) and follow its JSON `verdict` / `route`. Do not
-classify from a directory listing or conversation.
-
-- `owned` — only now read the applicable STATE.md. Require `pipeline:
-  gsd-path/v2`; a missing or different marker returns to `$gsd-path` for
-  ownership checking. Legal entry is `inspect/active|blocked`; `inspect/done`
-  routes to define, and any later phase stops. When an active router supplies
-  `.project/next/`, require its STATE.md to be a regular non-symlink file and
-  apply these rules to that track state.
+If STATE.md is missing, run the bundled
+`python3 <absolute-bundled-script> initialize --repo <absolute-root>
+--template <absolute-state-template>` helper (`scripts/detect_project.py`) and
+follow its returned JSON `verdict` / `route`. This is the only no-state
+boundary; do not run `classify` first or classify from a directory listing or
+conversation. If the command exits nonzero, returns `error`, or returns
+`wrote_state: false`, report the error and block without routing or claiming
+STATE.md was written.
+- `owned` — continue under the existing-state rules below.
 - `orphan` — return to `$gsd-path` for orphaned-state recovery instead of
   initializing or overwriting it.
-- `greenfield` or `brownfield` — run the same helper's `initialize --repo
-  <absolute-root> --template <absolute-state-template>` command. Require its
-  verdict and route to match the classifier, plus `wrote_state: true`; any
-  mismatch or error blocks. A greenfield result routes to `$gsd-path-define`.
-  A brownfield result continues from the helper's STATE.md at
-  `inspect/active`.
-
+- `greenfield` — the helper writes STATE.md at `define/active`; skip inspection
+  and route to `$gsd-path-define` from this returned verdict.
+- `brownfield` — require `wrote_state: true`, then continue with the helper's
+  STATE.md at `inspect/active`.
+If `.project/STATE.md` exists, run `python3 <absolute pipeline_state.py>
+validate --repo <absolute root> [--project-dir .project/next]`; a non-zero
+result returns to `$gsd-path` for ownership checking. Legal entry is
+`inspect/active|blocked`; `inspect/done` routes to define, and any later phase
+stops. When an active router supplies `.project/next/`, require its STATE.md
+to be a regular non-symlink file and apply these rules to that track state.
 When an existing state records a bound branch (single-milestone restart
 or program next-milestone), require the current symbolic branch to match and
 preserve both `branch` and `milestone`. Do not re-enter `inspect/done` in the
@@ -52,12 +53,14 @@ same milestone; a later milestone's `inspect/active` is a new scan.
 
 ## Process
 
-1. Before creating or changing `.project/` Markdown, freeze the sorted set of
-   in-scope repository Markdown paths. Exclude `.project/**`, `.git`, vendored
-   and generated trees, `node_modules`, and build output. If STATE.md is now
-   missing, restart Preconditions and route from the new `initialize` result;
-   never continue from an ignored result. Preserve an existing router-bound
-   branch and milestone.
+1. Before creating or changing `.project/` Markdown, freeze the helper's exact
+   stdout from `python3 <absolute check_docs_audit.py> --repo <absolute root>
+   --emit-inventory` in a temporary file. Do not rediscover or edit that
+   inventory. If STATE.md is now missing, restart Preconditions and route from
+   the new `initialize` result; never continue from an ignored result. Record
+   the SHA-256 of each existing assigned destination and preserve the existing
+   DOCS-AUDIT.md in a temporary prior-audit file. Preserve an existing
+   router-bound branch and milestone.
 2. Dispatch two independent agents in parallel, following the local
    [runtime dispatch contract](references/dispatch.md) and its deterministic
    task-name rules:
@@ -81,23 +84,34 @@ same milestone; a later milestone's `inspect/active` is a new scan.
    `python3 <absolute isolation.py> isolate-verify --repo <absolute primary>
    --base <HEAD> --name inspect-codebase` and `--name inspect-docs`, and
    includes its path and revision for project commands; expected new pipeline
-   artifacts do not make product code dirty. Each agent stages its assigned
-   output under that sidecar; the orchestrator validates and atomically
-   transfers both files to the primary `.project/` paths (the track's
-   `.project/next/` paths in Lookahead mode) before retiring only
-   those sidecars with `isolation.py retire`. Otherwise no
+   artifacts do not make product code dirty. Each agent writes only its
+   assigned output under that sidecar and keeps it there for the gates in step
+   3. Otherwise no
    project command may run.
 3. Gate both artifacts against their templates: the codebase evidence needs
    a filled `## Map` plus findings as observed — no quota, but an empty
    findings section must say why; the docs audit must pass the bundled
-   `python3 <absolute check_docs_audit.py> --repo <absolute root> --audit
+   `python3 <absolute check_docs_audit.py> --repo <docs sidecar> --audit
    <track-relative DOCS-AUDIT.md> --inventory <frozen inventory file>`, where
    the audit path is `.project/research/DOCS-AUDIT.md` normally and
-   `.project/next/research/DOCS-AUDIT.md` in Lookahead mode
+   `.project/next/research/DOCS-AUDIT.md` in Lookahead mode; add
+   `--prior-audit <temporary prior-audit file>` when one was preserved
    (disjoint `## Doc:` sections and `## Descriptive docs` equal to the frozen
    inventory, every claim a valid verdict with evidence, Summary counts and
-   remediation queue consistent). Redispatch one complete corrected brief under the same logical task
-   name, following the runtime dispatch contract, then set `status: blocked`
+   remediation queue consistent). After each artifact passes, collect it with
+   `python3 <absolute isolation.py> collect-artifact --repo <absolute primary>
+   --source <returned worktree> --base <recorded HEAD> --branch <returned
+   branch> --source-path <assigned track-relative path> --destination-path
+   <assigned track-relative path>`, adding `--expected-destination <recorded
+   prior SHA-256>` when that destination existed. Require the returned base,
+   branch, source, and destination to match. Only then retire with `python3
+   <absolute isolation.py> retire --repo <absolute primary> --worktree
+   <returned worktree> --branch <returned branch>` without `--force`.
+   Redispatch one complete corrected brief under the same logical task
+   name, following the runtime dispatch contract. If it still fails, run
+   `pipeline_state.py transition` with expected `inspect/active`, the exact
+   current branch and archive values, `--set-status blocked`, and an event
+   naming the failed artifact gate
    if it still fails. Present **Outcome** with the failed gate, **Review**
    linking each malformed output that exists or STATE.md when an output is
    missing, and **Next** naming the one correction or user decision required;
@@ -112,8 +126,14 @@ same milestone; a later milestone's `inspect/active` is a new scan.
    track's `research/evidence-codebase.md` and `research/DOCS-AUDIT.md`
    (`.project/research/` normally, `.project/next/research/` in Lookahead
    mode), then state that define is next.
-5. Set STATE.md to `phase: inspect`, `status: done`, log the transition,
-   and identify `$gsd-path-define` as next. When this phase was routed by an
+5. Run `python3 <absolute pipeline_state.py> transition --repo <absolute root>
+   [--project-dir .project/next]
+   --event "inspection artifacts passed" --expect-phase inspect --expect-status
+   active --expect-milestone <current milestone or null> --expect-branch
+   <current branch or null> --expect-archive <current archive or null>
+   --set-phase inspect --set-status done`. This helper is the only ordinary
+   STATE mutation; require its returned state to be `inspect/done`.
+   Identify `$gsd-path-define` as next. When this phase was routed by an
    active `$gsd-path`, return control to that router so its bundled define
    contract runs in brownfield mode (and milestone mode when ROADMAP.md
    exists). When invoked directly, stop and tell the

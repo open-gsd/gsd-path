@@ -22,7 +22,8 @@ required follow-up owned by docs audit in DOCS-AUDIT.md and record its
 disposition with the helper's `dispose` command; otherwise block with links
 to ANSWERS.md and the target artifact rather than publishing stale findings.
 
-Require an existing `.project/STATE.md` with `pipeline: gsd-path/v2`; never
+Require an existing `.project/STATE.md` that passes `python3 <absolute
+pipeline_state.py> validate --repo <absolute root>`; never
 create pipeline state or write into an unowned `.project/`. A missing state
 stops and offers explicit `$gsd-path` initialization; do not invoke it
 automatically. A different marker blocks and reports ownership without writing.
@@ -35,10 +36,11 @@ would dirty execution, invalidate review, or mutate shipped history.
 
 ## Process
 
-1. Before writing the output, freeze the sorted Markdown inventory. Exclude
-   vendored/generated trees, `node_modules`, `.git`, `.project/archive/**`,
-   and the assigned output itself; include other `.project/` Markdown only in
-   alignment mode. The frozen inventory travels inside the dispatch brief and
+1. Before writing the output, freeze the helper's exact stdout from `python3
+   <absolute check_docs_audit.py> --repo <absolute root> --emit-inventory`
+   (add `--alignment` in alignment mode) in a temporary file. Before any
+   rewrite, preserve an existing canonical audit in a separate temporary file
+   and record its SHA-256. The frozen inventory travels inside the dispatch brief and
    the gate below; never persist it as a `.project/` sidecar file — the
    audit's own path records are the durable copy. If a previous run left an
    inventory sidecar under `.project/research/`, the orchestrator deletes it
@@ -53,18 +55,28 @@ would dirty execution, invalidate review, or mutate shipped history.
    non-`.project` worktree changes, the orchestrator creates a verify sidecar
    with `python3 <absolute isolation.py> isolate-verify --repo <absolute
    primary> --base <HEAD> --name docs-audit` for project commands. The auditor
-   stages its assigned output under that sidecar; the orchestrator validates
-   and atomically transfers it to the primary canonical path before retiring
-   that sidecar. Otherwise no project command may run.
+   writes only its assigned output under that sidecar. Gate it there before
+   collection. Then run `python3 <absolute isolation.py> collect-artifact
+   --repo <absolute primary> --source <returned worktree> --base <recorded
+   HEAD> --branch <returned branch> --source-path
+   .project/research/DOCS-AUDIT.md --destination-path
+   .project/research/DOCS-AUDIT.md`, adding `--expected-destination <recorded
+   prior SHA-256>` when a prior audit existed. Require the returned base,
+   branch, source, and destination to match; then non-force retire that exact
+   worktree and branch with `isolation.py retire`. A corrected redispatch is
+   gated before collection and uses the same expected prior hash. Otherwise no
+   project command may run.
 2. Gate the artifact with the bundled helper: write the frozen inventory to
    a temporary file (one path per line) and run
-   `python3 <absolute check_docs_audit.py> --repo <absolute root> --inventory <file>`.
+   `python3 <absolute check_docs_audit.py> --repo <docs sidecar> --inventory
+   <file> [--prior-audit <temporary prior-audit file>]`.
    It enforces the contract — every doc with at least one testable claim has
    a claims table, every claim a valid type and verdict with evidence, every
    claimless doc appears once in the `## Descriptive docs` list, the section
    paths and that list are disjoint and together equal the frozen inventory
-   exactly, the Summary counts match the rows, and the remediation queue
-   classifies every non-verified claim. A non-zero exit names the failed
+   exactly, the Summary counts match the rows, the remediation queue
+   classifies every non-verified claim, and every prior User-ruling row and
+   Planned value survives in order. A non-zero exit names the failed
    rule. Redispatch one complete corrected brief under logical task name
    `docs_audit`, following the runtime dispatch contract. If it still fails,
    present **Outcome** with the failed gate, **Review** linking DOCS-AUDIT.md or

@@ -34,6 +34,20 @@ class SyncSkillResourcesTests(unittest.TestCase):
             generated = root / "skills" / "gsd-path-build" / "references" / "coder.md"
             if generated.exists():
                 generated.unlink()
+            ship_state = root / "skills" / "gsd-path-ship" / "scripts" / "pipeline_state.py"
+            ship_state.unlink(missing_ok=True)
+            ship_build_state = (
+                root / "skills" / "gsd-path-ship" / "scripts" / "build_state.py"
+            )
+            ship_task_briefs = (
+                root / "skills" / "gsd-path-ship" / "scripts" / "check_task_briefs.py"
+            )
+            ship_review_panel = (
+                root / "skills" / "gsd-path-ship" / "scripts" / "review_panel.py"
+            )
+            ship_build_state.unlink(missing_ok=True)
+            ship_task_briefs.unlink(missing_ok=True)
+            ship_review_panel.unlink(missing_ok=True)
             discussion_template = (
                 root / "skills" / "gsd-path-discuss" / "templates" / "dialogue.md"
             )
@@ -58,6 +72,22 @@ class SyncSkillResourcesTests(unittest.TestCase):
             self.assertEqual(
                 inspect_resource.read_bytes(),
                 (root / "skills" / "gsd-path" / "templates" / "codebase.md").read_bytes(),
+            )
+            self.assertEqual(
+                ship_state.read_bytes(),
+                (root / "scripts" / "pipeline_state.py").read_bytes(),
+            )
+            self.assertEqual(
+                ship_build_state.read_bytes(),
+                (root / "scripts" / "build_state.py").read_bytes(),
+            )
+            self.assertEqual(
+                ship_task_briefs.read_bytes(),
+                (root / "scripts" / "check_task_briefs.py").read_bytes(),
+            )
+            self.assertEqual(
+                ship_review_panel.read_bytes(),
+                (root / "scripts" / "review_panel.py").read_bytes(),
             )
             self.assertEqual(
                 discussion_template.read_bytes(),

@@ -26,6 +26,8 @@
     "scripts/git_guard.py",
     "scripts/isolation.py",
     "scripts/pipeline_git.py",
+    "scripts/pipeline_state.py",
+    "scripts/build_state.py",
     "scripts/loop_run.py",
     "README.md",
     "DOCS.md",
@@ -43,6 +45,8 @@
     "node": ">=18.17"
   },
   "scripts": {
-    "test": "node --test tests/*.test.mjs"
+    "test": "node --test tests/*.test.mjs",
+    "test:python": "python3 -m unittest discover -s tests",
+    "verify": "npm test && npm run test:python && python3 scripts/sync_skill_resources.py --check"
   }
 }

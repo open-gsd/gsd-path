@@ -4,9 +4,15 @@
 import argparse
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path, PurePosixPath
 from typing import Dict, List, Optional, Sequence, Set, Tuple
+
+try:
+    from pipeline_state import PipelineStateError, load_state
+except ImportError:  # pragma: no cover - package imports used by tests
+    from scripts.pipeline_state import PipelineStateError, load_state
 
 
 PIPELINE = "gsd-path/v2"
@@ -27,6 +33,7 @@ COVERAGE_ROW_PATTERN = re.compile(
     r"\|\s*(?P<acceptance>AC[1-9]\d*)\s*\|"
 )
 TASK_ID_PATTERN = re.compile(r"(?m)^id:\s*(T\d{3})\s*(?:#.*)?$")
+TASK_FILE_NAME = re.compile(r"^(?P<id>T\d{3})-[a-z0-9][a-z0-9-]*\.md$")
 OWNED_CRITERION_PATTERN = re.compile(r"^- (None|SC[1-9]\d*)$")
 VERIFY_BLOCK_PATTERN = re.compile(r"```bash[ \t]*\n(?P<block>.*?)```", re.DOTALL)
 FILES_FIELD_PATTERN = re.compile(r"^files:\s*(?P<value>[^#]*?)(?:\s+#.*)?$")
@@ -34,10 +41,26 @@ INLINE_LIST_PATTERN = re.compile(r"^\[(?P<body>.*)\]$")
 LIST_ITEM_PATTERN = re.compile(r"^\s*-\s+(?P<value>.*?)\s*(?:\s+#.*)?$")
 VERIFY_PATH_SPLIT = re.compile(r"[=,:]")
 WAVE_REVIEW_NAME = re.compile(
-    r"wave-(?P<wave>\d+)\.cycle\d+(?:\.(?:contract|adversarial))?\.md$"
+    r"wave-(?P<wave>[1-9]\d*)\.cycle(?P<cycle>[1-9]\d*)"
+    r"(?:\.(?P<lens>contract|adversarial))?\.md$"
 )
 WAVE_SC_HEADING = re.compile(r"^### (SC[1-9]\d*) — (.+)$")
+WAVE_TASK_HEADING = re.compile(
+    r"^## (?P<task>T\d{3}) — (?P<title>.+): (?P<verdict>pass|fail)$"
+)
 WAVE_FIELD_PATTERN = re.compile(r"(?m)^wave:\s*(\d+)\s*(?:#.*)?$")
+PLAN_WAVE_HEADING = re.compile(r"(?m)^## Wave (?P<wave>\d+) — (?P<title>.+)$")
+PLAN_TASK_ROW = re.compile(
+    r"^\|\s*(?P<task>T\d{3})\s*\|\s*(?P<title>[^|]+?)\s*\|"
+    r"\s*(?P<deps>[^|]+?)\s*\|\s*(?P<files>[^|]+?)\s*\|\s*$"
+)
+MILESTONE_HEADING = re.compile(
+    r"(?m)^### (?P<id>M\d{3}) — (?P<slug>\S.*?)\s*$"
+)
+GAP_NAME_PATTERN = re.compile(r"^final-gap-(?P<number>[1-9]\d*)\.md$")
+GAP_HEADING_PATTERN = re.compile(
+    r"^# Gap Review — (?P<number>[1-9]\d*): (?P<risk>\S.*)$"
+)
 
 
 def _source_pattern(project_dir: str) -> "re.Pattern[str]":
@@ -65,6 +88,51 @@ class HandoffError(RuntimeError):
     """Raised when a phase hand-off is absent, stale, or incomplete."""
 
 
+def _strict_frontmatter(text: str, label: str) -> Dict[str, object]:
+    lines = text.splitlines()
+    if not lines or lines[0] != "---":
+        raise HandoffError(f"{label} is missing YAML frontmatter")
+    values: Dict[str, object] = {}
+    index = 1
+    while index < len(lines):
+        line = lines[index]
+        if line == "---":
+            return values
+        if not line.strip() or line.lstrip().startswith("#"):
+            index += 1
+            continue
+        match = re.fullmatch(r"([a-z_]+):\s*([^#]*?)(?:\s+#.*)?", line)
+        if match is None:
+            raise HandoffError(f"{label} has malformed frontmatter: {line}")
+        key, raw = match.groups()
+        if key in values:
+            raise HandoffError(f"{label} repeats frontmatter field: {key}")
+        raw = raw.strip()
+        inline = INLINE_LIST_PATTERN.fullmatch(raw)
+        if inline is not None:
+            values[key] = [
+                item.strip().strip("\"'")
+                for item in inline.group("body").split(",")
+                if item.strip()
+            ]
+            index += 1
+            continue
+        if raw:
+            values[key] = raw.strip("\"'")
+            index += 1
+            continue
+        items: List[str] = []
+        index += 1
+        while index < len(lines):
+            item = LIST_ITEM_PATTERN.fullmatch(lines[index])
+            if item is None:
+                break
+            items.append(item.group("value").strip().strip("\"'"))
+            index += 1
+        values[key] = items
+    raise HandoffError(f"{label} frontmatter is not closed")
+
+
 def _read(root: Path, relative: str) -> str:
     path = root / relative
     if not path.is_file() or path.is_symlink():
@@ -72,25 +140,15 @@ def _read(root: Path, relative: str) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def _frontmatter(state: str) -> Dict[str, str]:
-    lines = state.splitlines()
-    if not lines or lines[0] != "---":
-        raise HandoffError("STATE.md is missing YAML frontmatter")
-    values: Dict[str, str] = {}
-    for line in lines[1:]:
-        if line == "---":
-            return values
-        match = re.fullmatch(r"([a-z_]+):\s*([^#]*?)(?:\s+#.*)?", line)
-        if match:
-            values[match.group(1)] = match.group(2).strip().strip("\"'")
-    raise HandoffError("STATE.md frontmatter is not closed")
-
-
 def _require_pipeline(root: Path, project_dir: str) -> Dict[str, str]:
-    values = _frontmatter(_read(root, f"{project_dir}/STATE.md"))
-    if values.get("pipeline") != PIPELINE:
-        raise HandoffError("STATE.md has the wrong pipeline marker")
-    return values
+    try:
+        state, _text, _path = load_state(root.resolve(), project_dir)
+    except PipelineStateError as error:
+        raise HandoffError(str(error)) from error
+    return {
+        key: "null" if value is None else value
+        for key, value in state.json().items()
+    }
 
 
 def _require_state(root: Path, phase: str, status: str, project_dir: str) -> None:
@@ -99,6 +157,20 @@ def _require_state(root: Path, phase: str, status: str, project_dir: str) -> Non
         raise HandoffError(
             f"STATE.md must be {phase}/{status}, found "
             f"{values.get('phase', '<missing>')}/{values.get('status', '<missing>')}"
+        )
+
+
+def _require_state_one_of(
+    root: Path,
+    expected: Set[Tuple[str, str]],
+    project_dir: str,
+) -> None:
+    values = _require_pipeline(root, project_dir)
+    actual = (values["phase"], values["status"])
+    if actual not in expected:
+        rendered = ", ".join(f"{phase}/{status}" for phase, status in sorted(expected))
+        raise HandoffError(
+            f"STATE.md must be one of {rendered}, found {actual[0]}/{actual[1]}"
         )
 
 
@@ -130,16 +202,89 @@ def _non_placeholder(value: str, label: str) -> str:
     return cleaned
 
 
-def _validate_evidence(root: Path, relative: str) -> None:
+def _evidence_field(text: str, field: str, relative: str) -> str:
+    matches = re.findall(
+        rf"(?m)^- \*\*{re.escape(field)}\*\*:\s*(.*)$", text
+    )
+    if len(matches) != 1:
+        raise HandoffError(
+            f"{relative} finding must contain exactly one {field} field"
+        )
+    return _non_placeholder(matches[0], f"{relative} finding {field}")
+
+
+def _validate_evidence(
+    root: Path,
+    relative: str,
+    dimension: str,
+    assigned_questions: Sequence[str],
+) -> None:
     text = _read(root, relative)
-    findings = re.split(r"(?m)^## Finding:\s*", text)[1:]
+    if len(re.findall(rf"(?m)^# Evidence — {re.escape(dimension)}\s*$", text)) != 1:
+        raise HandoffError(f"{relative} must name evidence dimension {dimension}")
+    dimension_values = re.findall(r"(?m)^Dimension:\s*(.*)$", text)
+    if len(dimension_values) != 1 or _non_placeholder(
+        dimension_values[0], f"{relative} Dimension"
+    ) != dimension:
+        raise HandoffError(f"{relative} Dimension must be {dimension}")
+    question_values = re.findall(r"(?m)^Questions assigned:\s*(.*)$", text)
+    expected_questions = "; ".join(assigned_questions) if assigned_questions else "none"
+    if len(question_values) != 1 or question_values[0].strip() != expected_questions:
+        raise HandoffError(
+            f"{relative} Questions assigned must be {expected_questions!r}"
+        )
+
+    headings = list(re.finditer(r"(?m)^## (?P<title>.+?)\s*$", text))
+    findings = []
+    for index, heading in enumerate(headings):
+        title = heading.group("title")
+        if not title.startswith("Finding"):
+            continue
+        if not title.startswith("Finding: "):
+            raise HandoffError(f"{relative} has a malformed Finding heading")
+        _non_placeholder(title[len("Finding: ") :], f"{relative} finding heading")
+        end = headings[index + 1].start() if index + 1 < len(headings) else len(text)
+        findings.append(text[heading.end() : end])
     if not findings:
         raise HandoffError(f"{relative} has no findings")
-    required = ("**Claim**:", "**Source**:", "**Confidence**:", "**Why it matters here**:")
     for finding in findings:
-        for field in required:
-            if field not in finding:
-                raise HandoffError(f"{relative} finding is missing {field}")
+        _evidence_field(finding, "Claim", relative)
+        _evidence_field(finding, "Source", relative)
+        confidence = _evidence_field(finding, "Confidence", relative)
+        if confidence not in {"high", "medium", "low"}:
+            raise HandoffError(f"{relative} finding has invalid Confidence: {confidence}")
+        _evidence_field(finding, "Why it matters here", relative)
+
+    answer_headings = [
+        (index, heading)
+        for index, heading in enumerate(headings)
+        if heading.group("title") == "Assigned questions — answers"
+    ]
+    if len(answer_headings) != 1:
+        raise HandoffError(
+            f"{relative} must contain one ## Assigned questions — answers section"
+        )
+    index, heading = answer_headings[0]
+    end = headings[index + 1].start() if index + 1 < len(headings) else len(text)
+    answer_lines = [line.strip() for line in text[heading.end() : end].splitlines() if line.strip()]
+    if not assigned_questions:
+        if answer_lines != ["- none"]:
+            raise HandoffError(f"{relative} must record no assigned-question answers")
+        return
+    answers = []
+    for line in answer_lines:
+        match = re.fullmatch(r"- (?P<question>.+?) → (?P<answer>.+)", line)
+        if match is None:
+            raise HandoffError(f"{relative} has a malformed assigned-question answer")
+        question = match.group("question").strip()
+        answer = _non_placeholder(
+            match.group("answer"), f"{relative} answer for {question}"
+        )
+        answers.append((question, answer))
+    if [question for question, _answer in answers] != list(assigned_questions):
+        raise HandoffError(
+            f"{relative} assigned-question answers do not match RESEARCH.md"
+        )
 
 
 def _research_questions(intent: str) -> List[str]:
@@ -151,12 +296,16 @@ def _research_questions(intent: str) -> List[str]:
 
 def _research_assignments(section: str) -> List[Tuple[str, str]]:
     assignments = []
-    for line in section.splitlines():
-        if line.strip() == "- none":
-            continue
-        match = QUESTION_PATTERN.fullmatch(line.strip())
-        if match:
-            assignments.append((match.group("question").strip(), match.group("dimension")))
+    lines = [line.strip() for line in section.splitlines() if line.strip()]
+    if lines == ["- none"]:
+        return assignments
+    for line in lines:
+        if line == "- none":
+            raise HandoffError("RESEARCH.md mixes none with question assignments")
+        match = QUESTION_PATTERN.fullmatch(line)
+        if match is None:
+            raise HandoffError("RESEARCH.md has a malformed question assignment")
+        assignments.append((match.group("question").strip(), match.group("dimension")))
     return assignments
 
 
@@ -165,7 +314,7 @@ def validate_research(
 ) -> Dict[str, object]:
     """Validate the research-to-synthesis hand-off and return its summary."""
 
-    _require_state(root, "research", "done", project_dir)
+    _require_state(root, "research", "active", project_dir)
     intent_path = f"{project_dir}/intent/INTENT.md"
     if not (root / intent_path).is_file():
         # CHARTER.md is program-level: it stays at the real .project/ top level.
@@ -203,6 +352,7 @@ def validate_research(
 
     dispatched: List[str] = []
     skipped: List[str] = []
+    evidence_outputs: Dict[str, str] = {}
     for dimension, status, output, _reason in dispatch_rows:
         if status == "dispatched":
             expected = f"{project_dir}/research/evidence-{dimension}.md"
@@ -210,7 +360,7 @@ def validate_research(
                 raise HandoffError(
                     f"{dimension} output must be {expected}, found {output}"
                 )
-            _validate_evidence(root, output)
+            evidence_outputs[dimension] = output
             dispatched.append(dimension)
         else:
             if output.casefold() != "none":
@@ -230,6 +380,18 @@ def validate_research(
     dispatched_set = set(dispatched)
     if any(dimension not in dispatched_set for _question, dimension in assignments):
         raise HandoffError("every assigned question must target a dispatched dimension")
+    for dimension in dispatched:
+        dimension_questions = [
+            question
+            for question, assigned_dimension in assignments
+            if assigned_dimension == dimension
+        ]
+        _validate_evidence(
+            root,
+            evidence_outputs[dimension],
+            dimension,
+            dimension_questions,
+        )
 
     return {
         "phase": "research",
@@ -258,10 +420,12 @@ def _field(block: str, field: str) -> str:
 
 
 def _source_field(block: str, field: str, source: str) -> str:
-    match = re.search(rf"(?m)^- \*\*{re.escape(field)}\*\*:\s*(.*)$", block)
-    if not match:
+    matches = re.findall(rf"(?m)^- \*\*{re.escape(field)}\*\*:\s*(.*)$", block)
+    if not matches:
         raise HandoffError(f"{source} is missing {field}")
-    value = match.group(1).strip().strip("`")
+    if len(matches) != 1:
+        raise HandoffError(f"{source} repeats {field}")
+    value = matches[0].strip().strip("`")
     if not value or "<" in value or ">" in value:
         raise HandoffError(f"{source} has an incomplete {field}")
     return value
@@ -361,14 +525,16 @@ def _task_texts(root: Path, project_dir: str) -> Dict[str, str]:
     if not tasks_dir.is_dir():
         raise HandoffError(f"missing {project_dir}/tasks")
     tasks: Dict[str, str] = {}
-    for path in sorted(tasks_dir.glob("*.md")):
-        if not path.is_file() or path.is_symlink():
-            continue
+    for path in sorted(tasks_dir.iterdir()):
+        named = TASK_FILE_NAME.fullmatch(path.name)
+        if named is None or not path.is_file() or path.is_symlink():
+            raise HandoffError(f"non-canonical task artifact: {path.name}")
         text = path.read_text(encoding="utf-8")
-        match = TASK_ID_PATTERN.search(text)
-        if not match:
+        task_id = _strict_frontmatter(text, path.name).get("id")
+        if not isinstance(task_id, str) or not re.fullmatch(r"T\d{3}", task_id):
             raise HandoffError(f"{path.name} is missing an id")
-        task_id = match.group(1)
+        if named.group("id") != task_id:
+            raise HandoffError(f"{path.name} does not match task id {task_id}")
         if task_id in tasks:
             raise HandoffError(f"duplicate task id {task_id}")
         tasks[task_id] = text
@@ -430,38 +596,12 @@ def _verify_command(task_text: str) -> str:
 
 
 def _frontmatter_files(task_text: str) -> List[str]:
-    lines = task_text.splitlines()
-    if not lines or lines[0] != "---":
-        raise HandoffError("task is missing YAML frontmatter")
-    index = 1
-    while index < len(lines):
-        line = lines[index]
-        if line == "---":
-            return []
-        match = FILES_FIELD_PATTERN.match(line)
-        if match is None:
-            index += 1
-            continue
-        value = match.group("value").strip()
-        inline = INLINE_LIST_PATTERN.fullmatch(value)
-        if inline is not None:
-            return [
-                item.strip().strip("\"'")
-                for item in inline.group("body").split(",")
-                if item.strip()
-            ]
-        if value:
-            return [value.strip("\"'")]
-        items: List[str] = []
-        cursor = index + 1
-        while cursor < len(lines):
-            item = LIST_ITEM_PATTERN.match(lines[cursor])
-            if item is None:
-                break
-            items.append(item.group("value").strip().strip("\"'"))
-            cursor += 1
-        return items
-    raise HandoffError("task frontmatter is not closed")
+    values = _strict_frontmatter(task_text, "task")
+    raw = values.get("files")
+    if raw is None:
+        raise HandoffError("task is missing files")
+    files = raw if isinstance(raw, list) else [raw]
+    return [_canonical_repo_path(str(path), "task files") for path in files]
 
 
 def _posix_path(value: str) -> str:
@@ -496,10 +636,217 @@ def _acceptance_items(task_text: str, task_id: str) -> Dict[int, str]:
 
 
 def _task_wave(task_text: str, task_id: str) -> int:
-    match = WAVE_FIELD_PATTERN.search(task_text)
-    if not match:
+    value = _task_scalar(task_text, task_id, "wave")
+    if not value.isdigit() or int(value) < 1:
         raise HandoffError(f"{task_id} is missing a wave")
-    return int(match.group(1))
+    return int(value)
+
+
+def _task_scalar(task_text: str, task_id: str, field: str) -> str:
+    value = _strict_frontmatter(task_text, task_id).get(field)
+    if value is None:
+        raise HandoffError(f"{task_id} is missing {field}")
+    if not isinstance(value, str):
+        raise HandoffError(f"{task_id} {field} must be a scalar")
+    return value
+
+
+def _inline_ids(value: str, prefix: str, label: str) -> List[str]:
+    cleaned = value.strip().strip("`")
+    if cleaned in {"", "—", "-", "[]"} or cleaned.casefold() == "none":
+        return []
+    inline = INLINE_LIST_PATTERN.fullmatch(cleaned)
+    if inline:
+        cleaned = inline.group("body")
+    values = [item.strip().strip("`\"'") for item in cleaned.split(",")]
+    pattern = re.compile(rf"^{re.escape(prefix)}\d{{3}}$")
+    if not values or any(not pattern.fullmatch(item) for item in values):
+        raise HandoffError(f"{label} has an invalid id list: {value}")
+    if len(values) != len(set(values)):
+        raise HandoffError(f"{label} repeats an id")
+    return values
+
+
+def _task_deps(task_text: str, task_id: str) -> List[str]:
+    value = _strict_frontmatter(task_text, task_id).get("deps")
+    if value is None:
+        raise HandoffError(f"{task_id} is missing deps")
+    if isinstance(value, list):
+        rendered = ",".join(str(item) for item in value)
+    else:
+        rendered = str(value)
+    return _inline_ids(rendered, "T", f"{task_id} deps")
+
+
+def _canonical_repo_path(value: str, label: str) -> str:
+    cleaned = value.strip().strip("`\"'")
+    path = PurePosixPath(cleaned)
+    if (
+        not cleaned
+        or cleaned == "."
+        or "\\" in cleaned
+        or path.is_absolute()
+        or ".." in path.parts
+        or path.as_posix() != cleaned
+    ):
+        raise HandoffError(f"{label} has an unsafe or non-canonical path: {value}")
+    return cleaned
+
+
+def _plan_files(value: str, task_id: str) -> List[str]:
+    cleaned = value.strip().strip("`")
+    files = [
+        item.strip().strip("`\"'")
+        for item in re.split(r"\s*(?:,|<br\s*/?>)\s*", cleaned)
+        if item.strip()
+    ]
+    if not files or any("<" in item or ">" in item for item in files):
+        raise HandoffError(f"PLAN.md {task_id} has an invalid Files cell")
+    files = [
+        _canonical_repo_path(item, f"PLAN.md {task_id} Files") for item in files
+    ]
+    if len(files) != len(set(files)):
+        raise HandoffError(f"PLAN.md {task_id} repeats a file")
+    return files
+
+
+def _plan_tasks(plan: str) -> Tuple[Dict[str, Dict[str, object]], List[int]]:
+    headings = list(PLAN_WAVE_HEADING.finditer(plan))
+    if not headings:
+        raise HandoffError("PLAN.md has no waves")
+    waves = [int(heading.group("wave")) for heading in headings]
+    if waves != list(range(1, len(waves) + 1)):
+        raise HandoffError("PLAN.md wave numbers must be unique, ordered, and contiguous")
+
+    rows: Dict[str, Dict[str, object]] = {}
+    ordered_ids: List[str] = []
+    for index, heading in enumerate(headings):
+        wave = int(heading.group("wave"))
+        end = headings[index + 1].start() if index + 1 < len(headings) else len(plan)
+        block = plan[heading.end() : end]
+        goal = re.search(r"(?m)^Goal:\s*(.+)$", block)
+        depth = re.search(r"(?m)^Review depth:\s*(\S+)", block)
+        if not goal:
+            raise HandoffError(f"PLAN.md Wave {wave} is missing Goal")
+        _non_placeholder(goal.group(1), f"PLAN.md Wave {wave} Goal")
+        if not depth or depth.group(1) not in {"full", "deep", "verify-only"}:
+            raise HandoffError(f"PLAN.md Wave {wave} has an invalid Review depth")
+        if wave == 1 and depth.group(1) == "verify-only":
+            raise HandoffError("PLAN.md Wave 1 Review depth must be full or deep")
+
+        wave_rows = 0
+        for line in _strip_comments(block).splitlines():
+            stripped = line.strip()
+            if re.match(r"^\|\s*Task\s*\|", stripped):
+                continue
+            if not re.match(r"^\|\s*T", stripped):
+                continue
+            match = PLAN_TASK_ROW.fullmatch(stripped)
+            if not match:
+                raise HandoffError(f"PLAN.md Wave {wave} has a malformed task row")
+            task_id = match.group("task")
+            if task_id in rows:
+                raise HandoffError(f"PLAN.md repeats {task_id}")
+            title = _non_placeholder(match.group("title"), f"PLAN.md {task_id} title")
+            rows[task_id] = {
+                "wave": wave,
+                "title": _normalize_ws(title),
+                "review_depth": depth.group(1),
+                "deps": _inline_ids(match.group("deps"), "T", f"PLAN.md {task_id} Deps"),
+                "files": _plan_files(match.group("files"), task_id),
+            }
+            ordered_ids.append(task_id)
+            wave_rows += 1
+        if wave_rows == 0:
+            raise HandoffError(f"PLAN.md Wave {wave} has no task rows")
+
+    expected = [f"T{number:03d}" for number in range(1, len(ordered_ids) + 1)]
+    if ordered_ids != expected:
+        raise HandoffError("PLAN.md task ids must be unique, ordered, and contiguous")
+    return rows, waves
+
+
+def _require_task_structure(task_id: str, text: str) -> None:
+    expected = {
+        "status": "pending",
+        "agent": "null",
+        "commit": "null",
+        "base": "null",
+        "worktree": "null",
+        "task_branch": "null",
+    }
+    for field, value in expected.items():
+        if _task_scalar(text, task_id, field) != value:
+            raise HandoffError(f"{task_id} {field} must initially be {value}")
+    for heading in ("Context", "Approach", "Interface contract", "Log"):
+        body = _strip_comments(_section(text, heading)).strip()
+        if not body or "<" in body or ">" in body:
+            raise HandoffError(f"{task_id} {heading} is empty or still a placeholder")
+
+
+def _validate_task_graph(
+    plan_rows: Dict[str, Dict[str, object]], tasks: Dict[str, str]
+) -> None:
+    if set(plan_rows) != set(tasks):
+        missing_rows = sorted(set(tasks) - set(plan_rows))
+        missing_files = sorted(set(plan_rows) - set(tasks))
+        details = []
+        if missing_rows:
+            details.append("task files without rows: " + ", ".join(missing_rows))
+        if missing_files:
+            details.append("rows without task files: " + ", ".join(missing_files))
+        raise HandoffError("PLAN/task mapping mismatch; " + "; ".join(details))
+
+    graph: Dict[str, List[str]] = {}
+    for task_id, text in tasks.items():
+        row = plan_rows[task_id]
+        _require_task_structure(task_id, text)
+        title = _normalize_ws(_task_scalar(text, task_id, "title"))
+        wave = _task_wave(text, task_id)
+        deps = _task_deps(text, task_id)
+        files = _frontmatter_files(text)
+        if title != row["title"]:
+            raise HandoffError(f"{task_id} title differs between PLAN.md and task file")
+        if wave != row["wave"]:
+            raise HandoffError(f"{task_id} wave differs between PLAN.md and task file")
+        if deps != row["deps"]:
+            raise HandoffError(f"{task_id} deps differ between PLAN.md and task file")
+        if files != row["files"]:
+            raise HandoffError(f"{task_id} files differ between PLAN.md and task file")
+        graph[task_id] = deps
+        for dependency in deps:
+            if dependency not in tasks:
+                raise HandoffError(f"{task_id} names unknown dependency {dependency}")
+            if _task_wave(tasks[dependency], dependency) > wave:
+                raise HandoffError(f"{task_id} depends on later-wave {dependency}")
+
+    task_ids = list(plan_rows)
+    for index, left in enumerate(task_ids):
+        for right in task_ids[index + 1 :]:
+            if plan_rows[left]["wave"] != plan_rows[right]["wave"]:
+                continue
+            overlap = sorted(set(plan_rows[left]["files"]) & set(plan_rows[right]["files"]))
+            if overlap:
+                raise HandoffError(
+                    f"same-wave file overlap between {left} and {right}: {', '.join(overlap)}"
+                )
+
+    visiting: Set[str] = set()
+    visited: Set[str] = set()
+
+    def visit(task_id: str) -> None:
+        if task_id in visiting:
+            raise HandoffError(f"dependency cycle includes {task_id}")
+        if task_id in visited:
+            return
+        visiting.add(task_id)
+        for dependency in graph[task_id]:
+            visit(dependency)
+        visiting.remove(task_id)
+        visited.add(task_id)
+
+    for task_id in graph:
+        visit(task_id)
 
 
 def _intent_path(project_dir: str) -> str:
@@ -516,17 +863,237 @@ def _owned_by_wave(
     return sorted(owned, key=lambda name: int(name[2:]))
 
 
+def _named_field(block: str, field: str, label: str) -> str:
+    match = re.search(rf"(?m)^- \*\*{re.escape(field)}\*\*:\s*(.+)$", block)
+    if not match:
+        raise HandoffError(f"{label} is missing {field}")
+    return _non_placeholder(match.group(1), f"{label} {field}")
+
+
+def validate_decide(
+    root: Path, project_dir: str = DEFAULT_PROJECT_DIR
+) -> Dict[str, object]:
+    """Validate the structural synthesis contract without judging decisions."""
+
+    _require_state(root, "decide", "active", project_dir)
+    program_scope = (
+        project_dir == DEFAULT_PROJECT_DIR
+        and (root / project_dir / "CHARTER.md").is_file()
+        and not (root / project_dir / "ROADMAP.md").exists()
+    )
+    relative = (
+        f"{project_dir}/SYNTHESIS.md"
+        if program_scope
+        else f"{project_dir}/research/SYNTHESIS.md"
+    )
+    text = _read(root, relative)
+    for heading in ("Settled", "Decisions", "For the planner", "User rulings", "Still unknown"):
+        _section(text, heading)
+
+    decision_section = _strip_comments(_section(text, "Decisions"))
+    headings = list(re.finditer(r"(?m)^### (.+?)\s*$", decision_section))
+    decisions: List[str] = []
+    if not headings and not re.search(r"(?m)^- None\s*$", decision_section):
+        raise HandoffError("SYNTHESIS.md Decisions must contain decision blocks or - None")
+    for index, heading in enumerate(headings):
+        title = _non_placeholder(heading.group(1), "SYNTHESIS.md decision heading")
+        end = headings[index + 1].start() if index + 1 < len(headings) else len(decision_section)
+        block = decision_section[heading.end() : end]
+        label = f"SYNTHESIS.md decision {title}"
+        _named_field(block, "Decision", label)
+        _named_field(block, "Runner-up", label)
+        _named_field(block, "Evidence", label)
+        confidence = _named_field(block, "Confidence", label).split("—", 1)[0].strip()
+        if confidence not in {"high", "medium", "low"}:
+            raise HandoffError(f"{label} Confidence is invalid")
+        decisions.append(title)
+
+    planner = _section(text, "For the planner")
+    for field in ("Wave-1 blockers", "Walking skeleton", "Pitfalls → tasks"):
+        _named_field(planner, field, "SYNTHESIS.md For the planner")
+    if re.search(r"<[^>\n]+>", _strip_comments(text)):
+        raise HandoffError("SYNTHESIS.md still contains a placeholder")
+    return {"phase": "decide", "synthesis": relative, "decisions": decisions}
+
+
+def _roadmap_field(block: str, field: str, milestone: str, *, allow_null: bool = False) -> str:
+    match = re.search(rf"(?m)^{re.escape(field)}:\s*([^#]*?)(?:\s+#.*)?$", block)
+    if not match:
+        raise HandoffError(f"{milestone} is missing {field}")
+    value = match.group(1).strip().strip("`\"'")
+    if allow_null and value == "null":
+        return value
+    return _non_placeholder(value, f"{milestone} {field}")
+
+
+def _roadmap_segment(block: str, start: str, end: Optional[str], milestone: str) -> str:
+    terminator = rf"(?=^{re.escape(end)}\s*$)" if end else r"\Z"
+    match = re.search(
+        rf"(?ms)^{re.escape(start)}\s*$\n(?P<body>.*?){terminator}", block
+    )
+    if not match:
+        raise HandoffError(f"{milestone} is missing {start}")
+    return match.group("body")
+
+
+def _roadmap_bullets(body: str, label: str, *, allow_none: bool) -> List[str]:
+    values = [
+        line.strip()[2:].strip()
+        for line in body.splitlines()
+        if line.strip().startswith("- ")
+    ]
+    if not values:
+        raise HandoffError(f"{label} has no entries")
+    for value in values:
+        if "<" in value or ">" in value or (not allow_none and value.casefold() == "none"):
+            raise HandoffError(f"{label} has an empty or placeholder entry")
+    return values
+
+
+def _milestone_blocks(text: str) -> List[Tuple[str, str, str, str]]:
+    section = _section(text, "Milestones")
+    searchable = COMMENT_PATTERN.sub(
+        lambda match: re.sub(r"[^\n]", " ", match.group(0)),
+        section,
+    )
+    headings = list(MILESTONE_HEADING.finditer(searchable))
+    if not headings:
+        raise HandoffError("ROADMAP.md has no milestones")
+    blocks = []
+    for index, heading in enumerate(headings):
+        end = headings[index + 1].start() if index + 1 < len(headings) else len(section)
+        blocks.append(
+            (
+                heading.group("id"),
+                _non_placeholder(heading.group("slug"), f"{heading.group('id')} slug"),
+                section[heading.end() : end],
+                section[heading.start() : end],
+            )
+        )
+    return blocks
+
+
+def _head_file(root: Path, relative: str) -> Optional[str]:
+    result = subprocess.run(
+        ["git", "show", f"HEAD:{relative}"],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return result.stdout if result.returncode == 0 else None
+
+
+def _without_roadmap_mutable_fields(block: str) -> str:
+    return re.sub(r"(?m)^(?:Status|Archive|Integrated):.*\n?", "", block).strip()
+
+
+def validate_roadmap(
+    root: Path, project_dir: str = DEFAULT_PROJECT_DIR
+) -> Dict[str, object]:
+    """Validate roadmap structure and dependency ordering."""
+
+    _require_state(root, "roadmap", "active", project_dir)
+    relative = f"{project_dir}/ROADMAP.md"
+    text = _read(root, relative)
+    if re.search(r"(?m)^## Wave |^\|\s*Task\s*\||^Files:\s*", text):
+        raise HandoffError("ROADMAP.md must not contain waves, tasks, or file lists")
+    if re.search(r"<[^>\n]+>", _strip_comments(text)):
+        raise HandoffError("ROADMAP.md still contains a placeholder")
+
+    blocks = _milestone_blocks(text)
+    ids = [milestone for milestone, _, _, _ in blocks]
+    expected = [f"M{number:03d}" for number in range(1, len(ids) + 1)]
+    if ids != expected:
+        raise HandoffError("ROADMAP.md milestone ids must be unique, ordered, and contiguous")
+
+    dependencies: Dict[str, List[str]] = {}
+    raw_by_id: Dict[str, str] = {}
+    for index, (milestone, _slug, block, raw) in enumerate(blocks):
+        raw_by_id[milestone] = raw
+        _roadmap_field(block, "Goal", milestone)
+        deps = _inline_ids(
+            _roadmap_field(block, "Depends on", milestone),
+            "M",
+            f"{milestone} Depends on",
+        )
+        earlier = set(ids[:index])
+        invalid = [dependency for dependency in deps if dependency not in earlier]
+        if invalid:
+            raise HandoffError(
+                f"{milestone} dependencies must name earlier milestones: {', '.join(invalid)}"
+            )
+        dependencies[milestone] = deps
+        status = _roadmap_field(block, "Status", milestone)
+        if status not in {"pending", "active", "shipped", "abandoned"}:
+            raise HandoffError(f"{milestone} Status is invalid")
+        _roadmap_field(block, "Archive", milestone, allow_null=True)
+        _roadmap_field(block, "Integrated", milestone, allow_null=True)
+        _roadmap_bullets(
+            _roadmap_segment(block, "Scope: in", "Scope: out", milestone),
+            f"{milestone} Scope: in",
+            allow_none=False,
+        )
+        _roadmap_bullets(
+            _roadmap_segment(block, "Scope: out", "Success criteria", milestone),
+            f"{milestone} Scope: out",
+            allow_none=True,
+        )
+        criteria = _numbered_items(
+            _roadmap_segment(block, "Success criteria", "Risks", milestone)
+        )
+        if not criteria or sorted(criteria) != list(range(1, len(criteria) + 1)):
+            raise HandoffError(f"{milestone} Success criteria must be contiguous from 1")
+        _roadmap_bullets(
+            _roadmap_segment(block, "Risks", "Open questions", milestone),
+            f"{milestone} Risks",
+            allow_none=False,
+        )
+        _roadmap_bullets(
+            _roadmap_segment(block, "Open questions", None, milestone),
+            f"{milestone} Open questions",
+            allow_none=True,
+        )
+
+    previous = _head_file(root, relative)
+    if previous and previous != text:
+        previous_blocks = {
+            milestone: raw
+            for milestone, _slug, _block, raw in _milestone_blocks(previous)
+        }
+        for milestone, old_block in previous_blocks.items():
+            status = _roadmap_field(old_block, "Status", milestone)
+            if milestone not in raw_by_id:
+                raise HandoffError(f"ROADMAP.md removed existing {milestone}")
+            new_block = raw_by_id[milestone]
+            if status == "abandoned" and new_block != old_block:
+                raise HandoffError(f"ROADMAP.md changed abandoned {milestone}")
+            shipped_changed = _without_roadmap_mutable_fields(
+                new_block
+            ) != _without_roadmap_mutable_fields(old_block)
+            if status == "shipped" and shipped_changed:
+                raise HandoffError(f"ROADMAP.md changed immutable content in shipped {milestone}")
+
+    return {"phase": "roadmap", "milestones": ids, "dependencies": dependencies}
+
+
 def validate_plan(
     root: Path, project_dir: str = DEFAULT_PROJECT_DIR
 ) -> Dict[str, object]:
     """Validate INTENT success criteria against PLAN.md coverage and tasks."""
 
-    _require_pipeline(root, project_dir)
+    _require_state_one_of(
+        root,
+        {("plan", "active"), ("build", "active")},
+        project_dir,
+    )
     intent = _read(root, _intent_path(project_dir))
     plan = _read(root, f"{project_dir}/plan/PLAN.md")
     criteria = _success_criteria(intent)
     rows = _coverage_rows(plan)
     tasks = _task_texts(root, project_dir)
+    plan_tasks, waves = _plan_tasks(plan)
+    _validate_task_graph(plan_tasks, tasks)
     assigned: Dict[str, Set[str]] = {task_id: set() for task_id in tasks}
     covered = set()
     for criterion, task_id, acceptance in rows:
@@ -570,6 +1137,7 @@ def validate_plan(
         "criteria": sorted(criteria),
         "rows": len(rows),
         "tasks": len(tasks),
+        "waves": waves,
     }
 
 
@@ -578,26 +1146,112 @@ def validate_wave(
     project_dir: str = DEFAULT_PROJECT_DIR,
     review: str = "",
 ) -> Dict[str, object]:
-    """Require a wave review to carry a verdict for every owned INTENT SC."""
+    """Validate one canonical wave review and its owned INTENT verdicts."""
 
-    _require_pipeline(root, project_dir)
+    _require_state(root, "build", "active", project_dir)
     if not review:
         raise HandoffError("wave validation requires --review")
-    name = PurePosixPath(review).name
+    review_path = PurePosixPath(review)
+    name = review_path.name
     named = WAVE_REVIEW_NAME.fullmatch(name)
     if not named:
         raise HandoffError(f"unrecognized wave review file: {name}")
+    expected_review = PurePosixPath(project_dir) / "review" / name
+    if review_path.is_absolute() or ".." in review_path.parts or review_path != expected_review:
+        raise HandoffError(
+            f"wave review must be the canonical path {expected_review.as_posix()}"
+        )
     wave = int(named.group("wave"))
+    cycle = int(named.group("cycle"))
+    lens = named.group("lens")
     intent = _read(root, _intent_path(project_dir))
     criteria = _success_criteria(intent)
-    rows = _coverage_rows(_read(root, f"{project_dir}/plan/PLAN.md"))
+    plan = _read(root, f"{project_dir}/plan/PLAN.md")
+    rows = _coverage_rows(plan)
+    plan_tasks, _waves = _plan_tasks(plan)
     tasks = _task_texts(root, project_dir)
+    if set(tasks) != set(plan_tasks):
+        raise HandoffError("PLAN/task mapping differs during wave review")
+    for task_id, task_text in tasks.items():
+        if _task_wave(task_text, task_id) != plan_tasks[task_id]["wave"]:
+            raise HandoffError(f"{task_id} wave differs between PLAN.md and task file")
+        title = _normalize_ws(_task_scalar(task_text, task_id, "title"))
+        if title != plan_tasks[task_id]["title"]:
+            raise HandoffError(f"{task_id} title differs between PLAN.md and task file")
+    expected_tasks = [
+        task_id
+        for task_id, task in plan_tasks.items()
+        if task["wave"] == wave
+    ]
+    if not expected_tasks:
+        raise HandoffError(f"PLAN.md has no Wave {wave} tasks")
+    expected_depth = plan_tasks[expected_tasks[0]]["review_depth"]
+    if lens is None and expected_depth == "deep":
+        raise HandoffError(f"{name} must name its contract or adversarial lens")
+    if lens is not None and expected_depth != "deep":
+        raise HandoffError(f"{name} has a lens but PLAN.md depth is {expected_depth}")
+
     assigned: Dict[str, Set[str]] = {task_id: set() for task_id in tasks}
     for criterion, task_id, _acceptance in rows:
         if task_id in assigned and criterion in criteria:
             assigned[task_id].add(criterion)
     owned = _owned_by_wave(tasks, assigned, wave)
-    text = _read(root, review)
+    text = _read(root, review_path.as_posix())
+    if _line_value(text, "Cycle:") != str(cycle):
+        raise HandoffError(f"{name} Cycle field does not match its filename")
+    if _line_value(text, "Depth:") != expected_depth:
+        raise HandoffError(f"{name} Depth does not match PLAN.md")
+    lens_fields = re.findall(r"(?m)^Lens:\s*(\S.*?)\s*$", text)
+    if lens is None and lens_fields:
+        raise HandoffError(f"{name} must not declare a review lens")
+    if lens is not None and lens_fields != [lens]:
+        raise HandoffError(f"{name} Lens field does not match its filename")
+    reviewed = _line_value(text, "Tasks reviewed:")
+    if not reviewed.isdigit() or int(reviewed) != len(expected_tasks):
+        raise HandoffError(f"{name} Tasks reviewed does not match Wave {wave}")
+
+    lines = text.splitlines()
+    task_headings = []
+    for index, line in enumerate(lines):
+        match = WAVE_TASK_HEADING.fullmatch(line)
+        if match:
+            task_headings.append((index, match))
+    reviewed_tasks = [match.group("task") for _, match in task_headings]
+    if reviewed_tasks != expected_tasks:
+        raise HandoffError(
+            f"{name} must review exactly {', '.join(expected_tasks)} in plan order"
+        )
+    task_verdicts = []
+    for heading_index, heading in task_headings:
+        task_id = heading.group("task")
+        if _normalize_ws(heading.group("title")) != plan_tasks[task_id]["title"]:
+            raise HandoffError(f"{name} title for {task_id} differs from PLAN.md")
+        end = next(
+            (
+                index
+                for index in range(heading_index + 1, len(lines))
+                if lines[index].startswith("## ")
+            ),
+            len(lines),
+        )
+        verdict = heading.group("verdict")
+        marker = "✅" if verdict == "pass" else "❌"
+        evidence = [
+            line.strip()[len(f"- {marker} ") :]
+            for line in lines[heading_index + 1 : end]
+            if line.strip().startswith(f"- {marker} ")
+        ]
+        if not evidence:
+            raise HandoffError(f"{name} task {task_id} lacks {verdict} evidence")
+        for item in evidence:
+            _non_placeholder(item, f"{name} task {task_id} {verdict} evidence")
+        task_verdicts.append(verdict)
+
+    overall = _line_value(text, "Wave verdict:")
+    if overall not in {"pass", "blocked"}:
+        raise HandoffError(f"{name} Wave verdict is invalid")
+    if overall == "pass" and "fail" in task_verdicts:
+        raise HandoffError(f"{name} Wave verdict is pass while a task failed")
     try:
         coverage = _section(text, "Intent coverage")
     except HandoffError:
@@ -605,31 +1259,63 @@ def validate_wave(
     if not owned:
         if coverage is not None and WAVE_SC_HEADING.search(_strip_comments(coverage)):
             raise HandoffError(f"{name} Intent coverage names SCs this wave does not own")
-        return {"phase": "wave", "wave": wave, "owned": [], "review": review}
+        return {
+            "phase": "wave",
+            "wave": wave,
+            "cycle": cycle,
+            "owned": [],
+            "review": review,
+            "verdict": overall,
+        }
     if coverage is None:
         raise HandoffError(f"{name} is missing ## Intent coverage")
     verdicts: Dict[str, str] = {}
-    for line in _strip_comments(coverage).splitlines():
-        match = WAVE_SC_HEADING.fullmatch(line.strip())
-        if not match:
-            continue
+    coverage_lines = _strip_comments(coverage).splitlines()
+    sc_headings = [
+        (index, match)
+        for index, line in enumerate(coverage_lines)
+        if (match := WAVE_SC_HEADING.fullmatch(line.strip())) is not None
+    ]
+    for position, (heading_index, match) in enumerate(sc_headings):
         sc_id = match.group(1)
-        verdict = match.group(2).rsplit(":", 1)[-1].strip()
+        heading_text, separator, verdict = match.group(2).rpartition(":")
+        verdict = verdict.strip()
         if verdict not in {"pass", "fail"}:
             raise HandoffError(f"{name} {sc_id} heading must end with `: pass` or `: fail`")
+        if (
+            sc_id in criteria
+            and (
+                not separator
+                or _normalize_ws(heading_text) != _normalize_ws(criteria[sc_id])
+            )
+        ):
+            raise HandoffError(f"{name} {sc_id} heading text differs from INTENT.md")
         if sc_id in verdicts:
             raise HandoffError(f"{name} Intent coverage repeats {sc_id}")
+        end = (
+            sc_headings[position + 1][0]
+            if position + 1 < len(sc_headings)
+            else len(coverage_lines)
+        )
+        marker = "✅" if verdict == "pass" else "❌"
+        evidence = [
+            line.strip()[len(f"- {marker} ") :]
+            for line in coverage_lines[heading_index + 1 : end]
+            if line.strip().startswith(f"- {marker} ")
+        ]
+        if not evidence:
+            raise HandoffError(f"{name} {sc_id} lacks {verdict} evidence")
+        for item in evidence:
+            _non_placeholder(item, f"{name} {sc_id} {verdict} evidence")
         verdicts[sc_id] = verdict
     if sorted(verdicts, key=lambda n: int(n[2:])) != owned:
         raise HandoffError(f"{name} Intent coverage must cover exactly {', '.join(owned)}")
-    overall = _line_value(text, "Wave verdict:")
-    if overall not in {"pass", "blocked"}:
-        raise HandoffError(f"{name} Wave verdict is invalid")
     if overall == "pass" and "fail" in verdicts.values():
         raise HandoffError(f"{name} Wave verdict is pass while an owned SC failed")
     return {
         "phase": "wave",
         "wave": wave,
+        "cycle": cycle,
         "owned": owned,
         "review": review,
         "verdict": overall,
@@ -641,46 +1327,132 @@ def validate_final(
 ) -> Dict[str, object]:
     """Require FINAL.md to give an evidenced verdict for every INTENT SC."""
 
-    _require_pipeline(root, project_dir)
+    _require_state(root, "ship", "active", project_dir)
     criteria = _success_criteria(_read(root, _intent_path(project_dir)))
     relative = f"{project_dir}/review/FINAL.md"
     text = _read(root, relative)
+    reviewed_head = _reviewed_head(text, relative)
+    head_result = subprocess.run(
+        ("git", "-C", str(root), "rev-parse", "--verify", "HEAD"),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if head_result.returncode != 0:
+        raise HandoffError("FINAL.md Reviewed HEAD cannot be checked because HEAD is missing")
+    current_head = head_result.stdout.strip()
+    if reviewed_head != current_head:
+        raise HandoffError("FINAL.md Reviewed HEAD must equal current HEAD")
     overall = _line_value(text, "Overall verdict:")
     if overall not in {"pass", "blocked"}:
         raise HandoffError("FINAL.md Overall verdict is invalid")
     text = _strip_comments(_section(text, "Success criteria"))
-    blocks = list(re.finditer(r"(?m)^### (SC[1-9]\d*) — .+$", text))
+    blocks = list(
+        re.finditer(r"(?m)^### (?P<id>SC[1-9]\d*) — (?P<title>.+)$", text)
+    )
     expected = list(criteria)
-    found = [match.group(1) for match in blocks]
+    found = [match.group("id") for match in blocks]
     if sorted(found, key=lambda n: int(n[2:])) != expected:
         raise HandoffError("FINAL.md Success criteria must cover exactly " + ", ".join(expected))
     verdicts: Dict[str, str] = {}
     for index, heading in enumerate(blocks):
-        sc_id = heading.group(1)
+        sc_id = heading.group("id")
+        if _normalize_ws(heading.group("title")) != _normalize_ws(criteria[sc_id]):
+            raise HandoffError(f"FINAL.md {sc_id} heading text differs from INTENT.md")
         end = blocks[index + 1].start() if index + 1 < len(blocks) else len(text)
         block = text[heading.end() : end]
-        verdict_match = re.search(r"(?m)^- \*\*Verdict\*\*:\s*(.+)$", block)
-        check_match = re.search(r"(?m)^- \*\*Check\*\*:\s*(.+)$", block)
-        reference_match = re.search(r"(?m)^- \*\*Reference\*\*:\s*(.+)$", block)
-        if not verdict_match:
-            raise HandoffError(f"FINAL.md {sc_id} is missing a Verdict")
-        verdict = verdict_match.group(1).strip().strip("`")
+        label = f"FINAL.md {sc_id}"
+        verdict = _source_field(block, "Verdict", label)
         if verdict not in {"met", "not-met", "unverifiable"}:
             raise HandoffError(f"FINAL.md {sc_id} Verdict is invalid")
         verdicts[sc_id] = verdict
-        check = check_match.group(1).strip().strip("`") if check_match else "none"
-        reference = (
-            reference_match.group(1).strip().strip("`") if reference_match else "none"
+        check = _source_field(block, "Check", label)
+        observed = _source_field(block, "Observed", label)
+        reference = _source_field(block, "Reference", label)
+        finding = _source_field(block, "Finding", label)
+        fix_direction = _source_field(block, "Fix direction", label)
+        if check.casefold() == "none" and reference.casefold() == "none":
+            raise HandoffError(f"FINAL.md {sc_id} lacks a Check or Reference")
+        if observed.casefold() == "none":
+            raise HandoffError(f"FINAL.md {sc_id} lacks an Observed result")
+        if verdict == "met":
+            if finding.casefold() != "none" or fix_direction.casefold() != "none":
+                raise HandoffError(
+                    f"FINAL.md {sc_id} met verdict must have no Finding or Fix direction"
+                )
+        elif finding.casefold() == "none" or fix_direction.casefold() == "none":
+            raise HandoffError(
+                f"FINAL.md {sc_id} {verdict} verdict requires a Finding and Fix direction"
+            )
+        if overall == "pass" and verdict != "met":
+            raise HandoffError(f"FINAL.md Overall verdict is pass while {sc_id} is {verdict}")
+    review_dir = root / project_dir / "review"
+    gaps: Dict[int, str] = {}
+    for path in sorted(review_dir.glob("final-gap-*.md")):
+        match = GAP_NAME_PATTERN.fullmatch(path.name)
+        if not match or not path.is_file() or path.is_symlink():
+            raise HandoffError(f"invalid final gap artifact: {path.name}")
+        number = int(match.group("number"))
+        if number in gaps:
+            raise HandoffError(f"duplicate final gap number {number}")
+        gap_relative = f"{project_dir}/review/{path.name}"
+        gap = _read(root, gap_relative)
+        heading = GAP_HEADING_PATTERN.fullmatch(gap.splitlines()[0] if gap else "")
+        if not heading or int(heading.group("number")) != number:
+            raise HandoffError(f"{gap_relative} heading does not match its file number")
+        if _reviewed_head(gap, gap_relative) != reviewed_head:
+            raise HandoffError(f"{gap_relative} Reviewed HEAD differs from FINAL.md")
+        verdict = _line_value(gap, "Gap verdict:")
+        if verdict not in {"pass", "blocked"}:
+            raise HandoffError(f"{gap_relative} Gap verdict is invalid")
+        risk = _line_value(gap, "Risk:")
+        if (
+            _normalize_ws(heading.group("risk")).casefold()
+            != _normalize_ws(risk).casefold()
+        ):
+            raise HandoffError(
+                f"{gap_relative} heading risk does not match Risk field"
+            )
+        _line_value(gap, "Waves checked:")
+        checked = _section(gap, "Checked evidence")
+        check = _source_field(checked, "Check", gap_relative)
+        observed = _source_field(checked, "Observed", gap_relative)
+        reference = _source_field(checked, "Reference", gap_relative)
+        if check.casefold() == "none" and reference.casefold() == "none":
+            raise HandoffError(f"{gap_relative} lacks a Check or Reference")
+        if observed.casefold() == "none":
+            raise HandoffError(f"{gap_relative} lacks an Observed result")
+        finding = _section(gap, "Finding")
+        found_value = _source_field(finding, "Found", gap_relative)
+        fix_direction = _source_field(finding, "Fix direction", gap_relative)
+        if found_value.casefold() == "none":
+            raise HandoffError(f"{gap_relative} lacks a Finding")
+        if verdict == "pass" and fix_direction.casefold() != "none":
+            raise HandoffError(f"{gap_relative} pass must use Fix direction: none")
+        if verdict == "blocked" and fix_direction.casefold() == "none":
+            raise HandoffError(f"{gap_relative} blocked verdict lacks a fix direction")
+        gaps[number] = verdict
+
+    expected_gaps = list(range(1, len(gaps) + 1))
+    if sorted(gaps) != expected_gaps or not gaps:
+        raise HandoffError("final gap artifacts must be present and contiguous from 1")
+    if overall == "pass" and any(verdict != "pass" for verdict in gaps.values()):
+        raise HandoffError("FINAL.md Overall verdict is pass while a final gap is blocked")
+    all_evidence_passes = (
+        all(verdict == "met" for verdict in verdicts.values())
+        and all(verdict == "pass" for verdict in gaps.values())
+    )
+    expected_overall = "pass" if all_evidence_passes else "blocked"
+    if overall != expected_overall:
+        raise HandoffError(
+            f"FINAL.md Overall verdict must be {expected_overall} for its SC and gap verdicts"
         )
-        if overall == "pass":
-            if verdict != "met":
-                raise HandoffError(f"FINAL.md Overall verdict is pass while {sc_id} is {verdict}")
-            if check.casefold() == "none" and reference.casefold() == "none":
-                raise HandoffError(f"FINAL.md {sc_id} lacks a Check or Reference")
     return {
         "phase": "ship",
         "criteria": expected,
         "verdict": overall,
+        "reviewed_head": reviewed_head,
+        "gaps": sorted(gaps),
     }
 
 
@@ -747,7 +1519,7 @@ def validate_patch_findings(
 def parser() -> argparse.ArgumentParser:
     argument_parser = argparse.ArgumentParser(description=__doc__)
     argument_parser.add_argument(
-        "phase", choices=("research", "patch", "plan", "wave", "final")
+        "phase", choices=("research", "decide", "roadmap", "patch", "plan", "wave", "final")
     )
     argument_parser.add_argument("--repo", type=Path, required=True)
     argument_parser.add_argument(
@@ -776,6 +1548,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         else:
             validators = {
                 "research": validate_research,
+                "decide": validate_decide,
+                "roadmap": validate_roadmap,
                 "patch": validate_patch_findings,
                 "plan": validate_plan,
                 "final": validate_final,

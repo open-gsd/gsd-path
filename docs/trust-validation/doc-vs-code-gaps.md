@@ -1,6 +1,6 @@
 # GSD Path — Documentation vs Code Gap Catalog
 
-**Generated:** 2026-08-05 (wayfinder: Catalog documentation vs code gaps)  
+**Generated:** 2026-08-05 (workstream: Catalog documentation vs code gaps)
 **Primary sources:** live repo read + commands; reconciled with `.project/research/DOCS-AUDIT.md` (2026-08-02) and `evidence-codebase.md`.
 
 ## Executive summary

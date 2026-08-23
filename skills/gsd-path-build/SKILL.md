@@ -25,7 +25,7 @@ explicitly invokes it.
   marks an interrupted milestone-abandon transaction: resume the Milestone
   abandon procedure below before any recovery or dispatch. `build/done` is never a normal execution state:
   re-prove all wave gates at current HEAD, then finish the
-  committed transition to `ship/active`. Project Verify waits for ship.
+  checkpointed transition to `ship/active`. Project Verify waits for ship.
 - Read the local [coder role](references/coder.md),
   [reviewer role](references/reviewer.md), [dispatch contract](references/dispatch.md),
   [task template](templates/task.md),
@@ -33,8 +33,9 @@ explicitly invokes it.
   [wave-panel template](templates/wave-panel.md). Resolve them to absolute
   paths before briefing agents. Resolve `scripts/review_panel.py` when
   PLAN.md Config names a review panel. Resolve `scripts/check_handoffs.py`
-  for Intent coverage. Resolve `scripts/isolation.py` for task isolation,
-  recovery, verify sidecars, and task landing; do not invent
+  for Intent coverage. Resolve `scripts/pipeline_state.py` for guarded state
+  transitions. Resolve `scripts/isolation.py` for task isolation, recovery,
+  verify sidecars, task landing, and bookkeeping checkpoints; do not invent
   `git worktree add`, `--detach`, commit, or cherry-pick commands.
 - There is no board file. Task frontmatter is the only task-state record;
   when a report or question needs a wave summary, render it inline from the
@@ -47,10 +48,10 @@ explicitly invokes it.
   transaction or no Git repository at approval time). On an approved patch
   re-entry, the exact review findings, appended
   plan/tasks, approval state, and no other changes are also expected; the build
-  orchestrator commits them with the `build/active` transition before a layer
+  orchestrator checkpoints them with the `build/active` transition before a layer
   base. Append-only `.project/discuss/DIALOGUE.md` and `ANSWERS.md` records are
   also expected bookkeeping: verify that their diff only appends complete
-  records, then include them in the next normal orchestrator bookkeeping commit
+  records, then include them in the next normal orchestrator bookkeeping checkpoint
   before establishing a layer base. Never discard, stash, or absorb another
   change.
 - Before recovery or dispatch and again before each layer/wave gate, scan
@@ -62,7 +63,7 @@ explicitly invokes it.
   layer base from stale inputs.
 - Fetch the configured remote and resolve its default ref and exact SHA without
   checking out, pulling, or updating the local default branch. When
-  `STATE.branch` is set, bind that recorded branch — never whatever clean
+  `STATE.branch` is set, adopt that recorded branch — never whatever clean
   unmerged non-default branch happens to be current: require the current
   symbolic branch to equal it. Ignore ship and integrate commits for older
   milestones inherited from main. Find only a ship subject whose M00N matches
@@ -71,15 +72,11 @@ explicitly invokes it.
   is incomplete: stop and return to `$gsd-path`, which routes to ship, not
   build. If that current-milestone ship is on the default without its matching
   `integrate:` commit, block as externally polluted. A newly prebound branch
-  whose HEAD equals the resolved remote-default SHA is valid. When
-  `STATE.branch` is null and neither archive nor shipped history exists,
-  bind a `gsd-path/M00N` branch at that remote-default SHA: the active
-  ROADMAP.md entry id when one exists, otherwise one plus the maximum
-  existing archive prefix, otherwise M001. Use the current clean unmerged
-  non-default branch only when it already has that exact name. The bound
-  branch must not equal the remote default. A mismatch or a branch owned by
-  another worktree blocks; never silently rebind it. A null branch after
-  shipped history is an incomplete router handoff and returns to `$gsd-path`.
+  whose HEAD equals the resolved remote-default SHA is valid. A null branch is
+  always an incomplete router binding: return to `$gsd-path`, which runs
+  `pipeline_git.py bind-initial` or resumes `bind-next`. Build never creates,
+  selects, switches, or rebinds a milestone branch. A mismatch or a branch
+  owned by another worktree blocks.
 - When `.project/REPOSITORY.md` records `Kind: new-github`, parse its required
   fixed fields and verify the current root is the recorded linked primary
   worktree and the recorded default checkout stays clean on the remote
@@ -90,14 +87,37 @@ explicitly invokes it.
   later `gsd-path/M00N` created at the then-current remote-default SHA. Adopt
   the proven worktree and default checkout; do not parse STATE log prose or
   create another primary worktree.
-- Persist the branch in STATE.md. On entry from `plan/done`, set STATE to
-  `build/active`, append `build started`, and commit that transition with the
-  expected initial `.project/` artifacts before dispatch. From then on, every
+- On entry from `plan/done`, run the bundled `pipeline_state.py transition`
+  helper with expected `phase: plan`, `status: done`, exact bound branch, and
+  archive. Set `phase: build` and `status: active`, and use event `build
+  started`. Recover `build/blocked` the same way with all old values expected.
+  Checkpoint that transition with the expected initial `.project/` artifacts
+  before dispatch. Never edit or append STATE.md through model-side text
+  transforms. From then on, every
   dispatch round starts from a clean primary worktree and exact full `HEAD`
-  SHA. Every orchestrator bookkeeping commit uses subject `build: <what
+  SHA. Every orchestrator bookkeeping checkpoint uses subject `build: <what
   changed>` plus a body that starts with `Why: <one sentence>` and may add
   `Wave:`, `Tasks:`, and `Base:` field lines. Task landing still goes
   through `isolation.py land`; do not invent those commit messages.
+
+**Bookkeeping checkpoint.** Every build-orchestrator instruction below to
+checkpoint `.project/` records uses this helper. Record the exact full HEAD
+before the first metadata change in that checkpoint, then run:
+
+```text
+python3 <absolute isolation.py> checkpoint \
+  --repo <absolute primary> \
+  --expected-head <recorded-full-HEAD> \
+  --subject 'build: <what changed>' \
+  --body 'Why: <one sentence>' \
+  --allow-path .project
+```
+
+Add only the documented optional `Wave:`, `Tasks:`, and `Base:` body lines.
+A typed error blocks and leaves no claimed checkpoint. The returned full
+commit becomes the next clean base. This is the only build bookkeeping commit
+path; product landing remains `isolation.py land`, and the ship commit remains
+ship-owned.
 
 ## Wave loop
 
@@ -134,12 +154,12 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
    - `block`: set `build/blocked` with the returned reason and stop.
    - `none`: take no recovery action for that task.
 
-2. **Prepare the ready set.** Reconcile failed and blocked tasks, then
-   select pending tasks whose dependencies are `done`. Readiness is
-   continuous, not layered: a task becomes selectable the moment its last
-   dependency lands, even while unrelated tasks still run. A
-   `NEEDS-ORCHESTRATOR` block stays unselectable until its
-   `Orchestrator answer` is recorded in the task Log. A documented plan
+2. **Prepare the ready set.** Reconcile failed and blocked tasks, then select
+   pending tasks whose dependencies are `done`. Readiness is continuous, not
+   layered: a task becomes selectable the moment its last dependency lands,
+   even while unrelated tasks still run. A `NEEDS-ORCHESTRATOR` block stays
+   unselectable until its `Orchestrator answer` is recorded in the task Log.
+   A documented plan
    defect may be repaired against INTENT.md and SYNTHESIS.md and logged before
    a new clean base. A user ruling that changes a success criterion,
    constraint, or veto is not a plan defect: set `build/blocked`, do not
@@ -150,7 +170,7 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
    Concurrent tasks must have disjoint `files`; serialize overlapping fix
    tasks. A retry never reuses a rejected dirty worktree: first copy its
    validated append-only task Log delta into the primary task file, record the
-   rejected diff's exact path set and hash, and commit the block bookkeeping.
+   rejected diff's exact path set and hash, and checkpoint the block bookkeeping.
    After confirming every old change is task-owned, retire that exact worktree
    with `python3 <absolute isolation.py> retire --repo <absolute primary>
    --worktree <path> --branch <task_branch> --force --task-file <task path>`,
@@ -158,11 +178,13 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
    worktree, rerun the same command; the recorded failed or blocked task and
    its exact base prove the remaining branch before deletion. Create the retry
    from the new clean primary HEAD. After
-   resolving a recoverable `build/blocked` condition, set STATE back to
-   `build/active`, log the resolution, and commit it before recording that new
-   dispatch-round base.
+   resolving a recoverable `build/blocked` condition, use
+   `pipeline_state.py transition` with the blocked state and bound branch as
+   expected fields to set `build/active` and log the resolution. Checkpoint it
+   through the bookkeeping rule before recording that new dispatch-round base.
 
-3. **Isolate every task.** Commit pending bookkeeping, record clean `HEAD` as
+3. **Isolate every task.** Checkpoint pending bookkeeping through the rule
+   above, then record clean `HEAD` as
    this dispatch round's base — tasks dispatched in the same round share it;
    a later round unlocked by fresh landings records the later HEAD — and
    lint every ready task's brief with the bundled
@@ -238,7 +260,7 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
      INTENT.md, SYNTHESIS.md, and the Interface contracts of every involved
      task) pin exactly one answer, append `Orchestrator answer: <answer> —
      <artifact citation>` to the task Log, return the task to `pending`,
-     commit the bookkeeping, and let a later layer redispatch it; a question
+     checkpoint the bookkeeping, and let a later layer redispatch it; a question
      redispatch never consumes the failed-implementation redispatch. When the
      runtime's structured layer exposes a blocking ask/reply channel, relay
      the answer through it with the worker held alive per the runtime
@@ -254,7 +276,7 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
      commit. Validate and copy the isolated task's append-only Log delta once;
      it is the coder's sole block/implementation narrative. Add orchestrator
      evidence only for a distinct diff or Verify rejection, set the task
-     `blocked` or `failed`, commit the bookkeeping, and apply the recovery
+     `blocked` or `failed`, checkpoint the bookkeeping, and apply the recovery
      rule. Preserve the isolated worktree unless and until the explicit clean
      retry-retirement procedure in step 2 owns and removes it.
 
@@ -310,8 +332,12 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
      --intent <absolute INTENT.md> --advertised <comma slugs>
      --parent-slug <current model slug when known>` and `--charter
      <absolute .project/CHARTER.md>` when that file exists. `off` or
-     `skipped` continues with no panel. Exit 2 / `error`
-     blocks the wave. `ready` spawns one child per selected family with
+     `off` continues with no current-cycle panel artifact. For `skipped`,
+     persist the helper's exact JSON stdout as
+     `.project/review/wave-N.cycleC.panel.skipped.json` and continue without
+     a panel; do not translate or summarize the receipt. Exit 2 / `error`
+     blocks the wave. `ready` requires that skipped-receipt path to be absent,
+     then spawns one child per selected family with
      logical task name `review_wave_<wave>_cycle_<cycle>_panel_<family>`,
      the reviewer role in wave-panel mode, the wave-panel template, and the
      exact helper-returned model slug when the host advertises model
@@ -359,26 +385,29 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
    actionable count, **Review** linking the panel file, and **Next** listing
    `Open fix tasks from panel findings (recommended)` first, then `Advance
    and keep panel findings as warnings`. Preference-only panel warnings do
-   not block advance. On pass, commit the review artifact, the panel file
-   when present, STATE.md, and wave bookkeeping, then report `wave N/M done, C review cycle(s)`.
+   not block advance. On pass, checkpoint the review artifact, the panel file
+   when present, STATE.md, and wave
+   bookkeeping, then report `wave N/M done, C review cycle(s)`.
 
 ## Completion
 
-After every wave passes, append `build done; final review pending`, set
-STATE.md directly to `phase: ship`, `status: active`, and commit that
-transition as the build orchestrator's final bookkeeping. Do not run
+After every wave passes, record exact full HEAD and run
+`pipeline_state.py transition`, expecting `build/active` plus the exact branch
+and archive, to set `phase: ship`, `status: active` with event `build done;
+final review pending`. Checkpoint that transition through the rule above with
+subject `build: complete milestone` and a concrete `Why:` body. Do not run
 PLAN.md's project Verify here — ship runs it once. This
 keeps the primary worktree clean and avoids a separate review-phase transition
-commit. Report waves, exact task commits, fixed findings, and remaining risk.
- Link the resolved absolute final wave review as the review surface and state
- that ship is next. Do not merge to the default branch, tag, mark `shipped`, or
- integrate; ship owns FINAL.md, project Verify, and those steps. When invoked
- directly, stop and tell the user to explicitly
- invoke `$gsd-path`, which routes to ship; do not invoke an explicit-only sibling
- skill yourself.
- If
- a crash leaves `build/done`, finish and commit this transition before returning
-to the router.
+checkpoint. Report waves, exact task commits, fixed findings, and remaining risk.
+Link the resolved absolute final wave review as the review surface and state
+that ship is next. Do not merge to the default branch, tag, mark `shipped`, or
+integrate; ship owns FINAL.md, project Verify, and those steps. When invoked
+directly, stop and tell the user to explicitly
+invoke `$gsd-path`, which routes to ship; do not invoke an explicit-only sibling
+skill yourself.
+If a crash leaves `build/done`, use that phase and status as the expected
+transition values, then checkpoint the same `ship/active` result before
+returning to the router.
 
 ## Milestone abandon (program flow only)
 
@@ -393,21 +422,22 @@ path — stop and let the user decide how to restart.
    recorded metadata cannot own.
 2. Run the bundled `scripts/archive_milestone.py abandon --repo <absolute
    repo root> --slug <milestone slug> --reason <user ruling, verbatim>`.
-   The helper archives the partial artifacts without review gates and
-   persists the transaction id in STATE.archive before moving anything.
-   Rerun it to resume an interrupted transaction; never select another
-   sequence number.
-3. Mark the milestone's ROADMAP.md entry `Status: abandoned` with its
-   `Archive:` path, append the ruling and its reason to `.project/LESSONS.md`,
-   and set STATE.md to `phase: roadmap`, `status: active`, `milestone:
-   null`, `archive: null`, logging the abandoned archive path and the
-   ruling verbatim.
-4. Commit the abandon bookkeeping — archive moves, ROADMAP.md, LESSONS.md,
-   STATE.md — with exact subject `build: abandon milestone <slug>` and body
-   `Why: <user ruling, verbatim>`. A crash
-   before this commit leaves STATE.archive set under `build/*`; recovery
-   resumes from step 2.
-5. Return to the router, which routes `roadmap/active` to the roadmap
+   This one helper-owned transaction journals the exact request and starting
+   HEAD before mutation; archives the partial artifacts without review gates;
+   marks the exact ROADMAP entry `Status: abandoned` with its `Archive:` path;
+   appends `- <NNN>-<slug> — abandoned: <collapsed ruling>` exactly once to
+   LESSONS.md; transitions STATE to `roadmap/active` with `milestone: null`
+   and `archive: null`; and creates the checkpoint with exact subject `build:
+   abandon milestone <slug>` and body `Why: <collapsed ruling>`. The manifest
+   `Reason:` and checkpoint `Why:` are the same normalized ruling.
+3. Rerun the same command with the same slug and ruling after any interruption.
+   It resumes archive moves, metadata, state transition, or checkpoint from
+   the journaled starting HEAD; a changed slug, ruling, archive, branch, or
+   manifest reason blocks. Success returns the archive, exact checkpoint
+   commit, and `committed` or `already-complete` status. Never edit or commit
+   any part of this transaction manually and never select another sequence
+   number.
+4. Return to the router, which routes `roadmap/active` to the roadmap
    contract in re-slice mode. The abandoned code stays on the build branch
    until the next milestone's integration, then reaches the default branch as
    inert history; the re-slice plans around it. Never revert product commits

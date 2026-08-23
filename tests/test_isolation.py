@@ -29,6 +29,8 @@ BUNDLED_ISOLATION_SCRIPTS = tuple(
         "skills/gsd-path-ship/scripts/isolation.py",
     )
 )
+TASK_BASE = "task T001\n\n## Log\n- created\n"
+TASK_WITH_LOG = TASK_BASE + "- verified\n"
 
 
 def git(root: Path, *arguments: str) -> str:
@@ -48,7 +50,7 @@ class IsolationTests(unittest.TestCase):
         path.write_text(content, encoding="utf-8")
 
     def init_bound_repo(self, root: Path) -> str:
-        git(root, "init", "-b", "gsd-path/demo")
+        git(root, "init", "-b", "gsd-path/M001")
         git(root, "config", "user.email", "test@example.test")
         git(root, "config", "user.name", "Test")
         self.write(root, "src/app.py", "print('base')\n")
@@ -75,7 +77,7 @@ class IsolationTests(unittest.TestCase):
             self.assertIsNone(result["task_branch"])
             self.assertEqual(result["worktree"], str(repo.resolve()))
             self.assertFalse(result["detached"])
-            self.assertEqual(git(repo, "branch", "--show-current"), "gsd-path/demo")
+            self.assertEqual(git(repo, "branch", "--show-current"), "gsd-path/M001")
             listed = git(repo, "worktree", "list")
             self.assertNotIn("detached", listed)
 
@@ -92,10 +94,32 @@ class IsolationTests(unittest.TestCase):
             worktree = Path(first["worktree"])
             self.assertEqual(git(worktree, "branch", "--show-current"), "gsd-path-task/T001")
             self.assertEqual(git(worktree, "rev-parse", "HEAD"), base)
-            self.assertEqual(git(repo, "branch", "--show-current"), "gsd-path/demo")
+            self.assertEqual(git(repo, "branch", "--show-current"), "gsd-path/M001")
             listed = git(repo, "worktree", "list")
             self.assertNotIn("detached", listed)
             self.assertIn("gsd-path-task/T002", second["task_branch"])
+
+    def test_parallel_task_isolation_rejects_a_stale_primary_base(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            base = self.init_bound_repo(repo)
+            self.write(repo, ".project/STATE.md", "advanced\n")
+            git(repo, "add", ".project/STATE.md")
+            git(repo, "commit", "-q", "-m", "advanced")
+
+            with self.assertRaisesRegex(isolation.IsolationError, "primary HEAD"):
+                isolation.isolate_task(repo, base, "T001", 2)
+
+    def test_task_isolation_requires_a_clean_primary(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            base = self.init_bound_repo(repo)
+            self.write(repo, "src/app.py", "print('dirty')\n")
+
+            with self.assertRaisesRegex(isolation.IsolationError, "clean primary"):
+                isolation.isolate_task(repo, base, "T001", 2)
 
     def test_isolate_verify_names_sidecar_branch(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -111,6 +135,32 @@ class IsolationTests(unittest.TestCase):
                 "gsd-path-verify/wave-1-cycle-1",
             )
             self.assertNotIn("detached", git(repo, "worktree", "list"))
+
+    def test_verify_isolation_rejects_a_stale_primary_base(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            base = self.init_bound_repo(repo)
+            self.write(repo, ".project/STATE.md", "advanced\n")
+            git(repo, "add", ".project/STATE.md")
+            git(repo, "commit", "-q", "-m", "advanced")
+
+            with self.assertRaisesRegex(isolation.IsolationError, "primary HEAD"):
+                isolation.isolate_verify(repo, base, "stale-review")
+
+    def test_verify_isolation_rejects_product_dirt_but_allows_project_outputs(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            base = self.init_bound_repo(repo)
+            self.write(repo, "src/app.py", "print('dirty')\n")
+            with self.assertRaisesRegex(isolation.IsolationError, "non-.project"):
+                isolation.isolate_verify(repo, base, "dirty-review")
+
+            self.write(repo, "src/app.py", "print('base')\n")
+            self.write(repo, ".project/review/existing.md", "collected\n")
+            result = isolation.isolate_verify(repo, base, "project-dirt-review")
+            self.assertEqual(result["base"], base)
 
     def test_serial_land_commits_on_bound_branch(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -131,7 +181,7 @@ class IsolationTests(unittest.TestCase):
             )
             self.assertEqual(result["mode"], "serial")
             self.assertEqual(result["subject"], "T001: add greeting")
-            self.assertEqual(git(repo, "branch", "--show-current"), "gsd-path/demo")
+            self.assertEqual(git(repo, "branch", "--show-current"), "gsd-path/M001")
             self.assertEqual(git(repo, "log", "-1", "--format=%s"), "T001: add greeting")
             body = git(repo, "log", "-1", "--format=%b")
             self.assertIn("Task: .project/tasks/T001.md", body)
@@ -322,7 +372,6 @@ class IsolationTests(unittest.TestCase):
                 encoding="utf-8",
             )
             self.write(repo, "src/app.py", "print('done')\n")
-
             result = isolation.land(
                 repo,
                 repo,
@@ -365,7 +414,7 @@ class IsolationTests(unittest.TestCase):
             )
             self.assertEqual(result["mode"], "parallel")
             self.assertEqual(git(repo, "log", "-1", "--format=%s"), "T001: add greeting")
-            self.assertEqual(git(repo, "branch", "--show-current"), "gsd-path/demo")
+            self.assertEqual(git(repo, "branch", "--show-current"), "gsd-path/M001")
             self.assertNotEqual(result["commit"], result["source_commit"])
             self.assertEqual(
                 git(source, "branch", "--show-current"), "gsd-path-task/T001"
@@ -717,6 +766,67 @@ class IsolationTests(unittest.TestCase):
                     ["src/app.py"],
                 )
 
+    def test_parallel_land_rejects_multiple_precommitted_source_commits(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            base = self.init_bound_repo(repo)
+            isolated = isolation.isolate_task(repo, base, "T001", 2)
+            source = Path(isolated["worktree"])
+            self.write(source, "src/app.py", "print('first')\n")
+            git(source, "add", "src/app.py")
+            git(source, "commit", "-q", "-m", "partial work")
+            self.write(source, ".project/tasks/T001.md", TASK_WITH_LOG)
+            paths = [".project/tasks/T001.md", "src/app.py"]
+            git(source, "add", ".project/tasks/T001.md")
+            git(
+                source,
+                "commit",
+                "-q",
+                "-m",
+                "T001: add greeting",
+                "-m",
+                isolation.task_commit_body(paths[0], paths),
+            )
+
+            with self.assertRaisesRegex(isolation.IsolationError, "exactly one"):
+                isolation.land(
+                    repo,
+                    source,
+                    base,
+                    "T001",
+                    "add greeting",
+                    paths[0],
+                    ["src/app.py"],
+                )
+
+            self.assertEqual(git(repo, "rev-parse", "HEAD"), base)
+
+    def test_parallel_land_rejects_pending_work_after_a_source_commit(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            base = self.init_bound_repo(repo)
+            isolated = isolation.isolate_task(repo, base, "T001", 2)
+            source = Path(isolated["worktree"])
+            self.write(source, "src/app.py", "print('committed')\n")
+            git(source, "add", "src/app.py")
+            git(source, "commit", "-q", "-m", "partial work")
+            self.write(source, ".project/tasks/T001.md", TASK_WITH_LOG)
+
+            with self.assertRaisesRegex(isolation.IsolationError, "only pending"):
+                isolation.land(
+                    repo,
+                    source,
+                    base,
+                    "T001",
+                    "add greeting",
+                    ".project/tasks/T001.md",
+                    ["src/app.py"],
+                )
+
+            self.assertEqual(git(repo, "rev-parse", "HEAD"), base)
+
     def test_land_rejects_unexpected_paths(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary) / "repo"
@@ -826,6 +936,108 @@ class IsolationTests(unittest.TestCase):
             self.assertEqual(git(repo, "diff", "--cached", "--binary"), cached_before)
             self.assertEqual(git(repo, "diff", "--binary"), working_before)
 
+    def test_serial_land_requires_a_task_log_delta(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            base = self.init_bound_repo(repo)
+            self.write(repo, "src/app.py", "print('done')\n")
+
+            with self.assertRaisesRegex(isolation.IsolationError, "task file must"):
+                isolation.land(
+                    repo,
+                    repo,
+                    base,
+                    "T001",
+                    "add greeting",
+                    ".project/tasks/T001.md",
+                    ["src/app.py"],
+                )
+
+            self.assertEqual(git(repo, "rev-parse", "HEAD"), base)
+
+    def test_parallel_land_requires_a_task_log_delta(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            base = self.init_bound_repo(repo)
+            isolated = isolation.isolate_task(repo, base, "T001", 2)
+            source = Path(isolated["worktree"])
+            self.write(source, "src/app.py", "print('done')\n")
+
+            with self.assertRaisesRegex(isolation.IsolationError, "task file must"):
+                isolation.land(
+                    repo,
+                    source,
+                    base,
+                    "T001",
+                    "add greeting",
+                    ".project/tasks/T001.md",
+                    ["src/app.py"],
+                )
+
+            self.assertEqual(git(repo, "rev-parse", "HEAD"), base)
+            self.assertEqual(git(source, "rev-parse", "HEAD"), base)
+
+    def test_parallel_land_rejects_a_precommitted_product_only_change(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            base = self.init_bound_repo(repo)
+            isolated = isolation.isolate_task(repo, base, "T001", 2)
+            source = Path(isolated["worktree"])
+            self.write(source, "src/app.py", "print('done')\n")
+            git(source, "add", "src/app.py")
+            git(
+                source,
+                "commit",
+                "-q",
+                "-m",
+                "T001: add greeting",
+                "-m",
+                isolation.task_commit_body(
+                    ".project/tasks/T001.md", ["src/app.py"]
+                ),
+            )
+
+            with self.assertRaisesRegex(isolation.IsolationError, "task commit must"):
+                isolation.land(
+                    repo,
+                    source,
+                    base,
+                    "T001",
+                    "add greeting",
+                    ".project/tasks/T001.md",
+                    ["src/app.py"],
+                )
+
+            self.assertEqual(git(repo, "rev-parse", "HEAD"), base)
+
+    def test_land_rejects_a_non_append_task_change(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            base = self.init_bound_repo(repo)
+            self.write(repo, "src/app.py", "print('done')\n")
+            self.write(
+                repo,
+                ".project/tasks/T001.md",
+                TASK_BASE.replace("task T001", "changed task") + "- verified\n",
+            )
+
+            with self.assertRaisesRegex(isolation.IsolationError, "append-only"):
+                isolation.land(
+                    repo,
+                    repo,
+                    base,
+                    "T001",
+                    "add greeting",
+                    ".project/tasks/T001.md",
+                    ["src/app.py"],
+                )
+
+            self.assertEqual(git(repo, "rev-parse", "HEAD"), base)
+
     def test_parallel_conflict_aborts_and_keeps_primary_clean(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary) / "repo"
@@ -849,7 +1061,7 @@ class IsolationTests(unittest.TestCase):
                     ["src/app.py"],
                 )
             self.assertIn("conflict:", str(raised.exception))
-            self.assertEqual(git(repo, "branch", "--show-current"), "gsd-path/demo")
+            self.assertEqual(git(repo, "branch", "--show-current"), "gsd-path/M001")
             self.assertFalse(git(repo, "status", "--porcelain"))
             in_progress = subprocess.run(
                 ("git", "-C", str(repo), "rev-parse", "-q", "--verify", "CHERRY_PICK_HEAD"),
@@ -867,7 +1079,7 @@ class IsolationTests(unittest.TestCase):
             result = isolation.retire(repo, repo, None, False)
             self.assertFalse(result["retired"])
             self.assertEqual(result["reason"], "serial")
-            self.assertEqual(git(repo, "branch", "--show-current"), "gsd-path/demo")
+            self.assertEqual(git(repo, "branch", "--show-current"), "gsd-path/M001")
 
     def test_retire_removes_named_sidecar(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -891,7 +1103,498 @@ class IsolationTests(unittest.TestCase):
                 check=False,
             )
             self.assertNotEqual(missing.returncode, 0)
-            self.assertEqual(git(repo, "branch", "--show-current"), "gsd-path/demo")
+            self.assertEqual(git(repo, "branch", "--show-current"), "gsd-path/M001")
+
+    def test_collect_artifact_copies_only_the_expected_real_file(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            base = self.init_bound_repo(repo)
+            isolated = isolation.isolate_verify(repo, base, "review-final")
+            source = Path(isolated["worktree"])
+            self.write(source, ".project/review/FINAL.md", "reviewed\n")
+
+            result = isolation.collect_artifact(
+                repo,
+                source,
+                base,
+                isolated["branch"],
+                ".project/review/FINAL.md",
+                ".project/review/FINAL.md",
+            )
+            retried = isolation.collect_artifact(
+                repo,
+                source,
+                base,
+                isolated["branch"],
+                ".project/review/FINAL.md",
+                ".project/review/FINAL.md",
+            )
+
+            self.assertEqual(
+                (repo / ".project/review/FINAL.md").read_text(encoding="utf-8"),
+                "reviewed\n",
+            )
+            self.assertEqual(result["bytes"], 9)
+            self.assertEqual(len(result["sha256"]), 64)
+            self.assertEqual(result, retried)
+            self.assertFalse(git(source, "status", "--porcelain"))
+            self.assertTrue(source.exists())
+
+    def test_collect_artifact_rejects_extra_sidecar_changes(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            base = self.init_bound_repo(repo)
+            isolated = isolation.isolate_verify(repo, base, "review-final")
+            source = Path(isolated["worktree"])
+            self.write(source, ".project/review/FINAL.md", "reviewed\n")
+            self.write(source, "unexpected.txt", "no\n")
+
+            with self.assertRaisesRegex(isolation.IsolationError, "unexpected sidecar paths"):
+                isolation.collect_artifact(
+                    repo,
+                    source,
+                    base,
+                    isolated["branch"],
+                    ".project/review/FINAL.md",
+                    ".project/review/FINAL.md",
+                )
+            self.assertFalse((repo / ".project/review/FINAL.md").exists())
+
+    def test_collect_artifact_rejects_a_stale_primary_head(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            base = self.init_bound_repo(repo)
+            isolated = isolation.isolate_verify(repo, base, "stale-review")
+            source = Path(isolated["worktree"])
+            self.write(source, ".project/review/FINAL.md", "reviewed\n")
+            self.write(repo, ".project/STATE.md", "advanced\n")
+            git(repo, "add", ".project/STATE.md")
+            git(repo, "commit", "-q", "-m", "advance primary")
+
+            with self.assertRaisesRegex(isolation.IsolationError, "primary worktree HEAD"):
+                isolation.collect_artifact(
+                    repo,
+                    source,
+                    base,
+                    isolated["branch"],
+                    ".project/review/FINAL.md",
+                    ".project/review/FINAL.md",
+                )
+
+            self.assertFalse((repo / ".project/review/FINAL.md").exists())
+
+    def test_collect_artifact_refuses_to_overwrite_different_content(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            base = self.init_bound_repo(repo)
+            isolated = isolation.isolate_verify(repo, base, "existing-review")
+            source = Path(isolated["worktree"])
+            self.write(source, ".project/review/FINAL.md", "new review\n")
+            self.write(repo, ".project/review/FINAL.md", "existing review\n")
+
+            with self.assertRaisesRegex(isolation.IsolationError, "proven expected version"):
+                isolation.collect_artifact(
+                    repo,
+                    source,
+                    base,
+                    isolated["branch"],
+                    ".project/review/FINAL.md",
+                    ".project/review/FINAL.md",
+                )
+
+            self.assertEqual(
+                (repo / ".project/review/FINAL.md").read_text(encoding="utf-8"),
+                "existing review\n",
+            )
+
+    def test_collect_artifact_replaces_a_destination_proven_at_base(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            self.init_bound_repo(repo)
+            self.write(repo, ".project/review/FINAL.md", "old review\n")
+            git(repo, "add", ".project/review/FINAL.md")
+            git(repo, "commit", "-q", "-m", "old review")
+            base = git(repo, "rev-parse", "HEAD")
+            isolated = isolation.isolate_verify(repo, base, "replace-base-review")
+            source = Path(isolated["worktree"])
+            self.write(source, ".project/review/FINAL.md", "new review\n")
+
+            result = isolation.collect_artifact(
+                repo,
+                source,
+                base,
+                isolated["branch"],
+                ".project/review/FINAL.md",
+                ".project/review/FINAL.md",
+                "base",
+            )
+            retried = isolation.collect_artifact(
+                repo,
+                source,
+                base,
+                isolated["branch"],
+                ".project/review/FINAL.md",
+                ".project/review/FINAL.md",
+                "base",
+            )
+
+            self.assertTrue(result["replaced"])
+            self.assertEqual(result, retried)
+            self.assertFalse(git(source, "status", "--porcelain"))
+            self.assertEqual(
+                (repo / ".project/review/FINAL.md").read_text(encoding="utf-8"),
+                "new review\n",
+            )
+
+    def test_collect_artifact_retries_with_the_prior_collected_hash(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            base = self.init_bound_repo(repo)
+            first = isolation.isolate_verify(repo, base, "first-review")
+            first_source = Path(first["worktree"])
+            self.write(first_source, ".project/review/FINAL.md", "first review\n")
+            first_result = isolation.collect_artifact(
+                repo,
+                first_source,
+                base,
+                first["branch"],
+                ".project/review/FINAL.md",
+                ".project/review/FINAL.md",
+            )
+            second = isolation.isolate_verify(repo, base, "second-review")
+            second_source = Path(second["worktree"])
+            self.write(second_source, ".project/review/FINAL.md", "fixed review\n")
+
+            result = isolation.collect_artifact(
+                repo,
+                second_source,
+                base,
+                second["branch"],
+                ".project/review/FINAL.md",
+                ".project/review/FINAL.md",
+                first_result["sha256"],
+            )
+
+            self.assertEqual(result["previous_sha256"], first_result["sha256"])
+            self.assertEqual(
+                (repo / ".project/review/FINAL.md").read_text(encoding="utf-8"),
+                "fixed review\n",
+            )
+
+    def test_collect_artifact_rejects_a_stale_expected_hash(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            base = self.init_bound_repo(repo)
+            isolated = isolation.isolate_verify(repo, base, "stale-hash-review")
+            source = Path(isolated["worktree"])
+            self.write(source, ".project/review/FINAL.md", "new review\n")
+            self.write(repo, ".project/review/FINAL.md", "current review\n")
+
+            with self.assertRaisesRegex(
+                isolation.IsolationError, "changed after its expected version"
+            ):
+                isolation.collect_artifact(
+                    repo,
+                    source,
+                    base,
+                    isolated["branch"],
+                    ".project/review/FINAL.md",
+                    ".project/review/FINAL.md",
+                    "0" * 64,
+                )
+
+            self.assertEqual(
+                (repo / ".project/review/FINAL.md").read_text(encoding="utf-8"),
+                "current review\n",
+            )
+
+    def test_collect_artifact_cleans_a_staged_new_artifact(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            base = self.init_bound_repo(repo)
+            isolated = isolation.isolate_verify(repo, base, "staged-review")
+            source = Path(isolated["worktree"])
+            self.write(source, ".project/review/FINAL.md", "reviewed\n")
+            git(source, "add", ".project/review/FINAL.md")
+
+            isolation.collect_artifact(
+                repo,
+                source,
+                base,
+                isolated["branch"],
+                ".project/review/FINAL.md",
+                ".project/review/FINAL.md",
+            )
+
+            self.assertFalse(git(source, "status", "--porcelain"))
+            self.assertEqual(
+                (repo / ".project/review/FINAL.md").read_text(encoding="utf-8"),
+                "reviewed\n",
+            )
+
+    def test_checkpoint_commits_only_allowlisted_paths_with_canonical_message(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            base = self.init_bound_repo(repo)
+            self.write(repo, ".project/STATE.md", "roadmap done\n")
+
+            result = isolation.checkpoint(
+                repo,
+                base,
+                "roadmap: program roadmap approved",
+                "Why: approved roadmap checkpoint",
+                [".project"],
+            )
+
+            self.assertEqual(result["paths"], [".project/STATE.md"])
+            self.assertEqual(git(repo, "log", "-1", "--format=%s"), result["subject"])
+            self.assertEqual(
+                git(repo, "log", "-1", "--format=%b"),
+                "Why: approved roadmap checkpoint",
+            )
+
+    def test_checkpoint_retry_returns_the_exact_existing_commit(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            base = self.init_bound_repo(repo)
+            self.write(repo, ".project/STATE.md", "roadmap done\n")
+            first = isolation.checkpoint(
+                repo,
+                base,
+                "roadmap: program roadmap approved",
+                "Why: approved roadmap checkpoint",
+                [".project"],
+            )
+
+            retried = isolation.checkpoint(
+                repo,
+                base,
+                "roadmap: program roadmap approved",
+                "Why: approved roadmap checkpoint",
+                [".project"],
+            )
+
+            self.assertEqual(first["commit"], retried["commit"])
+            self.assertEqual("committed", first["status"])
+            self.assertEqual("already-complete", retried["status"])
+            self.assertEqual("2", git(repo, "rev-list", "--count", "HEAD"))
+
+    def test_checkpoint_retry_rejects_a_different_message_or_dirty_tree(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            base = self.init_bound_repo(repo)
+            self.write(repo, ".project/STATE.md", "roadmap done\n")
+            isolation.checkpoint(
+                repo,
+                base,
+                "roadmap: program roadmap approved",
+                "Why: approved roadmap checkpoint",
+                [".project"],
+            )
+
+            with self.assertRaisesRegex(isolation.IsolationError, "HEAD differs"):
+                isolation.checkpoint(
+                    repo,
+                    base,
+                    "build: dispatch wave 1",
+                    "Why: a different checkpoint",
+                    [".project"],
+                )
+
+            self.write(repo, ".project/dirty.md", "unfinished\n")
+            with self.assertRaisesRegex(isolation.IsolationError, "HEAD differs"):
+                isolation.checkpoint(
+                    repo,
+                    base,
+                    "roadmap: program roadmap approved",
+                    "Why: approved roadmap checkpoint",
+                    [".project"],
+                )
+
+    def test_checkpoint_rejects_unrelated_changes_without_moving_head(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            base = self.init_bound_repo(repo)
+            self.write(repo, ".project/STATE.md", "roadmap done\n")
+            self.write(repo, "notes.txt", "user change\n")
+
+            with self.assertRaisesRegex(isolation.IsolationError, "unexpected paths"):
+                isolation.checkpoint(
+                    repo,
+                    base,
+                    "roadmap: program roadmap approved",
+                    "Why: approved roadmap checkpoint",
+                    [".project"],
+                )
+            self.assertEqual(git(repo, "rev-parse", "HEAD"), base)
+            self.assertTrue((repo / "notes.txt").exists())
+
+    def test_checkpoint_rejects_a_non_bound_primary_branch(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            base = self.init_bound_repo(repo)
+            git(repo, "switch", "-q", "-c", "main")
+            self.write(repo, ".project/STATE.md", "roadmap done\n")
+
+            with self.assertRaisesRegex(
+                isolation.IsolationError,
+                "primary branch must be canonical",
+            ):
+                isolation.checkpoint(
+                    repo,
+                    base,
+                    "roadmap: program roadmap approved",
+                    "Why: approved roadmap checkpoint",
+                    [".project"],
+                )
+            self.assertEqual(git(repo, "rev-parse", "HEAD"), base)
+
+    def test_abandon_checkpoint_requires_one_normalized_ruling_line(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            base = self.init_bound_repo(repo)
+            self.write(repo, ".project/STATE.md", "abandoned\n")
+
+            with self.assertRaisesRegex(
+                isolation.IsolationError, "one Why line"
+            ):
+                isolation.checkpoint(
+                    repo,
+                    base,
+                    "build: abandon milestone demo",
+                    "Why: user ruling\nTasks: none",
+                    [".project"],
+                )
+            with self.assertRaisesRegex(
+                isolation.IsolationError, "reason must be normalized"
+            ):
+                isolation.checkpoint(
+                    repo,
+                    base,
+                    "build: abandon milestone demo",
+                    "Why: user  ruling",
+                    [".project"],
+                )
+
+    def test_retire_refuses_a_dirty_sidecar_without_force(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            base = self.init_bound_repo(repo)
+            isolated = isolation.isolate_verify(repo, base, "dirty")
+            worktree = Path(isolated["worktree"])
+            self.write(worktree, "dirty.txt", "keep\n")
+
+            with self.assertRaisesRegex(isolation.IsolationError, "worktree is dirty"):
+                isolation.retire(repo, worktree, isolated["branch"], False)
+            self.assertTrue(worktree.exists())
+
+    def test_retire_refuses_the_bound_branch(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            self.init_bound_repo(repo)
+
+            with self.assertRaisesRegex(isolation.IsolationError, "bound branch"):
+                isolation.retire(repo, repo, "gsd-path/M001", False)
+
+    def test_retire_refuses_a_mismatched_branch_name(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            base = self.init_bound_repo(repo)
+            isolated = isolation.isolate_verify(repo, base, "expected")
+            worktree = Path(isolated["worktree"])
+
+            with self.assertRaisesRegex(
+                isolation.IsolationError,
+                "expected gsd-path-verify/other",
+            ):
+                isolation.retire(
+                    repo,
+                    worktree,
+                    "gsd-path-verify/other",
+                    False,
+                )
+            self.assertTrue(worktree.exists())
+
+    def test_retire_refuses_an_unrecognized_branch(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            base = self.init_bound_repo(repo)
+            worktree = Path(temporary) / "feature"
+            git(repo, "worktree", "add", "-q", "-b", "feature", str(worktree), base)
+
+            with self.assertRaisesRegex(isolation.IsolationError, "unrecognized branch"):
+                isolation.retire(repo, worktree, "feature", False)
+            self.assertTrue(worktree.exists())
+
+    def test_retire_refuses_an_unrecognized_branch_when_worktree_is_absent(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            base = self.init_bound_repo(repo)
+            git(repo, "branch", "feature", base)
+            missing = Path(temporary) / "missing-feature-worktree"
+
+            with self.assertRaisesRegex(isolation.IsolationError, "unrecognized branch"):
+                isolation.retire(repo, missing, "feature", True)
+
+            self.assertEqual(git(repo, "rev-parse", "feature"), base)
+
+    def test_retire_blocks_when_only_the_task_branch_remains(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            base = self.init_bound_repo(repo)
+            branch = "gsd-path-task/T001"
+            git(repo, "branch", branch, base)
+            missing = Path(temporary) / "missing-task-worktree"
+
+            with self.assertRaisesRegex(
+                isolation.IsolationError, "branch still exists"
+            ):
+                isolation.retire(repo, missing, branch, True)
+
+            self.assertEqual(git(repo, "rev-parse", branch), base)
+
+    def test_retire_refuses_a_foreign_worktree(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            self.init_bound_repo(repo)
+            foreign = Path(temporary) / "foreign"
+            foreign.mkdir()
+            git(foreign, "init", "-b", "gsd-path-verify/foreign")
+            git(foreign, "config", "user.email", "test@example.test")
+            git(foreign, "config", "user.name", "Test")
+            self.write(foreign, "README.md", "foreign\n")
+            git(foreign, "add", "README.md")
+            git(foreign, "commit", "-q", "-m", "foreign base")
+
+            with self.assertRaisesRegex(isolation.IsolationError, "another repository"):
+                isolation.retire(
+                    repo,
+                    foreign,
+                    "gsd-path-verify/foreign",
+                    False,
+                )
+            self.assertTrue(foreign.exists())
 
     def test_cli_isolate_task_json(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -913,6 +1616,110 @@ class IsolationTests(unittest.TestCase):
             payload = json.loads(completed.stdout)
             self.assertEqual(payload["mode"], "serial")
             self.assertFalse(payload["detached"])
+
+    def test_cli_land_json(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            base = self.init_bound_repo(repo)
+            self.write(repo, "src/app.py", "print('done')\n")
+            self.write(repo, ".project/tasks/T001.md", TASK_WITH_LOG)
+
+            completed = self.run_cli(
+                "land",
+                "--repo",
+                str(repo),
+                "--source",
+                str(repo),
+                "--base",
+                base,
+                "--task-id",
+                "T001",
+                "--title",
+                "add greeting",
+                "--task-file",
+                ".project/tasks/T001.md",
+                "--allow-path",
+                "src/app.py",
+            )
+
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            payload = json.loads(completed.stdout)
+            self.assertEqual(payload["mode"], "serial")
+            self.assertEqual(git(repo, "rev-parse", "HEAD"), payload["commit"])
+
+    def test_cli_checkpoint_json(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            base = self.init_bound_repo(repo)
+            self.write(repo, ".project/STATE.md", "roadmap done\n")
+
+            completed = self.run_cli(
+                "checkpoint",
+                "--repo",
+                str(repo),
+                "--expected-head",
+                base,
+                "--subject",
+                "roadmap: program roadmap approved",
+                "--body",
+                "Why: approved roadmap checkpoint",
+                "--allow-path",
+                ".project",
+            )
+
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            payload = json.loads(completed.stdout)
+            self.assertEqual(payload["paths"], [".project/STATE.md"])
+            self.assertEqual(git(repo, "rev-parse", "HEAD"), payload["commit"])
+
+    def test_cli_collect_and_retire_round_trip(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            base = self.init_bound_repo(repo)
+            created = self.run_cli(
+                "isolate-verify",
+                "--repo",
+                str(repo),
+                "--base",
+                base,
+                "--name",
+                "cli-review",
+            )
+            self.assertEqual(created.returncode, 0, created.stderr)
+            isolated = json.loads(created.stdout)
+            source = Path(isolated["worktree"])
+            self.write(source, ".project/review/FINAL.md", "reviewed\n")
+
+            collected = self.run_cli(
+                "collect-artifact",
+                "--repo",
+                str(repo),
+                "--source",
+                str(source),
+                "--base",
+                base,
+                "--branch",
+                isolated["branch"],
+                "--source-path",
+                ".project/review/FINAL.md",
+                "--destination-path",
+                ".project/review/FINAL.md",
+            )
+            self.assertEqual(collected.returncode, 0, collected.stderr)
+            retired = self.run_cli(
+                "retire",
+                "--repo",
+                str(repo),
+                "--worktree",
+                str(source),
+                "--branch",
+                isolated["branch"],
+            )
+            self.assertEqual(retired.returncode, 0, retired.stderr)
+            self.assertFalse(source.exists())
 
 
 class RecoverTests(unittest.TestCase):

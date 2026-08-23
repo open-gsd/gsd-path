@@ -3,7 +3,7 @@
 <!-- Written by one researcher role. Consumed by the decider. -->
 
 Dimension: <domain | stack | pitfalls | similar | custom>
-Questions assigned: <RESEARCH-tagged questions from INTENT.md, or "none">
+Questions assigned: <exact RESEARCH questions joined by "; ", or "none">
 
 ## Finding: <short claim as heading>
 
