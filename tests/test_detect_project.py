@@ -1021,6 +1021,21 @@ class DetectProjectTests(unittest.TestCase):
             self.assertEqual(payload["verdict"], "greenfield")
             self.assertEqual(payload["signals"], [])
 
+    def test_deleted_tracked_installer_bundle_is_greenfield(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            bundle = repo / ".agents" / "skills" / "gsd-path-helper"
+            bundle.mkdir(parents=True)
+            helper = bundle / "helper.py"
+            helper.write_text("print(1)\n", encoding="utf-8")
+            self.git(repo, "init", "-q", "-b", "main")
+            self.git(repo, "add", ".")
+            helper.unlink()
+            bundle.rmdir()
+            payload = self.classify(repo)
+            self.assertEqual(payload["verdict"], "greenfield")
+            self.assertEqual(payload["signals"], [])
+
     @unittest.skipIf(os.name == "nt", "symlink creation requires POSIX")
     def test_nonregular_staged_skill_marker_does_not_verify_bundle(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

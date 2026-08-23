@@ -887,6 +887,12 @@ def staged_skill_bundle_prefixes(
     prefixes = set()
     for entry in entries:
         parts = PurePosixPath(entry.path).parts
+        for end in range(1, len(parts)):
+            bundle_parts = parts[:end]
+            if is_skill_bundle_name(
+                bundle_parts[-1]
+            ) and is_verified_installer_bundle(bundle_parts):
+                prefixes.add("/".join(bundle_parts))
         if (
             len(parts) >= 2
             and parts[-1] == "SKILL.md"
