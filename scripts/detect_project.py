@@ -26,9 +26,10 @@ import argparse
 import json
 import os
 import re
+import stat
 import subprocess
 import sys
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Iterable, Optional, Sequence
 
 
@@ -138,27 +139,40 @@ SOURCE_SUFFIXES = {
 
 MARKDOWN_SUFFIXES = {".md", ".mdx", ".markdown"}
 
-NON_SYSTEM_DOC_STEMS = {
+GREENFIELD_DOC_STEMS = {
     "license",
     "licence",
     "copying",
-    "code-of-conduct",
-    "code_of_conduct",
-    "security",
-    "contributing",
-    "changelog",
-    "changes",
-    "authors",
-    "notice",
-    "patents",
-    "credits",
-    "maintainers",
-    "codeowners",
 }
 
-MANAGED_ROOT_FILES = {"AGENTS.md", "WORKFLOW.md"}
+MANAGED_EXACT_FILES = {
+    "AGENTS.md",
+    "WORKFLOW.md",
+    ".claude/CLAUDE.md",
+    ".cursor/agents/gsd-path.md",
+}
 
 PIPELINE_LINE = re.compile(r"^pipeline:\s*(\S+)", re.MULTILINE)
+ATX_TITLE = re.compile(r" {0,3}#{1,6}(?:[ \t]+.*)?")
+SETEXT_UNDERLINE = re.compile(r" {0,3}(?:=+|-+)[ \t]*")
+MANAGED_BACKUP = re.compile(r"disabled-gsd-skills(?:-\d+)?")
+SETEXT_BLOCK_START = re.compile(
+    r" {0,3}(?:>|[-+*](?:[ \t]+|$)|\d{1,9}[.)](?:[ \t]+|$)|"
+    r"`{3,}|~{3,}|\[[^]]+\]:)"
+)
+HTML_BLOCK_START = re.compile(
+    r" {0,3}(?:"
+    r"<(?:script|pre|style|textarea)(?:[ \t]+|>|$)"
+    r"|<!--|<\?|<![A-Z]|<!\[CDATA\["
+    r"|</?(?:address|article|aside|base|basefont|blockquote|body|caption|center|"
+    r"col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|"
+    r"footer|form|frame|frameset|h[1-6]|head|header|hr|html|iframe|legend|li|"
+    r"link|main|menu|menuitem|nav|noframes|ol|optgroup|option|p|param|search|"
+    r"section|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul)"
+    r"(?:[ \t]+|/?>|$)"
+    r"|</?[A-Za-z][A-Za-z0-9-]*(?:[ \t]+[^>]*)?/?>[ \t]*$)",
+    re.IGNORECASE,
+)
 
 
 class DetectError(RuntimeError):
@@ -170,52 +184,214 @@ def posix_relative(path: Path, root: Path) -> str:
 
 
 def is_ignored(relative: str) -> bool:
-    return any(part in IGNORE_DIRS for part in Path(relative).parts)
+    return any(part in IGNORE_DIRS for part in PurePosixPath(relative).parts)
 
 
-def is_managed_pipeline_artifact(relative: str) -> bool:
-    if relative in MANAGED_ROOT_FILES:
-        return True
-    parts = Path(relative).parts
+def is_managed_pipeline_path(parts: tuple[str, ...], *, descendant: bool) -> bool:
     return any(
-        parts[index] == "skills" and parts[index + 1].startswith("gsd-path")
-        for index in range(len(parts) - 1)
+        (
+            MANAGED_BACKUP.fullmatch(part)
+            and (not descendant or index + 1 < len(parts))
+        )
+        or (
+            index + 1 < len(parts)
+            and part.casefold() == "skills"
+            and (
+                parts[index + 1].casefold() == "gsd-path"
+                or parts[index + 1].casefold().startswith("gsd-path-")
+            )
+            and (not descendant or index + 2 < len(parts))
+        )
+        for index, part in enumerate(parts)
     )
 
 
-def markdown_has_body(path: Path) -> bool:
-    try:
-        text = path.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError) as error:
-        raise DetectError(f"cannot read Markdown evidence: {path}") from error
-    lines = text.splitlines()
-    in_comment = False
-    for index, line in enumerate(lines):
-        stripped = line.strip()
-        if not stripped:
-            continue
-        if in_comment:
-            if "-->" in stripped:
-                in_comment = False
-            continue
-        if stripped.startswith("<!--"):
-            in_comment = "-->" not in stripped
-            continue
-        if stripped.startswith("#"):
-            continue
-        if re.fullmatch(r"(?:=+|-+)", stripped):
-            continue
-        if set(stripped) <= set("-*_ "):
-            continue
-        if index + 1 < len(lines) and re.fullmatch(
-            r"(?:=+|-+)", lines[index + 1].strip()
-        ):
-            continue
+def is_managed_pipeline_directory(relative: str) -> bool:
+    return is_managed_pipeline_path(
+        PurePosixPath(relative).parts,
+        descendant=False,
+    )
+
+
+def is_managed_pipeline_artifact(relative: str) -> bool:
+    parts = PurePosixPath(relative).parts
+    if relative in MANAGED_EXACT_FILES or is_managed_pipeline_path(
+        parts,
+        descendant=True,
+    ):
         return True
-    return False
+    return (
+        len(parts) == 2
+        and parts[0] == ".gsd-path"
+        and PurePosixPath(parts[1]).suffix.casefold() == ".py"
+    )
 
 
-def file_kind(relative: str, root: Path) -> Optional[str]:
+def lstat_evidence(path: Path, *, missing_ok: bool) -> Optional[os.stat_result]:
+    try:
+        return os.lstat(path)
+    except FileNotFoundError as error:
+        if missing_ok:
+            return None
+        raise DetectError(f"filesystem evidence disappeared: {path}") from error
+    except OSError as error:
+        raise DetectError(
+            f"cannot inspect filesystem evidence: {path}: {error}"
+        ) from error
+
+
+def read_regular_evidence(
+    path: Path,
+    root: Path,
+    *,
+    missing_ok: bool,
+    evidence_name: str,
+) -> Optional[str]:
+    try:
+        relative = path.relative_to(root)
+    except ValueError as error:
+        raise DetectError(
+            f"{evidence_name} evidence escapes repo: {path}"
+        ) from error
+    current = root
+    expected = None
+    for index, part in enumerate(relative.parts):
+        current /= part
+        status = lstat_evidence(current, missing_ok=missing_ok)
+        if status is None:
+            return None
+        if stat.S_ISLNK(status.st_mode):
+            raise DetectError(
+                f"symlinked {evidence_name} evidence is not allowed: {current}"
+            )
+        final = index == len(relative.parts) - 1
+        if not final and not stat.S_ISDIR(status.st_mode):
+            raise DetectError(
+                f"{evidence_name} evidence parent is not a directory: {current}"
+            )
+        if final and not stat.S_ISREG(status.st_mode):
+            raise DetectError(
+                f"{evidence_name} evidence is not a regular file: {current}"
+            )
+        if final:
+            expected = status
+    if expected is None:
+        raise DetectError(f"{evidence_name} evidence path is empty: {path}")
+    flags = (
+        os.O_RDONLY
+        | getattr(os, "O_BINARY", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+        | getattr(os, "O_NONBLOCK", 0)
+    )
+    descriptor = None
+    try:
+        descriptor = os.open(path, flags)
+        actual = os.fstat(descriptor)
+        if not stat.S_ISREG(actual.st_mode) or not os.path.samestat(
+            expected,
+            actual,
+        ):
+            raise DetectError(
+                f"{evidence_name} evidence changed while reading: {path}"
+            )
+        stream = os.fdopen(descriptor, "rb")
+        descriptor = None
+        with stream:
+            data = stream.read()
+    except FileNotFoundError as error:
+        if missing_ok:
+            return None
+        raise DetectError(f"filesystem evidence disappeared: {path}") from error
+    except DetectError:
+        raise
+    except OSError as error:
+        raise DetectError(f"cannot read {evidence_name} evidence: {path}") from error
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+    try:
+        return data.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise DetectError(f"cannot read {evidence_name} evidence: {path}") from error
+
+
+def is_thematic_break(line: str) -> bool:
+    leading = len(line) - len(line.lstrip(" "))
+    if leading > 3:
+        return False
+    compact = re.sub(r"[ \t]", "", line[leading:])
+    return (
+        len(compact) >= 3
+        and compact[0] in "*-_"
+        and all(character == compact[0] for character in compact)
+    )
+
+
+def is_setext_title(line: str) -> bool:
+    indentation = line[: len(line) - len(line.lstrip(" \t"))]
+    return not (
+        len(indentation) > 3
+        or "\t" in indentation
+        or ATX_TITLE.fullmatch(line)
+        or SETEXT_BLOCK_START.match(line)
+        or HTML_BLOCK_START.match(line)
+        or is_thematic_break(line)
+    )
+
+
+def strip_standalone_html_comments(text: str) -> str:
+    output = []
+    in_comment = False
+    for line in text.splitlines(keepends=True):
+        remaining = line
+        if in_comment:
+            closing = remaining.find("-->")
+            if closing < 0:
+                continue
+            remaining = remaining[closing + 3 :]
+            in_comment = False
+        while True:
+            stripped = remaining.lstrip(" ")
+            indentation = len(remaining) - len(stripped)
+            if indentation > 3 or not stripped.startswith("<!--"):
+                break
+            closing = stripped.find("-->", 4)
+            if closing < 0:
+                in_comment = True
+                remaining = ""
+                break
+            remaining = stripped[closing + 3 :]
+        if remaining.strip():
+            output.append(remaining)
+        elif remaining and not in_comment:
+            output.append(remaining)
+    return "".join(output)
+
+
+def markdown_has_body(text: str) -> bool:
+    lines = [
+        line.rstrip()
+        for line in strip_standalone_html_comments(text).splitlines()
+    ]
+    while lines and not lines[0].strip():
+        lines.pop(0)
+    while lines and not lines[-1].strip():
+        lines.pop()
+    if not lines:
+        return False
+    if len(lines) == 1 and ATX_TITLE.fullmatch(lines[0]):
+        return False
+    if (
+        len(lines) >= 2
+        and all(line.strip() for line in lines)
+        and SETEXT_UNDERLINE.fullmatch(lines[-1])
+        and all(is_setext_title(line) for line in lines[:-1])
+    ):
+        return False
+    return True
+
+
+def file_kind(relative: str, root: Path, *, tracked: bool) -> Optional[str]:
     if (
         is_ignored(relative)
         or is_managed_pipeline_artifact(relative)
@@ -223,46 +399,89 @@ def file_kind(relative: str, root: Path) -> Optional[str]:
         or relative.startswith(".project/")
     ):
         return None
-    path = root / relative
-    name = Path(relative).name
-    stem = Path(name).stem.casefold()
-    suffix = Path(name).suffix
+    relative_path = PurePosixPath(relative)
+    path = root.joinpath(*relative_path.parts)
+    name = relative_path.name
+    stem = PurePosixPath(name).stem.casefold()
+    suffix = PurePosixPath(name).suffix
     if name in MANIFEST_NAMES or suffix in MANIFEST_SUFFIXES:
         return "manifest"
     if suffix.casefold() in SOURCE_SUFFIXES:
         return "source"
     if (
         suffix.casefold() in MARKDOWN_SUFFIXES or name.casefold() == "readme"
-    ) and stem not in NON_SYSTEM_DOC_STEMS:
-        if not path.is_file() or not markdown_has_body(path):
+    ) and stem not in GREENFIELD_DOC_STEMS:
+        text = read_regular_evidence(
+            path,
+            root,
+            missing_ok=tracked,
+            evidence_name="Markdown",
+        )
+        if text is None:
+            return None
+        if not markdown_has_body(text):
             return None
         return "docs"
     return None
 
 
+def raise_walk_error(error: OSError) -> None:
+    raise DetectError(f"cannot traverse filesystem evidence: {error}") from error
+
+
 def iter_worktree_files(root: Path) -> Iterable[str]:
-    for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
+    for dirpath, dirnames, filenames in os.walk(
+        root,
+        followlinks=False,
+        onerror=raise_walk_error,
+    ):
         current = Path(dirpath)
         relative_dir = "" if current == root else posix_relative(current, root)
-        dirnames[:] = [
-            name
-            for name in dirnames
-            if name not in IGNORE_DIRS
-            and name != ".project"
-            and not (current / name).is_symlink()
-        ]
+        kept_directories = []
+        for name in dirnames:
+            relative = f"{relative_dir}/{name}" if relative_dir else name
+            if (
+                is_ignored(relative)
+                or name == ".project"
+                or is_managed_pipeline_directory(relative)
+            ):
+                continue
+            status = lstat_evidence(current / name, missing_ok=False)
+            if stat.S_ISLNK(status.st_mode):
+                continue
+            if not stat.S_ISDIR(status.st_mode):
+                raise DetectError(f"walk entry is not a directory: {current / name}")
+            kept_directories.append(name)
+        dirnames[:] = kept_directories
         for name in filenames:
             path = current / name
-            if path.is_symlink() or not path.is_file():
-                continue
             relative = f"{relative_dir}/{name}" if relative_dir else name
-            if not is_ignored(relative):
-                yield relative
+            if is_ignored(relative) or is_managed_pipeline_artifact(relative):
+                continue
+            status = lstat_evidence(path, missing_ok=False)
+            if stat.S_ISLNK(status.st_mode) or not stat.S_ISREG(status.st_mode):
+                continue
+            yield relative
+
+
+def validated_git_path(relative: str) -> str:
+    path = PurePosixPath(relative)
+    if (
+        relative == "."
+        or path.is_absolute()
+        or ".." in path.parts
+        or (
+            os.sep != "/"
+            and (os.sep in relative or PureWindowsPath(relative).drive)
+        )
+    ):
+        raise DetectError(f"git ls-files returned unsafe path: {relative!r}")
+    return relative
 
 
 def git_tracked_files(root: Path) -> tuple[str, ...]:
     git_dir = root / ".git"
-    if not git_dir.exists() and not git_dir.is_symlink():
+    if lstat_evidence(git_dir, missing_ok=True) is None:
         return ()
     try:
         result = subprocess.run(
@@ -280,18 +499,24 @@ def git_tracked_files(root: Path) -> tuple[str, ...]:
         tracked = result.stdout.decode("utf-8")
     except UnicodeDecodeError as error:
         raise DetectError("git ls-files returned non-UTF-8 paths") from error
-    return tuple(
-        path.replace("\\", "/")
-        for path in tracked.split("\0")
-        if path and not is_ignored(path)
-    )
+    paths = []
+    for raw in tracked.split("\0"):
+        if not raw:
+            continue
+        relative = validated_git_path(raw)
+        if not is_ignored(relative):
+            paths.append(relative)
+    return tuple(paths)
 
 
 def occupied_project_paths(project: Path, root: Path) -> tuple[str, ...]:
-    if project.is_symlink():
-        return (posix_relative(project, root),)
-    if not project.exists():
+    project_status = lstat_evidence(project, missing_ok=True)
+    if project_status is None:
         return ()
+    if stat.S_ISLNK(project_status.st_mode) or not stat.S_ISDIR(
+        project_status.st_mode
+    ):
+        return (posix_relative(project, root),)
     try:
         next(project.iterdir())
     except StopIteration:
@@ -299,49 +524,67 @@ def occupied_project_paths(project: Path, root: Path) -> tuple[str, ...]:
     except OSError:
         return (posix_relative(project, root),)
     paths = []
-    for dirpath, dirnames, filenames in os.walk(project, followlinks=False):
+    for dirpath, dirnames, filenames in os.walk(
+        project,
+        followlinks=False,
+        onerror=raise_walk_error,
+    ):
         current = Path(dirpath)
-        linked_directories = [
-            name for name in dirnames if (current / name).is_symlink()
-        ]
-        paths.extend(posix_relative(current / name, root) for name in linked_directories)
+        linked_directories = []
+        for name in dirnames:
+            status = lstat_evidence(current / name, missing_ok=False)
+            if stat.S_ISLNK(status.st_mode):
+                linked_directories.append(name)
+        paths.extend(
+            posix_relative(current / name, root) for name in linked_directories
+        )
         dirnames[:] = [name for name in dirnames if name not in linked_directories]
         for name in filenames:
             paths.append(posix_relative(current / name, root))
         if not filenames and not dirnames and current != project:
             paths.append(posix_relative(current, root))
     if not paths:
-        return tuple(
-            sorted(
-                posix_relative(project / name, root) for name in os.listdir(project)
-            )
-        )
+        try:
+            names = os.listdir(project)
+        except OSError as error:
+            raise DetectError(
+                f"cannot list project evidence: {project}: {error}"
+            ) from error
+        return tuple(sorted(posix_relative(project / name, root) for name in names))
     return tuple(sorted(paths))
 
 
-def pipeline_marker(state: Path) -> Optional[str]:
-    try:
-        text = state.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError):
-        return None
+def pipeline_marker(state: Path, root: Path) -> Optional[str]:
+    text = read_regular_evidence(
+        state,
+        root,
+        missing_ok=False,
+        evidence_name="state",
+    )
+    if text is None:
+        raise DetectError(f"filesystem evidence disappeared: {state}")
     match = PIPELINE_LINE.search(text)
     return match.group(1) if match else None
 
 
 def classify(repo: Path) -> dict:
     root = repo.resolve()
-    if not root.is_dir():
+    root_status = lstat_evidence(root, missing_ok=True)
+    if root_status is None or not stat.S_ISDIR(root_status.st_mode):
         raise DetectError(f"repo is not a directory: {root}")
     project = root / ".project"
     state = project / "STATE.md"
-    if not project.is_symlink() and not state.is_symlink() and state.exists():
-        return {
-            "verdict": "owned",
-            "pipeline": pipeline_marker(state),
-            "signals": [],
-            "orphan_paths": [],
-            "route": "existing-state",
-        }
+    project_status = lstat_evidence(project, missing_ok=True)
+    if project_status is not None and stat.S_ISDIR(project_status.st_mode):
+        state_status = lstat_evidence(state, missing_ok=True)
+        if state_status is not None and stat.S_ISREG(state_status.st_mode):
+            return {
+                "verdict": "owned",
+                "pipeline": pipeline_marker(state, root),
+                "signals": [],
+                "orphan_paths": [],
+                "route": "existing-state",
+            }
     orphan_paths = occupied_project_paths(project, root)
     if orphan_paths:
         return {
@@ -354,7 +597,7 @@ def classify(repo: Path) -> dict:
     signals = []
     seen = set()
     for relative in iter_worktree_files(root):
-        kind = file_kind(relative, root)
+        kind = file_kind(relative, root, tracked=False)
         if kind is None:
             continue
         item = (kind, relative)
@@ -363,7 +606,7 @@ def classify(repo: Path) -> dict:
         seen.add(item)
         signals.append({"kind": kind, "path": relative})
     for relative in git_tracked_files(root):
-        kind = file_kind(relative, root)
+        kind = file_kind(relative, root, tracked=True)
         if kind is None:
             continue
         item = ("git", relative)

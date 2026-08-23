@@ -48,9 +48,11 @@ precondition fails.
 
 ## Alignment queue check
 
-Before planning (either mode), read `.project/research/DOCS-AUDIT.md` when it
-exists for rulings marked `planned: no`. An absent audit means an empty
-alignment queue. If queued rulings exist, offer once to include them:
+Before planning, read `research/DOCS-AUDIT.md` from the supplied track root:
+`.project/research/DOCS-AUDIT.md` normally or
+`.project/next/research/DOCS-AUDIT.md` in Lookahead mode. An absent
+track-local audit means an empty alignment queue. If queued rulings marked
+`planned: no` exist, offer once to include them:
 
 - **Normal planning** — accepted items fold into the plan as ordinary
   tasks in dependency order (evidence inlined, `fix-doc` verifies re-run
