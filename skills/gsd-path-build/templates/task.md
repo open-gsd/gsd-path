@@ -45,9 +45,7 @@ files:              # every file this task may touch — dispatch checks overlap
 
 ## Acceptance criteria
 
-<!-- Observable. The reviewer checks the diff against exactly these.
-     An ACn mapped from Intent coverage must contain that SC's INTENT
-     text verbatim. -->
+<!-- Observable. The reviewer checks the diff against exactly these. -->
 1. <behavior/command/output that must be true>
 
 ## Verify

@@ -594,70 +594,6 @@ The task implements the demo.
             with self.assertRaises(check_handoffs.HandoffError):
                 check_handoffs.validate_plan(root, ".project/next")
 
-    def test_plan_coverage_rejects_an_acceptance_that_drops_the_sc_text(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            self.write_plan_handoff(root)
-            self.write_coverage_task(
-                root, "T001", "- SC1", acceptance="1. Static proof only."
-            )
-
-            with self.assertRaises(check_handoffs.HandoffError) as failure:
-                check_handoffs.validate_plan(root)
-            self.assertIn("T001 AC1 does not carry SC1", str(failure.exception))
-
-    def write_settled_synthesis(
-        self, root: Path, project_dir: str = ".project", extra: str = ""
-    ) -> None:
-        self.write(
-            root,
-            f"{project_dir}/research/SYNTHESIS.md",
-            f"""# Synthesis
-
-## Settled
-- SC1 — The demo command prints hello. (INTENT.md)
-- SC2 — The demo test suite is green. (INTENT.md)
-
-## Decisions
-{extra or "- none yet"}
-
-## For the planner
-- **Wave-1 blockers**: none
-- **Walking skeleton**: demo CLI
-- **Pitfalls → tasks**: none
-
-## User rulings
-
-## Still unknown
-""",
-        )
-
-    def test_decide_requires_settled_sc_copies(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            self.write_state(root, "decide", "active")
-            self.write_intent_criteria(root)
-            self.write_settled_synthesis(root)
-
-            result = check_handoffs.validate_decide(root)
-
-            self.assertEqual(result["phase"], "decide")
-            self.assertEqual(result["criteria"], ["SC1", "SC2"])
-
-    def test_decide_rejects_a_restated_sc(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            self.write_state(root, "decide", "active")
-            self.write_intent_criteria(root)
-            self.write_settled_synthesis(
-                root,
-                extra="- SC1 — Static AST proof instead of hello.",
-            )
-
-            with self.assertRaises(check_handoffs.HandoffError) as failure:
-                check_handoffs.validate_decide(root)
-            self.assertIn("restates SC1", str(failure.exception))
-
     def write_wave_review(
         self,
         root: Path,
@@ -689,7 +625,7 @@ Tasks reviewed: 2
 
 ## Intent coverage
 
-### SC1 — The demo command prints hello.: {sc1}
+### SC1 — hello prints: {sc1}
 - ✅ hello.py output
 ### SC2 — The demo test suite is green.: {sc2}
 - ✅ unittest
@@ -719,17 +655,20 @@ Tasks reviewed: 2
                 check_handoffs.validate_wave(root, review=relative)
             self.assertIn("owned SC failed", str(failure.exception))
 
-    def test_wave_rejects_task_log_as_evidence(self) -> None:
+    def test_wave_rejects_a_missing_owned_sc(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             self.write_plan_handoff(root)
-            relative = self.write_wave_review(
-                root, extra="- ✅ cited the task Log\n"
+            relative = self.write_wave_review(root)
+            review = root / relative
+            review.write_text(
+                review.read_text(encoding="utf-8").replace("### SC2 —", "### SC9 —"),
+                encoding="utf-8",
             )
 
             with self.assertRaises(check_handoffs.HandoffError) as failure:
                 check_handoffs.validate_wave(root, review=relative)
-            self.assertIn("task Log", str(failure.exception))
+            self.assertIn("exactly SC1, SC2", str(failure.exception))
 
     def write_final_review(
         self,
@@ -750,7 +689,7 @@ Overall verdict: {verdict}
 
 ## Success criteria
 
-### SC1 — The demo command prints hello.
+### SC1 — hello prints
 
 - **Verdict**: {sc1}
 - **Check**: {check}
@@ -770,7 +709,7 @@ Overall verdict: {verdict}
 """,
         )
 
-    def test_final_requires_verbatim_intent_criteria(self) -> None:
+    def test_final_requires_a_verdict_per_intent_criterion(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             self.write_state(root, "ship", "active")

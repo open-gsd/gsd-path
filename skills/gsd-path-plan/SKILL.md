@@ -130,9 +130,8 @@ severity, or fit with this milestone's scope).
      root>` and `--project-dir .project/next` when the router supplied the
      lookahead track. A non-zero exit is a gate failure: every INTENT.md
      success criterion must appear in PLAN.md Intent coverage mapped to a
-     real task AC whose text contains that criterion verbatim, and each
-     task's Intent coverage section must match that table. A SYNTHESIS.md
-     that restates an SC also fails this helper.
+     real task AC, and each task's Intent coverage section must match that
+     table.
    - Run `python3 <absolute review_panel.py> validate-plan --plan <absolute
      PLAN.md> --intent <absolute INTENT.md>` and `--charter <absolute
      .project/CHARTER.md>` when that file exists. A non-zero exit is a gate
@@ -211,11 +210,9 @@ quick lane). Quick mode dispatches no planner agent — the orchestrator writes
 the artifacts directly:
 
 1. Write `.project/research/SYNTHESIS.md` containing only `## Settled` lines
-   that copy each INTENT.md success criterion as
-   `- SCn — <verbatim criterion> (INTENT.md)`, then cite remaining INTENT
-   constraints (and, brownfield, `evidence-codebase.md`), plus a minimal
-   `## For the planner` naming the walking skeleton. No invented decisions
-   or runner-ups.
+   citing INTENT.md constraints (and, brownfield, `evidence-codebase.md`)
+   plus a minimal `## For the planner` naming the walking skeleton. No
+   invented decisions or runner-ups.
 2. Write `.project/plan/PLAN.md` with exactly one wave — `Review depth:
    verify-only` permitted — and at most two deliverable-sized task files
    (project policy),
@@ -238,11 +235,10 @@ program decisions the milestone plan was built against:
 1. Require the program `.project/SYNTHESIS.md`, `.project/CHARTER.md`, and
    `.project/ROADMAP.md` with an `active` entry matching STATE.milestone.
 2. Write `.project/research/SYNTHESIS.md` containing only `## Settled` lines
-   that copy each milestone INTENT.md success criterion as
-   `- SCn — <verbatim criterion> (INTENT.md)`, then cite the program
-   SYNTHESIS decisions, charter constraints, and the active roadmap entry's
-   success criteria, plus a minimal `## For the planner` naming the
-   milestone's walking skeleton. No invented decisions or runner-ups.
+   citing the program SYNTHESIS decisions, charter constraints, and the active
+   roadmap entry's success criteria, plus a minimal `## For the planner`
+   naming the milestone's walking skeleton. No invented decisions or
+   runner-ups.
 3. Dispatch the planner per the standard contract (the brief includes
    CHARTER.md, ROADMAP.md, and the active entry slug), then gate and approve
    exactly as normal mode.

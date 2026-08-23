@@ -89,9 +89,9 @@ before dispatch or ship. Then:
    HEAD, and each numbered gap heading and Risk value must match its dispatch
    risk. Run
    `python3 <absolute check_handoffs.py> final --repo <absolute repo root>`
-   before any archive question: FINAL.md must copy every INTENT success
-   criterion verbatim, and `Overall verdict: pass` requires every verdict
-   `met` with a non-`none` Check or Reference. A non-zero exit is
+   before any archive question: FINAL.md needs one `### SCn — ...` block per
+   INTENT success criterion, and `Overall verdict: pass` requires every
+   verdict `met` with a non-`none` Check or Reference. A non-zero exit is
    `ship/blocked`. Re-run PLAN.md's project Verify in a fresh verify sidecar
    from `isolate-verify --name project-verify` at that same exact HEAD.
 5. Redispatch one complete corrected brief for a missing or invalid reviewer

@@ -29,7 +29,7 @@ Node requires **≥18.17**. Python 3 with no extra deps for unittest modules.
 | `tests/test_install.py` | unittest | `scripts/install.py` — Python installer (global install, dry-run, rollback, hooks) |
 | `tests/test_archive_milestone.py` | unittest | `scripts/archive_milestone.py` — prepare, preflight, validate, ship commit, carry-forward |
 | `tests/test_guard_hook.py` | unittest | `scripts/guard_hook.py` — archive deny, git commands, path normalization, subprocess E2E |
-| `tests/test_handoffs.py` | unittest | `scripts/check_handoffs.py` — research, plan Intent coverage, decide SC copies, wave/final INTENT gates, and patch-findings |
+| `tests/test_handoffs.py` | unittest | `scripts/check_handoffs.py` — research, plan Intent coverage, wave/final SC verdicts, and patch-findings |
 | `tests/test_isolation.py` | unittest | `scripts/isolation.py` — named task/verify checkouts, serial vs parallel landing, retire |
 | `tests/test_git_guard.py` | unittest | `scripts/git_guard.py` — violations matrix, pre-commit/commit-msg E2E |
 | `tests/test_bootstrap_repository.py` | unittest | `scripts/bootstrap_repository.py` — new-GitHub journaled creation/resume |

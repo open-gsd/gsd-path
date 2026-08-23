@@ -32,12 +32,11 @@ Contract violations (blocking):
 ## Intent coverage
 
 <!-- One heading per INTENT.md success criterion owned by a task in this
-     wave, criterion text verbatim, then `: pass` or `: fail`.
-     `scripts/check_handoffs.py wave --review <this file>` gates it.
-     Evidence may not cite a task Log. Omit this section when no task
-     in the wave owns an SC. -->
+     wave, ending `: pass` or `: fail`. `scripts/check_handoffs.py wave
+     --review <this file>` gates the SC id set and verdicts. Omit this
+     section when no task in the wave owns an SC. -->
 
-### SC1 — <criterion copied verbatim from INTENT.md>: <pass | fail>
+### SC1 — <criterion>: <pass | fail>
 - ✅ <evidence: verify output / file:line checked>
 - ❌ <criterion> — found: <what exists instead, file:line>
   fix: <concrete direction a coder can execute without re-investigating>

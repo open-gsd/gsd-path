@@ -5,10 +5,7 @@
 ## Settled
 
 <!-- Choices closed by an intent constraint or the existing codebase.
-     One line each, citing the settling source. No invented runner-ups.
-     Every INTENT.md success criterion appears exactly once as:
-     - SCn — <verbatim criterion> (INTENT.md) -->
-- SC1 — <verbatim criterion> (INTENT.md)
+     One line each, citing the settling source. No invented runner-ups. -->
 - <area> — <what stands> (<settling source>)
 
 ## Decisions

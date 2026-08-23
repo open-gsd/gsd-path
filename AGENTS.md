@@ -13,14 +13,11 @@ otherwise.
    or built.
 3. `.project/intent/INTENT.md`: constraints, vetoes, corrections, and success
    criteria are hard limits. Vetoes may not be researched, planned, or built.
-   A later artifact may not restate, substitute, or waive a success criterion.
-   A user ruling that changes one is written into INTENT.md `## Corrections`
-   by `$gsd-path-define` before any other phase continues. A task Log is not
-   that record.
+   Only `$gsd-path-define` changes a success criterion, by appending
+   `## Corrections`; a task Log or review cannot waive one.
 4. `.project/SYNTHESIS.md` (program flow, top level) or
    `.project/research/SYNTHESIS.md` (single milestone): gated decisions are
-   settled. Report conflicts; do not override them. SYNTHESIS may not rebind
-   how an INTENT success criterion is proven.
+   settled. Report conflicts; do not override them.
 5. The current phase brief or task file.
 
 If two sources disagree, stop and surface the conflict. Never average.

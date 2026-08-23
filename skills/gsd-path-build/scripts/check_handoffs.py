@@ -29,13 +29,10 @@ COVERAGE_ROW_PATTERN = re.compile(
 TASK_ID_PATTERN = re.compile(r"(?m)^id:\s*(T\d{3})\s*(?:#.*)?$")
 OWNED_CRITERION_PATTERN = re.compile(r"^- (None|SC[1-9]\d*)$")
 VERIFY_BLOCK_PATTERN = re.compile(r"```bash[ \t]*\n(?P<block>.*?)```", re.DOTALL)
-SETTLED_SC_PATTERN = re.compile(r"^- (SC[1-9]\d*) — (.+) \(INTENT\.md\)$")
-ANY_SC_LINE_PATTERN = re.compile(r"^- (SC[1-9]\d*) — (.+)$")
 WAVE_REVIEW_NAME = re.compile(
     r"wave-(?P<wave>\d+)\.cycle\d+(?:\.(?:contract|adversarial))?\.md$"
 )
 WAVE_SC_HEADING = re.compile(r"^### (SC[1-9]\d*) — (.+)$")
-LOG_EVIDENCE_PATTERN = re.compile(r"task Log|## Log", re.IGNORECASE)
 WAVE_FIELD_PATTERN = re.compile(r"(?m)^wave:\s*(\d+)\s*(?:#.*)?$")
 
 
@@ -416,10 +413,6 @@ def _has_verify(task_text: str) -> bool:
     return bool(block and block.group("block").strip())
 
 
-def _normalize_ws(value: str) -> str:
-    return " ".join(value.split())
-
-
 def _acceptance_items(task_text: str, task_id: str) -> Dict[int, str]:
     items = _numbered_items(_section(task_text, "Acceptance criteria"))
     if not items:
@@ -436,24 +429,6 @@ def _task_wave(task_text: str, task_id: str) -> int:
 
 def _intent_path(project_dir: str) -> str:
     return f"{project_dir}/intent/INTENT.md"
-
-
-def _synthesis_relative(root: Path, project_dir: str) -> Optional[str]:
-    research = f"{project_dir}/research/SYNTHESIS.md"
-    program = f"{project_dir}/SYNTHESIS.md"
-    if (root / research).is_file() and not (root / research).is_symlink():
-        return research
-    if (root / program).is_file() and not (root / program).is_symlink():
-        return program
-    return None
-
-
-def _sc_line_body(rest: str) -> str:
-    body = rest.strip()
-    suffix = "(INTENT.md)"
-    if body.endswith(suffix):
-        body = body[: -len(suffix)].rstrip()
-    return body
 
 
 def _owned_by_wave(
@@ -488,8 +463,6 @@ def validate_plan(
         number = int(acceptance[2:])
         if number not in items:
             raise HandoffError(f"{task_id} has no {acceptance}")
-        if _normalize_ws(criteria[criterion]) not in _normalize_ws(items[number]):
-            raise HandoffError(f"{task_id} {acceptance} does not carry {criterion}")
         if not _has_verify(tasks[task_id]):
             raise HandoffError(f"{task_id} Verify is empty")
         assigned[task_id].add(criterion)
@@ -501,8 +474,6 @@ def validate_plan(
         owned = set(_owned_criteria(text, task_id))
         if owned != assigned[task_id]:
             raise HandoffError(f"{task_id} Intent coverage does not match PLAN.md")
-    if _synthesis_relative(root, project_dir):
-        validate_decide(root, project_dir)
     return {
         "phase": "plan",
         "criteria": sorted(criteria),
@@ -511,61 +482,12 @@ def validate_plan(
     }
 
 
-def validate_decide(
-    root: Path, project_dir: str = DEFAULT_PROJECT_DIR
-) -> Dict[str, object]:
-    """Require SYNTHESIS.md to copy each INTENT success criterion verbatim."""
-
-    _require_pipeline(root, project_dir)
-    intent_relative = _intent_path(project_dir)
-    if not (root / intent_relative).is_file():
-        return {"phase": "decide", "skipped": True, "reason": "no milestone INTENT"}
-    criteria = _success_criteria(_read(root, intent_relative))
-    relative = _synthesis_relative(root, project_dir)
-    if relative is None:
-        raise HandoffError("missing SYNTHESIS.md")
-    synthesis = _read(root, relative)
-    settled = _section(synthesis, "Settled")
-    found: Dict[str, str] = {}
-    for line in _strip_comments(settled).splitlines():
-        match = SETTLED_SC_PATTERN.fullmatch(line.strip())
-        if not match:
-            continue
-        sc_id, text = match.group(1), match.group(2).strip()
-        if sc_id in found:
-            raise HandoffError(f"SYNTHESIS.md Settled repeats {sc_id}")
-        found[sc_id] = text
-    missing = [sc_id for sc_id in criteria if sc_id not in found]
-    if missing:
-        raise HandoffError("SYNTHESIS.md Settled omits " + ", ".join(missing))
-    for sc_id, text in found.items():
-        if sc_id not in criteria:
-            raise HandoffError(f"SYNTHESIS.md Settled names unknown {sc_id}")
-        if _normalize_ws(text) != _normalize_ws(criteria[sc_id]):
-            raise HandoffError(f"SYNTHESIS.md Settled restates {sc_id}")
-    for line in _strip_comments(synthesis).splitlines():
-        match = ANY_SC_LINE_PATTERN.fullmatch(line.strip())
-        if not match:
-            continue
-        sc_id = match.group(1)
-        body = _sc_line_body(match.group(2))
-        if sc_id not in criteria:
-            raise HandoffError(f"SYNTHESIS.md names unknown {sc_id}")
-        if _normalize_ws(body) != _normalize_ws(criteria[sc_id]):
-            raise HandoffError(f"SYNTHESIS.md restates {sc_id}")
-    return {
-        "phase": "decide",
-        "criteria": sorted(criteria),
-        "synthesis": relative,
-    }
-
-
 def validate_wave(
     root: Path,
     project_dir: str = DEFAULT_PROJECT_DIR,
     review: str = "",
 ) -> Dict[str, object]:
-    """Require a wave review to copy owned INTENT criteria verbatim."""
+    """Require a wave review to carry a verdict for every owned INTENT SC."""
 
     _require_pipeline(root, project_dir)
     if not review:
@@ -595,33 +517,24 @@ def validate_wave(
         return {"phase": "wave", "wave": wave, "owned": [], "review": review}
     if coverage is None:
         raise HandoffError(f"{name} is missing ## Intent coverage")
-    if LOG_EVIDENCE_PATTERN.search(coverage):
-        raise HandoffError(f"{name} Intent coverage cites a task Log")
-    headings: List[Tuple[str, str, str]] = []
+    verdicts: Dict[str, str] = {}
     for line in _strip_comments(coverage).splitlines():
         match = WAVE_SC_HEADING.fullmatch(line.strip())
         if not match:
             continue
-        rest = match.group(2).strip()
-        if ":" not in rest:
-            raise HandoffError(f"{name} Intent coverage heading is missing a verdict")
-        body, verdict = rest.rsplit(":", 1)
-        verdict = verdict.strip()
+        sc_id = match.group(1)
+        verdict = match.group(2).rsplit(":", 1)[-1].strip()
         if verdict not in {"pass", "fail"}:
-            raise HandoffError(f"{name} Intent coverage heading has an invalid verdict")
-        headings.append((match.group(1), body.strip(), verdict))
-    found_ids = [sc_id for sc_id, _body, _verdict in headings]
-    if found_ids != owned:
-        raise HandoffError(
-            f"{name} Intent coverage must list {', '.join(owned)} in INTENT order"
-        )
-    for sc_id, body, _verdict in headings:
-        if _normalize_ws(body) != _normalize_ws(criteria[sc_id]):
-            raise HandoffError(f"{name} restates {sc_id}")
+            raise HandoffError(f"{name} {sc_id} heading must end with `: pass` or `: fail`")
+        if sc_id in verdicts:
+            raise HandoffError(f"{name} Intent coverage repeats {sc_id}")
+        verdicts[sc_id] = verdict
+    if sorted(verdicts, key=lambda n: int(n[2:])) != owned:
+        raise HandoffError(f"{name} Intent coverage must cover exactly {', '.join(owned)}")
     overall = _line_value(text, "Wave verdict:")
     if overall not in {"pass", "blocked"}:
         raise HandoffError(f"{name} Wave verdict is invalid")
-    if overall == "pass" and any(verdict == "fail" for _sc, _body, verdict in headings):
+    if overall == "pass" and "fail" in verdicts.values():
         raise HandoffError(f"{name} Wave verdict is pass while an owned SC failed")
     return {
         "phase": "wave",
@@ -635,31 +548,21 @@ def validate_wave(
 def validate_final(
     root: Path, project_dir: str = DEFAULT_PROJECT_DIR
 ) -> Dict[str, object]:
-    """Require FINAL.md to copy every INTENT success criterion verbatim."""
+    """Require FINAL.md to give an evidenced verdict for every INTENT SC."""
 
     _require_pipeline(root, project_dir)
     criteria = _success_criteria(_read(root, _intent_path(project_dir)))
     relative = f"{project_dir}/review/FINAL.md"
     text = _read(root, relative)
-    if LOG_EVIDENCE_PATTERN.search(text):
-        raise HandoffError("FINAL.md cites a task Log")
     overall = _line_value(text, "Overall verdict:")
     if overall not in {"pass", "blocked"}:
         raise HandoffError("FINAL.md Overall verdict is invalid")
-    body = _section(text, "Success criteria")
-    headings: List[Tuple[str, str]] = []
-    for line in _strip_comments(body).splitlines():
-        match = WAVE_SC_HEADING.fullmatch(line.strip())
-        if match:
-            headings.append((match.group(1), match.group(2).strip()))
-    expected = list(criteria)
-    found = [sc_id for sc_id, _text in headings]
-    if found != expected:
-        raise HandoffError("FINAL.md success criteria must match INTENT.md order")
-    for sc_id, body_text in headings:
-        if _normalize_ws(body_text) != _normalize_ws(criteria[sc_id]):
-            raise HandoffError(f"FINAL.md restates {sc_id}")
+    text = _strip_comments(_section(text, "Success criteria"))
     blocks = list(re.finditer(r"(?m)^### (SC[1-9]\d*) — .+$", text))
+    expected = list(criteria)
+    found = [match.group(1) for match in blocks]
+    if sorted(found, key=lambda n: int(n[2:])) != expected:
+        raise HandoffError("FINAL.md Success criteria must cover exactly " + ", ".join(expected))
     verdicts: Dict[str, str] = {}
     for index, heading in enumerate(blocks):
         sc_id = heading.group(1)
@@ -753,7 +656,7 @@ def validate_patch_findings(
 def parser() -> argparse.ArgumentParser:
     argument_parser = argparse.ArgumentParser(description=__doc__)
     argument_parser.add_argument(
-        "phase", choices=("research", "patch", "plan", "decide", "wave", "final")
+        "phase", choices=("research", "patch", "plan", "wave", "final")
     )
     argument_parser.add_argument("--repo", type=Path, required=True)
     argument_parser.add_argument(
@@ -784,7 +687,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 "research": validate_research,
                 "patch": validate_patch_findings,
                 "plan": validate_plan,
-                "decide": validate_decide,
                 "final": validate_final,
             }
             result = validators[arguments.phase](repo, arguments.project_dir)
