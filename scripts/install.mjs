@@ -1688,7 +1688,8 @@ function usage() {
   return (
     "GSD Path installer — multi-host skills and project contracts.\n" +
     "Docs: DOCS.md (hub) · QUICK.md (first run) · FULL.md · UPDATE.md\n\n" +
-    "usage: gsd-path [--all] [--update] [--local] [--dry-run] [--project PATH]\n" +
+    "usage: gsd-path            (no flags on a terminal opens the interactive wizard)\n" +
+    "       gsd-path [--all] [--update] [--local] [--dry-run] [--project PATH]\n" +
     "              [--hooks] [--hooks-refresh] [--hooks-refresh-full] [target flags]\n\n" +
     "  First install:  gsd-path --all --dry-run && gsd-path --all\n" +
     "  New repo:       gsd-path --all --project /path/to/repo\n" +
@@ -1718,6 +1719,19 @@ export async function main(argv, env = process.env) {
   if (values.help) {
     console.log(usage());
     return 0;
+  }
+  if (!argv.length && process.stdin.isTTY && process.stdout.isTTY) {
+    const { wizard } = await import("./wizard.mjs");
+    const chosen = await wizard({
+      input: process.stdin,
+      output: process.stdout,
+      colored: !process.env.NO_COLOR,
+      version: packageVersion(),
+      targets: TARGETS,
+      installed: (target, local) =>
+        hasManagedInstall(local ? localRoot(target, process.cwd()) : defaultRoot(target, env)),
+    });
+    return chosen ? main(chosen, env) : 0;
   }
   const ui = makeUi(!values["no-color"]);
   const sourceRoot = values["source-root"]

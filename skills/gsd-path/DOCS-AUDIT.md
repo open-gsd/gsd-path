@@ -56,10 +56,16 @@ would dirty execution, invalidate review, or mutate shipped history.
    stages its assigned output under that sidecar; the orchestrator validates
    and atomically transfers it to the primary canonical path before retiring
    that sidecar. Otherwise no project command may run.
-2. Gate the artifact: every doc with at least one testable claim has a claims
-   table, every claim a verdict with evidence, every claimless doc appears
-   once in the `## Descriptive docs` list, and the section paths and that
-   list are disjoint and together equal the frozen inventory exactly. Redispatch one complete corrected brief under logical task name
+2. Gate the artifact with the bundled helper: write the frozen inventory to
+   a temporary file (one path per line) and run
+   `python3 <absolute check_docs_audit.py> --repo <absolute root> --inventory <file>`.
+   It enforces the contract — every doc with at least one testable claim has
+   a claims table, every claim a valid type and verdict with evidence, every
+   claimless doc appears once in the `## Descriptive docs` list, the section
+   paths and that list are disjoint and together equal the frozen inventory
+   exactly, the Summary counts match the rows, and the remediation queue
+   classifies every non-verified claim. A non-zero exit names the failed
+   rule. Redispatch one complete corrected brief under logical task name
    `docs_audit`, following the runtime dispatch contract. If it still fails,
    present **Outcome** with the failed gate, **Review** linking DOCS-AUDIT.md or
    STATE.md when it is missing, and **Next** naming the required correction.

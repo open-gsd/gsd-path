@@ -10,11 +10,13 @@
   "files": [
     "plugin.json",
     "scripts/install.mjs",
+    "scripts/wizard.mjs",
     "scripts/skill-resources.json",
     "scripts/archive_milestone.py",
     "scripts/bootstrap_repository.py",
     "scripts/discussion_records.py",
     "scripts/check_handoffs.py",
+    "scripts/check_docs_audit.py",
     "scripts/check_task_briefs.py",
     "scripts/review_panel.py",
     "scripts/check_update.py",
@@ -39,6 +41,6 @@
     "node": ">=18.17"
   },
   "scripts": {
-    "test": "node --test \"tests/*.test.mjs\""
+    "test": "node --test tests/*.test.mjs"
   }
 }

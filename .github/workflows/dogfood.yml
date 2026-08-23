@@ -1,0 +1,40 @@
+name: Dogfood
+
+# Live host run — costs API credits, so never on push. Manual or weekly.
+on:
+  workflow_dispatch:
+    inputs:
+      host:
+        description: "Host to dogfood"
+        type: choice
+        default: claude
+        options: [claude, codex]
+  schedule:
+    - cron: "0 6 * * 1" # Mondays 06:00 UTC
+
+jobs:
+  dogfood:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      HOST: ${{ github.event.inputs.host || 'claude' }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install host CLI
+        run: |
+          if [ "$HOST" = claude ]; then npm i -g @anthropic-ai/claude-code; else npm i -g @openai/codex; fi
+      - name: Run dogfood
+        run: python3 tests/dogfood.py --host "$HOST" --evidence evidence
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dogfood-${{ env.HOST }}-${{ github.run_id }}
+          path: evidence/

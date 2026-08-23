@@ -17,11 +17,13 @@
   "package_files": [
     "plugin.json",
     "scripts/install.mjs",
+    "scripts/wizard.mjs",
     "scripts/skill-resources.json",
     "scripts/archive_milestone.py",
     "scripts/bootstrap_repository.py",
     "scripts/discussion_records.py",
     "scripts/check_handoffs.py",
+    "scripts/check_docs_audit.py",
     "scripts/check_task_briefs.py",
     "scripts/review_panel.py",
     "scripts/check_update.py",
@@ -128,6 +130,18 @@
     ["scripts/discussion_records.py", "skills/gsd-path-research/scripts/discussion_records.py"],
     ["scripts/discussion_records.py", "skills/gsd-path-roadmap/scripts/discussion_records.py"],
     ["scripts/discussion_records.py", "skills/gsd-path-ship/scripts/discussion_records.py"],
+    [
+      "scripts/check_docs_audit.py",
+      "skills/gsd-path/scripts/check_docs_audit.py"
+    ],
+    [
+      "scripts/check_docs_audit.py",
+      "skills/gsd-path-docs-audit/scripts/check_docs_audit.py"
+    ],
+    [
+      "scripts/check_docs_audit.py",
+      "skills/gsd-path-inspect/scripts/check_docs_audit.py"
+    ],
     ["scripts/check_handoffs.py", "skills/gsd-path/scripts/check_handoffs.py"],
     ["scripts/check_handoffs.py", "skills/gsd-path-plan/scripts/check_handoffs.py"],
     ["scripts/check_handoffs.py", "skills/gsd-path-build/scripts/check_handoffs.py"],
