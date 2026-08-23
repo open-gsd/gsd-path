@@ -10,9 +10,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
+import stat
 import subprocess
 import sys
+import tempfile
 from pathlib import Path, PurePosixPath
 from typing import Dict, Optional, Sequence, Set
 
@@ -98,7 +101,7 @@ def common_git_dir(repo: Path) -> Path:
 
 
 def sidecar_root(primary: Path, kind: str, name: str) -> Path:
-    return (primary.parent / f"{primary.name}.gsd-path" / kind / name).resolve()
+    return primary.parent / f"{primary.name}.gsd-path" / kind / name
 
 
 def validate_task_id(task_id: str) -> str:
@@ -137,7 +140,7 @@ def create_named_worktree(primary: Path, branch: str, destination: Path, base: s
     existing_branch = run_git(primary, "show-ref", "--verify", "--quiet", f"refs/heads/{branch}")
     if existing_branch.returncode == 0:
         raise IsolationError(f"branch already exists: {branch}")
-    if destination.exists():
+    if os.path.lexists(destination):
         raise IsolationError(f"worktree path already exists: {destination}")
     destination.parent.mkdir(parents=True, exist_ok=True)
     result = run_git(
@@ -401,19 +404,81 @@ def _landed_task_text(text: str, base: str) -> str:
     return "---\n" + "\n".join(lines) + "\n---\n" + body
 
 
+def _read_regular_file(path: Path) -> tuple[bytes, int]:
+    descriptor = -1
+    try:
+        initial = path.lstat()
+        if not stat.S_ISREG(initial.st_mode):
+            raise IsolationError(f"task path is not a regular file: {path}")
+        descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        metadata = os.fstat(descriptor)
+        current = path.lstat()
+        initial_identity = (initial.st_dev, initial.st_ino)
+        opened_identity = (metadata.st_dev, metadata.st_ino)
+        current_identity = (current.st_dev, current.st_ino)
+        if (
+            not stat.S_ISREG(metadata.st_mode)
+            or not stat.S_ISREG(current.st_mode)
+            or initial_identity != opened_identity
+            or current_identity != opened_identity
+        ):
+            raise IsolationError(f"task path is not a regular file: {path}")
+        with os.fdopen(descriptor, "rb") as stream:
+            descriptor = -1
+            return stream.read(), stat.S_IMODE(metadata.st_mode)
+    except OSError as error:
+        raise IsolationError(f"task path is not a regular file: {path}") from error
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+
+
+def _read_task_text(path: Path) -> tuple[str, int]:
+    data, mode = _read_regular_file(path)
+    try:
+        return data.decode("utf-8"), mode
+    except UnicodeDecodeError as error:
+        raise IsolationError(f"task file is not UTF-8: {path}") from error
+
+
+def _replace_regular_file(path: Path, data: bytes, mode: int) -> None:
+    descriptor = -1
+    temporary_path: Optional[Path] = None
+    try:
+        descriptor, temporary_name = tempfile.mkstemp(
+            dir=path.parent, prefix=f".{path.name}."
+        )
+        temporary_path = Path(temporary_name)
+        os.chmod(temporary_path, mode)
+        with os.fdopen(descriptor, "wb") as stream:
+            descriptor = -1
+            stream.write(data)
+        os.replace(temporary_path, path)
+        temporary_path = None
+    except OSError as error:
+        raise IsolationError(f"could not replace task file {path}: {error}") from error
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
+
+
 def stamp_task_landed(task_path: Path, base: str) -> None:
     """Write the orchestrator-owned landing state into the task frontmatter."""
-    text = task_path.read_text(encoding="utf-8")
-    task_path.write_text(_landed_task_text(text, base), encoding="utf-8")
+    text, mode = _read_task_text(task_path)
+    _replace_regular_file(
+        task_path, _landed_task_text(text, base).encode("utf-8"), mode
+    )
 
 
 def _restore_landing_state(
-    worktree: Path, task_path: Path, task_bytes: bytes, index_tree: str
+    worktree: Path, task_path: Path, task_bytes: bytes, task_mode: int, index_tree: str
 ) -> None:
     errors = []
     try:
-        task_path.write_bytes(task_bytes)
-    except OSError as error:
+        _replace_regular_file(task_path, task_bytes, task_mode)
+    except IsolationError as error:
         errors.append(str(error))
     restored = run_git(worktree, "read-tree", index_tree)
     if restored.returncode != 0:
@@ -426,8 +491,9 @@ def _stamp_and_commit(
     worktree: Path, base: str, subject: str, task_file: str, allowed: Set[str]
 ) -> str:
     task_path = worktree / task_file
-    task_bytes = task_path.read_bytes()
-    stamped = _landed_task_text(task_bytes.decode("utf-8"), base).encode("utf-8")
+    task_text, task_mode = _read_task_text(task_path)
+    task_bytes = task_text.encode("utf-8")
+    stamped = _landed_task_text(task_text, base).encode("utf-8")
     _, landing_error = _landing_state(
         worktree, base, task_file, stamped.decode("utf-8"), subject, allowed
     )
@@ -440,14 +506,16 @@ def _stamp_and_commit(
     original_head = current_sha(worktree)
     index_tree = git_output(worktree, "write-tree")
     try:
-        task_path.write_bytes(stamped)
+        _replace_regular_file(task_path, stamped, task_mode)
         body = task_commit_body(task_file, uncommitted_paths(worktree), base)
         return commit_allowed_changes(worktree, base, subject, allowed, body)
     except Exception as error:
         if current_sha(worktree) != original_head:
             raise IsolationError("landing failed after HEAD changed; refusing rollback") from error
         try:
-            _restore_landing_state(worktree, task_path, task_bytes, index_tree)
+            _restore_landing_state(
+                worktree, task_path, task_bytes, task_mode, index_tree
+            )
         except IsolationError as restore_error:
             raise IsolationError(f"{error}; {restore_error}") from error
         raise
@@ -762,14 +830,30 @@ def _task_branch_proof_error(
     return None
 
 
-def _worktree_report(path: Path) -> Optional[Dict[str, object]]:
-    if not path.is_dir() or run_git(path, "rev-parse", "--git-dir").returncode != 0:
-        return None
-    return {
-        "path": str(path),
-        "branch": require_attached(path),
-        "clean": not git_output(path, "status", "--porcelain", "--untracked-files=all"),
-    }
+def _worktree_report(
+    primary: Path, path: Path, expected_branch: str
+) -> tuple[Optional[Dict[str, object]], Optional[str]]:
+    if not os.path.lexists(path):
+        return None, None
+    if path.is_symlink() or not path.is_dir() or path.resolve() != path:
+        return None, f"sidecar path is not an owned worktree: {path}"
+    try:
+        if worktree_root(path) != path:
+            return None, f"sidecar path is not its Git root: {path}"
+        if common_git_dir(path) != common_git_dir(primary):
+            return None, f"sidecar belongs to another repository: {path}"
+        branch = require_attached(path)
+        if branch != expected_branch:
+            return None, f"sidecar is on {branch}, expected {expected_branch}"
+        return {
+            "path": str(path),
+            "branch": branch,
+            "clean": not git_output(
+                path, "status", "--porcelain", "--untracked-files=all"
+            ),
+        }, None
+    except IsolationError as error:
+        return None, f"invalid sidecar worktree {path}: {error}"
 
 
 def _recover_task(
@@ -778,15 +862,19 @@ def _recover_task(
     history: Dict[str, list[tuple[str, str]]],
     branches: Set[str],
     head: str,
+    bound: str,
 ) -> Dict[str, object]:
-    task_text = path.read_text(encoding="utf-8")
-    fields, error = task_frontmatter(task_text)
     task_file = relative_posix(str(path.relative_to(primary)))
     report: Dict[str, object] = {"task": task_file}
 
     def result(verdict: str, **extra: object) -> Dict[str, object]:
         return {**report, "verdict": verdict, **extra}
 
+    try:
+        task_text, _ = _read_task_text(path)
+    except IsolationError as error:
+        return result("block", reason=str(error))
+    fields, error = task_frontmatter(task_text)
     if error or fields is None:
         return result("block", reason=error or "unreadable frontmatter")
     task_id, status, title = (str(fields.get(key, "")) for key in ("id", "status", "title"))
@@ -800,9 +888,15 @@ def _recover_task(
         return result("block", reason=str(exc))
     task_branch = task_branch_name(task_id)
     branch_exists = task_branch in branches
-    report["worktree"] = _worktree_report(sidecar_root(primary, "task", task_id))
+    worktree, worktree_error = _worktree_report(
+        primary, sidecar_root(primary, "task", task_id), task_branch
+    )
+    report["worktree"] = worktree
     report["task_branch"] = task_branch if branch_exists else None
     report["rejected"] = []
+
+    if worktree_error:
+        return result("block", reason=worktree_error)
 
     valid_statuses = {"pending", "in-progress", "done", "failed", "blocked"}
     if status not in valid_statuses:
@@ -826,15 +920,42 @@ def _recover_task(
         if base_error or base is None:
             return result("block", reason=base_error or "task base is unreadable")
         if not retained:
-            report["worktree"] = _worktree_report(primary)
+            primary_worktree, primary_error = _worktree_report(primary, primary, bound)
+            if primary_error:
+                return result("block", reason=primary_error)
+            report["worktree"] = primary_worktree
         return result("resume", base=base)
 
     if status in {"failed", "blocked"}:
-        if not retained:
+        recorded_worktree = str(fields.get("worktree", ""))
+        serial_retained = not retained and recorded_worktree == str(primary)
+        if not retained and not serial_retained:
             return result("none", reason=f"{status} task has no retained isolate")
-        base, base_error = recovery_base()
-        if base_error or base is None:
-            return result("block", reason=base_error or "task base is unreadable")
+        try:
+            base = require_commit(
+                primary, require_full_sha(str(fields.get("base", "")))
+            )
+        except IsolationError as error:
+            return result("block", reason=f"{status} task has invalid base: {error}")
+        if retained:
+            expected_worktree = str(sidecar_root(primary, "task", task_id))
+            if str(fields.get("worktree", "")) != expected_worktree:
+                return result("block", reason=f"{status} task records another worktree")
+            if str(fields.get("task_branch", "")) != task_branch:
+                return result("block", reason=f"{status} task records another branch")
+        if branch_exists and git_output(primary, "merge-base", head, task_branch) != base:
+            return result(
+                "block", reason=f"{status} task branch differs from its recorded base"
+            )
+        if serial_retained:
+            if str(fields.get("task_branch", "")) != "null":
+                return result("block", reason=f"{status} serial task records a task branch")
+            if run_git(primary, "merge-base", "--is-ancestor", base, head).returncode != 0:
+                return result("block", reason=f"{status} serial task base is not an ancestor")
+            primary_worktree, primary_error = _worktree_report(primary, primary, bound)
+            if primary_error:
+                return result("block", reason=primary_error)
+            report["worktree"] = primary_worktree
         return result("reconcile", base=base)
 
     recorded_base = str(fields.get("base", ""))
@@ -891,7 +1012,10 @@ def recover(primary: Path, tasks_dir: Path) -> Dict[str, object]:
         git_output(primary, "for-each-ref", "--format=%(refname:short)", f"refs/heads/{TASK_BRANCH_PREFIX}").splitlines()
     )
     head = current_sha(primary)
-    tasks = [_recover_task(primary, path, history, branches, head) for path in sorted(tasks_dir.glob("*.md"))]
+    tasks = [
+        _recover_task(primary, path, history, branches, head, bound)
+        for path in sorted(tasks_dir.glob("*.md"))
+    ]
     return {
         "bound_branch": bound,
         "tasks": tasks,
@@ -929,12 +1053,52 @@ def _require_first_parent_commit(repo: Path, bound: str, commit: str) -> None:
         raise IsolationError("landing commit is not on the bound first-parent history")
 
 
+def _failed_task_branch_proof_error(
+    repo: Path, branch: str, task_file: str
+) -> Optional[str]:
+    task_file = relative_posix(task_file)
+    task_path = repo / task_file
+    try:
+        task_text, _ = _read_task_text(task_path)
+    except IsolationError as error:
+        return str(error)
+    fields, fields_error = task_frontmatter(task_text)
+    if fields_error or fields is None:
+        return fields_error or "failed task frontmatter is unreadable"
+    task_id = str(fields.get("id", ""))
+    try:
+        if task_branch_name(task_id) != branch:
+            return "failed task id does not own the retained branch"
+    except IsolationError as error:
+        return str(error)
+    if fields.get("status") not in {"failed", "blocked"}:
+        return "forced rejected-branch retirement requires failed or blocked task state"
+    if fields.get("task_branch") != branch:
+        return "failed task does not record the retained branch"
+    if fields.get("worktree") != str(sidecar_root(repo, "task", task_id)):
+        return "failed task does not record the retained worktree"
+    try:
+        base = require_commit(repo, require_full_sha(str(fields.get("base", ""))))
+        branch_commit = require_commit(repo, branch)
+    except IsolationError as error:
+        return str(error)
+    parent, parent_error = _single_parent(repo, branch_commit)
+    if parent_error or parent != base:
+        return parent_error or "retained rejected branch parent differs from its recorded base"
+    body = git_output(repo, "log", "-1", "--format=%b", branch_commit)
+    _, proof_error = _prove_task_commit(
+        repo, branch_commit, body, task_file, base, None
+    )
+    return proof_error
+
+
 def retire(
     primary: Path,
     worktree: Optional[Path],
     branch: Optional[str],
     force: bool,
     landed_commit: Optional[str] = None,
+    task_file: Optional[str] = None,
 ) -> Dict[str, object]:
     primary = require_directory(primary, "primary worktree")
     bound = require_attached(primary)
@@ -980,16 +1144,25 @@ def retire(
                         or f"could not delete {branch}"
                     )
                 if deleted.returncode != 0:
-                    if not branch.startswith(TASK_BRANCH_PREFIX) or not landed_commit:
+                    if not branch.startswith(TASK_BRANCH_PREFIX):
                         raise IsolationError(
-                            "forced branch-only task retirement requires --landed-commit"
+                            "forced branch-only retirement requires a task branch"
                         )
-                    landed = require_commit(primary, require_full_sha(landed_commit))
-                    _require_first_parent_commit(primary, bound, landed)
-                    base = _landing_base(primary, landed)
-                    proof_error = _task_branch_proof_error(
-                        primary, branch, base, landed
-                    )
+                    if landed_commit:
+                        landed = require_commit(primary, require_full_sha(landed_commit))
+                        _require_first_parent_commit(primary, bound, landed)
+                        base = _landing_base(primary, landed)
+                        proof_error = _task_branch_proof_error(
+                            primary, branch, base, landed
+                        )
+                    elif task_file:
+                        proof_error = _failed_task_branch_proof_error(
+                            primary, branch, task_file
+                        )
+                    else:
+                        raise IsolationError(
+                            "forced branch-only task retirement requires --landed-commit or --task-file"
+                        )
                     if proof_error:
                         raise IsolationError(proof_error)
                     deleted = run_git(primary, "branch", "-D", branch)
@@ -1090,6 +1263,7 @@ def parser() -> argparse.ArgumentParser:
     retire_parser.add_argument("--branch")
     retire_parser.add_argument("--force", action="store_true")
     retire_parser.add_argument("--landed-commit")
+    retire_parser.add_argument("--task-file")
     return argument_parser
 
 
@@ -1124,6 +1298,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 arguments.branch,
                 arguments.force,
                 arguments.landed_commit,
+                arguments.task_file,
             )
     except IsolationError as error:
         print(str(error), file=sys.stderr)

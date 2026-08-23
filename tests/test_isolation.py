@@ -1,5 +1,6 @@
 import json
 import os
+import stat
 import subprocess
 import sys
 import tempfile
@@ -362,6 +363,64 @@ class IsolationTests(unittest.TestCase):
 
             self.assertEqual(report["verdict"], "recovered")
             self.assertEqual(report["commit"], landed["commit"])
+
+    def test_land_rejects_a_symlink_task_without_writing_its_target(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            repo = root / "repo"
+            repo.mkdir()
+            base = self.init_bound_repo(repo)
+            task_path = repo / ".project/tasks/T001.md"
+            target = root / "outside-task.md"
+            target.write_text(TASK_FILE + "log\n", encoding="utf-8")
+            target_before = target.read_bytes()
+            task_path.unlink()
+            task_path.symlink_to(target)
+            self.write(repo, "src/app.py", "print('done')\n")
+
+            with self.assertRaisesRegex(isolation.IsolationError, "regular file"):
+                isolation.land(
+                    repo,
+                    repo,
+                    base,
+                    "T001",
+                    "add greeting",
+                    ".project/tasks/T001.md",
+                    ["src/app.py"],
+                )
+
+            self.assertEqual(target.read_bytes(), target_before)
+            self.assertEqual(git(repo, "rev-parse", "HEAD"), base)
+
+    def test_land_replaces_the_task_file_instead_of_writing_through_it(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            repo = root / "repo"
+            repo.mkdir()
+            base = self.init_bound_repo(repo)
+            self.write(repo, "src/app.py", "print('done')\n")
+            task_path = repo / ".project/tasks/T001.md"
+            self.write(repo, ".project/tasks/T001.md", TASK_FILE + "log\n")
+            task_path.chmod(0o640)
+            original_mode = stat.S_IMODE(task_path.stat().st_mode)
+            linked_copy = root / "linked-task.md"
+            os.link(task_path, linked_copy)
+
+            isolation.land(
+                repo,
+                repo,
+                base,
+                "T001",
+                "add greeting",
+                ".project/tasks/T001.md",
+                ["src/app.py"],
+            )
+
+            self.assertIn("status: done", task_path.read_text(encoding="utf-8"))
+            self.assertEqual(stat.S_IMODE(task_path.stat().st_mode), original_mode)
+            self.assertIn(
+                "status: in-progress", linked_copy.read_text(encoding="utf-8")
+            )
 
     def test_parallel_land_rejects_a_bodyless_source_commit(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -819,6 +878,125 @@ class RecoverTests(unittest.TestCase):
                 self.assertEqual(report["task_branch"], isolated["task_branch"])
                 self.assertEqual(report["worktree"]["path"], isolated["worktree"])
 
+    def test_failed_and_blocked_serial_tasks_reconcile_in_primary(self) -> None:
+        for status in ("failed", "blocked"):
+            with self.subTest(status=status):
+                self.write_task(
+                    status,
+                    self.base,
+                    agent="coder",
+                    worktree=str(self.repo.resolve()),
+                )
+
+                report = self.recover()
+
+                self.assertEqual(report["verdict"], "reconcile")
+                self.assertEqual(report["base"], self.base)
+                self.assertIsNone(report["task_branch"])
+                self.assertEqual(report["worktree"]["path"], str(self.repo.resolve()))
+
+    def test_partial_sidecar_path_blocks_recovery(self) -> None:
+        expected = isolation.sidecar_root(self.repo.resolve(), "task", "T001")
+        expected.mkdir(parents=True)
+        self.write_task(
+            "in-progress",
+            self.base,
+            agent="coder",
+            worktree=str(expected),
+            task_branch="gsd-path-task/T001",
+        )
+
+        report = self.recover()
+
+        self.assertEqual(report["verdict"], "block")
+        self.assertIn("invalid sidecar worktree", report["reason"])
+
+    def test_foreign_repository_at_sidecar_path_blocks_recovery(self) -> None:
+        expected = isolation.sidecar_root(self.repo.resolve(), "task", "T001")
+        expected.mkdir(parents=True)
+        git(expected, "init", "-b", "gsd-path-task/T001")
+        self.write_task(
+            "in-progress",
+            self.base,
+            agent="coder",
+            worktree=str(expected),
+            task_branch="gsd-path-task/T001",
+        )
+
+        report = self.recover()
+
+        self.assertEqual(report["verdict"], "block")
+        self.assertIn("another repository", report["reason"])
+
+    def test_nested_repository_path_blocks_recovery(self) -> None:
+        expected = isolation.sidecar_root(self.repo.resolve(), "task", "T001")
+        git(
+            self.repo,
+            "worktree",
+            "add",
+            "-b",
+            "gsd-path-task/T001",
+            str(expected.parent),
+            self.base,
+        )
+        expected.mkdir()
+        self.write_task(
+            "in-progress",
+            self.base,
+            agent="coder",
+            worktree=str(expected),
+            task_branch="gsd-path-task/T001",
+        )
+
+        report = self.recover()
+
+        self.assertEqual(report["verdict"], "block")
+        self.assertIn("not its Git root", report["reason"])
+
+    def test_sidecar_on_another_branch_blocks_recovery(self) -> None:
+        expected = isolation.sidecar_root(self.repo.resolve(), "task", "T001")
+        git(
+            self.repo,
+            "worktree",
+            "add",
+            "-b",
+            "gsd-path-task/other",
+            str(expected),
+            self.base,
+        )
+        self.write_task(
+            "in-progress",
+            self.base,
+            agent="coder",
+            worktree=str(expected),
+            task_branch="gsd-path-task/T001",
+        )
+
+        report = self.recover()
+
+        self.assertEqual(report["verdict"], "block")
+        self.assertIn("expected gsd-path-task/T001", report["reason"])
+
+    def test_failed_serial_task_requires_a_valid_recorded_base(self) -> None:
+        self.write_task(
+            "failed",
+            "null",
+            agent="coder",
+            worktree=str(self.repo.resolve()),
+        )
+
+        report = self.recover()
+
+        self.assertEqual(report["verdict"], "block")
+        self.assertIn("invalid base", report["reason"])
+
+    def test_failed_task_without_a_retained_isolate_needs_nothing(self) -> None:
+        self.write_task("failed", self.base, agent="coder")
+
+        report = self.recover()
+
+        self.assertEqual(report["verdict"], "none")
+
     def test_unknown_status_blocks_with_a_retained_isolate(self) -> None:
         isolated = isolation.isolate_task(self.repo, self.base, "T001", 2)
         self.write_task(
@@ -894,6 +1072,114 @@ class RecoverTests(unittest.TestCase):
                 "--force",
                 "--landed-commit",
                 landed["commit"],
+            ),
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(retired.returncode, 0, retired.stderr)
+        self.assertEqual(json.loads(retired.stdout)["reason"], "branch-only")
+        missing = subprocess.run(
+            (
+                "git",
+                "-C",
+                str(self.repo),
+                "show-ref",
+                "--verify",
+                "--quiet",
+                f"refs/heads/{isolated['task_branch']}",
+            ),
+            check=False,
+        )
+        self.assertNotEqual(missing.returncode, 0)
+
+    def test_branch_only_failed_recovery_can_finish_retirement(self) -> None:
+        isolated = isolation.isolate_task(self.repo, self.base, "T001", 2)
+        source = Path(isolated["worktree"])
+        self.dispatch(source, isolated["task_branch"])
+        (source / "src/app.py").write_text("print('task')\n")
+        with (source / ".project/tasks/T001.md").open("a") as log:
+            log.write("- rejected\n")
+        (self.repo / "src/app.py").write_text("print('primary')\n")
+        git(self.repo, "add", "src/app.py")
+        git(self.repo, "commit", "-q", "-m", "build: conflicting task")
+        with self.assertRaisesRegex(isolation.IsolationError, "conflict:"):
+            isolation.land(
+                self.repo,
+                source,
+                self.base,
+                "T001",
+                "add greeting",
+                ".project/tasks/T001.md",
+                ["src/app.py"],
+            )
+        source_commit = git(source, "rev-parse", "HEAD")
+        self.write_task(
+            "failed",
+            self.base,
+            agent="coder",
+            worktree=isolated["worktree"],
+            task_branch=isolated["task_branch"],
+        )
+        git(self.repo, "add", ".project/tasks/T001.md")
+        git(self.repo, "commit", "-q", "-m", "build: record failed task")
+        git(self.repo, "worktree", "remove", str(source))
+
+        report = self.recover()
+
+        self.assertEqual(report["verdict"], "reconcile")
+        self.assertIsNone(report["worktree"])
+        self.assertEqual(report["task_branch"], isolated["task_branch"])
+        self.assertEqual(
+            git(self.repo, "rev-parse", isolated["task_branch"]), source_commit
+        )
+        self.write_task(
+            "in-progress",
+            self.base,
+            agent="coder",
+            worktree=isolated["worktree"],
+            task_branch=isolated["task_branch"],
+        )
+        rejected = subprocess.run(
+            (
+                sys.executable,
+                str(ISOLATION_SCRIPT),
+                "retire",
+                "--repo",
+                str(self.repo),
+                "--branch",
+                isolated["task_branch"],
+                "--force",
+                "--task-file",
+                ".project/tasks/T001.md",
+            ),
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertNotEqual(rejected.returncode, 0)
+        self.assertEqual(
+            git(self.repo, "rev-parse", isolated["task_branch"]), source_commit
+        )
+        self.write_task(
+            "failed",
+            self.base,
+            agent="coder",
+            worktree=isolated["worktree"],
+            task_branch=isolated["task_branch"],
+        )
+        retired = subprocess.run(
+            (
+                sys.executable,
+                str(ISOLATION_SCRIPT),
+                "retire",
+                "--repo",
+                str(self.repo),
+                "--branch",
+                isolated["task_branch"],
+                "--force",
+                "--task-file",
+                ".project/tasks/T001.md",
             ),
             text=True,
             capture_output=True,

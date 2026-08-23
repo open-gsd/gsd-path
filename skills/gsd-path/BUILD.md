@@ -150,7 +150,10 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
    rejected diff's exact path set and hash, and commit the block bookkeeping.
    After confirming every old change is task-owned, retire that exact worktree
    with `python3 <absolute isolation.py> retire --repo <absolute primary>
-   --worktree <path> --branch <task_branch> --force`, then create the retry
+   --worktree <path> --branch <task_branch> --force --task-file <task path>`,
+   then create the retry. If retirement was interrupted after removing the
+   worktree, rerun the same command; the recorded failed or blocked task and
+   its exact base prove the remaining branch before deletion. Create the retry
    from the new clean primary HEAD. After
    resolving a recoverable `build/blocked` condition, set STATE back to
    `build/active`, log the resolution, and commit it before recording that new
