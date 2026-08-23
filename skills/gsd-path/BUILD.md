@@ -105,14 +105,15 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
 `wave` equals N):
 
 1. **Recover before dispatch.** Run `python3 <absolute isolation.py> recover
-   --repo <absolute primary>`. It is read-only and proves every `done` or
-   `in-progress` task's landing commit from git (first-parent scan for
-   `<task-id>: <task title>`, body `Task:`/`Files:`, declared-path allow-list,
-   append-only task-file delta, patch equality with a retained task branch)
-   and reports the task worktree's presence, branch, and cleanliness. Act
-   only on its verdicts; do not re-derive them in prose, rerun Verify on a
-   proven commit, use an unanchored log grep, infer a SHA from `done`, or
-   reset unknown work.
+   --repo <absolute primary>`. It is read-only and proves every `done` task's
+   landing commit from its exact stamped base (first-parent scan for
+   `<task-id>: <task title>`, body `Task:`/`Files:`, the parent task's declared
+   path allow-list, exact landing metadata, append-only task-file body, and
+   patch equality with a retained task branch). Pending and `in-progress`
+   tasks bypass landing-history proof and report their resume state from the
+   recorded base and retained task branch/worktree. Act only on its verdicts;
+   do not re-derive them in prose, rerun Verify on a proven commit, use an
+   unanchored log grep, infer a SHA from `done`, or reset unknown work.
    - `recovered`: the task is landed (`land` already stamped `status: done`
      and `base`). Retire a still-present task worktree with `isolation.py
      retire` only when the report shows it present, clean, and on the task

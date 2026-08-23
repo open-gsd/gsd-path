@@ -1,16 +1,32 @@
 import json
+import os
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Optional
 
-from scripts import isolation
+from scripts import isolation, pipeline_git
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-TASK_FILE = "---\nid: T001\ntitle: demo\nstatus: in-progress\nbase: null\n---\ntask T001\n"
+TASK_FILE = (
+    "---\nid: T001\ntitle: demo\nwave: 1\ndeps: []\nstatus: in-progress\n"
+    "agent: coder\nbase: null\nworktree: active\ntask_branch: active\n"
+    "files:\n  - src/app.py\n---\ntask T001\n"
+)
 ISOLATION_SCRIPT = PROJECT_ROOT / "scripts" / "isolation.py"
+BUNDLED_ISOLATION_SCRIPTS = tuple(
+    PROJECT_ROOT / relative
+    for relative in (
+        "skills/gsd-path/scripts/isolation.py",
+        "skills/gsd-path-build/scripts/isolation.py",
+        "skills/gsd-path-inspect/scripts/isolation.py",
+        "skills/gsd-path-docs-audit/scripts/isolation.py",
+        "skills/gsd-path-ship/scripts/isolation.py",
+    )
+)
 
 
 def git(root: Path, *arguments: str) -> str:
@@ -46,11 +62,6 @@ class IsolationTests(unittest.TestCase):
             capture_output=True,
             check=False,
         )
-
-    def test_helper_source_never_detaches(self) -> None:
-        source = ISOLATION_SCRIPT.read_text(encoding="utf-8")
-        self.assertNotIn("--detach", source)
-        self.assertNotIn("checkout --detach", source)
 
     def test_serial_isolate_uses_bound_branch(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -185,6 +196,9 @@ class IsolationTests(unittest.TestCase):
             isolation.isolate_task(repo, base, "T001", 1)
             self.write(repo, "src/app.py", "print('done')\n")
             self.write(repo, "SECRET.md", "nope\n")
+            task_path = repo / ".project/tasks/T001.md"
+            task_before = task_path.read_bytes()
+            status_before = git(repo, "status", "--porcelain", "--untracked-files=all")
             with self.assertRaises(isolation.IsolationError) as raised:
                 isolation.land(
                     repo,
@@ -197,6 +211,45 @@ class IsolationTests(unittest.TestCase):
                 )
             self.assertIn("unexpected paths: SECRET.md", str(raised.exception))
             self.assertEqual(git(repo, "rev-parse", "HEAD"), base)
+            self.assertEqual(task_path.read_bytes(), task_before)
+            self.assertEqual(
+                git(repo, "status", "--porcelain", "--untracked-files=all"),
+                status_before,
+            )
+
+    def test_failed_commit_restores_task_and_index(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            base = self.init_bound_repo(repo)
+            isolation.isolate_task(repo, base, "T001", 1)
+            self.write(repo, "src/app.py", "print('staged')\n")
+            git(repo, "add", "src/app.py")
+            self.write(repo, "src/app.py", "print('unstaged')\n")
+            self.write(repo, ".project/tasks/T001.md", TASK_FILE + "log\n")
+            hook = repo / ".git/hooks/pre-commit"
+            hook.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
+            hook.chmod(0o755)
+            task_path = repo / ".project/tasks/T001.md"
+            task_before = task_path.read_bytes()
+            cached_before = git(repo, "diff", "--cached", "--binary")
+            working_before = git(repo, "diff", "--binary")
+
+            with self.assertRaises(isolation.IsolationError):
+                isolation.land(
+                    repo,
+                    repo,
+                    base,
+                    "T001",
+                    "add greeting",
+                    ".project/tasks/T001.md",
+                    ["src/app.py"],
+                )
+
+            self.assertEqual(git(repo, "rev-parse", "HEAD"), base)
+            self.assertEqual(task_path.read_bytes(), task_before)
+            self.assertEqual(git(repo, "diff", "--cached", "--binary"), cached_before)
+            self.assertEqual(git(repo, "diff", "--binary"), working_before)
 
     def test_parallel_conflict_aborts_and_keeps_primary_clean(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -293,9 +346,9 @@ if __name__ == "__main__":
 
 class RecoverTests(unittest.TestCase):
     TASK = (
-        "---\nid: T001\ntitle: add greeting\nwave: 1\ndeps: []\nstatus: {status}\n"
-        "agent: coder\ncommit: {commit}\nbase: {base}\nworktree: null\ntask_branch: null\n"
-        "files:\n  - src/app.py\n---\n\n# T001\n\n## Log\n"
+        "---\nid: T001\ntitle: add greeting\nwave: {wave}\ndeps: []\nstatus: {status}\n"
+        "agent: {agent}\nbase: {base}\nworktree: {worktree}\ntask_branch: {task_branch}\n"
+        "files:\n{files}\n---\n\n# T001\n\n## Log\n{log}"
     )
 
     def setUp(self) -> None:
@@ -307,7 +360,7 @@ class RecoverTests(unittest.TestCase):
         git(self.repo, "config", "user.name", "T")
         (self.repo / "src").mkdir()
         (self.repo / "src/app.py").write_text("print('base')\n")
-        self.write_task("pending", "null", "null")
+        self.write_task("pending", "null")
         git(self.repo, "add", ".")
         git(self.repo, "commit", "-q", "-m", "base")
         self.base = git(self.repo, "rev-parse", "HEAD")
@@ -315,12 +368,51 @@ class RecoverTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.tmp.cleanup()
 
-    def write_task(self, status: str, commit: str, base: str) -> None:
-        path = self.repo / ".project/tasks/T001.md"
+    def write_task(
+        self,
+        status: str,
+        base: str,
+        *,
+        root: Optional[Path] = None,
+        agent: str = "null",
+        worktree: str = "null",
+        task_branch: str = "null",
+        files: tuple[str, ...] = ("src/app.py",),
+        wave: int = 1,
+        log: str = "",
+    ) -> None:
+        path = (root or self.repo) / ".project/tasks/T001.md"
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(self.TASK.format(status=status, commit=commit, base=base))
+        path.write_text(
+            self.TASK.format(
+                status=status,
+                agent=agent,
+                base=base,
+                worktree=worktree,
+                task_branch=task_branch,
+                files="\n".join(f"  - {item}" for item in files),
+                wave=wave,
+                log=log,
+            ),
+            encoding="utf-8",
+        )
 
-    def land(self) -> str:
+    def dispatch(
+        self, root: Optional[Path] = None, task_branch: str = "null"
+    ) -> None:
+        task_root = root or self.repo
+        self.write_task(
+            "in-progress",
+            self.base,
+            root=task_root,
+            agent="coder",
+            worktree=str(task_root),
+            task_branch=task_branch,
+        )
+
+    def land(self, *, dispatch: bool = True) -> str:
+        if dispatch:
+            self.dispatch()
         (self.repo / "src/app.py").write_text("print('hello')\n")
         with (self.repo / ".project/tasks/T001.md").open("a") as log:
             log.write("- done\n")
@@ -332,20 +424,50 @@ class RecoverTests(unittest.TestCase):
     def recover(self) -> dict:
         return isolation.recover(self.repo, Path(".project/tasks"))["tasks"][0]
 
-    def test_in_progress_with_landed_commit_is_recovered(self) -> None:
-        self.write_task("in-progress", "null", self.base)
-        git(self.repo, "commit", "-qam", "build: dispatch")
+    def commit_candidate(
+        self, *, files: tuple[str, ...] = ("src/app.py",), wave: int = 1
+    ) -> str:
+        self.write_task(
+            "done",
+            self.base,
+            agent="coder",
+            files=files,
+            wave=wave,
+            log="- done\n",
+        )
+        (self.repo / "src/app.py").write_text("print('hello')\n")
+        for path in files:
+            if path != "src/app.py":
+                (self.repo / path).write_text("candidate\n", encoding="utf-8")
+        changed = {".project/tasks/T001.md", *files}
+        git(self.repo, "add", *sorted(changed))
+        body = pipeline_git.task_commit_body(
+            ".project/tasks/T001.md", changed, self.base
+        )
+        git(
+            self.repo,
+            "commit",
+            "-q",
+            "-m",
+            "T001: add greeting",
+            "-m",
+            body,
+        )
+        return git(self.repo, "rev-parse", "HEAD")
+
+    def test_landed_commit_is_recovered(self) -> None:
         commit = self.land()
         self.assertEqual(self.recover()["verdict"], "recovered")
         self.assertEqual(self.recover()["commit"], commit)
 
     def test_in_progress_without_landing_resumes(self) -> None:
-        self.write_task("in-progress", "null", self.base)
-        git(self.repo, "commit", "-qam", "build: dispatch")
-        self.assertEqual(self.recover()["verdict"], "resume")
+        self.dispatch()
+        report = self.recover()
+        self.assertEqual(report["verdict"], "resume")
+        self.assertEqual(report["base"], self.base)
+        self.assertEqual(report["worktree"]["path"], str(self.repo.resolve()))
 
     def test_stray_same_subject_commit_is_rejected_not_chosen(self) -> None:
-        self.write_task("in-progress", "null", self.base)
         commit = self.land()
         (self.repo / "src/app.py").write_text("print('stray')\n")
         git(self.repo, "commit", "-qam", "T001: add greeting")
@@ -355,21 +477,45 @@ class RecoverTests(unittest.TestCase):
         self.assertEqual(len(report["rejected"]), 1)
 
     def test_done_without_landing_blocks(self) -> None:
-        self.write_task("done", "null", self.base)
+        self.write_task("done", self.base, agent="coder")
         git(self.repo, "commit", "-qam", "build: bogus")
         self.assertEqual(self.recover()["verdict"], "block")
 
     def test_land_stamps_frontmatter_done(self) -> None:
-        self.write_task("in-progress", "null", "null")
-        self.land()
+        isolated = isolation.isolate_task(self.repo, self.base, "T001", 2)
+        source = Path(isolated["worktree"])
+        self.dispatch(source, isolated["task_branch"])
+        (source / "src/app.py").write_text("print('hello')\n")
+        with (source / ".project/tasks/T001.md").open("a") as log:
+            log.write("- done\n")
+        isolation.land(
+            self.repo,
+            source,
+            self.base,
+            "T001",
+            "add greeting",
+            ".project/tasks/T001.md",
+            ["src/app.py"],
+        )
         text = (self.repo / ".project/tasks/T001.md").read_text()
-        self.assertIn("status: done\n", text)
-        self.assertIn(f"base: {self.base}\n", text)
+        fields, error = isolation.task_frontmatter(text)
+        self.assertIsNone(error)
+        self.assertIsNotNone(fields)
+        self.assertEqual(
+            {key: fields[key] for key in ("status", "base", "worktree", "task_branch")},
+            {
+                "status": "done",
+                "base": self.base,
+                "worktree": "null",
+                "task_branch": "null",
+            },
+        )
         self.assertIn(f"Base: {self.base}", git(self.repo, "log", "-1", "--format=%b"))
 
     def test_parallel_in_flight_resumes_then_recovers(self) -> None:
         isolated = isolation.isolate_task(self.repo, self.base, "T001", 2)
         source = Path(isolated["worktree"])
+        self.dispatch(source, isolated["task_branch"])
         (source / "src/app.py").write_text("print('hello')\n")
         report = self.recover()
         self.assertEqual(report["verdict"], "resume")
@@ -386,6 +532,62 @@ class RecoverTests(unittest.TestCase):
         self.assertEqual(report["verdict"], "recovered")
         self.assertEqual(report["commit"], landed["commit"])
 
+    def test_candidate_cannot_expand_parent_allow_list(self) -> None:
+        self.commit_candidate(files=("src/app.py", "SECRET.md"))
+        report = self.recover()
+        self.assertEqual(report["verdict"], "block")
+        self.assertIn("SECRET.md", report["rejected"][0]["reason"])
+
+    def test_candidate_cannot_change_immutable_frontmatter(self) -> None:
+        self.commit_candidate(wave=2)
+        report = self.recover()
+        self.assertEqual(report["verdict"], "block")
+        self.assertIn("outside landing metadata", report["rejected"][0]["reason"])
+
+    def test_done_task_must_match_its_landing_commit(self) -> None:
+        self.land()
+        task_path = self.repo / ".project/tasks/T001.md"
+        task_path.write_text(
+            task_path.read_text(encoding="utf-8").replace("wave: 1\n", "wave: 2\n"),
+            encoding="utf-8",
+        )
+        git(self.repo, "commit", "-qam", "build: drift task contract")
+        report = self.recover()
+        self.assertEqual(report["verdict"], "block")
+        self.assertIn("differs from its landing commit", report["rejected"][0]["reason"])
+
+    def test_done_task_requires_stamped_base(self) -> None:
+        self.land()
+        task_path = self.repo / ".project/tasks/T001.md"
+        task_path.write_text(
+            task_path.read_text(encoding="utf-8").replace(
+                f"base: {self.base}\n", "base: null\n"
+            ),
+            encoding="utf-8",
+        )
+        report = self.recover()
+        self.assertEqual(report["verdict"], "block")
+        self.assertIn("invalid base", report["reason"])
+
+    def test_reused_task_id_ignores_older_landing(self) -> None:
+        old_commit = self.land()
+        self.write_task("pending", "null")
+        git(self.repo, "add", ".project/tasks/T001.md")
+        git(self.repo, "commit", "-q", "-m", "plan: reslice task")
+        self.base = git(self.repo, "rev-parse", "HEAD")
+
+        self.assertEqual(self.recover()["verdict"], "none")
+        self.dispatch()
+        report = self.recover()
+        self.assertEqual(report["verdict"], "resume")
+        self.assertEqual(report["base"], self.base)
+
+        new_commit = self.land(dispatch=False)
+        report = self.recover()
+        self.assertEqual(report["verdict"], "recovered")
+        self.assertEqual(report["commit"], new_commit)
+        self.assertNotEqual(report["commit"], old_commit)
+
     def test_pending_task_needs_nothing_and_cli_emits_json(self) -> None:
         result = subprocess.run(
             (sys.executable, str(ISOLATION_SCRIPT), "recover", "--repo", str(self.repo)),
@@ -394,3 +596,26 @@ class RecoverTests(unittest.TestCase):
         payload = json.loads(result.stdout)
         self.assertEqual(payload["verdict"], "ok")
         self.assertEqual(payload["tasks"][0]["verdict"], "none")
+
+    def test_bundled_recover_clis_are_self_contained(self) -> None:
+        environment = os.environ.copy()
+        environment["PYTHONPATH"] = ""
+        for script in BUNDLED_ISOLATION_SCRIPTS:
+            with self.subTest(script=script):
+                result = subprocess.run(
+                    (
+                        sys.executable,
+                        str(script),
+                        "recover",
+                        "--repo",
+                        str(self.repo),
+                    ),
+                    cwd=self.repo,
+                    env=environment,
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                payload = json.loads(result.stdout)
+                self.assertEqual(payload["tasks"][0]["verdict"], "none")

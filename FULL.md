@@ -268,7 +268,8 @@ preflights its brief first — every named
 path exists at the base or is declared, owned success criteria exist in
 INTENT.md, and the interface contract matches its
 siblings verbatim — blocking immediately on a mismatch. Each
-task gets one atomic commit; task frontmatter records exact SHA for recovery.
+task gets one atomic commit; task frontmatter records its base and landed state,
+and `isolation.py recover` proves the exact SHA from Git.
 The orchestrator's isolated task Verify rerun is that task's evidence; wave
 review reads it plus the isolated diff and does not re-run the command.
 PLAN.md's project Verify runs once, at ship. A task Verify names a path
@@ -354,7 +355,7 @@ Everything durable lives in `.project/`:
   research/RESEARCH.md     dispatch manifest
   research/SYNTHESIS.md
   plan/PLAN.md
-  tasks/T###-slug.md       base SHA, worktree, status, commit
+  tasks/T###-slug.md       base SHA, worktree, task branch, status
   review/…
   discuss/DIALOGUE.md       any-phase discussion transcript
   discuss/ANSWERS.md        durable discussion answers and decisions

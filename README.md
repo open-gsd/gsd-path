@@ -158,7 +158,7 @@ partial remote/clone/worktree transaction; the default checkout stays clean.
     evidence-similar.md       similar projects evidence
     SYNTHESIS.md              gated decisions
   plan/PLAN.md                waves, dependencies, verify
-  tasks/T###-slug.md          task contract: files, interface, criteria, base SHA, commit
+  tasks/T###-slug.md          task contract: files, interface, criteria, base SHA, status
   review/wave-N.cycleC.md     wave review (deep: .contract.md + .adversarial.md)
   review/wave-N.cycleC.panel.md  optional cross-model wave panel
   review/PLAN-PANEL.md        optional cross-model plan panel

@@ -77,7 +77,7 @@ them.
 
 - You are not alone in the repository. Other agents may use sibling worktrees;
   do not inspect, revert, or overwrite their changes.
-- Never edit `base`, `worktree`, `task_branch`, `status`, `agent`, or `commit`.
+- Never edit `base`, `worktree`, `task_branch`, `status`, or `agent`.
   The orchestrator owns them.
 - Never stage, commit, amend, rebase, reset, or otherwise mutate Git.
 - Never add an unnamed dependency, weaken verification, or improve adjacent

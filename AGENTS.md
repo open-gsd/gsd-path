@@ -293,6 +293,8 @@ that warning as a lost edit and re-apply it to the canonical path.
 
 ## Agent skills
 
+Repository-only: `docs/agents/` configures this source repository and is not installed into consumer projects.
+
 ### Issue tracker
 
 Issues live as local markdown files under `.scratch/<feature>/`. See `docs/agents/issue-tracker.md`.

@@ -310,9 +310,10 @@ task files, and wave reviews.
 
 The build contract is not restated here. Branch binding, the wave loop, task
 isolation and landing, wave review, fix batching, completion, and milestone
-abandon live only in [skills/gsd-path/BUILD.md](skills/gsd-path/BUILD.md)
-(mirrored as `skills/gsd-path-build/SKILL.md`). The build orchestrator reads
-that file; no build agent receives this section.
+abandon live only in the canonical
+[skills/gsd-path-build/SKILL.md](skills/gsd-path-build/SKILL.md).
+`skills/gsd-path/BUILD.md` is its generated mirror. The build orchestrator
+reads the canonical file; no build agent receives this section.
 
 ## Phase 6 — Ship (`gsd-path-ship`)
 
