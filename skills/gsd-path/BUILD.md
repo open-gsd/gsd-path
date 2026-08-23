@@ -125,8 +125,10 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
    - `resume`: continue from the returned `base`, `task_branch`, and worktree
      (the primary itself when no task branch exists); when the report shows
      the worktree absent, return the task to `pending` only when ownership is
-     clear. When `landing_retry` is true, do not resume implementation or
-     redispatch; rerun `land` against the returned isolate and base.
+     clear. When `dispatch_retry` is true, reuse the returned clean isolate,
+     write fresh dispatch metadata and agent there, then dispatch; do not
+     recreate it. When `landing_retry` is true, do not resume implementation
+     or redispatch; rerun `land` against the returned isolate and base.
    - `reconcile`: do not resume implementation. Preserve the returned isolate
      evidence and follow the failed/blocked reconciliation in step 2.
    - `block`: set `build/blocked` with the returned reason and stop.

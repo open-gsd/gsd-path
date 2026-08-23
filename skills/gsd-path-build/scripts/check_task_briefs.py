@@ -69,13 +69,10 @@ def _base_exists(repo: Path, base: str, path: str) -> bool:
 
 
 def _strip_yaml_comment(value: str) -> str:
-    start = len(value) - len(value.lstrip())
-    quote = (
-        value[start]
-        if start < len(value) and value[start] in {"'", '"'}
-        else None
-    )
-    index = start + 1 if quote else 0
+    quote = None
+    previous_significant = None
+    inline_list = value.lstrip().startswith("[")
+    index = 0
     while index < len(value):
         character = value[index]
         if quote == '"':
@@ -94,8 +91,18 @@ def _strip_yaml_comment(value: str) -> str:
                 continue
             if character == quote:
                 quote = None
-        elif character == "#" and (index == 0 or value[index - 1].isspace()):
-            return value[:index].rstrip()
+        else:
+            if character in {"'", '"'} and (
+                previous_significant is None
+                or (inline_list and previous_significant in {"[", ","})
+            ):
+                quote = character
+            elif character == "#" and (
+                index == 0 or value[index - 1].isspace()
+            ):
+                return value[:index].rstrip()
+        if quote is None and not character.isspace():
+            previous_significant = character
         index += 1
     return value.strip()
 

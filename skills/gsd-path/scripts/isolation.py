@@ -278,7 +278,7 @@ def commit_allowed_changes(
     subject: str,
     allowed: Set[str],
     body: str,
-) -> str:
+) -> tuple[str, str, Dict[str, Optional[tuple[str, str]]]]:
     require_attached(repo)
     pending = uncommitted_paths(repo)
     validate_allowed_changes(repo, base, pending, allowed)
@@ -294,12 +294,14 @@ def commit_allowed_changes(
     )
     if staged != pending:
         raise IsolationError("staged paths do not match the uncommitted change set")
+    verified_tree = git_output(repo, "write-tree")
+    verified_delta = _tree_delta(repo, base, verified_tree)
     committed = run_git(repo, "commit", "-q", "-m", subject, "-m", body)
     if committed.returncode != 0:
         raise IsolationError(
             (committed.stderr or committed.stdout).strip() or "commit failed"
         )
-    return current_sha(repo)
+    return current_sha(repo), verified_tree, verified_delta
 
 
 def split_frontmatter(text: str) -> tuple[list[str], str]:
@@ -314,13 +316,10 @@ def split_frontmatter(text: str) -> tuple[list[str], str]:
 
 
 def _strip_yaml_comment(value: str) -> str:
-    start = len(value) - len(value.lstrip())
-    quote = (
-        value[start]
-        if start < len(value) and value[start] in {"'", '"'}
-        else None
-    )
-    index = start + 1 if quote else 0
+    quote = None
+    previous_significant = None
+    inline_list = value.lstrip().startswith("[")
+    index = 0
     while index < len(value):
         character = value[index]
         if quote == '"':
@@ -339,8 +338,18 @@ def _strip_yaml_comment(value: str) -> str:
                 continue
             if character == quote:
                 quote = None
-        elif character == "#" and (index == 0 or value[index - 1].isspace()):
-            return value[:index].rstrip()
+        else:
+            if character in {"'", '"'} and (
+                previous_significant is None
+                or (inline_list and previous_significant in {"[", ","})
+            ):
+                quote = character
+            elif character == "#" and (
+                index == 0 or value[index - 1].isspace()
+            ):
+                return value[:index].rstrip()
+        if quote is None and not character.isspace():
+            previous_significant = character
         index += 1
     return value.strip()
 
@@ -410,6 +419,12 @@ def _landed_task_text(text: str, base: str) -> str:
         if key in values:
             if key in found:
                 raise IsolationError(f"task frontmatter repeats {key}")
+            if key == "base":
+                recorded_base = _strip_yaml_comment(line.split(":", 1)[1]).strip()
+                if recorded_base not in {"null", base}:
+                    raise IsolationError(
+                        "task frontmatter base must be null or match landing base"
+                    )
             found.add(key)
             lines.append(f"{key}: {values[key]}")
         else:
@@ -503,9 +518,27 @@ def _restore_landing_state(
         raise IsolationError("could not restore landing state: " + "; ".join(errors))
 
 
+def _restore_rejected_commit(
+    repo: Path, commit: str, parent: str, worktree_tree: str
+) -> None:
+    if current_sha(repo) != commit:
+        raise IsolationError("HEAD moved after the rejected landing commit")
+    moved = run_git(repo, "update-ref", "HEAD", parent, commit)
+    if moved.returncode != 0:
+        detail = (moved.stderr or moved.stdout).strip() or "could not restore HEAD"
+        raise IsolationError(detail)
+    restored = run_git(repo, "read-tree", "--reset", "-u", worktree_tree)
+    if restored.returncode != 0:
+        detail = (
+            (restored.stderr or restored.stdout).strip()
+            or "could not restore the verified tree"
+        )
+        raise IsolationError(detail)
+
+
 def _stamp_and_commit(
     worktree: Path, base: str, subject: str, task_file: str, allowed: Set[str]
-) -> str:
+) -> tuple[str, Dict[str, Optional[tuple[str, str]]]]:
     task_path = worktree / task_file
     task_text, task_mode = _read_task_text(task_path)
     task_bytes = task_text.encode("utf-8")
@@ -531,10 +564,34 @@ def _stamp_and_commit(
     try:
         _replace_regular_file(task_path, stamped, task_mode)
         body = task_commit_body(task_file, uncommitted_paths(worktree), base)
-        return commit_allowed_changes(worktree, base, subject, allowed, body)
+        commit, verified_tree, verified_delta = commit_allowed_changes(
+            worktree, base, subject, allowed, body
+        )
+        proof_error = _landing_commit_proof_error(
+            worktree,
+            commit,
+            original_head,
+            task_file,
+            base,
+            allowed,
+            verified_delta,
+        )
+        if proof_error:
+            try:
+                _restore_rejected_commit(
+                    worktree, commit, original_head, verified_tree
+                )
+            except IsolationError as restore_error:
+                raise IsolationError(
+                    f"landing commit proof failed: {proof_error}; {restore_error}"
+                ) from restore_error
+            raise IsolationError(f"landing commit proof failed: {proof_error}")
+        return commit, verified_delta
     except BaseException as error:
         if current_sha(worktree) != original_head:
-            raise IsolationError("landing failed after HEAD changed; refusing rollback") from error
+            raise IsolationError(
+                f"landing failed after HEAD changed; refusing rollback: {error}"
+            ) from error
         try:
             _restore_landing_state(
                 worktree, task_path, task_bytes, task_mode, index_tree
@@ -578,17 +635,13 @@ def land(
             raise IsolationError("serial landing requires the bound branch")
         if current_sha(primary) != resolved_base:
             raise IsolationError("serial landing requires HEAD to equal the recorded base")
-        commit = _stamp_and_commit(primary, resolved_base, subject, relative_posix(task_file), allowed)
-        proof_error = _landing_commit_proof_error(
+        commit, _ = _stamp_and_commit(
             primary,
-            commit,
             resolved_base,
+            subject,
             relative_posix(task_file),
-            resolved_base,
             allowed,
         )
-        if proof_error:
-            raise IsolationError(f"landing commit proof failed: {proof_error}")
         return {
             "bound_branch": bound,
             "commit": commit,
@@ -610,13 +663,14 @@ def land(
     if source_dirty:
         if current_sha(source) != resolved_base:
             raise IsolationError("dirty parallel source HEAD must equal the recorded base")
-        source_commit = _stamp_and_commit(
+        source_commit, source_delta = _stamp_and_commit(
             source, resolved_base, subject, relative_posix(task_file), allowed
         )
     else:
         source_commit = current_sha(source)
         if source_commit == resolved_base:
             raise IsolationError("no changes to land")
+        source_delta = _tree_delta(source, resolved_base, source_commit)
     source_parent, parent_error = _single_parent(source, source_commit)
     if parent_error or source_parent != resolved_base:
         raise IsolationError(
@@ -654,8 +708,17 @@ def land(
         relative_posix(task_file),
         resolved_base,
         allowed,
+        source_delta,
     )
     if proof_error:
+        try:
+            _restore_rejected_commit(
+                primary, commit, landing_parent, landing_parent
+            )
+        except IsolationError as restore_error:
+            raise IsolationError(
+                f"landing commit proof failed: {proof_error}; {restore_error}"
+            ) from restore_error
         raise IsolationError(f"landing commit proof failed: {proof_error}")
     return {
         "bound_branch": bound,
@@ -941,6 +1004,7 @@ def _landing_commit_proof_error(
     task_file: str,
     expected_base: str,
     allowed: Set[str],
+    expected_delta: Dict[str, Optional[tuple[str, str]]],
 ) -> Optional[str]:
     parent, parent_error = _single_parent(repo, commit)
     if parent_error or parent != expected_parent:
@@ -961,6 +1025,12 @@ def _landing_commit_proof_error(
     )
     if proof_error:
         return proof_error
+    try:
+        actual_delta = _tree_delta(repo, expected_parent, commit)
+    except IsolationError as error:
+        return str(error)
+    if actual_delta != expected_delta:
+        return "landing commit tree differs from the verified changes"
     pending = uncommitted_paths(repo)
     if pending:
         return "landing left uncommitted paths: " + ", ".join(sorted(pending))
@@ -1166,6 +1236,24 @@ def _recover_task(
                     "block",
                     reason=isolate_error or "retained task frontmatter is unreadable",
                 )
+            if status == "pending" and branch_head == base and bool(worktree["clean"]):
+                try:
+                    base_oid = _regular_blob_oid(primary, base, task_file)
+                    current_oid = _clean_blob_oid(
+                        primary, task_file, task_text, write=False
+                    )
+                    isolate_oid = _clean_blob_oid(
+                        sidecar, task_file, isolate_text, write=False
+                    )
+                except IsolationError as error:
+                    return result("block", reason=str(error))
+                if current_oid == base_oid and isolate_oid == base_oid:
+                    return result(
+                        "resume",
+                        reason="task isolation was created; retry dispatch",
+                        dispatch_retry=True,
+                        base=base,
+                    )
             if isolate_fields.get("status") == "done":
                 contract_error = _retained_task_contract_error(
                     task_text, isolate_text
@@ -1357,8 +1445,8 @@ def _recovery_task_inventory(
     primary: Path, tasks_dir: Path, head: str
 ) -> tuple[list[Path], Optional[str]]:
     requested = tasks_dir if tasks_dir.is_absolute() else primary / tasks_dir
-    if not requested.is_dir():
-        raise IsolationError(f"tasks directory missing: {requested}")
+    if os.path.lexists(requested) and not requested.is_dir():
+        raise IsolationError(f"tasks directory is not a directory: {requested}")
     resolved = requested.resolve()
     if resolved != requested.absolute():
         raise IsolationError(f"tasks directory must not use symlinks: {requested}")
@@ -1369,23 +1457,29 @@ def _recovery_task_inventory(
             f"tasks directory is outside the primary worktree: {resolved}"
         ) from error
     relative_posix_dir = PurePosixPath(relative_dir.as_posix())
-    tracked = {
-        path
-        for path in git_text(
-            primary,
-            "ls-tree",
-            "-r",
-            "--name-only",
-            "-z",
-            head,
-            "--",
-            relative_posix_dir.as_posix(),
-        ).split("\0")
-        if path
-        and PurePosixPath(path).parent == relative_posix_dir
-        and PurePosixPath(path).suffix == ".md"
-    }
-    task_paths = sorted(resolved.glob("*.md"))
+    revisions = [head]
+    parents = git_output(primary, "show", "-s", "--format=%P", head).split()
+    if parents:
+        revisions.append(parents[0])
+    tracked = set()
+    for revision in revisions:
+        tracked.update(
+            path
+            for path in git_text(
+                primary,
+                "ls-tree",
+                "-r",
+                "--name-only",
+                "-z",
+                revision,
+                "--",
+                relative_posix_dir.as_posix(),
+            ).split("\0")
+            if path
+            and PurePosixPath(path).parent == relative_posix_dir
+            and PurePosixPath(path).suffix == ".md"
+        )
+    task_paths = sorted(resolved.glob("*.md")) if resolved.is_dir() else []
     live = {path.relative_to(primary).as_posix() for path in task_paths}
     details = []
     missing = sorted(tracked - live)
@@ -1418,7 +1512,8 @@ def recover(primary: Path, tasks_dir: Path) -> Dict[str, object]:
             "bound_branch": bound,
             "tasks": [],
             "verdict": "block",
-            "reason": "task inventory differs from HEAD: " + inventory_error,
+            "reason": "task inventory differs from trusted Git state: "
+            + inventory_error,
         }
     history: Dict[str, list[tuple[str, str]]] = {}
     log = git_output(primary, "log", "--first-parent", "--format=%x1e%H%x00%s%x00%b", bound)

@@ -386,6 +386,15 @@ class TaskBriefTests(unittest.TestCase):
         self.assertEqual(fields["worktree"], "worktrees/task#1")
         self.assertEqual(fields["files"], ["docs/plan #1.md"])
 
+    def test_frontmatter_preserves_hash_in_quoted_inline_list(self) -> None:
+        fields, error = check_task_briefs._frontmatter(
+            "---\nfiles: ['docs/plan #1.md'] # planning note\n---\n"
+        )
+
+        self.assertIsNone(error)
+        self.assertIsNotNone(fields)
+        self.assertEqual(fields["files"], ["docs/plan #1.md"])
+
     def test_frontmatter_strips_comment_after_plain_apostrophe(self) -> None:
         fields, error = check_task_briefs._frontmatter(
             "---\ntitle: Don't regress # planning note\n---\n"
