@@ -18,7 +18,6 @@ REQUIRED_FIELDS = (
     "deps",
     "status",
     "agent",
-    "commit",
     "base",
     "worktree",
     "task_branch",

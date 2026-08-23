@@ -276,6 +276,28 @@ def commit_allowed_changes(
     return current_sha(repo)
 
 
+FRONTMATTER_RE = re.compile(r"\A---\n(.*?)\n---\n", re.DOTALL)
+
+
+def split_frontmatter(text: str) -> tuple[str, str]:
+    match = FRONTMATTER_RE.match(text)
+    if not match:
+        raise IsolationError("task file has no frontmatter")
+    return match.group(0), text[match.end():]
+
+
+def stamp_task_landed(task_path: Path, base: str) -> None:
+    """Write the orchestrator-owned landing state into the task frontmatter."""
+    text = task_path.read_text(encoding="utf-8")
+    head, body = split_frontmatter(text)
+    values = {"status": "done", "base": base, "worktree": "null", "task_branch": "null"}
+    lines = []
+    for line in head.splitlines():
+        key = line.split(":", 1)[0] if ":" in line else None
+        lines.append(f"{key}: {values[key]}" if key in values else line)
+    task_path.write_text("\n".join(lines) + "\n" + body, encoding="utf-8")
+
+
 def land(
     primary: Path,
     source: Path,
@@ -308,8 +330,9 @@ def land(
     if serial:
         if source_branch != bound:
             raise IsolationError("serial landing requires the bound branch")
+        stamp_task_landed(primary / relative_posix(task_file), resolved_base)
         pending = uncommitted_paths(primary)
-        body = task_commit_body(relative_posix(task_file), pending)
+        body = task_commit_body(relative_posix(task_file), pending, resolved_base)
         commit = commit_allowed_changes(primary, resolved_base, subject, allowed, body)
         return {
             "bound_branch": bound,
@@ -329,8 +352,9 @@ def land(
     if status:
         raise IsolationError("primary worktree is dirty; refusing to cherry-pick")
     if uncommitted_paths(source):
+        stamp_task_landed(source / relative_posix(task_file), resolved_base)
         pending = uncommitted_paths(source)
-        body = task_commit_body(relative_posix(task_file), pending)
+        body = task_commit_body(relative_posix(task_file), pending, resolved_base)
         source_commit = commit_allowed_changes(
             source, resolved_base, subject, allowed, body
         )
@@ -345,7 +369,7 @@ def land(
             )
         changed_paths = committed_paths_since(source, resolved_base)
         expected_body = task_commit_body(
-            relative_posix(task_file), changed_paths
+            relative_posix(task_file), changed_paths, resolved_base
         ).strip()
         source_body = git_output(source, "log", "-1", "--format=%b", source_commit)
         if source_body != expected_body:
@@ -382,108 +406,116 @@ def _patch_id(repo: Path, rev_range: str) -> str:
     return result.stdout.split()[0] if result.stdout.strip() else ""
 
 
+def _body_field(body: str, name: str) -> Optional[str]:
+    for line in body.splitlines():
+        if line.startswith(f"{name}: "):
+            return line[len(name) + 2 :].strip()
+    return None
+
+
 def _prove_task_commit(
-    repo: Path, sha: str, base: str, task_id: str, title: str, task_file: str, files: Sequence[str]
-) -> Optional[str]:
-    """Return None when `sha` is this task's landing commit, else the reason it is not."""
-    if run_git(repo, "merge-base", "--is-ancestor", base, sha).returncode != 0:
-        return "commit does not descend from the recorded base"
+    repo: Path, sha: str, task_id: str, title: str, task_file: str, files: Sequence[str]
+) -> tuple[Optional[str], Optional[str]]:
+    """Return (base, None) when `sha` is this task's landing commit, else (None, reason)."""
     if git_output(repo, "log", "-1", "--format=%s", sha) != task_commit_subject(task_id, title):
-        return "subject does not match"
+        return None, "subject does not match"
+    body = git_output(repo, "log", "-1", "--format=%b", sha)
+    base = _body_field(body, "Base")
+    if not base:
+        return None, "body has no Base: field"
+    if run_git(repo, "merge-base", "--is-ancestor", base, sha).returncode != 0:
+        return None, "commit does not descend from its Base:"
     changed = set(git_output(repo, "diff-tree", "--no-commit-id", "--name-only", "-r", sha).splitlines())
     if task_file not in changed:
-        return "commit does not touch the task file"
-    allowed = {task_file, *files}
-    stray = sorted(changed - allowed)
+        return None, "commit does not touch the task file"
+    stray = sorted(changed - {task_file, *files})
     if stray:
-        return f"commit touches undeclared paths: {', '.join(stray)}"
-    expected_body = task_commit_body(task_file, changed).strip()
-    if git_output(repo, "log", "-1", "--format=%b", sha) != expected_body:
-        return "body Task:/Files: fields do not match the changed paths"
-    task_diff = git_output(repo, "diff", f"{sha}^", sha, "--", task_file)
-    if any(line.startswith("-") and not line.startswith("---") for line in task_diff.splitlines()):
-        return "task file delta is not append-only"
-    return None
+        return None, f"commit touches undeclared paths: {', '.join(stray)}"
+    if body != task_commit_body(task_file, changed, base).strip():
+        return None, "body Task:/Files: fields do not match the changed paths"
+    before = git_output(repo, "show", f"{sha}^:{task_file}")
+    after = git_output(repo, "show", f"{sha}:{task_file}")
+    try:
+        _, before_body = split_frontmatter(before + "\n")
+        _, after_body = split_frontmatter(after + "\n")
+    except IsolationError as exc:
+        return None, str(exc)
+    if not after_body.startswith(before_body):
+        return None, "task file body is not append-only"
+    return base, None
+
+
+def _worktree_report(path: Path) -> Dict[str, object]:
+    present = path.is_dir() and run_git(path, "rev-parse", "--git-dir").returncode == 0
+    return {
+        "path": str(path),
+        "present": present,
+        "branch": require_attached(path) if present else None,
+        "clean": not git_output(path, "status", "--porcelain", "--untracked-files=all") if present else None,
+    }
 
 
 def _recover_task(primary: Path, bound: str, path: Path) -> Dict[str, object]:
     fields, error = task_frontmatter(path.read_text(encoding="utf-8"))
     task_file = relative_posix(str(path.relative_to(primary)))
-    report: Dict[str, object] = {"task": task_file, "candidates": [], "worktree": None}
+    report: Dict[str, object] = {"task": task_file, "candidates": []}
     if error or fields is None:
         return {**report, "verdict": "block", "reason": error or "unreadable frontmatter"}
     task_id = str(fields.get("id", ""))
     status = str(fields.get("status", ""))
+    title = str(fields.get("title", ""))
+    files = [relative_posix(item) for item in fields.get("files", []) if isinstance(item, str)]
     report.update({"task_id": task_id, "status": status})
-    if status not in ("done", "in-progress"):
-        return {**report, "verdict": "none", "reason": f"status {status!r} needs no recovery"}
-    base = fields.get("base")
-    if not isinstance(base, str) or not base or base == "null":
-        return {**report, "verdict": "block", "reason": "no recorded base"}
     try:
-        base = require_commit(primary, require_full_sha(base))
         validate_task_id(task_id)
     except IsolationError as exc:
         return {**report, "verdict": "block", "reason": str(exc)}
-    title = str(fields.get("title", ""))
-    files = [relative_posix(item) for item in fields.get("files", []) if isinstance(item, str)]
 
-    worktree = fields.get("worktree")
-    task_branch = fields.get("task_branch")
-    worktree = None if worktree in (None, "null", "") else str(worktree)
-    task_branch = None if task_branch in (None, "null", "") else str(task_branch)
-    if worktree:
-        wt = Path(worktree)
-        present = wt.is_dir() and run_git(wt, "rev-parse", "--git-dir").returncode == 0
-        report["worktree"] = {
-            "path": worktree,
-            "present": present,
-            "branch": require_attached(wt) if present else None,
-            "clean": not git_output(wt, "status", "--porcelain", "--untracked-files=all") if present else None,
-        }
+    isolate = sidecar_root(primary, "task", task_id)
+    task_branch = task_branch_name(task_id)
+    report["worktree"] = _worktree_report(isolate) if isolate.exists() else None
+    branch_exists = run_git(primary, "rev-parse", "--verify", "-q", task_branch).returncode == 0
 
-    recorded = fields.get("commit")
-    recorded = None if recorded in (None, "null", "") else str(recorded)
-    if status == "done":
-        if not recorded:
-            return {**report, "verdict": "block", "reason": "done without a recorded commit"}
-        try:
-            recorded = require_commit(primary, require_full_sha(recorded))
-        except IsolationError as exc:
-            return {**report, "verdict": "block", "reason": str(exc)}
-        why = _prove_task_commit(primary, recorded, base, task_id, title, task_file, files)
-        if why:
-            return {**report, "verdict": "block", "reason": why, "candidates": [recorded]}
-        candidates = [recorded]
-    else:
-        subject = task_commit_subject(task_id, title)
-        log = git_output(primary, "log", "--first-parent", "--format=%H%x00%s", f"{base}..{bound}")
-        candidates = []
+    subject = task_commit_subject(task_id, title) if title else None
+    candidates, rejected = [], []
+    if subject:
+        log = git_output(primary, "log", "--first-parent", "--format=%H%x00%s", bound)
         for line in log.splitlines():
             sha, _, line_subject = line.partition("\x00")
-            if line_subject == subject and _prove_task_commit(
-                primary, sha, base, task_id, title, task_file, files
-            ) is None:
-                candidates.append(sha)
-        if len(candidates) > 1:
-            return {**report, "verdict": "block", "reason": "multiple proven candidates", "candidates": candidates}
-        if not candidates:
-            return {**report, "verdict": "resume", "reason": "no landed commit; resume the isolated diff"}
-    commit = candidates[0]
-    if task_branch and run_git(primary, "rev-parse", "--verify", "-q", task_branch).returncode == 0:
-        if _patch_id(primary, f"{base}..{task_branch}") != _patch_id(primary, f"{commit}^..{commit}"):
-            return {**report, "verdict": "block", "reason": "retained task branch differs from the landed commit", "candidates": candidates}
-    return {**report, "verdict": "recovered", "commit": commit, "candidates": candidates}
+            if line_subject != subject:
+                continue
+            base, why = _prove_task_commit(primary, sha, task_id, title, task_file, files)
+            (candidates if why is None else rejected).append((sha, base or why))
+    report["candidates"] = [sha for sha, _ in candidates]
+    report["rejected"] = [{"commit": sha, "reason": why} for sha, why in rejected]
+
+    if len(candidates) > 1:
+        return {**report, "verdict": "block", "reason": "multiple proven landing commits"}
+    if candidates:
+        commit, base = candidates[0]
+        recorded_base = fields.get("base")
+        if recorded_base not in (None, "null", "", base):
+            return {**report, "verdict": "block", "reason": "recorded base differs from the landing commit's Base:"}
+        if branch_exists and _patch_id(primary, f"{base}..{task_branch}") != _patch_id(primary, f"{commit}^..{commit}"):
+            return {**report, "verdict": "block", "reason": "retained task branch differs from the landing commit"}
+        return {**report, "verdict": "recovered", "commit": commit, "base": base}
+    in_flight = status == "in-progress" or branch_exists or report["worktree"] is not None
+    if in_flight:
+        base = git_output(primary, "merge-base", bound, task_branch) if branch_exists else current_sha(primary)
+        return {**report, "verdict": "resume", "base": base, "task_branch": task_branch if branch_exists else None}
+    if status == "done":
+        return {**report, "verdict": "block", "reason": "done but no landing commit proves it"}
+    return {**report, "verdict": "none", "reason": f"status {status!r} needs no recovery"}
 
 
 def recover(primary: Path, tasks_dir: Path) -> Dict[str, object]:
-    """Prove each done/in-progress task's landing commit from git. Read-only.
+    """Prove each task's landing state from git. Read-only.
 
-    Verdicts: `recovered` (exactly one proven commit; orchestrator records it),
-    `resume` (nothing landed; continue from the isolated worktree), `block`
-    (missing proof, conflicting proof, or inconsistent metadata), `none`
-    (status needs no recovery). Verify is not rerun: a proven landing commit is
-    its own evidence.
+    Verdicts: `recovered` (exactly one proven landing commit; `commit` and
+    `base` returned), `resume` (in flight: no landing yet, derived `base` and
+    any retained `task_branch`/worktree returned), `block` (missing or
+    conflicting proof), `none` (nothing to recover). Verify is not rerun: a
+    proven landing commit is its own evidence.
     """
     primary = require_directory(primary, "primary worktree")
     if worktree_root(primary) != primary:
@@ -499,7 +531,6 @@ def recover(primary: Path, tasks_dir: Path) -> Dict[str, object]:
         "tasks": tasks,
         "verdict": "block" if any(t["verdict"] == "block" for t in tasks) else "ok",
     }
-
 
 def retire(
     primary: Path,

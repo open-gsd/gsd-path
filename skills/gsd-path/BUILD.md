@@ -109,18 +109,18 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
    `in-progress` task's landing commit from git (first-parent scan for
    `<task-id>: <task title>`, body `Task:`/`Files:`, declared-path allow-list,
    append-only task-file delta, patch equality with a retained task branch)
-   and reports the recorded worktree's presence, branch, and cleanliness. Act
+   and reports the task worktree's presence, branch, and cleanliness. Act
    only on its verdicts; do not re-derive them in prose, rerun Verify on a
    proven commit, use an unanchored log grep, infer a SHA from `done`, or
    reset unknown work.
-   - `recovered`: write the returned `commit` and `status: done` when the
-     frontmatter lacks them; if that metadata is the sole uncommitted primary
-     change, commit it. Retire a still-present recorded worktree with
-     `isolation.py retire` only when the report shows it present, clean, and
-     on the recorded branch; both absent is valid.
-   - `resume`: continue from the retained isolated worktree and branch; when
-     the report shows the worktree absent, return the task to `pending` only
-     when ownership is clear.
+   - `recovered`: the task is landed (`land` already stamped `status: done`
+     and `base`). Retire a still-present task worktree with `isolation.py
+     retire` only when the report shows it present, clean, and on the task
+     branch; both absent is valid.
+   - `resume`: continue from the returned `base`, `task_branch`, and worktree
+     (the primary itself when no task branch exists); when the report shows
+     the worktree absent, return the task to `pending` only when ownership is
+     clear.
    - `block`: set `build/blocked` with the returned reason and stop.
 
 2. **Prepare the ready set.** Reconcile failed and blocked tasks, then
@@ -165,10 +165,12 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
    Parallel (`N>=2`) creates a named `gsd-path-task/<id>` branch and linked
    worktree at that base; never a detached HEAD. Set frontmatter `base`,
    `worktree`, `task_branch`, `status: in-progress`, and `agent` from the
-   helper's JSON, then commit that dispatch bookkeeping in the primary
-   worktree. Do not append a dispatch
-   Log entry: the isolated task later appends at that location, and two parallel
-   appends make the cherry-pick ambiguous. Reuse a retained worktree only when
+   helper's JSON in the task file **inside the isolated worktree** (the
+   primary itself when serial). Do not commit this dispatch state: it lands
+   inside the task's own commit, and `recover` derives it from the task
+   branch and worktree meanwhile. The primary stays clean during a parallel
+   round. Do not append a dispatch Log entry: the isolated task later appends
+   at that location, and two parallel appends make the cherry-pick ambiguous. Reuse a retained worktree only when
    its recorded base, branch, and task agree exactly.
 
 4. **Dispatch the round.** Following the local runtime dispatch contract,
@@ -204,9 +206,11 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
      a typed failure: unexpected path, conflict, or empty diff. On conflict
      the helper aborts and leaves the primary clean on the bound branch.
      Never leave task landing in progress.
-   - Capture the returned primary full SHA. Before any later Git operation,
-     write it to `commit`, mark the task `done`, and commit that task's
-     bookkeeping. Only then retire the isolate with
+   - `land` stamps `status: done`, `base`, and null `worktree`/`task_branch`
+     into the task frontmatter and records `Base:` in the commit body, so the
+     product commit is the task's only commit; `commit` stays `null` and
+     `recover` proves the SHA from git. Do not write a separate bookkeeping
+     commit. Retire the isolate with
      `python3 <absolute isolation.py> retire --repo <absolute primary>
      --worktree <isolated worktree> [--branch <task_branch>]`. Serial rounds
      return `retired: false` and leave the bound branch untouched. Each
@@ -243,8 +247,8 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
    `Review depth` from PLAN.md (default `full`).
    - `full`: spawn one independent reviewer using deterministic logical task
      name `review_wave_<wave>_cycle_<cycle>`. Supply every task path, its
-     recorded base and commit, the reviewer role, wave-review template, and
-     the absolute INTENT.md path.
+     recorded base and proven landing commit, the reviewer role, and
+     wave-review template, and the absolute INTENT.md path.
      Create and supply one verify sidecar with
      `python3 <absolute isolation.py> isolate-verify --repo <absolute primary>
      --base <recorded review base> --name wave-<N>-cycle-<C>`. Brief the

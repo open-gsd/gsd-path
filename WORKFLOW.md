@@ -269,7 +269,7 @@ naming the exact shapes exchanged with other tasks (`None` when
 independent), an Intent coverage section, observable acceptance criteria, a
 meaningful `verify` command that names a path from that task's files,
 declared files, deps, and
-orchestrator-owned `base`/`worktree`/`task_branch`/`commit` fields initialized
+orchestrator-owned `base`/`worktree`/`task_branch` fields initialized
 to null. PLAN.md Intent coverage maps every INTENT.md success criterion to a
 task AC; that task's Verify must fail if the SC is skipped.
 `scripts/check_handoffs.py plan` gates the table; `wave` and `final`
@@ -525,7 +525,7 @@ Inventory every `.md` → extract testable claims → verify each by the
 cheapest sufficient method (run the command, read the code, run the test,
 check history) → verdict with recorded evidence → remediation queue. With
 `.project/` present it also audits the pipeline against itself: done tasks
-must have their commit SHA and a passing Verify, SYNTHESIS decisions must
+must have a proven landing commit and a passing Verify, SYNTHESIS decisions must
 match the code's actual shape, STATE must agree with task
 frontmatter. Useful mid-project as a drift check before a milestone review.
 The auditor never edits anything.
@@ -568,7 +568,7 @@ with their exact ordered source-file and row list.
   research/evidence-*.md     four required evidence dimensions
   research/SYNTHESIS.md      decision artifact; authoritative after decide gate
   plan/PLAN.md               waves, config, and project verify
-  tasks/T###-slug.md         full contract, clean base SHA, status, exact commit SHA
+  tasks/T###-slug.md         full contract, clean base SHA, status
   review/wave-N.cycleC.md    per-wave verdicts
   review/wave-N.cycleC.panel.md  optional cross-model wave panel
   review/PLAN-PANEL.md       optional cross-model plan panel

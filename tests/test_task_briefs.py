@@ -19,7 +19,6 @@ wave: 1
 deps: []
 status: pending
 agent: null
-commit: null
 base: null
 worktree: null
 task_branch: null

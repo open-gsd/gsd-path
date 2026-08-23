@@ -139,8 +139,8 @@ git history. Verdicts:
 **Alignment mode** (when `.project/` exists) — the pipeline audits itself:
 
 - every INTENT.md success criterion → `met` so far / `not yet` / `contradicted`
-- every task with `status: done` → its recorded commit SHA exists and its
-  Verify command still passes
+- every task with `status: done` → `isolation.py recover` proves its landing
+  commit and its Verify command still passes
 - SYNTHESIS.md decisions → the code actually uses the decided stack/shape
 - STATE.md → agrees with task frontmatter and review files
 

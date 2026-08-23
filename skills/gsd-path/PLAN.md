@@ -89,8 +89,8 @@ severity, or fit with this milestone's scope).
    - Require unique task ids, and require every task's `wave` to name a
      `## Wave N` heading in PLAN.md. PLAN.md carries no task table.
    - Require task frontmatter fields `id`, `title`, `wave`, `deps`, `status`,
-     `agent`, `commit`, `base`, `worktree`, `task_branch`, and `files`; require
-     initial `status: pending`, `agent: null`, `commit: null`, `base: null`,
+     `agent`, `base`, `worktree`, `task_branch`, and `files`; require
+     initial `status: pending`, `agent: null`, `base: null`,
      `worktree: null`, and `task_branch: null` values.
    - Require every dependency id to exist, forbid later-wave dependencies,
      detect cycles, and forbid file overlap between planned tasks in the same

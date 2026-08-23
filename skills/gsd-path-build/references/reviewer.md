@@ -22,7 +22,8 @@ Verify written GSD Path expectations and block failures. Never fix code.
 Use task acceptance criteria and the INTENT.md success criteria owned by
 tasks in this wave as the rubric. For each task:
 
-1. Read the task file and exact Git SHAs from its `base` and `commit` fields.
+1. Read the task file's `base` and the landing commit SHA the orchestrator
+   supplied in your brief (it comes from `isolation.py land`/`recover`).
    Never infer either SHA from task ids, branch position, or nearby history.
 2. Fail a missing, malformed, or invalid SHA. Inspect the commit with
    `git show --format=fuller --stat --patch <commit> --`.
@@ -45,7 +46,7 @@ an SC.
 
 Allow changed paths only in the task's `files` plus its assigned task file.
 Within the task file, allow orchestrator-owned `base`, `worktree`,
-`task_branch`, `status`, `agent`, and `commit` fields plus append-only Log
+`task_branch`, `status`, and `agent` fields plus append-only Log
 entries; block contract-body changes in the task commit. Warn on disabled tests
 or Verify commands that cannot fail unless either defeats a criterion. Set the
 wave verdict to `pass` only when every task passes and every owned INTENT

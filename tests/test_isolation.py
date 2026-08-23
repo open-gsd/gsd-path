@@ -9,6 +9,7 @@ from scripts import isolation
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+TASK_FILE = "---\nid: T001\ntitle: demo\nstatus: in-progress\nbase: null\n---\ntask T001\n"
 ISOLATION_SCRIPT = PROJECT_ROOT / "scripts" / "isolation.py"
 
 
@@ -33,7 +34,7 @@ class IsolationTests(unittest.TestCase):
         git(root, "config", "user.email", "test@example.test")
         git(root, "config", "user.name", "Test")
         self.write(root, "src/app.py", "print('base')\n")
-        self.write(root, ".project/tasks/T001.md", "task T001\n")
+        self.write(root, ".project/tasks/T001.md", TASK_FILE)
         git(root, "add", "src/app.py", ".project/tasks/T001.md")
         git(root, "commit", "-q", "-m", "base")
         return git(root, "rev-parse", "HEAD")
@@ -105,7 +106,7 @@ class IsolationTests(unittest.TestCase):
             base = self.init_bound_repo(repo)
             isolation.isolate_task(repo, base, "T001", 1)
             self.write(repo, "src/app.py", "print('done')\n")
-            self.write(repo, ".project/tasks/T001.md", "task T001\nlog\n")
+            self.write(repo, ".project/tasks/T001.md", TASK_FILE + "log\n")
             result = isolation.land(
                 repo,
                 repo,
@@ -135,7 +136,7 @@ class IsolationTests(unittest.TestCase):
             git(repo, "add", ".project/STATE.md")
             git(repo, "commit", "-q", "-m", "dispatch bookkeeping")
             self.write(source, "src/app.py", "print('done')\n")
-            self.write(source, ".project/tasks/T001.md", "task T001\nlog\n")
+            self.write(source, ".project/tasks/T001.md", TASK_FILE + "log\n")
             result = isolation.land(
                 repo,
                 source,
@@ -161,7 +162,7 @@ class IsolationTests(unittest.TestCase):
             isolated = isolation.isolate_task(repo, base, "T001", 2)
             source = Path(isolated["worktree"])
             self.write(source, "src/app.py", "print('done')\n")
-            self.write(source, ".project/tasks/T001.md", "task T001\nlog\n")
+            self.write(source, ".project/tasks/T001.md", TASK_FILE + "log\n")
             git(source, "add", "src/app.py", ".project/tasks/T001.md")
             git(source, "commit", "-q", "-m", "T001: add greeting")
 
@@ -208,7 +209,7 @@ class IsolationTests(unittest.TestCase):
             git(repo, "add", "src/app.py")
             git(repo, "commit", "-q", "-m", "bookkeeping overlap")
             self.write(source, "src/app.py", "print('task')\n")
-            self.write(source, ".project/tasks/T001.md", "task T001\nlog\n")
+            self.write(source, ".project/tasks/T001.md", TASK_FILE + "log\n")
             with self.assertRaises(isolation.IsolationError) as raised:
                 isolation.land(
                     repo,
@@ -343,17 +344,47 @@ class RecoverTests(unittest.TestCase):
         git(self.repo, "commit", "-qam", "build: dispatch")
         self.assertEqual(self.recover()["verdict"], "resume")
 
-    def test_done_with_wrong_commit_blocks(self) -> None:
+    def test_stray_same_subject_commit_is_rejected_not_chosen(self) -> None:
         self.write_task("in-progress", "null", self.base)
-        git(self.repo, "commit", "-qam", "build: dispatch")
-        self.land()
+        commit = self.land()
         (self.repo / "src/app.py").write_text("print('stray')\n")
         git(self.repo, "commit", "-qam", "T001: add greeting")
-        stray = git(self.repo, "rev-parse", "HEAD")
-        self.write_task("done", stray, self.base)
         report = self.recover()
-        self.assertEqual(report["verdict"], "block")
-        self.assertIn("task file", report["reason"])
+        self.assertEqual(report["verdict"], "recovered")
+        self.assertEqual(report["commit"], commit)
+        self.assertEqual(len(report["rejected"]), 1)
+
+    def test_done_without_landing_blocks(self) -> None:
+        self.write_task("done", "null", self.base)
+        git(self.repo, "commit", "-qam", "build: bogus")
+        self.assertEqual(self.recover()["verdict"], "block")
+
+    def test_land_stamps_frontmatter_done(self) -> None:
+        self.write_task("in-progress", "null", "null")
+        self.land()
+        text = (self.repo / ".project/tasks/T001.md").read_text()
+        self.assertIn("status: done\n", text)
+        self.assertIn(f"base: {self.base}\n", text)
+        self.assertIn(f"Base: {self.base}", git(self.repo, "log", "-1", "--format=%b"))
+
+    def test_parallel_in_flight_resumes_then_recovers(self) -> None:
+        isolated = isolation.isolate_task(self.repo, self.base, "T001", 2)
+        source = Path(isolated["worktree"])
+        (source / "src/app.py").write_text("print('hello')\n")
+        report = self.recover()
+        self.assertEqual(report["verdict"], "resume")
+        self.assertEqual(report["base"], self.base)
+        self.assertEqual(report["task_branch"], "gsd-path-task/T001")
+        self.assertTrue(report["worktree"]["present"])
+        with (source / ".project/tasks/T001.md").open("a") as log:
+            log.write("- done\n")
+        landed = isolation.land(
+            self.repo, source, self.base, "T001", "add greeting",
+            ".project/tasks/T001.md", ["src/app.py"],
+        )
+        report = self.recover()
+        self.assertEqual(report["verdict"], "recovered")
+        self.assertEqual(report["commit"], landed["commit"])
 
     def test_pending_task_needs_nothing_and_cli_emits_json(self) -> None:
         result = subprocess.run(

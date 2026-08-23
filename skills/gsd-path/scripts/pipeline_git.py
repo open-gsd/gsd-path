@@ -125,9 +125,12 @@ def task_commit_subject(task_id: str, title: str) -> str:
     return f"{task_id}: {cleaned}"
 
 
-def task_commit_body(task_file: str, paths: Sequence[str]) -> str:
+def task_commit_body(task_file: str, paths: Sequence[str], base: Optional[str] = None) -> str:
     ordered = sorted(paths)
-    lines = [f"Task: {task_file}", "Files:"]
+    lines = [f"Task: {task_file}"]
+    if base:
+        lines.append(f"Base: {base}")
+    lines.append("Files:")
     if ordered:
         lines.extend(f"- {path}" for path in ordered)
     else:
