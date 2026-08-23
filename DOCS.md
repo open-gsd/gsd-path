@@ -289,16 +289,17 @@ contract updates manually ([UPDATE.md](UPDATE.md)).
 Restore from `disabled-gsd-skills` beside the skills root ([UPDATE.md](UPDATE.md)).
 
 **Brownfield vs greenfield?**
-With no STATE.md, the router runs the bundled classifier:
-`scripts/detect_project.py classify --repo <absolute-root>`. A recognized
+With no STATE.md, the router runs the bundled initializer:
+`scripts/detect_project.py initialize --repo <absolute-root> --template
+<absolute-state-template>` and routes from its returned JSON. A recognized
 manifest or source file, qualifying tracked Git file, or qualifying Markdown
 document with a body is brownfield and routes to inspect. A title-only README,
 `LICENSE`/`COPYING`, `.gitignore`, or content only in ignored trees such as
 `node_modules` does not count; those scaffold-only trees stay greenfield and
 route to define. Other `.project/` content without STATE.md is orphaned and
 blocks for recovery. An owned state, including the new-GitHub bootstrap state,
-routes by STATE.md without running the classifier. After a milestone ships,
-the next one inspects again.
+routes by STATE.md without running the initializer. Use `classify` only for
+read-only inspection. After a milestone ships, the next one inspects again.
 
 ---
 
