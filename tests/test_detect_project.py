@@ -1,5 +1,7 @@
+import errno
 import json
 import os
+import stat
 import subprocess
 import sys
 import tempfile
@@ -14,6 +16,21 @@ import detect_project
 
 
 SCRIPT = ROOT / "scripts" / "detect_project.py"
+ANCHORED_READ_AVAILABLE = (
+    hasattr(os, "O_DIRECTORY")
+    and hasattr(os, "O_NOFOLLOW")
+    and os.open in os.supports_dir_fd
+    and os.stat in os.supports_dir_fd
+    and os.stat in os.supports_follow_symlinks
+)
+DESCRIPTOR_TRAVERSAL_AVAILABLE = (
+    ANCHORED_READ_AVAILABLE and os.listdir in getattr(os, "supports_fd", ())
+)
+ANCHORED_STATE_CREATE_AVAILABLE = (
+    DESCRIPTOR_TRAVERSAL_AVAILABLE
+    and os.mkdir in getattr(os, "supports_dir_fd", ())
+    and os.unlink in getattr(os, "supports_dir_fd", ())
+)
 
 
 class DetectProjectTests(unittest.TestCase):
@@ -69,6 +86,17 @@ class DetectProjectTests(unittest.TestCase):
             repo = Path(temporary)
             (repo / "README.md").write_text(
                 "# Demo\n<!-- scaffold note\n",
+                encoding="utf-8",
+            )
+            payload = self.classify(repo)
+            self.assertEqual(payload["verdict"], "greenfield")
+            self.assertEqual(payload["signals"], [])
+
+    def test_title_readme_with_three_space_comment_is_greenfield(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            (repo / "README.md").write_text(
+                "# Demo\n   <!-- scaffold -->\n",
                 encoding="utf-8",
             )
             payload = self.classify(repo)
@@ -145,9 +173,23 @@ class DetectProjectTests(unittest.TestCase):
             "```python\n---\n",
             "Demo\n\n====\n",
             "Demo\n<!-- scaffold -->\n====\n",
+            "Demo\n<!-- scaffold\nnote -->\n====\n",
             "Demo\n====\nOther\n====\n",
         )
         for contents in examples:
+            with self.subTest(contents=contents):
+                with tempfile.TemporaryDirectory() as temporary:
+                    repo = Path(temporary)
+                    (repo / "README.md").write_text(contents, encoding="utf-8")
+                    payload = self.classify(repo)
+                    self.assertEqual(payload["verdict"], "brownfield")
+                    self.assertEqual(
+                        payload["signals"],
+                        [{"kind": "docs", "path": "README.md"}],
+                    )
+
+    def test_indented_html_comments_are_markdown_body(self) -> None:
+        for contents in ("    <!-- code -->\n", "\t<!-- code -->\n"):
             with self.subTest(contents=contents):
                 with tempfile.TemporaryDirectory() as temporary:
                     repo = Path(temporary)
@@ -279,6 +321,96 @@ class DetectProjectTests(unittest.TestCase):
             payload = self.classify(repo)
             self.assertEqual(payload["verdict"], "orphan")
             self.assertEqual(payload["orphan_paths"], [".project"])
+
+    def test_name_surrogate_project_directory_is_orphan(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            project = repo / ".project"
+            project.mkdir()
+            (project / "STATE.md").write_text(
+                "---\npipeline: gsd-path/v2\n---\n",
+                encoding="utf-8",
+            )
+            real_lstat = detect_project.os.lstat
+            project_evidence = project.resolve()
+            project_status = real_lstat(project_evidence)
+            name_surrogate = mock.Mock(
+                st_mode=project_status.st_mode,
+                st_reparse_tag=0xA0000003,
+            )
+
+            def junction_lstat(path):
+                if Path(path) == project_evidence:
+                    return name_surrogate
+                return real_lstat(path)
+
+            with mock.patch.object(
+                detect_project.os,
+                "lstat",
+                side_effect=junction_lstat,
+            ):
+                payload = self.classify(repo)
+            self.assertEqual(payload["verdict"], "orphan")
+            self.assertEqual(payload["orphan_paths"], [".project"])
+
+    def test_lstat_fallback_rejects_name_surrogate_markdown(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            readme = repo / "README.md"
+            readme.write_text(
+                "# External\n\nExisting project.\n",
+                encoding="utf-8",
+            )
+            real_stat = detect_project.os.stat
+            readme_evidence = readme.resolve()
+            readme_status = real_stat(readme_evidence)
+            name_surrogate = mock.Mock(
+                st_mode=readme_status.st_mode,
+                st_reparse_tag=0xA000000C,
+            )
+
+            def reparse_stat(path, *, dir_fd=None, follow_symlinks=True):
+                if dir_fd is None and Path(path) == readme_evidence:
+                    return name_surrogate
+                return real_stat(
+                    path,
+                    dir_fd=dir_fd,
+                    follow_symlinks=follow_symlinks,
+                )
+
+            with mock.patch.object(
+                detect_project,
+                "ANCHORED_EVIDENCE_SUPPORTED",
+                False,
+            ):
+                with mock.patch.object(
+                    detect_project.os,
+                    "stat",
+                    side_effect=reparse_stat,
+                ):
+                    with self.assertRaisesRegex(
+                        detect_project.DetectError,
+                        "link-like Markdown evidence",
+                    ):
+                        self.classify(repo)
+
+    def test_lstat_fallback_classifies_regular_owned_state(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            state = repo / ".project" / "STATE.md"
+            state.parent.mkdir()
+            state.write_text(
+                "---\npipeline: gsd-path/v2\n---\n",
+                encoding="utf-8",
+            )
+            with mock.patch.object(
+                detect_project,
+                "ANCHORED_EVIDENCE_SUPPORTED",
+                False,
+            ):
+                payload = self.classify(repo)
+            self.assertEqual(payload["verdict"], "owned")
+            self.assertEqual(payload["pipeline"], "gsd-path/v2")
 
     def test_project_child_symlink_is_reported_lexically(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -438,11 +570,16 @@ class DetectProjectTests(unittest.TestCase):
                 "walk",
                 side_effect=failing_walk,
             ):
-                with self.assertRaisesRegex(
-                    detect_project.DetectError,
-                    "cannot traverse filesystem evidence",
+                with mock.patch.object(
+                    detect_project,
+                    "ANCHORED_EVIDENCE_SUPPORTED",
+                    False,
                 ):
-                    self.classify(repo)
+                    with self.assertRaisesRegex(
+                        detect_project.DetectError,
+                        "cannot traverse filesystem evidence",
+                    ):
+                        self.classify(repo)
 
     def test_worktree_stat_failure_errors(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -462,14 +599,80 @@ class DetectProjectTests(unittest.TestCase):
                 "lstat",
                 side_effect=failing_lstat,
             ):
-                with self.assertRaisesRegex(
-                    detect_project.DetectError,
-                    "cannot inspect filesystem evidence",
+                with mock.patch.object(
+                    detect_project,
+                    "ANCHORED_EVIDENCE_SUPPORTED",
+                    False,
                 ):
-                    self.classify(repo)
+                    with self.assertRaisesRegex(
+                        detect_project.DetectError,
+                        "cannot inspect filesystem evidence",
+                    ):
+                        self.classify(repo)
+
+    @unittest.skipUnless(
+        DESCRIPTOR_TRAVERSAL_AVAILABLE,
+        "descriptor-anchored traversal is unavailable",
+    )
+    def test_worktree_uses_descriptor_listing_when_supported(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            (repo / "main.py").write_text("print(1)\n", encoding="utf-8")
+            with mock.patch.object(
+                detect_project.os,
+                "walk",
+                side_effect=AssertionError("path traversal used"),
+            ):
+                payload = self.classify(repo)
+            self.assertEqual(payload["verdict"], "brownfield")
+            self.assertEqual(
+                payload["signals"],
+                [{"kind": "source", "path": "main.py"}],
+            )
+
+    @unittest.skipUnless(
+        DESCRIPTOR_TRAVERSAL_AVAILABLE,
+        "descriptor-anchored traversal is unavailable",
+    )
+    def test_anchored_traversal_open_failures_are_detect_errors(self) -> None:
+        for target in ("root", "child"):
+            with self.subTest(target=target):
+                with tempfile.TemporaryDirectory() as temporary:
+                    repo = Path(temporary)
+                    repo_evidence = repo.resolve()
+                    child = repo / "src"
+                    if target == "child":
+                        child.mkdir()
+                        (child / "main.py").write_text(
+                            "print(1)\n",
+                            encoding="utf-8",
+                        )
+                    real_open = detect_project.os.open
+
+                    def failing_open(path, flags, mode=0o777, *, dir_fd=None):
+                        root_open = dir_fd is None and Path(path) == repo_evidence
+                        child_open = dir_fd is not None and path == "src"
+                        if (target == "root" and root_open) or (
+                            target == "child" and child_open
+                        ):
+                            raise PermissionError(13, "denied", str(path))
+                        return real_open(path, flags, mode, dir_fd=dir_fd)
+
+                    with mock.patch.object(
+                        detect_project.os,
+                        "open",
+                        side_effect=failing_open,
+                    ):
+                        with self.assertRaisesRegex(
+                            detect_project.DetectError,
+                            "cannot traverse filesystem evidence",
+                        ):
+                            self.classify(repo)
 
     def test_git_rejects_unsafe_tracked_paths(self) -> None:
-        for raw in (b"../README.md\0", b"/README.md\0"):
+        oid = b"1" * 40
+        for path in (b"../README.md", b"/README.md"):
+            raw = b"100644 " + oid + b" 0\t" + path + b"\0"
             with self.subTest(raw=raw):
                 with tempfile.TemporaryDirectory() as temporary:
                     repo = Path(temporary)
@@ -498,7 +701,7 @@ class DetectProjectTests(unittest.TestCase):
             result = subprocess.CompletedProcess(
                 ["git", "ls-files"],
                 0,
-                stdout=b"D:/outside.md\0",
+                stdout=b"100644 " + (b"1" * 40) + b" 0\tD:/outside.md\0",
                 stderr=b"",
             )
             with mock.patch.object(
@@ -533,7 +736,7 @@ class DetectProjectTests(unittest.TestCase):
             self.assertEqual(payload["signals"], [])
 
     @unittest.skipIf(os.name == "nt", "symlink creation requires POSIX")
-    def test_tracked_markdown_symlink_errors(self) -> None:
+    def test_tracked_markdown_symlink_is_ignored(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             workspace = Path(temporary)
             repo = workspace / "repo"
@@ -546,11 +749,9 @@ class DetectProjectTests(unittest.TestCase):
             )
             (repo / "README.md").symlink_to(external)
             self.git(repo, "add", "README.md")
-            with self.assertRaisesRegex(
-                detect_project.DetectError,
-                "symlinked Markdown evidence",
-            ):
-                self.classify(repo)
+            payload = self.classify(repo)
+            self.assertEqual(payload["verdict"], "greenfield")
+            self.assertEqual(payload["signals"], [])
 
     @unittest.skipIf(os.name == "nt", "symlink creation requires POSIX")
     def test_tracked_markdown_below_symlinked_directory_errors(self) -> None:
@@ -573,7 +774,7 @@ class DetectProjectTests(unittest.TestCase):
             (repo / "docs").symlink_to(external, target_is_directory=True)
             with self.assertRaisesRegex(
                 detect_project.DetectError,
-                "symlinked Markdown evidence",
+                "link-like Markdown evidence",
             ):
                 self.classify(repo)
 
@@ -671,6 +872,18 @@ class DetectProjectTests(unittest.TestCase):
             self.assertEqual(payload["verdict"], "greenfield")
             self.assertEqual(payload["route"], "define")
 
+    def test_cli_help_distinguishes_classify_and_initialize(self) -> None:
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT), "--help"],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        help_text = " ".join(result.stdout.split())
+        self.assertIn("classify is read-only", help_text)
+        self.assertIn("initialize creates .project/STATE.md", help_text)
+
     def test_unreadable_markdown_errors(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary)
@@ -713,18 +926,20 @@ class DetectProjectTests(unittest.TestCase):
             )
 
     def test_comment_sharing_line_with_heading_is_body(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            repo = Path(temporary)
-            (repo / "README.md").write_text(
-                "<!-- scaffold --># Demo\n",
-                encoding="utf-8",
-            )
-            payload = self.classify(repo)
-            self.assertEqual(payload["verdict"], "brownfield")
-            self.assertEqual(
-                payload["signals"],
-                [{"kind": "docs", "path": "README.md"}],
-            )
+        for contents in (
+            "<!-- scaffold --># Demo\n",
+            "# Demo <!-- scaffold -->\n",
+        ):
+            with self.subTest(contents=contents):
+                with tempfile.TemporaryDirectory() as temporary:
+                    repo = Path(temporary)
+                    (repo / "README.md").write_text(contents, encoding="utf-8")
+                    payload = self.classify(repo)
+                    self.assertEqual(payload["verdict"], "brownfield")
+                    self.assertEqual(
+                        payload["signals"],
+                        [{"kind": "docs", "path": "README.md"}],
+                    )
 
     def test_deleted_tracked_readme_with_body_is_git_signal(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -746,6 +961,125 @@ class DetectProjectTests(unittest.TestCase):
                 [{"kind": "git", "path": "README.md"}],
             )
 
+    def test_deleted_markdown_reads_blob_by_staged_oid(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            (repo / ".git").mkdir()
+            oid = "1" * 40
+
+            def git_result(command, **kwargs):
+                del kwargs
+                if command[3:] == ["ls-files", "--stage", "-z"]:
+                    return subprocess.CompletedProcess(
+                        command,
+                        0,
+                        stdout=f"100644 {oid} 0\tREADME.md\0".encode(),
+                        stderr=b"",
+                    )
+                if command[3:] == ["cat-file", "blob", oid]:
+                    return subprocess.CompletedProcess(
+                        command,
+                        0,
+                        stdout=b"# Demo\n\nExisting project.\n",
+                        stderr=b"",
+                    )
+                raise AssertionError(command)
+
+            with mock.patch.object(
+                detect_project.subprocess,
+                "run",
+                side_effect=git_result,
+            ):
+                payload = self.classify(repo)
+            self.assertEqual(payload["verdict"], "brownfield")
+            self.assertEqual(
+                payload["signals"],
+                [{"kind": "git", "path": "README.md"}],
+            )
+
+    def test_deleted_nonregular_markdown_index_entries_are_ignored(self) -> None:
+        for mode in ("120000", "160000"):
+            with self.subTest(mode=mode):
+                with tempfile.TemporaryDirectory() as temporary:
+                    repo = Path(temporary)
+                    (repo / ".git").mkdir()
+                    oid = "1" * 40
+
+                    def git_result(command, **kwargs):
+                        del kwargs
+                        if command[3:] != ["ls-files", "--stage", "-z"]:
+                            raise AssertionError(command)
+                        return subprocess.CompletedProcess(
+                            command,
+                            0,
+                            stdout=f"{mode} {oid} 0\tREADME.md\0".encode(),
+                            stderr=b"",
+                        )
+
+                    with mock.patch.object(
+                        detect_project.subprocess,
+                        "run",
+                        side_effect=git_result,
+                    ):
+                        payload = self.classify(repo)
+                    self.assertEqual(payload["verdict"], "greenfield")
+                    self.assertEqual(payload["signals"], [])
+
+    def test_unmerged_git_index_entry_errors(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            (repo / ".git").mkdir()
+            oid = "1" * 40
+            result = subprocess.CompletedProcess(
+                ["git", "ls-files"],
+                0,
+                stdout=(
+                    f"100644 {oid} 1\tREADME.md\0"
+                    f"100644 {oid} 2\tREADME.md\0"
+                ).encode(),
+                stderr=b"",
+            )
+            with mock.patch.object(
+                detect_project.subprocess,
+                "run",
+                return_value=result,
+            ):
+                with self.assertRaisesRegex(
+                    detect_project.DetectError,
+                    "git index contains unmerged entry: README.md",
+                ):
+                    self.classify(repo)
+
+    def test_missing_regular_index_blob_errors(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            (repo / ".git").mkdir()
+            oid = "1" * 40
+            results = (
+                subprocess.CompletedProcess(
+                    ["git", "ls-files"],
+                    0,
+                    stdout=f"100644 {oid} 0\tREADME.md\0".encode(),
+                    stderr=b"",
+                ),
+                subprocess.CompletedProcess(
+                    ["git", "cat-file"],
+                    128,
+                    stdout=b"",
+                    stderr=b"missing blob",
+                ),
+            )
+            with mock.patch.object(
+                detect_project.subprocess,
+                "run",
+                side_effect=results,
+            ):
+                with self.assertRaisesRegex(
+                    detect_project.DetectError,
+                    "cannot read staged Markdown evidence: README.md: missing blob",
+                ):
+                    self.classify(repo)
+
     def test_git_index_override_is_ignored(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             workspace = Path(temporary)
@@ -765,6 +1099,10 @@ class DetectProjectTests(unittest.TestCase):
             self.assertEqual(payload["verdict"], "greenfield")
             self.assertEqual(payload["signals"], [])
 
+    @unittest.skipUnless(
+        ANCHORED_STATE_CREATE_AVAILABLE,
+        "anchored state creation is unavailable",
+    )
     def test_initialize_writes_state_for_greenfield(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary)
@@ -778,6 +1116,29 @@ class DetectProjectTests(unittest.TestCase):
             self.assertIn("phase: define", state)
             self.assertIn("pipeline: gsd-path/v2", state)
 
+    def test_initialize_fails_closed_without_anchored_create(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            template = (
+                ROOT / "skills" / "gsd-path" / "templates" / "state.md"
+            )
+            with mock.patch.object(
+                detect_project,
+                "ANCHORED_STATE_CREATE_SUPPORTED",
+                False,
+            ):
+                with self.assertRaisesRegex(
+                    detect_project.DetectError,
+                    "anchored no-follow STATE.md creation is unavailable",
+                ):
+                    detect_project.initialize(repo, template)
+            self.assertFalse((repo / ".project").exists())
+
+    @unittest.skipUnless(
+        ANCHORED_STATE_CREATE_AVAILABLE,
+        "anchored state creation is unavailable",
+    )
+    @unittest.skipIf(os.name == "nt", "symlink replacement requires POSIX")
     def test_initialize_rejects_symlinked_project(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             workspace = Path(temporary)
@@ -786,9 +1147,313 @@ class DetectProjectTests(unittest.TestCase):
             repo.mkdir()
             target.mkdir()
             (repo / "package.json").write_text("{}\n", encoding="utf-8")
-            (repo / ".project").symlink_to(target, target_is_directory=True)
-            payload = detect_project.classify(repo)
-            self.assertEqual(payload["verdict"], "orphan")
+            template = (
+                ROOT / "skills" / "gsd-path" / "templates" / "state.md"
+            )
+            project = repo / ".project"
+            real_mkdir = detect_project.os.mkdir
+
+            def replacing_mkdir(path, mode=0o777, *, dir_fd=None):
+                if path == ".project" and dir_fd is not None:
+                    project.symlink_to(target, target_is_directory=True)
+                    raise FileExistsError(".project appeared")
+                return real_mkdir(path, mode, dir_fd=dir_fd)
+
+            with mock.patch.object(
+                detect_project.os,
+                "mkdir",
+                side_effect=replacing_mkdir,
+            ):
+                with self.assertRaisesRegex(
+                    detect_project.DetectError,
+                    ".project changed after classification",
+                ):
+                    detect_project.initialize(repo, template)
+            self.assertFalse((target / "STATE.md").exists())
+
+    @unittest.skipUnless(
+        ANCHORED_STATE_CREATE_AVAILABLE,
+        "anchored state creation is unavailable",
+    )
+    @unittest.skipIf(os.name == "nt", "directory replacement requires POSIX")
+    def test_initialize_rolls_back_after_project_replacement(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = Path(temporary)
+            repo = workspace / "repo"
+            project = repo / ".project"
+            moved = workspace / "moved-project"
+            external = workspace / "external"
+            project.mkdir(parents=True)
+            external.mkdir()
+            (repo / "package.json").write_text("{}\n", encoding="utf-8")
+            template = (
+                ROOT / "skills" / "gsd-path" / "templates" / "state.md"
+            )
+            real_open = detect_project.os.open
+            replaced = False
+
+            def replacing_open(path, flags, mode=0o777, *, dir_fd=None):
+                nonlocal replaced
+                creating_state = (
+                    dir_fd is not None
+                    and path == "STATE.md"
+                    and bool(flags & os.O_CREAT)
+                )
+                if creating_state and not replaced:
+                    project.rename(moved)
+                    project.symlink_to(external, target_is_directory=True)
+                    replaced = True
+                return real_open(path, flags, mode, dir_fd=dir_fd)
+
+            with mock.patch.object(
+                detect_project.os,
+                "open",
+                side_effect=replacing_open,
+            ):
+                with self.assertRaisesRegex(
+                    detect_project.DetectError,
+                    "project identity changed while creating STATE.md",
+                ):
+                    detect_project.initialize(repo, template)
+            self.assertTrue(replaced)
+            self.assertFalse((moved / "STATE.md").exists())
+            self.assertFalse((external / "STATE.md").exists())
+
+    @unittest.skipUnless(
+        ANCHORED_STATE_CREATE_AVAILABLE,
+        "anchored state creation is unavailable",
+    )
+    def test_initialize_rolls_back_after_project_contents_change(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            project = repo / ".project"
+            project.mkdir()
+            (repo / "package.json").write_text("{}\n", encoding="utf-8")
+            template = (
+                ROOT / "skills" / "gsd-path" / "templates" / "state.md"
+            )
+            real_open = detect_project.os.open
+            changed = False
+
+            def changing_open(path, flags, mode=0o777, *, dir_fd=None):
+                nonlocal changed
+                creating_state = (
+                    dir_fd is not None
+                    and path == "STATE.md"
+                    and bool(flags & os.O_CREAT)
+                )
+                if creating_state and not changed:
+                    (project / "foreign.md").write_text(
+                        "foreign\n",
+                        encoding="utf-8",
+                    )
+                    changed = True
+                return real_open(path, flags, mode, dir_fd=dir_fd)
+
+            with mock.patch.object(
+                detect_project.os,
+                "open",
+                side_effect=changing_open,
+            ):
+                with self.assertRaisesRegex(
+                    detect_project.DetectError,
+                    ".project contents changed while creating STATE.md",
+                ):
+                    detect_project.initialize(repo, template)
+            self.assertTrue(changed)
+            self.assertTrue((project / "foreign.md").exists())
+            self.assertFalse((project / "STATE.md").exists())
+
+    @unittest.skipUnless(
+        ANCHORED_STATE_CREATE_AVAILABLE,
+        "anchored state creation is unavailable",
+    )
+    def test_initialize_retries_short_writes(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            template = (
+                ROOT / "skills" / "gsd-path" / "templates" / "state.md"
+            )
+            real_write = detect_project.os.write
+
+            def short_write(descriptor, data):
+                return real_write(descriptor, data[:7])
+
+            with mock.patch.object(
+                detect_project.os,
+                "write",
+                side_effect=short_write,
+            ):
+                payload = detect_project.initialize(repo, template)
+            self.assertTrue(payload["wrote_state"])
+            expected = detect_project.filled_state_template(
+                template.read_text(encoding="utf-8"),
+                detect_project.project_slug(repo.resolve()),
+                "define",
+            )
+            actual = (repo / ".project" / "STATE.md").read_text(encoding="utf-8")
+            self.assertEqual(actual, expected)
+
+    @unittest.skipUnless(
+        ANCHORED_STATE_CREATE_AVAILABLE,
+        "anchored state creation is unavailable",
+    )
+    def test_initialize_removes_partial_state_after_write_failure(self) -> None:
+        for failure in ("zero", "error"):
+            with self.subTest(failure=failure):
+                with tempfile.TemporaryDirectory() as temporary:
+                    repo = Path(temporary)
+                    template = (
+                        ROOT
+                        / "skills"
+                        / "gsd-path"
+                        / "templates"
+                        / "state.md"
+                    )
+                    real_write = detect_project.os.write
+                    calls = 0
+
+                    def failing_write(descriptor, data):
+                        nonlocal calls
+                        calls += 1
+                        if calls == 1:
+                            return real_write(descriptor, data[:7])
+                        if failure == "zero":
+                            return 0
+                        raise OSError("write failed")
+
+                    with mock.patch.object(
+                        detect_project.os,
+                        "write",
+                        side_effect=failing_write,
+                    ):
+                        with self.assertRaises(detect_project.DetectError):
+                            detect_project.initialize(repo, template)
+                    self.assertFalse((repo / ".project" / "STATE.md").exists())
+
+    @unittest.skipUnless(
+        ANCHORED_STATE_CREATE_AVAILABLE,
+        "anchored state creation is unavailable",
+    )
+    def test_initialize_rolls_back_after_state_fstat_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            template = (
+                ROOT / "skills" / "gsd-path" / "templates" / "state.md"
+            )
+            real_fstat = detect_project.os.fstat
+            failed = False
+
+            def failing_fstat(descriptor):
+                nonlocal failed
+                status = real_fstat(descriptor)
+                if not failed and stat.S_ISREG(status.st_mode):
+                    failed = True
+                    raise OSError("fstat failed")
+                return status
+
+            with mock.patch.object(
+                detect_project.os,
+                "fstat",
+                side_effect=failing_fstat,
+            ):
+                with self.assertRaisesRegex(
+                    detect_project.DetectError,
+                    "fstat failed",
+                ):
+                    detect_project.initialize(repo, template)
+            self.assertTrue(failed)
+            self.assertFalse((repo / ".project" / "STATE.md").exists())
+
+    @unittest.skipUnless(
+        ANCHORED_STATE_CREATE_AVAILABLE,
+        "anchored state creation is unavailable",
+    )
+    def test_initialize_rolls_back_after_interruption(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            template = (
+                ROOT / "skills" / "gsd-path" / "templates" / "state.md"
+            )
+            real_write = detect_project.os.write
+            calls = 0
+
+            def interrupted_write(descriptor, data):
+                nonlocal calls
+                calls += 1
+                if calls == 1:
+                    return real_write(descriptor, data[:7])
+                raise KeyboardInterrupt
+
+            with mock.patch.object(
+                detect_project.os,
+                "write",
+                side_effect=interrupted_write,
+            ):
+                with self.assertRaises(KeyboardInterrupt):
+                    detect_project.initialize(repo, template)
+            self.assertEqual(calls, 2)
+            self.assertFalse((repo / ".project" / "STATE.md").exists())
+
+    @unittest.skipUnless(
+        ANCHORED_STATE_CREATE_AVAILABLE,
+        "anchored state creation is unavailable",
+    )
+    def test_initialize_rolls_back_after_state_close_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            template = (
+                ROOT / "skills" / "gsd-path" / "templates" / "state.md"
+            )
+            real_close = detect_project.os.close
+            real_fstat = detect_project.os.fstat
+            real_open = detect_project.os.open
+            failed = False
+            closed_state_descriptor = None
+            state_close_retried = False
+            opened_descriptors = []
+
+            def recording_open(path, flags, mode=0o777, *, dir_fd=None):
+                descriptor = real_open(path, flags, mode, dir_fd=dir_fd)
+                opened_descriptors.append(descriptor)
+                return descriptor
+
+            def failing_close(descriptor):
+                nonlocal failed
+                nonlocal closed_state_descriptor, state_close_retried
+                if descriptor == closed_state_descriptor:
+                    state_close_retried = True
+                    raise AssertionError("state descriptor close retried")
+                status = real_fstat(descriptor)
+                if not failed and stat.S_ISREG(status.st_mode):
+                    failed = True
+                    closed_state_descriptor = descriptor
+                    real_close(descriptor)
+                    raise OSError("close failed")
+                return real_close(descriptor)
+
+            with mock.patch.object(
+                detect_project.os,
+                "open",
+                side_effect=recording_open,
+            ), mock.patch.object(
+                detect_project.os,
+                "close",
+                side_effect=failing_close,
+            ):
+                with self.assertRaisesRegex(
+                    detect_project.DetectError,
+                    "close failed",
+                ):
+                    detect_project.initialize(repo, template)
+            self.assertTrue(failed)
+            self.assertFalse(state_close_retried)
+            for descriptor in set(opened_descriptors):
+                with self.subTest(descriptor=descriptor):
+                    with self.assertRaises(OSError) as caught:
+                        real_fstat(descriptor)
+                    self.assertEqual(caught.exception.errno, errno.EBADF)
+            self.assertFalse((repo / ".project" / "STATE.md").exists())
 
 
 if __name__ == "__main__":

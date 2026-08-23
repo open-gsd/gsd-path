@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Classify a working tree as owned, orphan, brownfield, or greenfield.
+"""Classify or initialize a working tree.
 
 The router, define, and inspect phases call this instead of inferring
-brownfield vs greenfield from a directory listing. It does not create
-STATE.md or mutate the tree.
+brownfield vs greenfield from a directory listing. classify is read-only.
+initialize creates .project/STATE.md after classifying a new brownfield or
+greenfield project.
 
 Verdicts:
 
@@ -31,7 +32,7 @@ import subprocess
 import sys
 from datetime import date
 from pathlib import Path, PurePosixPath, PureWindowsPath
-from typing import Iterable, Optional, Sequence
+from typing import Iterable, NamedTuple, Optional, Sequence
 
 
 IGNORE_DIRS = {
@@ -173,6 +174,7 @@ HTML_BLOCK_START = re.compile(
     r"|</?[A-Za-z][A-Za-z0-9-]*(?:[ \t]+[^>]*)?/?>[ \t]*$)",
     re.IGNORECASE,
 )
+REPARSE_NAME_SURROGATE = 0x20000000
 ANCHORED_EVIDENCE_SUPPORTED = (
     hasattr(os, "O_DIRECTORY")
     and hasattr(os, "O_NOFOLLOW")
@@ -180,7 +182,13 @@ ANCHORED_EVIDENCE_SUPPORTED = (
     and os.stat in os.supports_dir_fd
     and os.stat in os.supports_follow_symlinks
 )
-LISTDIR_DIR_FD_SUPPORTED = os.listdir in getattr(os, "supports_dir_fd", [])
+LISTDIR_DIR_FD_SUPPORTED = os.listdir in getattr(os, "supports_fd", ())
+ANCHORED_STATE_CREATE_SUPPORTED = (
+    ANCHORED_EVIDENCE_SUPPORTED
+    and LISTDIR_DIR_FD_SUPPORTED
+    and os.mkdir in getattr(os, "supports_dir_fd", ())
+    and os.unlink in getattr(os, "supports_dir_fd", ())
+)
 GIT_OVERRIDE_VARS = (
     "GIT_DIR",
     "GIT_WORK_TREE",
@@ -195,6 +203,27 @@ GIT_OVERRIDE_VARS = (
 
 class DetectError(RuntimeError):
     pass
+
+
+class GitIndexEntry(NamedTuple):
+    path: str
+    mode: int
+    oid: str
+    stage: int
+
+
+def is_link_like(path: Path, status: os.stat_result) -> bool:
+    if stat.S_ISLNK(status.st_mode):
+        return True
+    if getattr(status, "st_reparse_tag", 0) & REPARSE_NAME_SURROGATE:
+        return True
+    isjunction = getattr(os.path, "isjunction", None)
+    if os.name != "nt" or isjunction is None:
+        return False
+    try:
+        return bool(isjunction(path))
+    except OSError as error:
+        raise DetectError(f"cannot inspect link-like evidence: {path}: {error}") from error
 
 
 def posix_relative(path: Path, root: Path) -> str:
@@ -341,9 +370,9 @@ def read_anchored_evidence(
                 dir_fd=descriptors[-1],
                 follow_symlinks=False,
             )
-            if stat.S_ISLNK(expected.st_mode):
+            if is_link_like(current, expected):
                 raise DetectError(
-                    f"symlinked {evidence_name} evidence is not allowed: {current}"
+                    f"link-like {evidence_name} evidence is not allowed: {current}"
                 )
             final = index == len(relative.parts) - 1
             if not final and not stat.S_ISDIR(expected.st_mode):
@@ -402,9 +431,9 @@ def read_lstat_open_evidence(
         for index, part in enumerate(relative.parts):
             current = current / part
             expected = os.stat(current, follow_symlinks=False)
-            if stat.S_ISLNK(expected.st_mode):
+            if is_link_like(current, expected):
                 raise DetectError(
-                    f"symlinked {evidence_name} evidence is not allowed: {current}"
+                    f"link-like {evidence_name} evidence is not allowed: {current}"
                 )
             final = index == len(relative.parts) - 1
             if not final and not stat.S_ISDIR(expected.st_mode):
@@ -470,39 +499,54 @@ def is_setext_title(line: str) -> bool:
     )
 
 
-def strip_standalone_html_comments(text: str) -> str:
+def normalize_html_comments(text: str) -> tuple[str, bool]:
     output = []
     in_comment = False
+    shares_content_line = False
     for line in text.splitlines(keepends=True):
-        if in_comment:
-            closing = line.find("-->")
-            if closing < 0:
-                continue
-            remainder = line[closing + 3 :]
-            in_comment = False
-            if remainder.strip():
-                output.append(remainder)
+        content = line.rstrip("\r\n")
+        ending = line[len(content) :]
+        indentation = content[: len(content) - len(content.lstrip(" \t"))]
+        if not in_comment and (len(indentation) > 3 or "\t" in indentation):
+            output.append(line)
             continue
-        stripped = line.lstrip(" ")
-        indentation = len(line) - len(stripped)
-        if indentation <= 3 and stripped.startswith("<!--"):
-            closing = stripped.find("-->", 4)
-            if closing < 0:
-                in_comment = True
+        visible = []
+        cursor = 0
+        line_has_comment = in_comment
+        while cursor < len(content):
+            if in_comment:
+                closing = content.find("-->", cursor)
+                if closing < 0:
+                    cursor = len(content)
+                    continue
+                cursor = closing + 3
+                in_comment = False
                 continue
-            after = stripped[closing + 3 :]
-            if not after.strip():
-                output.append("\n")
+            opening = content.find("<!--", cursor)
+            if opening < 0:
+                visible.append(content[cursor:])
+                cursor = len(content)
                 continue
-        output.append(line)
-    return "".join(output)
+            line_has_comment = True
+            visible.append(content[cursor:opening])
+            cursor = opening + 4
+            in_comment = True
+        visible_line = "".join(visible)
+        if line_has_comment and visible_line.strip():
+            shares_content_line = True
+        output.append(visible_line)
+        if ending:
+            output.append(ending)
+        elif line_has_comment and not visible_line:
+            output.append("\n")
+    return "".join(output), shares_content_line
 
 
 def markdown_has_body(text: str) -> bool:
-    lines = [
-        line.rstrip()
-        for line in strip_standalone_html_comments(text).splitlines()
-    ]
+    normalized, comment_shares_content = normalize_html_comments(text)
+    if comment_shares_content:
+        return True
+    lines = [line.rstrip() for line in normalized.splitlines()]
     while lines and not lines[0].strip():
         lines.pop(0)
     while lines and not lines[-1].strip():
@@ -521,7 +565,13 @@ def markdown_has_body(text: str) -> bool:
     return True
 
 
-def file_kind(relative: str, root: Path, *, tracked: bool) -> Optional[str]:
+def file_kind(
+    relative: str,
+    root: Path,
+    *,
+    tracked: bool,
+    index_oid: Optional[str] = None,
+) -> Optional[str]:
     if (
         is_ignored(relative)
         or is_managed_pipeline_artifact(relative, root)
@@ -548,7 +598,9 @@ def file_kind(relative: str, root: Path, *, tracked: bool) -> Optional[str]:
             evidence_name="Markdown",
         )
         if text is None and tracked:
-            text = read_git_index_blob(root, relative)
+            if index_oid is None:
+                raise DetectError(f"missing staged Markdown blob identity: {relative}")
+            text = read_git_index_blob(root, relative, index_oid)
         if text is None:
             return None
         if not markdown_has_body(text):
@@ -557,10 +609,10 @@ def file_kind(relative: str, root: Path, *, tracked: bool) -> Optional[str]:
     return None
 
 
-def read_git_index_blob(root: Path, relative: str) -> Optional[str]:
+def read_git_index_blob(root: Path, relative: str, oid: str) -> str:
     try:
         result = subprocess.run(
-            ["git", "-C", str(root), "cat-file", "-p", f":{relative}"],
+            ["git", "-C", str(root), "cat-file", "blob", oid],
             capture_output=True,
             check=False,
             env=git_environment(),
@@ -568,11 +620,39 @@ def read_git_index_blob(root: Path, relative: str) -> Optional[str]:
     except OSError as error:
         raise DetectError(f"git cat-file failed: {error}") from error
     if result.returncode != 0:
-        return None
+        detail = result.stderr.decode("utf-8", "replace").strip()
+        suffix = f": {detail}" if detail else ""
+        raise DetectError(
+            f"cannot read staged Markdown evidence: {relative}{suffix}"
+        )
     try:
         return result.stdout.decode("utf-8")
     except UnicodeDecodeError as error:
         raise DetectError(f"cannot read Markdown evidence: {relative}") from error
+
+
+def parse_git_index_record(raw: bytes) -> GitIndexEntry:
+    try:
+        metadata, encoded_path = raw.split(b"\t", 1)
+        encoded_mode, encoded_oid, encoded_stage = metadata.split(b" ")
+    except ValueError as error:
+        raise DetectError("git ls-files returned malformed staged data") from error
+    if (
+        re.fullmatch(rb"[0-7]{6}", encoded_mode) is None
+        or re.fullmatch(rb"[0-9a-fA-F]+", encoded_oid) is None
+        or re.fullmatch(rb"[0-3]", encoded_stage) is None
+    ):
+        raise DetectError("git ls-files returned malformed staged data")
+    try:
+        relative = encoded_path.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise DetectError("git ls-files returned non-UTF-8 paths") from error
+    return GitIndexEntry(
+        path=validated_git_path(relative),
+        mode=int(encoded_mode, 8),
+        oid=encoded_oid.decode("ascii").lower(),
+        stage=int(encoded_stage),
+    )
 
 
 def raise_walk_error(error: OSError) -> None:
@@ -599,11 +679,12 @@ def iter_worktree_files(root: Path) -> Iterable[str]:
                 or is_managed_pipeline_directory(relative, root)
             ):
                 continue
-            status = lstat_evidence(current / name, missing_ok=False)
-            if stat.S_ISLNK(status.st_mode):
+            path = current / name
+            status = lstat_evidence(path, missing_ok=False)
+            if is_link_like(path, status):
                 continue
             if not stat.S_ISDIR(status.st_mode):
-                raise DetectError(f"walk entry is not a directory: {current / name}")
+                raise DetectError(f"walk entry is not a directory: {path}")
             kept_directories.append(name)
         dirnames[:] = kept_directories
         for name in filenames:
@@ -612,15 +693,24 @@ def iter_worktree_files(root: Path) -> Iterable[str]:
             if is_ignored(relative) or is_managed_pipeline_artifact(relative, root):
                 continue
             status = lstat_evidence(path, missing_ok=False)
-            if stat.S_ISLNK(status.st_mode) or not stat.S_ISREG(status.st_mode):
+            if is_link_like(path, status) or not stat.S_ISREG(status.st_mode):
                 continue
             yield relative
 
 
 def iter_worktree_files_anchored(root: Path) -> Iterable[str]:
     flags = directory_flags()
-    root_fd = os.open(root, flags)
     try:
+        root_fd = os.open(root, flags)
+    except OSError as error:
+        raise DetectError(f"cannot traverse filesystem evidence: {error}") from error
+    try:
+        try:
+            root_status = os.fstat(root_fd)
+        except OSError as error:
+            raise DetectError(f"cannot traverse filesystem evidence: {error}") from error
+        if not stat.S_ISDIR(root_status.st_mode):
+            raise DetectError(f"repo evidence is not a directory: {root}")
         yield from iter_from_dir_fd(root_fd, "", root)
     finally:
         os.close(root_fd)
@@ -637,19 +727,37 @@ def iter_from_dir_fd(
         relative = f"{relative_dir}/{name}" if relative_dir else name
         if is_ignored(relative) or name == ".project":
             continue
+        path = root.joinpath(*PurePosixPath(relative).parts)
         try:
             status = os.stat(name, dir_fd=dir_fd, follow_symlinks=False)
         except OSError as error:
             raise DetectError(
                 f"cannot inspect filesystem evidence: {relative}: {error}"
             ) from error
-        if stat.S_ISLNK(status.st_mode):
+        if is_link_like(path, status):
             continue
         if stat.S_ISDIR(status.st_mode):
             if is_managed_pipeline_directory(relative, root):
                 continue
-            child = os.open(name, directory_flags(), dir_fd=dir_fd)
             try:
+                child = os.open(name, directory_flags(), dir_fd=dir_fd)
+            except OSError as error:
+                raise DetectError(
+                    f"cannot traverse filesystem evidence: {relative}: {error}"
+                ) from error
+            try:
+                try:
+                    actual = os.fstat(child)
+                except OSError as error:
+                    raise DetectError(
+                        f"cannot traverse filesystem evidence: {relative}: {error}"
+                    ) from error
+                if not stat.S_ISDIR(actual.st_mode) or not os.path.samestat(
+                    status, actual
+                ):
+                    raise DetectError(
+                        f"filesystem evidence changed while traversing: {relative}"
+                    )
                 yield from iter_from_dir_fd(child, relative, root)
             finally:
                 os.close(child)
@@ -676,13 +784,13 @@ def validated_git_path(relative: str) -> str:
     return relative
 
 
-def git_tracked_files(root: Path) -> tuple[str, ...]:
+def git_tracked_files(root: Path) -> tuple[GitIndexEntry, ...]:
     git_dir = root / ".git"
     if lstat_evidence(git_dir, missing_ok=True) is None:
         return ()
     try:
         result = subprocess.run(
-            ["git", "-C", str(root), "ls-files", "-z"],
+            ["git", "-C", str(root), "ls-files", "--stage", "-z"],
             capture_output=True,
             check=False,
             env=git_environment(),
@@ -693,25 +801,26 @@ def git_tracked_files(root: Path) -> tuple[str, ...]:
         detail = result.stderr.decode("utf-8", "replace").strip()
         suffix = f": {detail}" if detail else ""
         raise DetectError(f"git ls-files failed{suffix}")
-    try:
-        tracked = result.stdout.decode("utf-8")
-    except UnicodeDecodeError as error:
-        raise DetectError("git ls-files returned non-UTF-8 paths") from error
-    paths = []
-    for raw in tracked.split("\0"):
+    entries = []
+    for raw in result.stdout.split(b"\0"):
         if not raw:
             continue
-        relative = validated_git_path(raw)
-        if not is_ignored(relative):
-            paths.append(relative)
-    return tuple(paths)
+        entry = parse_git_index_record(raw)
+        if is_ignored(entry.path):
+            continue
+        if entry.stage != 0:
+            raise DetectError(f"git index contains unmerged entry: {entry.path}")
+        if not stat.S_ISREG(entry.mode):
+            continue
+        entries.append(entry)
+    return tuple(entries)
 
 
 def occupied_project_paths(project: Path, root: Path) -> tuple[str, ...]:
     project_status = lstat_evidence(project, missing_ok=True)
     if project_status is None:
         return ()
-    if stat.S_ISLNK(project_status.st_mode) or not stat.S_ISDIR(
+    if is_link_like(project, project_status) or not stat.S_ISDIR(
         project_status.st_mode
     ):
         return (posix_relative(project, root),)
@@ -730,8 +839,9 @@ def occupied_project_paths(project: Path, root: Path) -> tuple[str, ...]:
         current = Path(dirpath)
         linked_directories = []
         for name in dirnames:
-            status = lstat_evidence(current / name, missing_ok=False)
-            if stat.S_ISLNK(status.st_mode):
+            path = current / name
+            status = lstat_evidence(path, missing_ok=False)
+            if is_link_like(path, status):
                 linked_directories.append(name)
         paths.extend(
             posix_relative(current / name, root) for name in linked_directories
@@ -773,9 +883,17 @@ def classify(repo: Path) -> dict:
     project = root / ".project"
     state = project / "STATE.md"
     project_status = lstat_evidence(project, missing_ok=True)
-    if project_status is not None and stat.S_ISDIR(project_status.st_mode):
+    if (
+        project_status is not None
+        and not is_link_like(project, project_status)
+        and stat.S_ISDIR(project_status.st_mode)
+    ):
         state_status = lstat_evidence(state, missing_ok=True)
-        if state_status is not None and stat.S_ISREG(state_status.st_mode):
+        if (
+            state_status is not None
+            and not is_link_like(state, state_status)
+            and stat.S_ISREG(state_status.st_mode)
+        ):
             return {
                 "verdict": "owned",
                 "pipeline": pipeline_marker(state, root),
@@ -803,8 +921,14 @@ def classify(repo: Path) -> dict:
             continue
         seen.add(item)
         signals.append({"kind": kind, "path": relative})
-    for relative in git_tracked_files(root):
-        kind = file_kind(relative, root, tracked=True)
+    for entry in git_tracked_files(root):
+        relative = entry.path
+        kind = file_kind(
+            relative,
+            root,
+            tracked=True,
+            index_oid=entry.oid,
+        )
         if kind is None:
             continue
         item = ("git", relative)
@@ -849,69 +973,200 @@ def filled_state_template(template: str, slug: str, phase: str) -> str:
     return text
 
 
-def write_state_anchored(root: Path, content: str) -> None:
-    payload = content.encode("utf-8")
-    if ANCHORED_EVIDENCE_SUPPORTED:
-        flags = directory_flags()
-        root_fd = os.open(root, flags)
-        project_fd = None
-        state_fd = None
+def write_all(descriptor: int, payload: bytes) -> None:
+    remaining = memoryview(payload)
+    while remaining:
+        written = os.write(descriptor, remaining)
+        if written <= 0:
+            raise DetectError("cannot create STATE.md: write made no progress")
+        remaining = remaining[written:]
+
+
+def rollback_created_state(
+    project_fd: int,
+    state_fd: Optional[int],
+    created_status: Optional[os.stat_result],
+) -> None:
+    if created_status is None:
+        if state_fd is None:
+            raise DetectError("cannot roll back STATE.md: identity unavailable")
         try:
+            created_status = os.fstat(state_fd)
+        except OSError as error:
+            raise DetectError(f"cannot roll back STATE.md: {error}") from error
+    try:
+        current = os.stat("STATE.md", dir_fd=project_fd, follow_symlinks=False)
+    except FileNotFoundError:
+        return
+    except OSError as error:
+        raise DetectError(f"cannot roll back STATE.md: {error}") from error
+    if (
+        is_link_like(Path("STATE.md"), current)
+        or not stat.S_ISREG(current.st_mode)
+        or not os.path.samestat(created_status, current)
+    ):
+        return
+    try:
+        os.unlink("STATE.md", dir_fd=project_fd)
+    except OSError as error:
+        raise DetectError(f"cannot roll back STATE.md: {error}") from error
+
+
+def close_file_descriptors(
+    *descriptors: Optional[int],
+) -> Optional[OSError]:
+    first_error = None
+    for descriptor in descriptors:
+        if descriptor is None:
+            continue
+        try:
+            os.close(descriptor)
+        except OSError as error:
+            if first_error is None:
+                first_error = error
+    return first_error
+
+
+def write_state_anchored(
+    root: Path,
+    content: str,
+    expected_root: os.stat_result,
+    expected_project: Optional[os.stat_result],
+) -> None:
+    if not ANCHORED_STATE_CREATE_SUPPORTED:
+        raise DetectError("anchored no-follow STATE.md creation is unavailable")
+    payload = content.encode("utf-8")
+    flags = directory_flags()
+    root_fd = None
+    project_fd = None
+    state_fd = None
+    state_created = False
+    created_status = None
+    try:
+        try:
+            root_fd = os.open(root, flags)
+        except OSError as error:
+            raise DetectError(
+                f"cannot open repo for STATE.md creation: {error}"
+            ) from error
+        opened_root = os.fstat(root_fd)
+        if (
+            is_link_like(root, opened_root)
+            or not stat.S_ISDIR(opened_root.st_mode)
+            or not os.path.samestat(expected_root, opened_root)
+        ):
+            raise DetectError("repo changed after classification")
+        if expected_project is None:
             try:
                 os.mkdir(".project", dir_fd=root_fd)
-            except FileExistsError:
-                pass
-            project_fd = os.open(".project", flags, dir_fd=root_fd)
-            status = os.fstat(project_fd)
-            if stat.S_ISLNK(status.st_mode) or not stat.S_ISDIR(status.st_mode):
-                raise DetectError("cannot create state through a non-directory .project")
-            create = (
-                os.O_CREAT
-                | os.O_EXCL
-                | os.O_WRONLY
-                | getattr(os, "O_NOFOLLOW", 0)
-                | getattr(os, "O_BINARY", 0)
+            except FileExistsError as error:
+                raise DetectError(".project changed after classification") from error
+            except OSError as error:
+                raise DetectError(f"cannot create .project: {error}") from error
+        try:
+            named_project = os.stat(
+                ".project",
+                dir_fd=root_fd,
+                follow_symlinks=False,
             )
+        except OSError as error:
+            raise DetectError(
+                f"cannot inspect .project for STATE.md creation: {error}"
+            ) from error
+        if is_link_like(root / ".project", named_project) or not stat.S_ISDIR(
+            named_project.st_mode
+        ):
+            raise DetectError("cannot create state through a non-directory .project")
+        try:
+            project_fd = os.open(".project", flags, dir_fd=root_fd)
+        except OSError as error:
+            raise DetectError(
+                f"cannot open .project for STATE.md creation: {error}"
+            ) from error
+        opened_project = os.fstat(project_fd)
+        if (
+            not stat.S_ISDIR(opened_project.st_mode)
+            or not os.path.samestat(named_project, opened_project)
+            or (
+                expected_project is not None
+                and not os.path.samestat(expected_project, opened_project)
+            )
+        ):
+            raise DetectError(".project changed after classification")
+        if os.listdir(project_fd):
+            raise DetectError(".project changed after classification")
+        create = (
+            os.O_CREAT
+            | os.O_EXCL
+            | os.O_WRONLY
+            | os.O_NOFOLLOW
+            | getattr(os, "O_BINARY", 0)
+        )
+        try:
             state_fd = os.open("STATE.md", create, 0o644, dir_fd=project_fd)
-            os.write(state_fd, payload)
         except FileExistsError as error:
             raise DetectError("STATE.md already exists") from error
+        state_created = True
+        created_status = os.fstat(state_fd)
+        if is_link_like(
+            root / ".project" / "STATE.md", created_status
+        ) or not stat.S_ISREG(created_status.st_mode):
+            raise DetectError("created STATE.md is not a regular file")
+        write_all(state_fd, payload)
+        current_root = lstat_evidence(root, missing_ok=False)
+        current_project = os.stat(
+            ".project",
+            dir_fd=root_fd,
+            follow_symlinks=False,
+        )
+        current_project_fd = os.fstat(project_fd)
+        current_state = os.stat(
+            "STATE.md",
+            dir_fd=project_fd,
+            follow_symlinks=False,
+        )
+        if (
+            is_link_like(root, current_root)
+            or not os.path.samestat(opened_root, current_root)
+            or is_link_like(root / ".project", current_project)
+            or not stat.S_ISDIR(current_project.st_mode)
+            or not os.path.samestat(opened_project, current_project)
+            or not os.path.samestat(opened_project, current_project_fd)
+        ):
+            raise DetectError("project identity changed while creating STATE.md")
+        if (
+            is_link_like(root / ".project" / "STATE.md", current_state)
+            or not stat.S_ISREG(current_state.st_mode)
+            or not os.path.samestat(created_status, current_state)
+        ):
+            raise DetectError("STATE.md changed while writing")
+        if set(os.listdir(project_fd)) != {"STATE.md"}:
+            raise DetectError(".project contents changed while creating STATE.md")
+        closing_state_fd = state_fd
+        state_fd = None
+        try:
+            os.close(closing_state_fd)
         except OSError as error:
+            raise DetectError(f"cannot close STATE.md: {error}") from error
+    except BaseException as error:
+        if state_created and project_fd is not None:
+            try:
+                rollback_created_state(
+                    project_fd,
+                    state_fd,
+                    created_status,
+                )
+            except DetectError as rollback_error:
+                raise rollback_error from error
+        if isinstance(error, DetectError):
+            raise
+        if isinstance(error, OSError):
             raise DetectError(f"cannot create STATE.md: {error}") from error
-        finally:
-            if state_fd is not None:
-                os.close(state_fd)
-            if project_fd is not None:
-                os.close(project_fd)
-            os.close(root_fd)
-        return
-    project = root / ".project"
-    try:
-        project.mkdir(exist_ok=True)
-    except OSError as error:
-        raise DetectError(f"cannot create .project: {error}") from error
-    status = lstat_evidence(project, missing_ok=False)
-    if stat.S_ISLNK(status.st_mode) or not stat.S_ISDIR(status.st_mode):
-        raise DetectError("cannot create state through a non-directory .project")
-    state = project / "STATE.md"
-    flags = (
-        os.O_CREAT
-        | os.O_EXCL
-        | os.O_WRONLY
-        | getattr(os, "O_NOFOLLOW", 0)
-        | getattr(os, "O_BINARY", 0)
-    )
-    descriptor = None
-    try:
-        descriptor = os.open(state, flags, 0o644)
-        os.write(descriptor, payload)
-    except FileExistsError as error:
-        raise DetectError("STATE.md already exists") from error
-    except OSError as error:
-        raise DetectError(f"cannot create STATE.md: {error}") from error
+        raise
     finally:
-        if descriptor is not None:
-            os.close(descriptor)
+        close_error = close_file_descriptors(state_fd, project_fd, root_fd)
+        if close_error is not None and sys.exc_info()[0] is None:
+            raise DetectError(f"cannot close STATE.md descriptors: {close_error}") from close_error
 
 
 def initialize(
@@ -923,7 +1178,14 @@ def initialize(
         raw = template.read_text(encoding="utf-8")
     except OSError as error:
         raise DetectError(f"cannot read state template: {error}") from error
-    payload = classify(repo)
+    root = repo.resolve()
+    root_status = lstat_evidence(root, missing_ok=True)
+    if root_status is None or is_link_like(root, root_status) or not stat.S_ISDIR(
+        root_status.st_mode
+    ):
+        raise DetectError(f"repo is not a directory: {root}")
+    project_status = lstat_evidence(root / ".project", missing_ok=True)
+    payload = classify(root)
     if payload["verdict"] not in {"brownfield", "greenfield"}:
         payload["wrote_state"] = False
         return payload
@@ -934,10 +1196,11 @@ def initialize(
         raise DetectError(
             f"initialize phase {phase} does not match verdict {payload['verdict']}"
         )
-    root = repo.resolve()
     write_state_anchored(
         root,
         filled_state_template(raw, project_slug(root), phase),
+        root_status,
+        project_status,
     )
     payload["wrote_state"] = True
     return payload
