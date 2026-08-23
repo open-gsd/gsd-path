@@ -40,7 +40,8 @@ landing stays serial, processing completions as they arrive. A same-wave task
 never runs before its same-wave dependencies are done. Task verification
 reconstructs the recorded base plus only that task patch; combined branch-tip
 evidence does not count. The orchestrator calls `scripts/isolation.py` for
-isolate, land, and retire; it never invents `git worktree add` or `--detach`.
+isolate, recover, land, and retire; it never invents `git worktree add` or
+`--detach`.
 
 The parent orchestrator owns dispatch and lifecycle. It binds one structured
 run when the host provides one, creates one task per independent brief, waits
@@ -56,9 +57,9 @@ cancellation is a blocked result, not a skipped result.
 | research | assigned dimensions | concurrent up to capacity, then batches | validate RESEARCH.md and evidence |
 | decide | one decider | serial | validate SYNTHESIS.md |
 | roadmap | one roadmapper | serial; program flow only | validate ROADMAP.md |
-| plan | one planner; zero in quick mode | serial | validate PLAN.md and task mapping |
-| build | dependency-ready coders | parallel rounds, serial task landing | commit code and wave artifacts |
-| ship | wave reviewer; final integration and gap reviewers | independent reviewers concurrent | verify, approve, archive, and ship |
+| plan | one planner; zero in quick mode | serial | validate PLAN.md and task wave assignments |
+| build | dependency-ready coders; wave reviewers | coder rounds, then wave review | commit code and wave artifacts |
+| ship | final integration and gap reviewers | independent reviewers concurrent | verify, approve, archive, and ship |
 
 Non-interactive phases auto-advance when their artifacts pass their gates.
 User approval remains required at define, roadmap, plan, final-review patch
@@ -409,10 +410,10 @@ move with its MANIFEST.md, staged from `.project/` only, subject
 `ship: M00N — <milestone-slug>` and a body naming `Archive:` and
 `Reviewed-HEAD:`. Every other commit on the bound branch
 belongs to the build orchestrator. The commit must contain only `.project/`
-paths. There is no untracked-project fallback. Every pipeline commit —
-task land, build bookkeeping, plan/roadmap/router checkpoints, ship, and
-integrate — carries its defined subject plus a field body (`Task:`/`Files:`,
-`Why:`, `Archive:`, or the integrate fields).
+paths. There is no untracked-project fallback. Every pipeline commit carries
+the subject and field body defined by its canonical phase contract; task-land
+fields live only in the
+[build contract](skills/gsd-path-build/SKILL.md).
 
 ### Integration
 

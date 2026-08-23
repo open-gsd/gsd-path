@@ -107,9 +107,9 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
 1. **Recover before dispatch.** Run `python3 <absolute isolation.py> recover
    --repo <absolute primary>`. It is read-only and proves every `done` task's
    landing commit from its exact stamped base (first-parent scan for
-   `<task-id>: <task title>`, body `Task:`/`Files:`, the base task's declared
-   path allow-list from the task file at that base, exact landing metadata,
-   append-only task-file body, and
+   `<task-id>: <task title>`, body `Task:`/`Base:`/`Files:`, the base task's
+   declared path allow-list from the task file at that base, exact landing
+   metadata, append-only task-file body, and
    patch equality with a retained task branch). Pending and `in-progress`
    tasks bypass landing-history proof and report retained resume state or
    `none`; failed and blocked tasks with retained isolation report
@@ -216,10 +216,12 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
      `python3 <absolute isolation.py> land --repo <absolute primary>
      --source <isolated worktree> --base <recorded base> --task-id <id>
      --title <task title> --task-file <task path> --allow-path <each declared
-     file>`. Do not invent commit or cherry-pick commands. A non-zero exit is
-     a typed failure: unexpected path, conflict, or empty diff. On conflict
-     the helper aborts and leaves the primary clean on the bound branch.
-     Never leave task landing in progress.
+     file>`. Do not invent commit or cherry-pick commands. For a serial round,
+     the primary must still be on the bound branch at the recorded base. A
+     non-zero exit reports the exact landing failure, such as an unexpected
+     path, base or branch mismatch, invalid task proof, conflict, or empty diff.
+     On conflict the helper aborts and leaves the primary clean on the bound
+     branch. Never leave task landing in progress.
    - `land` stamps `status: done`, `base`, and null `worktree`/`task_branch`
      into the task frontmatter and records `Base:` in the commit body, so the
      product commit is the task's only commit; there is no `commit`
@@ -275,9 +277,9 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
    - `deep`: spawn two independent reviewers in parallel, each with a fresh
      isolated context and its own verify sidecar from `isolate-verify` at the
      recorded review base (`--name wave-<N>-cycle-<C>-contract` and
-     `wave-<N>-cycle-<C>-adversarial`). Supply both every task path, its recorded base and commit,
-     the reviewer role, the wave-review template, and the absolute INTENT.md
-     path. The contract lens —
+     `wave-<N>-cycle-<C>-adversarial`). Supply both every task path, its
+     recorded base and proven landing commit, the reviewer role, and the
+     wave-review template, and the absolute INTENT.md path. The contract lens —
      logical task name `review_wave_<wave>_cycle_<cycle>_contract` — does the
      full review: apply each task's `commit^..commit` product patch to the
      recorded base, check the recorded Verify plus the isolated diff, and

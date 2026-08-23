@@ -220,14 +220,14 @@ the lane corrects to `standard` and reroutes through research.
 
 After intent approval, the router walks phases and stops at gates.
 
-| Phase | Output (under `.project/`) | Your role |
+| Phase | Output | Your role |
 | --- | --- | --- |
 | **Research** | `research/evidence-*.md` | Usually nothing |
 | **Decide** | `research/SYNTHESIS.md` | Resolve `NEEDS-USER` at checkpoint |
 | **Roadmap** (program) | `ROADMAP.md` | **Approve milestone slicing** |
-| **Plan** | `plan/PLAN.md`, `tasks/T###-slug.md` | **Approve wave summary** |
-| **Build** | code, commits | Escalations only |
-| **Ship** | `review/wave-*.md`, `review/PLAN-PANEL.md`, `review/FINAL.md` | Approve patch waves if blocked and final shipping when green |
+| **Plan** | `plan/PLAN.md`, `tasks/T###-slug.md`, optional `review/PLAN-PANEL.md` | **Approve wave summary** |
+| **Build** | code, task commits, `review/wave-*.md` | Escalations only |
+| **Ship** | `review/FINAL.md`, `review/final-gap-*.md`, optional `review/PATCH-FINDINGS.md` | Approve patch waves if blocked and final shipping when green |
 
 The discussion sidecar is available alongside every row above. It writes
 `discuss/DIALOGUE.md` and `discuss/ANSWERS.md`; a `final` answer records context
@@ -262,7 +262,7 @@ on the bound branch. Task landing is **serial**. Before
 any worktree exists, the orchestrator lints every ready brief against the
 recorded base with `check_task_briefs.py` and re-checks Intent coverage with
 `check_handoffs.py plan`; a failure is a plan defect repaired
-before the layer proceeds. Isolate, land, and retire go through
+before the layer proceeds. Recovery, isolation, landing, and retirement go
 `isolation.py` — never a detached HEAD. Each coder reads INTENT.md and
 preflights its brief first — every named
 path exists at the base or is declared, owned success criteria exist in
@@ -275,19 +275,21 @@ review reads it plus the isolated diff and does not re-run the command.
 PLAN.md's project Verify runs once, at ship. A task Verify names a path
 from `files` unless it is that allowed Project-verify copy.
 
-### Ship
-
-Wave reviews after each build wave check task criteria and the INTENT success
-criteria that wave owns; final review audits every success criterion
-(`met` / `not-met` / `unverifiable`) and cross-wave gaps. Each wave carries a
-review depth — `full`, `verify-only` for low-risk waves, or sparingly `deep`
+Build reviews each completed wave against task criteria and the INTENT success
+criteria that wave owns. Each wave carries a review depth — `full`,
+`verify-only` for low-risk waves, or sparingly `deep`
 for irreversible or security-critical waves, where two independent reviewers
 (contract and adversarial lenses) must both pass. Review findings are keyed by
 their failed criterion and carried forward across cycles, so a criterion
 failing again after its fix task means the fix failed, never a duplicate fix
 task. Keep waves narrow enough for one reviewer context (≲12 tasks); split
-wider work into more waves at plan time. Failed criteria become
-**patch waves** — same build/review loop until the final gate passes.
+wider work into more waves at plan time.
+
+### Ship
+
+Final review audits every success criterion (`met` / `not-met` /
+`unverifiable`) and cross-wave gaps. Failed criteria become **patch waves** —
+the same build/review loop runs until the final gate passes.
 
 ---
 

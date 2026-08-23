@@ -40,7 +40,7 @@ Worst drift: <one sentence — the most misleading claim found>
 ## Alignment (alignment mode only)
 
 - **INTENT success criteria**: <each → met so far | not yet | contradicted, with evidence>
-- **Done tasks**: <each status:done task → commit SHA found? Verify re-run result?>
+- **Done tasks**: <each status:done task → recover-proven landing SHA? Verify re-run result?>
 - **SYNTHESIS decisions**: <each → code conforms? evidence>
 - **STATE vs frontmatter**: <agree | discrepancies listed>
 
