@@ -101,7 +101,8 @@ explicitly invokes it.
 
 ## Wave loop
 
-For each wave in PLAN.md order:
+For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
+`wave` equals N):
 
 1. **Recover before dispatch.** Read task frontmatter and
    inspect primary bookkeeping dirt plus every recorded task worktree and
@@ -328,12 +329,10 @@ For each wave in PLAN.md order:
    its failed criterion and carry still-open findings forward across cycles
    instead of rediscovering them: a criterion that fails again after its fix
    task ran is evidence the fix failed, never a new finding, and a re-review
-   never spawns a duplicate fix task for a finding already carried. Add every
-   fix task to the
-   current or newly appended PLAN.md wave table and `.project/tasks/` before
-   dispatch, preserving the one-row/one-file contract; do not create an
-   unlisted task that the next recovery cannot discover. Run them through the
-   same isolated layer loop. At the cap, record all attempts in the STATE.md
+   never spawns a duplicate fix task for a finding already carried. Write
+   each fix task to `.project/tasks/` with `wave` set to the current wave or
+   a newly appended `## Wave N` heading in PLAN.md before dispatch. Run them
+   through the same isolated layer loop. At the cap, record all attempts in the STATE.md
    log and ask the user — through an interactive user-input tool when
    available — after linking the resolved absolute blocking wave review,
    whether to redirect the approach, raise the cap, or send define to amend
