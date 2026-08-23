@@ -141,9 +141,11 @@ Project verify: `python3 tests/test_app.py`
 Goal: implement render
 Review depth: full
 
-| Task | Title | Deps | Files |
-|------|-------|------|-------|
-| T001 | render greeting | — | src/app.py, tests/test_app.py |
+## Intent coverage
+
+| Criterion | Task | Acceptance |
+|-----------|------|------------|
+| SC1 | T001 | AC1 |
 
 ## Dependency notes
 - none
@@ -156,7 +158,6 @@ wave: 1
 deps: []
 status: pending
 agent: null
-commit: null
 base: null
 worktree: null
 task_branch: null
@@ -359,15 +360,27 @@ Carried forward: none
             isolated = isolation.isolate_task(repo, base, "T001", 1)
             self.assertEqual(isolated["mode"], "serial")
             self.write("src/app.py", "def render(name):\n    return f'Hello, {name}'\n")
-            self.write(".project/tasks/T001-demo.md", TASK.format(today=TODAY).replace("status: pending", "status: done"))
+            dispatched_task = (
+                TASK.format(today=TODAY)
+                .replace("status: pending", "status: in-progress")
+                .replace("agent: null", "agent: cycle-coder")
+                .replace("base: null", f"base: {base}")
+                .replace("worktree: null", f"worktree: {isolated['worktree']}")
+            )
+            self.write(".project/tasks/T001-demo.md", dispatched_task)
             landed = isolation.land(
-                repo, repo, base, "T001", "render greeting", ".project/tasks/T001-demo.md", ["src/app.py"]
+                repo,
+                repo,
+                base,
+                "T001",
+                "render greeting",
+                ".project/tasks/T001-demo.md",
+                ["src/app.py", "tests/test_app.py"],
             )
             self.assertEqual(landed["subject"], "T001: render greeting")
             self.assertEqual(git(repo, "branch", "--show-current").stdout.strip(), BRANCH)
             verify = subprocess.run([sys.executable, "tests/test_app.py"], cwd=repo, capture_output=True, text=True)
             self.assertEqual(verify.returncode, 0, verify.stderr)
-            self.write(".project/BOARD.md", "# Board\n\n| Task | Status |\n|---|---|\n| T001 | done |\n")
             self.write(".project/review/wave-1.cycle1.md", WAVE_REVIEW)
             self.state("build", "done")
             self.commit("build: wave 1 reviewed")
