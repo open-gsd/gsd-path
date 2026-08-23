@@ -179,6 +179,10 @@ The task changes `src/app.py` and `tests/test_app.py`.
 
 None
 
+## Intent coverage
+
+- SC1 — `render("x")` returns a greeting.
+
 ## Acceptance criteria
 
 1. `render("x")` returns `Hello, x`.
