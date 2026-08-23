@@ -153,6 +153,18 @@ MANAGED_EXACT_FILES = {
     ".claude/CLAUDE.md",
 }
 
+VERIFIED_INSTALLER_SKILL_ROOTS = {
+    (".agents", "skills"),
+    (".claude", "skills"),
+    (".cursor", "skills"),
+    (".github", "skills"),
+    (".grok", "skills"),
+    (".kiro", "skills"),
+    (".kimi-code", "skills"),
+    (".opencode", "skills"),
+    (".qwen", "skills"),
+}
+
 PIPELINE_LINE = re.compile(r"^pipeline:\s*(\S+)", re.MULTILINE)
 ATX_TITLE = re.compile(r" {0,3}#{1,6}(?:[ \t]+.*)?")
 SETEXT_UNDERLINE = re.compile(r" {0,3}(?:=+|-+)[ \t]*")
@@ -244,6 +256,11 @@ def is_skill_bundle_name(name: str) -> bool:
     return folded in {"ogsd", "gsd-path"} or folded.startswith(("ogsd-", "gsd-path-"))
 
 
+def is_verified_installer_bundle(parts: tuple[str, ...]) -> bool:
+    parent = tuple(part.casefold() for part in parts[:-1])
+    return parent in VERIFIED_INSTALLER_SKILL_ROOTS
+
+
 def is_verified_skill_bundle(relative: str, root: Path) -> bool:
     parts = PurePosixPath(relative).parts
     if not parts:
@@ -251,7 +268,7 @@ def is_verified_skill_bundle(relative: str, root: Path) -> bool:
     name = parts[-1]
     if not is_skill_bundle_name(name):
         return False
-    if len(parts) >= 2 and parts[-2].casefold() == "skills":
+    if is_verified_installer_bundle(parts):
         return True
     skill = root.joinpath(*parts) / "SKILL.md"
     status = lstat_evidence(skill, missing_ok=True)
@@ -266,7 +283,7 @@ def is_verified_skill_bundle_at(relative: str, directory_fd: int) -> bool:
     parts = PurePosixPath(relative).parts
     if not parts or not is_skill_bundle_name(parts[-1]):
         return False
-    if len(parts) >= 2 and parts[-2].casefold() == "skills":
+    if is_verified_installer_bundle(parts):
         return True
     try:
         status = os.stat(
@@ -1224,6 +1241,10 @@ def initialize(
         raise DetectError(
             f"initialize phase {phase} does not match verdict {payload['verdict']}"
         )
+    if not ANCHORED_STATE_CREATE_SUPPORTED:
+        payload["wrote_state"] = False
+        payload["error"] = "anchored no-follow STATE.md creation is unavailable"
+        return payload
     write_state_anchored(
         root,
         filled_state_template(raw, project_slug(root), phase),

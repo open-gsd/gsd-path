@@ -1,4 +1,5 @@
 import errno
+import io
 import json
 import os
 import stat
@@ -130,6 +131,7 @@ class DetectProjectTests(unittest.TestCase):
                 ".gsd-path/git_guard.py": "print('managed')\n",
                 ".codex/skills/gsd-path-define/SKILL.md": "# Skill\n\nRules.\n",
                 ".codex/skills/gsd-path-define/helper.py": "print('managed')\n",
+                ".claude/skills/gsd-path-extra/helper.py": "print('managed')\n",
                 ".codex/disabled-gsd-skills/gsd-path-old/SKILL.md": (
                     "# Old\n\nRules.\n"
                 ),
@@ -985,6 +987,24 @@ class DetectProjectTests(unittest.TestCase):
                 [{"kind": "source", "path": "src/gsd-path-app/main.py"}],
             )
 
+    def test_product_source_under_nested_skills_directory_is_brownfield(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            source = repo / "src" / "skills" / "gsd-path-app" / "main.py"
+            source.parent.mkdir(parents=True)
+            source.write_text("print(1)\n", encoding="utf-8")
+            payload = self.classify(repo)
+            self.assertEqual(payload["verdict"], "brownfield")
+            self.assertEqual(
+                payload["signals"],
+                [
+                    {
+                        "kind": "source",
+                        "path": "src/skills/gsd-path-app/main.py",
+                    }
+                ],
+            )
+
     def test_comment_sharing_line_with_heading_is_body(self) -> None:
         for contents in (
             "<!-- scaffold --># Demo\n",
@@ -1180,22 +1200,36 @@ class DetectProjectTests(unittest.TestCase):
             self.assertIn("phase: define", state)
             self.assertIn("pipeline: gsd-path/v2", state)
 
-    def test_initialize_fails_closed_without_anchored_create(self) -> None:
+    def test_initialize_reports_verdict_without_anchored_create(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary)
             template = (
                 ROOT / "skills" / "gsd-path" / "templates" / "state.md"
             )
+            output = io.StringIO()
             with mock.patch.object(
                 detect_project,
                 "ANCHORED_STATE_CREATE_SUPPORTED",
                 False,
-            ):
-                with self.assertRaisesRegex(
-                    detect_project.DetectError,
-                    "anchored no-follow STATE.md creation is unavailable",
-                ):
-                    detect_project.initialize(repo, template)
+            ), mock.patch.object(sys, "stdout", output):
+                status = detect_project.main(
+                    [
+                        "initialize",
+                        "--repo",
+                        str(repo),
+                        "--template",
+                        str(template),
+                    ]
+                )
+            self.assertEqual(status, 0)
+            payload = json.loads(output.getvalue())
+            self.assertEqual(payload["verdict"], "greenfield")
+            self.assertEqual(payload["route"], "define")
+            self.assertFalse(payload["wrote_state"])
+            self.assertEqual(
+                payload["error"],
+                "anchored no-follow STATE.md creation is unavailable",
+            )
             self.assertFalse((repo / ".project").exists())
 
     @unittest.skipUnless(
