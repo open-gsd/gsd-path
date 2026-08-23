@@ -80,34 +80,30 @@ runs keep the build contract's current branch-binding behavior.
 
 ## State ownership and initialization
 
-1. Read `.project/STATE.md` when present. Require
-   `pipeline: gsd-path/v2`. A different non-null marker belongs to another
-   pipeline and blocks. A state file without the marker also blocks without
-   mutation: its `branch`, `archive`, task `base`, `worktree`, and
-   `task_branch` semantics cannot be inferred safely from unowned artifacts.
-   Report the missing marker and ask for an explicit recovery or a new
-   milestone; never stamp the marker onto unowned state.
-2. With no STATE.md, run the bundled
-   `python3 <absolute-bundled-script> initialize --repo <absolute-root>
-   --template <absolute-state-template>` helper
-   (`scripts/detect_project.py`) before asking anything. Do not classify
-   brownfield, greenfield, or orphaned `.project/` from a directory listing or
-   conversation. If the command exits nonzero, returns `error`, or returns
-   `wrote_state: false`, report the error and block without routing or claiming
-   STATE.md was written. Otherwise follow the JSON `verdict` / `route` exactly.
-   `initialize` classifies and, for brownfield or greenfield, writes STATE.md
-   through an anchored no-follow create — never create STATE.md yourself after
-   classify:
-   - `owned` — STATE.md exists; continue at step 1.
-   - `orphan` (`route: recover-orphan`) — block without mutation. List the
-     returned `orphan_paths` and ask for an explicit recovery, migration, or
-     new location; existing evidence and archives do not prove a safe v2 phase.
-   - `brownfield` (`route: inspect`) — the helper wrote STATE.md at
-     `inspect/active`; report the returned `signals` and route to the bundled
-     [inspect contract](INSPECT.md).
-   - `greenfield` (`route: define`) — the helper wrote STATE.md at
-     `define/active`; report that no brownfield signal fired, and route to
-     the bundled [define contract](DEFINE.md).
+Run the bundled `python3 <absolute-bundled-script> classify --repo
+<absolute-root>` helper (`scripts/detect_project.py`) before reading
+`.project/STATE.md` or asking anything. Do not classify brownfield,
+greenfield, owned, or orphaned `.project/` from a directory listing or
+conversation. Follow its JSON `verdict` / `route` exactly:
+
+- `owned` — only now read STATE.md. Require `pipeline: gsd-path/v2`. A
+  different non-null marker belongs to another pipeline and blocks. A state
+  file without the marker also blocks without mutation: its `branch`,
+  `archive`, task `base`, `worktree`, and `task_branch` semantics cannot be
+  inferred safely from unowned artifacts. Report the missing marker and ask
+  for an explicit recovery or a new milestone; never stamp the marker onto
+  unowned state.
+- `orphan` (`route: recover-orphan`) — block without mutation. List the
+  returned `orphan_paths` and ask for an explicit recovery, migration, or new
+  location; existing evidence and archives do not prove a safe v2 phase.
+- `brownfield` or `greenfield` — run the same helper's `initialize --repo
+  <absolute-root> --template <absolute-state-template>` command. It rechecks
+  the classification and writes STATE.md through an anchored no-follow create.
+  Require its verdict and route to match the classifier, plus `wrote_state:
+  true`; any mismatch or error blocks. Never create STATE.md yourself.
+  Report brownfield signals and route an `inspect/active` result to the bundled
+  [inspect contract](INSPECT.md). Report that no signal fired and route a
+  `define/active` result to the bundled [define contract](DEFINE.md).
 
 ## Transaction recovery first
 

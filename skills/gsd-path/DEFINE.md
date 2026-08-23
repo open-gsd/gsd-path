@@ -32,39 +32,38 @@ and the target artifact rather than approving stale intent.
 
 ## State ownership
 
-If STATE.md exists, require `pipeline: gsd-path/v2`; a missing or different
-marker returns to `$gsd-path` for ownership checking. Legal existing-state
-entry is `inspect/done` (transition to `define/active`; milestone mode when
-ROADMAP.md exists), `roadmap/done`
-(transition to `define/active`, milestone mode), or
-`define/active|blocked`. `define/done` or any later phase blocks rather than
-overwriting approved intent and leaving downstream artifacts stale. When an
-active router supplies the lookahead track root `.project/next/`, evaluate
-this ownership section against the track's STATE.md and paths instead; see
-Lookahead mode. If STATE.md is missing, run the bundled
-`python3 <absolute-bundled-script> initialize --repo <absolute-root>
---template <absolute-state-template>` helper (`scripts/detect_project.py`) and
-follow its returned JSON `verdict` / `route`. This is the only no-state
-boundary; do not run `classify` first or classify from a directory listing or
-conversation. If the command exits nonzero, returns `error`, or returns
-`wrote_state: false`, report the error and block without routing or claiming
-STATE.md was written.
-- `owned` — continue under the existing-state rules above.
+Before reading STATE.md, run the bundled `python3
+<absolute-bundled-script> classify --repo <absolute-root>` helper
+(`scripts/detect_project.py`) and follow its JSON `verdict` / `route`. Do not
+classify from a directory listing or conversation.
+
+- `owned` — only now read the applicable STATE.md. Require `pipeline:
+  gsd-path/v2`; a missing or different marker returns to `$gsd-path` for
+  ownership checking. Legal existing-state entry is `inspect/done`
+  (transition to `define/active`; milestone mode when ROADMAP.md exists),
+  `roadmap/done` (transition to `define/active`, milestone mode), or
+  `define/active|blocked`. `define/done` or any later phase blocks rather than
+  overwriting approved intent and leaving downstream artifacts stale. When an
+  active router supplies `.project/next/`, require its STATE.md to be a regular
+  non-symlink file, then evaluate these rules against that track state and its
+  paths; see Lookahead mode.
 - `orphan` — return to `$gsd-path` for orphaned-state recovery; existing
   evidence does not prove its pipeline version or phase and must not be reused
   or overwritten by inference.
-- `brownfield` — the helper writes STATE.md at `inspect/active`; route to
-  `$gsd-path-inspect` from this returned verdict.
-- `greenfield` — require `wrote_state: true`, then continue with the helper's
-  STATE.md at `define/active`. Do not create STATE.md yourself.
+- `brownfield` or `greenfield` — run the same helper's `initialize --repo
+  <absolute-root> --template <absolute-state-template>` command. Require its
+  verdict and route to match the classifier, plus `wrote_state: true`; any
+  mismatch or error blocks. A brownfield result routes to `$gsd-path-inspect`.
+  A greenfield result continues from the helper's STATE.md at `define/active`.
+  Do not create STATE.md yourself.
 
 The router's verified new-GitHub-repository transaction is the sole greenfield
 exception: STATE.md already exists at `define/active`, `branch` is the approved
 `gsd-path/M001` branch, and `.project/REPOSITORY.md` contains the
 fixed-format remote, remote-default SHA, clean default checkout, branch, and
 primary worktree. Verify that artifact and the current branch/worktree before
-interviewing. Do not run `detect_project.py` on this owned state; the
-bootstrap README is not a brownfield signal. A missing or mismatched binding
+interviewing. The required classifier returns `owned` before signal scanning,
+so the bootstrap README is not a brownfield signal. A missing or mismatched binding
 returns to `$gsd-path`; never infer it from STATE log prose or repair it
 inside define.
 

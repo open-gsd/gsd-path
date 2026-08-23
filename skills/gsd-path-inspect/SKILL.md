@@ -25,25 +25,27 @@ input.
 
 ## Preconditions
 
-If STATE.md is missing, run the bundled
-`python3 <absolute-bundled-script> initialize --repo <absolute-root>
---template <absolute-state-template>` helper (`scripts/detect_project.py`) and
-follow its returned JSON `verdict` / `route`. This is the only no-state
-boundary; do not run `classify` first or classify from a directory listing or
-conversation. If the command exits nonzero, returns `error`, or returns
-`wrote_state: false`, report the error and block without routing or claiming
-STATE.md was written.
-- `owned` — continue under the existing-state rules below.
+Before reading STATE.md, run the bundled `python3
+<absolute-bundled-script> classify --repo <absolute-root>` helper
+(`scripts/detect_project.py`) and follow its JSON `verdict` / `route`. Do not
+classify from a directory listing or conversation.
+
+- `owned` — only now read the applicable STATE.md. Require `pipeline:
+  gsd-path/v2`; a missing or different marker returns to `$gsd-path` for
+  ownership checking. Legal entry is `inspect/active|blocked`; `inspect/done`
+  routes to define, and any later phase stops. When an active router supplies
+  `.project/next/`, require its STATE.md to be a regular non-symlink file and
+  apply these rules to that track state.
 - `orphan` — return to `$gsd-path` for orphaned-state recovery instead of
   initializing or overwriting it.
-- `greenfield` — the helper writes STATE.md at `define/active`; skip inspection
-  and route to `$gsd-path-define` from this returned verdict.
-- `brownfield` — require `wrote_state: true`, then continue with the helper's
-  STATE.md at `inspect/active`.
-If `.project/STATE.md` exists, require `pipeline: gsd-path/v2`; a missing or
-different marker returns to `$gsd-path` for ownership checking. Legal entry is
-`inspect/active|blocked`; `inspect/done` routes to define, and any later phase
-stops. When an existing state records a bound branch (single-milestone restart
+- `greenfield` or `brownfield` — run the same helper's `initialize --repo
+  <absolute-root> --template <absolute-state-template>` command. Require its
+  verdict and route to match the classifier, plus `wrote_state: true`; any
+  mismatch or error blocks. A greenfield result routes to `$gsd-path-define`.
+  A brownfield result continues from the helper's STATE.md at
+  `inspect/active`.
+
+When an existing state records a bound branch (single-milestone restart
 or program next-milestone), require the current symbolic branch to match and
 preserve both `branch` and `milestone`. Do not re-enter `inspect/done` in the
 same milestone; a later milestone's `inspect/active` is a new scan.
