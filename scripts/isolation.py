@@ -314,8 +314,13 @@ def split_frontmatter(text: str) -> tuple[list[str], str]:
 
 
 def _strip_yaml_comment(value: str) -> str:
-    quote: Optional[str] = None
-    index = 0
+    start = len(value) - len(value.lstrip())
+    quote = (
+        value[start]
+        if start < len(value) and value[start] in {"'", '"'}
+        else None
+    )
+    index = start + 1 if quote else 0
     while index < len(value):
         character = value[index]
         if quote == '"':
@@ -334,8 +339,6 @@ def _strip_yaml_comment(value: str) -> str:
                 continue
             if character == quote:
                 quote = None
-        elif character in {"'", '"'}:
-            quote = character
         elif character == "#" and (index == 0 or value[index - 1].isspace()):
             return value[:index].rstrip()
         index += 1
@@ -576,6 +579,16 @@ def land(
         if current_sha(primary) != resolved_base:
             raise IsolationError("serial landing requires HEAD to equal the recorded base")
         commit = _stamp_and_commit(primary, resolved_base, subject, relative_posix(task_file), allowed)
+        proof_error = _landing_commit_proof_error(
+            primary,
+            commit,
+            resolved_base,
+            relative_posix(task_file),
+            resolved_base,
+            allowed,
+        )
+        if proof_error:
+            raise IsolationError(f"landing commit proof failed: {proof_error}")
         return {
             "bound_branch": bound,
             "commit": commit,
@@ -623,6 +636,7 @@ def land(
     )
     if proof_error:
         raise IsolationError(f"source commit body/task proof failed: {proof_error}")
+    landing_parent = current_sha(primary)
     picked = run_git(primary, "cherry-pick", source_commit)
     if picked.returncode != 0:
         run_git(primary, "cherry-pick", "--abort")
@@ -632,19 +646,24 @@ def land(
             raise IsolationError("cherry-pick failed and primary is no longer on the bound branch")
         detail = (picked.stderr or picked.stdout).strip() or "cherry-pick conflict"
         raise IsolationError(f"conflict: {detail}")
+    commit = current_sha(primary)
+    proof_error = _landing_commit_proof_error(
+        primary,
+        commit,
+        landing_parent,
+        relative_posix(task_file),
+        resolved_base,
+        allowed,
+    )
+    if proof_error:
+        raise IsolationError(f"landing commit proof failed: {proof_error}")
     return {
         "bound_branch": bound,
-        "commit": current_sha(primary),
+        "commit": commit,
         "mode": "parallel",
         "source_commit": source_commit,
         "subject": subject,
     }
-
-
-def _patch_id(repo: Path, rev_range: str) -> str:
-    diff = git_output(repo, "diff", rev_range)
-    result = run_git(repo, "patch-id", "--stable", input=diff + "\n") if diff else None
-    return result.stdout.split()[0] if result and result.stdout.strip() else ""
 
 
 def git_text(repo: Path, *arguments: str) -> str:
@@ -653,6 +672,41 @@ def git_text(repo: Path, *arguments: str) -> str:
         detail = (result.stderr or result.stdout).strip() or "git command failed"
         raise IsolationError(detail)
     return result.stdout
+
+
+def _tree_delta(
+    repo: Path, before: str, after: str
+) -> Dict[str, Optional[tuple[str, str]]]:
+    raw = git_text(
+        repo,
+        "diff",
+        "--raw",
+        "--no-abbrev",
+        "--no-renames",
+        "-z",
+        before,
+        after,
+        "--",
+    )
+    records = raw.split("\0")
+    if records and records[-1] == "":
+        records.pop()
+    if len(records) % 2:
+        raise IsolationError("could not parse tree delta")
+    delta: Dict[str, Optional[tuple[str, str]]] = {}
+    for metadata, path in zip(records[0::2], records[1::2]):
+        fields = metadata.split()
+        if (
+            len(fields) != 5
+            or not fields[0].startswith(":")
+            or not path
+            or path in delta
+        ):
+            raise IsolationError("could not parse tree delta")
+        mode = fields[1]
+        oid = fields[3]
+        delta[path] = None if mode == "000000" else (mode, oid)
+    return delta
 
 
 def _frontmatter_key(line: str) -> Optional[str]:
@@ -880,6 +934,39 @@ def _prove_task_commit(
     return base, None
 
 
+def _landing_commit_proof_error(
+    repo: Path,
+    commit: str,
+    expected_parent: str,
+    task_file: str,
+    expected_base: str,
+    allowed: Set[str],
+) -> Optional[str]:
+    parent, parent_error = _single_parent(repo, commit)
+    if parent_error or parent != expected_parent:
+        return parent_error or "landing commit parent differs from the pre-landing HEAD"
+    try:
+        current_task_text, _ = _read_task_text(repo / task_file)
+        body = git_output(repo, "log", "-1", "--format=%b", commit)
+    except IsolationError as error:
+        return str(error)
+    _, proof_error = _prove_task_commit(
+        repo,
+        commit,
+        body,
+        task_file,
+        expected_base,
+        current_task_text,
+        allowed,
+    )
+    if proof_error:
+        return proof_error
+    pending = uncommitted_paths(repo)
+    if pending:
+        return "landing left uncommitted paths: " + ", ".join(sorted(pending))
+    return None
+
+
 def _task_branch_proof_error(
     repo: Path, branch: str, base: str, landed_commit: str
 ) -> Optional[str]:
@@ -898,9 +985,12 @@ def _task_branch_proof_error(
     landed_body = git_output(repo, "log", "-1", "--format=%b", landed_commit)
     if branch_subject != landed_subject or branch_body != landed_body:
         return "retained task branch message differs from the landing commit"
-    branch_patch = _patch_id(repo, f"{base}..{branch_commit}")
-    landed_patch = _patch_id(repo, f"{landed_parent}..{landed_commit}")
-    if not branch_patch or branch_patch != landed_patch:
+    try:
+        branch_delta = _tree_delta(repo, base, branch_commit)
+        landed_delta = _tree_delta(repo, landed_parent, landed_commit)
+    except IsolationError as error:
+        return str(error)
+    if branch_delta != landed_delta:
         return "retained task branch differs from the landing commit"
     return None
 
@@ -1263,6 +1353,50 @@ def _recover_task(
     return result("block", reason="done but no landing commit proves it")
 
 
+def _recovery_task_inventory(
+    primary: Path, tasks_dir: Path, head: str
+) -> tuple[list[Path], Optional[str]]:
+    requested = tasks_dir if tasks_dir.is_absolute() else primary / tasks_dir
+    if not requested.is_dir():
+        raise IsolationError(f"tasks directory missing: {requested}")
+    resolved = requested.resolve()
+    if resolved != requested.absolute():
+        raise IsolationError(f"tasks directory must not use symlinks: {requested}")
+    try:
+        relative_dir = resolved.relative_to(primary)
+    except ValueError as error:
+        raise IsolationError(
+            f"tasks directory is outside the primary worktree: {resolved}"
+        ) from error
+    relative_posix_dir = PurePosixPath(relative_dir.as_posix())
+    tracked = {
+        path
+        for path in git_text(
+            primary,
+            "ls-tree",
+            "-r",
+            "--name-only",
+            "-z",
+            head,
+            "--",
+            relative_posix_dir.as_posix(),
+        ).split("\0")
+        if path
+        and PurePosixPath(path).parent == relative_posix_dir
+        and PurePosixPath(path).suffix == ".md"
+    }
+    task_paths = sorted(resolved.glob("*.md"))
+    live = {path.relative_to(primary).as_posix() for path in task_paths}
+    details = []
+    missing = sorted(tracked - live)
+    unexpected = sorted(live - tracked)
+    if missing:
+        details.append("missing " + ", ".join(missing))
+    if unexpected:
+        details.append("unexpected " + ", ".join(unexpected))
+    return task_paths, "; ".join(details) or None
+
+
 def recover(primary: Path, tasks_dir: Path) -> Dict[str, object]:
     """Prove each task's landing state from git. Read-only.
 
@@ -1277,9 +1411,15 @@ def recover(primary: Path, tasks_dir: Path) -> Dict[str, object]:
     if worktree_root(primary) != primary:
         raise IsolationError(f"primary is not its Git root: {primary}")
     bound = require_attached(primary)
-    tasks_dir = tasks_dir if tasks_dir.is_absolute() else primary / tasks_dir
-    if not tasks_dir.is_dir():
-        raise IsolationError(f"tasks directory missing: {tasks_dir}")
+    head = current_sha(primary)
+    task_paths, inventory_error = _recovery_task_inventory(primary, tasks_dir, head)
+    if inventory_error:
+        return {
+            "bound_branch": bound,
+            "tasks": [],
+            "verdict": "block",
+            "reason": "task inventory differs from HEAD: " + inventory_error,
+        }
     history: Dict[str, list[tuple[str, str]]] = {}
     log = git_output(primary, "log", "--first-parent", "--format=%x1e%H%x00%s%x00%b", bound)
     for record in filter(None, log.split("\x1e")):
@@ -1288,10 +1428,9 @@ def recover(primary: Path, tasks_dir: Path) -> Dict[str, object]:
     branches = set(
         git_output(primary, "for-each-ref", "--format=%(refname:short)", f"refs/heads/{TASK_BRANCH_PREFIX}").splitlines()
     )
-    head = current_sha(primary)
     tasks = [
         _recover_task(primary, path, history, branches, head, bound)
-        for path in sorted(tasks_dir.glob("*.md"))
+        for path in task_paths
     ]
     return {
         "bound_branch": bound,

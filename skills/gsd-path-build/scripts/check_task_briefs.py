@@ -23,6 +23,7 @@ REQUIRED_FIELDS = (
     "task_branch",
     "files",
 )
+FORBIDDEN_FIELDS = ("commit",)
 REQUIRED_SECTIONS = (
     "Context",
     "Approach",
@@ -68,8 +69,13 @@ def _base_exists(repo: Path, base: str, path: str) -> bool:
 
 
 def _strip_yaml_comment(value: str) -> str:
-    quote: Optional[str] = None
-    index = 0
+    start = len(value) - len(value.lstrip())
+    quote = (
+        value[start]
+        if start < len(value) and value[start] in {"'", '"'}
+        else None
+    )
+    index = start + 1 if quote else 0
     while index < len(value):
         character = value[index]
         if quote == '"':
@@ -88,8 +94,6 @@ def _strip_yaml_comment(value: str) -> str:
                 continue
             if character == quote:
                 quote = None
-        elif character in {"'", '"'}:
-            quote = character
         elif character == "#" and (index == 0 or value[index - 1].isspace()):
             return value[:index].rstrip()
         index += 1
@@ -212,6 +216,9 @@ def _lint_task(repo: Path, base: str, path: Path) -> Tuple[str, List[str], Optio
     for field in REQUIRED_FIELDS:
         if field not in fields:
             problems.append(f"missing frontmatter field: {field}")
+    for field in FORBIDDEN_FIELDS:
+        if field in fields:
+            problems.append(f"forbidden frontmatter field: {field}")
 
     sections = _sections(text)
     for name in REQUIRED_SECTIONS:
