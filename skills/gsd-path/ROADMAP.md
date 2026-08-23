@@ -120,11 +120,11 @@ paths, including `.project/LESSONS.md` when it exists. On a re-slice, also
    (the router owns the branch during that transaction). Confirm
    approval and link ROADMAP.md again. For a milestone-boundary re-slice,
    state that the preserved inspect or define phase resumes; otherwise state
-   that define (milestone mode) is next. Do not add another approval gate. When routed by an active
-   `$gsd-path`, return control to that router so its bundled define contract
-   starts. When invoked directly, stop and tell the user to explicitly
-   invoke `$gsd-path`, which routes to define; do not invoke an explicit-only
-   sibling skill yourself.
+   that define (milestone mode) is next. Do not add another approval gate.
+   When routed by an active `$gsd-path`, return control to that router so its
+   state table routes the resulting STATE.md. When invoked directly, stop and
+   tell the user to explicitly invoke `$gsd-path`, which routes the resulting
+   STATE.md; do not invoke an explicit-only sibling skill yourself.
 
 ## Rules
 

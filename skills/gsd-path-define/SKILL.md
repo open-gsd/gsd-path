@@ -245,14 +245,18 @@ when the user did not choose a panel and no CHARTER default exists.
 
 After approval, finalize `.project/intent/INTENT.md` and update STATE.md to
 `phase: define`, `status: done`, set its `milestone` field to this
-milestone's slug, and append the transition to its log. Report that research
-  is next — or, quick lane, that planning is next and research and decide
-are skipped. Confirm the approved outcome, link the final INTENT.md again, and
-name that next phase before routing. When routed by an active `$gsd-path`,
-return control to that router so its bundled next contract can auto-advance
-(research, or plan in quick mode). When invoked directly, stop and tell the
-user to explicitly invoke `$gsd-path`, which selects that next phase; do not
-invoke an explicit-only sibling skill yourself.
+milestone's slug, and append the transition to its log. Report the next phase
+from the approved lane. For `Lane: standard`, research is next. For
+`Lane: quick`, planning is next and research and decide are skipped. For
+`Lane: milestone`, use the resolved roadmap entry matching the track STATE's
+`milestone`: milestone-scoped research is next when that entry lists open
+questions; otherwise planning is next and research and decide are skipped.
+Confirm the approved outcome, link the final INTENT.md again, and name that
+next phase before routing. When routed by an active `$gsd-path`, return control
+to that router so its bundled next contract can auto-advance to the named
+phase. When invoked directly, stop and tell the user to explicitly invoke
+`$gsd-path`, which selects that next phase; do not invoke an explicit-only
+sibling skill yourself.
 
 ## Rules
 
