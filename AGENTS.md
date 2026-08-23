@@ -56,6 +56,10 @@ full-repo suite on a tiny edit outrank the phase brief.
 - Write every output to the handoff path in WORKFLOW.md, using the absolute
   bundled template path supplied by the active phase skill. An output that
   needs verbal explanation is defective.
+- Brownfield vs greenfield vs orphaned `.project/` is the bundled
+  `scripts/detect_project.py classify --repo <absolute-root>` helper; do not
+  classify from a directory listing or conversation. Follow its JSON
+  `verdict` and `route`.
 - `.project/STATE.md` tracks phase position. The orchestrator alone owns task
   frontmatter base, isolated worktree/branch, status, and agent; the landing
   commit is proven from git by `isolation.py recover`, never recorded. Require

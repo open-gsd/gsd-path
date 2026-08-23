@@ -196,7 +196,10 @@ inspect (brownfield only)
 
 Program flow inserts roadmap between decide and plan: define
 (program mode) writes CHARTER.md, roadmap slices it into ROADMAP.md,
-and each milestone loops define (milestone mode) → plan → build → ship.
+and each later milestone loops inspect → define (milestone + brownfield) →
+plan → build → ship. The first milestone after roadmap approval still
+starts at define (milestone mode); inspect already ran at program start when
+the tree was brownfield.
 During build, the next milestone can be planned in parallel under
 `.project/next/` (lookahead); a building milestone can be abandoned on an
 explicit ruling, archiving partial work and re-slicing the roadmap.
@@ -284,7 +287,10 @@ contract updates manually ([UPDATE.md](UPDATE.md)).
 Restore from `disabled-gsd-skills` beside the skills root ([UPDATE.md](UPDATE.md)).
 
 **Brownfield vs greenfield?**
-Brownfield = existing code/docs → inspect first. Greenfield = empty → define first.
+The router runs `scripts/detect_project.py classify`. Brownfield (manifest,
+source, tracked git signal, or docs with a body) → inspect first. Greenfield
+(no signal; a title-only README does not count) → define first. After a
+milestone ships, the next one inspects again.
 
 ---
 

@@ -28,8 +28,9 @@ Require `pipeline: gsd-path/v2` in `.project/STATE.md`; a missing or different
 marker returns to `$gsd-path` for ownership checking. Legal entry is
 `decide/done` with an existing `.project/CHARTER.md` and no `.project/ROADMAP.md`
 yet (transition to `roadmap/active`), `roadmap/active|blocked`, or a
-milestone-boundary re-slice: `define/active` with no approved INTENT.md for the
-next milestone and a user request to re-scope the remaining `pending` entries,
+milestone-boundary re-slice: `inspect/active` or `define/active` with no
+approved INTENT.md for the next milestone and a user request to re-scope the
+remaining `pending` entries,
 or `roadmap/active` with STATE.milestone null and an `abandoned` entry in
 ROADMAP.md (the post-abandon re-slice the build orchestrator hands off).
 Any later phase blocks; mid-milestone

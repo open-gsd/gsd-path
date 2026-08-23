@@ -9,12 +9,13 @@ dialogue and answers on disk. AGENTS.md supplies the shared operating rules.
 program mode and writes `.project/CHARTER.md` (enduring scope and vetoes),
 research and decide work at program scope, and the roadmap phase slices the
 charter into `.project/ROADMAP.md` — milestone-granularity scope for every
-milestone. Each milestone then runs define (milestone mode) → plan → build →
-ship; the router advances to the next roadmap entry after every ship until the
-program completes. While a milestone builds, the router may offer to plan the
+milestone. The first milestone after roadmap approval runs define
+(milestone mode) → plan → build → ship. Each later milestone inspects the
+now-shipped codebase, then define (milestone + brownfield) → plan → build →
+ship, until the program completes. While a milestone builds, the router may offer to plan the
 next dependency-ready milestone in parallel under `.project/next/` (the
-lookahead track); at the milestone boundary the router promotes it to the
-active paths in one commit. An explicit user ruling can instead abandon a
+lookahead track, starting at inspect); at the milestone boundary the router
+promotes it to the active paths in one commit. An explicit user ruling can instead abandon a
 building milestone: its partial artifacts archive without review gates, its
 roadmap entry becomes immutable `abandoned`, and the roadmap re-slices the
 remaining entries. CHARTER.md, ROADMAP.md, and the program `.project/SYNTHESIS.md`
@@ -103,9 +104,10 @@ at `inspect/active|blocked`. **Output:**
 `.project/research/evidence-codebase.md` and
 `.project/research/DOCS-AUDIT.md`.
 
-The router detects brownfield before asking anything: a package manifest,
-source layout, git history, or substantive docs means existing project.
-Detection routes here; a truly empty directory skips to define.
+The router classifies the tree with `scripts/detect_project.py classify`
+before asking anything. `brownfield` routes here; `greenfield` skips to
+define; `orphan` blocks. Do not re-derive that verdict from a directory
+listing.
 
 Before either agent writes `.project/`, freeze a sorted Markdown inventory
 that excludes `.project/**` and all vendored/generated trees. Two read-only
@@ -144,7 +146,9 @@ milestone`).
 Brownfield mode inverts the opening: present ground truth first, then
 interview only on deltas — this milestone's goal, what must change, what
 must not break (recorded as vetoes). Established facts are stated for
-correction, never asked. Every doc-vs-code conflict from the audit gets a
+correction, never asked. Milestone + brownfield still does not re-interview
+charter or roadmap scope; it presents ground truth, fills Current state, and
+collects doc-vs-code rulings before confirmation. Every doc-vs-code conflict from the audit gets a
 user ruling (`fix-doc`, `fix-code`, or `accept-drift`) recorded verbatim in
 both INTENT.md and DOCS-AUDIT.md's durable User rulings table. Actionable rows
 start at `planned: no`; accepted

@@ -310,16 +310,17 @@ approve **Archive and ship**, the archive transaction begins:
 After `validate-integrated` passes, the next milestone starts clean on a new
 `gsd-path/M00N` cut from `origin/main`. Invoke the router again; brownfield
 inspect runs against the now-shipped codebase. In program flow the router
-instead pulls the next pending roadmap entry and resumes at define (milestone
-mode); when every entry is shipped it reports the program complete against the
-charter's success criteria.
+pulls the next pending roadmap entry and inspects first, then define
+(milestone + brownfield); when every entry is shipped it reports the program
+complete against the charter's success criteria.
 
 Two program-flow refinements:
 
 - **Lookahead** — while a milestone is in `build/active`, the router offers
   to plan the next dependency-ready milestone in parallel under
-  `.project/next/` (define milestone mode → research for open questions →
-  decide → plan, all under their normal gates). The track never touches
+  `.project/next/` (inspect → define milestone + brownfield → research for
+  open questions → decide → plan, all under their normal gates). The track
+  never touches
   active-path artifacts, never binds a branch, and advances only on your
   direction. At the milestone boundary the router promotes `next/` to the
   active paths in one commit (`router: promote lookahead milestone <slug>`)
