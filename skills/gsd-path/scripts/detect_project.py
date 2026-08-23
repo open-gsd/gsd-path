@@ -881,6 +881,30 @@ def git_tracked_files(root: Path) -> tuple[GitIndexEntry, ...]:
     return tuple(entries)
 
 
+def staged_skill_bundle_prefixes(
+    entries: Sequence[GitIndexEntry],
+) -> frozenset[str]:
+    prefixes = set()
+    for entry in entries:
+        parts = PurePosixPath(entry.path).parts
+        if (
+            len(parts) >= 2
+            and parts[-1] == "SKILL.md"
+            and is_skill_bundle_name(parts[-2])
+        ):
+            prefixes.add("/".join(parts[:-1]))
+    return frozenset(prefixes)
+
+
+def is_staged_skill_bundle_artifact(
+    relative: str, prefixes: frozenset[str]
+) -> bool:
+    parts = PurePosixPath(relative).parts
+    return any(
+        "/".join(parts[:end]) in prefixes for end in range(1, len(parts))
+    )
+
+
 def occupied_project_paths(project: Path, root: Path) -> tuple[str, ...]:
     project_status = lstat_evidence(project, missing_ok=True)
     if project_status is None:
@@ -986,9 +1010,13 @@ def classify(repo: Path) -> dict:
             continue
         seen.add(item)
         signals.append({"kind": kind, "path": relative})
-    for entry in git_tracked_files(root):
+    tracked_entries = git_tracked_files(root)
+    staged_bundles = staged_skill_bundle_prefixes(tracked_entries)
+    for entry in tracked_entries:
         relative = entry.path
-        if is_managed_pipeline_artifact(relative, root):
+        if is_managed_pipeline_artifact(
+            relative, root
+        ) or is_staged_skill_bundle_artifact(relative, staged_bundles):
             continue
         kind = file_kind(
             relative,

@@ -1005,6 +1005,45 @@ class DetectProjectTests(unittest.TestCase):
                 ],
             )
 
+    def test_deleted_tracked_skill_bundle_is_greenfield(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            bundle = repo / "tools" / "gsd-path-helper"
+            bundle.mkdir(parents=True)
+            (bundle / "SKILL.md").write_text("# Skill\n", encoding="utf-8")
+            (bundle / "helper.py").write_text("print(1)\n", encoding="utf-8")
+            self.git(repo, "init", "-q", "-b", "main")
+            self.git(repo, "add", ".")
+            (bundle / "SKILL.md").unlink()
+            (bundle / "helper.py").unlink()
+            bundle.rmdir()
+            payload = self.classify(repo)
+            self.assertEqual(payload["verdict"], "greenfield")
+            self.assertEqual(payload["signals"], [])
+
+    @unittest.skipIf(os.name == "nt", "symlink creation requires POSIX")
+    def test_nonregular_staged_skill_marker_does_not_verify_bundle(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = Path(temporary)
+            repo = workspace / "repo"
+            bundle = repo / "tools" / "gsd-path-helper"
+            marker = workspace / "SKILL.md"
+            bundle.mkdir(parents=True)
+            marker.write_text("# Skill\n", encoding="utf-8")
+            (bundle / "SKILL.md").symlink_to(marker)
+            (bundle / "helper.py").write_text("print(1)\n", encoding="utf-8")
+            self.git(repo, "init", "-q", "-b", "main")
+            self.git(repo, "add", ".")
+            (bundle / "SKILL.md").unlink()
+            (bundle / "helper.py").unlink()
+            bundle.rmdir()
+            payload = self.classify(repo)
+            self.assertEqual(payload["verdict"], "brownfield")
+            self.assertEqual(
+                payload["signals"],
+                [{"kind": "git", "path": "tools/gsd-path-helper/helper.py"}],
+            )
+
     @unittest.skipIf(os.name == "nt", "symlink creation requires POSIX")
     def test_tracked_source_under_linked_bundle_is_brownfield(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
