@@ -22,6 +22,13 @@ otherwise.
 
 If two sources disagree, stop and surface the conflict. Never average.
 
+The orchestrator's isolated rerun of a task Verify is that task's evidence.
+Wave and ship reviewers read that recorded output plus the isolated diff;
+they do not re-run the task command. PLAN.md's project Verify runs once, at
+ship, in one sidecar. A task Verify must not copy that command unless an
+owned success criterion names it. INTENT constraints about not running the
+full-repo suite on a tiny edit outrank the phase brief.
+
 ## Files are the only memory
 
 - Start from disk, not conversation. If an input is absent from `.project/`,

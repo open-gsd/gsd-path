@@ -72,8 +72,9 @@ plan order above, which still keeps plan-invalidating risk in wave 1.
   in every involved task. This contract is the only cross-task communication;
   coders may not negotiate or deviate, so settle the seam here.
 - Write observable acceptance criteria and one Verify command that fails when
-  work is skipped. Criteria and Verify are the contract; Approach is
-  guidance.
+  this task's work is skipped. That command must not be PLAN.md's project
+  Verify unless an SC this task owns names that command. Criteria and
+  Verify are the contract; Approach is guidance.
 - Preserve every template field and its required initial value.
 
 Put the full-project build-and-test command in PLAN.md. Copy `Review panel:`

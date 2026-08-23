@@ -106,7 +106,8 @@ severity, or fit with this milestone's scope).
      is narrative order, not a dependency: drop that edge and place both tasks
      by the wave-order rules.
    - Require non-empty Context and Approach, observable Acceptance criteria,
-     a Verify command that can fail when work is skipped, an Intent coverage
+     a Verify command that can fail when this task is skipped and that is
+     not PLAN.md's project Verify unless an owned SC names that command, an Intent coverage
      section (`- None` or owned SCn ids), and Log sections.
    - Require an Interface contract section in every task: `None` for
      independent tasks; when tasks exchange a symbol, schema, endpoint, file
@@ -131,7 +132,8 @@ severity, or fit with this milestone's scope).
      lookahead track. A non-zero exit is a gate failure: every INTENT.md
      success criterion must appear in PLAN.md Intent coverage mapped to a
      real task AC, and each task's Intent coverage section must match that
-     table.
+     table. A task Verify that copies Project verify fails unless an owned
+     SC names that command.
    - Run `python3 <absolute review_panel.py> validate-plan --plan <absolute
      PLAN.md> --intent <absolute INTENT.md>` and `--charter <absolute
      .project/CHARTER.md>` when that file exists. A non-zero exit is a gate

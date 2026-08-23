@@ -24,8 +24,8 @@ explicitly invokes it.
   rather than rewinding state. A concrete STATE.archive during `build/*`
   marks an interrupted milestone-abandon transaction: resume the Milestone
   abandon procedure below before any recovery or dispatch. `build/done` is never a normal execution state:
-  re-prove all wave gates and project Verify at current HEAD, then finish the
-  committed transition to `ship/active`.
+  re-prove all wave gates at current HEAD, then finish the
+  committed transition to `ship/active`. Project Verify waits for ship.
 - Read the local [coder role](references/coder.md),
   [reviewer role](references/reviewer.md), [dispatch contract](references/dispatch.md),
   [task template](templates/task.md), [board template](templates/board.md),
@@ -255,7 +255,10 @@ For each wave in PLAN.md order:
      the absolute INTENT.md path.
      Create and supply one verify sidecar with
      `python3 <absolute isolation.py> isolate-verify --repo <absolute primary>
-     --base <recorded review base> --name wave-<N>-cycle-<C>`. The reviewer
+     --base <recorded review base> --name wave-<N>-cycle-<C>`. Brief the
+     recorded isolated Verify output per task (the Log entry the
+     orchestrator appended at landing). The reviewer must not re-run that
+     command or PLAN.md's project Verify. The reviewer
      stages `.project/review/wave-N.cycleC.md` there; the
      orchestrator validates it, atomically copies it to the primary canonical
      path, and only then retires that sidecar with `retire`.
@@ -267,7 +270,8 @@ For each wave in PLAN.md order:
      path. The contract lens —
      logical task name `review_wave_<wave>_cycle_<cycle>_contract` — does the
      full review: apply each task's `commit^..commit` product patch to the
-     recorded base, re-run Verify, and check every acceptance criterion,
+     recorded base, check the recorded Verify plus the isolated diff, and
+     check every acceptance criterion,
      owned INTENT success criterion, and interface contract. The adversarial
      lens — logical task name
      `review_wave_<wave>_cycle_<cycle>_adversarial` — tries to kill the work:
@@ -351,25 +355,19 @@ For each wave in PLAN.md order:
 
 ## Completion
 
-After every wave passes, create a verify sidecar with
-`python3 <absolute isolation.py> isolate-verify --repo <absolute primary>
---base <exact HEAD> --name project-verify` and run PLAN.md's project Verify
-there. On success, retire that sidecar, append `build done; final
-review pending`, set STATE.md directly to `phase: ship`, `status: active`,
-and commit that transition as the build orchestrator's final bookkeeping. This
+After every wave passes, append `build done; final review pending`, set
+STATE.md directly to `phase: ship`, `status: active`, and commit that
+transition as the build orchestrator's final bookkeeping. Do not run
+PLAN.md's project Verify here — ship runs it once. This
 keeps the primary worktree clean and avoids a separate review-phase transition
 commit. Report waves, exact task commits, fixed findings, and remaining risk.
 Link the resolved absolute BOARD.md as the review surface and state that ship
 is next. Do not merge to the default branch, tag, mark `shipped`, or
-integrate; ship owns FINAL.md and those steps. When invoked directly, stop
-and tell the user to explicitly
+integrate; ship owns FINAL.md, project Verify, and those steps. When invoked
+directly, stop and tell the user to explicitly
 invoke `$gsd-path`, which routes to ship; do not invoke an explicit-only sibling
 skill yourself.
-On failure, set build state to `blocked`, record the exact output, and do not
-claim success. Present **Outcome** with the failed Verify, **Review** linking
-the resolved absolute BOARD.md path and its recorded failure, and **Next** with
-the one required recovery action or question. Retire only the verify sidecar
-created for this check. If
+If
 a crash leaves `build/done`, finish and commit this transition before returning
 to the router.
 

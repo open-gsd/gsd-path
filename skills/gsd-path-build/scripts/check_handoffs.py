@@ -413,6 +413,18 @@ def _has_verify(task_text: str) -> bool:
     return bool(block and block.group("block").strip())
 
 
+def _normalize_ws(value: str) -> str:
+    return " ".join(value.split())
+
+
+def _verify_command(task_text: str) -> str:
+    body = _section(task_text, "Verify")
+    block = VERIFY_BLOCK_PATTERN.search(body)
+    if block is None:
+        return ""
+    return _normalize_ws(block.group("block"))
+
+
 def _acceptance_items(task_text: str, task_id: str) -> Dict[int, str]:
     items = _numbered_items(_section(task_text, "Acceptance criteria"))
     if not items:
@@ -474,6 +486,18 @@ def validate_plan(
         owned = set(_owned_criteria(text, task_id))
         if owned != assigned[task_id]:
             raise HandoffError(f"{task_id} Intent coverage does not match PLAN.md")
+    project_verify = _normalize_ws(_line_value(plan, "Project verify:"))
+    for task_id, text in tasks.items():
+        command = _verify_command(text)
+        if not command or command != project_verify:
+            continue
+        named = any(
+            project_verify in _normalize_ws(criteria[sc_id])
+            for sc_id in assigned[task_id]
+            if sc_id in criteria
+        )
+        if not named:
+            raise HandoffError(f"{task_id} Verify must not copy Project verify")
     return {
         "phase": "plan",
         "criteria": sorted(criteria),

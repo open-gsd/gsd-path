@@ -435,7 +435,7 @@ State: ship/blocked
             f"{project_dir}/plan/PLAN.md",
             f"""# Plan — demo
 
-Project verify: `python3 -m unittest`
+Project verify: `python3 -m unittest discover`
 
 ## Intent coverage
 
@@ -593,6 +593,56 @@ The task implements the demo.
 
             with self.assertRaises(check_handoffs.HandoffError):
                 check_handoffs.validate_plan(root, ".project/next")
+
+    def test_plan_rejects_a_task_verify_that_copies_project_verify(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_plan_handoff(root)
+            self.write_coverage_task(
+                root,
+                "T001",
+                "- SC1",
+                acceptance="1. The demo command prints hello.",
+                verify="python3 -m unittest discover",
+            )
+
+            with self.assertRaises(check_handoffs.HandoffError) as failure:
+                check_handoffs.validate_plan(root)
+            self.assertIn("T001 Verify must not copy Project verify", str(failure.exception))
+
+    def test_plan_allows_project_verify_when_an_owned_sc_names_it(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_state(root, "plan", "active")
+            self.write(
+                root,
+                ".project/intent/INTENT.md",
+                """# Intent — demo
+
+## Success criteria
+
+1. python3 -m unittest discover is green at cutover.
+2. The demo test suite is green.
+""",
+            )
+            self.write_plan_coverage(root)
+            self.write_coverage_task(
+                root,
+                "T001",
+                "- SC1",
+                acceptance="1. python3 -m unittest discover is green at cutover.",
+                verify="python3 -m unittest discover",
+            )
+            self.write_coverage_task(
+                root,
+                "T002",
+                "- SC2",
+                acceptance="1. The demo test suite is green.",
+            )
+
+            result = check_handoffs.validate_plan(root)
+
+            self.assertEqual(result["tasks"], 2)
 
     def write_wave_review(
         self,

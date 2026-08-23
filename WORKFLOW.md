@@ -349,7 +349,8 @@ For each wave:
    when several wait, in task-id order — never idling behind slower in-flight
    tasks. For each ready result,
    compare its complete base diff against declared files plus append-only task
-   Log changes and re-run Verify inside that isolated worktree. Land with
+   Log changes and run Verify once inside that isolated worktree. That
+   recorded output is the task evidence. Land with
    `isolation.py land`; do not invent commit or cherry-pick commands. Capture
    the returned primary full SHA, and commit that SHA plus
    `done` state before any later Git operation. A conflict, unexpected path,
@@ -373,9 +374,10 @@ For each wave:
 5. **Review the wave.** At `Review depth: full`, the reviewer receives task
    `base` and `commit`, INTENT.md, plus
    orchestrator-created verify sidecars. For each task it applies only
-   `commit^..commit` product-file patch to the recorded base, re-runs Verify,
-   and checks every acceptance criterion and each INTENT success criterion
-   owned by the wave. Paths outside declared files plus the assigned
+   `commit^..commit` product-file patch to the recorded base, checks the
+   recorded Verify plus the isolated diff, and checks every acceptance
+   criterion and each INTENT success criterion owned by the wave. Do not
+   re-run the task Verify or PLAN.md's project Verify. Paths outside declared files plus the assigned
    task file block; that task file may change only orchestrator fields and its
    append-only Log. At `verify-only`, no reviewer is spawned: the
    orchestrator writes the wave-review file from its own isolated Verify and
@@ -423,8 +425,9 @@ diff hash, prove the old dirty worktree is wholly task-owned, remove that exact
 worktree and branch, and create a fresh retry from the newly committed primary
 HEAD. Never redispatch a dirty failed worktree against divergent task history.
 
-**Gate:** every wave and project Verify pass; the build orchestrator commits
+**Gate:** every wave passes; the build orchestrator commits
 the transition directly to `ship/active`, leaving a clean primary worktree.
+PLAN.md's project Verify runs once at ship.
 
 **Milestone abandon (program flow).** On an explicit user ruling — at the
 review-cycle cap, a decision invalidation, or a direct request — the
@@ -467,9 +470,10 @@ Run an integration reviewer and independent gap reviewers through the shared
 capacity-aware dispatch contract. The integration reviewer marks each success
 criterion `met`, `not-met`, or `unverifiable` with checked evidence. Each gap
 reviewer records `pass` or `blocked` for its assigned end-to-end or cross-wave
-risk; PLAN.md's project Verify is always one numbered risk. List only genuine
-risks that could plausibly fail — a small milestone may carry only the
-project-Verify risk; never pad the list. The orchestrator
+risk. List only genuine
+risks that could plausibly fail; never pad the list. The orchestrator
+runs PLAN.md's project Verify once and writes its gap artifact; other gap
+reviewers do not re-run it. The orchestrator
 creates one disposable worktree at exact reviewed HEAD
 per reviewer; project commands never run in the primary worktree. Every final
 artifact records that full reviewed HEAD. The parent validates and atomically

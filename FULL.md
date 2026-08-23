@@ -269,6 +269,9 @@ path exists at the base or is declared, owned success criteria exist in
 INTENT.md, and the interface contract matches its
 siblings verbatim — blocking immediately on a mismatch. Each
 task gets one atomic commit; task frontmatter records exact SHA for recovery.
+The orchestrator's isolated task Verify rerun is that task's evidence; wave
+review reads it plus the isolated diff and does not re-run the command.
+PLAN.md's project Verify runs once, at ship.
 
 ### Ship
 
