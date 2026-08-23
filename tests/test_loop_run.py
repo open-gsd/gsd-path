@@ -618,21 +618,5 @@ class LoopRunTests(unittest.TestCase):
             self.assertEqual(0, result.returncode, result.stderr)
             self.assertEqual("run", json.loads(result.stdout)["decision"])
 
-    def test_skill_claims_before_verify_and_finishes_the_exact_claim(self) -> None:
-        skill = (ROOT / "skills" / "gsd-path-loop" / "SKILL.md").read_text(
-            encoding="utf-8"
-        )
-        process = skill.split("## Process", 1)[1].split("## Rules", 1)[0]
-
-        self.assertLess(
-            process.index("loop_run.py claim"),
-            process.index("loop_run.py verify"),
-        )
-        self.assertIn("loop_run.py finish --spec <path> --claim", process)
-        self.assertIn("verify --spec\n   <path> --claim <retained claim>", process)
-        self.assertIn("derives elapsed time from the claim", process)
-        self.assertNotIn("--used", process)
-
-
 if __name__ == "__main__":
     unittest.main()

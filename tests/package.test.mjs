@@ -17,6 +17,20 @@ function resourceManifest() {
 }
 
 
+function normalizedScriptGraph(packageJson, scriptName) {
+  return packageJson.scripts[scriptName].split(/\s*&&\s*/).map((command) => {
+    const [executable, ...args] = command.trim().split(/\s+/);
+    if (executable === "npm" && args.length === 1 && args[0] === "test") {
+      return { script: "test" };
+    }
+    if (executable === "npm" && args[0] === "run" && args.length === 2) {
+      return { script: args[1] };
+    }
+    return { executable, args };
+  });
+}
+
+
 test("npm package includes the pipeline helpers", () => {
   const output = execFileSync("npm", ["pack", "--dry-run", "--json"], {
     cwd: projectRoot,
@@ -112,7 +126,7 @@ test("npm package file policy is owned by the resource manifest", () => {
   assert.deepEqual(packageJson.files, manifest.package_files);
 });
 
-test("npm verify runs every local verification suite", () => {
+test("npm verification graph includes every local suite", () => {
   const packageJson = JSON.parse(
     execFileSync(process.execPath, ["-e", "process.stdout.write(require('fs').readFileSync('package.json'))"], {
       cwd: projectRoot,
@@ -120,12 +134,18 @@ test("npm verify runs every local verification suite", () => {
     })
   );
 
-  assert.equal(
-    packageJson.scripts["test:python"],
-    "python3 -m unittest discover -s tests"
-  );
-  assert.equal(
-    packageJson.scripts.verify,
-    "npm test && npm run test:python && python3 scripts/sync_skill_resources.py --check"
-  );
+  assert.deepEqual(normalizedScriptGraph(packageJson, "test:python"), [
+    {
+      executable: "python3",
+      args: ["-m", "unittest", "discover", "-s", "tests"],
+    },
+  ]);
+  assert.deepEqual(normalizedScriptGraph(packageJson, "verify"), [
+    { script: "test" },
+    { script: "test:python" },
+    {
+      executable: "python3",
+      args: ["scripts/sync_skill_resources.py", "--check"],
+    },
+  ]);
 });
