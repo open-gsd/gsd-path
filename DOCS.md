@@ -227,7 +227,6 @@ of guesses.
 | `research/SYNTHESIS.md` | Decisions for planner |
 | `plan/PLAN.md` | Waves and dependencies |
 | `tasks/T###-slug.md` | One coder contract (base SHA, scope) |
-| `BOARD.md` | Build status |
 | `review/PLAN-PANEL.md` | Optional cross-model plan review |
 | `review/wave-N.cycleC.panel.md` | Optional cross-model wave review |
 | `review/FINAL.md` | Ship gate verdicts |

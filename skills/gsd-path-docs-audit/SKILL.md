@@ -142,7 +142,7 @@ git history. Verdicts:
 - every task with `status: done` → its recorded commit SHA exists and its
   Verify command still passes
 - SYNTHESIS.md decisions → the code actually uses the decided stack/shape
-- BOARD.md and STATE.md → agree with task frontmatter and review files
+- STATE.md → agrees with task frontmatter and review files
 
 **Remediate.** Every non-`verified` claim lands in the remediation queue,
 classified `fix-doc` (reality is right, doc lies) or `fix-code`

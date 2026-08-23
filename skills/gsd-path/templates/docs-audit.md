@@ -42,7 +42,7 @@ Worst drift: <one sentence — the most misleading claim found>
 - **INTENT success criteria**: <each → met so far | not yet | contradicted, with evidence>
 - **Done tasks**: <each status:done task → commit SHA found? Verify re-run result?>
 - **SYNTHESIS decisions**: <each → code conforms? evidence>
-- **BOARD/STATE vs frontmatter**: <agree | discrepancies listed>
+- **STATE vs frontmatter**: <agree | discrepancies listed>
 
 ## User rulings
 

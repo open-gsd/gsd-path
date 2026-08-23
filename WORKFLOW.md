@@ -363,7 +363,7 @@ STATE.archive is a write-ahead transaction id. The bundled Python archive helper
 chooses one plus the maximum numeric prefix, persists the exact target before
 creating or moving, and reuses it on every retry. Shipping moves — never
 deletes — every supporting document into that numbered archive: `intent/`,
-`research/`, `plan/`, `tasks/`, `review/`, optional `discuss/`, and `BOARD.md`.
+`research/`, `plan/`, `tasks/`, `review/`, and optional `discuss/`.
 REPOSITORY.md, LESSONS.md, and the program artifacts (CHARTER.md,
 ROADMAP.md, top-level SYNTHESIS.md) remain active project metadata; a program
 ship also marks the milestone's roadmap entry `Status: shipped` with its
@@ -526,7 +526,7 @@ cheapest sufficient method (run the command, read the code, run the test,
 check history) → verdict with recorded evidence → remediation queue. With
 `.project/` present it also audits the pipeline against itself: done tasks
 must have their commit SHA and a passing Verify, SYNTHESIS decisions must
-match the code's actual shape, BOARD/STATE must agree with task
+match the code's actual shape, STATE must agree with task
 frontmatter. Useful mid-project as a drift check before a milestone review.
 The auditor never edits anything.
 
@@ -569,7 +569,6 @@ with their exact ordered source-file and row list.
   research/SYNTHESIS.md      decision artifact; authoritative after decide gate
   plan/PLAN.md               waves, config, and project verify
   tasks/T###-slug.md         full contract, clean base SHA, status, exact commit SHA
-  BOARD.md                   wave and escalation summary
   review/wave-N.cycleC.md    per-wave verdicts
   review/wave-N.cycleC.panel.md  optional cross-model wave panel
   review/PLAN-PANEL.md       optional cross-model plan panel
@@ -585,7 +584,7 @@ At ship, everything except `STATE.md`, `REPOSITORY.md`, `LESSONS.md`, `archive/`
 the program artifacts (`CHARTER.md`, `ROADMAP.md`, top-level `SYNTHESIS.md`)
 moves into the numbered archive; active paths above describe the current milestone
 only, including the discussion records. The ship step appends one lesson line per repeat-offender criterion and
-BOARD escalation to LESSONS.md before committing.
+STATE.md log escalation to LESSONS.md before committing.
 
 Artifact formats are bundled with the installed `gsd-path` skill. Each phase
 resolves and passes their absolute paths. A missing or malformed artifact

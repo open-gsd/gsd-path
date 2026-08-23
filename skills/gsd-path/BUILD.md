@@ -28,7 +28,7 @@ explicitly invokes it.
   committed transition to `ship/active`. Project Verify waits for ship.
 - Read the local [coder role](references/coder.md),
   [reviewer role](references/reviewer.md), [dispatch contract](references/dispatch.md),
-  [task template](templates/task.md), [board template](templates/board.md),
+  [task template](templates/task.md),
   [wave-review template](templates/wave-review.md), and
   [wave-panel template](templates/wave-panel.md). Resolve them to absolute
   paths before briefing agents. Resolve `scripts/review_panel.py` when
@@ -36,11 +36,10 @@ explicitly invokes it.
   for Intent coverage. Resolve `scripts/isolation.py` for
   task isolation, verify sidecars, and task landing; do not invent
   `git worktree add`, `--detach`, commit, or cherry-pick commands.
-- Before the first dispatch, create `.project/BOARD.md` from the bundled
-  board template when it is absent — `.project/BOARD.md` is the canonical
-  board path — and include it in the next orchestrator bookkeeping commit.
-  Update BOARD.md at every task state change so it always mirrors task
-  frontmatter.
+- There is no board file. Task frontmatter is the only task-state record;
+  when a report or question needs a wave summary, render it inline from the
+  task files and wave reviews. Record escalations and plan defects in the
+  STATE.md log.
 - Require a Git worktree with no unrelated changes. Roadmap and plan
   approval checkpoints normally leave `.project/` fully committed; expected
   uncommitted `.project/` planning artifacts may remain only through initial
@@ -56,7 +55,7 @@ explicitly invokes it.
   change.
 - Before recovery or dispatch and again before each layer/wave gate, scan
   ANSWERS.md for pending required follow-ups under AGENTS.md. Apply an answer
-  addressed to build only through PLAN/task/BOARD bookkeeping that is legal in
+  addressed to build only through PLAN/task bookkeeping that is legal in
   the current build state and append its disposition receipt. If it changes an
   approved upstream contract or names another owner, set `build/blocked`, link
   ANSWERS.md and the target artifact, and ask the user; never establish a new
@@ -104,7 +103,7 @@ explicitly invokes it.
 
 For each wave in PLAN.md order:
 
-1. **Recover before dispatch.** Reconcile task frontmatter over BOARD.md and
+1. **Recover before dispatch.** Read task frontmatter and
    inspect primary bookkeeping dirt plus every recorded task worktree and
    branch before selecting work. For an `in-progress` task with `commit: null`,
    use its recorded `base`, isolated worktree, and branch first. If task landing
@@ -334,12 +333,12 @@ For each wave in PLAN.md order:
    current or newly appended PLAN.md wave table and `.project/tasks/` before
    dispatch, preserving the one-row/one-file contract; do not create an
    unlisted task that the next recovery cannot discover. Run them through the
-   same isolated layer loop. At the cap, record all attempts in BOARD.md and
-   STATE.md and ask the user — through an interactive user-input tool when
-   available — after linking the resolved absolute BOARD.md and blocking wave
-   review, whether to redirect the approach, raise the cap, or send define
-   to amend INTENT.md `## Corrections` — never rewrite an AC from a Log
-   waiver — or, in program flow (ROADMAP.md exists), to abandon the
+   same isolated layer loop. At the cap, record all attempts in the STATE.md
+   log and ask the user — through an interactive user-input tool when
+   available — after linking the resolved absolute blocking wave review,
+   whether to redirect the approach, raise the cap, or send define to amend
+   INTENT.md `## Corrections` — never rewrite an AC from a Log waiver — or,
+   in program flow (ROADMAP.md exists), to abandon the
    milestone under the Milestone abandon procedure — listing the
    orchestrator's recommended option first marked
    `(recommended)` with a one-line reason drawn from the review evidence.
@@ -350,8 +349,7 @@ For each wave in PLAN.md order:
    `Open fix tasks from panel findings (recommended)` first, then `Advance
    and keep panel findings as warnings`. Preference-only panel warnings do
    not block advance. On pass, commit the review artifact, the panel file
-   when present, BOARD.md, STATE.md, and wave
-   bookkeeping, then report `wave N/M done, C review cycle(s)`.
+   when present, STATE.md, and wave bookkeeping, then report `wave N/M done, C review cycle(s)`.
 
 ## Completion
 
@@ -361,14 +359,14 @@ transition as the build orchestrator's final bookkeeping. Do not run
 PLAN.md's project Verify here — ship runs it once. This
 keeps the primary worktree clean and avoids a separate review-phase transition
 commit. Report waves, exact task commits, fixed findings, and remaining risk.
-Link the resolved absolute BOARD.md as the review surface and state that ship
-is next. Do not merge to the default branch, tag, mark `shipped`, or
-integrate; ship owns FINAL.md, project Verify, and those steps. When invoked
-directly, stop and tell the user to explicitly
-invoke `$gsd-path`, which routes to ship; do not invoke an explicit-only sibling
-skill yourself.
-If
-a crash leaves `build/done`, finish and commit this transition before returning
+ Link the resolved absolute final wave review as the review surface and state
+ that ship is next. Do not merge to the default branch, tag, mark `shipped`, or
+ integrate; ship owns FINAL.md, project Verify, and those steps. When invoked
+ directly, stop and tell the user to explicitly
+ invoke `$gsd-path`, which routes to ship; do not invoke an explicit-only sibling
+ skill yourself.
+ If
+ a crash leaves `build/done`, finish and commit this transition before returning
 to the router.
 
 ## Milestone abandon (program flow only)

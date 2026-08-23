@@ -56,7 +56,7 @@ class GuardHookTests(unittest.TestCase):
         self.assert_denied(
             {
                 "toolName": "Write",
-                "toolInput": {"filePath": "/repo/.project/archive/002-x/BOARD.md"},
+                "toolInput": {"filePath": "/repo/.project/archive/002-x/STATE.md"},
             }
         )
 

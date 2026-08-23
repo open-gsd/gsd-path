@@ -92,7 +92,6 @@ Tasks reviewed: 1
 - ✅ demo works — focused Verify passed
 """
         )
-        (project / "BOARD.md").write_text("# Board\n")
 
         self.git(root, "add", ".project")
         baseline = self.git(root, "commit", "-q", "-m", "baseline")
@@ -2814,7 +2813,6 @@ Tasks reviewed: 1
 - ❌ demo broken — focused Verify failed
 """
         )
-        (project / "BOARD.md").write_text("# Board\n")
 
         self.git(root, "add", ".project")
         baseline = self.git(root, "commit", "-q", "-m", "baseline")
@@ -2856,7 +2854,6 @@ Tasks reviewed: 1
                 "plan/PLAN.md",
                 "tasks/T001-demo.md",
                 "review/wave-1.cycle1.md",
-                "BOARD.md",
                 "discuss/DIALOGUE.md",
                 "discuss/ANSWERS.md",
             ):

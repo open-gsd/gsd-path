@@ -28,7 +28,6 @@ Carried forward: <none, or "N DOCS-AUDIT ruling(s)">
 - plan/PLAN.md
 - tasks/...
 - review/...
-- BOARD.md
 
 ## Notes
 

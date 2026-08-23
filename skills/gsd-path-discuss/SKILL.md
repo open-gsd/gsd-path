@@ -34,7 +34,7 @@ user which phase owns the follow-up; do not invoke a sibling phase implicitly.
    stale or malformed state. Do not reproduce those operations manually.
 5. Read only the helper-returned absolute DIALOGUE.md and ANSWERS.md paths.
 6. Do not change `STATE.md`, phase status, `INTENT.md`, `SYNTHESIS.md`,
-   `PLAN.md`, `BOARD.md`, task frontmatter, review verdicts, or archive
+   `PLAN.md`, task frontmatter, review verdicts, or archive
    contents. Discussion can propose a change and name its owner; the owning
    phase must apply it through its normal gate.
 

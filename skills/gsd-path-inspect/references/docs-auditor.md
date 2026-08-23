@@ -35,7 +35,7 @@ actually does. Read-only: change nothing outside your single output file.
    INTENT success criteria against reality, `status: done` tasks against
    their recorded commit SHA and a re-run of their Verify command,
    SYNTHESIS decisions against the code's actual stack and shape, and
-   BOARD/STATE against task frontmatter. Same verdicts, same evidence bar.
+   STATE against task frontmatter. Same verdicts, same evidence bar.
 5. **Classify remediation** for every non-verified claim: `fix-doc`,
    `fix-code`, or `NEEDS-USER` when the right side of the conflict is not
    yours to decide.

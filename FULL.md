@@ -226,7 +226,7 @@ After intent approval, the router walks phases and stops at gates.
 | **Decide** | `research/SYNTHESIS.md` | Resolve `NEEDS-USER` at checkpoint |
 | **Roadmap** (program) | `ROADMAP.md` | **Approve milestone slicing** |
 | **Plan** | `plan/PLAN.md`, `tasks/T###-slug.md` | **Approve wave summary** |
-| **Build** | code, commits, `BOARD.md` | Escalations only |
+| **Build** | code, commits | Escalations only |
 | **Ship** | `review/wave-*.md`, `review/PLAN-PANEL.md`, `review/FINAL.md` | Approve patch waves if blocked and final shipping when green |
 
 The discussion sidecar is available alongside every row above. It writes
@@ -355,7 +355,6 @@ Everything durable lives in `.project/`:
   research/SYNTHESIS.md
   plan/PLAN.md
   tasks/T###-slug.md       base SHA, worktree, status, commit
-  BOARD.md
   review/…
   discuss/DIALOGUE.md       any-phase discussion transcript
   discuss/ANSWERS.md        durable discussion answers and decisions
@@ -364,7 +363,7 @@ Everything durable lives in `.project/`:
 
 Full tree: [README.md](README.md#handoff-contract).
 
-To resume: invoke the router. It reconciles STATE, BOARD, and task frontmatter,
+To resume: invoke the router. It reconciles STATE and task frontmatter,
 reports position, and continues. **Do not hand-edit** task state or SHAs mid-pipeline.
 
 If STATE and artifacts disagree, the router stops and asks rather than guessing.
@@ -412,7 +411,7 @@ layers. Every child brief names absolute input/output paths and bounded scope.
 | Router blocked on branch | Check out `STATE.branch` or follow router instructions |
 | Phase says precondition missing | Run the producing phase it names |
 | Pipeline on unrelated work | Explicit invocation only — [DOCS.md](DOCS.md#faq) |
-| Contradictory STATE / BOARD / tasks | Re-invoke router; artifacts outrank chat |
+| Contradictory STATE / tasks | Re-invoke router; artifacts outrank chat |
 | Archive tamper blocked | Expected with hooks — [HOOKS.md](HOOKS.md) |
 | Upgrade skills or hooks | [UPDATE.md](UPDATE.md) |
 | More help | [DOCS.md](DOCS.md#help) |

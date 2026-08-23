@@ -59,8 +59,8 @@ full-repo suite on a tiny edit outrank the phase brief.
 - `.project/STATE.md` tracks phase position. The orchestrator alone owns task
   frontmatter base, isolated worktree/branch, status, agent, and exact commit SHA. Require
   `pipeline: gsd-path/v2`; never consume an ambiguous or differently owned
-  state file. Artifacts outrank summaries; reconcile STATE.md or BOARD.md when
-  they disagree. During a program build, `.project/next/STATE.md` may hold
+  state file. Artifacts outrank summaries; reconcile STATE.md when it
+  disagrees with task frontmatter. During a program build, `.project/next/STATE.md` may hold
   the lookahead planning track for the next milestone; it follows the same
   marker rule, owns no task frontmatter, and never binds a branch.
 - Spawned agents have isolated context. Follow the installed runtime dispatch
@@ -261,8 +261,8 @@ Stop and ask the user only when:
 - a `NEEDS-USER` item reaches a phase checkpoint; or
 - sources of truth conflict and INTENT.md does not make the resolution clear.
 
-Handle everything else autonomously and record it in the task log, BOARD.md,
-or STATE.md.
+Handle everything else autonomously and record it in the task log or
+STATE.md.
 
 ## Style
 

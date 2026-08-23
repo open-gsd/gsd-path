@@ -98,7 +98,6 @@ DISCUSSION_TRANSACTION_NAME = ".discussion-archive-transaction.json"
 DIRECTORIES_TO_ARCHIVE = ("intent", "research", "plan", "tasks", "review")
 OPTIONAL_DIRECTORIES_TO_ARCHIVE = ("discuss",)
 TRANSACTION_DIRECTORIES = (*DIRECTORIES_TO_ARCHIVE, *OPTIONAL_DIRECTORIES_TO_ARCHIVE)
-FILES_TO_ARCHIVE = ("BOARD.md",)
 MANIFEST_FIELDS = (
     "Milestone:",
     "Shipped:",
@@ -117,10 +116,9 @@ REQUIRED_ARCHIVE_FILES = (
     "research/SYNTHESIS.md",
     "plan/PLAN.md",
     "review/FINAL.md",
-    "BOARD.md",
 )
-# Abandon runs from build: review/ may hold only wave files, and BOARD.md is
-# moved when present, but an approved plan implies these artifacts existed.
+# Abandon runs from build: review/ may hold only wave files, but an approved
+# plan implies these artifacts existed.
 ABANDON_REQUIRED_ARCHIVE_FILES = (
     "intent/INTENT.md",
     "research/SYNTHESIS.md",
@@ -424,14 +422,6 @@ def move_directory(source: Path, destination: Path) -> None:
         shutil.move(str(source), str(destination))
 
 
-def move_file(source: Path, destination: Path) -> None:
-    if source.exists() and destination.exists():
-        raise ArchiveError(f"archive collision: both {source} and {destination} exist")
-    if source.exists():
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.move(str(source), str(destination))
-
-
 def require_complete_transaction_inputs(active_root: Path, archive: Path) -> None:
     for name in DIRECTORIES_TO_ARCHIVE:
         source = active_root / name
@@ -452,13 +442,6 @@ def require_complete_transaction_inputs(active_root: Path, archive: Path) -> Non
                 continue
             raise ArchiveError(f"archive collision: both {source} and {destination} exist")
 
-    for name in FILES_TO_ARCHIVE:
-        source = active_root / name
-        destination = archive / name
-        if source.exists() and destination.exists():
-            raise ArchiveError(f"archive collision: both {source} and {destination} exist")
-        if not source.exists() and not destination.exists():
-            raise ArchiveError(f"missing both active and archived {name}")
 
 
 def selected_transaction_path(active_root: Path, archive: Path, relative: str) -> Path:
@@ -537,7 +520,7 @@ def require_canonical_transaction_inputs(active_root: Path, archive: Path) -> No
 
 def require_safe_move_inputs(active_root: Path, archive: Path) -> None:
     archive_device = archive.stat().st_dev
-    for name in (*TRANSACTION_DIRECTORIES, *FILES_TO_ARCHIVE):
+    for name in TRANSACTION_DIRECTORIES:
         source = active_root / name
         destination = archive / name
         if source.is_symlink() or destination.is_symlink():
@@ -1437,8 +1420,6 @@ def prepare_locked(project: Path, active_root: Path, slug: str) -> dict:
     reconcile_append_only_discussion(active_root, archive)
     for name in TRANSACTION_DIRECTORIES:
         move_directory(active_root / name, archive / name)
-    for name in FILES_TO_ARCHIVE:
-        move_file(active_root / name, archive / name)
 
     archived_audit = archive / "research" / "DOCS-AUDIT.md"
     carried_forward = pending_ruling_count(archived_audit)
@@ -1479,13 +1460,6 @@ def require_complete_abandon_inputs(active_root: Path, archive: Path) -> None:
         destination = archive / name
         if source.exists() and destination.exists():
             require_append_only_discussion(source, destination)
-
-    board_source = active_root / "BOARD.md"
-    board_destination = archive / "BOARD.md"
-    if board_source.exists() and board_destination.exists():
-        raise ArchiveError(
-            f"archive collision: both {board_source} and {board_destination} exist"
-        )
 
 
 def require_canonical_abandon_inputs(active_root: Path, archive: Path) -> None:
@@ -1592,8 +1566,6 @@ def abandon_locked(project: Path, active_root: Path, slug: str, reason: str) -> 
     reconcile_append_only_discussion(active_root, archive)
     for name in TRANSACTION_DIRECTORIES:
         move_directory(active_root / name, archive / name)
-    for name in FILES_TO_ARCHIVE:
-        move_file(active_root / name, archive / name)
 
     archived_audit = archive / "research" / "DOCS-AUDIT.md"
     carried_forward = pending_ruling_count(archived_audit)
@@ -1695,9 +1667,6 @@ def require_canonical_archive(archive: Path) -> None:
         path = archive / directory
         if path.is_symlink() or not path.is_dir():
             missing.append(f"{directory}/")
-    board = archive / "BOARD.md"
-    if board.is_symlink() or not board.is_file():
-        missing.append("BOARD.md")
     if missing:
         raise ArchiveError(f"canonical archive artifacts are missing: {', '.join(sorted(set(missing)))}")
     discussion = archive / "discuss"
@@ -1928,7 +1897,6 @@ def validate(repo: Path) -> dict:
         path
         for path in changed_paths
         if path != ".project/STATE.md"
-        and path != ".project/BOARD.md"
         and path != ".project/LESSONS.md"
         and path not in persistent_program_files
         and not path.startswith(archive_prefix)
