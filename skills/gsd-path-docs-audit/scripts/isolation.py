@@ -26,9 +26,9 @@ TASK_BRANCH_PREFIX = "gsd-path-task/"
 VERIFY_BRANCH_PREFIX = "gsd-path-verify/"
 TASK_ID_RE = re.compile(r"^[A-Za-z][A-Za-z0-9._-]*$")
 NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
-FIELD_PATTERN = re.compile(r"^(?P<key>[a-z_]+):\s*(?P<value>[^#]*?)(?:\s+#.*)?$")
+FIELD_PATTERN = re.compile(r"^(?P<key>[a-z_]+):\s*(?P<value>.*)$")
 INLINE_LIST_PATTERN = re.compile(r"^\[(?P<body>.*)\]$")
-LIST_ITEM_PATTERN = re.compile(r"^\s*-\s+(?P<value>.*?)\s*(?:\s+#.*)?$")
+LIST_ITEM_PATTERN = re.compile(r"^\s*-\s+(?P<value>.*)$")
 
 
 class IsolationError(RuntimeError):
@@ -297,8 +297,44 @@ def split_frontmatter(text: str) -> tuple[list[str], str]:
     raise IsolationError("task file frontmatter is not closed")
 
 
+def _strip_yaml_comment(value: str) -> str:
+    quote: Optional[str] = None
+    index = 0
+    while index < len(value):
+        character = value[index]
+        if quote == '"':
+            if character == "\\" and index + 1 < len(value):
+                index += 2
+                continue
+            if character == quote:
+                quote = None
+        elif quote == "'":
+            if (
+                character == quote
+                and index + 1 < len(value)
+                and value[index + 1] == quote
+            ):
+                index += 2
+                continue
+            if character == quote:
+                quote = None
+        elif character in {"'", '"'}:
+            quote = character
+        elif character == "#" and (index == 0 or value[index - 1].isspace()):
+            return value[:index].rstrip()
+        index += 1
+    return value.strip()
+
+
 def _unquote(value: str) -> str:
-    return value.strip().strip("\"'")
+    cleaned = _strip_yaml_comment(value).strip()
+    if (
+        len(cleaned) >= 2
+        and cleaned[0] == cleaned[-1]
+        and cleaned[0] in {"'", '"'}
+    ):
+        return cleaned[1:-1]
+    return cleaned
 
 
 def task_frontmatter(text: str) -> tuple[Optional[Dict[str, object]], Optional[str]]:
@@ -314,7 +350,7 @@ def task_frontmatter(text: str) -> tuple[Optional[Dict[str, object]], Optional[s
             index += 1
             continue
         key = match.group("key")
-        value = match.group("value").strip()
+        value = _strip_yaml_comment(match.group("value"))
         inline = INLINE_LIST_PATTERN.fullmatch(value)
         if inline is not None:
             fields[key] = [
@@ -392,6 +428,11 @@ def _stamp_and_commit(
     task_path = worktree / task_file
     task_bytes = task_path.read_bytes()
     stamped = _landed_task_text(task_bytes.decode("utf-8"), base).encode("utf-8")
+    _, landing_error = _landing_state(
+        worktree, base, task_file, stamped.decode("utf-8"), subject, allowed
+    )
+    if landing_error:
+        raise IsolationError(landing_error)
     pending = uncommitted_paths(worktree)
     if stamped != task_bytes:
         pending.add(task_file)
@@ -462,7 +503,10 @@ def land(
     status = git_output(primary, "status", "--porcelain", "--untracked-files=all")
     if status:
         raise IsolationError("primary worktree is dirty; refusing to cherry-pick")
-    if uncommitted_paths(source):
+    source_dirty = bool(uncommitted_paths(source))
+    if source_dirty:
+        if current_sha(source) != resolved_base:
+            raise IsolationError("dirty parallel source HEAD must equal the recorded base")
         source_commit = _stamp_and_commit(
             source, resolved_base, subject, relative_posix(task_file), allowed
         )
@@ -470,18 +514,25 @@ def land(
         source_commit = current_sha(source)
         if source_commit == resolved_base:
             raise IsolationError("no changes to land")
-        source_subject = git_output(source, "log", "-1", "--format=%s", source_commit)
-        if source_subject != subject:
-            raise IsolationError(
-                f"source commit subject is {source_subject!r}, expected {subject!r}"
-            )
-        changed_paths = committed_paths_since(source, resolved_base)
-        expected_body = task_commit_body(
-            relative_posix(task_file), changed_paths, resolved_base
-        ).strip()
-        source_body = git_output(source, "log", "-1", "--format=%b", source_commit)
-        if source_body != expected_body:
-            raise IsolationError("source commit body does not match expected task fields")
+    source_parent, parent_error = _single_parent(source, source_commit)
+    if parent_error or source_parent != resolved_base:
+        raise IsolationError(
+            parent_error or "clean parallel source commit parent must equal the recorded base"
+        )
+    if uncommitted_paths(source):
+        raise IsolationError("source worktree is dirty after creating the task commit")
+    source_body = git_output(source, "log", "-1", "--format=%b", source_commit)
+    _, proof_error = _prove_task_commit(
+        source,
+        source_commit,
+        source_body,
+        relative_posix(task_file),
+        resolved_base,
+        None,
+        allowed,
+    )
+    if proof_error:
+        raise IsolationError(f"source commit body/task proof failed: {proof_error}")
     picked = run_git(primary, "cherry-pick", source_commit)
     if picked.returncode != 0:
         run_git(primary, "cherry-pick", "--abort")
@@ -519,6 +570,13 @@ def _frontmatter_key(line: str) -> Optional[str]:
     return match.group("key") if match is not None else None
 
 
+def _single_parent(repo: Path, sha: str) -> tuple[Optional[str], Optional[str]]:
+    parents = git_output(repo, "show", "-s", "--format=%P", sha).split()
+    if len(parents) != 1:
+        return None, "task commit must have exactly one parent"
+    return parents[0], None
+
+
 def _landing_transition_error(
     before_head: Sequence[str],
     after_head: Sequence[str],
@@ -528,7 +586,7 @@ def _landing_transition_error(
 ) -> Optional[str]:
     for key in LANDING_MUTABLE_FIELDS:
         if sum(_frontmatter_key(line) == key for line in before_head) != 1:
-            return f"parent task frontmatter must contain one {key} field"
+            return f"base task frontmatter must contain one {key} field"
         if sum(_frontmatter_key(line) == key for line in after_head) != 1:
             return f"landed task frontmatter must contain one {key} field"
     immutable_before = [
@@ -540,7 +598,7 @@ def _landing_transition_error(
     if immutable_after != immutable_before:
         return "task frontmatter changes fields outside landing metadata"
     if before_fields.get("status") == "done":
-        return "parent task is already done"
+        return "base task is already done"
     expected = {**LANDED_FIELDS, "base": base}
     for key, value in expected.items():
         if after_fields.get(key) != value:
@@ -558,11 +616,76 @@ def _declared_task_paths(
     if not isinstance(raw_files, list) or not all(
         isinstance(item, str) for item in raw_files
     ):
-        return None, "parent task frontmatter has invalid files"
+        return None, "base task frontmatter has invalid files"
     try:
         return {relative_posix(item) for item in raw_files}, None
     except IsolationError as error:
         return None, str(error)
+
+
+def _base_task_contract(
+    repo: Path, base: str, task_file: str
+) -> tuple[list[str], str, Dict[str, object], Set[str]]:
+    text = git_text(repo, "show", f"{base}:{task_file}")
+    head, body = split_frontmatter(text)
+    fields, error = task_frontmatter(text)
+    if error or fields is None:
+        raise IsolationError(error or "base task frontmatter is unreadable")
+    files, files_error = _declared_task_paths(fields)
+    if files_error or files is None:
+        raise IsolationError(files_error or "base task files are unreadable")
+    return head, body, fields, {task_file, *files}
+
+
+def _landing_state(
+    repo: Path,
+    base: str,
+    task_file: str,
+    after_text: str,
+    subject: str,
+    allowed: Optional[Set[str]],
+) -> tuple[Optional[Set[str]], Optional[str]]:
+    try:
+        before_head, before_body, before_fields, contract_paths = _base_task_contract(
+            repo, base, task_file
+        )
+        after_head, after_body = split_frontmatter(after_text)
+    except IsolationError as error:
+        return None, str(error)
+    after_fields, after_error = task_frontmatter(after_text)
+    if after_error or after_fields is None:
+        return contract_paths, after_error or "landed task frontmatter is unreadable"
+    try:
+        expected_subject = task_commit_subject(
+            str(before_fields.get("id", "")), str(before_fields.get("title", ""))
+        )
+    except ValueError as error:
+        return contract_paths, str(error)
+    if subject != expected_subject:
+        return (
+            contract_paths,
+            f"source commit subject is {subject!r}, expected {expected_subject!r}",
+        )
+    if allowed is not None and allowed != contract_paths:
+        missing = sorted(contract_paths - allowed)
+        extra = sorted(allowed - contract_paths)
+        details = []
+        if missing:
+            details.append("missing " + ", ".join(missing))
+        if extra:
+            details.append("extra " + ", ".join(extra))
+        return (
+            contract_paths,
+            "landing allow-list differs from the base task: " + "; ".join(details),
+        )
+    transition_error = _landing_transition_error(
+        before_head, after_head, before_fields, after_fields, base
+    )
+    if transition_error:
+        return contract_paths, transition_error
+    if not after_body.startswith(before_body):
+        return contract_paths, "task file body is not append-only"
+    return contract_paths, None
 
 
 def _prove_task_commit(
@@ -571,7 +694,8 @@ def _prove_task_commit(
     body: str,
     task_file: str,
     expected_base: str,
-    current_task_text: str,
+    current_task_text: Optional[str],
+    allowed: Optional[Set[str]] = None,
 ) -> tuple[Optional[str], Optional[str]]:
     """Return (base, None) when `sha` is this task's landing commit, else (None, reason)."""
     base = next((line[6:].strip() for line in body.splitlines() if line.startswith("Base: ")), None)
@@ -579,42 +703,63 @@ def _prove_task_commit(
         return None, "body has no Base: field"
     if base != expected_base:
         return None, "body Base: differs from the task's recorded base"
-    if run_git(repo, "merge-base", "--is-ancestor", base, f"{sha}^").returncode != 0:
+    parent, parent_error = _single_parent(repo, sha)
+    if parent_error or parent is None:
+        return None, parent_error or "task commit parent is unreadable"
+    if run_git(repo, "merge-base", "--is-ancestor", base, parent).returncode != 0:
         return None, "commit does not descend from its Base:"
     try:
-        before_text = git_text(repo, "show", f"{sha}^:{task_file}")
         after_text = git_text(repo, "show", f"{sha}:{task_file}")
-        before_head, before_body = split_frontmatter(before_text)
-        after_head, after_body = split_frontmatter(after_text)
     except IsolationError as error:
         return None, str(error)
-    before_fields, before_error = task_frontmatter(before_text)
-    after_fields, after_error = task_frontmatter(after_text)
-    if before_error or before_fields is None:
-        return None, before_error or "parent task frontmatter is unreadable"
-    if after_error or after_fields is None:
-        return None, after_error or "landed task frontmatter is unreadable"
-    files, files_error = _declared_task_paths(before_fields)
-    if files_error or files is None:
-        return None, files_error or "parent task files are unreadable"
-    changed = set(git_output(repo, "diff-tree", "--no-commit-id", "--name-only", "-r", sha).splitlines())
+    subject = git_output(repo, "log", "-1", "--format=%s", sha)
+    contract_paths, landing_error = _landing_state(
+        repo, base, task_file, after_text, subject, allowed
+    )
+    if contract_paths is None:
+        return None, landing_error or "base task contract is unreadable"
+    changed = set(
+        git_output(
+            repo, "diff-tree", "--no-commit-id", "--name-only", "-r", sha
+        ).splitlines()
+    )
     if task_file not in changed:
         return None, "commit does not touch the task file"
-    stray = sorted(changed - {task_file, *files})
+    stray = sorted(changed - contract_paths)
     if stray:
         return None, f"commit touches undeclared paths: {', '.join(stray)}"
+    if landing_error:
+        return None, landing_error
     if body != task_commit_body(task_file, changed, base).strip():
         return None, "body Task:/Files: fields do not match the changed paths"
-    transition_error = _landing_transition_error(
-        before_head, after_head, before_fields, after_fields, base
-    )
-    if transition_error:
-        return None, transition_error
-    if not after_body.startswith(before_body):
-        return None, "task file body is not append-only"
-    if after_text != current_task_text:
+    if current_task_text is not None and after_text != current_task_text:
         return None, "current done task differs from its landing commit"
     return base, None
+
+
+def _task_branch_proof_error(
+    repo: Path, branch: str, base: str, landed_commit: str
+) -> Optional[str]:
+    branch_commit = require_commit(repo, branch)
+    branch_parent, branch_parent_error = _single_parent(repo, branch_commit)
+    if branch_parent_error or branch_parent != base:
+        return branch_parent_error or "retained task branch parent differs from Base:"
+    landed_parent, landed_parent_error = _single_parent(repo, landed_commit)
+    if landed_parent_error or landed_parent is None:
+        return landed_parent_error or "landing commit parent is unreadable"
+    if run_git(repo, "merge-base", "--is-ancestor", base, landed_parent).returncode != 0:
+        return "landing commit does not descend from Base:"
+    branch_subject = git_output(repo, "log", "-1", "--format=%s", branch_commit)
+    landed_subject = git_output(repo, "log", "-1", "--format=%s", landed_commit)
+    branch_body = git_output(repo, "log", "-1", "--format=%b", branch_commit)
+    landed_body = git_output(repo, "log", "-1", "--format=%b", landed_commit)
+    if branch_subject != landed_subject or branch_body != landed_body:
+        return "retained task branch message differs from the landing commit"
+    branch_patch = _patch_id(repo, f"{base}..{branch_commit}")
+    landed_patch = _patch_id(repo, f"{landed_parent}..{landed_commit}")
+    if not branch_patch or branch_patch != landed_patch:
+        return "retained task branch differs from the landing commit"
+    return None
 
 
 def _worktree_report(path: Path) -> Optional[Dict[str, object]]:
@@ -656,21 +801,41 @@ def _recover_task(
     task_branch = task_branch_name(task_id)
     branch_exists = task_branch in branches
     report["worktree"] = _worktree_report(sidecar_root(primary, "task", task_id))
+    report["task_branch"] = task_branch if branch_exists else None
     report["rejected"] = []
 
-    if status != "done":
-        if status == "in-progress" or branch_exists or report["worktree"] is not None:
+    valid_statuses = {"pending", "in-progress", "done", "failed", "blocked"}
+    if status not in valid_statuses:
+        return result("block", reason=f"unknown task status: {status!r}")
+
+    retained = branch_exists or report["worktree"] is not None
+
+    def recovery_base() -> tuple[Optional[str], Optional[str]]:
+        try:
             if branch_exists:
-                base = git_output(primary, "merge-base", head, task_branch)
-            else:
-                recorded_base = str(fields.get("base", ""))
-                try:
-                    base = require_commit(primary, require_full_sha(recorded_base))
-                except IsolationError as error:
-                    return result("block", reason=f"in-progress task has invalid base: {error}")
-                report["worktree"] = _worktree_report(primary)
-            return result("resume", base=base, task_branch=task_branch if branch_exists else None)
-        return result("none", reason=f"status {status!r} needs no recovery")
+                return git_output(primary, "merge-base", head, task_branch), None
+            recorded_base = str(fields.get("base", ""))
+            return require_commit(primary, require_full_sha(recorded_base)), None
+        except IsolationError as error:
+            return None, f"{status} task has invalid base: {error}"
+
+    if status in {"pending", "in-progress"}:
+        if status == "pending" and not retained:
+            return result("none", reason="pending task has no retained isolate")
+        base, base_error = recovery_base()
+        if base_error or base is None:
+            return result("block", reason=base_error or "task base is unreadable")
+        if not retained:
+            report["worktree"] = _worktree_report(primary)
+        return result("resume", base=base)
+
+    if status in {"failed", "blocked"}:
+        if not retained:
+            return result("none", reason=f"{status} task has no retained isolate")
+        base, base_error = recovery_base()
+        if base_error or base is None:
+            return result("block", reason=base_error or "task base is unreadable")
+        return result("reconcile", base=base)
 
     recorded_base = str(fields.get("base", ""))
     try:
@@ -693,8 +858,10 @@ def _recover_task(
         return result("block", reason="multiple proven landing commits: " + ", ".join(sha for sha, _ in proven))
     if proven:
         commit, base = proven[0]
-        if branch_exists and _patch_id(primary, f"{base}..{task_branch}") != _patch_id(primary, f"{commit}^..{commit}"):
-            return result("block", reason="retained task branch differs from the landing commit")
+        if branch_exists:
+            branch_error = _task_branch_proof_error(primary, task_branch, base, commit)
+            if branch_error:
+                return result("block", reason=branch_error)
         return result("recovered", commit=commit, base=base)
     return result("block", reason="done but no landing commit proves it")
 
@@ -703,10 +870,10 @@ def recover(primary: Path, tasks_dir: Path) -> Dict[str, object]:
     """Prove each task's landing state from git. Read-only.
 
     Verdicts: `recovered` (exactly one proven landing commit; `commit` and
-    `base` returned), `resume` (in flight: no landing yet, derived `base` and
-    any retained `task_branch`/worktree returned), `block` (missing or
-    conflicting proof), `none` (nothing to recover). Verify is not rerun: a
-    proven landing commit is its own evidence.
+    `base` returned), `resume` (pending or in progress), `reconcile` (a failed
+    or blocked task retains isolation), `block` (missing or conflicting proof),
+    and `none` (nothing to recover). Retained `task_branch` and worktree state
+    are returned. Verify is not rerun: a proven landing commit is its own evidence.
     """
     primary = require_directory(primary, "primary worktree")
     if worktree_root(primary) != primary:
@@ -731,18 +898,67 @@ def recover(primary: Path, tasks_dir: Path) -> Dict[str, object]:
         "verdict": "block" if any(t["verdict"] == "block" for t in tasks) else "ok",
     }
 
+
+def _sidecar_path_for_branch(primary: Path, branch: str) -> Path:
+    if branch.startswith(TASK_BRANCH_PREFIX):
+        task_id = branch.removeprefix(TASK_BRANCH_PREFIX)
+        validate_task_id(task_id)
+        return sidecar_root(primary, "task", task_id)
+    if branch.startswith(VERIFY_BRANCH_PREFIX):
+        name = branch.removeprefix(VERIFY_BRANCH_PREFIX)
+        validate_name(name, "verify name")
+        return sidecar_root(primary, "verify", name)
+    raise IsolationError(f"refusing to retire unrecognized branch {branch}")
+
+
+def _landing_base(repo: Path, commit: str) -> str:
+    body = git_output(repo, "log", "-1", "--format=%b", commit)
+    values = [
+        line.removeprefix("Base: ").strip()
+        for line in body.splitlines()
+        if line.startswith("Base: ")
+    ]
+    if len(values) != 1:
+        raise IsolationError("landing commit body must contain one Base: field")
+    return require_commit(repo, require_full_sha(values[0]))
+
+
+def _require_first_parent_commit(repo: Path, bound: str, commit: str) -> None:
+    history = git_output(repo, "rev-list", "--first-parent", bound).splitlines()
+    if commit not in history:
+        raise IsolationError("landing commit is not on the bound first-parent history")
+
+
 def retire(
     primary: Path,
-    worktree: Path,
+    worktree: Optional[Path],
     branch: Optional[str],
     force: bool,
+    landed_commit: Optional[str] = None,
 ) -> Dict[str, object]:
     primary = require_directory(primary, "primary worktree")
     bound = require_attached(primary)
-    resolved_worktree = worktree.resolve()
+    if branch == bound:
+        raise IsolationError("refusing to retire the bound branch")
+    expected_worktree = (
+        _sidecar_path_for_branch(primary, branch) if branch else None
+    )
+    if worktree is None:
+        if expected_worktree is None:
+            raise IsolationError("retire requires --worktree or --branch")
+        resolved_worktree = expected_worktree
+    else:
+        resolved_worktree = worktree.resolve()
+        if (
+            branch
+            and not resolved_worktree.exists()
+            and expected_worktree is not None
+            and resolved_worktree != expected_worktree
+        ):
+            raise IsolationError("absent worktree path does not match the sidecar branch")
     if resolved_worktree == primary:
-        if branch and branch == bound:
-            raise IsolationError("refusing to retire the bound branch")
+        if branch:
+            raise IsolationError("refusing to retire a sidecar branch through the primary")
         return {
             "bound_branch": bound,
             "branch": None,
@@ -751,24 +967,43 @@ def retire(
             "worktree": str(primary),
         }
     if not resolved_worktree.exists():
+        branch_retired = False
         if branch:
             existing = run_git(
                 primary, "show-ref", "--verify", "--quiet", f"refs/heads/{branch}"
             )
             if existing.returncode == 0:
-                if branch == bound:
-                    raise IsolationError("refusing to delete the bound branch")
-                deleted = run_git(primary, "branch", "-d" if not force else "-D", branch)
-                if deleted.returncode != 0:
+                deleted = run_git(primary, "branch", "-d", branch)
+                if deleted.returncode != 0 and not force:
                     raise IsolationError(
                         (deleted.stderr or deleted.stdout).strip()
                         or f"could not delete {branch}"
                     )
+                if deleted.returncode != 0:
+                    if not branch.startswith(TASK_BRANCH_PREFIX) or not landed_commit:
+                        raise IsolationError(
+                            "forced branch-only task retirement requires --landed-commit"
+                        )
+                    landed = require_commit(primary, require_full_sha(landed_commit))
+                    _require_first_parent_commit(primary, bound, landed)
+                    base = _landing_base(primary, landed)
+                    proof_error = _task_branch_proof_error(
+                        primary, branch, base, landed
+                    )
+                    if proof_error:
+                        raise IsolationError(proof_error)
+                    deleted = run_git(primary, "branch", "-D", branch)
+                    if deleted.returncode != 0:
+                        raise IsolationError(
+                            (deleted.stderr or deleted.stdout).strip()
+                            or f"could not delete {branch}"
+                        )
+                branch_retired = True
         return {
             "bound_branch": bound,
             "branch": branch,
             "retired": True,
-            "reason": "already-absent",
+            "reason": "branch-only" if branch_retired else "already-absent",
             "worktree": str(resolved_worktree),
         }
     if worktree_root(resolved_worktree) != resolved_worktree:
@@ -851,9 +1086,10 @@ def parser() -> argparse.ArgumentParser:
 
     retire_parser = subparsers.add_parser("retire", help="remove a named sidecar checkout")
     retire_parser.add_argument("--repo", type=Path, required=True)
-    retire_parser.add_argument("--worktree", type=Path, required=True)
+    retire_parser.add_argument("--worktree", type=Path)
     retire_parser.add_argument("--branch")
     retire_parser.add_argument("--force", action="store_true")
+    retire_parser.add_argument("--landed-commit")
     return argument_parser
 
 
@@ -887,6 +1123,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 arguments.worktree,
                 arguments.branch,
                 arguments.force,
+                arguments.landed_commit,
             )
     except IsolationError as error:
         print(str(error), file=sys.stderr)

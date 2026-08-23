@@ -351,6 +351,22 @@ class TaskBriefTests(unittest.TestCase):
             self.assertEqual(exit_code, 1)
             self.assertIn("newpkg/mod.py has no parent directory newpkg", stderr)
 
+    def test_frontmatter_preserves_hashes_inside_quoted_values(self) -> None:
+        fields, error = check_task_briefs._frontmatter(
+            "---\n"
+            'title: "Fix #123" # comment\n'
+            "worktree: 'worktrees/task#1'\n"
+            "files:\n"
+            "  - 'docs/plan #1.md' # comment\n"
+            "---\n"
+        )
+
+        self.assertIsNone(error)
+        self.assertIsNotNone(fields)
+        self.assertEqual(fields["title"], "Fix #123")
+        self.assertEqual(fields["worktree"], "worktrees/task#1")
+        self.assertEqual(fields["files"], ["docs/plan #1.md"])
+
     def test_unresolvable_base_fails(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

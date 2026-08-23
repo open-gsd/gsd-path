@@ -107,22 +107,29 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
 1. **Recover before dispatch.** Run `python3 <absolute isolation.py> recover
    --repo <absolute primary>`. It is read-only and proves every `done` task's
    landing commit from its exact stamped base (first-parent scan for
-   `<task-id>: <task title>`, body `Task:`/`Files:`, the parent task's declared
-   path allow-list, exact landing metadata, append-only task-file body, and
+   `<task-id>: <task title>`, body `Task:`/`Files:`, the base task's declared
+   path allow-list from the task file at that base, exact landing metadata,
+   append-only task-file body, and
    patch equality with a retained task branch). Pending and `in-progress`
-   tasks bypass landing-history proof and report their resume state from the
-   recorded base and retained task branch/worktree. Act only on its verdicts;
+   tasks bypass landing-history proof and report retained resume state or
+   `none`; failed and blocked tasks with retained isolation report
+   `reconcile`. Act only on its verdicts;
    do not re-derive them in prose, rerun Verify on a proven commit, use an
    unanchored log grep, infer a SHA from `done`, or reset unknown work.
    - `recovered`: the task is landed (`land` already stamped `status: done`
      and `base`). Retire a still-present task worktree with `isolation.py
      retire` only when the report shows it present, clean, and on the task
-     branch; both absent is valid.
+     branch. If only `task_branch` remains, finish its proven interrupted
+     retirement with `retire --branch <task_branch> --force --landed-commit
+     <commit>`; both absent is valid.
    - `resume`: continue from the returned `base`, `task_branch`, and worktree
      (the primary itself when no task branch exists); when the report shows
      the worktree absent, return the task to `pending` only when ownership is
      clear.
+   - `reconcile`: do not resume implementation. Preserve the returned isolate
+     evidence and follow the failed/blocked reconciliation in step 2.
    - `block`: set `build/blocked` with the returned reason and stop.
+   - `none`: take no recovery action for that task.
 
 2. **Prepare the ready set.** Reconcile failed and blocked tasks, then
    select pending tasks whose dependencies are `done`. Readiness is

@@ -33,9 +33,9 @@ REQUIRED_SECTIONS = (
     "Log",
 )
 PROSE_SECTIONS = ("Context", "Approach", "Interface contract")
-FIELD_PATTERN = re.compile(r"^(?P<key>[a-z_]+):\s*(?P<value>[^#]*?)(?:\s+#.*)?$")
+FIELD_PATTERN = re.compile(r"^(?P<key>[a-z_]+):\s*(?P<value>.*)$")
 INLINE_LIST_PATTERN = re.compile(r"^\[(?P<body>.*)\]$")
-LIST_ITEM_PATTERN = re.compile(r"^\s*-\s+(?P<value>.*?)\s*(?:\s+#.*)?$")
+LIST_ITEM_PATTERN = re.compile(r"^\s*-\s+(?P<value>.*)$")
 HEADING_PATTERN = re.compile(r"(?m)^## (?P<name>.+?)\s*$")
 COMMENT_PATTERN = re.compile(r"<!--.*?-->", re.DOTALL)
 BACKTICK_PATTERN = re.compile(r"`([^`\n]+)`")
@@ -67,8 +67,44 @@ def _base_exists(repo: Path, base: str, path: str) -> bool:
     return _run_git(repo, "cat-file", "-e", f"{base}:{path}").returncode == 0
 
 
+def _strip_yaml_comment(value: str) -> str:
+    quote: Optional[str] = None
+    index = 0
+    while index < len(value):
+        character = value[index]
+        if quote == '"':
+            if character == "\\" and index + 1 < len(value):
+                index += 2
+                continue
+            if character == quote:
+                quote = None
+        elif quote == "'":
+            if (
+                character == quote
+                and index + 1 < len(value)
+                and value[index + 1] == quote
+            ):
+                index += 2
+                continue
+            if character == quote:
+                quote = None
+        elif character in {"'", '"'}:
+            quote = character
+        elif character == "#" and (index == 0 or value[index - 1].isspace()):
+            return value[:index].rstrip()
+        index += 1
+    return value.strip()
+
+
 def _unquote(value: str) -> str:
-    return value.strip().strip("\"'")
+    cleaned = _strip_yaml_comment(value).strip()
+    if (
+        len(cleaned) >= 2
+        and cleaned[0] == cleaned[-1]
+        and cleaned[0] in {"'", '"'}
+    ):
+        return cleaned[1:-1]
+    return cleaned
 
 
 def _frontmatter(text: str) -> Tuple[Optional[Dict[str, object]], Optional[str]]:
@@ -84,7 +120,7 @@ def _frontmatter(text: str) -> Tuple[Optional[Dict[str, object]], Optional[str]]
         match = FIELD_PATTERN.match(line)
         if match:
             key = match.group("key")
-            value = match.group("value").strip()
+            value = _strip_yaml_comment(match.group("value"))
             inline = INLINE_LIST_PATTERN.fullmatch(value)
             if inline is not None:
                 body = inline.group("body").strip()
