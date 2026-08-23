@@ -8,12 +8,14 @@ greenfield project.
 
 Verdicts:
 
-- owned — `.project/STATE.md` exists; route by that file, not detection
-- orphan — no STATE.md, but `.project/` contains a file or directory
-- brownfield — no STATE.md, `.project/` empty or absent, and at least one
+- owned — `.project/` is a real directory with a regular `STATE.md` and no
+  unsafe project paths; route by that file, not detection
+- orphan — `.project/` is unsafe, or it contains a file or directory without
+  a safe regular `STATE.md`
+- brownfield — no owned state, `.project/` empty or absent, and at least one
   in-scope signal (package/build manifest, source file, tracked signal in
   git, or substantive system documentation)
-- greenfield — no STATE.md, `.project/` empty or absent, and no signal
+- greenfield — no owned state, `.project/` empty or absent, and no signal
 
 Ignored path components: `.git`, `node_modules`, vendored/generated trees,
 build output, and managed GSD Path installation artifacts. `.project/` is

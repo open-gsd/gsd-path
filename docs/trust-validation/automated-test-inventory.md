@@ -33,7 +33,7 @@ Node requires **≥18.17**. Python 3 with no extra deps for unittest modules.
 | `tests/test_isolation.py` | unittest | `scripts/isolation.py` — named task/verify checkouts, serial vs parallel landing, retire |
 | `tests/test_git_guard.py` | unittest | `scripts/git_guard.py` — violations matrix, pre-commit/commit-msg E2E |
 | `tests/test_bootstrap_repository.py` | unittest | `scripts/bootstrap_repository.py` — new-GitHub journaled creation/resume |
-| `tests/test_detect_project.py` | unittest | `scripts/detect_project.py` — owned/orphan/brownfield/greenfield classify |
+| `tests/test_detect_project.py` | unittest | `scripts/detect_project.py` — owned/orphan/brownfield/greenfield classify; `scripts/promote_lookahead.py` — promotion and recovery |
 | `tests/test_discussion_records.py` | unittest | `scripts/discussion_records.py` — discuss dialogue/answers records |
 | `tests/test_check_update.py` | unittest | `scripts/check_update.py` — version compare, cache, notice |
 | `tests/test_sync_skill_resources.py` | unittest | `scripts/sync_skill_resources.py` — generated resources, explicit-only links, dispatch branches |
