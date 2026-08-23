@@ -50,7 +50,7 @@ discussion sidecar to talk through a question at any non-shipped phase.
 | --- | --- |
 | `gsd-path` | Router — detects state, runs next phase |
 | `gsd-path-inspect` | Phase 0 — brownfield codebase map + doc audit |
-| `gsd-path-define` | Phase 1 — intent interview |
+| `gsd-path-define` | Phase 1 — intent definition |
 | `gsd-path-research` | Phase 2 — parallel evidence researchers |
 | `gsd-path-decide` | Phase 3 — evidence → decisions |
 | `gsd-path-roadmap` | Phase 3.5 — program: slice charter into milestone roadmap |
@@ -70,13 +70,15 @@ flowchart TD
     R{"gsd-path router"} --> I["0 · inspect (brownfield)"]
     R --> D["1 · define → INTENT.md / CHARTER.md"]
     I --> D
-    D -->|"standard / milestone lane"| RE["2 · research → evidence files"]
+    D -->|"standard / program lane"| RE["2 · research → evidence files"]
     D -->|"quick lane"| P
     RE --> DE["3 · decide → SYNTHESIS.md"]
     DE -->|"program scope"| RM["3.5 · roadmap → ROADMAP.md"]
     RM -->|"approved → checkpoint commit"| DM["define (milestone mode)"]
-    DM --> P["4 · plan → PLAN.md + task contracts"]
-    DE -->|"single milestone"| P
+    DM --> MQ{"roadmap entry has open questions?"}
+    MQ -->|"yes"| RE
+    MQ -->|"no"| P["4 · plan → PLAN.md + task contracts"]
+    DE -->|"milestone / single-project scope"| P
     P -->|"approved → checkpoint commit"| B["5 · build"]
     B --> W{"wave loop"}
     W -->|"briefs linted at base SHA"| C["parallel coders, isolated worktrees"]
@@ -89,7 +91,7 @@ flowchart TD
     O -.-> C
     B -.->|"lookahead: next milestone in .project/next/"| MI["inspect current code + docs"]
     MI --> MB["define (milestone + brownfield mode)"]
-    MB --> P
+    MB --> MQ
     B -->|"explicit ruling: abandon milestone"| AB["archive partial work → re-slice roadmap"]
     AB --> RM
     S -->|"approved → archive + ship commit"| MG["merge gsd-path/M00N into main + tag"]
@@ -131,8 +133,10 @@ prompts. Phase skills stop at their handoff; invoke the router again to continue
 The discussion sidecar is the exception: it can be invoked at any non-shipped
 phase and returns only a durable conversation record.
 
-**Brownfield** (existing code/docs) → inspect then define. **Greenfield** → define.
-**Quick lane** (tiny scope) may skip research/decide — see [FULL.md](FULL.md).
+**Brownfield** → inspect then define. **Greenfield** → define. The router uses
+the classifier described in the [DOCS.md FAQ](DOCS.md#faq); it does not infer
+the verdict from a directory listing. **Quick lane** (tiny scope) may skip
+research/decide — see [FULL.md](FULL.md).
 
 For an explicit new-GitHub request, the router previews the owner, visibility,
 default checkout, `gsd-path/M001` branch, and sibling linked worktree. A

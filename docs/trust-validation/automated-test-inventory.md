@@ -1,6 +1,6 @@
 # GSD Path — Automated Test & CI Inventory
 
-**Generated:** 2026-08-05; **inventory updated 2026-08-21**
+**Generated:** 2026-08-05; **inventory updated 2026-08-23**
 **Repo:** `open-gsd/gsd-path` @ local workspace
 **Suites:** `npm test`; `python3 -m unittest discover -s tests`
 
@@ -33,7 +33,7 @@ Node requires **≥18.17**. Python 3 with no extra deps for unittest modules.
 | `tests/test_isolation.py` | unittest | `scripts/isolation.py` — named task/verify checkouts, serial vs parallel landing, retire |
 | `tests/test_git_guard.py` | unittest | `scripts/git_guard.py` — violations matrix, pre-commit/commit-msg E2E |
 | `tests/test_bootstrap_repository.py` | unittest | `scripts/bootstrap_repository.py` — new-GitHub journaled creation/resume |
-| `tests/test_detect_project.py` | unittest | `scripts/detect_project.py` — brownfield/greenfield/orphan classify |
+| `tests/test_detect_project.py` | unittest | `scripts/detect_project.py` — owned/orphan/brownfield/greenfield classify |
 | `tests/test_discussion_records.py` | unittest | `scripts/discussion_records.py` — discuss dialogue/answers records |
 | `tests/test_check_update.py` | unittest | `scripts/check_update.py` — version compare, cache, notice |
 | `tests/test_sync_skill_resources.py` | unittest | `scripts/sync_skill_resources.py` — generated resources, explicit-only links, dispatch branches |
@@ -54,7 +54,7 @@ remaining parity gap is that `install.py` has no `--local` or
 | Dimension | Automated signal | Strength |
 |-----------|------------------|----------|
 | **1. Install & update** | `install.test.mjs`, `test_install.py`, `test_check_update.py`, hook install/refresh tests | **Strong** for both installers; `--local`/`--update` flows remain Node-only |
-| **2. Invoke & route** | `test_router_contract.py`, `test_full_cycle.py` (STATE transitions), `test_implicit_invocation.py` | **Partial** — state table and transitions proven; live routing by a host only via dogfood |
+| **2. Invoke & route** | `test_detect_project.py`, `test_router_contract.py`, `test_full_cycle.py` (STATE transitions), `test_implicit_invocation.py` | **Partial** — classification, state table, and transitions proven; live routing by a host only via dogfood |
 | **3. Phase execution** | `test_full_cycle.py`, `test_handoffs.py`, `test_task_briefs.py` | **Strong** for the disk contract — every phase's output passes the next phase's gate |
 | **4. Build orchestration** | `test_isolation.py`, `test_full_cycle.py` (isolate → land → verify → review) | **Partial** — helper chain proven; no live wave scheduling |
 | **5. Guards** | `test_guard_hook.py`, `test_git_guard.py`, hook installer tests | **Strong** |

@@ -126,7 +126,7 @@ Run one phase only; stops at handoff:
 | `gsd-path` | `/gsd-path` | Router — default |
 | `gsd-path-discuss` | `/gsd-path-discuss` | Any-phase discussion and durable answers |
 | `gsd-path-inspect` | `/gsd-path-inspect` | Brownfield scan only |
-| `gsd-path-define` | `/gsd-path-define` | Intent interview only |
+| `gsd-path-define` | `/gsd-path-define` | Intent definition only |
 | `gsd-path-research` | `/gsd-path-research` | Evidence gathering |
 | `gsd-path-decide` | `/gsd-path-decide` | Decisions |
 | `gsd-path-roadmap` | `/gsd-path-roadmap` | Program milestone slicing |
@@ -153,7 +153,7 @@ state or bypasses a gate.
 
 | Phase | You do |
 | --- | --- |
-| Define | Answer questions; approve intent playback |
+| Define | Answer gaps or review milestone derivation; approve intent playback |
 | Decide | Resolve `NEEDS-USER` decisions |
 | Roadmap | **Approve milestone slicing** (program flow) |
 | Plan | **Approve wave summary** before any code is written |
@@ -163,8 +163,9 @@ state or bypasses a gate.
 ### Cheat sheet
 
 ```text
-Empty repo, new milestone       → router → define
-Existing code, new milestone    → router → inspect → define
+No state, greenfield verdict    → router → define
+No state, brownfield verdict    → router → inspect → define
+No state, orphan verdict        → router → block for recovery
 Huge multi-milestone program    → router → define (program mode: charter →
                                   research → decide → roadmap → milestone loop)
 Already mid-pipeline            → router (continues)
@@ -197,9 +198,10 @@ inspect (brownfield only)
 Program flow inserts roadmap between decide and plan: define
 (program mode) writes CHARTER.md, roadmap slices it into ROADMAP.md,
 and each later milestone loops inspect → define (milestone + brownfield) →
-plan → build → ship. The first milestone after roadmap approval still
-starts at define (milestone mode); inspect already ran at program start when
-the tree was brownfield.
+research and decide when the roadmap entry has open questions → plan → build
+→ ship. The first milestone after roadmap approval still starts at define
+(milestone mode), then follows the same open-question branch; inspect already
+ran at program start when the tree was brownfield.
 During build, the next milestone can be planned in parallel under
 `.project/next/` (lookahead); a building milestone can be abandoned on an
 explicit ruling, archiving partial work and re-slicing the roadmap.
@@ -287,10 +289,16 @@ contract updates manually ([UPDATE.md](UPDATE.md)).
 Restore from `disabled-gsd-skills` beside the skills root ([UPDATE.md](UPDATE.md)).
 
 **Brownfield vs greenfield?**
-The router runs `scripts/detect_project.py classify`. Brownfield (manifest,
-source, tracked git signal, or docs with a body) → inspect first. Greenfield
-(no signal; a title-only README does not count) → define first. After a
-milestone ships, the next one inspects again.
+With no STATE.md, the router runs the bundled classifier:
+`scripts/detect_project.py classify --repo <absolute-root>`. A recognized
+manifest or source file, qualifying tracked Git file, or qualifying Markdown
+document with a body is brownfield and routes to inspect. A title-only README,
+`LICENSE`/`COPYING`, `.gitignore`, or content only in ignored trees such as
+`node_modules` does not count; those scaffold-only trees stay greenfield and
+route to define. Other `.project/` content without STATE.md is orphaned and
+blocks for recovery. An owned state, including the new-GitHub bootstrap state,
+routes by STATE.md without running the classifier. After a milestone ships,
+the next one inspects again.
 
 ---
 

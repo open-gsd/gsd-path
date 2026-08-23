@@ -10,9 +10,11 @@ program mode and writes `.project/CHARTER.md` (enduring scope and vetoes),
 research and decide work at program scope, and the roadmap phase slices the
 charter into `.project/ROADMAP.md` — milestone-granularity scope for every
 milestone. The first milestone after roadmap approval runs define
-(milestone mode) → plan → build → ship. Each later milestone inspects the
-now-shipped codebase, then define (milestone + brownfield) → plan → build →
-ship, until the program completes. While a milestone builds, the router may offer to plan the
+(milestone mode), research and decide only when its roadmap entry has open
+questions, then plan → build → ship. Each later milestone inspects the
+now-shipped codebase, then runs define (milestone + brownfield), the same
+open-question branch, and plan → build → ship, until the program completes.
+While a milestone builds, the router may offer to plan the
 next dependency-ready milestone in parallel under `.project/next/` (the
 lookahead track, starting at inspect); at the milestone boundary the router
 promotes it to the active paths in one commit. An explicit user ruling can instead abandon a
@@ -104,10 +106,11 @@ at `inspect/active|blocked`. **Output:**
 `.project/research/evidence-codebase.md` and
 `.project/research/DOCS-AUDIT.md`.
 
-The router classifies the tree with `scripts/detect_project.py classify`
-before asking anything. `brownfield` routes here; `greenfield` skips to
-define; `orphan` blocks. Do not re-derive that verdict from a directory
-listing.
+When STATE.md is absent, the router classifies the tree with the bundled
+`scripts/detect_project.py classify --repo <absolute-root>` helper before
+asking anything. `brownfield` routes here; `greenfield` skips to define;
+`orphan` blocks. Owned state routes by STATE.md without rerunning the helper.
+Do not re-derive a verdict from a directory listing.
 
 Before either agent writes `.project/`, freeze a sorted Markdown inventory
 that excludes `.project/**` and all vendored/generated trees. Two read-only

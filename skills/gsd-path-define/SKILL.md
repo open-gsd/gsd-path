@@ -1,12 +1,13 @@
 ---
 name: gsd-path-define
-description: Define and approve project intent in .project/intent/INTENT.md through a focused user interview. Use only when the user explicitly invokes $gsd-path-define or an active $gsd-path router explicitly routes to this phase.
+description: Define and approve project or milestone intent through an interview or milestone confirmation, writing .project/CHARTER.md or .project/intent/INTENT.md. Use only when the user explicitly invokes $gsd-path-define or an active $gsd-path router explicitly routes to this phase.
 ---
 
 # GSD Path Define Phase
 
-Turn a vague idea into `.project/intent/INTENT.md`. Run this phase in the
-main conversation; never delegate the interview.
+Turn a project idea or approved roadmap entry into an approved intent artifact.
+Run this phase in the main conversation; never delegate its interview or
+confirmation.
 
 Primary modes: **standard** (single milestone, below), **program** (a
 multi-milestone program — interview into `.project/CHARTER.md`), and
@@ -105,8 +106,8 @@ INTENT.md in program mode.
 ## Milestone mode
 
 Legal entry: `roadmap/done`, `inspect/done` when `.project/ROADMAP.md`
-exists, or a router post-ship reset to `define/active` with ROADMAP.md
-present. There is no re-interview of charter or roadmap scope:
+exists, or a resumed `define/active` with ROADMAP.md present. There is no
+re-interview of charter or roadmap scope:
 1. Read `.project/CHARTER.md` and `.project/ROADMAP.md`, then resolve the
    roadmap entry from the track state. In Lookahead mode, use the entry whose
    slug matches `.project/next/STATE.md`'s `milestone` and require it to remain

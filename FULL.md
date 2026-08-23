@@ -39,7 +39,7 @@ without your approval.
 gsd-path  (router: reads STATE.md, runs the next valid phase)
   |
   |-- 0. inspect      brownfield only — map code + audit docs
-  |-- 1. define       interactive intent interview
+  |-- 1. define       intent definition or milestone confirmation
   |-- 2. research     parallel evidence researchers
   |-- 3. decide       evidence → cited decisions
   |-- 3.5 roadmap     program flow: charter → milestone slicing
@@ -176,9 +176,11 @@ Restart the host session after install if skills do not appear.
 
 Open your agent in the project directory. Invoke the router explicitly.
 
-### Greenfield (empty or new milestone)
+### Initial greenfield repository
 
-No `.project/STATE.md` in an existing empty checkout → **define** immediately.
+With no `.project/STATE.md`, a `greenfield` classifier verdict routes to
+**define** immediately. The [DOCS.md FAQ](DOCS.md#faq) owns the exact
+classification rules.
 For an explicit request to create a new GitHub repository, the router first
 previews the repository and linked-worktree targets for approval as described
 in [README.md](README.md#the-flow).
@@ -194,15 +196,17 @@ mode).
 
 Vetoes in INTENT.md are hard limits for every later phase.
 
-### Brownfield (existing code or docs)
+### Brownfield
 
-Router detects existing work → **inspect** first:
+A `brownfield` classifier verdict routes to **inspect** first:
 
 1. Codebase mapper — what actually exists (stack, architecture, surprises)
 2. Docs auditor — every `.md` claim verified, stale, aspirational, or unverifiable
 
-You get **ground truth on one screen** before any questions. Define then
-asks only **deltas**: this milestone’s goal, what changes, what must not break.
+You get **ground truth on one screen** before any questions. Standard and
+program define interviews then ask only **deltas**. Milestone + brownfield
+define derives approved scope from the charter and roadmap, fills Current
+state, collects doc-vs-code rulings, and asks for one confirmation.
 
 Each doc-vs-code conflict gets your ruling: `fix-doc`, `fix-code`, or
 `accept-drift`. Inspect writes nothing outside `.project/`.

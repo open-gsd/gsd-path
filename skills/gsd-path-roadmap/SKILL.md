@@ -62,7 +62,7 @@ precondition fails.
    archived manifest and evidence copies under their
    `.project/archive/<NNN>-<slug>/research/` paths
    instead — template, and output
-paths, including `.project/LESSONS.md` when it exists. On a re-slice, also
+   paths, including `.project/LESSONS.md` when it exists. On a re-slice, also
    give the existing ROADMAP.md with the instruction to preserve `shipped`
    entries byte-for-byte except Status/Archive/Integrated fields and to never modify
    `abandoned` entries at all. On a milestone-boundary re-slice, also preserve
