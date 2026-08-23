@@ -307,6 +307,41 @@ class IsolationTests(unittest.TestCase):
                 (repo / ".project/tasks/T001.md").read_text(encoding="utf-8"),
             )
 
+    def test_serial_land_accepts_quoted_recorded_base(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            base = self.init_bound_repo(repo)
+            isolation.isolate_task(repo, base, "T001", 1)
+            task_path = repo / ".project/tasks/T001.md"
+            task_path.write_text(
+                task_path.read_text(encoding="utf-8").replace(
+                    "base: null", f"base: '{base}'"
+                )
+                + "log\n",
+                encoding="utf-8",
+            )
+            self.write(repo, "src/app.py", "print('done')\n")
+
+            result = isolation.land(
+                repo,
+                repo,
+                base,
+                "T001",
+                "add greeting",
+                ".project/tasks/T001.md",
+                ["src/app.py"],
+            )
+            fields, error = isolation.task_frontmatter(
+                task_path.read_text(encoding="utf-8")
+            )
+
+            self.assertIsNone(error)
+            self.assertIsNotNone(fields)
+            self.assertEqual(result["mode"], "serial")
+            self.assertEqual(fields["base"], base)
+            self.assertEqual(fields["status"], "done")
+
     def test_parallel_land_cherry_picks_onto_bound_branch(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary) / "repo"

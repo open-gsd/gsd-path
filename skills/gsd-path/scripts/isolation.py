@@ -420,7 +420,7 @@ def _landed_task_text(text: str, base: str) -> str:
             if key in found:
                 raise IsolationError(f"task frontmatter repeats {key}")
             if key == "base":
-                recorded_base = _strip_yaml_comment(line.split(":", 1)[1]).strip()
+                recorded_base = _unquote(line.split(":", 1)[1])
                 if recorded_base not in {"null", base}:
                     raise IsolationError(
                         "task frontmatter base must be null or match landing base"
