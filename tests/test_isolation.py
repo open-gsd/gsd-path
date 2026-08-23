@@ -375,7 +375,7 @@ class RecoverTests(unittest.TestCase):
         self.assertEqual(report["verdict"], "resume")
         self.assertEqual(report["base"], self.base)
         self.assertEqual(report["task_branch"], "gsd-path-task/T001")
-        self.assertTrue(report["worktree"]["present"])
+        self.assertEqual(report["worktree"]["branch"], "gsd-path-task/T001")
         with (source / ".project/tasks/T001.md").open("a") as log:
             log.write("- done\n")
         landed = isolation.land(

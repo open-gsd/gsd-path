@@ -208,9 +208,9 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
      Never leave task landing in progress.
    - `land` stamps `status: done`, `base`, and null `worktree`/`task_branch`
      into the task frontmatter and records `Base:` in the commit body, so the
-     product commit is the task's only commit; `commit` stays `null` and
-     `recover` proves the SHA from git. Do not write a separate bookkeeping
-     commit. Retire the isolate with
+     product commit is the task's only commit; there is no `commit`
+     frontmatter field — `recover` proves the SHA from git. Do not write a
+     separate bookkeeping commit. Retire the isolate with
      `python3 <absolute isolation.py> retire --repo <absolute primary>
      --worktree <isolated worktree> [--branch <task_branch>]`. Serial rounds
      return `retired: false` and leave the bound branch untouched. Each
