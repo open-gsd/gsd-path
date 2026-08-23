@@ -46,7 +46,9 @@ Lookahead mode. If STATE.md is missing, run the bundled
 --template <absolute-state-template>` helper (`scripts/detect_project.py`) and
 follow its returned JSON `verdict` / `route`. This is the only no-state
 boundary; do not run `classify` first or classify from a directory listing or
-conversation.
+conversation. If the command exits nonzero, returns `error`, or returns
+`wrote_state: false`, report the error and block without routing or claiming
+STATE.md was written.
 - `owned` — continue under the existing-state rules above.
 - `orphan` — return to `$gsd-path` for orphaned-state recovery; existing
   evidence does not prove its pipeline version or phase and must not be reused

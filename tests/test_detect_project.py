@@ -1005,6 +1005,30 @@ class DetectProjectTests(unittest.TestCase):
                 ],
             )
 
+    @unittest.skipIf(os.name == "nt", "symlink creation requires POSIX")
+    def test_tracked_source_under_linked_bundle_is_brownfield(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = Path(temporary)
+            repo = workspace / "repo"
+            bundle = repo / "src" / "skills" / "gsd-path-app"
+            external = workspace / "external"
+            bundle.mkdir(parents=True)
+            (bundle / "main.py").write_text("print(1)\n", encoding="utf-8")
+            self.git(repo, "init", "-q", "-b", "main")
+            self.git(repo, "add", ".")
+            (bundle / "main.py").unlink()
+            bundle.rmdir()
+            external.mkdir()
+            (external / "main.py").write_text("print(2)\n", encoding="utf-8")
+            (external / "SKILL.md").write_text("# Skill\n", encoding="utf-8")
+            bundle.symlink_to(external, target_is_directory=True)
+            payload = self.classify(repo)
+            self.assertEqual(payload["verdict"], "brownfield")
+            self.assertEqual(
+                payload["signals"],
+                [{"kind": "git", "path": "src/skills/gsd-path-app/main.py"}],
+            )
+
     def test_comment_sharing_line_with_heading_is_body(self) -> None:
         for contents in (
             "<!-- scaffold --># Demo\n",
@@ -1221,7 +1245,7 @@ class DetectProjectTests(unittest.TestCase):
                         str(template),
                     ]
                 )
-            self.assertEqual(status, 0)
+            self.assertEqual(status, 2)
             payload = json.loads(output.getvalue())
             self.assertEqual(payload["verdict"], "greenfield")
             self.assertEqual(payload["route"], "define")

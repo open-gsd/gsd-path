@@ -92,9 +92,12 @@ runs keep the build contract's current branch-binding behavior.
    --template <absolute-state-template>` helper
    (`scripts/detect_project.py`) before asking anything. Do not classify
    brownfield, greenfield, or orphaned `.project/` from a directory listing or
-   conversation. Follow the JSON `verdict` / `route` exactly. `initialize`
-   classifies and, for brownfield or greenfield, writes STATE.md through an
-   anchored no-follow create — never create STATE.md yourself after classify:
+   conversation. If the command exits nonzero, returns `error`, or returns
+   `wrote_state: false`, report the error and block without routing or claiming
+   STATE.md was written. Otherwise follow the JSON `verdict` / `route` exactly.
+   `initialize` classifies and, for brownfield or greenfield, writes STATE.md
+   through an anchored no-follow create — never create STATE.md yourself after
+   classify:
    - `owned` — STATE.md exists; continue at step 1.
    - `orphan` (`route: recover-orphan`) — block without mutation. List the
      returned `orphan_paths` and ask for an explicit recovery, migration, or

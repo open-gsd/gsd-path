@@ -261,12 +261,28 @@ def is_verified_installer_bundle(parts: tuple[str, ...]) -> bool:
     return parent in VERIFIED_INSTALLER_SKILL_ROOTS
 
 
+def has_safe_bundle_path(root: Path, parts: tuple[str, ...]) -> bool:
+    current = root
+    for part in parts:
+        current /= part
+        status = lstat_evidence(current, missing_ok=True)
+        if (
+            status is None
+            or is_link_like(current, status)
+            or not stat.S_ISDIR(status.st_mode)
+        ):
+            return False
+    return True
+
+
 def is_verified_skill_bundle(relative: str, root: Path) -> bool:
     parts = PurePosixPath(relative).parts
     if not parts:
         return False
     name = parts[-1]
     if not is_skill_bundle_name(name):
+        return False
+    if not has_safe_bundle_path(root, parts):
         return False
     if is_verified_installer_bundle(parts):
         return True
@@ -1255,10 +1271,10 @@ def initialize(
     return payload
 
 
-def emit(payload: dict) -> int:
+def emit(payload: dict, exit_code: int = 0) -> int:
     json.dump(payload, sys.stdout, indent=2, sort_keys=True)
     sys.stdout.write("\n")
-    return 0
+    return exit_code
 
 
 def parser() -> argparse.ArgumentParser:
@@ -1278,9 +1294,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         if arguments.command == "initialize":
             if arguments.template is None:
                 raise DetectError("initialize requires --template")
-            return emit(
-                initialize(arguments.repo, arguments.template, arguments.phase)
+            payload = initialize(
+                arguments.repo, arguments.template, arguments.phase
             )
+            return emit(payload, 2 if payload.get("error") else 0)
         raise DetectError(f"unknown command: {arguments.command}")
     except DetectError as error:
         json.dump({"status": "error", "error": str(error)}, sys.stdout, indent=2)

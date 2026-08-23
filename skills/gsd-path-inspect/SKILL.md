@@ -30,7 +30,9 @@ If STATE.md is missing, run the bundled
 --template <absolute-state-template>` helper (`scripts/detect_project.py`) and
 follow its returned JSON `verdict` / `route`. This is the only no-state
 boundary; do not run `classify` first or classify from a directory listing or
-conversation.
+conversation. If the command exits nonzero, returns `error`, or returns
+`wrote_state: false`, report the error and block without routing or claiming
+STATE.md was written.
 - `owned` — continue under the existing-state rules below.
 - `orphan` — return to `$gsd-path` for orphaned-state recovery instead of
   initializing or overwriting it.
