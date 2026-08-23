@@ -295,11 +295,15 @@ With no STATE.md, the router runs the bundled initializer:
 manifest or source file, qualifying tracked Git file, or qualifying Markdown
 document with a body is brownfield and routes to inspect. A title-only README,
 `LICENSE`/`COPYING`, `.gitignore`, or content only in ignored trees such as
-`node_modules` does not count; those scaffold-only trees stay greenfield and
-route to define. Other `.project/` content without STATE.md is orphaned and
-blocks for recovery. An owned state, including the new-GitHub bootstrap state,
-routes by STATE.md without running the initializer. Use `classify` only for
-read-only inspection. After a milestone ships, the next one inspects again.
+`node_modules` does not count. Neither do managed GSD Path files or verified
+GSD Path skill bundles: a `gsd-path*` or `ogsd*` bundle is verified under a
+supported installer skill root or when it contains `SKILL.md`; a similarly
+named source directory still counts normally. Those scaffold-only trees stay
+greenfield and route to define. Other `.project/` content without STATE.md is
+orphaned and blocks for recovery. An owned state, including the new-GitHub
+bootstrap state, routes by STATE.md without running the initializer. Use
+`classify` only for read-only inspection. After a milestone ships, the next one
+inspects again.
 
 ---
 
