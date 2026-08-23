@@ -97,19 +97,23 @@ precondition fails.
    **Next** naming the one correction or user decision required. Stop.
 5. Show every milestone id, goal, and dependency summary as the outcome. Link
    the resolved absolute `.project/ROADMAP.md` path, then ask one explicit next
-   question: whether to approve this roadmap and start milestone planning.
-   For a milestone-boundary re-slice, list `Approve roadmap and resume the
-   active milestone (recommended)` first; otherwise list `Approve roadmap and
-   start the first pending milestone (recommended)` first. In either case,
-   list `Request changes` as the alternative. If the user requests changes,
+   question. For a milestone-boundary re-slice, list `Approve roadmap and
+   resume the active milestone (recommended)` first. For a post-abandon
+   re-slice, list `Approve roadmap and inspect the first pending milestone
+   (recommended)` first. Otherwise list `Approve roadmap and start the first
+   pending milestone (recommended)` first. In every case, list `Request
+   changes` as the alternative. If the user requests changes,
    retain the entering state for a milestone-boundary re-slice; otherwise keep
    `phase: roadmap`, `status: active`. Revise and re-gate.
 6. On approval of a milestone-boundary re-slice, preserve the entering
    `phase`, `status`, and `milestone` in STATE.md and keep its matching roadmap
-   entry `active`. On any other approval, set STATE.md to `phase: roadmap`,
-   `status: done`, set its `milestone` field to the first `pending` milestone
-   slug, and mark that entry `active` in ROADMAP.md. Record the approval in the
-   log. Then
+   entry `active`. On a post-abandon re-slice, preserve the bound branch, set
+   STATE.md to `phase: inspect`, `status: active`, `milestone` to the first
+   `pending` milestone slug, and `archive: null`; mark that entry `active` and
+   record the abandoned predecessor in the log. On first roadmap approval,
+   set STATE.md to `phase: roadmap`, `status: done`, set `milestone` to the
+   first `pending` milestone slug, and mark that entry `active`. Record the
+   approval in the log. Then
    checkpoint the approval in Git: stage `.project/` in full — the approved
    CHARTER.md, program SYNTHESIS.md, ROADMAP.md, research artifacts, STATE.md,
    and complete append-only discussion records — and commit with exact
@@ -119,8 +123,9 @@ precondition fails.
    a Git repository or `.project/REPOSITORY.md` records `Kind: new-github`
    (the router owns the branch during that transaction). Confirm
    approval and link ROADMAP.md again. For a milestone-boundary re-slice,
-   state that the preserved inspect or define phase resumes; otherwise state
-   that define (milestone mode) is next. Do not add another approval gate.
+   state that the preserved inspect or define phase resumes. For a
+   post-abandon re-slice, state that inspect is next. Otherwise state that
+   define (milestone mode) is next. Do not add another approval gate.
    When routed by an active `$gsd-path`, return control to that router so its
    state table routes the preserved STATE.md — `inspect/active` resumes
    inspect, `define/active` resumes define; never name define as next when
