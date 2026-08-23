@@ -173,8 +173,8 @@ and must not delay routing.
 | `define`, done, no INTENT.md (program charter approved) | bundled [research contract](RESEARCH.md), program scope |
 | `define`, done, INTENT `Lane: standard` (or no Lane line) | bundled [research contract](RESEARCH.md) |
 | `define`, done, INTENT `Lane: quick` | bundled [plan contract](PLAN.md), quick mode |
-| `define`, done, INTENT `Lane: milestone`, active roadmap entry has open questions | bundled [research contract](RESEARCH.md), milestone scope |
-| `define`, done, INTENT `Lane: milestone`, no open questions | bundled [plan contract](PLAN.md) |
+| `define`, done, INTENT `Lane: milestone`, roadmap entry matching the track STATE's `milestone` has open questions | bundled [research contract](RESEARCH.md), milestone scope |
+| `define`, done, INTENT `Lane: milestone`, matching roadmap entry has no open questions | bundled [plan contract](PLAN.md) |
 | `research`, not done | bundled [research contract](RESEARCH.md) |
 | `research`, done | bundled [decide contract](DECIDE.md) |
 | `decide`, not done | bundled [decide contract](DECIDE.md) |

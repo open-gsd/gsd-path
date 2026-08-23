@@ -85,7 +85,10 @@ same milestone; a later milestone's `inspect/active` is a new scan.
 3. Gate both artifacts against their templates: the codebase evidence needs
    a filled `## Map` plus findings as observed — no quota, but an empty
    findings section must say why; the docs audit must pass the bundled
-   `python3 <absolute check_docs_audit.py> --repo <absolute root> --inventory <frozen inventory file>`
+   `python3 <absolute check_docs_audit.py> --repo <absolute root> --audit
+   <track-relative DOCS-AUDIT.md> --inventory <frozen inventory file>`, where
+   the audit path is `.project/research/DOCS-AUDIT.md` normally and
+   `.project/next/research/DOCS-AUDIT.md` in Lookahead mode
    (disjoint `## Doc:` sections and `## Descriptive docs` equal to the frozen
    inventory, every claim a valid verdict with evidence, Summary counts and
    remediation queue consistent). Redispatch one complete corrected brief under the same logical task
@@ -100,9 +103,10 @@ same milestone; a later milestone's `inspect/active` is a new scan.
    - drift: what the docs claim that the code contradicts, and what exists
      with no documentation at all;
    - the mapper's open questions about apparent intent.
-   Lead with the outcome, then provide absolute-path Markdown links to
-   `.project/research/evidence-codebase.md` and
-     `.project/research/DOCS-AUDIT.md`, then state that define is next.
+   Lead with the outcome, then provide absolute-path Markdown links to the
+   track's `research/evidence-codebase.md` and `research/DOCS-AUDIT.md`
+   (`.project/research/` normally, `.project/next/research/` in Lookahead
+   mode), then state that define is next.
 5. Set STATE.md to `phase: inspect`, `status: done`, log the transition,
    and identify `$gsd-path-define` as next. When this phase was routed by an
    active `$gsd-path`, return control to that router so its bundled define

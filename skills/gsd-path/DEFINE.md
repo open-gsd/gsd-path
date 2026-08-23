@@ -107,11 +107,14 @@ INTENT.md in program mode.
 Legal entry: `roadmap/done`, `inspect/done` when `.project/ROADMAP.md`
 exists, or a router post-ship reset to `define/active` with ROADMAP.md
 present. There is no re-interview of charter or roadmap scope:
-1. Read `.project/CHARTER.md`, `.project/ROADMAP.md`, and the `active`
-   roadmap entry. When brownfield, also read the track's
+1. Read `.project/CHARTER.md` and `.project/ROADMAP.md`, then resolve the
+   roadmap entry from the track state. In Lookahead mode, use the entry whose
+   slug matches `.project/next/STATE.md`'s `milestone` and require it to remain
+   `pending`; otherwise use the `active` entry and require it to match the
+   track state's non-null `milestone`. When brownfield, also read the track's
    `research/evidence-codebase.md` and `research/DOCS-AUDIT.md` first.
-2. Draft INTENT.md from them: Summary from the entry's Goal, Scope in/out and
-   Success criteria from the entry, Constraints inherited from the charter,
+2. Draft INTENT.md from the resolved entry: Summary from its Goal, Scope
+   in/out and Success criteria from the entry, Constraints inherited from the charter,
    Risks and Open questions from the entry (tagged `RESEARCH`/`NEEDS-USER`),
    `Lane: milestone`, and `Review panel:` copied from CHARTER.md (default
    `off` when CHARTER omits it). The confirmation may override the copied
@@ -121,11 +124,11 @@ present. There is no re-interview of charter or roadmap scope:
 3. Present one confirmation, not an interview: playback the derivation (and
    brownfield ground truth when present), link the resolved absolute INTENT.md
    path, and ask approve or adjust. A requested change that contradicts the
-   charter or the approved roadmap entry is a scope change — this phase never
+   charter or the resolved roadmap entry is a scope change — this phase never
    edits the roadmap; surface it to the user for a `$gsd-path-roadmap` re-slice
    at the next milestone boundary.
 4. On approval, finalize per the Output contract, setting `milestone` to the
-   active entry's slug. The router continues with milestone-scoped research
+   resolved entry's slug. The router continues with milestone-scoped research
    when the entry lists open questions, otherwise planning.
 
 ## Lookahead mode
@@ -138,9 +141,10 @@ INTENT.md is `.project/next/intent/INTENT.md` — never against active-path
 artifacts. This is milestone mode run against the track, with two
 differences:
 
-- Read CHARTER.md, ROADMAP.md, and the active milestone's roadmap context
-  from their active `.project/` paths, but never create or modify any
-  active-path artifact.
+- Read CHARTER.md and ROADMAP.md from their active `.project/` paths, but
+  resolve the milestone only from `.project/next/STATE.md` as described above;
+  never use the building milestone's `active` entry and never create or modify
+  any active-path artifact.
 - Never mark the lookahead milestone's roadmap entry `active`; the router
   does that at promotion.
 

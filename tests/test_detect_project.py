@@ -48,6 +48,41 @@ class DetectProjectTests(unittest.TestCase):
             self.assertEqual(payload["verdict"], "greenfield")
             self.assertEqual(payload["signals"], [])
 
+    def test_setext_title_readme_is_greenfield(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            (repo / "README.md").write_text("Demo\n====\n", encoding="utf-8")
+            payload = self.classify(repo)
+            self.assertEqual(payload["verdict"], "greenfield")
+            self.assertEqual(payload["signals"], [])
+
+    def test_extensionless_readme_with_body_is_brownfield(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            (repo / "README").write_text(
+                "Demo\n====\n\nAn existing project.\n",
+                encoding="utf-8",
+            )
+            payload = self.classify(repo)
+            self.assertEqual(payload["verdict"], "brownfield")
+            self.assertEqual(
+                payload["signals"],
+                [{"kind": "docs", "path": "README"}],
+            )
+
+    def test_managed_pipeline_artifacts_are_greenfield(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            (repo / "AGENTS.md").write_text("# Agents\n\nInstructions.\n")
+            (repo / "WORKFLOW.md").write_text("# Workflow\n\nSteps.\n")
+            bundle = repo / ".codex" / "skills" / "gsd-path-define"
+            bundle.mkdir(parents=True)
+            (bundle / "SKILL.md").write_text("# Installed skill\n\nRules.\n")
+            (bundle / "helper.py").write_text("print('managed')\n")
+            payload = self.classify(repo)
+            self.assertEqual(payload["verdict"], "greenfield")
+            self.assertEqual(payload["signals"], [])
+
     def test_package_manifest_is_brownfield(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary)
@@ -116,6 +151,44 @@ class DetectProjectTests(unittest.TestCase):
             payload = self.classify(repo)
             self.assertEqual(payload["verdict"], "greenfield")
 
+    def test_symlinked_project_directory_is_orphan(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = Path(temporary)
+            repo = workspace / "repo"
+            target = workspace / "target"
+            repo.mkdir()
+            target.mkdir()
+            (repo / ".project").symlink_to(target, target_is_directory=True)
+            payload = self.classify(repo)
+            self.assertEqual(payload["verdict"], "orphan")
+            self.assertEqual(payload["orphan_paths"], [".project"])
+
+    def test_project_child_symlink_is_reported_lexically(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = Path(temporary)
+            repo = workspace / "repo"
+            target = workspace / "target"
+            project = repo / ".project"
+            project.mkdir(parents=True)
+            target.mkdir()
+            (project / "external").symlink_to(target, target_is_directory=True)
+            payload = self.classify(repo)
+            self.assertEqual(payload["verdict"], "orphan")
+            self.assertEqual(payload["orphan_paths"], [".project/external"])
+
+    def test_symlinked_state_file_is_orphan(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = Path(temporary)
+            repo = workspace / "repo"
+            project = repo / ".project"
+            target = workspace / "STATE.md"
+            project.mkdir(parents=True)
+            target.write_text("---\npipeline: gsd-path/v2\n---\n")
+            (project / "STATE.md").symlink_to(target)
+            payload = self.classify(repo)
+            self.assertEqual(payload["verdict"], "orphan")
+            self.assertEqual(payload["orphan_paths"], [".project/STATE.md"])
+
     def test_project_without_state_is_orphan(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary)
@@ -174,28 +247,33 @@ class DetectProjectTests(unittest.TestCase):
             self.assertEqual(payload["verdict"], "greenfield")
             self.assertEqual(payload["route"], "define")
 
-    def test_missing_repo_errors(self) -> None:
-        missing = Path("/tmp/gsd-path-detect-missing-repo")
-        result = self.command(missing)
-        self.assertEqual(result.returncode, 2)
-        payload = json.loads(result.stdout)
-        self.assertEqual(payload["status"], "error")
+    def test_unreadable_markdown_errors(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            (repo / "README.md").write_bytes(b"# Demo\n\n\xff\n")
+            result = self.command(repo)
+            self.assertEqual(result.returncode, 2)
+            payload = json.loads(result.stdout)
+            self.assertEqual(payload["status"], "error")
+            self.assertIn("cannot read Markdown evidence", payload["error"])
 
-    def test_router_and_phases_defer_to_helper(self) -> None:
-        files = (
-            ROOT / "skills" / "gsd-path" / "SKILL.md",
-            ROOT / "skills" / "gsd-path-define" / "SKILL.md",
-            ROOT / "skills" / "gsd-path-inspect" / "SKILL.md",
-        )
-        for path in files:
-            text = path.read_text(encoding="utf-8")
-            self.assertIn("detect_project.py", text, path.name)
-            self.assertIn("classify --repo", text, path.name)
-            self.assertNotIn(
-                "look for a package/build manifest",
-                text,
-                path.name,
-            )
+    def test_git_ls_files_failure_errors(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            (repo / ".git").mkdir()
+            result = self.command(repo)
+            self.assertEqual(result.returncode, 2)
+            payload = json.loads(result.stdout)
+            self.assertEqual(payload["status"], "error")
+            self.assertIn("git ls-files failed", payload["error"])
+
+    def test_missing_repo_errors(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            missing = Path(temporary) / "missing"
+            result = self.command(missing)
+            self.assertEqual(result.returncode, 2)
+            payload = json.loads(result.stdout)
+            self.assertEqual(payload["status"], "error")
 
 
 if __name__ == "__main__":

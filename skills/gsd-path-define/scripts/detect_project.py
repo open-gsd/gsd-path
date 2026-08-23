@@ -15,9 +15,9 @@ Verdicts:
 - greenfield — no STATE.md, `.project/` empty or absent, and no signal
 
 Ignored path components: `.git`, `node_modules`, vendored/generated trees,
-and build output. `.project/` is never a brownfield signal; it only decides
-owned vs orphan. A title-only root README is not substantive documentation
-(the new-GitHub bootstrap README shape).
+build output, and managed GSD Path installation artifacts. `.project/` is
+never a brownfield signal; it only decides owned vs orphan. A title-only root
+README, with or without a Markdown suffix, is not substantive documentation.
 """
 
 from __future__ import annotations
@@ -156,6 +156,8 @@ NON_SYSTEM_DOC_STEMS = {
     "codeowners",
 }
 
+MANAGED_ROOT_FILES = {"AGENTS.md", "WORKFLOW.md"}
+
 PIPELINE_LINE = re.compile(r"^pipeline:\s*(\S+)", re.MULTILINE)
 
 
@@ -164,34 +166,62 @@ class DetectError(RuntimeError):
 
 
 def posix_relative(path: Path, root: Path) -> str:
-    return path.resolve().relative_to(root.resolve()).as_posix()
+    return path.relative_to(root).as_posix()
 
 
 def is_ignored(relative: str) -> bool:
     return any(part in IGNORE_DIRS for part in Path(relative).parts)
 
 
+def is_managed_pipeline_artifact(relative: str) -> bool:
+    if relative in MANAGED_ROOT_FILES:
+        return True
+    parts = Path(relative).parts
+    return any(
+        parts[index] == "skills" and parts[index + 1].startswith("gsd-path")
+        for index in range(len(parts) - 1)
+    )
+
+
 def markdown_has_body(path: Path) -> bool:
     try:
         text = path.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError):
-        return False
-    for line in text.splitlines():
+    except (OSError, UnicodeDecodeError) as error:
+        raise DetectError(f"cannot read Markdown evidence: {path}") from error
+    lines = text.splitlines()
+    in_comment = False
+    for index, line in enumerate(lines):
         stripped = line.strip()
         if not stripped:
             continue
+        if in_comment:
+            if "-->" in stripped:
+                in_comment = False
+            continue
+        if stripped.startswith("<!--"):
+            in_comment = "-->" not in stripped
+            continue
         if stripped.startswith("#"):
             continue
-        if stripped.startswith("<!--") or stripped.endswith("-->"):
+        if re.fullmatch(r"(?:=+|-+)", stripped):
             continue
         if set(stripped) <= set("-*_ "):
+            continue
+        if index + 1 < len(lines) and re.fullmatch(
+            r"(?:=+|-+)", lines[index + 1].strip()
+        ):
             continue
         return True
     return False
 
 
-def file_kind(relative: str, root: Path, *, require_doc_body: bool) -> Optional[str]:
-    if is_ignored(relative) or relative == ".project" or relative.startswith(".project/"):
+def file_kind(relative: str, root: Path) -> Optional[str]:
+    if (
+        is_ignored(relative)
+        or is_managed_pipeline_artifact(relative)
+        or relative == ".project"
+        or relative.startswith(".project/")
+    ):
         return None
     path = root / relative
     name = Path(relative).name
@@ -201,10 +231,10 @@ def file_kind(relative: str, root: Path, *, require_doc_body: bool) -> Optional[
         return "manifest"
     if suffix.casefold() in SOURCE_SUFFIXES:
         return "source"
-    if suffix.casefold() in MARKDOWN_SUFFIXES and stem not in NON_SYSTEM_DOC_STEMS:
-        if require_doc_body and path.is_file() and not markdown_has_body(path):
-            return None
-        if require_doc_body and not path.is_file():
+    if (
+        suffix.casefold() in MARKDOWN_SUFFIXES or name.casefold() == "readme"
+    ) and stem not in NON_SYSTEM_DOC_STEMS:
+        if not path.is_file() or not markdown_has_body(path):
             return None
         return "docs"
     return None
@@ -213,7 +243,7 @@ def file_kind(relative: str, root: Path, *, require_doc_body: bool) -> Optional[
 def iter_worktree_files(root: Path) -> Iterable[str]:
     for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
         current = Path(dirpath)
-        relative_dir = "" if current.resolve() == root else posix_relative(current, root)
+        relative_dir = "" if current == root else posix_relative(current, root)
         dirnames[:] = [
             name
             for name in dirnames
@@ -232,23 +262,34 @@ def iter_worktree_files(root: Path) -> Iterable[str]:
 
 def git_tracked_files(root: Path) -> tuple[str, ...]:
     git_dir = root / ".git"
-    if not git_dir.exists():
+    if not git_dir.exists() and not git_dir.is_symlink():
         return ()
-    result = subprocess.run(
-        ["git", "-C", str(root), "ls-files", "-z"],
-        capture_output=True,
-        check=False,
-    )
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(root), "ls-files", "-z"],
+            capture_output=True,
+            check=False,
+        )
+    except OSError as error:
+        raise DetectError(f"git ls-files failed: {error}") from error
     if result.returncode != 0:
-        return ()
+        detail = result.stderr.decode("utf-8", "replace").strip()
+        suffix = f": {detail}" if detail else ""
+        raise DetectError(f"git ls-files failed{suffix}")
+    try:
+        tracked = result.stdout.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise DetectError("git ls-files returned non-UTF-8 paths") from error
     return tuple(
         path.replace("\\", "/")
-        for path in result.stdout.decode("utf-8", "replace").split("\0")
+        for path in tracked.split("\0")
         if path and not is_ignored(path)
     )
 
 
 def occupied_project_paths(project: Path, root: Path) -> tuple[str, ...]:
+    if project.is_symlink():
+        return (posix_relative(project, root),)
     if not project.exists():
         return ()
     try:
@@ -259,14 +300,16 @@ def occupied_project_paths(project: Path, root: Path) -> tuple[str, ...]:
         return (posix_relative(project, root),)
     paths = []
     for dirpath, dirnames, filenames in os.walk(project, followlinks=False):
-        dirnames[:] = [name for name in dirnames if not (Path(dirpath) / name).is_symlink()]
+        current = Path(dirpath)
+        linked_directories = [
+            name for name in dirnames if (current / name).is_symlink()
+        ]
+        paths.extend(posix_relative(current / name, root) for name in linked_directories)
+        dirnames[:] = [name for name in dirnames if name not in linked_directories]
         for name in filenames:
-            path = Path(dirpath) / name
-            if path.is_symlink():
-                continue
-            paths.append(posix_relative(path, root))
-        if not filenames and not dirnames and Path(dirpath) != project:
-            paths.append(posix_relative(Path(dirpath), root))
+            paths.append(posix_relative(current / name, root))
+        if not filenames and not dirnames and current != project:
+            paths.append(posix_relative(current, root))
     if not paths:
         return tuple(
             sorted(
@@ -291,7 +334,7 @@ def classify(repo: Path) -> dict:
         raise DetectError(f"repo is not a directory: {root}")
     project = root / ".project"
     state = project / "STATE.md"
-    if state.exists():
+    if not project.is_symlink() and not state.is_symlink() and state.exists():
         return {
             "verdict": "owned",
             "pipeline": pipeline_marker(state),
@@ -311,7 +354,7 @@ def classify(repo: Path) -> dict:
     signals = []
     seen = set()
     for relative in iter_worktree_files(root):
-        kind = file_kind(relative, root, require_doc_body=True)
+        kind = file_kind(relative, root)
         if kind is None:
             continue
         item = (kind, relative)
@@ -320,7 +363,7 @@ def classify(repo: Path) -> dict:
         seen.add(item)
         signals.append({"kind": kind, "path": relative})
     for relative in git_tracked_files(root):
-        kind = file_kind(relative, root, require_doc_body=True)
+        kind = file_kind(relative, root)
         if kind is None:
             continue
         item = ("git", relative)
