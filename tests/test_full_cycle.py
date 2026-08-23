@@ -485,7 +485,7 @@ class FullCycleTests(unittest.TestCase):
             )
             self.assertEqual(landed["subject"], "T001: render greeting")
             self.assertEqual(git(repo, "branch", "--show-current").stdout.strip(), BRANCH)
-            verify = subprocess.run([sys.executable, "tests/test_app.py"], cwd=repo, capture_output=True, text=True)
+            verify = subprocess.run([sys.executable, "-B", "tests/test_app.py"], cwd=repo, capture_output=True, text=True)
             self.assertEqual(verify.returncode, 0, verify.stderr)
             self.write(".project/review/wave-1.cycle1.md", WAVE_REVIEW)
             wave = self.gate(
