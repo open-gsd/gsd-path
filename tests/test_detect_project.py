@@ -136,6 +136,9 @@ class DetectProjectTests(unittest.TestCase):
                 ".claude/disabled-gsd-skills-1/gsd-path-old/helper.py": (
                     "print('old')\n"
                 ),
+                ".claude/disabled-gsd-skills-1/gsd-path-old/SKILL.md": (
+                    "# Old\n\nRules.\n"
+                ),
                 ".agent-tools/gsd-path-define/SKILL.md": "# Skill\n\nRules.\n",
                 ".agent-tools/gsd-path-define/helper.py": "print('managed')\n",
                 "agents/gsd-path.md": "# Agent\n\nInstalled agent.\n",
@@ -264,6 +267,24 @@ class DetectProjectTests(unittest.TestCase):
             self.assertEqual(
                 payload["signals"],
                 [{"kind": "source", "path": "skills/gsd-path-tool.py"}],
+            )
+
+    def test_source_under_backup_named_directory_is_brownfield(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            source = repo / "src" / "disabled-gsd-skills" / "main.py"
+            source.parent.mkdir(parents=True)
+            source.write_text("print(1)\n", encoding="utf-8")
+            payload = self.classify(repo)
+            self.assertEqual(payload["verdict"], "brownfield")
+            self.assertEqual(
+                payload["signals"],
+                [
+                    {
+                        "kind": "source",
+                        "path": "src/disabled-gsd-skills/main.py",
+                    }
+                ],
             )
 
     def test_readme_with_body_is_brownfield_docs(self) -> None:
@@ -628,6 +649,45 @@ class DetectProjectTests(unittest.TestCase):
             self.assertEqual(
                 payload["signals"],
                 [{"kind": "source", "path": "main.py"}],
+            )
+
+    @unittest.skipUnless(
+        DESCRIPTOR_TRAVERSAL_AVAILABLE,
+        "descriptor-anchored traversal is unavailable",
+    )
+    def test_anchored_bundle_probe_does_not_follow_replacement_path(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = Path(temporary)
+            repo = workspace / "repo"
+            bundle = repo / "gsd-path-app"
+            moved = workspace / "moved"
+            bundle.mkdir(parents=True)
+            (bundle / "main.py").write_text("print(1)\n", encoding="utf-8")
+            bundle_evidence = bundle.resolve()
+            skill_evidence = bundle_evidence / "SKILL.md"
+            real_lstat = detect_project.os.lstat
+            replaced = False
+
+            def replacing_lstat(path):
+                nonlocal replaced
+                if not replaced and Path(path) == skill_evidence:
+                    bundle_evidence.rename(moved)
+                    bundle_evidence.mkdir()
+                    skill_evidence.write_text("# Skill\n", encoding="utf-8")
+                    replaced = True
+                return real_lstat(path)
+
+            with mock.patch.object(
+                detect_project.os,
+                "lstat",
+                side_effect=replacing_lstat,
+            ):
+                payload = self.classify(repo)
+            self.assertFalse(replaced)
+            self.assertEqual(payload["verdict"], "brownfield")
+            self.assertEqual(
+                payload["signals"],
+                [{"kind": "source", "path": "gsd-path-app/main.py"}],
             )
 
     @unittest.skipUnless(
@@ -1346,13 +1406,13 @@ class DetectProjectTests(unittest.TestCase):
                 ROOT / "skills" / "gsd-path" / "templates" / "state.md"
             )
             real_fstat = detect_project.os.fstat
-            failed = False
+            failures = 0
 
             def failing_fstat(descriptor):
-                nonlocal failed
+                nonlocal failures
                 status = real_fstat(descriptor)
-                if not failed and stat.S_ISREG(status.st_mode):
-                    failed = True
+                if stat.S_ISREG(status.st_mode):
+                    failures += 1
                     raise OSError("fstat failed")
                 return status
 
@@ -1366,7 +1426,7 @@ class DetectProjectTests(unittest.TestCase):
                     "fstat failed",
                 ):
                     detect_project.initialize(repo, template)
-            self.assertTrue(failed)
+            self.assertEqual(failures, 1)
             self.assertFalse((repo / ".project" / "STATE.md").exists())
 
     @unittest.skipUnless(

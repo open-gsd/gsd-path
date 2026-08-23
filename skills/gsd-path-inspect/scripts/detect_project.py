@@ -156,7 +156,6 @@ MANAGED_EXACT_FILES = {
 PIPELINE_LINE = re.compile(r"^pipeline:\s*(\S+)", re.MULTILINE)
 ATX_TITLE = re.compile(r" {0,3}#{1,6}(?:[ \t]+.*)?")
 SETEXT_UNDERLINE = re.compile(r" {0,3}(?:=+|-+)[ \t]*")
-MANAGED_BACKUP = re.compile(r"disabled-gsd-skills(?:-\d+)?")
 SETEXT_BLOCK_START = re.compile(
     r" {0,3}(?:>|[-+*](?:[ \t]+|$)|\d{1,9}[.)](?:[ \t]+|$)|"
     r"`{3,}|~{3,}|\[[^]]+\]:)"
@@ -212,10 +211,16 @@ class GitIndexEntry(NamedTuple):
     stage: int
 
 
-def is_link_like(path: Path, status: os.stat_result) -> bool:
+def is_link_like_status(status: os.stat_result) -> bool:
     if stat.S_ISLNK(status.st_mode):
         return True
     if getattr(status, "st_reparse_tag", 0) & REPARSE_NAME_SURROGATE:
+        return True
+    return False
+
+
+def is_link_like(path: Path, status: os.stat_result) -> bool:
+    if is_link_like_status(status):
         return True
     isjunction = getattr(os.path, "isjunction", None)
     if os.name != "nt" or isjunction is None:
@@ -244,8 +249,6 @@ def is_verified_skill_bundle(relative: str, root: Path) -> bool:
     if not parts:
         return False
     name = parts[-1]
-    if MANAGED_BACKUP.fullmatch(name):
-        return True
     if not is_skill_bundle_name(name):
         return False
     if len(parts) >= 2 and parts[-2].casefold() == "skills":
@@ -259,7 +262,28 @@ def is_managed_pipeline_directory(relative: str, root: Path) -> bool:
     return is_verified_skill_bundle(relative, root)
 
 
-def is_managed_pipeline_artifact(relative: str, root: Path) -> bool:
+def is_verified_skill_bundle_at(relative: str, directory_fd: int) -> bool:
+    parts = PurePosixPath(relative).parts
+    if not parts or not is_skill_bundle_name(parts[-1]):
+        return False
+    if len(parts) >= 2 and parts[-2].casefold() == "skills":
+        return True
+    try:
+        status = os.stat(
+            "SKILL.md",
+            dir_fd=directory_fd,
+            follow_symlinks=False,
+        )
+    except FileNotFoundError:
+        return False
+    except OSError as error:
+        raise DetectError(
+            f"cannot inspect managed skill bundle: {relative}: {error}"
+        ) from error
+    return not is_link_like_status(status) and stat.S_ISREG(status.st_mode)
+
+
+def is_fixed_managed_pipeline_artifact(relative: str) -> bool:
     if relative in MANAGED_EXACT_FILES:
         return True
     parts = PurePosixPath(relative).parts
@@ -275,6 +299,13 @@ def is_managed_pipeline_artifact(relative: str, root: Path) -> bool:
         and PurePosixPath(parts[1]).suffix.casefold() == ".py"
     ):
         return True
+    return False
+
+
+def is_managed_pipeline_artifact(relative: str, root: Path) -> bool:
+    if is_fixed_managed_pipeline_artifact(relative):
+        return True
+    parts = PurePosixPath(relative).parts
     return any(
         is_verified_skill_bundle("/".join(parts[:end]), root)
         for end in range(1, len(parts))
@@ -576,7 +607,6 @@ def file_kind(
 ) -> Optional[str]:
     if (
         is_ignored(relative)
-        or is_managed_pipeline_artifact(relative, root)
         or relative == ".project"
         or relative.startswith(".project/")
     ):
@@ -739,8 +769,6 @@ def iter_from_dir_fd(
         if is_link_like(path, status):
             continue
         if stat.S_ISDIR(status.st_mode):
-            if is_managed_pipeline_directory(relative, root):
-                continue
             try:
                 child = os.open(name, directory_flags(), dir_fd=dir_fd)
             except OSError as error:
@@ -760,13 +788,15 @@ def iter_from_dir_fd(
                     raise DetectError(
                         f"filesystem evidence changed while traversing: {relative}"
                     )
+                if is_verified_skill_bundle_at(relative, child):
+                    continue
                 yield from iter_from_dir_fd(child, relative, root)
             finally:
                 os.close(child)
             continue
         if not stat.S_ISREG(status.st_mode):
             continue
-        if is_managed_pipeline_artifact(relative, root):
+        if is_fixed_managed_pipeline_artifact(relative):
             continue
         yield relative
 
@@ -925,6 +955,8 @@ def classify(repo: Path) -> dict:
         signals.append({"kind": kind, "path": relative})
     for entry in git_tracked_files(root):
         relative = entry.path
+        if is_managed_pipeline_artifact(relative, root):
+            continue
         kind = file_kind(
             relative,
             root,
@@ -986,16 +1018,16 @@ def write_all(descriptor: int, payload: bytes) -> None:
 
 def rollback_created_state(
     project_fd: int,
-    state_fd: Optional[int],
     created_status: Optional[os.stat_result],
 ) -> None:
     if created_status is None:
-        if state_fd is None:
-            raise DetectError("cannot roll back STATE.md: identity unavailable")
         try:
-            created_status = os.fstat(state_fd)
+            os.unlink("STATE.md", dir_fd=project_fd)
+        except FileNotFoundError:
+            return
         except OSError as error:
             raise DetectError(f"cannot roll back STATE.md: {error}") from error
+        return
     try:
         current = os.stat("STATE.md", dir_fd=project_fd, follow_symlinks=False)
     except FileNotFoundError:
@@ -1152,7 +1184,6 @@ def write_state_anchored(
             try:
                 rollback_created_state(
                     project_fd,
-                    state_fd,
                     created_status,
                 )
             except DetectError as rollback_error:

@@ -106,11 +106,13 @@ at `inspect/active|blocked`. **Output:**
 `.project/research/evidence-codebase.md` and
 `.project/research/DOCS-AUDIT.md`.
 
-When STATE.md is absent, the router classifies the tree with the bundled
-`scripts/detect_project.py classify --repo <absolute-root>` helper before
-asking anything. `brownfield` routes here; `greenfield` skips to define;
-`orphan` blocks. Owned state routes by STATE.md without rerunning the helper.
-Do not re-derive a verdict from a directory listing.
+When STATE.md is absent, the router runs the bundled
+`scripts/detect_project.py initialize --repo <absolute-root> --template
+<absolute-state-template>` helper before asking anything and routes from its
+returned JSON. `brownfield` initializes `inspect/active` and routes here;
+`greenfield` initializes `define/active` and skips to define; `orphan` blocks.
+Owned state routes by STATE.md without rerunning the helper. Reserve `classify`
+for read-only inspection; do not re-derive a verdict from a directory listing.
 
 Before either agent writes `.project/`, freeze a sorted Markdown inventory
 that excludes `.project/**` and all vendored/generated trees. Two read-only
