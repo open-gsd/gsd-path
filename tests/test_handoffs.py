@@ -451,7 +451,7 @@ Project verify: `python3 -m unittest discover`
         task_id: str,
         owns: str,
         acceptance: str = "1. The demo behavior holds.",
-        verify: str = "python3 -m unittest",
+        verify: str = "python3 src/app.py",
         project_dir: str = ".project",
     ) -> None:
         self.write(
@@ -638,6 +638,38 @@ The task implements the demo.
                 "T002",
                 "- SC2",
                 acceptance="1. The demo test suite is green.",
+            )
+
+            result = check_handoffs.validate_plan(root)
+
+            self.assertEqual(result["tasks"], 2)
+
+    def test_plan_rejects_a_task_verify_that_names_no_files_path(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_plan_handoff(root)
+            self.write_coverage_task(
+                root,
+                "T001",
+                "- SC1",
+                acceptance="1. The demo command prints hello.",
+                verify="pnpm test",
+            )
+
+            with self.assertRaises(check_handoffs.HandoffError) as failure:
+                check_handoffs.validate_plan(root)
+            self.assertIn("T001 Verify must name a path from files", str(failure.exception))
+
+    def test_plan_allows_a_task_verify_with_a_pytest_node_id(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_plan_handoff(root)
+            self.write_coverage_task(
+                root,
+                "T001",
+                "- SC1",
+                acceptance="1. The demo command prints hello.",
+                verify="pytest src/app.py::test_hello",
             )
 
             result = check_handoffs.validate_plan(root)

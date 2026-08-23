@@ -267,7 +267,7 @@ when file scopes, dependencies, or capacity force it. Every task contains
 inlined context, real paths, approach constraints, an interface contract
 naming the exact shapes exchanged with other tasks (`None` when
 independent), an Intent coverage section, observable acceptance criteria, a
-meaningful `verify` command,
+meaningful `verify` command that names a path from that task's files,
 declared files, deps, and
 orchestrator-owned `base`/`worktree`/`task_branch`/`commit` fields initialized
 to null. PLAN.md Intent coverage maps every INTENT.md success criterion to a
@@ -427,7 +427,8 @@ HEAD. Never redispatch a dirty failed worktree against divergent task history.
 
 **Gate:** every wave passes; the build orchestrator commits
 the transition directly to `ship/active`, leaving a clean primary worktree.
-PLAN.md's project Verify runs once at ship.
+PLAN.md's project Verify runs once at ship. A task Verify names a path
+from `files` unless it is that allowed Project-verify copy.
 
 **Milestone abandon (program flow).** On an explicit user ruling — at the
 review-cycle cap, a decision invalidation, or a direct request — the

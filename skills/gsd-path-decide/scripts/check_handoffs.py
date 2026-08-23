@@ -29,6 +29,10 @@ COVERAGE_ROW_PATTERN = re.compile(
 TASK_ID_PATTERN = re.compile(r"(?m)^id:\s*(T\d{3})\s*(?:#.*)?$")
 OWNED_CRITERION_PATTERN = re.compile(r"^- (None|SC[1-9]\d*)$")
 VERIFY_BLOCK_PATTERN = re.compile(r"```bash[ \t]*\n(?P<block>.*?)```", re.DOTALL)
+FILES_FIELD_PATTERN = re.compile(r"^files:\s*(?P<value>[^#]*?)(?:\s+#.*)?$")
+INLINE_LIST_PATTERN = re.compile(r"^\[(?P<body>.*)\]$")
+LIST_ITEM_PATTERN = re.compile(r"^\s*-\s+(?P<value>.*?)\s*(?:\s+#.*)?$")
+VERIFY_PATH_SPLIT = re.compile(r"[=,:]")
 WAVE_REVIEW_NAME = re.compile(
     r"wave-(?P<wave>\d+)\.cycle\d+(?:\.(?:contract|adversarial))?\.md$"
 )
@@ -425,6 +429,65 @@ def _verify_command(task_text: str) -> str:
     return _normalize_ws(block.group("block"))
 
 
+def _frontmatter_files(task_text: str) -> List[str]:
+    lines = task_text.splitlines()
+    if not lines or lines[0] != "---":
+        raise HandoffError("task is missing YAML frontmatter")
+    index = 1
+    while index < len(lines):
+        line = lines[index]
+        if line == "---":
+            return []
+        match = FILES_FIELD_PATTERN.match(line)
+        if match is None:
+            index += 1
+            continue
+        value = match.group("value").strip()
+        inline = INLINE_LIST_PATTERN.fullmatch(value)
+        if inline is not None:
+            return [
+                item.strip().strip("\"'")
+                for item in inline.group("body").split(",")
+                if item.strip()
+            ]
+        if value:
+            return [value.strip("\"'")]
+        items: List[str] = []
+        cursor = index + 1
+        while cursor < len(lines):
+            item = LIST_ITEM_PATTERN.match(lines[cursor])
+            if item is None:
+                break
+            items.append(item.group("value").strip().strip("\"'"))
+            cursor += 1
+        return items
+    raise HandoffError("task frontmatter is not closed")
+
+
+def _posix_path(value: str) -> str:
+    stripped = value.strip().strip("/")
+    if not stripped:
+        return ""
+    return str(PurePosixPath(stripped))
+
+
+def _verify_mentions_a_file(command: str, files: Sequence[str]) -> bool:
+    tokens: List[str] = []
+    for raw in command.split():
+        for piece in VERIFY_PATH_SPLIT.split(raw.strip("\"'")):
+            normalized = _posix_path(piece)
+            if normalized and normalized != ".":
+                tokens.append(normalized)
+    for path in files:
+        needle = _posix_path(path)
+        if not needle or needle == ".":
+            continue
+        for token in tokens:
+            if token == needle or token.startswith(needle + "/"):
+                return True
+    return False
+
+
 def _acceptance_items(task_text: str, task_id: str) -> Dict[int, str]:
     items = _numbered_items(_section(task_text, "Acceptance criteria"))
     if not items:
@@ -489,15 +552,19 @@ def validate_plan(
     project_verify = _normalize_ws(_line_value(plan, "Project verify:"))
     for task_id, text in tasks.items():
         command = _verify_command(text)
-        if not command or command != project_verify:
+        if not command:
             continue
-        named = any(
-            project_verify in _normalize_ws(criteria[sc_id])
-            for sc_id in assigned[task_id]
-            if sc_id in criteria
-        )
-        if not named:
-            raise HandoffError(f"{task_id} Verify must not copy Project verify")
+        if command == project_verify:
+            named = any(
+                project_verify in _normalize_ws(criteria[sc_id])
+                for sc_id in assigned[task_id]
+                if sc_id in criteria
+            )
+            if not named:
+                raise HandoffError(f"{task_id} Verify must not copy Project verify")
+            continue
+        if not _verify_mentions_a_file(command, _frontmatter_files(text)):
+            raise HandoffError(f"{task_id} Verify must name a path from files")
     return {
         "phase": "plan",
         "criteria": sorted(criteria),

@@ -271,7 +271,8 @@ siblings verbatim — blocking immediately on a mismatch. Each
 task gets one atomic commit; task frontmatter records exact SHA for recovery.
 The orchestrator's isolated task Verify rerun is that task's evidence; wave
 review reads it plus the isolated diff and does not re-run the command.
-PLAN.md's project Verify runs once, at ship.
+PLAN.md's project Verify runs once, at ship. A task Verify names a path
+from `files` unless it is that allowed Project-verify copy.
 
 ### Ship
 

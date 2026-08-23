@@ -51,7 +51,7 @@ files:              # every file this task may touch — dispatch checks overlap
 ## Verify
 
 ```bash
-<one command that fails if this task wasn't done>
+<one command that fails if this task wasn't done; names a path from files>
 ```
 
 ## Log

@@ -4,7 +4,8 @@
 
 Project verify: `<command that builds + tests the whole project>`
 <!-- Run once at ship. A task Verify must not copy this command unless an
-     owned INTENT success criterion names it. -->
+     owned INTENT success criterion names it. Otherwise the task Verify
+     names a path from that task's files. -->
 
 ## Config
 
