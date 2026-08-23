@@ -968,7 +968,6 @@ class DetectProjectTests(unittest.TestCase):
             oid = "1" * 40
 
             def git_result(command, **kwargs):
-                del kwargs
                 if command[3:] == ["ls-files", "--stage", "-z"]:
                     return subprocess.CompletedProcess(
                         command,
@@ -977,6 +976,11 @@ class DetectProjectTests(unittest.TestCase):
                         stderr=b"",
                     )
                 if command[3:] == ["cat-file", "blob", oid]:
+                    self.assertEqual(kwargs["env"]["GIT_NO_LAZY_FETCH"], "1")
+                    self.assertEqual(
+                        kwargs["env"]["GIT_NO_REPLACE_OBJECTS"],
+                        "1",
+                    )
                     return subprocess.CompletedProcess(
                         command,
                         0,
@@ -1394,6 +1398,41 @@ class DetectProjectTests(unittest.TestCase):
                     detect_project.initialize(repo, template)
             self.assertEqual(calls, 2)
             self.assertFalse((repo / ".project" / "STATE.md").exists())
+
+    @unittest.skipUnless(
+        ANCHORED_STATE_CREATE_AVAILABLE,
+        "anchored state creation is unavailable",
+    )
+    def test_initialize_succeeds_after_directory_close_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            template = (
+                ROOT / "skills" / "gsd-path" / "templates" / "state.md"
+            )
+            real_close = detect_project.os.close
+            real_fstat = detect_project.os.fstat
+            state_closed = False
+            failed_closes = 0
+
+            def failing_close(descriptor):
+                nonlocal state_closed, failed_closes
+                status = real_fstat(descriptor)
+                real_close(descriptor)
+                if stat.S_ISREG(status.st_mode):
+                    state_closed = True
+                elif state_closed:
+                    failed_closes += 1
+                    raise OSError("directory close failed")
+
+            with mock.patch.object(
+                detect_project.os,
+                "close",
+                side_effect=failing_close,
+            ):
+                payload = detect_project.initialize(repo, template)
+            self.assertTrue(payload["wrote_state"])
+            self.assertEqual(failed_closes, 2)
+            self.assertTrue((repo / ".project" / "STATE.md").exists())
 
     @unittest.skipUnless(
         ANCHORED_STATE_CREATE_AVAILABLE,

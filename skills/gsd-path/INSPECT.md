@@ -26,16 +26,18 @@ input.
 ## Preconditions
 
 If STATE.md is missing, run the bundled
-`python3 <absolute-bundled-script> classify --repo <absolute-root>` helper
-(`scripts/detect_project.py`) and follow its JSON `verdict` / `route`. Do not
-classify from a directory listing or conversation.
+`python3 <absolute-bundled-script> initialize --repo <absolute-root>
+--template <absolute-state-template>` helper (`scripts/detect_project.py`) and
+follow its returned JSON `verdict` / `route`. This is the only no-state
+boundary; do not run `classify` first or classify from a directory listing or
+conversation.
 - `owned` — continue under the existing-state rules below.
 - `orphan` — return to `$gsd-path` for orphaned-state recovery instead of
   initializing or overwriting it.
-- `greenfield` — skip inspection; route to `$gsd-path-define`.
-- `brownfield` — continue; if STATE.md is still missing, run
-  `initialize --repo <absolute-root> --template <absolute-state-template>`
-  instead of creating STATE.md yourself.
+- `greenfield` — the helper writes STATE.md at `define/active`; skip inspection
+  and route to `$gsd-path-define` from this returned verdict.
+- `brownfield` — require `wrote_state: true`, then continue with the helper's
+  STATE.md at `inspect/active`.
 If `.project/STATE.md` exists, require `pipeline: gsd-path/v2`; a missing or
 different marker returns to `$gsd-path` for ownership checking. Legal entry is
 `inspect/active|blocked`; `inspect/done` routes to define, and any later phase
@@ -48,9 +50,10 @@ same milestone; a later milestone's `inspect/active` is a new scan.
 
 1. Before creating or changing `.project/` Markdown, freeze the sorted set of
    in-scope repository Markdown paths. Exclude `.project/**`, `.git`, vendored
-   and generated trees, `node_modules`, and build output. Then create
-   `.project/STATE.md` with `initialize --template <absolute-state-template>`
-   if missing. Preserve an existing router-bound branch and milestone.
+   and generated trees, `node_modules`, and build output. If STATE.md is now
+   missing, restart Preconditions and route from the new `initialize` result;
+   never continue from an ignored result. Preserve an existing router-bound
+   branch and milestone.
 2. Dispatch two independent agents in parallel, following the local
    [runtime dispatch contract](references/dispatch.md) and its deterministic
    task-name rules:

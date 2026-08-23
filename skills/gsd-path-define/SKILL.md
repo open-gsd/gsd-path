@@ -42,17 +42,19 @@ overwriting approved intent and leaving downstream artifacts stale. When an
 active router supplies the lookahead track root `.project/next/`, evaluate
 this ownership section against the track's STATE.md and paths instead; see
 Lookahead mode. If STATE.md is missing, run the bundled
-`python3 <absolute-bundled-script> classify --repo <absolute-root>` helper
-(`scripts/detect_project.py`) and follow its JSON `verdict` / `route`. Do not
-classify from a directory listing or conversation.
+`python3 <absolute-bundled-script> initialize --repo <absolute-root>
+--template <absolute-state-template>` helper (`scripts/detect_project.py`) and
+follow its returned JSON `verdict` / `route`. This is the only no-state
+boundary; do not run `classify` first or classify from a directory listing or
+conversation.
 - `owned` — continue under the existing-state rules above.
 - `orphan` — return to `$gsd-path` for orphaned-state recovery; existing
   evidence does not prove its pipeline version or phase and must not be reused
   or overwritten by inference.
-- `brownfield` — route to `$gsd-path-inspect`.
-- `greenfield` — run `initialize --repo <absolute-root> --template
-  <absolute-state-template>` so the helper writes STATE.md at
-  `define/active`. Do not create STATE.md yourself after classify.
+- `brownfield` — the helper writes STATE.md at `inspect/active`; route to
+  `$gsd-path-inspect` from this returned verdict.
+- `greenfield` — require `wrote_state: true`, then continue with the helper's
+  STATE.md at `define/active`. Do not create STATE.md yourself.
 
 The router's verified new-GitHub-repository transaction is the sole greenfield
 exception: STATE.md already exists at `define/active`, `branch` is the approved

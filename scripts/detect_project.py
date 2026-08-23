@@ -285,6 +285,8 @@ def git_environment() -> dict[str, str]:
     env = os.environ.copy()
     for key in GIT_OVERRIDE_VARS:
         env.pop(key, None)
+    env["GIT_NO_LAZY_FETCH"] = "1"
+    env["GIT_NO_REPLACE_OBJECTS"] = "1"
     return env
 
 
@@ -1014,17 +1016,14 @@ def rollback_created_state(
 
 def close_file_descriptors(
     *descriptors: Optional[int],
-) -> Optional[OSError]:
-    first_error = None
+) -> None:
     for descriptor in descriptors:
         if descriptor is None:
             continue
         try:
             os.close(descriptor)
-        except OSError as error:
-            if first_error is None:
-                first_error = error
-    return first_error
+        except OSError:
+            pass
 
 
 def write_state_anchored(
@@ -1164,9 +1163,7 @@ def write_state_anchored(
             raise DetectError(f"cannot create STATE.md: {error}") from error
         raise
     finally:
-        close_error = close_file_descriptors(state_fd, project_fd, root_fd)
-        if close_error is not None and sys.exc_info()[0] is None:
-            raise DetectError(f"cannot close STATE.md descriptors: {close_error}") from close_error
+        close_file_descriptors(state_fd, project_fd, root_fd)
 
 
 def initialize(
