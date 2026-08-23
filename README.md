@@ -87,12 +87,14 @@ flowchart TD
     F -->|"all waves pass"| S["6 · ship — final review"]
     C -.->|"NEEDS-ORCHESTRATOR question"| O["orchestrator answers from artifacts, or asks you"]
     O -.-> C
-    B -.->|"lookahead: next milestone planned in .project/next/"| P
+    B -.->|"lookahead: next milestone in .project/next/"| MI["inspect current code + docs"]
+    MI --> MB["define (milestone + brownfield mode)"]
+    MB --> P
     B -->|"explicit ruling: abandon milestone"| AB["archive partial work → re-slice roadmap"]
     AB --> RM
     S -->|"approved → archive + ship commit"| MG["merge gsd-path/M00N into main + tag"]
     MG -->|"validate-integrated passes"| A["shipped"]
-    A -->|"another program milestone → bind next gsd-path/M00N"| DM
+    A -->|"another program milestone → bind next gsd-path/M00N"| MI
     A -->|"single-milestone restart → bind next gsd-path/M00N"| I
     A -->|"program complete"| PC["stop"]
 ```

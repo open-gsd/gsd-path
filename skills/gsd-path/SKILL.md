@@ -155,9 +155,11 @@ ask the user how to reconcile the upstream change.
 Report normal progress in three labeled lines: **Outcome** names the phase and
 completed work, **Review** links the newest canonical artifact using its
 resolved absolute path when one exists, and **Next** names the action the
-router is taking or the single action required from the user. If DOCS-AUDIT.md
-has `planned: no` rulings, add one alignment-queue line and offer once to route
-them through the bundled [plan contract](PLAN.md); declining does not block.
+router is taking or the single action required from the user. Resolve the
+routed track root first: `.project/` for the active track or `.project/next/`
+for lookahead. If that track root's `research/DOCS-AUDIT.md` has `planned: no`
+rulings, add one alignment-queue line and offer once to route them through the
+bundled [plan contract](PLAN.md); declining does not block.
 
 Once per conversation, before the status report, run the bundled update check
 `python3 <skill-dir>/scripts/check_update.py`. It is cached, offline-safe, and

@@ -108,6 +108,9 @@ class DetectProjectTests(unittest.TestCase):
                 ".claude/disabled-gsd-skills-1/gsd-path-old/helper.py": (
                     "print('old')\n"
                 ),
+                ".agent-tools/gsd-path-define/SKILL.md": "# Skill\n\nRules.\n",
+                ".agent-tools/gsd-path-define/helper.py": "print('managed')\n",
+                "agents/gsd-path.md": "# Agent\n\nInstalled agent.\n",
             }
             for relative, contents in managed_files.items():
                 path = repo / relative
@@ -141,6 +144,8 @@ class DetectProjectTests(unittest.TestCase):
             "- Existing project\n---\n",
             "```python\n---\n",
             "Demo\n\n====\n",
+            "Demo\n<!-- scaffold -->\n====\n",
+            "Demo\n====\nOther\n====\n",
         )
         for contents in examples:
             with self.subTest(contents=contents):
@@ -337,15 +342,21 @@ class DetectProjectTests(unittest.TestCase):
             real_open = detect_project.os.open
             replaced = False
 
-            def replacing_open(path, flags):
+            def replacing_open(path, flags, *, dir_fd=None):
                 nonlocal replaced
-                if Path(path) == state_evidence and not replaced:
+                final_state = (
+                    (dir_fd is None and Path(path) == state_evidence)
+                    or (dir_fd is not None and path == state.name)
+                )
+                if final_state and not replaced:
                     if not flags & os.O_NONBLOCK:
                         raise AssertionError("state evidence open must be nonblocking")
                     state.unlink()
                     os.mkfifo(state)
                     replaced = True
-                return real_open(path, flags)
+                if dir_fd is None:
+                    return real_open(path, flags)
+                return real_open(path, flags, dir_fd=dir_fd)
 
             with mock.patch.object(
                 detect_project.os,
@@ -583,13 +594,19 @@ class DetectProjectTests(unittest.TestCase):
             real_open = detect_project.os.open
             replaced = False
 
-            def replacing_open(path, flags):
+            def replacing_open(path, flags, *, dir_fd=None):
                 nonlocal replaced
-                if Path(path) == readme_evidence and not replaced:
+                final_readme = (
+                    (dir_fd is None and Path(path) == readme_evidence)
+                    or (dir_fd is not None and path == readme.name)
+                )
+                if final_readme and not replaced:
                     readme.unlink()
                     readme.symlink_to(external)
                     replaced = True
-                return real_open(path, flags)
+                if dir_fd is None:
+                    return real_open(path, flags)
+                return real_open(path, flags, dir_fd=dir_fd)
 
             with mock.patch.object(
                 detect_project.os,
@@ -601,6 +618,49 @@ class DetectProjectTests(unittest.TestCase):
                     "cannot read Markdown evidence",
                 ):
                     self.classify(repo)
+
+    @unittest.skipIf(os.name == "nt", "directory descriptor semantics required")
+    def test_markdown_parent_replacement_stays_anchored(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = Path(temporary)
+            repo = workspace / "repo"
+            docs = repo / "docs"
+            moved = workspace / "moved-docs"
+            external = workspace / "external-docs"
+            readme = docs / "README.md"
+            docs.mkdir(parents=True)
+            external.mkdir()
+            readme.write_text("# Local\n", encoding="utf-8")
+            (external / "README.md").write_text(
+                "# External\n\nExisting project.\n",
+                encoding="utf-8",
+            )
+            real_open = detect_project.os.open
+            replaced = False
+
+            def replacing_open(path, flags, *, dir_fd=None):
+                nonlocal replaced
+                final_readme = (
+                    (dir_fd is None and Path(path) == readme)
+                    or (dir_fd is not None and path == readme.name)
+                )
+                if final_readme and not replaced:
+                    docs.rename(moved)
+                    docs.symlink_to(external, target_is_directory=True)
+                    replaced = True
+                if dir_fd is None:
+                    return real_open(path, flags)
+                return real_open(path, flags, dir_fd=dir_fd)
+
+            with mock.patch.object(
+                detect_project.os,
+                "open",
+                side_effect=replacing_open,
+            ):
+                payload = self.classify(repo)
+            self.assertTrue(replaced)
+            self.assertEqual(payload["verdict"], "greenfield")
+            self.assertEqual(payload["signals"], [])
 
     def test_cli_emits_json(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

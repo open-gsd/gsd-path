@@ -149,7 +149,6 @@ MANAGED_EXACT_FILES = {
     "AGENTS.md",
     "WORKFLOW.md",
     ".claude/CLAUDE.md",
-    ".cursor/agents/gsd-path.md",
 }
 
 PIPELINE_LINE = re.compile(r"^pipeline:\s*(\S+)", re.MULTILINE)
@@ -173,6 +172,13 @@ HTML_BLOCK_START = re.compile(
     r"|</?[A-Za-z][A-Za-z0-9-]*(?:[ \t]+[^>]*)?/?>[ \t]*$)",
     re.IGNORECASE,
 )
+ANCHORED_EVIDENCE_SUPPORTED = (
+    hasattr(os, "O_DIRECTORY")
+    and hasattr(os, "O_NOFOLLOW")
+    and os.open in os.supports_dir_fd
+    and os.stat in os.supports_dir_fd
+    and os.stat in os.supports_follow_symlinks
+)
 
 
 class DetectError(RuntimeError):
@@ -194,13 +200,11 @@ def is_managed_pipeline_path(parts: tuple[str, ...], *, descendant: bool) -> boo
             and (not descendant or index + 1 < len(parts))
         )
         or (
-            index + 1 < len(parts)
-            and part.casefold() == "skills"
-            and (
-                parts[index + 1].casefold() == "gsd-path"
-                or parts[index + 1].casefold().startswith("gsd-path-")
+            (
+                part.casefold() in ("ogsd", "gsd-path")
+                or part.casefold().startswith(("ogsd-", "gsd-path-"))
             )
-            and (not descendant or index + 2 < len(parts))
+            and (not descendant or index + 1 < len(parts))
         )
         for index, part in enumerate(parts)
     )
@@ -218,6 +222,12 @@ def is_managed_pipeline_artifact(relative: str) -> bool:
     if relative in MANAGED_EXACT_FILES or is_managed_pipeline_path(
         parts,
         descendant=True,
+    ):
+        return True
+    if (
+        len(parts) >= 2
+        and parts[-2].casefold() == "agents"
+        and parts[-1].casefold() == "gsd-path.md"
     ):
         return True
     return (
@@ -253,50 +263,62 @@ def read_regular_evidence(
         raise DetectError(
             f"{evidence_name} evidence escapes repo: {path}"
         ) from error
-    current = root
-    expected = None
-    for index, part in enumerate(relative.parts):
-        current /= part
-        status = lstat_evidence(current, missing_ok=missing_ok)
-        if status is None:
-            return None
-        if stat.S_ISLNK(status.st_mode):
-            raise DetectError(
-                f"symlinked {evidence_name} evidence is not allowed: {current}"
-            )
-        final = index == len(relative.parts) - 1
-        if not final and not stat.S_ISDIR(status.st_mode):
-            raise DetectError(
-                f"{evidence_name} evidence parent is not a directory: {current}"
-            )
-        if final and not stat.S_ISREG(status.st_mode):
-            raise DetectError(
-                f"{evidence_name} evidence is not a regular file: {current}"
-            )
-        if final:
-            expected = status
-    if expected is None:
+    if not relative.parts:
         raise DetectError(f"{evidence_name} evidence path is empty: {path}")
-    flags = (
+    if not ANCHORED_EVIDENCE_SUPPORTED:
+        raise DetectError(
+            f"secure {evidence_name} evidence reads are unavailable"
+        )
+    directory_flags = (
         os.O_RDONLY
-        | getattr(os, "O_BINARY", 0)
-        | getattr(os, "O_NOFOLLOW", 0)
+        | os.O_DIRECTORY
+        | os.O_NOFOLLOW
         | getattr(os, "O_NONBLOCK", 0)
     )
-    descriptor = None
+    file_flags = (
+        os.O_RDONLY
+        | os.O_NOFOLLOW
+        | getattr(os, "O_BINARY", 0)
+        | getattr(os, "O_NONBLOCK", 0)
+    )
+    descriptors = []
     try:
-        descriptor = os.open(path, flags)
-        actual = os.fstat(descriptor)
-        if not stat.S_ISREG(actual.st_mode) or not os.path.samestat(
-            expected,
-            actual,
-        ):
-            raise DetectError(
-                f"{evidence_name} evidence changed while reading: {path}"
+        descriptors.append(os.open(root, directory_flags))
+        if not stat.S_ISDIR(os.fstat(descriptors[-1]).st_mode):
+            raise DetectError(f"repo evidence is not a directory: {root}")
+        for index, part in enumerate(relative.parts):
+            current = root.joinpath(*relative.parts[: index + 1])
+            expected = os.stat(
+                part,
+                dir_fd=descriptors[-1],
+                follow_symlinks=False,
             )
-        stream = os.fdopen(descriptor, "rb")
-        descriptor = None
-        with stream:
+            if stat.S_ISLNK(expected.st_mode):
+                raise DetectError(
+                    f"symlinked {evidence_name} evidence is not allowed: {current}"
+                )
+            final = index == len(relative.parts) - 1
+            if not final and not stat.S_ISDIR(expected.st_mode):
+                raise DetectError(
+                    f"{evidence_name} evidence parent is not a directory: {current}"
+                )
+            if final and not stat.S_ISREG(expected.st_mode):
+                raise DetectError(
+                    f"{evidence_name} evidence is not a regular file: {current}"
+                )
+            flags = file_flags if final else directory_flags
+            descriptor = os.open(part, flags, dir_fd=descriptors[-1])
+            descriptors.append(descriptor)
+            actual = os.fstat(descriptor)
+            expected_kind = stat.S_ISREG if final else stat.S_ISDIR
+            if not expected_kind(actual.st_mode) or not os.path.samestat(
+                expected,
+                actual,
+            ):
+                raise DetectError(
+                    f"{evidence_name} evidence changed while reading: {current}"
+                )
+        with os.fdopen(descriptors.pop(), "rb") as stream:
             data = stream.read()
     except FileNotFoundError as error:
         if missing_ok:
@@ -307,7 +329,7 @@ def read_regular_evidence(
     except OSError as error:
         raise DetectError(f"cannot read {evidence_name} evidence: {path}") from error
     finally:
-        if descriptor is not None:
+        for descriptor in reversed(descriptors):
             os.close(descriptor)
     try:
         return data.decode("utf-8")
@@ -333,6 +355,7 @@ def is_setext_title(line: str) -> bool:
         len(indentation) > 3
         or "\t" in indentation
         or ATX_TITLE.fullmatch(line)
+        or SETEXT_UNDERLINE.fullmatch(line)
         or SETEXT_BLOCK_START.match(line)
         or HTML_BLOCK_START.match(line)
         or is_thematic_break(line)
