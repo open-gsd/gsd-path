@@ -57,6 +57,34 @@ class DetectProjectTests(unittest.TestCase):
             self.assertEqual(payload["route"], "define")
             self.assertEqual(payload["signals"], [])
 
+    def test_dockerfile_is_brownfield_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            (repo / "Dockerfile").write_text(
+                "FROM python:3.12\n", encoding="utf-8"
+            )
+            payload = self.classify(repo)
+            self.assertEqual(payload["verdict"], "brownfield")
+            self.assertEqual(
+                payload["signals"],
+                [{"kind": "manifest", "path": "Dockerfile"}],
+            )
+
+    def test_common_source_only_projects_are_brownfield(self) -> None:
+        for filename in ("index.html", "styles.css", "deploy.sh", "main.tf"):
+            with self.subTest(filename=filename):
+                with tempfile.TemporaryDirectory() as temporary:
+                    repo = Path(temporary)
+                    (repo / filename).write_text(
+                        "existing project\n", encoding="utf-8"
+                    )
+                    payload = self.classify(repo)
+                    self.assertEqual(payload["verdict"], "brownfield")
+                    self.assertEqual(
+                        payload["signals"],
+                        [{"kind": "source", "path": filename}],
+                    )
+
     def test_git_init_license_and_title_readme_are_greenfield(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary)
