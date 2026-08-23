@@ -288,3 +288,78 @@ class IsolationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RecoverTests(unittest.TestCase):
+    TASK = (
+        "---\nid: T001\ntitle: add greeting\nwave: 1\ndeps: []\nstatus: {status}\n"
+        "agent: coder\ncommit: {commit}\nbase: {base}\nworktree: null\ntask_branch: null\n"
+        "files:\n  - src/app.py\n---\n\n# T001\n\n## Log\n"
+    )
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.repo = Path(self.tmp.name) / "repo"
+        self.repo.mkdir()
+        git(self.repo, "init", "-b", "gsd-path/M001")
+        git(self.repo, "config", "user.email", "t@example.test")
+        git(self.repo, "config", "user.name", "T")
+        (self.repo / "src").mkdir()
+        (self.repo / "src/app.py").write_text("print('base')\n")
+        self.write_task("pending", "null", "null")
+        git(self.repo, "add", ".")
+        git(self.repo, "commit", "-q", "-m", "base")
+        self.base = git(self.repo, "rev-parse", "HEAD")
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
+
+    def write_task(self, status: str, commit: str, base: str) -> None:
+        path = self.repo / ".project/tasks/T001.md"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(self.TASK.format(status=status, commit=commit, base=base))
+
+    def land(self) -> str:
+        (self.repo / "src/app.py").write_text("print('hello')\n")
+        with (self.repo / ".project/tasks/T001.md").open("a") as log:
+            log.write("- done\n")
+        return isolation.land(
+            self.repo, self.repo, self.base, "T001", "add greeting",
+            ".project/tasks/T001.md", ["src/app.py"],
+        )["commit"]
+
+    def recover(self) -> dict:
+        return isolation.recover(self.repo, Path(".project/tasks"))["tasks"][0]
+
+    def test_in_progress_with_landed_commit_is_recovered(self) -> None:
+        self.write_task("in-progress", "null", self.base)
+        git(self.repo, "commit", "-qam", "build: dispatch")
+        commit = self.land()
+        self.assertEqual(self.recover()["verdict"], "recovered")
+        self.assertEqual(self.recover()["commit"], commit)
+
+    def test_in_progress_without_landing_resumes(self) -> None:
+        self.write_task("in-progress", "null", self.base)
+        git(self.repo, "commit", "-qam", "build: dispatch")
+        self.assertEqual(self.recover()["verdict"], "resume")
+
+    def test_done_with_wrong_commit_blocks(self) -> None:
+        self.write_task("in-progress", "null", self.base)
+        git(self.repo, "commit", "-qam", "build: dispatch")
+        self.land()
+        (self.repo / "src/app.py").write_text("print('stray')\n")
+        git(self.repo, "commit", "-qam", "T001: add greeting")
+        stray = git(self.repo, "rev-parse", "HEAD")
+        self.write_task("done", stray, self.base)
+        report = self.recover()
+        self.assertEqual(report["verdict"], "block")
+        self.assertIn("task file", report["reason"])
+
+    def test_pending_task_needs_nothing_and_cli_emits_json(self) -> None:
+        result = subprocess.run(
+            (sys.executable, str(ISOLATION_SCRIPT), "recover", "--repo", str(self.repo)),
+            text=True, capture_output=True, check=True,
+        )
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["verdict"], "ok")
+        self.assertEqual(payload["tasks"][0]["verdict"], "none")

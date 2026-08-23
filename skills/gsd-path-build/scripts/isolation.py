@@ -18,8 +18,10 @@ from typing import Dict, Optional, Sequence, Set
 
 try:
     from pipeline_git import task_commit_body, task_commit_subject
+    from check_task_briefs import _frontmatter as task_frontmatter
 except ImportError:  # pragma: no cover - package import used by tests
     from scripts.pipeline_git import task_commit_body, task_commit_subject
+    from scripts.check_task_briefs import _frontmatter as task_frontmatter
 
 
 TASK_BRANCH_PREFIX = "gsd-path-task/"
@@ -366,6 +368,139 @@ def land(
     }
 
 
+def _patch_id(repo: Path, rev_range: str) -> str:
+    diff = git_output(repo, "diff", rev_range)
+    if not diff:
+        return ""
+    result = subprocess.run(
+        ("git", "-C", str(repo), "patch-id", "--stable"),
+        input=diff + "\n",
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    return result.stdout.split()[0] if result.stdout.strip() else ""
+
+
+def _prove_task_commit(
+    repo: Path, sha: str, base: str, task_id: str, title: str, task_file: str, files: Sequence[str]
+) -> Optional[str]:
+    """Return None when `sha` is this task's landing commit, else the reason it is not."""
+    if run_git(repo, "merge-base", "--is-ancestor", base, sha).returncode != 0:
+        return "commit does not descend from the recorded base"
+    if git_output(repo, "log", "-1", "--format=%s", sha) != task_commit_subject(task_id, title):
+        return "subject does not match"
+    changed = set(git_output(repo, "diff-tree", "--no-commit-id", "--name-only", "-r", sha).splitlines())
+    if task_file not in changed:
+        return "commit does not touch the task file"
+    allowed = {task_file, *files}
+    stray = sorted(changed - allowed)
+    if stray:
+        return f"commit touches undeclared paths: {', '.join(stray)}"
+    expected_body = task_commit_body(task_file, changed).strip()
+    if git_output(repo, "log", "-1", "--format=%b", sha) != expected_body:
+        return "body Task:/Files: fields do not match the changed paths"
+    task_diff = git_output(repo, "diff", f"{sha}^", sha, "--", task_file)
+    if any(line.startswith("-") and not line.startswith("---") for line in task_diff.splitlines()):
+        return "task file delta is not append-only"
+    return None
+
+
+def _recover_task(primary: Path, bound: str, path: Path) -> Dict[str, object]:
+    fields, error = task_frontmatter(path.read_text(encoding="utf-8"))
+    task_file = relative_posix(str(path.relative_to(primary)))
+    report: Dict[str, object] = {"task": task_file, "candidates": [], "worktree": None}
+    if error or fields is None:
+        return {**report, "verdict": "block", "reason": error or "unreadable frontmatter"}
+    task_id = str(fields.get("id", ""))
+    status = str(fields.get("status", ""))
+    report.update({"task_id": task_id, "status": status})
+    if status not in ("done", "in-progress"):
+        return {**report, "verdict": "none", "reason": f"status {status!r} needs no recovery"}
+    base = fields.get("base")
+    if not isinstance(base, str) or not base or base == "null":
+        return {**report, "verdict": "block", "reason": "no recorded base"}
+    try:
+        base = require_commit(primary, require_full_sha(base))
+        validate_task_id(task_id)
+    except IsolationError as exc:
+        return {**report, "verdict": "block", "reason": str(exc)}
+    title = str(fields.get("title", ""))
+    files = [relative_posix(item) for item in fields.get("files", []) if isinstance(item, str)]
+
+    worktree = fields.get("worktree")
+    task_branch = fields.get("task_branch")
+    worktree = None if worktree in (None, "null", "") else str(worktree)
+    task_branch = None if task_branch in (None, "null", "") else str(task_branch)
+    if worktree:
+        wt = Path(worktree)
+        present = wt.is_dir() and run_git(wt, "rev-parse", "--git-dir").returncode == 0
+        report["worktree"] = {
+            "path": worktree,
+            "present": present,
+            "branch": require_attached(wt) if present else None,
+            "clean": not git_output(wt, "status", "--porcelain", "--untracked-files=all") if present else None,
+        }
+
+    recorded = fields.get("commit")
+    recorded = None if recorded in (None, "null", "") else str(recorded)
+    if status == "done":
+        if not recorded:
+            return {**report, "verdict": "block", "reason": "done without a recorded commit"}
+        try:
+            recorded = require_commit(primary, require_full_sha(recorded))
+        except IsolationError as exc:
+            return {**report, "verdict": "block", "reason": str(exc)}
+        why = _prove_task_commit(primary, recorded, base, task_id, title, task_file, files)
+        if why:
+            return {**report, "verdict": "block", "reason": why, "candidates": [recorded]}
+        candidates = [recorded]
+    else:
+        subject = task_commit_subject(task_id, title)
+        log = git_output(primary, "log", "--first-parent", "--format=%H%x00%s", f"{base}..{bound}")
+        candidates = []
+        for line in log.splitlines():
+            sha, _, line_subject = line.partition("\x00")
+            if line_subject == subject and _prove_task_commit(
+                primary, sha, base, task_id, title, task_file, files
+            ) is None:
+                candidates.append(sha)
+        if len(candidates) > 1:
+            return {**report, "verdict": "block", "reason": "multiple proven candidates", "candidates": candidates}
+        if not candidates:
+            return {**report, "verdict": "resume", "reason": "no landed commit; resume the isolated diff"}
+    commit = candidates[0]
+    if task_branch and run_git(primary, "rev-parse", "--verify", "-q", task_branch).returncode == 0:
+        if _patch_id(primary, f"{base}..{task_branch}") != _patch_id(primary, f"{commit}^..{commit}"):
+            return {**report, "verdict": "block", "reason": "retained task branch differs from the landed commit", "candidates": candidates}
+    return {**report, "verdict": "recovered", "commit": commit, "candidates": candidates}
+
+
+def recover(primary: Path, tasks_dir: Path) -> Dict[str, object]:
+    """Prove each done/in-progress task's landing commit from git. Read-only.
+
+    Verdicts: `recovered` (exactly one proven commit; orchestrator records it),
+    `resume` (nothing landed; continue from the isolated worktree), `block`
+    (missing proof, conflicting proof, or inconsistent metadata), `none`
+    (status needs no recovery). Verify is not rerun: a proven landing commit is
+    its own evidence.
+    """
+    primary = require_directory(primary, "primary worktree")
+    if worktree_root(primary) != primary:
+        raise IsolationError(f"primary is not its Git root: {primary}")
+    bound = require_attached(primary)
+    tasks_dir = tasks_dir if tasks_dir.is_absolute() else primary / tasks_dir
+    if not tasks_dir.is_dir():
+        raise IsolationError(f"tasks directory missing: {tasks_dir}")
+    tasks = [_recover_task(primary, bound, path) for path in sorted(tasks_dir.glob("*.md"))]
+    return {
+        "bound_branch": bound,
+        "head": current_sha(primary),
+        "tasks": tasks,
+        "verdict": "block" if any(t["verdict"] == "block" for t in tasks) else "ok",
+    }
+
+
 def retire(
     primary: Path,
     worktree: Path,
@@ -478,6 +613,12 @@ def parser() -> argparse.ArgumentParser:
     land_parser.add_argument("--task-file", required=True)
     land_parser.add_argument("--allow-path", action="append", default=[], dest="allow_paths")
 
+    recover_parser = subparsers.add_parser(
+        "recover", help="prove landed task commits from git; read-only"
+    )
+    recover_parser.add_argument("--repo", type=Path, required=True)
+    recover_parser.add_argument("--tasks-dir", type=Path, default=Path(".project/tasks"))
+
     retire_parser = subparsers.add_parser("retire", help="remove a named sidecar checkout")
     retire_parser.add_argument("--repo", type=Path, required=True)
     retire_parser.add_argument("--worktree", type=Path, required=True)
@@ -508,6 +649,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 arguments.task_file,
                 arguments.allow_paths,
             )
+        elif arguments.command == "recover":
+            result = recover(arguments.repo, arguments.tasks_dir)
         else:
             result = retire(
                 arguments.repo,

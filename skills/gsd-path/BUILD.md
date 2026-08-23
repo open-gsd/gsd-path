@@ -33,8 +33,8 @@ explicitly invokes it.
   [wave-panel template](templates/wave-panel.md). Resolve them to absolute
   paths before briefing agents. Resolve `scripts/review_panel.py` when
   PLAN.md Config names a review panel. Resolve `scripts/check_handoffs.py`
-  for Intent coverage. Resolve `scripts/isolation.py` for
-  task isolation, verify sidecars, and task landing; do not invent
+  for Intent coverage. Resolve `scripts/isolation.py` for task isolation,
+  recovery, verify sidecars, and task landing; do not invent
   `git worktree add`, `--detach`, commit, or cherry-pick commands.
 - There is no board file. Task frontmatter is the only task-state record;
   when a report or question needs a wave summary, render it inline from the
@@ -104,32 +104,24 @@ explicitly invokes it.
 For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
 `wave` equals N):
 
-1. **Recover before dispatch.** Read task frontmatter and
-   inspect primary bookkeeping dirt plus every recorded task worktree and
-   branch before selecting work. For an `in-progress` task with `commit: null`,
-   use its recorded `base`, isolated worktree, and branch first. If task landing
-   may already have happened,
-   inspect only first-parent commits in `base..STATE.branch` whose subject
-   equals `<task-id>: <task title>`. A candidate must touch the task file, have
-   no path outside `files` plus that task file, carry a body whose `Task:` field
-   names the task file and whose sorted `Files:` list exactly matches the changed
-   paths, preserve the task contract with an append-only Log delta, and pass
-   isolated Verify. The retained task branch or worktree must still prove the
-   candidate's complete binary product patch and task-Log delta byte-for-byte
-   equal the isolated source commit/diff.
-   Exactly one proven candidate recovers its full SHA and `done` state; zero
-   candidates resumes the retained isolated diff or returns it to `pending`
-   only when ownership is clear; missing proof, multiple candidates, or any
-   inconsistency blocks. For a task already carrying `status: done` and a full
-   `commit`, prove that exact commit by the same subject, body, path,
-   source-patch, Log-delta, and Verify checks. If its metadata is the sole
-   uncommitted primary change, commit that bookkeeping; if the metadata is
-   already in HEAD, leave it untouched. Then retire a still-present recorded worktree with
-   `isolation.py retire` only when both the worktree and branch resolve to that
-   proven task source and are clean. It
-   is valid for both to be absent after earlier cleanup; one missing, a dirty
-   worktree, or mismatched ownership blocks. Never use an unanchored log grep,
-   infer a SHA from `done`, or reset unknown work.
+1. **Recover before dispatch.** Run `python3 <absolute isolation.py> recover
+   --repo <absolute primary>`. It is read-only and proves every `done` or
+   `in-progress` task's landing commit from git (first-parent scan for
+   `<task-id>: <task title>`, body `Task:`/`Files:`, declared-path allow-list,
+   append-only task-file delta, patch equality with a retained task branch)
+   and reports the recorded worktree's presence, branch, and cleanliness. Act
+   only on its verdicts; do not re-derive them in prose, rerun Verify on a
+   proven commit, use an unanchored log grep, infer a SHA from `done`, or
+   reset unknown work.
+   - `recovered`: write the returned `commit` and `status: done` when the
+     frontmatter lacks them; if that metadata is the sole uncommitted primary
+     change, commit it. Retire a still-present recorded worktree with
+     `isolation.py retire` only when the report shows it present, clean, and
+     on the recorded branch; both absent is valid.
+   - `resume`: continue from the retained isolated worktree and branch; when
+     the report shows the worktree absent, return the task to `pending` only
+     when ownership is clear.
+   - `block`: set `build/blocked` with the returned reason and stop.
 
 2. **Prepare the ready set.** Reconcile failed and blocked tasks, then
    select pending tasks whose dependencies are `done`. Readiness is
