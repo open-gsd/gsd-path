@@ -13,7 +13,9 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
+import archive_milestone
 import detect_project
+import promote_lookahead
 
 
 SCRIPT = ROOT / "scripts" / "detect_project.py"
@@ -1694,6 +1696,324 @@ class DetectProjectTests(unittest.TestCase):
                     self.assertEqual(caught.exception.errno, errno.EBADF)
             self.assertFalse((repo / ".project" / "STATE.md").exists())
 
+class PromoteLookaheadTests(unittest.TestCase):
+    AUDIT = """# Docs Audit
+
+## User rulings
+
+| Queue # | Ruling | User's words | Planned |
+|---------|--------|--------------|---------|
+| 1 | fix-doc | "keep this ruling" | no |
+
+## Remediation queue
+"""
+
+    def git(self, repo: Path, *args: str) -> str:
+        result = subprocess.run(
+            ["git", *args],
+            cwd=repo,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        return result.stdout.strip()
+
+    def setup_repo(
+        self,
+        repo: Path,
+        *,
+        archived_audit: bool = True,
+        mismatched_audit: bool = False,
+    ) -> str:
+        self.git(repo, "init", "-q", "-b", "main")
+        self.git(repo, "config", "user.email", "dev@example.test")
+        self.git(repo, "config", "user.name", "Dev")
+        self.git(repo, "commit", "-q", "--allow-empty", "-m", "base")
+        self.git(repo, "switch", "-q", "-c", "gsd-path/M001")
+        project = repo / ".project"
+        archive = project / "archive" / "001-first" / "research"
+        archive.mkdir(parents=True)
+        if archived_audit:
+            (archive / "DOCS-AUDIT.md").write_text(self.AUDIT, encoding="utf-8")
+        (project / "STATE.md").write_text(
+            """---
+pipeline: gsd-path/v2
+project: demo
+milestone: first
+phase: shipped
+status: done
+branch: gsd-path/M001
+archive: .project/archive/001-first
+---
+
+# Project State
+""",
+            encoding="utf-8",
+        )
+        (project / "ROADMAP.md").write_text(
+            """# Roadmap
+
+### M001 — first
+
+Depends on: []
+Status: shipped
+Archive: .project/archive/001-first
+Integrated: null
+
+### M002 — second
+
+Depends on: [M001]
+Status: pending
+Archive: null
+Integrated: null
+""",
+            encoding="utf-8",
+        )
+        next_root = project / "next"
+        (next_root / "intent").mkdir(parents=True)
+        (next_root / "research").mkdir()
+        (next_root / "plan").mkdir()
+        (next_root / "tasks").mkdir()
+        (next_root / "STATE.md").write_text(
+            """---
+pipeline: gsd-path/v2
+project: demo
+milestone: second
+phase: plan
+status: done
+branch: null
+archive: null
+---
+""",
+            encoding="utf-8",
+        )
+        (next_root / "intent" / "INTENT.md").write_text("# Intent\n")
+        track_audit = self.AUDIT
+        if mismatched_audit:
+            track_audit = track_audit.replace("keep this ruling", "changed ruling")
+        (next_root / "research" / "DOCS-AUDIT.md").write_text(
+            track_audit,
+            encoding="utf-8",
+        )
+        (next_root / "research" / "SYNTHESIS.md").write_text("# Synthesis\n")
+        (next_root / "plan" / "PLAN.md").write_text("# Plan\n")
+        (next_root / "tasks" / "T001-demo.md").write_text("# Task\n")
+        if archived_audit:
+            active_research = project / "research"
+            active_research.mkdir()
+            (active_research / "DOCS-AUDIT.md").write_text(
+                self.AUDIT,
+                encoding="utf-8",
+            )
+        self.git(repo, "add", ".project")
+        self.git(repo, "commit", "-q", "-m", "ship: M001 — first")
+        ship = self.git(repo, "rev-parse", "HEAD")
+        self.git(repo, "switch", "-q", "main")
+        integration_body = (
+            ".project/archive/001-first",
+            ship,
+            "main",
+            "gsd-path/M001",
+        )
+        self.git(
+            repo,
+            "merge",
+            "-q",
+            "--no-ff",
+            "gsd-path/M001",
+            "-m",
+            "integrate: M001 — merge gsd-path/M001 into main",
+            "-m",
+            archive_milestone.integrate_commit_body(*integration_body),
+        )
+        integrate = self.git(repo, "rev-parse", "HEAD")
+        self.git(
+            repo,
+            "tag",
+            "-a",
+            "milestone/001-first",
+            "-m",
+            "first milestone",
+            integrate,
+        )
+        self.git(repo, "update-ref", "refs/remotes/origin/main", integrate)
+        self.git(
+            repo,
+            "symbolic-ref",
+            "refs/remotes/origin/HEAD",
+            "refs/remotes/origin/main",
+        )
+        self.git(repo, "switch", "-q", "-c", "gsd-path/M002", integrate)
+        return integrate
+
+    def project_snapshot(self, project: Path) -> dict[str, bytes]:
+        return {
+            path.relative_to(project).as_posix(): path.read_bytes()
+            for path in project.rglob("*")
+            if path.is_file()
+        }
+
+    def test_promote_moves_artifacts_and_updates_state_idempotently(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            integrate = self.setup_repo(repo)
+
+            result = promote_lookahead.promote(
+                repo,
+                "gsd-path/M002",
+                integrate,
+            )
+
+            project = repo / ".project"
+            self.assertEqual(result["status"], "promoted")
+            self.assertFalse((project / "next").exists())
+            for name in promote_lookahead.ARTIFACTS:
+                self.assertTrue((project / name).is_dir())
+            state = (project / "STATE.md").read_text(encoding="utf-8")
+            self.assertEqual(promote_lookahead.state_value(state, "milestone"), "second")
+            self.assertEqual(promote_lookahead.state_value(state, "branch"), "gsd-path/M002")
+            self.assertEqual(promote_lookahead.state_value(state, "archive"), "null")
+            self.assertEqual(
+                promote_lookahead.promote(repo, "gsd-path/M002", integrate)["status"],
+                "already-promoted",
+            )
+
+    def test_interrupted_promotion_resumes_from_journal(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            integrate = self.setup_repo(repo)
+            source = repo / ".project" / "next" / "intent"
+            destination = repo / ".project" / "intent"
+            original_replace = promote_lookahead.os.replace
+            interrupted = False
+
+            def interrupt_after_intent(old, new) -> None:
+                nonlocal interrupted
+                original_replace(old, new)
+                old_path = Path(old)
+                new_path = Path(new)
+                if (
+                    old_path.name == source.name
+                    and old_path.parent.name == "next"
+                    and new_path.name == destination.name
+                    and new_path.parent.name == ".project"
+                    and not interrupted
+                ):
+                    interrupted = True
+                    raise OSError("simulated interruption")
+
+            with mock.patch.object(
+                promote_lookahead.os,
+                "replace",
+                new=interrupt_after_intent,
+            ):
+                with self.assertRaises(OSError):
+                    promote_lookahead.promote(repo, "gsd-path/M002", integrate)
+
+            project = repo / ".project"
+            self.assertTrue((project / promote_lookahead.JOURNAL_NAME).is_file())
+            result = promote_lookahead.promote(repo, "gsd-path/M002", integrate)
+            self.assertEqual(result["status"], "promoted")
+            self.assertFalse((project / "next").exists())
+            self.assertFalse((project / promote_lookahead.JOURNAL_NAME).exists())
+
+    def test_promote_accepts_shipped_archive_without_docs_audit(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            integrate = self.setup_repo(repo, archived_audit=False)
+
+            result = promote_lookahead.promote(
+                repo,
+                "gsd-path/M002",
+                integrate,
+            )
+
+            self.assertEqual(result["status"], "promoted")
+            self.assertFalse((repo / ".project" / "next").exists())
+
+    def test_wrong_integration_sha_blocks_without_changes(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            self.setup_repo(repo)
+            project = repo / ".project"
+            before = self.project_snapshot(project)
+            wrong = self.git(repo, "rev-parse", "HEAD^")
+
+            with self.assertRaises(promote_lookahead.LookaheadError):
+                promote_lookahead.promote(repo, "gsd-path/M002", wrong)
+
+            self.assertEqual(self.project_snapshot(project), before)
+
+    def test_branch_must_match_selected_roadmap_milestone(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            integrate = self.setup_repo(repo)
+            self.git(repo, "branch", "-m", "gsd-path/M003")
+            project = repo / ".project"
+            before = self.project_snapshot(project)
+
+            with self.assertRaises(promote_lookahead.LookaheadError):
+                promote_lookahead.promote(repo, "gsd-path/M003", integrate)
+
+            self.assertEqual(self.project_snapshot(project), before)
+
+    def test_recovery_requires_a_failed_strict_preflight(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            integrate = self.setup_repo(repo)
+            project = repo / ".project"
+            before = self.project_snapshot(project)
+
+            with self.assertRaises(promote_lookahead.LookaheadError):
+                promote_lookahead.recover(
+                    repo,
+                    "gsd-path/M002",
+                    integrate,
+                    "discard",
+                )
+
+            self.assertEqual(self.project_snapshot(project), before)
+
+    def test_audit_mismatch_is_unchanged_and_recovery_is_idempotent(self) -> None:
+        for strategy in ("rewind", "discard"):
+            with self.subTest(strategy=strategy):
+                with tempfile.TemporaryDirectory() as temporary:
+                    repo = Path(temporary)
+                    integrate = self.setup_repo(repo, mismatched_audit=True)
+                    project = repo / ".project"
+                    before = self.project_snapshot(project)
+
+                    with self.assertRaises(promote_lookahead.NeedsRecovery):
+                        promote_lookahead.promote(repo, "gsd-path/M002", integrate)
+
+                    self.assertEqual(self.project_snapshot(project), before)
+                    result = promote_lookahead.recover(
+                        repo,
+                        "gsd-path/M002",
+                        integrate,
+                        strategy,
+                    )
+                    self.assertEqual(result["status"], "recovered")
+                    self.assertFalse((project / "next").exists())
+                    self.assertFalse((project / "intent").exists())
+                    self.assertFalse((project / "plan").exists())
+                    self.assertFalse((project / "tasks").exists())
+                    self.assertEqual(
+                        (project / "research" / "DOCS-AUDIT.md").read_text(),
+                        self.AUDIT,
+                    )
+                    state = (project / "STATE.md").read_text(encoding="utf-8")
+                    self.assertEqual(promote_lookahead.state_value(state, "phase"), "inspect")
+                    self.assertEqual(promote_lookahead.state_value(state, "status"), "active")
+                    self.assertEqual(
+                        promote_lookahead.recover(
+                            repo,
+                            "gsd-path/M002",
+                            integrate,
+                            strategy,
+                        )["status"],
+                        "already-recovered",
+                    )
 
 if __name__ == "__main__":
     unittest.main()

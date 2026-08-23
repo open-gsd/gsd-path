@@ -259,16 +259,38 @@ a crash. Record the returned branch and base in the state
 Log, then:
 
 - **Program** (ROADMAP.md exists): while `pending` entries remain, first
-  promote any lookahead track. When `.project/next/STATE.md` exists, move
-  whichever of `next/intent/`, `next/research/`, `next/plan/`, and
-  `next/tasks/` exist to their active `.project/` paths (promotion is
-  idempotent — resume an interrupted promotion by moving what remains),
-  copy the track's `phase`, `status`, and `milestone` into STATE.md with
-  `branch: gsd-path/M00N` and `archive: null`, mark that entry `active` in
-  ROADMAP.md, fill the previously shipped entry's `Integrated:` field with
-  the merge SHA of the just-completed integrate commit,
-  remove `.project/next/`, and commit the promotion with exact
-  subject `router: promote lookahead milestone <slug>` and body
+  promote any lookahead track. When `.project/next/STATE.md` exists, run the
+  bundled transaction helper:
+
+  ```text
+  python3 <absolute-bundled-promote-lookahead.py> promote \
+    --repo <absolute-primary-root> \
+    --branch gsd-path/M00N \
+    --integrate <exact-integration-merge-sha>
+  ```
+
+  The helper validates the track, shipped archive, audit carry-forward, branch,
+  STATE.md, ROADMAP.md, and all source and destination paths before mutation.
+  It journals the transaction, resumes interrupted moves and state updates,
+  and removes the journal only after canonical state and paths agree. Repeat
+  the same command after an interruption.
+
+  A `needs-recovery` result makes only the recovery choice a user decision.
+  Present the mismatch with links and offer `Rewind the selected milestone to
+  inspect (recommended)` or `Discard the lookahead track`. Invoke the selected
+  deterministic recovery with the same repo, branch, and integration SHA:
+
+  ```text
+  python3 <absolute-bundled-promote-lookahead.py> recover \
+    --repo <absolute-primary-root> \
+    --branch gsd-path/M00N \
+    --integrate <exact-integration-merge-sha> \
+    --strategy <rewind|discard>
+  ```
+
+  Repeat that command after an interruption. A successful promote or recovery
+  result supplies the milestone and route state. Commit the transaction with
+  exact subject `router: promote lookahead milestone <slug>` and body
   `Why: promote lookahead track` plus `Milestone: <slug>` and
   `Integrate: <merge SHA>` — the router's only
   bookkeeping commit outside the new-repository transaction. Then route by
