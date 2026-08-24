@@ -154,12 +154,6 @@ Project verify: `python3 tests/test_app.py`
 - max_review_cycles: 2
 - review_panel: off
 
-## Intent coverage
-
-| Criterion | Task | Acceptance |
-|-----------|------|------------|
-| SC1 | T001 | AC1 |
-
 ## Wave 1 — demo
 
 Goal: implement render

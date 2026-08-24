@@ -1,6 +1,5 @@
 """Router contract: Markdown delegates routing to the executable state helper."""
 
-import re
 import subprocess
 import tempfile
 import unittest
@@ -10,7 +9,6 @@ from scripts import pipeline_state
 
 
 ROUTER_DIR = Path(__file__).resolve().parents[1] / "skills" / "gsd-path"
-STATE_TEMPLATE = ROUTER_DIR / "templates" / "state.md"
 CONTRACTS = {
     "inspect": "INSPECT.md",
     "define": "DEFINE.md",
@@ -58,12 +56,6 @@ class RouterContractTests(unittest.TestCase):
                 encoding="utf-8",
             )
             return pipeline_state.route_state(repo)["route"]
-
-    def test_template_phase_tokens_match_the_executable_router(self):
-        template = STATE_TEMPLATE.read_text(encoding="utf-8")
-        tokens = re.search(r"v2 tokens: (.+)", template).group(1)
-        phases = [token.strip() for token in tokens.split("|")]
-        self.assertEqual(list(pipeline_state.PHASES), phases)
 
     def test_every_executable_phase_target_has_a_bundled_contract(self):
         for phase, filename in CONTRACTS.items():

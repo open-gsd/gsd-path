@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare, validate, and abandon crash-resumable GSD Path milestone archives.
+"""Prepare, render, validate, integrate, and abandon GSD Path milestone archives.
 
 Also validates milestone integration: the read-only validate-integrated
 command checks the shipped transaction, the integration merge commit on the
@@ -20,6 +20,11 @@ from pathlib import Path, PurePosixPath
 from typing import Iterator, NamedTuple, Optional, Sequence
 
 try:
+    from isolation import (
+        IsolationError,
+        checkpoint as isolation_checkpoint,
+        verify_landed_task_files,
+    )
     from pipeline_git import (
         bound_branch_name,
         default_branch_name,
@@ -28,11 +33,24 @@ try:
         is_bound_branch,
         is_integrate_subject,
         is_ship_subject,
+        milestone_id,
         milestone_number,
         ship_commit_body,
         ship_subject,
     )
+    from review_panel import KNOWN_FAMILIES, ReviewPanelError, parse_sources
+    from pipeline_state import (
+        PipelineState,
+        PipelineStateError,
+        load_state,
+        transition_state,
+    )
 except ImportError:  # pragma: no cover - package import used by tests
+    from scripts.isolation import (
+        IsolationError,
+        checkpoint as isolation_checkpoint,
+        verify_landed_task_files,
+    )
     from scripts.pipeline_git import (
         bound_branch_name,
         default_branch_name,
@@ -41,9 +59,17 @@ except ImportError:  # pragma: no cover - package import used by tests
         is_bound_branch,
         is_integrate_subject,
         is_ship_subject,
+        milestone_id,
         milestone_number,
         ship_commit_body,
         ship_subject,
+    )
+    from scripts.review_panel import KNOWN_FAMILIES, ReviewPanelError, parse_sources
+    from scripts.pipeline_state import (
+        PipelineState,
+        PipelineStateError,
+        load_state,
+        transition_state,
     )
 
 if sys.platform == "win32":
@@ -57,10 +83,21 @@ TASK_FILE_PATTERN = re.compile(r"^T\d{3}-[a-z0-9][a-z0-9-]*\.md$")
 WAVE_FILE_PATTERN = re.compile(
     r"^wave-([1-9]\d*)\.cycle([1-9]\d*)(\.(?:contract|adversarial|panel))?\.md$"
 )
+WAVE_PANEL_SKIP_PATTERN = re.compile(
+    r"^wave-([1-9]\d*)\.cycle([1-9]\d*)\.panel\.skipped\.json$"
+)
 FINAL_CRITERION_PATTERN = re.compile(r"^### SC([1-9]\d*) — (.+)$")
+INTENT_CRITERION_PATTERN = re.compile(r"^([1-9]\d*)\.\s+(\S.*)$")
+HTML_COMMENT_PATTERN = re.compile(r"<!--.*?-->", re.DOTALL)
 FINAL_GAP_FILE_PATTERN = re.compile(r"^final-gap-([1-9]\d*)\.md$")
 FINAL_GAP_HEADING_PATTERN = re.compile(r"^# Gap Review — ([1-9]\d*): (.+)$")
 WAVE_TASK_HEADING_PATTERN = re.compile(r"^## (T\d{3}) — (.+): (pass|fail)$")
+WAVE_SC_HEADING_PATTERN = re.compile(
+    r"^### (SC[1-9]\d*) — (.+): (pass|fail)$"
+)
+PLAN_COVERAGE_ROW_PATTERN = re.compile(
+    r"^\|\s*(SC[1-9]\d*)\s*\|\s*(T\d{3})\s*\|\s*([^|]+?)\s*\|$"
+)
 DIALOGUE_HEADING_PATTERN = re.compile(
     r"^### D(\d{3}) — (\d{4}-\d{2}-\d{2}) — "
     r"([a-z-]+)/(active|blocked|done) — (.+)$"
@@ -109,6 +146,11 @@ MANIFEST_HEADINGS = ("## Success criteria at ship", "## Contents", "## Notes")
 CARRY_TEMP_NAME = ".DOCS-AUDIT.md.gsd-path-tmp"
 STATE_TEMP_NAME = ".STATE.md.gsd-path-tmp"
 MANIFEST_TEMP_NAME = ".MANIFEST.md.gsd-path-tmp"
+ABANDON_JOURNAL_SCHEMA = "gsd-path/abandon/v1"
+ABANDON_JOURNAL_NAME = "gsd-path-abandon.json"
+ROADMAP_HEADING_PATTERN = re.compile(
+    r"^### (M\d{3,}) — ([a-z0-9][a-z0-9-]*)\s*$"
+)
 # Evidence files are per-dispatched-dimension: the research phase gate owns
 # their existence, so the archive requires only the always-produced core.
 REQUIRED_ARCHIVE_FILES = (
@@ -135,15 +177,12 @@ def contains_placeholder(value: str) -> bool:
     return PLACEHOLDER_PATTERN.search(value) is not None
 
 
-REVIEW_PANEL_LINE = re.compile(r"^-\s*review_panel:\s*(\S+)", re.MULTILINE)
-
-
-def plan_review_panel_enabled(plan_text: str) -> bool:
-    matches = REVIEW_PANEL_LINE.findall(plan_text)
-    if not matches:
-        return False
-    token = matches[-1].split()[0].strip().strip("`.")
-    return token.casefold() != "off"
+def plan_review_panel_config(plan_text: str) -> dict:
+    """Parse PLAN review-panel policy with the canonical fail-closed parser."""
+    try:
+        return parse_sources(plan_text, None)
+    except ReviewPanelError as error:
+        raise ArchiveError(f"PLAN.md review_panel config is invalid: {error}") from error
 
 
 def split_manifest_row(line: str) -> Sequence[str]:
@@ -294,17 +333,28 @@ def is_unset(value: Optional[str]) -> bool:
     return not value or value.lower() in {"null", "none"} or value.startswith("<")
 
 
-def milestone_slug(state: str) -> str:
-    milestone = frontmatter_value(state, "milestone")
+def milestone_slug(state: PipelineState) -> str:
+    milestone = state.milestone
     if is_unset(milestone):
         raise ArchiveError("STATE.md does not name a milestone")
     return normalized_slug(milestone or "")
 
 
-def require_archive_milestone(archive_name: str, state: str) -> None:
+def require_archive_milestone(archive_name: str, state: PipelineState) -> None:
     match = ARCHIVE_PATTERN.fullmatch(archive_name)
-    if not match or match.group(2) != milestone_slug(state):
+    if (
+        not match
+        or int(match.group(1)) < 1
+        or match.group(2) != milestone_slug(state)
+    ):
         raise ArchiveError("persisted archive slug does not match normalized STATE.milestone")
+    branch = state.branch
+    if (
+        branch is None
+        or not is_bound_branch(branch)
+        or int(match.group(1)) != milestone_number(branch)
+    ):
+        raise ArchiveError("persisted archive sequence does not match STATE.branch")
 
 
 def require_project_layout(project: Path) -> Path:
@@ -323,7 +373,9 @@ def safe_archive_root(project: Path) -> Path:
     active_root = require_project_layout(project)
     archive_root = active_root / "archive"
     if archive_root.is_symlink() or not archive_root.is_dir():
-        raise ArchiveError(f"archive root must be a real directory: {archive_root}")
+        raise ArchiveError(
+            f"archive root must be a real, non-symlink directory: {archive_root}"
+        )
     if archive_root.resolve().parent != active_root.resolve():
         raise ArchiveError(f"archive root resolves outside .project: {archive_root}")
     for candidate in archive_root.iterdir():
@@ -360,22 +412,82 @@ def archive_from_state(project: Path, configured: str) -> Path:
     return archive
 
 
-def persisted_archive(project: Path, state_path: Path, slug: str) -> Path:
-    state = state_path.read_text(encoding="utf-8")
-    configured = frontmatter_value(state, "archive")
-    if not is_unset(configured):
-        return archive_from_state(project, configured)
+def strict_state(project: Path) -> tuple[PipelineState, str, Path]:
+    try:
+        return load_state(project, ".project")
+    except PipelineStateError as error:
+        raise ArchiveError(f"STATE.md is invalid: {error}") from error
 
-    archive_root = create_archive_root(project)
-    sequences = []
+
+def archive_sequence_entries(project: Path) -> dict[int, Path]:
+    archive_root = project / ".project" / "archive"
+    if not archive_root.exists() and not archive_root.is_symlink():
+        return {}
+    archive_root = safe_archive_root(project)
+    entries = {}
     for candidate in archive_root.iterdir():
         match = ARCHIVE_PATTERN.fullmatch(candidate.name)
-        if candidate.is_dir() and match:
-            sequences.append(int(match.group(1)))
-    sequence = max(sequences, default=0) + 1
-    archive = archive_root / f"{sequence:03d}-{normalized_slug(slug)}"
+        if match is None or not candidate.is_dir():
+            raise ArchiveError(f"archive root has a noncanonical entry: {candidate.name}")
+        number = int(match.group(1))
+        if number == 0:
+            raise ArchiveError("archive milestone number must be >= 1")
+        if number in entries:
+            raise ArchiveError(
+                f"archive sequence {number:03d} has multiple milestone directories"
+            )
+        entries[number] = candidate
+    return entries
+
+
+def resolved_archive_target(
+    project: Path, slug: str, parsed_state: PipelineState
+) -> Path:
+    branch = parsed_state.branch
+    if not isinstance(branch, str) or not is_bound_branch(branch):
+        raise ArchiveError("STATE.branch must be a canonical gsd-path/M00N branch")
+    expected_number = milestone_number(branch)
+    configured = parsed_state.archive
+    entries = archive_sequence_entries(project)
+    missing_prior = [
+        number for number in range(1, expected_number) if number not in entries
+    ]
+    later = sorted(number for number in entries if number > expected_number)
+    if missing_prior or later:
+        raise ArchiveError(
+            f"archive sequence does not match bound branch {branch}: "
+            f"missing={missing_prior}, later={later}"
+        )
+
+    if configured is not None:
+        archive = archive_from_state(project, configured)
+        if milestone_number(archive.name) != expected_number:
+            raise ArchiveError("persisted archive sequence does not match STATE.branch")
+        collision = entries.get(expected_number)
+        if collision is not None and collision.resolve() != archive.resolve():
+            raise ArchiveError(
+                f"archive sequence {expected_number:03d} collides with {collision.name}"
+            )
+        return archive
+
+    if expected_number in entries:
+        raise ArchiveError(
+            f"archive sequence {expected_number:03d} already exists before persistence"
+        )
+    archive_root = project / ".project" / "archive"
+    return archive_root / f"{expected_number:03d}-{normalized_slug(slug)}"
+
+
+def persisted_archive(
+    project: Path, state_path: Path, slug: str, parsed_state: PipelineState
+) -> Path:
+    archive = resolved_archive_target(project, slug, parsed_state)
+    if parsed_state.archive is not None:
+        return archive
+    create_archive_root(project)
     relative_archive = archive.relative_to(project).as_posix()
-    atomic_write(state_path, set_frontmatter_value(state, "archive", relative_archive))
+    state_text = state_path.read_text(encoding="utf-8")
+    atomic_write(state_path, set_frontmatter_value(state_text, "archive", relative_archive))
     return archive
 
 
@@ -460,10 +572,99 @@ def is_real_file(path: Path) -> bool:
 def canonical_task_files(tasks: Path) -> Sequence[Path]:
     if tasks.is_symlink() or not tasks.is_dir():
         return ()
-    candidates = sorted(path for path in tasks.iterdir() if path.name.startswith("T"))
-    if any(not TASK_FILE_PATTERN.fullmatch(path.name) or not is_real_file(path) for path in candidates):
+    candidates = sorted(tasks.iterdir())
+    if any(
+        not TASK_FILE_PATTERN.fullmatch(path.name) or not is_real_file(path)
+        for path in candidates
+    ):
         raise ArchiveError("canonical task artifacts must be real T###-slug.md files")
     return candidates
+
+
+def completed_task_files(
+    project: Path, tasks: Path, reviewed_head: str
+) -> Sequence[Path]:
+    """Return task artifacts only when each records landed completion evidence."""
+    candidates = canonical_task_files(tasks)
+    try:
+        verify_landed_task_files(
+            project,
+            candidates,
+            ".project/tasks",
+            reviewed_head,
+        )
+    except (IsolationError, ValueError) as error:
+        raise ArchiveError(f"task landing proof failed: {error}") from error
+    return candidates
+
+
+def validate_panel_skip_receipt(path: Path, expected_mode: str) -> None:
+    if not is_real_file(path):
+        raise ArchiveError(f"panel skip receipt must be a real file: {path.name}")
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        raise ArchiveError(f"{path.name} is not valid review_panel JSON") from error
+    expected_keys = {
+        "missing",
+        "mode",
+        "parent_family",
+        "reason",
+        "selected",
+        "skipped",
+        "status",
+    }
+    if not isinstance(payload, dict) or set(payload) != expected_keys:
+        raise ArchiveError(f"{path.name} is not a canonical skipped-panel receipt")
+    if (
+        expected_mode != "detected"
+        or payload["mode"] != expected_mode
+        or payload["status"] != "skipped"
+        or payload["reason"] != "no advertised cross-model families"
+        or payload["selected"] != []
+    ):
+        raise ArchiveError(f"{path.name} does not record the expected skipped resolution")
+    parent_family = payload["parent_family"]
+    if parent_family is not None and not isinstance(parent_family, str):
+        raise ArchiveError(f"{path.name} has an invalid parent_family")
+    missing = payload["missing"]
+    if (
+        not isinstance(missing, list)
+        or any(item not in KNOWN_FAMILIES for item in missing)
+        or len(missing) != len(set(missing))
+    ):
+        raise ArchiveError(f"{path.name} has invalid missing families")
+    skipped = payload["skipped"]
+    if not isinstance(skipped, list) or any(
+        not isinstance(item, dict)
+        or set(item) != {"family", "reason"}
+        or item["family"] not in KNOWN_FAMILIES
+        or item["reason"] not in {"parent family", "not advertised", "cap"}
+        for item in skipped
+    ):
+        raise ArchiveError(f"{path.name} has invalid skipped families")
+
+
+def require_plan_panel_evidence(
+    plan_text: str, panel: Path, skipped_receipt: Path
+) -> dict:
+    config = plan_review_panel_config(plan_text)
+    panel_exists = is_real_file(panel)
+    receipt_exists = is_real_file(skipped_receipt)
+    if config["mode"] == "off":
+        if receipt_exists:
+            raise ArchiveError(
+                f"{skipped_receipt.name} conflicts with review_panel mode off"
+            )
+        return config
+    if panel_exists == receipt_exists:
+        raise ArchiveError(
+            "configured review_panel requires exactly one of review/PLAN-PANEL.md "
+            "or review/PLAN-PANEL.skipped.json"
+        )
+    if receipt_exists:
+        validate_panel_skip_receipt(skipped_receipt, str(config["mode"]))
+    return config
 
 
 class WaveArtifact(NamedTuple):
@@ -478,10 +679,15 @@ def canonical_wave_files(reviews: Path) -> Sequence[WaveArtifact]:
         return ()
     candidates = sorted(path for path in reviews.iterdir() if path.name.startswith("wave-"))
     matches = [(path, WAVE_FILE_PATTERN.fullmatch(path.name)) for path in candidates]
-    if any(match is None or not is_real_file(path) for path, match in matches):
+    if any(
+        (match is None and WAVE_PANEL_SKIP_PATTERN.fullmatch(path.name) is None)
+        or not is_real_file(path)
+        for path, match in matches
+    ):
         raise ArchiveError(
             "canonical wave artifacts must be real wave-N.cycleC.md files "
-            "(a .contract, .adversarial, or .panel lens suffix is allowed)"
+            "(a .contract, .adversarial, or .panel lens suffix is allowed), "
+            "or canonical .panel.skipped.json receipts"
         )
     return [
         WaveArtifact(
@@ -491,7 +697,22 @@ def canonical_wave_files(reviews: Path) -> Sequence[WaveArtifact]:
             match.group(3).removeprefix(".") if match.group(3) else None,
         )
         for path, match in matches
+        if match is not None
     ]
+
+
+def canonical_wave_panel_skip_files(reviews: Path) -> dict[tuple[int, int], Path]:
+    if reviews.is_symlink() or not reviews.is_dir():
+        return {}
+    receipts = {}
+    for path in sorted(reviews.iterdir()):
+        match = WAVE_PANEL_SKIP_PATTERN.fullmatch(path.name)
+        if match is None:
+            continue
+        if not is_real_file(path):
+            raise ArchiveError(f"panel skip receipt must be a real file: {path.name}")
+        receipts[(int(match.group(1)), int(match.group(2)))] = path
+    return receipts
 
 
 def require_canonical_transaction_inputs(active_root: Path, archive: Path) -> None:
@@ -507,12 +728,15 @@ def require_canonical_transaction_inputs(active_root: Path, archive: Path) -> No
     if not canonical_wave_files(reviews):
         missing.append("review/wave-N.cycleC.md")
     plan = selected_transaction_path(active_root, archive, "plan/PLAN.md")
-    if is_real_file(plan) and plan_review_panel_enabled(plan.read_text(encoding="utf-8")):
-        panel = selected_transaction_path(active_root, archive, "review/PLAN-PANEL.md")
-        if not is_real_file(panel):
-            missing.append("review/PLAN-PANEL.md")
     if missing:
         raise ArchiveError(f"canonical milestone artifacts are missing: {', '.join(missing)}")
+    require_plan_panel_evidence(
+        plan.read_text(encoding="utf-8"),
+        selected_transaction_path(active_root, archive, "review/PLAN-PANEL.md"),
+        selected_transaction_path(
+            active_root, archive, "review/PLAN-PANEL.skipped.json"
+        ),
+    )
     discussion = selected_transaction_path(active_root, archive, "discuss")
     if discussion.exists():
         validate_discussion_directory(discussion)
@@ -923,8 +1147,10 @@ def remove_interrupted_carry_copy(active_root: Path, archive: Path) -> None:
         temporary_path.unlink()
 
 
-def require_transaction_context(project: Path, state: str, phases: Sequence[str]) -> None:
-    phase = frontmatter_value(state, "phase")
+def require_transaction_context(
+    project: Path, state: PipelineState, phases: Sequence[str]
+) -> None:
+    phase = state.phase
     if phase not in phases:
         raise ArchiveError(f"archive transaction is not valid in phase: {phase}")
 
@@ -935,7 +1161,7 @@ def require_transaction_context(project: Path, state: str, phases: Sequence[str]
     if Path(repository_root).resolve() != project:
         raise ArchiveError(f"--repo must be the Git worktree root: {repository_root}")
 
-    expected_branch = frontmatter_value(state, "branch")
+    expected_branch = state.branch
     current_branch = require_git_success(
         run_git(project, "branch", "--show-current"),
         "resolve current branch",
@@ -993,6 +1219,27 @@ def section_lines(lines: Sequence[str], heading: str, artifact: str) -> Sequence
     return lines[start:end]
 
 
+def archived_intent_criteria(archive: Path) -> dict[int, str]:
+    intent = archive / "intent" / "INTENT.md"
+    if not is_real_file(intent):
+        raise ArchiveError("archived intent must be a real INTENT.md file")
+    text = HTML_COMMENT_PATTERN.sub("", intent.read_text(encoding="utf-8"))
+    lines = text.splitlines()
+    section = section_lines(lines, "## Success criteria", "INTENT.md")
+    criteria = {}
+    for line in section:
+        match = INTENT_CRITERION_PATTERN.fullmatch(line.strip())
+        if match is None:
+            continue
+        number = int(match.group(1))
+        if number in criteria:
+            raise ArchiveError(f"INTENT.md repeats success criterion SC{number}")
+        criteria[number] = " ".join(match.group(2).split())
+    if not criteria or sorted(criteria) != list(range(1, max(criteria) + 1)):
+        raise ArchiveError("INTENT.md success criteria must be contiguous from SC1")
+    return criteria
+
+
 def parse_final_review(archive: Path) -> tuple:
     final = archive / "review" / "FINAL.md"
     if not is_real_file(final):
@@ -1020,6 +1267,14 @@ def parse_final_review(archive: Path) -> tuple:
             headings.append((index, int(match.group(1)), match.group(2).strip()))
     if not headings or [number for _, number, _ in headings] != list(range(1, len(headings) + 1)):
         raise ArchiveError("FINAL.md success criteria must be ordered and contiguous")
+    intent_criteria = archived_intent_criteria(archive)
+    if len(headings) != len(intent_criteria):
+        raise ArchiveError("FINAL.md success criteria do not exactly cover INTENT.md")
+    for _, number, criterion in headings:
+        if " ".join(criterion.split()) != intent_criteria[number]:
+            raise ArchiveError(
+                f"FINAL.md SC{number} heading text differs from archived INTENT.md"
+            )
 
     expected_fields = ("Verdict", "Check", "Observed", "Reference", "Finding", "Fix direction")
     criteria = []
@@ -1082,8 +1337,15 @@ def validate_gap_reviews(archive: Path, reviewed_head: str) -> None:
             raise ArchiveError(f"{path.name} Reviewed HEAD does not match FINAL.md")
         if completed_field(lines, "Gap verdict:", path.name) != "pass":
             raise ArchiveError(f"{path.name} gap review did not pass")
-        if completed_field(lines, "Risk:", path.name) == "none":
+        risk = completed_field(lines, "Risk:", path.name)
+        if risk.casefold() == "none":
             raise ArchiveError(f"{path.name} does not name a completed risk")
+        if (
+            " ".join(headings[0].group(2).split()).casefold()
+            != " ".join(risk.split()).casefold()
+        ):
+            raise ArchiveError(f"{path.name} heading risk does not match Risk field")
+        completed_field(lines, "Waves checked:", path.name)
         evidence = section_lines(lines, "## Checked evidence", path.name)
         check = completed_bullet_field(evidence, "Check", path.name)
         observed = completed_bullet_field(evidence, "Observed", path.name)
@@ -1094,14 +1356,120 @@ def validate_gap_reviews(archive: Path, reviewed_head: str) -> None:
             raise ArchiveError(f"{path.name} checked evidence has no command or reference")
         finding = section_lines(lines, "## Finding", path.name)
         found = completed_bullet_field(finding, "Found", path.name)
-        completed_bullet_field(finding, "Fix direction", path.name)
+        fix_direction = completed_bullet_field(finding, "Fix direction", path.name)
         if found.casefold() == "none":
             raise ArchiveError(f"{path.name} finding has no observed result")
+        if fix_direction.casefold() != "none":
+            raise ArchiveError(f"{path.name} pass must use Fix direction: none")
+
+
+def meaningful_review_evidence(lines: Sequence[str], marker: str) -> bool:
+    prefix = f"- {marker} "
+    evidence = []
+    for line in lines:
+        stripped = line.strip()
+        if not stripped.startswith(prefix):
+            continue
+        evidence.append(stripped.removeprefix(prefix).strip().strip("`"))
+    return bool(evidence) and all(
+        item
+        and item.casefold() not in {"none", "n/a", "null"}
+        and "<" not in item
+        and ">" not in item
+        for item in evidence
+    )
+
+
+def archived_wave_tasks(
+    archive: Path, wave_numbers: Sequence[int]
+) -> dict[int, Sequence[tuple[str, str]]]:
+    tasks: dict[int, list[tuple[str, str]]] = {
+        wave: [] for wave in wave_numbers
+    }
+    seen = set()
+    for path in canonical_task_files(archive / "tasks"):
+        content = path.read_text(encoding="utf-8")
+        task_id = frontmatter_value(content, "id")
+        title = frontmatter_value(content, "title")
+        wave_text = frontmatter_value(content, "wave")
+        if task_id is None or title is None or wave_text is None:
+            raise ArchiveError(f"{path.name} is missing id, title, or wave")
+        if task_id in seen or not path.name.startswith(f"{task_id}-"):
+            raise ArchiveError(f"{path.name} has an invalid or repeated task id")
+        seen.add(task_id)
+        try:
+            wave = int(wave_text)
+        except ValueError as error:
+            raise ArchiveError(f"{path.name} has an invalid wave") from error
+        if wave not in tasks:
+            raise ArchiveError(f"{path.name} names unknown Wave {wave}")
+        if contains_placeholder(title):
+            raise ArchiveError(f"{path.name} has an incomplete title")
+        tasks[wave].append((task_id, title))
+    for wave, members in tasks.items():
+        if not members:
+            raise ArchiveError(f"plan Wave {wave} has no task files")
+    return tasks
+
+
+def plan_wave_criteria(
+    archive: Path,
+    plan_text: str,
+    wave_tasks: dict[int, Sequence[tuple[str, str]]],
+) -> dict[int, Sequence[tuple[str, str]]]:
+    intent_path = archive / "intent" / "INTENT.md"
+    if not intent_path.exists() and not intent_path.is_symlink():
+        return {wave: () for wave in wave_tasks}
+    criteria = archived_intent_criteria(archive)
+    lines = plan_text.splitlines()
+    if lines.count("## Intent coverage") != 1:
+        raise ArchiveError("PLAN.md requires one Intent coverage section")
+    coverage = section_lines(lines, "## Intent coverage", "PLAN.md")
+    rows = []
+    for line in coverage:
+        if not re.match(r"^\|\s*SC\d", line.strip()):
+            continue
+        match = PLAN_COVERAGE_ROW_PATTERN.fullmatch(line.strip())
+        if match is None:
+            raise ArchiveError("PLAN.md has a malformed Intent coverage row")
+        rows.append((match.group(1), match.group(2), match.group(3).strip()))
+    if not rows:
+        raise ArchiveError("PLAN.md Intent coverage has no rows")
+    known_tasks = {
+        task_id for tasks in wave_tasks.values() for task_id, _title in tasks
+    }
+    seen = set()
+    for sc_id, task_id, acceptance in rows:
+        number = int(sc_id.removeprefix("SC"))
+        if number not in criteria:
+            raise ArchiveError(f"PLAN.md Intent coverage names unknown {sc_id}")
+        if task_id not in known_tasks:
+            raise ArchiveError(f"PLAN.md Intent coverage names unknown {task_id}")
+        if not acceptance or contains_placeholder(acceptance):
+            raise ArchiveError("PLAN.md Intent coverage has incomplete acceptance evidence")
+        if (sc_id, task_id, acceptance) in seen:
+            raise ArchiveError("PLAN.md Intent coverage repeats a row")
+        seen.add((sc_id, task_id, acceptance))
+    result = {}
+    for wave, tasks in wave_tasks.items():
+        task_ids = {task_id for task_id, _title in tasks}
+        owned_numbers = sorted(
+            {
+                int(sc_id.removeprefix("SC"))
+                for sc_id, task_id, _acceptance in rows
+                if task_id in task_ids
+            }
+        )
+        result[wave] = tuple(
+            (f"SC{number}", criteria[number]) for number in owned_numbers
+        )
+    return result
 
 
 def validate_wave_review(
     path: Path,
-    known_task_ids: Optional[Sequence[str]],
+    expected_tasks: Sequence[tuple[str, str]],
+    expected_criteria: Sequence[tuple[str, str]],
     expected_depth: str,
     expected_lens: Optional[str] = None,
 ) -> Sequence[str]:
@@ -1113,6 +1481,7 @@ def validate_wave_review(
         lens = completed_field(lines, "Lens:", path.name)
         if lens != expected_lens:
             raise ArchiveError(f"{path.name} Lens field does not match its filename")
+    wave_verdict = completed_field(lines, "Wave verdict:", path.name)
     reviewed = completed_field(lines, "Tasks reviewed:", path.name)
     if not reviewed.isdigit() or int(reviewed) < 1:
         raise ArchiveError(f"{path.name} requires a positive task count")
@@ -1121,32 +1490,108 @@ def validate_wave_review(
     for index, line in enumerate(lines):
         match = WAVE_TASK_HEADING_PATTERN.fullmatch(line)
         if match:
-            headings.append((index, match.group(1), match.group(3)))
+            headings.append((index, match.group(1), match.group(2), match.group(3)))
     if len(headings) != int(reviewed):
         raise ArchiveError(f"{path.name} task count does not match Tasks reviewed")
-    task_ids = [task_id for _, task_id, _ in headings]
+    task_ids = [task_id for _, task_id, _, _ in headings]
     if len(task_ids) != len(set(task_ids)):
         raise ArchiveError(f"{path.name} repeats a reviewed task")
-    known_ids = set(known_task_ids) if known_task_ids is not None else None
-    if known_ids is not None:
-        unknown = sorted(set(task_ids) - known_ids)
-        if unknown:
-            raise ArchiveError(
-                f"{path.name} reviews task(s) not present in the archive: {', '.join(unknown)}"
-            )
+    actual_tasks = [(task_id, " ".join(title.split())) for _, task_id, title, _ in headings]
+    normalized_expected = [
+        (task_id, " ".join(title.split())) for task_id, title in expected_tasks
+    ]
+    if actual_tasks != normalized_expected:
+        raise ArchiveError(
+            f"{path.name} tasks and titles do not match its wave task files in order"
+        )
 
     verdicts = []
-    for position, (heading_index, _task_id, verdict) in enumerate(headings):
-        section_end = (
+    for position, (heading_index, _task_id, _title, verdict) in enumerate(headings):
+        next_task = (
             headings[position + 1][0]
             if position + 1 < len(headings)
             else len(lines)
         )
-        task_lines = lines[heading_index + 1 : section_end]
+        next_section = next(
+            (
+                index
+                for index in range(heading_index + 1, next_task)
+                if lines[index].startswith("## ")
+            ),
+            next_task,
+        )
+        task_lines = lines[heading_index + 1 : next_section]
         marker = "✅" if verdict == "pass" else "❌"
-        if not any(line.lstrip().startswith(f"- {marker}") for line in task_lines):
-            raise ArchiveError(f"{path.name} task {task_ids[position]} lacks evidence")
+        if not meaningful_review_evidence(task_lines, marker):
+            raise ArchiveError(
+                f"{path.name} task {task_ids[position]} lacks non-placeholder evidence"
+            )
         verdicts.append(verdict)
+
+    coverage_indexes = [
+        index for index, line in enumerate(lines) if line == "## Intent coverage"
+    ]
+    if not expected_criteria:
+        if coverage_indexes:
+            start = coverage_indexes[0] + 1
+            end = next(
+                (
+                    index
+                    for index in range(start, len(lines))
+                    if lines[index].startswith("## ")
+                ),
+                len(lines),
+            )
+            if any(WAVE_SC_HEADING_PATTERN.fullmatch(line) for line in lines[start:end]):
+                raise ArchiveError(f"{path.name} names unowned success criteria")
+        return verdicts
+    if len(coverage_indexes) != 1:
+        raise ArchiveError(f"{path.name} requires one Intent coverage section")
+    coverage_start = coverage_indexes[0] + 1
+    coverage_end = next(
+        (
+            index
+            for index in range(coverage_start, len(lines))
+            if lines[index].startswith("## ")
+        ),
+        len(lines),
+    )
+    criterion_headings = []
+    for index in range(coverage_start, coverage_end):
+        line = lines[index]
+        if not line.startswith("### "):
+            continue
+        match = WAVE_SC_HEADING_PATTERN.fullmatch(line)
+        if match is None:
+            raise ArchiveError(f"{path.name} has an invalid Intent coverage heading")
+        criterion_headings.append(
+            (index, match.group(1), " ".join(match.group(2).split()), match.group(3))
+        )
+    actual = [(sc_id, text) for _, sc_id, text, _ in criterion_headings]
+    normalized_expected_criteria = [
+        (sc_id, " ".join(text.split())) for sc_id, text in expected_criteria
+    ]
+    if actual != normalized_expected_criteria:
+        raise ArchiveError(
+            f"{path.name} Intent coverage does not match its owned success criteria"
+        )
+    for position, (heading_index, sc_id, _text, verdict) in enumerate(
+        criterion_headings
+    ):
+        section_end = (
+            criterion_headings[position + 1][0]
+            if position + 1 < len(criterion_headings)
+            else coverage_end
+        )
+        marker = "✅" if verdict == "pass" else "❌"
+        if not meaningful_review_evidence(
+            lines[heading_index + 1 : section_end], marker
+        ):
+            raise ArchiveError(f"{path.name} {sc_id} lacks non-placeholder evidence")
+        if verdict == "fail" and wave_verdict == "pass":
+            raise ArchiveError(
+                f"{path.name} passes while owned success criterion {sc_id} fails"
+            )
     return verdicts
 
 
@@ -1164,9 +1609,10 @@ def review_cycle_counts(archive: Path) -> Sequence[int]:
             if index + 1 < len(wave_matches)
             else len(plan_text)
         )
+        section = plan_text[match.end() : section_end]
         depths = re.findall(
             r"^Review depth:\s*(\S+)",
-            plan_text[match.end() : section_end],
+            section,
             re.MULTILINE,
         )
         wave = int(match.group(1))
@@ -1176,12 +1622,12 @@ def review_cycle_counts(archive: Path) -> Sequence[int]:
         if depth not in {"full", "deep", "verify-only"}:
             raise ArchiveError(f"plan wave {wave} has an invalid review depth")
         wave_depths[wave] = depth
-    known_task_ids = [
-        path.name.split("-", 1)[0] for path in canonical_task_files(archive / "tasks")
-    ]
+    wave_tasks = archived_wave_tasks(archive, wave_numbers)
+    wave_criteria = plan_wave_criteria(archive, plan_text, wave_tasks)
 
     artifacts = {}
-    panel_enabled = plan_review_panel_enabled(plan_text)
+    panel_config = plan_review_panel_config(plan_text)
+    panel_skip_receipts = canonical_wave_panel_skip_files(archive / "review")
     for path, wave, cycle, lens in canonical_wave_files(archive / "review"):
         if lens == "panel":
             artifacts.setdefault(wave, {}).setdefault(cycle, {})[lens] = path
@@ -1226,11 +1672,20 @@ def review_cycle_counts(archive: Path) -> Sequence[int]:
                         f"for PLAN depth {depth}"
                     )
                 expected = ((gate[None], depth, None),)
-            if panel_enabled and depth in {"full", "deep"} and "panel" not in reviews:
-                raise ArchiveError(
-                    f"wave {wave} cycle {cycle} requires wave-{wave}.cycle{cycle}.panel.md "
-                    "because PLAN.md enables review_panel"
-                )
+            receipt = panel_skip_receipts.pop((wave, cycle), None)
+            if panel_config["mode"] != "off" and depth in {"full", "deep"}:
+                has_panel = "panel" in reviews
+                if has_panel == (receipt is not None):
+                    raise ArchiveError(
+                        f"wave {wave} cycle {cycle} requires exactly one panel artifact "
+                        "or canonical skipped-panel receipt"
+                    )
+                if receipt is not None:
+                    validate_panel_skip_receipt(
+                        receipt, str(panel_config["mode"])
+                    )
+            elif receipt is not None:
+                raise ArchiveError(f"unexpected skipped-panel receipt: {receipt.name}")
 
             wave_verdicts[cycle] = []
             task_verdicts[cycle] = []
@@ -1238,7 +1693,13 @@ def review_cycle_counts(archive: Path) -> Sequence[int]:
                 lines = path.read_text(encoding="utf-8").splitlines()
                 wave_verdicts[cycle].append(completed_field(lines, "Wave verdict:", path.name))
                 task_verdicts[cycle].extend(
-                    validate_wave_review(path, known_task_ids, depth, lens)
+                    validate_wave_review(
+                        path,
+                        wave_tasks[wave],
+                        wave_criteria[wave],
+                        depth,
+                        lens,
+                    )
                 )
 
         last_cycle = max(cycles)
@@ -1247,10 +1708,99 @@ def review_cycle_counts(archive: Path) -> Sequence[int]:
         if any(task_verdict != "pass" for task_verdict in task_verdicts[last_cycle]):
             raise ArchiveError(f"last review cycle for wave {wave} has a failed task")
         counts.append(last_cycle)
+    if panel_skip_receipts:
+        names = ", ".join(path.name for path in panel_skip_receipts.values())
+        raise ArchiveError(f"skipped-panel receipts do not match review cycles: {names}")
     return counts
 
 
-def validate_manifest(archive: Path, state: str) -> tuple:
+def manifest_cell(value: str) -> str:
+    return value.replace("\\|", "|").replace("|", "\\|")
+
+
+def archive_file_inventory(archive: Path) -> Sequence[str]:
+    contents = []
+    for path in archive.rglob("*"):
+        if path.is_symlink():
+            raise ArchiveError(f"archive contents must not be symlinks: {path}")
+        if path.is_file() and path.name != "MANIFEST.md":
+            contents.append(path.relative_to(archive).as_posix())
+    return sorted(contents)
+
+
+def render_manifest(repo: Path) -> dict:
+    project = repo.resolve()
+    active_root = require_project_layout(project)
+    state, _, loaded_state_path = strict_state(project)
+    if loaded_state_path.resolve() != (active_root / "STATE.md").resolve():
+        raise ArchiveError("strict STATE.md loader returned an unexpected path")
+    require_transaction_context(project, state, ("ship", "shipped"))
+    phase = state.phase
+    status = state.status
+    if (phase, status) not in {("ship", "active"), ("shipped", "done")}:
+        raise ArchiveError(
+            "manifest rendering requires ship/active or uncommitted shipped/done"
+        )
+
+    configured = state.archive
+    if configured is None:
+        raise ArchiveError("STATE.md does not name the archive transaction")
+    archive = archive_from_state(project, configured)
+    require_archive_milestone(archive.name, state)
+    require_uncommitted_archive(project, configured)
+    if archive.is_symlink() or not archive.is_dir():
+        raise ArchiveError("archive is missing")
+    require_canonical_archive(archive)
+    require_clean_active_root(active_root, archive)
+
+    reviewed_head, criteria = parse_final_review(archive)
+    validate_gap_reviews(archive, reviewed_head)
+    tasks = completed_task_files(project, archive / "tasks", reviewed_head)
+    cycles = review_cycle_counts(archive)
+    carried_forward = pending_ruling_count(archive / "research" / "DOCS-AUDIT.md")
+    carry_text = (
+        "none"
+        if carried_forward == 0
+        else f"{carried_forward} DOCS-AUDIT ruling(s)"
+    )
+    criteria_rows = "\n".join(
+        f"| {manifest_cell(criterion)} | {verdict} | {manifest_cell(evidence)} |"
+        for criterion, verdict, evidence in criteria
+    )
+    listed_contents = "\n".join(f"- {path}" for path in archive_file_inventory(archive))
+    cycle_text = "/".join(str(cycle) for cycle in cycles)
+    count_text = (
+        f"{len(cycles)}  Tasks: {len(tasks)} done / {len(tasks)} total  "
+        f"Review cycles used: {cycle_text}"
+    )
+    content = f"""# Archive — {archive.name}
+
+Milestone: {state.milestone}
+Shipped: {date.today().isoformat()}
+Final verdict: all criteria met; project verify passed
+Waves: {count_text}
+Carried forward: {carry_text}
+
+## Success criteria at ship
+
+| Criterion | Verdict | Evidence |
+|-----------|---------|----------|
+{criteria_rows}
+
+## Contents
+
+{listed_contents}
+
+## Notes
+
+- none
+"""
+    atomic_replace(archive / "MANIFEST.md", archive / MANIFEST_TEMP_NAME, content)
+    validate_manifest(project, archive, state)
+    return {"archive": configured, "reviewed_head": reviewed_head}
+
+
+def validate_manifest(project: Path, archive: Path, state: PipelineState) -> tuple:
     manifest = archive / "MANIFEST.md"
     if manifest.is_symlink() or not manifest.is_file():
         raise ArchiveError("archive MANIFEST.md must be a real file")
@@ -1267,7 +1817,7 @@ def validate_manifest(archive: Path, state: str) -> tuple:
         if lines.count(heading) != 1:
             raise ArchiveError(f"manifest requires one {heading} section")
 
-    milestone = frontmatter_value(state, "milestone")
+    milestone = state.milestone
     if fields["Milestone:"] != milestone:
         raise ArchiveError(
             f"manifest milestone {fields['Milestone:']!r} does not match STATE.milestone {milestone!r}"
@@ -1279,7 +1829,9 @@ def validate_manifest(archive: Path, state: str) -> tuple:
     if fields["Final verdict:"] != "all criteria met; project verify passed":
         raise ArchiveError("manifest final verdict does not record the passed final gate")
 
-    task_files = canonical_task_files(archive / "tasks")
+    reviewed_head, final_criteria = parse_final_review(archive)
+    validate_gap_reviews(archive, reviewed_head)
+    task_files = completed_task_files(project, archive / "tasks", reviewed_head)
     cycle_counts = review_cycle_counts(archive)
     wave_count = len(cycle_counts)
     counts = re.fullmatch(
@@ -1326,8 +1878,6 @@ def validate_manifest(archive: Path, state: str) -> tuple:
         for row in criteria_rows
     ):
         raise ArchiveError("manifest success-criteria rows are incomplete")
-    reviewed_head, final_criteria = parse_final_review(archive)
-    validate_gap_reviews(archive, reviewed_head)
     if [tuple(row) for row in criteria_rows] != list(final_criteria):
         raise ArchiveError("manifest success criteria do not match FINAL.md evidence in order")
 
@@ -1346,13 +1896,7 @@ def validate_manifest(archive: Path, state: str) -> tuple:
         if not value or path.is_absolute() or ".." in path.parts or value == "MANIFEST.md":
             raise ArchiveError(f"manifest contains an invalid path: {value}")
 
-    actual = []
-    for path in archive.rglob("*"):
-        if path.is_symlink():
-            raise ArchiveError(f"archive contents must not be symlinks: {path}")
-        if path.is_file() and path.name != "MANIFEST.md":
-            actual.append(path.relative_to(archive).as_posix())
-    actual.sort()
+    actual = archive_file_inventory(archive)
     if sorted(listed) != actual:
         missing = sorted(set(actual) - set(listed))
         extra = sorted(set(listed) - set(actual))
@@ -1381,31 +1925,31 @@ def prepare_locked(project: Path, active_root: Path, slug: str) -> dict:
     state_path = active_root / "STATE.md"
     state_temporary = active_root / STATE_TEMP_NAME
 
-    state = state_path.read_text(encoding="utf-8")
-    if frontmatter_value(state, "pipeline") != PIPELINE_MARKER:
-        raise ArchiveError(f"STATE.md pipeline marker must be {PIPELINE_MARKER}")
-    require_transaction_context(project, state, ("ship", "shipped"))
-    phase = frontmatter_value(state, "phase")
-    status = frontmatter_value(state, "status")
+    parsed_state, _, loaded_state_path = strict_state(project)
+    if loaded_state_path.resolve() != state_path.resolve():
+        raise ArchiveError("strict STATE.md loader returned an unexpected path")
+    require_transaction_context(project, parsed_state, ("ship", "shipped"))
+    phase = parsed_state.phase
+    status = parsed_state.status
     if (phase, status) not in {("ship", "active"), ("shipped", "done")}:
         raise ArchiveError(f"archive transaction is not valid in state: {phase}/{status}")
-    expected_slug = milestone_slug(state)
+    expected_slug = milestone_slug(parsed_state)
     if normalized_slug(slug) != expected_slug:
         raise ArchiveError(
             f"--slug {slug!r} does not match normalized STATE.milestone {expected_slug!r}"
         )
-    configured = frontmatter_value(state, "archive")
-    if phase == "shipped" and is_unset(configured):
+    configured = parsed_state.archive
+    if phase == "shipped" and configured is None:
         raise ArchiveError("shipped state has no persisted archive transaction")
-    if not is_unset(configured):
+    if configured is not None:
         relative_archive = archive_relative_from_state(configured)
-        require_archive_milestone(relative_archive.name, state)
+        require_archive_milestone(relative_archive.name, parsed_state)
         require_uncommitted_archive(project, configured)
     if state_temporary.exists() or state_temporary.is_symlink():
         state_temporary.unlink()
 
-    archive = persisted_archive(project, state_path, slug)
-    require_archive_milestone(archive.name, state)
+    archive = persisted_archive(project, state_path, slug, parsed_state)
+    require_archive_milestone(archive.name, parsed_state)
     archive.mkdir(parents=True, exist_ok=True)
     manifest_temporary = archive / MANIFEST_TEMP_NAME
     if manifest_temporary.exists() or manifest_temporary.is_symlink():
@@ -1483,7 +2027,9 @@ def require_canonical_abandon_inputs(active_root: Path, archive: Path) -> None:
         validate_discussion_directory(discussion)
 
 
-def write_abandon_manifest(archive: Path, slug: str, ruling: str) -> None:
+def write_abandon_manifest(
+    archive: Path, slug: str, ruling: str, abandoned_on: str
+) -> None:
     contents = []
     for path in archive.rglob("*"):
         if path.is_symlink():
@@ -1498,7 +2044,7 @@ def write_abandon_manifest(archive: Path, slug: str, ruling: str) -> None:
         f"""# Archive — {archive.name}
 
 Milestone: {slug}
-Abandoned: {date.today().isoformat()}
+Abandoned: {abandoned_on}
 Reason: {ruling}
 
 ## Contents
@@ -1512,46 +2058,456 @@ Reason: {ruling}
     )
 
 
+def validate_abandon_manifest(
+    archive: Path, slug: str, ruling: str, abandoned_on: str
+) -> None:
+    manifest = archive / "MANIFEST.md"
+    if manifest.is_symlink() or not manifest.is_file():
+        raise ArchiveError("abandoned archive MANIFEST.md must be a real file")
+    lines = manifest.read_text(encoding="utf-8").splitlines()
+    if lines.count(f"# Archive — {archive.name}") != 1:
+        raise ArchiveError("abandon manifest header does not match its archive")
+    expected_fields = {
+        "Milestone:": slug,
+        "Abandoned:": abandoned_on,
+        "Reason:": ruling,
+    }
+    for field, expected in expected_fields.items():
+        if completed_field(lines, field, "abandon manifest") != expected:
+            raise ArchiveError(f"abandon manifest {field} does not match its transaction")
+    try:
+        date.fromisoformat(abandoned_on)
+    except ValueError as error:
+        raise ArchiveError("abandon manifest date is invalid") from error
+    if lines.count("## Contents") != 1 or lines.count("## Notes") != 1:
+        raise ArchiveError("abandon manifest requires Contents and Notes sections")
+    contents_start = lines.index("## Contents") + 1
+    listed = []
+    for line in lines[contents_start:]:
+        if line.startswith("## "):
+            break
+        if line.startswith("- "):
+            listed.append(line[2:].strip().strip("`"))
+    if len(listed) != len(set(listed)) or sorted(listed) != archive_file_inventory(archive):
+        raise ArchiveError("abandon manifest contents do not match the archive")
+
+
+def abandon_journal_path(project: Path) -> Path:
+    common = require_git_success(
+        run_git(project, "rev-parse", "--path-format=absolute", "--git-common-dir"),
+        "resolve common Git directory",
+    )
+    path = Path(common)
+    if not path.is_absolute():
+        path = project / path
+    return path.resolve() / ABANDON_JOURNAL_NAME
+
+
+def read_abandon_journal(path: Path) -> dict:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise ArchiveError(f"abandon journal is unreadable: {path}") from error
+    fields = {
+        "schema",
+        "repo",
+        "slug",
+        "ruling",
+        "expected_head",
+        "archive",
+        "branch",
+        "build_status",
+        "abandoned_on",
+    }
+    if not isinstance(payload, dict) or set(payload) != fields:
+        raise ArchiveError("abandon journal has invalid fields")
+    if payload["schema"] != ABANDON_JOURNAL_SCHEMA or any(
+        not isinstance(payload[field], str) for field in fields - {"schema"}
+    ):
+        raise ArchiveError("abandon journal has invalid values")
+    if (
+        not re.fullmatch(r"[0-9a-f]{40,64}", payload["expected_head"])
+        or payload["build_status"] not in {"active", "blocked"}
+        or not is_bound_branch(payload["branch"])
+    ):
+        raise ArchiveError("abandon journal has invalid transaction metadata")
+    try:
+        date.fromisoformat(payload["abandoned_on"])
+    except ValueError as error:
+        raise ArchiveError("abandon journal has invalid transaction date") from error
+    return payload
+
+
+def write_abandon_journal(path: Path, payload: dict) -> None:
+    temporary = path.with_name(f".{path.name}.tmp")
+    if temporary.exists() or temporary.is_symlink():
+        temporary.unlink()
+    atomic_replace(path, temporary, json.dumps(payload, sort_keys=True) + "\n")
+
+
+def require_abandon_request(
+    project: Path, journal: dict, slug: str, ruling: str
+) -> None:
+    expected = {
+        "repo": str(project),
+        "slug": slug,
+        "ruling": ruling,
+    }
+    mismatches = [
+        key
+        for key, value in expected.items()
+        if journal[key] != value
+    ]
+    if mismatches:
+        raise ArchiveError(
+            "abandon request differs from journal fields: "
+            + ", ".join(sorted(mismatches))
+        )
+    resolved = run_git(
+        project,
+        "rev-parse",
+        "--verify",
+        "--quiet",
+        f"{journal['expected_head']}^{{commit}}",
+    )
+    if resolved.returncode != 0 or resolved.stdout.strip() != journal["expected_head"]:
+        raise ArchiveError("abandon journal expected HEAD no longer resolves")
+
+
+def update_abandoned_roadmap(
+    path: Path,
+    archive_name: str,
+    slug: str,
+    configured: str,
+    *,
+    write: bool = True,
+) -> None:
+    if path.is_symlink() or not path.is_file():
+        raise ArchiveError(f"milestone abandon requires a real ROADMAP.md: {path}")
+    lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
+    headings = []
+    for index, line in enumerate(lines):
+        match = ROADMAP_HEADING_PATTERN.fullmatch(line.rstrip("\r\n"))
+        if match is None:
+            continue
+        if int(match.group(1).removeprefix("M")) < 1:
+            raise ArchiveError("ROADMAP milestone number must be >= 1")
+        headings.append((index, match.group(1), match.group(2)))
+    identifier = milestone_id(milestone_number(archive_name))
+    matches = [item for item in headings if item[1:] == (identifier, slug)]
+    if len(matches) != 1:
+        raise ArchiveError(
+            f"ROADMAP.md requires one exact {identifier} — {slug} milestone entry"
+        )
+    start = matches[0][0]
+    end = next((index for index, _, _ in headings if index > start), len(lines))
+    status_indexes = [
+        index for index in range(start + 1, end) if lines[index].startswith("Status:")
+    ]
+    archive_indexes = [
+        index for index in range(start + 1, end) if lines[index].startswith("Archive:")
+    ]
+    if len(status_indexes) != 1 or len(archive_indexes) > 1:
+        raise ArchiveError("ROADMAP milestone has ambiguous Status or Archive fields")
+    status_index = status_indexes[0]
+    status = lines[status_index].rstrip("\r\n")
+    if status not in {"Status: active", "Status: abandoned"}:
+        raise ArchiveError(f"ROADMAP milestone cannot be abandoned from {status!r}")
+    lines[status_index] = "Status: abandoned\n"
+    if archive_indexes:
+        archive_index = archive_indexes[0]
+        current = lines[archive_index].rstrip("\r\n")
+        if current not in {"Archive: null", f"Archive: {configured}"}:
+            raise ArchiveError("ROADMAP milestone Archive field conflicts with transaction")
+        lines[archive_index] = f"Archive: {configured}\n"
+    else:
+        lines.insert(status_index + 1, f"Archive: {configured}\n")
+    if not write:
+        return
+    temporary = path.with_name(f".{path.name}.gsd-path-tmp")
+    if temporary.exists() or temporary.is_symlink():
+        temporary.unlink()
+    atomic_replace(path, temporary, "".join(lines))
+
+
+def append_abandon_lesson(
+    path: Path, archive_name: str, ruling: str, *, write: bool = True
+) -> None:
+    line = f"- {archive_name} — abandoned: {ruling}"
+    if path.exists() or path.is_symlink():
+        if path.is_symlink() or not path.is_file():
+            raise ArchiveError(f"LESSONS.md must be a real file: {path}")
+        text = path.read_text(encoding="utf-8")
+    else:
+        text = "# Lessons\n"
+    matches = [
+        value
+        for value in text.splitlines()
+        if value.startswith(f"- {archive_name} — abandoned:")
+    ]
+    if matches and matches != [line]:
+        raise ArchiveError("LESSONS.md has a conflicting abandon ruling")
+    if matches == [line]:
+        return
+    if not write:
+        raise ArchiveError("LESSONS.md is missing the canonical abandon ruling")
+    rendered = text.rstrip() + f"\n\n{line}\n"
+    temporary = path.with_name(f".{path.name}.gsd-path-tmp")
+    if temporary.exists() or temporary.is_symlink():
+        temporary.unlink()
+    atomic_replace(path, temporary, rendered)
+
+
+def completed_abandon(
+    project: Path, active_root: Path, slug: str, ruling: str, state: PipelineState
+) -> dict:
+    if not (
+        state.phase == "roadmap"
+        and state.status == "active"
+        and state.milestone is None
+        and state.archive is None
+        and state.branch is not None
+    ):
+        raise ArchiveError(
+            f"milestone abandon is not valid in state: {state.phase}/{state.status}"
+        )
+    require_transaction_context(project, state, ("roadmap",))
+    number = milestone_number(state.branch)
+    archive_name = f"{number:03d}-{slug}"
+    configured = f".project/archive/{archive_name}"
+    archive = archive_from_state(project, configured)
+    if archive.is_symlink() or not archive.is_dir():
+        raise ArchiveError("completed abandoned archive is missing")
+    manifest = archive / "MANIFEST.md"
+    if manifest.is_symlink() or not manifest.is_file():
+        raise ArchiveError("abandoned archive MANIFEST.md must be a real file")
+    manifest_lines = manifest.read_text(encoding="utf-8").splitlines()
+    abandoned_on = completed_field(manifest_lines, "Abandoned:", "abandon manifest")
+    validate_abandon_manifest(archive, slug, ruling, abandoned_on)
+    update_abandoned_roadmap(
+        active_root / "ROADMAP.md",
+        archive_name,
+        slug,
+        configured,
+        write=False,
+    )
+    append_abandon_lesson(
+        active_root / "LESSONS.md", archive_name, ruling, write=False
+    )
+    head = require_git_success(run_git(project, "rev-parse", "HEAD"), "resolve HEAD")
+    parent = require_git_success(
+        run_git(project, "rev-parse", f"{head}^"), "resolve abandon checkpoint parent"
+    )
+    try:
+        checkpoint = isolation_checkpoint(
+            project,
+            parent,
+            f"build: abandon milestone {slug}",
+            f"Why: {ruling}",
+            [".project"],
+        )
+    except IsolationError as error:
+        raise ArchiveError(f"completed abandon checkpoint is invalid: {error}") from error
+    return {
+        "archive": configured,
+        "carried_forward": pending_ruling_count(
+            archive / "research" / "DOCS-AUDIT.md"
+        ),
+        "commit": checkpoint["commit"],
+        "status": checkpoint["status"],
+    }
+
+
 def abandon(repo: Path, slug: str, reason: str) -> dict:
     project = repo.resolve()
     active_root = require_project_layout(project)
+    requested_slug = normalized_slug(slug)
+    ruling = " ".join(reason.split())
+    if not ruling:
+        raise ArchiveError("milestone abandon requires a non-empty --reason ruling")
+    journal_path = abandon_journal_path(project)
+    if journal_path.is_symlink():
+        raise ArchiveError(f"abandon journal must not be a symlink: {journal_path}")
+    journal = read_abandon_journal(journal_path) if journal_path.is_file() else None
+    if journal_path.exists() and journal is None:
+        raise ArchiveError(f"abandon journal must be a real file: {journal_path}")
+    if journal is not None:
+        require_abandon_request(project, journal, requested_slug, ruling)
+    else:
+        state, _, _ = strict_state(project)
+        if state.phase == "roadmap":
+            with discussion_lock(active_root):
+                return completed_abandon(
+                    project, active_root, requested_slug, ruling, state
+                )
     with discussion_lock(active_root):
-        return abandon_locked(project, active_root, slug, reason)
+        journal, carried_forward = abandon_locked(
+            project,
+            active_root,
+            requested_slug,
+            ruling,
+            journal_path,
+            journal,
+        )
+
+    try:
+        state, _, _ = strict_state(project)
+        if state.phase == "build":
+            transition_state(
+                project,
+                expected={
+                    "phase": "build",
+                    "status": journal["build_status"],
+                    "milestone": journal["slug"],
+                    "branch": journal["branch"],
+                    "archive": journal["archive"],
+                },
+                changes={
+                    "phase": "roadmap",
+                    "status": "active",
+                    "milestone": None,
+                    "archive": None,
+                },
+                event=(
+                    f"milestone abandoned: {journal['slug']}; "
+                    f"archive: {journal['archive']}; ruling: {journal['ruling']}"
+                ),
+            )
+        elif not (
+            state.phase == "roadmap"
+            and state.status == "active"
+            and state.milestone is None
+            and state.branch == journal["branch"]
+            and state.archive is None
+        ):
+            raise ArchiveError("abandon transaction has an invalid finalized STATE.md")
+
+        finalized_state, _, _ = strict_state(project)
+        require_transaction_context(project, finalized_state, ("roadmap",))
+        checkpoint = isolation_checkpoint(
+            project,
+            journal["expected_head"],
+            f"build: abandon milestone {journal['slug']}",
+            f"Why: {journal['ruling']}",
+            [".project"],
+        )
+    except (PipelineStateError, IsolationError) as error:
+        raise ArchiveError(f"abandon finalization failed: {error}") from error
+
+    journal_path.unlink()
+    return {
+        "archive": journal["archive"],
+        "carried_forward": carried_forward,
+        "commit": checkpoint["commit"],
+        "status": checkpoint["status"],
+    }
 
 
-def abandon_locked(project: Path, active_root: Path, slug: str, reason: str) -> dict:
+def abandon_locked(
+    project: Path,
+    active_root: Path,
+    slug: str,
+    ruling: str,
+    journal_path: Path,
+    journal: Optional[dict],
+) -> tuple[dict, int]:
     state_path = active_root / "STATE.md"
     state_temporary = active_root / STATE_TEMP_NAME
 
-    state = state_path.read_text(encoding="utf-8")
-    if frontmatter_value(state, "pipeline") != PIPELINE_MARKER:
-        raise ArchiveError(f"STATE.md pipeline marker must be {PIPELINE_MARKER}")
+    parsed_state, _, loaded_state_path = strict_state(project)
+    if loaded_state_path.resolve() != state_path.resolve():
+        raise ArchiveError("strict STATE.md loader returned an unexpected path")
     if not is_real_file(active_root / "ROADMAP.md"):
         raise ArchiveError(
             "milestone abandon requires program flow: missing .project/ROADMAP.md"
         )
-    require_transaction_context(project, state, ("build",))
-    status = frontmatter_value(state, "status")
-    if status not in {"active", "blocked"}:
-        raise ArchiveError(f"milestone abandon is not valid in status: {status}")
-    ruling = " ".join(reason.split())
-    if not ruling:
-        raise ArchiveError("milestone abandon requires a non-empty --reason ruling")
-    expected_slug = milestone_slug(state)
-    if normalized_slug(slug) != expected_slug:
-        raise ArchiveError(
-            f"--slug {slug!r} does not match normalized STATE.milestone {expected_slug!r}"
+    require_transaction_context(project, parsed_state, ("build", "roadmap"))
+    if journal is None:
+        if parsed_state.phase != "build" or parsed_state.status not in {"active", "blocked"}:
+            raise ArchiveError(
+                f"milestone abandon is not valid in state: "
+                f"{parsed_state.phase}/{parsed_state.status}"
+            )
+        expected_slug = milestone_slug(parsed_state)
+        if slug != expected_slug:
+            raise ArchiveError(
+                f"--slug {slug!r} does not match normalized "
+                f"STATE.milestone {expected_slug!r}"
+            )
+        archive = resolved_archive_target(project, slug, parsed_state)
+        configured = archive.relative_to(project).as_posix()
+        expected_head = require_git_success(
+            run_git(project, "rev-parse", "HEAD"), "resolve abandon base"
         )
-    configured = frontmatter_value(state, "archive")
-    if not is_unset(configured):
-        relative_archive = archive_relative_from_state(configured)
-        require_archive_milestone(relative_archive.name, state)
+        journal = {
+            "schema": ABANDON_JOURNAL_SCHEMA,
+            "repo": str(project),
+            "slug": slug,
+            "ruling": ruling,
+            "expected_head": expected_head,
+            "archive": configured,
+            "branch": parsed_state.branch,
+            "build_status": parsed_state.status,
+            "abandoned_on": date.today().isoformat(),
+        }
+        write_abandon_journal(journal_path, journal)
+    else:
+        require_abandon_request(project, journal, slug, ruling)
+        if parsed_state.branch != journal["branch"]:
+            raise ArchiveError("STATE.branch differs from the abandon journal")
+
+    configured = journal["archive"]
+    if parsed_state.phase == "roadmap":
+        archive = archive_from_state(project, configured)
+        if not (
+            parsed_state.status == "active"
+            and parsed_state.milestone is None
+            and parsed_state.archive is None
+        ):
+            raise ArchiveError("abandon transaction has an invalid finalized STATE.md")
+        if archive.is_symlink() or not archive.is_dir():
+            raise ArchiveError("abandoned archive is missing during checkpoint recovery")
+        validate_abandon_manifest(
+            archive,
+            journal["slug"],
+            journal["ruling"],
+            journal["abandoned_on"],
+        )
+        update_abandoned_roadmap(
+            active_root / "ROADMAP.md", archive.name, journal["slug"], configured
+        )
+        append_abandon_lesson(
+            active_root / "LESSONS.md", archive.name, journal["ruling"]
+        )
+        require_clean_active_root(active_root, archive)
+        return journal, pending_ruling_count(archive / "research" / "DOCS-AUDIT.md")
+
+    if (
+        parsed_state.status != journal["build_status"]
+        or parsed_state.milestone != journal["slug"]
+        or parsed_state.branch != journal["branch"]
+    ):
+        raise ArchiveError("build STATE.md differs from the abandon journal")
+    update_abandoned_roadmap(
+        active_root / "ROADMAP.md",
+        PurePosixPath(configured).name,
+        journal["slug"],
+        configured,
+        write=False,
+    )
+    if parsed_state.archive is not None:
+        relative_archive = archive_relative_from_state(parsed_state.archive)
+        require_archive_milestone(relative_archive.name, parsed_state)
+        if parsed_state.archive != configured:
+            raise ArchiveError("STATE.archive differs from the abandon journal")
         require_uncommitted_archive(project, configured)
     if state_temporary.exists() or state_temporary.is_symlink():
         state_temporary.unlink()
 
-    archive = persisted_archive(project, state_path, slug)
-    require_archive_milestone(archive.name, state)
+    archive = persisted_archive(project, state_path, slug, parsed_state)
+    if archive.relative_to(project).as_posix() != configured:
+        raise ArchiveError("persisted archive differs from the abandon journal")
+    require_archive_milestone(archive.name, parsed_state)
     archive.mkdir(parents=True, exist_ok=True)
     manifest_temporary = archive / MANIFEST_TEMP_NAME
     if manifest_temporary.exists() or manifest_temporary.is_symlink():
@@ -1577,13 +2533,26 @@ def abandon_locked(project: Path, active_root: Path, slug: str, reason: str) -> 
         if not active_audit.exists():
             atomic_copy(archived_audit, active_audit)
 
-    write_abandon_manifest(archive, expected_slug, ruling)
+    write_abandon_manifest(
+        archive,
+        journal["slug"],
+        journal["ruling"],
+        journal["abandoned_on"],
+    )
+    validate_abandon_manifest(
+        archive,
+        journal["slug"],
+        journal["ruling"],
+        journal["abandoned_on"],
+    )
+    update_abandoned_roadmap(
+        active_root / "ROADMAP.md", archive.name, journal["slug"], configured
+    )
+    append_abandon_lesson(
+        active_root / "LESSONS.md", archive.name, journal["ruling"]
+    )
     require_clean_active_root(active_root, archive)
-
-    return {
-        "archive": archive.relative_to(project).as_posix(),
-        "carried_forward": carried_forward,
-    }
+    return journal, carried_forward
 
 
 def run_git(repo: Path, *arguments: str) -> subprocess.CompletedProcess:
@@ -1660,15 +2629,17 @@ def require_canonical_archive(archive: Path) -> None:
     if not canonical_wave_files(archive / "review"):
         missing.append("review/wave-N.cycleC.md")
     plan = archive / "plan" / "PLAN.md"
-    if is_real_file(plan) and plan_review_panel_enabled(plan.read_text(encoding="utf-8")):
-        if not is_real_file(archive / "review" / "PLAN-PANEL.md"):
-            missing.append("review/PLAN-PANEL.md")
     for directory in DIRECTORIES_TO_ARCHIVE:
         path = archive / directory
         if path.is_symlink() or not path.is_dir():
             missing.append(f"{directory}/")
     if missing:
         raise ArchiveError(f"canonical archive artifacts are missing: {', '.join(sorted(set(missing)))}")
+    require_plan_panel_evidence(
+        plan.read_text(encoding="utf-8"),
+        archive / "review" / "PLAN-PANEL.md",
+        archive / "review" / "PLAN-PANEL.skipped.json",
+    )
     discussion = archive / "discuss"
     if discussion.exists() or discussion.is_symlink():
         validate_discussion_directory(discussion)
@@ -1749,13 +2720,13 @@ def prepared_transaction(
     active_root = require_project_layout(project)
     state_path = active_root / "STATE.md"
 
-    state = state_path.read_text(encoding="utf-8")
-    if frontmatter_value(state, "pipeline") != PIPELINE_MARKER:
-        raise ArchiveError(f"STATE.md pipeline marker must be {PIPELINE_MARKER}")
+    state, _, loaded_state_path = strict_state(project)
+    if loaded_state_path.resolve() != state_path.resolve():
+        raise ArchiveError("strict STATE.md loader returned an unexpected path")
     require_transaction_context(project, state, phases)
 
-    configured = frontmatter_value(state, "archive")
-    if is_unset(configured):
+    configured = state.archive
+    if configured is None:
         raise ArchiveError("STATE.md does not name the archive transaction")
     relative_archive = archive_relative_from_state(configured)
     require_archive_milestone(relative_archive.name, state)
@@ -1769,7 +2740,7 @@ def prepared_transaction(
 
     require_canonical_archive(archive)
     require_clean_active_root(active_root, archive)
-    archived_files, reviewed_head = validate_manifest(archive, state)
+    archived_files, reviewed_head = validate_manifest(project, archive, state)
     return project, active_root, state, configured, archive, archived_files, reviewed_head
 
 
@@ -1779,8 +2750,8 @@ def preflight(repo: Path) -> dict:
         ("ship", "shipped"),
         must_be_uncommitted=True,
     )
-    phase = frontmatter_value(state, "phase")
-    status = frontmatter_value(state, "status")
+    phase = state.phase
+    status = state.status
     if (phase, status) not in {("ship", "active"), ("shipped", "done")}:
         raise ArchiveError("archive preflight requires ship/active or uncommitted shipped/done")
     require_stageable_carry_forward(project, archive)
@@ -1810,7 +2781,9 @@ def require_canonical_commit_body(
     subject, separator, body = message.partition("\x00")
     if not separator:
         raise ArchiveError(f"{label} commit message is malformed")
-    if subject == canonical_subject and body.strip() != expected_body.strip():
+    if subject != canonical_subject:
+        raise ArchiveError(f"{label} commit subject must be {canonical_subject!r}")
+    if body.strip() != expected_body.strip():
         raise ArchiveError(f"{label} commit body does not match required fields")
 
 
@@ -1825,15 +2798,39 @@ def find_ship_commit(project: Path, archive_name: str) -> str:
         if "\x00" not in record:
             continue
         commit, subject = record.split("\x00", 1)
-        if is_ship_subject(subject, archive_name):
+        if subject == expected_subject:
             matches.append(commit)
     if not matches:
         raise ArchiveError(f"no commit with exact subject {expected_subject!r} in HEAD history")
-    # git log is newest-first: the most recent ship subject owns the
-    # transaction, so an empty or malformed duplicate cannot inherit validity.
-    # The bound branch stays linear; --first-parent keeps discovery robust if
-    # merges ever appear in ancestry, so only mainline ship commits match.
+    if len(matches) != 1:
+        raise ArchiveError(
+            f"multiple commits with exact subject {expected_subject!r} in HEAD history"
+        )
     return matches[0]
+
+
+def validate_shipped_roadmap(text: str, state: PipelineState, archive: str) -> None:
+    if state.milestone is None or state.branch is None:
+        raise ArchiveError("shipped program state must name milestone and branch")
+    lines = text.splitlines()
+    headings = [
+        (index, match)
+        for index, line in enumerate(lines)
+        if (match := ROADMAP_HEADING_PATTERN.fullmatch(line)) is not None
+    ]
+    matches = [item for item in headings if item[1].group(2) == state.milestone]
+    if len(matches) != 1:
+        raise ArchiveError("ROADMAP.md must contain one shipped milestone entry")
+    start, heading = matches[0]
+    end = next((index for index, _ in headings if index > start), len(lines))
+    expected_id = milestone_id(milestone_number(state.branch))
+    if heading.group(1) != expected_id:
+        raise ArchiveError("ROADMAP.md shipped milestone id differs from STATE.branch")
+    section = lines[start:end]
+    statuses = [line.split(":", 1)[1].strip() for line in section if line.startswith("Status:")]
+    archives = [line.split(":", 1)[1].strip() for line in section if line.startswith("Archive:")]
+    if statuses != ["shipped"] or archives != [archive]:
+        raise ArchiveError("ROADMAP.md must record Status: shipped and the exact Archive")
 
 
 def validate(repo: Path) -> dict:
@@ -1841,16 +2838,17 @@ def validate(repo: Path) -> dict:
         repo,
         ("shipped",),
     )
-    if frontmatter_value(state, "status") != "done":
+    if state.status != "done":
         raise ArchiveError("STATE.md is not shipped/done")
 
     project_status = require_git_success(run_git(project, "status", "--porcelain"), "inspect worktree status")
     if project_status:
         raise ArchiveError("ship transaction worktree is not clean")
 
-    # The ship commit must be reachable from HEAD but need not be HEAD:
-    # product commits after shipping do not disturb a validated shipment.
     ship_commit = find_ship_commit(project, archive.name)
+    head = require_git_success(run_git(project, "rev-parse", "HEAD"), "resolve HEAD")
+    if head != ship_commit:
+        raise ArchiveError("bound worktree HEAD must equal the canonical ship commit")
 
     parents = require_git_success(
         run_git(project, "rev-list", "--parents", "-n", "1", ship_commit),
@@ -1887,7 +2885,14 @@ def validate(repo: Path) -> dict:
 
     allowed_active_prefixes = tuple(f".project/{name}/" for name in TRANSACTION_DIRECTORIES)
     persistent_program_files = set()
-    if (project / ".project" / "CHARTER.md").is_file():
+    charter_path = project / ".project" / "CHARTER.md"
+    roadmap_path = project / ".project" / "ROADMAP.md"
+    if charter_path.is_symlink() or (charter_path.exists() and not charter_path.is_file()):
+        raise ArchiveError("CHARTER.md must be a real file")
+    if roadmap_path.is_symlink() or (roadmap_path.exists() and not roadmap_path.is_file()):
+        raise ArchiveError("ROADMAP.md must be a real file")
+    program_ship = is_real_file(charter_path)
+    if program_ship:
         persistent_program_files = {
             ".project/CHARTER.md",
             ".project/ROADMAP.md",
@@ -1912,6 +2917,8 @@ def validate(repo: Path) -> dict:
         f"{configured}/MANIFEST.md",
         *(f"{configured}/{path}" for path in archived_files),
     }
+    if program_ship:
+        required_paths.add(".project/ROADMAP.md")
     missing_from_commit = sorted(required_paths - set(changed_paths))
     if missing_from_commit:
         raise ArchiveError(
@@ -1940,12 +2947,17 @@ def validate(repo: Path) -> dict:
         run_git(project, "show", f"{ship_commit}:.project/STATE.md"),
         "read committed STATE.md",
     )
-    if (
-        frontmatter_value(committed_state, "phase") != "shipped"
-        or frontmatter_value(committed_state, "status") != "done"
-        or frontmatter_value(committed_state, "archive") != configured
-    ):
+    current_state = (project / ".project" / "STATE.md").read_text(
+        encoding="utf-8"
+    ).strip()
+    if committed_state != current_state:
         raise ArchiveError("ship commit does not contain the shipped state transaction")
+    if program_ship:
+        committed_roadmap = require_git_success(
+            run_git(project, "show", f"{ship_commit}:.project/ROADMAP.md"),
+            "read committed ROADMAP.md",
+        )
+        validate_shipped_roadmap(committed_roadmap, state, configured)
 
     manifest_path = f"{ship_commit}:{configured}/MANIFEST.md"
     require_git_success(run_git(project, "cat-file", "-e", manifest_path), "verify committed manifest")
@@ -1958,11 +2970,64 @@ def validate(repo: Path) -> dict:
 
 
 def resolve_remote_default(project: Path) -> str:
-    result = run_git(project, "symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD")
-    remote_default = result.stdout.strip()
-    if result.returncode != 0 or not remote_default:
+    result = run_git(project, "symbolic-ref", "--quiet", "refs/remotes/origin/HEAD")
+    remote_ref = result.stdout.strip()
+    prefix = "refs/remotes/"
+    if result.returncode != 0 or not remote_ref.startswith(prefix):
         raise ArchiveError("origin/HEAD is unresolved; fetch before validating integration")
-    return remote_default
+    return remote_ref.removeprefix(prefix)
+
+
+def live_remote_ref(project: Path, ref: str) -> Optional[str]:
+    result = run_git(
+        project,
+        "ls-remote",
+        "--exit-code",
+        "--refs",
+        "origin",
+        ref,
+    )
+    if result.returncode == 2:
+        return None
+    if result.returncode != 0:
+        raise ArchiveError(f"could not inspect {ref} on origin: git ls-remote failed")
+    rows = [line.split("\t", 1) for line in result.stdout.splitlines() if line]
+    if len(rows) != 1 or len(rows[0]) != 2 or rows[0][1] != ref:
+        raise ArchiveError(f"origin returned ambiguous ref data for {ref}")
+    return rows[0][0]
+
+
+def publish_bound_branch(project: Path, branch: str, ship_commit: str) -> None:
+    remote_ref = f"refs/heads/{branch}"
+    remote_sha = live_remote_ref(project, remote_ref)
+    if remote_sha is None:
+        require_git_success(
+            run_git(
+                project,
+                "push",
+                f"--force-with-lease={remote_ref}:",
+                "origin",
+                f"{ship_commit}:{remote_ref}",
+            ),
+            "create bound branch with absent-ref lease",
+        )
+    elif remote_sha != ship_commit:
+        raise ArchiveError(
+            f"origin/{branch} moved or collides: {remote_sha} != {ship_commit}"
+        )
+
+    confirmed_sha = live_remote_ref(project, remote_ref)
+    if confirmed_sha != ship_commit:
+        raise ArchiveError(f"origin/{branch} does not equal the ship commit after publish")
+    require_git_success(
+        run_git(
+            project,
+            "update-ref",
+            f"refs/remotes/origin/{branch}",
+            ship_commit,
+        ),
+        "refresh local bound-branch ref",
+    )
 
 
 def refresh_origin(repo: Path) -> dict:
@@ -1987,6 +3052,510 @@ def refresh_origin(repo: Path) -> dict:
     return {"remote_default": remote_default}
 
 
+def optional_ref(project: Path, ref: str) -> Optional[str]:
+    result = run_git(project, "rev-parse", "--verify", "--quiet", ref)
+    return result.stdout.strip() if result.returncode == 0 else None
+
+
+def integration_names(project: Path, archive_name: str) -> tuple[str, Path]:
+    identifier = milestone_id(milestone_number(archive_name))
+    branch = f"gsd-path-integrate/{identifier}"
+    worktree = project.parent / f".{project.name}-gsd-path-integrate-{identifier}"
+    return branch, worktree
+
+
+def registered_worktree(project: Path, branch: str) -> Optional[Path]:
+    output = require_git_success(
+        run_git(project, "worktree", "list", "--porcelain"),
+        "inspect integration worktrees",
+    )
+    branch_ref = f"branch refs/heads/{branch}"
+    matches = []
+    for record in output.split("\n\n"):
+        lines = record.splitlines()
+        if branch_ref not in lines:
+            continue
+        worktree_lines = [
+            line.removeprefix("worktree ")
+            for line in lines
+            if line.startswith("worktree ")
+        ]
+        if len(worktree_lines) != 1:
+            raise ArchiveError(
+                f"integration branch {branch} has a malformed worktree record"
+            )
+        matches.append(Path(worktree_lines[0]).resolve())
+    if len(matches) > 1:
+        raise ArchiveError(f"integration branch {branch} is checked out more than once")
+    return matches[0] if matches else None
+
+
+def remove_registered_worktree(project: Path, branch: str, expected_path: Path) -> None:
+    registered = registered_worktree(project, branch)
+    if registered is None:
+        if expected_path.exists() or expected_path.is_symlink():
+            raise ArchiveError(f"unregistered integration worktree path exists: {expected_path}")
+        return
+    if registered != expected_path.resolve():
+        raise ArchiveError(
+            f"integration branch {branch} is checked out at unexpected path: {registered}"
+        )
+    status = require_git_success(
+        run_git(registered, "status", "--porcelain", "--untracked-files=all"),
+        "inspect integration worktree status",
+    )
+    if status:
+        raise ArchiveError("integration worktree is dirty; refusing cleanup")
+    require_git_success(
+        run_git(project, "worktree", "remove", str(registered)),
+        "remove integration worktree",
+    )
+
+
+def delete_integration_branch(project: Path, branch: str, expected: str) -> None:
+    ref = f"refs/heads/{branch}"
+    actual = optional_ref(project, ref)
+    if actual is None:
+        return
+    if actual != expected:
+        raise ArchiveError(f"integration branch {branch} moved unexpectedly")
+    require_git_success(
+        run_git(project, "update-ref", "-d", ref, expected),
+        "delete integration branch",
+    )
+
+
+def require_generated_integration_commit(
+    project: Path,
+    commit: str,
+    archive_path: str,
+    archive_name: str,
+    ship_commit: str,
+    default_name: str,
+    bound_branch: str,
+    first_parent: Optional[str] = None,
+) -> None:
+    subject = require_git_success(
+        run_git(project, "show", "-s", "--format=%s", commit),
+        "inspect integration commit subject",
+    )
+    expected_subject = integrate_subject(archive_name, default_name)
+    if subject != expected_subject:
+        raise ArchiveError(f"integration commit subject must be {expected_subject!r}")
+    require_canonical_commit_body(
+        project,
+        commit,
+        expected_subject,
+        integrate_commit_body(archive_path, ship_commit, default_name, bound_branch),
+        "integration",
+    )
+    parents = require_git_success(
+        run_git(project, "rev-list", "--parents", "-n", "1", commit),
+        "inspect integration merge parents",
+    ).split()
+    if len(parents) != 3 or parents[2] != ship_commit:
+        raise ArchiveError("integration commit is not the canonical merge of the ship commit")
+    if first_parent is not None and parents[1] != first_parent:
+        raise ArchiveError("integration merge was created from a stale remote default")
+
+
+def discard_unpublished_stale_integration(
+    project: Path,
+    branch: str,
+    merge_commit: str,
+    remote_default_sha: str,
+    default_name: str,
+    archive_name: str,
+    bound_branch: str,
+) -> None:
+    live_default = live_remote_ref(project, f"refs/heads/{default_name}")
+    if live_default != remote_default_sha:
+        raise ArchiveError(f"origin/{default_name} advanced again; rerun integrate")
+    published = run_git(
+        project, "merge-base", "--is-ancestor", merge_commit, remote_default_sha
+    )
+    if published.returncode == 0:
+        raise ArchiveError("stale integration merge is already published on origin/main")
+    if published.returncode != 1:
+        require_git_success(published, "inspect stale integration publication")
+
+    bound_ref = f"refs/heads/{bound_branch}"
+    if live_remote_ref(project, bound_ref) is not None:
+        raise ArchiveError(
+            "stale integration recovery requires the remote bound branch to be absent"
+        )
+    tag_name = f"milestone/{archive_name}"
+    published_tag_ref = f"refs/tags/{tag_name}"
+    if live_remote_ref(project, published_tag_ref) is not None:
+        raise ArchiveError(
+            "stale integration recovery requires the remote milestone tag to be absent"
+        )
+
+    local_tag_ref = f"refs/tags/{tag_name}"
+    local_tag_object = optional_ref(project, local_tag_ref)
+    if local_tag_object is not None:
+        require_annotated_tag(
+            project,
+            local_tag_ref,
+            merge_commit,
+            f"stale milestone tag {tag_name}",
+        )
+        require_git_success(
+            run_git(project, "update-ref", "-d", local_tag_ref, local_tag_object),
+            "delete unpublished stale milestone tag",
+        )
+
+    tracking_tag_ref = f"refs/remotes/origin/tags/{tag_name}"
+    tracking_tag_object = optional_ref(project, tracking_tag_ref)
+    if tracking_tag_object is not None:
+        if local_tag_object is None or tracking_tag_object != local_tag_object:
+            raise ArchiveError("local published-tag tracking ref is not safely recoverable")
+        require_git_success(
+            run_git(
+                project,
+                "update-ref",
+                "-d",
+                tracking_tag_ref,
+                tracking_tag_object,
+            ),
+            "delete stale published-tag tracking ref",
+        )
+    delete_integration_branch(project, branch, merge_commit)
+
+
+def create_integration_merge(
+    project: Path,
+    worktree: Path,
+    branch: str,
+    remote_default_sha: str,
+    archive_path: str,
+    archive_name: str,
+    ship_commit: str,
+    default_name: str,
+    bound_branch: str,
+) -> tuple[str, bool]:
+    if worktree.exists() or worktree.is_symlink():
+        raise ArchiveError(f"integration worktree path already exists: {worktree}")
+    branch_ref = f"refs/heads/{branch}"
+    branch_tip = optional_ref(project, branch_ref)
+    if branch_tip is None:
+        add = run_git(
+            project,
+            "worktree",
+            "add",
+            "--quiet",
+            "-b",
+            branch,
+            str(worktree),
+            remote_default_sha,
+        )
+    elif branch_tip == remote_default_sha:
+        add = run_git(project, "worktree", "add", "--quiet", str(worktree), branch)
+    else:
+        require_generated_integration_commit(
+            project,
+            branch_tip,
+            archive_path,
+            archive_name,
+            ship_commit,
+            default_name,
+            bound_branch,
+        )
+        parents = require_git_success(
+            run_git(project, "rev-list", "--parents", "-n", "1", branch_tip),
+            "inspect existing integration merge parents",
+        ).split()
+        if parents[1] == remote_default_sha:
+            return branch_tip, False
+        discard_unpublished_stale_integration(
+            project,
+            branch,
+            branch_tip,
+            remote_default_sha,
+            default_name,
+            archive_name,
+            bound_branch,
+        )
+        add = run_git(
+            project,
+            "worktree",
+            "add",
+            "--quiet",
+            "-b",
+            branch,
+            str(worktree),
+            remote_default_sha,
+        )
+    require_git_success(add, "create integration worktree")
+
+    merge = run_git(
+        worktree,
+        "merge",
+        "--no-ff",
+        "-m",
+        integrate_subject(archive_name, default_name),
+        "-m",
+        integrate_commit_body(archive_path, ship_commit, default_name, bound_branch),
+        ship_commit,
+    )
+    if merge.returncode != 0:
+        conflicted = optional_ref(worktree, "MERGE_HEAD") is not None
+        detail = (merge.stderr or merge.stdout).strip()
+        if conflicted:
+            require_git_success(
+                run_git(worktree, "merge", "--abort"),
+                "abort integration merge",
+            )
+        remove_registered_worktree(project, branch, worktree)
+        delete_integration_branch(project, branch, remote_default_sha)
+        if conflicted:
+            raise ArchiveError(
+                "integration merge conflicted; Git aborted it without resolving files"
+            )
+        raise ArchiveError(f"create integration merge failed: {detail}")
+
+    merge_commit = require_git_success(
+        run_git(worktree, "rev-parse", "HEAD"), "resolve integration merge"
+    )
+    require_generated_integration_commit(
+        project,
+        merge_commit,
+        archive_path,
+        archive_name,
+        ship_commit,
+        default_name,
+        bound_branch,
+        remote_default_sha,
+    )
+    return merge_commit, True
+
+
+def require_annotated_tag(project: Path, ref: str, merge_commit: str, label: str) -> str:
+    object_id = optional_ref(project, ref)
+    if object_id is None:
+        raise ArchiveError(f"missing {label}")
+    tag_type = require_git_success(
+        run_git(project, "cat-file", "-t", ref), f"inspect {label}"
+    )
+    if tag_type != "tag":
+        raise ArchiveError(f"{label} must be annotated")
+    target = require_git_success(
+        run_git(project, "rev-parse", f"{ref}^{{commit}}"), f"resolve {label} target"
+    )
+    if target != merge_commit:
+        raise ArchiveError(f"{label} does not point at the integration merge")
+    return object_id
+
+
+def ensure_integration_tag(project: Path, tag_name: str, merge_commit: str) -> tuple[str, bool]:
+    local_ref = f"refs/tags/{tag_name}"
+    remote_ref = f"refs/remotes/origin/tags/{tag_name}"
+    local_object = optional_ref(project, local_ref)
+    remote_object = optional_ref(project, remote_ref)
+    if remote_object is not None:
+        remote_object = require_annotated_tag(
+            project, remote_ref, merge_commit, f"published milestone tag {tag_name}"
+        )
+    if local_object is None:
+        if remote_object is not None:
+            require_git_success(
+                run_git(project, "update-ref", local_ref, remote_object),
+                "restore local milestone tag",
+            )
+        else:
+            tag_message = f"milestone {tag_name.removeprefix('milestone/')}"
+            require_git_success(
+                run_git(
+                    project,
+                    "tag",
+                    "-a",
+                    "-m",
+                    tag_message,
+                    tag_name,
+                    merge_commit,
+                ),
+                "create milestone tag",
+            )
+    local_object = require_annotated_tag(
+        project, local_ref, merge_commit, f"milestone tag {tag_name}"
+    )
+    if remote_object is not None and remote_object != local_object:
+        raise ArchiveError(f"local and published milestone tag {tag_name} differ")
+    return local_object, remote_object is not None
+
+
+def integrate(repo: Path, slug: str) -> dict:
+    project = repo.resolve()
+    active_root = require_project_layout(project)
+    state, _, loaded_state_path = strict_state(project)
+    if loaded_state_path.resolve() != (active_root / "STATE.md").resolve():
+        raise ArchiveError("strict STATE.md loader returned an unexpected path")
+    expected_slug = milestone_slug(state)
+    if normalized_slug(slug) != expected_slug:
+        raise ArchiveError(
+            f"--slug {slug!r} does not match normalized STATE.milestone {expected_slug!r}"
+        )
+
+    shipped = validate(project)
+    archive_path = shipped["archive"]
+    ship_commit = shipped["commit"]
+    archive_name = PurePosixPath(archive_path).name
+    bound_branch = state.branch
+    expected_branch = bound_branch_name(milestone_number(archive_name))
+    if bound_branch != expected_branch:
+        raise ArchiveError(f"integration requires canonical bound branch {expected_branch}")
+    head = require_git_success(
+        run_git(project, "rev-parse", "HEAD"), "resolve bound branch HEAD"
+    )
+    if head != ship_commit:
+        raise ArchiveError("bound worktree must remain at the ship commit during integration")
+    subject = require_git_success(
+        run_git(project, "show", "-s", "--format=%s", ship_commit),
+        "inspect ship commit subject",
+    )
+    if subject != ship_subject(archive_name):
+        raise ArchiveError("integration only generates canonical M00N shipment history")
+
+    remote_default = refresh_origin(project)["remote_default"]
+    default_name = default_branch_name(remote_default)
+    if default_name != "main":
+        raise ArchiveError(f"remote default must be main, got {default_name!r}")
+    if bound_branch == default_name:
+        raise ArchiveError("bound branch must not be the remote default")
+    remote_default_sha = require_git_success(
+        run_git(project, "rev-parse", remote_default), "resolve remote default"
+    )
+    integration_branch, worktree = integration_names(project, archive_name)
+    interrupted_worktree = registered_worktree(project, integration_branch)
+    if (
+        interrupted_worktree is not None
+        and optional_ref(interrupted_worktree, "MERGE_HEAD") is not None
+    ):
+        if interrupted_worktree != worktree.resolve():
+            raise ArchiveError(
+                f"integration branch {integration_branch} is checked out at unexpected path: "
+                f"{interrupted_worktree}"
+            )
+        require_git_success(
+            run_git(interrupted_worktree, "merge", "--abort"),
+            "abort interrupted integration merge",
+        )
+        remove_registered_worktree(project, integration_branch, worktree)
+        interrupted_tip = optional_ref(project, f"refs/heads/{integration_branch}")
+        if interrupted_tip is not None:
+            delete_integration_branch(project, integration_branch, interrupted_tip)
+        raise ArchiveError(
+            "interrupted integration merge conflicted; Git aborted it without resolving files"
+        )
+    remove_registered_worktree(project, integration_branch, worktree)
+    worktree_active = False
+
+    contains_ship = run_git(
+        project, "merge-base", "--is-ancestor", ship_commit, remote_default
+    )
+    if contains_ship.returncode == 0:
+        merge_commit = find_integrate_commit(
+            project, remote_default, archive_name, ship_commit
+        )
+        require_generated_integration_commit(
+            project,
+            merge_commit,
+            archive_path,
+            archive_name,
+            ship_commit,
+            default_name,
+            bound_branch,
+        )
+    elif contains_ship.returncode == 1:
+        merge_commit, worktree_active = create_integration_merge(
+            project,
+            worktree,
+            integration_branch,
+            remote_default_sha,
+            archive_path,
+            archive_name,
+            ship_commit,
+            default_name,
+            bound_branch,
+        )
+    else:
+        require_git_success(contains_ship, "inspect ship ancestry on the remote default")
+        raise AssertionError("unreachable")
+
+    action_error = None
+    try:
+        tag_name = f"milestone/{archive_name}"
+        tag_object, tag_published = ensure_integration_tag(
+            project, tag_name, merge_commit
+        )
+
+        published_merge = run_git(
+            project, "merge-base", "--is-ancestor", merge_commit, remote_default
+        )
+        if published_merge.returncode == 1:
+            require_git_success(
+                run_git(
+                    project,
+                    "push",
+                    "origin",
+                    f"{merge_commit}:refs/heads/{default_name}",
+                ),
+                "push integration merge to main",
+            )
+            require_git_success(
+                run_git(project, "update-ref", remote_default, merge_commit),
+                "refresh local remote-default ref",
+            )
+        elif published_merge.returncode != 0:
+            require_git_success(published_merge, "inspect published integration merge")
+
+        publish_bound_branch(project, bound_branch, ship_commit)
+        if not tag_published:
+            require_git_success(
+                run_git(
+                    project,
+                    "push",
+                    "origin",
+                    f"refs/tags/{tag_name}:refs/tags/{tag_name}",
+                ),
+                "push milestone tag",
+            )
+            require_git_success(
+                run_git(
+                    project,
+                    "update-ref",
+                    f"refs/remotes/origin/tags/{tag_name}",
+                    tag_object,
+                ),
+                "refresh local milestone-tag ref",
+            )
+    except (ArchiveError, OSError) as error:
+        action_error = error
+
+    try:
+        if worktree_active:
+            remove_registered_worktree(project, integration_branch, worktree)
+    except (ArchiveError, OSError) as cleanup_error:
+        if action_error is not None:
+            raise ArchiveError(
+                f"{action_error}; integration worktree cleanup failed: {cleanup_error}"
+            )
+        raise
+    if action_error is not None:
+        raise action_error
+
+    branch_tip = optional_ref(project, f"refs/heads/{integration_branch}")
+    if branch_tip is not None:
+        if branch_tip != merge_commit:
+            ancestor = run_git(
+                project, "merge-base", "--is-ancestor", branch_tip, merge_commit
+            )
+            if ancestor.returncode != 0:
+                raise ArchiveError(f"integration branch {integration_branch} moved unexpectedly")
+        delete_integration_branch(project, integration_branch, branch_tip)
+    return validate_integrated(project, slug)
+
+
 def find_integrate_commit(
     project: Path,
     remote_default: str,
@@ -2004,14 +3573,18 @@ def find_integrate_commit(
         if "\x00" not in record:
             continue
         commit, subject = record.split("\x00", 1)
-        if is_integrate_subject(subject, archive_name, default_name):
+        if subject == expected_subject:
             matches.append(commit)
     if not matches:
         raise ArchiveError(
             f"no commit with exact subject {expected_subject!r} "
             f"in {remote_default} first-parent history"
         )
-    # Newest-first: the most recent integrate subject owns the integration.
+    if len(matches) != 1:
+        raise ArchiveError(
+            f"multiple commits with exact subject {expected_subject!r} "
+            f"in {remote_default} first-parent history"
+        )
     merge_commit = matches[0]
     parents = require_git_success(
         run_git(project, "rev-list", "--parents", "-n", "1", merge_commit),
@@ -2027,7 +3600,9 @@ def find_integrate_commit(
 def validate_integrated(repo: Path, slug: str) -> dict:
     project = repo.resolve()
     active_root = require_project_layout(project)
-    state = (active_root / "STATE.md").read_text(encoding="utf-8")
+    state, _, loaded_state_path = strict_state(project)
+    if loaded_state_path.resolve() != (active_root / "STATE.md").resolve():
+        raise ArchiveError("strict STATE.md loader returned an unexpected path")
     expected_slug = milestone_slug(state)
     if normalized_slug(slug) != expected_slug:
         raise ArchiveError(
@@ -2044,16 +3619,17 @@ def validate_integrated(repo: Path, slug: str) -> dict:
     # fetching is the phase's job.
     remote_default = resolve_remote_default(project)
     default_name = default_branch_name(remote_default)
-    bound_branch = frontmatter_value(state, "branch")
-    if is_unset(bound_branch):
+    bound_branch = state.branch
+    if bound_branch is None:
         raise ArchiveError("STATE.md does not name a bound build branch")
     expected_branch = bound_branch_name(milestone_number(archive_name))
     ship_subject_text = require_git_success(
         run_git(project, "log", "-1", "--format=%s", ship_commit),
         "read ship commit subject",
     )
-    canonical_ship = ship_subject_text == ship_subject(archive_name)
-    if canonical_ship and not is_bound_branch(bound_branch):
+    if ship_subject_text != ship_subject(archive_name):
+        raise ArchiveError("current milestone ship commit subject is not canonical")
+    if not is_bound_branch(bound_branch):
         raise ArchiveError(f"bound branch {bound_branch!r} is not gsd-path/M00N")
     if is_bound_branch(bound_branch) and bound_branch != expected_branch:
         expected_milestone = expected_branch.removeprefix("gsd-path/")
@@ -2171,6 +3747,12 @@ def parser() -> argparse.ArgumentParser:
     )
     preflight_parser.add_argument("--repo", required=True, type=Path)
 
+    manifest_parser = subparsers.add_parser(
+        "render-manifest",
+        help="render the current uncommitted archive manifest from validated evidence",
+    )
+    manifest_parser.add_argument("--repo", required=True, type=Path)
+
     validate_parser = subparsers.add_parser("validate", help="validate the committed ship transaction")
     validate_parser.add_argument("--repo", required=True, type=Path)
 
@@ -2187,6 +3769,13 @@ def parser() -> argparse.ArgumentParser:
     )
     refresh_parser.add_argument("--repo", required=True, type=Path)
 
+    integrate_parser = subparsers.add_parser(
+        "integrate",
+        help="resume and publish the shipped milestone integration",
+    )
+    integrate_parser.add_argument("--repo", required=True, type=Path)
+    integrate_parser.add_argument("--slug", required=True)
+
     abandon_parser = subparsers.add_parser(
         "abandon",
         help="abandon the active build milestone and archive its partial artifacts",
@@ -2202,6 +3791,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     try:
         if arguments.command == "prepare":
             result = prepare(arguments.repo, arguments.slug)
+        elif arguments.command == "render-manifest":
+            result = render_manifest(arguments.repo)
         elif arguments.command == "preflight":
             result = preflight(arguments.repo)
         elif arguments.command == "abandon":
@@ -2210,6 +3801,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             result = validate_integrated(arguments.repo, arguments.slug)
         elif arguments.command == "refresh-origin":
             result = refresh_origin(arguments.repo)
+        elif arguments.command == "integrate":
+            result = integrate(arguments.repo, arguments.slug)
         else:
             result = validate(arguments.repo)
     except (ArchiveError, OSError) as error:

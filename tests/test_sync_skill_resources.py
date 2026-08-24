@@ -89,6 +89,17 @@ class SyncSkillResourcesTests(unittest.TestCase):
                 ship_review_panel.read_bytes(),
                 (root / "scripts" / "review_panel.py").read_bytes(),
             )
+            roadmap_promote = (
+                root / "skills" / "gsd-path-roadmap" / "scripts" / "promote_lookahead.py"
+            )
+            roadmap_help = subprocess.run(
+                [sys.executable, str(roadmap_promote), "--help"],
+                cwd=root,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(roadmap_help.returncode, 0, roadmap_help.stderr)
             self.assertEqual(
                 discussion_template.read_bytes(),
                 (root / "skills" / "gsd-path" / "templates" / "dialogue.md").read_bytes(),

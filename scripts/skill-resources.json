@@ -167,6 +167,7 @@
     ["scripts/review_panel.py", "skills/gsd-path/scripts/review_panel.py"],
     ["scripts/review_panel.py", "skills/gsd-path-plan/scripts/review_panel.py"],
     ["scripts/review_panel.py", "skills/gsd-path-build/scripts/review_panel.py"],
+    ["scripts/review_panel.py", "skills/gsd-path-roadmap/scripts/review_panel.py"],
     ["scripts/review_panel.py", "skills/gsd-path-ship/scripts/review_panel.py"],
     ["scripts/loop_run.py", "skills/gsd-path-loop/scripts/loop_run.py"],
     ["scripts/isolation.py", "skills/gsd-path/scripts/isolation.py"],
