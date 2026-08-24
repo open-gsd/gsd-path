@@ -1,17 +1,21 @@
 ---
 name: gsd-path-define
-description: Define and approve project intent in .project/intent/INTENT.md through a focused user interview. Use only when the user explicitly invokes $gsd-path-define or an active $gsd-path router explicitly routes to this phase.
+description: Define and approve project or milestone intent through an interview or milestone confirmation, writing .project/CHARTER.md or .project/intent/INTENT.md. Use only when the user explicitly invokes $gsd-path-define or an active $gsd-path router explicitly routes to this phase.
 ---
 
 # GSD Path Define Phase
 
-Turn a vague idea into `.project/intent/INTENT.md`. Run this phase in the
-main conversation; never delegate the interview.
+Turn a project idea or approved roadmap entry into an approved intent artifact.
+Run this phase in the main conversation; never delegate its interview or
+confirmation.
 
-Three modes: **standard** (single milestone, below), **program mode** (a
+Primary modes: **standard** (single milestone, below), **program** (a
 multi-milestone program — interview into `.project/CHARTER.md`), and
-**milestone mode** (derive one milestone's INTENT.md from the approved
-roadmap; no re-interview).
+**milestone** (derive one milestone's INTENT.md from the approved roadmap; no
+re-interview). Modifiers: **brownfield** when the track's
+`research/evidence-codebase.md` exists, and **supplied-spec** when the user
+hands in a PRD, issue, or design doc. Apply every matching modifier on top of
+the primary mode.
 
 Any instruction below to route, return, or invoke another GSD Path phase is a
 caller handoff, not permission to trigger an explicit-only skill. If an active
@@ -30,32 +34,39 @@ and the target artifact rather than approving stale intent.
 
 If STATE.md exists, require `pipeline: gsd-path/v2`; a missing or different
 marker returns to `$gsd-path` for ownership checking. Legal existing-state
-entry is `inspect/done` (transition to `define/active`), `roadmap/done`
+entry is `inspect/done` (transition to `define/active`; milestone mode when
+ROADMAP.md exists), `roadmap/done`
 (transition to `define/active`, milestone mode), or
 `define/active|blocked`. `define/done` or any later phase blocks rather than
 overwriting approved intent and leaving downstream artifacts stale. When an
 active router supplies the lookahead track root `.project/next/`, evaluate
 this ownership section against the track's STATE.md and paths instead; see
-Lookahead mode. If
-STATE.md is missing and `.project/` contains any artifact, return to
-`$gsd-path` for orphaned-state recovery; existing evidence does not prove its
-pipeline version or phase and must not be reused or overwritten by inference.
-Otherwise perform the router's brownfield detection before interviewing. Any
-brownfield signal routes to `$gsd-path-inspect`. Only a greenfield directory
-may initialize STATE.md directly from the local
-[state template](templates/state.md), with a deterministic project slug from
-the working-directory name, `pipeline: gsd-path/v2`, `phase: define`,
-`status: active`, `milestone: null`, `branch: null`, `archive: null`, and an
-initialization Log entry. No template placeholder may remain.
+Lookahead mode. If STATE.md is missing, run the bundled
+`python3 <absolute-bundled-script> initialize --repo <absolute-root>
+--template <absolute-state-template>` helper (`scripts/detect_project.py`) and
+follow its returned JSON `verdict` / `route`. This is the only no-state
+boundary; do not run `classify` first or classify from a directory listing or
+conversation. If the command exits nonzero, returns `error`, or returns
+`wrote_state: false`, report the error and block without routing or claiming
+STATE.md was written.
+- `owned` — continue under the existing-state rules above.
+- `orphan` — return to `$gsd-path` for orphaned-state recovery; existing
+  evidence does not prove its pipeline version or phase and must not be reused
+  or overwritten by inference.
+- `brownfield` — the helper writes STATE.md at `inspect/active`; route to
+  `$gsd-path-inspect` from this returned verdict.
+- `greenfield` — require `wrote_state: true`, then continue with the helper's
+  STATE.md at `define/active`. Do not create STATE.md yourself.
 
 The router's verified new-GitHub-repository transaction is the sole greenfield
 exception: STATE.md already exists at `define/active`, `branch` is the approved
 `gsd-path/M001` branch, and `.project/REPOSITORY.md` contains the
 fixed-format remote, remote-default SHA, clean default checkout, branch, and
 primary worktree. Verify that artifact and the current branch/worktree before
-interviewing. The bootstrap README does not make this routed project
-brownfield. A missing or mismatched binding returns to `$gsd-path`; never infer
-it from STATE log prose or repair it inside define.
+interviewing. Do not run `detect_project.py` on this owned state; the
+bootstrap README is not a brownfield signal. A missing or mismatched binding
+returns to `$gsd-path`; never infer it from STATE log prose or repair it
+inside define.
 
 ## Coverage checklist
 
@@ -96,23 +107,34 @@ INTENT.md in program mode.
 
 ## Milestone mode
 
-Legal entry: `roadmap/done`, or a router post-ship reset to `define/active`
-with `.project/ROADMAP.md` present. There is no re-interview:
-1. Read `.project/CHARTER.md`, `.project/ROADMAP.md`, and the `active`
-   roadmap entry.
-2. Draft INTENT.md from them: Summary from the entry's Goal, Scope in/out and
-   Success criteria from the entry, Constraints inherited from the charter,
+Legal entry: `roadmap/done`, `inspect/done` when `.project/ROADMAP.md`
+exists, or a resumed `define/active` with ROADMAP.md present. There is no
+re-interview of charter or roadmap scope:
+1. Read `.project/CHARTER.md` and `.project/ROADMAP.md`, then resolve the
+   roadmap entry from the track state. In Lookahead mode, use the entry whose
+   slug matches `.project/next/STATE.md`'s `milestone` and require it to remain
+   `pending`; otherwise use the `active` entry and require it to match the
+   track state's non-null `milestone`. When brownfield, also read the track's
+   `research/evidence-codebase.md` and `research/DOCS-AUDIT.md` first.
+2. Draft INTENT.md from the resolved entry: Summary from its Goal, Scope
+   in/out and Success criteria from the entry, Constraints inherited from the charter,
    Risks and Open questions from the entry (tagged `RESEARCH`/`NEEDS-USER`),
    `Lane: milestone`, and `Review panel:` copied from CHARTER.md (default
    `off` when CHARTER omits it). The confirmation may override the copied
-   panel value; do not invent `detected` or a named list.
-3. Present one confirmation, not an interview: playback the derivation, link
-   the resolved absolute INTENT.md path, and ask approve or adjust. A requested
-   change that contradicts the charter or the approved roadmap entry is a
-   scope change — this phase never edits the roadmap; surface it to the user
-   for a `$gsd-path-roadmap` re-slice at the next milestone boundary.
+   panel value; do not invent `detected` or a named list. When brownfield,
+   fill `## Current state` from the map, record doc-vs-code rulings as in
+   Brownfield mode, and add protected existing behavior under Scope out.
+   Write Ground truth paths from the track root: `.project` normally, or
+   `.project/next` in Lookahead mode — never the building milestone's
+   active `research/` paths.
+3. Present one confirmation, not an interview: playback the derivation (and
+   brownfield ground truth when present), link the resolved absolute INTENT.md
+   path, and ask approve or adjust. A requested change that contradicts the
+   charter or the resolved roadmap entry is a scope change — this phase never
+   edits the roadmap; surface it to the user for a `$gsd-path-roadmap` re-slice
+   at the next milestone boundary.
 4. On approval, finalize per the Output contract, setting `milestone` to the
-   active entry's slug. The router continues with milestone-scoped research
+   resolved entry's slug. The router continues with milestone-scoped research
    when the entry lists open questions, otherwise planning.
 
 ## Lookahead mode
@@ -125,13 +147,15 @@ INTENT.md is `.project/next/intent/INTENT.md` — never against active-path
 artifacts. This is milestone mode run against the track, with two
 differences:
 
-- Read CHARTER.md, ROADMAP.md, and the active milestone's roadmap context
-  from their active `.project/` paths, but never create or modify any
-  active-path artifact.
+- Read CHARTER.md and ROADMAP.md from their active `.project/` paths, but
+  resolve the milestone only from `.project/next/STATE.md` as described above;
+  never use the building milestone's `active` entry and never create or modify
+  any active-path artifact.
 - Never mark the lookahead milestone's roadmap entry `active`; the router
   does that at promotion.
 
-All other milestone-mode rules apply unchanged.
+All other milestone-mode rules apply unchanged. Brownfield evidence for
+this track is `.project/next/research/evidence-codebase.md`.
 
 ## Supplied-spec mode
 
@@ -145,44 +169,66 @@ truth first, then the spec, then delta questions only.
 
 ## Brownfield mode
 
-When `.project/research/evidence-codebase.md` exists (the router ran
-`$gsd-path-inspect`), read it and `.project/research/DOCS-AUDIT.md` before the
-first question. The rules change:
+When the track's `research/evidence-codebase.md` exists (inspect already
+ran), read it and the matching `research/DOCS-AUDIT.md` before the first
+question. The rules change for every primary mode:
 
 - Established facts are not questions. Never ask what the stack is or what
   the code does — the map answers that. State it and let the user correct.
-- The interview centers on deltas: what should change, what must not break,
-  and the goal of THIS milestone against the code that already exists.
+- Standard and program interviews cover only deltas: what should change, what
+  must not break, and — standard — the goal of THIS milestone against the
+  code that already exists. Program interviews still use the charter
+  checklist, but skip any area the map already settled.
+- Milestone mode still does not re-interview; it still collects the rulings
+  below before confirmation.
 - Work through the mapper's `## Open questions for define` and the
   audit's `NEEDS-USER` remediation rows — each doc-vs-code conflict gets a
   ruling (`fix-doc`, `fix-code`, or `accept-drift`) recorded verbatim in
   INTENT.md and appended to DOCS-AUDIT.md's `## User rulings` table.
   `fix-doc` and `fix-code` rows receive `planned: no`; `accept-drift` receives
   `planned: n/a (accept-drift)`. Never leave the durable alignment queue only
-  in INTENT.md.
+  in INTENT.md. Program mode records those rulings on CHARTER.md Constraints
+  or Corrections and still writes the DOCS-AUDIT.md table.
 - Existing behavior the user wants preserved is recorded under Scope out as
   a veto ("do not break X"); accepted `fix-code` items become scope.
 - Fill INTENT.md's `## Current state` from the codebase map so downstream
-  phases inherit ground truth without re-scanning.
+  phases inherit ground truth without re-scanning. Set Ground truth to the
+  track's `research/evidence-codebase.md` and `research/DOCS-AUDIT.md`
+  (`.project/next/research/` in Lookahead mode). Omit that section for
+  greenfield. Do not add it to CHARTER.md.
 
 ## Process
 
-1. Ask for a one-paragraph idea description if the user has not supplied one.
-   In brownfield mode, instead present the one-screen ground truth (from
-   inspection) and ask what this milestone should achieve.
-2. Ask small rounds of questions aimed at the weakest checklist areas.
-   Use an interactive user-input tool when available. Otherwise ask concise
-   numbered questions in chat and stop for the reply. Keep each round small
-   enough to answer in one reply. When a question offers options, list the
-   recommended one first marked `(recommended)` with a one-line reason;
-   leave open questions open.
+1. Open in this order, then stop for the reply:
+   - **Brownfield (any primary):** present the one-screen ground truth from
+     inspect before any question.
+   - **Standard, no brownfield:** ask for a one-paragraph idea if missing.
+   - **Program, no brownfield:** ask for the program vision if missing.
+   - **Milestone:** do not ask for an idea; continue at Milestone mode
+     (ground truth already presented when brownfield).
+   - **Supplied spec:** after the opening above, present settled coverage
+     for correction, then interview only its gaps.
+   - **Standard + brownfield:** after ground truth, ask what this milestone
+     should achieve against the code that exists.
+2. For standard and program modes, ask small rounds of questions aimed at the
+   weakest checklist areas that the opening did not already settle. Never ask
+   a fact the map, audit, or supplied spec already answered. Use an
+   interactive user-input tool when available. Otherwise ask concise numbered
+   questions in chat and stop for the reply. Keep each round small enough to
+   answer in one reply. When a question offers options, list the recommended
+   one first marked `(recommended)` with a one-line reason; leave open
+   questions open. Milestone mode skips this step; collect brownfield rulings
+   if brownfield, then use the Milestone mode confirmation.
 3. Surface contradictions immediately and ask the user to choose. Never
    average incompatible answers.
-4. Challenge the largest assumption at least once: ask what happens if it is
-   false.
+4. In standard and program modes, challenge the largest remaining assumption
+   at least once: ask what happens if it is false. Do not challenge a fact
+   the brownfield map already established. Milestone mode skips this step.
 5. Stop when coverage is complete or the user says `enough`. Record remaining
    uncertainty under `## Open questions` with `RESEARCH` or `NEEDS-USER`.
-6. Classify the proposed milestone lane before writing the approval draft:
+6. Classify the proposed milestone lane before writing the approval draft.
+   Milestone mode keeps `Lane: milestone` and skips this classification.
+   Program mode writes CHARTER.md instead of INTENT.md. Otherwise choose
    `quick` when scope fits at most two deliverable-sized tasks (project
    policy) in one wave with
    no `RESEARCH` or `NEEDS-USER` items and no cross-wave integration risk;
@@ -207,18 +253,23 @@ when the user did not choose a panel and no CHARTER default exists.
 
 After approval, finalize `.project/intent/INTENT.md` and update STATE.md to
 `phase: define`, `status: done`, set its `milestone` field to this
-milestone's slug, and append the transition to its log. Report that research
-  is next — or, quick lane, that planning is next and research and decide
-are skipped. Confirm the approved outcome, link the final INTENT.md again, and
-name that next phase before routing. When routed by an active `$gsd-path`,
-return control to that router so its bundled next contract can auto-advance
-(research, or plan in quick mode). When invoked directly, stop and tell the
-user to explicitly invoke `$gsd-path`, which selects that next phase; do not
-invoke an explicit-only sibling skill yourself.
+milestone's slug, and append the transition to its log. Report the next phase
+from the approved lane. For `Lane: standard`, research is next. For
+`Lane: quick`, planning is next and research and decide are skipped. For
+`Lane: milestone`, use the resolved roadmap entry matching the track STATE's
+`milestone`: milestone-scoped research is next when that entry lists open
+questions; otherwise planning is next and research and decide are skipped.
+Confirm the approved outcome, link the final INTENT.md again, and name that
+next phase before routing. When routed by an active `$gsd-path`, return control
+to that router so its bundled next contract can auto-advance to the named
+phase. When invoked directly, stop and tell the user to explicitly invoke
+`$gsd-path`, which selects that next phase; do not invoke an explicit-only
+sibling skill yourself.
 
 ## Rules
 
 - Trace every question to a checklist gap; omit curiosity questions.
+- In brownfield mode, state mapped facts for correction; never re-ask them.
 - Treat solution-shaped problems as hypotheses and uncover the underlying pain.
 - Preserve vetoes and corrections verbatim.
 - Wrap up when every coverage-checklist area is answered or the user signals

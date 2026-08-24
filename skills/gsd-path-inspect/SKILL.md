@@ -25,39 +25,50 @@ input.
 
 ## Preconditions
 
-An existing project: source files, git history, or substantive docs. If the
-directory is effectively empty, skip inspection — route to `$gsd-path-define`.
+If STATE.md is missing, run the bundled
+`python3 <absolute-bundled-script> initialize --repo <absolute-root>
+--template <absolute-state-template>` helper (`scripts/detect_project.py`) and
+follow its returned JSON `verdict` / `route`. This is the only no-state
+boundary; do not run `classify` first or classify from a directory listing or
+conversation. If the command exits nonzero, returns `error`, or returns
+`wrote_state: false`, report the error and block without routing or claiming
+STATE.md was written.
+- `owned` — continue under the existing-state rules below.
+- `orphan` — return to `$gsd-path` for orphaned-state recovery instead of
+  initializing or overwriting it.
+- `greenfield` — the helper writes STATE.md at `define/active`; skip inspection
+  and route to `$gsd-path-define` from this returned verdict.
+- `brownfield` — require `wrote_state: true`, then continue with the helper's
+  STATE.md at `inspect/active`.
 If `.project/STATE.md` exists, require `pipeline: gsd-path/v2`; a missing or
 different marker returns to `$gsd-path` for ownership checking. Legal entry is
 `inspect/active|blocked`; `inspect/done` routes to define, and any later phase
-stops. If STATE.md is absent but `.project/` already contains any artifact,
-return to `$gsd-path` for orphaned-state recovery instead of initializing or
-overwriting it. When an existing state records a bound branch for a
-single-milestone restart, require the current symbolic branch to match and
-preserve it. Re-running inspection would overwrite established context.
+stops. When an existing state records a bound branch (single-milestone restart
+or program next-milestone), require the current symbolic branch to match and
+preserve both `branch` and `milestone`. Do not re-enter `inspect/done` in the
+same milestone; a later milestone's `inspect/active` is a new scan.
 
 ## Process
 
 1. Before creating or changing `.project/` Markdown, freeze the sorted set of
    in-scope repository Markdown paths. Exclude `.project/**`, `.git`, vendored
-   and generated trees, `node_modules`, and build output. Then create
-   `.project/STATE.md` from the local [state template](templates/state.md) if
-   missing. Set `project` to the normalized working-directory basename,
-   `milestone: null`, `pipeline: gsd-path/v2`, `phase: inspect`,
-   `status: active`, `branch: null`, and `archive: null` only for a newly
-   created state; no template placeholder may remain. Preserve an existing
-   router-bound branch.
+   and generated trees, `node_modules`, and build output. If STATE.md is now
+   missing, restart Preconditions and route from the new `initialize` result;
+   never continue from an ignored result. Preserve an existing router-bound
+   branch and milestone.
 2. Dispatch two independent agents in parallel, following the local
    [runtime dispatch contract](references/dispatch.md) and its deterministic
    task-name rules:
    - **Codebase mapper** — role
      [codebase-mapper](references/codebase-mapper.md), template
      [codebase](templates/codebase.md), output
-     `.project/research/evidence-codebase.md`, task name `inspect_codebase`.
+     `.project/research/evidence-codebase.md` (`.project/next/research/` in
+     Lookahead mode), task name `inspect_codebase`.
    - **Docs auditor** — role
      [docs-auditor](references/docs-auditor.md), template
      [docs-audit](templates/docs-audit.md), output
-     `.project/research/DOCS-AUDIT.md`, task name `inspect_docs`.
+     `.project/research/DOCS-AUDIT.md` (same next/ prefix in Lookahead mode),
+     task name `inspect_docs`.
    Give each the absolute repo root and exclusion rule. Give the auditor the
    exact frozen inventory and `alignment mode: false`; it audits only that
    list and never rediscovers paths. The frozen inventory travels inside the
@@ -70,13 +81,17 @@ preserve it. Re-running inspection would overwrite established context.
    includes its path and revision for project commands; expected new pipeline
    artifacts do not make product code dirty. Each agent stages its assigned
    output under that sidecar; the orchestrator validates and atomically
-   transfers both files to the primary `.project/` paths before retiring only
+   transfers both files to the primary `.project/` paths (the track's
+   `.project/next/` paths in Lookahead mode) before retiring only
    those sidecars with `isolation.py retire`. Otherwise no
    project command may run.
 3. Gate both artifacts against their templates: the codebase evidence needs
    a filled `## Map` plus findings as observed — no quota, but an empty
    findings section must say why; the docs audit must pass the bundled
-   `python3 <absolute check_docs_audit.py> --repo <absolute root> --inventory <frozen inventory file>`
+   `python3 <absolute check_docs_audit.py> --repo <absolute root> --audit
+   <track-relative DOCS-AUDIT.md> --inventory <frozen inventory file>`, where
+   the audit path is `.project/research/DOCS-AUDIT.md` normally and
+   `.project/next/research/DOCS-AUDIT.md` in Lookahead mode
    (disjoint `## Doc:` sections and `## Descriptive docs` equal to the frozen
    inventory, every claim a valid verdict with evidence, Summary counts and
    remediation queue consistent). Redispatch one complete corrected brief under the same logical task
@@ -91,15 +106,30 @@ preserve it. Re-running inspection would overwrite established context.
    - drift: what the docs claim that the code contradicts, and what exists
      with no documentation at all;
    - the mapper's open questions about apparent intent.
-   Lead with the outcome, then provide absolute-path Markdown links to
-   `.project/research/evidence-codebase.md` and
-     `.project/research/DOCS-AUDIT.md`, then state that define is next.
+   Lead with the outcome, then provide absolute-path Markdown links to the
+   track's `research/evidence-codebase.md` and `research/DOCS-AUDIT.md`
+   (`.project/research/` normally, `.project/next/research/` in Lookahead
+   mode), then state that define is next.
 5. Set STATE.md to `phase: inspect`, `status: done`, log the transition,
    and identify `$gsd-path-define` as next. When this phase was routed by an
    active `$gsd-path`, return control to that router so its bundled define
-   contract runs in brownfield mode. When invoked directly, stop and tell the
+   contract runs in brownfield mode (and milestone mode when ROADMAP.md
+   exists). When invoked directly, stop and tell the
    user to explicitly invoke `$gsd-path`, which routes to define; do not invoke
    an explicit-only sibling skill yourself.
+
+## Lookahead mode
+
+Entered only when an active router supplies the lookahead track root
+`.project/next/` while the active STATE.md is `build/active` in program
+flow. Evaluate every state and artifact precondition against the track:
+`.project/next/STATE.md` is the state file and the outputs are
+`.project/next/research/evidence-codebase.md` and
+`.project/next/research/DOCS-AUDIT.md`. Freeze the inventory from the
+repository root as usual. Carry forward the active
+`.project/research/DOCS-AUDIT.md` when it exists so its `## User rulings`
+and `planned` values remain verbatim; otherwise carry forward a track-local
+audit if present. Never write an active-path artifact.
 
 ## Rules
 

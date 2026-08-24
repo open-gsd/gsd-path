@@ -53,10 +53,12 @@ flow. Evaluate every state and artifact precondition against the track:
 `.project/next/STATE.md` is the state file, INTENT.md is
 `.project/next/intent/INTENT.md`, and the manifest and evidence files live
 under `.project/next/research/`. Program-level inputs (CHARTER.md,
-ROADMAP.md, top-level SYNTHESIS.md, `evidence-codebase.md` when it applies
-to the building milestone) are read from their active `.project/` paths;
-archived evidence from earlier milestones uses the same archived-manifest
-rule as the roadmap phase. Validate the handoff with
+ROADMAP.md, top-level SYNTHESIS.md) are read from their active `.project/`
+paths. Brownfield input is the track's
+`.project/next/research/evidence-codebase.md` after lookahead inspect;
+do not substitute the building milestone's map. Archived evidence from
+earlier milestones uses the same archived-manifest rule as the roadmap
+phase. Validate the handoff with
 `python3 <absolute check_handoffs.py> research --repo <absolute repo root>
 --project-dir .project/next`. Dispatch, gates, and completion rules are
 unchanged; never write an active-path artifact.

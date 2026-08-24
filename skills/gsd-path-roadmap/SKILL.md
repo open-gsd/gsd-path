@@ -28,8 +28,9 @@ Require `pipeline: gsd-path/v2` in `.project/STATE.md`; a missing or different
 marker returns to `$gsd-path` for ownership checking. Legal entry is
 `decide/done` with an existing `.project/CHARTER.md` and no `.project/ROADMAP.md`
 yet (transition to `roadmap/active`), `roadmap/active|blocked`, or a
-milestone-boundary re-slice: `define/active` with no approved INTENT.md for the
-next milestone and a user request to re-scope the remaining `pending` entries,
+milestone-boundary re-slice: `inspect/active` or `define/active` with no
+approved INTENT.md for the next milestone and a user request to re-scope the
+remaining `pending` entries,
 or `roadmap/active` with STATE.milestone null and an `abandoned` entry in
 ROADMAP.md (the post-abandon re-slice the build orchestrator hands off).
 Any later phase blocks; mid-milestone
@@ -64,7 +65,9 @@ precondition fails.
    paths, including `.project/LESSONS.md` when it exists. On a re-slice, also
    give the existing ROADMAP.md with the instruction to preserve `shipped`
    entries byte-for-byte except Status/Archive/Integrated fields and to never modify
-   `abandoned` entries at all.
+   `abandoned` entries at all. On a milestone-boundary re-slice, also preserve
+   the entry matching STATE.milestone as the single `active` entry and re-slice
+   only the remaining `pending` entries.
    The output is exactly `.project/ROADMAP.md` — no other location is
    canonical.
 3. Gate ROADMAP.md:
@@ -81,22 +84,32 @@ precondition fails.
      honored by at least one milestone's scope.
    - `shipped` entries differ from the prior roadmap only in
      Status/Archive/Integrated; `abandoned` entries are byte-for-byte identical.
+   - On a milestone-boundary re-slice, the entry matching STATE.milestone is
+     unchanged and remains the single `active` entry.
 4. Redispatch one complete corrected brief under logical task name `roadmap`,
    following the runtime dispatch contract and including all gate failures.
-   Allow one revision round. If it still fails, set STATE.md to
-   `phase: roadmap`, `status: blocked`, append the failures to its log, then
+   Allow one revision round. If it still fails, keep the entering
+   `inspect/active` or `define/active` state for a milestone-boundary re-slice;
+   otherwise set STATE.md to `phase: roadmap`, `status: blocked`. Append the
+   failures to its log, then
    present **Outcome** with the failed gate, **Review** linking the resolved
    absolute ROADMAP.md path (or STATE.md when ROADMAP.md is missing), and
    **Next** naming the one correction or user decision required. Stop.
 5. Show every milestone id, goal, and dependency summary as the outcome. Link
    the resolved absolute `.project/ROADMAP.md` path, then ask one explicit next
    question: whether to approve this roadmap and start milestone planning.
-   List `Approve roadmap and start the first pending milestone (recommended)`
-   first when every gate passed, with `Request changes` as the alternative. If the user requests
-   changes, keep `phase: roadmap`, `status: active`, revise, and re-gate.
-6. On approval, set STATE.md to `phase: roadmap`, `status: done`, set its
-   `milestone` field to the first `pending` milestone slug, mark that entry
-   `active` in ROADMAP.md, and record the approval in the log. Then
+   For a milestone-boundary re-slice, list `Approve roadmap and resume the
+   active milestone (recommended)` first; otherwise list `Approve roadmap and
+   start the first pending milestone (recommended)` first. In either case,
+   list `Request changes` as the alternative. If the user requests changes,
+   retain the entering state for a milestone-boundary re-slice; otherwise keep
+   `phase: roadmap`, `status: active`. Revise and re-gate.
+6. On approval of a milestone-boundary re-slice, preserve the entering
+   `phase`, `status`, and `milestone` in STATE.md and keep its matching roadmap
+   entry `active`. On any other approval, set STATE.md to `phase: roadmap`,
+   `status: done`, set its `milestone` field to the first `pending` milestone
+   slug, and mark that entry `active` in ROADMAP.md. Record the approval in the
+   log. Then
    checkpoint the approval in Git: stage `.project/` in full — the approved
    CHARTER.md, program SYNTHESIS.md, ROADMAP.md, research artifacts, STATE.md,
    and complete append-only discussion records — and commit with exact
@@ -105,12 +118,15 @@ precondition fails.
    build orchestrator's transition commit only when the directory is not yet
    a Git repository or `.project/REPOSITORY.md` records `Kind: new-github`
    (the router owns the branch during that transaction). Confirm
-   approval, link ROADMAP.md again, and state that define (milestone mode) is
-   next. Do not add another approval gate. When routed by an active
-   `$gsd-path`, return control to that router so its bundled define contract
-   starts. When invoked directly, stop and tell the user to explicitly
-   invoke `$gsd-path`, which routes to define; do not invoke an explicit-only
-   sibling skill yourself.
+   approval and link ROADMAP.md again. For a milestone-boundary re-slice,
+   state that the preserved inspect or define phase resumes; otherwise state
+   that define (milestone mode) is next. Do not add another approval gate.
+   When routed by an active `$gsd-path`, return control to that router so its
+   state table routes the preserved STATE.md — `inspect/active` resumes
+   inspect, `define/active` resumes define; never name define as next when
+   inspect was preserved. When invoked directly, stop and tell the user to
+   explicitly invoke `$gsd-path`, which routes that same preserved state; do
+   not invoke an explicit-only sibling skill yourself.
 
 ## Rules
 

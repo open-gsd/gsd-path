@@ -40,17 +40,19 @@ Require `.project/intent/INTENT.md`. Normal mode also requires
 `.project/research/SYNTHESIS.md`; quick mode may enter without it because this
 phase creates the Settled-only synthesis before gating. Milestone mode instead
 requires the program `.project/SYNTHESIS.md` at the `.project/` top level plus
-`.project/ROADMAP.md` with an `active` entry matching STATE.milestone. Require
-a non-empty `## Decisions` or `## Settled` section and no unresolved
-`NEEDS-USER` items
-before dispatching the planner. Route to the producing phase when a
+`.project/ROADMAP.md` with an entry matching the track STATE's `milestone`.
+Require that entry to be `active` normally and `pending` in Lookahead mode.
+Require a non-empty `## Decisions` or `## Settled` section and no unresolved
+`NEEDS-USER` items before dispatching the planner. Route to the producing phase when a
 precondition fails.
 
 ## Alignment queue check
 
-Before planning (either mode), read `.project/research/DOCS-AUDIT.md` when it
-exists for rulings marked `planned: no`. An absent audit means an empty
-alignment queue. If queued rulings exist, offer once to include them:
+Before planning, read `research/DOCS-AUDIT.md` from the supplied track root:
+`.project/research/DOCS-AUDIT.md` normally or
+`.project/next/research/DOCS-AUDIT.md` in Lookahead mode. An absent
+track-local audit means an empty alignment queue. If queued rulings marked
+`planned: no` exist, offer once to include them:
 
 - **Normal planning** — accepted items fold into the plan as ordinary
   tasks in dependency order (evidence inlined, `fix-doc` verifies re-run
@@ -76,7 +78,7 @@ severity, or fit with this milestone's scope).
    input, template, and output paths, including `.project/LESSONS.md` when it
    exists. Whenever INTENT.md records `Lane: milestone` — any entry point —
    also include `.project/CHARTER.md`, `.project/ROADMAP.md`, the top-level
-   program `.project/SYNTHESIS.md`, and the active
+   program `.project/SYNTHESIS.md`, and the resolved
    milestone entry slug. In
    final-review patch mode also include
    `.project/review/PATCH-FINDINGS.md` and every source artifact it names; in
@@ -237,14 +239,15 @@ mode first writes the milestone's own synthesis — the archive requires
 program decisions the milestone plan was built against:
 
 1. Require the program `.project/SYNTHESIS.md`, `.project/CHARTER.md`, and
-   `.project/ROADMAP.md` with an `active` entry matching STATE.milestone.
+   `.project/ROADMAP.md` with an entry matching the track STATE's `milestone`;
+   it must be `active` normally and `pending` in Lookahead mode.
 2. Write `.project/research/SYNTHESIS.md` containing only `## Settled` lines
-   citing the program SYNTHESIS decisions, charter constraints, and the active
-   roadmap entry's success criteria, plus a minimal `## For the planner`
+   citing the program SYNTHESIS decisions, charter constraints, and the
+   resolved roadmap entry's success criteria, plus a minimal `## For the planner`
    naming the milestone's walking skeleton. No invented decisions or
    runner-ups.
 3. Dispatch the planner per the standard contract (the brief includes
-   CHARTER.md, ROADMAP.md, and the active entry slug), then gate and approve
+   CHARTER.md, ROADMAP.md, and the resolved entry slug), then gate and approve
    exactly as normal mode.
 
 ## Lookahead mode
@@ -257,8 +260,11 @@ flow. Milestone-mode rules apply with every per-milestone path rooted at
 `next/research/SYNTHESIS.md` (written here, per milestone mode), and the
 outputs are `next/plan/PLAN.md` and `next/tasks/T###-slug.md`. Program
 inputs — CHARTER.md, ROADMAP.md, the top-level SYNTHESIS.md, LESSONS.md —
-are read from their active `.project/` paths. Three lookahead-only
-differences:
+are read from their active `.project/` paths. Lookahead-only differences:
+
+- Resolve the roadmap entry only from `.project/next/STATE.md`'s `milestone`,
+  require that exact entry to remain `pending`, and never substitute the
+  building milestone's `active` entry.
 
 - Task paths gate against the codebase at current HEAD while the active
   milestone is still building. Where the building milestone's approved

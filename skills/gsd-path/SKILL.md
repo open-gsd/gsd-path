@@ -87,22 +87,26 @@ runs keep the build contract's current branch-binding behavior.
    `task_branch` semantics cannot be inferred safely from unowned artifacts.
    Report the missing marker and ask for an explicit recovery or a new
    milestone; never stamp the marker onto unowned state.
-2. With no STATE.md, inspect `.project/` before project detection. If it
-   contains any file or directory, treat it as orphaned active pipeline
-   artifacts or foreign state and block without mutation. List the paths and
-   ask for an explicit recovery, migration, or new location; existing evidence
-   and archives do not prove a safe v2 phase. Otherwise detect before asking
-   anything. Exclude `.git`,
-   `node_modules`, build output, vendored trees, and `.project/archive/`, then
-   look for a package/build manifest, recognizable source layout, relevant Git
-   history, or substantive system documentation.
-   - Any signal is brownfield: create STATE.md from the local
-     [state template](templates/state.md) with deterministic project slug,
-     `pipeline: gsd-path/v2`, `phase: inspect`, `status: active`,
-     `milestone: null`, `branch: null`, and `archive: null`; report the signal and route to
-     the bundled [inspect contract](INSPECT.md).
-   - No signal is greenfield: initialize the same template with
-     `phase: define`, `milestone: null`, report that no brownfield signal fired, and route to
+2. With no STATE.md, run the bundled
+   `python3 <absolute-bundled-script> initialize --repo <absolute-root>
+   --template <absolute-state-template>` helper
+   (`scripts/detect_project.py`) before asking anything. Do not classify
+   brownfield, greenfield, or orphaned `.project/` from a directory listing or
+   conversation. If the command exits nonzero, returns `error`, or returns
+   `wrote_state: false`, report the error and block without routing or claiming
+   STATE.md was written. Otherwise follow the JSON `verdict` / `route` exactly.
+   `initialize` classifies and, for brownfield or greenfield, writes STATE.md
+   through an anchored no-follow create — never create STATE.md yourself after
+   classify:
+   - `owned` — STATE.md exists; continue at step 1.
+   - `orphan` (`route: recover-orphan`) — block without mutation. List the
+     returned `orphan_paths` and ask for an explicit recovery, migration, or
+     new location; existing evidence and archives do not prove a safe v2 phase.
+   - `brownfield` (`route: inspect`) — the helper wrote STATE.md at
+     `inspect/active`; report the returned `signals` and route to the bundled
+     [inspect contract](INSPECT.md).
+   - `greenfield` (`route: define`) — the helper wrote STATE.md at
+     `define/active`; report that no brownfield signal fired, and route to
      the bundled [define contract](DEFINE.md).
 
 ## Transaction recovery first
@@ -155,9 +159,11 @@ ask the user how to reconcile the upstream change.
 Report normal progress in three labeled lines: **Outcome** names the phase and
 completed work, **Review** links the newest canonical artifact using its
 resolved absolute path when one exists, and **Next** names the action the
-router is taking or the single action required from the user. If DOCS-AUDIT.md
-has `planned: no` rulings, add one alignment-queue line and offer once to route
-them through the bundled [plan contract](PLAN.md); declining does not block.
+router is taking or the single action required from the user. Resolve the
+routed track root first: `.project/` for the active track or `.project/next/`
+for lookahead. If that track root's `research/DOCS-AUDIT.md` has `planned: no`
+rulings, add one alignment-queue line and offer once to route them through the
+bundled [plan contract](PLAN.md); declining does not block.
 
 Once per conversation, before the status report, run the bundled update check
 `python3 <skill-dir>/scripts/check_update.py`. It is cached, offline-safe, and
@@ -168,13 +174,13 @@ and must not delay routing.
 | State | Next action |
 | --- | --- |
 | `inspect`, not done | bundled [inspect contract](INSPECT.md) |
-| `inspect`, done | bundled [define contract](DEFINE.md), brownfield mode |
+| `inspect`, done | bundled [define contract](DEFINE.md), brownfield mode; add milestone mode when ROADMAP.md exists |
 | `define`, not done | bundled [define contract](DEFINE.md) |
 | `define`, done, no INTENT.md (program charter approved) | bundled [research contract](RESEARCH.md), program scope |
 | `define`, done, INTENT `Lane: standard` (or no Lane line) | bundled [research contract](RESEARCH.md) |
 | `define`, done, INTENT `Lane: quick` | bundled [plan contract](PLAN.md), quick mode |
-| `define`, done, INTENT `Lane: milestone`, active roadmap entry has open questions | bundled [research contract](RESEARCH.md), milestone scope |
-| `define`, done, INTENT `Lane: milestone`, no open questions | bundled [plan contract](PLAN.md) |
+| `define`, done, INTENT `Lane: milestone`, roadmap entry matching the track STATE's `milestone` has open questions | bundled [research contract](RESEARCH.md), milestone scope |
+| `define`, done, INTENT `Lane: milestone`, matching roadmap entry has no open questions | bundled [plan contract](PLAN.md) |
 | `research`, not done | bundled [research contract](RESEARCH.md) |
 | `research`, done | bundled [decide contract](DECIDE.md) |
 | `decide`, not done | bundled [decide contract](DECIDE.md) |
@@ -195,9 +201,9 @@ and must not delay routing.
 Auto-advance after a non-interactive phase completes unless blocked or waiting
 on `NEEDS-USER`. Planning owns the single build-approval gate; never ask a
 second time. One user-driven exception to the table: at a program milestone
-boundary — `define/active` with no approved INTENT.md for the next milestone —
-a user request to re-scope the remaining `pending` entries routes to the
-bundled [roadmap contract](ROADMAP.md) in re-slice mode.
+boundary — `inspect/active` or `define/active` with no approved INTENT.md for
+the next milestone — a user request to re-scope the remaining `pending`
+entries routes to the bundled [roadmap contract](ROADMAP.md) in re-slice mode.
 
 ## Lookahead planning (program flow)
 
@@ -206,10 +212,11 @@ entry whose dependencies are all `shipped` or the active milestone, offer
 once per milestone to plan that next milestone in parallel with the build.
 On acceptance, create `.project/next/STATE.md` from the local [state
 template](templates/state.md) with `pipeline: gsd-path/v2`, `phase:
-define`, `status: active`, the next dependency-ready `pending` slug as
+inspect`, `status: active`, the next dependency-ready `pending` slug as
 `milestone`, `branch: null`, and `archive: null`, then follow the bundled
-phase contracts in their Lookahead mode — define, research (only when the
-entry lists open questions), decide, and plan — rooted at `.project/next/`.
+phase contracts in their Lookahead mode — inspect, define (milestone +
+brownfield), research (only when the entry lists open questions), decide, and
+plan — rooted at `.project/next/`.
 Declining does not block; offer again only at the next milestone's build.
 
 - The build track always takes routing precedence: the lookahead track
@@ -272,12 +279,13 @@ Log, then:
   the promoted state (a promoted `plan/done` goes straight to the bundled
   build contract, subject to the re-validation below). With no lookahead
   track, reset
-  `phase: define`, `status: active`, `milestone` to the next dependency-ready
+  `phase: inspect`, `status: active`, `milestone` to the next dependency-ready
   `pending` slug, `branch: gsd-path/M00N`, and `archive: null`; mark that entry
   `active` in ROADMAP.md, fill the previously shipped entry's `Integrated:`
   field with the merge SHA of the just-completed integrate
-  commit, and route to the bundled [define contract](DEFINE.md) in milestone
-  mode. When every entry is `shipped`,
+  commit, and route to the bundled [inspect contract](INSPECT.md). The
+  codebase changed at the previous ship, so inspect rescans before milestone
+  define. When every entry is `shipped`,
   report the program complete against CHARTER.md's program success criteria
   and stop.
 - **Single milestone** (no ROADMAP.md): reset `phase: inspect`,
