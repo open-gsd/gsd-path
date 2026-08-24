@@ -176,7 +176,7 @@ Restart the host session after install if skills do not appear.
 
 Open your agent in the project directory. Invoke the router explicitly.
 
-### Initial greenfield repository
+### Initial greenfield repository (first milestone)
 
 With no `.project/STATE.md`, a `greenfield` classifier verdict routes to
 **define** immediately. The [DOCS.md FAQ](DOCS.md#faq) owns the exact
@@ -316,8 +316,9 @@ After `validate-integrated` passes, the next milestone starts clean on a new
 `gsd-path/M00N` cut from `origin/main`. Invoke the router again; brownfield
 inspect runs against the now-shipped codebase. In program flow the router
 pulls the next pending roadmap entry and inspects first, then define
-(milestone + brownfield); when every entry is shipped it reports the program
-complete against the charter's success criteria.
+(milestone + brownfield); when every entry is terminal (`shipped` or
+`abandoned`) it reports the program complete against the charter's success
+criteria.
 
 Two program-flow refinements:
 

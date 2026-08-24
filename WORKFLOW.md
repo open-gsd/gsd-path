@@ -325,6 +325,11 @@ abandon live only in the canonical
 `skills/gsd-path/BUILD.md` is its generated mirror. The build orchestrator
 reads the canonical file; no build agent receives this section.
 
+Program lookahead starts at inspect under `.project/next/`, then runs define
+in milestone + brownfield mode. Later non-lookahead milestones follow the same
+inspect-first route; only the first milestone after initial roadmap approval
+starts at define.
+
 ## Phase 6 — Ship (`gsd-path-ship`)
 
 ### Final review (`gsd-path-ship final`)

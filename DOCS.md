@@ -163,7 +163,7 @@ state or bypasses a gate.
 ### Cheat sheet
 
 ```text
-No state, greenfield verdict    → router → define
+No state, greenfield verdict    → router → define (first milestone)
 No state, brownfield verdict    → router → inspect → define
 No state, orphan verdict        → router → block for recovery
 Huge multi-milestone program    → router → define (program mode: charter →
