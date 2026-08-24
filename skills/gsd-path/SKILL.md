@@ -249,27 +249,33 @@ Start only from a ship transaction that passes the bundled validator and the
 bundled integration check (`validate-integrated`); pending integration routes
 back to ship, never here. Preserve the previous archive path, ship SHA,
 integration SHA, and build branch in the state Log. Before fetching or binding
-the next program branch, report program completion and stop when every roadmap
-entry is `shipped`; otherwise resolve the branch through the bundled helper.
-With a saved lookahead track, run:
+the next program branch, fetch origin and resolve the exact current
+`origin/main` SHA. For a program roadmap, resolve the branch from that exact
+fetched commit through the bundled helper. With a saved lookahead track, run:
 
 ```text
-python3 <absolute-bundled-promote-lookahead.py> select-branch \
-  --roadmap <absolute-.project/ROADMAP.md> \
-  --state <absolute-.project/next/STATE.md>
+python3 <absolute-bundled-promote-lookahead.py> select-base \
+  --repo <absolute-primary-root> \
+  --base <exact-origin-main-sha> \
+  --remote-default origin/main \
+  --lookahead
 ```
 
 Without a saved lookahead track, run:
 
 ```text
-python3 <absolute-bundled-promote-lookahead.py> select-next \
-  --roadmap <absolute-.project/ROADMAP.md>
+python3 <absolute-bundled-promote-lookahead.py> select-base \
+  --repo <absolute-primary-root> \
+  --base <exact-origin-main-sha> \
+  --remote-default origin/main
 ```
 
-Require `status: selected` and use the exact returned `branch`; a mismatch or
-no selection blocks before branch mutation. For a single-milestone restart,
-use one plus the maximum archive prefix. Then fetch origin, resolve the exact
-current `origin/main` SHA, and run:
+When the helper returns `status: complete`, report program completion and stop;
+this means every roadmap entry is terminal (`shipped` or `abandoned`). Otherwise
+require `status: selected`, require its returned `base` to equal the exact
+fetched SHA, and use its exact returned `branch`; a mismatch or `status: none`
+blocks before branch mutation. For a single-milestone restart, use one plus the
+maximum archive prefix. Then run:
 
 ```text
 python3 <absolute-bundled-pipeline-git.py> bind-next \
@@ -337,7 +343,7 @@ Log, then:
   field with the merge SHA of the just-completed integrate
   commit, and route to the bundled [inspect contract](INSPECT.md). The
   codebase changed at the previous ship, so inspect rescans before milestone
-  define. When every entry is `shipped`,
+  define. When every entry is terminal (`shipped` or `abandoned`),
   report the program complete against CHARTER.md's program success criteria
   and stop.
 - **Single milestone** (no ROADMAP.md): reset `phase: inspect`,

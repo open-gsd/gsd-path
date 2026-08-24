@@ -594,6 +594,75 @@ class DetectProjectTests(unittest.TestCase):
             self.assertEqual(payload["route"], "existing-state")
             self.assertEqual(payload["signals"], [])
 
+    def test_markerless_state_is_owned_with_unknown_pipeline(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            project = repo / ".project"
+            project.mkdir()
+            (project / "STATE.md").write_text("# State\n", encoding="utf-8")
+
+            payload = self.classify(repo)
+
+            self.assertEqual(payload["verdict"], "owned")
+            self.assertIsNone(payload["pipeline"])
+
+    def test_pipeline_marker_in_state_body_does_not_claim_ownership(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            project = repo / ".project"
+            project.mkdir()
+            (project / "STATE.md").write_text(
+                "# State\n\npipeline: gsd-path/v2\n",
+                encoding="utf-8",
+            )
+
+            payload = self.classify(repo)
+
+            self.assertEqual(payload["verdict"], "owned")
+            self.assertIsNone(payload["pipeline"])
+
+    def test_duplicate_pipeline_fields_fail_classification(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            project = repo / ".project"
+            project.mkdir()
+            (project / "STATE.md").write_text(
+                "---\npipeline: gsd-path/v2\npipeline: other/v1\n---\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(
+                detect_project.DetectError,
+                "duplicate pipeline fields",
+            ):
+                self.classify(repo)
+
+    def test_malformed_pipeline_field_fails_classification(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            project = repo / ".project"
+            project.mkdir()
+            (project / "STATE.md").write_text(
+                "---\npipeline gsd-path/v2\n---\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(
+                detect_project.DetectError,
+                "malformed pipeline field",
+            ):
+                self.classify(repo)
+
+    def test_invalid_utf8_state_fails_instead_of_returning_owned(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            project = repo / ".project"
+            project.mkdir()
+            (project / "STATE.md").write_bytes(b"\xff\xfe")
+
+            with self.assertRaises(detect_project.DetectError):
+                self.classify(repo)
+
     def test_special_project_artifact_is_orphan_with_regular_state(self) -> None:
         if not hasattr(os, "mkfifo"):
             self.skipTest("FIFOs unavailable")
@@ -2131,6 +2200,47 @@ archive: null
                 track_state.replace("milestone: second", "milestone: third"),
             )
 
+    def test_fetched_base_selection_ignores_worktree_roadmap_changes(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            integrate = self.setup_repo(repo)
+            roadmap = repo / ".project" / "ROADMAP.md"
+            roadmap.write_text(
+                roadmap.read_text(encoding="utf-8").replace(
+                    "### M002 — second",
+                    "### M003 — third",
+                ),
+                encoding="utf-8",
+            )
+
+            result = promote_lookahead.select_fetched_base(
+                repo,
+                integrate,
+                "origin/main",
+                True,
+            )
+
+            self.assertEqual(result["branch"], "gsd-path/M002")
+            self.assertEqual(result["base"], integrate)
+            self.git(repo, "restore", ".project/ROADMAP.md")
+            self.git(repo, "commit", "-q", "--allow-empty", "-m", "new base")
+            self.git(
+                repo,
+                "update-ref",
+                "refs/remotes/origin/main",
+                self.git(repo, "rev-parse", "HEAD"),
+            )
+            with self.assertRaisesRegex(
+                promote_lookahead.LookaheadError,
+                "base does not match",
+            ):
+                promote_lookahead.select_fetched_base(
+                    repo,
+                    integrate,
+                    "origin/main",
+                    True,
+                )
+
     def test_roadmap_snapshot_is_created_once_and_reused(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
@@ -2153,6 +2263,14 @@ archive: null
     def test_roadmap_contract_comparison_covers_plan_binding_fields(self) -> None:
         before = """# Roadmap
 
+### M001 — first
+
+Goal: deliver first
+Depends on: []
+Status: shipped
+Archive: .project/archive/001-first
+Integrated: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
 ### M002 — second
 
 Goal: deliver second
@@ -2164,7 +2282,10 @@ Integrated: null
 Success criteria
 1. Original result
 """
-        mutable_only = before.replace("Status: pending", "Status: active")
+        mutable_only = before.replace(
+            "Integrated: null",
+            "Integrated: " + "b" * 40,
+        )
         changed_contract = before.replace("Original result", "Different result")
 
         self.assertEqual(
@@ -2186,6 +2307,65 @@ Success criteria
                 "status"
             ],
             "changed",
+        )
+
+    def test_roadmap_comparison_rejects_a_new_earlier_eligible_entry(self) -> None:
+        before = """# Roadmap
+
+### M001 — first
+
+Depends on: []
+Status: active
+Archive: null
+Integrated: null
+
+### M003 — third
+
+Depends on: [M001]
+Status: pending
+Archive: null
+Integrated: null
+"""
+        inserted = """### M002 — second
+
+Depends on: [M001]
+Status: pending
+Archive: null
+Integrated: null
+
+"""
+        after = before.replace("### M003 — third", inserted + "### M003 — third")
+
+        result = promote_lookahead.compare_roadmap_entry(
+            before,
+            after,
+            "third",
+            "first",
+        )
+
+        self.assertEqual(result["status"], "changed")
+
+    def test_abandoned_and_shipped_roadmap_is_complete(self) -> None:
+        roadmap = """# Roadmap
+
+### M001 — first
+
+Depends on: []
+Status: shipped
+Archive: .project/archive/001-first
+Integrated: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+### M002 — second
+
+Depends on: [M001]
+Status: abandoned
+Archive: null
+Integrated: null
+"""
+
+        self.assertEqual(
+            promote_lookahead.select_lookahead(roadmap),
+            {"status": "complete"},
         )
 
     def test_recovery_requires_a_failed_strict_preflight(self) -> None:

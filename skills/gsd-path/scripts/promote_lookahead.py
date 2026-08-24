@@ -199,6 +199,13 @@ def select_lookahead(content: str, active_milestone: Optional[str] = None) -> di
     try:
         selected = next_eligible_pending(content, active_milestone)
     except NoEligibleLookahead:
+        blocks = roadmap_blocks(content)
+        if blocks and all(
+            block["fields"].get("Status", (-1, ""))[1]
+            in {"shipped", "abandoned"}
+            for block in blocks
+        ):
+            return {"status": "complete"}
         return {"status": "none"}
     return selection_payload(selected)
 
@@ -270,14 +277,95 @@ def roadmap_contract(content: str, milestone: str) -> tuple[str, ...]:
     )
 
 
-def compare_roadmap_entry(before: str, after: str, milestone: str) -> dict:
+def compare_roadmap_entry(
+    before: str,
+    after: str,
+    milestone: str,
+    active_milestone: Optional[str] = None,
+) -> dict:
     before_contract = roadmap_contract(before, milestone)
     try:
         after_contract = roadmap_contract(after, milestone)
+        selected = milestone_block(after, milestone)
+        eligible = next_eligible_pending(after, active_milestone)
     except LookaheadError:
         after_contract = ()
-    status = "unchanged" if before_contract == after_contract else "changed"
+        selected = None
+        eligible = None
+    status = (
+        "unchanged"
+        if before_contract == after_contract
+        and selected is not None
+        and eligible is not None
+        and selected["id"] == eligible["id"]
+        else "changed"
+    )
     return {"status": status, "milestone": milestone}
+
+
+def git_commit_file(root: Path, commit: str, relative: str) -> str:
+    require_directory(root, "repository")
+    if not SHA_RE.fullmatch(commit):
+        raise LookaheadError("base must be a full lowercase commit SHA")
+    entry = subprocess.run(
+        ["git", "-C", str(root), "ls-tree", "-z", commit, "--", relative],
+        capture_output=True,
+        check=False,
+    )
+    metadata, separator, path = entry.stdout.rstrip(b"\0").partition(b"\t")
+    fields = metadata.split()
+    if (
+        entry.returncode != 0
+        or not separator
+        or path.decode("utf-8", "replace") != relative
+        or len(fields) != 3
+        or fields[0] not in {b"100644", b"100755"}
+        or fields[1] != b"blob"
+    ):
+        raise LookaheadError(f"{relative} must be a regular file at base {commit}")
+    result = subprocess.run(
+        ["git", "-C", str(root), "show", f"{commit}:{relative}"],
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        detail = result.stderr.decode("utf-8", "replace").strip()
+        suffix = f": {detail}" if detail else ""
+        raise LookaheadError(f"cannot read {relative} at base {commit}{suffix}")
+    try:
+        return result.stdout.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise LookaheadError(
+            f"cannot decode {relative} at base {commit}: {error}"
+        ) from error
+
+
+def select_fetched_base(
+    repo: Path,
+    base: str,
+    remote_default: str,
+    use_lookahead: bool,
+) -> dict:
+    root = repo.resolve()
+    if not re.fullmatch(r"origin/[A-Za-z0-9][A-Za-z0-9._/-]*", remote_default):
+        raise LookaheadError("remote default must be an origin branch")
+    if ".." in remote_default or "//" in remote_default:
+        raise LookaheadError("remote default is invalid")
+    resolved = subprocess.run(
+        ["git", "-C", str(root), "rev-parse", "--verify", f"{remote_default}^{{commit}}"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if resolved.returncode != 0 or resolved.stdout.strip() != base:
+        raise LookaheadError("base does not match the fetched remote default")
+    roadmap = git_commit_file(root, base, ".project/ROADMAP.md")
+    if use_lookahead:
+        track_state = git_commit_file(root, base, ".project/next/STATE.md")
+        result = select_track_branch(roadmap, track_state)
+    else:
+        result = select_lookahead(roadmap)
+    return {**result, "base": base}
 
 
 def roadmap_transition(
@@ -1194,12 +1282,18 @@ def parser() -> argparse.ArgumentParser:
     compare_parser.add_argument("--before", required=True, type=Path)
     compare_parser.add_argument("--after", required=True, type=Path)
     compare_parser.add_argument("--milestone", required=True)
+    compare_parser.add_argument("--active-milestone")
     select_parser = subparsers.add_parser("select-next")
     select_parser.add_argument("--roadmap", required=True, type=Path)
     select_parser.add_argument("--active-milestone")
     branch_parser = subparsers.add_parser("select-branch")
     branch_parser.add_argument("--roadmap", required=True, type=Path)
     branch_parser.add_argument("--state", required=True, type=Path)
+    base_parser = subparsers.add_parser("select-base")
+    base_parser.add_argument("--repo", required=True, type=Path)
+    base_parser.add_argument("--base", required=True)
+    base_parser.add_argument("--remote-default", required=True)
+    base_parser.add_argument("--lookahead", action="store_true")
     snapshot_parser = subparsers.add_parser("snapshot-roadmap")
     snapshot_parser.add_argument("--roadmap", required=True, type=Path)
     snapshot_parser.add_argument("--snapshot", required=True, type=Path)
@@ -1214,6 +1308,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 read_text(arguments.before, "previous ROADMAP.md"),
                 read_text(arguments.after, "proposed ROADMAP.md"),
                 arguments.milestone,
+                arguments.active_milestone,
             )
         elif arguments.command == "select-next":
             result = select_lookahead(
@@ -1225,6 +1320,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             result = select_track_branch(
                 read_text(arguments.roadmap, "ROADMAP.md"),
                 read_text(arguments.state, "lookahead STATE.md"),
+            )
+        elif arguments.command == "select-base":
+            result = select_fetched_base(
+                arguments.repo,
+                arguments.base,
+                arguments.remote_default,
+                arguments.lookahead,
             )
         elif arguments.command == "snapshot-roadmap":
             result = snapshot_roadmap(arguments.roadmap, arguments.snapshot)

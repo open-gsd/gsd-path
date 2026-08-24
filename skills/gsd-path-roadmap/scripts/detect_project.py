@@ -173,7 +173,6 @@ VERIFIED_INSTALLER_SKILL_ROOTS = {
     (".qwen", "skills"),
 }
 
-PIPELINE_LINE = re.compile(r"^pipeline:\s*(\S+)", re.MULTILINE)
 ATX_TITLE = re.compile(r" {0,3}#{1,6}(?:[ \t]+.*)?")
 SETEXT_UNDERLINE = re.compile(r" {0,3}(?:=+|-+)[ \t]*")
 SETEXT_BLOCK_START = re.compile(
@@ -218,6 +217,7 @@ GIT_OVERRIDE_VARS = (
     "GIT_PREFIX",
     "GIT_NAMESPACE",
 )
+FRONTMATTER_FIELD_RE = re.compile(r"^([A-Za-z][A-Za-z0-9_-]*):[ \t]*(.*)$")
 
 
 class DetectError(RuntimeError):
@@ -988,8 +988,50 @@ def pipeline_marker(state: Path, root: Path) -> Optional[str]:
     )
     if text is None:
         raise DetectError(f"filesystem evidence disappeared: {state}")
-    match = PIPELINE_LINE.search(text)
-    return match.group(1) if match else None
+    lines = text.splitlines()
+    if not lines or lines[0] != "---":
+        return None
+    try:
+        end = lines.index("---", 1)
+    except ValueError as error:
+        raise DetectError("STATE.md frontmatter is not closed") from error
+    marker = None
+    seen = False
+    for line in lines[1:end]:
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        match = FRONTMATTER_FIELD_RE.fullmatch(line)
+        if match is None:
+            if re.match(r"^[ \t]*pipeline(?:\s|$)", line):
+                raise DetectError("STATE.md has a malformed pipeline field")
+            continue
+        if match.group(1) != "pipeline":
+            continue
+        if seen:
+            raise DetectError("STATE.md has duplicate pipeline fields")
+        seen = True
+        value = match.group(2).strip()
+        if value.startswith('"'):
+            try:
+                decoded = json.loads(value)
+            except json.JSONDecodeError as error:
+                raise DetectError("STATE.md has a malformed pipeline field") from error
+            if not isinstance(decoded, str):
+                raise DetectError("STATE.md has a malformed pipeline field")
+            value = decoded
+        elif value.startswith("'"):
+            quoted = re.fullmatch(r"'((?:[^']|'')*)'", value)
+            if quoted is None:
+                raise DetectError("STATE.md has a malformed pipeline field")
+            value = quoted.group(1).replace("''", "'")
+        else:
+            value = re.sub(r"[ \t]+#.*$", "", value).rstrip()
+            if not re.fullmatch(r"[^\s#\[\]{},]+", value):
+                raise DetectError("STATE.md has a malformed pipeline field")
+        if not value:
+            raise DetectError("STATE.md has a malformed pipeline field")
+        marker = value
+    return marker
 
 
 def classify(repo: Path) -> dict:

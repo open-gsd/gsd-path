@@ -102,9 +102,11 @@ precondition fails.
 5. On a re-slice with a saved lookahead track, run the bundled
    `scripts/promote_lookahead.py compare-entry --before
    .project/ROADMAP.before-reslice.md --after .project/ROADMAP.md --milestone
-   <lookahead-slug>` helper now. It compares
-   every plan-binding part of the entry while ignoring only Status, Archive,
-   and Integrated. When it returns `status: unchanged`, ask the user to choose
+   <lookahead-slug> --active-milestone <STATE.milestone>` helper now. It
+   compares every plan-binding part of the entry while ignoring only Status, Archive,
+   and Integrated, and requires that entry to remain the candidate roadmap's
+   first dependency-ready milestone. When it returns `status: unchanged`, ask
+   the user to choose
    `Keep the unchanged lookahead track (recommended)` or `Discard and
    regenerate the lookahead track`. When it returns `status: changed`, offer
    `Discard and regenerate the lookahead track (recommended)` or `Request
