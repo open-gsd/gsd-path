@@ -192,8 +192,8 @@ promotion, `resume-next-handoff` resumes the verified `bind-next` transaction,
 `resume-shipment` runs the shipment recovery command above,
 `resume-promotion` reruns the returned `promote-next` transaction, and
 `block` stops with the returned reason. `bind-initial`
-means repository setup is now complete but the initial router binding was
-deferred: resolve the exact fetched `origin/main` SHA, call `bind-initial` as
+means initialization is complete and phase work must wait for the initial
+router binding: resolve the exact fetched `origin/main` SHA, call `bind-initial` as
 above with `route.branch`, then persist its returned branch with
 `pipeline_state.py transition` using the route result's `state` phase and status plus its
 null branch and archive as expected fields. Rerun `route`; never route from a

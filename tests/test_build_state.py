@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from scripts.pipeline_git import task_commit_body, task_commit_subject
+from scripts import isolation
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -36,7 +36,6 @@ def task_text(
     *,
     status: str = "pending",
     agent: str | None = None,
-    commit: str | None = None,
     base: str | None = None,
     worktree: str | None = None,
     task_branch: str | None = None,
@@ -53,7 +52,6 @@ wave: {wave}
 deps: [{deps_value}]
 status: {status}
 agent: {scalar(agent)}
-commit: {scalar(commit)}
 base: {scalar(base)}
 worktree: {scalar(worktree)}
 task_branch: {scalar(task_branch)}
@@ -79,13 +77,9 @@ def plan_text(
             (
                 f"## Wave {wave} — test",
                 "",
-                "| Task | Title | Deps | Files |",
-                "|------|-------|------|-------|",
+                f"Goal: exercise {len(rows)} canonical task files",
             )
         )
-        for task_id, title, deps, files in rows:
-            deps_cell = ", ".join(deps) if deps else "—"
-            blocks.append(f"| {task_id} | {title} | {deps_cell} | {', '.join(files)} |")
         blocks.append("")
     return "\n".join(blocks)
 
@@ -151,7 +145,7 @@ archive: null
             )
         return result, payload
 
-    def test_ready_stays_in_the_first_unfinished_wave(self) -> None:
+    def test_ready_reads_canonical_task_files_without_plan_rows(self) -> None:
         self.write_plan(
             (
                 (("T001", "First", (), ("one.py",)),),
@@ -232,46 +226,26 @@ archive: null
                 worktree=str(self.repo),
             ),
         )
-        self.commit_all("build: dispatch T001")
         task_path.write_text(
             task_path.read_text(encoding="utf-8") + "- implementation complete\n",
             encoding="utf-8",
         )
         (self.repo / "one.py").write_text("done = True\n", encoding="utf-8")
-        paths = [".project/tasks/T001-task.md", "one.py"]
-        run_git(self.repo, "add", "-A")
-        run_git(
+        isolation.land(
             self.repo,
-            "commit",
-            "-q",
-            "-m",
-            task_commit_subject("T001", "Foundation"),
-            "-m",
-            task_commit_body(paths[0], paths, base),
-        )
-        landed = run_git(self.repo, "rev-parse", "HEAD")
-        self.write_task(
+            self.repo,
+            base,
             "T001",
-            task_text(
-                "T001",
-                "Foundation",
-                1,
-                (),
-                ("one.py",),
-                status="done",
-                agent="builder",
-                base=base,
-                commit=landed,
-                worktree=str(self.repo),
-                log=("created", "implementation complete"),
-            ),
+            "Foundation",
+            ".project/tasks/T001-task.md",
+            ["one.py"],
         )
         result, after = self.cli("ready")
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual([task["id"] for task in after["ready"]], ["T002"])
 
-    def test_ready_rejects_done_metadata_from_an_unrelated_branch(self) -> None:
+    def test_ready_rejects_done_task_without_a_proven_landing(self) -> None:
         rows = (
             (
                 ("T001", "Foundation", (), ("one.py",)),
@@ -284,26 +258,6 @@ archive: null
             "T002", task_text("T002", "Consumer", 1, ("T001",), ("two.py",))
         )
         base = self.commit_all("plan")
-        run_git(self.repo, "switch", "-q", "-c", "unrelated")
-        task_path = self.repo / ".project/tasks/T001-task.md"
-        task_path.write_text(
-            task_path.read_text(encoding="utf-8") + "- unrelated implementation\n",
-            encoding="utf-8",
-        )
-        (self.repo / "one.py").write_text("done = True\n", encoding="utf-8")
-        paths = [".project/tasks/T001-task.md", "one.py"]
-        run_git(self.repo, "add", "-A")
-        run_git(
-            self.repo,
-            "commit",
-            "-q",
-            "-m",
-            task_commit_subject("T001", "Foundation"),
-            "-m",
-            task_commit_body(paths[0], paths, base),
-        )
-        unrelated = run_git(self.repo, "rev-parse", "HEAD")
-        run_git(self.repo, "switch", "-q", BRANCH)
         self.write_task(
             "T001",
             task_text(
@@ -315,7 +269,6 @@ archive: null
                 status="done",
                 agent="builder",
                 base=base,
-                commit=unrelated,
             ),
         )
 
@@ -323,7 +276,7 @@ archive: null
 
         self.assertEqual(result.returncode, 1)
         self.assertEqual(payload["error"]["code"], "invalid-task-state")
-        self.assertIn("first-parent", payload["error"]["message"])
+        self.assertIn("retry land", payload["error"]["message"])
 
     def test_ready_blocks_the_wave_until_failed_or_blocked_tasks_recover(self) -> None:
         self.write_plan(
@@ -334,7 +287,13 @@ archive: null
                 ),
             )
         )
-        base = self.commit_all("empty base")
+        self.write_task(
+            "T001", task_text("T001", "Blocked", 1, (), ("one.py",))
+        )
+        self.write_task(
+            "T002", task_text("T002", "Independent", 1, (), ("two.py",))
+        )
+        base = self.commit_all("plan")
         self.write_task(
             "T001",
             task_text(
@@ -349,10 +308,6 @@ archive: null
                 worktree=str(self.repo),
             ),
         )
-        self.write_task(
-            "T002", task_text("T002", "Independent", 1, (), ("two.py",))
-        )
-
         result, payload = self.cli("ready")
 
         self.assertEqual(result.returncode, 1)
@@ -390,24 +345,6 @@ archive: null
             "T002", task_text("T002", "Consumer", 1, ("T001",), ("two.py",))
         )
         base = self.commit_all("plan")
-        task_path = ".project/tasks/T002-task.md"
-        (self.repo / task_path).write_text(
-            (self.repo / task_path).read_text(encoding="utf-8") + "- forged completion\n",
-            encoding="utf-8",
-        )
-        (self.repo / "two.py").write_text("done = True\n", encoding="utf-8")
-        paths = [task_path, "two.py"]
-        run_git(self.repo, "add", "-A")
-        run_git(
-            self.repo,
-            "commit",
-            "-q",
-            "-m",
-            task_commit_subject("T002", "Consumer"),
-            "-m",
-            task_commit_body(task_path, paths, base),
-        )
-        landed = run_git(self.repo, "rev-parse", "HEAD")
         self.write_task(
             "T002",
             task_text(
@@ -419,7 +356,6 @@ archive: null
                 status="done",
                 agent="builder",
                 base=base,
-                commit=landed,
             ),
         )
 
@@ -549,7 +485,6 @@ archive: null
                 worktree=str(self.repo),
             ),
         )
-        self.commit_all("build: dispatch T001")
         return base, ".project/tasks/T001-task.md"
 
     def land_task(self, task_file: str, sequence: int) -> str:
@@ -558,24 +493,22 @@ archive: null
         (self.repo / task_file).write_text(
             current + f"- implementation {sequence}\n", encoding="utf-8"
         )
-        paths = [task_file, "app.py"]
         fields = dict(
             line.split(": ", 1)
             for line in current.split("---", 2)[1].strip().splitlines()
             if ": " in line
         )
         base = fields["base"]
-        run_git(self.repo, "add", "-A")
-        run_git(
+        result = isolation.land(
             self.repo,
-            "commit",
-            "-q",
-            "-m",
-            task_commit_subject("T001", "Implement feature"),
-            "-m",
-            task_commit_body(task_file, paths, base),
+            self.repo,
+            base,
+            "T001",
+            "Implement feature",
+            task_file,
+            ["app.py"],
         )
-        return run_git(self.repo, "rev-parse", "HEAD")
+        return str(result["commit"])
 
     def test_reconcile_proves_one_canonical_landed_commit(self) -> None:
         base, task_file = self.prepare_in_progress_task()
@@ -593,176 +526,15 @@ archive: null
         self.assertEqual(len(payload["history"]["candidates"]), 1)
         self.assertTrue(payload["history"]["candidates"][0]["valid"])
 
-    def test_reconcile_rejects_rewritten_task_contract_before_log(self) -> None:
-        base, task_file = self.prepare_in_progress_task()
-        path = self.repo / task_file
-        path.write_text(
-            path.read_text(encoding="utf-8").replace(
-                "# T001 — Implement feature",
-                "# T001 — Rewritten contract",
-            )
-            + "- implementation complete\n",
-            encoding="utf-8",
-        )
-        (self.repo / "app.py").write_text("value = 1\n", encoding="utf-8")
-        paths = [task_file, "app.py"]
-        run_git(self.repo, "add", "-A")
-        run_git(
-            self.repo,
-            "commit",
-            "-q",
-            "-m",
-            task_commit_subject("T001", "Implement feature"),
-            "-m",
-            task_commit_body(task_file, paths, base),
-        )
-
-        result, payload = self.cli("reconcile", "--task-id", "T001")
-
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(payload["classification"], "blocked")
-        self.assertIn("append-only Log delta", payload["reasons"][0])
-
-    def test_reconcile_rejects_deleted_pre_log_content(self) -> None:
-        base, task_file = self.prepare_in_progress_task()
-        path = self.repo / task_file
-        content = path.read_text(encoding="utf-8")
-        path.write_text(
-            content.replace("# T001 — Implement feature\n\n", "")
-            + "- implementation complete\n",
-            encoding="utf-8",
-        )
-        (self.repo / "app.py").write_text("value = 1\n", encoding="utf-8")
-        paths = [task_file, "app.py"]
-        run_git(self.repo, "add", "-A")
-        run_git(
-            self.repo,
-            "commit",
-            "-q",
-            "-m",
-            task_commit_subject("T001", "Implement feature"),
-            "-m",
-            task_commit_body(task_file, paths, base),
-        )
-
-        _, payload = self.cli("reconcile", "--task-id", "T001")
-
-        self.assertEqual(payload["classification"], "blocked")
-        self.assertIn("append-only Log delta", payload["reasons"][0])
-
-    def test_reconcile_requires_retained_source_for_in_progress_landing(self) -> None:
-        _, task_file = self.prepare_in_progress_task()
-        path = self.repo / task_file
-        path.write_text(
-            path.read_text(encoding="utf-8")
-            .replace("worktree: " + str(self.repo), "worktree: /missing/task-worktree")
-            .replace("task_branch: null", "task_branch: gsd-path-task/T001"),
-            encoding="utf-8",
-        )
-        self.commit_all("build: record parallel ownership")
-        self.land_task(task_file, 1)
-
-        result, payload = self.cli("reconcile", "--task-id", "T001")
-
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(payload["classification"], "blocked")
-        self.assertIn("recorded worktree is missing", payload["reasons"])
-
-    def test_reconcile_rejects_landed_patch_that_differs_from_retained_source(self) -> None:
-        self.write_plan(((('T001', 'Implement feature', (), ('app.py',)),),))
-        (self.repo / "app.py").write_text("value = 0\n", encoding="utf-8")
-        self.write_task(
-            "T001", task_text("T001", "Implement feature", 1, (), ("app.py",))
-        )
-        base = self.commit_all("plan")
-        holder = tempfile.TemporaryDirectory()
-        self.addCleanup(holder.cleanup)
-        source = Path(holder.name) / "task"
-        run_git(
-            self.repo,
-            "worktree",
-            "add",
-            "-b",
-            "gsd-path-task/T001",
-            str(source),
-            base,
-        )
-        self.write_task(
-            "T001",
-            task_text(
-                "T001",
-                "Implement feature",
-                1,
-                (),
-                ("app.py",),
-                status="in-progress",
-                agent="builder",
-                base=base,
-                worktree=str(source),
-                task_branch="gsd-path-task/T001",
-            ),
-        )
-        self.commit_all("build: dispatch T001")
-
-        source_task = source / ".project/tasks/T001-task.md"
-        source_task.write_text(
-            source_task.read_text(encoding="utf-8") + "- implementation complete\n",
-            encoding="utf-8",
-        )
-        (source / "app.py").write_text("value = 1\n", encoding="utf-8")
-        changed = [".project/tasks/T001-task.md", "app.py"]
-        run_git(source, "add", "-A")
-        run_git(
-            source,
-            "commit",
-            "-q",
-            "-m",
-            task_commit_subject("T001", "Implement feature"),
-            "-m",
-            task_commit_body(changed[0], changed, base),
-        )
-
-        primary_task = self.repo / changed[0]
-        primary_task.write_text(
-            primary_task.read_text(encoding="utf-8") + "- implementation complete\n",
-            encoding="utf-8",
-        )
-        (self.repo / "app.py").write_text("value = 2\n", encoding="utf-8")
-        run_git(self.repo, "add", "-A")
-        run_git(
-            self.repo,
-            "commit",
-            "-q",
-            "-m",
-            task_commit_subject("T001", "Implement feature"),
-            "-m",
-            task_commit_body(changed[0], changed, base),
-        )
-
-        result, payload = self.cli("reconcile", "--task-id", "T001")
-
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(payload["classification"], "blocked")
-        self.assertIn("product patches differ", payload["reasons"][0])
-        run_git(self.repo, "worktree", "remove", "--force", str(source))
-
-    def test_reconcile_proves_the_recorded_done_commit(self) -> None:
+    def test_reconcile_proves_done_commit_from_isolation_history(self) -> None:
         _, task_file = self.prepare_in_progress_task()
         landed = self.land_task(task_file, 1)
-        path = self.repo / task_file
-        text = path.read_text(encoding="utf-8")
-        path.write_text(
-            text.replace("status: in-progress", "status: done").replace(
-                "commit: null", f"commit: {landed}"
-            ),
-            encoding="utf-8",
-        )
 
         result, payload = self.cli("reconcile", "--task-id", "T001")
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(payload["classification"], "proven-landed")
-        self.assertEqual(payload["task"]["recorded_commit"], landed)
+        self.assertEqual(payload["landed_commit"], landed)
 
     def test_reconcile_rejects_rewritten_ancestral_dispatch_base(self) -> None:
         (self.repo / "seed.txt").write_text("seed\n", encoding="utf-8")
@@ -772,8 +544,6 @@ archive: null
         path = self.repo / task_file
         path.write_text(
             path.read_text(encoding="utf-8")
-            .replace("status: in-progress", "status: done")
-            .replace("commit: null", f"commit: {landed}")
             .replace(f"base: {base}", f"base: {earlier}"),
             encoding="utf-8",
         )
@@ -782,18 +552,11 @@ archive: null
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(payload["classification"], "blocked")
-        self.assertIn("canonical task fields", payload["reasons"][0])
+        self.assertIn("no landing commit", payload["reasons"][0])
 
     def test_verify_landed_uses_canonical_paths_for_archived_tasks(self) -> None:
         _, task_file = self.prepare_in_progress_task()
         landed = self.land_task(task_file, 1)
-        path = self.repo / task_file
-        path.write_text(
-            path.read_text(encoding="utf-8")
-            .replace("status: in-progress", "status: done")
-            .replace("commit: null", f"commit: {landed}"),
-            encoding="utf-8",
-        )
         archive = self.repo / ".project" / "archive" / "001-test"
         archive.mkdir(parents=True)
         (self.repo / ".project" / "plan").rename(archive / "plan")
@@ -846,39 +609,14 @@ archive: null
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(payload["classification"], "blocked")
-        self.assertIn("no recorded base", payload["reasons"][0])
+        self.assertIn("invalid base", payload["reasons"][0])
 
-    def test_reconcile_blocks_a_wrong_recorded_commit(self) -> None:
-        base, task_file = self.prepare_in_progress_task()
-        self.land_task(task_file, 1)
-        path = self.repo / task_file
-        text = path.read_text(encoding="utf-8")
-        path.write_text(
-            text.replace("status: in-progress", "status: done").replace(
-                "commit: null", f"commit: {base}"
-            ),
-            encoding="utf-8",
-        )
-
-        result, payload = self.cli("reconcile", "--task-id", "T001")
-
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(payload["classification"], "blocked")
-        self.assertIn("does not match", payload["reasons"][0])
-
-    def test_reconcile_marks_multiple_canonical_commits_ambiguous(self) -> None:
+    def test_isolation_rejects_a_second_landing_for_done_task(self) -> None:
         _, task_file = self.prepare_in_progress_task()
-        first = self.land_task(task_file, 1)
-        second = self.land_task(task_file, 2)
+        self.land_task(task_file, 1)
 
-        result, payload = self.cli("reconcile", "--task-id", "T001")
-
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(payload["classification"], "ambiguous")
-        self.assertEqual(
-            [candidate["commit"] for candidate in payload["history"]["candidates"]],
-            [first, second],
-        )
+        with self.assertRaises(isolation.IsolationError):
+            self.land_task(task_file, 2)
 
 
 if __name__ == "__main__":

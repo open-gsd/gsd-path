@@ -102,6 +102,23 @@ class PipelineStateTests(unittest.TestCase):
             self.assertEqual(routed["route"]["action"], "bind-initial")
             self.assertEqual(routed["route"]["branch"], "gsd-path/M001")
 
+    def test_route_binds_initialized_state_before_phase_work(self) -> None:
+        for phase in ("inspect", "define"):
+            with self.subTest(phase=phase), tempfile.TemporaryDirectory() as tmp:
+                repo = Path(tmp)
+                run_git(repo, "init", "-b", "main")
+                project = repo / ".project"
+                project.mkdir()
+                (project / "STATE.md").write_text(
+                    state_text(phase=phase, status="active", milestone="null"),
+                    encoding="utf-8",
+                )
+
+                routed = pipeline_state.route_state(repo)
+
+                self.assertEqual(routed["route"]["action"], "bind-initial")
+                self.assertEqual(routed["route"]["branch"], "gsd-path/M001")
+
     def test_validate_rejects_unowned_state(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             repo = Path(tmp)

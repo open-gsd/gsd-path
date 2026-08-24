@@ -621,11 +621,11 @@ def route_state(repo: Path, project_dir: str = ".project") -> dict[str, object]:
             if bind_recovery is not None:
                 return bind_recovery
 
-    if not lookahead and state.branch is None and state.phase == "build":
+    if not lookahead and state.branch is None:
         result = _route_result(
             state,
             "bind-initial",
-            reason="build state has no router-owned branch binding",
+            reason="active state has no router-owned branch binding",
         )
         result["route"]["branch"] = _selected_initial_branch(project, state)
         return result
@@ -751,14 +751,6 @@ def route_state(repo: Path, project_dir: str = ".project") -> dict[str, object]:
                 mode="lookahead-ready",
                 reason="lookahead plan is approved and waits for milestone promotion",
             )
-        if state.branch is None:
-            result = _route_result(
-                state,
-                "bind-initial",
-                reason="approved plan has no router-owned branch binding",
-            )
-            result["route"]["branch"] = _selected_initial_branch(project, state)
-            return result
         return _route_result(
             state,
             "run-phase",

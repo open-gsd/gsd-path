@@ -14,11 +14,17 @@ from typing import Dict, List, Mapping, Optional, Sequence, Tuple
 
 try:
     from check_task_briefs import _frontmatter
-    from pipeline_git import task_commit_body, task_commit_subject
+    from isolation import IsolationError, recover as recover_isolation, verify_landed_task_files
+    from pipeline_git import task_commit_subject
     from pipeline_state import PipelineStateError, load_state
 except ImportError:  # pragma: no cover - package imports used by tests
     from scripts.check_task_briefs import _frontmatter
-    from scripts.pipeline_git import task_commit_body, task_commit_subject
+    from scripts.isolation import (
+        IsolationError,
+        recover as recover_isolation,
+        verify_landed_task_files,
+    )
+    from scripts.pipeline_git import task_commit_subject
     from scripts.pipeline_state import PipelineStateError, load_state
 
 
@@ -27,10 +33,6 @@ TASK_ID_RE = re.compile(r"^T\d{3}$")
 TASK_FILE_RE = re.compile(r"^(?P<id>T\d{3})-[a-z0-9][a-z0-9-]*\.md$")
 FULL_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 WAVE_HEADING_RE = re.compile(r"(?m)^## Wave (?P<wave>\d+)\b.*$")
-PLAN_ROW_RE = re.compile(
-    r"^\|\s*(?P<id>T\d{3})\s*\|\s*(?P<title>[^|]+?)\s*\|"
-    r"\s*(?P<deps>[^|]+?)\s*\|\s*(?P<files>[^|]+?)\s*\|\s*$"
-)
 VALID_TASK_STATUSES = {"pending", "in-progress", "done", "failed", "blocked"}
 
 
@@ -46,19 +48,14 @@ class BuildStateError(RuntimeError):
 
 
 @dataclass(frozen=True)
-class PlanTask:
+class Task:
     task_id: str
     title: str
     wave: int
     deps: Tuple[str, ...]
     files: Tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class Task(PlanTask):
     status: str
     agent: Optional[str]
-    commit: Optional[str]
     base: Optional[str]
     worktree: Optional[str]
     task_branch: Optional[str]
@@ -71,6 +68,7 @@ class Project:
     branch: str
     head: str
     tasks: Tuple[Task, ...]
+    tasks_dir: Path
 
 
 def _run_git(repo: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
@@ -169,81 +167,19 @@ def _normalize_list(
     return tuple(normalized)
 
 
-def _plan_ids(value: str, label: str) -> Tuple[str, ...]:
-    cleaned = value.strip().strip("`")
-    if cleaned in {"", "—", "-", "[]"} or cleaned.casefold() == "none":
-        return ()
-    if cleaned.startswith("[") and cleaned.endswith("]"):
-        cleaned = cleaned[1:-1]
-    ids = tuple(item.strip().strip("`\"'") for item in cleaned.split(","))
-    if not ids or any(not TASK_ID_RE.fullmatch(item) for item in ids):
-        raise BuildStateError("invalid-plan", f"{label} has an invalid task list")
-    if len(ids) != len(set(ids)):
-        raise BuildStateError("invalid-plan", f"{label} repeats a task")
-    return ids
-
-
-def _plan_files(value: str, label: str) -> Tuple[str, ...]:
-    cleaned = value.strip().strip("`")
-    values = [
-        item.strip().strip("`\"'")
-        for item in re.split(r"\s*(?:,|<br\s*/?>)\s*", cleaned)
-        if item.strip()
-    ]
-    try:
-        return _normalize_list(values, label, paths=True)
-    except BuildStateError as error:
-        raise BuildStateError("invalid-plan", str(error)) from error
-
-
-def _parse_plan(text: str) -> Tuple[PlanTask, ...]:
+def _parse_plan(text: str) -> Tuple[int, ...]:
     headings = list(WAVE_HEADING_RE.finditer(text))
     if not headings:
         raise BuildStateError("invalid-plan", "PLAN.md has no waves")
-    wave_numbers = [int(match.group("wave")) for match in headings]
-    if wave_numbers != list(range(1, len(wave_numbers) + 1)):
+    wave_numbers = tuple(int(match.group("wave")) for match in headings)
+    if wave_numbers != tuple(range(1, len(wave_numbers) + 1)):
         raise BuildStateError(
             "invalid-plan", "PLAN.md wave numbers must be unique, ordered, and contiguous"
         )
-
-    tasks: List[PlanTask] = []
-    seen = set()
-    for index, heading in enumerate(headings):
-        wave = int(heading.group("wave"))
-        end = headings[index + 1].start() if index + 1 < len(headings) else len(text)
-        wave_rows = 0
-        for line in text[heading.end() : end].splitlines():
-            stripped = line.strip()
-            if not re.match(r"^\|\s*T\d", stripped):
-                continue
-            match = PLAN_ROW_RE.fullmatch(stripped)
-            if match is None:
-                raise BuildStateError("invalid-plan", f"PLAN.md Wave {wave} has a malformed row")
-            task_id = match.group("id")
-            if task_id in seen:
-                raise BuildStateError("invalid-plan", f"PLAN.md repeats {task_id}")
-            seen.add(task_id)
-            title = match.group("title").strip()
-            if not title:
-                raise BuildStateError("invalid-plan", f"PLAN.md {task_id} title is empty")
-            tasks.append(
-                PlanTask(
-                    task_id=task_id,
-                    title=title,
-                    wave=wave,
-                    deps=_plan_ids(match.group("deps"), f"PLAN.md {task_id} Deps"),
-                    files=_plan_files(match.group("files"), f"PLAN.md {task_id} Files"),
-                )
-            )
-            wave_rows += 1
-        if wave_rows == 0:
-            raise BuildStateError("invalid-plan", f"PLAN.md Wave {wave} has no task rows")
-    return tuple(tasks)
+    return wave_numbers
 
 
-def _parse_task(
-    path: Path, relative_path: str, plan: PlanTask, task_file: Optional[str] = None
-) -> Task:
+def _parse_task(path: Path, relative_path: str, task_file: Optional[str] = None) -> Task:
     label = relative_path
     fields = _parse_frontmatter(path, label)
     task_id = _required_string(fields, "id", label)
@@ -259,20 +195,6 @@ def _parse_task(
     if status not in VALID_TASK_STATUSES:
         raise BuildStateError("invalid-frontmatter", f"{label} has invalid status: {status}")
 
-    if task_id != plan.task_id:
-        raise BuildStateError("plan-task-mismatch", f"PLAN.md {plan.task_id} maps to {label}")
-    comparisons = (
-        ("title", " ".join(title.split()), " ".join(plan.title.split())),
-        ("wave", wave, plan.wave),
-        ("deps", deps, plan.deps),
-        ("files", files, plan.files),
-    )
-    for field, actual, expected in comparisons:
-        if actual != expected:
-            raise BuildStateError(
-                "plan-task-mismatch", f"{task_id} {field} differs between PLAN.md and task file"
-            )
-
     return Task(
         task_id=task_id,
         title=title,
@@ -281,7 +203,6 @@ def _parse_task(
         files=files,
         status=status,
         agent=_nullable_string(fields, "agent", label),
-        commit=_nullable_string(fields, "commit", label),
         base=_nullable_string(fields, "base", label),
         worktree=_nullable_string(fields, "worktree", label),
         task_branch=_nullable_string(fields, "task_branch", label),
@@ -337,7 +258,7 @@ def _load_tasks(
     canonical_project_dir: Optional[str] = None,
 ) -> Tuple[Task, ...]:
     plan_path = project_path / "plan" / "PLAN.md"
-    plan_rows = _parse_plan(_read_file(plan_path, f"{project_dir}/plan/PLAN.md"))
+    plan_waves = _parse_plan(_read_file(plan_path, f"{project_dir}/plan/PLAN.md"))
     tasks_dir = project_path / "tasks"
     if not tasks_dir.is_dir() or tasks_dir.is_symlink():
         raise BuildStateError("missing-input", f"task directory is missing or unsafe: {tasks_dir}")
@@ -357,25 +278,31 @@ def _load_tasks(
                 {"task": task_id, "files": [task_paths[task_id].name, path.name]},
             )
         task_paths[task_id] = path
-    plan_ids = {row.task_id for row in plan_rows}
-    if plan_ids != set(task_paths):
-        missing_files = sorted(plan_ids - set(task_paths))
-        extra_files = sorted(set(task_paths) - plan_ids)
-        details: List[str] = []
-        if missing_files:
-            details.append("rows without task files: " + ", ".join(missing_files))
-        if extra_files:
-            details.append("task files without rows: " + ", ".join(extra_files))
-        raise BuildStateError("plan-task-mismatch", "; ".join(details))
-
     parsed: List[Task] = []
-    for row in plan_rows:
-        path = task_paths[row.task_id]
+    for task_id, path in sorted(task_paths.items()):
         relative = path.relative_to(repo).as_posix()
         task_file = relative
         if canonical_project_dir is not None:
             task_file = str(PurePosixPath(canonical_project_dir) / "tasks" / path.name)
-        parsed.append(_parse_task(path, relative, row, task_file))
+        task = _parse_task(path, relative, task_file)
+        if task.task_id != task_id:
+            raise BuildStateError(
+                "invalid-task-file",
+                f"{relative} frontmatter id does not match its filename",
+            )
+        if task.wave not in plan_waves:
+            raise BuildStateError(
+                "plan-task-mismatch",
+                f"{task.task_id} names missing PLAN.md Wave {task.wave}",
+            )
+        parsed.append(task)
+    missing_waves = sorted(set(plan_waves) - {task.wave for task in parsed})
+    if missing_waves:
+        raise BuildStateError(
+            "invalid-plan",
+            "PLAN.md waves without task files: "
+            + ", ".join(str(wave) for wave in missing_waves),
+        )
     _validate_graph(parsed)
     return tuple(parsed)
 
@@ -408,7 +335,7 @@ def _load_project(repo_value: str, project_value: str, statuses: Sequence[str]) 
         )
     head = _git_output(repo, "rev-parse", "HEAD")
     parsed = _load_tasks(repo, project_dir, project_path)
-    return Project(repo, branch, head, tuple(parsed))
+    return Project(repo, branch, head, tuple(parsed), project_path / "tasks")
 
 
 def _commit_resolves(repo: Path, value: str) -> bool:
@@ -426,11 +353,33 @@ def _invalid_state(task: Task, message: str) -> None:
     )
 
 
+def _recovery_reports(project: Project) -> Dict[str, Mapping[str, object]]:
+    try:
+        recovery = recover_isolation(project.repo, project.tasks_dir)
+    except IsolationError as error:
+        raise BuildStateError("invalid-task-state", str(error)) from error
+    if recovery.get("verdict") == "block" and not recovery.get("tasks"):
+        raise BuildStateError(
+            "invalid-task-state",
+            str(recovery.get("reason", "task recovery failed")),
+        )
+    reports: Dict[str, Mapping[str, object]] = {}
+    for report in recovery.get("tasks", []):
+        if not isinstance(report, Mapping):
+            raise BuildStateError("invalid-task-state", "task recovery returned invalid evidence")
+        task_id = report.get("task_id")
+        if not isinstance(task_id, str) or task_id in reports:
+            raise BuildStateError("invalid-task-state", "task recovery returned invalid ownership")
+        reports[task_id] = report
+    expected = {task.task_id for task in project.tasks}
+    if set(reports) != expected:
+        raise BuildStateError("invalid-task-state", "task recovery inventory is incomplete")
+    return reports
+
+
 def _validate_ready_metadata(project: Project) -> None:
     by_id = {task.task_id: task for task in project.tasks}
-    first_parent = set(
-        _git_output(project.repo, "rev-list", "--first-parent", project.head).splitlines()
-    )
+    recovery = _recovery_reports(project)
     seen_worktrees: Dict[str, str] = {}
     seen_branches: Dict[str, str] = {}
     for task in project.tasks:
@@ -439,17 +388,14 @@ def _validate_ready_metadata(project: Project) -> None:
                 value is not None
                 for value in (
                     task.agent,
-                    task.commit,
                     task.base,
                     task.worktree,
                     task.task_branch,
                 )
             ):
-                _invalid_state(task, "pending task retains dispatch or commit metadata")
+                _invalid_state(task, "pending task retains dispatch metadata")
             continue
         if task.status in {"in-progress", "failed", "blocked"}:
-            if task.commit is not None:
-                _invalid_state(task, f"{task.status} task has a recorded commit")
             if task.agent is None or task.base is None or task.worktree is None:
                 _invalid_state(
                     task,
@@ -487,25 +433,14 @@ def _validate_ready_metadata(project: Project) -> None:
         if task.status == "done":
             if any(by_id[dependency].status != "done" for dependency in task.deps):
                 _invalid_state(task, "done task has an incomplete dependency")
-            if task.agent is None or task.base is None or task.commit is None:
-                _invalid_state(task, "done task is missing agent, base, or commit")
-            if not FULL_SHA_RE.fullmatch(task.base) or not FULL_SHA_RE.fullmatch(task.commit):
-                _invalid_state(task, "done task base or commit is not a full SHA")
-            if not _commit_resolves(project.repo, task.base) or not _commit_resolves(
-                project.repo, task.commit
-            ):
-                _invalid_state(task, "done task base or commit does not exist")
-            if task.base not in first_parent or task.commit not in first_parent:
-                _invalid_state(
-                    task,
-                    "done task base and commit must be on canonical first-parent history",
-                )
-            if not _is_ancestor(project.repo, task.base, task.commit):
-                _invalid_state(task, "done task commit precedes its recorded base")
-            candidate = _candidate(project, task, task.commit)
-            if not candidate["valid"]:
-                reasons = ", ".join(candidate["reasons"])
-                _invalid_state(task, f"done task commit is not canonical: {reasons}")
+            if task.agent is None or task.base is None:
+                _invalid_state(task, "done task is missing agent or base")
+            if task.worktree is not None or task.task_branch is not None:
+                _invalid_state(task, "done task retains active isolation metadata")
+            report = recovery[task.task_id]
+            if report.get("verdict") != "recovered":
+                reason = report.get("reason", "landing commit is not proven")
+                _invalid_state(task, str(reason))
 
 
 def _overlap(left: Task, right: Task) -> List[str]:
@@ -602,276 +537,6 @@ def ready(repo: str, project_dir: str = DEFAULT_PROJECT_DIR) -> Dict[str, object
     }
 
 
-def _candidate(
-    project: Project,
-    task: Task,
-    commit: str,
-    *,
-    require_dispatch_parent: bool = True,
-) -> Dict[str, object]:
-    parents = _git_output(project.repo, "show", "-s", "--format=%P", commit).split()
-    if not parents:
-        raise BuildStateError("git-error", "candidate commit has no parent")
-    parent = parents[0]
-    paths_result = _run_git(
-        project.repo,
-        "-c",
-        "diff.renames=false",
-        "diff-tree",
-        "--no-commit-id",
-        "--name-only",
-        "-r",
-        "-z",
-        parent,
-        commit,
-    )
-    if paths_result.returncode != 0:
-        raise BuildStateError("git-error", "could not inspect candidate paths")
-    paths = sorted(path for path in paths_result.stdout.split("\0") if path)
-    subject = _git_output(project.repo, "show", "-s", "--format=%s", commit)
-    expected_subject = task_commit_subject(task.task_id, task.title)
-    body = _git_output(project.repo, "show", "-s", "--format=%b", commit)
-    expected_body = task_commit_body(task.task_file, paths, task.base or "").strip()
-    allowed = set(task.files) | {task.task_file}
-    unexpected = sorted(set(paths) - allowed)
-    reasons: List[str] = []
-    if len(parents) != 1:
-        reasons.append("task commit is a merge")
-    if task.task_file not in paths:
-        reasons.append("task file is not changed")
-    if unexpected:
-        reasons.append("unexpected changed paths")
-    if subject != expected_subject:
-        reasons.append("commit subject does not match the canonical task subject")
-    if body != expected_body:
-        reasons.append("commit body does not match canonical task fields")
-    parent_text = _git_file_text(project.repo, parent, task.task_file)
-    if require_dispatch_parent and parent_text is None:
-        reasons.append("candidate parent is missing the task file")
-    elif require_dispatch_parent:
-        assert parent_text is not None
-        parent_fields, error = _frontmatter(parent_text)
-        if parent_fields is None:
-            reasons.append(f"candidate parent task frontmatter is invalid: {error}")
-        else:
-            expected_dispatch = {
-                "base": task.base,
-                "agent": task.agent,
-                "worktree": task.worktree,
-                "task_branch": task.task_branch,
-            }
-            actual_dispatch: Dict[str, Optional[str]] = {}
-            for field in expected_dispatch:
-                value = parent_fields.get(field)
-                if not isinstance(value, str):
-                    reasons.append(
-                        f"candidate parent task has invalid dispatch field: {field}"
-                    )
-                    continue
-                cleaned = value.strip()
-                actual_dispatch[field] = (
-                    None if cleaned in {"", "null"} else cleaned
-                )
-            mismatched = sorted(
-                field
-                for field, expected in expected_dispatch.items()
-                if actual_dispatch.get(field) != expected
-            )
-            if mismatched:
-                reasons.append(
-                    "candidate parent dispatch metadata differs from recorded task: "
-                    + ", ".join(mismatched)
-                )
-            if parent_fields.get("status") != "in-progress":
-                reasons.append("candidate parent task status is not in-progress")
-            if parent_fields.get("commit") != "null":
-                reasons.append("candidate parent task already records a commit")
-    _, log_reason = _task_log_delta(project.repo, parent, commit, task.task_file)
-    if log_reason is not None:
-        reasons.append(log_reason)
-    return {
-        "commit": commit,
-        "parent": parent,
-        "valid": not reasons,
-        "paths": paths,
-        "unexpected_paths": unexpected,
-        "subject_matches": subject == expected_subject,
-        "body_matches": body == expected_body,
-        "is_merge": len(parents) != 1,
-        "reasons": reasons,
-    }
-
-
-def _git_file_text(repo: Path, revision: str, path: str) -> Optional[str]:
-    result = _run_git(repo, "show", f"{revision}:{path}")
-    return result.stdout if result.returncode == 0 else None
-
-
-def _task_log_delta(
-    repo: Path,
-    parent: str,
-    commit: str,
-    task_file: str,
-) -> Tuple[Optional[str], Optional[str]]:
-    before = _git_file_text(repo, parent, task_file)
-    after = _git_file_text(repo, commit, task_file)
-    if before is None or after is None:
-        return None, "task file is missing before or after the candidate"
-    if before.count("\n## Log\n") != 1:
-        return None, "task file parent has no unique Log section"
-    if len(after) <= len(before) or not after.startswith(before):
-        return None, "task file is not a nonempty append-only Log delta"
-    delta = after[len(before) :]
-    if not delta.strip():
-        return None, "task Log delta is empty"
-    return delta, None
-
-
-def _binary_patch(repo: Path, parent: str, commit: str, paths: Sequence[str]) -> bytes:
-    if not paths:
-        return b""
-    result = subprocess.run(
-        (
-            "git",
-            "-C",
-            str(repo),
-            "diff",
-            "--binary",
-            "--full-index",
-            "--no-ext-diff",
-            "--no-renames",
-            parent,
-            commit,
-            "--",
-            *sorted(paths),
-        ),
-        capture_output=True,
-        check=False,
-    )
-    if result.returncode != 0:
-        raise BuildStateError("git-error", "could not reconstruct candidate patch")
-    return result.stdout
-
-
-def _common_git_dir(repo: Path) -> Optional[Path]:
-    result = _run_git(repo, "rev-parse", "--path-format=absolute", "--git-common-dir")
-    if result.returncode != 0:
-        return None
-    return Path(result.stdout.strip()).resolve()
-
-
-def _resumable(project: Project, task: Task) -> Tuple[bool, List[str]]:
-    reasons: List[str] = []
-    if task.status == "pending":
-        if any(
-            value is not None
-            for value in (task.agent, task.commit, task.base, task.worktree, task.task_branch)
-        ):
-            reasons.append("pending task retains dispatch or commit metadata")
-        return not reasons, reasons
-    if task.status != "in-progress":
-        return False, [f"task status is {task.status}"]
-    if task.base is None:
-        reasons.append("in-progress task has no recorded base")
-    if task.commit is not None:
-        reasons.append("in-progress task has a recorded commit")
-    if task.agent is None or task.worktree is None:
-        reasons.append("in-progress task is missing agent or worktree")
-        return False, reasons
-    worktree = Path(task.worktree).resolve()
-    if task.task_branch is None:
-        if worktree != project.repo:
-            reasons.append("serial task does not name the primary worktree")
-    else:
-        expected = f"gsd-path-task/{task.task_id}"
-        if task.task_branch != expected:
-            reasons.append("parallel task branch is not canonical")
-        if not worktree.is_dir():
-            reasons.append("recorded worktree is missing")
-        else:
-            root_result = _run_git(worktree, "rev-parse", "--show-toplevel")
-            branch_result = _run_git(worktree, "branch", "--show-current")
-            if (
-                root_result.returncode != 0
-                or Path(root_result.stdout.strip()).resolve() != worktree
-            ):
-                reasons.append("recorded worktree is not its Git root")
-            if branch_result.returncode != 0 or branch_result.stdout.strip() != task.task_branch:
-                reasons.append("recorded worktree is not on the recorded branch")
-            if _common_git_dir(worktree) != _common_git_dir(project.repo):
-                reasons.append("recorded worktree belongs to another repository")
-    return not reasons, reasons
-
-
-def _retained_source_reasons(
-    project: Project,
-    task: Task,
-    landed: Mapping[str, object],
-) -> List[str]:
-    owned, reasons = _resumable(project, task)
-    if not owned:
-        return reasons
-    landed_commit = str(landed["commit"])
-    if task.task_branch is None:
-        if project.head != landed_commit:
-            return ["serial retained source HEAD does not equal the landed candidate"]
-        return []
-
-    assert task.worktree is not None
-    source = Path(task.worktree).resolve()
-    if _git_output(source, "status", "--porcelain", "--untracked-files=all"):
-        return ["retained source worktree is not clean"]
-    source_commit = _git_output(source, "rev-parse", "HEAD")
-    assert task.base is not None
-    source_parents = _git_output(source, "show", "-s", "--format=%P", source_commit).split()
-    if source_parents != [task.base]:
-        return ["retained source is not one task commit directly after its base"]
-    source_candidate = _candidate(
-        project,
-        task,
-        source_commit,
-        require_dispatch_parent=False,
-    )
-    if not source_candidate["valid"]:
-        return [
-            "retained source commit is not canonical: "
-            + ", ".join(str(reason) for reason in source_candidate["reasons"])
-        ]
-    if source_candidate["paths"] != landed["paths"]:
-        return ["retained source and landed candidate changed different paths"]
-
-    source_delta, source_error = _task_log_delta(
-        project.repo,
-        task.base,
-        source_commit,
-        task.task_file,
-    )
-    landed_delta, landed_error = _task_log_delta(
-        project.repo,
-        str(landed["parent"]),
-        landed_commit,
-        task.task_file,
-    )
-    if source_error is not None or landed_error is not None:
-        return [source_error or landed_error or "task Log delta could not be compared"]
-    if source_delta != landed_delta:
-        return ["retained source and landed task Log deltas differ"]
-
-    product_paths = [
-        path for path in task.files if path != task.task_file
-    ]
-    source_patch = _binary_patch(project.repo, task.base, source_commit, product_paths)
-    landed_patch = _binary_patch(
-        project.repo,
-        str(landed["parent"]),
-        landed_commit,
-        product_paths,
-    )
-    if source_patch != landed_patch:
-        return ["retained source and landed product patches differ"]
-    return []
-
-
 def _reconcile_result(
     project: Project,
     task: Task,
@@ -888,7 +553,6 @@ def _reconcile_result(
             "status": task.status,
             "task_file": task.task_file,
             "base": task.base,
-            "recorded_commit": task.commit,
         },
         "history": {
             "branch": project.branch,
@@ -902,94 +566,38 @@ def _reconcile_result(
 
 
 def _reconcile_task(project: Project, task: Task) -> Dict[str, object]:
-    if task.base is None:
-        resumable, reasons = _resumable(project, task)
-        classification = "resumable" if resumable else "blocked"
-        return _reconcile_result(project, task, classification, (), reasons)
-    if not FULL_SHA_RE.fullmatch(task.base) or not _commit_resolves(project.repo, task.base):
-        return _reconcile_result(
-            project, task, "blocked", (), ("recorded base is not a full, existing commit",)
+    report = _recovery_reports(project)[task.task_id]
+    verdict = str(report.get("verdict", "block"))
+    rejected = report.get("rejected")
+    candidates: List[Mapping[str, object]] = []
+    if isinstance(rejected, list):
+        candidates.extend(item for item in rejected if isinstance(item, Mapping))
+    commit = report.get("commit")
+    if isinstance(commit, str):
+        candidates.append(
+            {
+                "commit": commit,
+                "base": report.get("base"),
+                "valid": verdict == "recovered",
+            }
         )
-    if not _is_ancestor(project.repo, task.base, project.head):
-        return _reconcile_result(
-            project, task, "blocked", (), ("recorded base is not an ancestor of HEAD",)
-        )
-
-    subject = task_commit_subject(task.task_id, task.title)
-    commits = _git_output(
-        project.repo, "rev-list", "--first-parent", "--reverse", f"{task.base}..{project.head}"
-    ).splitlines()
-    matching = [
-        commit
-        for commit in commits
-        if _git_output(project.repo, "show", "-s", "--format=%s", commit) == subject
-    ]
-    candidates = [_candidate(project, task, commit) for commit in matching]
-    if len(candidates) > 1:
+    if verdict == "recovered":
         return _reconcile_result(
             project,
             task,
-            "ambiguous",
+            "proven-landed",
             candidates,
-            ("multiple first-parent commits have the canonical task subject",),
-        )
-    if candidates and not candidates[0]["valid"]:
-        return _reconcile_result(
-            project,
-            task,
-            "blocked",
-            candidates,
-            tuple(candidates[0]["reasons"]),  # type: ignore[arg-type]
-        )
-    if candidates:
-        candidate_commit = str(candidates[0]["commit"])
-        if task.status == "done":
-            if task.commit != candidate_commit:
-                return _reconcile_result(
-                    project,
-                    task,
-                    "blocked",
-                    candidates,
-                    ("recorded commit does not match the canonical landed commit",),
-                )
-        elif task.status != "in-progress" or task.commit is not None:
-            return _reconcile_result(
-                project,
-                task,
-                "blocked",
-                candidates,
-                (f"landed commit conflicts with task status {task.status}",),
-            )
-        else:
-            source_reasons = _retained_source_reasons(project, task, candidates[0])
-            if source_reasons:
-                return _reconcile_result(
-                    project,
-                    task,
-                    "blocked",
-                    candidates,
-                    source_reasons,
-                )
-        return _reconcile_result(
-            project, task, "proven-landed", candidates, (), landed_commit=candidate_commit
-        )
-
-    if task.status == "done":
-        return _reconcile_result(
-            project,
-            task,
-            "blocked",
             (),
-            ("done task has no canonical commit on first-parent history",),
+            landed_commit=commit if isinstance(commit, str) else None,
         )
-    resumable, reasons = _resumable(project, task)
-    return _reconcile_result(
-        project,
-        task,
-        "resumable" if resumable else "blocked",
-        (),
-        reasons,
-    )
+    reason = str(report.get("reason", verdict))
+    classification = {
+        "none": "resumable",
+        "resume": "resumable",
+        "reconcile": "reconcile",
+        "block": "blocked",
+    }.get(verdict, "blocked")
+    return _reconcile_result(project, task, classification, candidates, (reason,))
 
 
 def reconcile(
@@ -1002,7 +610,7 @@ def reconcile(
     project = _load_project(repo, project_dir, ("active", "blocked", "done"))
     task = next((item for item in project.tasks if item.task_id == task_id), None)
     if task is None:
-        raise BuildStateError("unknown-task", f"task is not in PLAN.md: {task_id}")
+        raise BuildStateError("unknown-task", f"task file is missing: {task_id}")
     return _reconcile_task(project, task)
 
 
@@ -1030,19 +638,56 @@ def verify_landed_tasks(
         artifact_path,
         canonical_project_dir=canonical_dir,
     )
-    project = Project(repository, "", head, tasks)
     for task in tasks:
         if task.status != "done":
             _invalid_state(task, "task must have status: done before shipping")
-    _validate_ready_metadata(project)
+    try:
+        proven = verify_landed_task_files(
+            repository,
+            [artifact_path / "tasks" / Path(task.task_file).name for task in tasks],
+            str(PurePosixPath(canonical_dir) / "tasks"),
+            head,
+        )
+    except IsolationError as error:
+        raise BuildStateError("invalid-task-state", str(error)) from error
 
+    reports = {
+        str(report["task_id"]): report
+        for report in proven["tasks"]
+        if isinstance(report, Mapping) and isinstance(report.get("task_id"), str)
+    }
     evidence = []
     for task in tasks:
-        result = _reconcile_task(project, task)
-        if result["classification"] != "proven-landed":
-            reasons = ", ".join(str(reason) for reason in result["reasons"])
-            _invalid_state(task, reasons or "task landing is not canonical")
-        evidence.append(result)
+        report = reports.get(task.task_id)
+        if report is None or report.get("verdict") != "recovered":
+            _invalid_state(task, "task landing is not canonical")
+        commit = report.get("commit")
+        evidence.append(
+            {
+                "command": "reconcile",
+                "classification": "proven-landed",
+                "task": {
+                    "id": task.task_id,
+                    "status": task.status,
+                    "task_file": task.task_file,
+                    "base": task.base,
+                },
+                "history": {
+                    "branch": proven["bound_branch"],
+                    "head": head,
+                    "subject": task_commit_subject(task.task_id, task.title),
+                    "candidates": [
+                        {
+                            "commit": commit,
+                            "base": report.get("base"),
+                            "valid": True,
+                        }
+                    ],
+                },
+                "landed_commit": commit,
+                "reasons": [],
+            }
+        )
     return {
         "command": "verify-landed",
         "project_dir": artifact_dir,
