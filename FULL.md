@@ -198,7 +198,8 @@ Vetoes in INTENT.md are hard limits for every later phase.
 
 ### Brownfield
 
-A `brownfield` classifier verdict routes to **inspect** first:
+The router uses the [documented classifier signals](DOCS.md#faq); a
+`brownfield` verdict routes to **inspect** first:
 
 1. Codebase mapper — what actually exists (stack, architecture, surprises)
 2. Docs auditor — every `.md` claim verified, stale, aspirational, or unverifiable
