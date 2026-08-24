@@ -34,7 +34,7 @@ user which phase owns the follow-up; do not invoke a sibling phase implicitly.
    stale or malformed state. Do not reproduce those operations manually.
 5. Read only the helper-returned absolute DIALOGUE.md and ANSWERS.md paths.
 6. Do not change `STATE.md`, phase status, `INTENT.md`, `SYNTHESIS.md`,
-   `PLAN.md`, `BOARD.md`, task frontmatter, review verdicts, or archive
+   `PLAN.md`, task frontmatter, review verdicts, or archive
    contents. Discussion can propose a change and name its owner; the owning
    phase must apply it through its normal gate.
 
@@ -71,8 +71,8 @@ Read only the phase-specific inputs needed for the question:
 | decide | intent, evidence, and synthesis |
 | roadmap | charter, program synthesis, and the roadmap |
 | `plan` | intent, synthesis, plan, and affected task contracts |
-| `build` | intent, synthesis, plan, board, and affected task/log |
-| ship | intent, plan, board, and relevant review artifacts |
+| `build` | intent, synthesis, plan, task frontmatter/logs, wave reviews, and STATE log |
+| ship | intent, plan, task frontmatter, STATE log, and relevant review artifacts |
 
 Then inspect the code that can prove or disprove the claim. Do not reread the
 whole repository when a focused path set answers the question.

@@ -19,7 +19,6 @@ wave: 1
 deps: []
 status: pending
 agent: null
-commit: null
 base: null
 worktree: null
 task_branch: null
@@ -149,6 +148,25 @@ class TaskBriefTests(unittest.TestCase):
             self.assertEqual(summary["base"], base)
             self.assertEqual(summary["tasks"], 2)
             self.assertGreater(summary["checked"], 0)
+
+    def test_legacy_commit_frontmatter_field_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.init_repo(root)
+            self.write_happy_tasks(root)
+            task_path = root / ".project/tasks/T001-demo.md"
+            task_path.write_text(
+                task_path.read_text(encoding="utf-8").replace(
+                    "base: null\n", "base: null\ncommit: null\n", 1
+                ),
+                encoding="utf-8",
+            )
+            base = self.commit(root)
+
+            exit_code, _stdout, stderr = self.lint(root, base)
+
+            self.assertEqual(exit_code, 1)
+            self.assertIn("T001: forbidden frontmatter field: commit", stderr)
 
     def test_declared_file_with_missing_parent_directory_fails(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -351,6 +369,40 @@ class TaskBriefTests(unittest.TestCase):
 
             self.assertEqual(exit_code, 1)
             self.assertIn("newpkg/mod.py has no parent directory newpkg", stderr)
+
+    def test_frontmatter_preserves_hashes_inside_quoted_values(self) -> None:
+        fields, error = check_task_briefs._frontmatter(
+            "---\n"
+            'title: "Fix #123" # comment\n'
+            "worktree: 'worktrees/task#1'\n"
+            "files:\n"
+            "  - 'docs/plan #1.md' # comment\n"
+            "---\n"
+        )
+
+        self.assertIsNone(error)
+        self.assertIsNotNone(fields)
+        self.assertEqual(fields["title"], "Fix #123")
+        self.assertEqual(fields["worktree"], "worktrees/task#1")
+        self.assertEqual(fields["files"], ["docs/plan #1.md"])
+
+    def test_frontmatter_preserves_hash_in_quoted_inline_list(self) -> None:
+        fields, error = check_task_briefs._frontmatter(
+            "---\nfiles: ['docs/plan #1.md'] # planning note\n---\n"
+        )
+
+        self.assertIsNone(error)
+        self.assertIsNotNone(fields)
+        self.assertEqual(fields["files"], ["docs/plan #1.md"])
+
+    def test_frontmatter_strips_comment_after_plain_apostrophe(self) -> None:
+        fields, error = check_task_briefs._frontmatter(
+            "---\ntitle: Don't regress # planning note\n---\n"
+        )
+
+        self.assertIsNone(error)
+        self.assertIsNotNone(fields)
+        self.assertEqual(fields["title"], "Don't regress")
 
     def test_unresolvable_base_fails(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

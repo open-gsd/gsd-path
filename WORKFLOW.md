@@ -40,7 +40,8 @@ landing stays serial, processing completions as they arrive. A same-wave task
 never runs before its same-wave dependencies are done. Task verification
 reconstructs the recorded base plus only that task patch; combined branch-tip
 evidence does not count. The orchestrator calls `scripts/isolation.py` for
-isolate, land, and retire; it never invents `git worktree add` or `--detach`.
+isolate, recover, land, and retire; it never invents `git worktree add` or
+`--detach`.
 
 The parent orchestrator owns dispatch and lifecycle. It binds one structured
 run when the host provides one, creates one task per independent brief, waits
@@ -56,9 +57,9 @@ cancellation is a blocked result, not a skipped result.
 | research | assigned dimensions | concurrent up to capacity, then batches | validate RESEARCH.md and evidence |
 | decide | one decider | serial | validate SYNTHESIS.md |
 | roadmap | one roadmapper | serial; program flow only | validate ROADMAP.md |
-| plan | one planner; zero in quick mode | serial | validate PLAN.md and task mapping |
-| build | dependency-ready coders | parallel rounds, serial task landing | commit code and wave artifacts |
-| ship | wave reviewer; final integration and gap reviewers | independent reviewers concurrent | verify, approve, archive, and ship |
+| plan | one planner; zero in quick mode | serial | validate PLAN.md and task wave assignments |
+| build | dependency-ready coders; wave reviewers | coder rounds, then wave review | commit code and wave artifacts |
+| ship | final integration and gap reviewers | independent reviewers concurrent | verify, approve, archive, and ship |
 
 Non-interactive phases auto-advance when their artifacts pass their gates.
 User approval remains required at define, roadmap, plan, final-review patch
@@ -269,7 +270,7 @@ naming the exact shapes exchanged with other tasks (`None` when
 independent), an Intent coverage section, observable acceptance criteria, a
 meaningful `verify` command that names a path from that task's files,
 declared files, deps, and
-orchestrator-owned `base`/`worktree`/`task_branch`/`commit` fields initialized
+orchestrator-owned `base`/`worktree`/`task_branch` fields initialized
 to null. PLAN.md Intent coverage maps every INTENT.md success criterion to a
 task AC; that task's Verify must fail if the SC is skipped.
 `scripts/check_handoffs.py plan` gates the table; `wave` and `final`
@@ -305,159 +306,15 @@ build's re-entry transition instead).
 
 ## Phase 5 — Build (`gsd-path-build`)
 
-**Input:** the approved plan and tasks. **Output:** committed code,
-`.project/BOARD.md`, updated task files, and wave reviews.
+**Input:** the approved plan and tasks. **Output:** committed code, updated
+task files, and wave reviews.
 
-At first entry, fetch and resolve the remote default SHA without checking out
-or updating the local default branch. Bind the branch recorded in STATE.branch
-(and REPOSITORY.md when present) — never whatever is current when a recorded
-branch exists. Validate the binding: the current symbolic branch must equal
-STATE.branch, and a mismatch blocks. Ignore older milestone ship and integrate
-commits inherited through main. A ship for STATE.branch's M00N, if any, must
-be an ancestor of origin/main and have its matching integrate commit there;
-otherwise control routes to ship or blocks as externally polluted. A newly
-prebound branch at the exact remote-default SHA is valid. A fresh initial
-branch with no shipped archive or current-milestone ship follows the original
-rule: use the current clean unmerged non-default `gsd-path/M00N` branch, or
-create `gsd-path/M00N` directly at the remote-default SHA. The bound branch
-must not be the remote default. A null branch after shipped history returns to
-the router for its incomplete milestone handoff. The initial binding commit
-changes `plan/done` to
-`build/active` before any task dispatch. Recovering a resolved `build/blocked`
-state likewise commits `build/active` before a new dispatch-round base.
-
-For each wave:
-
-1. **Establish a clean round base.** Reconcile task state, commit pending
-   bookkeeping, select dependency-ready tasks with disjoint files, and record
-   exact HEAD in every ready task's `base` field. Readiness is continuous: a
-   task becomes ready the moment its dependencies land, and each new
-   dispatch round records the then-current clean HEAD.
-2. **Isolate and dispatch.** Lint every ready task's brief at the recorded
-   base with `check_task_briefs.py` and re-check Intent coverage with
-   `check_handoffs.py plan`; a failure is a plan defect repaired
-   before any worktree exists. Isolate each ready task with `isolation.py
-   isolate-task` at that round's base (`--round-size` is the ready-set size).
-   Serial rounds return the primary worktree and `task_branch: null`. Parallel
-   rounds create a named `gsd-path-task/<id>` branch — never a detached HEAD.
-   Record the helper's path and branch, mark the task
-   in-progress in orchestrator-owned frontmatter without appending its Log,
-   commit dispatch bookkeeping, then send one `worker` to each worktree with
-   deterministic `build_<task_id>` identity. The coder brief includes
-   INTENT.md; owned success criteria are part of done.
-3. **Verify and land serially.** Process each result as it arrives —
-   when several wait, in task-id order — never idling behind slower in-flight
-   tasks. For each ready result,
-   compare its complete base diff against declared files plus append-only task
-   Log changes and run Verify once inside that isolated worktree. That
-   recorded output is the task evidence. Land with
-   `isolation.py land`; do not invent commit or cherry-pick commands. Capture
-   the returned primary full SHA, and commit that SHA plus
-   `done` state before any later Git operation. A conflict, unexpected path,
-   or failed Verify creates no product commit and blocks or fails the task with
-   exact evidence. Every completed task landing re-opens step 1 for newly
-   ready dependents.
-4. **Recover deterministically.** For an in-progress/null-commit task, inspect
-   its retained worktree first. If task landing may have occurred, search only
-   first-parent commits in `base..STATE.branch` for exact subject equality,
-   required task path, a body whose `Task:` field names that task file and whose
-   sorted `Files:` list matches the changed paths, append-only Log change,
-   allowed path set, and passing isolated Verify. Its binary patch and Log delta
-   must equal the retained source commit/diff byte-for-byte. Exactly one proven
-   candidate is recoverable; missing proof or ambiguity blocks. Never use loose
-   grep or reset unknown work. A `done` task with a recorded SHA is also
-   reconciled: prove that exact landing and its isolated source, commit sole
-   pending bookkeeping when necessary, then retire a retained clean worktree
-   with `isolation.py retire` only when both still belong to that task.
-   Already-absent resources mean cleanup completed; partial or mismatched
-   cleanup blocks.
-5. **Review the wave.** At `Review depth: full`, the reviewer receives task
-   `base` and `commit`, INTENT.md, plus
-   orchestrator-created verify sidecars. For each task it applies only
-   `commit^..commit` product-file patch to the recorded base, checks the
-   recorded Verify plus the isolated diff, and checks every acceptance
-   criterion and each INTENT success criterion owned by the wave. Do not
-   re-run the task Verify or PLAN.md's project Verify. Paths outside declared files plus the assigned
-   task file block; that task file may change only orchestrator fields and its
-   append-only Log. At `verify-only`, no reviewer is spawned: the
-   orchestrator writes the wave-review file from its own isolated Verify and
-   diff evidence, and anything it cannot confirm from that evidence is a
-   finding. At `deep`, two independent reviewers with fresh contexts and
-   separate disposable worktrees run in parallel at the review base: the
-   contract lens (`full`'s checks) staging `wave-N.cycleC.contract.md` and the
-   adversarial lens (security, edge cases, failure modes, data loss) staging
-   `wave-N.cycleC.adversarial.md`; both must pass, and any blocked lens blocks
-   the wave with both files' findings feeding fix tasks. When PLAN.md enables
-   `review_panel`, `full` and `deep` waves also spawn family-specific panel
-   children (deep: adversarial lens only) and merge them into
-   `wave-N.cycleC.panel.md`. The inherit reviewer remains the only Wave
-   verdict; actionable panel findings (high + written criterion) require a
-   user ruling before advance. A wave review is a
-   single reader of the whole wave's diffs (two at `deep`), so keep waves
-   narrow enough for one reviewer context (≲12 tasks) and split wider work
-   into more waves at plan time.
-6. **Fix and re-review.** Batch findings into complete fix tasks — one per
-   disjoint file scope, not one per finding — add every fix task to the current
-   or next PLAN wave and create its complete task file before dispatch, then
-   execute them through the same isolated loop. Findings are keyed by their
-   failed criterion and carried forward across cycles: a criterion failing
-   again after its fix task ran is evidence the fix failed, never a new
-   finding or a duplicate fix task. Stop for a user ruling at the
-   configured cycle cap.
-7. **Advance.** Only a passing wave permits the next. Commit review artifacts
-   and BOARD/STATE bookkeeping at the boundary.
-
-Coders never change orchestrator frontmatter, stage, or commit. They stay in
-their assigned linked worktrees and declared files. A coder's first act is a
-preflight: every path the brief names must exist at the base or be declared
-in `files`, and the interface contract must match its siblings verbatim —
-mismatches block immediately instead of mid-run. Task frontmatter and exact
-base/commit SHAs outrank BOARD.md when resuming. A coder facing an ambiguous
-contract — rather than a defective one — blocks with `NEEDS-ORCHESTRATOR:
-<question>` in its task Log; the orchestrator answers from the approved
-artifacts or asks the user, records the answer in the Log, and redispatches
-without consuming the task's one failure retry.
-
-For an unlanded attempt, the coder's append-only task Log delta is copied
-to the primary exactly once; the orchestrator adds only distinct diff/Verify
-rejection evidence. Before one allowed retry, record the rejected path set and
-diff hash, prove the old dirty worktree is wholly task-owned, remove that exact
-worktree and branch, and create a fresh retry from the newly committed primary
-HEAD. Never redispatch a dirty failed worktree against divergent task history.
-
-**Gate:** every wave passes; the build orchestrator commits
-the transition directly to `ship/active`, leaving a clean primary worktree.
-PLAN.md's project Verify runs once at ship. A task Verify names a path
-from `files` unless it is that allowed Project-verify copy.
-
-**Milestone abandon (program flow).** On an explicit user ruling — at the
-review-cycle cap, a decision invalidation, or a direct request — the
-orchestrator retires the recorded task worktrees, runs the archive helper's
-`abandon` command to archive the partial artifacts without review gates,
-marks the roadmap entry `abandoned`, logs the ruling verbatim to LESSONS.md,
-and commits the transition to `roadmap/active` for a re-slice. Abandoned
-roadmap entries are immutable; the abandoned code stays on the branch until
-the next integration, when it reaches the default branch as inert history,
-and the re-slice plans around it.
-
-**Lookahead (program flow).** While a milestone builds, the router may offer
-to plan the next dependency-ready milestone in parallel under
-`.project/next/`: define (milestone mode), research for the entry's open
-questions, decide, and plan run there under their normal gates, reading
-program artifacts from their active paths. The track never writes an
-active-path artifact, never binds a branch, and advances only on explicit
-user direction. At the milestone boundary the router promotes `next/` to
-the active paths in one bookkeeping commit and routes by the promoted state.
-After integration validation and before that promotion, the router uses the
-bundled `pipeline_git.py bind-next` helper to move the clean primary worktree
-from the shipped branch to the new unused `gsd-path/M00N` branch at the exact
-current `origin/main` SHA; the helper also retires the integrated previous
-branch locally and on origin. STATE.branch records the new branch, so the
-promotion commit is the first commit on it. The same handoff precedes a normal
-next-milestone define or single-milestone inspect. Promotion re-validates a
-completed lookahead plan's task paths against the new HEAD (diff since the
-approval checkpoint commit); drifted tasks return to `plan/active` for
-re-gating and re-approval before build.
+The build contract is not restated here. Branch binding, the wave loop, task
+isolation and landing, wave review, fix batching, completion, and milestone
+abandon live only in the canonical
+[skills/gsd-path-build/SKILL.md](skills/gsd-path-build/SKILL.md).
+`skills/gsd-path/BUILD.md` is its generated mirror. The build orchestrator
+reads the canonical file; no build agent receives this section.
 
 ## Phase 6 — Ship (`gsd-path-ship`)
 
@@ -508,7 +365,7 @@ STATE.archive is a write-ahead transaction id. The bundled Python archive helper
 chooses one plus the maximum numeric prefix, persists the exact target before
 creating or moving, and reuses it on every retry. Shipping moves — never
 deletes — every supporting document into that numbered archive: `intent/`,
-`research/`, `plan/`, `tasks/`, `review/`, optional `discuss/`, and `BOARD.md`.
+`research/`, `plan/`, `tasks/`, `review/`, and optional `discuss/`.
 REPOSITORY.md, LESSONS.md, and the program artifacts (CHARTER.md,
 ROADMAP.md, top-level SYNTHESIS.md) remain active project metadata; a program
 ship also marks the milestone's roadmap entry `Status: shipped` with its
@@ -553,10 +410,10 @@ move with its MANIFEST.md, staged from `.project/` only, subject
 `ship: M00N — <milestone-slug>` and a body naming `Archive:` and
 `Reviewed-HEAD:`. Every other commit on the bound branch
 belongs to the build orchestrator. The commit must contain only `.project/`
-paths. There is no untracked-project fallback. Every pipeline commit —
-task land, build bookkeeping, plan/roadmap/router checkpoints, ship, and
-integrate — carries its defined subject plus a field body (`Task:`/`Files:`,
-`Why:`, `Archive:`, or the integrate fields).
+paths. There is no untracked-project fallback. Every pipeline commit carries
+the subject and field body defined by its canonical phase contract; task-land
+fields live only in the
+[build contract](skills/gsd-path-build/SKILL.md).
 
 ### Integration
 
@@ -670,8 +527,8 @@ Inventory every `.md` → extract testable claims → verify each by the
 cheapest sufficient method (run the command, read the code, run the test,
 check history) → verdict with recorded evidence → remediation queue. With
 `.project/` present it also audits the pipeline against itself: done tasks
-must have their commit SHA and a passing Verify, SYNTHESIS decisions must
-match the code's actual shape, BOARD/STATE must agree with task
+must have a proven landing commit and a passing Verify, SYNTHESIS decisions must
+match the code's actual shape, STATE must agree with task
 frontmatter. Useful mid-project as a drift check before a milestone review.
 The auditor never edits anything.
 
@@ -713,8 +570,7 @@ with their exact ordered source-file and row list.
   research/evidence-*.md     four required evidence dimensions
   research/SYNTHESIS.md      decision artifact; authoritative after decide gate
   plan/PLAN.md               waves, config, and project verify
-  tasks/T###-slug.md         full contract, clean base SHA, status, exact commit SHA
-  BOARD.md                   wave and escalation summary
+  tasks/T###-slug.md         full contract, clean base SHA, status
   review/wave-N.cycleC.md    per-wave verdicts
   review/wave-N.cycleC.panel.md  optional cross-model wave panel
   review/PLAN-PANEL.md       optional cross-model plan panel
@@ -730,7 +586,7 @@ At ship, everything except `STATE.md`, `REPOSITORY.md`, `LESSONS.md`, `archive/`
 the program artifacts (`CHARTER.md`, `ROADMAP.md`, top-level `SYNTHESIS.md`)
 moves into the numbered archive; active paths above describe the current milestone
 only, including the discussion records. The ship step appends one lesson line per repeat-offender criterion and
-BOARD escalation to LESSONS.md before committing.
+STATE.md log escalation to LESSONS.md before committing.
 
 Artifact formats are bundled with the installed `gsd-path` skill. Each phase
 resolves and passes their absolute paths. A missing or malformed artifact

@@ -5,7 +5,6 @@ wave: 1
 deps: []            # task ids whose output or landed effect this task needs
 status: pending     # orchestrator-owned: pending | in-progress | done | failed | blocked
 agent: null         # orchestrator-owned: set at dispatch
-commit: null        # orchestrator-owned: exact task commit SHA
 base: null          # orchestrator-owned: clean layer SHA for isolated Verify
 worktree: null      # orchestrator-owned: isolated task worktree while active
 task_branch: null   # orchestrator-owned: gsd-path-task/<id> while parallel; null when serial

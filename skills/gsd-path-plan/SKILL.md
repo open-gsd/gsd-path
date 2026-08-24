@@ -86,11 +86,11 @@ severity, or fit with this milestone's scope).
    file per task at `.project/tasks/T###-slug.md` — no other location is
    canonical, and `.project/PLAN.md` is never written.
 3. Gate PLAN.md and every task file:
-   - Map every PLAN table row to exactly one task file and every task file to
-     exactly one row. Require unique ids and matching wave numbers.
+   - Require unique task ids, and require every task's `wave` to name a
+     `## Wave N` heading in PLAN.md. PLAN.md carries no task table.
    - Require task frontmatter fields `id`, `title`, `wave`, `deps`, `status`,
-     `agent`, `commit`, `base`, `worktree`, `task_branch`, and `files`; require
-     initial `status: pending`, `agent: null`, `commit: null`, `base: null`,
+     `agent`, `base`, `worktree`, `task_branch`, and `files`; require
+     initial `status: pending`, `agent: null`, `base: null`,
      `worktree: null`, and `task_branch: null` values.
    - Require every dependency id to exist, forbid later-wave dependencies,
      detect cycles, and forbid file overlap between planned tasks in the same

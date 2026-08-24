@@ -28,19 +28,18 @@ explicitly invokes it.
   committed transition to `ship/active`. Project Verify waits for ship.
 - Read the local [coder role](references/coder.md),
   [reviewer role](references/reviewer.md), [dispatch contract](references/dispatch.md),
-  [task template](templates/task.md), [board template](templates/board.md),
+  [task template](templates/task.md),
   [wave-review template](templates/wave-review.md), and
   [wave-panel template](templates/wave-panel.md). Resolve them to absolute
   paths before briefing agents. Resolve `scripts/review_panel.py` when
   PLAN.md Config names a review panel. Resolve `scripts/check_handoffs.py`
-  for Intent coverage. Resolve `scripts/isolation.py` for
-  task isolation, verify sidecars, and task landing; do not invent
+  for Intent coverage. Resolve `scripts/isolation.py` for task isolation,
+  recovery, verify sidecars, and task landing; do not invent
   `git worktree add`, `--detach`, commit, or cherry-pick commands.
-- Before the first dispatch, create `.project/BOARD.md` from the bundled
-  board template when it is absent — `.project/BOARD.md` is the canonical
-  board path — and include it in the next orchestrator bookkeeping commit.
-  Update BOARD.md at every task state change so it always mirrors task
-  frontmatter.
+- There is no board file. Task frontmatter is the only task-state record;
+  when a report or question needs a wave summary, render it inline from the
+  task files and wave reviews. Record escalations and plan defects in the
+  STATE.md log.
 - Require a Git worktree with no unrelated changes. Roadmap and plan
   approval checkpoints normally leave `.project/` fully committed; expected
   uncommitted `.project/` planning artifacts may remain only through initial
@@ -56,7 +55,7 @@ explicitly invokes it.
   change.
 - Before recovery or dispatch and again before each layer/wave gate, scan
   ANSWERS.md for pending required follow-ups under AGENTS.md. Apply an answer
-  addressed to build only through PLAN/task/BOARD bookkeeping that is legal in
+  addressed to build only through PLAN/task bookkeeping that is legal in
   the current build state and append its disposition receipt. If it changes an
   approved upstream contract or names another owner, set `build/blocked`, link
   ANSWERS.md and the target artifact, and ask the user; never establish a new
@@ -102,34 +101,38 @@ explicitly invokes it.
 
 ## Wave loop
 
-For each wave in PLAN.md order:
+For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
+`wave` equals N):
 
-1. **Recover before dispatch.** Reconcile task frontmatter over BOARD.md and
-   inspect primary bookkeeping dirt plus every recorded task worktree and
-   branch before selecting work. For an `in-progress` task with `commit: null`,
-   use its recorded `base`, isolated worktree, and branch first. If task landing
-   may already have happened,
-   inspect only first-parent commits in `base..STATE.branch` whose subject
-   equals `<task-id>: <task title>`. A candidate must touch the task file, have
-   no path outside `files` plus that task file, carry a body whose `Task:` field
-   names the task file and whose sorted `Files:` list exactly matches the changed
-   paths, preserve the task contract with an append-only Log delta, and pass
-   isolated Verify. The retained task branch or worktree must still prove the
-   candidate's complete binary product patch and task-Log delta byte-for-byte
-   equal the isolated source commit/diff.
-   Exactly one proven candidate recovers its full SHA and `done` state; zero
-   candidates resumes the retained isolated diff or returns it to `pending`
-   only when ownership is clear; missing proof, multiple candidates, or any
-   inconsistency blocks. For a task already carrying `status: done` and a full
-   `commit`, prove that exact commit by the same subject, body, path,
-   source-patch, Log-delta, and Verify checks. If its metadata is the sole
-   uncommitted primary change, commit that bookkeeping; if the metadata is
-   already in HEAD, leave it untouched. Then retire a still-present recorded worktree with
-   `isolation.py retire` only when both the worktree and branch resolve to that
-   proven task source and are clean. It
-   is valid for both to be absent after earlier cleanup; one missing, a dirty
-   worktree, or mismatched ownership blocks. Never use an unanchored log grep,
-   infer a SHA from `done`, or reset unknown work.
+1. **Recover before dispatch.** Run `python3 <absolute isolation.py> recover
+   --repo <absolute primary>`. It is read-only and proves every `done` task's
+   landing commit from its exact stamped base (first-parent scan for
+   `<task-id>: <task title>`, body `Task:`/`Base:`/`Files:`, the base task's
+   declared path allow-list from the task file at that base, exact landing
+   metadata, append-only task-file body, and
+   patch equality with a retained task branch). Pending and `in-progress`
+   tasks bypass landing-history proof and report retained resume state or
+   `none`; failed and blocked tasks with retained isolation report
+   `reconcile`. Act only on its verdicts;
+   do not re-derive them in prose, rerun Verify on a proven commit, use an
+   unanchored log grep, infer a SHA from `done`, or reset unknown work.
+   - `recovered`: the task is landed (`land` already stamped `status: done`
+     and `base`). Retire a still-present task worktree with `isolation.py
+     retire` only when the report shows it present, clean, and on the task
+     branch. If only `task_branch` remains, finish its proven interrupted
+     retirement with `retire --branch <task_branch> --force --landed-commit
+     <commit>`; both absent is valid.
+   - `resume`: continue from the returned `base`, `task_branch`, and worktree
+     (the primary itself when no task branch exists); when the report shows
+     the worktree absent, return the task to `pending` only when ownership is
+     clear. When `dispatch_retry` is true, reuse the returned clean isolate,
+     write fresh dispatch metadata and agent there, then dispatch; do not
+     recreate it. When `landing_retry` is true, do not resume implementation
+     or redispatch; rerun `land` against the returned isolate and base.
+   - `reconcile`: do not resume implementation. Preserve the returned isolate
+     evidence and follow the failed/blocked reconciliation in step 2.
+   - `block`: set `build/blocked` with the returned reason and stop.
+   - `none`: take no recovery action for that task.
 
 2. **Prepare the ready set.** Reconcile failed and blocked tasks, then
    select pending tasks whose dependencies are `done`. Readiness is
@@ -150,7 +153,10 @@ For each wave in PLAN.md order:
    rejected diff's exact path set and hash, and commit the block bookkeeping.
    After confirming every old change is task-owned, retire that exact worktree
    with `python3 <absolute isolation.py> retire --repo <absolute primary>
-   --worktree <path> --branch <task_branch> --force`, then create the retry
+   --worktree <path> --branch <task_branch> --force --task-file <task path>`,
+   then create the retry. If retirement was interrupted after removing the
+   worktree, rerun the same command; the recorded failed or blocked task and
+   its exact base prove the remaining branch before deletion. Create the retry
    from the new clean primary HEAD. After
    resolving a recoverable `build/blocked` condition, set STATE back to
    `build/active`, log the resolution, and commit it before recording that new
@@ -173,10 +179,12 @@ For each wave in PLAN.md order:
    Parallel (`N>=2`) creates a named `gsd-path-task/<id>` branch and linked
    worktree at that base; never a detached HEAD. Set frontmatter `base`,
    `worktree`, `task_branch`, `status: in-progress`, and `agent` from the
-   helper's JSON, then commit that dispatch bookkeeping in the primary
-   worktree. Do not append a dispatch
-   Log entry: the isolated task later appends at that location, and two parallel
-   appends make the cherry-pick ambiguous. Reuse a retained worktree only when
+   helper's JSON in the task file **inside the isolated worktree** (the
+   primary itself when serial). Do not commit this dispatch state: it lands
+   inside the task's own commit, and `recover` derives it from the task
+   branch and worktree meanwhile. The primary stays clean during a parallel
+   round. Do not append a dispatch Log entry: the isolated task later appends
+   at that location, and two parallel appends make the cherry-pick ambiguous. Reuse a retained worktree only when
    its recorded base, branch, and task agree exactly.
 
 4. **Dispatch the round.** Following the local runtime dispatch contract,
@@ -208,13 +216,17 @@ For each wave in PLAN.md order:
      `python3 <absolute isolation.py> land --repo <absolute primary>
      --source <isolated worktree> --base <recorded base> --task-id <id>
      --title <task title> --task-file <task path> --allow-path <each declared
-     file>`. Do not invent commit or cherry-pick commands. A non-zero exit is
-     a typed failure: unexpected path, conflict, or empty diff. On conflict
-     the helper aborts and leaves the primary clean on the bound branch.
-     Never leave task landing in progress.
-   - Capture the returned primary full SHA. Before any later Git operation,
-     write it to `commit`, mark the task `done`, and commit that task's
-     bookkeeping. Only then retire the isolate with
+     file>`. Do not invent commit or cherry-pick commands. For a serial round,
+     the primary must still be on the bound branch at the recorded base. A
+     non-zero exit reports the exact landing failure, such as an unexpected
+     path, base or branch mismatch, invalid task proof, conflict, or empty diff.
+     On conflict the helper aborts and leaves the primary clean on the bound
+     branch. Never leave task landing in progress.
+   - `land` stamps `status: done`, `base`, and null `worktree`/`task_branch`
+     into the task frontmatter and records `Base:` in the commit body, so the
+     product commit is the task's only commit; there is no `commit`
+     frontmatter field — `recover` proves the SHA from git. Do not write a
+     separate bookkeeping commit. Retire the isolate with
      `python3 <absolute isolation.py> retire --repo <absolute primary>
      --worktree <isolated worktree> [--branch <task_branch>]`. Serial rounds
      return `retired: false` and leave the bound branch untouched. Each
@@ -251,8 +263,8 @@ For each wave in PLAN.md order:
    `Review depth` from PLAN.md (default `full`).
    - `full`: spawn one independent reviewer using deterministic logical task
      name `review_wave_<wave>_cycle_<cycle>`. Supply every task path, its
-     recorded base and commit, the reviewer role, wave-review template, and
-     the absolute INTENT.md path.
+     recorded base and proven landing commit, the reviewer role, and
+     wave-review template, and the absolute INTENT.md path.
      Create and supply one verify sidecar with
      `python3 <absolute isolation.py> isolate-verify --repo <absolute primary>
      --base <recorded review base> --name wave-<N>-cycle-<C>`. Brief the
@@ -265,9 +277,9 @@ For each wave in PLAN.md order:
    - `deep`: spawn two independent reviewers in parallel, each with a fresh
      isolated context and its own verify sidecar from `isolate-verify` at the
      recorded review base (`--name wave-<N>-cycle-<C>-contract` and
-     `wave-<N>-cycle-<C>-adversarial`). Supply both every task path, its recorded base and commit,
-     the reviewer role, the wave-review template, and the absolute INTENT.md
-     path. The contract lens —
+     `wave-<N>-cycle-<C>-adversarial`). Supply both every task path, its
+     recorded base and proven landing commit, the reviewer role, and the
+     wave-review template, and the absolute INTENT.md path. The contract lens —
      logical task name `review_wave_<wave>_cycle_<cycle>_contract` — does the
      full review: apply each task's `commit^..commit` product patch to the
      recorded base, check the recorded Verify plus the isolated diff, and
@@ -329,17 +341,15 @@ For each wave in PLAN.md order:
    its failed criterion and carry still-open findings forward across cycles
    instead of rediscovering them: a criterion that fails again after its fix
    task ran is evidence the fix failed, never a new finding, and a re-review
-   never spawns a duplicate fix task for a finding already carried. Add every
-   fix task to the
-   current or newly appended PLAN.md wave table and `.project/tasks/` before
-   dispatch, preserving the one-row/one-file contract; do not create an
-   unlisted task that the next recovery cannot discover. Run them through the
-   same isolated layer loop. At the cap, record all attempts in BOARD.md and
-   STATE.md and ask the user — through an interactive user-input tool when
-   available — after linking the resolved absolute BOARD.md and blocking wave
-   review, whether to redirect the approach, raise the cap, or send define
-   to amend INTENT.md `## Corrections` — never rewrite an AC from a Log
-   waiver — or, in program flow (ROADMAP.md exists), to abandon the
+   never spawns a duplicate fix task for a finding already carried. Write
+   each fix task to `.project/tasks/` with `wave` set to the current wave or
+   a newly appended `## Wave N` heading in PLAN.md before dispatch. Run them
+   through the same isolated layer loop. At the cap, record all attempts in the STATE.md
+   log and ask the user — through an interactive user-input tool when
+   available — after linking the resolved absolute blocking wave review,
+   whether to redirect the approach, raise the cap, or send define to amend
+   INTENT.md `## Corrections` — never rewrite an AC from a Log waiver — or,
+   in program flow (ROADMAP.md exists), to abandon the
    milestone under the Milestone abandon procedure — listing the
    orchestrator's recommended option first marked
    `(recommended)` with a one-line reason drawn from the review evidence.
@@ -350,8 +360,7 @@ For each wave in PLAN.md order:
    `Open fix tasks from panel findings (recommended)` first, then `Advance
    and keep panel findings as warnings`. Preference-only panel warnings do
    not block advance. On pass, commit the review artifact, the panel file
-   when present, BOARD.md, STATE.md, and wave
-   bookkeeping, then report `wave N/M done, C review cycle(s)`.
+   when present, STATE.md, and wave bookkeeping, then report `wave N/M done, C review cycle(s)`.
 
 ## Completion
 
@@ -361,14 +370,14 @@ transition as the build orchestrator's final bookkeeping. Do not run
 PLAN.md's project Verify here — ship runs it once. This
 keeps the primary worktree clean and avoids a separate review-phase transition
 commit. Report waves, exact task commits, fixed findings, and remaining risk.
-Link the resolved absolute BOARD.md as the review surface and state that ship
-is next. Do not merge to the default branch, tag, mark `shipped`, or
-integrate; ship owns FINAL.md, project Verify, and those steps. When invoked
-directly, stop and tell the user to explicitly
-invoke `$gsd-path`, which routes to ship; do not invoke an explicit-only sibling
-skill yourself.
-If
-a crash leaves `build/done`, finish and commit this transition before returning
+ Link the resolved absolute final wave review as the review surface and state
+ that ship is next. Do not merge to the default branch, tag, mark `shipped`, or
+ integrate; ship owns FINAL.md, project Verify, and those steps. When invoked
+ directly, stop and tell the user to explicitly
+ invoke `$gsd-path`, which routes to ship; do not invoke an explicit-only sibling
+ skill yourself.
+ If
+ a crash leaves `build/done`, finish and commit this transition before returning
 to the router.
 
 ## Milestone abandon (program flow only)

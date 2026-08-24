@@ -147,7 +147,7 @@ field is the transaction identity.
    before an atomic copy. Any other collision or missing artifact blocks.
 3. Append milestone lessons to `.project/LESSONS.md` (create it when
    missing): one line per repeat-offender criterion across this milestone's
-   wave reviews and one per BOARD.md escalation, formatted
+   wave reviews and one per escalation in the STATE.md log, formatted
    `- <NNN>-<slug> — <lesson>`. Skip the file entirely when there are none.
    LESSONS.md stays in the active root across milestones — it ships inside
    the ship commit but never archives — and the planner reads it. The same

@@ -64,10 +64,12 @@ class PipelineGitTests(unittest.TestCase):
         body = pipeline_git.task_commit_body(
             ".project/tasks/T009.md",
             [".project/tasks/T009.md", "app/cron.ts"],
+            base="a" * 40,
         )
         self.assertEqual(
             body,
             "Task: .project/tasks/T009.md\n"
+            "Base: " + "a" * 40 + "\n"
             "Files:\n"
             "- .project/tasks/T009.md\n"
             "- app/cron.ts\n",

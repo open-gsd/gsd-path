@@ -57,10 +57,11 @@ full-repo suite on a tiny edit outrank the phase brief.
   bundled template path supplied by the active phase skill. An output that
   needs verbal explanation is defective.
 - `.project/STATE.md` tracks phase position. The orchestrator alone owns task
-  frontmatter base, isolated worktree/branch, status, agent, and exact commit SHA. Require
+  frontmatter base, isolated worktree/branch, status, and agent; the landing
+  commit is proven from git by `isolation.py recover`, never recorded. Require
   `pipeline: gsd-path/v2`; never consume an ambiguous or differently owned
-  state file. Artifacts outrank summaries; reconcile STATE.md or BOARD.md when
-  they disagree. During a program build, `.project/next/STATE.md` may hold
+  state file. Artifacts outrank summaries; reconcile STATE.md when it
+  disagrees with task frontmatter. During a program build, `.project/next/STATE.md` may hold
   the lookahead planning track for the next milestone; it follows the same
   marker rule, owns no task frontmatter, and never binds a branch.
 - Spawned agents have isolated context. Follow the installed runtime dispatch
@@ -104,7 +105,8 @@ full-repo suite on a tiny edit outrank the phase brief.
 - The orchestrator dispatches, arbitrates, and creates task isolation and
   verify sidecars through the bundled `scripts/isolation.py` helper — named
   branches only, never a detached HEAD — lands task work serially, and
-  records each clean base and exact full commit SHA in task frontmatter. It
+  records each clean base in task frontmatter; `land` stamps the landed
+  state into the task's own commit, so a task has exactly one commit. It
   writes no product code.
 - All pipeline work for a milestone lives on `gsd-path/M00N` (M001, M002,
   …) bound in STATE.branch. The next milestone binds a new unused
@@ -261,8 +263,8 @@ Stop and ask the user only when:
 - a `NEEDS-USER` item reaches a phase checkpoint; or
 - sources of truth conflict and INTENT.md does not make the resolution clear.
 
-Handle everything else autonomously and record it in the task log, BOARD.md,
-or STATE.md.
+Handle everything else autonomously and record it in the task log or
+STATE.md.
 
 ## Style
 

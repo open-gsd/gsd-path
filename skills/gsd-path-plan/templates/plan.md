@@ -29,18 +29,13 @@ Review depth: full   <!-- full | deep | verify-only. Wave 1 and auth/payments/
                           deep. Assign deep sparingly: irreversible or
                           security-critical merges. -->
 
-| Task | Title | Deps | Files |
-|------|-------|------|-------|
-| T001 | <title> | — | <paths> |
+<!-- No task table. Task id, title, deps, and files live only in each
+     `tasks/T###-slug.md` frontmatter; `wave: N` there assigns it here. -->
 
 ## Wave 2 — walking skeleton
 
 Goal: <the end-to-end slice that runs>
 Review depth: <full | deep | verify-only>
-
-| Task | Title | Deps | Files |
-|------|-------|------|-------|
-| T00x | <title> | T001 | <paths> |
 
 <!-- More waves: features by dependency, then polish. Rules:
      - deps only in earlier waves, or same wave with no file overlap
