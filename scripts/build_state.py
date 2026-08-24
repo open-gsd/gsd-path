@@ -631,7 +631,7 @@ def _candidate(
     subject = _git_output(project.repo, "show", "-s", "--format=%s", commit)
     expected_subject = task_commit_subject(task.task_id, task.title)
     body = _git_output(project.repo, "show", "-s", "--format=%b", commit)
-    expected_body = task_commit_body(task.task_file, paths).strip()
+    expected_body = task_commit_body(task.task_file, paths, task.base or "").strip()
     allowed = set(task.files) | {task.task_file}
     unexpected = sorted(set(paths) - allowed)
     reasons: List[str] = []

@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Optional
 from unittest import mock
 
-from scripts import archive_milestone, pipeline_git, review_panel
+from scripts import archive_milestone, isolation, pipeline_git, review_panel
 
 if sys.platform != "win32":
     import fcntl
@@ -106,7 +106,6 @@ wave: 1
 deps: []
 status: pending
 agent: null
-commit: null
 base: null
 worktree: null
 task_branch: null
@@ -158,11 +157,11 @@ Tasks reviewed: 1
             .replace("worktree: null", f"worktree: {root}"),
             encoding="utf-8",
         )
-        self.git(root, "add", ".project/tasks/T001-demo.md")
-        dispatched = self.git(root, "commit", "-q", "-m", "build: dispatch wave 1")
-        self.assertEqual(dispatched.returncode, 0, dispatched.stderr)
         task.write_text(
-            task.read_text(encoding="utf-8") + "- implementation complete\n",
+            isolation._landed_task_text(
+                task.read_text(encoding="utf-8") + "- implementation complete\n",
+                base,
+            ),
             encoding="utf-8",
         )
         product.write_text("value = 'implemented'\n", encoding="utf-8")
@@ -176,16 +175,10 @@ Tasks reviewed: 1
             "-m",
             pipeline_git.task_commit_subject("T001", "demo"),
             "-m",
-            pipeline_git.task_commit_body(task_file, changed_paths),
+            pipeline_git.task_commit_body(task_file, changed_paths, base),
         )
         self.assertEqual(landed.returncode, 0, landed.stderr)
         reviewed_head = self.git(root, "rev-parse", "HEAD").stdout.strip()
-        task.write_text(
-            task.read_text(encoding="utf-8")
-            .replace("status: in-progress", "status: done")
-            .replace("commit: null", f"commit: {reviewed_head}"),
-            encoding="utf-8",
-        )
         (project / "review" / "FINAL.md").write_text(
             f"""# Final Review — demo
 
@@ -604,7 +597,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
             self.assertIn("heading text differs", rendered.stderr)
             self.assertFalse((archive / "MANIFEST.md").exists())
 
-    def test_render_manifest_rejects_a_task_commit_off_first_parent(self) -> None:
+    def test_render_manifest_ignores_an_unrelated_commit_off_first_parent(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             repo = Path(temporary_directory)
             self.make_repo(repo)
@@ -623,13 +616,6 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
             self.assertEqual(merge.returncode, 0, merge.stderr)
             reviewed_head = self.git(repo, "rev-parse", "HEAD").stdout.strip()
 
-            task = repo / ".project" / "tasks" / "T001-demo.md"
-            task.write_text(
-                task.read_text(encoding="utf-8").replace(
-                    f"commit: {landed}", f"commit: {side}"
-                ),
-                encoding="utf-8",
-            )
             for name in ("FINAL.md", "final-gap-1.md"):
                 review = repo / ".project" / "review" / name
                 review.write_text(
@@ -642,9 +628,8 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
 
             rendered = self.render_manifest(repo)
 
-            self.assertNotEqual(rendered.returncode, 0)
-            self.assertIn("first-parent", rendered.stderr)
-            self.assertFalse((archive / "MANIFEST.md").exists())
+            self.assertEqual(rendered.returncode, 0, rendered.stderr)
+            self.assertTrue((archive / "MANIFEST.md").exists())
 
     def test_preflight_rejects_a_task_commit_with_noncanonical_body(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -668,12 +653,6 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
             )
             self.assertEqual(committed.returncode, 0, committed.stderr)
             malformed = self.git(repo, "rev-parse", "HEAD").stdout.strip()
-            task.write_text(
-                task.read_text(encoding="utf-8").replace(
-                    f"commit: {previous}", f"commit: {malformed}"
-                ),
-                encoding="utf-8",
-            )
             for name in ("FINAL.md", "final-gap-1.md"):
                 review = repo / ".project" / "review" / name
                 review.write_text(
@@ -686,7 +665,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
             preflight = self.preflight(repo)
 
             self.assertNotEqual(preflight.returncode, 0)
-            self.assertIn("commit body", preflight.stderr)
+            self.assertIn("body has no Base: field", preflight.stderr)
 
     def test_prepare_archives_optional_discussion_records(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -2170,7 +2149,9 @@ Tasks reviewed: 1
 Review depth: deep
 """
             )
-            (archive / "tasks" / "T001-demo.md").write_text("# Task\n")
+            (archive / "tasks" / "T001-demo.md").write_text(
+                "---\nid: T001\ntitle: demo\nwave: 1\n---\n# Task\n"
+            )
             (archive / "review" / "wave-1.cycle1.contract.md").write_text(
                 """# Review — wave 1, cycle 1
 
@@ -2207,6 +2188,7 @@ Tasks reviewed: 1
         with tempfile.TemporaryDirectory() as temporary_directory:
             archive = Path(temporary_directory)
             (archive / "plan").mkdir()
+            (archive / "tasks").mkdir()
             (archive / "review").mkdir()
             (archive / "plan" / "PLAN.md").write_text(
                 """# Plan
@@ -2223,6 +2205,12 @@ Tasks reviewed: 1
 |------|-------|------|-------|
 | T002 | second task | T001 | second.py |
 """
+            )
+            (archive / "tasks" / "T001-first.md").write_text(
+                "---\nid: T001\ntitle: first task\nwave: 1\n---\n"
+            )
+            (archive / "tasks" / "T002-second.md").write_text(
+                "---\nid: T002\ntitle: second task\nwave: 2\n---\n"
             )
             for wave in (1, 2):
                 (archive / "review" / f"wave-{wave}.cycle1.md").write_text(
@@ -2241,7 +2229,7 @@ Tasks reviewed: 1
 
             with self.assertRaisesRegex(
                 archive_milestone.ArchiveError,
-                "tasks and titles do not match its PLAN wave in order",
+                "tasks and titles do not match its wave task files in order",
             ):
                 archive_milestone.review_cycle_counts(archive)
 

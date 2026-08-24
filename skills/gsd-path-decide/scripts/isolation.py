@@ -1095,6 +1095,7 @@ def _prove_task_commit(
     expected_base: str,
     current_task_text: Optional[str],
     allowed: Optional[Set[str]] = None,
+    compare_head: bool = True,
 ) -> tuple[Optional[str], Optional[str]]:
     """Return (base, None) when `sha` is this task's landing commit, else (None, reason)."""
     base = next((line[6:].strip() for line in body.splitlines() if line.startswith("Base: ")), None)
@@ -1134,9 +1135,13 @@ def _prove_task_commit(
         return None, "body Task:/Files: fields do not match the changed paths"
     if current_task_text is not None:
         try:
-            current_head_oid = _regular_blob_oid(repo, "HEAD", task_file)
             current_oid = _clean_blob_oid(
                 repo, task_file, current_task_text, write=False
+            )
+            current_head_oid = (
+                _regular_blob_oid(repo, "HEAD", task_file)
+                if compare_head
+                else after_oid
             )
         except IsolationError as error:
             return None, str(error)
@@ -1316,8 +1321,9 @@ def _recover_task(
     branches: Set[str],
     head: str,
     bound: str,
+    canonical_task_file: Optional[str] = None,
 ) -> Dict[str, object]:
-    task_file = relative_posix(str(path.relative_to(primary)))
+    task_file = canonical_task_file or relative_posix(str(path.relative_to(primary)))
     report: Dict[str, object] = {"task": task_file}
 
     def result(verdict: str, **extra: object) -> Dict[str, object]:
@@ -1544,7 +1550,13 @@ def _recover_task(
     proven, rejected = [], []
     for sha, body in history.get(subject, []):
         base, why = _prove_task_commit(
-            primary, sha, body, task_file, recorded_base, task_text
+            primary,
+            sha,
+            body,
+            task_file,
+            recorded_base,
+            task_text,
+            compare_head=canonical_task_file is None,
         )
         if why is None:
             proven.append((sha, base))
@@ -1680,6 +1692,90 @@ def recover(primary: Path, tasks_dir: Path) -> Dict[str, object]:
         "tasks": tasks,
         "verdict": "block" if any(t["verdict"] == "block" for t in tasks) else "ok",
     }
+
+
+def verify_landed_task_files(
+    primary: Path,
+    task_paths: Sequence[Path],
+    canonical_tasks_dir: str,
+    head: str,
+) -> Dict[str, object]:
+    """Prove archived task files against their canonical landing commits."""
+
+    primary = require_directory(primary, "primary worktree")
+    if worktree_root(primary) != primary:
+        raise IsolationError(f"primary is not its Git root: {primary}")
+    bound = require_attached(primary)
+    resolved_head = require_commit(primary, require_full_sha(head))
+    canonical_dir = relative_posix(canonical_tasks_dir)
+    history: Dict[str, list[tuple[str, str]]] = {}
+    log = git_output(
+        primary,
+        "log",
+        "--first-parent",
+        "--format=%x1e%H%x00%s%x00%b",
+        resolved_head,
+    )
+    for record in filter(None, log.split("\x1e")):
+        sha, subject, body = record.split("\x00", 2)
+        history.setdefault(subject, []).append((sha, body.strip()))
+    branches = set(
+        git_output(
+            primary,
+            "for-each-ref",
+            "--format=%(refname:short)",
+            f"refs/heads/{TASK_BRANCH_PREFIX}",
+        ).splitlines()
+    )
+    tasks = []
+    for path in task_paths:
+        resolved = path.resolve()
+        if path.is_symlink() or not path.is_file():
+            raise IsolationError(f"task artifact is missing or unsafe: {path}")
+        try:
+            resolved.relative_to(primary)
+        except ValueError as error:
+            raise IsolationError(f"task artifact is outside the primary: {path}") from error
+        canonical = relative_posix(f"{canonical_dir}/{path.name}")
+        task_text, _ = _read_task_text(resolved)
+        fields, error = task_frontmatter(task_text)
+        if error or fields is None:
+            raise IsolationError(error or f"unreadable task frontmatter: {path.name}")
+        if fields.get("status") != "done":
+            raise IsolationError(
+                f"{fields.get('id', path.name)}: task must have status: done"
+            )
+        tasks.append(
+            _recover_task(
+                primary,
+                resolved,
+                history,
+                branches,
+                resolved_head,
+                bound,
+                canonical,
+            )
+        )
+    blocked = [task for task in tasks if task["verdict"] != "recovered"]
+    if blocked:
+        def failure_reason(task: Dict[str, object]) -> str:
+            rejected = task.get("rejected")
+            if isinstance(rejected, list) and rejected:
+                details = ", ".join(
+                    str(item.get("reason", "rejected"))
+                    for item in rejected
+                    if isinstance(item, dict)
+                )
+                if details:
+                    return details
+            return str(task.get("reason", task["verdict"]))
+
+        reasons = "; ".join(
+            f"{task.get('task_id', task['task'])}: {failure_reason(task)}"
+            for task in blocked
+        )
+        raise IsolationError(reasons)
+    return {"bound_branch": bound, "head": resolved_head, "tasks": tasks}
 
 
 def _sidecar_path_for_branch(primary: Path, branch: str) -> Path:

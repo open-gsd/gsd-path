@@ -710,7 +710,7 @@ def _plan_files(value: str, task_id: str) -> List[str]:
     return files
 
 
-def _plan_tasks(plan: str) -> Tuple[Dict[str, Dict[str, object]], List[int]]:
+def _plan_waves(plan: str) -> Tuple[Dict[int, str], List[int]]:
     headings = list(PLAN_WAVE_HEADING.finditer(plan))
     if not headings:
         raise HandoffError("PLAN.md has no waves")
@@ -718,8 +718,7 @@ def _plan_tasks(plan: str) -> Tuple[Dict[str, Dict[str, object]], List[int]]:
     if waves != list(range(1, len(waves) + 1)):
         raise HandoffError("PLAN.md wave numbers must be unique, ordered, and contiguous")
 
-    rows: Dict[str, Dict[str, object]] = {}
-    ordered_ids: List[str] = []
+    depths: Dict[int, str] = {}
     for index, heading in enumerate(headings):
         wave = int(heading.group("wave"))
         end = headings[index + 1].start() if index + 1 < len(headings) else len(plan)
@@ -733,44 +732,14 @@ def _plan_tasks(plan: str) -> Tuple[Dict[str, Dict[str, object]], List[int]]:
             raise HandoffError(f"PLAN.md Wave {wave} has an invalid Review depth")
         if wave == 1 and depth.group(1) == "verify-only":
             raise HandoffError("PLAN.md Wave 1 Review depth must be full or deep")
-
-        wave_rows = 0
-        for line in _strip_comments(block).splitlines():
-            stripped = line.strip()
-            if re.match(r"^\|\s*Task\s*\|", stripped):
-                continue
-            if not re.match(r"^\|\s*T", stripped):
-                continue
-            match = PLAN_TASK_ROW.fullmatch(stripped)
-            if not match:
-                raise HandoffError(f"PLAN.md Wave {wave} has a malformed task row")
-            task_id = match.group("task")
-            if task_id in rows:
-                raise HandoffError(f"PLAN.md repeats {task_id}")
-            title = _non_placeholder(match.group("title"), f"PLAN.md {task_id} title")
-            rows[task_id] = {
-                "wave": wave,
-                "title": _normalize_ws(title),
-                "review_depth": depth.group(1),
-                "deps": _inline_ids(match.group("deps"), "T", f"PLAN.md {task_id} Deps"),
-                "files": _plan_files(match.group("files"), task_id),
-            }
-            ordered_ids.append(task_id)
-            wave_rows += 1
-        if wave_rows == 0:
-            raise HandoffError(f"PLAN.md Wave {wave} has no task rows")
-
-    expected = [f"T{number:03d}" for number in range(1, len(ordered_ids) + 1)]
-    if ordered_ids != expected:
-        raise HandoffError("PLAN.md task ids must be unique, ordered, and contiguous")
-    return rows, waves
+        depths[wave] = depth.group(1)
+    return depths, waves
 
 
 def _require_task_structure(task_id: str, text: str) -> None:
     expected = {
         "status": "pending",
         "agent": "null",
-        "commit": "null",
         "base": "null",
         "worktree": "null",
         "task_branch": "null",
@@ -785,47 +754,37 @@ def _require_task_structure(task_id: str, text: str) -> None:
 
 
 def _validate_task_graph(
-    plan_rows: Dict[str, Dict[str, object]], tasks: Dict[str, str]
+    wave_depths: Dict[int, str], tasks: Dict[str, str]
 ) -> None:
-    if set(plan_rows) != set(tasks):
-        missing_rows = sorted(set(tasks) - set(plan_rows))
-        missing_files = sorted(set(plan_rows) - set(tasks))
-        details = []
-        if missing_rows:
-            details.append("task files without rows: " + ", ".join(missing_rows))
-        if missing_files:
-            details.append("rows without task files: " + ", ".join(missing_files))
-        raise HandoffError("PLAN/task mapping mismatch; " + "; ".join(details))
+    task_ids = list(tasks)
+    expected = [f"T{number:03d}" for number in range(1, len(task_ids) + 1)]
+    if task_ids != expected:
+        raise HandoffError("task ids must be unique, ordered, and contiguous")
 
     graph: Dict[str, List[str]] = {}
+    task_waves: Dict[str, int] = {}
+    task_files: Dict[str, List[str]] = {}
     for task_id, text in tasks.items():
-        row = plan_rows[task_id]
         _require_task_structure(task_id, text)
-        title = _normalize_ws(_task_scalar(text, task_id, "title"))
         wave = _task_wave(text, task_id)
         deps = _task_deps(text, task_id)
         files = _frontmatter_files(text)
-        if title != row["title"]:
-            raise HandoffError(f"{task_id} title differs between PLAN.md and task file")
-        if wave != row["wave"]:
-            raise HandoffError(f"{task_id} wave differs between PLAN.md and task file")
-        if deps != row["deps"]:
-            raise HandoffError(f"{task_id} deps differ between PLAN.md and task file")
-        if files != row["files"]:
-            raise HandoffError(f"{task_id} files differ between PLAN.md and task file")
+        if wave not in wave_depths:
+            raise HandoffError(f"{task_id} names unknown Wave {wave}")
         graph[task_id] = deps
+        task_waves[task_id] = wave
+        task_files[task_id] = files
         for dependency in deps:
             if dependency not in tasks:
                 raise HandoffError(f"{task_id} names unknown dependency {dependency}")
             if _task_wave(tasks[dependency], dependency) > wave:
                 raise HandoffError(f"{task_id} depends on later-wave {dependency}")
 
-    task_ids = list(plan_rows)
     for index, left in enumerate(task_ids):
         for right in task_ids[index + 1 :]:
-            if plan_rows[left]["wave"] != plan_rows[right]["wave"]:
+            if task_waves[left] != task_waves[right]:
                 continue
-            overlap = sorted(set(plan_rows[left]["files"]) & set(plan_rows[right]["files"]))
+            overlap = sorted(set(task_files[left]) & set(task_files[right]))
             if overlap:
                 raise HandoffError(
                     f"same-wave file overlap between {left} and {right}: {', '.join(overlap)}"
@@ -1092,8 +1051,8 @@ def validate_plan(
     criteria = _success_criteria(intent)
     rows = _coverage_rows(plan)
     tasks = _task_texts(root, project_dir)
-    plan_tasks, waves = _plan_tasks(plan)
-    _validate_task_graph(plan_tasks, tasks)
+    wave_depths, waves = _plan_waves(plan)
+    _validate_task_graph(wave_depths, tasks)
     assigned: Dict[str, Set[str]] = {task_id: set() for task_id in tasks}
     covered = set()
     for criterion, task_id, acceptance in rows:
@@ -1168,24 +1127,18 @@ def validate_wave(
     criteria = _success_criteria(intent)
     plan = _read(root, f"{project_dir}/plan/PLAN.md")
     rows = _coverage_rows(plan)
-    plan_tasks, _waves = _plan_tasks(plan)
+    wave_depths, _waves = _plan_waves(plan)
     tasks = _task_texts(root, project_dir)
-    if set(tasks) != set(plan_tasks):
-        raise HandoffError("PLAN/task mapping differs during wave review")
-    for task_id, task_text in tasks.items():
-        if _task_wave(task_text, task_id) != plan_tasks[task_id]["wave"]:
-            raise HandoffError(f"{task_id} wave differs between PLAN.md and task file")
-        title = _normalize_ws(_task_scalar(task_text, task_id, "title"))
-        if title != plan_tasks[task_id]["title"]:
-            raise HandoffError(f"{task_id} title differs between PLAN.md and task file")
     expected_tasks = [
         task_id
-        for task_id, task in plan_tasks.items()
-        if task["wave"] == wave
+        for task_id, task_text in tasks.items()
+        if _task_wave(task_text, task_id) == wave
     ]
     if not expected_tasks:
         raise HandoffError(f"PLAN.md has no Wave {wave} tasks")
-    expected_depth = plan_tasks[expected_tasks[0]]["review_depth"]
+    if wave not in wave_depths:
+        raise HandoffError(f"PLAN.md has no Wave {wave}")
+    expected_depth = wave_depths[wave]
     if lens is None and expected_depth == "deep":
         raise HandoffError(f"{name} must name its contract or adversarial lens")
     if lens is not None and expected_depth != "deep":
@@ -1224,8 +1177,9 @@ def validate_wave(
     task_verdicts = []
     for heading_index, heading in task_headings:
         task_id = heading.group("task")
-        if _normalize_ws(heading.group("title")) != plan_tasks[task_id]["title"]:
-            raise HandoffError(f"{name} title for {task_id} differs from PLAN.md")
+        expected_title = _normalize_ws(_task_scalar(tasks[task_id], task_id, "title"))
+        if _normalize_ws(heading.group("title")) != expected_title:
+            raise HandoffError(f"{name} title for {task_id} differs from task file")
         end = next(
             (
                 index

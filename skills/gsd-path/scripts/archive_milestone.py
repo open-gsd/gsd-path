@@ -20,8 +20,11 @@ from pathlib import Path, PurePosixPath
 from typing import Iterator, NamedTuple, Optional, Sequence
 
 try:
-    from build_state import BuildStateError, verify_landed_tasks
-    from isolation import IsolationError, checkpoint as isolation_checkpoint
+    from isolation import (
+        IsolationError,
+        checkpoint as isolation_checkpoint,
+        verify_landed_task_files,
+    )
     from pipeline_git import (
         bound_branch_name,
         default_branch_name,
@@ -41,8 +44,11 @@ try:
         transition_state,
     )
 except ImportError:  # pragma: no cover - package import used by tests
-    from scripts.build_state import BuildStateError, verify_landed_tasks
-    from scripts.isolation import IsolationError, checkpoint as isolation_checkpoint
+    from scripts.isolation import (
+        IsolationError,
+        checkpoint as isolation_checkpoint,
+        verify_landed_task_files,
+    )
     from scripts.pipeline_git import (
         bound_branch_name,
         default_branch_name,
@@ -84,9 +90,6 @@ FINAL_GAP_HEADING_PATTERN = re.compile(r"^# Gap Review — ([1-9]\d*): (.+)$")
 WAVE_TASK_HEADING_PATTERN = re.compile(r"^## (T\d{3}) — (.+): (pass|fail)$")
 WAVE_SC_HEADING_PATTERN = re.compile(
     r"^### (SC[1-9]\d*) — (.+): (pass|fail)$"
-)
-PLAN_TASK_ROW_PATTERN = re.compile(
-    r"^\|\s*(T\d{3})\s*\|\s*([^|]+?)\s*\|\s*[^|]+?\s*\|\s*[^|]+?\s*\|$"
 )
 PLAN_COVERAGE_ROW_PATTERN = re.compile(
     r"^\|\s*(SC[1-9]\d*)\s*\|\s*(T\d{3})\s*\|\s*([^|]+?)\s*\|$"
@@ -580,12 +583,13 @@ def completed_task_files(
     """Return task artifacts only when each records landed completion evidence."""
     candidates = canonical_task_files(tasks)
     try:
-        verify_landed_tasks(
-            str(project),
-            tasks.parent.relative_to(project).as_posix(),
+        verify_landed_task_files(
+            project,
+            candidates,
+            ".project/tasks",
             reviewed_head,
         )
-    except (BuildStateError, ValueError) as error:
+    except (IsolationError, ValueError) as error:
         raise ArchiveError(f"task landing proof failed: {error}") from error
     return candidates
 
@@ -1372,6 +1376,38 @@ def meaningful_review_evidence(lines: Sequence[str], marker: str) -> bool:
     )
 
 
+def archived_wave_tasks(
+    archive: Path, wave_numbers: Sequence[int]
+) -> dict[int, Sequence[tuple[str, str]]]:
+    tasks: dict[int, list[tuple[str, str]]] = {
+        wave: [] for wave in wave_numbers
+    }
+    seen = set()
+    for path in canonical_task_files(archive / "tasks"):
+        content = path.read_text(encoding="utf-8")
+        task_id = frontmatter_value(content, "id")
+        title = frontmatter_value(content, "title")
+        wave_text = frontmatter_value(content, "wave")
+        if task_id is None or title is None or wave_text is None:
+            raise ArchiveError(f"{path.name} is missing id, title, or wave")
+        if task_id in seen or not path.name.startswith(f"{task_id}-"):
+            raise ArchiveError(f"{path.name} has an invalid or repeated task id")
+        seen.add(task_id)
+        try:
+            wave = int(wave_text)
+        except ValueError as error:
+            raise ArchiveError(f"{path.name} has an invalid wave") from error
+        if wave not in tasks:
+            raise ArchiveError(f"{path.name} names unknown Wave {wave}")
+        if contains_placeholder(title):
+            raise ArchiveError(f"{path.name} has an incomplete title")
+        tasks[wave].append((task_id, title))
+    for wave, members in tasks.items():
+        if not members:
+            raise ArchiveError(f"plan Wave {wave} has no task files")
+    return tasks
+
+
 def plan_wave_criteria(
     archive: Path,
     plan_text: str,
@@ -1462,7 +1498,7 @@ def validate_wave_review(
     ]
     if actual_tasks != normalized_expected:
         raise ArchiveError(
-            f"{path.name} tasks and titles do not match its PLAN wave in order"
+            f"{path.name} tasks and titles do not match its wave task files in order"
         )
 
     verdicts = []
@@ -1563,7 +1599,6 @@ def review_cycle_counts(archive: Path) -> Sequence[int]:
     if not wave_numbers or wave_numbers != list(range(1, len(wave_numbers) + 1)):
         raise ArchiveError("plan wave numbers must be ordered and contiguous")
     wave_depths = {}
-    wave_tasks = {}
     for index, match in enumerate(wave_matches):
         section_end = (
             wave_matches[index + 1].start()
@@ -1583,17 +1618,7 @@ def review_cycle_counts(archive: Path) -> Sequence[int]:
         if depth not in {"full", "deep", "verify-only"}:
             raise ArchiveError(f"plan wave {wave} has an invalid review depth")
         wave_depths[wave] = depth
-        rows = []
-        for line in section.splitlines():
-            if not re.match(r"^\|\s*T\d", line.strip()):
-                continue
-            row = PLAN_TASK_ROW_PATTERN.fullmatch(line.strip())
-            if row is None:
-                raise ArchiveError(f"plan wave {wave} has a malformed task row")
-            rows.append((row.group(1), row.group(2).strip()))
-        if not rows:
-            raise ArchiveError(f"plan wave {wave} has no task rows")
-        wave_tasks[wave] = rows
+    wave_tasks = archived_wave_tasks(archive, wave_numbers)
     wave_criteria = plan_wave_criteria(archive, plan_text, wave_tasks)
 
     artifacts = {}

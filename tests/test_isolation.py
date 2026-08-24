@@ -29,8 +29,6 @@ BUNDLED_ISOLATION_SCRIPTS = tuple(
         "skills/gsd-path-ship/scripts/isolation.py",
     )
 )
-TASK_BASE = "task T001\n\n## Log\n- created\n"
-TASK_WITH_LOG = TASK_BASE + "- verified\n"
 
 
 def git(root: Path, *arguments: str) -> str:
@@ -776,7 +774,11 @@ class IsolationTests(unittest.TestCase):
             self.write(source, "src/app.py", "print('first')\n")
             git(source, "add", "src/app.py")
             git(source, "commit", "-q", "-m", "partial work")
-            self.write(source, ".project/tasks/T001.md", TASK_WITH_LOG)
+            self.write(
+                source,
+                ".project/tasks/T001.md",
+                isolation._landed_task_text(TASK_FILE + "log\n", base),
+            )
             paths = [".project/tasks/T001.md", "src/app.py"]
             git(source, "add", ".project/tasks/T001.md")
             git(
@@ -786,10 +788,10 @@ class IsolationTests(unittest.TestCase):
                 "-m",
                 "T001: add greeting",
                 "-m",
-                isolation.task_commit_body(paths[0], paths),
+                isolation.task_commit_body(paths[0], paths, base),
             )
 
-            with self.assertRaisesRegex(isolation.IsolationError, "exactly one"):
+            with self.assertRaisesRegex(isolation.IsolationError, "parent must equal"):
                 isolation.land(
                     repo,
                     source,
@@ -812,9 +814,9 @@ class IsolationTests(unittest.TestCase):
             self.write(source, "src/app.py", "print('committed')\n")
             git(source, "add", "src/app.py")
             git(source, "commit", "-q", "-m", "partial work")
-            self.write(source, ".project/tasks/T001.md", TASK_WITH_LOG)
+            self.write(source, ".project/tasks/T001.md", TASK_FILE + "log\n")
 
-            with self.assertRaisesRegex(isolation.IsolationError, "only pending"):
+            with self.assertRaisesRegex(isolation.IsolationError, "dirty parallel source"):
                 isolation.land(
                     repo,
                     source,
@@ -936,49 +938,6 @@ class IsolationTests(unittest.TestCase):
             self.assertEqual(git(repo, "diff", "--cached", "--binary"), cached_before)
             self.assertEqual(git(repo, "diff", "--binary"), working_before)
 
-    def test_serial_land_requires_a_task_log_delta(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            repo = Path(temporary) / "repo"
-            repo.mkdir()
-            base = self.init_bound_repo(repo)
-            self.write(repo, "src/app.py", "print('done')\n")
-
-            with self.assertRaisesRegex(isolation.IsolationError, "task file must"):
-                isolation.land(
-                    repo,
-                    repo,
-                    base,
-                    "T001",
-                    "add greeting",
-                    ".project/tasks/T001.md",
-                    ["src/app.py"],
-                )
-
-            self.assertEqual(git(repo, "rev-parse", "HEAD"), base)
-
-    def test_parallel_land_requires_a_task_log_delta(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            repo = Path(temporary) / "repo"
-            repo.mkdir()
-            base = self.init_bound_repo(repo)
-            isolated = isolation.isolate_task(repo, base, "T001", 2)
-            source = Path(isolated["worktree"])
-            self.write(source, "src/app.py", "print('done')\n")
-
-            with self.assertRaisesRegex(isolation.IsolationError, "task file must"):
-                isolation.land(
-                    repo,
-                    source,
-                    base,
-                    "T001",
-                    "add greeting",
-                    ".project/tasks/T001.md",
-                    ["src/app.py"],
-                )
-
-            self.assertEqual(git(repo, "rev-parse", "HEAD"), base)
-            self.assertEqual(git(source, "rev-parse", "HEAD"), base)
-
     def test_parallel_land_rejects_a_precommitted_product_only_change(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary) / "repo"
@@ -996,11 +955,11 @@ class IsolationTests(unittest.TestCase):
                 "T001: add greeting",
                 "-m",
                 isolation.task_commit_body(
-                    ".project/tasks/T001.md", ["src/app.py"]
+                    ".project/tasks/T001.md", ["src/app.py"], base
                 ),
             )
 
-            with self.assertRaisesRegex(isolation.IsolationError, "task commit must"):
+            with self.assertRaisesRegex(isolation.IsolationError, "does not touch the task file"):
                 isolation.land(
                     repo,
                     source,
@@ -1022,7 +981,7 @@ class IsolationTests(unittest.TestCase):
             self.write(
                 repo,
                 ".project/tasks/T001.md",
-                TASK_BASE.replace("task T001", "changed task") + "- verified\n",
+                TASK_FILE.replace("task T001", "changed task") + "log\n",
             )
 
             with self.assertRaisesRegex(isolation.IsolationError, "append-only"):
@@ -1557,21 +1516,25 @@ class IsolationTests(unittest.TestCase):
 
             self.assertEqual(git(repo, "rev-parse", "feature"), base)
 
-    def test_retire_blocks_when_only_the_task_branch_remains(self) -> None:
+    def test_retire_removes_a_merged_task_branch_when_worktree_is_absent(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary) / "repo"
             repo.mkdir()
             base = self.init_bound_repo(repo)
             branch = "gsd-path-task/T001"
             git(repo, "branch", branch, base)
-            missing = Path(temporary) / "missing-task-worktree"
+            missing = isolation.sidecar_root(repo.resolve(), "task", "T001")
 
-            with self.assertRaisesRegex(
-                isolation.IsolationError, "branch still exists"
-            ):
-                isolation.retire(repo, missing, branch, True)
+            result = isolation.retire(repo, missing, branch, True)
 
-            self.assertEqual(git(repo, "rev-parse", branch), base)
+            self.assertEqual(result["reason"], "branch-only")
+            self.assertNotEqual(
+                subprocess.run(
+                    ("git", "-C", str(repo), "show-ref", "--verify", "--quiet", f"refs/heads/{branch}"),
+                    check=False,
+                ).returncode,
+                0,
+            )
 
     def test_retire_refuses_a_foreign_worktree(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -1623,7 +1586,7 @@ class IsolationTests(unittest.TestCase):
             repo.mkdir()
             base = self.init_bound_repo(repo)
             self.write(repo, "src/app.py", "print('done')\n")
-            self.write(repo, ".project/tasks/T001.md", TASK_WITH_LOG)
+            self.write(repo, ".project/tasks/T001.md", TASK_FILE + "log\n")
 
             completed = self.run_cli(
                 "land",

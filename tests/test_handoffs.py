@@ -687,17 +687,16 @@ The task implements the demo.
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             self.write_plan_handoff(root)
-            self.write_plan_coverage(
+            self.write_coverage_task(
                 root,
-                task_rows=(
-                    "| T001 | Demo task T001 | — | ../src/app.py |\n"
-                    "| T002 | Demo task T002 | — | tests/test_app.py |\n"
-                ),
+                "T001",
+                "- SC1",
+                files="../src/app.py",
             )
 
             with self.assertRaisesRegex(
                 check_handoffs.HandoffError,
-                "PLAN.md T001 Files has an unsafe or non-canonical path",
+                "task files has an unsafe or non-canonical path",
             ):
                 check_handoffs.validate_plan(root)
 

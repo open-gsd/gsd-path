@@ -247,7 +247,7 @@ archive: null
             "-m",
             task_commit_subject("T001", "Foundation"),
             "-m",
-            task_commit_body(paths[0], paths),
+            task_commit_body(paths[0], paths, base),
         )
         landed = run_git(self.repo, "rev-parse", "HEAD")
         self.write_task(
@@ -300,7 +300,7 @@ archive: null
             "-m",
             task_commit_subject("T001", "Foundation"),
             "-m",
-            task_commit_body(paths[0], paths),
+            task_commit_body(paths[0], paths, base),
         )
         unrelated = run_git(self.repo, "rev-parse", "HEAD")
         run_git(self.repo, "switch", "-q", BRANCH)
@@ -405,7 +405,7 @@ archive: null
             "-m",
             task_commit_subject("T002", "Consumer"),
             "-m",
-            task_commit_body(task_path, paths),
+            task_commit_body(task_path, paths, base),
         )
         landed = run_git(self.repo, "rev-parse", "HEAD")
         self.write_task(
@@ -559,6 +559,12 @@ archive: null
             current + f"- implementation {sequence}\n", encoding="utf-8"
         )
         paths = [task_file, "app.py"]
+        fields = dict(
+            line.split(": ", 1)
+            for line in current.split("---", 2)[1].strip().splitlines()
+            if ": " in line
+        )
+        base = fields["base"]
         run_git(self.repo, "add", "-A")
         run_git(
             self.repo,
@@ -567,12 +573,12 @@ archive: null
             "-m",
             task_commit_subject("T001", "Implement feature"),
             "-m",
-            task_commit_body(task_file, paths),
+            task_commit_body(task_file, paths, base),
         )
         return run_git(self.repo, "rev-parse", "HEAD")
 
     def test_reconcile_proves_one_canonical_landed_commit(self) -> None:
-        _, task_file = self.prepare_in_progress_task()
+        base, task_file = self.prepare_in_progress_task()
         landed = self.land_task(task_file, 1)
         before = run_git(self.repo, "status", "--porcelain=v1", "--untracked-files=all")
 
@@ -588,7 +594,7 @@ archive: null
         self.assertTrue(payload["history"]["candidates"][0]["valid"])
 
     def test_reconcile_rejects_rewritten_task_contract_before_log(self) -> None:
-        _, task_file = self.prepare_in_progress_task()
+        base, task_file = self.prepare_in_progress_task()
         path = self.repo / task_file
         path.write_text(
             path.read_text(encoding="utf-8").replace(
@@ -608,7 +614,7 @@ archive: null
             "-m",
             task_commit_subject("T001", "Implement feature"),
             "-m",
-            task_commit_body(task_file, paths),
+            task_commit_body(task_file, paths, base),
         )
 
         result, payload = self.cli("reconcile", "--task-id", "T001")
@@ -618,7 +624,7 @@ archive: null
         self.assertIn("append-only Log delta", payload["reasons"][0])
 
     def test_reconcile_rejects_deleted_pre_log_content(self) -> None:
-        _, task_file = self.prepare_in_progress_task()
+        base, task_file = self.prepare_in_progress_task()
         path = self.repo / task_file
         content = path.read_text(encoding="utf-8")
         path.write_text(
@@ -636,7 +642,7 @@ archive: null
             "-m",
             task_commit_subject("T001", "Implement feature"),
             "-m",
-            task_commit_body(task_file, paths),
+            task_commit_body(task_file, paths, base),
         )
 
         _, payload = self.cli("reconcile", "--task-id", "T001")
@@ -713,7 +719,7 @@ archive: null
             "-m",
             task_commit_subject("T001", "Implement feature"),
             "-m",
-            task_commit_body(changed[0], changed),
+            task_commit_body(changed[0], changed, base),
         )
 
         primary_task = self.repo / changed[0]
@@ -730,7 +736,7 @@ archive: null
             "-m",
             task_commit_subject("T001", "Implement feature"),
             "-m",
-            task_commit_body(changed[0], changed),
+            task_commit_body(changed[0], changed, base),
         )
 
         result, payload = self.cli("reconcile", "--task-id", "T001")
@@ -776,7 +782,7 @@ archive: null
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(payload["classification"], "blocked")
-        self.assertIn("dispatch metadata differs", payload["reasons"][0])
+        self.assertIn("canonical task fields", payload["reasons"][0])
 
     def test_verify_landed_uses_canonical_paths_for_archived_tasks(self) -> None:
         _, task_file = self.prepare_in_progress_task()
