@@ -61,12 +61,18 @@ full-repo suite on a tiny edit outrank the phase brief.
   <absolute-state-template>` helper; do not classify from a directory listing
   or conversation. Follow its JSON `verdict` and `route`. Reserve `classify`
   for read-only inspection; do not use it as a state-initialization preflight.
-- `.project/STATE.md` tracks phase position. The orchestrator alone owns task
-  frontmatter base, isolated worktree/branch, status, and agent; the landing
-  commit is proven from git by `isolation.py recover`, never recorded. Require
-  `pipeline: gsd-path/v2`; never consume an ambiguous or differently owned
-  state file. Artifacts outrank summaries; reconcile STATE.md when it
-  disagrees with task frontmatter. During a program build, `.project/next/STATE.md` may hold
+- `.project/STATE.md` tracks phase position. Parse and validate it only with
+  the bundled `scripts/pipeline_state.py validate` command, route with its
+  `route` command, and make ordinary phase transitions only with its
+  expected-state `transition`. A journaled transaction helper may write only
+  the state fields its contract explicitly owns. Never reproduce these
+  deterministic operations in model reasoning. The
+  orchestrator alone owns task frontmatter base, isolated worktree/branch,
+  status, and agent; the landing commit is proven from git by `isolation.py
+  recover`, never recorded. Require `pipeline: gsd-path/v2`; never
+  consume an ambiguous or differently owned state file. Artifacts outrank
+  summaries; reconcile STATE.md when it disagrees with task frontmatter.
+  During a program build, `.project/next/STATE.md` may hold
   the lookahead planning track for the next milestone; it follows the same
   marker rule, owns no task frontmatter, and never binds a branch.
 - Spawned agents have isolated context. Follow the installed runtime dispatch
@@ -119,6 +125,13 @@ full-repo suite on a tiny edit outrank the phase brief.
   Integration at ship is the only path from the bound branch to the default
   branch — the bound branch never receives merges or back-merges, is never
   the GitHub default, and nothing else merges, pushes, or tags on its behalf.
+- After initialization writes STATE.md, and before entering the first pipeline
+  phase in an existing Git repository, the router calls
+  `scripts/pipeline_git.py bind-initial` with the selected M00N and exact
+  fetched `origin/main` SHA. The helper alone checks worktree identity and
+  cleanliness, exact base, and every local, remote, and other-worktree
+  collision before creating or adopting the branch. The router persists its
+  typed result in the new state. Build has no branch-creation authority.
 - After `validate-integrated` passes and before any next-milestone file
   changes, the router calls the bundled `scripts/pipeline_git.py bind-next`
   helper with the previous bound branch, exact ship SHA, and exact current
@@ -128,9 +141,12 @@ full-repo suite on a tiny edit outrank the phase brief.
   previous branch — deleted locally and on origin; the ship commit stays
   reachable from the integration merge and its annotated tag. The router
   persists the new branch in STATE; a wrong-SHA or colliding branch blocks.
-  This handoff and the approved new-repository bootstrap are the router's
-  only bound-branch creation authority, and the handoff's retirement push is
-  the router's only bound-branch deletion authority.
+  `bind-initial`, this handoff, and the approved new-repository bootstrap are
+  the only bound-branch creation authorities, and the handoff's retirement
+  push is the router's only bound-branch deletion authority. When a lookahead
+  track exists, the router then calls `scripts/pipeline_state.py promote-next`;
+  only that journaled helper moves the track, updates state and roadmap,
+  classifies plan drift, and writes the router promotion commit.
 - Build adopts the branch recorded in STATE.branch, never whatever is current
   when a recorded branch exists. A new-GitHub REPOSITORY.md proves the
   default checkout and first bound branch; later milestones may rebind
@@ -139,7 +155,8 @@ full-repo suite on a tiny edit outrank the phase brief.
   for the current STATE.branch milestone must be an ancestor of origin/main;
   if it is not, that milestone's integration is incomplete and control routes
   to ship, not build. A current-milestone ship on main without its matching
-  `integrate:` commit is externally polluted and blocks.
+  `integrate:` commit is externally polluted and blocks. A null branch returns
+  to the router; build never creates, selects, switches, or rebinds it.
 - The ship phase makes exactly one commit on the bound branch — the
   `.project/`-only ship commit recording
   STATE.md, the final-review artifacts, and the archive — and additionally
@@ -149,9 +166,13 @@ full-repo suite on a tiny edit outrank the phase brief.
   The roadmap and
   plan phases each make exactly one approval checkpoint commit
   (`.project/`-only, deferred to the build transition commit during a
-  new-repository transaction or before Git exists). The router makes one
-  bookkeeping commit when promoting a lookahead track at a milestone
-  boundary. Every other commit belongs to the orchestrator.
+  new-repository transaction or before Git exists). Their bundled
+  `pipeline_state.py approve` command journals before changing STATE or
+  ROADMAP.md and owns that canonical checkpoint; a routed
+  `resume-checkpoint` must finish before phase work. The router makes one
+  bookkeeping commit through `pipeline_state.py promote-next` when promoting a
+  lookahead track at a milestone boundary. Every other commit belongs to the
+  orchestrator.
 - Reviewers verify and block; they never fix. A block names the criterion,
   observed result, evidence location, and concrete fix direction. An optional
   review panel is advisory: the inherit reviewer remains the only wave

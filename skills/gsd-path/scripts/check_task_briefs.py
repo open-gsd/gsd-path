@@ -131,6 +131,8 @@ def _frontmatter(text: str) -> Tuple[Optional[Dict[str, object]], Optional[str]]
         match = FIELD_PATTERN.match(line)
         if match:
             key = match.group("key")
+            if key in fields:
+                return None, f"frontmatter repeats field: {key}"
             value = _strip_yaml_comment(match.group("value"))
             inline = INLINE_LIST_PATTERN.fullmatch(value)
             if inline is not None:
@@ -157,6 +159,8 @@ def _frontmatter(text: str) -> Tuple[Optional[Dict[str, object]], Optional[str]]
             fields[key] = items
             index = cursor
             continue
+        if line.strip() and not line.lstrip().startswith("#"):
+            return None, f"malformed frontmatter line: {line}"
         index += 1
     return None, "frontmatter is not closed"
 

@@ -61,28 +61,68 @@ before dispatch or ship. Then:
 2. Derive a stable numbered list of cross-wave integration risks from
    interfaces and flows that span waves. List only genuine risks that could
    plausibly fail; never pad the list. Include PLAN.md's project Verify as
-   numbered risk 1. The orchestrator runs that command once in step 4 and
+   numbered risk 1. The orchestrator runs that command once in step 3 and
    writes its gap artifact; do not dispatch a gap reviewer for it. Resolve the local
    [final-review template](templates/final-review.md),
    [gap-review template](templates/gap-review.md), [patch-findings
    template](templates/patch-findings.md), and `scripts/check_handoffs.py`.
-3. Dispatch through the shared capacity-aware contract at the exact reviewed
-   HEAD:
-   - one integration reviewer with logical task name `review_final`, writing only
-     `.project/review/FINAL.md`;
-   - one reviewer per numbered risk other than project Verify, with
-     logical task name `review_gap_<number>`, each
-     writing only `.project/review/final-gap-N.md`.
-   Before dispatch, the orchestrator creates a distinct verify sidecar at
-   exact reviewed HEAD for each reviewer with
+3. Reuse a valid `final-gap-1.md` admitted by step 1 without rerunning its
+   command. Otherwise, before reviewer dispatch, create a fresh project-verify
+   sidecar at the exact reviewed HEAD with
    `python3 <absolute isolation.py> isolate-verify --repo <absolute primary>
-   --base <HEAD> --name review-final` or `--name review-gap-<number>` and
-   supplies its path.
+   --base <HEAD> --name project-verify`. Run PLAN.md's project Verify exactly
+   once in the returned worktree. Restore every command-created change, then
+   write only `.project/review/final-gap-1.md` there from the gap-review template,
+   using risk `project Verify` and the exact command output. Before dispatch,
+   if the destination already contains an invalid or superseded output admitted
+   by step 1, record that file's exact SHA-256. Collect a new destination with:
+
+   ```bash
+   python3 <absolute isolation.py> collect-artifact \
+     --repo <absolute primary> \
+     --source <returned worktree> \
+     --base <HEAD> \
+     --branch <returned branch> \
+     --source-path .project/review/final-gap-1.md \
+     --destination-path .project/review/final-gap-1.md
+   ```
+
+   When replacing the recorded existing destination, append
+   `--expected-destination <recorded SHA-256>` to that command. Omit the option
+   only when the destination did not exist. A replacement without this
+   compare-and-swap proof blocks.
+
+   Require the returned base, branch, source, and destination to match, then
+   retire that clean sidecar with `python3 <absolute isolation.py> retire
+   --repo <absolute primary> --worktree <returned worktree> --branch <returned
+   branch>`. Keep the exact command output for the final-review brief. A
+   non-zero project Verify determines `ship/blocked`, but still collect the
+   complete final evidence set before the final handoff gate.
+4. For each numbered risk other than project Verify without a reusable output,
+   dispatch one reviewer through the shared capacity-aware contract at the
+   exact reviewed HEAD. Use logical task name `review_gap_<number>` and assign only
+   `.project/review/final-gap-N.md`. Before each dispatch, create its distinct
+   sidecar with `python3 <absolute isolation.py> isolate-verify --repo
+   <absolute primary> --base <HEAD> --name review-gap-<number>` and supply the
+   returned path.
    Review commands and staged outputs run only there, never in the primary
-   worktree; the orchestrator validates and atomically copies each assigned
-   output to its canonical primary path before retiring only those sidecars
-   after collection.
-4. Validate every artifact. Every success criterion is `met`, `not-met`, or
+   worktree. For every returned artifact, substitute its returned worktree,
+   branch, and assigned `.project/review/...` path into the exact
+   `collect-artifact` command above. Require its returned fields to match, then
+   run the exact non-force `retire` command above. The helper must observe only
+   the assigned artifact in each sidecar. Model-written copies into the
+   primary do not count as collection.
+   After every gap artifact is present, reuse a valid FINAL.md admitted by
+   step 1 or create a fresh sidecar with `isolate-verify --name review-final`
+   and dispatch the integration reviewer under logical task name
+   `review_final`, assigning only
+   `.project/review/FINAL.md`. Its complete brief includes the exact recorded
+   project Verify output and every collected gap verdict so Overall verdict is
+   consistent with them. Collect FINAL.md and retire its sidecar through the
+   same helper flow.
+5. Only after `final-gap-1.md` and every dispatched reviewer artifact have
+   been collected and all review sidecars retired, validate every artifact.
+   Every success criterion is `met`, `not-met`, or
    `unverifiable` with checked evidence; every gap is `pass` or `blocked` with
    checked evidence. Every output must record the same exact full reviewed
    HEAD, and each numbered gap heading and Risk value must match its dispatch
@@ -91,13 +131,14 @@ before dispatch or ship. Then:
    before any archive question: FINAL.md needs one `### SCn — ...` block per
    INTENT success criterion, and `Overall verdict: pass` requires every
    verdict `met` with a non-`none` Check or Reference. A non-zero exit is
-   `ship/blocked`. Run PLAN.md's project Verify once in a fresh verify
-   sidecar from `isolate-verify --name project-verify` at that same exact
-   HEAD. Write `.project/review/final-gap-1.md` from that output (risk:
-   project Verify). Do not run it again. A non-zero exit is `ship/blocked`.
-5. Redispatch one complete corrected brief for a missing or invalid reviewer
+   `ship/blocked`; never rerun project Verify to repair the evidence.
+6. Redispatch one complete corrected brief for a missing or invalid reviewer
    artifact under the same logical task name, following the runtime dispatch
-   contract. If it remains invalid, set `ship/blocked` with
+   contract. Before dispatch, record the invalid destination's exact SHA-256.
+   Give the retry a fresh verify sidecar, collect its corrected artifact with
+   the same `collect-artifact` command plus
+   `--expected-destination <recorded SHA-256>`, retire the sidecar, and rerun
+   the final handoff gate. If it remains invalid, set `ship/blocked` with
    the exact contract failure and a `NEEDS-USER` dispatch-failure entry. Present
    **Outcome** with the invalid output, **Review** linking that output or
    STATE.md when it is missing, and **Next** naming the required correction;
@@ -114,7 +155,7 @@ before dispatch or ship. Then:
    explicit-only sibling skill yourself. Ship never writes tasks or PLAN.md.
    The patch build commits this prior finding set with the approved patch
    artifacts before execution.
-6. Only when every criterion is `met`, every gap passes, project Verify passes,
+7. Only when every criterion is `met`, every gap passes, project Verify passes,
    and no required discussion follow-up is pending, keep STATE.md at `phase:
    ship`, `status: active`, append `final gate passed; shipping approval
    pending`. Present **Outcome** with the final verdict, **Review** linking the
@@ -126,25 +167,34 @@ before dispatch or ship. Then:
 
 ## Archive transaction
 
-Use the local [archive-manifest template](templates/archive-manifest.md) and
-resolve bundled `scripts/archive_milestone.py` to an absolute path. Invoke it
-with `python3`; the file need not be executable. The persisted `STATE.archive`
-field is the transaction identity.
+Resolve bundled `scripts/archive_milestone.py` and `scripts/pipeline_state.py`
+to absolute paths and invoke them with `python3`; the files need not be
+executable. The archive helper is the sole MANIFEST.md and integration writer.
+The persisted `STATE.archive` field is the transaction identity.
 
 1. Normally require STATE `ship/active`, the bound build branch, and no
    non-`.project` change. The sole crash-recovery exception is
    `shipped/done` with a concrete target that is absent from HEAD; this is an
    uncommitted transaction and resumes without rewinding STATE. On every
    initial run or retry, run:
-   `python3 <absolute-script> prepare --repo <root> --slug <STATE.milestone>`.
-   The helper chooses one plus the maximum existing numeric prefix, writes the
-   exact `.project/archive/<NNN>-<slug>` path atomically to STATE.md before
-   moving anything, and then moves the active milestone. On every retry run
+   `python3 <absolute archive_milestone.py> prepare --repo <root> --slug
+   <STATE.milestone>`.
+   The helper strict-loads STATE.md, requires its canonical `gsd-path/M00N`
+   branch with `N >= 1` to equal the next collision-free archive sequence,
+   rejects any `000-*` archive entry, and writes the exact
+   `.project/archive/<NNN>-<slug>` path atomically to STATE.md before moving
+   anything, and then moves the active milestone. On every retry run
    the same command; it reuses STATE.archive and never recomputes N.
 2. The helper requires exactly one of each active or archived top-level
    artifact, permits active and archived `research/` together only for the
    byte-identical pending DOCS-AUDIT carry-forward, and recreates its parent
    before an atomic copy. Any other collision or missing artifact blocks.
+   For a non-off PLAN review-panel policy it also requires exactly one plan
+   resolution artifact: `review/PLAN-PANEL.md` for `ready`, or the exact
+   helper JSON in `review/PLAN-PANEL.skipped.json` for `skipped`. Each full or
+   deep wave cycle likewise requires exactly one merged `.panel.md` artifact
+   or exact `.panel.skipped.json` receipt. Configuration alone never proves
+   that a panel was ready or skipped.
 3. Append milestone lessons to `.project/LESSONS.md` (create it when
    missing): one line per repeat-offender criterion across this milestone's
    wave reviews and one per escalation in the STATE.md log, formatted
@@ -154,82 +204,84 @@ field is the transaction identity.
    persistence applies to program artifacts when present: CHARTER.md,
    ROADMAP.md, and a top-level program SYNTHESIS.md ship in the commit but
    never archive.
-   Then render MANIFEST.md from the template using actual archive contents, final
-   verdicts, wave/task/cycle counts, and carry-forward count. Write it through
-   the deterministic same-directory path `.MANIFEST.md.gsd-path-tmp`, then
-   atomically rename it to MANIFEST.md. `prepare` removes that exact temporary
-   after a crash. A pre-existing uncommitted manifest may be replaced only
-   while resuming this named transaction. If the target exists in HEAD,
-   `prepare` must refuse all mutation and the only valid action is `validate`.
-4. Run `python3 <absolute-script> preflight --repo <root>` while STATE is
-   `ship/active`, or while it is `shipped/done` in the uncommitted crash
-   window above. It validates Git root/branch, current target absence from
+   Then run `python3 <absolute archive_milestone.py> render-manifest --repo
+   <root>`. The helper derives final verdicts, wave/task/cycle counts,
+   carry-forward count, and the exact archive inventory, then atomically
+   replaces MANIFEST.md through its deterministic same-directory temporary.
+   Never render or edit the manifest directly. `prepare` removes that exact
+   temporary after a crash. If the target exists in HEAD, `prepare` and
+   `render-manifest` refuse mutation and the only valid action is `validate`.
+4. Run `python3 <absolute archive_milestone.py> preflight --repo <root>` while
+   STATE is `ship/active`, or while it is `shipped/done` in the uncommitted
+   crash window above. It validates Git root/branch, current target absence from
    HEAD, immutable older archives, canonical real files, exact active-root
    allowlist and carry-forward, reviewed revision, manifest metadata and
-   criteria against FINAL.md, actual cycle counts, completed Notes, and the
-   exact file inventory. Immediately before this command, recheck for an active
+   criteria against FINAL.md, exact ordered PLAN wave task/title rows with
+   non-placeholder evidence for every task and owned success criterion, actual
+   cycle counts, completed Notes, and the exact file inventory. Immediately
+   before this command, recheck for an active
    `discuss/` copy created after prepare; if present, rerun `prepare`, regenerate
-   MANIFEST.md from the reconciled archive, and only then preflight. Do not
-   commit when it fails.
-5. Set STATE.md to `phase: shipped`, `status: done` and append the archive path
-   only after preflight passes. When `.project/ROADMAP.md` exists, first mark
-   the milestone's entry `Status: shipped` with its `Archive:` pointer — the
-   roadmap stays active at `.project/` top level and rides inside this commit —
-   and when that was the last `pending` entry, note program completion in the
-   STATE log. Stage only
+   MANIFEST.md by rerunning `render-manifest`, and only then preflight. Do not
+   commit when it fails. The archive helper independently binds every FINAL.md
+   `SCn` heading id and normalized text to the archived INTENT.md; a renamed or
+   easier criterion blocks even if the earlier handoff gate was bypassed.
+5. Only after preflight passes, record shipment through the journaled helper;
+   for a program it atomically replaces both ROADMAP.md and STATE.md, setting
+   the current entry to `Status: shipped` with the exact `Archive:` pointer:
+
+   ```bash
+   python3 <absolute pipeline_state.py> record-shipment \
+     --repo <root> \
+     --archive <STATE.archive> \
+     --event "archive preflight passed; shipment recorded"
+   ```
+
+   Require the returned state to be `shipped/done` with the unchanged branch
+   and archive. When this was the last pending roadmap entry, use the event
+   `archive preflight passed; shipment recorded; program complete` instead.
+   When CHARTER.md and ROADMAP.md are both absent, this same command preserves
+   the single-milestone flow and updates STATE.md only.
+   Retry this exact command after interruption; it resumes its journal and is
+   idempotent after completion. Stage only
    `.project/` paths, inspect the staged path list against the transaction and
    create the ship phase's one commit with exact subject
    `ship: M00N — <milestone-slug>` and body
    `Archive: .project/archive/<NNN>-<slug>` plus
    `Reviewed-HEAD: <reviewed SHA>`. M00N and NNN come from STATE.archive.
-   When recovery already has `shipped/done`, do
-   not append or rewrite the transition again. There is no untracked-project
-   exception and no product or older-archive path may enter this commit.
-6. Immediately run `python3 <absolute-script> validate --repo <root>`. It requires
-   the committed shipped state, exact archive and manifest, valid carry-forward,
-   no active milestone artifacts, a clean worktree, the newest commit with a
-   recognized ship subject for this archive in HEAD history, only `.project/`
-   paths in that commit, and no `.project` change after it. The ship commit
-   need not be HEAD: later product commits do not disturb a validated
-   shipment. A passing validate completes the
+   There is no untracked-project exception and no product or older-archive
+   path may enter this commit.
+6. Immediately run `python3 <absolute archive_milestone.py> validate --repo
+   <root>`. It requires the committed shipped state, exact archive and
+   manifest, valid carry-forward, no active milestone artifacts, a clean
+   worktree, exactly one current-milestone commit with the canonical ship
+   subject and body in first-parent history, only `.project/` paths in that
+   commit, and bound-worktree HEAD exactly equal to that ship commit. Any
+   later product or `.project/` commit blocks validation. A passing validate completes the
    archive transaction; record its returned archive path and full commit
    SHA, and link the archived MANIFEST.md as the final review surface. The
    milestone is not shipped until integration below passes.
 7. Integrate only after the postcommit `validate` passes, with the recorded
-   ship commit and the exact reviewed HEAD unchanged; otherwise block. Run
-   `python3 <absolute-script> refresh-origin --repo <root>` (fetch, refresh
-   `origin/HEAD`, and mirror published `milestone/*` tags), then resolve the
-   remote-default name and SHA. Before
-   any integration worktree, merge, tag, or push, require that the name is
-   exactly `main`; otherwise block. Also require that name is not STATE.branch
-   — the bound `gsd-path/M00N` branch is never the GitHub default.
-   Create a temporary named worktree `gsd-path-integrate/M00N` at the
-   remote-default SHA (never detach HEAD), run
-   `git merge --no-ff` of the ship commit with subject
-   `integrate: M00N — merge gsd-path/M00N into main` and body
-   `Archive:`, `Ship:`, `Default: main`, `Branch:`.
-   When the default has no commits the ship commit lacks
-   (`git merge-base --is-ancestor <remote-default-sha> <ship-commit>`), the
-   merge is trivial. When the default has diverged, still attempt the merge
-   and let Git decide: a conflict-free merge proceeds, and any conflict
-   aborts — run `git merge --abort`, remove the temporary worktree, block,
-   and escalate to the user. Never auto-resolve a diverged default's
-   conflicts. Then push
-   in order: the merge commit to `main`, the bound
-   branch, and the annotated tag `milestone/<NNN>-<slug>` pointing at the
-   merge commit. Remove the temporary worktree. The merge subject must
-   not start with `ship:` —
-   `git_guard.py` restricts `ship:`-subject commits to `.project/`-only
-   paths. NNN always comes from the persisted STATE.archive, never
-   recomputed. The bound branch never receives merges or back-merges;
-   integration is the only path from it to the default branch. The default
-   checkout is never entered, and its local default branch ref may lag
-   origin harmlessly. Then run
-   `python3 <absolute-script> validate-integrated --repo <root> --slug <slug>`
-   as the post-integration gate; it is read-only and uses the existing
-   `origin/*` refs without fetching, including `origin/<bound-branch>` at
-   the ship commit and `refs/remotes/origin/tags/milestone/<NNN>-<slug>`.
-   Report shipped only when it passes.
+   ship commit and exact reviewed HEAD unchanged. Run `python3 <absolute
+   archive_milestone.py> integrate --repo <root> --slug <STATE.milestone>`.
+   This helper owns the resumable transaction: it validates the ship commit,
+   fetches origin, requires remote default `main`, creates the canonical named
+   integration worktree, performs the normal hook-verified `--no-ff` merge,
+   refuses to resolve conflicts, creates the annotated milestone tag, pushes
+   main then the bound branch then the tag, and removes its worktree and branch.
+   Immediately before publishing the bound branch it reads the live origin ref:
+   absence is created with an absent-ref lease, the exact ship commit is an
+   idempotent success, and every other value blocks without overwriting it.
+   If origin/main advances after the local merge but rejects the push, a retry
+   may discard and rebuild only that canonical local merge and tag, and only
+   when the merge is unpublished and both the live remote bound branch and
+   milestone tag are absent. Any published or colliding state blocks.
+   It finishes by running the same checks exposed by `validate-integrated` and
+   returns that result. A non-zero result blocks; rerun the exact `integrate`
+   command to resume a safe partial transaction instead of repairing refs or
+   Git state manually. For a later read-only recheck, run `python3 <absolute
+   archive_milestone.py> validate-integrated --repo <root> --slug
+   <STATE.milestone>`; it uses existing `origin/*` refs without fetching.
+   Report shipped only when the integration result passes.
    Leave the primary worktree and STATE.branch on the shipped
    `gsd-path/M00N` at the ship commit. The router owns the later handoff to a
    new milestone branch after this gate.
@@ -241,23 +293,16 @@ field is the transaction identity.
    target exists in HEAD, validate it rather than running `prepare` or creating
    another commit. Any inconsistent committed transaction blocks; never
    mutate a committed archive.
-   The fourth crash window is integration: it is pending from the ship
-   commit until a commit with a recognized integration subject exists whose
-   second parent is the ship commit and which is an ancestor of `origin/main`.
-   The transaction id is the ship commit itself,
-   discoverable via `find_ship_commit`; no new STATE field. Resumable
-   partial states are merged-not-tagged, tagged-not-pushed, and
-   pushed-branch-not-tag. Resume is idempotent: merge only when the ship
-   commit is not yet an ancestor of `origin/main`, tag only when
-   `milestone/<NNN>-<slug>` is absent, and retry pushes freely; NNN is
-   always reused from STATE.archive, never recomputed. While integration is
-   pending, never report shipped or start the next milestone; route back to
+   The fourth crash window is integration. Its transaction id is the ship
+   commit, and partial merge, tag, push, and cleanup states are resumed only by
+   rerunning `integrate`; it reuses NNN from STATE.archive. While integration
+   is pending, never report shipped or start the next milestone; route back to
    ship.
 
-Legacy compatibility is validation-only. Existing shipped history may use the
-exact subjects `ship: <NNN>-<slug>` and `integrate: <NNN>-<slug>` without the
-canonical field bodies. Every new ship and integration commit uses the
-canonical subject and body above; never generate a legacy subject.
+Legacy ship and integration subjects may be ignored only while scanning older
+milestones. They never satisfy the current milestone transaction. Current
+validation requires exactly one canonical ship commit and one canonical
+integration commit, each with its canonical body.
 
 ## Rules
 

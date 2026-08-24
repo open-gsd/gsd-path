@@ -180,6 +180,50 @@ class BootstrapRepositoryTests(unittest.TestCase):
         )
         return workspace, checkout, worktree, remotes, environment, command
 
+    def test_create_rejects_unjournaled_remote_and_path_collisions(self) -> None:
+        cases = (
+            ("remote", "GitHub repository already exists"),
+            ("checkout", "default checkout path already exists"),
+            ("worktree", "linked worktree path already exists"),
+        )
+        for collision, expected in cases:
+            with self.subTest(collision=collision), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                workspace = root / "workspace"
+                workspace.mkdir()
+                request = bootstrap_repository.BootstrapRequest(
+                    workspace=str(workspace),
+                    owner="acme",
+                    repo="demo",
+                    visibility="private",
+                    default_checkout=str(workspace / "demo"),
+                    worktree=str(workspace / "demo-gsd-path"),
+                    branch="gsd-path/M001",
+                    description=None,
+                )
+                if collision == "checkout":
+                    request.checkout_path.mkdir()
+                elif collision == "worktree":
+                    request.worktree_path.mkdir()
+
+                with mock.patch.object(
+                    bootstrap_repository, "gh_authentication"
+                ), mock.patch.object(
+                    bootstrap_repository,
+                    "remote_exists",
+                    return_value=collision == "remote",
+                ):
+                    with self.assertRaisesRegex(
+                        bootstrap_repository.BootstrapError, expected
+                    ):
+                        bootstrap_repository.create(
+                            request,
+                            root / "unused-state.md",
+                            root / "unused-repository.md",
+                        )
+
+                self.assertFalse(request.journal_path.exists())
+
     def test_create_rejects_remote_default_other_than_main(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)

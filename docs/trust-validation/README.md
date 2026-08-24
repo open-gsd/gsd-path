@@ -1,10 +1,10 @@
 # Trust validation (2026-08-05)
 
-Wayfinder effort: validate whether GSD Path is trustworthy to run on Codex, Claude Code, and Cursor.
+Validation workstream: determine whether GSD Path is trustworthy to run on Codex, Claude Code, and Cursor.
 
 **Start here:** [TRUST-VALIDATION-SPEC.md](TRUST-VALIDATION-SPEC.md)  
 **Manual runs:** [TRUST-EVIDENCE.md](TRUST-EVIDENCE.md)  
-**Map:** [GitHub issue #3](https://github.com/open-gsd/gsd-path/issues/3)
+**Tracking issue:** [GitHub issue #3](https://github.com/open-gsd/gsd-path/issues/3)
 
 | File | Purpose |
 |------|---------|

@@ -311,6 +311,44 @@ class TaskBriefTests(unittest.TestCase):
             self.assertEqual(exit_code, 1)
             self.assertIn("missing frontmatter field: task_branch", stderr)
 
+    def test_duplicate_frontmatter_field_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.init_repo(root)
+            self.write_happy_tasks(root)
+            task_path = root / ".project/tasks/T001-demo.md"
+            task_path.write_text(
+                task_path.read_text(encoding="utf-8").replace(
+                    "status: pending\n", "status: pending\nstatus: done\n"
+                ),
+                encoding="utf-8",
+            )
+            base = self.commit(root)
+
+            exit_code, _stdout, stderr = self.lint(root, base)
+
+            self.assertEqual(exit_code, 1)
+            self.assertIn("frontmatter repeats field: status", stderr)
+
+    def test_malformed_frontmatter_line_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.init_repo(root)
+            self.write_happy_tasks(root)
+            task_path = root / ".project/tasks/T001-demo.md"
+            task_path.write_text(
+                task_path.read_text(encoding="utf-8").replace(
+                    "status: pending\n", "status pending\n"
+                ),
+                encoding="utf-8",
+            )
+            base = self.commit(root)
+
+            exit_code, _stdout, stderr = self.lint(root, base)
+
+            self.assertEqual(exit_code, 1)
+            self.assertIn("malformed frontmatter line", stderr)
+
     def test_empty_tasks_dir_fails(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

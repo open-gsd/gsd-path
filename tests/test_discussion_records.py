@@ -6,6 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from typing import Optional
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -230,6 +231,52 @@ archive: null
             self.assertNotEqual(appended.returncode, 0)
             self.assertIn("YYYY-MM-DD", appended.stderr)
             self.assertFalse((repo / ".project" / ".discussion-append-transaction.json").exists())
+
+    def test_append_recovers_after_only_one_paired_file_was_written(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            prepared = self.command(repo, "prepare")
+            self.assertEqual(prepared.returncode, 0, prepared.stderr)
+            project = repo / ".project"
+            discussion = project / "discuss"
+            payload_path = self.turn_payload(repo, "turn.json")
+            payload = json.loads(payload_path.read_text(encoding="utf-8"))
+            real_atomic_write = discussion_records.atomic_write
+            writes = 0
+
+            def fail_answer_write(path: Path, content: str) -> None:
+                nonlocal writes
+                writes += 1
+                if writes == 3:
+                    raise OSError("injected answer write failure")
+                real_atomic_write(path, content)
+
+            with mock.patch.object(
+                discussion_records,
+                "atomic_write",
+                side_effect=fail_answer_write,
+            ):
+                with self.assertRaisesRegex(OSError, "injected answer write failure"):
+                    discussion_records.append_record(
+                        discussion,
+                        project,
+                        "plan",
+                        "active",
+                        payload,
+                    )
+
+            transaction = project / discussion_records.APPEND_TRANSACTION
+            self.assertTrue(transaction.is_file())
+            self.assertIn("### D001", (discussion / "DIALOGUE.md").read_text())
+            self.assertNotIn("## Answer A001", (discussion / "ANSWERS.md").read_text())
+
+            discussion_records.finish_append(project, discussion)
+
+            self.assertFalse(transaction.exists())
+            self.assertIn("### D001", (discussion / "DIALOGUE.md").read_text())
+            self.assertIn("## Answer A001", (discussion / "ANSWERS.md").read_text())
+            discussion_records.validate_or_empty(discussion)
 
     def test_append_reports_every_invalid_payload_field(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

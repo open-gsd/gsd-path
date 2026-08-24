@@ -75,46 +75,69 @@ GitHub repository and no owned `.project/STATE.md` is active for that request.
    contract; it reads REPOSITORY.md and records the binding under INTENT.md's
    Constraints.
 
-Never apply this transaction to an existing repository. Ordinary existing-repo
-runs keep the build contract's current branch-binding behavior.
+Never apply this transaction to an existing repository. The router binds an
+existing repository with `pipeline_git.py bind-initial`; build never creates or
+selects a milestone branch.
 
 ## State ownership and initialization
 
-Run the bundled `python3 <absolute-bundled-script> classify --repo
-<absolute-root>` helper (`scripts/detect_project.py`) before reading
-`.project/STATE.md` or asking anything. Do not classify brownfield,
-greenfield, owned, or orphaned `.project/` from a directory listing or
-conversation. Follow its JSON `verdict` / `route` exactly:
-
-- `owned` — only now read STATE.md. Require `pipeline: gsd-path/v2`. A
-  different non-null marker belongs to another pipeline and blocks. A state
-  file without the marker also blocks without mutation: its `branch`,
-  `archive`, task `base`, `worktree`, and `task_branch` semantics cannot be
-  inferred safely from unowned artifacts. Report the missing marker and ask
-  for an explicit recovery or a new milestone; never stamp the marker onto
-  unowned state.
-- `orphan` (`route: recover-orphan`) — block without mutation. List the
-  returned `orphan_paths` and ask for an explicit recovery, migration, or new
-  location; existing evidence and archives do not prove a safe v2 phase.
-- `brownfield` or `greenfield` — run the same helper's `initialize --repo
-  <absolute-root> --template <absolute-state-template>` command. It rechecks
-  the classification and writes STATE.md through an anchored no-follow create.
-  Require its verdict and route to match the classifier, plus `wrote_state:
-  true`; any mismatch or error blocks. Never create STATE.md yourself.
-  Report brownfield signals and route an `inspect/active` result to the bundled
-  [inspect contract](INSPECT.md). Report that no signal fired and route a
-  `define/active` result to the bundled [define contract](DEFINE.md).
+1. When `.project/STATE.md` exists, run `python3
+   <absolute-bundled-pipeline-state.py> validate --repo <absolute-root>`.
+   Treat its typed JSON as the state; do not parse frontmatter or repair an
+   invalid file through model reasoning. A validation failure blocks without
+   mutation. In particular, never stamp the marker onto unowned state.
+2. With no STATE.md, run the bundled
+   `python3 <absolute-bundled-script> initialize --repo <absolute-root>
+   --template <absolute-state-template>` helper
+   (`scripts/detect_project.py`) before asking anything. Do not classify
+   brownfield, greenfield, or orphaned `.project/` from a directory listing or
+   conversation. If the command exits nonzero, returns `error`, or returns
+   `wrote_state: false`, report the error and block without routing or claiming
+   STATE.md was written. Otherwise follow the JSON `verdict` / `route` exactly.
+   `initialize` classifies and, for brownfield or greenfield, writes STATE.md
+   through an anchored no-follow create — never create STATE.md yourself after
+   classify:
+   - `owned` — STATE.md exists; continue at step 1.
+   - `orphan` (`route: recover-orphan`) — block without mutation. List the
+     returned `orphan_paths` and ask for an explicit recovery, migration, or
+     new location; existing evidence and archives do not prove a safe v2 phase.
+   - `brownfield` (`route: inspect`) — the helper wrote STATE.md at
+     `inspect/active`; report the returned `signals` and route to the bundled
+     [inspect contract](INSPECT.md).
+   - `greenfield` (`route: define`) — the helper wrote STATE.md at
+     `define/active`; report that no brownfield signal fired, and route to
+     the bundled [define contract](DEFINE.md).
 
 ## Transaction recovery first
 
-Before archive recovery, compare the current symbolic branch with
-STATE.branch. A mismatch normally blocks. The one recoverable mismatch is an
-interrupted next-milestone handoff: state is `shipped/done` on the previous
-`gsd-path/M00N`, the current branch is the selected later `gsd-path/M00N`, and
-HEAD is the exact current `origin/main` SHA. Rerun the `bind-next` command from
-Next milestone with the logged previous branch and ship SHA. Resume that
-handoff only when the helper confirms every invariant and any worktree dirt is
-limited to the router's expected partial promotion paths; otherwise block.
+Run `pipeline_state.py route` before any phase contract. A
+`resume-shipment` result means the ROADMAP/STATE shipment record was
+interrupted; rerun `pipeline_state.py record-shipment` with the returned exact
+archive and event, require its typed `recorded` result, then rerun `route`.
+The journal owns recovery even when one or both files already contain their
+shipped values. A `resume-checkpoint` result means a plan or roadmap approval journal exists;
+run `pipeline_state.py resume-checkpoint --repo <absolute-root>`, require its
+typed `approved` result and current commit, then rerun `route`. The journal
+owns recovery even when STATE or ROADMAP.md already contains the approved
+values. Never repeat those edits or call a phase while recovery remains.
+A
+`resume-promotion` result means a promotion journal exists; rerun
+`promote-next` with the returned milestone, branch, and integration SHA. The
+journal owns recovery even if STATE already contains some promoted values.
+Never route a phase while that result remains.
+
+For a branch mismatch, `route` normally returns `block`. Its only recoverable
+result is `resume-next-handoff`: state is `shipped/done` on the returned
+previous bound branch, and the durable journal proves the current branch and
+HEAD match its prepared, switched, or retired stage. Promotion-journal recovery
+returns `resume-promotion` earlier instead. Rerun `bind-next` immediately with
+the returned typed branch, previous branch, ship, remote-default, and base
+fields. Do not rerun the old-branch archive or integration validators in this
+recovery path: they passed before the journal was created and cannot run after
+the switch. `bind-next` rechecks the live remote refs, exact SHAs, integration
+ancestry, cleanliness, and journal ownership before continuing. After it
+returns, continue the state transition or lookahead promotion below. Do not
+reconstruct this classification from Git output or Log prose.
 
 Before ordinary routing, inspect `STATE.archive`.
 
@@ -152,6 +175,47 @@ ask the user how to reconcile the upstream change.
 
 ## Normal routing
 
+Run the bundled state router instead of evaluating the state table in model
+reasoning:
+
+```text
+python3 <absolute-bundled-pipeline-state.py> route \
+  --repo <absolute-root> \
+  --project-dir <.project or .project/next>
+```
+
+Follow its `route.action`, `phase`, and `mode` fields exactly. `run-phase`
+selects the matching bundled phase contract, `validate-integrated` enters the
+shipped validator, `wait` leaves an approved lookahead track ready for
+promotion, `resume-next-handoff` resumes the verified `bind-next` transaction,
+`resume-checkpoint` runs the approval recovery command above,
+`resume-shipment` runs the shipment recovery command above,
+`resume-promotion` reruns the returned `promote-next` transaction, and
+`block` stops with the returned reason. `bind-initial`
+means initialization is complete and phase work must wait for the initial
+router binding: resolve the exact fetched `origin/main` SHA, call `bind-initial` as
+above with `route.branch`, then persist its returned branch with
+`pipeline_state.py transition` using the route result's `state` phase and status plus its
+null branch and archive as expected fields. Rerun `route`; never route from a
+remembered or hand-parsed state.
+
+Every ordinary state change not already owned by the journaled approval,
+promotion, archive, or branch helpers uses `pipeline_state.py transition` with
+expected phase, status, milestone, and any
+safety-relevant branch/archive fields, the changed fields, and one `--event`.
+It compares the expected state, validates the result, appends the fixed-format
+Log line, and atomically replaces STATE.md. A mismatch blocks; never perform a
+read-edit-write substitute.
+
+```text
+python3 <absolute-bundled-pipeline-state.py> transition \
+  --repo <absolute-root> \
+  --expect-phase plan --expect-status done \
+  --expect-branch <STATE.branch> --expect-archive null \
+  --set-phase build --set-status active \
+  --event "build started"
+```
+
 Report normal progress in three labeled lines: **Outcome** names the phase and
 completed work, **Review** links the newest canonical artifact using its
 resolved absolute path when one exists, and **Next** names the action the
@@ -167,36 +231,9 @@ prints either nothing or one notice line; append that line verbatim to the
 report. Ignore any failure and never block or retry — the check is advisory
 and must not delay routing.
 
-| State | Next action |
-| --- | --- |
-| `inspect`, not done | bundled [inspect contract](INSPECT.md) |
-| `inspect`, done | bundled [define contract](DEFINE.md), brownfield mode; add milestone mode when ROADMAP.md exists |
-| `define`, not done | bundled [define contract](DEFINE.md) |
-| `define`, done, no INTENT.md (program charter approved) | bundled [research contract](RESEARCH.md), program scope |
-| `define`, done, INTENT `Lane: standard` (or no Lane line) | bundled [research contract](RESEARCH.md) |
-| `define`, done, INTENT `Lane: quick` | bundled [plan contract](PLAN.md), quick mode |
-| `define`, done, INTENT `Lane: milestone`, roadmap entry matching the track STATE's `milestone` has open questions | bundled [research contract](RESEARCH.md), milestone scope |
-| `define`, done, INTENT `Lane: milestone`, matching roadmap entry has no open questions | bundled [plan contract](PLAN.md) |
-| `research`, not done | bundled [research contract](RESEARCH.md) |
-| `research`, done | bundled [decide contract](DECIDE.md) |
-| `decide`, not done | bundled [decide contract](DECIDE.md) |
-| `decide`, done, CHARTER.md exists, no ROADMAP.md | bundled [roadmap contract](ROADMAP.md) |
-| `decide`, done, ROADMAP.md exists | bundled [plan contract](PLAN.md) |
-| `decide`, done, no CHARTER.md | bundled [plan contract](PLAN.md) |
-| `roadmap`, not done | bundled [roadmap contract](ROADMAP.md) |
-| `roadmap`, done | bundled [define contract](DEFINE.md), milestone mode |
-| `plan`, not done | bundled [plan contract](PLAN.md) |
-| `plan`, done | bundled [build contract](BUILD.md); approval already authorizes execution |
-| `build`, active or blocked | bundled [build contract](BUILD.md), recovery mode |
-| `build`, done | bundled [build contract](BUILD.md) transition recovery, then ship |
-| `ship`, active | bundled [ship contract](SHIP.md), final mode |
-| `ship`, blocked with valid finding sources | bundled [plan contract](PLAN.md), patch mode |
-| `ship`, blocked without a valid finding source or with conflicting evidence | stop at its `NEEDS-USER` item |
-| `shipped`, validated archive and completed integration | report archive path, exact ship SHA, and integration merge SHA; stop |
-
 Auto-advance after a non-interactive phase completes unless blocked or waiting
 on `NEEDS-USER`. Planning owns the single build-approval gate; never ask a
-second time. One user-driven exception to the table: at a program milestone
+second time. One user-driven exception to normal routing: at a program milestone
 boundary — `inspect/active` or `define/active` with no approved INTENT.md for
 the next milestone — a user request to re-scope the remaining `pending`
 entries routes to the bundled [roadmap contract](ROADMAP.md) in re-slice mode.
@@ -238,7 +275,7 @@ Declining does not block; offer again only at the next milestone's build.
   roadmap entry `active`, never binds a branch, and never dispatches build
   agents. Its approval checkpoints commit `.project/` in full, `next/`
   included.
-- Route the track by `.project/next/STATE.md` through the same state table,
+- Route the track with `pipeline_state.py route --project-dir .project/next`,
   passing the track root to every bundled phase contract.
 - A roadmap re-slice while `.project/next/` exists follows the keep/discard
   ruling in the roadmap contract before the track continues.
@@ -299,69 +336,47 @@ a crash. Record the returned branch and base in the state
 Log, then:
 
 - **Program** (ROADMAP.md exists): while `pending` entries remain, first
-  promote any lookahead track. When `.project/next/STATE.md` exists, run the
-  bundled transaction helper:
+  promote any lookahead track. When `.project/next/STATE.md` exists, move
+  nothing by hand. Run:
 
   ```text
-  python3 <absolute-bundled-promote-lookahead.py> promote \
+  python3 <absolute-bundled-pipeline-state.py> promote-next \
     --repo <absolute-primary-root> \
-    --branch <selected-branch> \
+    --milestone <next-slug> \
+    --branch gsd-path/M00N \
     --integrate <exact-integration-merge-sha>
   ```
 
-  The helper validates the track, shipped archive, audit carry-forward, branch,
-  STATE.md, ROADMAP.md, and all source and destination paths before mutation.
-  It journals the transaction, resumes interrupted moves and state updates,
-  and removes the journal only after canonical state and paths agree. Repeat
-  the same command after an interruption.
-
-  A `needs-recovery` result makes only the recovery choice a user decision.
-  Present the mismatch with links and offer `Rewind the selected milestone to
-  inspect (recommended)` or `Discard the lookahead track`. Invoke the selected
-  deterministic recovery with the same repo, branch, and integration SHA:
-
-  ```text
-  python3 <absolute-bundled-promote-lookahead.py> recover \
-    --repo <absolute-primary-root> \
-    --branch <selected-branch> \
-    --integrate <exact-integration-merge-sha> \
-    --strategy <rewind|discard>
-  ```
-
-  Repeat that command after an interruption. A successful promote or recovery
-  result supplies the milestone and route state. Commit the transaction with
-  exact subject `router: promote lookahead milestone <slug>` and body
-  `Why: promote lookahead track` plus `Milestone: <slug>` and
-  `Integrate: <merge SHA>` — the router's only
-  bookkeeping commit outside the new-repository transaction. Then route by
-  the promoted state (a promoted `plan/done` goes straight to the bundled
-  build contract, subject to the re-validation below). With no lookahead
-  track, reset
-  `phase: inspect`, `status: active`, `milestone` to the next dependency-ready
-  `pending` slug, `branch` to `<selected-branch>`, and `archive: null`; mark that entry
-  `active` in ROADMAP.md, fill the previously shipped entry's `Integrated:`
-  field with the merge SHA of the just-completed integrate
-  commit, and route to the bundled [inspect contract](INSPECT.md). The
-  codebase changed at the previous ship, so inspect rescans before milestone
-  define. When every entry is terminal (`shipped` or `abandoned`),
+  The helper journals before mutation, verifies or resumes each documented
+  `intent`, `research`, `plan`, `tasks`, and `review` move, including the
+  lookahead PLAN-PANEL artifact or skipped receipt, updates STATE.md and
+  ROADMAP.md, stages the residual lookahead track in its recovery path outside
+  `.project/`,
+  classifies plan drift, removes `next/`, and writes the exact router
+  promotion commit. Rerun the same command after interruption; any request or
+  filesystem drift blocks. Route from its returned state and `drift` result.
+  With no lookahead track, mark the selected entry `active` in ROADMAP.md and
+  fill the previously shipped entry's `Integrated:` field with the merge SHA.
+  Then call `pipeline_state.py transition`, expecting the complete
+  `shipped/done` state including its previous branch and archive, and set
+  `phase: inspect`, `status: active`, `milestone` to the selected pending slug,
+  `branch: gsd-path/M00N`, and `archive: null`. The event records the returned
+  base and integration SHA. Route to the bundled [inspect contract](INSPECT.md)
+  so the changed codebase is rescanned before milestone define. When every
+  entry is terminal (`shipped` or `abandoned`),
   report the program complete against CHARTER.md's program success criteria
   and stop.
-- **Single milestone** (no ROADMAP.md): reset `phase: inspect`,
-  `status: active`, `milestone: null`, `branch: gsd-path/M00N`, and
-  `archive: null`.
+- **Single milestone** (no ROADMAP.md): use the same guarded transition from
+  the complete previous `shipped/done` state to `phase: inspect`, `status:
+  active`, `milestone: null`, `branch: gsd-path/M00N`, and `archive: null`.
+  Record the returned base and integration SHA in its event.
   The project is now brownfield, so inspect rescans current code and docs.
 
-Re-validate a promoted `plan/done` before routing to build: diff
-`--name-only` from the track's approval checkpoint commit (exact subject
-`plan: build plan approved`) to HEAD and intersect the result with every
-promoted task's full declared `files` set, including paths now deleted or
-renamed. An empty
-intersection promotes as `plan/done`. A non-empty intersection — or a
-missing checkpoint commit, where drift cannot be measured — promotes as
-`plan/active` with the flagged task ids (or the skip reason) in the state
-log, and the bundled plan contract re-gates and re-approves the flagged
-tasks against current HEAD before build. Tracks promoted at an earlier
-phase skip this check.
+`promote-next` returns `drift.class: clean` for a promoted `plan/done` only
+when no existing declared task path changed after the matching exact plan
+approval checkpoint. `changed` and `unverifiable` reopen the promoted state as
+`plan/active` and record the task ids or reason. Earlier-phase tracks return
+`not-applicable`. Do not recompute or override this classification.
 
 Committed archives are read-only. CHARTER.md, ROADMAP.md, program
 SYNTHESIS.md, and LESSONS.md stay active across milestones; they ship inside

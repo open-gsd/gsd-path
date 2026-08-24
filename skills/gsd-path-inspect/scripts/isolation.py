@@ -9,6 +9,7 @@ it never detaches HEAD.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -20,9 +21,13 @@ from pathlib import Path, PurePosixPath
 from typing import Dict, Optional, Sequence, Set
 
 try:
-    from pipeline_git import task_commit_body, task_commit_subject
+    from pipeline_git import is_bound_branch, task_commit_body, task_commit_subject
 except ImportError:  # pragma: no cover - package import used by tests
-    from scripts.pipeline_git import task_commit_body, task_commit_subject
+    from scripts.pipeline_git import (
+        is_bound_branch,
+        task_commit_body,
+        task_commit_subject,
+    )
 
 
 TASK_BRANCH_PREFIX = "gsd-path-task/"
@@ -32,6 +37,7 @@ NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 FIELD_PATTERN = re.compile(r"^(?P<key>[a-z_]+):\s*(?P<value>.*)$")
 INLINE_LIST_PATTERN = re.compile(r"^\[(?P<body>.*)\]$")
 LIST_ITEM_PATTERN = re.compile(r"^\s*-\s+(?P<value>.*)$")
+COLLECT_JOURNAL_SCHEMA = "gsd-path/collect-artifact/v1"
 
 
 class IsolationError(RuntimeError):
@@ -69,6 +75,15 @@ def require_attached(repo: Path) -> str:
     branch = git_output(repo, "branch", "--show-current")
     if not branch:
         raise IsolationError(f"HEAD is detached in {repo}; expected a named branch")
+    return branch
+
+
+def require_bound(repo: Path) -> str:
+    branch = require_attached(repo)
+    if not is_bound_branch(branch):
+        raise IsolationError(
+            f"primary branch must be canonical gsd-path/M00N, found {branch}"
+        )
     return branch
 
 
@@ -131,8 +146,95 @@ def relative_posix(path: str) -> str:
     return parsed.as_posix()
 
 
+def _real_file(root: Path, relative: str, label: str) -> Path:
+    normalized = relative_posix(relative)
+    if normalized in {"", "."}:
+        raise IsolationError(f"{label} must name a file")
+    path = root / normalized
+    if not path.is_file() or path.is_symlink():
+        raise IsolationError(f"{label} is not a real file: {normalized}")
+    try:
+        path.resolve().relative_to(root)
+    except ValueError as error:
+        raise IsolationError(f"{label} escapes its worktree: {normalized}") from error
+    return path
+
+
+def _safe_destination(root: Path, relative: str) -> Path:
+    normalized = relative_posix(relative)
+    if normalized in {"", "."} or not normalized.startswith(".project/"):
+        raise IsolationError("artifact destination must be a file under .project/")
+    current = root
+    parts = PurePosixPath(normalized).parts
+    for part in parts[:-1]:
+        current = current / part
+        if current.is_symlink():
+            raise IsolationError(f"artifact destination has a symlink parent: {normalized}")
+    destination = root / normalized
+    if destination.is_symlink() or (destination.exists() and not destination.is_file()):
+        raise IsolationError(f"artifact destination is not a real file: {normalized}")
+    return destination
+
+
+def _sha256(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def _collect_journal_path(primary: Path, request: Dict[str, object]) -> Path:
+    key = hashlib.sha256(
+        json.dumps(request, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    return common_git_dir(primary) / "gsd-path" / "collect-artifact" / f"{key}.json"
+
+
+def _write_collect_journal(path: Path, payload: Dict[str, object]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_name: Optional[str] = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=".collect-artifact-",
+            delete=False,
+        ) as handle:
+            json.dump(payload, handle, sort_keys=True)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+            temporary_name = handle.name
+        os.replace(temporary_name, path)
+        temporary_name = None
+    finally:
+        if temporary_name:
+            Path(temporary_name).unlink(missing_ok=True)
+
+
+def _read_collect_journal(path: Path) -> Dict[str, object]:
+    if path.is_symlink() or not path.is_file():
+        raise IsolationError(f"artifact collection journal is not a real file: {path}")
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise IsolationError(f"artifact collection journal is unreadable: {path}") from error
+    if not isinstance(payload, dict):
+        raise IsolationError("artifact collection journal must contain an object")
+    return payload
+
+
+def _git_file(repo: Path, revision: str, path: str) -> bytes:
+    result = subprocess.run(
+        ("git", "-C", str(repo), "show", f"{revision}:{path}"),
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise IsolationError(f"file is missing at {revision}: {path}")
+    return result.stdout
+
+
 def create_named_worktree(primary: Path, branch: str, destination: Path, base: str) -> None:
-    bound = require_attached(primary)
+    bound = require_bound(primary)
     if branch == bound:
         raise IsolationError(
             f"refusing to check out the bound branch {bound} in a second worktree"
@@ -180,14 +282,20 @@ def isolate_task(
     primary = require_directory(primary, "primary worktree")
     if worktree_root(primary) != primary:
         raise IsolationError(f"primary is not its Git root: {primary}")
-    bound = require_attached(primary)
+    bound = require_bound(primary)
     resolved_base = require_commit(primary, require_full_sha(base))
     validate_task_id(task_id)
     if round_size < 1:
         raise IsolationError("round-size must be >= 1")
+    if current_sha(primary) != resolved_base:
+        raise IsolationError("task isolation requires primary HEAD to equal the recorded base")
+    dirty = uncommitted_paths(primary)
+    if dirty:
+        raise IsolationError(
+            "task isolation requires a clean primary worktree: "
+            + ", ".join(sorted(dirty))
+        )
     if round_size == 1:
-        if current_sha(primary) != resolved_base:
-            raise IsolationError("serial isolation requires primary HEAD to equal the recorded base")
         return {
             "base": resolved_base,
             "bound_branch": bound,
@@ -215,8 +323,18 @@ def isolate_verify(primary: Path, base: str, name: str) -> Dict[str, object]:
     primary = require_directory(primary, "primary worktree")
     if worktree_root(primary) != primary:
         raise IsolationError(f"primary is not its Git root: {primary}")
-    bound = require_attached(primary)
+    bound = require_bound(primary)
     resolved_base = require_commit(primary, require_full_sha(base))
+    if current_sha(primary) != resolved_base:
+        raise IsolationError("verify isolation requires primary HEAD to equal the recorded base")
+    product_dirt = sorted(
+        path for path in uncommitted_paths(primary) if not path.startswith(".project/")
+    )
+    if product_dirt:
+        raise IsolationError(
+            "verify isolation refuses non-.project primary changes: "
+            + ", ".join(product_dirt)
+        )
     branch = verify_branch_name(name)
     destination = sidecar_root(primary, "verify", name)
     create_named_worktree(primary, branch, destination, resolved_base)
@@ -236,8 +354,12 @@ def _split_paths(block: str) -> Set[str]:
 
 
 def uncommitted_paths(repo: Path) -> Set[str]:
-    tracked = git_output(repo, "diff", "--name-only", "--relative", "HEAD")
-    cached = git_output(repo, "diff", "--name-only", "--cached", "--relative")
+    tracked = git_output(
+        repo, "diff", "--no-renames", "--name-only", "--relative", "HEAD"
+    )
+    cached = git_output(
+        repo, "diff", "--no-renames", "--name-only", "--cached", "--relative"
+    )
     untracked = git_output(repo, "ls-files", "--others", "--exclude-standard")
     return _split_paths(tracked) | _split_paths(cached) | _split_paths(untracked)
 
@@ -245,7 +367,37 @@ def uncommitted_paths(repo: Path) -> Set[str]:
 def committed_paths_since(repo: Path, base: str) -> Set[str]:
     if current_sha(repo) == base:
         return set()
-    return _split_paths(git_output(repo, "diff", "--name-only", "--relative", base, "HEAD"))
+    return _split_paths(
+        git_output(
+            repo, "diff", "--no-renames", "--name-only", "--relative", base, "HEAD"
+        )
+    )
+
+
+def _commit_pending(repo: Path, pending: Set[str], subject: str, body: str) -> str:
+    reset = run_git(repo, "reset", "-q", "HEAD")
+    if reset.returncode != 0:
+        raise IsolationError("could not clear the index before commit")
+    for path in sorted(pending):
+        added = run_git(repo, "add", "-A", "--", path)
+        if added.returncode != 0:
+            raise IsolationError(f"could not stage {path}")
+    staged = _split_paths(
+        git_output(
+            repo,
+            "diff",
+            "--no-renames",
+            "--cached",
+            "--name-only",
+            "--relative",
+        )
+    )
+    if staged != pending:
+        raise IsolationError("staged paths do not match the uncommitted change set")
+    committed = run_git(repo, "commit", "-q", "-m", subject, "-m", body)
+    if committed.returncode != 0:
+        raise IsolationError((committed.stderr or committed.stdout).strip() or "commit failed")
+    return current_sha(repo)
 
 
 def validate_allowed_changes(
@@ -257,8 +409,6 @@ def validate_allowed_changes(
     unexpected = sorted(path for path in since_base if path not in allowed)
     if unexpected:
         raise IsolationError("unexpected paths: " + ", ".join(unexpected))
-
-
 def _clean_blob_oid(repo: Path, path: str, text: str, *, write: bool) -> str:
     arguments = ["hash-object"]
     if write:
@@ -599,8 +749,6 @@ def _stamp_and_commit(
         except IsolationError as restore_error:
             raise IsolationError(f"{error}; {restore_error}") from error
         raise
-
-
 def land(
     primary: Path,
     source: Path,
@@ -618,7 +766,7 @@ def land(
         raise IsolationError(f"source is not its Git root: {source}")
     if common_git_dir(primary) != common_git_dir(source):
         raise IsolationError("source worktree belongs to another repository")
-    bound = require_attached(primary)
+    bound = require_bound(primary)
     source_branch = require_attached(source)
     resolved_base = require_commit(primary, require_full_sha(base))
     validate_task_id(task_id)
@@ -947,6 +1095,7 @@ def _prove_task_commit(
     expected_base: str,
     current_task_text: Optional[str],
     allowed: Optional[Set[str]] = None,
+    compare_head: bool = True,
 ) -> tuple[Optional[str], Optional[str]]:
     """Return (base, None) when `sha` is this task's landing commit, else (None, reason)."""
     base = next((line[6:].strip() for line in body.splitlines() if line.startswith("Base: ")), None)
@@ -986,9 +1135,13 @@ def _prove_task_commit(
         return None, "body Task:/Files: fields do not match the changed paths"
     if current_task_text is not None:
         try:
-            current_head_oid = _regular_blob_oid(repo, "HEAD", task_file)
             current_oid = _clean_blob_oid(
                 repo, task_file, current_task_text, write=False
+            )
+            current_head_oid = (
+                _regular_blob_oid(repo, "HEAD", task_file)
+                if compare_head
+                else after_oid
             )
         except IsolationError as error:
             return None, str(error)
@@ -1168,8 +1321,9 @@ def _recover_task(
     branches: Set[str],
     head: str,
     bound: str,
+    canonical_task_file: Optional[str] = None,
 ) -> Dict[str, object]:
-    task_file = relative_posix(str(path.relative_to(primary)))
+    task_file = canonical_task_file or relative_posix(str(path.relative_to(primary)))
     report: Dict[str, object] = {"task": task_file}
 
     def result(verdict: str, **extra: object) -> Dict[str, object]:
@@ -1396,7 +1550,13 @@ def _recover_task(
     proven, rejected = [], []
     for sha, body in history.get(subject, []):
         base, why = _prove_task_commit(
-            primary, sha, body, task_file, recorded_base, task_text
+            primary,
+            sha,
+            body,
+            task_file,
+            recorded_base,
+            task_text,
+            compare_head=canonical_task_file is None,
         )
         if why is None:
             proven.append((sha, base))
@@ -1534,6 +1694,90 @@ def recover(primary: Path, tasks_dir: Path) -> Dict[str, object]:
     }
 
 
+def verify_landed_task_files(
+    primary: Path,
+    task_paths: Sequence[Path],
+    canonical_tasks_dir: str,
+    head: str,
+) -> Dict[str, object]:
+    """Prove archived task files against their canonical landing commits."""
+
+    primary = require_directory(primary, "primary worktree")
+    if worktree_root(primary) != primary:
+        raise IsolationError(f"primary is not its Git root: {primary}")
+    bound = require_attached(primary)
+    resolved_head = require_commit(primary, require_full_sha(head))
+    canonical_dir = relative_posix(canonical_tasks_dir)
+    history: Dict[str, list[tuple[str, str]]] = {}
+    log = git_output(
+        primary,
+        "log",
+        "--first-parent",
+        "--format=%x1e%H%x00%s%x00%b",
+        resolved_head,
+    )
+    for record in filter(None, log.split("\x1e")):
+        sha, subject, body = record.split("\x00", 2)
+        history.setdefault(subject, []).append((sha, body.strip()))
+    branches = set(
+        git_output(
+            primary,
+            "for-each-ref",
+            "--format=%(refname:short)",
+            f"refs/heads/{TASK_BRANCH_PREFIX}",
+        ).splitlines()
+    )
+    tasks = []
+    for path in task_paths:
+        resolved = path.resolve()
+        if path.is_symlink() or not path.is_file():
+            raise IsolationError(f"task artifact is missing or unsafe: {path}")
+        try:
+            resolved.relative_to(primary)
+        except ValueError as error:
+            raise IsolationError(f"task artifact is outside the primary: {path}") from error
+        canonical = relative_posix(f"{canonical_dir}/{path.name}")
+        task_text, _ = _read_task_text(resolved)
+        fields, error = task_frontmatter(task_text)
+        if error or fields is None:
+            raise IsolationError(error or f"unreadable task frontmatter: {path.name}")
+        if fields.get("status") != "done":
+            raise IsolationError(
+                f"{fields.get('id', path.name)}: task must have status: done"
+            )
+        tasks.append(
+            _recover_task(
+                primary,
+                resolved,
+                history,
+                branches,
+                resolved_head,
+                bound,
+                canonical,
+            )
+        )
+    blocked = [task for task in tasks if task["verdict"] != "recovered"]
+    if blocked:
+        def failure_reason(task: Dict[str, object]) -> str:
+            rejected = task.get("rejected")
+            if isinstance(rejected, list) and rejected:
+                details = ", ".join(
+                    str(item.get("reason", "rejected"))
+                    for item in rejected
+                    if isinstance(item, dict)
+                )
+                if details:
+                    return details
+            return str(task.get("reason", task["verdict"]))
+
+        reasons = "; ".join(
+            f"{task.get('task_id', task['task'])}: {failure_reason(task)}"
+            for task in blocked
+        )
+        raise IsolationError(reasons)
+    return {"bound_branch": bound, "head": resolved_head, "tasks": tasks}
+
+
 def _sidecar_path_for_branch(primary: Path, branch: str) -> Path:
     if branch.startswith(TASK_BRANCH_PREFIX):
         task_id = branch.removeprefix(TASK_BRANCH_PREFIX)
@@ -1601,6 +1845,289 @@ def _failed_task_branch_proof_error(
         repo, branch_commit, body, task_file, base, None
     )
     return proof_error
+def collect_artifact(
+    primary: Path,
+    source: Path,
+    base: str,
+    branch: str,
+    source_path: str,
+    destination_path: str,
+    expected_destination: Optional[str] = None,
+) -> Dict[str, object]:
+    """Atomically collect one artifact and retain an idempotent receipt."""
+
+    primary = require_directory(primary, "primary worktree")
+    source = require_directory(source, "source worktree")
+    if worktree_root(primary) != primary or worktree_root(source) != source:
+        raise IsolationError("primary and source must each be their Git root")
+    if common_git_dir(primary) != common_git_dir(source):
+        raise IsolationError("source worktree belongs to another repository")
+    resolved_base = require_commit(primary, require_full_sha(base))
+    if current_sha(primary) != resolved_base:
+        raise IsolationError("primary worktree HEAD differs from the recorded base")
+    if current_sha(source) != resolved_base:
+        raise IsolationError("source worktree HEAD differs from the recorded base")
+    if not branch.startswith(VERIFY_BRANCH_PREFIX) or require_attached(source) != branch:
+        raise IsolationError("source worktree is not on the expected verify branch")
+    normalized_source = relative_posix(source_path)
+    normalized_destination = relative_posix(destination_path)
+    destination = _safe_destination(primary, normalized_destination)
+    request: Dict[str, object] = {
+        "schema": COLLECT_JOURNAL_SCHEMA,
+        "primary_worktree": str(primary),
+        "source_worktree": str(source),
+        "base": resolved_base,
+        "branch": branch,
+        "source": normalized_source,
+        "destination": normalized_destination,
+        "expected_destination": expected_destination,
+    }
+    journal_path = _collect_journal_path(primary, request)
+    changed = uncommitted_paths(source)
+    journal: Optional[Dict[str, object]] = None
+    if journal_path.exists() or journal_path.is_symlink():
+        journal = _read_collect_journal(journal_path)
+        expected_fields = set(request) | {
+            "bytes",
+            "previous_sha256",
+            "replaced",
+            "sha256",
+            "stage",
+        }
+        if set(journal) != expected_fields or any(
+            journal.get(key) != value for key, value in request.items()
+        ):
+            raise IsolationError("artifact collection journal does not match request")
+        if journal.get("stage") not in {"prepared", "collected", "complete"}:
+            raise IsolationError("artifact collection journal has an invalid stage")
+        if journal["stage"] == "complete" and changed == {normalized_source}:
+            journal = None  # a later sidecar run reuses the same branch and paths
+
+    if journal is None:
+        if changed != {normalized_source}:
+            unexpected = sorted(changed - {normalized_source})
+            detail = ", ".join(unexpected) if unexpected else "expected artifact is unchanged"
+            raise IsolationError(f"unexpected sidecar paths: {detail}")
+        source_file = _real_file(source, normalized_source, "artifact source")
+        data = source_file.read_bytes()
+        previous_data = destination.read_bytes() if destination.exists() else None
+        if previous_data is not None and previous_data != data:
+            actual_hash = _sha256(previous_data)
+            if expected_destination == "base":
+                expected_hash = _sha256(
+                    _git_file(primary, resolved_base, normalized_destination)
+                )
+            elif expected_destination and re.fullmatch(
+                r"[0-9a-f]{64}", expected_destination
+            ):
+                expected_hash = expected_destination
+            else:
+                raise IsolationError(
+                    "artifact destination has different content without a proven expected version"
+                )
+            if actual_hash != expected_hash:
+                raise IsolationError(
+                    "artifact destination changed after its expected version was recorded"
+                )
+        journal = {
+            **request,
+            "bytes": len(data),
+            "previous_sha256": _sha256(previous_data) if previous_data is not None else None,
+            "replaced": previous_data is not None and previous_data != data,
+            "sha256": _sha256(data),
+            "stage": "prepared",
+        }
+        _write_collect_journal(journal_path, journal)
+    else:
+        current_hash = _sha256(destination.read_bytes()) if destination.exists() else None
+        if not changed:
+            if current_hash != journal["sha256"]:
+                raise IsolationError(
+                    "artifact receipt exists but the collected destination changed"
+                )
+            journal["stage"] = "complete"
+            _write_collect_journal(journal_path, journal)
+            return {
+                key: journal[key]
+                for key in (
+                    "base",
+                    "branch",
+                    "bytes",
+                    "destination",
+                    "previous_sha256",
+                    "replaced",
+                    "sha256",
+                    "source",
+                )
+            }
+        if changed != {normalized_source}:
+            unexpected = sorted(changed - {normalized_source})
+            raise IsolationError(
+                "unexpected sidecar paths: " + ", ".join(unexpected)
+            )
+        source_file = _real_file(source, normalized_source, "artifact source")
+        data = source_file.read_bytes()
+        if _sha256(data) != journal["sha256"]:
+            raise IsolationError("artifact source changed after collection was prepared")
+        if current_hash not in {journal["previous_sha256"], journal["sha256"]}:
+            raise IsolationError(
+                "artifact destination changed after collection was prepared"
+            )
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if not destination.exists() or _sha256(destination.read_bytes()) != journal["sha256"]:
+        temporary_name: Optional[str] = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                dir=destination.parent,
+                prefix=".gsd-path-artifact-",
+                delete=False,
+            ) as handle:
+                handle.write(data)
+                handle.flush()
+                os.fsync(handle.fileno())
+                temporary_name = handle.name
+            os.replace(temporary_name, destination)
+            temporary_name = None
+        finally:
+            if temporary_name:
+                Path(temporary_name).unlink(missing_ok=True)
+    if _sha256(destination.read_bytes()) != journal["sha256"]:
+        raise IsolationError("artifact destination does not match the prepared receipt")
+    journal["stage"] = "collected"
+    _write_collect_journal(journal_path, journal)
+
+    reset = run_git(source, "reset", "-q", "HEAD", "--", normalized_source)
+    if reset.returncode != 0:
+        raise IsolationError("artifact was collected but its staged state could not be cleared")
+    tracked = run_git(source, "ls-files", "--error-unmatch", "--", normalized_source)
+    if tracked.returncode == 0:
+        restored = run_git(source, "restore", "--worktree", "--", normalized_source)
+        if restored.returncode != 0:
+            raise IsolationError("artifact was collected but the source could not be restored")
+    else:
+        source_file.unlink()
+    if uncommitted_paths(source):
+        raise IsolationError("artifact was collected but the source worktree is still dirty")
+    journal["stage"] = "complete"
+    _write_collect_journal(journal_path, journal)
+    return {
+        key: journal[key]
+        for key in (
+            "base",
+            "branch",
+            "bytes",
+            "destination",
+            "previous_sha256",
+            "replaced",
+            "sha256",
+            "source",
+        )
+    }
+
+
+def _validate_checkpoint_message(subject: str, body: str) -> None:
+    lines = [line.strip() for line in body.splitlines() if line.strip()]
+    if subject == "roadmap: program roadmap approved":
+        if lines != ["Why: approved roadmap checkpoint"]:
+            raise IsolationError("roadmap checkpoint body is not canonical")
+        return
+    if subject == "plan: build plan approved":
+        if (
+            len(lines) != 2
+            or lines[0] != "Why: approved plan checkpoint"
+            or not re.fullmatch(r"Milestone: \S+", lines[1])
+        ):
+            raise IsolationError("plan checkpoint body is not canonical")
+        return
+    if re.fullmatch(r"build: abandon milestone [a-z0-9][a-z0-9-]*", subject):
+        if len(lines) != 1 or not lines[0].startswith("Why: "):
+            raise IsolationError("abandon checkpoint body must contain one Why line")
+        reason = lines[0][len("Why: ") :]
+        if not reason or reason != " ".join(reason.split()):
+            raise IsolationError("abandon checkpoint reason must be normalized")
+        return
+    if re.fullmatch(r"build: \S.*", subject):
+        if not lines or not re.fullmatch(r"Why: \S.*", lines[0]):
+            raise IsolationError("build checkpoint body must start with Why")
+        seen = set()
+        for line in lines[1:]:
+            match = re.fullmatch(r"(Wave|Tasks|Base): \S.*", line)
+            if not match or match.group(1) in seen:
+                raise IsolationError("build checkpoint body has an invalid field")
+            seen.add(match.group(1))
+        return
+    raise IsolationError("unsupported pipeline checkpoint subject")
+
+
+def checkpoint(
+    repo: Path,
+    expected_head: str,
+    subject: str,
+    body: str,
+    allow_paths: Sequence[str],
+) -> Dict[str, object]:
+    """Create one allowlisted pipeline checkpoint with a canonical message."""
+
+    repo = require_directory(repo, "primary worktree")
+    if worktree_root(repo) != repo:
+        raise IsolationError(f"primary is not its Git root: {repo}")
+    require_bound(repo)
+    expected = require_commit(repo, require_full_sha(expected_head))
+    _validate_checkpoint_message(subject.strip(), body)
+    allowed = [relative_posix(path).rstrip("/") for path in allow_paths]
+    if not allowed or any(
+        path in {"", "."}
+        or not (path == ".project" or path.startswith(".project/"))
+        for path in allowed
+    ):
+        raise IsolationError("checkpoint allow paths must stay under .project/")
+    current = current_sha(repo)
+    if current != expected:
+        parents = git_output(repo, "show", "-s", "--format=%P", current).split()
+        actual_subject = git_output(repo, "show", "-s", "--format=%s", current)
+        actual_body = git_output(repo, "show", "-s", "--format=%b", current)
+        paths = committed_paths_since(repo, expected) if parents == [expected] else set()
+        paths_allowed = paths and all(
+            any(
+                path == allowed_path or path.startswith(allowed_path + "/")
+                for allowed_path in allowed
+            )
+            for path in paths
+        )
+        if (
+            parents == [expected]
+            and actual_subject == subject.strip()
+            and actual_body == body.strip()
+            and paths_allowed
+            and not uncommitted_paths(repo)
+        ):
+            return {
+                "commit": current,
+                "paths": sorted(paths),
+                "status": "already-complete",
+                "subject": subject.strip(),
+            }
+        raise IsolationError("primary HEAD differs from --expected-head")
+    pending = uncommitted_paths(repo)
+    if not pending:
+        raise IsolationError("no changes to checkpoint")
+    unexpected = sorted(
+        path
+        for path in pending
+        if not any(
+            path == allowed_path or path.startswith(allowed_path + "/")
+            for allowed_path in allowed
+        )
+    )
+    if unexpected:
+        raise IsolationError("unexpected paths: " + ", ".join(unexpected))
+    return {
+        "commit": _commit_pending(repo, pending, subject.strip(), body),
+        "paths": sorted(pending),
+        "status": "committed",
+        "subject": subject.strip(),
+    }
 
 
 def retire(
@@ -1644,6 +2171,13 @@ def retire(
     if not resolved_worktree.exists():
         branch_retired = False
         if branch:
+            if branch == bound:
+                raise IsolationError("refusing to delete the bound branch")
+            if not (
+                branch.startswith(TASK_BRANCH_PREFIX)
+                or branch.startswith(VERIFY_BRANCH_PREFIX)
+            ):
+                raise IsolationError(f"refusing to retire unrecognized branch {branch}")
             existing = run_git(
                 primary, "show-ref", "--verify", "--quiet", f"refs/heads/{branch}"
             )
@@ -1708,7 +2242,9 @@ def retire(
             resolved_worktree, "status", "--porcelain", "--untracked-files=all"
         )
         if dirty:
-            raise IsolationError("worktree is dirty; pass --force only from the retry-retirement path")
+            raise IsolationError(
+                "worktree is dirty; pass --force only from the retry-retirement path"
+            )
     remove = run_git(
         primary,
         "worktree",
@@ -1768,6 +2304,31 @@ def parser() -> argparse.ArgumentParser:
     recover_parser.add_argument("--repo", type=Path, required=True)
     recover_parser.add_argument("--tasks-dir", type=Path, default=Path(".project/tasks"))
 
+    collect_parser = subparsers.add_parser(
+        "collect-artifact", help="atomically collect one verified sidecar artifact"
+    )
+    collect_parser.add_argument("--repo", type=Path, required=True)
+    collect_parser.add_argument("--source", type=Path, required=True)
+    collect_parser.add_argument("--base", required=True)
+    collect_parser.add_argument("--branch", required=True)
+    collect_parser.add_argument("--source-path", required=True)
+    collect_parser.add_argument("--destination-path", required=True)
+    collect_parser.add_argument(
+        "--expected-destination",
+        help="base or the recorded SHA-256 of an existing destination",
+    )
+
+    checkpoint_parser = subparsers.add_parser(
+        "checkpoint", help="commit allowlisted pipeline bookkeeping"
+    )
+    checkpoint_parser.add_argument("--repo", type=Path, required=True)
+    checkpoint_parser.add_argument("--expected-head", required=True)
+    checkpoint_parser.add_argument("--subject", required=True)
+    checkpoint_parser.add_argument("--body", required=True)
+    checkpoint_parser.add_argument(
+        "--allow-path", action="append", required=True, dest="allow_paths"
+    )
+
     retire_parser = subparsers.add_parser("retire", help="remove a named sidecar checkout")
     retire_parser.add_argument("--repo", type=Path, required=True)
     retire_parser.add_argument("--worktree", type=Path)
@@ -1802,6 +2363,24 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             )
         elif arguments.command == "recover":
             result = recover(arguments.repo, arguments.tasks_dir)
+        elif arguments.command == "collect-artifact":
+            result = collect_artifact(
+                arguments.repo,
+                arguments.source,
+                arguments.base,
+                arguments.branch,
+                arguments.source_path,
+                arguments.destination_path,
+                arguments.expected_destination,
+            )
+        elif arguments.command == "checkpoint":
+            result = checkpoint(
+                arguments.repo,
+                arguments.expected_head,
+                arguments.subject,
+                arguments.body,
+                arguments.allow_paths,
+            )
         else:
             result = retire(
                 arguments.repo,

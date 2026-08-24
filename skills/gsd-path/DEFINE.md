@@ -32,34 +32,43 @@ and the target artifact rather than approving stale intent.
 
 ## State ownership
 
-Before reading STATE.md, run the bundled `python3
-<absolute-bundled-script> classify --repo <absolute-root>` helper
-(`scripts/detect_project.py`) and follow its JSON `verdict` / `route`. Do not
-classify from a directory listing or conversation.
-
-- `owned` — only now read the applicable STATE.md. Require `pipeline:
-  gsd-path/v2`; a missing or different marker returns to `$gsd-path` for
-  ownership checking. Legal existing-state entry is `inspect/done`
-  (transition to `define/active`; milestone mode when ROADMAP.md exists),
-  `roadmap/done` only for the first milestone after initial roadmap approval,
-  or `define/active|blocked`. When ROADMAP.md exists, a later milestone or
-  lookahead track at `define/active|blocked` also requires both current-track
-  inspection artifacts and a Log entry proving `inspect/done` for the same
-  milestone after its latest activation; otherwise route to inspect.
-  `define/done` or any later phase blocks rather than
-  overwriting approved intent and leaving downstream artifacts stale. When an
-  active router supplies `.project/next/`, require its STATE.md to be a regular
-  non-symlink file, then evaluate these rules against that track state and its
-  paths; see Lookahead mode.
+If STATE.md exists, require `pipeline_state.py validate --repo <absolute root>
+[--project-dir .project/next]` to pass; otherwise return to `$gsd-path` for
+ownership checking. Legal existing-state
+entry is `inspect/done` (transition to `define/active`; milestone mode when
+ROADMAP.md exists), `roadmap/done`
+(transition to `define/active`, milestone mode), or
+`define/active|blocked`. When ROADMAP.md exists, a later milestone or
+lookahead track at `define/active|blocked` also requires both current-track
+inspection artifacts and a Log entry proving `inspect/done` for the same
+milestone after its latest activation; otherwise route to inspect.
+`define/done` or any later phase blocks rather than overwriting approved
+intent and leaving downstream artifacts stale. When an active router supplies
+the lookahead track root `.project/next/`, require its STATE.md to be a regular
+non-symlink file and evaluate this section against that track's state and
+paths; see Lookahead mode. If STATE.md is missing, run the bundled
+`python3 <absolute-bundled-script> initialize --repo <absolute-root>
+--template <absolute-state-template>` helper (`scripts/detect_project.py`) and
+follow its returned JSON `verdict` / `route`. This is the only no-state
+boundary; do not run `classify` first or classify from a directory listing or
+conversation. If the command exits nonzero, returns `error`, or returns
+`wrote_state: false`, report the error and block without routing or claiming
+STATE.md was written.
+- `owned` — continue under the existing-state rules above.
 - `orphan` — return to `$gsd-path` for orphaned-state recovery; existing
   evidence does not prove its pipeline version or phase and must not be reused
   or overwritten by inference.
-- `brownfield` or `greenfield` — run the same helper's `initialize --repo
-  <absolute-root> --template <absolute-state-template>` command. Require its
-  verdict and route to match the classifier, plus `wrote_state: true`; any
-  mismatch or error blocks. A brownfield result routes to `$gsd-path-inspect`.
-  A greenfield result continues from the helper's STATE.md at `define/active`.
-  Do not create STATE.md yourself.
+- `brownfield` — the helper writes STATE.md at `inspect/active`; route to
+  `$gsd-path-inspect` from this returned verdict.
+- `greenfield` — require `wrote_state: true`, then continue with the helper's
+  STATE.md at `define/active`. Do not create STATE.md yourself.
+
+Enter from `inspect/done` or `roadmap/done` only with `pipeline_state.py
+transition`: pass the exact expected phase/status/branch/archive values, event
+`definition started`, and `--set-phase define --set-status active` (plus
+`--project-dir .project/next` for lookahead). This helper is the only ordinary
+STATE mutation; direct template writing is limited to the missing-state
+greenfield initialization above.
 
 The router's verified new-GitHub-repository transaction is the sole greenfield
 exception: STATE.md already exists at `define/active`, `branch` is the approved
@@ -102,8 +111,10 @@ Read the local [charter template](templates/charter.md), write the approval
 draft to `.project/CHARTER.md` including `Review panel:` (default `off`;
 never invent `detected` or a named list), and run the same playback-approval
 loop as the standard Process. On approval, retain the reviewed
-`Review panel:` value on CHARTER.md, update STATE.md to `phase: define`,
-`status: done`, leave `milestone: null`, and report that research (program
+`Review panel:` value on CHARTER.md, run `pipeline_state.py transition` with
+expected `define/active`, milestone/branch/archive all at their exact current
+values, event `program charter approved`, and `--set-phase define --set-status
+done`; require milestone to remain null. Report that research (program
 scope) is next. Research, decide, and the roadmap phase slice the program;
 per-milestone INTENT.md files come later, in milestone mode. Do not write
 INTENT.md in program mode.
@@ -257,9 +268,12 @@ Retain `Review panel:` as reviewed: the CHARTER copy or the user's override
 in milestone/lookahead mode, the CHARTER value in program mode, or `off`
 when the user did not choose a panel and no CHARTER default exists.
 
-After approval, finalize `.project/intent/INTENT.md` and update STATE.md to
-`phase: define`, `status: done`, set its `milestone` field to this
-milestone's slug, and append the transition to its log. Report the next phase
+After approval, finalize `.project/intent/INTENT.md` and run
+`pipeline_state.py transition` with expected `define/active`, the exact
+current milestone/branch/archive values, event `milestone intent approved`,
+`--set-phase define --set-status done --set-milestone <milestone slug>`, and
+`--project-dir .project/next` in lookahead. Require returned `define/done` and
+the exact milestone. Report the next phase
 from the approved lane. For `Lane: standard`, research is next. For
 `Lane: quick`, planning is next and research and decide are skipped. For
 `Lane: milestone`, use the resolved roadmap entry matching the track STATE's

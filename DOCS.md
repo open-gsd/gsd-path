@@ -289,10 +289,9 @@ contract updates manually ([UPDATE.md](UPDATE.md)).
 Restore from `disabled-gsd-skills` beside the skills root ([UPDATE.md](UPDATE.md)).
 
 **Brownfield vs greenfield?**
-The router first runs `scripts/detect_project.py classify --repo
-<absolute-root>` and routes from its returned JSON. For a brownfield or
-greenfield verdict, it then runs the bundled `initialize` command and requires
-the same verdict before the helper creates STATE.md. A recognized
+The router runs the bundled `scripts/detect_project.py initialize --repo
+<absolute-root>` command, which classifies the project before it creates
+STATE.md for a brownfield or greenfield verdict. A recognized
 manifest or source file, qualifying tracked Git file, or qualifying Markdown
 document with a body is brownfield and routes to inspect. A title-only README,
 `LICENSE`/`COPYING`, `.gitignore`, or content only in ignored trees such as

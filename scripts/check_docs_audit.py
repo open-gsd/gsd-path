@@ -7,6 +7,9 @@ with testable claims where every claim row carries a valid type, a valid
 verdict, and real evidence, a `## Descriptive docs` list for claimless docs,
 the two sets disjoint and together equal to the frozen inventory, and a
 remediation queue with one classified row per non-verified claim.
+`## User rulings` is fixed-format durable memory. Pass the pre-rewrite audit
+with `--prior-audit FILE`; every prior row, including its Planned value, must
+remain an exact ordered prefix.
 
 The frozen inventory travels in the dispatch brief; pass it with
 `--inventory FILE` (one POSIX path per line, `-` for stdin). Without it the
@@ -21,6 +24,7 @@ import json
 import re
 import subprocess
 import sys
+from datetime import date
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence
 
@@ -28,6 +32,7 @@ DEFAULT_AUDIT = ".project/research/DOCS-AUDIT.md"
 TYPES = ("command", "feature", "structure", "status", "config", "integration")
 VERDICTS = ("verified", "stale", "aspirational", "unverifiable")
 CLASSES = ("fix-doc", "fix-code", "NEEDS-USER")
+RULINGS = ("fix-code", "fix-doc", "accept-drift")
 SUMMARY_ROWS = VERDICTS + ("descriptive docs (no testable claims)",)
 
 HEADER_PATTERN = re.compile(r"^(Repo root|Audited|Alignment mode): (.+)$", re.M)
@@ -76,7 +81,12 @@ def _table_rows(body: str, width: int, label: str) -> List[List[str]]:
 
 
 def _not_placeholder(value: str, label: str) -> None:
-    if not value or PLACEHOLDER_PATTERN.match(value.strip("`\"")):
+    normalized = value.strip().strip("`\"").strip()
+    if (
+        not normalized
+        or normalized.casefold() == "none"
+        or PLACEHOLDER_PATTERN.match(normalized)
+    ):
         raise AuditError(f"{label}: placeholder or empty value: {value!r}")
 
 
@@ -90,7 +100,17 @@ def _installed_skill(parts: Sequence[str]) -> bool:
 
 def derive_inventory(repo: Path, audit_relative: str, alignment: bool) -> List[str]:
     listed = subprocess.run(
-        ["git", "ls-files", "-z", "--", "*.md", "**/*.md"],
+        [
+            "git",
+            "ls-files",
+            "-z",
+            "--cached",
+            "--others",
+            "--exclude-standard",
+            "--",
+            "*.md",
+            "**/*.md",
+        ],
         cwd=repo,
         capture_output=True,
         check=False,
@@ -114,24 +134,63 @@ def derive_inventory(repo: Path, audit_relative: str, alignment: bool) -> List[s
     return sorted(paths)
 
 
-def validate(repo: Path, audit_relative: str, inventory: Optional[Sequence[str]]) -> Dict[str, object]:
+def _user_rulings(body: str, label: str) -> List[List[str]]:
+    rows = _table_rows(body, 4, label)
+    seen = set()
+    for number, ruling, words, planned in rows:
+        if not number.isdigit() or int(number) < 1:
+            raise AuditError(f"{label}: Queue # must be a positive integer: {number}")
+        if number in seen:
+            raise AuditError(f"{label}: repeated Queue #: {number}")
+        seen.add(number)
+        if ruling not in RULINGS:
+            raise AuditError(f"{label}: invalid ruling: {ruling}")
+        _not_placeholder(words, f"{label} #{number} User's words")
+        if ruling == "accept-drift":
+            if planned != "n/a (accept-drift)":
+                raise AuditError(
+                    f"{label} #{number}: accept-drift must be planned n/a (accept-drift)"
+                )
+        elif planned != "no" and not re.fullmatch(r"T\d{3}", planned):
+            raise AuditError(
+                f"{label} #{number}: Planned must be no or a T### task id"
+            )
+    return rows
+
+
+def validate(
+    repo: Path,
+    audit_relative: str,
+    inventory: Optional[Sequence[str]],
+    prior_text: Optional[str] = None,
+) -> Dict[str, object]:
     audit = repo / audit_relative
     if not audit.is_file() or audit.is_symlink():
         raise AuditError(f"missing real audit file: {audit_relative}")
     text = audit.read_text(encoding="utf-8")
 
-    header = dict(HEADER_PATTERN.findall(text))
+    header_rows = HEADER_PATTERN.findall(text)
+    header = {}
     for key in ("Repo root", "Audited", "Alignment mode"):
-        if key not in header:
-            raise AuditError(f"missing header line: {key}")
-        _not_placeholder(header[key], key)
+        values = [value for found_key, value in header_rows if found_key == key]
+        if len(values) != 1:
+            raise AuditError(f"header must contain exactly one {key} line")
+        _not_placeholder(values[0], key)
+        header[key] = values[0]
+    declared_root = Path(header["Repo root"])
+    if not declared_root.is_absolute() or declared_root.resolve() != repo.resolve():
+        raise AuditError("Repo root does not match --repo")
+    try:
+        date.fromisoformat(header["Audited"])
+    except ValueError as error:
+        raise AuditError("Audited must be an ISO date") from error
     alignment_value = header["Alignment mode"].split("—")[0].strip().lower()
     if alignment_value not in ("yes", "no"):
         raise AuditError(f"Alignment mode must be yes or no, found: {header['Alignment mode']}")
     alignment = alignment_value == "yes"
 
     sections = _sections(text)
-    for required in ("Summary", "Descriptive docs", "Remediation queue"):
+    for required in ("Summary", "Descriptive docs", "User rulings", "Remediation queue"):
         if required not in sections:
             raise AuditError(f"missing section: ## {required}")
 
@@ -153,8 +212,13 @@ def validate(repo: Path, audit_relative: str, inventory: Optional[Sequence[str]]
             continue
         path = title[len("Doc: ") :].strip().strip("`")
         _not_placeholder(path, "Doc section path")
+        if path in docs:
+            raise AuditError(f"duplicate normalized Doc section: {path}")
         claims = []
-        for claim, kind, verdict, evidence in _table_rows(body, 4, f"Doc: {path}"):
+        claim_rows = _table_rows(body, 4, f"Doc: {path}")
+        if not claim_rows:
+            raise AuditError(f"Doc: {path}: requires at least one claim row")
+        for claim, kind, verdict, evidence in claim_rows:
             if kind not in TYPES:
                 raise AuditError(f"Doc: {path}: invalid claim type: {kind}")
             if verdict not in VERDICTS:
@@ -200,9 +264,28 @@ def validate(repo: Path, audit_relative: str, inventory: Optional[Sequence[str]]
             f"does not match {len(descriptive)} listed docs"
         )
 
+    rulings = _user_rulings(sections["User rulings"], "User rulings")
+    if prior_text is not None:
+        prior_sections = _sections(prior_text)
+        if "User rulings" not in prior_sections:
+            raise AuditError("prior audit is missing section: ## User rulings")
+        prior_rulings = _user_rulings(
+            prior_sections["User rulings"], "Prior user rulings"
+        )
+        if rulings[: len(prior_rulings)] != prior_rulings:
+            raise AuditError(
+                "User rulings must preserve every prior row and Planned value in order"
+            )
+
     queue_body = sections["Remediation queue"]
     non_verified = sum(tallies[verdict] for verdict in VERDICTS if verdict != "verified")
     queue = _table_rows(queue_body, 6, "Remediation queue") if non_verified or "|" in queue_body else []
+    expected_queue = sorted(
+        (doc, claim["claim"], claim["verdict"])
+        for doc, claims in docs.items()
+        for claim in claims
+        if claim["verdict"] != "verified"
+    )
     for number, doc, claim, verdict, klass, action in queue:
         if verdict not in VERDICTS or verdict == "verified":
             raise AuditError(f"Remediation queue #{number}: verdict must be non-verified, found: {verdict}")
@@ -213,6 +296,14 @@ def validate(repo: Path, audit_relative: str, inventory: Optional[Sequence[str]]
         _not_placeholder(action, f"Remediation queue #{number}: action")
     if len(queue) != non_verified:
         raise AuditError(f"Remediation queue has {len(queue)} rows for {non_verified} non-verified claims")
+    numbers = [row[0] for row in queue]
+    if numbers != [str(number) for number in range(1, len(queue) + 1)]:
+        raise AuditError("Remediation queue numbers must be contiguous and ordered from 1")
+    actual_queue = sorted((doc, claim, verdict) for _, doc, claim, verdict, _, _ in queue)
+    if actual_queue != expected_queue:
+        raise AuditError(
+            "Remediation queue must bind each non-verified doc, claim, and verdict exactly once"
+        )
 
     return {
         "audit": audit_relative,
@@ -222,6 +313,7 @@ def validate(repo: Path, audit_relative: str, inventory: Optional[Sequence[str]]
         "claims": sum(len(claims) for claims in docs.values()),
         "verdicts": tallies,
         "queue": len(queue),
+        "rulings": len(rulings),
     }
 
 
@@ -230,18 +322,60 @@ def parser() -> argparse.ArgumentParser:
     argument_parser.add_argument("--repo", type=Path, required=True)
     argument_parser.add_argument("--audit", default=DEFAULT_AUDIT, help="relative audit path (default: %(default)s)")
     argument_parser.add_argument("--inventory", help="file with one inventoried POSIX path per line, or - for stdin")
+    argument_parser.add_argument(
+        "--prior-audit",
+        type=Path,
+        help="pre-rewrite audit whose User rulings must carry forward",
+    )
+    argument_parser.add_argument(
+        "--emit-inventory",
+        action="store_true",
+        help="print the frozen tracked and untracked Markdown inventory, one path per line",
+    )
+    argument_parser.add_argument(
+        "--alignment",
+        action="store_true",
+        help="include active .project Markdown when emitting an alignment inventory",
+    )
     return argument_parser
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
     arguments = parser().parse_args(argv)
+    if arguments.emit_inventory:
+        if arguments.inventory is not None or arguments.prior_audit is not None:
+            print(
+                "docs audit validation failed: --emit-inventory cannot use validation inputs",
+                file=sys.stderr,
+            )
+            return 1
+        try:
+            inventory = derive_inventory(
+                arguments.repo.resolve(), arguments.audit, arguments.alignment
+            )
+        except AuditError as error:
+            print(f"docs audit validation failed: {error}", file=sys.stderr)
+            return 1
+        print("\n".join(inventory))
+        return 0
     inventory = None
     if arguments.inventory is not None:
         source = sys.stdin if arguments.inventory == "-" else open(arguments.inventory, encoding="utf-8")
         with source:
             inventory = [line.strip() for line in source if line.strip()]
+    prior_text = None
+    if arguments.prior_audit is not None:
+        if arguments.prior_audit.is_symlink() or not arguments.prior_audit.is_file():
+            print(
+                "docs audit validation failed: --prior-audit must be a real file",
+                file=sys.stderr,
+            )
+            return 1
+        prior_text = arguments.prior_audit.read_text(encoding="utf-8")
     try:
-        result = validate(arguments.repo.resolve(), arguments.audit, inventory)
+        result = validate(
+            arguments.repo.resolve(), arguments.audit, inventory, prior_text
+        )
     except AuditError as error:
         print(f"docs audit validation failed: {error}", file=sys.stderr)
         return 1

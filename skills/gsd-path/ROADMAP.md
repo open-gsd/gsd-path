@@ -24,15 +24,20 @@ and the target artifact rather than approving stale scope.
 
 ## Preconditions
 
-Require `pipeline: gsd-path/v2` in `.project/STATE.md`; a missing or different
-marker returns to `$gsd-path` for ownership checking. Legal entry is
+Require `pipeline_state.py validate --repo <absolute root>` to pass; otherwise
+return to `$gsd-path` for ownership checking. Legal entry is
 `decide/done` with an existing `.project/CHARTER.md` and no `.project/ROADMAP.md`
-yet (transition to `roadmap/active`), `roadmap/active|blocked`, or a
+yet, `roadmap/active|blocked`, or a
 milestone-boundary re-slice: `inspect/active` or `define/active` with no
 approved INTENT.md for the next milestone and a user request to re-scope the
 remaining `pending` entries,
 or `roadmap/active` with STATE.milestone null and an `abandoned` entry in
 ROADMAP.md (the post-abandon re-slice the build orchestrator hands off).
+Enter from `decide/done` only with `pipeline_state.py transition`, exact
+expected phase/status/milestone/branch/archive fields, event `roadmap started`,
+and `--set-phase roadmap --set-status active`; never edit STATE directly. In a
+milestone-boundary re-slice, preserve the entering `inspect/active` or
+`define/active` state throughout the re-slice.
 Any later phase blocks; mid-milestone
 re-scope is never legal — finish or ship the active milestone first. A
 `decide/done` state with ROADMAP.md already present is milestone-scope decide;
@@ -74,6 +79,9 @@ precondition fails.
    The output is exactly `.project/ROADMAP.md` — no other location is
    canonical.
 3. Gate ROADMAP.md:
+   First run `python3 <absolute check_handoffs.py> roadmap --repo <absolute
+   root>`; its structural result is required in addition to the semantic
+   checks below.
    - Every CHARTER.md `Full scope: in` item maps to at least one milestone,
      and every milestone traces back to charter scope.
    - Every milestone entry has Goal, Depends on, Status, Archive, Scope in/out,
@@ -93,9 +101,11 @@ precondition fails.
 4. Redispatch one complete corrected brief under logical task name `roadmap`,
    following the runtime dispatch contract and including all gate failures.
    Allow one revision round. If it still fails, keep the entering
-   `inspect/active` or `define/active` state for a milestone-boundary re-slice;
-   otherwise set STATE.md to `phase: roadmap`, `status: blocked`. Append the
-   failures to its log, then
+   `inspect/active` or `define/active` state for a milestone-boundary re-slice
+   and use `pipeline_state.py transition` with that complete state as both the
+   expected and retained state and an event naming the failed roadmap gate.
+   Otherwise use the helper with expected `roadmap/active`, exact milestone,
+   branch, and archive values, `--set-status blocked`, and the same event. Then
    present **Outcome** with the failed gate, **Review** linking the resolved
    absolute ROADMAP.md path (or STATE.md when ROADMAP.md is missing), and
    **Next** naming the one correction or user decision required. Stop.
@@ -112,8 +122,10 @@ precondition fails.
    `Keep the unchanged lookahead track (recommended)` or `Discard and
    regenerate the lookahead track`. When it returns `status: changed`, offer
    `Discard and regenerate the lookahead track (recommended)` or `Request
-   roadmap changes`; keeping the stale track is not valid. Apply the ruling and
-   record the helper result and ruling in the state log. Retain the baseline
+   roadmap changes`; keeping the stale track is not valid. Apply the ruling
+   and record the helper result and ruling with `pipeline_state.py transition`,
+   expecting and retaining the complete entering state with event `lookahead
+   re-slice ruling: <ruling>`; never append it directly. Retain the baseline
    through any requested roadmap revisions and the final approval decision.
 6. On a post-abandon re-slice, first run the bundled
    `scripts/promote_lookahead.py select-next --roadmap .project/ROADMAP.md`
@@ -134,35 +146,66 @@ precondition fails.
    retain the entering state for a milestone-boundary re-slice; otherwise keep
    `phase: roadmap`, `status: active`. Retain the baseline, revise, and re-gate
    against that same baseline.
-7. On approval of a milestone-boundary re-slice, preserve the entering
-   `phase`, `status`, and `milestone` in STATE.md and keep its matching roadmap
-   entry `active`. On a post-abandon re-slice, preserve the bound branch, set
-   STATE.md to `phase: inspect`, `status: active`, `milestone` to the
-   helper-selected milestone slug, and `archive: null`; mark that entry `active` and
-   record the abandoned predecessor in the log. On first roadmap approval,
-   set STATE.md to `phase: roadmap`, `status: done`, set `milestone` to the
-   first `pending` milestone slug, and mark that entry `active`. Record the
-   approval in the log. For every re-slice, remove
-   `.project/ROADMAP.before-reslice.md` only after the approved roadmap and
-   transition state have been written. Then
-   checkpoint the approval in Git: stage `.project/` in full — the approved
-   CHARTER.md, program SYNTHESIS.md, ROADMAP.md, research artifacts, STATE.md,
-   and complete append-only discussion records — and commit with exact
-   subject `roadmap: program roadmap approved` and body
-   `Why: approved roadmap checkpoint`. Defer the checkpoint to the
-   build orchestrator's transition commit only when the directory is not yet
-   a Git repository or `.project/REPOSITORY.md` records `Kind: new-github`
-   (the router owns the branch during that transaction). Confirm
-   approval and link ROADMAP.md again. For a milestone-boundary re-slice,
-   state that the preserved inspect or define phase resumes. For a
-   post-abandon re-slice, state that inspect is next. Otherwise state that
-   define (milestone mode) is next. Do not add another approval gate.
-   When routed by an active `$gsd-path`, return control to that router so its
-   state table routes the preserved STATE.md — `inspect/active` resumes
-   inspect, `define/active` resumes define; never name define as next when
-   inspect was preserved. When invoked directly, stop and tell the user to
-   explicitly invoke `$gsd-path`, which routes that same preserved state; do
-   not invoke an explicit-only sibling skill yourself.
+7. On approval in an established repository, record the exact full current
+   HEAD before changing ROADMAP.md or STATE.md. For a milestone-boundary
+   re-slice, keep its matching roadmap entry `active`, use `pipeline_state.py
+   transition` to record `program roadmap re-slice approved` while expecting
+   and retaining the complete entering `inspect/active` or `define/active`
+   state, then checkpoint the pending `.project/` artifacts with:
+
+   ```text
+   python3 <absolute isolation.py> checkpoint \
+     --repo <absolute root> --expected-head <recorded full HEAD> \
+     --subject "roadmap: program roadmap approved" \
+     --body "Why: approved roadmap checkpoint" \
+     --allow-path .project
+   ```
+
+   On a post-abandon re-slice, mark only the helper-selected pending entry
+   `active`, use `pipeline_state.py transition` with the complete current
+   `roadmap/active` state as expected to set `phase: inspect`, `status: active`,
+   `milestone` to the selected slug, preserve the bound branch, and set
+   `archive: null`, with an event naming the abandoned predecessor. Then use
+   the same `isolation.py checkpoint` command above. For a first roadmap
+   approval, run:
+
+   ```text
+   python3 <absolute pipeline_state.py> approve \
+     --repo <absolute root> --kind roadmap \
+     --milestone <selected first pending slug> \
+     --expected-head <recorded full HEAD>
+   ```
+
+   The helper journals before mutation, proves the selected entry is pending
+   and no entry is already active, marks it active, changes STATE from
+   `roadmap/active` to `roadmap/done` with that milestone and event `program
+   roadmap approved`, and checkpoints all pending `.project/` artifacts with
+   the canonical roadmap subject and body. Require its typed result to report
+   `schema: gsd-path/state-checkpoint/v1`, `status: approved`, `kind: roadmap`,
+   `project_dir: .project`, `state.status: done`, the selected milestone, and
+   the returned current commit. Rerun the same command after interruption; the
+   matching journal owns recovery.
+
+   For every re-slice, remove `.project/ROADMAP.before-reslice.md` only after
+   the state transition succeeds and before the checkpoint. Retain it through
+   every requested revision and failed approval attempt.
+
+   Defer either checkpoint only when the directory is not yet a Git repository
+   or `.project/REPOSITORY.md` records `Kind: new-github`. For a normal
+   approval, mark the selected entry active and use `pipeline_state.py
+   transition` with the complete current state as expected, `--set-status done
+   --set-milestone <selected slug>`, and event `program roadmap approved`; for
+   a milestone-boundary re-slice, use the retaining transition above; for a
+   post-abandon re-slice, use its transition above. The build transition
+   commit owns the pending artifacts. Confirm approval and link ROADMAP.md again. For
+   a milestone-boundary re-slice, state that the preserved inspect or define
+   phase resumes; for a post-abandon re-slice, state that inspect is next;
+   otherwise state that define (milestone mode) is next. Do not
+   add another approval gate. When routed by an active `$gsd-path`, return
+   control to that router so it routes the resulting state; never name define
+   as next when inspect was preserved or selected. When invoked directly, stop
+   and tell the user to explicitly invoke `$gsd-path`, which routes the same
+   result; do not invoke an explicit-only sibling skill yourself.
 
 ## Rules
 

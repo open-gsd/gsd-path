@@ -101,6 +101,12 @@ flowchart TD
     A -->|"program complete"| PC["stop"]
 ```
 
+For an existing Git repository, initialization writes STATE.md first. Before
+entering inspect or define, the router fetches `origin/main`, creates or adopts
+`gsd-path/M001` there, and records the binding in state. Build only uses that
+recorded milestone branch; it never creates or selects one. See the
+[phase workflow](WORKFLOW.md#phase-0--inspect-gsd-path-inspect).
+
 At any non-shipped phase, `/gsd-path-discuss` (or `$gsd-path-discuss` in
 Codex) records the conversation in `.project/discuss/` without advancing or
 editing the phase handoff. Required decisions carry a named owner and remain

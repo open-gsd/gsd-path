@@ -29,6 +29,11 @@ is `decide/done` (transition to `plan/active`) or `plan/active|blocked`;
 quick mode additionally enters from `define/done` when INTENT.md records
 `Lane: quick`, and milestone mode enters from `define/done` when INTENT.md
 records `Lane: milestone` (see Quick mode and Milestone mode below).
+Before dispatch, enter from `decide/done` or `define/done` with
+`pipeline_state.py transition`, the complete current state as expected,
+`--set-phase plan --set-status active`, and event `planning started`. Resume
+`plan/blocked` through the same helper with event `planning resumed`. Require
+the returned track state to be `plan/active`; never edit STATE directly.
 Any later phase blocks instead of replacing an approved plan. Patch mode is
 the only reopen exception: require an approved plan, no in-progress task, and
 state `plan/done` or `ship/blocked`; any other state blocks. `build/done` is
@@ -69,6 +74,11 @@ severity, or fit with this milestone's scope).
 
 ## Process
 
+Set `<track>` to `.project` for normal work and `.project/next` when the
+router supplied lookahead mode. Every per-milestone path below, including
+review-panel evidence, is rooted there. Program inputs remain at `.project/`
+as stated in Lookahead mode.
+
 1. Read the local [plan template](templates/plan.md), [task template](templates/task.md),
    [plan-panel template](templates/plan-panel.md), `scripts/check_handoffs.py`,
    and `scripts/review_panel.py`; resolve them to absolute paths.
@@ -84,8 +94,8 @@ severity, or fit with this milestone's scope).
    `.project/review/PATCH-FINDINGS.md` and every source artifact it names; in
    docs-audit patch mode include the selected `DOCS-AUDIT.md` rows and user
    rulings.
-   The outputs are exactly `.project/plan/PLAN.md` and one task
-   file per task at `.project/tasks/T###-slug.md` — no other location is
+   The outputs are exactly `<track>/plan/PLAN.md` and one task
+   file per task at `<track>/tasks/T###-slug.md` — no other location is
    canonical, and `.project/PLAN.md` is never written.
 3. Gate PLAN.md and every task file:
    - Require unique task ids, and require every task's `wave` to name a
@@ -144,27 +154,40 @@ severity, or fit with this milestone's scope).
      failure. Quick mode requires `review_panel: off`.
 4. Redispatch one complete corrected brief under logical task name `plan`,
    following the runtime dispatch contract and including all gate failures.
-   Allow one revision round. If it still fails, set STATE.md to
-   `phase: plan`, `status: blocked`, append the failures to its log, then
+   Allow one revision round. If it still fails, use `pipeline_state.py
+   transition` with the exact current phase, status, milestone, branch, and
+   archive as expected fields, `--set-phase plan --set-status blocked`, and a
+   one-line event naming the failed plan gates. Require returned
+   `plan/blocked`, then
    present **Outcome** with the failed gate, **Review** linking the resolved
    absolute PLAN.md path (or STATE.md when PLAN.md is missing), and **Next**
    naming the one correction or user decision required. Stop.
 5. Show the wave number, goal, and task count for every wave as the outcome.
-   Link the resolved absolute `.project/plan/PLAN.md` path and summarize the
-   linked `.project/tasks/` task set. Then run the optional review panel
+   Link the resolved absolute `<track>/plan/PLAN.md` path and summarize the
+   linked `<track>/tasks/` task set. Then run the optional review panel
    before the approval question:
    - Inspect the host child-agent schema for advertised model slugs. Do not
      guess slugs. Pass them to `python3 <absolute review_panel.py> resolve
-     --plan <absolute PLAN.md> --intent <absolute INTENT.md> --advertised
+     --plan <absolute <track>/plan/PLAN.md> --intent <absolute
+     <track>/intent/INTENT.md> --advertised
      <comma slugs> --parent-slug <current model slug when known>` and
      `--charter <absolute .project/CHARTER.md>` when that file exists.
-   - `status: off` — skip the panel. The approval question may include
+   - `status: off` — skip the panel and remove any stale
+     `<track>/review/PLAN-PANEL.md` or `PLAN-PANEL.skipped.json`. The approval
+     question may include
      `Approve with review panel (detected)` as an alternative; if chosen,
      write `review_panel: detected` into PLAN.md Config, re-run resolve, and
      continue this step.
-   - `status: skipped` — record the helper reason in the state log and
-     continue without a panel. Do not treat this as a gate failure.
-   - `status: error` or exit 2 — set `plan/blocked`, link PLAN.md, and stop.
+   - `status: skipped` — remove any stale
+     `<track>/review/PLAN-PANEL.md`, persist the exact JSON stdout from
+     `resolve` at `<track>/review/PLAN-PANEL.skipped.json`, then use
+     `pipeline_state.py transition` against `<track>` with the exact current
+     state as both expected and resulting phase/status and event `plan review
+     panel skipped: <helper reason>`. Require the returned unchanged
+     `plan/active` position and continue without a panel. Do not treat
+     this as a gate failure or infer enablement again from Config.
+   - `status: error` or exit 2 — use the same guarded transition to set
+     `plan/blocked` with an event naming the helper error, link PLAN.md, and stop.
      A named family that is not advertised is an assertion failure.
    - `status: ready` — for each selected family, spawn one independent child
      with logical task name `review_plan_panel_<family>`, the reviewer role
@@ -172,29 +195,47 @@ severity, or fit with this milestone's scope).
      model slug when the host advertises model selection. Never override the
      model on the planner. Each child stages its family file under a
      disposable root; the parent validates and copies those files, then runs
+     remove any stale `<track>/review/PLAN-PANEL.skipped.json`, then run
      `python3 <absolute review_panel.py> merge --kind plan --inputs <family
-     files> --output <absolute .project/review/PLAN-PANEL.md> --mode
+     files> --output <absolute <track>/review/PLAN-PANEL.md> --mode
      <detected|named>`. Do not average findings or auto-replan.
+   Before asking for approval, require exactly one panel artifact for non-off
+   Config: `PLAN-PANEL.md` for `ready`, or `PLAN-PANEL.skipped.json` for
+   `skipped`. Off Config requires neither. A mismatch blocks approval.
    Ask one explicit next question: whether to approve this plan and start the
    build. When PLAN-PANEL.md has `Actionable: 0` or the panel did not run,
    list `Approve and start build (recommended)` first, with `Request changes`
    as the alternative. When `Actionable` is greater than 0, list `Address
    panel findings first (recommended)` first, then `Approve and start build`,
-   then `Request changes`. Link PLAN-PANEL.md when it exists. If the user
+   then `Request changes`. Link the applicable `<track>/review/PLAN-PANEL.md`
+   or skipped receipt. If the user
    requests changes, keep `phase: plan`, `status: active`, revise, and re-gate.
-6. On approval, set STATE.md to `phase: plan`, `status: done`, record the
-   approval in the log. Then checkpoint the approval in Git: stage
-   `.project/` in full — INTENT.md, research artifacts, the approved PLAN.md
-   and task set, STATE.md, PLAN-PANEL.md when present, and complete
-   append-only discussion records — and
-   commit with exact subject `plan: build plan approved` and body
-   `Why: approved plan checkpoint` plus `Milestone: <STATE.milestone or none>`.
-   Defer the
-   checkpoint to the build orchestrator's transition commit only when the
-   directory is not yet a Git repository or `.project/REPOSITORY.md` records
-   `Kind: new-github` (the router owns the branch during that transaction).
-   Patch-mode approvals do not checkpoint: build's patch re-entry commits
-   those artifacts with its `build/active` transition. Confirm approval,
+6. On approval in an established repository, record the exact full current
+   HEAD before changing approval metadata, then run:
+
+   ```text
+   python3 <absolute pipeline_state.py> approve \
+     --repo <absolute root> --kind plan \
+     --project-dir <.project or .project/next> \
+     --expected-head <recorded full HEAD>
+   ```
+
+   The helper journals before mutation, changes the track STATE from
+   `plan/active` to `plan/done` with event `plan approved`, validates that the
+   active worktree is on its bound branch, and checkpoints all pending
+   `.project/` artifacts with the canonical plan subject and body. Require its
+   typed result to report `schema: gsd-path/state-checkpoint/v1`, `status:
+   approved`, `kind: plan`, the requested `project_dir`, `state.status: done`,
+   and the returned current commit. Rerun the same command after interruption;
+   the matching journal owns recovery.
+
+   Defer that checkpoint only when the directory is not yet a Git repository
+   or `.project/REPOSITORY.md` records `Kind: new-github`. In that case use
+   `pipeline_state.py transition` with the complete current state as expected,
+   `--set-status done`, and event `plan approved`; the build transition commit
+   owns the pending artifacts. Patch-mode approvals also use that guarded
+   transition without a plan checkpoint because build's patch re-entry commits
+   the artifacts with its `build/active` transition. Confirm approval,
    link PLAN.md again, and state that
    build starts next. Do not add another approval gate. When routed by an
    active `$gsd-path`, return control to that router so its bundled build
@@ -272,7 +313,9 @@ are read from their active `.project/` paths. Lookahead-only differences:
   in the task Context; the router's promotion and the build's normal
   plan-defect repair absorb drift.
 - The approval checkpoint commit stages `.project/` in full, which includes
-  `next/`; the deferral exceptions are unchanged.
+  `next/`; the deferral exceptions are unchanged. Its panel evidence is
+  `.project/next/review/PLAN-PANEL.md` or
+  `.project/next/review/PLAN-PANEL.skipped.json`, never an active-path copy.
 - Patch mode is never legal in lookahead: there is no running build of the
   lookahead milestone to patch. Route any such request to the active
   milestone's build track.
@@ -303,8 +346,10 @@ first.
 
 **Process.**
 
-1. Set STATE.md `phase: plan`, `status: active` and note the patch reopening in
-   the state log. A shipped milestone cannot reopen because its plan is
+1. Use `pipeline_state.py transition` with the complete `plan/done` or
+   `ship/blocked` state as expected, set `phase: plan`, `status: active`, and
+   event `patch plan reopened`. Require returned `plan/active`. A shipped
+   milestone cannot reopen because its plan is
    archived; start a new milestone instead.
 2. In final-review patch mode, run `python3 <absolute check_handoffs.py> patch
    --repo <absolute repo root>`. In docs-audit patch mode, use the selected
@@ -327,8 +372,10 @@ first.
    user, not into the wave.
 4. Show the patch wave outcome (finding → task mapping), link the resolved
    absolute PLAN.md and task set, and ask the same two-option approval question.
-   On approval, relink the approved plan, mark `phase: plan`, `status: done`, log
-   it, and use the same provenance rule as normal mode: an active router
+   On approval, relink the approved plan, use `pipeline_state.py transition`
+   with the complete `plan/active` state as expected, `--set-status done`, and
+   event `patch plan approved`, then use the same provenance rule as normal
+   mode: an active router
    resumes its bundled build contract, while a direct invocation stops and
    tells the user to explicitly invoke `$gsd-path` or `$gsd-path-build`. The
    build runs the new wave through the normal dispatch and review-gate loop

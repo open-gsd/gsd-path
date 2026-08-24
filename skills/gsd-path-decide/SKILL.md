@@ -22,10 +22,13 @@ and the target artifact rather than settling stale decisions.
 
 ## Preconditions
 
-Require `pipeline: gsd-path/v2` in `.project/STATE.md`; a missing or different
-marker returns to `$gsd-path` for ownership checking. Legal entry is
-`research/done` (transition to `decide/active`) or
-`decide/active|blocked`; `decide/done` or any later phase blocks rather
+Require `pipeline_state.py validate --repo <absolute root> [--project-dir
+.project/next]` to pass; otherwise return to `$gsd-path` for ownership
+checking. Legal entry is `research/done` or `decide/active|blocked`. On
+`research/done`, enter with `pipeline_state.py transition`, expected
+phase/status `research/done`, exact branch and archive values, event `decision
+synthesis started`, and set phase/status `decide/active` (plus the same
+lookahead project dir); never edit STATE directly. `decide/done` or any later phase blocks rather
 than replacing decisions beneath an existing plan. When an active router
 supplies the lookahead track root `.project/next/`, evaluate these
 preconditions against the track instead; see Lookahead mode. Require
@@ -69,7 +72,8 @@ rules are unchanged; never write an active-path artifact.
    `AGENTS.md`, `WORKFLOW.md`, INTENT.md (or CHARTER.md in program flow),
    RESEARCH.md, every evidence file, the
    template, and the required output path from the Preconditions.
-3. Validate SYNTHESIS.md. Require one decision block for every genuinely open
+3. Validate SYNTHESIS.md with `python3 <absolute check_handoffs.py> decide
+   --repo <absolute root> [--project-dir .project/next]`. Require one decision block for every genuinely open
    choice in INTENT.md and the evidence, including stack and architecture
    shape plus build-vs-buy when open. A choice already settled by an intent
    constraint or the existing codebase belongs under `## Settled` as one line
@@ -79,8 +83,10 @@ rules are unchanged; never write an active-path artifact.
    blockers, walking skeleton, and pitfall-to-task guidance.
 4. If structural validation fails, redispatch one complete corrected brief
    under logical task name `decide`, following the runtime dispatch
-   contract, and validate again. If it still fails, set STATE.md to
-   `phase: decide`, `status: blocked`, append the failures to its log, and
+   contract, and validate again. If it still fails, use
+   `pipeline_state.py transition` with expected `decide/active`, exact branch
+   and archive values, `--set-status blocked`, and an event naming the failed
+   synthesis gate, and
    present **Outcome** with the failed gate, **Review** linking SYNTHESIS.md or
    STATE.md when it is missing, and **Next** naming the one correction or user
    decision required; then stop.
@@ -94,8 +100,11 @@ rules are unchanged; never write an active-path artifact.
    answer, append the ruling under `## User rulings`, revise every affected
    decision so it reflects the ruling, and only then remove its tag.
 6. Re-run the structural gate. When it passes with no unresolved user items,
-   set STATE.md to `phase: decide`, `status: done`, append the transition
-   to its log. Confirm the settled outcome, link SYNTHESIS.md again, and name
+   use `pipeline_state.py transition` with expected `decide/active`, exact
+   branch and archive values, `--set-phase decide --set-status done`, and an
+   event naming the validated synthesis path. Include `--project-dir
+   .project/next` in lookahead and require returned `decide/done`. Confirm the
+   settled outcome, link SYNTHESIS.md again, and name
    the next phase: the roadmap phase in program scope, planning otherwise.
    When routed by an active `$gsd-path`, return control to
    that router. When invoked directly, stop and tell the user to explicitly

@@ -114,9 +114,16 @@ returned JSON. `brownfield` initializes `inspect/active` and routes here;
 Owned state routes by STATE.md without rerunning the helper. Reserve `classify`
 for read-only inspection; do not re-derive a verdict from a directory listing.
 
-Before either agent writes `.project/`, freeze a sorted Markdown inventory
-that excludes `.project/**` and all vendored/generated trees. Two read-only
-agents then run in parallel. The codebase mapper establishes what
+For a newly initialized existing Git repository, the state router returns
+`bind-initial` while `STATE.branch` is null. The router fetches `origin/main`,
+runs `pipeline_git.py bind-initial` with that exact SHA, and records the
+returned `gsd-path/M00N` binding through `pipeline_state.py transition` before
+entering inspect or define. Build consumes this binding and never creates or
+selects the milestone branch.
+
+Before either inspect agent writes a phase artifact, freeze a sorted Markdown
+inventory that excludes `.project/**` and all vendored/generated trees. Two
+read-only agents then run in parallel. The codebase mapper establishes what
 actually exists: stack, entry points, architecture, conventions, maturity,
 recent activity, load-bearing surprises, and open questions only the user
 can settle. The docs auditor inventories every `.md`, extracts testable

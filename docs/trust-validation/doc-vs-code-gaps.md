@@ -1,6 +1,6 @@
 # GSD Path — Documentation vs Code Gap Catalog
 
-**Generated:** 2026-08-05 (wayfinder: Catalog documentation vs code gaps)  
+**Generated:** 2026-08-05 (workstream: Catalog documentation vs code gaps)
 **Primary sources:** live repo read + commands; reconciled with `.project/research/DOCS-AUDIT.md` (2026-08-02) and `evidence-codebase.md`.
 
 ## Executive summary
@@ -80,7 +80,7 @@ Static dispatch contracts are **verified** (files exist, installer copies them).
 
 ## Verified alignments (high confidence)
 
-- Eleven `gsd-path*` skills; phase contracts are checked by `sync --check`.
+- Declared `gsd-path*` skills align with the sync manifest and `sync --check`.
 - `HOOKS.md` matches `guard_hook.py` / `git_guard.py` (archive path-first, cp/tee/checkout, case-insensitive `ship:`).
 - `WORKFLOW.md` phase SOP matches skill contracts (handoffs, archive script, explicit-only router).
 - Multi-host install targets in code match README install table (11 targets + shared codex/zed profile).

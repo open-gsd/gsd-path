@@ -1,6 +1,6 @@
 # GSD Path — Automated Evidence × Trust Criteria Map
 
-**Generated:** 2026-08-05 (wayfinder: Map automated evidence to trust criteria)  
+**Generated:** 2026-08-05 (workstream: Map automated evidence to trust criteria)
 **Schema:** [Define trust criteria dimensions and severity rubric](https://github.com/open-gsd/gsd-path/issues/4)  
 **Inputs:** test inventory (#5), doc gaps (#6), host scope (#7 — Codex, Claude, Cursor in scope)
 

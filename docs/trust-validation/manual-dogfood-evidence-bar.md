@@ -1,6 +1,6 @@
 # GSD Path — Manual & Dogfood Evidence Bar
 
-**Generated:** 2026-08-05 (wayfinder: Define manual and dogfood evidence bar)  
+**Generated:** 2026-08-05 (workstream: Define manual and dogfood evidence bar)
 **Hosts in scope:** Codex, Claude, Cursor ([#7](https://github.com/open-gsd/gsd-path/issues/7))
 
 ## Evidence recording rule
