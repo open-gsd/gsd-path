@@ -125,13 +125,13 @@ full-repo suite on a tiny edit outrank the phase brief.
   Integration at ship is the only path from the bound branch to the default
   branch — the bound branch never receives merges or back-merges, is never
   the GitHub default, and nothing else merges, pushes, or tags on its behalf.
-- Before writing the first pipeline artifact in an existing Git repository,
-  the router calls `scripts/pipeline_git.py bind-initial` with the selected
-  M00N and exact fetched `origin/main` SHA. The helper alone checks worktree
-  identity and cleanliness, exact base, and every local, remote, and
-  other-worktree collision before creating or adopting the branch. The router
-  persists its typed result in the new state. Build has no branch-creation
-  authority.
+- After initialization writes STATE.md, and before entering the first pipeline
+  phase in an existing Git repository, the router calls
+  `scripts/pipeline_git.py bind-initial` with the selected M00N and exact
+  fetched `origin/main` SHA. The helper alone checks worktree identity and
+  cleanliness, exact base, and every local, remote, and other-worktree
+  collision before creating or adopting the branch. The router persists its
+  typed result in the new state. Build has no branch-creation authority.
 - After `validate-integrated` passes and before any next-milestone file
   changes, the router calls the bundled `scripts/pipeline_git.py bind-next`
   helper with the previous bound branch, exact ship SHA, and exact current
