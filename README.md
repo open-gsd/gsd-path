@@ -133,10 +133,11 @@ prompts. Phase skills stop at their handoff; invoke the router again to continue
 The discussion sidecar is the exception: it can be invoked at any non-shipped
 phase and returns only a durable conversation record.
 
-**Brownfield** → inspect then define. **Greenfield** → define. The router uses
-the classifier described in the [DOCS.md FAQ](DOCS.md#faq); it does not infer
-the verdict from a directory listing. **Quick lane** (tiny scope) may skip
-research/decide — see [FULL.md](FULL.md).
+The router classifies **brownfield**, **greenfield**, owned, and orphaned
+project state before routing; see [DOCS.md](DOCS.md#faq). Brownfield →
+inspect then define. Greenfield → define. It does not infer the verdict from
+a directory listing.
+**Quick lane** (tiny scope) may skip research/decide — see [FULL.md](FULL.md).
 
 For an explicit new-GitHub request, the router previews the owner, visibility,
 default checkout, `gsd-path/M001` branch, and sibling linked worktree. A

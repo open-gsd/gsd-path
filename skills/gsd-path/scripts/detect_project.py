@@ -8,12 +8,14 @@ greenfield project.
 
 Verdicts:
 
-- owned — `.project/STATE.md` exists; route by that file, not detection
-- orphan — no STATE.md, but `.project/` contains a file or directory
-- brownfield — no STATE.md, `.project/` empty or absent, and at least one
+- owned — `.project/` is a real directory with a regular `STATE.md` and no
+  unsafe project paths; route by that file, not detection
+- orphan — `.project/` is unsafe, or it contains a file or directory without
+  a safe regular `STATE.md`
+- brownfield — no owned state, `.project/` empty or absent, and at least one
   in-scope signal (package/build manifest, source file, tracked signal in
   git, or substantive system documentation)
-- greenfield — no STATE.md, `.project/` empty or absent, and no signal
+- greenfield — no owned state, `.project/` empty or absent, and no signal
 
 Ignored path components: `.git`, `node_modules`, vendored/generated trees,
 build output, and managed GSD Path installation artifacts. `.project/` is
@@ -75,6 +77,7 @@ MANIFEST_NAMES = {
     "settings.gradle",
     "settings.gradle.kts",
     "CMakeLists.txt",
+    "Dockerfile",
     "Makefile",
     "makefile",
     "meson.build",
@@ -131,12 +134,17 @@ SOURCE_SUFFIXES = {
     ".clj",
     ".cljs",
     ".dart",
+    ".html",
+    ".css",
+    ".sh",
+    ".tf",
     ".zig",
     ".nim",
     ".vue",
     ".svelte",
     ".r",
     ".jl",
+    ".sql",
 }
 
 MARKDOWN_SUFFIXES = {".md", ".mdx", ".markdown"}
@@ -165,7 +173,6 @@ VERIFIED_INSTALLER_SKILL_ROOTS = {
     (".qwen", "skills"),
 }
 
-PIPELINE_LINE = re.compile(r"^pipeline:\s*(\S+)", re.MULTILINE)
 ATX_TITLE = re.compile(r" {0,3}#{1,6}(?:[ \t]+.*)?")
 SETEXT_UNDERLINE = re.compile(r" {0,3}(?:=+|-+)[ \t]*")
 SETEXT_BLOCK_START = re.compile(
@@ -210,6 +217,7 @@ GIT_OVERRIDE_VARS = (
     "GIT_PREFIX",
     "GIT_NAMESPACE",
 )
+FRONTMATTER_FIELD_RE = re.compile(r"^([A-Za-z][A-Za-z0-9_-]*):[ \t]*(.*)$")
 
 
 class DetectError(RuntimeError):
@@ -851,8 +859,24 @@ def validated_git_path(relative: str) -> str:
 
 def git_tracked_files(root: Path) -> tuple[GitIndexEntry, ...]:
     git_dir = root / ".git"
-    if lstat_evidence(git_dir, missing_ok=True) is None:
+    git_status = lstat_evidence(git_dir, missing_ok=True)
+    if git_status is None:
         return ()
+    if is_link_like(git_dir, git_status):
+        raise DetectError(f".git must be a real directory or pointer file: {git_dir}")
+    if stat.S_ISREG(git_status.st_mode):
+        pointer = read_regular_evidence(
+            git_dir,
+            root,
+            missing_ok=False,
+            evidence_name=".git pointer",
+        )
+        if pointer is None or re.fullmatch(
+            r"gitdir: ([^\0\r\n]+)(?:\r?\n)?", pointer
+        ) is None:
+            raise DetectError(f".git must be a valid gitdir pointer file: {git_dir}")
+    elif not stat.S_ISDIR(git_status.st_mode):
+        raise DetectError(f".git must be a real directory or pointer file: {git_dir}")
     try:
         result = subprocess.run(
             ["git", "-C", str(root), "ls-files", "--stage", "-z"],
@@ -911,21 +935,26 @@ def is_staged_skill_bundle_artifact(
     )
 
 
-def occupied_project_paths(project: Path, root: Path) -> tuple[str, ...]:
+def project_path_inventory(
+    project: Path, root: Path
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
     project_status = lstat_evidence(project, missing_ok=True)
     if project_status is None:
-        return ()
+        return (), ()
     if is_link_like(project, project_status) or not stat.S_ISDIR(
         project_status.st_mode
     ):
-        return (posix_relative(project, root),)
+        relative = posix_relative(project, root)
+        return (relative,), (relative,)
     try:
         next(project.iterdir())
     except StopIteration:
-        return ()
+        return (), ()
     except OSError:
-        return (posix_relative(project, root),)
+        relative = posix_relative(project, root)
+        return (relative,), (relative,)
     paths = []
+    unsafe_paths = []
     for dirpath, dirnames, filenames in os.walk(
         project,
         followlinks=False,
@@ -938,12 +967,21 @@ def occupied_project_paths(project: Path, root: Path) -> tuple[str, ...]:
             status = lstat_evidence(path, missing_ok=False)
             if is_link_like(path, status):
                 linked_directories.append(name)
+                unsafe_paths.append(posix_relative(path, root))
+            elif not stat.S_ISDIR(status.st_mode):
+                linked_directories.append(name)
+                unsafe_paths.append(posix_relative(path, root))
         paths.extend(
             posix_relative(current / name, root) for name in linked_directories
         )
         dirnames[:] = [name for name in dirnames if name not in linked_directories]
         for name in filenames:
-            paths.append(posix_relative(current / name, root))
+            path = current / name
+            relative = posix_relative(path, root)
+            status = lstat_evidence(path, missing_ok=False)
+            paths.append(relative)
+            if is_link_like(path, status) or not stat.S_ISREG(status.st_mode):
+                unsafe_paths.append(relative)
         if not filenames and not dirnames and current != project:
             paths.append(posix_relative(current, root))
     if not paths:
@@ -953,8 +991,54 @@ def occupied_project_paths(project: Path, root: Path) -> tuple[str, ...]:
             raise DetectError(
                 f"cannot list project evidence: {project}: {error}"
             ) from error
-        return tuple(sorted(posix_relative(project / name, root) for name in names))
-    return tuple(sorted(paths))
+        paths = [posix_relative(project / name, root) for name in names]
+    return tuple(sorted(paths)), tuple(sorted(unsafe_paths))
+
+
+def frontmatter_scalar(raw: str) -> str:
+    value = raw.strip()
+    if value.startswith('"'):
+        try:
+            decoded = json.loads(value)
+        except json.JSONDecodeError as error:
+            raise DetectError("STATE.md has malformed frontmatter") from error
+        if not isinstance(decoded, str):
+            raise DetectError("STATE.md has malformed frontmatter")
+        value = decoded
+    elif value.startswith("'"):
+        quoted = re.fullmatch(r"'((?:[^']|'')*)'", value)
+        if quoted is None:
+            raise DetectError("STATE.md has malformed frontmatter")
+        value = quoted.group(1).replace("''", "'")
+    else:
+        value = re.sub(r"[ \t]+#.*$", "", value).rstrip()
+        if not re.fullmatch(r"[^\s#\[\]{},]+", value):
+            raise DetectError("STATE.md has malformed frontmatter")
+    if not value:
+        raise DetectError("STATE.md has malformed frontmatter")
+    return value
+
+
+def state_frontmatter(text: str) -> Optional[dict[str, str]]:
+    lines = text.splitlines()
+    if not lines or lines[0] != "---":
+        return None
+    try:
+        end = lines.index("---", 1)
+    except ValueError as error:
+        raise DetectError("STATE.md frontmatter is not closed") from error
+    fields = {}
+    for line in lines[1:end]:
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        match = FRONTMATTER_FIELD_RE.fullmatch(line)
+        if match is None:
+            raise DetectError("STATE.md has malformed frontmatter")
+        key = match.group(1)
+        if key in fields:
+            raise DetectError(f"STATE.md has duplicate frontmatter field: {key}")
+        fields[key] = frontmatter_scalar(match.group(2))
+    return fields
 
 
 def pipeline_marker(state: Path, root: Path) -> Optional[str]:
@@ -966,8 +1050,8 @@ def pipeline_marker(state: Path, root: Path) -> Optional[str]:
     )
     if text is None:
         raise DetectError(f"filesystem evidence disappeared: {state}")
-    match = PIPELINE_LINE.search(text)
-    return match.group(1) if match else None
+    fields = state_frontmatter(text)
+    return fields.get("pipeline") if fields is not None else None
 
 
 def classify(repo: Path) -> dict:
@@ -977,6 +1061,15 @@ def classify(repo: Path) -> dict:
         raise DetectError(f"repo is not a directory: {root}")
     project = root / ".project"
     state = project / "STATE.md"
+    orphan_paths, unsafe_paths = project_path_inventory(project, root)
+    if unsafe_paths:
+        return {
+            "verdict": "orphan",
+            "pipeline": None,
+            "signals": [],
+            "orphan_paths": list(unsafe_paths),
+            "route": "recover-orphan",
+        }
     project_status = lstat_evidence(project, missing_ok=True)
     if (
         project_status is not None
@@ -996,7 +1089,6 @@ def classify(repo: Path) -> dict:
                 "orphan_paths": [],
                 "route": "existing-state",
             }
-    orphan_paths = occupied_project_paths(project, root)
     if orphan_paths:
         return {
             "verdict": "orphan",

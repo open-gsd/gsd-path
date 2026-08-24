@@ -163,7 +163,7 @@ state or bypasses a gate.
 ### Cheat sheet
 
 ```text
-No state, greenfield verdict    → router → define
+No state, greenfield verdict    → router → define (first milestone)
 No state, brownfield verdict    → router → inspect → define
 No state, orphan verdict        → router → block for recovery
 Huge multi-milestone program    → router → define (program mode: charter →
@@ -289,9 +289,10 @@ contract updates manually ([UPDATE.md](UPDATE.md)).
 Restore from `disabled-gsd-skills` beside the skills root ([UPDATE.md](UPDATE.md)).
 
 **Brownfield vs greenfield?**
-With no STATE.md, the router runs the bundled initializer:
-`scripts/detect_project.py initialize --repo <absolute-root> --template
-<absolute-state-template>` and routes from its returned JSON. A recognized
+The router first runs `scripts/detect_project.py classify --repo
+<absolute-root>` and routes from its returned JSON. For a brownfield or
+greenfield verdict, it then runs the bundled `initialize` command and requires
+the same verdict before the helper creates STATE.md. A recognized
 manifest or source file, qualifying tracked Git file, or qualifying Markdown
 document with a body is brownfield and routes to inspect. A title-only README,
 `LICENSE`/`COPYING`, `.gitignore`, or content only in ignored trees such as
@@ -301,9 +302,8 @@ supported installer skill root or when it contains `SKILL.md`; a similarly
 named source directory still counts normally. Those scaffold-only trees stay
 greenfield and route to define. Other `.project/` content without STATE.md is
 orphaned and blocks for recovery. An owned state, including the new-GitHub
-bootstrap state, routes by STATE.md without running the initializer. Use
-`classify` only for read-only inspection. After a milestone ships, the next one
-inspects again.
+bootstrap state, routes by STATE.md after classification without running the
+initializer. After a milestone ships, the next one inspects again.
 
 ---
 

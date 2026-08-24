@@ -15,6 +15,7 @@
     "scripts/archive_milestone.py",
     "scripts/bootstrap_repository.py",
     "scripts/detect_project.py",
+    "scripts/promote_lookahead.py",
     "scripts/discussion_records.py",
     "scripts/check_handoffs.py",
     "scripts/check_docs_audit.py",
