@@ -39,10 +39,14 @@ re-scope is never legal — finish or ship the active milestone first. A
 route to `$gsd-path-plan`, never regenerate the roadmap beneath it. Absent
 CHARTER.md, this is not a program: route to `$gsd-path`, which continues the
 single-milestone flow at plan. A re-slice while `.project/next/` holds a
-lookahead track requires a user ruling before dispatch: keep the track only
-when its milestone's entry survives the re-slice with Goal and Scope text
-unchanged; otherwise discard `.project/next/` entirely. Record the ruling in
-the state log.
+lookahead track requires a user ruling before dispatch. Before asking, save the
+current ROADMAP.md and run the bundled `scripts/promote_lookahead.py
+compare-entry --before <saved-roadmap> --after <proposed-roadmap> --milestone
+<lookahead-slug>` helper. Offer to keep the track only when it returns
+`status: unchanged`; this compares every plan-binding part of the entry while
+ignoring only Status, Archive, and Integrated. When it returns `changed`,
+discard `.project/next/` entirely and regenerate it from the new contract.
+Record the result and ruling in the state log.
 
 Require `.project/CHARTER.md` and `.project/SYNTHESIS.md` (program scope) with
 a non-empty `## Decisions` or `## Settled` section and no unresolved

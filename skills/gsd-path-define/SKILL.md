@@ -41,8 +41,12 @@ classify from a directory listing or conversation.
   gsd-path/v2`; a missing or different marker returns to `$gsd-path` for
   ownership checking. Legal existing-state entry is `inspect/done`
   (transition to `define/active`; milestone mode when ROADMAP.md exists),
-  `roadmap/done` (transition to `define/active`, milestone mode), or
-  `define/active|blocked`. `define/done` or any later phase blocks rather than
+  `roadmap/done` only for the first milestone after initial roadmap approval,
+  or `define/active|blocked`. When ROADMAP.md exists, a later milestone or
+  lookahead track at `define/active|blocked` also requires both current-track
+  inspection artifacts and a Log entry proving `inspect/done` for the same
+  milestone after its latest activation; otherwise route to inspect.
+  `define/done` or any later phase blocks rather than
   overwriting approved intent and leaving downstream artifacts stale. When an
   active router supplies `.project/next/`, require its STATE.md to be a regular
   non-symlink file, then evaluate these rules against that track state and its
@@ -106,14 +110,17 @@ INTENT.md in program mode.
 
 ## Milestone mode
 
-Legal entry: `roadmap/done`, `inspect/done` when `.project/ROADMAP.md`
-exists, or a resumed `define/active` with ROADMAP.md present. There is no
-re-interview of charter or roadmap scope:
-1. Read `.project/CHARTER.md` and `.project/ROADMAP.md`, then resolve the
-   roadmap entry from the track state. In Lookahead mode, use the entry whose
-   slug matches `.project/next/STATE.md`'s `milestone` and require it to remain
-   `pending`; otherwise use the `active` entry and require it to match the
-   track state's non-null `milestone`. When brownfield, also read the track's
+Legal entry: `roadmap/done` only for the first milestone after initial roadmap
+approval, or `inspect/done` when `.project/ROADMAP.md` exists. Recovery from
+`define/active|blocked` follows the current inspection-evidence requirement in
+State ownership. There is no re-interview of charter or roadmap scope:
+1. Read the applicable track STATE.md, `.project/CHARTER.md`, and
+   `.project/ROADMAP.md`. Select the entry whose slug matches `STATE.milestone`.
+   Require exactly one match. In ordinary milestone mode,
+   require that entry to be `active`; in lookahead mode, require it to be
+   `pending`. A missing, duplicate, or wrong-status match blocks: record the
+   failure in the applicable STATE.md and return to the router. When
+   brownfield, also read the track's
    `research/evidence-codebase.md` and `research/DOCS-AUDIT.md` first.
 2. Draft INTENT.md from the resolved entry: Summary from its Goal, Scope
    in/out and Success criteria from the entry, Constraints inherited from the charter,

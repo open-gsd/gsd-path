@@ -144,6 +144,7 @@ SOURCE_SUFFIXES = {
     ".svelte",
     ".r",
     ".jl",
+    ".sql",
 }
 
 MARKDOWN_SUFFIXES = {".md", ".mdx", ".markdown"}

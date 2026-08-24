@@ -314,7 +314,8 @@ Log, then:
 Re-validate a promoted `plan/done` before routing to build: diff
 `--name-only` from the track's approval checkpoint commit (exact subject
 `plan: build plan approved`) to HEAD and intersect the result with every
-promoted task's declared `files` that exist in the repository. An empty
+promoted task's full declared `files` set, including paths now deleted or
+renamed. An empty
 intersection promotes as `plan/done`. A non-empty intersection — or a
 missing checkpoint commit, where drift cannot be measured — promotes as
 `plan/active` with the flagged task ids (or the skip reason) in the state

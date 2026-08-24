@@ -73,7 +73,13 @@ class DetectProjectTests(unittest.TestCase):
             )
 
     def test_common_source_only_projects_are_brownfield(self) -> None:
-        for filename in ("index.html", "styles.css", "deploy.sh", "main.tf"):
+        for filename in (
+            "index.html",
+            "styles.css",
+            "deploy.sh",
+            "main.tf",
+            "schema.sql",
+        ):
             with self.subTest(filename=filename):
                 with tempfile.TemporaryDirectory() as temporary:
                     repo = Path(temporary)
@@ -1873,6 +1879,11 @@ archive: null
             self.assertEqual(promote_lookahead.state_value(state, "milestone"), "second")
             self.assertEqual(promote_lookahead.state_value(state, "branch"), "gsd-path/M002")
             self.assertEqual(promote_lookahead.state_value(state, "archive"), "null")
+            unexpected = repo / "unexpected.txt"
+            unexpected.write_text("unowned\n", encoding="utf-8")
+            with self.assertRaises(promote_lookahead.LookaheadError):
+                promote_lookahead.promote(repo, "gsd-path/M002", integrate)
+            unexpected.unlink()
             self.assertEqual(
                 promote_lookahead.promote(repo, "gsd-path/M002", integrate)["status"],
                 "already-promoted",
@@ -1912,6 +1923,11 @@ archive: null
 
             project = repo / ".project"
             self.assertTrue((project / promote_lookahead.JOURNAL_NAME).is_file())
+            unexpected = repo / "unexpected.txt"
+            unexpected.write_text("unowned\n", encoding="utf-8")
+            with self.assertRaises(promote_lookahead.LookaheadError):
+                promote_lookahead.promote(repo, "gsd-path/M002", integrate)
+            unexpected.unlink()
             result = promote_lookahead.promote(repo, "gsd-path/M002", integrate)
             self.assertEqual(result["status"], "promoted")
             self.assertFalse((project / "next").exists())
@@ -1956,6 +1972,80 @@ archive: null
                 promote_lookahead.promote(repo, "gsd-path/M003", integrate)
 
             self.assertEqual(self.project_snapshot(project), before)
+
+    def test_promotion_rejects_skipping_an_earlier_eligible_milestone(self) -> None:
+        roadmap = """# Roadmap
+
+### M001 — first
+
+Depends on: []
+Status: shipped
+Archive: .project/archive/001-first
+Integrated: null
+
+### M002 — second
+
+Depends on: [M001]
+Status: pending
+Archive: null
+Integrated: null
+
+### M003 — third
+
+Depends on: [M001]
+Status: pending
+Archive: null
+Integrated: null
+"""
+
+        with self.assertRaisesRegex(
+            promote_lookahead.LookaheadError,
+            "next eligible milestone M002",
+        ):
+            promote_lookahead.roadmap_transition(
+                roadmap,
+                "third",
+                ".project/archive/001-first",
+                "a" * 40,
+            )
+
+    def test_roadmap_contract_comparison_covers_plan_binding_fields(self) -> None:
+        before = """# Roadmap
+
+### M002 — second
+
+Goal: deliver second
+Depends on: [M001]
+Status: pending
+Archive: null
+Integrated: null
+
+Success criteria
+1. Original result
+"""
+        mutable_only = before.replace("Status: pending", "Status: active")
+        changed_contract = before.replace("Original result", "Different result")
+
+        self.assertEqual(
+            promote_lookahead.compare_roadmap_entry(before, mutable_only, "second")[
+                "status"
+            ],
+            "unchanged",
+        )
+        self.assertEqual(
+            promote_lookahead.compare_roadmap_entry(
+                before,
+                changed_contract,
+                "second",
+            )["status"],
+            "changed",
+        )
+        self.assertEqual(
+            promote_lookahead.compare_roadmap_entry(before, "# Roadmap\n", "second")[
+                "status"
+            ],
+            "changed",
+        )
 
     def test_recovery_requires_a_failed_strict_preflight(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

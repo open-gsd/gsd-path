@@ -27,6 +27,7 @@ STATUSES = {"active", "blocked", "done"}
 BRANCH_RE = re.compile(r"^gsd-path/M\d{3,}$")
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 ROADMAP_HEADING_RE = re.compile(r"^### (M\d{3,}) — (.+)$")
+MUTABLE_ROADMAP_FIELDS_RE = re.compile(r"^(Status|Archive|Integrated):")
 
 
 class LookaheadError(RuntimeError):
@@ -139,6 +140,56 @@ def milestone_block(content: str, milestone: str) -> dict:
     return matches[0]
 
 
+def dependency_ids(block: dict) -> list[str]:
+    dependencies = block["fields"].get("Depends on")
+    if dependencies is None:
+        raise LookaheadError(f"roadmap milestone {block['id']} lacks dependencies")
+    dependency_list = re.fullmatch(
+        r"\[\s*(M\d{3,}(?:\s*,\s*M\d{3,})*)?\s*\]",
+        dependencies[1],
+    )
+    if dependency_list is None:
+        raise LookaheadError(f"roadmap milestone {block['id']} has invalid dependencies")
+    return re.findall(r"M\d{3,}", dependency_list.group(1) or "")
+
+
+def next_eligible_pending(content: str) -> dict:
+    blocks = roadmap_blocks(content)
+    blocks_by_id = {block["id"]: block for block in blocks}
+    for block in blocks:
+        if block["fields"].get("Status", (-1, ""))[1] != "pending":
+            continue
+        dependencies = dependency_ids(block)
+        if all(
+            dependency in blocks_by_id
+            and blocks_by_id[dependency]["fields"].get("Status", (-1, ""))[1]
+            == "shipped"
+            for dependency in dependencies
+        ):
+            return block
+    raise LookaheadError("ROADMAP.md has no dependency-ready pending milestone")
+
+
+def roadmap_contract(content: str, milestone: str) -> tuple[str, ...]:
+    block = milestone_block(content, milestone)
+    lines = content.splitlines()
+    return tuple(
+        line.rstrip()
+        for line in lines[block["start"] : block["end"]]
+        if not MUTABLE_ROADMAP_FIELDS_RE.match(line)
+    )
+
+
+def compare_roadmap_entry(before: str, after: str, milestone: str) -> dict:
+    before_contract = roadmap_contract(before, milestone)
+    try:
+        after_contract = roadmap_contract(after, milestone)
+    except LookaheadError:
+        after_contract = ()
+    status = "unchanged" if before_contract == after_contract else "changed"
+    return {"status": status, "milestone": milestone}
+
+
 def roadmap_transition(
     content: str,
     milestone: str,
@@ -150,32 +201,11 @@ def roadmap_transition(
     status = selected["fields"].get("Status")
     if status is None or status[1] != "pending":
         raise LookaheadError(f"lookahead milestone {milestone} is not pending")
-    dependencies = selected["fields"].get("Depends on")
-    if dependencies is None:
-        raise LookaheadError(f"lookahead milestone {milestone} lacks dependencies")
-    dependency_list = re.fullmatch(
-        r"\[\s*(M\d{3,}(?:\s*,\s*M\d{3,})*)?\s*\]",
-        dependencies[1],
-    )
-    if dependency_list is None:
-        raise LookaheadError(f"lookahead milestone {milestone} has invalid dependencies")
-    dependency_ids = (
-        re.findall(r"M\d{3,}", dependency_list.group(1))
-        if dependency_list.group(1)
-        else []
-    )
-    blocks_by_id = {block["id"]: block for block in roadmap_blocks(content)}
-    unready = [
-        dependency
-        for dependency in dependency_ids
-        if dependency not in blocks_by_id
-        or blocks_by_id[dependency]["fields"].get("Status", (-1, ""))[1]
-        != "shipped"
-    ]
-    if unready:
+    eligible = next_eligible_pending(content)
+    if selected["id"] != eligible["id"]:
         raise LookaheadError(
-            f"lookahead milestone {milestone} has unshipped dependencies: "
-            + ", ".join(unready)
+            f"lookahead milestone {milestone} is not the next eligible milestone "
+            f"{eligible['id']}"
         )
     previous = [
         block
@@ -453,6 +483,76 @@ def transaction_archive(root: Path, active_state: str) -> tuple[str, Path]:
     return normalized_path(configured), archive
 
 
+def worktree_changes(root: Path) -> set[str]:
+    result = subprocess.run(
+        ["git", "-C", str(root), "status", "--porcelain=v1", "-z"],
+        capture_output=True,
+    )
+    if result.returncode != 0:
+        raise LookaheadError("cannot inspect worktree status")
+    records = result.stdout.split(b"\0")
+    paths = set()
+    index = 0
+    while index < len(records):
+        record = records[index]
+        index += 1
+        if not record:
+            continue
+        if len(record) < 4:
+            raise LookaheadError("git status returned malformed output")
+        paths.add(record[3:].decode("utf-8", "replace").replace("\\", "/"))
+        if record[:2] in {b"R ", b"C ", b" R", b" C"}:
+            if index >= len(records) or not records[index]:
+                raise LookaheadError("git status returned malformed rename output")
+            paths.add(records[index].decode("utf-8", "replace").replace("\\", "/"))
+            index += 1
+    return paths
+
+
+def validate_worktree_changes(
+    root: Path,
+    allowed_paths: set[str],
+    allowed_roots: Sequence[str],
+    context: str,
+) -> None:
+    unexpected = {
+        path
+        for path in worktree_changes(root)
+        if path not in allowed_paths
+        and not any(path.startswith(f"{allowed_root}/") for allowed_root in allowed_roots)
+    }
+    if unexpected:
+        raise LookaheadError(
+            f"unexpected worktree changes {context}: "
+            + ", ".join(sorted(unexpected))
+        )
+
+
+def validate_transaction_worktree(root: Path, transaction: dict, context: str) -> None:
+    validate_worktree_changes(
+        root,
+        {
+            ".project/STATE.md",
+            ".project/ROADMAP.md",
+            f".project/{JOURNAL_NAME}",
+        },
+        (
+            ".project/next",
+            *(f".project/{name}" for name in transaction["artifacts"]),
+        ),
+        context,
+    )
+
+
+def validate_completed_worktree(root: Path, context: str) -> None:
+    validate_worktree_changes(
+        root,
+        {".project/STATE.md", ".project/ROADMAP.md"},
+        (".project/next", *(f".project/{name}" for name in ARTIFACTS)),
+        context,
+    )
+
+
 def prepare_transaction(
     root: Path,
     project: Path,
@@ -460,24 +560,12 @@ def prepare_transaction(
     integrate: str,
     allow_audit_mismatch: bool,
 ) -> dict:
-    status_result = subprocess.run(
-        ["git", "-C", str(root), "status", "--porcelain"],
-        capture_output=True,
-        text=True,
+    validate_worktree_changes(
+        root,
+        {".project/STATE.md"},
+        (),
+        "before promotion",
     )
-    if status_result.returncode != 0:
-        raise LookaheadError("cannot inspect worktree status before promotion")
-    dirty_paths = {
-        line[3:]
-        for line in status_result.stdout.splitlines()
-        if len(line) >= 4
-    }
-    unexpected_dirty = dirty_paths - {".project/STATE.md"}
-    if unexpected_dirty:
-        raise LookaheadError(
-            "unexpected worktree changes before promotion: "
-            + ", ".join(sorted(unexpected_dirty))
-        )
     next_root = project / "next"
     require_directory(next_root, "lookahead root")
     next_state_path = next_root / "STATE.md"
@@ -802,6 +890,7 @@ def promote(repo: Path, branch: str, integrate: str) -> dict:
         if transaction is None:
             complete = already_transitioned(project, branch, integrate, recovery=False)
             if complete:
+                validate_completed_worktree(root, "after promotion")
                 return complete
             transaction = prepare_transaction(
                 root,
@@ -813,6 +902,7 @@ def promote(repo: Path, branch: str, integrate: str) -> dict:
             write_journal(project, transaction)
         if transaction["action"] != "promote":
             raise LookaheadError("lookahead journal is a recovery transaction")
+        validate_transaction_worktree(root, transaction, "during promotion recovery")
         return resume_promotion(root, project, transaction)
 
 
@@ -877,6 +967,7 @@ def recover(repo: Path, branch: str, integrate: str, strategy: str) -> dict:
         if transaction is None:
             complete = already_transitioned(project, branch, integrate, recovery=True)
             if complete:
+                validate_completed_worktree(root, "after lookahead recovery")
                 complete["strategy"] = strategy
                 return complete
             try:
@@ -899,6 +990,7 @@ def recover(repo: Path, branch: str, integrate: str, strategy: str) -> dict:
                 raise LookaheadError("lookahead recovery is not required")
         transaction = recovery_transaction(transaction, strategy)
         write_journal(project, transaction)
+        validate_transaction_worktree(root, transaction, "during lookahead recovery")
         return resume_recovery(root, project, transaction)
 
 
@@ -918,13 +1010,23 @@ def parser() -> argparse.ArgumentParser:
         required=True,
         choices=("rewind", "discard"),
     )
+    compare_parser = subparsers.add_parser("compare-entry")
+    compare_parser.add_argument("--before", required=True, type=Path)
+    compare_parser.add_argument("--after", required=True, type=Path)
+    compare_parser.add_argument("--milestone", required=True)
     return result
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
     arguments = parser().parse_args(argv)
     try:
-        if arguments.command == "promote":
+        if arguments.command == "compare-entry":
+            result = compare_roadmap_entry(
+                read_text(arguments.before, "previous ROADMAP.md"),
+                read_text(arguments.after, "proposed ROADMAP.md"),
+                arguments.milestone,
+            )
+        elif arguments.command == "promote":
             result = promote(arguments.repo, arguments.branch, arguments.integrate)
         else:
             result = recover(
