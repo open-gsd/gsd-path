@@ -102,10 +102,12 @@ precondition fails.
 5. On a re-slice with a saved lookahead track, run the bundled
    `scripts/promote_lookahead.py compare-entry --before
    .project/ROADMAP.before-reslice.md --after .project/ROADMAP.md --milestone
-   <lookahead-slug> --active-milestone <STATE.milestone>` helper now. It
-   compares every plan-binding part of the entry while ignoring only Status, Archive,
-   and Integrated, and requires that entry to remain the candidate roadmap's
-   first dependency-ready milestone. When it returns `status: unchanged`, ask
+   <lookahead-slug>` helper now. When STATE.milestone is set, append
+   `--active-milestone <STATE.milestone>`; when it is unset, omit that option.
+   It compares every plan-binding part of the entry while ignoring only
+   Status, Archive, and Integrated, and requires that entry to remain the
+   candidate roadmap's first dependency-ready milestone. When it returns
+   `status: unchanged`, ask
    the user to choose
    `Keep the unchanged lookahead track (recommended)` or `Discard and
    regenerate the lookahead track`. When it returns `status: changed`, offer
@@ -113,12 +115,20 @@ precondition fails.
    roadmap changes`; keeping the stale track is not valid. Apply the ruling and
    record the helper result and ruling in the state log. Retain the baseline
    through any requested roadmap revisions and the final approval decision.
-6. Show every milestone id, goal, and dependency summary as the outcome. Link
+6. On a post-abandon re-slice, first run the bundled
+   `scripts/promote_lookahead.py select-next --roadmap .project/ROADMAP.md`
+   helper against the gated candidate. When it returns `status: complete`,
+   report program completion against CHARTER.md's program success criteria and
+   stop without offering a pending-milestone approval. When it returns
+   `status: selected`, use only its exact milestone in the approval and
+   transition below. A `status: none` result blocks without mutation.
+   Show every milestone id, goal, and dependency summary as the outcome. Link
    the resolved absolute `.project/ROADMAP.md` path, then ask one explicit next
    question. For a milestone-boundary re-slice, list `Approve roadmap and
    resume the active milestone (recommended)` first. For a post-abandon
-   re-slice, list `Approve roadmap and inspect the first pending milestone
-   (recommended)` first. Otherwise list `Approve roadmap and start the first
+   re-slice, list
+   `Approve roadmap and inspect <selected-milestone> (recommended)` first.
+   Otherwise list `Approve roadmap and start the first
    pending milestone (recommended)` first. In every case, list `Request
    changes` as the alternative. If the user requests changes,
    retain the entering state for a milestone-boundary re-slice; otherwise keep
@@ -127,8 +137,8 @@ precondition fails.
 7. On approval of a milestone-boundary re-slice, preserve the entering
    `phase`, `status`, and `milestone` in STATE.md and keep its matching roadmap
    entry `active`. On a post-abandon re-slice, preserve the bound branch, set
-   STATE.md to `phase: inspect`, `status: active`, `milestone` to the first
-   `pending` milestone slug, and `archive: null`; mark that entry `active` and
+   STATE.md to `phase: inspect`, `status: active`, `milestone` to the
+   helper-selected milestone slug, and `archive: null`; mark that entry `active` and
    record the abandoned predecessor in the log. On first roadmap approval,
    set STATE.md to `phase: roadmap`, `status: done`, set `milestone` to the
    first `pending` milestone slug, and mark that entry `active`. Record the

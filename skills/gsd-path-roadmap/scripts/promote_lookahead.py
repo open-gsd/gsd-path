@@ -81,15 +81,22 @@ def atomic_write(path: Path, content: str) -> None:
     )
 
 
-def state_value(content: str, key: str) -> str:
+def state_fields(content: str) -> dict[str, str]:
     try:
-        value = archive_milestone.frontmatter_value(content, key)
-    except archive_milestone.ArchiveError as error:
+        fields = detect_project.state_frontmatter(content)
+    except detect_project.DetectError as error:
         raise LookaheadError(str(error)) from error
-    return value or ""
+    if fields is None:
+        raise LookaheadError("STATE.md is missing YAML frontmatter")
+    return fields
+
+
+def state_value(content: str, key: str) -> str:
+    return state_fields(content).get(key, "")
 
 
 def update_state(content: str, values: dict[str, str]) -> str:
+    state_fields(content)
     try:
         for key, value in values.items():
             content = archive_milestone.set_frontmatter_value(content, key, value)
@@ -119,6 +126,11 @@ def roadmap_blocks(content: str) -> list[dict]:
                 lines[index].rstrip("\r\n"),
             )
             if match:
+                if match.group(1) in fields:
+                    raise LookaheadError(
+                        f"roadmap milestone {milestone_id} has duplicate "
+                        f"{match.group(1)} field"
+                    )
                 fields[match.group(1)] = (index, match.group(2).strip())
         blocks.append(
             {
@@ -211,18 +223,19 @@ def select_lookahead(content: str, active_milestone: Optional[str] = None) -> di
 
 
 def select_track_branch(content: str, track_state: str) -> dict:
-    if state_value(track_state, "pipeline") != archive_milestone.PIPELINE_MARKER:
+    fields = state_fields(track_state)
+    if fields.get("pipeline", "") != archive_milestone.PIPELINE_MARKER:
         raise LookaheadError("lookahead STATE.md is not owned by gsd-path/v2")
-    phase = state_value(track_state, "phase")
-    status = state_value(track_state, "status")
-    milestone = state_value(track_state, "milestone")
+    phase = fields.get("phase", "")
+    status = fields.get("status", "")
+    milestone = fields.get("milestone", "")
     if phase not in PHASES or status not in STATUSES:
         raise LookaheadError(f"invalid lookahead state: {phase}/{status}")
     if archive_milestone.is_unset(milestone):
         raise LookaheadError("lookahead STATE.md does not name a milestone")
-    if not archive_milestone.is_unset(state_value(track_state, "branch")):
+    if not archive_milestone.is_unset(fields.get("branch")):
         raise LookaheadError("lookahead STATE.md must not bind a branch")
-    if not archive_milestone.is_unset(state_value(track_state, "archive")):
+    if not archive_milestone.is_unset(fields.get("archive")):
         raise LookaheadError("lookahead STATE.md must not own an archive")
     selected = milestone_block(content, milestone)
     if selected["fields"].get("Status", (-1, ""))[1] != "pending":
@@ -704,8 +717,11 @@ def safe_project(repo: Path) -> tuple[Path, Path]:
     return root, project
 
 
-def transaction_archive(root: Path, active_state: str) -> tuple[str, Path]:
-    configured = state_value(active_state, "archive")
+def transaction_archive(
+    root: Path,
+    active_fields: dict[str, str],
+) -> tuple[str, Path]:
+    configured = active_fields.get("archive", "")
     if archive_milestone.is_unset(configured):
         raise LookaheadError("active STATE.md does not name the shipped archive")
     try:
@@ -813,34 +829,36 @@ def prepare_transaction(
     active_state = read_text(active_state_path, "active STATE.md")
     track_state = read_text(next_state_path, "lookahead STATE.md")
     roadmap = read_text(roadmap_path, "ROADMAP.md")
-    if state_value(active_state, "pipeline") != archive_milestone.PIPELINE_MARKER:
+    active_fields = state_fields(active_state)
+    track_fields = state_fields(track_state)
+    if active_fields.get("pipeline", "") != archive_milestone.PIPELINE_MARKER:
         raise LookaheadError("active STATE.md is not owned by gsd-path/v2")
     if (
-        state_value(active_state, "phase"),
-        state_value(active_state, "status"),
+        active_fields.get("phase", ""),
+        active_fields.get("status", ""),
     ) != ("shipped", "done"):
         raise LookaheadError("active STATE.md must be shipped/done")
-    if state_value(track_state, "pipeline") != archive_milestone.PIPELINE_MARKER:
+    if track_fields.get("pipeline", "") != archive_milestone.PIPELINE_MARKER:
         raise LookaheadError("lookahead STATE.md is not owned by gsd-path/v2")
-    phase = state_value(track_state, "phase")
-    status = state_value(track_state, "status")
-    milestone = state_value(track_state, "milestone")
+    phase = track_fields.get("phase", "")
+    status = track_fields.get("status", "")
+    milestone = track_fields.get("milestone", "")
     if phase not in PHASES or status not in STATUSES:
         raise LookaheadError(f"invalid lookahead state: {phase}/{status}")
     if archive_milestone.is_unset(milestone):
         raise LookaheadError("lookahead STATE.md does not name a milestone")
-    if not archive_milestone.is_unset(state_value(track_state, "branch")):
+    if not archive_milestone.is_unset(track_fields.get("branch")):
         raise LookaheadError("lookahead STATE.md must not bind a branch")
-    if not archive_milestone.is_unset(state_value(track_state, "archive")):
+    if not archive_milestone.is_unset(track_fields.get("archive")):
         raise LookaheadError("lookahead STATE.md must not own an archive")
 
-    configured_archive, archive = transaction_archive(root, active_state)
+    configured_archive, archive = transaction_archive(root, active_fields)
     validate_integration(
         root,
         archive,
         configured_archive,
         integrate,
-        state_value(active_state, "branch"),
+        active_fields.get("branch", ""),
     )
     archived_audit = archive / "research" / "DOCS-AUDIT.md"
     archived_audit_mode = path_mode(archived_audit)
@@ -1096,12 +1114,13 @@ def already_transitioned(
     if path_mode(project / "next") is not None:
         return None
     state = read_text(project / "STATE.md", "active STATE.md")
-    milestone = state_value(state, "milestone")
-    phase = state_value(state, "phase")
-    status = state_value(state, "status")
+    fields = state_fields(state)
+    milestone = fields.get("milestone", "")
+    phase = fields.get("phase", "")
+    status = fields.get("status", "")
     if (
-        state_value(state, "branch") != branch
-        or not archive_milestone.is_unset(state_value(state, "archive"))
+        fields.get("branch", "") != branch
+        or not archive_milestone.is_unset(fields.get("archive"))
         or archive_milestone.is_unset(milestone)
     ):
         return None

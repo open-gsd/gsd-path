@@ -633,7 +633,7 @@ class DetectProjectTests(unittest.TestCase):
 
             with self.assertRaisesRegex(
                 detect_project.DetectError,
-                "duplicate pipeline fields",
+                "duplicate frontmatter field: pipeline",
             ):
                 self.classify(repo)
 
@@ -649,7 +649,23 @@ class DetectProjectTests(unittest.TestCase):
 
             with self.assertRaisesRegex(
                 detect_project.DetectError,
-                "malformed pipeline field",
+                "malformed frontmatter",
+            ):
+                self.classify(repo)
+
+    def test_malformed_non_pipeline_frontmatter_fails_classification(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            project = repo / ".project"
+            project.mkdir()
+            (project / "STATE.md").write_text(
+                "---\n[invalid\npipeline: gsd-path/v2\n---\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(
+                detect_project.DetectError,
+                "malformed frontmatter",
             ):
                 self.classify(repo)
 
@@ -697,6 +713,54 @@ class DetectProjectTests(unittest.TestCase):
                 payload["signals"],
                 [{"kind": "git", "path": "app.py"}],
             )
+
+    def test_symlinked_git_metadata_fails_classification(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            repo = base / "repo"
+            repo.mkdir()
+            metadata = base / "metadata"
+            metadata.mkdir()
+            try:
+                (repo / ".git").symlink_to(metadata, target_is_directory=True)
+            except (NotImplementedError, OSError) as error:
+                self.skipTest(f"symlinks unavailable: {error}")
+
+            with self.assertRaisesRegex(
+                detect_project.DetectError,
+                ".git must be a real directory or pointer file",
+            ):
+                self.classify(repo)
+
+    def test_special_git_metadata_fails_classification(self) -> None:
+        if not hasattr(os, "mkfifo"):
+            self.skipTest("FIFOs unavailable")
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            os.mkfifo(repo / ".git")
+
+            with self.assertRaisesRegex(
+                detect_project.DetectError,
+                ".git must be a real directory or pointer file",
+            ):
+                self.classify(repo)
+
+    def test_regular_gitdir_pointer_is_supported(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            repo = base / "repo"
+            repo.mkdir()
+            metadata = base / "metadata"
+            self.git(repo, "init", "-q", "--separate-git-dir", str(metadata), ".")
+            self.git(repo, "config", "user.email", "dev@example.test")
+            self.git(repo, "config", "user.name", "Dev")
+            (repo / "app.py").write_text("print(1)\n", encoding="utf-8")
+            self.git(repo, "add", "app.py")
+            self.git(repo, "commit", "-q", "-m", "add app")
+
+            payload = self.classify(repo)
+
+            self.assertEqual(payload["verdict"], "brownfield")
 
     def test_worktree_traversal_failure_errors(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -2200,6 +2264,88 @@ archive: null
                 track_state.replace("milestone: second", "milestone: third"),
             )
 
+    def test_duplicate_lookahead_state_fields_are_rejected(self) -> None:
+        roadmap = """# Roadmap
+
+### M001 — first
+
+Depends on: []
+Status: shipped
+Archive: .project/archive/001-first
+Integrated: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+### M002 — second
+
+Depends on: [M001]
+Status: pending
+Archive: null
+Integrated: null
+"""
+        track_state = """---
+pipeline: gsd-path/v2
+milestone: second
+phase: plan
+status: done
+branch: null
+archive: null
+---
+"""
+
+        values = {
+            "phase": "plan",
+            "status": "done",
+            "milestone": "second",
+            "branch": "null",
+            "archive": "null",
+        }
+        for key, value in values.items():
+            with self.subTest(key=key):
+                duplicate = track_state.replace(
+                    f"{key}: {value}",
+                    f"{key}: {value}\n{key}: other",
+                )
+                with self.assertRaisesRegex(
+                    promote_lookahead.LookaheadError,
+                    f"duplicate frontmatter field: {key}",
+                ):
+                    promote_lookahead.select_track_branch(roadmap, duplicate)
+
+    def test_duplicate_roadmap_fields_are_rejected(self) -> None:
+        roadmap = """# Roadmap
+
+### M001 — first
+
+Depends on: []
+Status: shipped
+Archive: .project/archive/001-first
+Integrated: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+### M002 — second
+
+Depends on: [M001]
+Status: pending
+Archive: null
+Integrated: null
+"""
+
+        values = {
+            "Depends on": "[M001]",
+            "Status": "pending",
+            "Archive": "null",
+            "Integrated": "null",
+        }
+        for key, value in values.items():
+            with self.subTest(key=key):
+                duplicate = roadmap.replace(
+                    f"{key}: {value}",
+                    f"{key}: {value}\n{key}: duplicate",
+                )
+                with self.assertRaisesRegex(
+                    promote_lookahead.LookaheadError,
+                    f"M002 has duplicate {key} field",
+                ):
+                    promote_lookahead.select_lookahead(duplicate)
+
     def test_fetched_base_selection_ignores_worktree_roadmap_changes(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary)
@@ -2344,6 +2490,39 @@ Integrated: null
         )
 
         self.assertEqual(result["status"], "changed")
+
+    def test_post_abandon_comparison_omits_active_milestone(self) -> None:
+        roadmap = """# Roadmap
+
+### M001 — first
+
+Depends on: []
+Status: shipped
+Archive: .project/archive/001-first
+Integrated: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+### M002 — abandoned
+
+Depends on: [M001]
+Status: abandoned
+Archive: .project/archive/002-abandoned
+Integrated: null
+
+### M003 — third
+
+Depends on: [M001]
+Status: pending
+Archive: null
+Integrated: null
+"""
+
+        result = promote_lookahead.compare_roadmap_entry(
+            roadmap,
+            roadmap,
+            "third",
+        )
+
+        self.assertEqual(result["status"], "unchanged")
 
     def test_abandoned_and_shipped_roadmap_is_complete(self) -> None:
         roadmap = """# Roadmap
