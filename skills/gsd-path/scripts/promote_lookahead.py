@@ -185,15 +185,78 @@ def next_eligible_pending(content: str, active_milestone: Optional[str] = None) 
     raise NoEligibleLookahead("ROADMAP.md has no dependency-ready pending milestone")
 
 
-def select_lookahead(content: str, active_milestone: str) -> dict:
+def selection_payload(selected: dict) -> dict:
+    milestone = archive_milestone.normalized_slug(selected["title"])
+    return {
+        "status": "selected",
+        "id": selected["id"],
+        "milestone": milestone,
+        "branch": f"gsd-path/{selected['id']}",
+    }
+
+
+def select_lookahead(content: str, active_milestone: Optional[str] = None) -> dict:
     try:
         selected = next_eligible_pending(content, active_milestone)
     except NoEligibleLookahead:
         return {"status": "none"}
+    return selection_payload(selected)
+
+
+def select_track_branch(content: str, track_state: str) -> dict:
+    if state_value(track_state, "pipeline") != archive_milestone.PIPELINE_MARKER:
+        raise LookaheadError("lookahead STATE.md is not owned by gsd-path/v2")
+    phase = state_value(track_state, "phase")
+    status = state_value(track_state, "status")
+    milestone = state_value(track_state, "milestone")
+    if phase not in PHASES or status not in STATUSES:
+        raise LookaheadError(f"invalid lookahead state: {phase}/{status}")
+    if archive_milestone.is_unset(milestone):
+        raise LookaheadError("lookahead STATE.md does not name a milestone")
+    if not archive_milestone.is_unset(state_value(track_state, "branch")):
+        raise LookaheadError("lookahead STATE.md must not bind a branch")
+    if not archive_milestone.is_unset(state_value(track_state, "archive")):
+        raise LookaheadError("lookahead STATE.md must not own an archive")
+    selected = milestone_block(content, milestone)
+    if selected["fields"].get("Status", (-1, ""))[1] != "pending":
+        raise LookaheadError(f"lookahead milestone {milestone} is not pending")
+    eligible = next_eligible_pending(content)
+    if selected["id"] != eligible["id"]:
+        raise LookaheadError(
+            f"lookahead milestone {milestone} is not the next eligible milestone "
+            f"{eligible['id']}"
+        )
+    return selection_payload(selected)
+
+
+def snapshot_roadmap(source: Path, destination: Path) -> dict:
+    require_file(source, "ROADMAP.md")
+    require_directory(destination.parent, "roadmap snapshot parent")
+    existing_mode = path_mode(destination)
+    if existing_mode is not None:
+        require_file(destination, "roadmap baseline snapshot")
+        content = read_text(destination, "roadmap baseline snapshot")
+        return {
+            "status": "existing",
+            "sha256": hashlib.sha256(content.encode("utf-8")).hexdigest(),
+        }
+    content = read_text(source, "ROADMAP.md")
+    temporary = destination.parent / f".{destination.name}.gsd-path-tmp"
+    try:
+        atomic_write(temporary, content)
+        try:
+            os.link(temporary, destination)
+            status = "created"
+        except FileExistsError:
+            require_file(destination, "roadmap baseline snapshot")
+            content = read_text(destination, "roadmap baseline snapshot")
+            status = "existing"
+    finally:
+        if path_mode(temporary) is not None:
+            temporary.unlink()
     return {
-        "status": "selected",
-        "id": selected["id"],
-        "milestone": archive_milestone.normalized_slug(selected["title"]),
+        "status": status,
+        "sha256": hashlib.sha256(content.encode("utf-8")).hexdigest(),
     }
 
 
@@ -259,37 +322,78 @@ def completed_transition(
     content: str,
     milestone: str,
     branch: str,
-    integrate: str,
-) -> Optional[dict]:
+) -> bool:
     try:
         selected = milestone_block(content, milestone)
     except LookaheadError:
-        return None
+        return False
     status = selected["fields"].get("Status")
-    if not status or status[1] != "active" or branch != f"gsd-path/{selected['id']}":
-        return None
+    return bool(
+        status
+        and status[1] == "active"
+        and branch == f"gsd-path/{selected['id']}"
+    )
+
+
+def latest_shipped_transition(root: Path, content: str) -> dict:
     blocks = roadmap_blocks(content)
-    selected_index = next(
-        (index for index, block in enumerate(blocks) if block["id"] == selected["id"]),
-        None,
-    )
-    if selected_index is None:
-        return None
-    previous = next(
-        (
-            block
-            for block in reversed(blocks[:selected_index])
-            if block["fields"].get("Status", (-1, ""))[1] == "shipped"
-        ),
-        None,
-    )
-    if previous is None:
-        return None
-    if previous["fields"].get("Integrated", (-1, ""))[1] != integrate:
-        raise LookaheadError(
-            "integrate SHA does not match the immediately preceding shipped transition"
+    if len({block["id"] for block in blocks}) != len(blocks):
+        raise LookaheadError("ROADMAP.md milestone ids must be unique")
+    shipped = []
+    for block in blocks:
+        if block["fields"].get("Status", (-1, ""))[1] != "shipped":
+            continue
+        configured_archive = block["fields"].get("Archive", (-1, ""))[1]
+        if archive_milestone.is_unset(configured_archive):
+            raise LookaheadError(
+                f"shipped roadmap milestone {block['id']} lacks an archive"
+            )
+        try:
+            archive_name = archive_milestone.archive_relative_from_state(
+                configured_archive
+            ).name
+        except archive_milestone.ArchiveError as error:
+            raise LookaheadError(str(error)) from error
+        shipped.append((block, archive_name))
+    try:
+        remote_default = archive_milestone.resolve_remote_default(root)
+        default_name = archive_milestone.default_branch_name(remote_default)
+        history = archive_milestone.require_git_success(
+            archive_milestone.run_git(
+                root,
+                "log",
+                "--first-parent",
+                "--format=%H%x00%s",
+                remote_default,
+            ),
+            "inspect integration history",
         )
-    return previous
+    except archive_milestone.ArchiveError as error:
+        raise LookaheadError(str(error)) from error
+    for record in history.splitlines():
+        if "\x00" not in record:
+            continue
+        commit, subject = record.split("\x00", 1)
+        matches = [
+            block
+            for block, archive_name in shipped
+            if archive_milestone.is_integrate_subject(
+                subject,
+                archive_name,
+                default_name,
+            )
+        ]
+        if len(matches) > 1:
+            raise LookaheadError("ROADMAP.md shipped transitions are ambiguous")
+        if not matches:
+            continue
+        latest = matches[0]
+        if latest["fields"].get("Integrated", (-1, ""))[1] != commit:
+            raise LookaheadError(
+                "latest shipped transition does not match ROADMAP.md Integrated"
+            )
+        return latest
+    raise LookaheadError("ROADMAP.md has no validated shipped transition")
 
 
 def ruling_rows(audit: Path) -> list[str]:
@@ -914,9 +1018,13 @@ def already_transitioned(
     ):
         return None
     roadmap = read_text(project / "ROADMAP.md", "ROADMAP.md")
-    previous = completed_transition(roadmap, milestone, branch, integrate)
-    if previous is None:
+    if not completed_transition(roadmap, milestone, branch):
         return None
+    previous = latest_shipped_transition(root, roadmap)
+    if previous["fields"].get("Integrated", (-1, ""))[1] != integrate:
+        raise LookaheadError(
+            "integrate SHA does not match the latest shipped transition"
+        )
     if recovery and (phase, status) != ("inspect", "active"):
         return None
     configured_archive = previous["fields"].get("Archive", (-1, ""))[1]
@@ -1088,7 +1196,13 @@ def parser() -> argparse.ArgumentParser:
     compare_parser.add_argument("--milestone", required=True)
     select_parser = subparsers.add_parser("select-next")
     select_parser.add_argument("--roadmap", required=True, type=Path)
-    select_parser.add_argument("--active-milestone", required=True)
+    select_parser.add_argument("--active-milestone")
+    branch_parser = subparsers.add_parser("select-branch")
+    branch_parser.add_argument("--roadmap", required=True, type=Path)
+    branch_parser.add_argument("--state", required=True, type=Path)
+    snapshot_parser = subparsers.add_parser("snapshot-roadmap")
+    snapshot_parser.add_argument("--roadmap", required=True, type=Path)
+    snapshot_parser.add_argument("--snapshot", required=True, type=Path)
     return result
 
 
@@ -1106,6 +1220,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 read_text(arguments.roadmap, "ROADMAP.md"),
                 arguments.active_milestone,
             )
+        elif arguments.command == "select-branch":
+            require_file(arguments.state, "lookahead STATE.md")
+            result = select_track_branch(
+                read_text(arguments.roadmap, "ROADMAP.md"),
+                read_text(arguments.state, "lookahead STATE.md"),
+            )
+        elif arguments.command == "snapshot-roadmap":
+            result = snapshot_roadmap(arguments.roadmap, arguments.snapshot)
         elif arguments.command == "promote":
             result = promote(arguments.repo, arguments.branch, arguments.integrate)
         else:

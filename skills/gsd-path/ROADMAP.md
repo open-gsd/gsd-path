@@ -38,12 +38,14 @@ re-scope is never legal — finish or ship the active milestone first. A
 `decide/done` state with ROADMAP.md already present is milestone-scope decide;
 route to `$gsd-path-plan`, never regenerate the roadmap beneath it. Absent
 CHARTER.md, this is not a program: route to `$gsd-path`, which continues the
-single-milestone flow at plan. Before dispatching a re-slice while
-`.project/next/` holds a lookahead track, copy the current ROADMAP.md to the
-regular file `.project/ROADMAP.before-reslice.md` and save the lookahead
+single-milestone flow at plan. Before dispatching every re-slice, run the
+bundled `scripts/promote_lookahead.py snapshot-roadmap --roadmap
+.project/ROADMAP.md --snapshot .project/ROADMAP.before-reslice.md` helper.
+Create the baseline once and retain it through every revision; an `existing`
+result is recovery evidence and must never be replaced from the current
+candidate. When `.project/next/` holds a lookahead track, also save its
 milestone slug. Do not ask for the keep/discard ruling until the candidate
-roadmap has been generated and passed its gate. On recovery, reuse that exact
-snapshot; never replace it from the current candidate.
+roadmap has been generated and passed its gate.
 
 Require `.project/CHARTER.md` and `.project/SYNTHESIS.md` (program scope) with
 a non-empty `## Decisions` or `## Settled` section and no unresolved
@@ -64,11 +66,11 @@ precondition fails.
    `.project/archive/<NNN>-<slug>/research/` paths
    instead — template, and output
    paths, including `.project/LESSONS.md` when it exists. On a re-slice, also
-   give the existing ROADMAP.md with the instruction to preserve `shipped`
-   entries byte-for-byte except Status/Archive/Integrated fields and to never modify
-   `abandoned` entries at all. On a milestone-boundary re-slice, also preserve
-   the entry matching STATE.milestone as the single `active` entry and re-slice
-   only the remaining `pending` entries.
+   give `.project/ROADMAP.before-reslice.md` with the instruction to preserve
+   `shipped` entries byte-for-byte except Status/Archive/Integrated fields and
+   to never modify `abandoned` entries at all. For a milestone-boundary
+   re-slice, also preserve the existing `active` entry byte-for-byte; only
+   `pending` entries are in scope.
    The output is exactly `.project/ROADMAP.md` — no other location is
    canonical.
 3. Gate ROADMAP.md:
@@ -83,10 +85,11 @@ precondition fails.
    - Rolling-wave: no waves, tasks, or file lists anywhere in the roadmap.
    - No scope-out veto appears in any milestone; every synthesis decision is
      honored by at least one milestone's scope.
-   - `shipped` entries differ from the prior roadmap only in
-     Status/Archive/Integrated; `abandoned` entries are byte-for-byte identical.
-   - On a milestone-boundary re-slice, the entry matching STATE.milestone is
-     unchanged and remains the single `active` entry.
+   - On a re-slice, `shipped` entries differ from
+     `.project/ROADMAP.before-reslice.md` only in Status/Archive/Integrated;
+     `abandoned` entries are byte-for-byte identical.
+   - On a milestone-boundary re-slice, the prior `active` entry is byte-for-byte
+     identical to `.project/ROADMAP.before-reslice.md`.
 4. Redispatch one complete corrected brief under logical task name `roadmap`,
    following the runtime dispatch contract and including all gate failures.
    Allow one revision round. If it still fails, keep the entering
@@ -105,9 +108,9 @@ precondition fails.
    `Keep the unchanged lookahead track (recommended)` or `Discard and
    regenerate the lookahead track`. When it returns `status: changed`, offer
    `Discard and regenerate the lookahead track (recommended)` or `Request
-   roadmap changes`; keeping the stale track is not valid. Apply the ruling,
-   remove the saved comparison file, and record the helper result and ruling
-   in the state log before roadmap approval.
+   roadmap changes`; keeping the stale track is not valid. Apply the ruling and
+   record the helper result and ruling in the state log. Retain the baseline
+   through any requested roadmap revisions and the final approval decision.
 6. Show every milestone id, goal, and dependency summary as the outcome. Link
    the resolved absolute `.project/ROADMAP.md` path, then ask one explicit next
    question. For a milestone-boundary re-slice, list `Approve roadmap and
@@ -117,7 +120,8 @@ precondition fails.
    pending milestone (recommended)` first. In every case, list `Request
    changes` as the alternative. If the user requests changes,
    retain the entering state for a milestone-boundary re-slice; otherwise keep
-   `phase: roadmap`, `status: active`. Revise and re-gate.
+   `phase: roadmap`, `status: active`. Retain the baseline, revise, and re-gate
+   against that same baseline.
 7. On approval of a milestone-boundary re-slice, preserve the entering
    `phase`, `status`, and `milestone` in STATE.md and keep its matching roadmap
    entry `active`. On a post-abandon re-slice, preserve the bound branch, set
@@ -126,7 +130,9 @@ precondition fails.
    record the abandoned predecessor in the log. On first roadmap approval,
    set STATE.md to `phase: roadmap`, `status: done`, set `milestone` to the
    first `pending` milestone slug, and mark that entry `active`. Record the
-   approval in the log. Then
+   approval in the log. For every re-slice, remove
+   `.project/ROADMAP.before-reslice.md` only after the approved roadmap and
+   transition state have been written. Then
    checkpoint the approval in Git: stage `.project/` in full — the approved
    CHARTER.md, program SYNTHESIS.md, ROADMAP.md, research artifacts, STATE.md,
    and complete append-only discussion records — and commit with exact

@@ -247,17 +247,34 @@ Declining does not block; offer again only at the next milestone's build.
 
 Start only from a ship transaction that passes the bundled validator and the
 bundled integration check (`validate-integrated`); pending integration routes
-back to ship, never here. Preserve
-the previous archive path, ship SHA, integration SHA, and build branch in the
-state Log. When another milestone remains, select its roadmap M00N id (or one
-plus the maximum archive prefix for a single-milestone restart), fetch origin,
-and resolve the exact current `origin/main` SHA. Before changing any
-next-milestone file, run:
+back to ship, never here. Preserve the previous archive path, ship SHA,
+integration SHA, and build branch in the state Log. Before fetching or binding
+the next program branch, report program completion and stop when every roadmap
+entry is `shipped`; otherwise resolve the branch through the bundled helper.
+With a saved lookahead track, run:
+
+```text
+python3 <absolute-bundled-promote-lookahead.py> select-branch \
+  --roadmap <absolute-.project/ROADMAP.md> \
+  --state <absolute-.project/next/STATE.md>
+```
+
+Without a saved lookahead track, run:
+
+```text
+python3 <absolute-bundled-promote-lookahead.py> select-next \
+  --roadmap <absolute-.project/ROADMAP.md>
+```
+
+Require `status: selected` and use the exact returned `branch`; a mismatch or
+no selection blocks before branch mutation. For a single-milestone restart,
+use one plus the maximum archive prefix. Then fetch origin, resolve the exact
+current `origin/main` SHA, and run:
 
 ```text
 python3 <absolute-bundled-pipeline-git.py> bind-next \
   --repo <absolute-primary-root> \
-  --branch gsd-path/M00N \
+  --branch <selected-branch> \
   --previous-branch <STATE.branch> \
   --ship <exact-ship-sha> \
   --remote-default origin/main \
@@ -282,7 +299,7 @@ Log, then:
   ```text
   python3 <absolute-bundled-promote-lookahead.py> promote \
     --repo <absolute-primary-root> \
-    --branch gsd-path/M00N \
+    --branch <selected-branch> \
     --integrate <exact-integration-merge-sha>
   ```
 
@@ -300,7 +317,7 @@ Log, then:
   ```text
   python3 <absolute-bundled-promote-lookahead.py> recover \
     --repo <absolute-primary-root> \
-    --branch gsd-path/M00N \
+    --branch <selected-branch> \
     --integrate <exact-integration-merge-sha> \
     --strategy <rewind|discard>
   ```
@@ -315,7 +332,7 @@ Log, then:
   build contract, subject to the re-validation below). With no lookahead
   track, reset
   `phase: inspect`, `status: active`, `milestone` to the next dependency-ready
-  `pending` slug, `branch: gsd-path/M00N`, and `archive: null`; mark that entry
+  `pending` slug, `branch` to `<selected-branch>`, and `archive: null`; mark that entry
   `active` in ROADMAP.md, fill the previously shipped entry's `Integrated:`
   field with the merge SHA of the just-completed integrate
   commit, and route to the bundled [inspect contract](INSPECT.md). The

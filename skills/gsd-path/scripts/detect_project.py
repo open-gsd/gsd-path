@@ -919,21 +919,26 @@ def is_staged_skill_bundle_artifact(
     )
 
 
-def occupied_project_paths(project: Path, root: Path) -> tuple[str, ...]:
+def project_path_inventory(
+    project: Path, root: Path
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
     project_status = lstat_evidence(project, missing_ok=True)
     if project_status is None:
-        return ()
+        return (), ()
     if is_link_like(project, project_status) or not stat.S_ISDIR(
         project_status.st_mode
     ):
-        return (posix_relative(project, root),)
+        relative = posix_relative(project, root)
+        return (relative,), (relative,)
     try:
         next(project.iterdir())
     except StopIteration:
-        return ()
+        return (), ()
     except OSError:
-        return (posix_relative(project, root),)
+        relative = posix_relative(project, root)
+        return (relative,), (relative,)
     paths = []
+    unsafe_paths = []
     for dirpath, dirnames, filenames in os.walk(
         project,
         followlinks=False,
@@ -946,12 +951,21 @@ def occupied_project_paths(project: Path, root: Path) -> tuple[str, ...]:
             status = lstat_evidence(path, missing_ok=False)
             if is_link_like(path, status):
                 linked_directories.append(name)
+                unsafe_paths.append(posix_relative(path, root))
+            elif not stat.S_ISDIR(status.st_mode):
+                linked_directories.append(name)
+                unsafe_paths.append(posix_relative(path, root))
         paths.extend(
             posix_relative(current / name, root) for name in linked_directories
         )
         dirnames[:] = [name for name in dirnames if name not in linked_directories]
         for name in filenames:
-            paths.append(posix_relative(current / name, root))
+            path = current / name
+            relative = posix_relative(path, root)
+            status = lstat_evidence(path, missing_ok=False)
+            paths.append(relative)
+            if is_link_like(path, status) or not stat.S_ISREG(status.st_mode):
+                unsafe_paths.append(relative)
         if not filenames and not dirnames and current != project:
             paths.append(posix_relative(current, root))
     if not paths:
@@ -961,8 +975,8 @@ def occupied_project_paths(project: Path, root: Path) -> tuple[str, ...]:
             raise DetectError(
                 f"cannot list project evidence: {project}: {error}"
             ) from error
-        return tuple(sorted(posix_relative(project / name, root) for name in names))
-    return tuple(sorted(paths))
+        paths = [posix_relative(project / name, root) for name in names]
+    return tuple(sorted(paths)), tuple(sorted(unsafe_paths))
 
 
 def pipeline_marker(state: Path, root: Path) -> Optional[str]:
@@ -985,6 +999,15 @@ def classify(repo: Path) -> dict:
         raise DetectError(f"repo is not a directory: {root}")
     project = root / ".project"
     state = project / "STATE.md"
+    orphan_paths, unsafe_paths = project_path_inventory(project, root)
+    if unsafe_paths:
+        return {
+            "verdict": "orphan",
+            "pipeline": None,
+            "signals": [],
+            "orphan_paths": list(unsafe_paths),
+            "route": "recover-orphan",
+        }
     project_status = lstat_evidence(project, missing_ok=True)
     if (
         project_status is not None
@@ -1004,7 +1027,6 @@ def classify(repo: Path) -> dict:
                 "orphan_paths": [],
                 "route": "existing-state",
             }
-    orphan_paths = occupied_project_paths(project, root)
     if orphan_paths:
         return {
             "verdict": "orphan",

@@ -594,6 +594,24 @@ class DetectProjectTests(unittest.TestCase):
             self.assertEqual(payload["route"], "existing-state")
             self.assertEqual(payload["signals"], [])
 
+    def test_special_project_artifact_is_orphan_with_regular_state(self) -> None:
+        if not hasattr(os, "mkfifo"):
+            self.skipTest("FIFOs unavailable")
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            project = repo / ".project"
+            project.mkdir()
+            (project / "STATE.md").write_text(
+                "pipeline: gsd-path/v2\n",
+                encoding="utf-8",
+            )
+            os.mkfifo(project / "events")
+
+            payload = self.classify(repo)
+
+            self.assertEqual(payload["verdict"], "orphan")
+            self.assertEqual(payload["orphan_paths"], [".project/events"])
+
     def test_git_tracks_deleted_source_as_git_signal(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary)
@@ -2060,10 +2078,76 @@ Integrated: null
             self.assertEqual(
                 json.loads(result.stdout),
                 {
+                    "branch": "gsd-path/M002",
                     "id": "M002",
                     "milestone": "second-choice",
                     "status": "selected",
                 },
+            )
+
+    def test_saved_track_selects_and_validates_its_exact_branch(self) -> None:
+        roadmap = """# Roadmap
+
+### M001 — first
+
+Depends on: []
+Status: shipped
+Archive: .project/archive/001-first
+Integrated: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+### M002 — second
+
+Depends on: [M001]
+Status: pending
+Archive: null
+Integrated: null
+
+### M003 — third
+
+Depends on: [M001]
+Status: pending
+Archive: null
+Integrated: null
+"""
+        track_state = """---
+pipeline: gsd-path/v2
+milestone: second
+phase: plan
+status: done
+branch: null
+archive: null
+---
+"""
+
+        result = promote_lookahead.select_track_branch(roadmap, track_state)
+
+        self.assertEqual(result["branch"], "gsd-path/M002")
+        with self.assertRaisesRegex(
+            promote_lookahead.LookaheadError,
+            "next eligible milestone M002",
+        ):
+            promote_lookahead.select_track_branch(
+                roadmap,
+                track_state.replace("milestone: second", "milestone: third"),
+            )
+
+    def test_roadmap_snapshot_is_created_once_and_reused(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            roadmap = directory / "ROADMAP.md"
+            snapshot = directory / "ROADMAP.before-reslice.md"
+            roadmap.write_text("original roadmap\n", encoding="utf-8")
+
+            created = promote_lookahead.snapshot_roadmap(roadmap, snapshot)
+            roadmap.write_text("revised roadmap\n", encoding="utf-8")
+            existing = promote_lookahead.snapshot_roadmap(roadmap, snapshot)
+
+            self.assertEqual(created["status"], "created")
+            self.assertEqual(existing["status"], "existing")
+            self.assertEqual(created["sha256"], existing["sha256"])
+            self.assertEqual(
+                snapshot.read_text(encoding="utf-8"),
+                "original roadmap\n",
             )
 
     def test_roadmap_contract_comparison_covers_plan_binding_fields(self) -> None:
@@ -2162,110 +2246,112 @@ Success criteria
                         "already-recovered",
                     )
 
-    def test_completed_transition_rejects_an_older_integration(self) -> None:
+    def test_completed_transition_uses_latest_ship_not_roadmap_order(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary)
             first_integration = self.setup_repo(repo)
-            promote_lookahead.promote(repo, "gsd-path/M002", first_integration)
             project = repo / ".project"
-            second_archive = project / "archive" / "002-second"
-            second_archive.mkdir(parents=True)
-            (second_archive / "MANIFEST.md").write_text("# Archive\n", encoding="utf-8")
-            for name in promote_lookahead.ARTIFACTS:
-                shutil.rmtree(project / name)
+            shutil.rmtree(project / "next")
+            self.git(repo, "branch", "-m", "gsd-path/M003")
+            third_archive = project / "archive" / "003-third"
+            third_archive.mkdir(parents=True)
+            (third_archive / "MANIFEST.md").write_text("# Archive\n", encoding="utf-8")
             state = (project / "STATE.md").read_text(encoding="utf-8")
             state = promote_lookahead.update_state(
                 state,
                 {
                     "phase": "shipped",
                     "status": "done",
-                    "milestone": "second",
-                    "branch": "gsd-path/M002",
-                    "archive": ".project/archive/002-second",
+                    "milestone": "third",
+                    "branch": "gsd-path/M003",
+                    "archive": ".project/archive/003-third",
                 },
             )
             (project / "STATE.md").write_text(state, encoding="utf-8")
             roadmap = (project / "ROADMAP.md").read_text(encoding="utf-8")
             roadmap = roadmap.replace(
-                "### M002 — second\n\nDepends on: [M001]\nStatus: active\nArchive: null",
-                "### M002 — second\n\nDepends on: [M001]\nStatus: shipped\n"
-                "Archive: .project/archive/002-second",
+                "Status: shipped\nArchive: .project/archive/001-first\nIntegrated: null",
+                "Status: shipped\nArchive: .project/archive/001-first\n"
+                f"Integrated: {first_integration}",
             )
             roadmap += """
 
 ### M003 — third
 
-Depends on: [M002]
-Status: pending
-Archive: null
+Depends on: [M001]
+Status: shipped
+Archive: .project/archive/003-third
 Integrated: null
 """
             (project / "ROADMAP.md").write_text(roadmap, encoding="utf-8")
             self.git(repo, "add", ".project")
-            self.git(repo, "commit", "-q", "-m", "ship: M002 — second")
+            self.git(repo, "commit", "-q", "-m", "ship: M003 — third")
             ship = self.git(repo, "rev-parse", "HEAD")
             self.git(repo, "switch", "-q", "main")
             integration_body = (
-                ".project/archive/002-second",
+                ".project/archive/003-third",
                 ship,
                 "main",
-                "gsd-path/M002",
+                "gsd-path/M003",
             )
             self.git(
                 repo,
                 "merge",
                 "-q",
                 "--no-ff",
-                "gsd-path/M002",
+                "gsd-path/M003",
                 "-m",
-                "integrate: M002 — merge gsd-path/M002 into main",
+                "integrate: M003 — merge gsd-path/M003 into main",
                 "-m",
                 archive_milestone.integrate_commit_body(*integration_body),
             )
-            second_integration = self.git(repo, "rev-parse", "HEAD")
+            third_integration = self.git(repo, "rev-parse", "HEAD")
             self.git(
                 repo,
                 "tag",
                 "-a",
-                "milestone/002-second",
+                "milestone/003-third",
                 "-m",
-                "second milestone",
-                second_integration,
+                "third milestone",
+                third_integration,
             )
-            self.git(repo, "update-ref", "refs/remotes/origin/main", second_integration)
-            self.git(repo, "switch", "-q", "-c", "gsd-path/M003", second_integration)
+            self.git(repo, "update-ref", "refs/remotes/origin/main", third_integration)
+            self.git(repo, "switch", "-q", "-c", "gsd-path/M002", third_integration)
             state = promote_lookahead.update_state(
                 state,
                 {
                     "phase": "inspect",
                     "status": "active",
-                    "milestone": "third",
-                    "branch": "gsd-path/M003",
+                    "milestone": "second",
+                    "branch": "gsd-path/M002",
                     "archive": "null",
                 },
             )
             (project / "STATE.md").write_text(state, encoding="utf-8")
             roadmap = roadmap.replace(
-                "Status: shipped\nArchive: .project/archive/002-second\nIntegrated: null",
-                "Status: shipped\nArchive: .project/archive/002-second\n"
-                f"Integrated: {second_integration}",
+                "Status: shipped\nArchive: .project/archive/003-third\nIntegrated: null",
+                "Status: shipped\nArchive: .project/archive/003-third\n"
+                f"Integrated: {third_integration}",
             ).replace(
-                "### M003 — third\n\nDepends on: [M002]\nStatus: pending",
-                "### M003 — third\n\nDepends on: [M002]\nStatus: active",
+                "### M002 — second\n\nDepends on: [M001]\nStatus: pending",
+                "### M002 — second\n\nDepends on: [M001]\nStatus: active",
             )
             (project / "ROADMAP.md").write_text(roadmap, encoding="utf-8")
 
-            with self.assertRaises(promote_lookahead.LookaheadError):
+            with self.assertRaisesRegex(
+                promote_lookahead.LookaheadError,
+                "latest shipped transition",
+            ):
                 promote_lookahead.promote(
                     repo,
-                    "gsd-path/M003",
+                    "gsd-path/M002",
                     first_integration,
                 )
             self.assertEqual(
                 promote_lookahead.promote(
                     repo,
-                    "gsd-path/M003",
-                    second_integration,
+                    "gsd-path/M002",
+                    third_integration,
                 )["status"],
                 "already-promoted",
             )
