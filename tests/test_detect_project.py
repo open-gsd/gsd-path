@@ -3,6 +3,7 @@ import io
 import json
 import os
 import stat
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -34,6 +35,7 @@ ANCHORED_STATE_CREATE_AVAILABLE = (
     and os.mkdir in getattr(os, "supports_dir_fd", ())
     and os.unlink in getattr(os, "supports_dir_fd", ())
 )
+PROMOTE_SCRIPT = ROOT / "scripts" / "promote_lookahead.py"
 
 
 class DetectProjectTests(unittest.TestCase):
@@ -2009,6 +2011,61 @@ Integrated: null
                 "a" * 40,
             )
 
+    def test_selector_chooses_first_pending_entry_after_active_dependency(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            roadmap = Path(temporary) / "ROADMAP.md"
+            roadmap.write_text(
+                """# Roadmap
+
+### M001 — first
+
+Depends on: []
+Status: active
+Archive: null
+Integrated: null
+
+### M002 — second choice
+
+Depends on: [M001]
+Status: pending
+Archive: null
+Integrated: null
+
+### M003 — third choice
+
+Depends on: [M001]
+Status: pending
+Archive: null
+Integrated: null
+""",
+                encoding="utf-8",
+            )
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(PROMOTE_SCRIPT),
+                    "select-next",
+                    "--roadmap",
+                    str(roadmap),
+                    "--active-milestone",
+                    "first",
+                ],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(
+                json.loads(result.stdout),
+                {
+                    "id": "M002",
+                    "milestone": "second-choice",
+                    "status": "selected",
+                },
+            )
+
     def test_roadmap_contract_comparison_covers_plan_binding_fields(self) -> None:
         before = """# Roadmap
 
@@ -2104,6 +2161,114 @@ Success criteria
                         )["status"],
                         "already-recovered",
                     )
+
+    def test_completed_transition_rejects_an_older_integration(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            first_integration = self.setup_repo(repo)
+            promote_lookahead.promote(repo, "gsd-path/M002", first_integration)
+            project = repo / ".project"
+            second_archive = project / "archive" / "002-second"
+            second_archive.mkdir(parents=True)
+            (second_archive / "MANIFEST.md").write_text("# Archive\n", encoding="utf-8")
+            for name in promote_lookahead.ARTIFACTS:
+                shutil.rmtree(project / name)
+            state = (project / "STATE.md").read_text(encoding="utf-8")
+            state = promote_lookahead.update_state(
+                state,
+                {
+                    "phase": "shipped",
+                    "status": "done",
+                    "milestone": "second",
+                    "branch": "gsd-path/M002",
+                    "archive": ".project/archive/002-second",
+                },
+            )
+            (project / "STATE.md").write_text(state, encoding="utf-8")
+            roadmap = (project / "ROADMAP.md").read_text(encoding="utf-8")
+            roadmap = roadmap.replace(
+                "### M002 — second\n\nDepends on: [M001]\nStatus: active\nArchive: null",
+                "### M002 — second\n\nDepends on: [M001]\nStatus: shipped\n"
+                "Archive: .project/archive/002-second",
+            )
+            roadmap += """
+
+### M003 — third
+
+Depends on: [M002]
+Status: pending
+Archive: null
+Integrated: null
+"""
+            (project / "ROADMAP.md").write_text(roadmap, encoding="utf-8")
+            self.git(repo, "add", ".project")
+            self.git(repo, "commit", "-q", "-m", "ship: M002 — second")
+            ship = self.git(repo, "rev-parse", "HEAD")
+            self.git(repo, "switch", "-q", "main")
+            integration_body = (
+                ".project/archive/002-second",
+                ship,
+                "main",
+                "gsd-path/M002",
+            )
+            self.git(
+                repo,
+                "merge",
+                "-q",
+                "--no-ff",
+                "gsd-path/M002",
+                "-m",
+                "integrate: M002 — merge gsd-path/M002 into main",
+                "-m",
+                archive_milestone.integrate_commit_body(*integration_body),
+            )
+            second_integration = self.git(repo, "rev-parse", "HEAD")
+            self.git(
+                repo,
+                "tag",
+                "-a",
+                "milestone/002-second",
+                "-m",
+                "second milestone",
+                second_integration,
+            )
+            self.git(repo, "update-ref", "refs/remotes/origin/main", second_integration)
+            self.git(repo, "switch", "-q", "-c", "gsd-path/M003", second_integration)
+            state = promote_lookahead.update_state(
+                state,
+                {
+                    "phase": "inspect",
+                    "status": "active",
+                    "milestone": "third",
+                    "branch": "gsd-path/M003",
+                    "archive": "null",
+                },
+            )
+            (project / "STATE.md").write_text(state, encoding="utf-8")
+            roadmap = roadmap.replace(
+                "Status: shipped\nArchive: .project/archive/002-second\nIntegrated: null",
+                "Status: shipped\nArchive: .project/archive/002-second\n"
+                f"Integrated: {second_integration}",
+            ).replace(
+                "### M003 — third\n\nDepends on: [M002]\nStatus: pending",
+                "### M003 — third\n\nDepends on: [M002]\nStatus: active",
+            )
+            (project / "ROADMAP.md").write_text(roadmap, encoding="utf-8")
+
+            with self.assertRaises(promote_lookahead.LookaheadError):
+                promote_lookahead.promote(
+                    repo,
+                    "gsd-path/M003",
+                    first_integration,
+                )
+            self.assertEqual(
+                promote_lookahead.promote(
+                    repo,
+                    "gsd-path/M003",
+                    second_integration,
+                )["status"],
+                "already-promoted",
+            )
 
 if __name__ == "__main__":
     unittest.main()

@@ -38,15 +38,12 @@ re-scope is never legal — finish or ship the active milestone first. A
 `decide/done` state with ROADMAP.md already present is milestone-scope decide;
 route to `$gsd-path-plan`, never regenerate the roadmap beneath it. Absent
 CHARTER.md, this is not a program: route to `$gsd-path`, which continues the
-single-milestone flow at plan. A re-slice while `.project/next/` holds a
-lookahead track requires a user ruling before dispatch. Before asking, save the
-current ROADMAP.md and run the bundled `scripts/promote_lookahead.py
-compare-entry --before <saved-roadmap> --after <proposed-roadmap> --milestone
-<lookahead-slug>` helper. Offer to keep the track only when it returns
-`status: unchanged`; this compares every plan-binding part of the entry while
-ignoring only Status, Archive, and Integrated. When it returns `changed`,
-discard `.project/next/` entirely and regenerate it from the new contract.
-Record the result and ruling in the state log.
+single-milestone flow at plan. Before dispatching a re-slice while
+`.project/next/` holds a lookahead track, copy the current ROADMAP.md to the
+regular file `.project/ROADMAP.before-reslice.md` and save the lookahead
+milestone slug. Do not ask for the keep/discard ruling until the candidate
+roadmap has been generated and passed its gate. On recovery, reuse that exact
+snapshot; never replace it from the current candidate.
 
 Require `.project/CHARTER.md` and `.project/SYNTHESIS.md` (program scope) with
 a non-empty `## Decisions` or `## Settled` section and no unresolved
@@ -99,7 +96,19 @@ precondition fails.
    present **Outcome** with the failed gate, **Review** linking the resolved
    absolute ROADMAP.md path (or STATE.md when ROADMAP.md is missing), and
    **Next** naming the one correction or user decision required. Stop.
-5. Show every milestone id, goal, and dependency summary as the outcome. Link
+5. On a re-slice with a saved lookahead track, run the bundled
+   `scripts/promote_lookahead.py compare-entry --before
+   .project/ROADMAP.before-reslice.md --after .project/ROADMAP.md --milestone
+   <lookahead-slug>` helper now. It compares
+   every plan-binding part of the entry while ignoring only Status, Archive,
+   and Integrated. When it returns `status: unchanged`, ask the user to choose
+   `Keep the unchanged lookahead track (recommended)` or `Discard and
+   regenerate the lookahead track`. When it returns `status: changed`, offer
+   `Discard and regenerate the lookahead track (recommended)` or `Request
+   roadmap changes`; keeping the stale track is not valid. Apply the ruling,
+   remove the saved comparison file, and record the helper result and ruling
+   in the state log before roadmap approval.
+6. Show every milestone id, goal, and dependency summary as the outcome. Link
    the resolved absolute `.project/ROADMAP.md` path, then ask one explicit next
    question. For a milestone-boundary re-slice, list `Approve roadmap and
    resume the active milestone (recommended)` first. For a post-abandon
@@ -109,7 +118,7 @@ precondition fails.
    changes` as the alternative. If the user requests changes,
    retain the entering state for a milestone-boundary re-slice; otherwise keep
    `phase: roadmap`, `status: active`. Revise and re-gate.
-6. On approval of a milestone-boundary re-slice, preserve the entering
+7. On approval of a milestone-boundary re-slice, preserve the entering
    `phase`, `status`, and `milestone` in STATE.md and keep its matching roadmap
    entry `active`. On a post-abandon re-slice, preserve the bound branch, set
    STATE.md to `phase: inspect`, `status: active`, `milestone` to the first

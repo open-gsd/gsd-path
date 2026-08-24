@@ -34,6 +34,10 @@ class LookaheadError(RuntimeError):
     pass
 
 
+class NoEligibleLookahead(LookaheadError):
+    pass
+
+
 class NeedsRecovery(LookaheadError):
     def __init__(self, milestone: str, reason: str):
         super().__init__(reason)
@@ -153,21 +157,44 @@ def dependency_ids(block: dict) -> list[str]:
     return re.findall(r"M\d{3,}", dependency_list.group(1) or "")
 
 
-def next_eligible_pending(content: str) -> dict:
+def next_eligible_pending(content: str, active_milestone: Optional[str] = None) -> dict:
     blocks = roadmap_blocks(content)
     blocks_by_id = {block["id"]: block for block in blocks}
+    if len(blocks_by_id) != len(blocks):
+        raise LookaheadError("ROADMAP.md milestone ids must be unique")
+    active_id = None
+    if active_milestone is not None:
+        active = milestone_block(content, active_milestone)
+        if active["fields"].get("Status", (-1, ""))[1] != "active":
+            raise LookaheadError(f"roadmap milestone {active_milestone} is not active")
+        active_id = active["id"]
     for block in blocks:
         if block["fields"].get("Status", (-1, ""))[1] != "pending":
             continue
         dependencies = dependency_ids(block)
         if all(
             dependency in blocks_by_id
-            and blocks_by_id[dependency]["fields"].get("Status", (-1, ""))[1]
-            == "shipped"
+            and (
+                blocks_by_id[dependency]["fields"].get("Status", (-1, ""))[1]
+                == "shipped"
+                or dependency == active_id
+            )
             for dependency in dependencies
         ):
             return block
-    raise LookaheadError("ROADMAP.md has no dependency-ready pending milestone")
+    raise NoEligibleLookahead("ROADMAP.md has no dependency-ready pending milestone")
+
+
+def select_lookahead(content: str, active_milestone: str) -> dict:
+    try:
+        selected = next_eligible_pending(content, active_milestone)
+    except NoEligibleLookahead:
+        return {"status": "none"}
+    return {
+        "status": "selected",
+        "id": selected["id"],
+        "milestone": archive_milestone.normalized_slug(selected["title"]),
+    }
 
 
 def roadmap_contract(content: str, milestone: str) -> tuple[str, ...]:
@@ -228,26 +255,41 @@ def roadmap_transition(
     return "".join(lines)
 
 
-def roadmap_is_complete(
+def completed_transition(
     content: str,
     milestone: str,
     branch: str,
     integrate: str,
-) -> bool:
+) -> Optional[dict]:
     try:
         selected = milestone_block(content, milestone)
     except LookaheadError:
-        return False
+        return None
     status = selected["fields"].get("Status")
-    return bool(
-        status
-        and status[1] == "active"
-        and branch == f"gsd-path/{selected['id']}"
-        and any(
-            block["fields"].get("Integrated", (-1, ""))[1] == integrate
-            for block in roadmap_blocks(content)
-        )
+    if not status or status[1] != "active" or branch != f"gsd-path/{selected['id']}":
+        return None
+    blocks = roadmap_blocks(content)
+    selected_index = next(
+        (index for index, block in enumerate(blocks) if block["id"] == selected["id"]),
+        None,
     )
+    if selected_index is None:
+        return None
+    previous = next(
+        (
+            block
+            for block in reversed(blocks[:selected_index])
+            if block["fields"].get("Status", (-1, ""))[1] == "shipped"
+        ),
+        None,
+    )
+    if previous is None:
+        return None
+    if previous["fields"].get("Integrated", (-1, ""))[1] != integrate:
+        raise LookaheadError(
+            "integrate SHA does not match the immediately preceding shipped transition"
+        )
+    return previous
 
 
 def ruling_rows(audit: Path) -> list[str]:
@@ -370,10 +412,10 @@ def validate_git(repo: Path, branch: str, integrate: str) -> None:
 
 def validate_integration(
     root: Path,
-    active_state: str,
     archive: Path,
     configured_archive: str,
     integrate: str,
+    shipped_branch: str,
 ) -> None:
     try:
         remote_default = archive_milestone.resolve_remote_default(root)
@@ -427,7 +469,6 @@ def validate_integration(
         )
         if not archive_milestone.is_ship_subject(ship_subject, archive.name):
             raise LookaheadError("integration second parent is not the shipped milestone")
-        bound_branch = state_value(active_state, "branch")
         archive_milestone.require_canonical_commit_body(
             root,
             integrate,
@@ -436,7 +477,7 @@ def validate_integration(
                 configured_archive,
                 ship_commit,
                 default_name,
-                bound_branch,
+                shipped_branch,
             ),
             "integration",
         )
@@ -604,10 +645,10 @@ def prepare_transaction(
     configured_archive, archive = transaction_archive(root, active_state)
     validate_integration(
         root,
-        active_state,
         archive,
         configured_archive,
         integrate,
+        state_value(active_state, "branch"),
     )
     archived_audit = archive / "research" / "DOCS-AUDIT.md"
     archived_audit_mode = path_mode(archived_audit)
@@ -853,7 +894,13 @@ def resume_promotion(root: Path, project: Path, transaction: dict) -> dict:
     }
 
 
-def already_transitioned(project: Path, branch: str, integrate: str, recovery: bool) -> Optional[dict]:
+def already_transitioned(
+    root: Path,
+    project: Path,
+    branch: str,
+    integrate: str,
+    recovery: bool,
+) -> Optional[dict]:
     if path_mode(project / "next") is not None:
         return None
     state = read_text(project / "STATE.md", "active STATE.md")
@@ -864,16 +911,29 @@ def already_transitioned(project: Path, branch: str, integrate: str, recovery: b
         state_value(state, "branch") != branch
         or not archive_milestone.is_unset(state_value(state, "archive"))
         or archive_milestone.is_unset(milestone)
-        or not roadmap_is_complete(
-            read_text(project / "ROADMAP.md", "ROADMAP.md"),
-            milestone,
-            branch,
-            integrate,
-        )
     ):
+        return None
+    roadmap = read_text(project / "ROADMAP.md", "ROADMAP.md")
+    previous = completed_transition(roadmap, milestone, branch, integrate)
+    if previous is None:
         return None
     if recovery and (phase, status) != ("inspect", "active"):
         return None
+    configured_archive = previous["fields"].get("Archive", (-1, ""))[1]
+    if archive_milestone.is_unset(configured_archive):
+        raise LookaheadError("previous shipped roadmap milestone lacks an archive")
+    try:
+        archive = archive_milestone.archive_from_state(root, configured_archive)
+    except archive_milestone.ArchiveError as error:
+        raise LookaheadError(str(error)) from error
+    require_directory(archive, "shipped archive")
+    validate_integration(
+        root,
+        archive,
+        normalized_path(configured_archive),
+        integrate,
+        f"gsd-path/{previous['id']}",
+    )
     return {
         "status": "already-recovered" if recovery else "already-promoted",
         "milestone": milestone,
@@ -888,7 +948,13 @@ def promote(repo: Path, branch: str, integrate: str) -> dict:
     with archive_milestone.discussion_lock(project):
         transaction = load_journal(project, branch, integrate)
         if transaction is None:
-            complete = already_transitioned(project, branch, integrate, recovery=False)
+            complete = already_transitioned(
+                root,
+                project,
+                branch,
+                integrate,
+                recovery=False,
+            )
             if complete:
                 validate_completed_worktree(root, "after promotion")
                 return complete
@@ -965,7 +1031,13 @@ def recover(repo: Path, branch: str, integrate: str, strategy: str) -> dict:
     with archive_milestone.discussion_lock(project):
         transaction = load_journal(project, branch, integrate)
         if transaction is None:
-            complete = already_transitioned(project, branch, integrate, recovery=True)
+            complete = already_transitioned(
+                root,
+                project,
+                branch,
+                integrate,
+                recovery=True,
+            )
             if complete:
                 validate_completed_worktree(root, "after lookahead recovery")
                 complete["strategy"] = strategy
@@ -1014,6 +1086,9 @@ def parser() -> argparse.ArgumentParser:
     compare_parser.add_argument("--before", required=True, type=Path)
     compare_parser.add_argument("--after", required=True, type=Path)
     compare_parser.add_argument("--milestone", required=True)
+    select_parser = subparsers.add_parser("select-next")
+    select_parser.add_argument("--roadmap", required=True, type=Path)
+    select_parser.add_argument("--active-milestone", required=True)
     return result
 
 
@@ -1025,6 +1100,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 read_text(arguments.before, "previous ROADMAP.md"),
                 read_text(arguments.after, "proposed ROADMAP.md"),
                 arguments.milestone,
+            )
+        elif arguments.command == "select-next":
+            result = select_lookahead(
+                read_text(arguments.roadmap, "ROADMAP.md"),
+                arguments.active_milestone,
             )
         elif arguments.command == "promote":
             result = promote(arguments.repo, arguments.branch, arguments.integrate)

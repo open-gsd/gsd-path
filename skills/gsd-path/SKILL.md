@@ -203,12 +203,29 @@ entries routes to the bundled [roadmap contract](ROADMAP.md) in re-slice mode.
 
 ## Lookahead planning (program flow)
 
-While STATE is `build/active` and `.project/ROADMAP.md` has a `pending`
-entry whose dependencies are all `shipped` or the active milestone, offer
-once per milestone to plan that next milestone in parallel with the build.
-On acceptance, create `.project/next/STATE.md` from the local [state
+Before creating, reading, routing, or writing `.project/next/`, rerun the
+bundled project classifier and require `verdict: owned`. For a new track,
+require `next/` to be absent under non-following metadata, create it as a real
+directory, then classify again before writing STATE.md. For a resumed track,
+require `next/` to be a real directory and `next/STATE.md` to be a regular
+non-symlink file. A symlink, special file, vanished path, metadata error, or
+non-`owned` verdict blocks as orphan recovery. Repeat this check immediately
+before every lookahead phase dispatch and before promotion.
+
+While STATE is `build/active`, run the bundled deterministic selector before
+offering lookahead planning:
+
+```text
+python3 <absolute-bundled-promote-lookahead.py> select-next \
+  --roadmap <absolute-.project/ROADMAP.md> \
+  --active-milestone <STATE.milestone>
+```
+
+Offer once per milestone only when it returns `status: selected`; its first
+roadmap-ordered `pending` entry has dependencies that are all `shipped` or the
+active milestone. On acceptance, create `.project/next/STATE.md` from the local [state
 template](templates/state.md) with `pipeline: gsd-path/v2`, `phase:
-inspect`, `status: active`, the next dependency-ready `pending` slug as
+inspect`, `status: active`, the selector's exact returned `milestone` slug as
 `milestone`, `branch: null`, and `archive: null`, then follow the bundled
 phase contracts in their Lookahead mode — inspect, define (milestone +
 brownfield), research (only when the entry lists open questions), decide, and
