@@ -1298,6 +1298,47 @@ class InstallerTests(unittest.TestCase):
         self.assertNotIn("commit-msg", output)
         self.assertTrue((project / ".claude" / "settings.json").is_file())
 
+    def test_git_only_hooks_require_initialized_repository(self):
+        project = self.root / "plain-project"
+        target = self.root / "grok" / "skills"
+        with mock.patch.object(
+            install, "_detect_python_interpreter", return_value="python3"
+        ):
+            with self.assertRaisesRegex(
+                install.InstallerError,
+                "initialized Git repository.*git-only hosts: grok",
+            ):
+                install.install(
+                    self.source,
+                    [install.TargetPlan("grok", target)],
+                    project=project,
+                    hooks=True,
+                )
+
+        self.assertFalse(target.exists())
+        self.assertFalse((project / "AGENTS.md").exists())
+
+    def test_git_only_hooks_require_python_interpreter(self):
+        project = self.root / "grok-project"
+        (project / ".git").mkdir(parents=True)
+        target = self.root / "grok" / "skills"
+        with mock.patch.object(
+            install, "_detect_python_interpreter", return_value=None
+        ):
+            with self.assertRaisesRegex(
+                install.InstallerError,
+                "working Python interpreter.*git-only hosts: grok",
+            ):
+                install.install(
+                    self.source,
+                    [install.TargetPlan("grok", target)],
+                    project=project,
+                    hooks=True,
+                )
+
+        self.assertFalse(target.exists())
+        self.assertFalse((project / "AGENTS.md").exists())
+
     def test_hooks_collision_rolls_back_cleanly(self):
         project = self.root / "project"
         (project / ".claude").mkdir(parents=True)

@@ -44,10 +44,10 @@ hooks. Other target files are refused if they already exist:
 
 Git hooks are written to the repository's **effective** hooks directory,
 resolved with `git rev-parse --git-path hooks`. That honors `core.hooksPath`
-setups (Husky and friends) and linked worktrees (where `.git` is a file). Only
-when git itself is not runnable does the installer fall back to a plain
-`.git/hooks` directory; if neither works, it reports that git hooks were
-skipped instead of dropping them silently.
+setups (Husky and friends) and linked worktrees (where `.git` is a file).
+Native-guarded hosts may fall back to a plain `.git/hooks` directory when Git
+is not runnable. A selected `git-only` host requires an initialized repository
+with a resolvable hooks directory; otherwise installation stops before writing.
 
 Git hooks work for **any** agent that commits. Native guard wiring denies a tool
 call when its event is malformed or the guard cannot validate it.
@@ -55,9 +55,10 @@ call when its event is malformed or the guard cannot validate it.
 **Windows / interpreter caveat:** hooks and native host settings invoke a
 Python interpreter that the installer probes at install time — `python3` first,
 then `python` (plain `python3` usually does not exist on Windows). If neither
-runs, hook install is skipped with a warning rather than wiring an interpreter
-that would make every commit fail. The `sh` hook scripts themselves need a
-POSIX shell (Git for Windows provides one).
+runs, native-guarded installs skip hook wiring with a warning rather than
+pinning a missing interpreter. A `git-only` install fails because it cannot
+provide its declared tier. The `sh` hook scripts themselves need a POSIX shell
+(Git for Windows provides one).
 
 ### Updating after package upgrade
 
@@ -83,8 +84,8 @@ See [UPDATE.md](UPDATE.md).
 
 - non-read tools targeting paths under `.project/archive/` (including `..` paths)
 - `git reset --hard`, `git clean -f`, force push, `git branch -D`
-- `cp`, `tee`, `git checkout`/`restore` into archive
-- `rm`, `mv`, redirects into archive
+- shell commands that reference the archive unless the whole command is a
+  recognized standalone read
 
 Read tools (`Read`, `Grep`, `View`, …) may still open archive paths.
 

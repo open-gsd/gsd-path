@@ -143,12 +143,19 @@ export function resolveGitHooksPath(project) {
 }
 
 function gitHooksDirectory(project) {
+  return gitHooksLocation(project).directory;
+}
+
+function gitHooksLocation(project) {
   const dotGit = path.join(project, ".git");
-  if (!lexists(dotGit)) return null;
+  if (!lexists(dotGit)) return { directory: null, resolved: false };
   const resolved = hooks.resolveGitHooksPath(project);
-  if (resolved !== null) return resolved;
+  if (resolved !== null) return { directory: resolved, resolved: true };
   // Fallback when git is not runnable: only a plain .git directory is safe.
-  return isDirectory(dotGit) ? path.join(dotGit, "hooks") : null;
+  return {
+    directory: isDirectory(dotGit) ? path.join(dotGit, "hooks") : null,
+    resolved: false,
+  };
 }
 const HOST_NOTES = {
   opencode:
@@ -200,6 +207,9 @@ export function localRootsForManifest(manifest) {
 
 export const TARGETS = targetsForManifest(MANIFEST);
 export const LOCAL_ROOTS = localRootsForManifest(MANIFEST);
+const GUARD_TIERS = Object.fromEntries(
+  Object.entries(MANIFEST.hosts).map(([target, config]) => [target, config.guard_tier])
+);
 export const SKILL_NAMES = skillNamesForManifest(MANIFEST);
 export const SKILL_ALIASES = { ...MANIFEST.skill_aliases };
 const PHASE_RESOURCES = MANIFEST.phase_resources;
@@ -1614,6 +1624,8 @@ export async function install(sourceRoot, plans, options = {}) {
   if (hooksEnabled && project === null) {
     throw new InstallerError("--hooks requires --project");
   }
+  const selected = plans.map((plan) => plan.name);
+  const gitOnly = selected.filter((target) => GUARD_TIERS[target] === "git-only");
   // Resolve per-run environment facts (interpreter, git hooks directory)
   // once here and thread them down.
   let effectiveHooks = hooksEnabled;
@@ -1623,6 +1635,11 @@ export async function install(sourceRoot, plans, options = {}) {
   if (hooksEnabled) {
     const probed = effectiveInterpreter();
     if (probed === null) {
+      if (gitOnly.length > 0) {
+        throw new InstallerError(
+          `--hooks requires a working Python interpreter for git-only hosts: ${gitOnly.join(", ")}`
+        );
+      }
       effectiveHooks = false;
       hookNotes.push(
         "note: hooks: no working python3 or python interpreter found on PATH; " +
@@ -1633,7 +1650,14 @@ export async function install(sourceRoot, plans, options = {}) {
     }
   }
   if (effectiveHooks) {
-    hooksDir = gitHooksDirectory(project);
+    const location = gitHooksLocation(project);
+    hooksDir = location.directory;
+    if (gitOnly.length > 0 && !location.resolved) {
+      throw new InstallerError(
+        "--hooks requires an initialized Git repository with a resolvable hooks " +
+          `directory for git-only hosts: ${gitOnly.join(", ")}`
+      );
+    }
     if (hooksDir === null && lexists(path.join(project, ".git"))) {
       hookNotes.push(
         "note: hooks: found .git but could not resolve the git hooks directory " +
@@ -1645,7 +1669,6 @@ export async function install(sourceRoot, plans, options = {}) {
     if (onProgress) onProgress(text);
     await tick();
   };
-  const selected = plans.map((plan) => plan.name);
   const deployments = deploymentPlans(plans);
   const adapters = [...new Set(deployments.map((deployment) => deployment.profile))];
   await progress("Validating synchronized package");

@@ -1272,6 +1272,34 @@ test("hooks skip the git hook without a repository", async () => {
   assert.ok(!/commit-msg/.test(projectLine));
 });
 
+test("git-only hooks require an initialized repository", async () => {
+  const project = path.join(root, "plain-project");
+  const target = path.join(root, "grok", "skills");
+
+  await assert.rejects(
+    runInstall([installer.targetPlan("grok", target)], { project, hooks: true }),
+    /initialized Git repository.*git-only hosts: grok/
+  );
+
+  assert.ok(!fs.existsSync(target));
+  assert.ok(!fs.existsSync(path.join(project, "AGENTS.md")));
+});
+
+test("git-only hooks require a Python interpreter", async () => {
+  installer.hooks.detectPythonInterpreter = () => null;
+  const project = path.join(root, "grok-project");
+  fs.mkdirSync(path.join(project, ".git"), { recursive: true });
+  const target = path.join(root, "grok", "skills");
+
+  await assert.rejects(
+    runInstall([installer.targetPlan("grok", target)], { project, hooks: true }),
+    /working Python interpreter.*git-only hosts: grok/
+  );
+
+  assert.ok(!fs.existsSync(target));
+  assert.ok(!fs.existsSync(path.join(project, "AGENTS.md")));
+});
+
 test("hooks collision rolls back cleanly", async () => {
   const project = path.join(root, "project");
   fs.mkdirSync(path.join(project, ".claude"), { recursive: true });

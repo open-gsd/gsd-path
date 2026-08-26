@@ -108,10 +108,23 @@ class GuardHookTests(unittest.TestCase):
             "Clear-Content .project/archive/001-mvp/NOTE.md",
             "New-Item .project/archive/001-mvp/NEW.md",
             "'broken' | Out-File .project/archive/001-mvp/NOTE.md",
+            r"del .project\archive\001-mvp\NOTE.md",
+            "Get-Item .project/archive/001-mvp/NOTE.md | Remove-Item",
         ):
             with self.subTest(command=command):
                 self.assert_denied(
                     {"tool_name": "PowerShell", "tool_input": {"command": command}}
+                )
+
+    def test_denies_unproven_archive_shell_commands(self):
+        for command in (
+            "sed -i 's/a/b/' .project/archive/001-mvp/NOTE.md",
+            "python3 -c 'write()' .project/archive/001-mvp/NOTE.md",
+            "cat .project/archive/001-mvp/NOTE.md > /tmp/note.md",
+        ):
+            with self.subTest(command=command):
+                self.assert_denied(
+                    {"tool_name": "Bash", "tool_input": {"command": command}}
                 )
 
     def test_allows_powershell_archive_reads(self):

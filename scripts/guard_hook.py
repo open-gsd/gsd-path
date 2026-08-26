@@ -76,10 +76,15 @@ SEGMENT = r"[^|;&]*"
 # `git branch -d` is never confused with `-D`.
 GIT = r"\b(?i:git)\b"
 ARCHIVE_PATH = r"(?i:\.project[\\/]archive)"
-ARCHIVE_MUTATOR = (
-    r"(?i:rm|rmdir|mv|cp|tee|remove-item|move-item|copy-item|rename-item|"
-    r"set-content|add-content|clear-content|new-item|out-file)"
+ARCHIVE_REFERENCE = re.compile(ARCHIVE_PATH)
+ARCHIVE_READ_COMMAND = re.compile(
+    r"^\s*(?i:cat|head|tail|grep|rg|ls|stat|wc|file|readlink|realpath|test|"
+    r"get-content|get-childitem|get-item|get-acl|select-string|test-path)\b"
 )
+ARCHIVE_READ_GIT_COMMAND = re.compile(
+    rf"^\s*{GIT}\s+(?i:status|diff|log|show|ls-files)\b"
+)
+AMBIGUOUS_SHELL_SYNTAX = re.compile(r"[|;&<>`]|\$\(|@\(")
 COMMAND_RULES = (
     (
         re.compile(rf"{GIT}{SEGMENT}\breset\b{SEGMENT}\s--hard\b"),
@@ -96,22 +101,6 @@ COMMAND_RULES = (
     (
         re.compile(rf"{GIT}{SEGMENT}\bbranch\b{SEGMENT}\s-D\b"),
         "git branch -D destroys task branches the recovery protocol inspects",
-    ),
-    (
-        re.compile(rf"\b{ARCHIVE_MUTATOR}\b{SEGMENT}{ARCHIVE_PATH}"),
-        ARCHIVE_REASON,
-    ),
-    (
-        re.compile(rf"{GIT}{SEGMENT}\bcheckout\b{SEGMENT}{ARCHIVE_PATH}"),
-        ARCHIVE_REASON,
-    ),
-    (
-        re.compile(rf"{GIT}{SEGMENT}\brestore\b{SEGMENT}{ARCHIVE_PATH}"),
-        ARCHIVE_REASON,
-    ),
-    (
-        re.compile(rf">>?\s*\S*{ARCHIVE_PATH}"),
-        ARCHIVE_REASON,
     ),
 )
 
@@ -189,6 +178,17 @@ def patch_paths(payload):
         yield (match.group(1) or match.group(2)).strip()
 
 
+def archive_command_is_read_only(command):
+    if not ARCHIVE_REFERENCE.search(command):
+        return True
+    if AMBIGUOUS_SHELL_SYNTAX.search(command):
+        return False
+    return bool(
+        ARCHIVE_READ_COMMAND.match(command)
+        or ARCHIVE_READ_GIT_COMMAND.match(command)
+    )
+
+
 def deny(reason):
     # One denial object per documented host schema: decision/reason (Grok,
     # Antigravity), permission + user/agentMessage (Cursor), permissionDecision
@@ -237,6 +237,8 @@ def evaluate(event):
                 if in_archive(path):
                     deny(ARCHIVE_REASON)
     for command in commands:
+        if not archive_command_is_read_only(command):
+            deny(ARCHIVE_REASON)
         for pattern, reason in COMMAND_RULES:
             if pattern.search(command):
                 deny(reason)

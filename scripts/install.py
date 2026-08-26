@@ -36,6 +36,10 @@ def local_roots_for_manifest(manifest: Mapping) -> Mapping[str, str]:
 
 TARGETS = targets_for_manifest(sync_skill_resources.RESOURCE_MANIFEST)
 LOCAL_ROOTS = local_roots_for_manifest(sync_skill_resources.RESOURCE_MANIFEST)
+GUARD_TIERS = {
+    target: config["guard_tier"]
+    for target, config in sync_skill_resources.RESOURCE_MANIFEST["hosts"].items()
+}
 SKILL_NAMES = skill_names_for_manifest(sync_skill_resources.RESOURCE_MANIFEST)
 SKILL_ALIASES = dict(sync_skill_resources.RESOURCE_MANIFEST["skill_aliases"])
 CLAUDE_BRIDGE = "@../AGENTS.md\n@../WORKFLOW.md\n"
@@ -203,14 +207,20 @@ def _resolve_git_hooks_path(project: "Path") -> Optional["Path"]:
 
 
 def _git_hooks_directory(project: "Path") -> Optional["Path"]:
+    return _git_hooks_location(project)[0]
+
+
+def _git_hooks_location(project: "Path") -> Tuple[Optional["Path"], bool]:
     dot_git = project / ".git"
     if not _lexists(dot_git):
-        return None
+        return None, False
     resolved = _resolve_git_hooks_path(project)
     if resolved is not None:
-        return resolved
+        return resolved, True
     # Fallback when git is not runnable: only a plain .git directory is safe.
-    return dot_git / "hooks" if dot_git.is_dir() else None
+    return (dot_git / "hooks" if dot_git.is_dir() else None), False
+
+
 OPENCODE_NOTE = (
     "note: OpenCode stable discovers the skills but has no documented hard "
     'explicit-only switch; OpenCode v2 honors opencode/autoinvoke="false" '
@@ -1339,6 +1349,10 @@ def install(
 ) -> List[str]:
     if hooks and project is None:
         raise InstallerError("--hooks requires --project")
+    selected = [plan.name for plan in plans]
+    git_only = [
+        target for target in selected if GUARD_TIERS.get(target) == "git-only"
+    ]
     # Resolve per-run environment facts (interpreter, git hooks directory)
     # once here and thread them down.
     effective_hooks = hooks
@@ -1348,6 +1362,11 @@ def install(
     if hooks:
         probed = _effective_interpreter()
         if probed is None:
+            if git_only:
+                raise InstallerError(
+                    "--hooks requires a working Python interpreter for "
+                    f"git-only hosts: {', '.join(git_only)}"
+                )
             effective_hooks = False
             hook_notes.append(
                 "note: hooks: no working python3 or python interpreter found "
@@ -1356,13 +1375,18 @@ def install(
         else:
             interpreter = probed
     if effective_hooks:
-        hooks_dir = _git_hooks_directory(project)
+        hooks_dir, git_resolved = _git_hooks_location(project)
+        if git_only and not git_resolved:
+            raise InstallerError(
+                "--hooks requires an initialized Git repository with a "
+                "resolvable hooks directory for git-only hosts: "
+                + ", ".join(git_only)
+            )
         if hooks_dir is None and _lexists(project / ".git"):
             hook_notes.append(
                 "note: hooks: found .git but could not resolve the git hooks "
                 "directory (is git runnable?); git hooks were not installed"
             )
-    selected = [plan.name for plan in plans]
     deployments = _deployment_plans(plans)
     adapters = list(dict.fromkeys(deployment.profile for deployment in deployments))
     validate_source(source_root, adapters)
