@@ -789,6 +789,42 @@ test("hooks require a project", async () => {
   assert.ok(!fs.existsSync(target));
 });
 
+test("hooks init adds guards without changing existing project contracts", async () => {
+  installer.hooks.detectPythonInterpreter = () => "python3";
+  const project = path.join(root, "existing-project");
+  fs.mkdirSync(path.join(project, ".git"), { recursive: true });
+  fs.writeFileSync(path.join(project, "AGENTS.md"), "existing agents\n");
+  fs.writeFileSync(path.join(project, "WORKFLOW.md"), "existing workflow\n");
+
+  assert.equal(
+    await installer.main(
+      [
+        "--hooks-init",
+        "--claude",
+        "--project",
+        project,
+        "--source-root",
+        source,
+        "--no-color",
+      ],
+      env
+    ),
+    0
+  );
+
+  assert.equal(fs.readFileSync(path.join(project, "AGENTS.md"), "utf8"), "existing agents\n");
+  assert.equal(
+    fs.readFileSync(path.join(project, "WORKFLOW.md"), "utf8"),
+    "existing workflow\n"
+  );
+  for (const name of installer.GUARD_SCRIPTS) {
+    assert.ok(fs.existsSync(path.join(project, installer.HOOKS_DIRECTORY, name)));
+  }
+  assert.ok(fs.existsSync(path.join(project, ".claude", "settings.json")));
+  assert.ok(fs.existsSync(path.join(project, ".git", "hooks", "pre-commit")));
+  assert.ok(fs.existsSync(path.join(project, ".git", "hooks", "commit-msg")));
+});
+
 test("hooks install guard scripts, settings, and git hook", async () => {
   const project = path.join(root, "project");
   fs.mkdirSync(path.join(project, ".git"), { recursive: true });

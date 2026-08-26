@@ -87,6 +87,9 @@ class GuardHookTests(unittest.TestCase):
             "git push --force origin main",
             "git push origin main --force-with-lease",
             "git branch -D gsd-path/feature",
+            "git -c clean.requireForce=false clean -d",
+            "git update-ref -d refs/heads/task/demo",
+            "git update-ref --stdin",
             "rm -rf .project/archive/001-mvp",
             "mv .project/archive/001-mvp /tmp/x",
             "echo broken > .project/archive/001-mvp/MANIFEST.md",
@@ -264,11 +267,33 @@ class GuardHookTests(unittest.TestCase):
             "source /tmp/unsafe-gsd-path-command.sh",
             ". /tmp/unsafe-gsd-path-command.sh",
             "builtin eval 'git reset --hard HEAD~1'",
+            'echo "$(git reset --hard HEAD~1)"',
+            "bash -lc 'export HOME=/tmp/aliases; git wipe HEAD~1'",
         ):
             with self.subTest(command=command):
                 self.assert_denied(
                     {"tool_name": "Bash", "tool_input": {"command": command}}
                 )
+
+    def test_denies_archive_path_through_symlink(self):
+        previous = Path.cwd()
+        with tempfile.TemporaryDirectory() as temporary:
+            repository = Path(temporary)
+            archive = repository / ".project" / "archive" / "001-mvp"
+            archive.mkdir(parents=True)
+            (repository / "history").symlink_to(
+                ".project/archive", target_is_directory=True
+            )
+            try:
+                os.chdir(repository)
+                self.assert_denied(
+                    {
+                        "tool_name": "Bash",
+                        "tool_input": {"command": "rm history/001-mvp/PLAN.md"},
+                    }
+                )
+            finally:
+                os.chdir(previous)
 
     def test_denies_destructive_persistent_git_alias(self):
         previous = Path.cwd()

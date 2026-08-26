@@ -1177,14 +1177,19 @@ function mergedCursorSettings(settings, interpreter) {
   return mergedHookSettings(settings, "preToolUse", managedEntry, isManagedDirectHookEntry);
 }
 
-function validateHooksRefresh(sourceRoot, project, full, hooksDir, selected) {
+function validateHooksRefresh(sourceRoot, project, full, hooksDir, selected, initialize = false) {
   validateDirectoryDestination(project, "project path");
+  validateDirectoryDestination(
+    path.join(project, HOOKS_DIRECTORY),
+    "guard hooks directory"
+  );
   for (const name of GUARD_SCRIPTS) {
     const destination = path.join(project, HOOKS_DIRECTORY, name);
+    const exists = lexists(destination);
     if (isSymlink(destination)) {
       throw new InstallerError(`refusing to refresh a symlink: ${destination}`);
     }
-    if (!isManagedGuardScript(destination)) {
+    if ((exists && !isManagedGuardScript(destination)) || (!exists && !initialize)) {
       throw new InstallerError(`not a managed GSD Path guard script: ${destination}`);
     }
     const source = path.join(sourceRoot, "scripts", name);
@@ -1230,22 +1235,25 @@ function validateHooksRefresh(sourceRoot, project, full, hooksDir, selected) {
 
 // Returns refreshed project-relative paths; entries prefixed "note:" are
 // user-facing notes rather than refreshed files.
-function refreshHooks(sourceRoot, project, full, dryRun, selected = []) {
+function refreshHooks(sourceRoot, project, full, dryRun, selected = [], initialize = false) {
   let hooksDir = full ? gitHooksDirectory(project) : null;
   let interpreter = null;
   if (full && !dryRun) {
     ({ interpreter, hooksDir } = requiredHookRuntime(
       project,
-      "--hooks-refresh-full",
+      initialize ? "--hooks-init" : "--hooks-refresh-full",
       selected
     ));
   }
-  validateHooksRefresh(sourceRoot, project, full, hooksDir, selected);
+  validateHooksRefresh(sourceRoot, project, full, hooksDir, selected, initialize);
   const refreshed = [];
   for (const name of GUARD_SCRIPTS) {
     const destination = path.join(project, HOOKS_DIRECTORY, name);
     const source = path.join(sourceRoot, "scripts", name);
-    if (!dryRun) copyFileAtomic(source, destination);
+    if (!dryRun) {
+      fs.mkdirSync(path.dirname(destination), { recursive: true });
+      copyFileAtomic(source, destination);
+    }
     refreshed.push(describeProjectPath(project, destination));
   }
   if (full) {
@@ -1927,6 +1935,7 @@ export function parseCli(argv) {
     project: { type: "string" },
     doctor: { type: "boolean", default: false },
     hooks: { type: "boolean", default: false },
+    "hooks-init": { type: "boolean", default: false },
     "hooks-refresh": { type: "boolean", default: false },
     "hooks-refresh-full": { type: "boolean", default: false },
     "source-root": { type: "string" },
@@ -2003,7 +2012,7 @@ function usage() {
     "Docs: DOCS.md (hub) · QUICK.md (first run) · FULL.md · UPDATE.md\n\n" +
     "usage: gsd-path            (no flags on a terminal opens the interactive wizard)\n" +
     "       gsd-path [--all] [--update] [--local] [--dry-run] [--project PATH]\n" +
-    "              [--hooks] [--hooks-refresh] [--hooks-refresh-full] [target flags]\n\n" +
+    "              [--hooks] [--hooks-init] [--hooks-refresh] [--hooks-refresh-full] [target flags]\n\n" +
     "  First install:  gsd-path --all --dry-run && gsd-path --all\n" +
     "  New repo:       gsd-path --all --project /path/to/repo\n" +
     "  Update skills:  gsd-path --update   (or npx gsd-path@latest --update)\n\n" +
@@ -2013,6 +2022,7 @@ function usage() {
     "  --project PATH        also write AGENTS.md and WORKFLOW.md into PATH\n" +
     "  --doctor              read-only health check of installs, hooks, and state\n" +
     "  --hooks               with --project: install guard hooks (see HOOKS.md)\n" +
+    "  --hooks-init          add guards to an existing project without changing its contracts\n" +
     "  --hooks-refresh       with --project: overwrite managed .gsd-path scripts\n" +
     "  --hooks-refresh-full  refresh native settings/git hooks; target flags create missing configs\n" +
     "  --dry-run             preview without writing\n" +
@@ -2071,14 +2081,21 @@ export async function main(argv, env = process.env) {
     console.log(`\n  ${ui.dim(failed ? `${failed} problem${failed === 1 ? "" : "s"} found.` : "Healthy.")}\n`);
     return failed ? 1 : 0;
   }
+  const hooksInit = values["hooks-init"];
   const hooksRefresh = values["hooks-refresh"] || values["hooks-refresh-full"];
-  if (hooksRefresh) {
+  if (hooksInit || hooksRefresh) {
     if (project === null) {
-      ui.error("--hooks-refresh requires --project");
+      ui.error(`${hooksInit ? "--hooks-init" : "--hooks-refresh"} requires --project`);
+      return 2;
+    }
+    const selected = TARGETS.filter((target) => values.all || values[target]);
+    if (hooksInit && !selected.length) {
+      ui.error("--hooks-init requires at least one target or --all");
       return 2;
     }
     const refreshMode =
-      `hooks refresh for ${project}` + (values["dry-run"] ? " · dry run" : "");
+      `hooks ${hooksInit ? "initialization" : "refresh"} for ${project}` +
+      (values["dry-run"] ? " · dry run" : "");
     ui.banner(refreshMode);
     const spin = ui.spinner("Validating synchronized package");
     try {
@@ -2090,17 +2107,18 @@ export async function main(argv, env = process.env) {
       const refreshed = refreshHooks(
         sourceRoot,
         project,
-        values["hooks-refresh-full"],
+        hooksInit || values["hooks-refresh-full"],
         values["dry-run"],
-        TARGETS.filter((target) => values.all || values[target])
+        selected,
+        hooksInit
       );
       spin.stop();
       const notes = refreshed.filter((line) => line.startsWith("note:"));
       const files = refreshed.filter((line) => !line.startsWith("note:"));
       ui.result(
         values["dry-run"]
-          ? `hooks: would refresh ${files.join(", ")}`
-          : `hooks: refreshed ${files.join(", ")}`
+          ? `hooks: would ${hooksInit ? "initialize" : "refresh"} ${files.join(", ")}`
+          : `hooks: ${hooksInit ? "initialized" : "refreshed"} ${files.join(", ")}`
       );
       for (const note of notes) ui.result(note);
       console.log(

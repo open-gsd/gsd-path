@@ -1108,6 +1108,40 @@ class InstallerTests(unittest.TestCase):
         self.assertIn("--hooks requires --project", error)
         self.assertFalse(target.exists())
 
+    def test_hooks_init_adds_guards_without_changing_existing_contracts(self):
+        project = self.root / "existing-project"
+        (project / ".git").mkdir(parents=True)
+        (project / "AGENTS.md").write_text("existing agents\n", encoding="utf-8")
+        (project / "WORKFLOW.md").write_text(
+            "existing workflow\n", encoding="utf-8"
+        )
+
+        status, _, error = self.run_main(
+            [
+                "--hooks-init",
+                "--claude",
+                "--project",
+                str(project),
+                "--source-root",
+                str(self.source),
+            ]
+        )
+
+        self.assertEqual(0, status, error)
+        self.assertEqual(
+            "existing agents\n",
+            (project / "AGENTS.md").read_text(encoding="utf-8"),
+        )
+        self.assertEqual(
+            "existing workflow\n",
+            (project / "WORKFLOW.md").read_text(encoding="utf-8"),
+        )
+        for name in install.GUARD_SCRIPTS:
+            self.assertTrue((project / install.HOOKS_DIRECTORY / name).is_file())
+        self.assertTrue((project / ".claude" / "settings.json").is_file())
+        self.assertTrue((project / ".git" / "hooks" / "pre-commit").is_file())
+        self.assertTrue((project / ".git" / "hooks" / "commit-msg").is_file())
+
     def test_hooks_install_guard_scripts_settings_and_git_hook(self):
         project = self.root / "project"
         (project / ".git").mkdir(parents=True)

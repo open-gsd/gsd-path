@@ -20,7 +20,7 @@ import re
 import shlex
 import subprocess
 import sys
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 
 PATH_KEYS = frozenset(
     {
@@ -113,6 +113,7 @@ GIT_REASONS = {
     "clean": "git clean -f deletes untracked evidence and retained task worktrees",
     "push": "force pushes rewrite build-branch history the pipeline resumes from",
     "branch": "git branch -D destroys task branches the recovery protocol inspects",
+    "update-ref": "git update-ref deletion destroys refs the recovery protocol inspects",
 }
 GIT_GLOBAL_OPTIONS_WITH_VALUES = frozenset(
     {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--config-env"}
@@ -126,7 +127,23 @@ POWERSHELL_WRAPPERS = frozenset(
     {"powershell", "powershell.exe", "pwsh", "pwsh.exe"}
 )
 COMMAND_WRAPPERS = frozenset({"command", "exec"})
-UNVALIDATED_EXECUTION_BUILTINS = frozenset({".", "builtin", "eval", "source"})
+UNVALIDATED_EXECUTION_BUILTINS = frozenset(
+    {
+        ".",
+        "builtin",
+        "declare",
+        "eval",
+        "export",
+        "local",
+        "readonly",
+        "set",
+        "setenv",
+        "source",
+        "typeset",
+        "unset",
+        "unsetenv",
+    }
+)
 SHELL_CONTROL_WORDS = frozenset(
     {
         "!",
@@ -269,11 +286,22 @@ def path_in_archive(path, working_directories=()):
     for value in path_values(path):
         if in_archive(value) or expansion_can_match_archive(value):
             return True
-        if is_absolute_path(value):
-            continue
-        for working_directory in working_directories:
-            resolved = f"{working_directory}/{value}"
-            if in_archive(resolved) or expansion_can_match_archive(resolved):
+        bases = [""] if is_absolute_path(value) else list(working_directories) or [""]
+        for working_directory in bases:
+            combined = (
+                value
+                if is_absolute_path(value) or not working_directory
+                else f"{working_directory}/{value}"
+            )
+            if in_archive(combined) or expansion_can_match_archive(combined):
+                return True
+            if re.match(r"^[A-Za-z]:[/\\]", combined):
+                continue
+            try:
+                resolved = Path(combined).resolve(strict=False)
+            except (OSError, RuntimeError):
+                continue
+            if in_archive(resolved.as_posix()):
                 return True
     return False
 
@@ -455,10 +483,12 @@ def git_command(segment):
                 raise ValueError("git global option lacks a value")
             value = arguments[index]
             index += 1
-        if option in {"-c", "--config-env"} and str(value).casefold().startswith(
-            "alias."
-        ):
-            raise ValueError("git alias configuration cannot be validated")
+        if option in {"-c", "--config-env"}:
+            config_key = str(value).split("=", 1)[0].casefold()
+            if config_key.startswith("alias."):
+                raise ValueError("git alias configuration cannot be validated")
+            if config_key == "clean.requireforce":
+                raise ValueError("git clean safety configuration cannot be validated")
         if option in GIT_GLOBAL_OPTIONS_WITH_VALUES:
             git_options.extend((option, str(value)))
     if index >= len(arguments):
@@ -583,6 +613,12 @@ def destructive_git_reason(tokens, resolved_aliases=frozenset()):
             )
             if deletes and forces:
                 return GIT_REASONS[command]
+        if command == "update-ref" and (
+            "-d" in arguments
+            or "--delete" in arguments
+            or any(argument.startswith("--stdin") for argument in arguments)
+        ):
+            return GIT_REASONS[command]
     return None
 
 
@@ -665,10 +701,14 @@ def evaluate(event):
         for path in extracted_patch_paths:
             if path_in_archive(path, working_directories):
                 deny(ARCHIVE_REASON)
-    archive_working_directory = any(in_archive(path) for path in working_directories)
+    archive_working_directory = any(
+        path_in_archive(path) for path in working_directories
+    )
     if archive_working_directory and not commands and not read_tool:
         deny(ARCHIVE_REASON)
     for command in commands:
+        if SHELL_EXPANSION_SYNTAX.search(command):
+            raise ValueError("dynamic shell execution cannot be validated")
         tokens = shell_tokens(command)
         archive_context = (
             archive_working_directory

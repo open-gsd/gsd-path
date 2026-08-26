@@ -21,6 +21,9 @@ Installed with --hooks and upgraded guard scripts
    └─ Also refresh native settings / git hooks?
       → --hooks-refresh-full [--claude] [--codex] [--cursor]
 
+Existing project needs guards for the first time
+└─ install.mjs --hooks-init --claude --project PATH
+
 AGENTS.md or WORKFLOW.md template changed upstream
 └─ Manual diff + merge (installer never overwrites)
 ```
@@ -37,6 +40,7 @@ AGENTS.md or WORKFLOW.md template changed upstream
 | Project-local skills (`.cursor/skills`, …) | Yes | `--update --local` |
 | `.gsd-path/guard_hook.py`, `git_guard.py` | Yes | `--hooks-refresh` |
 | Native hook settings + git hooks | Yes | `--hooks-refresh-full` (host flag creates missing config) |
+| Guards for an existing project | Yes | `--hooks-init` (preserves project contracts) |
 | `AGENTS.md`, `WORKFLOW.md` | **No** | Manual merge |
 | `.project/*` (active milestone) | **No** | Pipeline state |
 
@@ -44,6 +48,8 @@ Existing `gsd-path*` skills move to `disabled-gsd-skills` beside each root befor
 Unrelated skills are never touched. Failed multi-host updates roll back all selected targets.
 An initial `--hooks` install merges valid native settings for explicitly selected Codex
 or Cursor hosts; other existing project contract and guard files are refused.
+Use `--hooks-init` to add guards to an existing project without changing its
+`AGENTS.md` or `WORKFLOW.md`.
 
 ---
 

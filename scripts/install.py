@@ -1091,13 +1091,18 @@ def _validate_hooks_refresh(
     full: bool,
     hooks_dir: Optional[Path],
     selected: Sequence[str],
+    initialize: bool = False,
 ) -> None:
     _validate_directory_destination(project, "project path")
+    _validate_directory_destination(project / HOOKS_DIRECTORY, "guard hooks directory")
     for name in GUARD_SCRIPTS:
         destination = project / HOOKS_DIRECTORY / name
+        exists = _lexists(destination)
         if destination.is_symlink():
             raise InstallerError(f"refusing to refresh a symlink: {destination}")
-        if not _is_managed_guard_script(destination):
+        if (exists and not _is_managed_guard_script(destination)) or (
+            not exists and not initialize
+        ):
             raise InstallerError(f"not a managed GSD Path guard script: {destination}")
         source = source_root / "scripts" / name
         if source.is_symlink() or not source.is_file():
@@ -1141,6 +1146,7 @@ def refresh_hooks(
     full: bool,
     dry_run: bool = False,
     selected: Sequence[str] = (),
+    initialize: bool = False,
 ) -> List[str]:
     """Refreshed project-relative paths; "note:"-prefixed entries are
     user-facing notes rather than refreshed files."""
@@ -1148,14 +1154,17 @@ def refresh_hooks(
     interpreter: Optional[str] = None
     if full and not dry_run:
         interpreter, hooks_dir = _required_hook_runtime(
-            project, "--hooks-refresh-full", selected
+            project, "--hooks-init" if initialize else "--hooks-refresh-full", selected
         )
-    _validate_hooks_refresh(source_root, project, full, hooks_dir, selected)
+    _validate_hooks_refresh(
+        source_root, project, full, hooks_dir, selected, initialize
+    )
     refreshed: List[str] = []
     for name in GUARD_SCRIPTS:
         destination = project / HOOKS_DIRECTORY / name
         source = source_root / "scripts" / name
         if not dry_run:
+            destination.parent.mkdir(parents=True, exist_ok=True)
             _atomic_copy(source, destination)
         refreshed.append(_describe_project_path(project, destination))
     if full:
@@ -1561,6 +1570,7 @@ def parser() -> argparse.ArgumentParser:
     argument_parser.add_argument("--dry-run", action="store_true")
     argument_parser.add_argument("--project", type=Path)
     argument_parser.add_argument("--hooks", action="store_true")
+    argument_parser.add_argument("--hooks-init", action="store_true")
     argument_parser.add_argument("--hooks-refresh", action="store_true")
     argument_parser.add_argument("--hooks-refresh-full", action="store_true")
     argument_parser.add_argument(
@@ -1579,9 +1589,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     project = (
         absolute_path(arguments.project) if arguments.project is not None else None
     )
-    if arguments.hooks_refresh or arguments.hooks_refresh_full:
+    hooks_init = arguments.hooks_init
+    if hooks_init or arguments.hooks_refresh or arguments.hooks_refresh_full:
         if project is None:
-            print("error: --hooks-refresh requires --project", file=sys.stderr)
+            option = "--hooks-init" if hooks_init else "--hooks-refresh"
+            print(f"error: {option} requires --project", file=sys.stderr)
             return 2
         try:
             selected = [
@@ -1589,16 +1601,26 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 for target in TARGETS
                 if arguments.all_targets or getattr(arguments, target)
             ]
+            if hooks_init and not selected:
+                print(
+                    "error: --hooks-init requires at least one target or --all",
+                    file=sys.stderr,
+                )
+                return 2
             refreshed = refresh_hooks(
                 source_root,
                 project,
-                arguments.hooks_refresh_full,
+                hooks_init or arguments.hooks_refresh_full,
                 arguments.dry_run,
                 selected,
+                hooks_init,
             )
             notes = [line for line in refreshed if line.startswith("note:")]
             files = [line for line in refreshed if not line.startswith("note:")]
-            prefix = "would refresh" if arguments.dry_run else "refreshed"
+            if arguments.dry_run:
+                prefix = "would initialize" if hooks_init else "would refresh"
+            else:
+                prefix = "initialized" if hooks_init else "refreshed"
             print(f"hooks: {prefix} {', '.join(files)}")
             for note in notes:
                 print(note)

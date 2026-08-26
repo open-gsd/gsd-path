@@ -28,9 +28,20 @@ npx gsd-path --claude --project /path/to/repo --hooks
 node scripts/install.mjs --claude --project /path/to/repo --hooks
 ```
 
+For a project that already has `AGENTS.md` and `WORKFLOW.md`, initialize only
+the guards and keep those contracts unchanged:
+
+```bash
+npx gsd-path --hooks-init --claude --project /path/to/repo
+```
+
 `--hooks` requires `--project`. Valid existing native settings for explicitly
 selected Codex or Cursor hosts are merged, preserving unrelated settings and
 hooks. Other target files are refused if they already exist:
+
+`--hooks-init` also requires `--project` plus at least one host flag or `--all`.
+It creates the managed guard scripts, merges selected native settings, and
+installs Git hooks without reading or writing existing project contracts.
 
 | File | Purpose |
 | --- | --- |
