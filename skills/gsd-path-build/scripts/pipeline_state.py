@@ -15,6 +15,7 @@ import json
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 from dataclasses import asdict, dataclass
@@ -851,6 +852,25 @@ def _state_lock(project: Path) -> Iterator[None]:
 
 def _atomic_write(path: Path, content: str) -> None:
     temporary = path.parent / f".{path.name}.gsd-path-tmp"
+    try:
+        path_status = path.lstat()
+        temporary_status = temporary.lstat()
+    except FileNotFoundError:
+        pass
+    else:
+        if (
+            stat.S_ISREG(path_status.st_mode)
+            and stat.S_ISREG(temporary_status.st_mode)
+            and path_status.st_nlink == 2
+            and temporary_status.st_nlink == 2
+            and os.path.samestat(path_status, temporary_status)
+        ):
+            temporary.unlink()
+            directory = os.open(path.parent, os.O_RDONLY)
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
     if temporary.exists() or temporary.is_symlink():
         raise PipelineStateError(f"atomic-write temporary path already exists: {temporary}")
     descriptor: Optional[int] = None

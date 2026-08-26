@@ -54,7 +54,7 @@ project: demo
 milestone: demo
 phase: plan
 status: active
-branch: main
+branch: gsd-path/M001
 archive: null
 ---
 """,
@@ -74,6 +74,24 @@ archive: null
             )
             pending = self.command(repo, "pending")
             self.assertEqual(pending.returncode, 0, pending.stderr)
+
+    def test_prepare_rejects_state_that_the_pipeline_rejects(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            state = repo / ".project" / "STATE.md"
+            state.write_text(
+                state.read_text(encoding="utf-8").replace(
+                    "branch: gsd-path/M001", "branch: main"
+                ),
+                encoding="utf-8",
+            )
+
+            prepared = self.command(repo, "prepare")
+
+            self.assertNotEqual(prepared.returncode, 0)
+            self.assertIn("invalid branch", prepared.stderr)
+            self.assertFalse((repo / ".project" / "discuss").exists())
 
     def test_append_allocates_lineage_and_disposition_clears_pending(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

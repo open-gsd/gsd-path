@@ -38,6 +38,7 @@ FIELD_PATTERN = re.compile(r"^(?P<key>[a-z_]+):\s*(?P<value>.*)$")
 INLINE_LIST_PATTERN = re.compile(r"^\[(?P<body>.*)\]$")
 LIST_ITEM_PATTERN = re.compile(r"^\s*-\s+(?P<value>.*)$")
 COLLECT_JOURNAL_SCHEMA = "gsd-path/collect-artifact/v1"
+NULL_SHA = "0" * 40
 
 
 class IsolationError(RuntimeError):
@@ -233,43 +234,107 @@ def _git_file(repo: Path, revision: str, path: str) -> bytes:
     return result.stdout
 
 
+def _registered_worktrees(primary: Path) -> Dict[Path, Optional[str]]:
+    result = run_git(primary, "worktree", "list", "--porcelain")
+    if result.returncode != 0:
+        raise IsolationError(
+            (result.stderr or result.stdout).strip() or "could not list worktrees"
+        )
+    records: Dict[Path, Optional[str]] = {}
+    for block in result.stdout.strip().split("\n\n"):
+        fields = block.splitlines()
+        if not fields or not fields[0].startswith("worktree "):
+            continue
+        path = Path(fields[0].removeprefix("worktree ")).resolve()
+        branch = next(
+            (
+                line.removeprefix("branch ")
+                for line in fields[1:]
+                if line.startswith("branch ")
+            ),
+            None,
+        )
+        records[path] = branch
+    return records
+
+
+def _same_directory(path: Path, expected: os.stat_result) -> bool:
+    try:
+        current = path.lstat()
+    except OSError:
+        return False
+    return stat.S_ISDIR(current.st_mode) and os.path.samestat(current, expected)
+
+
+def _cleanup_reserved_worktree(
+    primary: Path,
+    branch: str,
+    destination: Path,
+    base: str,
+    reserved_directory: os.stat_result,
+) -> None:
+    ref = f"refs/heads/{branch}"
+    records = _registered_worktrees(primary)
+    registered = records.get(destination.resolve())
+    if registered == ref and _same_directory(destination, reserved_directory):
+        run_git(primary, "worktree", "remove", "--force", str(destination))
+        records = _registered_worktrees(primary)
+    elif registered is None and _same_directory(destination, reserved_directory):
+        try:
+            destination.rmdir()
+        except OSError:
+            pass
+    if ref not in records.values():
+        run_git(primary, "update-ref", "-d", ref, base)
+
+
 def create_named_worktree(primary: Path, branch: str, destination: Path, base: str) -> None:
     bound = require_bound(primary)
     if branch == bound:
         raise IsolationError(
             f"refusing to check out the bound branch {bound} in a second worktree"
         )
-    existing_branch = run_git(primary, "show-ref", "--verify", "--quiet", f"refs/heads/{branch}")
-    if existing_branch.returncode == 0:
-        raise IsolationError(f"branch already exists: {branch}")
     if os.path.lexists(destination):
         raise IsolationError(f"worktree path already exists: {destination}")
     destination.parent.mkdir(parents=True, exist_ok=True)
+    ref = f"refs/heads/{branch}"
+    reserved = run_git(primary, "update-ref", ref, base, NULL_SHA)
+    if reserved.returncode != 0:
+        raise IsolationError(f"branch already exists: {branch}")
+    try:
+        destination.mkdir()
+    except FileExistsError as error:
+        run_git(primary, "update-ref", "-d", ref, base)
+        raise IsolationError(f"worktree path already exists: {destination}") from error
+    except OSError as error:
+        run_git(primary, "update-ref", "-d", ref, base)
+        raise IsolationError(f"cannot reserve worktree path {destination}: {error}") from error
+    reserved_directory = destination.lstat()
     result = run_git(
         primary,
         "worktree",
         "add",
-        "-b",
-        branch,
         str(destination),
-        base,
+        branch,
     )
     if result.returncode != 0:
-        if destination.exists():
-            run_git(primary, "worktree", "remove", "--force", str(destination))
-        run_git(primary, "branch", "-D", branch)
+        _cleanup_reserved_worktree(
+            primary, branch, destination, base, reserved_directory
+        )
         detail = (result.stderr or result.stdout).strip() or "git worktree add failed"
         raise IsolationError(detail)
     current = git_output(destination, "branch", "--show-current")
     if current != branch:
-        run_git(primary, "worktree", "remove", "--force", str(destination))
-        run_git(primary, "branch", "-D", branch)
+        _cleanup_reserved_worktree(
+            primary, branch, destination, base, reserved_directory
+        )
         raise IsolationError(
             f"worktree HEAD is not {branch} (got {current or 'detached'})"
         )
     if git_output(destination, "rev-parse", "HEAD") != base:
-        run_git(primary, "worktree", "remove", "--force", str(destination))
-        run_git(primary, "branch", "-D", branch)
+        _cleanup_reserved_worktree(
+            primary, branch, destination, base, reserved_directory
+        )
         raise IsolationError("new worktree is not at the recorded base")
 
 

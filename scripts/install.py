@@ -481,6 +481,19 @@ def _backup_existing(
             os.replace(entry, stored)
 
 
+def _reserve_directory(path: Path) -> None:
+    path.mkdir()
+
+
+def _reserve_file(path: Path) -> None:
+    descriptor = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+    try:
+        os.close(descriptor)
+    except BaseException:
+        path.unlink(missing_ok=True)
+        raise
+
+
 def _apply_target(
     plan: DeploymentPlan, staged_root: Path, transaction: TargetTransaction
 ) -> None:
@@ -494,9 +507,11 @@ def _apply_target(
     _backup_existing(transaction, extras)
     for name in SKILL_NAMES:
         destination = plan.root / name
+        _reserve_directory(destination)
         transaction.installed.append(destination)
-        shutil.copytree(staged_root / name, destination)
+        shutil.copytree(staged_root / name, destination, dirs_exist_ok=True)
     if cursor_agent is not None:
+        _reserve_file(cursor_agent)
         transaction.installed.append(cursor_agent)
         shutil.copy2(staged_root / CURSOR_AGENT_FILENAME, cursor_agent)
 

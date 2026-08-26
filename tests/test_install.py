@@ -888,6 +888,36 @@ class InstallerTests(unittest.TestCase):
                 )
         self.assertFalse(target.parent.exists())
 
+    def test_install_collision_does_not_remove_a_concurrent_destination(self):
+        target = self.root / "concurrent-install" / "skills"
+        destination = target / install.SKILL_NAMES[0]
+        original = install._reserve_directory
+        raced = False
+
+        def concurrent_reservation(path):
+            nonlocal raced
+            if path == destination and not raced:
+                raced = True
+                path.mkdir()
+                (path / "other-installer.txt").write_text(
+                    "live install\n", encoding="utf-8"
+                )
+            original(path)
+
+        with mock.patch.object(
+            install, "_reserve_directory", side_effect=concurrent_reservation
+        ):
+            with self.assertRaisesRegex(install.InstallerError, "rolled back"):
+                install.install(
+                    self.source, [install.TargetPlan("claude", target)]
+                )
+
+        self.assertTrue(raced)
+        self.assertEqual(
+            (destination / "other-installer.txt").read_text(encoding="utf-8"),
+            "live install\n",
+        )
+
     def test_failure_restores_cursor_subagent(self):
         cursor = self.root / "cursor-rollback" / "skills"
         agent = cursor.parent / "agents" / install.CURSOR_AGENT_FILENAME

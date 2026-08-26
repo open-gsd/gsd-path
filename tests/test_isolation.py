@@ -97,6 +97,49 @@ class IsolationTests(unittest.TestCase):
             self.assertNotIn("detached", listed)
             self.assertIn("gsd-path-task/T002", second["task_branch"])
 
+    def test_parallel_isolation_does_not_remove_a_concurrent_worktree(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            base = self.init_bound_repo(repo)
+            branch = isolation.task_branch_name("T001")
+            destination = isolation.sidecar_root(repo.resolve(), "task", "T001")
+            original = isolation.run_git
+            raced = False
+
+            def concurrent_reservation(primary, *arguments, **kwargs):
+                nonlocal raced
+                if arguments[:2] == ("update-ref", f"refs/heads/{branch}") and not raced:
+                    raced = True
+                    created = original(
+                        primary,
+                        "worktree",
+                        "add",
+                        "-b",
+                        branch,
+                        str(destination),
+                        base,
+                    )
+                    self.assertEqual(created.returncode, 0, created.stderr)
+                    (destination / "other-agent.txt").write_text(
+                        "live work\n", encoding="utf-8"
+                    )
+                return original(primary, *arguments, **kwargs)
+
+            with mock.patch.object(
+                isolation, "run_git", side_effect=concurrent_reservation
+            ):
+                with self.assertRaisesRegex(isolation.IsolationError, "branch already exists"):
+                    isolation.create_named_worktree(repo.resolve(), branch, destination, base)
+
+            self.assertTrue(raced)
+            self.assertTrue((destination / "other-agent.txt").is_file())
+            self.assertEqual(git(destination, "branch", "--show-current"), branch)
+            self.assertEqual(
+                git(repo, "show-ref", "--verify", f"refs/heads/{branch}").split()[0],
+                base,
+            )
+
     def test_parallel_task_isolation_rejects_a_stale_primary_base(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary) / "repo"

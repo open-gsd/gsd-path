@@ -613,13 +613,29 @@ async function applyTarget(plan, stagedRoot, transaction) {
   backupExisting(transaction, extras);
   for (const name of SKILL_NAMES) {
     const destination = path.join(plan.root, name);
+    hooks.reserveDirectory(destination);
     transaction.installed.push(destination);
     fs.cpSync(path.join(stagedRoot, name), destination, { recursive: true, errorOnExist: true, force: false });
     await tick();
   }
   if (cursorAgent !== null) {
+    hooks.reserveFile(cursorAgent);
     transaction.installed.push(cursorAgent);
     fs.copyFileSync(path.join(stagedRoot, CURSOR_AGENT_FILENAME), cursorAgent);
+  }
+}
+
+function reserveDirectory(destination) {
+  fs.mkdirSync(destination);
+}
+
+function reserveFile(destination) {
+  const descriptor = fs.openSync(destination, "wx", 0o644);
+  try {
+    fs.closeSync(descriptor);
+  } catch (error) {
+    fs.rmSync(destination, { force: true });
+    throw error;
   }
 }
 
@@ -1323,6 +1339,8 @@ export const hooks = {
   mismatches,
   applyTarget,
   rename: fs.renameSync.bind(fs),
+  reserveDirectory,
+  reserveFile,
   detectPythonInterpreter,
   resolveGitHooksPath,
 };
