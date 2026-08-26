@@ -92,6 +92,9 @@ See [UPDATE.md](UPDATE.md).
   force branch deletion
 - shell commands that reference the archive unless the whole command is a
   recognized standalone read
+- destructive Git commands nested in supported shell and command wrappers
+- archive glob/brace expansions and execution-capable read options such as
+  `rg --pre`
 
 Read tools (`Read`, `Grep`, `View`, …) may still open archive paths.
 

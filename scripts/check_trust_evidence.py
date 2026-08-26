@@ -7,12 +7,14 @@ import re
 import subprocess
 import sys
 import tempfile
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Dict, FrozenSet, List, Mapping, Sequence, Tuple
 
 
 SCHEMA = "gsd-path/live-evidence/v1"
 STEP_SCHEMA = "gsd-path/live-step-evidence/v1"
+RUN_MANIFEST_SCHEMA = "gsd-path/live-run-manifest/v1"
+GUARD_EVIDENCE_SCHEMA = "gsd-path/live-guard-evidence/v1"
 PIPELINE = "gsd-path/v2"
 PASS_FIELDS = (
     "verdict",
@@ -53,6 +55,7 @@ STEP_STRING_FIELDS = {
     "child-spawn": ("child_id",),
     "task-landing": (
         "fixture_bundle",
+        "run_manifest",
         "fixture_base_commit",
         "task_branch",
         "task_worktree",
@@ -61,7 +64,13 @@ STEP_STRING_FIELDS = {
     "task-verify": ("verify_artifact",),
     "reviews": ("wave_review_artifact", "final_review_artifact"),
     "archive": ("archive_path",),
-    "integration": ("fixture_bundle", "integration_commit", "milestone_tag"),
+    "integration": (
+        "fixture_bundle",
+        "run_manifest",
+        "integration_commit",
+        "milestone_tag",
+    ),
+    "guards": ("guard_artifact",),
 }
 STEP_EXACT_FIELDS = {
     "install": {"exit_code": 0},
@@ -139,7 +148,7 @@ def _validate_step_artifact(
                 f"{path}: {key} must be {value!r}, found {evidence.get(key)!r}"
             )
     step = ARTIFACT_STEPS[label]
-    for key in ("command", "output", *STEP_STRING_FIELDS.get(step, ())):
+    for key in ("run_id", "command", "output", *STEP_STRING_FIELDS.get(step, ())):
         _required_string(evidence, key, path)
     for key, value in STEP_EXACT_FIELDS.get(step, {}).items():
         if evidence.get(key) != value:
@@ -189,9 +198,154 @@ def _full_sha(evidence: Mapping, key: str, path: Path) -> str:
     return value
 
 
-def _validate_git_bundle(
-    bundle: Path, host: str, landing: Mapping, integration: Mapping
+def _bundle_path(value: str, label: str, bundle: Path) -> str:
+    path = PurePosixPath(value)
+    if (
+        not value
+        or "\\" in value
+        or ":" in value
+        or path.is_absolute()
+        or ".." in path.parts
+        or not path.parts
+        or path.parts[0] != ".project"
+    ):
+        raise EvidenceError(f"{bundle}: {label} must be a safe .project path")
+    return path.as_posix()
+
+
+def _bundle_object_type(fixture: Path, commit: str, path: str, bundle: Path) -> str:
+    try:
+        return _git(fixture, "cat-file", "-t", f"{commit}:{path}")
+    except EvidenceError:
+        raise EvidenceError(f"{bundle}: bundled artifact is missing: {path}") from None
+
+
+def _bundle_blob(fixture: Path, commit: str, path: str, bundle: Path) -> str:
+    if _bundle_object_type(fixture, commit, path, bundle) != "blob":
+        raise EvidenceError(f"{bundle}: bundled artifact must be a file: {path}")
+    content = _git(fixture, "show", f"{commit}:{path}")
+    if not content:
+        raise EvidenceError(f"{bundle}: bundled artifact is empty: {path}")
+    return content
+
+
+def _validate_shipped_state(content: str, path: str, bundle: Path) -> None:
+    lines = content.splitlines()
+    if not lines or lines[0] != "---":
+        raise EvidenceError(f"{bundle}: bundled state lacks frontmatter: {path}")
+    fields = {}
+    closed = False
+    for line in lines[1:]:
+        if line == "---":
+            closed = True
+            break
+        if ":" in line:
+            key, value = line.split(":", 1)
+            fields[key.strip()] = value.split("#", 1)[0].strip()
+    if not closed:
+        raise EvidenceError(f"{bundle}: bundled state frontmatter is not closed: {path}")
+    expected = {"pipeline": PIPELINE, "phase": "shipped", "status": "done"}
+    for key, value in expected.items():
+        if fields.get(key) != value:
+            raise EvidenceError(f"{bundle}: bundled state {key} must be {value!r}")
+
+
+def _validate_run_artifacts(
+    fixture: Path,
+    bundle: Path,
+    host: str,
+    guard_tier: str,
+    integration_commit: str,
+    steps: Mapping[str, Mapping],
 ) -> None:
+    landing = steps["task-landing"]
+    integration = steps["integration"]
+    run_id = _required_string(landing, "run_id", bundle)
+    manifest_path = _bundle_path(
+        _required_string(landing, "run_manifest", bundle), "run_manifest", bundle
+    )
+    if _required_string(integration, "run_manifest", bundle) != manifest_path:
+        raise EvidenceError(f"{bundle}: landing and integration must use one run manifest")
+    try:
+        manifest = json.loads(
+            _bundle_blob(fixture, integration_commit, manifest_path, bundle)
+        )
+    except json.JSONDecodeError as error:
+        raise EvidenceError(f"{bundle}: run manifest is not valid JSON") from error
+    if not isinstance(manifest, dict):
+        raise EvidenceError(f"{bundle}: run manifest must be a JSON object")
+    expected_artifacts = {
+        "state": _required_string(steps["router"], "state_artifact", bundle),
+        "verify": _required_string(steps["task-verify"], "verify_artifact", bundle),
+        "wave_review": _required_string(
+            steps["reviews"], "wave_review_artifact", bundle
+        ),
+        "final_review": _required_string(
+            steps["reviews"], "final_review_artifact", bundle
+        ),
+        "archive": _required_string(steps["archive"], "archive_path", bundle),
+        "guards": _required_string(steps["guards"], "guard_artifact", bundle),
+    }
+    expected_manifest = {
+        "schema": RUN_MANIFEST_SCHEMA,
+        "host": host,
+        "run_id": run_id,
+        "host_version": _required_string(steps["install"], "host_version", bundle),
+        "child_id": _required_string(steps["child-spawn"], "child_id", bundle),
+        "guard_tier": guard_tier,
+        "fixture_base_commit": _full_sha(landing, "fixture_base_commit", bundle),
+        "landing_commit": _full_sha(landing, "landing_commit", bundle),
+        "task_branch": _required_string(landing, "task_branch", bundle),
+        "milestone_tag": _required_string(integration, "milestone_tag", bundle),
+        "artifacts": expected_artifacts,
+    }
+    for key, value in expected_manifest.items():
+        if manifest.get(key) != value:
+            raise EvidenceError(f"{bundle}: run manifest {key} does not match evidence")
+    paths = {
+        label: _bundle_path(value, f"{label} artifact", bundle)
+        for label, value in expected_artifacts.items()
+    }
+    archive = paths["archive"]
+    for label in ("verify", "wave_review", "final_review", "guards"):
+        if not paths[label].startswith(f"{archive}/"):
+            raise EvidenceError(f"{bundle}: {label} artifact must be inside archive")
+    if _bundle_object_type(fixture, integration_commit, archive, bundle) != "tree":
+        raise EvidenceError(f"{bundle}: archive artifact must be a directory")
+    if not _git(
+        fixture, "ls-tree", "-r", "--name-only", integration_commit, "--", archive
+    ):
+        raise EvidenceError(f"{bundle}: archive artifact is empty")
+    state = _bundle_blob(fixture, integration_commit, paths["state"], bundle)
+    _validate_shipped_state(state, paths["state"], bundle)
+    for label in ("verify", "wave_review", "final_review"):
+        _bundle_blob(fixture, integration_commit, paths[label], bundle)
+    try:
+        guard_evidence = json.loads(
+            _bundle_blob(fixture, integration_commit, paths["guards"], bundle)
+        )
+    except json.JSONDecodeError as error:
+        raise EvidenceError(f"{bundle}: bundled guard evidence is not valid JSON") from error
+    if not isinstance(guard_evidence, dict):
+        raise EvidenceError(f"{bundle}: bundled guard evidence must be a JSON object")
+    expected_guard = {
+        "schema": GUARD_EVIDENCE_SCHEMA,
+        "host": host,
+        "run_id": run_id,
+        "declared_tier": guard_tier,
+        "native_guard": steps["guards"].get("native_guard"),
+        "git_hooks": steps["guards"].get("git_hooks"),
+    }
+    for key, value in expected_guard.items():
+        if guard_evidence.get(key) != value:
+            raise EvidenceError(f"{bundle}: bundled guard {key} does not match evidence")
+
+
+def _validate_git_bundle(
+    bundle: Path, host: str, guard_tier: str, steps: Mapping[str, Mapping]
+) -> None:
+    landing = steps["task-landing"]
+    integration = steps["integration"]
     base = _full_sha(landing, "fixture_base_commit", bundle)
     landing_commit = _full_sha(landing, "landing_commit", bundle)
     integration_commit = _full_sha(integration, "integration_commit", bundle)
@@ -253,6 +407,14 @@ def _validate_git_bundle(
             raise EvidenceError(
                 f"{bundle}: milestone tag must be annotated at integration_commit"
             )
+        _validate_run_artifacts(
+            fixture,
+            bundle,
+            host,
+            guard_tier,
+            integration_commit,
+            steps,
+        )
 
 
 def _validate_evidence_details(
@@ -291,6 +453,11 @@ def _validate_evidence_details(
         artifacts.append(resolved)
     landing = steps["task-landing"]
     integration = steps["integration"]
+    run_ids = {
+        _required_string(evidence, "run_id", path) for evidence in steps.values()
+    }
+    if len(run_ids) != 1:
+        raise EvidenceError(f"{path}: all evidence steps must use one run_id")
     landing_bundle = _required_string(landing, "fixture_bundle", path)
     integration_bundle = _required_string(integration, "fixture_bundle", path)
     if landing_bundle != integration_bundle:
@@ -298,7 +465,7 @@ def _validate_evidence_details(
     bundle = _resolved_artifact(
         path, artifact_directory, landing_bundle, "fixture Git bundle"
     )
-    _validate_git_bundle(bundle, host, landing, integration)
+    _validate_git_bundle(bundle, host, guard_tier, steps)
     artifacts.append(bundle)
     return tuple(artifacts)
 

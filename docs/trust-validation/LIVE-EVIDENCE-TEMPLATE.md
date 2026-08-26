@@ -52,6 +52,7 @@ step-specific fields below:
   "schema": "gsd-path/live-step-evidence/v1",
   "host": "HOST",
   "step": "install",
+  "run_id": "ONE_HOST_RUN_ID",
   "command": "node scripts/install.mjs ...",
   "result": "pass",
   "output": "actual command output or artifact details"
@@ -63,13 +64,13 @@ step-specific fields below:
 | `install` | `host_version`, `install_root`, `exit_code: 0` |
 | `router` | `state_artifact`, `state_phase: "shipped"` |
 | `child-spawn` | `child_id`, `child_status: "completed"` |
-| `task-landing` | `fixture_bundle`, `fixture_base_commit`, `task_branch`, `task_worktree`, `landing_commit` |
+| `task-landing` | `fixture_bundle`, `run_manifest`, `fixture_base_commit`, `task_branch`, `task_worktree`, `landing_commit` |
 | `task-verify` | `verify_artifact`, `verify_exit_code: 0` |
 | `reviews` | `wave_review_artifact`, `final_review_artifact` |
 | `archive` | `archive_path`, `validation_exit_code: 0` |
-| `integration` | `fixture_bundle`, `integration_commit`, `milestone_tag` |
+| `integration` | `fixture_bundle`, `run_manifest`, `integration_commit`, `milestone_tag` |
 | `worktrees` | non-empty `remaining_worktrees` string list |
-| `guards` | manifest `declared_tier`, `native_guard`, and `git_hooks` results |
+| `guards` | `guard_artifact` plus manifest `declared_tier`, `native_guard`, and `git_hooks` results |
 
 `fixture_bundle` is one tracked `git bundle` inside the host evidence directory.
 It must contain the base and landing commits, an `integrate:` merge commit, and
@@ -77,6 +78,14 @@ an annotated `milestone/<NNN>-<slug>` tag at that merge. The landing and
 integration steps must reference the same bundle. For a `git-only` host set
 `native_guard` to `not-applicable`; otherwise set it to `pass`. `git_hooks`
 must be `pass` for every host.
+
+Every step must use one `run_id`. `run_manifest` names a tracked JSON artifact
+inside the bundle at the integration commit. It records the same host, run,
+version, child, guard tier, landing commit, task branch, milestone tag, and the
+exact state, verify, review, archive, and guard paths. Those paths must exist
+and be non-empty at the integration commit. Verify, review, and guard artifacts
+must be inside the archived milestone; state must record `phase: shipped` and
+`status: done`.
 
 Do not mark `child_spawn: pass` for a top-level CLI invocation. If any result
 is missing or cannot be reproduced, set the affected field to `unverifiable`.

@@ -14,6 +14,7 @@ Kiro; the JSON covers hosts that read a decision object instead).
 Malformed input or an internal failure denies the tool call.
 """
 
+from fnmatch import fnmatchcase
 import json
 import re
 import shlex
@@ -96,6 +97,7 @@ ARCHIVE_READ_COMMANDS = frozenset(
 )
 ARCHIVE_READ_GIT_COMMANDS = frozenset({"status", "diff", "log", "show", "ls-files"})
 GIT_READ_WRITE_OPTIONS = frozenset({"--output", "--ext-diff", "--textconv"})
+ARCHIVE_READ_EXECUTION_OPTIONS = {"rg": frozenset({"--pre"})}
 AMBIGUOUS_SHELL_SYNTAX = re.compile(r"[\r\n|;&<>`]|\$\(|@\(")
 GIT_REASONS = {
     "reset": "git reset --hard discards work the build recovery protocol needs",
@@ -106,6 +108,11 @@ GIT_REASONS = {
 GIT_GLOBAL_OPTIONS_WITH_VALUES = frozenset(
     {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--config-env"}
 )
+POSIX_SHELL_WRAPPERS = frozenset({"bash", "dash", "fish", "ksh", "sh", "zsh"})
+POWERSHELL_WRAPPERS = frozenset(
+    {"powershell", "powershell.exe", "pwsh", "pwsh.exe"}
+)
+COMMAND_WRAPPERS = frozenset({"command", "exec"})
 
 
 def collect(node, paths, working_directories, commands):
@@ -180,6 +187,31 @@ def in_archive(path):
     return suffix == "" or suffix.startswith("/")
 
 
+def component_can_match(pattern, target):
+    match = re.search(r"\{([^{}]+)\}", pattern)
+    if match is not None:
+        return any(
+            component_can_match(
+                pattern[: match.start()] + option + pattern[match.end() :], target
+            )
+            for option in match.group(1).split(",")
+        )
+    return fnmatchcase(target, pattern)
+
+
+def expansion_can_match_archive(path):
+    components = [
+        component.casefold()
+        for component in PurePosixPath(normalize_posix(path)).parts
+        if component != "/"
+    ]
+    return any(
+        component_can_match(components[index], ".project")
+        and component_can_match(components[index + 1], "archive")
+        for index in range(len(components) - 1)
+    )
+
+
 def path_values(value):
     yield value
     if value.startswith("-") and "=" in value:
@@ -193,12 +225,13 @@ def is_absolute_path(path):
 
 def path_in_archive(path, working_directories=()):
     for value in path_values(path):
-        if in_archive(value):
+        if in_archive(value) or expansion_can_match_archive(value):
             return True
         if is_absolute_path(value):
             continue
         for working_directory in working_directories:
-            if in_archive(f"{working_directory}/{value}"):
+            resolved = f"{working_directory}/{value}"
+            if in_archive(resolved) or expansion_can_match_archive(resolved):
                 return True
     return False
 
@@ -237,7 +270,7 @@ def command_segments(tokens):
         yield segment
 
 
-def git_command(segment):
+def command_invocation(segment):
     index = 0
     while index < len(segment) and SHELL_ASSIGNMENT_PATTERN.match(segment[index]):
         index += 1
@@ -258,17 +291,54 @@ def git_command(segment):
     if index >= len(segment):
         return None
     executable = segment[index].replace("\\", "/").rsplit("/", 1)[-1].casefold()
+    return executable, segment[index + 1:]
+
+
+def git_command(segment):
+    invocation = command_invocation(segment)
+    if invocation is None:
+        return None
+    executable, arguments = invocation
     if executable not in {"git", "git.exe"}:
         return None
-    index += 1
-    while index < len(segment) and segment[index].startswith("-"):
-        option = segment[index].split("=", 1)[0]
+    index = 0
+    while index < len(arguments) and arguments[index].startswith("-"):
+        option = arguments[index].split("=", 1)[0]
         index += 1
-        if option in GIT_GLOBAL_OPTIONS_WITH_VALUES and "=" not in segment[index - 1]:
+        if option in GIT_GLOBAL_OPTIONS_WITH_VALUES and "=" not in arguments[index - 1]:
             index += 1
-    if index >= len(segment):
+    if index >= len(arguments):
         return None
-    return segment[index].casefold(), segment[index + 1:]
+    return arguments[index].casefold(), arguments[index + 1:]
+
+
+def wrapped_command_tokens(segment):
+    invocation = command_invocation(segment)
+    if invocation is None:
+        return None
+    executable, arguments = invocation
+    if executable in COMMAND_WRAPPERS:
+        if executable == "command" and arguments[:1] == ["-p"]:
+            arguments = arguments[1:]
+        if not arguments or arguments[0].startswith("-"):
+            raise ValueError("command wrapper cannot be validated")
+        return arguments
+    if executable in POSIX_SHELL_WRAPPERS:
+        for index, argument in enumerate(arguments):
+            if argument.startswith("-") and "c" in argument[1:]:
+                if index + 1 >= len(arguments):
+                    raise ValueError("shell wrapper lacks command payload")
+                return shell_tokens(arguments[index + 1])
+        raise ValueError("shell wrapper cannot be validated")
+    if executable in POWERSHELL_WRAPPERS or executable in {"cmd", "cmd.exe"}:
+        switches = {"-c", "-command", "/c", "/k"}
+        for index, argument in enumerate(arguments):
+            if argument.casefold() in switches:
+                if index + 1 >= len(arguments):
+                    raise ValueError("shell wrapper lacks command payload")
+                return shell_tokens(arguments[index + 1])
+        raise ValueError("shell wrapper cannot be validated")
+    return None
 
 
 def has_short_option(arguments, option):
@@ -282,6 +352,11 @@ def has_short_option(arguments, option):
 
 def destructive_git_reason(tokens):
     for segment in command_segments(tokens):
+        wrapped = wrapped_command_tokens(segment)
+        if wrapped is not None:
+            reason = destructive_git_reason(wrapped)
+            if reason is not None:
+                return reason
         invocation = git_command(segment)
         if invocation is None:
             continue
@@ -327,6 +402,13 @@ def archive_command_is_read_only(command, tokens, archive_context=False):
     if AMBIGUOUS_SHELL_SYNTAX.search(command):
         return False
     executable = tokens[0].replace("\\", "/").rsplit("/", 1)[-1].casefold()
+    denied_options = ARCHIVE_READ_EXECUTION_OPTIONS.get(executable, ())
+    if any(
+        token == option or token.startswith(f"{option}=")
+        for token in tokens[1:]
+        for option in denied_options
+    ):
+        return False
     if executable in ARCHIVE_READ_COMMANDS:
         return True
     if executable != "git" or len(tokens) < 2:

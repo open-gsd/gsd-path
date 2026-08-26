@@ -13,6 +13,7 @@ class TrustEvidenceTests(unittest.TestCase):
         self.fixture_temporary = tempfile.TemporaryDirectory()
         self.repo = Path(self.temporary.name)
         self.fixtures = {}
+        self.omit_fixture_artifact = {}
         self.guard_tiers = {
             "alpha": "native-fail-closed",
             "beta": "git-only",
@@ -90,6 +91,63 @@ class TrustEvidenceTests(unittest.TestCase):
         git("add", "task.txt")
         git("commit", "-qm", f"task: land {host}")
         landing = git("rev-parse", "HEAD")
+        run_id = f"{host}-run-001"
+        archive = f".project/archive/001-{host}"
+        artifact_paths = {
+            "state": ".project/STATE.md",
+            "verify": f"{archive}/tasks/001/VERIFY.md",
+            "wave_review": f"{archive}/reviews/wave.md",
+            "final_review": f"{archive}/reviews/final.md",
+            "archive": archive,
+            "guards": f"{archive}/guards.json",
+        }
+        run_manifest = f".project/trust-runs/{run_id}/manifest.json"
+        files = {
+            artifact_paths["state"]: (
+                "---\npipeline: gsd-path/v2\nphase: shipped\nstatus: done\n---\n"
+            ),
+            artifact_paths["verify"]: "task verify passed\n",
+            artifact_paths["wave_review"]: "wave review passed\n",
+            artifact_paths["final_review"]: "final review passed\n",
+            artifact_paths["guards"]: json.dumps(
+                {
+                    "schema": check_trust_evidence.GUARD_EVIDENCE_SCHEMA,
+                    "host": host,
+                    "run_id": run_id,
+                    "declared_tier": self.guard_tiers[host],
+                    "native_guard": (
+                        "not-applicable"
+                        if self.guard_tiers[host] == "git-only"
+                        else "pass"
+                    ),
+                    "git_hooks": "pass",
+                }
+            )
+            + "\n",
+        }
+        manifest = {
+            "schema": check_trust_evidence.RUN_MANIFEST_SCHEMA,
+            "host": host,
+            "run_id": run_id,
+            "host_version": "fixture-cli 1.0",
+            "child_id": f"{host}-child-1",
+            "guard_tier": self.guard_tiers[host],
+            "fixture_base_commit": base,
+            "landing_commit": landing,
+            "task_branch": task_branch,
+            "milestone_tag": f"milestone/001-{host}",
+            "artifacts": artifact_paths,
+        }
+        files[run_manifest] = json.dumps(manifest) + "\n"
+        omitted = self.omit_fixture_artifact.get(host)
+        for relative, content in files.items():
+            if relative == omitted:
+                continue
+            destination = repository / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_text(content, encoding="utf-8")
+        git("add", ".project")
+        git("commit", "-qm", f"ship: record {host} evidence")
         git("checkout", "-q", "main")
         git(
             "merge",
@@ -113,6 +171,9 @@ class TrustEvidenceTests(unittest.TestCase):
             "task_branch": task_branch,
             "task_worktree": str(repository),
             "bundle": f"{host}/fixture.bundle",
+            "run_id": run_id,
+            "run_manifest": run_manifest,
+            "artifacts": artifact_paths,
         }
         return self.fixtures[host]
 
@@ -122,6 +183,7 @@ class TrustEvidenceTests(unittest.TestCase):
             "schema": check_trust_evidence.STEP_SCHEMA,
             "host": host,
             "step": step,
+            "run_id": fixture["run_id"],
             "command": f"run {step} for {host}",
             "result": "pass",
             "output": f"observed {step} output for {host}",
@@ -133,7 +195,7 @@ class TrustEvidenceTests(unittest.TestCase):
                 "exit_code": 0,
             },
             "router": {
-                "state_artifact": ".project/STATE.md",
+                "state_artifact": fixture["artifacts"]["state"],
                 "state_phase": "shipped",
             },
             "child-spawn": {
@@ -142,30 +204,33 @@ class TrustEvidenceTests(unittest.TestCase):
             },
             "task-landing": {
                 "fixture_bundle": fixture["bundle"],
+                "run_manifest": fixture["run_manifest"],
                 "fixture_base_commit": fixture["base"],
                 "task_branch": fixture["task_branch"],
                 "task_worktree": fixture["task_worktree"],
                 "landing_commit": fixture["landing"],
             },
             "task-verify": {
-                "verify_artifact": ".project/tasks/001/VERIFY.md",
+                "verify_artifact": fixture["artifacts"]["verify"],
                 "verify_exit_code": 0,
             },
             "reviews": {
-                "wave_review_artifact": ".project/reviews/wave.md",
-                "final_review_artifact": ".project/reviews/final.md",
+                "wave_review_artifact": fixture["artifacts"]["wave_review"],
+                "final_review_artifact": fixture["artifacts"]["final_review"],
             },
             "archive": {
-                "archive_path": f".project/archive/001-{host}",
+                "archive_path": fixture["artifacts"]["archive"],
                 "validation_exit_code": 0,
             },
             "integration": {
                 "fixture_bundle": fixture["bundle"],
+                "run_manifest": fixture["run_manifest"],
                 "integration_commit": fixture["integration"],
                 "milestone_tag": fixture["milestone_tag"],
             },
             "worktrees": {"remaining_worktrees": [fixture["task_worktree"]]},
             "guards": {
+                "guard_artifact": fixture["artifacts"]["guards"],
                 "declared_tier": self.guard_tiers[host],
                 "native_guard": (
                     "not-applicable"
@@ -378,6 +443,30 @@ class TrustEvidenceTests(unittest.TestCase):
         self.commit_receipts()
 
         with self.assertRaisesRegex(check_trust_evidence.EvidenceError, "merge commit"):
+            check_trust_evidence.validate_repository(self.repo)
+
+    def test_rejects_missing_artifact_claimed_by_bundled_run(self):
+        missing = ".project/STATE.md"
+        self.omit_fixture_artifact["alpha"] = missing
+        self.receipt("alpha")
+        self.receipt("beta")
+        self.commit_receipts()
+
+        with self.assertRaisesRegex(
+            check_trust_evidence.EvidenceError, "bundled artifact is missing"
+        ):
+            check_trust_evidence.validate_repository(self.repo)
+
+    def test_rejects_evidence_steps_from_different_runs(self):
+        self.receipt("alpha")
+        self.receipt("beta")
+        router = self.artifact("alpha", "router")
+        evidence = json.loads(router.read_text(encoding="utf-8"))
+        evidence["run_id"] = "another-run"
+        router.write_text(json.dumps(evidence) + "\n", encoding="utf-8")
+        self.commit_receipts()
+
+        with self.assertRaisesRegex(check_trust_evidence.EvidenceError, "one run_id"):
             check_trust_evidence.validate_repository(self.repo)
 
     def test_rejects_guard_tier_that_disagrees_with_manifest(self):

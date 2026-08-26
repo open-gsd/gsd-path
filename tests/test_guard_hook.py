@@ -214,6 +214,50 @@ class GuardHookTests(unittest.TestCase):
                     {"tool_name": "Bash", "tool_input": {"command": command}}
                 )
 
+    def test_denies_destructive_git_through_command_wrappers(self):
+        for command in (
+            "bash -lc 'git reset --hard HEAD~1'",
+            "sh -c 'git clean -fd'",
+            "command git push origin +main",
+            "exec git branch --delete --force task",
+            "pwsh -Command 'git reset --hard HEAD~1'",
+            "cmd /c 'git clean -fd'",
+        ):
+            with self.subTest(command=command):
+                self.assert_denied(
+                    {"tool_name": "Bash", "tool_input": {"command": command}}
+                )
+
+    def test_allows_safe_git_through_command_wrappers(self):
+        for command in (
+            "bash -lc 'git status'",
+            "command git branch -d merged",
+        ):
+            with self.subTest(command=command):
+                self.assert_allowed(
+                    {"tool_name": "Bash", "tool_input": {"command": command}}
+                )
+
+    def test_denies_archive_paths_hidden_by_shell_expansion(self):
+        for command in (
+            "rm .project/arc[h]ive/001-mvp/NOTE.md",
+            "rm .project/{archive,active}/001-mvp/NOTE.md",
+        ):
+            with self.subTest(command=command):
+                self.assert_denied(
+                    {"tool_name": "Bash", "tool_input": {"command": command}}
+                )
+
+    def test_denies_execution_capable_archive_read_options(self):
+        for command in (
+            "rg --pre rm .project/archive/001-mvp/NOTE.md",
+            "rg --pre=rm .project/archive/001-mvp/NOTE.md",
+        ):
+            with self.subTest(command=command):
+                self.assert_denied(
+                    {"tool_name": "Bash", "tool_input": {"command": command}}
+                )
+
     def test_allows_powershell_archive_reads(self):
         self.assert_allowed(
             {
