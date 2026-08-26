@@ -11,13 +11,23 @@ class TrustEvidenceTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.repo = Path(self.temporary.name)
+        self.guard_tiers = {
+            "alpha": "native-fail-closed",
+            "beta": "git-only",
+        }
         (self.repo / "scripts").mkdir()
         (self.repo / "scripts" / "skill-resources.json").write_text(
             json.dumps(
                 {
                     "hosts": {
-                        "alpha": {"local_root": ".alpha/skills"},
-                        "beta": {"local_root": ".beta/skills"},
+                        "alpha": {
+                            "local_root": ".alpha/skills",
+                            "guard_tier": self.guard_tiers["alpha"],
+                        },
+                        "beta": {
+                            "local_root": ".beta/skills",
+                            "guard_tier": self.guard_tiers["beta"],
+                        },
                     }
                 }
             ),
@@ -47,7 +57,14 @@ class TrustEvidenceTests(unittest.TestCase):
         self.assertEqual(0, result.returncode, result.stderr)
         return result
 
-    def receipt(self, host, details=True, **overrides):
+    def receipt(
+        self,
+        host,
+        details=True,
+        write_artifacts=True,
+        shared_artifact=False,
+        **overrides,
+    ):
         fields = {
             "schema": "gsd-path/live-evidence/v1",
             "host": host,
@@ -62,7 +79,7 @@ class TrustEvidenceTests(unittest.TestCase):
             "final_review": "pass",
             "archive": "pass",
             "integration": "pass",
-            "guard_tier": "git-only",
+            "guard_tier": self.guard_tiers[host],
         }
         fields.update(overrides)
         lines = [
@@ -79,7 +96,8 @@ class TrustEvidenceTests(unittest.TestCase):
                 for label in check_trust_evidence.METADATA_DETAILS
             )
             lines.extend(
-                f"- {label}: {host}/proof.txt"
+                f"- {label}: {host}/"
+                f"{'install' if shared_artifact else check_trust_evidence.ARTIFACT_STEPS[label]}.json"
                 for label in check_trust_evidence.ARTIFACT_DETAILS
             )
         path = (
@@ -93,17 +111,34 @@ class TrustEvidenceTests(unittest.TestCase):
         )
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("\n".join(lines), encoding="utf-8")
-        if details:
-            artifact = path.with_suffix("") / "proof.txt"
-            artifact.parent.mkdir(parents=True, exist_ok=True)
-            artifact.write_text(f"reproducible output for {host}\n", encoding="utf-8")
+        if details and write_artifacts:
+            for step in check_trust_evidence.ARTIFACT_STEPS.values():
+                artifact_step = "install" if shared_artifact else step
+                artifact = self.artifact(host, artifact_step)
+                artifact.parent.mkdir(parents=True, exist_ok=True)
+                if artifact.exists():
+                    continue
+                artifact.write_text(
+                    json.dumps(
+                        {
+                            "schema": check_trust_evidence.STEP_SCHEMA,
+                            "host": host,
+                            "step": step,
+                            "command": f"run {step} for {host}",
+                            "result": "pass",
+                            "output": f"observed {step} output for {host}",
+                        }
+                    )
+                    + "\n",
+                    encoding="utf-8",
+                )
 
     def commit_receipts(self):
         self.git("add", "-A")
         self.git("commit", "-qm", "trust evidence")
 
     def test_accepts_complete_current_evidence(self):
-        self.receipt("alpha", guard_tier="native-fail-closed")
+        self.receipt("alpha")
         self.receipt("beta")
         self.commit_receipts()
 
@@ -140,7 +175,7 @@ class TrustEvidenceTests(unittest.TestCase):
     def test_rejects_missing_evidence_artifact(self):
         self.receipt("alpha")
         self.receipt("beta")
-        self.artifact("alpha").unlink()
+        self.artifact("alpha", "install").unlink()
         self.commit_receipts()
 
         with self.assertRaisesRegex(
@@ -151,7 +186,7 @@ class TrustEvidenceTests(unittest.TestCase):
     def test_rejects_empty_evidence_artifact(self):
         self.receipt("alpha")
         self.receipt("beta")
-        self.artifact("alpha").write_text("", encoding="utf-8")
+        self.artifact("alpha", "install").write_text("", encoding="utf-8")
         self.commit_receipts()
 
         with self.assertRaisesRegex(
@@ -168,7 +203,7 @@ class TrustEvidenceTests(unittest.TestCase):
         with self.assertRaisesRegex(check_trust_evidence.EvidenceError, "clean worktree"):
             check_trust_evidence.validate_repository(self.repo)
 
-    def artifact(self, host):
+    def artifact(self, host, step):
         return (
             self.repo
             / "docs"
@@ -177,8 +212,63 @@ class TrustEvidenceTests(unittest.TestCase):
             / "releases"
             / "1.2.3"
             / host
-            / "proof.txt"
+            / f"{step}.json"
         )
+
+    def test_rejects_one_artifact_reused_for_every_step(self):
+        self.receipt("alpha", shared_artifact=True)
+        self.receipt("beta")
+        self.commit_receipts()
+
+        with self.assertRaisesRegex(check_trust_evidence.EvidenceError, "own artifact"):
+            check_trust_evidence.validate_repository(self.repo)
+
+    def test_rejects_unstructured_step_evidence(self):
+        self.receipt("alpha")
+        self.receipt("beta")
+        self.artifact("alpha", "install").write_text("{}\n", encoding="utf-8")
+        self.commit_receipts()
+
+        with self.assertRaisesRegex(check_trust_evidence.EvidenceError, "schema"):
+            check_trust_evidence.validate_repository(self.repo)
+
+    def test_rejects_guard_tier_that_disagrees_with_manifest(self):
+        self.receipt("alpha", guard_tier="git-only")
+        self.receipt("beta")
+        self.commit_receipts()
+
+        with self.assertRaisesRegex(check_trust_evidence.EvidenceError, "guard_tier"):
+            check_trust_evidence.validate_repository(self.repo)
+
+    def test_rejects_ignored_untracked_evidence(self):
+        (self.repo / ".gitignore").write_text(
+            "docs/trust-validation/evidence/\n", encoding="utf-8"
+        )
+        self.git("add", ".gitignore")
+        self.git("commit", "-qm", "ignore evidence")
+        self.candidate = self.git("rev-parse", "HEAD").stdout.strip()
+        self.receipt("alpha")
+        self.receipt("beta")
+
+        with self.assertRaisesRegex(check_trust_evidence.EvidenceError, "not tracked"):
+            check_trust_evidence.validate_repository(self.repo)
+
+    def test_rejects_artifacts_older_than_candidate(self):
+        self.receipt("alpha")
+        self.receipt("beta")
+        self.commit_receipts()
+        (self.repo / "candidate.txt").write_text("new candidate\n", encoding="utf-8")
+        self.git("add", "candidate.txt")
+        self.git("commit", "-qm", "new candidate")
+        self.candidate = self.git("rev-parse", "HEAD").stdout.strip()
+        self.receipt("alpha", write_artifacts=False)
+        self.receipt("beta", write_artifacts=False)
+        self.commit_receipts()
+
+        with self.assertRaisesRegex(
+            check_trust_evidence.EvidenceError, "not added or updated"
+        ):
+            check_trust_evidence.validate_repository(self.repo)
 
     def test_rejects_unstaged_release_input(self):
         self.receipt("alpha")

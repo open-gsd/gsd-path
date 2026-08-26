@@ -64,14 +64,14 @@ npx gsd-path --hooks-refresh --project /path/to/repo
 npx gsd-path --hooks-refresh-full --project /path/to/repo   # + settings/git hooks
 ```
 
-`--hooks-refresh-full` merges existing `.claude/settings.json`,
+`--hooks-refresh-full` refreshes existing managed `.claude/settings.json`,
 `.codex/hooks.json`, and `.cursor/hooks.json`. Add `--claude`, `--codex`, or
-`--cursor` to create that selected host's missing native config during a
-refresh. It replaces only managed guard entries (identified by their
-`.gsd-path/guard_hook.py` command) and preserves unrelated entries, hook events,
-and settings. Codex resolves the guard from the Git root; Cursor runs its
-project hook from the project root, so both configs remain valid after a clone
-or move.
+`--cursor` to create a missing config or merge the guard into that selected
+host's valid existing JSON. Unselected foreign configs are not changed. The
+merge replaces only managed guard entries and preserves unrelated entries,
+hook events, and settings. Codex resolves the guard from the Git root; Cursor
+runs its project hook from the project root, so both configs remain valid after
+a clone or move.
 
 See [UPDATE.md](UPDATE.md).
 

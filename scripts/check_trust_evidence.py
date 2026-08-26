@@ -7,10 +7,11 @@ import re
 import subprocess
 import sys
 from pathlib import Path
-from typing import Dict, List, Mapping, Sequence
+from typing import Dict, FrozenSet, List, Mapping, Sequence, Tuple
 
 
 SCHEMA = "gsd-path/live-evidence/v1"
+STEP_SCHEMA = "gsd-path/live-step-evidence/v1"
 PIPELINE = "gsd-path/v2"
 PASS_FIELDS = (
     "verdict",
@@ -30,18 +31,19 @@ METADATA_DETAILS = (
     "Fixture repository",
     "Child-agent API used",
 )
-ARTIFACT_DETAILS = (
-    "Install command and result",
-    "Router invocation and state artifact",
-    "Child spawn output",
-    "Task branch, worktree, and landing commit",
-    "Task Verify command and result",
-    "Wave and final review artifacts",
-    "Archive validation output",
-    "Integration merge and milestone tag",
-    "Remaining `git worktree list` output",
-    "Native guard and Git-hook results",
-)
+ARTIFACT_STEPS = {
+    "Install command and result": "install",
+    "Router invocation and state artifact": "router",
+    "Child spawn output": "child-spawn",
+    "Task branch, worktree, and landing commit": "task-landing",
+    "Task Verify command and result": "task-verify",
+    "Wave and final review artifacts": "reviews",
+    "Archive validation output": "archive",
+    "Integration merge and milestone tag": "integration",
+    "Remaining `git worktree list` output": "worktrees",
+    "Native guard and Git-hook results": "guards",
+}
+ARTIFACT_DETAILS = tuple(ARTIFACT_STEPS)
 REQUIRED_DETAILS = METADATA_DETAILS + ARTIFACT_DETAILS
 EMPTY_DETAIL_VALUES = frozenset({"pass", "pending", "yes", "none", "n/a"})
 SUMMARY_PATHS = frozenset(
@@ -85,7 +87,30 @@ def _frontmatter(path: Path) -> Dict[str, str]:
     raise EvidenceError(f"evidence frontmatter is not closed: {path}")
 
 
-def _validate_evidence_details(path: Path) -> None:
+def _validate_step_artifact(path: Path, host: str, label: str) -> None:
+    evidence = _read_json(path)
+    if not isinstance(evidence, dict):
+        raise EvidenceError(f"{path}: step evidence must be a JSON object")
+    expected = {
+        "schema": STEP_SCHEMA,
+        "host": host,
+        "step": ARTIFACT_STEPS[label],
+        "result": "pass",
+    }
+    for key, value in expected.items():
+        if evidence.get(key) != value:
+            raise EvidenceError(
+                f"{path}: {key} must be {value!r}, found {evidence.get(key)!r}"
+            )
+    for key in ("command", "output"):
+        value = evidence.get(key)
+        if not isinstance(value, str) or not value.strip():
+            raise EvidenceError(f"{path}: step evidence requires non-empty {key}")
+        if value.strip().casefold() in EMPTY_DETAIL_VALUES:
+            raise EvidenceError(f"{path}: step evidence requires meaningful {key}")
+
+
+def _validate_evidence_details(path: Path, host: str) -> Tuple[Path, ...]:
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
     except OSError as error:
@@ -99,6 +124,7 @@ def _validate_evidence_details(path: Path) -> None:
             if label in details:
                 raise EvidenceError(f"{path}: duplicate evidence detail: {label}")
             details[label] = value.strip()
+    artifacts: List[Path] = []
     for label in REQUIRED_DETAILS:
         value = details.get(label, "")
         if not value or value.casefold() in EMPTY_DETAIL_VALUES:
@@ -119,6 +145,11 @@ def _validate_evidence_details(path: Path) -> None:
             raise EvidenceError(f"{path}: invalid evidence artifact for {label}: {value}")
         if artifact.is_symlink() or not resolved.is_file() or resolved.stat().st_size == 0:
             raise EvidenceError(f"{path}: invalid evidence artifact for {label}: {value}")
+        if resolved in artifacts:
+            raise EvidenceError(f"{path}: each evidence step requires its own artifact")
+        _validate_step_artifact(resolved, host, label)
+        artifacts.append(resolved)
+    return tuple(artifacts)
 
 
 def _git(repo: Path, *arguments: str) -> str:
@@ -137,8 +168,14 @@ def _git(repo: Path, *arguments: str) -> str:
 
 
 def _validate_receipt(
-    path: Path, host: str, package_version: str, candidate: str = ""
-) -> str:
+    path: Path,
+    host: str,
+    package_version: str,
+    guard_tier: str,
+    candidate: str = "",
+) -> Tuple[str, Tuple[Path, ...]]:
+    if path.is_symlink():
+        raise EvidenceError(f"evidence receipt must not be a symlink: {path}")
     fields = _frontmatter(path)
     expected = {
         "schema": SCHEMA,
@@ -163,12 +200,33 @@ def _validate_receipt(
             raise EvidenceError(
                 f"{path}: {field} must be 'pass', found {fields.get(field)!r}"
             )
-    if fields.get("guard_tier") not in GUARD_TIERS:
+    if guard_tier not in GUARD_TIERS:
         raise EvidenceError(
-            f"{path}: guard_tier must be one of {sorted(GUARD_TIERS)}"
+            f"host manifest guard_tier must be one of {sorted(GUARD_TIERS)}: {host}"
         )
-    _validate_evidence_details(path)
-    return receipt_candidate
+    if fields.get("guard_tier") != guard_tier:
+        raise EvidenceError(
+            f"{path}: guard_tier must be {guard_tier!r}, "
+            f"found {fields.get('guard_tier')!r}"
+        )
+    return receipt_candidate, _validate_evidence_details(path, host)
+
+
+def _require_current_tracked_evidence(
+    repo: Path, path: Path, changed: FrozenSet[str]
+) -> None:
+    try:
+        relative = path.relative_to(repo).as_posix()
+    except ValueError:
+        raise EvidenceError(f"evidence resolves outside the repository: {path}")
+    try:
+        _git(repo, "ls-files", "--error-unmatch", "--", relative)
+    except EvidenceError:
+        raise EvidenceError(f"evidence is not tracked: {relative}") from None
+    if relative not in changed:
+        raise EvidenceError(
+            f"evidence was not added or updated after candidate: {relative}"
+        )
 
 
 def validate_repository(repo: Path) -> Mapping:
@@ -177,7 +235,10 @@ def validate_repository(repo: Path) -> Mapping:
         raise EvidenceError("release evidence requires a clean worktree")
     manifest = _read_json(repo / "scripts" / "skill-resources.json")
     package = _read_json(repo / "package.json")
-    hosts = list(manifest.get("hosts", {}))
+    host_contracts = manifest.get("hosts", {})
+    if not isinstance(host_contracts, dict):
+        raise EvidenceError("host manifest must contain a hosts object")
+    hosts = list(host_contracts)
     version = package.get("version")
     if not hosts:
         raise EvidenceError("host manifest is empty")
@@ -194,12 +255,26 @@ def validate_repository(repo: Path) -> Mapping:
         raise EvidenceError(f"unexpected host evidence: {', '.join(extra)}")
 
     candidate = ""
+    evidence_paths: List[Path] = []
     for host in hosts:
-        candidate = _validate_receipt(
-            evidence_root / f"{host}.md", host, version, candidate
+        contract = host_contracts[host]
+        if not isinstance(contract, dict):
+            raise EvidenceError(f"host manifest entry must be an object: {host}")
+        receipt = evidence_root / f"{host}.md"
+        candidate, artifacts = _validate_receipt(
+            receipt,
+            host,
+            version,
+            contract.get("guard_tier", ""),
+            candidate,
         )
+        evidence_paths.extend((receipt, *artifacts))
     _git(repo, "merge-base", "--is-ancestor", candidate, "HEAD")
-    changed = _git(repo, "diff", "--name-only", f"{candidate}..HEAD").splitlines()
+    changed = frozenset(
+        _git(repo, "diff", "--name-only", f"{candidate}..HEAD").splitlines()
+    )
+    for path in evidence_paths:
+        _require_current_tracked_evidence(repo, path, changed)
     evidence_prefix = f"docs/trust-validation/evidence/releases/{version}/"
     disallowed = [
         path

@@ -972,6 +972,109 @@ test("hooks refresh full creates selected missing native configs", async () => {
   assert.equal(fs.readFileSync(path.join(project, "AGENTS.md"), "utf8"), "agents\n");
 });
 
+test("hooks refresh full merges selected foreign native configs", async () => {
+  installer.hooks.detectPythonInterpreter = () => "python3";
+  const project = path.join(root, "foreign-native-project");
+  fs.mkdirSync(path.join(project, ".git"), { recursive: true });
+  await runInstall([installer.targetPlan("claude", path.join(root, "claude", "skills"))], {
+    project,
+    hooks: true,
+  });
+  const codexPath = path.join(project, ".codex", "hooks.json");
+  const cursorPath = path.join(project, ".cursor", "hooks.json");
+  fs.mkdirSync(path.dirname(codexPath));
+  fs.mkdirSync(path.dirname(cursorPath));
+  fs.writeFileSync(
+    codexPath,
+    JSON.stringify({
+      custom: "codex",
+      hooks: {
+        PreToolUse: [
+          { matcher: "Custom", hooks: [{ type: "command", command: "custom-codex" }] },
+        ],
+      },
+    })
+  );
+  fs.writeFileSync(
+    cursorPath,
+    JSON.stringify({
+      custom: "cursor",
+      hooks: { preToolUse: [{ matcher: "Custom", command: "custom-cursor" }] },
+    })
+  );
+
+  const status = await installer.main([
+    "--hooks-refresh-full",
+    "--codex",
+    "--cursor",
+    "--project",
+    project,
+    "--source-root",
+    source,
+    "--no-color",
+  ]);
+
+  assert.equal(status, 0);
+  const codex = JSON.parse(fs.readFileSync(codexPath, "utf8"));
+  const cursor = JSON.parse(fs.readFileSync(cursorPath, "utf8"));
+  assert.equal(codex.custom, "codex");
+  assert.equal(codex.hooks.PreToolUse[0].hooks[0].command, "custom-codex");
+  assert.equal(codex.hooks.PreToolUse.length, 2);
+  assert.equal(cursor.custom, "cursor");
+  assert.equal(cursor.hooks.preToolUse[0].command, "custom-cursor");
+  assert.equal(cursor.hooks.preToolUse.length, 2);
+});
+
+test("hooks refresh full rejects an unselected foreign native config", async () => {
+  const project = path.join(root, "unselected-foreign-project");
+  fs.mkdirSync(path.join(project, ".git"), { recursive: true });
+  await runInstall([installer.targetPlan("claude", path.join(root, "claude", "skills"))], {
+    project,
+    hooks: true,
+  });
+  const settings = path.join(project, ".codex", "hooks.json");
+  fs.mkdirSync(path.dirname(settings));
+  fs.writeFileSync(settings, '{"custom":true}\n');
+
+  const status = await installer.main([
+    "--hooks-refresh-full",
+    "--project",
+    project,
+    "--source-root",
+    source,
+    "--no-color",
+  ]);
+
+  assert.equal(status, 1);
+  assert.equal(fs.readFileSync(settings, "utf8"), '{"custom":true}\n');
+});
+
+test("hooks refresh full rejects a symlinked native parent", async () => {
+  installer.hooks.detectPythonInterpreter = () => "python3";
+  const project = path.join(root, "symlink-parent-project");
+  fs.mkdirSync(path.join(project, ".git"), { recursive: true });
+  await runInstall([installer.targetPlan("codex", path.join(root, "codex", "skills"))], {
+    project,
+    hooks: true,
+  });
+  const outside = path.join(root, "outside-codex");
+  fs.renameSync(path.join(project, ".codex"), outside);
+  fs.symlinkSync(outside, path.join(project, ".codex"), "dir");
+  const before = fs.readFileSync(path.join(outside, "hooks.json"), "utf8");
+
+  const status = await installer.main([
+    "--hooks-refresh-full",
+    "--project",
+    project,
+    "--source-root",
+    source,
+    "--no-color",
+  ]);
+
+  assert.equal(status, 1);
+  assert.equal(fs.readFileSync(path.join(outside, "hooks.json"), "utf8"), before);
+});
+
 test("hooks refresh rejects unmanaged guard scripts", async () => {
   const project = path.join(root, "project");
   fs.mkdirSync(path.join(project, installer.HOOKS_DIRECTORY), { recursive: true });

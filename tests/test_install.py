@@ -1393,6 +1393,101 @@ class InstallerTests(unittest.TestCase):
             "agents\n", (project / "AGENTS.md").read_text(encoding="utf-8")
         )
 
+    def test_hooks_refresh_full_merges_selected_foreign_native_configs(self):
+        project = self.root / "foreign-native-project"
+        (project / ".git").mkdir(parents=True)
+        self.run_main(self.hooks_arguments(project, self.root / "claude" / "skills"))
+        codex_path = project / ".codex" / "hooks.json"
+        cursor_path = project / ".cursor" / "hooks.json"
+        codex_path.parent.mkdir()
+        cursor_path.parent.mkdir()
+        codex_path.write_text(
+            json.dumps(
+                {
+                    "custom": "codex",
+                    "hooks": {
+                        "PreToolUse": [
+                            {
+                                "matcher": "Custom",
+                                "hooks": [{"type": "command", "command": "custom-codex"}],
+                            }
+                        ]
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        cursor_path.write_text(
+            json.dumps(
+                {
+                    "custom": "cursor",
+                    "hooks": {
+                        "preToolUse": [
+                            {"matcher": "Custom", "command": "custom-cursor"}
+                        ]
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        with mock.patch.object(
+            install, "_detect_python_interpreter", return_value="python3"
+        ):
+            status, _, error = self.run_main(
+                [*self.refresh_full_arguments(project), "--codex", "--cursor"]
+            )
+
+        self.assertEqual(0, status, error)
+        codex = json.loads(codex_path.read_text(encoding="utf-8"))
+        cursor = json.loads(cursor_path.read_text(encoding="utf-8"))
+        self.assertEqual("codex", codex["custom"])
+        self.assertEqual(
+            "custom-codex",
+            codex["hooks"]["PreToolUse"][0]["hooks"][0]["command"],
+        )
+        self.assertEqual(2, len(codex["hooks"]["PreToolUse"]))
+        self.assertEqual("cursor", cursor["custom"])
+        self.assertEqual(
+            "custom-cursor", cursor["hooks"]["preToolUse"][0]["command"]
+        )
+        self.assertEqual(2, len(cursor["hooks"]["preToolUse"]))
+
+    def test_hooks_refresh_full_rejects_unselected_foreign_native_config(self):
+        project = self.root / "unselected-foreign-project"
+        (project / ".git").mkdir(parents=True)
+        self.run_main(self.hooks_arguments(project, self.root / "claude" / "skills"))
+        settings = project / ".codex" / "hooks.json"
+        settings.parent.mkdir()
+        settings.write_text('{"custom": true}\n', encoding="utf-8")
+
+        status, _, error = self.run_main(self.refresh_full_arguments(project))
+
+        self.assertEqual(1, status)
+        self.assertIn("not a managed GSD Path hook settings file", error)
+        self.assertEqual('{"custom": true}\n', settings.read_text(encoding="utf-8"))
+
+    def test_hooks_refresh_full_rejects_symlinked_native_parent(self):
+        project = self.root / "symlink-parent-project"
+        (project / ".git").mkdir(parents=True)
+        plans = [install.TargetPlan("codex", self.root / "codex" / "skills")]
+        with mock.patch.object(
+            install, "_detect_python_interpreter", return_value="python3"
+        ):
+            install.install(self.source, plans, project=project, hooks=True)
+        outside = self.root / "outside-codex"
+        (project / ".codex").rename(outside)
+        (project / ".codex").symlink_to(outside, target_is_directory=True)
+        before = (outside / "hooks.json").read_text(encoding="utf-8")
+
+        status, _, error = self.run_main(self.refresh_full_arguments(project))
+
+        self.assertEqual(1, status)
+        self.assertIn("symlink", error)
+        self.assertEqual(
+            before, (outside / "hooks.json").read_text(encoding="utf-8")
+        )
+
     def test_hooks_refresh_full_rejects_malformed_managed_settings(self):
         project = self.root / "project"
         (project / ".git").mkdir(parents=True)

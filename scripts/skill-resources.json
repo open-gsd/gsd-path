@@ -1,16 +1,16 @@
 {
   "hosts": {
-    "codex": {"local_root": ".agents/skills"},
-    "claude": {"local_root": ".claude/skills"},
-    "grok": {"local_root": ".grok/skills"},
-    "opencode": {"local_root": ".opencode/skills"},
-    "copilot": {"local_root": ".github/skills"},
-    "qwen": {"local_root": ".qwen/skills"},
-    "antigravity": {"local_root": ".agents/skills"},
-    "cursor": {"local_root": ".cursor/skills"},
-    "zed": {"local_root": ".agents/skills"},
-    "kiro": {"local_root": ".kiro/skills"},
-    "kimi": {"local_root": ".kimi-code/skills"}
+    "codex": {"local_root": ".agents/skills", "guard_tier": "native-fail-closed"},
+    "claude": {"local_root": ".claude/skills", "guard_tier": "native-fail-closed"},
+    "grok": {"local_root": ".grok/skills", "guard_tier": "git-only"},
+    "opencode": {"local_root": ".opencode/skills", "guard_tier": "git-only"},
+    "copilot": {"local_root": ".github/skills", "guard_tier": "git-only"},
+    "qwen": {"local_root": ".qwen/skills", "guard_tier": "git-only"},
+    "antigravity": {"local_root": ".agents/skills", "guard_tier": "git-only"},
+    "cursor": {"local_root": ".cursor/skills", "guard_tier": "native-fail-closed"},
+    "zed": {"local_root": ".agents/skills", "guard_tier": "git-only"},
+    "kiro": {"local_root": ".kiro/skills", "guard_tier": "git-only"},
+    "kimi": {"local_root": ".kimi-code/skills", "guard_tier": "git-only"}
   },
   "skills": [
     "gsd-path",

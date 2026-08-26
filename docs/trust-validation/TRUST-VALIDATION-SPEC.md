@@ -11,8 +11,8 @@ interactive entry point.
 A release that changes pipeline contracts is trusted only when:
 
 1. `npm run verify` passes.
-2. Every declared host has one current full-milestone receipt under
-   `evidence/releases/<package-version>/`.
+2. Every declared host has one current full-milestone receipt and structured,
+   tracked per-step evidence under `evidence/releases/<package-version>/`.
 3. `npm run verify:release` accepts those receipts and proves that only trust
    evidence or its summaries changed after the tested candidate SHA.
 
@@ -46,7 +46,9 @@ pre-action coverage is reported separately:
 - `git-only` — no validated native hook is installed; Git hooks pass.
 
 Different safety tiers do not hide or waive the full-milestone requirement.
-The current status is recorded in [HOST-MATRIX.md](HOST-MATRIX.md).
+Each host's required tier is declared in `scripts/skill-resources.json`; a
+receipt cannot claim a different tier. Current status is recorded in
+[HOST-MATRIX.md](HOST-MATRIX.md).
 
 ## Open gaps
 

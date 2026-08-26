@@ -1080,26 +1080,23 @@ function validateHooksRefresh(sourceRoot, project, full, hooksDir, selected) {
     }
   }
   if (full) {
-    const nativeDirectories = {
-      claude: ["Claude", path.join(project, ".claude")],
-      codex: ["Codex", path.join(project, ".codex")],
-      cursor: ["Cursor", path.join(project, ".cursor")],
-    };
-    for (const target of selected) {
-      if (nativeDirectories[target]) {
-        const [label, directory] = nativeDirectories[target];
-        validateDirectoryDestination(directory, `unsafe ${label} project directory`);
-      }
-    }
-    for (const settings of [
-      path.join(project, ".claude", "settings.json"),
-      path.join(project, ".codex", "hooks.json"),
-      path.join(project, ".cursor", "hooks.json"),
+    for (const [target, label, settings] of [
+      ["claude", "Claude", path.join(project, ".claude", "settings.json")],
+      ["codex", "Codex", path.join(project, ".codex", "hooks.json")],
+      ["cursor", "Cursor", path.join(project, ".cursor", "hooks.json")],
     ]) {
+      const exists = lexists(settings);
+      if (!exists && !selected.includes(target)) continue;
+      validateDirectoryDestination(
+        path.dirname(settings),
+        `unsafe ${label} project directory`
+      );
       if (isSymlink(settings)) {
         throw new InstallerError(`refusing to refresh a symlink: ${settings}`);
       }
-      if (lexists(settings) && !isManagedHookSettings(settings)) {
+      if (exists && selected.includes(target)) {
+        parsedManagedSettings(settings);
+      } else if (exists && !isManagedHookSettings(settings)) {
         throw new InstallerError(`not a managed GSD Path hook settings file: ${settings}`);
       }
     }

@@ -7,7 +7,7 @@ full-milestone receipt for every host below.
 | Host | Install | Native guard installed | Full live milestone | Current posture |
 |---|---|---|---|---|
 | Codex | automated | fail-closed project hook + Git hooks | missing | release blocked |
-| Claude Code | automated | pre-tool hook + Git hooks | missing | release blocked |
+| Claude Code | automated | fail-closed project hook + Git hooks | missing | release blocked |
 | Grok | automated | not installed; Git hooks | missing | release blocked |
 | OpenCode | automated | not installed; Git hooks | missing | release blocked |
 | GitHub Copilot CLI | automated | not installed; Git hooks | missing | release blocked |

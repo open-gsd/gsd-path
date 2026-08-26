@@ -974,25 +974,22 @@ def _validate_hooks_refresh(
         if source.is_symlink() or not source.is_file():
             raise InstallerError(f"missing guard script source: {source}")
     if full:
-        native_directories = {
-            "claude": ("Claude", project / ".claude"),
-            "codex": ("Codex", project / ".codex"),
-            "cursor": ("Cursor", project / ".cursor"),
-        }
-        for target in selected:
-            if target in native_directories:
-                label, directory = native_directories[target]
-                _validate_directory_destination(
-                    directory, f"unsafe {label} project directory"
-                )
-        for settings in (
-            project / ".claude" / "settings.json",
-            project / ".codex" / "hooks.json",
-            project / ".cursor" / "hooks.json",
+        for target, label, settings in (
+            ("claude", "Claude", project / ".claude" / "settings.json"),
+            ("codex", "Codex", project / ".codex" / "hooks.json"),
+            ("cursor", "Cursor", project / ".cursor" / "hooks.json"),
         ):
+            exists = _lexists(settings)
+            if not exists and target not in selected:
+                continue
+            _validate_directory_destination(
+                settings.parent, f"unsafe {label} project directory"
+            )
             if settings.is_symlink():
                 raise InstallerError(f"refusing to refresh a symlink: {settings}")
-            if _lexists(settings) and not _is_managed_hook_settings(settings):
+            if exists and target in selected:
+                _parsed_managed_settings(settings)
+            elif exists and not _is_managed_hook_settings(settings):
                 raise InstallerError(
                     f"not a managed GSD Path hook settings file: {settings}"
                 )

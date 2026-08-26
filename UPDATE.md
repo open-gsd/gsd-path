@@ -116,14 +116,14 @@ explicitly selected hosts:
 node scripts/install.mjs --hooks-refresh-full --codex --cursor --project /path/to/repo
 ```
 
-`--hooks-refresh-full` **merges** existing Claude, Codex, and Cursor settings
-instead of replacing them. A `--claude`, `--codex`, or `--cursor` flag creates
-that host's missing native config. Only the managed pre-tool guard entry (the
-one whose command runs `.gsd-path/guard_hook.py`) is refreshed. Other hook
-events, custom pre-tool entries, and settings keys are preserved. Git hooks are
-refreshed in the repository's effective hooks directory
-(`git rev-parse --git-path hooks`), so `core.hooksPath` setups and linked
-worktrees are handled.
+`--hooks-refresh-full` refreshes existing managed Claude, Codex, and Cursor
+settings. A `--claude`, `--codex`, or `--cursor` flag also creates that host's
+missing config or merges into its valid foreign JSON; unselected foreign
+configs are rejected and left unchanged. Only the managed pre-tool guard entry
+is refreshed. Other hook events, custom pre-tool entries, and settings keys are
+preserved. Git hooks are refreshed in the repository's effective hooks
+directory (`git rev-parse --git-path hooks`), so `core.hooksPath` setups and
+linked worktrees are handled.
 
 Details: [HOOKS.md](HOOKS.md)
 
