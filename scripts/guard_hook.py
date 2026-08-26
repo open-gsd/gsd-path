@@ -71,8 +71,7 @@ ARCHIVE_REASON = (
 )
 ARCHIVE_MARKER = ".project/archive"
 INVALID_INPUT_REASON = "GSD Path guard could not validate the tool request"
-ARCHIVE_PATH = r"(?i:\.project[\\/]archive)"
-ARCHIVE_REFERENCE = re.compile(ARCHIVE_PATH)
+ARCHIVE_REFERENCE = re.compile(r"(?i:\.project[\\/]archive)")
 ARCHIVE_READ_COMMANDS = frozenset(
     {
         "cat",
@@ -181,6 +180,33 @@ def in_archive(path):
     return suffix == "" or suffix.startswith("/")
 
 
+def path_values(value):
+    yield value
+    if value.startswith("-") and "=" in value:
+        yield value.split("=", 1)[1]
+
+
+def is_absolute_path(path):
+    normalized = path.replace("\\", "/")
+    return normalized.startswith("/") or bool(re.match(r"^[A-Za-z]:/", normalized))
+
+
+def path_in_archive(path, working_directories=()):
+    for value in path_values(path):
+        if in_archive(value):
+            return True
+        if is_absolute_path(value):
+            continue
+        for working_directory in working_directories:
+            if in_archive(f"{working_directory}/{value}"):
+                return True
+    return False
+
+
+def command_references_archive(tokens, working_directories):
+    return any(path_in_archive(token, working_directories) for token in tokens)
+
+
 def patch_paths(payload):
     for match in PATCH_PATH_PATTERN.finditer(payload):
         yield (match.group(1) or match.group(2)).strip()
@@ -245,6 +271,15 @@ def git_command(segment):
     return segment[index].casefold(), segment[index + 1:]
 
 
+def has_short_option(arguments, option):
+    return any(
+        argument.startswith("-")
+        and not argument.startswith("--")
+        and option in argument[1:]
+        for argument in arguments
+    )
+
+
 def destructive_git_reason(tokens):
     for segment in command_segments(tokens):
         invocation = git_command(segment)
@@ -253,30 +288,41 @@ def destructive_git_reason(tokens):
         command, arguments = invocation
         if command == "reset" and "--hard" in arguments:
             return GIT_REASONS[command]
-        if command == "clean" and any(
-            argument == "--force"
-            or (argument.startswith("-") and not argument.startswith("--") and "f" in argument[1:])
-            for argument in arguments
-        ):
-            return GIT_REASONS[command]
-        if command == "push" and any(
-            argument == "--force"
-            or argument.startswith("--force-with-lease")
-            or (
-                argument.startswith("-")
-                and not argument.startswith("--")
-                and "f" in argument[1:]
+        if command == "clean":
+            force = "--force" in arguments or has_short_option(arguments, "f")
+            if force:
+                return GIT_REASONS[command]
+        if command == "push":
+            force_option = any(
+                argument == "--force"
+                or argument.startswith("--force-with-lease")
+                or argument == "--mirror"
+                for argument in arguments
+            ) or has_short_option(arguments, "f")
+            force_refspec = any(
+                argument.startswith("+") and len(argument) > 1
+                for argument in arguments
             )
-            for argument in arguments
-        ):
-            return GIT_REASONS[command]
-        if command == "branch" and "-D" in arguments:
-            return GIT_REASONS[command]
+            if force_option or force_refspec:
+                return GIT_REASONS[command]
+        if command == "branch":
+            deletes = (
+                "--delete" in arguments
+                or has_short_option(arguments, "d")
+                or has_short_option(arguments, "D")
+            )
+            forces = (
+                "--force" in arguments
+                or has_short_option(arguments, "f")
+                or has_short_option(arguments, "D")
+            )
+            if deletes and forces:
+                return GIT_REASONS[command]
     return None
 
 
-def archive_command_is_read_only(command, tokens, archive_working_directory=False):
-    if not archive_working_directory and not ARCHIVE_REFERENCE.search(command):
+def archive_command_is_read_only(command, tokens, archive_context=False):
+    if not archive_context:
         return True
     if AMBIGUOUS_SHELL_SYNTAX.search(command):
         return False
@@ -334,18 +380,23 @@ def evaluate(event):
         commands = []
     if not is_read_tool(tool):
         for path in paths:
-            if in_archive(path):
+            if path_in_archive(path, working_directories):
                 deny(ARCHIVE_REASON)
         for payload in patch_payloads:
             for path in patch_paths(payload):
-                if in_archive(path):
+                if path_in_archive(path, working_directories):
                     deny(ARCHIVE_REASON)
     archive_working_directory = any(in_archive(path) for path in working_directories)
     if archive_working_directory and not commands:
         deny(ARCHIVE_REASON)
     for command in commands:
         tokens = shell_tokens(command)
-        if not archive_command_is_read_only(command, tokens, archive_working_directory):
+        archive_context = (
+            archive_working_directory
+            or bool(ARCHIVE_REFERENCE.search(command))
+            or command_references_archive(tokens, working_directories)
+        )
+        if not archive_command_is_read_only(command, tokens, archive_context):
             deny(ARCHIVE_REASON)
         reason = destructive_git_reason(tokens)
         if reason is not None:

@@ -140,6 +140,30 @@ class GuardHookTests(unittest.TestCase):
                     }
                 )
 
+    def test_resolves_archive_operands_against_working_directory(self):
+        for key in ("working_directory", "workdir", "cwd"):
+            with self.subTest(key=key):
+                self.assert_denied(
+                    {
+                        "tool_name": "Shell",
+                        "tool_input": {
+                            "command": "rm -rf archive/001-mvp",
+                            key: "/repo/.project",
+                        },
+                    }
+                )
+
+    def test_allows_relative_archive_read_from_project_directory(self):
+        self.assert_allowed(
+            {
+                "tool_name": "Shell",
+                "tool_input": {
+                    "command": "cat archive/001-mvp/MANIFEST.md",
+                    "working_directory": "/repo/.project",
+                },
+            }
+        )
+
     def test_allows_archive_read_from_archive_working_directory(self):
         self.assert_allowed(
             {
@@ -172,6 +196,18 @@ class GuardHookTests(unittest.TestCase):
             "FOO=1 git reset '--hard' HEAD~1",
             "git.exe reset '--hard' HEAD~1",
             "echo ok\ngit reset '--hard' HEAD~1",
+        ):
+            with self.subTest(command=command):
+                self.assert_denied(
+                    {"tool_name": "Bash", "tool_input": {"command": command}}
+                )
+
+    def test_denies_semantic_force_pushes_and_branch_deletes(self):
+        for command in (
+            "git push origin +main",
+            "git push --mirror origin",
+            "git branch --delete --force gsd-path/task",
+            "git branch -df gsd-path/task",
         ):
             with self.subTest(command=command):
                 self.assert_denied(

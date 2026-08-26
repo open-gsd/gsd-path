@@ -1,6 +1,6 @@
 {
   "hosts": {
-    "codex": {"local_root": ".agents/skills", "guard_tier": "native-fail-closed"},
+    "codex": {"local_root": ".agents/skills", "guard_tier": "git-only"},
     "claude": {"local_root": ".claude/skills", "guard_tier": "native-fail-closed"},
     "grok": {"local_root": ".grok/skills", "guard_tier": "git-only"},
     "opencode": {"local_root": ".opencode/skills", "guard_tier": "git-only"},

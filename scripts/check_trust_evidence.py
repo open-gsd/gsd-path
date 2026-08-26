@@ -6,6 +6,7 @@ import json
 import re
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import Dict, FrozenSet, List, Mapping, Sequence, Tuple
 
@@ -46,6 +47,29 @@ ARTIFACT_STEPS = {
 ARTIFACT_DETAILS = tuple(ARTIFACT_STEPS)
 REQUIRED_DETAILS = METADATA_DETAILS + ARTIFACT_DETAILS
 EMPTY_DETAIL_VALUES = frozenset({"pass", "pending", "yes", "none", "n/a"})
+STEP_STRING_FIELDS = {
+    "install": ("host_version", "install_root"),
+    "router": ("state_artifact",),
+    "child-spawn": ("child_id",),
+    "task-landing": (
+        "fixture_bundle",
+        "fixture_base_commit",
+        "task_branch",
+        "task_worktree",
+        "landing_commit",
+    ),
+    "task-verify": ("verify_artifact",),
+    "reviews": ("wave_review_artifact", "final_review_artifact"),
+    "archive": ("archive_path",),
+    "integration": ("fixture_bundle", "integration_commit", "milestone_tag"),
+}
+STEP_EXACT_FIELDS = {
+    "install": {"exit_code": 0},
+    "router": {"state_phase": "shipped"},
+    "child-spawn": {"child_status": "completed"},
+    "task-verify": {"verify_exit_code": 0},
+    "archive": {"validation_exit_code": 0},
+}
 SUMMARY_PATHS = frozenset(
     {
         "docs/trust-validation/HOST-MATRIX.md",
@@ -86,7 +110,20 @@ def _frontmatter(path: Path) -> Dict[str, str]:
     raise EvidenceError(f"evidence frontmatter is not closed: {path}")
 
 
-def _validate_step_artifact(path: Path, host: str, label: str) -> None:
+def _required_string(evidence: Mapping, key: str, path: Path) -> str:
+    value = evidence.get(key)
+    if (
+        not isinstance(value, str)
+        or not value.strip()
+        or value.strip().casefold() in EMPTY_DETAIL_VALUES
+    ):
+        raise EvidenceError(f"{path}: step evidence requires meaningful {key}")
+    return value.strip()
+
+
+def _validate_step_artifact(
+    path: Path, host: str, label: str, guard_tier: str
+) -> Mapping:
     evidence = _read_json(path)
     if not isinstance(evidence, dict):
         raise EvidenceError(f"{path}: step evidence must be a JSON object")
@@ -101,15 +138,126 @@ def _validate_step_artifact(path: Path, host: str, label: str) -> None:
             raise EvidenceError(
                 f"{path}: {key} must be {value!r}, found {evidence.get(key)!r}"
             )
-    for key in ("command", "output"):
-        value = evidence.get(key)
-        if not isinstance(value, str) or not value.strip():
-            raise EvidenceError(f"{path}: step evidence requires non-empty {key}")
-        if value.strip().casefold() in EMPTY_DETAIL_VALUES:
-            raise EvidenceError(f"{path}: step evidence requires meaningful {key}")
+    step = ARTIFACT_STEPS[label]
+    for key in ("command", "output", *STEP_STRING_FIELDS.get(step, ())):
+        _required_string(evidence, key, path)
+    for key, value in STEP_EXACT_FIELDS.get(step, {}).items():
+        if evidence.get(key) != value:
+            raise EvidenceError(f"{path}: {key} must be {value!r}")
+    if step == "worktrees":
+        worktrees = evidence.get("remaining_worktrees")
+        if not isinstance(worktrees, list) or not worktrees or not all(
+            isinstance(item, str) and item.strip() for item in worktrees
+        ):
+            raise EvidenceError(
+                f"{path}: remaining_worktrees must be a non-empty string list"
+            )
+    if step == "guards":
+        expected_native = "not-applicable" if guard_tier == "git-only" else "pass"
+        expected_guards = {
+            "declared_tier": guard_tier,
+            "native_guard": expected_native,
+            "git_hooks": "pass",
+        }
+        for key, value in expected_guards.items():
+            if evidence.get(key) != value:
+                raise EvidenceError(f"{path}: {key} must be {value!r}")
+    return evidence
 
 
-def _validate_evidence_details(path: Path, host: str) -> Tuple[Path, ...]:
+def _resolved_artifact(
+    path: Path, artifact_directory: Path, value: str, label: str
+) -> Path:
+    relative_artifact = Path(value)
+    if relative_artifact.is_absolute():
+        raise EvidenceError(f"{path}: evidence artifact must be relative: {label}")
+    try:
+        artifact = path.parent / relative_artifact
+        resolved = artifact.resolve(strict=True)
+        resolved.relative_to(artifact_directory.resolve())
+    except (OSError, RuntimeError, ValueError):
+        raise EvidenceError(f"{path}: invalid evidence artifact for {label}: {value}")
+    if artifact.is_symlink() or not resolved.is_file() or resolved.stat().st_size == 0:
+        raise EvidenceError(f"{path}: invalid evidence artifact for {label}: {value}")
+    return resolved
+
+
+def _full_sha(evidence: Mapping, key: str, path: Path) -> str:
+    value = evidence.get(key)
+    if not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{40}", value):
+        raise EvidenceError(f"{path}: {key} must be a full lowercase Git SHA")
+    return value
+
+
+def _validate_git_bundle(
+    bundle: Path, host: str, landing: Mapping, integration: Mapping
+) -> None:
+    base = _full_sha(landing, "fixture_base_commit", bundle)
+    landing_commit = _full_sha(landing, "landing_commit", bundle)
+    integration_commit = _full_sha(integration, "integration_commit", bundle)
+    milestone_tag = _required_string(integration, "milestone_tag", bundle)
+    if not re.fullmatch(r"milestone/[0-9]{3}-[A-Za-z0-9._-]+", milestone_tag):
+        raise EvidenceError(f"{bundle}: milestone_tag has an invalid name")
+    with tempfile.TemporaryDirectory(prefix=f"gsd-path-{host}-evidence-") as temporary:
+        fixture = Path(temporary) / "fixture.git"
+        _git(
+            bundle.parent,
+            "clone",
+            "--bare",
+            "--quiet",
+            "--",
+            str(bundle),
+            str(fixture),
+        )
+        for name, commit in (
+            ("fixture_base_commit", base),
+            ("landing_commit", landing_commit),
+            ("integration_commit", integration_commit),
+        ):
+            try:
+                _git(fixture, "cat-file", "-e", f"{commit}^{{commit}}")
+            except EvidenceError:
+                raise EvidenceError(
+                    f"{bundle}: {name} is not present in the bundle"
+                ) from None
+        for ancestor, descendant, relationship in (
+            (base, landing_commit, "fixture base must precede landing commit"),
+            (
+                landing_commit,
+                integration_commit,
+                "landing commit must precede integration",
+            ),
+        ):
+            try:
+                _git(fixture, "merge-base", "--is-ancestor", ancestor, descendant)
+            except EvidenceError:
+                raise EvidenceError(f"{bundle}: {relationship}") from None
+        parents = _git(
+            fixture, "rev-list", "--parents", "-n", "1", integration_commit
+        ).split()
+        if len(parents) < 3:
+            raise EvidenceError(f"{bundle}: integration_commit must be a merge commit")
+        if not _git(fixture, "show", "-s", "--format=%s", integration_commit).startswith(
+            "integrate:"
+        ):
+            raise EvidenceError(
+                f"{bundle}: integration commit subject must start with 'integrate:'"
+            )
+        tag_ref = f"refs/tags/{milestone_tag}"
+        try:
+            tag_type = _git(fixture, "cat-file", "-t", tag_ref)
+            tagged_commit = _git(fixture, "rev-parse", f"{tag_ref}^{{commit}}")
+        except EvidenceError:
+            raise EvidenceError(f"{bundle}: milestone tag is not present") from None
+        if tag_type != "tag" or tagged_commit != integration_commit:
+            raise EvidenceError(
+                f"{bundle}: milestone tag must be annotated at integration_commit"
+            )
+
+
+def _validate_evidence_details(
+    path: Path, host: str, guard_tier: str
+) -> Tuple[Path, ...]:
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
     except OSError as error:
@@ -123,31 +271,35 @@ def _validate_evidence_details(path: Path, host: str) -> Tuple[Path, ...]:
             if label in details:
                 raise EvidenceError(f"{path}: duplicate evidence detail: {label}")
             details[label] = value.strip()
-    artifacts: List[Path] = []
     for label in REQUIRED_DETAILS:
         value = details.get(label, "")
         if not value or value.casefold() in EMPTY_DETAIL_VALUES:
             raise EvidenceError(f"{path}: missing reproducible evidence detail: {label}")
-        if label not in ARTIFACT_DETAILS:
-            continue
-        relative_artifact = Path(value)
-        if relative_artifact.is_absolute():
-            raise EvidenceError(f"{path}: evidence artifact must be relative: {label}")
-        artifact_directory = path.with_suffix("")
-        if artifact_directory.is_symlink() or not artifact_directory.is_dir():
-            raise EvidenceError(f"{path}: invalid evidence artifact for {label}: {value}")
-        try:
-            artifact = path.parent / relative_artifact
-            resolved = artifact.resolve(strict=True)
-            resolved.relative_to(artifact_directory.resolve())
-        except (OSError, RuntimeError, ValueError):
-            raise EvidenceError(f"{path}: invalid evidence artifact for {label}: {value}")
-        if artifact.is_symlink() or not resolved.is_file() or resolved.stat().st_size == 0:
-            raise EvidenceError(f"{path}: invalid evidence artifact for {label}: {value}")
+    artifact_directory = path.with_suffix("")
+    if artifact_directory.is_symlink() or not artifact_directory.is_dir():
+        raise EvidenceError(f"{path}: evidence artifact directory is missing")
+    artifacts: List[Path] = []
+    steps: Dict[str, Mapping] = {}
+    for label in ARTIFACT_DETAILS:
+        value = details[label]
+        resolved = _resolved_artifact(path, artifact_directory, value, label)
         if resolved in artifacts:
             raise EvidenceError(f"{path}: each evidence step requires its own artifact")
-        _validate_step_artifact(resolved, host, label)
+        steps[ARTIFACT_STEPS[label]] = _validate_step_artifact(
+            resolved, host, label, guard_tier
+        )
         artifacts.append(resolved)
+    landing = steps["task-landing"]
+    integration = steps["integration"]
+    landing_bundle = _required_string(landing, "fixture_bundle", path)
+    integration_bundle = _required_string(integration, "fixture_bundle", path)
+    if landing_bundle != integration_bundle:
+        raise EvidenceError(f"{path}: landing and integration must use one fixture bundle")
+    bundle = _resolved_artifact(
+        path, artifact_directory, landing_bundle, "fixture Git bundle"
+    )
+    _validate_git_bundle(bundle, host, landing, integration)
+    artifacts.append(bundle)
     return tuple(artifacts)
 
 
@@ -208,7 +360,7 @@ def _validate_receipt(
             f"{path}: guard_tier must be {guard_tier!r}, "
             f"found {fields.get('guard_tier')!r}"
         )
-    return receipt_candidate, _validate_evidence_details(path, host)
+    return receipt_candidate, _validate_evidence_details(path, host, guard_tier)
 
 
 def _require_current_tracked_evidence(

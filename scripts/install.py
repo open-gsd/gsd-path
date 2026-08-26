@@ -983,7 +983,13 @@ def _has_managed_hook_settings(parsed: dict) -> bool:
 
 def _parsed_managed_settings(settings: Path) -> dict:
     try:
-        parsed = json.loads(settings.read_text(encoding="utf-8", errors="replace"))
+        content = settings.read_text(encoding="utf-8", errors="replace")
+    except OSError as error:
+        raise InstallerError(
+            f"cannot read managed hook settings file: {settings}: {error}"
+        ) from error
+    try:
+        parsed = json.loads(content)
     except json.JSONDecodeError as error:
         raise InstallerError(
             f"managed hook settings file is not valid JSON: {settings}"

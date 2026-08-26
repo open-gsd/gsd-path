@@ -6,6 +6,12 @@ from tests import dogfood
 
 
 class DogfoodContractTests(unittest.TestCase):
+    def test_codex_guaranteed_tier_requires_only_git_hooks(self):
+        self.assertEqual(
+            "git-only",
+            dogfood.RESOURCE_MANIFEST["hosts"]["codex"]["guard_tier"],
+        )
+
     def test_every_declared_host_has_an_evidence_route(self):
         self.assertEqual(set(dogfood.DECLARED_HOSTS), set(dogfood.HOSTS))
         automated = {

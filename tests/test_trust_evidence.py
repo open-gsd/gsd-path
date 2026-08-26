@@ -10,7 +10,9 @@ from scripts import check_trust_evidence
 class TrustEvidenceTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
+        self.fixture_temporary = tempfile.TemporaryDirectory()
         self.repo = Path(self.temporary.name)
+        self.fixtures = {}
         self.guard_tiers = {
             "alpha": "native-fail-closed",
             "beta": "git-only",
@@ -44,6 +46,7 @@ class TrustEvidenceTests(unittest.TestCase):
         self.candidate = self.git("rev-parse", "HEAD").stdout.strip()
 
     def tearDown(self):
+        self.fixture_temporary.cleanup()
         self.temporary.cleanup()
 
     def git(self, *arguments):
@@ -56,6 +59,124 @@ class TrustEvidenceTests(unittest.TestCase):
         )
         self.assertEqual(0, result.returncode, result.stderr)
         return result
+
+    def fixture(self, host):
+        if host in self.fixtures:
+            return self.fixtures[host]
+        repository = Path(self.fixture_temporary.name) / host
+        repository.mkdir()
+
+        def git(*arguments):
+            result = subprocess.run(
+                ["git", *arguments],
+                cwd=repository,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(0, result.returncode, result.stderr)
+            return result.stdout.strip()
+
+        git("init", "-q", "-b", "main")
+        git("config", "user.email", "fixture@example.invalid")
+        git("config", "user.name", "Fixture")
+        (repository / "README.md").write_text("fixture\n", encoding="utf-8")
+        git("add", "README.md")
+        git("commit", "-qm", "fixture base")
+        base = git("rev-parse", "HEAD")
+        task_branch = f"task/{host}-milestone"
+        git("checkout", "-qb", task_branch)
+        (repository / "task.txt").write_text("landed\n", encoding="utf-8")
+        git("add", "task.txt")
+        git("commit", "-qm", f"task: land {host}")
+        landing = git("rev-parse", "HEAD")
+        git("checkout", "-q", "main")
+        git(
+            "merge",
+            "--no-ff",
+            "-q",
+            "-m",
+            "integrate: M001 — fixture milestone",
+            task_branch,
+        )
+        integration = git("rev-parse", "HEAD")
+        milestone_tag = f"milestone/001-{host}"
+        git("tag", "-a", "-m", f"{host} milestone", milestone_tag)
+        bundle = self.artifact(host, "fixture").with_suffix(".bundle")
+        bundle.parent.mkdir(parents=True, exist_ok=True)
+        git("bundle", "create", str(bundle), "--all")
+        self.fixtures[host] = {
+            "base": base,
+            "landing": landing,
+            "integration": integration,
+            "milestone_tag": milestone_tag,
+            "task_branch": task_branch,
+            "task_worktree": str(repository),
+            "bundle": f"{host}/fixture.bundle",
+        }
+        return self.fixtures[host]
+
+    def step_evidence(self, host, step):
+        fixture = self.fixture(host)
+        evidence = {
+            "schema": check_trust_evidence.STEP_SCHEMA,
+            "host": host,
+            "step": step,
+            "command": f"run {step} for {host}",
+            "result": "pass",
+            "output": f"observed {step} output for {host}",
+        }
+        details = {
+            "install": {
+                "host_version": "fixture-cli 1.0",
+                "install_root": f".{host}/skills",
+                "exit_code": 0,
+            },
+            "router": {
+                "state_artifact": ".project/STATE.md",
+                "state_phase": "shipped",
+            },
+            "child-spawn": {
+                "child_id": f"{host}-child-1",
+                "child_status": "completed",
+            },
+            "task-landing": {
+                "fixture_bundle": fixture["bundle"],
+                "fixture_base_commit": fixture["base"],
+                "task_branch": fixture["task_branch"],
+                "task_worktree": fixture["task_worktree"],
+                "landing_commit": fixture["landing"],
+            },
+            "task-verify": {
+                "verify_artifact": ".project/tasks/001/VERIFY.md",
+                "verify_exit_code": 0,
+            },
+            "reviews": {
+                "wave_review_artifact": ".project/reviews/wave.md",
+                "final_review_artifact": ".project/reviews/final.md",
+            },
+            "archive": {
+                "archive_path": f".project/archive/001-{host}",
+                "validation_exit_code": 0,
+            },
+            "integration": {
+                "fixture_bundle": fixture["bundle"],
+                "integration_commit": fixture["integration"],
+                "milestone_tag": fixture["milestone_tag"],
+            },
+            "worktrees": {"remaining_worktrees": [fixture["task_worktree"]]},
+            "guards": {
+                "declared_tier": self.guard_tiers[host],
+                "native_guard": (
+                    "not-applicable"
+                    if self.guard_tiers[host] == "git-only"
+                    else "pass"
+                ),
+                "git_hooks": "pass",
+            },
+        }
+        evidence.update(details[step])
+        return evidence
 
     def receipt(
         self,
@@ -119,17 +240,7 @@ class TrustEvidenceTests(unittest.TestCase):
                 if artifact.exists():
                     continue
                 artifact.write_text(
-                    json.dumps(
-                        {
-                            "schema": check_trust_evidence.STEP_SCHEMA,
-                            "host": host,
-                            "step": step,
-                            "command": f"run {step} for {host}",
-                            "result": "pass",
-                            "output": f"observed {step} output for {host}",
-                        }
-                    )
-                    + "\n",
+                    json.dumps(self.step_evidence(host, step)) + "\n",
                     encoding="utf-8",
                 )
 
@@ -230,6 +341,43 @@ class TrustEvidenceTests(unittest.TestCase):
         self.commit_receipts()
 
         with self.assertRaisesRegex(check_trust_evidence.EvidenceError, "schema"):
+            check_trust_evidence.validate_repository(self.repo)
+
+    def test_rejects_generic_attestations_without_step_proof(self):
+        self.receipt("alpha")
+        self.receipt("beta")
+        for step in check_trust_evidence.ARTIFACT_STEPS.values():
+            self.artifact("alpha", step).write_text(
+                json.dumps(
+                    {
+                        "schema": check_trust_evidence.STEP_SCHEMA,
+                        "host": "alpha",
+                        "step": step,
+                        "command": "x",
+                        "result": "pass",
+                        "output": "x",
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+        self.commit_receipts()
+
+        with self.assertRaisesRegex(
+            check_trust_evidence.EvidenceError, "step evidence requires"
+        ):
+            check_trust_evidence.validate_repository(self.repo)
+
+    def test_rejects_integration_commit_that_is_not_a_merge(self):
+        self.receipt("alpha")
+        self.receipt("beta")
+        integration = self.artifact("alpha", "integration")
+        evidence = json.loads(integration.read_text(encoding="utf-8"))
+        evidence["integration_commit"] = self.fixtures["alpha"]["landing"]
+        integration.write_text(json.dumps(evidence) + "\n", encoding="utf-8")
+        self.commit_receipts()
+
+        with self.assertRaisesRegex(check_trust_evidence.EvidenceError, "merge commit"):
             check_trust_evidence.validate_repository(self.repo)
 
     def test_rejects_guard_tier_that_disagrees_with_manifest(self):

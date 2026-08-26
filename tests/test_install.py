@@ -1240,6 +1240,33 @@ class InstallerTests(unittest.TestCase):
             "guard_hook.py", cursor["hooks"]["preToolUse"][1]["command"]
         )
 
+    def test_native_hook_install_reports_unreadable_settings(self):
+        project = self.root / "unreadable-native-hooks-project"
+        (project / ".git").mkdir(parents=True)
+        settings = project / ".codex" / "hooks.json"
+        settings.mkdir(parents=True)
+        target = self.root / "codex" / "skills"
+        with mock.patch.object(
+            install, "_detect_python_interpreter", return_value="python3"
+        ):
+            status, _, error = self.run_main(
+                [
+                    "--codex",
+                    "--codex-root",
+                    str(target),
+                    "--source-root",
+                    str(self.source),
+                    "--project",
+                    str(project),
+                    "--hooks",
+                ]
+            )
+
+        self.assertEqual(1, status)
+        self.assertIn("cannot read managed hook settings file", error)
+        self.assertNotIn("Traceback", error)
+        self.assertFalse(target.exists())
+
     def test_native_hook_commands_run_from_supported_working_directories(self):
         project = self.root / "native hooks project"
         project.mkdir()

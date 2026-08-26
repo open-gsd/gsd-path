@@ -51,6 +51,12 @@ directory; otherwise installation stops before writing.
 Git hooks work for **any** agent that commits. Native guard wiring denies a tool
 call when its event is malformed or the guard cannot validate it.
 
+Codex [project hooks](https://learn.chatgpt.com/docs/hooks) are installed but do
+not run until Codex trusts the project `.codex/` layer and the exact hook
+definition. Open `/hooks` in Codex, review both, and trust them. Until that
+manual activation is complete, Codex's guaranteed manifest tier is `git-only`;
+changing the hook requires review again.
+
 **Windows / interpreter caveat:** hooks and native host settings invoke a
 Python interpreter that the installer probes at install time — `python3` first,
 then `python` (plain `python3` usually does not exist on Windows). If neither
@@ -82,7 +88,8 @@ See [UPDATE.md](UPDATE.md).
 **`guard_hook.py`** (pre-tool-use):
 
 - non-read tools targeting paths under `.project/archive/` (including `..` paths)
-- `git reset --hard`, `git clean -f`, force push, `git branch -D`
+- `git reset --hard`, `git clean -f`, force push (including `+` refspecs),
+  force branch deletion
 - shell commands that reference the archive unless the whole command is a
   recognized standalone read
 
