@@ -47,7 +47,7 @@ class TrustEvidenceTests(unittest.TestCase):
         self.assertEqual(0, result.returncode, result.stderr)
         return result
 
-    def receipt(self, host, **overrides):
+    def receipt(self, host, details=True, **overrides):
         fields = {
             "schema": "gsd-path/live-evidence/v1",
             "host": host,
@@ -66,6 +66,13 @@ class TrustEvidenceTests(unittest.TestCase):
         }
         fields.update(overrides)
         lines = ["---", *[f"{key}: {value}" for key, value in fields.items()], "---", "", f"# {host} live evidence", ""]
+        if details:
+            lines.extend(
+                [
+                    f"- {label}: proof for {host} at artifacts/{host}.txt"
+                    for label in check_trust_evidence.REQUIRED_DETAILS
+                ]
+            )
         path = (
             self.repo
             / "docs"
@@ -105,6 +112,16 @@ class TrustEvidenceTests(unittest.TestCase):
         self.commit_receipts()
 
         with self.assertRaisesRegex(check_trust_evidence.EvidenceError, "child_spawn"):
+            check_trust_evidence.validate_repository(self.repo)
+
+    def test_rejects_frontmatter_only_receipt(self):
+        self.receipt("alpha", details=False)
+        self.receipt("beta")
+        self.commit_receipts()
+
+        with self.assertRaisesRegex(
+            check_trust_evidence.EvidenceError, "missing reproducible evidence detail"
+        ):
             check_trust_evidence.validate_repository(self.repo)
 
     def test_rejects_non_evidence_changes_after_candidate(self):

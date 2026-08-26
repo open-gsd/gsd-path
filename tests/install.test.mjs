@@ -813,11 +813,31 @@ test("hooks install native Codex and Cursor project configs", async () => {
   );
 
   const codex = JSON.parse(fs.readFileSync(path.join(project, ".codex", "hooks.json"), "utf8"));
-  assert.equal(codex.hooks.PreToolUse[0].hooks[0].command, 'python3 ".gsd-path/guard_hook.py"');
+  const guardCommand = `python3 "${path.join(project, installer.HOOKS_DIRECTORY, "guard_hook.py")}"`;
+  assert.equal(codex.hooks.PreToolUse[0].hooks[0].command, guardCommand);
   const cursor = JSON.parse(fs.readFileSync(path.join(project, ".cursor", "hooks.json"), "utf8"));
   assert.equal(cursor.version, 1);
-  assert.equal(cursor.hooks.preToolUse[0].command, 'python3 ".gsd-path/guard_hook.py"');
+  assert.equal(cursor.hooks.preToolUse[0].command, guardCommand);
   assert.equal(cursor.hooks.preToolUse[0].failClosed, true);
+});
+
+test("native hook install rejects unsafe project directories", async () => {
+  installer.hooks.detectPythonInterpreter = () => "python3";
+  for (const host of ["codex", "cursor"]) {
+    const project = path.join(root, `unsafe-${host}-project`);
+    const outside = path.join(root, `outside-${host}`);
+    fs.mkdirSync(project);
+    fs.mkdirSync(outside);
+    fs.symlinkSync(outside, path.join(project, `.${host}`), "dir");
+    const target = path.join(root, host, "skills");
+
+    await assert.rejects(
+      runInstall([installer.targetPlan(host, target)], { project, hooks: true }),
+      new RegExp(`unsafe ${host[0].toUpperCase()}${host.slice(1)} project directory`)
+    );
+    assert.ok(!fs.existsSync(path.join(outside, "hooks.json")));
+    assert.ok(!fs.existsSync(target));
+  }
 });
 
 test("hooks refresh updates managed guard scripts", async () => {
@@ -877,12 +897,12 @@ test("hooks refresh full updates native Codex and Cursor configs", async () => {
   );
   const codexPath = path.join(project, ".codex", "hooks.json");
   const codex = JSON.parse(fs.readFileSync(codexPath, "utf8"));
-  codex.hooks.PreToolUse[0].hooks[0].command = 'pythonX ".gsd-path/guard_hook.py"';
+  codex.hooks.PreToolUse[0].hooks[0].command = 'python "C:\\repo\\.gsd-path\\guard_hook.py"';
   codex.userSetting = true;
   fs.writeFileSync(codexPath, JSON.stringify(codex) + "\n");
   const cursorPath = path.join(project, ".cursor", "hooks.json");
   const cursor = JSON.parse(fs.readFileSync(cursorPath, "utf8"));
-  cursor.hooks.preToolUse[0].command = 'pythonX ".gsd-path/guard_hook.py"';
+  cursor.hooks.preToolUse[0].command = 'python "C:\\repo\\.gsd-path\\guard_hook.py"';
   cursor.userSetting = true;
   fs.writeFileSync(cursorPath, JSON.stringify(cursor) + "\n");
 
@@ -894,16 +914,18 @@ test("hooks refresh full updates native Codex and Cursor configs", async () => {
   const refreshedCodex = JSON.parse(fs.readFileSync(codexPath, "utf8"));
   assert.equal(
     refreshedCodex.hooks.PreToolUse[0].hooks[0].command,
-    'python3 ".gsd-path/guard_hook.py"'
+    `python3 "${path.join(project, installer.HOOKS_DIRECTORY, "guard_hook.py")}"`
   );
   assert.equal(refreshedCodex.userSetting, true);
+  assert.equal(refreshedCodex.hooks.PreToolUse.length, 1);
   const refreshedCursor = JSON.parse(fs.readFileSync(cursorPath, "utf8"));
   assert.equal(
     refreshedCursor.hooks.preToolUse[0].command,
-    'python3 ".gsd-path/guard_hook.py"'
+    `python3 "${path.join(project, installer.HOOKS_DIRECTORY, "guard_hook.py")}"`
   );
   assert.equal(refreshedCursor.hooks.preToolUse[0].failClosed, true);
   assert.equal(refreshedCursor.userSetting, true);
+  assert.equal(refreshedCursor.hooks.preToolUse.length, 1);
 });
 
 test("hooks refresh rejects unmanaged guard scripts", async () => {

@@ -136,11 +136,12 @@ Merge upgrades manually — the installer will not overwrite existing contracts.
 ### Guard hooks (optional)
 
 ```bash
-node scripts/install.mjs --claude --project /path/to/project --hooks
+node scripts/install.mjs --claude --codex --cursor --project /path/to/project --hooks
 ```
 
 Installs `.gsd-path/` guard scripts, git `pre-commit` and `commit-msg` hooks,
-and Claude PreToolUse wiring. See [HOOKS.md](HOOKS.md).
+plus native project wiring for each selected Claude, Codex, or Cursor target.
+See [HOOKS.md](HOOKS.md).
 
 After upgrading the package:
 

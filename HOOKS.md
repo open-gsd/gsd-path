@@ -118,7 +118,7 @@ orchestrator-level.
 | Commit blocked on archive edit | Expected — ship adds to archive; edits after ship are forbidden |
 | `ship:` commit blocked with `app.py` staged | Ship commits may only touch `.project/` |
 | Tool denied editing archive | Pre-tool guard — use active paths, not archive |
-| Hook not running in Cursor | Wire `.cursor/hooks.json` manually (see table) |
+| Hook not running in Cursor | Reinstall with `--cursor --project /path/to/repo --hooks` or run `--hooks-refresh-full` |
 | `--hooks-refresh` rejected | Scripts not from prior `--hooks` install |
 
 More: [DOCS.md](DOCS.md#help) · [UPDATE.md](UPDATE.md)

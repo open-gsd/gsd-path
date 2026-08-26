@@ -50,6 +50,7 @@
     "test": "node --test tests/*.test.mjs",
     "test:python": "python3 -m unittest discover -s tests",
     "verify": "npm test && npm run test:python && python3 scripts/sync_skill_resources.py --check",
-    "verify:release": "npm run verify && python3 scripts/check_trust_evidence.py --repo ."
+    "verify:release": "npm run verify && python3 scripts/check_trust_evidence.py --repo .",
+    "prepublishOnly": "npm run verify:release"
   }
 }

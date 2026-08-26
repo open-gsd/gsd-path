@@ -16,6 +16,9 @@ A release that changes pipeline contracts is trusted only when:
 3. `npm run verify:release` accepts those receipts and proves that only trust
    evidence or its summaries changed after the tested candidate SHA.
 
+`npm publish` runs this gate through the package's `prepublishOnly` lifecycle.
+The release-trust workflow provides the same check on demand before publishing.
+
 Missing credentials, an unavailable host, or a manual result marked partial or
 unverifiable blocks release. It never becomes an implicit pass.
 

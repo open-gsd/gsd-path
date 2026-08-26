@@ -34,6 +34,10 @@ PATH_KEYS = frozenset(
     }
 )
 COMMAND_KEYS = frozenset({"command", "cmd", "script"})
+PATCH_PATH_PATTERN = re.compile(
+    r"^\*\*\* (?:Add|Update|Delete) File: (.+)$|^\*\*\* Move to: (.+)$",
+    re.MULTILINE,
+)
 # A tool skips path checks only when its name carries a read-only verb and
 # no write-capable verb: `get_and_write` must still be path-checked.
 READ_VERBS = frozenset({"read", "grep", "search", "view", "list", "get", "cat"})
@@ -167,6 +171,11 @@ def in_archive(path):
     return suffix == "" or suffix.startswith("/")
 
 
+def patch_paths(command):
+    for match in PATCH_PATH_PATTERN.finditer(command):
+        yield (match.group(1) or match.group(2)).strip()
+
+
 def deny(reason):
     # One denial object per documented host schema: decision/reason (Grok,
     # Antigravity), permission + user/agentMessage (Cursor), permissionDecision
@@ -209,6 +218,10 @@ def main():
         for path in paths:
             if in_archive(path):
                 deny(ARCHIVE_REASON)
+        for command in commands:
+            for path in patch_paths(command):
+                if in_archive(path):
+                    deny(ARCHIVE_REASON)
     for command in commands:
         for pattern, reason in COMMAND_RULES:
             if pattern.search(command):

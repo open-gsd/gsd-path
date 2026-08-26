@@ -71,7 +71,12 @@ def claude_hooks_settings(interpreter: str) -> str:
     )
 
 
-def codex_hooks_settings(interpreter: str) -> str:
+def _project_guard_command(interpreter: str, project: Path) -> str:
+    guard = project.resolve(strict=False) / HOOKS_DIRECTORY / "guard_hook.py"
+    return f'{interpreter} "{guard}"'
+
+
+def codex_hooks_settings(interpreter: str, project: Path) -> str:
     return json.dumps(
         {
             "hooks": {
@@ -81,7 +86,7 @@ def codex_hooks_settings(interpreter: str) -> str:
                         "hooks": [
                             {
                                 "type": "command",
-                                "command": f'{interpreter} ".gsd-path/guard_hook.py"',
+                                "command": _project_guard_command(interpreter, project),
                             }
                         ],
                     }
@@ -92,14 +97,14 @@ def codex_hooks_settings(interpreter: str) -> str:
     ) + "\n"
 
 
-def cursor_hooks_settings(interpreter: str) -> str:
+def cursor_hooks_settings(interpreter: str, project: Path) -> str:
     return json.dumps(
         {
             "version": 1,
             "hooks": {
                 "preToolUse": [
                     {
-                        "command": f'{interpreter} ".gsd-path/guard_hook.py"',
+                        "command": _project_guard_command(interpreter, project),
                         "matcher": ".*",
                         "failClosed": True,
                     }
@@ -663,7 +668,7 @@ def _project_destinations(
                 (
                     project / ".codex" / "hooks.json",
                     None,
-                    codex_hooks_settings(interpreter),
+                    codex_hooks_settings(interpreter, project),
                     False,
                 )
             )
@@ -672,7 +677,7 @@ def _project_destinations(
                 (
                     project / ".cursor" / "hooks.json",
                     None,
-                    cursor_hooks_settings(interpreter),
+                    cursor_hooks_settings(interpreter, project),
                     False,
                 )
             )
@@ -743,11 +748,18 @@ def _validate_project(
                 raise InstallerError(
                     f"project contract overlaps {label}: {destination}, {root}"
                 )
-    claude_directory = project / ".claude"
-    if "claude" in selected and _lexists(claude_directory) and (
-        claude_directory.is_symlink() or not claude_directory.is_dir()
-    ):
-        raise InstallerError(f"unsafe Claude project directory: {claude_directory}")
+    project_directories = []
+    if "claude" in selected:
+        project_directories.append(("Claude", project / ".claude"))
+    if hooks and "codex" in selected:
+        project_directories.append(("Codex", project / ".codex"))
+    if hooks and "cursor" in selected:
+        project_directories.append(("Cursor", project / ".cursor"))
+    for label, directory in project_directories:
+        if _lexists(directory) and (
+            directory.is_symlink() or not directory.is_dir()
+        ):
+            raise InstallerError(f"unsafe {label} project directory: {directory}")
 
 
 def _apply_project(
@@ -852,16 +864,20 @@ def _is_managed_hook_entry(entry) -> bool:
     return any(
         isinstance(hook, dict)
         and isinstance(hook.get("command"), str)
-        and f"{HOOKS_DIRECTORY}/guard_hook.py" in hook["command"]
+        and _is_guard_command(hook["command"])
         for hook in hooks_list
     )
+
+
+def _is_guard_command(command: str) -> bool:
+    return f"{HOOKS_DIRECTORY}/guard_hook.py" in command.replace("\\", "/")
 
 
 def _is_managed_direct_hook_entry(entry) -> bool:
     return (
         isinstance(entry, dict)
         and isinstance(entry.get("command"), str)
-        and f"{HOOKS_DIRECTORY}/guard_hook.py" in entry["command"]
+        and _is_guard_command(entry["command"])
     )
 
 
@@ -912,18 +928,16 @@ def _merged_claude_settings(settings: Path, interpreter: str) -> str:
 
 
 def _merged_codex_settings(settings: Path, interpreter: str) -> str:
-    managed_entry = json.loads(codex_hooks_settings(interpreter))["hooks"][
-        "PreToolUse"
-    ][0]
+    managed = codex_hooks_settings(interpreter, settings.parents[1])
+    managed_entry = json.loads(managed)["hooks"]["PreToolUse"][0]
     return _merged_hook_settings(
         settings, "PreToolUse", managed_entry, _is_managed_hook_entry
     )
 
 
 def _merged_cursor_settings(settings: Path, interpreter: str) -> str:
-    managed_entry = json.loads(cursor_hooks_settings(interpreter))["hooks"][
-        "preToolUse"
-    ][0]
+    managed = cursor_hooks_settings(interpreter, settings.parents[1])
+    managed_entry = json.loads(managed)["hooks"]["preToolUse"][0]
     return _merged_hook_settings(
         settings, "preToolUse", managed_entry, _is_managed_direct_hook_entry
     )
@@ -1452,6 +1466,16 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 else default_root(target)
             )
         )
+    extra_notes = []
+    if "antigravity" in selected and any(
+        target in selected and _same_path(roots[target], roots["antigravity"])
+        for target in ("codex", "zed")
+    ):
+        selected.remove("antigravity")
+        extra_notes.append(
+            "note: antigravity reads the same project .agents/skills directory "
+            "installed for codex/zed; skipped installing a second bundle there."
+        )
     plans = (
         detect_installs(selected, roots)
         if arguments.update
@@ -1477,6 +1501,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             update=arguments.update,
         ):
             print(result)
+        for note in extra_notes:
+            print(note)
     except InstallerError as error:
         print(f"error: {error}", file=sys.stderr)
         return 1

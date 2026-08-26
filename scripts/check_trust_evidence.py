@@ -23,6 +23,24 @@ PASS_FIELDS = (
     "integration",
 )
 GUARD_TIERS = frozenset({"native-fail-closed", "native-limited", "git-only"})
+REQUIRED_DETAILS = (
+    "Host and CLI version",
+    "Operator",
+    "Date",
+    "Fixture repository",
+    "Child-agent API used",
+    "Install command and result",
+    "Router invocation and state artifact",
+    "Child spawn output",
+    "Task branch, worktree, and landing commit",
+    "Task Verify command and result",
+    "Wave and final review artifacts",
+    "Archive validation output",
+    "Integration merge and milestone tag",
+    "Remaining `git worktree list` output",
+    "Native guard and Git-hook results",
+)
+EMPTY_DETAIL_VALUES = frozenset({"pass", "pending", "yes", "none", "n/a"})
 SUMMARY_PATHS = frozenset(
     {
         "docs/trust-validation/HOST-MATRIX.md",
@@ -62,6 +80,26 @@ def _frontmatter(path: Path) -> Dict[str, str]:
             raise EvidenceError(f"invalid evidence field in {path}: {key or line}")
         fields[key] = value
     raise EvidenceError(f"evidence frontmatter is not closed: {path}")
+
+
+def _validate_evidence_details(path: Path) -> None:
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError as error:
+        raise EvidenceError(f"cannot read evidence {path}: {error}") from error
+    details: Dict[str, str] = {}
+    for line in lines:
+        if not line.startswith("- ") or ":" not in line:
+            continue
+        label, value = line[2:].split(":", 1)
+        if label in REQUIRED_DETAILS:
+            if label in details:
+                raise EvidenceError(f"{path}: duplicate evidence detail: {label}")
+            details[label] = value.strip()
+    for label in REQUIRED_DETAILS:
+        value = details.get(label, "")
+        if not value or value.casefold() in EMPTY_DETAIL_VALUES:
+            raise EvidenceError(f"{path}: missing reproducible evidence detail: {label}")
 
 
 def _git(repo: Path, *arguments: str) -> str:
@@ -110,6 +148,7 @@ def _validate_receipt(
         raise EvidenceError(
             f"{path}: guard_tier must be one of {sorted(GUARD_TIERS)}"
         )
+    _validate_evidence_details(path)
     return receipt_candidate
 
 

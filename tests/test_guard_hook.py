@@ -106,6 +106,26 @@ class GuardHookTests(unittest.TestCase):
             }
         )
 
+    def test_denies_codex_apply_patch_inside_archive(self):
+        self.assert_denied(
+            {
+                "tool_name": "apply_patch",
+                "tool_input": {
+                    "command": "*** Begin Patch\n*** Update File: .project/archive/001-mvp/PLAN.md\n@@\n-old\n+new\n*** End Patch"
+                },
+            }
+        )
+
+    def test_allows_codex_apply_patch_outside_archive(self):
+        self.assert_allowed(
+            {
+                "tool_name": "apply_patch",
+                "tool_input": {
+                    "command": "*** Begin Patch\n*** Update File: .project/PLAN.md\n@@\n-old\n+new\n*** End Patch"
+                },
+            }
+        )
+
     def test_denies_archive_path_with_traversal(self):
         self.assert_denied(
             {

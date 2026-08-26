@@ -148,4 +148,7 @@ test("npm verification graph includes every local suite", () => {
       args: ["scripts/sync_skill_resources.py", "--check"],
     },
   ]);
+  assert.deepEqual(normalizedScriptGraph(packageJson, "prepublishOnly"), [
+    { script: "verify:release" },
+  ]);
 });

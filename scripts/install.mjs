@@ -33,7 +33,11 @@ export function claudeHooksSettings(interpreter) {
     JSON.stringify({ hooks: { PreToolUse: [claudeGuardEntry(interpreter)] } }, null, 2) + "\n"
   );
 }
-export function codexHooksSettings(interpreter) {
+function projectGuardCommand(interpreter, project) {
+  return `${interpreter} "${path.join(path.resolve(project), HOOKS_DIRECTORY, "guard_hook.py")}"`;
+}
+
+export function codexHooksSettings(interpreter, project) {
   return (
     JSON.stringify(
       {
@@ -41,7 +45,7 @@ export function codexHooksSettings(interpreter) {
           PreToolUse: [
             {
               matcher: ".*",
-              hooks: [{ type: "command", command: `${interpreter} ".gsd-path/guard_hook.py"` }],
+              hooks: [{ type: "command", command: projectGuardCommand(interpreter, project) }],
             },
           ],
         },
@@ -51,7 +55,7 @@ export function codexHooksSettings(interpreter) {
     ) + "\n"
   );
 }
-export function cursorHooksSettings(interpreter) {
+export function cursorHooksSettings(interpreter, project) {
   return (
     JSON.stringify(
       {
@@ -59,7 +63,7 @@ export function cursorHooksSettings(interpreter) {
         hooks: {
           preToolUse: [
             {
-              command: `${interpreter} ".gsd-path/guard_hook.py"`,
+              command: projectGuardCommand(interpreter, project),
               matcher: ".*",
               failClosed: true,
             },
@@ -779,7 +783,7 @@ function projectDestinations(project, selected, hooksEnabled, interpreter, hooks
       destinations.push([
         path.join(project, ".codex", "hooks.json"),
         null,
-        codexHooksSettings(interpreter),
+        codexHooksSettings(interpreter, project),
         false,
       ]);
     }
@@ -787,7 +791,7 @@ function projectDestinations(project, selected, hooksEnabled, interpreter, hooks
       destinations.push([
         path.join(project, ".cursor", "hooks.json"),
         null,
-        cursorHooksSettings(interpreter),
+        cursorHooksSettings(interpreter, project),
         false,
       ]);
     }
@@ -854,13 +858,18 @@ function validateProject(sourceRoot, project, selected, hooksEnabled, reservedRo
       }
     }
   }
-  const claudeDirectory = path.join(project, ".claude");
-  if (
-    includeClaude &&
-    lexists(claudeDirectory) &&
-    (isSymlink(claudeDirectory) || !isDirectory(claudeDirectory))
-  ) {
-    throw new InstallerError(`unsafe Claude project directory: ${claudeDirectory}`);
+  const projectDirectories = [];
+  if (includeClaude) projectDirectories.push(["Claude", path.join(project, ".claude")]);
+  if (hooksEnabled && selected.includes("codex")) {
+    projectDirectories.push(["Codex", path.join(project, ".codex")]);
+  }
+  if (hooksEnabled && selected.includes("cursor")) {
+    projectDirectories.push(["Cursor", path.join(project, ".cursor")]);
+  }
+  for (const [label, directory] of projectDirectories) {
+    if (lexists(directory) && (isSymlink(directory) || !isDirectory(directory))) {
+      throw new InstallerError(`unsafe ${label} project directory: ${directory}`);
+    }
   }
 }
 
@@ -955,6 +964,10 @@ function copyFileAtomic(source, destination) {
 }
 
 // A PreToolUse entry is ours when one of its commands runs the guard hook.
+function isGuardCommand(command) {
+  return command.replaceAll("\\", "/").includes(`${HOOKS_DIRECTORY}/guard_hook.py`);
+}
+
 function isManagedHookEntry(entry) {
   return Boolean(
     entry &&
@@ -965,7 +978,7 @@ function isManagedHookEntry(entry) {
         (hook) =>
           hook &&
           typeof hook.command === "string" &&
-          hook.command.includes(`${HOOKS_DIRECTORY}/guard_hook.py`)
+          isGuardCommand(hook.command)
       )
   );
 }
@@ -976,7 +989,7 @@ function isManagedDirectHookEntry(entry) {
       typeof entry === "object" &&
       !Array.isArray(entry) &&
       typeof entry.command === "string" &&
-      entry.command.includes(`${HOOKS_DIRECTORY}/guard_hook.py`)
+      isGuardCommand(entry.command)
   );
 }
 
@@ -1028,12 +1041,14 @@ function mergedClaudeSettings(settings, interpreter) {
 }
 
 function mergedCodexSettings(settings, interpreter) {
-  const managedEntry = JSON.parse(codexHooksSettings(interpreter)).hooks.PreToolUse[0];
+  const project = path.dirname(path.dirname(settings));
+  const managedEntry = JSON.parse(codexHooksSettings(interpreter, project)).hooks.PreToolUse[0];
   return mergedHookSettings(settings, "PreToolUse", managedEntry, isManagedHookEntry);
 }
 
 function mergedCursorSettings(settings, interpreter) {
-  const managedEntry = JSON.parse(cursorHooksSettings(interpreter)).hooks.preToolUse[0];
+  const project = path.dirname(path.dirname(settings));
+  const managedEntry = JSON.parse(cursorHooksSettings(interpreter, project)).hooks.preToolUse[0];
   return mergedHookSettings(settings, "preToolUse", managedEntry, isManagedDirectHookEntry);
 }
 
