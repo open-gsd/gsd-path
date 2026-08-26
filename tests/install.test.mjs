@@ -914,6 +914,7 @@ test("hooks refresh full updates native Codex and Cursor configs", async () => {
   const codexPath = path.join(project, ".codex", "hooks.json");
   const codex = JSON.parse(fs.readFileSync(codexPath, "utf8"));
   codex.hooks.PreToolUse[0].hooks[0].command = 'python "C:\\repo\\.gsd-path\\guard_hook.py"';
+  codex.hooks.PreToolUse[0].hooks.push({ type: "command", command: "custom-codex" });
   codex.userSetting = true;
   fs.writeFileSync(codexPath, JSON.stringify(codex) + "\n");
   const cursorPath = path.join(project, ".cursor", "hooks.json");
@@ -934,6 +935,8 @@ test("hooks refresh full updates native Codex and Cursor configs", async () => {
   );
   assert.equal(refreshedCodex.userSetting, true);
   assert.equal(refreshedCodex.hooks.PreToolUse.length, 1);
+  assert.equal(refreshedCodex.hooks.PreToolUse[0].hooks.length, 2);
+  assert.equal(refreshedCodex.hooks.PreToolUse[0].hooks[1].command, "custom-codex");
   const refreshedCursor = JSON.parse(fs.readFileSync(cursorPath, "utf8"));
   assert.equal(
     refreshedCursor.hooks.preToolUse[0].command,
@@ -1034,7 +1037,13 @@ test("hooks refresh full rejects an unselected foreign native config", async () 
   });
   const settings = path.join(project, ".codex", "hooks.json");
   fs.mkdirSync(path.dirname(settings));
-  const original = '{"note":".gsd-path/guard_hook.py"}\n';
+  const original = JSON.stringify({
+    hooks: {
+      PreToolUse: [
+        { matcher: ".*", hooks: [{ type: "command", command: "echo .gsd-path/guard_hook.py" }] },
+      ],
+    },
+  }) + "\n";
   fs.writeFileSync(settings, original);
 
   const status = await installer.main([
@@ -1390,6 +1399,7 @@ test("hooks refresh full preserves user hook events and entries", async () => {
   const settingsPath = path.join(project, ".claude", "settings.json");
   const settings = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
   settings.hooks.PreToolUse[0].matcher = "old";
+  settings.hooks.PreToolUse[0].hooks.push({ type: "command", command: "echo nested" });
   settings.hooks.PreToolUse.push({
     matcher: "WebFetch",
     hooks: [{ type: "command", command: "echo user" }],
@@ -1406,6 +1416,8 @@ test("hooks refresh full preserves user hook events and entries", async () => {
   ]);
   assert.equal(refreshed.hooks.PreToolUse.length, 2);
   assert.equal(refreshed.hooks.PreToolUse[0].matcher, installer.CLAUDE_MATCHER);
+  assert.equal(refreshed.hooks.PreToolUse[0].hooks.length, 2);
+  assert.equal(refreshed.hooks.PreToolUse[0].hooks[1].command, "echo nested");
   assert.deepEqual(refreshed.hooks.PreToolUse[1], {
     matcher: "WebFetch",
     hooks: [{ type: "command", command: "echo user" }],

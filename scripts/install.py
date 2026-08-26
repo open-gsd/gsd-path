@@ -4,6 +4,7 @@
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -883,24 +884,32 @@ def _is_managed_hook_entry(entry) -> bool:
     hooks_list = entry.get("hooks")
     if not isinstance(hooks_list, list):
         return False
-    return any(
-        isinstance(hook, dict)
-        and isinstance(hook.get("command"), str)
-        and _is_guard_command(hook["command"])
-        for hook in hooks_list
-    )
+    return any(_is_managed_command_hook(hook) for hook in hooks_list)
 
 
 def _is_guard_command(command: str) -> bool:
-    return f"{HOOKS_DIRECTORY}/guard_hook.py" in command.replace("\\", "/")
+    normalized = command.replace("\\", "/")
+    match = re.fullmatch(
+        r"(?:python3|python)\s+(?:\"([^\"\r\n]+)\"|'([^'\r\n]+)'|(\S+))",
+        normalized,
+    )
+    if match is None:
+        return False
+    script = next(value for value in match.groups() if value is not None)
+    managed_script = f"{HOOKS_DIRECTORY}/guard_hook.py"
+    return script == managed_script or script.endswith(f"/{managed_script}")
+
+
+def _is_managed_command_hook(hook) -> bool:
+    return (
+        isinstance(hook, dict)
+        and isinstance(hook.get("command"), str)
+        and _is_guard_command(hook["command"])
+    )
 
 
 def _is_managed_direct_hook_entry(entry) -> bool:
-    return (
-        isinstance(entry, dict)
-        and isinstance(entry.get("command"), str)
-        and _is_guard_command(entry["command"])
-    )
+    return _is_managed_command_hook(entry)
 
 
 def _has_managed_hook_settings(parsed: dict) -> bool:
@@ -958,18 +967,49 @@ def _merged_hook_settings(
     return json.dumps(parsed, indent=2) + "\n"
 
 
+def _merged_nested_hook_settings(settings: Path, managed_entry: dict) -> str:
+    parsed = _parsed_managed_settings(settings)
+    hooks_object = parsed.get("hooks")
+    if not isinstance(hooks_object, dict):
+        hooks_object = {}
+    existing = hooks_object.get("PreToolUse")
+    if not isinstance(existing, list):
+        existing = []
+    merged = []
+    replaced = False
+    for entry in existing:
+        if not _is_managed_hook_entry(entry):
+            merged.append(entry)
+            continue
+        unrelated_hooks = [
+            hook for hook in entry["hooks"] if not _is_managed_command_hook(hook)
+        ]
+        if not replaced:
+            merged.append(
+                {
+                    **entry,
+                    **managed_entry,
+                    "hooks": [*managed_entry["hooks"], *unrelated_hooks],
+                }
+            )
+            replaced = True
+        elif unrelated_hooks:
+            merged.append({**entry, "hooks": unrelated_hooks})
+    if not replaced:
+        merged.append(managed_entry)
+    hooks_object["PreToolUse"] = merged
+    parsed["hooks"] = hooks_object
+    return json.dumps(parsed, indent=2) + "\n"
+
+
 def _merged_claude_settings(settings: Path, interpreter: str) -> str:
-    return _merged_hook_settings(
-        settings, "PreToolUse", _claude_guard_entry(interpreter), _is_managed_hook_entry
-    )
+    return _merged_nested_hook_settings(settings, _claude_guard_entry(interpreter))
 
 
 def _merged_codex_settings(settings: Path, interpreter: str) -> str:
     managed = codex_hooks_settings(interpreter)
     managed_entry = json.loads(managed)["hooks"]["PreToolUse"][0]
-    return _merged_hook_settings(
-        settings, "PreToolUse", managed_entry, _is_managed_hook_entry
-    )
+    return _merged_nested_hook_settings(settings, managed_entry)
 
 
 def _merged_cursor_settings(settings: Path, interpreter: str) -> str:

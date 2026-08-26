@@ -119,7 +119,7 @@ class GuardHookTests(unittest.TestCase):
         self.assert_allowed(
             {
                 "tool_name": "apply_patch",
-                "tool_input": "*** Begin Patch\n*** Update File: .project/PLAN.md\n@@\n-old\n+new\n*** End Patch",
+                "tool_input": "*** Begin Patch\n*** Update File: README.md\n@@\n-old\n+git reset --hard is blocked\n*** End Patch",
             }
         )
 

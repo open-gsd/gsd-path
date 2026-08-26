@@ -980,7 +980,24 @@ function copyFileAtomic(source, destination) {
 
 // A PreToolUse entry is ours when one of its commands runs the guard hook.
 function isGuardCommand(command) {
-  return command.replaceAll("\\", "/").includes(`${HOOKS_DIRECTORY}/guard_hook.py`);
+  const normalized = command.replaceAll("\\", "/");
+  const match = /^(?:python3|python)\s+(?:"([^"\r\n]+)"|'([^'\r\n]+)'|(\S+))$/.exec(
+    normalized
+  );
+  if (match === null) return false;
+  const script = match[1] || match[2] || match[3];
+  const managedScript = `${HOOKS_DIRECTORY}/guard_hook.py`;
+  return script === managedScript || script.endsWith(`/${managedScript}`);
+}
+
+function isManagedCommandHook(hook) {
+  return Boolean(
+    hook &&
+      typeof hook === "object" &&
+      !Array.isArray(hook) &&
+      typeof hook.command === "string" &&
+      isGuardCommand(hook.command)
+  );
 }
 
 function isManagedHookEntry(entry) {
@@ -989,23 +1006,12 @@ function isManagedHookEntry(entry) {
       typeof entry === "object" &&
       !Array.isArray(entry) &&
       Array.isArray(entry.hooks) &&
-      entry.hooks.some(
-        (hook) =>
-          hook &&
-          typeof hook.command === "string" &&
-          isGuardCommand(hook.command)
-      )
+      entry.hooks.some(isManagedCommandHook)
   );
 }
 
 function isManagedDirectHookEntry(entry) {
-  return Boolean(
-    entry &&
-      typeof entry === "object" &&
-      !Array.isArray(entry) &&
-      typeof entry.command === "string" &&
-      isGuardCommand(entry.command)
-  );
+  return isManagedCommandHook(entry);
 }
 
 function hasManagedHookSettings(parsed) {
@@ -1057,18 +1063,45 @@ function mergedHookSettings(settings, eventName, managedEntry, isManagedEntry) {
   return JSON.stringify(parsed, null, 2) + "\n";
 }
 
+function mergedNestedHookSettings(settings, managedEntry) {
+  const parsed = parsedManagedSettings(settings);
+  const hooksObject =
+    parsed.hooks && typeof parsed.hooks === "object" && !Array.isArray(parsed.hooks)
+      ? parsed.hooks
+      : {};
+  const existing = Array.isArray(hooksObject.PreToolUse) ? hooksObject.PreToolUse : [];
+  const merged = [];
+  let replaced = false;
+  for (const entry of existing) {
+    if (!isManagedHookEntry(entry)) {
+      merged.push(entry);
+      continue;
+    }
+    const unrelatedHooks = entry.hooks.filter((hook) => !isManagedCommandHook(hook));
+    if (!replaced) {
+      merged.push({
+        ...entry,
+        ...managedEntry,
+        hooks: [...managedEntry.hooks, ...unrelatedHooks],
+      });
+      replaced = true;
+    } else if (unrelatedHooks.length > 0) {
+      merged.push({ ...entry, hooks: unrelatedHooks });
+    }
+  }
+  if (!replaced) merged.push(managedEntry);
+  hooksObject.PreToolUse = merged;
+  parsed.hooks = hooksObject;
+  return JSON.stringify(parsed, null, 2) + "\n";
+}
+
 function mergedClaudeSettings(settings, interpreter) {
-  return mergedHookSettings(
-    settings,
-    "PreToolUse",
-    claudeGuardEntry(interpreter),
-    isManagedHookEntry
-  );
+  return mergedNestedHookSettings(settings, claudeGuardEntry(interpreter));
 }
 
 function mergedCodexSettings(settings, interpreter) {
   const managedEntry = JSON.parse(codexHooksSettings(interpreter)).hooks.PreToolUse[0];
-  return mergedHookSettings(settings, "PreToolUse", managedEntry, isManagedHookEntry);
+  return mergedNestedHookSettings(settings, managedEntry);
 }
 
 function mergedCursorSettings(settings, interpreter) {

@@ -1341,6 +1341,9 @@ class InstallerTests(unittest.TestCase):
         codex["hooks"]["PreToolUse"][0]["hooks"][0]["command"] = (
             'python "C:\\repo\\.gsd-path\\guard_hook.py"'
         )
+        codex["hooks"]["PreToolUse"][0]["hooks"].append(
+            {"type": "command", "command": "custom-codex"}
+        )
         codex["userSetting"] = True
         codex_path.write_text(json.dumps(codex) + "\n", encoding="utf-8")
         cursor_path = project / ".cursor" / "hooks.json"
@@ -1364,6 +1367,11 @@ class InstallerTests(unittest.TestCase):
         )
         self.assertTrue(refreshed_codex["userSetting"])
         self.assertEqual(1, len(refreshed_codex["hooks"]["PreToolUse"]))
+        self.assertEqual(2, len(refreshed_codex["hooks"]["PreToolUse"][0]["hooks"]))
+        self.assertEqual(
+            "custom-codex",
+            refreshed_codex["hooks"]["PreToolUse"][0]["hooks"][1]["command"],
+        )
         refreshed_cursor = json.loads(cursor_path.read_text(encoding="utf-8"))
         self.assertEqual(
             'python3 ".gsd-path/guard_hook.py"',
@@ -1459,7 +1467,26 @@ class InstallerTests(unittest.TestCase):
         self.run_main(self.hooks_arguments(project, self.root / "claude" / "skills"))
         settings = project / ".codex" / "hooks.json"
         settings.parent.mkdir()
-        original = '{"note": ".gsd-path/guard_hook.py"}\n'
+        original = (
+            json.dumps(
+                {
+                    "hooks": {
+                        "PreToolUse": [
+                            {
+                                "matcher": ".*",
+                                "hooks": [
+                                    {
+                                        "type": "command",
+                                        "command": "echo .gsd-path/guard_hook.py",
+                                    }
+                                ],
+                            }
+                        ]
+                    }
+                }
+            )
+            + "\n"
+        )
         settings.write_text(original, encoding="utf-8")
 
         status, _, error = self.run_main(self.refresh_full_arguments(project))
@@ -1619,6 +1646,9 @@ class InstallerTests(unittest.TestCase):
         settings_path = project / ".claude" / "settings.json"
         settings = json.loads(settings_path.read_text(encoding="utf-8"))
         settings["hooks"]["PreToolUse"][0]["matcher"] = "old"
+        settings["hooks"]["PreToolUse"][0]["hooks"].append(
+            {"type": "command", "command": "echo nested"}
+        )
         user_entry = {
             "matcher": "WebFetch",
             "hooks": [{"type": "command", "command": "echo user"}],
@@ -1634,6 +1664,11 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(2, len(refreshed["hooks"]["PreToolUse"]))
         self.assertEqual(
             install.CLAUDE_MATCHER, refreshed["hooks"]["PreToolUse"][0]["matcher"]
+        )
+        self.assertEqual(2, len(refreshed["hooks"]["PreToolUse"][0]["hooks"]))
+        self.assertEqual(
+            "echo nested",
+            refreshed["hooks"]["PreToolUse"][0]["hooks"][1]["command"],
         )
         self.assertEqual(user_entry, refreshed["hooks"]["PreToolUse"][1])
 

@@ -33,7 +33,7 @@ PATH_KEYS = frozenset(
         "directory",
     }
 )
-COMMAND_KEYS = frozenset({"command", "cmd", "script", "tool_input", "toolinput"})
+COMMAND_KEYS = frozenset({"command", "cmd", "script"})
 PATCH_PATH_PATTERN = re.compile(
     r"^\*\*\* (?:Add|Update|Delete) File: (.+)$|^\*\*\* Move to: (.+)$",
     re.MULTILINE,
@@ -156,9 +156,17 @@ def normalize_posix(path):
     return "/" + "/".join(parts)
 
 
+def tool_tokens(tool):
+    return {token.casefold() for token in TOOL_TOKEN_PATTERN.findall(tool)}
+
+
 def is_read_tool(tool):
-    tokens = {token.casefold() for token in TOOL_TOKEN_PATTERN.findall(tool)}
+    tokens = tool_tokens(tool)
     return bool(tokens & READ_VERBS) and not tokens & WRITE_VERBS
+
+
+def is_patch_tool(tool):
+    return "patch" in tool_tokens(tool)
 
 
 def in_archive(path):
@@ -172,8 +180,8 @@ def in_archive(path):
     return suffix == "" or suffix.startswith("/")
 
 
-def patch_paths(command):
-    for match in PATCH_PATH_PATTERN.finditer(command):
+def patch_paths(payload):
+    for match in PATCH_PATH_PATTERN.finditer(payload):
         yield (match.group(1) or match.group(2)).strip()
 
 
@@ -209,12 +217,19 @@ def evaluate(event):
         raise ValueError("hook event is missing its tool name")
     paths, commands = [], []
     collect(event, paths, commands)
+    patch_payloads = []
+    if is_patch_tool(tool):
+        patch_payloads.extend(commands)
+        raw_input = event.get("tool_input", event.get("toolInput"))
+        if isinstance(raw_input, str):
+            patch_payloads.append(raw_input)
+        commands = []
     if not is_read_tool(tool):
         for path in paths:
             if in_archive(path):
                 deny(ARCHIVE_REASON)
-        for command in commands:
-            for path in patch_paths(command):
+        for payload in patch_payloads:
+            for path in patch_paths(payload):
                 if in_archive(path):
                     deny(ARCHIVE_REASON)
     for command in commands:
