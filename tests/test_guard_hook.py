@@ -175,6 +175,27 @@ class GuardHookTests(unittest.TestCase):
             }
         )
 
+    def test_allows_read_tool_from_archive_working_directory(self):
+        self.assert_allowed(
+            {
+                "tool_name": "Read",
+                "tool_input": {
+                    "path": "NOTE.md",
+                    "cwd": ".project/archive/001-mvp",
+                },
+            }
+        )
+
+    def test_denies_ambiguous_archive_mutations(self):
+        for command in (
+            "rm .project/$(printf archive)/001-mvp/NOTE.md",
+            "cd .project && rm archive/001-mvp/NOTE.md",
+        ):
+            with self.subTest(command=command):
+                self.assert_denied(
+                    {"tool_name": "Bash", "tool_input": {"command": command}}
+                )
+
     def test_denies_write_capable_and_multiline_archive_reads(self):
         for command in (
             "git diff --output=.project/archive/001-mvp/NOTE.md HEAD",
@@ -222,6 +243,8 @@ class GuardHookTests(unittest.TestCase):
             "exec git branch --delete --force task",
             "pwsh -Command 'git reset --hard HEAD~1'",
             "cmd /c 'git clean -fd'",
+            "env -- git reset --hard HEAD~1",
+            "env -u TOKEN -- git clean -fd",
         ):
             with self.subTest(command=command):
                 self.assert_denied(
@@ -232,6 +255,7 @@ class GuardHookTests(unittest.TestCase):
         for command in (
             "bash -lc 'git status'",
             "command git branch -d merged",
+            "env -- git status",
         ):
             with self.subTest(command=command):
                 self.assert_allowed(

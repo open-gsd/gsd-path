@@ -85,7 +85,7 @@ version, child, guard tier, landing commit, task branch, milestone tag, and the
 exact state, verify, review, archive, and guard paths. Those paths must exist
 and be non-empty at the integration commit. Verify, review, and guard artifacts
 must be inside the archived milestone; state must record `phase: shipped` and
-`status: done`.
+`status: done` and pass the bundled `pipeline_state.py validate` command.
 
 Do not mark `child_spawn: pass` for a top-level CLI invocation. If any result
 is missing or cannot be reproduced, set the affected field to `unverifiable`.

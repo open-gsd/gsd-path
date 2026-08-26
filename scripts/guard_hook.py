@@ -99,6 +99,7 @@ ARCHIVE_READ_GIT_COMMANDS = frozenset({"status", "diff", "log", "show", "ls-file
 GIT_READ_WRITE_OPTIONS = frozenset({"--output", "--ext-diff", "--textconv"})
 ARCHIVE_READ_EXECUTION_OPTIONS = {"rg": frozenset({"--pre"})}
 AMBIGUOUS_SHELL_SYNTAX = re.compile(r"[\r\n|;&<>`]|\$\(|@\(")
+SHELL_EXPANSION_SYNTAX = re.compile(r"`|\$\(|@\(")
 GIT_REASONS = {
     "reset": "git reset --hard discards work the build recovery protocol needs",
     "clean": "git clean -f deletes untracked evidence and retained task worktrees",
@@ -107,6 +108,10 @@ GIT_REASONS = {
 }
 GIT_GLOBAL_OPTIONS_WITH_VALUES = frozenset(
     {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--config-env"}
+)
+ENV_OPTIONS_WITH_VALUES = frozenset({"-C", "-u", "--chdir", "--unset"})
+ENV_OPTIONS_WITHOUT_VALUES = frozenset(
+    {"-0", "-i", "-v", "--debug", "--ignore-environment", "--null"}
 )
 POSIX_SHELL_WRAPPERS = frozenset({"bash", "dash", "fish", "ksh", "sh", "zsh"})
 POWERSHELL_WRAPPERS = frozenset(
@@ -237,7 +242,46 @@ def path_in_archive(path, working_directories=()):
 
 
 def command_references_archive(tokens, working_directories):
-    return any(path_in_archive(token, working_directories) for token in tokens)
+    current_directories = list(working_directories)
+    for segment in command_segments(tokens):
+        if any(path_in_archive(token, current_directories) for token in segment):
+            return True
+        wrapped = wrapped_command_tokens(segment)
+        if wrapped is not None and command_references_archive(
+            wrapped, current_directories
+        ):
+            return True
+        invocation = command_invocation(segment)
+        if invocation is None or invocation[0] != "cd":
+            continue
+        operands = [
+            argument
+            for argument in invocation[1]
+            if argument != "--" and not argument.startswith("-")
+        ]
+        if not operands:
+            continue
+        target = operands[-1]
+        if is_absolute_path(target):
+            current_directories = [target]
+        else:
+            bases = current_directories or [""]
+            current_directories = [f"{base}/{target}" for base in bases]
+    return False
+
+
+def unresolved_archive_expansion(command, working_directories):
+    if not SHELL_EXPANSION_SYNTAX.search(command):
+        return False
+    lowered = command.replace("\\", "/").casefold()
+    return (
+        ".project" in lowered
+        or "archive" in lowered
+        or any(
+            "/.project" in normalize_posix(path).casefold()
+            for path in working_directories
+        )
+    )
 
 
 def patch_paths(payload):
@@ -281,12 +325,25 @@ def command_invocation(segment):
         index += 1
         while index < len(segment):
             token = segment[index]
-            if "=" in token and not token.startswith("="):
+            if token == "--":
+                index += 1
+                break
+            if SHELL_ASSIGNMENT_PATTERN.match(token):
                 index += 1
                 continue
-            if token in {"-i", "--ignore-environment"}:
+            option = token.split("=", 1)[0]
+            if option in ENV_OPTIONS_WITHOUT_VALUES:
                 index += 1
                 continue
+            if option in ENV_OPTIONS_WITH_VALUES:
+                index += 1
+                if "=" not in token:
+                    if index >= len(segment):
+                        raise ValueError("env option lacks a value")
+                    index += 1
+                continue
+            if token.startswith("-"):
+                raise ValueError("env invocation cannot be validated")
             break
     if index >= len(segment):
         return None
@@ -397,10 +454,10 @@ def destructive_git_reason(tokens):
 
 
 def archive_command_is_read_only(command, tokens, archive_context=False):
+    if archive_context and AMBIGUOUS_SHELL_SYNTAX.search(command):
+        return False
     if not archive_context:
         return True
-    if AMBIGUOUS_SHELL_SYNTAX.search(command):
-        return False
     executable = tokens[0].replace("\\", "/").rsplit("/", 1)[-1].casefold()
     denied_options = ARCHIVE_READ_EXECUTION_OPTIONS.get(executable, ())
     if any(
@@ -460,7 +517,8 @@ def evaluate(event):
         if isinstance(raw_input, str):
             patch_payloads.append(raw_input)
         commands = []
-    if not is_read_tool(tool):
+    read_tool = is_read_tool(tool)
+    if not read_tool:
         for path in paths:
             if path_in_archive(path, working_directories):
                 deny(ARCHIVE_REASON)
@@ -469,7 +527,7 @@ def evaluate(event):
                 if path_in_archive(path, working_directories):
                     deny(ARCHIVE_REASON)
     archive_working_directory = any(in_archive(path) for path in working_directories)
-    if archive_working_directory and not commands:
+    if archive_working_directory and not commands and not read_tool:
         deny(ARCHIVE_REASON)
     for command in commands:
         tokens = shell_tokens(command)
@@ -477,6 +535,7 @@ def evaluate(event):
             archive_working_directory
             or bool(ARCHIVE_REFERENCE.search(command))
             or command_references_archive(tokens, working_directories)
+            or unresolved_archive_expansion(command, working_directories)
         )
         if not archive_command_is_read_only(command, tokens, archive_context):
             deny(ARCHIVE_REASON)

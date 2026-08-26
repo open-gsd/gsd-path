@@ -14,6 +14,7 @@ class TrustEvidenceTests(unittest.TestCase):
         self.repo = Path(self.temporary.name)
         self.fixtures = {}
         self.omit_fixture_artifact = {}
+        self.fixture_states = {}
         self.guard_tiers = {
             "alpha": "native-fail-closed",
             "beta": "git-only",
@@ -102,10 +103,22 @@ class TrustEvidenceTests(unittest.TestCase):
             "guards": f"{archive}/guards.json",
         }
         run_manifest = f".project/trust-runs/{run_id}/manifest.json"
-        files = {
-            artifact_paths["state"]: (
-                "---\npipeline: gsd-path/v2\nphase: shipped\nstatus: done\n---\n"
+        state = self.fixture_states.get(
+            host,
+            (
+                "---\n"
+                "pipeline: gsd-path/v2\n"
+                f"project: {host}\n"
+                f"milestone: {host}\n"
+                "phase: shipped\n"
+                "status: done\n"
+                "branch: gsd-path/M001\n"
+                f"archive: {archive}/\n"
+                "---\n"
             ),
+        )
+        files = {
+            artifact_paths["state"]: state,
             artifact_paths["verify"]: "task verify passed\n",
             artifact_paths["wave_review"]: "wave review passed\n",
             artifact_paths["final_review"]: "final review passed\n",
@@ -454,6 +467,19 @@ class TrustEvidenceTests(unittest.TestCase):
 
         with self.assertRaisesRegex(
             check_trust_evidence.EvidenceError, "bundled artifact is missing"
+        ):
+            check_trust_evidence.validate_repository(self.repo)
+
+    def test_rejects_bundled_state_missing_canonical_fields(self):
+        self.fixture_states["alpha"] = (
+            "---\npipeline: gsd-path/v2\nphase: shipped\nstatus: done\n---\n"
+        )
+        self.receipt("alpha")
+        self.receipt("beta")
+        self.commit_receipts()
+
+        with self.assertRaisesRegex(
+            check_trust_evidence.EvidenceError, "bundled state is invalid"
         ):
             check_trust_evidence.validate_repository(self.repo)
 

@@ -229,25 +229,41 @@ def _bundle_blob(fixture: Path, commit: str, path: str, bundle: Path) -> str:
     return content
 
 
-def _validate_shipped_state(content: str, path: str, bundle: Path) -> None:
-    lines = content.splitlines()
-    if not lines or lines[0] != "---":
-        raise EvidenceError(f"{bundle}: bundled state lacks frontmatter: {path}")
-    fields = {}
-    closed = False
-    for line in lines[1:]:
-        if line == "---":
-            closed = True
-            break
-        if ":" in line:
-            key, value = line.split(":", 1)
-            fields[key.strip()] = value.split("#", 1)[0].strip()
-    if not closed:
-        raise EvidenceError(f"{bundle}: bundled state frontmatter is not closed: {path}")
-    expected = {"pipeline": PIPELINE, "phase": "shipped", "status": "done"}
-    for key, value in expected.items():
-        if fields.get(key) != value:
-            raise EvidenceError(f"{bundle}: bundled state {key} must be {value!r}")
+def _validate_shipped_state(
+    content: str, path: str, archive: str, bundle: Path
+) -> None:
+    if path != ".project/STATE.md":
+        raise EvidenceError(f"{bundle}: bundled state must be .project/STATE.md")
+    with tempfile.TemporaryDirectory(prefix="gsd-path-state-evidence-") as temporary:
+        root = Path(temporary)
+        state_path = root / path
+        state_path.parent.mkdir(parents=True)
+        state_path.write_text(content, encoding="utf-8")
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(Path(__file__).resolve().with_name("pipeline_state.py")),
+                "validate",
+                "--repo",
+                str(root),
+            ],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip()
+        raise EvidenceError(f"{bundle}: bundled state is invalid: {detail}")
+    try:
+        state = json.loads(result.stdout)["state"]
+    except (json.JSONDecodeError, KeyError, TypeError) as error:
+        raise EvidenceError(
+            f"{bundle}: bundled state validator returned invalid JSON"
+        ) from error
+    if state.get("phase") != "shipped" or state.get("status") != "done":
+        raise EvidenceError(f"{bundle}: bundled state must be shipped and done")
+    if str(state.get("archive", "")).rstrip("/") != archive.rstrip("/"):
+        raise EvidenceError(f"{bundle}: bundled state archive does not match evidence")
 
 
 def _validate_run_artifacts(
@@ -317,7 +333,7 @@ def _validate_run_artifacts(
     ):
         raise EvidenceError(f"{bundle}: archive artifact is empty")
     state = _bundle_blob(fixture, integration_commit, paths["state"], bundle)
-    _validate_shipped_state(state, paths["state"], bundle)
+    _validate_shipped_state(state, paths["state"], archive, bundle)
     for label in ("verify", "wave_review", "final_review"):
         _bundle_blob(fixture, integration_commit, paths[label], bundle)
     try:
