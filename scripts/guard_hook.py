@@ -155,6 +155,7 @@ UNVALIDATED_EXECUTION_COMMANDS = frozenset(
         "xargs.exe",
     }
 )
+FIND_EXECUTION_ACTIONS = frozenset({"-exec", "-execdir", "-ok", "-okdir"})
 SHELL_CONTROL_WORDS = frozenset(
     {
         "!",
@@ -401,7 +402,8 @@ def command_references_archive(tokens, working_directories):
 
 
 def environment_parameter_value(match):
-    return os.environ.get(match.group(1) or match.group(2), "")
+    name = match.group(1) or match.group(2)
+    return os.environ.get(name, match.group(0))
 
 
 def expand_environment_parameters(command):
@@ -506,6 +508,11 @@ def command_invocation(segment):
         raise ValueError("shell executable cannot be validated")
     if executable in SHELL_CONTROL_WORDS:
         raise ValueError("shell control syntax cannot be validated")
+    if executable in {"find", "find.exe"} and any(
+        argument.casefold() in FIND_EXECUTION_ACTIONS
+        for argument in segment[index + 1:]
+    ):
+        raise ValueError("find execution action cannot be validated")
     if executable in UNVALIDATED_EXECUTION_COMMANDS:
         raise ValueError("shell execution command cannot be validated")
     return executable, segment[index + 1:]

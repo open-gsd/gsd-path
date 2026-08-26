@@ -201,6 +201,7 @@ class GuardHookTests(unittest.TestCase):
             "rm .project/$(printf archive)/001-mvp/NOTE.md",
             "cd .project && rm archive/001-mvp/NOTE.md",
             'P=.project; rm "$P/archive/001-mvp/NOTE.md"',
+            'A=.pro; B=ject/ar; C=chive; rm -rf "$A$B$C"',
             "bash -lc '(cd .project && rm archive/001-mvp/NOTE.md)'",
             "bash -lc 'pushd .project >/dev/null && rm archive/001-mvp/PLAN.md'",
         ):
@@ -276,6 +277,7 @@ class GuardHookTests(unittest.TestCase):
             'echo "$(git reset --hard HEAD~1)"',
             "bash -lc 'export HOME=/tmp/aliases; git wipe HEAD~1'",
             "printf '%s\\0' reset --hard HEAD~1 | xargs -0 git",
+            "find . -maxdepth 0 -exec git reset --hard HEAD~1 \\;",
         ):
             with self.subTest(command=command):
                 self.assert_denied(
@@ -446,6 +448,7 @@ class GuardHookTests(unittest.TestCase):
             "command git branch -d merged",
             "env -- git status",
             "git -c core.quotepath=false status",
+            "find . -maxdepth 1 -type f",
         ):
             with self.subTest(command=command):
                 self.assert_allowed(

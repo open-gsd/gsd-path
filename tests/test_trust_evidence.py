@@ -21,6 +21,7 @@ class TrustEvidenceTests(unittest.TestCase):
         self.unrelated_integration_hosts = set()
         self.blocked_final_hosts = set()
         self.shared_history_groups = {}
+        self.shared_landing_groups = set()
         self.guard_tiers = {
             "alpha": "native-fail-closed",
             "beta": "git-only",
@@ -105,7 +106,9 @@ class TrustEvidenceTests(unittest.TestCase):
         for evidence_host in fixture_hosts[1:]:
             git("commit", "--allow-empty", "-qm", f"land {evidence_host} task")
             landing_commit = git("rev-parse", "HEAD")
-            landing_commits[evidence_host] = landing_commit
+            landing_commits[evidence_host] = (
+                landing if host in self.shared_landing_groups else landing_commit
+            )
             for review_name in ("FINAL.md", "final-gap-1.md"):
                 review = repository / ".project" / "review" / review_name
                 review.write_text(
@@ -531,7 +534,19 @@ class TrustEvidenceTests(unittest.TestCase):
         self.commit_receipts()
 
         with self.assertRaisesRegex(
-            check_trust_evidence.EvidenceError, "share one milestone history"
+            check_trust_evidence.EvidenceError, "share one ship commit"
+        ):
+            check_trust_evidence.validate_repository(self.repo)
+
+    def test_rejects_one_landing_reused_for_multiple_hosts(self):
+        self.shared_history_groups["alpha"] = ("alpha", "beta")
+        self.shared_landing_groups.add("alpha")
+        self.receipt("alpha")
+        self.receipt("beta")
+        self.commit_receipts()
+
+        with self.assertRaisesRegex(
+            check_trust_evidence.EvidenceError, "share one landing commit"
         ):
             check_trust_evidence.validate_repository(self.repo)
 

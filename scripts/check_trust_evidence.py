@@ -808,6 +808,7 @@ def validate_repository(repo: Path) -> Mapping:
     candidate = ""
     evidence_paths: List[Path] = []
     run_owners: Dict[str, str] = {}
+    landing_owners: Dict[str, str] = {}
     ship_owners: Dict[str, str] = {}
     integration_owners: Dict[str, str] = {}
     for host in hosts:
@@ -828,14 +829,15 @@ def validate_repository(repo: Path) -> Mapping:
                 f"hosts {previous_host} and {host} share one live run_id"
             )
         run_owners[identity.run_id] = host
-        for commit, owners in (
-            (identity.ship_commit, ship_owners),
-            (identity.integration_commit, integration_owners),
+        for label, commit, owners in (
+            ("landing commit", identity.landing_commit, landing_owners),
+            ("ship commit", identity.ship_commit, ship_owners),
+            ("integration commit", identity.integration_commit, integration_owners),
         ):
             previous_host = owners.get(commit)
             if previous_host is not None:
                 raise EvidenceError(
-                    f"hosts {previous_host} and {host} share one milestone history"
+                    f"hosts {previous_host} and {host} share one {label}"
                 )
             owners[commit] = host
         evidence_paths.extend((receipt, *artifacts))

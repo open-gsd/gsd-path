@@ -19,8 +19,8 @@ node /Users/jeremymcspadden/github/open-gsd/gsd-path/scripts/install.mjs \
 
 **Result:** PASS
 
-- codex → `.agents/skills` (9 skills at the time of this run; the package now installs 11)
-- claude → `.claude/skills` (9 skills at the time of this run; the package now installs 11)
+- codex → `.agents/skills` (9 skills at the time of this run)
+- claude → `.claude/skills` (9 skills at the time of this run)
 - cursor → `.cursor/skills` + `.cursor/agents/gsd-path.md`
 - project → `AGENTS.md`, `WORKFLOW.md`, `.claude/CLAUDE.md`, `.gsd-path/*`, Claude settings, git hooks
 
