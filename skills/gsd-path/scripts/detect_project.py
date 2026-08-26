@@ -10,8 +10,9 @@ Verdicts:
 
 - owned — `.project/` is a real directory with a regular `STATE.md` and no
   unsafe project paths; route by that file, not detection
-- orphan — `.project/` is unsafe, or it contains a file or directory without
-  a safe regular `STATE.md`
+- orphan — `.project/` is unsafe, or it contains an entry without a safe
+  regular `STATE.md`; the initializer's regular temporary state file is
+  recoverable and does not make the project orphaned
 - brownfield — no owned state, `.project/` empty or absent, and at least one
   in-scope signal (package/build manifest, source file, tracked signal in
   git, or substantive system documentation)
