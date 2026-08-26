@@ -1,5 +1,8 @@
 # GSD Path — Documentation vs Code Gap Catalog
 
+> Historical catalog from 2026-08-05. Resolved and newly gated behavior is
+> tracked by `TRUST-VALIDATION-SPEC.md` and `HOST-MATRIX.md`.
+
 **Generated:** 2026-08-05 (workstream: Catalog documentation vs code gaps)
 **Primary sources:** live repo read + commands; reconciled with `.project/research/DOCS-AUDIT.md` (2026-08-02) and `evidence-codebase.md`.
 

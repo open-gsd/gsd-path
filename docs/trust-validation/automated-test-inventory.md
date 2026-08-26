@@ -51,17 +51,18 @@ dependency.
 | `tests/test_sync_skill_resources.py` | unittest | generated resources, manifest-owned links, and dispatch branches |
 | `tests/test_task_briefs.py` | unittest | task frontmatter, recorded bases, ownership, commit evidence, and verify scope |
 | `tests/test_wizard_tty.py` | unittest | no-flag CLI opens the wizard on a real PTY and hands off to the installer |
-| `tests/dogfood.py` | script (`--host claude\|codex`) | **Live** host run: local install, headless `/gsd-path-docs-audit`, `check_docs_audit.py` gate, guard deny/allow; writes an evidence record. `.github/workflows/dogfood.yml` runs it on dispatch/weekly with API secrets |
+| `tests/test_trust_evidence.py` | unittest | all-host release receipts, candidate ancestry, pass fields, and evidence-only follow-up diff |
+| `tests/dogfood.py` | script (`--host <declared-host>`) | **Live** host run: Claude/Codex have headless adapters; every other declared host routes explicitly to the manual full-evidence template instead of being silently omitted |
 
-**Note:** `scripts/install.py` is covered by `tests/test_install.py`. The
-remaining parity gap is that `install.py` has no `--local` or
-`--update` flags — those flows are Node-only.
+**Note:** `scripts/install.py` is covered by `tests/test_install.py`, including
+project-local install and managed-install update behavior. The Node CLI remains
+the interactive wizard and npm entry point.
 
 ## Coverage by trust dimension (journey order)
 
 | Dimension | Automated signal | Strength |
 |-----------|------------------|----------|
-| **1. Install & update** | `install.test.mjs`, `test_install.py`, `test_check_update.py`, hook install/refresh tests | **Strong** for both installers; `--local`/`--update` flows remain Node-only |
+| **1. Install & update** | `install.test.mjs`, `test_install.py`, `test_check_update.py`, hook install/refresh tests | **Strong** for Node and Python local/update transactions |
 | **2. Invoke & route** | `test_detect_project.py`, `test_router_contract.py`, `test_pipeline_state.py`, `test_full_cycle.py`, `test_implicit_invocation.py` | **Partial** — classification, initialization, route, and transition decisions are deterministic; live host routing is covered only by dogfood |
 | **3. Phase execution** | `test_full_cycle.py`, `test_handoffs.py`, `test_task_briefs.py` | **Strong** for the disk contract — phase outputs have executable gates |
 | **4. Build orchestration** | `test_build_state.py`, `test_isolation.py`, `test_full_cycle.py` | **Partial** — readiness, recovery, and helper chain are proven; live child-agent dispatch is not automated |
@@ -77,8 +78,8 @@ remaining parity gap is that `install.py` has no `--local` or
 - Live router execution of the deterministic recovery decisions
 - Live orchestrator child-agent scheduling and parallel dispatch
 - Per-host runtime dispatch (Cursor Task, Claude subagents, etc.) beyond install artifacts
-- `scripts/install.py` parity for `--local` / `--update` (Node-only flags; the rest of `install.py` is covered by `test_install.py`)
-- Non-Claude guard hook wiring (only Claude settings + git hooks tested via installer)
+- Native guard wiring outside Claude, Codex, and Cursor
+- Full live release receipts for every advertised host
 - Networked `check_update` fetch (mocked in tests only)
 - OpenCode v2, Kiro, Kimi implicit-invocation behavior (installer notes warnings; no tests)
 

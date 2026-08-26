@@ -96,7 +96,9 @@ node scripts/install.mjs --claude --project "$(pwd)" --hooks
 
 Full roots and invocation table: [README.md](README.md#install-summary).
 
-**Python installer:** `scripts/install.py` — same global install; no `--local` UI.
+**Python installer:** `scripts/install.py` supports global and `--local`
+installs plus `--update`. The Node CLI remains the interactive wizard and npm
+entry point.
 Help: `node scripts/install.mjs --help`
 
 ---

@@ -1,4 +1,17 @@
 {
+  "hosts": {
+    "codex": {"local_root": ".agents/skills"},
+    "claude": {"local_root": ".claude/skills"},
+    "grok": {"local_root": ".grok/skills"},
+    "opencode": {"local_root": ".opencode/skills"},
+    "copilot": {"local_root": ".github/skills"},
+    "qwen": {"local_root": ".qwen/skills"},
+    "antigravity": {"local_root": ".agents/skills"},
+    "cursor": {"local_root": ".cursor/skills"},
+    "zed": {"local_root": ".agents/skills"},
+    "kiro": {"local_root": ".kiro/skills"},
+    "kimi": {"local_root": ".kimi-code/skills"}
+  },
   "skills": [
     "gsd-path",
     "gsd-path-build",
@@ -17,6 +30,7 @@
   "package_files": [
     "plugin.json",
     "scripts/install.mjs",
+    "scripts/install.py",
     "scripts/wizard.mjs",
     "scripts/skill-resources.json",
     "scripts/archive_milestone.py",
@@ -29,6 +43,7 @@
     "scripts/check_task_briefs.py",
     "scripts/review_panel.py",
     "scripts/check_update.py",
+    "scripts/check_trust_evidence.py",
     "scripts/guard_hook.py",
     "scripts/git_guard.py",
     "scripts/isolation.py",

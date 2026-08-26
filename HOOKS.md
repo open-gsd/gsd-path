@@ -36,7 +36,9 @@ node scripts/install.mjs --claude --project /path/to/repo --hooks
 | `.gsd-path/git_guard.py` | Staged-path + ship-subject validator |
 | `.git/hooks/pre-commit` | Runs `git_guard.py` before commit |
 | `.git/hooks/commit-msg` | Runs `git_guard.py` with commit message |
-| `.claude/settings.json` | Claude PreToolUse wiring (`claude` target only) |
+| `.claude/settings.json` | Claude PreToolUse wiring (`claude` target) |
+| `.codex/hooks.json` | Codex PreToolUse wiring (`codex` target) |
+| `.cursor/hooks.json` | Cursor fail-closed preToolUse wiring (`cursor` target) |
 
 Git hooks are written to the repository's **effective** hooks directory,
 resolved with `git rev-parse --git-path hooks`. That honors `core.hooksPath`
@@ -48,7 +50,7 @@ skipped instead of dropping them silently.
 Git hooks work for **any** agent that commits. Guards **fail open** on crash or
 bad input — they never brick the host or git permanently.
 
-**Windows / interpreter caveat:** hooks and the Claude settings command invoke a
+**Windows / interpreter caveat:** hooks and native host settings invoke a
 Python interpreter that the installer probes at install time — `python3` first,
 then `python` (plain `python3` usually does not exist on Windows). If neither
 runs, hook install is skipped with a warning rather than wiring an interpreter
@@ -62,10 +64,10 @@ npx gsd-path --hooks-refresh --project /path/to/repo
 npx gsd-path --hooks-refresh-full --project /path/to/repo   # + settings/git hooks
 ```
 
-`--hooks-refresh-full` **merges** `.claude/settings.json`: it replaces only the
-managed PreToolUse guard entry (identified by its `.gsd-path/guard_hook.py`
-command) and preserves every other hook event (`Stop`, `PostToolUse`, …) and
-any PreToolUse entries you added yourself.
+`--hooks-refresh-full` merges `.claude/settings.json`, `.codex/hooks.json`, and
+`.cursor/hooks.json` when present. It replaces only managed guard entries
+(identified by their `.gsd-path/guard_hook.py` command) and preserves unrelated
+entries, hook events, and settings.
 
 See [UPDATE.md](UPDATE.md).
 
@@ -88,8 +90,9 @@ Read tools (`Read`, `Grep`, `View`, …) may still open archive paths.
 
 ## Wire other hosts
 
-Only Claude wiring is installed automatically. Register
-`python3 .gsd-path/guard_hook.py` as a pre-tool-use hook elsewhere:
+Claude, Codex, and Cursor wiring is installed automatically when that target is
+selected. Register `python3 .gsd-path/guard_hook.py` as a pre-tool-use hook on
+the remaining hosts:
 
 | Host | Where | Docs |
 | --- | --- | --- |

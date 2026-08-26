@@ -18,25 +18,23 @@ except ImportError:  # Direct execution from scripts/.
     import sync_skill_resources  # type: ignore
 
 
-TARGETS = (
-    "codex",
-    "claude",
-    "grok",
-    "opencode",
-    "copilot",
-    "qwen",
-    "antigravity",
-    "cursor",
-    "zed",
-    "kiro",
-    "kimi",
-)
-
-
 def skill_names_for_manifest(manifest: Mapping) -> Tuple[str, ...]:
     return tuple(manifest["skills"])
 
 
+def targets_for_manifest(manifest: Mapping) -> Tuple[str, ...]:
+    return tuple(manifest["hosts"])
+
+
+def local_roots_for_manifest(manifest: Mapping) -> Mapping[str, str]:
+    return {
+        target: config["local_root"]
+        for target, config in manifest["hosts"].items()
+    }
+
+
+TARGETS = targets_for_manifest(sync_skill_resources.RESOURCE_MANIFEST)
+LOCAL_ROOTS = local_roots_for_manifest(sync_skill_resources.RESOURCE_MANIFEST)
 SKILL_NAMES = skill_names_for_manifest(sync_skill_resources.RESOURCE_MANIFEST)
 SKILL_ALIASES = dict(sync_skill_resources.RESOURCE_MANIFEST["skill_aliases"])
 CLAUDE_BRIDGE = "@../AGENTS.md\n@../WORKFLOW.md\n"
@@ -71,6 +69,45 @@ def claude_hooks_settings(interpreter: str) -> str:
         )
         + "\n"
     )
+
+
+def codex_hooks_settings(interpreter: str) -> str:
+    return json.dumps(
+        {
+            "hooks": {
+                "PreToolUse": [
+                    {
+                        "matcher": ".*",
+                        "hooks": [
+                            {
+                                "type": "command",
+                                "command": f'{interpreter} ".gsd-path/guard_hook.py"',
+                            }
+                        ],
+                    }
+                ]
+            }
+        },
+        indent=2,
+    ) + "\n"
+
+
+def cursor_hooks_settings(interpreter: str) -> str:
+    return json.dumps(
+        {
+            "version": 1,
+            "hooks": {
+                "preToolUse": [
+                    {
+                        "command": f'{interpreter} ".gsd-path/guard_hook.py"',
+                        "matcher": ".*",
+                        "failClosed": True,
+                    }
+                ]
+            },
+        },
+        indent=2,
+    ) + "\n"
 
 
 def pre_commit_hook(interpreter: str) -> str:
@@ -216,6 +253,14 @@ class ProjectTransaction:
 
 def absolute_path(path: Path) -> Path:
     return Path(os.path.abspath(os.fspath(path.expanduser())))
+
+
+def local_root(target: str, project_dir: Path) -> Path:
+    try:
+        relative = LOCAL_ROOTS[target]
+    except KeyError as error:
+        raise ValueError(f"unsupported target: {target}") from error
+    return absolute_path(project_dir) / relative
 
 
 def default_root(target: str, environ: Optional[Mapping[str, str]] = None) -> Path:
@@ -581,7 +626,7 @@ def _rollback_target(transaction: TargetTransaction) -> None:
 
 def _project_destinations(
     project: Path,
-    include_claude: bool,
+    selected: Sequence[str],
     hooks: bool,
     interpreter: str,
     hooks_dir: Optional[Path],
@@ -595,7 +640,7 @@ def _project_destinations(
         (project / "AGENTS.md", "AGENTS.md", None, False),
         (project / "WORKFLOW.md", "WORKFLOW.md", None, False),
     ]
-    if include_claude:
+    if "claude" in selected:
         destinations.append(
             (project / ".claude" / "CLAUDE.md", None, CLAUDE_BRIDGE, False)
         )
@@ -604,12 +649,30 @@ def _project_destinations(
             destinations.append(
                 (project / HOOKS_DIRECTORY / name, f"scripts/{name}", None, False)
             )
-        if include_claude:
+        if "claude" in selected:
             destinations.append(
                 (
                     project / ".claude" / "settings.json",
                     None,
                     claude_hooks_settings(interpreter),
+                    False,
+                )
+            )
+        if "codex" in selected:
+            destinations.append(
+                (
+                    project / ".codex" / "hooks.json",
+                    None,
+                    codex_hooks_settings(interpreter),
+                    False,
+                )
+            )
+        if "cursor" in selected:
+            destinations.append(
+                (
+                    project / ".cursor" / "hooks.json",
+                    None,
+                    cursor_hooks_settings(interpreter),
                     False,
                 )
             )
@@ -632,7 +695,7 @@ def _describe_project_path(project: Path, destination: Path) -> str:
 
 def _project_files(
     project: Path,
-    include_claude: bool,
+    selected: Sequence[str],
     hooks: bool,
     interpreter: str,
     hooks_dir: Optional[Path],
@@ -640,7 +703,7 @@ def _project_files(
     return ", ".join(
         _describe_project_path(project, destination)
         for destination, _, _, _ in _project_destinations(
-            project, include_claude, hooks, interpreter, hooks_dir
+            project, selected, hooks, interpreter, hooks_dir
         )
     )
 
@@ -656,7 +719,7 @@ def _existing_contract_error(destination: Path) -> "InstallerError":
 def _validate_project(
     source_root: Path,
     project: Path,
-    include_claude: bool,
+    selected: Sequence[str],
     hooks: bool,
     reserved_roots: Sequence[Tuple[str, Path]],
     interpreter: str,
@@ -671,7 +734,7 @@ def _validate_project(
         if source.is_symlink() or not source.is_file():
             raise InstallerError(f"missing project contract: {source}")
     for destination, _, _, _ in _project_destinations(
-        project, include_claude, hooks, interpreter, hooks_dir
+        project, selected, hooks, interpreter, hooks_dir
     ):
         if _lexists(destination):
             raise _existing_contract_error(destination)
@@ -681,7 +744,7 @@ def _validate_project(
                     f"project contract overlaps {label}: {destination}, {root}"
                 )
     claude_directory = project / ".claude"
-    if include_claude and _lexists(claude_directory) and (
+    if "claude" in selected and _lexists(claude_directory) and (
         claude_directory.is_symlink() or not claude_directory.is_dir()
     ):
         raise InstallerError(f"unsafe Claude project directory: {claude_directory}")
@@ -690,7 +753,7 @@ def _validate_project(
 def _apply_project(
     source_root: Path,
     project: Path,
-    include_claude: bool,
+    selected: Sequence[str],
     hooks: bool,
     transaction: ProjectTransaction,
     interpreter: str,
@@ -698,7 +761,7 @@ def _apply_project(
 ) -> None:
     _create_directory(project, transaction.created_directories)
     for destination, source_name, content, executable in _project_destinations(
-        project, include_claude, hooks, interpreter, hooks_dir
+        project, selected, hooks, interpreter, hooks_dir
     ):
         _create_directory(destination.parent, transaction.created_directories)
         created = False
@@ -742,7 +805,7 @@ def _is_managed_git_hook(destination: Path) -> bool:
     return GUARD_MARKER in text and "git_guard.py" in text
 
 
-def _is_managed_claude_settings(destination: Path) -> bool:
+def _is_managed_hook_settings(destination: Path) -> bool:
     if not destination.is_file():
         return False
     text = destination.read_text(encoding="utf-8", errors="replace")
@@ -794,7 +857,15 @@ def _is_managed_hook_entry(entry) -> bool:
     )
 
 
-def _merged_claude_settings(settings: Path, interpreter: str) -> str:
+def _is_managed_direct_hook_entry(entry) -> bool:
+    return (
+        isinstance(entry, dict)
+        and isinstance(entry.get("command"), str)
+        and f"{HOOKS_DIRECTORY}/guard_hook.py" in entry["command"]
+    )
+
+
+def _parsed_managed_settings(settings: Path) -> dict:
     try:
         parsed = json.loads(settings.read_text(encoding="utf-8", errors="replace"))
     except json.JSONDecodeError as error:
@@ -805,19 +876,23 @@ def _merged_claude_settings(settings: Path, interpreter: str) -> str:
         raise InstallerError(
             f"managed hook settings file is not a JSON object: {settings}"
         )
-    # Merge: replace only the managed PreToolUse guard entry; preserve every
-    # other hook event (Stop, PostToolUse, ...) and user PreToolUse entries.
-    managed_entry = _claude_guard_entry(interpreter)
+    return parsed
+
+
+def _merged_hook_settings(
+    settings: Path, event_name: str, managed_entry: dict, is_managed_entry
+) -> str:
+    parsed = _parsed_managed_settings(settings)
     hooks_object = parsed.get("hooks")
     if not isinstance(hooks_object, dict):
         hooks_object = {}
-    existing = hooks_object.get("PreToolUse")
+    existing = hooks_object.get(event_name)
     if not isinstance(existing, list):
         existing = []
     merged = []
     replaced = False
     for entry in existing:
-        if _is_managed_hook_entry(entry):
+        if is_managed_entry(entry):
             if not replaced:
                 merged.append(managed_entry)
                 replaced = True
@@ -825,9 +900,33 @@ def _merged_claude_settings(settings: Path, interpreter: str) -> str:
             merged.append(entry)
     if not replaced:
         merged.append(managed_entry)
-    hooks_object["PreToolUse"] = merged
+    hooks_object[event_name] = merged
     parsed["hooks"] = hooks_object
     return json.dumps(parsed, indent=2) + "\n"
+
+
+def _merged_claude_settings(settings: Path, interpreter: str) -> str:
+    return _merged_hook_settings(
+        settings, "PreToolUse", _claude_guard_entry(interpreter), _is_managed_hook_entry
+    )
+
+
+def _merged_codex_settings(settings: Path, interpreter: str) -> str:
+    managed_entry = json.loads(codex_hooks_settings(interpreter))["hooks"][
+        "PreToolUse"
+    ][0]
+    return _merged_hook_settings(
+        settings, "PreToolUse", managed_entry, _is_managed_hook_entry
+    )
+
+
+def _merged_cursor_settings(settings: Path, interpreter: str) -> str:
+    managed_entry = json.loads(cursor_hooks_settings(interpreter))["hooks"][
+        "preToolUse"
+    ][0]
+    return _merged_hook_settings(
+        settings, "preToolUse", managed_entry, _is_managed_direct_hook_entry
+    )
 
 
 def _validate_hooks_refresh(
@@ -844,13 +943,17 @@ def _validate_hooks_refresh(
         if source.is_symlink() or not source.is_file():
             raise InstallerError(f"missing guard script source: {source}")
     if full:
-        settings = project / ".claude" / "settings.json"
-        if settings.is_symlink():
-            raise InstallerError(f"refusing to refresh a symlink: {settings}")
-        if _lexists(settings) and not _is_managed_claude_settings(settings):
-            raise InstallerError(
-                f"not a managed GSD Path hook settings file: {settings}"
-            )
+        for settings in (
+            project / ".claude" / "settings.json",
+            project / ".codex" / "hooks.json",
+            project / ".cursor" / "hooks.json",
+        ):
+            if settings.is_symlink():
+                raise InstallerError(f"refusing to refresh a symlink: {settings}")
+            if _lexists(settings) and not _is_managed_hook_settings(settings):
+                raise InstallerError(
+                    f"not a managed GSD Path hook settings file: {settings}"
+                )
         if hooks_dir is not None:
             for hook_name in ("pre-commit", "commit-msg"):
                 hook_path = hooks_dir / hook_name
@@ -884,14 +987,18 @@ def refresh_hooks(
         if not dry_run and interpreter is None:
             refreshed.append(
                 "note: hooks: no working python3 or python interpreter found "
-                "on PATH; skipped Claude settings and git hook refresh"
+                "on PATH; skipped native settings and git hook refresh"
             )
             return refreshed
-        settings = project / ".claude" / "settings.json"
-        if _lexists(settings):
-            if not dry_run:
-                _atomic_write(settings, _merged_claude_settings(settings, interpreter))
-            refreshed.append(_describe_project_path(project, settings))
+        for settings, merge in (
+            (project / ".claude" / "settings.json", _merged_claude_settings),
+            (project / ".codex" / "hooks.json", _merged_codex_settings),
+            (project / ".cursor" / "hooks.json", _merged_cursor_settings),
+        ):
+            if _lexists(settings):
+                if not dry_run:
+                    _atomic_write(settings, merge(settings, interpreter))
+                refreshed.append(_describe_project_path(project, settings))
         if hooks_dir is not None:
             for hook_name in ("pre-commit", "commit-msg"):
                 hook_path = hooks_dir / hook_name
@@ -998,8 +1105,11 @@ def _append_host_notes(results: List[str], selected: Sequence[str]) -> None:
             results.append(HOST_NOTES[target])
 
 
-def _install_result(plan: DeploymentPlan, dry_run: bool = False) -> str:
-    action = "would install" if dry_run else "installed"
+def _install_result(
+    plan: DeploymentPlan, dry_run: bool = False, update: bool = False
+) -> str:
+    verb = "update" if update else "install"
+    action = f"would {verb}" if dry_run else ("updated" if update else "installed")
     label = "+".join(plan.targets)
     skill_count = len(SKILL_NAMES)
     if plan.profile == "cursor":
@@ -1023,6 +1133,20 @@ def _managed_entry_count(plan: DeploymentPlan) -> int:
     ):
         count += 1
     return count
+
+
+def _has_managed_install(root: Path) -> bool:
+    return root.is_dir() and any(_is_managed_name(entry.name) for entry in root.iterdir())
+
+
+def detect_installs(
+    targets: Sequence[str], roots: Mapping[str, Path]
+) -> List[TargetPlan]:
+    return [
+        TargetPlan(target, roots[target])
+        for target in targets
+        if _has_managed_install(roots[target])
+    ]
 
 
 def _planned_backup_roots(
@@ -1054,6 +1178,8 @@ def install(
     project: Optional[Path] = None,
     dry_run: bool = False,
     hooks: bool = False,
+    migrate_legacy: bool = True,
+    update: bool = False,
 ) -> List[str]:
     if hooks and project is None:
         raise InstallerError("--hooks requires --project")
@@ -1100,8 +1226,9 @@ def install(
             raise InstallerError(
                 f"Cursor agent root overlaps source repository: {cursor_agent_root}"
             )
-    include_claude = "claude" in selected
-    legacy_root = legacy_codex_root() if "codex" in selected else None
+    legacy_root = (
+        legacy_codex_root() if migrate_legacy and "codex" in selected else None
+    )
     reserved_roots = [
         (f"{'+'.join(plan.targets)} skills root", plan.root) for plan in deployments
     ]
@@ -1144,7 +1271,7 @@ def install(
         _validate_project(
             source_root,
             project,
-            include_claude,
+            selected,
             effective_hooks,
             [*mutation_roots, *planned_backups],
             interpreter,
@@ -1173,10 +1300,12 @@ def install(
             for plan in deployments:
                 count = _managed_entry_count(plan)
                 suffix = f"; would back up {count} entries" if count else ""
-                results.append(_install_result(plan, dry_run=True) + suffix)
+                results.append(
+                    _install_result(plan, dry_run=True, update=update) + suffix
+                )
             if project is not None:
                 files = _project_files(
-                    project, include_claude, effective_hooks, interpreter, hooks_dir
+                    project, selected, effective_hooks, interpreter, hooks_dir
                 )
                 results.append(f"project: would copy {files} to {project}")
             results.extend(hook_notes)
@@ -1204,7 +1333,7 @@ def install(
                 transaction = TargetTransaction(plan.root)
                 target_transactions.append(transaction)
                 _apply_target(plan, staged[index], transaction)
-                results.append(_install_result(plan))
+                results.append(_install_result(plan, update=update))
                 if transaction.backup is not None:
                     results.append(
                         f"{'+'.join(plan.targets)}: backed up "
@@ -1215,14 +1344,14 @@ def install(
                 _apply_project(
                     source_root,
                     project,
-                    include_claude,
+                    selected,
                     effective_hooks,
                     project_transaction,
                     interpreter,
                     hooks_dir,
                 )
                 files = _project_files(
-                    project, include_claude, effective_hooks, interpreter, hooks_dir
+                    project, selected, effective_hooks, interpreter, hooks_dir
                 )
                 results.append(f"project: copied {files} to {project}")
             results.extend(hook_notes)
@@ -1256,6 +1385,8 @@ def parser() -> argparse.ArgumentParser:
         argument_parser.add_argument(f"--{target}", action="store_true")
         argument_parser.add_argument(f"--{target}-root", type=Path)
     argument_parser.add_argument("--all", action="store_true", dest="all_targets")
+    argument_parser.add_argument("--update", action="store_true")
+    argument_parser.add_argument("--local", action="store_true")
     argument_parser.add_argument("--dry-run", action="store_true")
     argument_parser.add_argument("--project", type=Path)
     argument_parser.add_argument("--hooks", action="store_true")
@@ -1304,16 +1435,46 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         if arguments.all_targets or getattr(arguments, target)
     ]
     if not selected:
-        argument_parser.error("select at least one target or --all")
+        if arguments.update:
+            selected = list(TARGETS)
+        else:
+            argument_parser.error("select at least one target or --all")
 
-    plans = []
+    roots = {}
     for target in selected:
         override = getattr(arguments, f"{target}_root")
-        root = absolute_path(override) if override is not None else default_root(target)
-        plans.append(TargetPlan(target, root))
+        roots[target] = (
+            absolute_path(override)
+            if override is not None
+            else (
+                local_root(target, Path.cwd())
+                if arguments.local
+                else default_root(target)
+            )
+        )
+    plans = (
+        detect_installs(selected, roots)
+        if arguments.update
+        else [TargetPlan(target, roots[target]) for target in selected]
+    )
+    if arguments.update and not plans:
+        scope = "this project" if arguments.local else "global roots"
+        print(
+            "error: no existing GSD Path skills found to update "
+            f"({scope}); run an install first, e.g. --all"
+            + (" --local" if arguments.local else ""),
+            file=sys.stderr,
+        )
+        return 1
     try:
         for result in install(
-            source_root, plans, project, arguments.dry_run, arguments.hooks
+            source_root,
+            plans,
+            project,
+            arguments.dry_run,
+            arguments.hooks,
+            migrate_legacy=not arguments.local,
+            update=arguments.update,
         ):
             print(result)
     except InstallerError as error:

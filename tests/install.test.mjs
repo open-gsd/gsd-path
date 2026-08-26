@@ -800,6 +800,26 @@ test("hooks install guard scripts, settings, and git hook", async () => {
   assert.match(projectLine, /\.git\/hooks\/commit-msg/);
 });
 
+test("hooks install native Codex and Cursor project configs", async () => {
+  installer.hooks.detectPythonInterpreter = () => "python3";
+  const project = path.join(root, "native-hooks-project");
+  fs.mkdirSync(path.join(project, ".git"), { recursive: true });
+  await runInstall(
+    [
+      installer.targetPlan("codex", path.join(root, "codex", "skills")),
+      installer.targetPlan("cursor", path.join(root, "cursor", "skills")),
+    ],
+    { project, hooks: true }
+  );
+
+  const codex = JSON.parse(fs.readFileSync(path.join(project, ".codex", "hooks.json"), "utf8"));
+  assert.equal(codex.hooks.PreToolUse[0].hooks[0].command, 'python3 ".gsd-path/guard_hook.py"');
+  const cursor = JSON.parse(fs.readFileSync(path.join(project, ".cursor", "hooks.json"), "utf8"));
+  assert.equal(cursor.version, 1);
+  assert.equal(cursor.hooks.preToolUse[0].command, 'python3 ".gsd-path/guard_hook.py"');
+  assert.equal(cursor.hooks.preToolUse[0].failClosed, true);
+});
+
 test("hooks refresh updates managed guard scripts", async () => {
   const project = path.join(root, "project");
   fs.mkdirSync(path.join(project, ".git"), { recursive: true });
@@ -842,6 +862,48 @@ test("hooks refresh full updates settings and git hooks", async () => {
   assert.equal(status, 0);
   const refreshed = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
   assert.equal(refreshed.hooks.PreToolUse[0].matcher, installer.CLAUDE_MATCHER);
+});
+
+test("hooks refresh full updates native Codex and Cursor configs", async () => {
+  installer.hooks.detectPythonInterpreter = () => "python3";
+  const project = path.join(root, "native-hooks-project");
+  fs.mkdirSync(path.join(project, ".git"), { recursive: true });
+  await runInstall(
+    [
+      installer.targetPlan("codex", path.join(root, "codex", "skills")),
+      installer.targetPlan("cursor", path.join(root, "cursor", "skills")),
+    ],
+    { project, hooks: true }
+  );
+  const codexPath = path.join(project, ".codex", "hooks.json");
+  const codex = JSON.parse(fs.readFileSync(codexPath, "utf8"));
+  codex.hooks.PreToolUse[0].hooks[0].command = 'pythonX ".gsd-path/guard_hook.py"';
+  codex.userSetting = true;
+  fs.writeFileSync(codexPath, JSON.stringify(codex) + "\n");
+  const cursorPath = path.join(project, ".cursor", "hooks.json");
+  const cursor = JSON.parse(fs.readFileSync(cursorPath, "utf8"));
+  cursor.hooks.preToolUse[0].command = 'pythonX ".gsd-path/guard_hook.py"';
+  cursor.userSetting = true;
+  fs.writeFileSync(cursorPath, JSON.stringify(cursor) + "\n");
+
+  const status = await installer.main(
+    ["--hooks-refresh-full", "--project", project, "--source-root", source, "--no-color"]
+  );
+
+  assert.equal(status, 0);
+  const refreshedCodex = JSON.parse(fs.readFileSync(codexPath, "utf8"));
+  assert.equal(
+    refreshedCodex.hooks.PreToolUse[0].hooks[0].command,
+    'python3 ".gsd-path/guard_hook.py"'
+  );
+  assert.equal(refreshedCodex.userSetting, true);
+  const refreshedCursor = JSON.parse(fs.readFileSync(cursorPath, "utf8"));
+  assert.equal(
+    refreshedCursor.hooks.preToolUse[0].command,
+    'python3 ".gsd-path/guard_hook.py"'
+  );
+  assert.equal(refreshedCursor.hooks.preToolUse[0].failClosed, true);
+  assert.equal(refreshedCursor.userSetting, true);
 });
 
 test("hooks refresh rejects unmanaged guard scripts", async () => {

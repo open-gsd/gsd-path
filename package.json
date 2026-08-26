@@ -10,6 +10,7 @@
   "files": [
     "plugin.json",
     "scripts/install.mjs",
+    "scripts/install.py",
     "scripts/wizard.mjs",
     "scripts/skill-resources.json",
     "scripts/archive_milestone.py",
@@ -22,6 +23,7 @@
     "scripts/check_task_briefs.py",
     "scripts/review_panel.py",
     "scripts/check_update.py",
+    "scripts/check_trust_evidence.py",
     "scripts/guard_hook.py",
     "scripts/git_guard.py",
     "scripts/isolation.py",
@@ -47,6 +49,7 @@
   "scripts": {
     "test": "node --test tests/*.test.mjs",
     "test:python": "python3 -m unittest discover -s tests",
-    "verify": "npm test && npm run test:python && python3 scripts/sync_skill_resources.py --check"
+    "verify": "npm test && npm run test:python && python3 scripts/sync_skill_resources.py --check",
+    "verify:release": "npm run verify && python3 scripts/check_trust_evidence.py --repo ."
   }
 }

@@ -180,6 +180,73 @@ class InstallerTests(unittest.TestCase):
             ("gsd-path", "gsd-path-alpha", "gsd-path-zeta"),
         )
 
+    def test_targets_and_local_roots_are_derived_from_resource_manifest(self):
+        manifest = {
+            "hosts": {
+                "alpha": {"local_root": ".alpha/skills"},
+                "beta": {"local_root": ".beta/skills"},
+            }
+        }
+
+        self.assertEqual(install.targets_for_manifest(manifest), ("alpha", "beta"))
+        self.assertEqual(
+            install.local_roots_for_manifest(manifest),
+            {"alpha": ".alpha/skills", "beta": ".beta/skills"},
+        )
+
+    def test_local_root_resolution_matches_manifest(self):
+        project = self.root / "project"
+
+        for target, relative in install.LOCAL_ROOTS.items():
+            with self.subTest(target=target):
+                self.assertEqual(project / relative, install.local_root(target, project))
+
+        with self.assertRaisesRegex(ValueError, "unsupported target"):
+            install.local_root("unknown", project)
+
+    def test_local_install_and_update_match_node_behavior(self):
+        project = self.root / "project"
+        project.mkdir()
+        previous = Path.cwd()
+        try:
+            os.chdir(project)
+            status, _, error = self.run_main(
+                ["--claude", "--local", "--source-root", str(self.source)]
+            )
+            self.assertEqual(0, status, error)
+            installed = project / ".claude" / "skills" / "gsd-path" / "SKILL.md"
+            self.assertTrue(installed.is_file())
+
+            source_skill = self.source / "skills" / "gsd-path" / "SKILL.md"
+            source_skill.write_text(
+                "---\nname: gsd-path\ndescription: updated\n---\nupdated\n",
+                encoding="utf-8",
+            )
+            status, output, error = self.run_main(
+                ["--update", "--local", "--source-root", str(self.source)]
+            )
+            self.assertEqual(0, status, error)
+            self.assertIn("description: updated", installed.read_text(encoding="utf-8"))
+            self.assertIn("updated", output)
+            self.assertTrue((project / ".claude" / "disabled-gsd-skills").is_dir())
+        finally:
+            os.chdir(previous)
+
+    def test_update_without_an_existing_install_fails_cleanly(self):
+        project = self.root / "project"
+        project.mkdir()
+        previous = Path.cwd()
+        try:
+            os.chdir(project)
+            status, _, error = self.run_main(
+                ["--update", "--local", "--source-root", str(self.source)]
+            )
+        finally:
+            os.chdir(previous)
+
+        self.assertEqual(1, status)
+        self.assertIn("no existing GSD Path skills found to update", error)
+
     def test_discussion_skill_is_installed_and_invocable(self):
         self.assertIn("gsd-path-discuss", install.SKILL_NAMES)
         target = self.root / "discussion" / "skills"
@@ -1016,6 +1083,35 @@ class InstallerTests(unittest.TestCase):
         self.assertIn(".git/hooks/pre-commit", output)
         self.assertIn(".git/hooks/commit-msg", output)
 
+    def test_hooks_install_native_codex_and_cursor_project_configs(self):
+        project = self.root / "native-hooks-project"
+        (project / ".git").mkdir(parents=True)
+        plans = [
+            install.TargetPlan("codex", self.root / "codex" / "skills"),
+            install.TargetPlan("cursor", self.root / "cursor" / "skills"),
+        ]
+        with mock.patch.object(
+            install, "_detect_python_interpreter", return_value="python3"
+        ):
+            install.install(self.source, plans, project=project, hooks=True)
+
+        codex = json.loads(
+            (project / ".codex" / "hooks.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(
+            'python3 ".gsd-path/guard_hook.py"',
+            codex["hooks"]["PreToolUse"][0]["hooks"][0]["command"],
+        )
+        cursor = json.loads(
+            (project / ".cursor" / "hooks.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(1, cursor["version"])
+        self.assertEqual(
+            'python3 ".gsd-path/guard_hook.py"',
+            cursor["hooks"]["preToolUse"][0]["command"],
+        )
+        self.assertTrue(cursor["hooks"]["preToolUse"][0]["failClosed"])
+
     def test_hooks_skip_git_hook_without_repository(self):
         project = self.root / "project"
         target = self.root / "claude" / "skills"
@@ -1124,6 +1220,52 @@ class InstallerTests(unittest.TestCase):
         )
         self.assertEqual({"allow": ["Bash(npm test)"]}, refreshed["permissions"])
         self.assertEqual("opus", refreshed["model"])
+
+    def test_hooks_refresh_full_updates_native_codex_and_cursor_configs(self):
+        project = self.root / "native-hooks-project"
+        (project / ".git").mkdir(parents=True)
+        plans = [
+            install.TargetPlan("codex", self.root / "codex" / "skills"),
+            install.TargetPlan("cursor", self.root / "cursor" / "skills"),
+        ]
+        with mock.patch.object(
+            install, "_detect_python_interpreter", return_value="python3"
+        ):
+            install.install(self.source, plans, project=project, hooks=True)
+        codex_path = project / ".codex" / "hooks.json"
+        codex = json.loads(codex_path.read_text(encoding="utf-8"))
+        codex["hooks"]["PreToolUse"][0]["hooks"][0]["command"] = (
+            'pythonX ".gsd-path/guard_hook.py"'
+        )
+        codex["userSetting"] = True
+        codex_path.write_text(json.dumps(codex) + "\n", encoding="utf-8")
+        cursor_path = project / ".cursor" / "hooks.json"
+        cursor = json.loads(cursor_path.read_text(encoding="utf-8"))
+        cursor["hooks"]["preToolUse"][0]["command"] = (
+            'pythonX ".gsd-path/guard_hook.py"'
+        )
+        cursor["userSetting"] = True
+        cursor_path.write_text(json.dumps(cursor) + "\n", encoding="utf-8")
+
+        with mock.patch.object(
+            install, "_detect_python_interpreter", return_value="python3"
+        ):
+            status, _, error = self.run_main(self.refresh_full_arguments(project))
+
+        self.assertEqual(0, status, error)
+        refreshed_codex = json.loads(codex_path.read_text(encoding="utf-8"))
+        self.assertEqual(
+            'python3 ".gsd-path/guard_hook.py"',
+            refreshed_codex["hooks"]["PreToolUse"][0]["hooks"][0]["command"],
+        )
+        self.assertTrue(refreshed_codex["userSetting"])
+        refreshed_cursor = json.loads(cursor_path.read_text(encoding="utf-8"))
+        self.assertEqual(
+            'python3 ".gsd-path/guard_hook.py"',
+            refreshed_cursor["hooks"]["preToolUse"][0]["command"],
+        )
+        self.assertTrue(refreshed_cursor["hooks"]["preToolUse"][0]["failClosed"])
+        self.assertTrue(refreshed_cursor["userSetting"])
 
     def test_hooks_refresh_full_rejects_malformed_managed_settings(self):
         project = self.root / "project"

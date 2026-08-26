@@ -19,6 +19,7 @@ and exits nonzero on any failed check.
 
 import argparse
 import datetime as dt
+import json
 import os
 import re
 import shutil
@@ -29,10 +30,22 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 INSTALLER = ROOT / "scripts" / "install.mjs"
+RESOURCE_MANIFEST = json.loads(
+    (ROOT / "scripts" / "skill-resources.json").read_text(encoding="utf-8")
+)
+DECLARED_HOSTS = tuple(RESOURCE_MANIFEST["hosts"])
 
 HOSTS = {
+    host: {
+        "skill_root": config["local_root"],
+        "evidence_route": "manual",
+    }
+    for host, config in RESOURCE_MANIFEST["hosts"].items()
+}
+HOSTS.update({
     "claude": {
         "skill_root": ".claude/skills",
+        "evidence_route": "automated",
         "spawn_api": "Claude Code headless (`claude -p`), Agent tool for children",
         "command": lambda prompt: [
             "claude", "-p", prompt, "--dangerously-skip-permissions", "--output-format", "text",
@@ -40,10 +53,11 @@ HOSTS = {
     },
     "codex": {
         "skill_root": ".agents/skills",
+        "evidence_route": "automated",
         "spawn_api": "Codex CLI headless (`codex exec --full-auto`), collaboration spawn for children",
         "command": lambda prompt: ["codex", "exec", "--full-auto", prompt],
     },
-}
+})
 
 PROMPT = (
     "/gsd-path-docs-audit\n\nRun the GSD Path docs audit for this repository in "
@@ -155,6 +169,12 @@ def main(argv=None):
     parser.add_argument("--keep", action="store_true", help="keep the fixture repo")
     args = parser.parse_args(argv)
     host = HOSTS[args.host]
+    if host["evidence_route"] == "manual":
+        print(
+            f"manual: `{args.host}` has no verified headless dogfood adapter; "
+            "use docs/trust-validation/LIVE-EVIDENCE-TEMPLATE.md"
+        )
+        return 3
     if shutil.which(args.host) is None:
         print(f"skip: `{args.host}` not on PATH")
         return 3

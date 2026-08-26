@@ -80,7 +80,8 @@ treat explicit invocation as an operating rule.
 ### Requirements
 
 - **Node 18.17+** for `scripts/install.mjs` (recommended; also the npm `gsd-path` bin once the package is published to npm)
-- **Python 3** optional — `scripts/install.py` mirrors global install validation and transactions (no `--local` UI)
+- **Python 3** optional — `scripts/install.py` mirrors global and `--local`
+  install transactions and `--update`; it does not provide the interactive wizard
 
 ### Global install (default)
 
