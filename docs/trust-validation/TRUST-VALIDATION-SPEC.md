@@ -49,7 +49,8 @@ pre-action coverage is reported separately:
 
 Different safety tiers do not hide or waive the full-milestone requirement.
 Each host's required tier is declared in `scripts/skill-resources.json`; a
-receipt cannot claim a different tier. Current status is recorded in
+receipt cannot claim a different tier. The same manifest declares the child
+APIs that can prove real dispatch for each host. Current status is recorded in
 [HOST-MATRIX.md](HOST-MATRIX.md).
 
 ## Open gaps

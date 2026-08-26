@@ -26,6 +26,7 @@ class TrustEvidenceTests(unittest.TestCase):
             "alpha": "native-fail-closed",
             "beta": "git-only",
         }
+        self.child_apis = {"alpha": "alpha.spawn", "beta": "beta.spawn"}
         (self.repo / "scripts").mkdir()
         (self.repo / "scripts" / "skill-resources.json").write_text(
             json.dumps(
@@ -34,10 +35,12 @@ class TrustEvidenceTests(unittest.TestCase):
                         "alpha": {
                             "local_root": ".alpha/skills",
                             "guard_tier": self.guard_tiers["alpha"],
+                            "child_apis": [self.child_apis["alpha"]],
                         },
                         "beta": {
                             "local_root": ".beta/skills",
                             "guard_tier": self.guard_tiers["beta"],
+                            "child_apis": [self.child_apis["beta"]],
                         },
                     }
                 }
@@ -184,7 +187,8 @@ class TrustEvidenceTests(unittest.TestCase):
                 "host_version": "fixture-cli 1.0",
                 "candidate": self.candidate,
                 "package_version": "1.2.3",
-                "child_id": f"{evidence_host}-child-1",
+                "child_api": self.child_apis[evidence_host],
+                "child_id": "builder",
                 "guard_tier": self.guard_tiers[evidence_host],
                 "fixture_base_commit": base,
                 "landing_commit": landing_commits[evidence_host],
@@ -371,14 +375,23 @@ class TrustEvidenceTests(unittest.TestCase):
 
     def step_evidence(self, host, step):
         fixture = self.fixture(host)
+        child_spawn = step == "child-spawn"
         evidence = {
             "schema": check_trust_evidence.STEP_SCHEMA,
             "host": host,
             "step": step,
             "run_id": fixture["run_id"],
-            "command": f"run {step} for {host}",
+            "command": (
+                self.child_apis[host]
+                if child_spawn
+                else f"run {step} for {host}"
+            ),
             "result": "pass",
-            "output": f"observed {step} output for {host}",
+            "output": (
+                {"child_id": "builder", "status": "completed"}
+                if child_spawn
+                else f"observed {step} output for {host}"
+            ),
         }
         details = {
             "install": {
@@ -393,7 +406,8 @@ class TrustEvidenceTests(unittest.TestCase):
                 "state_phase": "shipped",
             },
             "child-spawn": {
-                "child_id": f"{host}-child-1",
+                "child_api": self.child_apis[host],
+                "child_id": "builder",
                 "child_status": "completed",
             },
             "task-landing": {
@@ -527,14 +541,15 @@ class TrustEvidenceTests(unittest.TestCase):
         self.assertEqual(["alpha", "beta"], result["hosts"])
         self.assertEqual(self.candidate, result["candidate"])
 
-    def test_rejects_one_milestone_history_reused_for_multiple_hosts(self):
+    def test_rejects_noncanonical_landing_in_shared_history(self):
         self.shared_history_groups["alpha"] = ("alpha", "beta")
         self.receipt("alpha")
         self.receipt("beta")
         self.commit_receipts()
 
         with self.assertRaisesRegex(
-            check_trust_evidence.EvidenceError, "share one ship commit"
+            check_trust_evidence.EvidenceError,
+            "landing_commit is not one canonically proven task landing",
         ):
             check_trust_evidence.validate_repository(self.repo)
 
@@ -563,6 +578,62 @@ class TrustEvidenceTests(unittest.TestCase):
         self.commit_receipts()
 
         with self.assertRaisesRegex(check_trust_evidence.EvidenceError, "child_spawn"):
+            check_trust_evidence.validate_repository(self.repo)
+
+    def test_rejects_simulated_child_spawn_evidence(self):
+        self.receipt("alpha")
+        self.receipt("beta")
+        child_spawn = self.artifact("alpha", "child-spawn")
+        evidence = json.loads(child_spawn.read_text(encoding="utf-8"))
+        evidence["command"] = "echo simulated"
+        evidence["output"] = {
+            "child_id": evidence["child_id"],
+            "status": "completed",
+        }
+        child_spawn.write_text(json.dumps(evidence) + "\n", encoding="utf-8")
+        self.commit_receipts()
+
+        with self.assertRaisesRegex(
+            check_trust_evidence.EvidenceError,
+            "child-spawn command must name child_api",
+        ):
+            check_trust_evidence.validate_repository(self.repo)
+
+    def test_rejects_child_id_not_bound_to_task_landing(self):
+        self.fixture_manifest_overrides["alpha"] = {
+            "child_id": "simulated-child"
+        }
+        self.receipt("alpha")
+        self.receipt("beta")
+        child_spawn = self.artifact("alpha", "child-spawn")
+        evidence = json.loads(child_spawn.read_text(encoding="utf-8"))
+        evidence["child_id"] = "simulated-child"
+        evidence["output"] = {
+            "child_id": "simulated-child",
+            "status": "completed",
+        }
+        child_spawn.write_text(json.dumps(evidence) + "\n", encoding="utf-8")
+        self.commit_receipts()
+
+        with self.assertRaisesRegex(
+            check_trust_evidence.EvidenceError,
+            "child_id does not own the proven task landing",
+        ):
+            check_trust_evidence.validate_repository(self.repo)
+
+    def test_rejects_landing_commit_equal_to_ship_commit(self):
+        self.receipt("alpha")
+        self.receipt("beta")
+        landing = self.artifact("alpha", "task-landing")
+        evidence = json.loads(landing.read_text(encoding="utf-8"))
+        evidence["landing_commit"] = self.fixtures["alpha"]["ship"]
+        landing.write_text(json.dumps(evidence) + "\n", encoding="utf-8")
+        self.commit_receipts()
+
+        with self.assertRaisesRegex(
+            check_trust_evidence.EvidenceError,
+            "landing commit must precede ship commit",
+        ):
             check_trust_evidence.validate_repository(self.repo)
 
     def test_rejects_frontmatter_only_receipt(self):

@@ -401,18 +401,34 @@ def command_references_archive(tokens, working_directories):
     return False
 
 
-def environment_parameter_value(match):
+def environment_parameter_value(match, assignments):
     name = match.group(1) or match.group(2)
-    return os.environ.get(name, match.group(0))
+    return assignments.get(name, os.environ.get(name, ""))
 
 
-def expand_environment_parameters(command):
-    expanded = NAMED_SHELL_PARAMETER_SYNTAX.sub(environment_parameter_value, command)
-    return CMD_PARAMETER_SYNTAX.sub(environment_parameter_value, expanded)
+def expand_environment_parameters(command, assignments=None):
+    values = assignments or {}
+
+    def substitute(match):
+        return environment_parameter_value(match, values)
+
+    expanded = NAMED_SHELL_PARAMETER_SYNTAX.sub(substitute, command)
+    return CMD_PARAMETER_SYNTAX.sub(substitute, expanded)
 
 
-def unresolved_archive_expansion(command, working_directories):
-    expanded = expand_environment_parameters(command)
+def shell_assignment_values(tokens):
+    values = {}
+    for segment in command_segments(tokens):
+        for token in segment:
+            if not SHELL_ASSIGNMENT_PATTERN.match(token):
+                break
+            name, value = token.split("=", 1)
+            values[name] = expand_environment_parameters(value, values)
+    return values
+
+
+def unresolved_archive_expansion(command, tokens, working_directories):
+    expanded = expand_environment_parameters(command, shell_assignment_values(tokens))
     lowered = expanded.replace("\\", "/").casefold()
     if (
         ".project" in lowered
@@ -583,10 +599,15 @@ def wrapped_command_tokens(segment):
             if argument.casefold() in switches:
                 if index + 1 >= len(arguments):
                     raise ValueError("shell wrapper lacks command payload")
-                payload = arguments[index + 1]
+                payload = arguments[index + 1:]
                 if executable in {"cmd", "cmd.exe"}:
-                    payload = expand_environment_parameters(payload)
-                return shell_tokens(payload)
+                    payload = [
+                        expand_environment_parameters(argument)
+                        for argument in payload
+                    ]
+                if len(payload) == 1:
+                    return shell_tokens(payload[0])
+                return payload
         raise ValueError("shell wrapper cannot be validated")
     return None
 
@@ -801,7 +822,7 @@ def evaluate(event):
             archive_working_directory
             or bool(ARCHIVE_REFERENCE.search(command))
             or command_references_archive(tokens, working_directories)
-            or unresolved_archive_expansion(command, working_directories)
+            or unresolved_archive_expansion(command, tokens, working_directories)
         )
         if not archive_command_is_read_only(command, tokens, archive_context):
             deny(ARCHIVE_REASON)

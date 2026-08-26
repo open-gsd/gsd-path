@@ -257,7 +257,9 @@ class GuardHookTests(unittest.TestCase):
             "command git push origin +main",
             "exec git branch --delete --force task",
             "pwsh -Command 'git reset --hard HEAD~1'",
+            "powershell -Command git reset --hard HEAD~1",
             "cmd /c 'git clean -fd'",
+            "cmd /c git reset --hard HEAD~1",
             "cmd.exe /c 'call git reset --hard HEAD~1'",
             "env -- git reset --hard HEAD~1",
             "env -u TOKEN -- git clean -fd",
@@ -341,6 +343,14 @@ class GuardHookTests(unittest.TestCase):
                     "tool_input": {"command": 'mkdir "$TMPDIR/build"'},
                 }
             )
+
+    def test_allows_visible_non_archive_assignment(self):
+        self.assert_allowed(
+            {
+                "tool_name": "Bash",
+                "tool_input": {"command": 'OUT=build; mkdir "$OUT/cache"'},
+            }
+        )
 
     def test_allows_reading_unresolved_path(self):
         self.assert_allowed(

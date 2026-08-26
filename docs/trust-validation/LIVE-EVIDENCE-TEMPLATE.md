@@ -63,7 +63,7 @@ step-specific fields below:
 |---|---|
 | `install` | `host_version`, `install_root`, `candidate`, `package_version`, `exit_code: 0` |
 | `router` | `state_artifact`, `state_phase: "shipped"` |
-| `child-spawn` | `child_id`, `child_status: "completed"` |
+| `child-spawn` | manifest-declared `child_api`, matching `command`, structured child output that binds `child_id` and completed status, `child_id`, `child_status: "completed"` |
 | `task-landing` | `fixture_bundle`, `run_manifest`, `fixture_base_commit`, `task_branch`, `task_worktree`, `landing_commit` |
 | `task-verify` | `verify_artifact`, `verify_exit_code: 0` |
 | `reviews` | `wave_review_artifact`, `final_review_artifact` |
@@ -80,7 +80,10 @@ integration steps must reference the same bundle. For a `git-only` host set
 `native_guard` to `not-applicable`; otherwise set it to `pass`. `git_hooks`
 must be `pass` for every host.
 
-Every step must use one `run_id`. `run_manifest` names a tracked JSON artifact
+Every step must use one `run_id`. The child ID must own the canonically proven
+task landing, and the structured child output and run manifest must bind the
+same manifest-declared child API and child ID. `run_manifest` names a tracked
+JSON artifact
 inside the bundle at the integration commit. It records the same host, run,
 version, child, guard tier, landing commit, task and bound branches, default
 branch, milestone tag, and the tested candidate, package version, and exact state, verify, review, archive,

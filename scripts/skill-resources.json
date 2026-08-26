@@ -1,16 +1,16 @@
 {
   "hosts": {
-    "codex": {"local_root": ".agents/skills", "guard_tier": "git-only", "invocation_prefix": "$"},
-    "claude": {"local_root": ".claude/skills", "guard_tier": "native-fail-closed"},
-    "grok": {"local_root": ".grok/skills", "guard_tier": "git-only"},
-    "opencode": {"local_root": ".opencode/skills", "guard_tier": "git-only"},
-    "copilot": {"local_root": ".github/skills", "guard_tier": "git-only"},
-    "qwen": {"local_root": ".qwen/skills", "guard_tier": "git-only"},
-    "antigravity": {"local_root": ".agents/skills", "guard_tier": "git-only", "invocation_prefix": "/"},
-    "cursor": {"local_root": ".cursor/skills", "guard_tier": "native-fail-closed"},
-    "zed": {"local_root": ".agents/skills", "guard_tier": "git-only", "invocation_prefix": "/"},
-    "kiro": {"local_root": ".kiro/skills", "guard_tier": "git-only"},
-    "kimi": {"local_root": ".kimi-code/skills", "guard_tier": "git-only"}
+    "codex": {"local_root": ".agents/skills", "guard_tier": "git-only", "invocation_prefix": "$", "child_apis": ["collaboration.spawn_agent"]},
+    "claude": {"local_root": ".claude/skills", "guard_tier": "native-fail-closed", "child_apis": ["Agent"]},
+    "grok": {"local_root": ".grok/skills", "guard_tier": "git-only", "child_apis": ["spawn_subagent"]},
+    "opencode": {"local_root": ".opencode/skills", "guard_tier": "git-only", "child_apis": ["Task", "subagent"]},
+    "copilot": {"local_root": ".github/skills", "guard_tier": "git-only", "child_apis": ["task"]},
+    "qwen": {"local_root": ".qwen/skills", "guard_tier": "git-only", "child_apis": ["agent"]},
+    "antigravity": {"local_root": ".agents/skills", "guard_tier": "git-only", "invocation_prefix": "/", "child_apis": ["invoke_subagent"]},
+    "cursor": {"local_root": ".cursor/skills", "guard_tier": "native-fail-closed", "child_apis": ["Task"]},
+    "zed": {"local_root": ".agents/skills", "guard_tier": "git-only", "invocation_prefix": "/", "child_apis": ["spawn_agent"]},
+    "kiro": {"local_root": ".kiro/skills", "guard_tier": "git-only", "child_apis": ["invoke_sub_agent"]},
+    "kimi": {"local_root": ".kimi-code/skills", "guard_tier": "git-only", "child_apis": ["Agent"]}
   },
   "skills": [
     "gsd-path",

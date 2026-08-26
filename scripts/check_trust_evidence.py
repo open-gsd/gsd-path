@@ -17,6 +17,11 @@ try:
         require_published_integration,
         validate as validate_archive_transaction,
     )
+    from isolation import (
+        IsolationError,
+        task_frontmatter,
+        verify_landed_task_files,
+    )
     from pipeline_git import bound_branch_name, milestone_number, ship_subject
 except ImportError:
     from scripts.archive_milestone import (
@@ -24,6 +29,11 @@ except ImportError:
         require_generated_integration_commit,
         require_published_integration,
         validate as validate_archive_transaction,
+    )
+    from scripts.isolation import (
+        IsolationError,
+        task_frontmatter,
+        verify_landed_task_files,
     )
     from scripts.pipeline_git import bound_branch_name, milestone_number, ship_subject
 
@@ -69,7 +79,7 @@ EMPTY_DETAIL_VALUES = frozenset({"pass", "pending", "yes", "none", "n/a"})
 STEP_STRING_FIELDS = {
     "install": ("host_version", "install_root", "candidate", "package_version"),
     "router": ("state_artifact",),
-    "child-spawn": ("child_id",),
+    "child-spawn": ("child_api", "child_id"),
     "task-landing": (
         "fixture_bundle",
         "run_manifest",
@@ -163,7 +173,11 @@ def _required_string(evidence: Mapping, key: str, path: Path) -> str:
 
 
 def _validate_step_artifact(
-    path: Path, host: str, label: str, guard_tier: str
+    path: Path,
+    host: str,
+    label: str,
+    guard_tier: str,
+    child_apis: Sequence[str],
 ) -> Mapping:
     evidence = _read_json(path)
     if not isinstance(evidence, dict):
@@ -180,7 +194,10 @@ def _validate_step_artifact(
                 f"{path}: {key} must be {value!r}, found {evidence.get(key)!r}"
             )
     step = ARTIFACT_STEPS[label]
-    for key in ("run_id", "command", "output", *STEP_STRING_FIELDS.get(step, ())):
+    string_fields = ("run_id", "command", *STEP_STRING_FIELDS.get(step, ()))
+    if step != "child-spawn":
+        string_fields = (*string_fields, "output")
+    for key in string_fields:
         _required_string(evidence, key, path)
     for key, value in STEP_EXACT_FIELDS.get(step, {}).items():
         if evidence.get(key) != value:
@@ -195,6 +212,22 @@ def _validate_step_artifact(
         for key, value in expected_guards.items():
             if evidence.get(key) != value:
                 raise EvidenceError(f"{path}: {key} must be {value!r}")
+    if step == "child-spawn":
+        child_api = _required_string(evidence, "child_api", path)
+        if child_api not in child_apis:
+            raise EvidenceError(f"{path}: child_api is not declared for {host}")
+        if _required_string(evidence, "command", path) != child_api:
+            raise EvidenceError(f"{path}: child-spawn command must name child_api")
+        child_id = _required_string(evidence, "child_id", path)
+        output = evidence.get("output")
+        if (
+            not isinstance(output, dict)
+            or output.get("child_id") != child_id
+            or output.get("status") != "completed"
+        ):
+            raise EvidenceError(
+                f"{path}: child-spawn output must bind the completed child_id"
+            )
     return evidence
 
 
@@ -375,6 +408,7 @@ def _validate_run_artifacts(
         "host_version": _required_string(steps["install"], "host_version", bundle),
         "candidate": candidate,
         "package_version": package_version,
+        "child_api": _required_string(steps["child-spawn"], "child_api", bundle),
         "child_id": _required_string(steps["child-spawn"], "child_id", bundle),
         "guard_tier": guard_tier,
         "fixture_base_commit": _full_sha(landing, "fixture_base_commit", bundle),
@@ -477,6 +511,8 @@ def _validate_git_bundle(
             (base, landing_commit, "fixture base must precede landing commit"),
             (landing_commit, ship_commit, "landing commit must precede ship commit"),
         ):
+            if ancestor == descendant:
+                raise EvidenceError(f"{bundle}: {relationship}")
             try:
                 _git(fixture, "merge-base", "--is-ancestor", ancestor, descendant)
             except EvidenceError:
@@ -518,6 +554,34 @@ def _validate_git_bundle(
                 )
             if validated.get("archive") != archive_path:
                 raise EvidenceError(f"{bundle}: validated archive does not match evidence")
+            ship_parent = _git(fixture, "rev-parse", f"{ship_commit}^")
+            task_directory = transaction.joinpath(
+                *PurePosixPath(archive_path).parts, "tasks"
+            )
+            proven_tasks = verify_landed_task_files(
+                transaction,
+                sorted(task_directory.glob("*.md")),
+                ".project/tasks",
+                ship_parent,
+            )["tasks"]
+            matching_tasks = [
+                task for task in proven_tasks if task.get("commit") == landing_commit
+            ]
+            if len(matching_tasks) != 1:
+                raise EvidenceError(
+                    f"{bundle}: landing_commit is not one canonically proven task landing"
+                )
+            task_path = task_directory / PurePosixPath(
+                str(matching_tasks[0]["task"])
+            ).name
+            task_fields, task_error = task_frontmatter(
+                task_path.read_text(encoding="utf-8")
+            )
+            child_id = _required_string(steps["child-spawn"], "child_id", bundle)
+            if task_error or task_fields is None or task_fields.get("agent") != child_id:
+                raise EvidenceError(
+                    f"{bundle}: child_id does not own the proven task landing"
+                )
             require_generated_integration_commit(
                 fixture,
                 integration_commit,
@@ -542,7 +606,7 @@ def _validate_git_bundle(
                 milestone_tag,
                 integration_commit,
             )
-        except ArchiveError as error:
+        except (ArchiveError, IsolationError, OSError) as error:
             raise EvidenceError(f"{bundle}: {error}") from error
         tag_ref = f"refs/tags/{milestone_tag}"
         try:
@@ -579,6 +643,7 @@ def _validate_evidence_details(
     guard_tier: str,
     candidate: str,
     package_version: str,
+    child_apis: Sequence[str],
 ) -> Tuple[Tuple[Path, ...], EvidenceIdentity]:
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
@@ -608,7 +673,7 @@ def _validate_evidence_details(
         if resolved in artifacts:
             raise EvidenceError(f"{path}: each evidence step requires its own artifact")
         steps[ARTIFACT_STEPS[label]] = _validate_step_artifact(
-            resolved, host, label, guard_tier
+            resolved, host, label, guard_tier, child_apis
         )
         artifacts.append(resolved)
     landing = steps["task-landing"]
@@ -716,6 +781,7 @@ def _validate_receipt(
     host: str,
     package_version: str,
     guard_tier: str,
+    child_apis: Sequence[str],
     candidate: str = "",
 ) -> Tuple[str, Tuple[Path, ...], EvidenceIdentity]:
     if path.is_symlink():
@@ -759,6 +825,7 @@ def _validate_receipt(
         guard_tier,
         receipt_candidate,
         package_version,
+        child_apis,
     )
     return receipt_candidate, artifacts, identity
 
@@ -815,12 +882,20 @@ def validate_repository(repo: Path) -> Mapping:
         contract = host_contracts[host]
         if not isinstance(contract, dict):
             raise EvidenceError(f"host manifest entry must be an object: {host}")
+        child_apis = contract.get("child_apis")
+        if (
+            not isinstance(child_apis, list)
+            or not child_apis
+            or any(not isinstance(api, str) or not api.strip() for api in child_apis)
+        ):
+            raise EvidenceError(f"host manifest child_apis must be non-empty: {host}")
         receipt = evidence_root / f"{host}.md"
         candidate, artifacts, identity = _validate_receipt(
             receipt,
             host,
             version,
             contract.get("guard_tier", ""),
+            child_apis,
             candidate,
         )
         previous_host = run_owners.get(identity.run_id)
