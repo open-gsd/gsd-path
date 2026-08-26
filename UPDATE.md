@@ -118,6 +118,9 @@ explicitly selected hosts:
 node scripts/install.mjs --hooks-refresh-full --codex --cursor --project /path/to/repo
 ```
 
+A full refresh requires a working Python interpreter and an initialized Git
+repository whose effective hooks directory can be resolved.
+
 `--hooks-refresh-full` refreshes existing managed Claude, Codex, and Cursor
 settings. A `--claude`, `--codex`, or `--cursor` flag also creates that host's
 missing config or merges into its valid foreign JSON; unselected foreign

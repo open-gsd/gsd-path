@@ -16,6 +16,7 @@ Malformed input or an internal failure denies the tool call.
 
 import json
 import re
+import shlex
 import sys
 from pathlib import PurePosixPath
 
@@ -33,6 +34,7 @@ PATH_KEYS = frozenset(
         "directory",
     }
 )
+WORKING_DIRECTORY_KEYS = frozenset({"working_directory", "workdir", "cwd"})
 COMMAND_KEYS = frozenset({"command", "cmd", "script"})
 PATCH_PATH_PATTERN = re.compile(
     r"^\*\*\* (?:Add|Update|Delete) File: (.+)$|^\*\*\* Move to: (.+)$",
@@ -61,6 +63,7 @@ WRITE_VERBS = frozenset(
     }
 )
 TOOL_TOKEN_PATTERN = re.compile(r"[A-Z]?[a-z]+|[A-Z]+(?![a-z])|\d+")
+SHELL_ASSIGNMENT_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 
 ARCHIVE_REASON = (
     "committed GSD Path archives under .project/archive/ are read-only; "
@@ -68,50 +71,53 @@ ARCHIVE_REASON = (
 )
 ARCHIVE_MARKER = ".project/archive"
 INVALID_INPUT_REASON = "GSD Path guard could not validate the tool request"
-# Stay inside one shell command segment so `git status && rm x` cannot
-# join tokens across `|`, `;`, or `&`.
-SEGMENT = r"[^|;&]*"
-# Program names and the archive path match case-insensitively: on APFS and
-# Windows `RM .Project/Archive` works. Flags stay case-sensitive so a safe
-# `git branch -d` is never confused with `-D`.
-GIT = r"\b(?i:git)\b"
 ARCHIVE_PATH = r"(?i:\.project[\\/]archive)"
 ARCHIVE_REFERENCE = re.compile(ARCHIVE_PATH)
-ARCHIVE_READ_COMMAND = re.compile(
-    r"^\s*(?i:cat|head|tail|grep|rg|ls|stat|wc|file|readlink|realpath|test|"
-    r"get-content|get-childitem|get-item|get-acl|select-string|test-path)\b"
+ARCHIVE_READ_COMMANDS = frozenset(
+    {
+        "cat",
+        "head",
+        "tail",
+        "grep",
+        "rg",
+        "ls",
+        "stat",
+        "wc",
+        "file",
+        "readlink",
+        "realpath",
+        "test",
+        "get-content",
+        "get-childitem",
+        "get-item",
+        "get-acl",
+        "select-string",
+        "test-path",
+    }
 )
-ARCHIVE_READ_GIT_COMMAND = re.compile(
-    rf"^\s*{GIT}\s+(?i:status|diff|log|show|ls-files)\b"
-)
-AMBIGUOUS_SHELL_SYNTAX = re.compile(r"[|;&<>`]|\$\(|@\(")
-COMMAND_RULES = (
-    (
-        re.compile(rf"{GIT}{SEGMENT}\breset\b{SEGMENT}\s--hard\b"),
-        "git reset --hard discards work the build recovery protocol needs",
-    ),
-    (
-        re.compile(rf"{GIT}{SEGMENT}\bclean\b{SEGMENT}(\s-[A-Za-z]*f|\s--force\b)"),
-        "git clean -f deletes untracked evidence and retained task worktrees",
-    ),
-    (
-        re.compile(rf"{GIT}{SEGMENT}\bpush\b{SEGMENT}(\s--force(-with-lease)?\b|\s-f\b)"),
-        "force pushes rewrite build-branch history the pipeline resumes from",
-    ),
-    (
-        re.compile(rf"{GIT}{SEGMENT}\bbranch\b{SEGMENT}\s-D\b"),
-        "git branch -D destroys task branches the recovery protocol inspects",
-    ),
+ARCHIVE_READ_GIT_COMMANDS = frozenset({"status", "diff", "log", "show", "ls-files"})
+GIT_READ_WRITE_OPTIONS = frozenset({"--output", "--ext-diff", "--textconv"})
+AMBIGUOUS_SHELL_SYNTAX = re.compile(r"[\r\n|;&<>`]|\$\(|@\(")
+GIT_REASONS = {
+    "reset": "git reset --hard discards work the build recovery protocol needs",
+    "clean": "git clean -f deletes untracked evidence and retained task worktrees",
+    "push": "force pushes rewrite build-branch history the pipeline resumes from",
+    "branch": "git branch -D destroys task branches the recovery protocol inspects",
+}
+GIT_GLOBAL_OPTIONS_WITH_VALUES = frozenset(
+    {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--config-env"}
 )
 
 
-def collect(node, paths, commands):
+def collect(node, paths, working_directories, commands):
     if isinstance(node, dict):
         for key, value in node.items():
             lowered = key.lower()
             if isinstance(value, str):
                 if lowered in PATH_KEYS:
                     paths.append(value)
+                elif lowered in WORKING_DIRECTORY_KEYS:
+                    working_directories.append(value)
                 elif lowered in COMMAND_KEYS:
                     commands.append(value)
             elif isinstance(value, list):
@@ -120,14 +126,16 @@ def collect(node, paths, commands):
                 strings = [item for item in value if isinstance(item, str)]
                 if strings and lowered in PATH_KEYS:
                     paths.extend(strings)
+                elif strings and lowered in WORKING_DIRECTORY_KEYS:
+                    working_directories.extend(strings)
                 elif strings and lowered in COMMAND_KEYS:
                     commands.append(" ".join(strings))
-                collect(value, paths, commands)
+                collect(value, paths, working_directories, commands)
             else:
-                collect(value, paths, commands)
+                collect(value, paths, working_directories, commands)
     elif isinstance(node, list):
         for value in node:
-            collect(value, paths, commands)
+            collect(value, paths, working_directories, commands)
 
 
 def normalize_posix(path):
@@ -178,14 +186,110 @@ def patch_paths(payload):
         yield (match.group(1) or match.group(2)).strip()
 
 
-def archive_command_is_read_only(command):
-    if not ARCHIVE_REFERENCE.search(command):
+def shell_tokens(command):
+    if "\n" in command or "\r" in command:
+        raise ValueError("shell command contains a line separator")
+    lexer = shlex.shlex(command, posix=True, punctuation_chars="|;&")
+    lexer.whitespace_split = True
+    lexer.commenters = ""
+    tokens = list(lexer)
+    if not tokens:
+        raise ValueError("shell command is empty")
+    return tokens
+
+
+def command_segments(tokens):
+    segment = []
+    for token in tokens:
+        if token and set(token) <= set("|;&"):
+            if segment:
+                yield segment
+                segment = []
+        else:
+            segment.append(token)
+    if segment:
+        yield segment
+
+
+def git_command(segment):
+    index = 0
+    while index < len(segment) and SHELL_ASSIGNMENT_PATTERN.match(segment[index]):
+        index += 1
+    if index >= len(segment):
+        return None
+    executable = segment[index].replace("\\", "/").rsplit("/", 1)[-1].casefold()
+    if executable == "env":
+        index += 1
+        while index < len(segment):
+            token = segment[index]
+            if "=" in token and not token.startswith("="):
+                index += 1
+                continue
+            if token in {"-i", "--ignore-environment"}:
+                index += 1
+                continue
+            break
+    if index >= len(segment):
+        return None
+    executable = segment[index].replace("\\", "/").rsplit("/", 1)[-1].casefold()
+    if executable not in {"git", "git.exe"}:
+        return None
+    index += 1
+    while index < len(segment) and segment[index].startswith("-"):
+        option = segment[index].split("=", 1)[0]
+        index += 1
+        if option in GIT_GLOBAL_OPTIONS_WITH_VALUES and "=" not in segment[index - 1]:
+            index += 1
+    if index >= len(segment):
+        return None
+    return segment[index].casefold(), segment[index + 1:]
+
+
+def destructive_git_reason(tokens):
+    for segment in command_segments(tokens):
+        invocation = git_command(segment)
+        if invocation is None:
+            continue
+        command, arguments = invocation
+        if command == "reset" and "--hard" in arguments:
+            return GIT_REASONS[command]
+        if command == "clean" and any(
+            argument == "--force"
+            or (argument.startswith("-") and not argument.startswith("--") and "f" in argument[1:])
+            for argument in arguments
+        ):
+            return GIT_REASONS[command]
+        if command == "push" and any(
+            argument == "--force"
+            or argument.startswith("--force-with-lease")
+            or (
+                argument.startswith("-")
+                and not argument.startswith("--")
+                and "f" in argument[1:]
+            )
+            for argument in arguments
+        ):
+            return GIT_REASONS[command]
+        if command == "branch" and "-D" in arguments:
+            return GIT_REASONS[command]
+    return None
+
+
+def archive_command_is_read_only(command, tokens, archive_working_directory=False):
+    if not archive_working_directory and not ARCHIVE_REFERENCE.search(command):
         return True
     if AMBIGUOUS_SHELL_SYNTAX.search(command):
         return False
-    return bool(
-        ARCHIVE_READ_COMMAND.match(command)
-        or ARCHIVE_READ_GIT_COMMAND.match(command)
+    executable = tokens[0].replace("\\", "/").rsplit("/", 1)[-1].casefold()
+    if executable in ARCHIVE_READ_COMMANDS:
+        return True
+    if executable != "git" or len(tokens) < 2:
+        return False
+    if tokens[1].casefold() not in ARCHIVE_READ_GIT_COMMANDS:
+        return False
+    return not any(
+        token in GIT_READ_WRITE_OPTIONS or token.startswith("--output=")
+        for token in tokens[2:]
     )
 
 
@@ -219,8 +323,8 @@ def evaluate(event):
     tool = event.get("tool_name") or event.get("toolName") or event.get("tool")
     if not isinstance(tool, str) or not tool.strip():
         raise ValueError("hook event is missing its tool name")
-    paths, commands = [], []
-    collect(event, paths, commands)
+    paths, working_directories, commands = [], [], []
+    collect(event, paths, working_directories, commands)
     patch_payloads = []
     if is_patch_tool(tool):
         patch_payloads.extend(commands)
@@ -236,12 +340,16 @@ def evaluate(event):
             for path in patch_paths(payload):
                 if in_archive(path):
                     deny(ARCHIVE_REASON)
+    archive_working_directory = any(in_archive(path) for path in working_directories)
+    if archive_working_directory and not commands:
+        deny(ARCHIVE_REASON)
     for command in commands:
-        if not archive_command_is_read_only(command):
+        tokens = shell_tokens(command)
+        if not archive_command_is_read_only(command, tokens, archive_working_directory):
             deny(ARCHIVE_REASON)
-        for pattern, reason in COMMAND_RULES:
-            if pattern.search(command):
-                deny(reason)
+        reason = destructive_git_reason(tokens)
+        if reason is not None:
+            deny(reason)
 
 
 def main():

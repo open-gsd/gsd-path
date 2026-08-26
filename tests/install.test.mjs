@@ -70,6 +70,13 @@ beforeEach(() => {
   source = makeSource(root);
   env = { CODEX_HOME: path.join(root, "legacy") };
   installer.hooks.mismatches = () => [];
+  installer.hooks.resolveGitHooksPath = (project) => {
+    const resolved = originalHooks.resolveGitHooksPath(project);
+    const dotGit = path.join(project, ".git");
+    return resolved ?? (fs.existsSync(dotGit) && fs.statSync(dotGit).isDirectory()
+      ? path.join(dotGit, "hooks")
+      : null);
+  };
 });
 
 afterEach(() => {
@@ -892,7 +899,7 @@ test("native hook install rejects unsafe project directories", async () => {
   for (const host of ["codex", "cursor"]) {
     const project = path.join(root, `unsafe-${host}-project`);
     const outside = path.join(root, `outside-${host}`);
-    fs.mkdirSync(project);
+    fs.mkdirSync(path.join(project, ".git"), { recursive: true });
     fs.mkdirSync(outside);
     fs.symlinkSync(outside, path.join(project, `.${host}`), "dir");
     const target = path.join(root, host, "skills");
@@ -1259,17 +1266,16 @@ test("cli loads from an install path containing spaces", () => {
   assert.equal(result.status, 0, result.stderr);
 });
 
-test("hooks skip the git hook without a repository", async () => {
+test("native hooks require an initialized repository", async () => {
   const project = path.join(root, "project");
   const target = path.join(root, "claude", "skills");
-  const results = await runInstall([installer.targetPlan("claude", target)], {
-    project,
-    hooks: true,
-  });
+  await assert.rejects(
+    runInstall([installer.targetPlan("claude", target)], { project, hooks: true }),
+    /initialized Git repository.*selected hosts: claude/
+  );
   assert.ok(!fs.existsSync(path.join(project, ".git")));
-  assert.ok(fs.existsSync(path.join(project, ".claude", "settings.json")));
-  const projectLine = results.find((line) => line.startsWith("project:"));
-  assert.ok(!/commit-msg/.test(projectLine));
+  assert.ok(!fs.existsSync(path.join(project, ".claude", "settings.json")));
+  assert.ok(!fs.existsSync(target));
 });
 
 test("git-only hooks require an initialized repository", async () => {
@@ -1278,7 +1284,7 @@ test("git-only hooks require an initialized repository", async () => {
 
   await assert.rejects(
     runInstall([installer.targetPlan("grok", target)], { project, hooks: true }),
-    /initialized Git repository.*git-only hosts: grok/
+    /initialized Git repository.*selected hosts: grok/
   );
 
   assert.ok(!fs.existsSync(target));
@@ -1293,7 +1299,7 @@ test("git-only hooks require a Python interpreter", async () => {
 
   await assert.rejects(
     runInstall([installer.targetPlan("grok", target)], { project, hooks: true }),
-    /working Python interpreter.*git-only hosts: grok/
+    /working Python interpreter.*selected hosts: grok/
   );
 
   assert.ok(!fs.existsSync(target));
@@ -1302,6 +1308,7 @@ test("git-only hooks require a Python interpreter", async () => {
 
 test("hooks collision rolls back cleanly", async () => {
   const project = path.join(root, "project");
+  fs.mkdirSync(path.join(project, ".git"), { recursive: true });
   fs.mkdirSync(path.join(project, ".claude"), { recursive: true });
   fs.writeFileSync(path.join(project, ".claude", "settings.json"), "{}");
   const target = path.join(root, "claude", "skills");
@@ -1451,24 +1458,20 @@ test("hooks follow a linked worktree's resolved hooks directory", async () => {
   );
 });
 
-test("hooks report cleanly when a .git file cannot be resolved", async () => {
+test("hooks reject a .git file that cannot be resolved", async () => {
   installer.hooks.detectPythonInterpreter = () => "python3";
   installer.hooks.resolveGitHooksPath = () => null;
   const project = path.join(root, "gitfile-project");
   fs.mkdirSync(project);
   fs.writeFileSync(path.join(project, ".git"), "gitdir: /nonexistent\n");
   const target = path.join(root, "claude", "skills");
-  const results = await runInstall([installer.targetPlan("claude", target)], {
-    project,
-    hooks: true,
-  });
-  assert.ok(
-    results.some((line) => /could not resolve the git hooks directory/.test(line))
+  await assert.rejects(
+    runInstall([installer.targetPlan("claude", target)], { project, hooks: true }),
+    /initialized Git repository.*selected hosts: claude/
   );
-  const projectLine = results.find((line) => line.startsWith("project:"));
-  assert.doesNotMatch(projectLine, /pre-commit/);
-  assert.ok(fs.existsSync(path.join(project, installer.HOOKS_DIRECTORY, "guard_hook.py")));
-  assert.ok(fs.existsSync(path.join(project, ".claude", "settings.json")));
+  assert.ok(!fs.existsSync(path.join(project, installer.HOOKS_DIRECTORY)));
+  assert.ok(!fs.existsSync(path.join(project, ".claude", "settings.json")));
+  assert.ok(!fs.existsSync(target));
 });
 
 test("hooks refresh full preserves user hook events and entries", async () => {
@@ -1528,23 +1531,22 @@ test("emitted hooks use the probed interpreter token", async () => {
   );
 });
 
-test("hook install is skipped with a note when no interpreter works", async () => {
+test("native hook install requires an interpreter", async () => {
   installer.hooks.detectPythonInterpreter = () => null;
   const project = path.join(root, "project");
   fs.mkdirSync(path.join(project, ".git"), { recursive: true });
   const target = path.join(root, "claude", "skills");
-  const results = await runInstall([installer.targetPlan("claude", target)], {
-    project,
-    hooks: true,
-  });
-  assert.ok(results.some((line) => /no working python3 or python interpreter/.test(line)));
+  await assert.rejects(
+    runInstall([installer.targetPlan("claude", target)], { project, hooks: true }),
+    /working Python interpreter.*selected hosts: claude/
+  );
   assert.ok(!fs.existsSync(path.join(project, installer.HOOKS_DIRECTORY)));
   assert.ok(!fs.existsSync(path.join(project, ".claude", "settings.json")));
   assert.ok(!fs.existsSync(path.join(project, ".git", "hooks", "pre-commit")));
-  assert.ok(fs.existsSync(path.join(project, "AGENTS.md")));
+  assert.ok(!fs.existsSync(path.join(project, "AGENTS.md")));
 });
 
-test("hooks refresh full skips settings and git hooks without an interpreter", async () => {
+test("hooks refresh full rejects before writes without an interpreter", async () => {
   const project = path.join(root, "project");
   fs.mkdirSync(path.join(project, ".git"), { recursive: true });
   const target = path.join(root, "claude", "skills");
@@ -1561,13 +1563,37 @@ test("hooks refresh full skips settings and git hooks without an interpreter", a
   const status = await installer.main(
     ["--hooks-refresh-full", "--project", project, "--source-root", source, "--no-color"]
   );
-  assert.equal(status, 0);
-  assert.match(
+  assert.equal(status, 1);
+  assert.doesNotMatch(
     fs.readFileSync(path.join(project, installer.HOOKS_DIRECTORY, "guard_hook.py"), "utf8"),
     /guard v2/
   );
   assert.equal(fs.readFileSync(settingsPath, "utf8"), settingsBefore);
   assert.equal(fs.readFileSync(preCommit, "utf8"), hookBefore);
+});
+
+test("selected full refresh requires an initialized repository before writes", async () => {
+  installer.hooks.detectPythonInterpreter = () => "python3";
+  const project = path.join(root, "plain-refresh-project");
+  const managed = path.join(project, installer.HOOKS_DIRECTORY);
+  fs.mkdirSync(managed, { recursive: true });
+  for (const name of installer.GUARD_SCRIPTS) {
+    fs.writeFileSync(path.join(managed, name), `old\n${installer.GUARD_MARKER}\n`);
+  }
+  const before = fs.readFileSync(path.join(managed, "guard_hook.py"), "utf8");
+
+  const status = await installer.main([
+    "--hooks-refresh-full",
+    "--grok",
+    "--project",
+    project,
+    "--source-root",
+    source,
+    "--no-color",
+  ]);
+
+  assert.equal(status, 1);
+  assert.equal(fs.readFileSync(path.join(managed, "guard_hook.py"), "utf8"), before);
 });
 
 test("hooks refresh dry run never probes the interpreter", async () => {

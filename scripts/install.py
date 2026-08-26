@@ -36,10 +36,6 @@ def local_roots_for_manifest(manifest: Mapping) -> Mapping[str, str]:
 
 TARGETS = targets_for_manifest(sync_skill_resources.RESOURCE_MANIFEST)
 LOCAL_ROOTS = local_roots_for_manifest(sync_skill_resources.RESOURCE_MANIFEST)
-GUARD_TIERS = {
-    target: config["guard_tier"]
-    for target, config in sync_skill_resources.RESOURCE_MANIFEST["hosts"].items()
-}
 SKILL_NAMES = skill_names_for_manifest(sync_skill_resources.RESOURCE_MANIFEST)
 SKILL_ALIASES = dict(sync_skill_resources.RESOURCE_MANIFEST["skill_aliases"])
 CLAUDE_BRIDGE = "@../AGENTS.md\n@../WORKFLOW.md\n"
@@ -172,9 +168,7 @@ def _detect_python_interpreter() -> Optional[str]:
 def _effective_interpreter() -> Optional[str]:
     """Single owner of the interpreter probe and its policy.
 
-    Returns the probed interpreter, or None when no interpreter works —
-    callers must then skip writing hook content instead of pinning a
-    nonexistent python3.
+    Hook installation fails before writing when no interpreter works.
     """
     return _detect_python_interpreter()
 
@@ -219,6 +213,24 @@ def _git_hooks_location(project: "Path") -> Tuple[Optional["Path"], bool]:
         return resolved, True
     # Fallback when git is not runnable: only a plain .git directory is safe.
     return (dot_git / "hooks" if dot_git.is_dir() else None), False
+
+
+def _required_hook_runtime(
+    project: Path, command: str, selected: Sequence[str] = ()
+) -> Tuple[str, Path]:
+    suffix = f" for selected hosts: {', '.join(selected)}" if selected else ""
+    interpreter = _effective_interpreter()
+    if interpreter is None:
+        raise InstallerError(
+            f"{command} requires a working Python interpreter{suffix}"
+        )
+    hooks_dir, resolved = _git_hooks_location(project)
+    if not resolved or hooks_dir is None:
+        raise InstallerError(
+            f"{command} requires an initialized Git repository with a "
+            f"resolvable hooks directory{suffix}"
+        )
+    return interpreter, hooks_dir
 
 
 OPENCODE_NOTE = (
@@ -1116,6 +1128,11 @@ def refresh_hooks(
     """Refreshed project-relative paths; "note:"-prefixed entries are
     user-facing notes rather than refreshed files."""
     hooks_dir = _git_hooks_directory(project) if full else None
+    interpreter: Optional[str] = None
+    if full and not dry_run:
+        interpreter, hooks_dir = _required_hook_runtime(
+            project, "--hooks-refresh-full", selected
+        )
     _validate_hooks_refresh(source_root, project, full, hooks_dir, selected)
     refreshed: List[str] = []
     for name in GUARD_SCRIPTS:
@@ -1125,14 +1142,6 @@ def refresh_hooks(
             _atomic_copy(source, destination)
         refreshed.append(_describe_project_path(project, destination))
     if full:
-        # Dry-run only lists paths, so it never needs the interpreter probe.
-        interpreter = None if dry_run else _effective_interpreter()
-        if not dry_run and interpreter is None:
-            refreshed.append(
-                "note: hooks: no working python3 or python interpreter found "
-                "on PATH; skipped native settings and git hook refresh"
-            )
-            return refreshed
         for target, settings, merge, generated in (
             (
                 "claude",
@@ -1350,43 +1359,10 @@ def install(
     if hooks and project is None:
         raise InstallerError("--hooks requires --project")
     selected = [plan.name for plan in plans]
-    git_only = [
-        target for target in selected if GUARD_TIERS.get(target) == "git-only"
-    ]
-    # Resolve per-run environment facts (interpreter, git hooks directory)
-    # once here and thread them down.
-    effective_hooks = hooks
     interpreter = "python3"
     hooks_dir: Optional[Path] = None
-    hook_notes: List[str] = []
     if hooks:
-        probed = _effective_interpreter()
-        if probed is None:
-            if git_only:
-                raise InstallerError(
-                    "--hooks requires a working Python interpreter for "
-                    f"git-only hosts: {', '.join(git_only)}"
-                )
-            effective_hooks = False
-            hook_notes.append(
-                "note: hooks: no working python3 or python interpreter found "
-                "on PATH; skipped guard hook install"
-            )
-        else:
-            interpreter = probed
-    if effective_hooks:
-        hooks_dir, git_resolved = _git_hooks_location(project)
-        if git_only and not git_resolved:
-            raise InstallerError(
-                "--hooks requires an initialized Git repository with a "
-                "resolvable hooks directory for git-only hosts: "
-                + ", ".join(git_only)
-            )
-        if hooks_dir is None and _lexists(project / ".git"):
-            hook_notes.append(
-                "note: hooks: found .git but could not resolve the git hooks "
-                "directory (is git runnable?); git hooks were not installed"
-            )
+        interpreter, hooks_dir = _required_hook_runtime(project, "--hooks", selected)
     deployments = _deployment_plans(plans)
     adapters = list(dict.fromkeys(deployment.profile for deployment in deployments))
     validate_source(source_root, adapters)
@@ -1452,7 +1428,7 @@ def install(
             source_root,
             project,
             selected,
-            effective_hooks,
+            hooks,
             [*mutation_roots, *planned_backups],
             interpreter,
             hooks_dir,
@@ -1485,10 +1461,9 @@ def install(
                 )
             if project is not None:
                 files = _project_files(
-                    project, selected, effective_hooks, interpreter, hooks_dir
+                    project, selected, hooks, interpreter, hooks_dir
                 )
                 results.append(f"project: would copy {files} to {project}")
-            results.extend(hook_notes)
             _append_host_notes(results, selected)
             return results
 
@@ -1525,16 +1500,15 @@ def install(
                     source_root,
                     project,
                     selected,
-                    effective_hooks,
+                    hooks,
                     project_transaction,
                     interpreter,
                     hooks_dir,
                 )
                 files = _project_files(
-                    project, selected, effective_hooks, interpreter, hooks_dir
+                    project, selected, hooks, interpreter, hooks_dir
                 )
                 results.append(f"project: copied {files} to {project}")
-            results.extend(hook_notes)
         except (Exception, KeyboardInterrupt) as error:
             rollback_errors = []
             try:

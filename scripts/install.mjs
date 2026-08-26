@@ -118,9 +118,8 @@ export function detectPythonInterpreter() {
   return null;
 }
 
-// Single owner of the interpreter probe and its policy: returns the probed
-// interpreter, or null when no interpreter works — callers must then skip
-// writing hook content instead of pinning a nonexistent python3.
+// Single owner of the interpreter probe and its policy. Hook installation
+// fails before writing when no interpreter works.
 function effectiveInterpreter() {
   return hooks.detectPythonInterpreter();
 }
@@ -156,6 +155,24 @@ function gitHooksLocation(project) {
     directory: isDirectory(dotGit) ? path.join(dotGit, "hooks") : null,
     resolved: false,
   };
+}
+
+function requiredHookRuntime(project, command, selected = []) {
+  const targetSuffix = selected.length ? ` for selected hosts: ${selected.join(", ")}` : "";
+  const interpreter = effectiveInterpreter();
+  if (interpreter === null) {
+    throw new InstallerError(
+      `${command} requires a working Python interpreter${targetSuffix}`
+    );
+  }
+  const location = gitHooksLocation(project);
+  if (!location.resolved) {
+    throw new InstallerError(
+      `${command} requires an initialized Git repository with a resolvable hooks ` +
+        `directory${targetSuffix}`
+    );
+  }
+  return { interpreter, hooksDir: location.directory };
 }
 const HOST_NOTES = {
   opencode:
@@ -207,9 +224,6 @@ export function localRootsForManifest(manifest) {
 
 export const TARGETS = targetsForManifest(MANIFEST);
 export const LOCAL_ROOTS = localRootsForManifest(MANIFEST);
-const GUARD_TIERS = Object.fromEntries(
-  Object.entries(MANIFEST.hosts).map(([target, config]) => [target, config.guard_tier])
-);
 export const SKILL_NAMES = skillNamesForManifest(MANIFEST);
 export const SKILL_ALIASES = { ...MANIFEST.skill_aliases };
 const PHASE_RESOURCES = MANIFEST.phase_resources;
@@ -1199,7 +1213,15 @@ function validateHooksRefresh(sourceRoot, project, full, hooksDir, selected) {
 // Returns refreshed project-relative paths; entries prefixed "note:" are
 // user-facing notes rather than refreshed files.
 function refreshHooks(sourceRoot, project, full, dryRun, selected = []) {
-  const hooksDir = full ? gitHooksDirectory(project) : null;
+  let hooksDir = full ? gitHooksDirectory(project) : null;
+  let interpreter = null;
+  if (full && !dryRun) {
+    ({ interpreter, hooksDir } = requiredHookRuntime(
+      project,
+      "--hooks-refresh-full",
+      selected
+    ));
+  }
   validateHooksRefresh(sourceRoot, project, full, hooksDir, selected);
   const refreshed = [];
   for (const name of GUARD_SCRIPTS) {
@@ -1209,15 +1231,6 @@ function refreshHooks(sourceRoot, project, full, dryRun, selected = []) {
     refreshed.push(describeProjectPath(project, destination));
   }
   if (full) {
-    // Dry-run only lists paths, so it never needs the interpreter probe.
-    const interpreter = dryRun ? null : effectiveInterpreter();
-    if (!dryRun && interpreter === null) {
-      refreshed.push(
-        "note: hooks: no working python3 or python interpreter found on PATH; " +
-          "skipped native settings and git hook refresh"
-      );
-      return refreshed;
-    }
     for (const [target, settings, merge, generated] of [
       [
         "claude",
@@ -1625,45 +1638,10 @@ export async function install(sourceRoot, plans, options = {}) {
     throw new InstallerError("--hooks requires --project");
   }
   const selected = plans.map((plan) => plan.name);
-  const gitOnly = selected.filter((target) => GUARD_TIERS[target] === "git-only");
-  // Resolve per-run environment facts (interpreter, git hooks directory)
-  // once here and thread them down.
-  let effectiveHooks = hooksEnabled;
   let interpreter = "python3";
   let hooksDir = null;
-  const hookNotes = [];
   if (hooksEnabled) {
-    const probed = effectiveInterpreter();
-    if (probed === null) {
-      if (gitOnly.length > 0) {
-        throw new InstallerError(
-          `--hooks requires a working Python interpreter for git-only hosts: ${gitOnly.join(", ")}`
-        );
-      }
-      effectiveHooks = false;
-      hookNotes.push(
-        "note: hooks: no working python3 or python interpreter found on PATH; " +
-          "skipped guard hook install"
-      );
-    } else {
-      interpreter = probed;
-    }
-  }
-  if (effectiveHooks) {
-    const location = gitHooksLocation(project);
-    hooksDir = location.directory;
-    if (gitOnly.length > 0 && !location.resolved) {
-      throw new InstallerError(
-        "--hooks requires an initialized Git repository with a resolvable hooks " +
-          `directory for git-only hosts: ${gitOnly.join(", ")}`
-      );
-    }
-    if (hooksDir === null && lexists(path.join(project, ".git"))) {
-      hookNotes.push(
-        "note: hooks: found .git but could not resolve the git hooks directory " +
-          "(is git runnable?); git hooks were not installed"
-      );
-    }
+    ({ interpreter, hooksDir } = requiredHookRuntime(project, "--hooks", selected));
   }
   const progress = async (text) => {
     if (onProgress) onProgress(text);
@@ -1744,7 +1722,7 @@ export async function install(sourceRoot, plans, options = {}) {
       sourceRoot,
       project,
       selected,
-      effectiveHooks,
+      hooksEnabled,
       [...mutationRoots, ...plannedBackups],
       interpreter,
       hooksDir
@@ -1776,10 +1754,9 @@ export async function install(sourceRoot, plans, options = {}) {
         results.push(installResult(plan, true, update) + suffix);
       }
       if (project !== null) {
-        const files = projectFiles(project, selected, effectiveHooks, interpreter, hooksDir);
+        const files = projectFiles(project, selected, hooksEnabled, interpreter, hooksDir);
         results.push(`project: would copy ${files} to ${project}`);
       }
-      results.push(...hookNotes);
       appendHostNotes(results, selected);
       return results;
     }
@@ -1833,15 +1810,14 @@ export async function install(sourceRoot, plans, options = {}) {
           sourceRoot,
           project,
           selected,
-          effectiveHooks,
+          hooksEnabled,
           projectTransaction,
           interpreter,
           hooksDir
         );
-        const files = projectFiles(project, selected, effectiveHooks, interpreter, hooksDir);
+        const files = projectFiles(project, selected, hooksEnabled, interpreter, hooksDir);
         results.push(`project: copied ${files} to ${project}`);
       }
-      results.push(...hookNotes);
     } catch (error) {
       const rollbackErrors = [];
       try {

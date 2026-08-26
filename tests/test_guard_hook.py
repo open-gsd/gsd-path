@@ -127,6 +127,57 @@ class GuardHookTests(unittest.TestCase):
                     {"tool_name": "Bash", "tool_input": {"command": command}}
                 )
 
+    def test_denies_archive_mutation_from_archive_working_directory(self):
+        for key in ("working_directory", "workdir", "cwd"):
+            with self.subTest(key=key):
+                self.assert_denied(
+                    {
+                        "tool_name": "Shell",
+                        "tool_input": {
+                            "command": "touch NOTE.md",
+                            key: ".project/archive/001-mvp",
+                        },
+                    }
+                )
+
+    def test_allows_archive_read_from_archive_working_directory(self):
+        self.assert_allowed(
+            {
+                "tool_name": "Shell",
+                "tool_input": {
+                    "command": "cat NOTE.md",
+                    "working_directory": ".project/archive/001-mvp",
+                },
+            }
+        )
+
+    def test_denies_write_capable_and_multiline_archive_reads(self):
+        for command in (
+            "git diff --output=.project/archive/001-mvp/NOTE.md HEAD",
+            "cat .project/archive/001-mvp/NOTE.md\nrm .project/archive/001-mvp/NOTE.md",
+        ):
+            with self.subTest(command=command):
+                self.assert_denied(
+                    {"tool_name": "Bash", "tool_input": {"command": command}}
+                )
+
+    def test_denies_destructive_git_commands_with_quoted_flags(self):
+        for command in (
+            "git reset '--hard' HEAD~1",
+            "git clean '-fd'",
+            "git push '--force-with-lease' origin main",
+            "git branch '-D' gsd-path/task",
+            "env git reset '--hard' HEAD~1",
+            "git -C repo reset '--hard' HEAD~1",
+            "FOO=1 git reset '--hard' HEAD~1",
+            "git.exe reset '--hard' HEAD~1",
+            "echo ok\ngit reset '--hard' HEAD~1",
+        ):
+            with self.subTest(command=command):
+                self.assert_denied(
+                    {"tool_name": "Bash", "tool_input": {"command": command}}
+                )
+
     def test_allows_powershell_archive_reads(self):
         self.assert_allowed(
             {

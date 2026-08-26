@@ -14,6 +14,7 @@ from scripts import install
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+ORIGINAL_GIT_HOOKS_RESOLVER = install._resolve_git_hooks_path
 
 
 class InstallerTests(unittest.TestCase):
@@ -79,10 +80,22 @@ class InstallerTests(unittest.TestCase):
             install.sync_skill_resources, "mismatches", return_value=[]
         )
         self.sync_patch.start()
+        self.git_hooks_patch = mock.patch.object(
+            install, "_resolve_git_hooks_path", side_effect=self.resolve_test_hooks_path
+        )
+        self.git_hooks_patch.start()
 
     def tearDown(self):
+        self.git_hooks_patch.stop()
         self.sync_patch.stop()
         self.temporary.cleanup()
+
+    def resolve_test_hooks_path(self, project):
+        resolved = ORIGINAL_GIT_HOOKS_RESOLVER(project)
+        dot_git = project / ".git"
+        if resolved is not None:
+            return resolved
+        return dot_git / "hooks" if dot_git.is_dir() else None
 
     def run_main(self, arguments, environment=None):
         output = io.StringIO()
@@ -1268,7 +1281,7 @@ class InstallerTests(unittest.TestCase):
         for host in ("codex", "cursor"):
             with self.subTest(host=host):
                 project = self.root / f"unsafe-{host}-project"
-                project.mkdir()
+                (project / ".git").mkdir(parents=True)
                 outside = self.root / f"outside-{host}"
                 outside.mkdir()
                 (project / f".{host}").symlink_to(outside, target_is_directory=True)
@@ -1289,14 +1302,15 @@ class InstallerTests(unittest.TestCase):
                 self.assertFalse((outside / "hooks.json").exists())
                 self.assertFalse(target.exists())
 
-    def test_hooks_skip_git_hook_without_repository(self):
+    def test_native_hooks_require_initialized_repository(self):
         project = self.root / "project"
         target = self.root / "claude" / "skills"
-        status, output, error = self.run_main(self.hooks_arguments(project, target))
-        self.assertEqual(0, status, error)
+        status, _, error = self.run_main(self.hooks_arguments(project, target))
+        self.assertEqual(1, status)
+        self.assertRegex(error, "initialized Git repository.*selected hosts: claude")
         self.assertFalse((project / ".git").exists())
-        self.assertNotIn("commit-msg", output)
-        self.assertTrue((project / ".claude" / "settings.json").is_file())
+        self.assertFalse((project / ".claude" / "settings.json").exists())
+        self.assertFalse(target.exists())
 
     def test_git_only_hooks_require_initialized_repository(self):
         project = self.root / "plain-project"
@@ -1306,7 +1320,7 @@ class InstallerTests(unittest.TestCase):
         ):
             with self.assertRaisesRegex(
                 install.InstallerError,
-                "initialized Git repository.*git-only hosts: grok",
+                "initialized Git repository.*selected hosts: grok",
             ):
                 install.install(
                     self.source,
@@ -1327,7 +1341,7 @@ class InstallerTests(unittest.TestCase):
         ):
             with self.assertRaisesRegex(
                 install.InstallerError,
-                "working Python interpreter.*git-only hosts: grok",
+                "working Python interpreter.*selected hosts: grok",
             ):
                 install.install(
                     self.source,
@@ -1341,6 +1355,7 @@ class InstallerTests(unittest.TestCase):
 
     def test_hooks_collision_rolls_back_cleanly(self):
         project = self.root / "project"
+        (project / ".git").mkdir(parents=True)
         (project / ".claude").mkdir(parents=True)
         (project / ".claude" / "settings.json").write_text("{}", encoding="utf-8")
         target = self.root / "claude" / "skills"
@@ -1734,7 +1749,7 @@ class InstallerTests(unittest.TestCase):
         self.assertFalse((project / ".git" / "hooks" / "pre-commit").exists())
         self.assertIn(".husky/pre-commit", output)
 
-    def test_hooks_report_cleanly_when_git_file_cannot_be_resolved(self):
+    def test_hooks_reject_git_file_that_cannot_be_resolved(self):
         project = self.root / "gitfile-project"
         project.mkdir()
         (project / ".git").write_text("gitdir: /nonexistent\n", encoding="utf-8")
@@ -1745,16 +1760,14 @@ class InstallerTests(unittest.TestCase):
             with mock.patch.object(
                 install, "_resolve_git_hooks_path", return_value=None
             ):
-                status, output, error = self.run_main(
+                status, _, error = self.run_main(
                     self.hooks_arguments(project, target)
                 )
-        self.assertEqual(0, status, error)
-        self.assertIn("could not resolve the git hooks directory", output)
-        self.assertNotIn("pre-commit", output)
-        self.assertTrue(
-            (project / install.HOOKS_DIRECTORY / "guard_hook.py").is_file()
-        )
-        self.assertTrue((project / ".claude" / "settings.json").is_file())
+        self.assertEqual(1, status)
+        self.assertRegex(error, "initialized Git repository.*selected hosts: claude")
+        self.assertFalse((project / install.HOOKS_DIRECTORY).exists())
+        self.assertFalse((project / ".claude" / "settings.json").exists())
+        self.assertFalse(target.exists())
 
     def test_hooks_refresh_full_preserves_user_hook_events_and_entries(self):
         project = self.root / "project"
@@ -1814,24 +1827,24 @@ class InstallerTests(unittest.TestCase):
         command = settings["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
         self.assertTrue(command.startswith('pythonX "'), command)
 
-    def test_hook_install_is_skipped_with_note_when_no_interpreter_works(self):
+    def test_native_hook_install_requires_interpreter(self):
         project = self.root / "project"
         (project / ".git").mkdir(parents=True)
         target = self.root / "claude" / "skills"
         with mock.patch.object(
             install, "_detect_python_interpreter", return_value=None
         ):
-            status, output, error = self.run_main(
+            status, _, error = self.run_main(
                 self.hooks_arguments(project, target)
             )
-        self.assertEqual(0, status, error)
-        self.assertIn("no working python3 or python interpreter", output)
+        self.assertEqual(1, status)
+        self.assertRegex(error, "working Python interpreter.*selected hosts: claude")
         self.assertFalse((project / install.HOOKS_DIRECTORY).exists())
         self.assertFalse((project / ".claude" / "settings.json").exists())
         self.assertFalse((project / ".git" / "hooks" / "pre-commit").exists())
-        self.assertTrue((project / "AGENTS.md").is_file())
+        self.assertFalse((project / "AGENTS.md").exists())
 
-    def test_hooks_refresh_full_skips_without_interpreter(self):
+    def test_hooks_refresh_full_rejects_before_writes_without_interpreter(self):
         project = self.root / "project"
         (project / ".git").mkdir(parents=True)
         target = self.root / "claude" / "skills"
@@ -1846,19 +1859,43 @@ class InstallerTests(unittest.TestCase):
         with mock.patch.object(
             install, "_detect_python_interpreter", return_value=None
         ):
-            status, output, error = self.run_main(
+            status, _, error = self.run_main(
                 self.refresh_full_arguments(project)
             )
-        self.assertEqual(0, status, error)
-        self.assertIn(
+        self.assertEqual(1, status)
+        self.assertIn("working Python interpreter", error)
+        self.assertNotIn(
             "guard v2",
-            (project / install.HOOKS_DIRECTORY / "guard_hook.py").read_text(
-                encoding="utf-8"
-            ),
+            (project / install.HOOKS_DIRECTORY / "guard_hook.py").read_text(encoding="utf-8"),
         )
-        self.assertIn("no working python3 or python interpreter", output)
         self.assertEqual(settings_before, settings_path.read_text(encoding="utf-8"))
         self.assertEqual(hook_before, pre_commit.read_text(encoding="utf-8"))
+
+    def test_selected_full_refresh_requires_repository_before_writes(self):
+        project = self.root / "plain-refresh-project"
+        managed = project / install.HOOKS_DIRECTORY
+        managed.mkdir(parents=True)
+        for name in install.GUARD_SCRIPTS:
+            (managed / name).write_text(
+                f"old\n{install.GUARD_MARKER}\n", encoding="utf-8"
+            )
+        before = (managed / "guard_hook.py").read_text(encoding="utf-8")
+        with mock.patch.object(
+            install, "_detect_python_interpreter", return_value="python3"
+        ):
+            status, _, error = self.run_main(
+                [
+                    "--hooks-refresh-full",
+                    "--grok",
+                    "--project",
+                    str(project),
+                    "--source-root",
+                    str(self.source),
+                ]
+            )
+        self.assertEqual(1, status)
+        self.assertIn("initialized Git repository", error)
+        self.assertEqual(before, (managed / "guard_hook.py").read_text(encoding="utf-8"))
 
     def test_hooks_refresh_dry_run_never_probes_interpreter(self):
         project = self.root / "project"

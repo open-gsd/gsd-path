@@ -45,9 +45,8 @@ hooks. Other target files are refused if they already exist:
 Git hooks are written to the repository's **effective** hooks directory,
 resolved with `git rev-parse --git-path hooks`. That honors `core.hooksPath`
 setups (Husky and friends) and linked worktrees (where `.git` is a file).
-Native-guarded hosts may fall back to a plain `.git/hooks` directory when Git
-is not runnable. A selected `git-only` host requires an initialized repository
-with a resolvable hooks directory; otherwise installation stops before writing.
+Every selected host requires an initialized repository with a resolvable hooks
+directory; otherwise installation stops before writing.
 
 Git hooks work for **any** agent that commits. Native guard wiring denies a tool
 call when its event is malformed or the guard cannot validate it.
@@ -55,10 +54,9 @@ call when its event is malformed or the guard cannot validate it.
 **Windows / interpreter caveat:** hooks and native host settings invoke a
 Python interpreter that the installer probes at install time — `python3` first,
 then `python` (plain `python3` usually does not exist on Windows). If neither
-runs, native-guarded installs skip hook wiring with a warning rather than
-pinning a missing interpreter. A `git-only` install fails because it cannot
-provide its declared tier. The `sh` hook scripts themselves need a POSIX shell
-(Git for Windows provides one).
+runs, hook installation stops before writing instead of pinning a missing
+interpreter. The `sh` hook scripts themselves need a POSIX shell (Git for
+Windows provides one).
 
 ### Updating after package upgrade
 
@@ -74,7 +72,8 @@ host's valid existing JSON. Unselected foreign configs are not changed. The
 merge replaces only managed guard entries and preserves unrelated entries,
 hook events, and settings. Codex resolves the guard from the Git root; Cursor
 runs its project hook from the project root, so both configs remain valid after
-a clone or move.
+a clone or move. A full refresh requires the same working interpreter and
+resolved Git hooks directory as the initial install.
 
 See [UPDATE.md](UPDATE.md).
 
