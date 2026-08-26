@@ -558,10 +558,14 @@ def _validate_evidence_details(
         ),
         None,
     )
-    if primary is None or primary["HEAD"] != _full_sha(
-        integration, "integration_commit", path
+    if (
+        primary is None
+        or not primary.get("branch", "").startswith("refs/heads/")
+        or primary["HEAD"] != _full_sha(integration, "integration_commit", path)
     ):
-        raise EvidenceError(f"{path}: primary worktree is missing integration HEAD")
+        raise EvidenceError(
+            f"{path}: primary worktree must be on a named branch at integration HEAD"
+        )
     if any(
         record["worktree"].casefold() == task_worktree.casefold()
         or record.get("branch") == task_ref

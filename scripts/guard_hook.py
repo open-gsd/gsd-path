@@ -100,7 +100,12 @@ GIT_READ_WRITE_OPTIONS = frozenset({"--output", "--ext-diff", "--textconv"})
 ARCHIVE_READ_EXECUTION_OPTIONS = {"rg": frozenset({"--pre"})}
 AMBIGUOUS_SHELL_SYNTAX = re.compile(r"[\r\n|;&<>`]|\$\(|@\(")
 SHELL_EXPANSION_SYNTAX = re.compile(r"`|\$\(|@\(")
-SHELL_VARIABLE_SYNTAX = re.compile(r"\$(?:[A-Za-z_][A-Za-z0-9_]*|\{[^}\r\n]+\})")
+SHELL_PARAMETER_SYNTAX = re.compile(
+    r"\$(?:[A-Za-z_][A-Za-z0-9_]*|[0-9]+|[-*@#?$!]|\{[^}\r\n]+\})"
+)
+DIRECTORY_CHANGE_COMMANDS = frozenset(
+    {"cd", "chdir", "pushd", "set-location", "sl"}
+)
 GIT_REASONS = {
     "reset": "git reset --hard discards work the build recovery protocol needs",
     "clean": "git clean -f deletes untracked evidence and retained task worktrees",
@@ -242,6 +247,32 @@ def path_in_archive(path, working_directories=()):
     return False
 
 
+def is_redirection(token):
+    return bool(token) and set(token) <= {"<", ">"}
+
+
+def directory_change_target(arguments):
+    operands = []
+    for index, argument in enumerate(arguments):
+        if is_redirection(argument):
+            break
+        if (
+            argument.isdigit()
+            and index + 1 < len(arguments)
+            and is_redirection(arguments[index + 1])
+        ):
+            break
+        if (
+            argument != "--"
+            and not argument.startswith("-")
+            and argument.casefold() != "/d"
+        ):
+            operands.append(argument)
+    if not operands or operands[-1] == "-":
+        raise ValueError("directory change cannot be validated")
+    return operands[-1]
+
+
 def command_references_archive(tokens, working_directories):
     current_directories = list(working_directories)
     for segment in command_segments(tokens):
@@ -253,16 +284,16 @@ def command_references_archive(tokens, working_directories):
         ):
             return True
         invocation = command_invocation(segment)
-        if invocation is None or invocation[0] != "cd":
+        if invocation is None:
             continue
-        operands = [
-            argument
-            for argument in invocation[1]
-            if argument != "--" and not argument.startswith("-")
-        ]
-        if not operands:
+        command, arguments = invocation
+        if command == "popd":
+            raise ValueError("directory stack changes cannot be validated")
+        if command not in DIRECTORY_CHANGE_COMMANDS:
             continue
-        target = operands[-1]
+        target = directory_change_target(arguments)
+        if SHELL_PARAMETER_SYNTAX.search(target):
+            raise ValueError("directory change cannot be validated")
         if is_absolute_path(target):
             current_directories = [target]
         else:
@@ -274,7 +305,7 @@ def command_references_archive(tokens, working_directories):
 def unresolved_archive_expansion(command, working_directories):
     if not (
         SHELL_EXPANSION_SYNTAX.search(command)
-        or SHELL_VARIABLE_SYNTAX.search(command)
+        or SHELL_PARAMETER_SYNTAX.search(command)
     ):
         return False
     lowered = command.replace("\\", "/").casefold()
@@ -296,7 +327,7 @@ def patch_paths(payload):
 def shell_tokens(command):
     if "\n" in command or "\r" in command:
         raise ValueError("shell command contains a line separator")
-    lexer = shlex.shlex(command, posix=True, punctuation_chars="|;&()")
+    lexer = shlex.shlex(command, posix=True, punctuation_chars="|;&()<>")
     lexer.whitespace_split = True
     lexer.commenters = ""
     tokens = list(lexer)
@@ -318,9 +349,15 @@ def command_segments(tokens):
         yield segment
 
 
+def validate_shell_assignment(assignment):
+    if assignment.partition("=")[0].casefold().startswith("git_config_"):
+        raise ValueError("Git configuration environment cannot be validated")
+
+
 def command_invocation(segment):
     index = 0
     while index < len(segment) and SHELL_ASSIGNMENT_PATTERN.match(segment[index]):
+        validate_shell_assignment(segment[index])
         index += 1
     if index >= len(segment):
         return None
@@ -333,6 +370,7 @@ def command_invocation(segment):
                 index += 1
                 break
             if SHELL_ASSIGNMENT_PATTERN.match(token):
+                validate_shell_assignment(token)
                 index += 1
                 continue
             option = token.split("=", 1)[0]
@@ -352,7 +390,7 @@ def command_invocation(segment):
     if index >= len(segment):
         return None
     executable = segment[index].replace("\\", "/").rsplit("/", 1)[-1].casefold()
-    if SHELL_VARIABLE_SYNTAX.search(executable):
+    if SHELL_PARAMETER_SYNTAX.search(executable):
         raise ValueError("shell executable cannot be validated")
     return executable, segment[index + 1:]
 
@@ -364,7 +402,7 @@ def git_command(segment):
     executable, arguments = invocation
     if executable not in {"git", "git.exe"}:
         return None
-    if any(SHELL_VARIABLE_SYNTAX.search(argument) for argument in arguments):
+    if any(SHELL_PARAMETER_SYNTAX.search(argument) for argument in arguments):
         raise ValueError("git invocation cannot be validated")
     index = 0
     while index < len(arguments) and arguments[index].startswith("-"):
@@ -476,7 +514,7 @@ def destructive_git_reason(tokens):
 def archive_command_is_read_only(command, tokens, archive_context=False):
     if archive_context and (
         AMBIGUOUS_SHELL_SYNTAX.search(command)
-        or SHELL_VARIABLE_SYNTAX.search(command)
+        or SHELL_PARAMETER_SYNTAX.search(command)
     ):
         return False
     if not archive_context:

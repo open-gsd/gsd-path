@@ -1353,6 +1353,32 @@ test("doctor reports a healthy install, hooks, and project", async () => {
   assert.ok(findings.some((finding) => /pre-commit wired/.test(finding.text)));
 });
 
+test("doctor fails when a manifest-required native guard config is missing", async () => {
+  for (const [targetName, settingsPath] of [
+    ["claude", [".claude", "settings.json"]],
+    ["cursor", [".cursor", "hooks.json"]],
+  ]) {
+    const project = path.join(root, `${targetName}-native-doctor`);
+    fs.mkdirSync(path.join(project, ".git"), { recursive: true });
+    const target = path.join(root, targetName, "skills");
+    await runInstall([installer.targetPlan(targetName, target)], { project, hooks: true });
+    fs.rmSync(path.join(project, ...settingsPath));
+
+    const findings = installer.doctor(source, {
+      targets: [targetName],
+      rootFor: () => target,
+      project,
+    });
+    assert.ok(
+      findings.some(
+        (finding) =>
+          finding.level === "fail" &&
+          finding.text.includes(`${targetName} native guard wiring is missing`)
+      )
+    );
+  }
+});
+
 test("doctor flags stale versions and incomplete installs", async () => {
   const target = path.join(root, "claude", "skills");
   await runInstall([installer.targetPlan("claude", target)]);

@@ -192,6 +192,7 @@ class GuardHookTests(unittest.TestCase):
             "cd .project && rm archive/001-mvp/NOTE.md",
             'P=.project; rm "$P/archive/001-mvp/NOTE.md"',
             "bash -lc '(cd .project && rm archive/001-mvp/NOTE.md)'",
+            "bash -lc 'pushd .project >/dev/null && rm archive/001-mvp/PLAN.md'",
         ):
             with self.subTest(command=command):
                 self.assert_denied(
@@ -251,6 +252,9 @@ class GuardHookTests(unittest.TestCase):
             "git -c alias.wipe='reset --hard' wipe HEAD~1",
             "git -calias.wipe='reset --hard' wipe HEAD~1",
             "git --config-env=alias.wipe=WIPE wipe HEAD~1",
+            "bash -lc 'set -- git; \"$1\" reset --hard HEAD~1'",
+            "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=alias.wipe "
+            "GIT_CONFIG_VALUE_0='reset --hard' git wipe HEAD~1",
         ):
             with self.subTest(command=command):
                 self.assert_denied(

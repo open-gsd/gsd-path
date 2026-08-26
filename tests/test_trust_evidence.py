@@ -575,6 +575,22 @@ class TrustEvidenceTests(unittest.TestCase):
         ):
             check_trust_evidence.validate_repository(self.repo)
 
+    def test_rejects_primary_worktree_without_named_branch(self):
+        self.receipt("alpha")
+        self.receipt("beta")
+        worktrees = self.artifact("alpha", "worktrees")
+        evidence = json.loads(worktrees.read_text(encoding="utf-8"))
+        evidence["output"] = evidence["output"].replace(
+            "branch refs/heads/main", "bare"
+        )
+        worktrees.write_text(json.dumps(evidence) + "\n", encoding="utf-8")
+        self.commit_receipts()
+
+        with self.assertRaisesRegex(
+            check_trust_evidence.EvidenceError, "must be on a named branch"
+        ):
+            check_trust_evidence.validate_repository(self.repo)
+
     def test_rejects_unretired_task_branch(self):
         self.keep_fixture_branches.add("alpha")
         self.receipt("alpha")

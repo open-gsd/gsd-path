@@ -45,23 +45,25 @@ function codexGuardCommandWindows(interpreter) {
   );
 }
 
+function codexGuardEntry(interpreter) {
+  return {
+    matcher: ".*",
+    hooks: [
+      {
+        type: "command",
+        command: codexGuardCommand(interpreter),
+        commandWindows: codexGuardCommandWindows(interpreter),
+      },
+    ],
+  };
+}
+
 export function codexHooksSettings(interpreter) {
   return (
     JSON.stringify(
       {
         hooks: {
-          PreToolUse: [
-            {
-              matcher: ".*",
-              hooks: [
-                {
-                  type: "command",
-                  command: codexGuardCommand(interpreter),
-                  commandWindows: codexGuardCommandWindows(interpreter),
-                },
-              ],
-            },
-          ],
+          PreToolUse: [codexGuardEntry(interpreter)],
         },
       },
       null,
@@ -69,19 +71,22 @@ export function codexHooksSettings(interpreter) {
     ) + "\n"
   );
 }
+
+function cursorGuardEntry(interpreter) {
+  return {
+    command: `${interpreter} "${HOOKS_DIRECTORY}/guard_hook.py"`,
+    matcher: ".*",
+    failClosed: true,
+  };
+}
+
 export function cursorHooksSettings(interpreter) {
   return (
     JSON.stringify(
       {
         version: 1,
         hooks: {
-          preToolUse: [
-            {
-              command: `${interpreter} "${HOOKS_DIRECTORY}/guard_hook.py"`,
-              matcher: ".*",
-              failClosed: true,
-            },
-          ],
+          preToolUse: [cursorGuardEntry(interpreter)],
         },
       },
       null,
@@ -1303,6 +1308,31 @@ function isExecutable(candidate) {
   }
 }
 
+function nativeGuardContract(target, project) {
+  if (target === "claude") {
+    return {
+      settings: path.join(project, ".claude", "settings.json"),
+      event: "PreToolUse",
+      entry: claudeGuardEntry,
+    };
+  }
+  if (target === "codex") {
+    return {
+      settings: path.join(project, ".codex", "hooks.json"),
+      event: "PreToolUse",
+      entry: codexGuardEntry,
+    };
+  }
+  if (target === "cursor") {
+    return {
+      settings: path.join(project, ".cursor", "hooks.json"),
+      event: "preToolUse",
+      entry: cursorGuardEntry,
+    };
+  }
+  return null;
+}
+
 // Read-only health check: host installs, project contracts, guard hooks,
 // and pipeline state. Never writes.
 export function doctor(sourceRoot, { targets, rootFor, project = null }) {
@@ -1311,6 +1341,7 @@ export function doctor(sourceRoot, { targets, rootFor, project = null }) {
   const version = readPackageVersion(path.join(sourceRoot, "package.json"));
 
   const seen = [];
+  const installedTargets = new Set();
   for (const target of targets) {
     const root = rootFor(target);
     const prior = seen.find(([, other]) => samePath(other, root));
@@ -1323,6 +1354,7 @@ export function doctor(sourceRoot, { targets, rootFor, project = null }) {
       push("note", `${target}: not installed (${root})`);
       continue;
     }
+    installedTargets.add(target);
     const missing = SKILL_NAMES.filter((name) => !isDirectory(path.join(root, name)));
     if (missing.length) {
       push("fail", `${target}: incomplete install at ${root} — missing ${missing.join(", ")}`);
@@ -1376,34 +1408,38 @@ export function doctor(sourceRoot, { targets, rootFor, project = null }) {
         push("ok", `hooks: ${HOOKS_DIRECTORY}/${name} current`);
       }
     }
-    // Staleness must not depend on which interpreter wins today's probe: a
-    // hook legitimately installed with any known interpreter is current.
-    const managedVariants = INTERPRETER_CANDIDATES.map((candidate) =>
-      JSON.stringify(claudeGuardEntry(candidate))
-    );
-    const settings = path.join(project, ".claude", "settings.json");
-    if (!isFile(settings)) {
-      push("note", "hooks: no .claude/settings.json guard wiring");
-    } else if (!isManagedHookSettings(settings)) {
-      push("warn", "hooks: .claude/settings.json is not the managed guard wiring");
-    } else {
-      let hooksCurrent = false;
+    for (const target of targets) {
+      if (!installedTargets.has(target)) continue;
+      if (MANIFEST.hosts[target]?.guard_tier === "git-only") continue;
+      const contract = nativeGuardContract(target, project);
+      if (contract === null) {
+        push("fail", `hooks: ${target} declares a native guard without a health contract`);
+        continue;
+      }
+      if (!isFile(contract.settings)) {
+        push("fail", `hooks: ${target} native guard wiring is missing — run --hooks-refresh-full`);
+        continue;
+      }
+      let current = false;
       try {
-        const parsed = JSON.parse(fs.readFileSync(settings, "utf8"));
+        const parsed = JSON.parse(fs.readFileSync(contract.settings, "utf8"));
         const entries =
           parsed && typeof parsed === "object" && parsed.hooks
-            ? parsed.hooks.PreToolUse
+            ? parsed.hooks[contract.event]
             : null;
-        hooksCurrent =
+        const variants = INTERPRETER_CANDIDATES.map((candidate) =>
+          JSON.stringify(contract.entry(candidate))
+        );
+        current =
           Array.isArray(entries) &&
-          entries.some((entry) => managedVariants.includes(JSON.stringify(entry)));
+          entries.some((entry) => variants.includes(JSON.stringify(entry)));
       } catch {
-        hooksCurrent = false;
+        current = false;
       }
-      if (hooksCurrent) {
-        push("ok", "hooks: .claude/settings.json guard wiring present");
+      if (current) {
+        push("ok", `hooks: ${target} native guard wiring present`);
       } else {
-        push("warn", "hooks: .claude/settings.json guard wiring is stale — run --hooks-refresh-full");
+        push("fail", `hooks: ${target} native guard wiring is stale — run --hooks-refresh-full`);
       }
     }
     const dotGit = path.join(project, ".git");
