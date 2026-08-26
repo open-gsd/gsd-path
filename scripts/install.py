@@ -260,6 +260,18 @@ CURSOR_AGENT_FILENAME = "gsd-path.md"
 CURSOR_AGENT_BACKUP_NAME = "cursor-agent-gsd-path.md"
 
 
+def _shared_invocations(text: str) -> str:
+    hosts = sync_skill_resources.RESOURCE_MANIFEST["hosts"]
+
+    def replace(match: re.Match) -> str:
+        skill = match.group(0)[1:]
+        codex = f"{hosts['codex']['invocation_prefix']}{skill}"
+        others = f"{hosts['antigravity']['invocation_prefix']}{skill}"
+        return f"{codex} (Codex) or {others} (Antigravity/Zed)"
+
+    return re.sub(r"\$gsd-path(?:-[a-z0-9]+)*", replace, text)
+
+
 class InstallerError(RuntimeError):
     """A safe, user-facing installation failure."""
 
@@ -503,11 +515,7 @@ def stage_target(source_root: Path, target: str, staged_root: Path) -> None:
                 metadata = staged_root / name / "agents"
                 if metadata.is_dir():
                     shutil.rmtree(metadata)
-        invocation = (
-            "gsd-path"
-            if target in {"opencode", SHARED_AGENT_PROFILE}
-            else "/gsd-path"
-        )
+        invocation = "gsd-path" if target == "opencode" else "/gsd-path"
         for name in SKILL_NAMES:
             entrypoint = staged_root / name / "SKILL.md"
             entrypoint.write_text(
@@ -516,9 +524,12 @@ def stage_target(source_root: Path, target: str, staged_root: Path) -> None:
             )
         for markdown in sorted(staged_root.rglob("*.md")):
             content = markdown.read_text(encoding="utf-8")
-            markdown.write_text(
-                content.replace("$gsd-path", invocation), encoding="utf-8"
+            transformed = (
+                _shared_invocations(content)
+                if target == SHARED_AGENT_PROFILE
+                else content.replace("$gsd-path", invocation)
             )
+            markdown.write_text(transformed, encoding="utf-8")
 
 
 def _missing_directories(path: Path) -> List[Path]:

@@ -126,6 +126,7 @@ POWERSHELL_WRAPPERS = frozenset(
     {"powershell", "powershell.exe", "pwsh", "pwsh.exe"}
 )
 COMMAND_WRAPPERS = frozenset({"command", "exec"})
+UNVALIDATED_EXECUTION_BUILTINS = frozenset({".", "builtin", "eval", "source"})
 SHELL_CONTROL_WORDS = frozenset(
     {
         "!",
@@ -380,7 +381,8 @@ def command_segments(tokens):
 
 
 def validate_shell_assignment(assignment):
-    if assignment.partition("=")[0].casefold().startswith("git_config_"):
+    name = assignment.partition("=")[0].casefold()
+    if name in {"home", "xdg_config_home"} or name.startswith("git_"):
         raise ValueError("Git configuration environment cannot be validated")
 
 
@@ -424,6 +426,8 @@ def command_invocation(segment):
         raise ValueError("shell executable cannot be validated")
     if executable in SHELL_CONTROL_WORDS:
         raise ValueError("shell control syntax cannot be validated")
+    if executable in UNVALIDATED_EXECUTION_BUILTINS:
+        raise ValueError("shell execution builtin cannot be validated")
     return executable, segment[index + 1:]
 
 

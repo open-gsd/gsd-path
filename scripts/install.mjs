@@ -213,6 +213,15 @@ const SCRIPT_DIRECTORY = path.dirname(fileURLToPath(import.meta.url));
 const MANIFEST = JSON.parse(
   fs.readFileSync(path.join(SCRIPT_DIRECTORY, "skill-resources.json"), "utf8")
 );
+
+function sharedInvocations(text) {
+  return text.replace(/\$gsd-path(?:-[a-z0-9]+)*/g, (token) => {
+    const skill = token.slice(1);
+    const codex = `${MANIFEST.hosts.codex.invocation_prefix}${skill}`;
+    const others = `${MANIFEST.hosts.antigravity.invocation_prefix}${skill}`;
+    return `${codex} (Codex) or ${others} (Antigravity/Zed)`;
+  });
+}
 export function skillNamesForManifest(manifest) {
   return [...manifest.skills];
 }
@@ -628,15 +637,19 @@ export function stageTarget(sourceRoot, target, stagedRoot) {
         if (isDirectory(metadata)) fs.rmSync(metadata, { recursive: true });
       }
     }
-    const invocation =
-      target === "opencode" || target === SHARED_AGENT_PROFILE ? "gsd-path" : "/gsd-path";
+    const invocation = target === "opencode" ? "gsd-path" : "/gsd-path";
     for (const name of SKILL_NAMES) {
       const entrypoint = path.join(stagedRoot, name, "SKILL.md");
       fs.writeFileSync(entrypoint, augmentFrontmatter(fs.readFileSync(entrypoint, "utf8"), target));
     }
     for (const markdown of markdownFiles(stagedRoot)) {
       const content = fs.readFileSync(markdown, "utf8");
-      fs.writeFileSync(markdown, content.replaceAll("$gsd-path", invocation));
+      fs.writeFileSync(
+        markdown,
+        target === SHARED_AGENT_PROFILE
+          ? sharedInvocations(content)
+          : content.replaceAll("$gsd-path", invocation)
+      );
     }
   }
 }

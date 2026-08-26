@@ -68,8 +68,8 @@ step-specific fields below:
 | `task-verify` | `verify_artifact`, `verify_exit_code: 0` |
 | `reviews` | `wave_review_artifact`, `final_review_artifact` |
 | `archive` | `archive_path`, `validation_exit_code: 0` |
-| `integration` | `fixture_bundle`, `run_manifest`, `ship_commit`, `bound_branch`, `default_branch`, `integration_commit`, `milestone_tag` |
-| `worktrees` | `primary_worktree` and normalized `git worktree list --porcelain` in `output`; the task worktree and branch must be absent |
+| `integration` | `fixture_bundle`, `run_manifest`, `ship_commit`, `bound_branch`, `default_branch`, `pre_integration_default_commit`, `integration_commit`, `milestone_tag` |
+| `worktrees` | `primary_worktree`, retired `integration_worktree`, and normalized `git worktree list --porcelain` in `output`; the primary must remain on the bound branch at the ship commit, while task and integration worktrees must be absent |
 | `guards` | `guard_artifact` plus manifest `declared_tier`, `native_guard`, and `git_hooks` results |
 
 `fixture_bundle` is one tracked `git bundle` inside the host evidence directory.

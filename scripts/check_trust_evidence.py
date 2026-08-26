@@ -15,6 +15,7 @@ try:
         ArchiveError,
         require_generated_integration_commit,
         require_published_integration,
+        validate as validate_archive_transaction,
     )
     from pipeline_git import bound_branch_name, milestone_number, ship_subject
 except ImportError:
@@ -22,6 +23,7 @@ except ImportError:
         ArchiveError,
         require_generated_integration_commit,
         require_published_integration,
+        validate as validate_archive_transaction,
     )
     from scripts.pipeline_git import bound_branch_name, milestone_number, ship_subject
 
@@ -85,10 +87,11 @@ STEP_STRING_FIELDS = {
         "ship_commit",
         "bound_branch",
         "default_branch",
+        "pre_integration_default_commit",
         "integration_commit",
         "milestone_tag",
     ),
-    "worktrees": ("primary_worktree",),
+    "worktrees": ("primary_worktree", "integration_worktree"),
     "guards": ("guard_artifact",),
 }
 STEP_EXACT_FIELDS = {
@@ -372,6 +375,9 @@ def _validate_run_artifacts(
         "task_branch": _required_string(landing, "task_branch", bundle),
         "bound_branch": _required_string(integration, "bound_branch", bundle),
         "default_branch": _required_string(integration, "default_branch", bundle),
+        "pre_integration_default_commit": _full_sha(
+            integration, "pre_integration_default_commit", bundle
+        ),
         "milestone_tag": _required_string(integration, "milestone_tag", bundle),
         "artifacts": expected_artifacts,
     }
@@ -394,8 +400,6 @@ def _validate_run_artifacts(
         raise EvidenceError(f"{bundle}: archive artifact is empty")
     state = _bundle_blob(fixture, integration_commit, paths["state"], bundle)
     _validate_shipped_state(state, paths["state"], archive, bundle)
-    for label in ("verify", "wave_review", "final_review"):
-        _bundle_blob(fixture, integration_commit, paths[label], bundle)
     try:
         guard_evidence = json.loads(
             _bundle_blob(fixture, integration_commit, paths["guards"], bundle)
@@ -431,6 +435,9 @@ def _validate_git_bundle(
     landing_commit = _full_sha(landing, "landing_commit", bundle)
     ship_commit = _full_sha(integration, "ship_commit", bundle)
     integration_commit = _full_sha(integration, "integration_commit", bundle)
+    pre_integration_default = _full_sha(
+        integration, "pre_integration_default_commit", bundle
+    )
     bound_branch = _required_string(integration, "bound_branch", bundle)
     default_branch = _required_string(integration, "default_branch", bundle)
     milestone_tag = _required_string(integration, "milestone_tag", bundle)
@@ -487,6 +494,23 @@ def _validate_git_bundle(
         if _git(fixture, "show", "-s", "--format=%s", ship_commit) != expected_ship_subject:
             raise EvidenceError(f"{bundle}: ship commit subject is not canonical")
         try:
+            transaction = Path(temporary) / "ship-transaction"
+            _git(
+                fixture,
+                "worktree",
+                "add",
+                "--quiet",
+                "--",
+                str(transaction),
+                bound_branch,
+            )
+            validated = validate_archive_transaction(transaction)
+            if validated.get("commit") != ship_commit:
+                raise EvidenceError(
+                    f"{bundle}: validated ship commit does not match evidence"
+                )
+            if validated.get("archive") != archive_path:
+                raise EvidenceError(f"{bundle}: validated archive does not match evidence")
             require_generated_integration_commit(
                 fixture,
                 integration_commit,
@@ -495,7 +519,7 @@ def _validate_git_bundle(
                 ship_commit,
                 default_branch,
                 bound_branch,
-                first_parent=base,
+                first_parent=pre_integration_default,
             )
             remote_default = _git(
                 fixture, "rev-parse", f"refs/remotes/origin/{default_branch}"
@@ -601,6 +625,9 @@ def _validate_evidence_details(
     primary_worktree = _normalized_worktree_path(
         _required_string(worktree_step, "primary_worktree", path), path
     )
+    integration_worktree = _normalized_worktree_path(
+        _required_string(worktree_step, "integration_worktree", path), path
+    )
     task_worktree = _normalized_worktree_path(
         _required_string(landing, "task_worktree", path), path
     )
@@ -615,11 +642,12 @@ def _validate_evidence_details(
     )
     if (
         primary is None
-        or not primary.get("branch", "").startswith("refs/heads/")
-        or primary["HEAD"] != _full_sha(integration, "integration_commit", path)
+        or primary.get("branch")
+        != f"refs/heads/{_required_string(integration, 'bound_branch', path)}"
+        or primary["HEAD"] != _full_sha(integration, "ship_commit", path)
     ):
         raise EvidenceError(
-            f"{path}: primary worktree must be on a named branch at integration HEAD"
+            f"{path}: primary worktree must be on the bound branch at ship HEAD"
         )
     if any(
         record["worktree"].casefold() == task_worktree.casefold()
@@ -627,6 +655,11 @@ def _validate_evidence_details(
         for record in records
     ):
         raise EvidenceError(f"{path}: task worktree was not retired")
+    if any(
+        record["worktree"].casefold() == integration_worktree.casefold()
+        for record in records
+    ):
+        raise EvidenceError(f"{path}: integration worktree was not retired")
     bundle = _resolved_artifact(
         path, artifact_directory, landing_bundle, "fixture Git bundle"
     )

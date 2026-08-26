@@ -2,6 +2,7 @@ import contextlib
 import io
 import json
 import os
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -259,6 +260,10 @@ class GuardHookTests(unittest.TestCase):
             "GIT_CONFIG_VALUE_0='reset --hard' git wipe HEAD~1",
             "if git reset --hard HEAD~1; then :; fi",
             "git config alias.wipe 'reset --hard'",
+            "eval 'git reset --hard HEAD~1'",
+            "source /tmp/unsafe-gsd-path-command.sh",
+            ". /tmp/unsafe-gsd-path-command.sh",
+            "builtin eval 'git reset --hard HEAD~1'",
         ):
             with self.subTest(command=command):
                 self.assert_denied(
@@ -281,6 +286,39 @@ class GuardHookTests(unittest.TestCase):
                     {
                         "tool_name": "Bash",
                         "tool_input": {"command": "git wipe HEAD~1"},
+                    }
+                )
+            finally:
+                os.chdir(previous)
+
+    def test_denies_git_alias_through_alternate_home(self):
+        previous = Path.cwd()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            repository = root / "repository"
+            home = root / "home"
+            repository.mkdir()
+            home.mkdir()
+            subprocess.run(["git", "init", "-q"], cwd=repository, check=True)
+            subprocess.run(
+                [
+                    "git",
+                    "config",
+                    "--file",
+                    str(home / ".gitconfig"),
+                    "alias.wipe",
+                    "reset --hard",
+                ],
+                check=True,
+            )
+            try:
+                os.chdir(repository)
+                self.assert_denied(
+                    {
+                        "tool_name": "Bash",
+                        "tool_input": {
+                            "command": f"HOME={shlex.quote(str(home))} git wipe HEAD~1"
+                        },
                     }
                 )
             finally:

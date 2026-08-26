@@ -374,14 +374,12 @@ class InstallerTests(unittest.TestCase):
                         self.assertIn("opencode dispatch for gsd-path", dispatch, name)
                         self.assertFalse((staged / name / "agents").exists(), name)
                     elif target == install.SHARED_AGENT_PROFILE:
+                        self.assertIn("$gsd-path (Codex)", content, name)
+                        self.assertIn("/gsd-path (Antigravity/Zed)", content, name)
                         self.assertIn(
-                            "Run gsd-path, gsd-path-build, and gsd-path-discuss",
-                            content,
-                            name,
+                            "shared dispatch for $gsd-path (Codex)", dispatch, name
                         )
-                        self.assertNotIn("$gsd-path", content, name)
-                        self.assertNotIn("/gsd-path", content, name)
-                        self.assertIn("shared dispatch for gsd-path", dispatch, name)
+                        self.assertIn("/gsd-path (Antigravity/Zed)", dispatch, name)
                         self.assertTrue(
                             (staged / name / "agents" / "openai.yaml").is_file(), name
                         )
@@ -529,7 +527,7 @@ class InstallerTests(unittest.TestCase):
         content = (root / "gsd-path" / "SKILL.md").read_text(encoding="utf-8")
         self.assertIn("disable-model-invocation: true", content)
         self.assertIn(
-            "Run gsd-path, gsd-path-build, and gsd-path-discuss", content
+            "$gsd-path (Codex) or /gsd-path (Antigravity/Zed)", content
         )
         self.assertTrue((root / "gsd-path" / "agents" / "openai.yaml").is_file())
 

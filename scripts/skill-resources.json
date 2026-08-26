@@ -1,14 +1,14 @@
 {
   "hosts": {
-    "codex": {"local_root": ".agents/skills", "guard_tier": "git-only"},
+    "codex": {"local_root": ".agents/skills", "guard_tier": "git-only", "invocation_prefix": "$"},
     "claude": {"local_root": ".claude/skills", "guard_tier": "native-fail-closed"},
     "grok": {"local_root": ".grok/skills", "guard_tier": "git-only"},
     "opencode": {"local_root": ".opencode/skills", "guard_tier": "git-only"},
     "copilot": {"local_root": ".github/skills", "guard_tier": "git-only"},
     "qwen": {"local_root": ".qwen/skills", "guard_tier": "git-only"},
-    "antigravity": {"local_root": ".agents/skills", "guard_tier": "git-only"},
+    "antigravity": {"local_root": ".agents/skills", "guard_tier": "git-only", "invocation_prefix": "/"},
     "cursor": {"local_root": ".cursor/skills", "guard_tier": "native-fail-closed"},
-    "zed": {"local_root": ".agents/skills", "guard_tier": "git-only"},
+    "zed": {"local_root": ".agents/skills", "guard_tier": "git-only", "invocation_prefix": "/"},
     "kiro": {"local_root": ".kiro/skills", "guard_tier": "git-only"},
     "kimi": {"local_root": ".kimi-code/skills", "guard_tier": "git-only"}
   },

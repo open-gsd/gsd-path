@@ -211,9 +211,10 @@ test("all platform transforms", () => {
         assert.match(dispatch, /opencode dispatch for gsd-path/, label);
         assert.ok(!agentsKept, label);
       } else if (target === installer.SHARED_AGENT_PROFILE) {
-        assert.match(content, /Run gsd-path, gsd-path-build, and gsd-path-discuss/, label);
-        assert.doesNotMatch(content, /[$/]gsd-path/, label);
-        assert.match(dispatch, /shared dispatch for gsd-path/, label);
+        assert.match(content, /\$gsd-path \(Codex\)/, label);
+        assert.match(content, /\/gsd-path \(Antigravity\/Zed\)/, label);
+        assert.match(dispatch, /shared dispatch for \$gsd-path \(Codex\)/, label);
+        assert.match(dispatch, /\/gsd-path \(Antigravity\/Zed\)/, label);
         assert.ok(agentsKept, label);
       } else {
         assert.match(content, /\/gsd-path/, label);
@@ -320,7 +321,7 @@ test("local install via main uses project roots and skips legacy migration", asy
     path.join(project, ".agents", "skills", "gsd-path", "SKILL.md"),
     "utf8"
   );
-  assert.match(sharedSkill, /Run gsd-path, gsd-path-build, and gsd-path-discuss/);
+  assert.match(sharedSkill, /\$gsd-path \(Codex\) or \/gsd-path \(Antigravity\/Zed\)/);
   assert.match(
     fs.readFileSync(
       path.join(project, ".agents", "skills", "gsd-path", "references", "dispatch.md"),
@@ -384,7 +385,7 @@ test("shared agent hosts use one deployment and back up existing entries", async
   assert.ok(fs.statSync(path.join(path.dirname(shared), "disabled-gsd-skills", "gsd-path-old")).isDirectory());
   const content = fs.readFileSync(path.join(shared, "gsd-path", "SKILL.md"), "utf8");
   assert.match(content, /disable-model-invocation: true/);
-  assert.match(content, /Run gsd-path, gsd-path-build, and gsd-path-discuss/);
+  assert.match(content, /\$gsd-path \(Codex\) or \/gsd-path \(Antigravity\/Zed\)/);
   assert.ok(fs.existsSync(path.join(shared, "gsd-path", "agents", "openai.yaml")));
 });
 

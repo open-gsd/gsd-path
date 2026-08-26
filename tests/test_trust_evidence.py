@@ -4,7 +4,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from scripts import check_trust_evidence
+from scripts import check_trust_evidence, pipeline_git
+from tests import test_archive_milestone
 
 
 class TrustEvidenceTests(unittest.TestCase):
@@ -18,6 +19,7 @@ class TrustEvidenceTests(unittest.TestCase):
         self.fixture_manifest_overrides = {}
         self.keep_fixture_branches = set()
         self.unrelated_integration_hosts = set()
+        self.blocked_final_hosts = set()
         self.guard_tiers = {
             "alpha": "native-fail-closed",
             "beta": "git-only",
@@ -70,6 +72,8 @@ class TrustEvidenceTests(unittest.TestCase):
             return self.fixtures[host]
         repository = Path(self.fixture_temporary.name) / host
         repository.mkdir()
+        remote = repository.parent / f"{host}-origin.git"
+        builder = test_archive_milestone.ArchiveMilestoneTests()
 
         def git(*arguments):
             result = subprocess.run(
@@ -82,51 +86,26 @@ class TrustEvidenceTests(unittest.TestCase):
             self.assertEqual(0, result.returncode, result.stderr)
             return result.stdout.strip()
 
-        git("init", "-q", "-b", "main")
-        git("config", "user.email", "fixture@example.invalid")
-        git("config", "user.name", "Fixture")
-        (repository / "README.md").write_text("fixture\n", encoding="utf-8")
-        git("add", "README.md")
-        git("commit", "-qm", "fixture base")
-        base = git("rev-parse", "HEAD")
+        builder.make_publishable_bound_repo(repository, remote)
+        landing = git("rev-parse", "HEAD")
+        base = git("rev-parse", "HEAD^")
+        pre_integration_default = git("rev-parse", "main")
         task_branch = f"task/{host}-milestone"
         task_worktree = repository.parent / f"{host}-task-worktree"
-        git("checkout", "-qb", task_branch)
-        (repository / "task.txt").write_text("landed\n", encoding="utf-8")
-        git("add", "task.txt")
-        git("commit", "-qm", f"task: land {host}")
-        landing = git("rev-parse", "HEAD")
         run_id = f"{host}-run-001"
-        archive = f".project/archive/001-{host}"
+        archive_directory = builder.prepare_archive(repository)
+        archive = archive_directory.relative_to(repository).as_posix()
         artifact_paths = {
             "state": ".project/STATE.md",
-            "verify": f"{archive}/tasks/001/VERIFY.md",
-            "wave_review": f"{archive}/reviews/wave.md",
-            "final_review": f"{archive}/reviews/final.md",
+            "verify": f"{archive}/tasks/T001-demo.md",
+            "wave_review": f"{archive}/review/wave-1.cycle1.md",
+            "final_review": f"{archive}/review/FINAL.md",
             "archive": archive,
             "guards": f"{archive}/guards.json",
         }
-        run_manifest = f".project/trust-runs/{run_id}/manifest.json"
-        state = self.fixture_states.get(
-            host,
-            (
-                "---\n"
-                "pipeline: gsd-path/v2\n"
-                f"project: {host}\n"
-                f"milestone: {host}\n"
-                "phase: shipped\n"
-                "status: done\n"
-                "branch: gsd-path/M001\n"
-                f"archive: {archive}/\n"
-                "---\n"
-            ),
-        )
-        files = {
-            artifact_paths["state"]: state,
-            artifact_paths["verify"]: "task verify passed\n",
-            artifact_paths["wave_review"]: "wave review passed\n",
-            artifact_paths["final_review"]: "final review passed\n",
-            artifact_paths["guards"]: json.dumps(
+        run_manifest = f"{archive}/trust-run-manifest.json"
+        (repository / artifact_paths["guards"]).write_text(
+            json.dumps(
                 {
                     "schema": check_trust_evidence.GUARD_EVIDENCE_SCHEMA,
                     "host": host,
@@ -141,7 +120,8 @@ class TrustEvidenceTests(unittest.TestCase):
                 }
             )
             + "\n",
-        }
+            encoding="utf-8",
+        )
         manifest = {
             "schema": check_trust_evidence.RUN_MANIFEST_SCHEMA,
             "host": host,
@@ -153,62 +133,111 @@ class TrustEvidenceTests(unittest.TestCase):
             "guard_tier": self.guard_tiers[host],
             "fixture_base_commit": base,
             "landing_commit": landing,
+            "pre_integration_default_commit": pre_integration_default,
             "task_branch": task_branch,
             "bound_branch": "gsd-path/M001",
             "default_branch": "main",
-            "milestone_tag": f"milestone/001-{host}",
+            "milestone_tag": f"milestone/{archive_directory.name}",
             "artifacts": artifact_paths,
         }
         manifest.update(self.fixture_manifest_overrides.get(host, {}))
-        files[run_manifest] = json.dumps(manifest) + "\n"
+        (repository / run_manifest).write_text(
+            json.dumps(manifest) + "\n", encoding="utf-8"
+        )
+        rendered = builder.render_manifest(repository)
+        self.assertEqual(0, rendered.returncode, rendered.stderr)
+        checked = builder.preflight(repository)
+        self.assertEqual(0, checked.returncode, checked.stderr)
+        builder.mark_shipped(repository)
+        if host in self.blocked_final_hosts:
+            final = repository / artifact_paths["final_review"]
+            final.write_text(
+                final.read_text(encoding="utf-8").replace(
+                    "Overall verdict: pass", "Overall verdict: blocked"
+                ),
+                encoding="utf-8",
+            )
+        if host in self.fixture_states:
+            (repository / artifact_paths["state"]).write_text(
+                self.fixture_states[host], encoding="utf-8"
+            )
         omitted = self.omit_fixture_artifact.get(host)
-        for relative, content in files.items():
-            if relative == omitted:
-                continue
-            destination = repository / relative
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            destination.write_text(content, encoding="utf-8")
+        if omitted:
+            (repository / omitted).unlink()
         git("add", ".project")
-        git("commit", "-qm", f"ship: M001 — {host}")
+        ship_result = builder.commit_ship(repository, archive_directory)
+        self.assertEqual(0, ship_result.returncode, ship_result.stderr)
         ship = git("rev-parse", "HEAD")
         bound_branch = "gsd-path/M001"
-        git("branch", bound_branch, ship)
-        git("checkout", "-q", "main")
-        integration_subject = f"integrate: M001 — merge {bound_branch} into main"
-        integration_body = (
-            f"Archive: {archive}\n"
-            f"Ship: {ship}\n"
-            "Default: main\n"
-            f"Branch: {bound_branch}\n"
+        milestone_tag = f"milestone/{archive_directory.name}"
+        integration_worktree = repository.parent / f".{host}-gsd-path-integrate-M001"
+        invalid_ship = bool(
+            omitted
+            or host in self.fixture_states
+            or host in self.blocked_final_hosts
         )
-        merge_branch = task_branch
-        if host in self.unrelated_integration_hosts:
-            git("merge", "--ff-only", "-q", task_branch)
-            merge_branch = f"unrelated/{host}"
-            git("checkout", "-qb", merge_branch, base)
-            (repository / "unrelated.txt").write_text("unrelated\n", encoding="utf-8")
-            git("add", "unrelated.txt")
-            git("commit", "-qm", "unrelated change")
-            git("checkout", "-q", "main")
-        git(
-            "merge",
-            "--no-ff",
-            "-q",
-            "-m",
-            integration_subject,
-            "-m",
-            integration_body,
-            merge_branch,
-        )
-        integration = git("rev-parse", "HEAD")
-        milestone_tag = f"milestone/001-{host}"
-        git("tag", "-a", "-m", f"{host} milestone", milestone_tag)
-        tag_object = git("rev-parse", f"refs/tags/{milestone_tag}")
-        git("update-ref", "refs/remotes/origin/main", integration)
-        git("update-ref", f"refs/remotes/origin/{bound_branch}", ship)
-        git("update-ref", f"refs/remotes/origin/tags/{milestone_tag}", tag_object)
-        if host not in self.keep_fixture_branches:
-            git("branch", "-D", task_branch)
+        if invalid_ship or host in self.unrelated_integration_hosts:
+            git("worktree", "add", "-q", str(integration_worktree), "main")
+
+            def integration_git(*arguments):
+                result = subprocess.run(
+                    ["git", *arguments],
+                    cwd=integration_worktree,
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                )
+                self.assertEqual(0, result.returncode, result.stderr)
+                return result.stdout.strip()
+
+            merge_commit = ship
+            if host in self.unrelated_integration_hosts:
+                integration_git("merge", "--ff-only", "-q", bound_branch)
+                tree = git("rev-parse", f"{pre_integration_default}^{{tree}}")
+                merge_commit = git(
+                    "commit-tree",
+                    tree,
+                    "-p",
+                    pre_integration_default,
+                    "-m",
+                    "unrelated change",
+                )
+            integration_git(
+                "merge",
+                "--no-ff",
+                "-q",
+                "-m",
+                pipeline_git.integrate_subject(archive_directory.name, "main"),
+                "-m",
+                pipeline_git.integrate_commit_body(
+                    archive, ship, "main", bound_branch
+                ),
+                merge_commit,
+            )
+            integration = integration_git("rev-parse", "HEAD")
+            integration_git("tag", "-a", "-m", f"{host} milestone", milestone_tag)
+            integration_git(
+                "push",
+                "-q",
+                "origin",
+                "main",
+                f"{bound_branch}:{bound_branch}",
+                f"refs/tags/{milestone_tag}",
+            )
+            git("worktree", "remove", str(integration_worktree))
+            git("fetch", "-q", "origin")
+            tag_object = git("rev-parse", f"refs/tags/{milestone_tag}")
+            git("update-ref", f"refs/remotes/origin/tags/{milestone_tag}", tag_object)
+        else:
+            integrated = builder.integrate(repository)
+            self.assertEqual(0, integrated.returncode, integrated.stderr)
+            result = json.loads(integrated.stdout)
+            integration = result["integrate"]
+            integration_worktree = (
+                repository.parent / f".{repository.name}-gsd-path-integrate-M001"
+            )
+        if host in self.keep_fixture_branches:
+            git("branch", task_branch, landing)
         bundle = self.artifact(host, "fixture").with_suffix(".bundle")
         bundle.parent.mkdir(parents=True, exist_ok=True)
         git("bundle", "create", str(bundle), "--all")
@@ -216,6 +245,7 @@ class TrustEvidenceTests(unittest.TestCase):
             "base": base,
             "landing": landing,
             "ship": ship,
+            "pre_integration_default": pre_integration_default,
             "integration": integration,
             "milestone_tag": milestone_tag,
             "bound_branch": bound_branch,
@@ -223,10 +253,11 @@ class TrustEvidenceTests(unittest.TestCase):
             "task_branch": task_branch,
             "task_worktree": str(task_worktree),
             "primary_worktree": str(repository),
+            "integration_worktree": str(integration_worktree),
             "worktree_output": (
                 f"worktree {repository}\n"
-                f"HEAD {integration}\n"
-                "branch refs/heads/main\n"
+                f"HEAD {ship}\n"
+                f"branch refs/heads/{bound_branch}\n"
             ),
             "bundle": f"{host}/fixture.bundle",
             "run_id": run_id,
@@ -288,11 +319,15 @@ class TrustEvidenceTests(unittest.TestCase):
                 "ship_commit": fixture["ship"],
                 "bound_branch": fixture["bound_branch"],
                 "default_branch": fixture["default_branch"],
+                "pre_integration_default_commit": fixture[
+                    "pre_integration_default"
+                ],
                 "integration_commit": fixture["integration"],
                 "milestone_tag": fixture["milestone_tag"],
             },
             "worktrees": {
                 "primary_worktree": fixture["primary_worktree"],
+                "integration_worktree": fixture["integration_worktree"],
                 "output": fixture["worktree_output"],
             },
             "guards": {
@@ -531,6 +566,17 @@ class TrustEvidenceTests(unittest.TestCase):
         ):
             check_trust_evidence.validate_repository(self.repo)
 
+    def test_rejects_blocked_canonical_final_review(self):
+        self.blocked_final_hosts.add("alpha")
+        self.receipt("alpha")
+        self.receipt("beta")
+        self.commit_receipts()
+
+        with self.assertRaisesRegex(
+            check_trust_evidence.EvidenceError, "final review did not pass"
+        ):
+            check_trust_evidence.validate_repository(self.repo)
+
     def test_rejects_missing_artifact_claimed_by_bundled_run(self):
         missing = ".project/STATE.md"
         self.omit_fixture_artifact["alpha"] = missing
@@ -539,7 +585,7 @@ class TrustEvidenceTests(unittest.TestCase):
         self.commit_receipts()
 
         with self.assertRaisesRegex(
-            check_trust_evidence.EvidenceError, "bundled artifact is missing"
+            check_trust_evidence.EvidenceError, "missing real state file"
         ):
             check_trust_evidence.validate_repository(self.repo)
 
@@ -552,7 +598,7 @@ class TrustEvidenceTests(unittest.TestCase):
         self.commit_receipts()
 
         with self.assertRaisesRegex(
-            check_trust_evidence.EvidenceError, "bundled state is invalid"
+            check_trust_evidence.EvidenceError, "STATE.md is invalid"
         ):
             check_trust_evidence.validate_repository(self.repo)
 
@@ -623,19 +669,39 @@ class TrustEvidenceTests(unittest.TestCase):
         ):
             check_trust_evidence.validate_repository(self.repo)
 
+    def test_rejects_registered_integration_worktree(self):
+        self.receipt("alpha")
+        self.receipt("beta")
+        fixture = self.fixtures["alpha"]
+        worktrees = self.artifact("alpha", "worktrees")
+        evidence = json.loads(worktrees.read_text(encoding="utf-8"))
+        evidence["output"] += (
+            f"\nworktree {fixture['integration_worktree']}\n"
+            f"HEAD {fixture['integration']}\n"
+            "branch refs/heads/gsd-path-integrate/M001\n"
+        )
+        worktrees.write_text(json.dumps(evidence) + "\n", encoding="utf-8")
+        self.commit_receipts()
+
+        with self.assertRaisesRegex(
+            check_trust_evidence.EvidenceError,
+            "integration worktree was not retired",
+        ):
+            check_trust_evidence.validate_repository(self.repo)
+
     def test_rejects_primary_worktree_without_named_branch(self):
         self.receipt("alpha")
         self.receipt("beta")
         worktrees = self.artifact("alpha", "worktrees")
         evidence = json.loads(worktrees.read_text(encoding="utf-8"))
         evidence["output"] = evidence["output"].replace(
-            "branch refs/heads/main", "bare"
+            "branch refs/heads/gsd-path/M001", "bare"
         )
         worktrees.write_text(json.dumps(evidence) + "\n", encoding="utf-8")
         self.commit_receipts()
 
         with self.assertRaisesRegex(
-            check_trust_evidence.EvidenceError, "must be on a named branch"
+            check_trust_evidence.EvidenceError, "must be on the bound branch"
         ):
             check_trust_evidence.validate_repository(self.repo)
 
