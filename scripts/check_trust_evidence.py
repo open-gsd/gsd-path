@@ -808,7 +808,7 @@ def validate_repository(repo: Path) -> Mapping:
     candidate = ""
     evidence_paths: List[Path] = []
     run_owners: Dict[str, str] = {}
-    history_owners: Dict[Tuple[str, str, str], str] = {}
+    history_owners: Dict[Tuple[str, str], str] = {}
     for host in hosts:
         contract = host_contracts[host]
         if not isinstance(contract, dict):
@@ -828,7 +828,6 @@ def validate_repository(repo: Path) -> Mapping:
             )
         run_owners[identity.run_id] = host
         history = (
-            identity.landing_commit,
             identity.ship_commit,
             identity.integration_commit,
         )

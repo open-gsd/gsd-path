@@ -199,6 +199,7 @@ class GuardHookTests(unittest.TestCase):
             "rm .project/$(printf archive)/001-mvp/NOTE.md",
             "cd .project && rm archive/001-mvp/NOTE.md",
             'P=.project; rm "$P/archive/001-mvp/NOTE.md"',
+            'rm "$P/001-mvp/MANIFEST.md"',
             "bash -lc '(cd .project && rm archive/001-mvp/NOTE.md)'",
             "bash -lc 'pushd .project >/dev/null && rm archive/001-mvp/PLAN.md'",
         ):
@@ -249,6 +250,7 @@ class GuardHookTests(unittest.TestCase):
     def test_denies_destructive_git_through_command_wrappers(self):
         for command in (
             "bash -lc 'git reset --hard HEAD~1'",
+            "bash --norc -c 'git reset --hard HEAD~1'",
             "sh -c 'git clean -fd'",
             "command git push origin +main",
             "exec git branch --delete --force task",
@@ -277,6 +279,30 @@ class GuardHookTests(unittest.TestCase):
                 self.assert_denied(
                     {"tool_name": "Bash", "tool_input": {"command": command}}
                 )
+
+    def test_denies_deleting_archive_ancestor(self):
+        previous = Path.cwd()
+        with tempfile.TemporaryDirectory() as temporary:
+            repository = Path(temporary)
+            (repository / ".project" / "archive" / "001-mvp").mkdir(parents=True)
+            try:
+                os.chdir(repository)
+                self.assert_denied(
+                    {
+                        "tool_name": "Bash",
+                        "tool_input": {"command": "rm -rf .project"},
+                    }
+                )
+            finally:
+                os.chdir(previous)
+
+    def test_allows_reading_unresolved_path(self):
+        self.assert_allowed(
+            {
+                "tool_name": "Bash",
+                "tool_input": {"command": 'cat "$P/001-mvp/MANIFEST.md"'},
+            }
+        )
 
     def test_denies_archive_path_through_symlink(self):
         previous = Path.cwd()

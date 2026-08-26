@@ -100,6 +100,22 @@ class TrustEvidenceTests(unittest.TestCase):
         landing = git("rev-parse", "HEAD")
         base = git("rev-parse", "HEAD^")
         pre_integration_default = git("rev-parse", "main")
+        landing_commits = {fixture_hosts[0]: landing}
+        reviewed_head = landing
+        for evidence_host in fixture_hosts[1:]:
+            git("commit", "--allow-empty", "-qm", f"land {evidence_host} task")
+            landing_commit = git("rev-parse", "HEAD")
+            landing_commits[evidence_host] = landing_commit
+            for review_name in ("FINAL.md", "final-gap-1.md"):
+                review = repository / ".project" / "review" / review_name
+                review.write_text(
+                    review.read_text(encoding="utf-8").replace(
+                        f"Reviewed HEAD: {reviewed_head}",
+                        f"Reviewed HEAD: {landing_commit}",
+                    ),
+                    encoding="utf-8",
+                )
+            reviewed_head = landing_commit
         task_branches = {
             evidence_host: f"task/{evidence_host}-milestone"
             for evidence_host in fixture_hosts
@@ -157,7 +173,7 @@ class TrustEvidenceTests(unittest.TestCase):
                 "child_id": f"{evidence_host}-child-1",
                 "guard_tier": self.guard_tiers[evidence_host],
                 "fixture_base_commit": base,
-                "landing_commit": landing,
+                "landing_commit": landing_commits[evidence_host],
                 "pre_integration_default_commit": pre_integration_default,
                 "task_branch": task_branches[evidence_host],
                 "bound_branch": "gsd-path/M001",
@@ -278,7 +294,7 @@ class TrustEvidenceTests(unittest.TestCase):
                 evidence_bundle.write_bytes(bundle.read_bytes())
             self.fixtures[evidence_host] = {
                 "base": base,
-                "landing": landing,
+                "landing": landing_commits[evidence_host],
                 "ship": ship,
                 "pre_integration_default": pre_integration_default,
                 "integration": integration,

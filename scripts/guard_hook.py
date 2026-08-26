@@ -284,6 +284,32 @@ def is_absolute_path(path):
     return normalized.startswith("/") or bool(re.match(r"^[A-Za-z]:/", normalized))
 
 
+def contains_existing_archive(path, working_directories):
+    try:
+        target = Path(path).resolve(strict=False)
+    except (OSError, RuntimeError):
+        return False
+    search_paths = [target, Path.cwd(), *(Path(value) for value in working_directories)]
+    for search_path in search_paths:
+        if re.match(r"^[A-Za-z]:[/\\]", str(search_path)):
+            continue
+        try:
+            resolved = search_path.resolve(strict=False)
+        except (OSError, RuntimeError):
+            continue
+        for parent in (resolved, *resolved.parents):
+            archive = parent / ".project" / "archive"
+            if not archive.is_dir():
+                continue
+            try:
+                archive = archive.resolve(strict=True)
+            except (OSError, RuntimeError):
+                continue
+            if target == archive or target in archive.parents:
+                return True
+    return False
+
+
 def path_in_archive(path, working_directories=()):
     for value in path_values(path):
         if in_archive(value) or expansion_can_match_archive(value):
@@ -303,7 +329,9 @@ def path_in_archive(path, working_directories=()):
                 resolved = Path(combined).resolve(strict=False)
             except (OSError, RuntimeError):
                 continue
-            if in_archive(resolved.as_posix()):
+            if in_archive(resolved.as_posix()) or contains_existing_archive(
+                resolved, working_directories
+            ):
                 return True
     return False
 
@@ -364,10 +392,9 @@ def command_references_archive(tokens, working_directories):
 
 
 def unresolved_archive_expansion(command, working_directories):
-    if not (
-        SHELL_EXPANSION_SYNTAX.search(command)
-        or SHELL_PARAMETER_SYNTAX.search(command)
-    ):
+    if SHELL_PARAMETER_SYNTAX.search(command):
+        return True
+    if not SHELL_EXPANSION_SYNTAX.search(command):
         return False
     lowered = command.replace("\\", "/").casefold()
     return (
@@ -513,7 +540,11 @@ def wrapped_command_tokens(segment):
         return arguments
     if executable in POSIX_SHELL_WRAPPERS:
         for index, argument in enumerate(arguments):
-            if argument.startswith("-") and "c" in argument[1:]:
+            if (
+                argument.startswith("-")
+                and not argument.startswith("--")
+                and "c" in argument[1:]
+            ):
                 if index + 1 >= len(arguments):
                     raise ValueError("shell wrapper lacks command payload")
                 return shell_tokens(arguments[index + 1])
@@ -630,10 +661,7 @@ def destructive_git_reason(tokens, resolved_aliases=frozenset()):
 
 
 def archive_command_is_read_only(command, tokens, archive_context=False):
-    if archive_context and (
-        AMBIGUOUS_SHELL_SYNTAX.search(command)
-        or SHELL_PARAMETER_SYNTAX.search(command)
-    ):
+    if archive_context and AMBIGUOUS_SHELL_SYNTAX.search(command):
         return False
     if not archive_context:
         return True
