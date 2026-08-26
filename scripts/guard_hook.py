@@ -33,7 +33,7 @@ PATH_KEYS = frozenset(
         "directory",
     }
 )
-COMMAND_KEYS = frozenset({"command", "cmd", "script"})
+COMMAND_KEYS = frozenset({"command", "cmd", "script", "tool_input", "toolinput"})
 PATCH_PATH_PATTERN = re.compile(
     r"^\*\*\* (?:Add|Update|Delete) File: (.+)$|^\*\*\* Move to: (.+)$",
     re.MULTILINE,

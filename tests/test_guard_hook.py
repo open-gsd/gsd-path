@@ -111,9 +111,7 @@ class GuardHookTests(unittest.TestCase):
         self.assert_denied(
             {
                 "tool_name": "apply_patch",
-                "tool_input": {
-                    "command": "*** Begin Patch\n*** Update File: .project/archive/001-mvp/PLAN.md\n@@\n-old\n+new\n*** End Patch"
-                },
+                "tool_input": "*** Begin Patch\n*** Update File: .project/archive/001-mvp/PLAN.md\n@@\n-old\n+new\n*** End Patch",
             }
         )
 
@@ -121,9 +119,7 @@ class GuardHookTests(unittest.TestCase):
         self.assert_allowed(
             {
                 "tool_name": "apply_patch",
-                "tool_input": {
-                    "command": "*** Begin Patch\n*** Update File: .project/PLAN.md\n@@\n-old\n+new\n*** End Patch"
-                },
+                "tool_input": "*** Begin Patch\n*** Update File: .project/PLAN.md\n@@\n-old\n+new\n*** End Patch",
             }
         )
 

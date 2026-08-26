@@ -34,6 +34,7 @@ dependency.
 | `tests/test_build_state.py` | unittest | `scripts/build_state.py` — dependency-ready task selection and landed-task reconciliation |
 | `tests/test_check_docs_audit.py` | unittest | `scripts/check_docs_audit.py` — tracked/untracked Markdown inventory and docs-audit artifact gate |
 | `tests/test_detect_project.py` | unittest | `scripts/detect_project.py` — owned/orphan/brownfield/greenfield classification and initialization; `scripts/promote_lookahead.py` — lookahead selection, snapshots, and contract comparison |
+| `tests/test_dogfood.py` | unittest | `tests/dogfood.py` — every declared host has an automated or explicitly blocked manual evidence route |
 | `tests/test_check_update.py` | unittest | `scripts/check_update.py` — version compare, cache, notice |
 | `tests/test_discussion_records.py` | unittest | `scripts/discussion_records.py` — paired append, half-write recovery, pending records, dispositions |
 | `tests/test_dispatch_contract.py` | unittest | runtime dispatch contract — host branches, model selection, and bounded child responsibilities |
@@ -85,4 +86,4 @@ the interactive wizard and npm entry point.
 
 ## Installer targets exercised in tests
 
-`install.test.mjs` / `test_install.py` exercise multi-target install including: codex, zed (shared root), claude, cursor (+ subagent), grok, opencode, copilot, qwen, kiro, kimi. Antigravity shares codex/zed `.agents/skills` (skipped duplicate install). Global vs `--local` project roots tested.
+`install.test.mjs` / `test_install.py` exercise multi-target install including: codex, antigravity, and zed through one shared `.agents/skills` deployment; claude; cursor (+ subagent); grok; opencode; copilot; qwen; kiro; and kimi. Global vs `--local` project roots tested.

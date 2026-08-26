@@ -50,7 +50,6 @@ SUMMARY_PATHS = frozenset(
     {
         "docs/trust-validation/HOST-MATRIX.md",
         "docs/trust-validation/TRUST-EVIDENCE.md",
-        "docs/trust-validation/TRUST-VALIDATION-SPEC.md",
     }
 )
 

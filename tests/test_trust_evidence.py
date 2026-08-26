@@ -298,6 +298,16 @@ class TrustEvidenceTests(unittest.TestCase):
         with self.assertRaisesRegex(check_trust_evidence.EvidenceError, "non-evidence"):
             check_trust_evidence.validate_repository(self.repo)
 
+    def test_rejects_active_validation_spec_change_after_candidate(self):
+        self.receipt("alpha")
+        self.receipt("beta")
+        spec = self.repo / "docs" / "trust-validation" / "TRUST-VALIDATION-SPEC.md"
+        spec.write_text("changed release contract\n", encoding="utf-8")
+        self.commit_receipts()
+
+        with self.assertRaisesRegex(check_trust_evidence.EvidenceError, "non-evidence"):
+            check_trust_evidence.validate_repository(self.repo)
+
 
 if __name__ == "__main__":
     unittest.main()
