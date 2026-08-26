@@ -75,7 +75,11 @@ SEGMENT = r"[^|;&]*"
 # Windows `RM .Project/Archive` works. Flags stay case-sensitive so a safe
 # `git branch -d` is never confused with `-D`.
 GIT = r"\b(?i:git)\b"
-ARCHIVE_PATH = r"(?i:\.project/archive)"
+ARCHIVE_PATH = r"(?i:\.project[\\/]archive)"
+ARCHIVE_MUTATOR = (
+    r"(?i:rm|rmdir|mv|cp|tee|remove-item|move-item|copy-item|rename-item|"
+    r"set-content|add-content|clear-content|new-item|out-file)"
+)
 COMMAND_RULES = (
     (
         re.compile(rf"{GIT}{SEGMENT}\breset\b{SEGMENT}\s--hard\b"),
@@ -94,7 +98,7 @@ COMMAND_RULES = (
         "git branch -D destroys task branches the recovery protocol inspects",
     ),
     (
-        re.compile(rf"\b(?i:rm|rmdir|mv|cp|tee)\b{SEGMENT}{ARCHIVE_PATH}"),
+        re.compile(rf"\b{ARCHIVE_MUTATOR}\b{SEGMENT}{ARCHIVE_PATH}"),
         ARCHIVE_REASON,
     ),
     (

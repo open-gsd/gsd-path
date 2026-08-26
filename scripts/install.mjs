@@ -15,7 +15,7 @@ export const GUARD_SCRIPTS = ["guard_hook.py", "git_guard.py"];
 export const GUARD_MARKER = "gsd-path guard";
 const INSTALL_LOCK_NAME = ".gsd-path-install-lock";
 export const CLAUDE_MATCHER =
-  "Edit|Write|MultiEdit|NotebookEdit|Delete|StrReplace|ApplyPatch|Create|Shell|Bash";
+  "Edit|Write|MultiEdit|NotebookEdit|Delete|StrReplace|ApplyPatch|Create|Shell|Bash|PowerShell";
 // The managed PreToolUse guard entry, as an object.
 export function claudeGuardEntry(interpreter) {
   return {

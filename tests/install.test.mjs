@@ -800,6 +800,7 @@ test("hooks install guard scripts, settings, and git hook", async () => {
   );
   assert.ok(settings.hooks.PreToolUse);
   assert.equal(settings.hooks.PreToolUse[0].matcher, installer.CLAUDE_MATCHER);
+  assert.match("PowerShell", new RegExp(`^(?:${settings.hooks.PreToolUse[0].matcher})$`));
   const preCommit = path.join(project, ".git", "hooks", "pre-commit");
   const commitMsg = path.join(project, ".git", "hooks", "commit-msg");
   assert.equal(fs.readFileSync(preCommit, "utf8"), installer.preCommitHook("python3"));

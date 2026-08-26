@@ -97,6 +97,33 @@ class GuardHookTests(unittest.TestCase):
                     {"tool_name": "Bash", "tool_input": {"command": command}}
                 )
 
+    def test_denies_powershell_archive_mutations(self):
+        for command in (
+            "Remove-Item -Recurse .project/archive/001-mvp",
+            r"Move-Item README.md .project\archive\001-mvp\README.md",
+            "Copy-Item README.md .project/archive/001-mvp/README.md",
+            "Rename-Item .project/archive/001-mvp/OLD.md NEW.md",
+            "Set-Content .project/archive/001-mvp/NOTE.md broken",
+            "Add-Content .project/archive/001-mvp/NOTE.md broken",
+            "Clear-Content .project/archive/001-mvp/NOTE.md",
+            "New-Item .project/archive/001-mvp/NEW.md",
+            "'broken' | Out-File .project/archive/001-mvp/NOTE.md",
+        ):
+            with self.subTest(command=command):
+                self.assert_denied(
+                    {"tool_name": "PowerShell", "tool_input": {"command": command}}
+                )
+
+    def test_allows_powershell_archive_reads(self):
+        self.assert_allowed(
+            {
+                "tool_name": "PowerShell",
+                "tool_input": {
+                    "command": "Get-Content .project/archive/001-mvp/NOTE.md"
+                },
+            }
+        )
+
     def test_denies_archive_path_via_any_tool_name(self):
         self.assert_denied(
             {

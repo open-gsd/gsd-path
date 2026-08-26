@@ -44,7 +44,7 @@ GUARD_SCRIPTS = ("guard_hook.py", "git_guard.py")
 GUARD_MARKER = "gsd-path guard"
 INSTALL_LOCK_NAME = ".gsd-path-install-lock"
 CLAUDE_MATCHER = (
-    "Edit|Write|MultiEdit|NotebookEdit|Delete|StrReplace|ApplyPatch|Create|Shell|Bash"
+    "Edit|Write|MultiEdit|NotebookEdit|Delete|StrReplace|ApplyPatch|Create|Shell|Bash|PowerShell"
 )
 def _claude_guard_entry(interpreter: str) -> dict:
     """The managed PreToolUse guard entry, as an object."""

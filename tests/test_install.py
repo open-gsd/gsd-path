@@ -2,6 +2,7 @@ import contextlib
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -1112,6 +1113,9 @@ class InstallerTests(unittest.TestCase):
         )
         self.assertIn("PreToolUse", settings["hooks"])
         self.assertEqual(settings["hooks"]["PreToolUse"][0]["matcher"], install.CLAUDE_MATCHER)
+        self.assertIsNotNone(
+            re.fullmatch(settings["hooks"]["PreToolUse"][0]["matcher"], "PowerShell")
+        )
         pre_commit = project / ".git" / "hooks" / "pre-commit"
         commit_msg = project / ".git" / "hooks" / "commit-msg"
         self.assertEqual(install.pre_commit_hook("python3"), pre_commit.read_text(encoding="utf-8"))
