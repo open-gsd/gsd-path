@@ -1459,13 +1459,38 @@ class InstallerTests(unittest.TestCase):
         self.run_main(self.hooks_arguments(project, self.root / "claude" / "skills"))
         settings = project / ".codex" / "hooks.json"
         settings.parent.mkdir()
-        settings.write_text('{"custom": true}\n', encoding="utf-8")
+        original = '{"note": ".gsd-path/guard_hook.py"}\n'
+        settings.write_text(original, encoding="utf-8")
 
         status, _, error = self.run_main(self.refresh_full_arguments(project))
 
         self.assertEqual(1, status)
         self.assertIn("not a managed GSD Path hook settings file", error)
-        self.assertEqual('{"custom": true}\n', settings.read_text(encoding="utf-8"))
+        self.assertEqual(original, settings.read_text(encoding="utf-8"))
+
+    def test_hooks_refresh_full_does_not_follow_legacy_temporary_symlink(self):
+        project = self.root / "temporary-symlink-project"
+        (project / ".git").mkdir(parents=True)
+        plans = [install.TargetPlan("codex", self.root / "codex" / "skills")]
+        with mock.patch.object(
+            install, "_detect_python_interpreter", return_value="python3"
+        ):
+            install.install(self.source, plans, project=project, hooks=True)
+        outside = self.root / "outside-hooks.json"
+        outside.write_text("outside\n", encoding="utf-8")
+        legacy_temporary = project / ".codex" / ".hooks.json.gsd-path-tmp"
+        legacy_temporary.symlink_to(outside)
+
+        with mock.patch.object(
+            install, "_detect_python_interpreter", return_value="python3"
+        ):
+            status, _, error = self.run_main(
+                [*self.refresh_full_arguments(project), "--codex"]
+            )
+
+        self.assertEqual(0, status, error)
+        self.assertEqual("outside\n", outside.read_text(encoding="utf-8"))
+        self.assertTrue(legacy_temporary.is_symlink())
 
     def test_hooks_refresh_full_rejects_symlinked_native_parent(self):
         project = self.root / "symlink-parent-project"

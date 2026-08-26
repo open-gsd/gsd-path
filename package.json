@@ -11,6 +11,7 @@
     "plugin.json",
     "scripts/install.mjs",
     "scripts/install.py",
+    "scripts/sync_skill_resources.py",
     "scripts/wizard.mjs",
     "scripts/skill-resources.json",
     "scripts/archive_milestone.py",

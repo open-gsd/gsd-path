@@ -1034,7 +1034,8 @@ test("hooks refresh full rejects an unselected foreign native config", async () 
   });
   const settings = path.join(project, ".codex", "hooks.json");
   fs.mkdirSync(path.dirname(settings));
-  fs.writeFileSync(settings, '{"custom":true}\n');
+  const original = '{"note":".gsd-path/guard_hook.py"}\n';
+  fs.writeFileSync(settings, original);
 
   const status = await installer.main([
     "--hooks-refresh-full",
@@ -1046,7 +1047,35 @@ test("hooks refresh full rejects an unselected foreign native config", async () 
   ]);
 
   assert.equal(status, 1);
-  assert.equal(fs.readFileSync(settings, "utf8"), '{"custom":true}\n');
+  assert.equal(fs.readFileSync(settings, "utf8"), original);
+});
+
+test("hooks refresh full does not follow the legacy temporary symlink", async () => {
+  installer.hooks.detectPythonInterpreter = () => "python3";
+  const project = path.join(root, "temporary-symlink-project");
+  fs.mkdirSync(path.join(project, ".git"), { recursive: true });
+  await runInstall([installer.targetPlan("codex", path.join(root, "codex", "skills"))], {
+    project,
+    hooks: true,
+  });
+  const outside = path.join(root, "outside-hooks.json");
+  fs.writeFileSync(outside, "outside\n");
+  const legacyTemporary = path.join(project, ".codex", ".hooks.json.gsd-path-tmp");
+  fs.symlinkSync(outside, legacyTemporary);
+
+  const status = await installer.main([
+    "--hooks-refresh-full",
+    "--codex",
+    "--project",
+    project,
+    "--source-root",
+    source,
+    "--no-color",
+  ]);
+
+  assert.equal(status, 0);
+  assert.equal(fs.readFileSync(outside, "utf8"), "outside\n");
+  assert.ok(fs.lstatSync(legacyTemporary).isSymbolicLink());
 });
 
 test("hooks refresh full rejects a symlinked native parent", async () => {

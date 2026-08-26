@@ -833,20 +833,27 @@ def _is_managed_git_hook(destination: Path) -> bool:
 def _is_managed_hook_settings(destination: Path) -> bool:
     if not destination.is_file():
         return False
-    text = destination.read_text(encoding="utf-8", errors="replace")
-    return "guard_hook.py" in text and HOOKS_DIRECTORY in text
+    try:
+        parsed = _parsed_managed_settings(destination)
+    except InstallerError:
+        return False
+    return _has_managed_hook_settings(parsed)
 
 
-def _temporary_path(destination: Path) -> Path:
-    return destination.parent / f".{destination.name}.gsd-path-tmp"
+def _atomic_temporary(destination: Path) -> Tuple[int, Path]:
+    descriptor, name = tempfile.mkstemp(
+        prefix=f".{destination.name}.gsd-path-tmp-", dir=destination.parent
+    )
+    return descriptor, Path(name)
 
 
 def _atomic_write(
     destination: Path, content: str, mode: Optional[int] = None
 ) -> None:
-    temporary = _temporary_path(destination)
+    descriptor, temporary = _atomic_temporary(destination)
     try:
-        temporary.write_text(content, encoding="utf-8")
+        with os.fdopen(descriptor, "w", encoding="utf-8") as output:
+            output.write(content)
         if mode is not None:
             temporary.chmod(mode)
         elif destination.is_file() and not destination.is_symlink():
@@ -858,9 +865,11 @@ def _atomic_write(
 
 
 def _atomic_copy(source: Path, destination: Path) -> None:
-    temporary = _temporary_path(destination)
+    descriptor, temporary = _atomic_temporary(destination)
     try:
-        shutil.copyfile(source, temporary)
+        with source.open("rb") as input_file:
+            with os.fdopen(descriptor, "wb") as output:
+                shutil.copyfileobj(input_file, output)
         os.replace(temporary, destination)
     except BaseException:
         _remove_path(temporary)
@@ -891,6 +900,21 @@ def _is_managed_direct_hook_entry(entry) -> bool:
         isinstance(entry, dict)
         and isinstance(entry.get("command"), str)
         and _is_guard_command(entry["command"])
+    )
+
+
+def _has_managed_hook_settings(parsed: dict) -> bool:
+    hooks = parsed.get("hooks")
+    if not isinstance(hooks, dict):
+        return False
+    nested = hooks.get("PreToolUse")
+    direct = hooks.get("preToolUse")
+    return (
+        isinstance(nested, list)
+        and any(_is_managed_hook_entry(entry) for entry in nested)
+    ) or (
+        isinstance(direct, list)
+        and any(_is_managed_direct_hook_entry(entry) for entry in direct)
     )
 
 
@@ -987,12 +1011,12 @@ def _validate_hooks_refresh(
             )
             if settings.is_symlink():
                 raise InstallerError(f"refusing to refresh a symlink: {settings}")
-            if exists and target in selected:
-                _parsed_managed_settings(settings)
-            elif exists and not _is_managed_hook_settings(settings):
-                raise InstallerError(
-                    f"not a managed GSD Path hook settings file: {settings}"
-                )
+            if exists:
+                parsed = _parsed_managed_settings(settings)
+                if target not in selected and not _has_managed_hook_settings(parsed):
+                    raise InstallerError(
+                        f"not a managed GSD Path hook settings file: {settings}"
+                    )
         if hooks_dir is not None:
             for hook_name in ("pre-commit", "commit-msg"):
                 hook_path = hooks_dir / hook_name

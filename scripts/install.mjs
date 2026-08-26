@@ -939,41 +939,42 @@ function isManagedGitHook(destination) {
 
 function isManagedHookSettings(destination) {
   if (!isFile(destination)) return false;
-  const text = fs.readFileSync(destination, "utf8");
-  return text.includes("guard_hook.py") && text.includes(HOOKS_DIRECTORY);
+  try {
+    return hasManagedHookSettings(parsedManagedSettings(destination));
+  } catch {
+    return false;
+  }
 }
 
-function temporaryPathFor(destination) {
-  return path.join(
-    path.dirname(destination),
-    `.${path.basename(destination)}.gsd-path-tmp`
+function atomicTemporary(destination) {
+  const directory = fs.mkdtempSync(
+    path.join(path.dirname(destination), `.${path.basename(destination)}.gsd-path-tmp-`)
   );
+  return { directory, temporary: path.join(directory, "value") };
 }
 
 function writeFileAtomic(destination, content, mode) {
-  const temporary = temporaryPathFor(destination);
+  const { directory, temporary } = atomicTemporary(destination);
   try {
-    fs.writeFileSync(temporary, content);
+    fs.writeFileSync(temporary, content, { flag: "wx" });
     if (mode !== undefined) {
       fs.chmodSync(temporary, mode);
     } else if (isFile(destination) && !isSymlink(destination)) {
       fs.chmodSync(temporary, fs.statSync(destination).mode & 0o777);
     }
     fs.renameSync(temporary, destination);
-  } catch (error) {
-    removePath(temporary);
-    throw error;
+  } finally {
+    removePath(directory);
   }
 }
 
 function copyFileAtomic(source, destination) {
-  const temporary = temporaryPathFor(destination);
+  const { directory, temporary } = atomicTemporary(destination);
   try {
-    fs.copyFileSync(source, temporary);
+    fs.copyFileSync(source, temporary, fs.constants.COPYFILE_EXCL);
     fs.renameSync(temporary, destination);
-  } catch (error) {
-    removePath(temporary);
-    throw error;
+  } finally {
+    removePath(directory);
   }
 }
 
@@ -1004,6 +1005,17 @@ function isManagedDirectHookEntry(entry) {
       !Array.isArray(entry) &&
       typeof entry.command === "string" &&
       isGuardCommand(entry.command)
+  );
+}
+
+function hasManagedHookSettings(parsed) {
+  const hooks = parsed.hooks;
+  if (hooks === null || typeof hooks !== "object" || Array.isArray(hooks)) return false;
+  const nested = hooks.PreToolUse;
+  const direct = hooks.preToolUse;
+  return (
+    (Array.isArray(nested) && nested.some(isManagedHookEntry)) ||
+    (Array.isArray(direct) && direct.some(isManagedDirectHookEntry))
   );
 }
 
@@ -1094,10 +1106,11 @@ function validateHooksRefresh(sourceRoot, project, full, hooksDir, selected) {
       if (isSymlink(settings)) {
         throw new InstallerError(`refusing to refresh a symlink: ${settings}`);
       }
-      if (exists && selected.includes(target)) {
-        parsedManagedSettings(settings);
-      } else if (exists && !isManagedHookSettings(settings)) {
-        throw new InstallerError(`not a managed GSD Path hook settings file: ${settings}`);
+      if (exists) {
+        const parsed = parsedManagedSettings(settings);
+        if (!selected.includes(target) && !hasManagedHookSettings(parsed)) {
+          throw new InstallerError(`not a managed GSD Path hook settings file: ${settings}`);
+        }
       }
     }
     if (hooksDir !== null) {

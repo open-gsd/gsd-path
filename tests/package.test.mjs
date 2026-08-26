@@ -61,6 +61,25 @@ test("npm package includes the pipeline helpers", () => {
   }
 });
 
+test("packed Python installer starts with only packaged files", (context) => {
+  const scratch = mkdtempSync(path.join(tmpdir(), "gsd-path-package-"));
+  context.after(() => rmSync(scratch, { recursive: true, force: true }));
+  const output = execFileSync(
+    "npm",
+    ["pack", "--ignore-scripts", "--json", "--pack-destination", scratch],
+    { cwd: projectRoot, encoding: "utf8" }
+  );
+  const [{ filename }] = JSON.parse(output);
+  execFileSync("tar", ["-xzf", path.join(scratch, filename)], { cwd: scratch });
+
+  execFileSync("python3", [path.join(scratch, "package", "scripts", "install.py"), "--help"], {
+    cwd: scratch,
+    encoding: "utf8",
+    env: { ...process.env, PYTHONNOUSERSITE: "1", PYTHONPATH: "" },
+    stdio: "pipe",
+  });
+});
+
 test("every copied Python helper imports from its own bundle", (context) => {
   const scratch = mkdtempSync(path.join(tmpdir(), "gsd-path-helper-imports-"));
   context.after(() => rmSync(scratch, { recursive: true, force: true }));
