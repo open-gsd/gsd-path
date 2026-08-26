@@ -131,6 +131,7 @@ UNVALIDATED_EXECUTION_BUILTINS = frozenset(
     {
         ".",
         "builtin",
+        "call",
         "declare",
         "eval",
         "export",
@@ -139,6 +140,7 @@ UNVALIDATED_EXECUTION_BUILTINS = frozenset(
         "set",
         "setenv",
         "source",
+        "start",
         "typeset",
         "unset",
         "unsetenv",
@@ -184,15 +186,15 @@ def collect(node, paths, working_directories, commands, patch_payloads):
                 elif lowered in PATCH_KEYS:
                     patch_payloads.append(value)
             elif isinstance(value, list):
-                # Argv-style values ({"command": ["bash", "-lc", "..."]})
-                # must be inspected like their joined string form.
                 strings = [item for item in value if isinstance(item, str)]
                 if strings and lowered in PATH_KEYS:
                     paths.extend(strings)
                 elif strings and lowered in WORKING_DIRECTORY_KEYS:
                     working_directories.extend(strings)
-                elif strings and lowered in COMMAND_KEYS:
-                    commands.append(" ".join(strings))
+                elif lowered in COMMAND_KEYS:
+                    if not strings or len(strings) != len(value):
+                        raise ValueError("command argv cannot be validated")
+                    commands.append(shlex.join(strings))
                 elif strings and lowered in PATCH_KEYS:
                     patch_payloads.extend(strings)
                 collect(value, paths, working_directories, commands, patch_payloads)
@@ -438,6 +440,8 @@ def command_invocation(segment):
                 index += 1
                 continue
             if option in ENV_OPTIONS_WITH_VALUES:
+                if option in {"-C", "--chdir"}:
+                    raise ValueError("env working directory cannot be validated")
                 index += 1
                 if "=" not in token:
                     if index >= len(segment):
@@ -585,7 +589,10 @@ def destructive_git_reason(tokens, resolved_aliases=frozenset()):
             return GIT_REASONS[command]
         if command == "clean":
             force = "--force" in arguments or has_short_option(arguments, "f")
-            if force:
+            interactive = "--interactive" in arguments or has_short_option(
+                arguments, "i"
+            )
+            if force or interactive:
                 return GIT_REASONS[command]
         if command == "push":
             force_option = any(

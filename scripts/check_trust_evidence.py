@@ -8,7 +8,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path, PurePosixPath
-from typing import Dict, FrozenSet, List, Mapping, Sequence, Tuple
+from typing import Dict, FrozenSet, List, Mapping, NamedTuple, Sequence, Tuple
 
 try:
     from archive_milestone import (
@@ -114,6 +114,13 @@ WORKTREE_RECORD_KEYS = frozenset(
 
 class EvidenceError(RuntimeError):
     pass
+
+
+class EvidenceIdentity(NamedTuple):
+    run_id: str
+    landing_commit: str
+    ship_commit: str
+    integration_commit: str
 
 
 def _read_json(path: Path) -> Mapping:
@@ -572,7 +579,7 @@ def _validate_evidence_details(
     guard_tier: str,
     candidate: str,
     package_version: str,
-) -> Tuple[Path, ...]:
+) -> Tuple[Tuple[Path, ...], EvidenceIdentity]:
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
     except OSError as error:
@@ -667,7 +674,13 @@ def _validate_evidence_details(
         bundle, host, guard_tier, steps, candidate, package_version
     )
     artifacts.append(bundle)
-    return tuple(artifacts)
+    identity = EvidenceIdentity(
+        next(iter(run_ids)),
+        _full_sha(landing, "landing_commit", path),
+        _full_sha(integration, "ship_commit", path),
+        _full_sha(integration, "integration_commit", path),
+    )
+    return tuple(artifacts), identity
 
 
 def _git(repo: Path, *arguments: str) -> str:
@@ -704,7 +717,7 @@ def _validate_receipt(
     package_version: str,
     guard_tier: str,
     candidate: str = "",
-) -> Tuple[str, Tuple[Path, ...]]:
+) -> Tuple[str, Tuple[Path, ...], EvidenceIdentity]:
     if path.is_symlink():
         raise EvidenceError(f"evidence receipt must not be a symlink: {path}")
     fields = _frontmatter(path)
@@ -740,13 +753,14 @@ def _validate_receipt(
             f"{path}: guard_tier must be {guard_tier!r}, "
             f"found {fields.get('guard_tier')!r}"
         )
-    return receipt_candidate, _validate_evidence_details(
+    artifacts, identity = _validate_evidence_details(
         path,
         host,
         guard_tier,
         receipt_candidate,
         package_version,
     )
+    return receipt_candidate, artifacts, identity
 
 
 def _require_current_tracked_evidence(
@@ -793,18 +807,37 @@ def validate_repository(repo: Path) -> Mapping:
 
     candidate = ""
     evidence_paths: List[Path] = []
+    run_owners: Dict[str, str] = {}
+    history_owners: Dict[Tuple[str, str, str], str] = {}
     for host in hosts:
         contract = host_contracts[host]
         if not isinstance(contract, dict):
             raise EvidenceError(f"host manifest entry must be an object: {host}")
         receipt = evidence_root / f"{host}.md"
-        candidate, artifacts = _validate_receipt(
+        candidate, artifacts, identity = _validate_receipt(
             receipt,
             host,
             version,
             contract.get("guard_tier", ""),
             candidate,
         )
+        previous_host = run_owners.get(identity.run_id)
+        if previous_host is not None:
+            raise EvidenceError(
+                f"hosts {previous_host} and {host} share one live run_id"
+            )
+        run_owners[identity.run_id] = host
+        history = (
+            identity.landing_commit,
+            identity.ship_commit,
+            identity.integration_commit,
+        )
+        previous_host = history_owners.get(history)
+        if previous_host is not None:
+            raise EvidenceError(
+                f"hosts {previous_host} and {host} share one milestone history"
+            )
+        history_owners[history] = host
         evidence_paths.extend((receipt, *artifacts))
     _git(repo, "merge-base", "--is-ancestor", candidate, "HEAD")
     changed = frozenset(

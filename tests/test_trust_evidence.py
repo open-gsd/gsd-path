@@ -20,6 +20,7 @@ class TrustEvidenceTests(unittest.TestCase):
         self.keep_fixture_branches = set()
         self.unrelated_integration_hosts = set()
         self.blocked_final_hosts = set()
+        self.shared_history_groups = {}
         self.guard_tiers = {
             "alpha": "native-fail-closed",
             "beta": "git-only",
@@ -70,6 +71,15 @@ class TrustEvidenceTests(unittest.TestCase):
     def fixture(self, host):
         if host in self.fixtures:
             return self.fixtures[host]
+        fixture_hosts = (host,)
+        for owner, members in self.shared_history_groups.items():
+            if host not in members:
+                continue
+            if host != owner:
+                self.fixture(owner)
+                return self.fixtures[host]
+            fixture_hosts = members
+            break
         repository = Path(self.fixture_temporary.name) / host
         repository.mkdir()
         remote = repository.parent / f"{host}-origin.git"
@@ -90,60 +100,78 @@ class TrustEvidenceTests(unittest.TestCase):
         landing = git("rev-parse", "HEAD")
         base = git("rev-parse", "HEAD^")
         pre_integration_default = git("rev-parse", "main")
-        task_branch = f"task/{host}-milestone"
-        task_worktree = repository.parent / f"{host}-task-worktree"
-        run_id = f"{host}-run-001"
+        task_branches = {
+            evidence_host: f"task/{evidence_host}-milestone"
+            for evidence_host in fixture_hosts
+        }
+        task_worktrees = {
+            evidence_host: repository.parent / f"{evidence_host}-task-worktree"
+            for evidence_host in fixture_hosts
+        }
+        run_ids = {
+            evidence_host: f"{evidence_host}-run-001"
+            for evidence_host in fixture_hosts
+        }
         archive_directory = builder.prepare_archive(repository)
         archive = archive_directory.relative_to(repository).as_posix()
-        artifact_paths = {
-            "state": ".project/STATE.md",
-            "verify": f"{archive}/tasks/T001-demo.md",
-            "wave_review": f"{archive}/review/wave-1.cycle1.md",
-            "final_review": f"{archive}/review/FINAL.md",
-            "archive": archive,
-            "guards": f"{archive}/guards.json",
-        }
-        run_manifest = f"{archive}/trust-run-manifest.json"
-        (repository / artifact_paths["guards"]).write_text(
-            json.dumps(
-                {
-                    "schema": check_trust_evidence.GUARD_EVIDENCE_SCHEMA,
-                    "host": host,
-                    "run_id": run_id,
-                    "declared_tier": self.guard_tiers[host],
-                    "native_guard": (
-                        "not-applicable"
-                        if self.guard_tiers[host] == "git-only"
-                        else "pass"
-                    ),
-                    "git_hooks": "pass",
-                }
+        artifact_paths_by_host = {}
+        run_manifests = {}
+        for evidence_host in fixture_hosts:
+            suffix = f"-{evidence_host}" if len(fixture_hosts) > 1 else ""
+            artifact_paths = {
+                "state": ".project/STATE.md",
+                "verify": f"{archive}/tasks/T001-demo.md",
+                "wave_review": f"{archive}/review/wave-1.cycle1.md",
+                "final_review": f"{archive}/review/FINAL.md",
+                "archive": archive,
+                "guards": f"{archive}/guards{suffix}.json",
+            }
+            run_manifest = f"{archive}/trust-run-manifest{suffix}.json"
+            artifact_paths_by_host[evidence_host] = artifact_paths
+            run_manifests[evidence_host] = run_manifest
+            (repository / artifact_paths["guards"]).write_text(
+                json.dumps(
+                    {
+                        "schema": check_trust_evidence.GUARD_EVIDENCE_SCHEMA,
+                        "host": evidence_host,
+                        "run_id": run_ids[evidence_host],
+                        "declared_tier": self.guard_tiers[evidence_host],
+                        "native_guard": (
+                            "not-applicable"
+                            if self.guard_tiers[evidence_host] == "git-only"
+                            else "pass"
+                        ),
+                        "git_hooks": "pass",
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
             )
-            + "\n",
-            encoding="utf-8",
-        )
-        manifest = {
-            "schema": check_trust_evidence.RUN_MANIFEST_SCHEMA,
-            "host": host,
-            "run_id": run_id,
-            "host_version": "fixture-cli 1.0",
-            "candidate": self.candidate,
-            "package_version": "1.2.3",
-            "child_id": f"{host}-child-1",
-            "guard_tier": self.guard_tiers[host],
-            "fixture_base_commit": base,
-            "landing_commit": landing,
-            "pre_integration_default_commit": pre_integration_default,
-            "task_branch": task_branch,
-            "bound_branch": "gsd-path/M001",
-            "default_branch": "main",
-            "milestone_tag": f"milestone/{archive_directory.name}",
-            "artifacts": artifact_paths,
-        }
-        manifest.update(self.fixture_manifest_overrides.get(host, {}))
-        (repository / run_manifest).write_text(
-            json.dumps(manifest) + "\n", encoding="utf-8"
-        )
+            manifest = {
+                "schema": check_trust_evidence.RUN_MANIFEST_SCHEMA,
+                "host": evidence_host,
+                "run_id": run_ids[evidence_host],
+                "host_version": "fixture-cli 1.0",
+                "candidate": self.candidate,
+                "package_version": "1.2.3",
+                "child_id": f"{evidence_host}-child-1",
+                "guard_tier": self.guard_tiers[evidence_host],
+                "fixture_base_commit": base,
+                "landing_commit": landing,
+                "pre_integration_default_commit": pre_integration_default,
+                "task_branch": task_branches[evidence_host],
+                "bound_branch": "gsd-path/M001",
+                "default_branch": "main",
+                "milestone_tag": f"milestone/{archive_directory.name}",
+                "artifacts": artifact_paths,
+            }
+            manifest.update(self.fixture_manifest_overrides.get(evidence_host, {}))
+            (repository / run_manifest).write_text(
+                json.dumps(manifest) + "\n", encoding="utf-8"
+            )
+        task_branch = task_branches[host]
+        task_worktree = task_worktrees[host]
+        artifact_paths = artifact_paths_by_host[host]
         rendered = builder.render_manifest(repository)
         self.assertEqual(0, rendered.returncode, rendered.stderr)
         checked = builder.preflight(repository)
@@ -241,29 +269,36 @@ class TrustEvidenceTests(unittest.TestCase):
         bundle = self.artifact(host, "fixture").with_suffix(".bundle")
         bundle.parent.mkdir(parents=True, exist_ok=True)
         git("bundle", "create", str(bundle), "--all")
-        self.fixtures[host] = {
-            "base": base,
-            "landing": landing,
-            "ship": ship,
-            "pre_integration_default": pre_integration_default,
-            "integration": integration,
-            "milestone_tag": milestone_tag,
-            "bound_branch": bound_branch,
-            "default_branch": "main",
-            "task_branch": task_branch,
-            "task_worktree": str(task_worktree),
-            "primary_worktree": str(repository),
-            "integration_worktree": str(integration_worktree),
-            "worktree_output": (
-                f"worktree {repository}\n"
-                f"HEAD {ship}\n"
-                f"branch refs/heads/{bound_branch}\n"
-            ),
-            "bundle": f"{host}/fixture.bundle",
-            "run_id": run_id,
-            "run_manifest": run_manifest,
-            "artifacts": artifact_paths,
-        }
+        for evidence_host in fixture_hosts:
+            evidence_bundle = self.artifact(evidence_host, "fixture").with_suffix(
+                ".bundle"
+            )
+            evidence_bundle.parent.mkdir(parents=True, exist_ok=True)
+            if evidence_bundle != bundle:
+                evidence_bundle.write_bytes(bundle.read_bytes())
+            self.fixtures[evidence_host] = {
+                "base": base,
+                "landing": landing,
+                "ship": ship,
+                "pre_integration_default": pre_integration_default,
+                "integration": integration,
+                "milestone_tag": milestone_tag,
+                "bound_branch": bound_branch,
+                "default_branch": "main",
+                "task_branch": task_branches[evidence_host],
+                "task_worktree": str(task_worktrees[evidence_host]),
+                "primary_worktree": str(repository),
+                "integration_worktree": str(integration_worktree),
+                "worktree_output": (
+                    f"worktree {repository}\n"
+                    f"HEAD {ship}\n"
+                    f"branch refs/heads/{bound_branch}\n"
+                ),
+                "bundle": f"{evidence_host}/fixture.bundle",
+                "run_id": run_ids[evidence_host],
+                "run_manifest": run_manifests[evidence_host],
+                "artifacts": artifact_paths_by_host[evidence_host],
+            }
         return self.fixtures[host]
 
     def step_evidence(self, host, step):
@@ -423,6 +458,17 @@ class TrustEvidenceTests(unittest.TestCase):
 
         self.assertEqual(["alpha", "beta"], result["hosts"])
         self.assertEqual(self.candidate, result["candidate"])
+
+    def test_rejects_one_milestone_history_reused_for_multiple_hosts(self):
+        self.shared_history_groups["alpha"] = ("alpha", "beta")
+        self.receipt("alpha")
+        self.receipt("beta")
+        self.commit_receipts()
+
+        with self.assertRaisesRegex(
+            check_trust_evidence.EvidenceError, "share one milestone history"
+        ):
+            check_trust_evidence.validate_repository(self.repo)
 
     def test_rejects_missing_host_receipt(self):
         self.receipt("alpha")

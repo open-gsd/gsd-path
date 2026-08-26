@@ -1114,6 +1114,8 @@ def _validate_hooks_refresh(
             ("cursor", "Cursor", project / ".cursor" / "hooks.json"),
         ):
             exists = _lexists(settings)
+            if initialize and target not in selected:
+                continue
             if not exists and target not in selected:
                 continue
             _validate_directory_destination(
@@ -1188,6 +1190,8 @@ def refresh_hooks(
                 cursor_hooks_settings,
             ),
         ):
+            if initialize and target not in selected:
+                continue
             exists = _lexists(settings)
             if exists or target in selected:
                 if not dry_run:

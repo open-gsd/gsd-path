@@ -88,6 +88,8 @@ class GuardHookTests(unittest.TestCase):
             "git push origin main --force-with-lease",
             "git branch -D gsd-path/feature",
             "git -c clean.requireForce=false clean -d",
+            "git clean -di",
+            "git clean --interactive",
             "git update-ref -d refs/heads/task/demo",
             "git update-ref --stdin",
             "rm -rf .project/archive/001-mvp",
@@ -252,6 +254,7 @@ class GuardHookTests(unittest.TestCase):
             "exec git branch --delete --force task",
             "pwsh -Command 'git reset --hard HEAD~1'",
             "cmd /c 'git clean -fd'",
+            "cmd.exe /c 'call git reset --hard HEAD~1'",
             "env -- git reset --hard HEAD~1",
             "env -u TOKEN -- git clean -fd",
             'G=git; "$G" reset --hard HEAD~1',
@@ -348,6 +351,24 @@ class GuardHookTests(unittest.TestCase):
                 )
             finally:
                 os.chdir(previous)
+
+    def test_denies_git_alias_through_env_working_directory(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            repository = Path(temporary)
+            subprocess.run(["git", "init", "-q"], cwd=repository, check=True)
+            subprocess.run(
+                ["git", "config", "alias.wipe", "reset --hard"],
+                cwd=repository,
+                check=True,
+            )
+            self.assert_denied(
+                {
+                    "tool_name": "Bash",
+                    "tool_input": {
+                        "command": f"env -C {shlex.quote(str(repository))} git wipe HEAD~1"
+                    },
+                }
+            )
 
     def test_allows_safe_git_through_command_wrappers(self):
         for command in (
@@ -486,6 +507,14 @@ class GuardHookTests(unittest.TestCase):
             {
                 "tool_name": "Bash",
                 "tool_input": {"command": ["git", "reset", "--hard", "HEAD~2"]},
+            }
+        )
+        self.assert_denied(
+            {
+                "tool_name": "Bash",
+                "tool_input": {
+                    "command": ["bash", "-lc", "git reset --hard HEAD~1"]
+                },
             }
         )
 

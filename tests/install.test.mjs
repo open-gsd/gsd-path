@@ -825,6 +825,33 @@ test("hooks init adds guards without changing existing project contracts", async
   assert.ok(fs.existsSync(path.join(project, ".git", "hooks", "commit-msg")));
 });
 
+test("hooks init ignores unselected foreign native configs", async () => {
+  installer.hooks.detectPythonInterpreter = () => "python3";
+  const project = path.join(root, "existing-grok-project");
+  fs.mkdirSync(path.join(project, ".git"), { recursive: true });
+  const settings = path.join(project, ".claude", "settings.json");
+  fs.mkdirSync(path.dirname(settings), { recursive: true });
+  const original = JSON.stringify({ hooks: { custom: true } }) + "\n";
+  fs.writeFileSync(settings, original);
+
+  const status = await installer.main(
+    [
+      "--hooks-init",
+      "--grok",
+      "--project",
+      project,
+      "--source-root",
+      source,
+      "--no-color",
+    ],
+    env
+  );
+
+  assert.equal(status, 0);
+  assert.equal(fs.readFileSync(settings, "utf8"), original);
+  assert.ok(fs.existsSync(path.join(project, ".git", "hooks", "pre-commit")));
+});
+
 test("hooks install guard scripts, settings, and git hook", async () => {
   const project = path.join(root, "project");
   fs.mkdirSync(path.join(project, ".git"), { recursive: true });

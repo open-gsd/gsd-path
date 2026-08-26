@@ -88,6 +88,8 @@ and guard paths. Those paths must exist
 and be non-empty at the integration commit. Verify, review, and guard artifacts
 must be inside the archived milestone; state must record `phase: shipped` and
 `status: done` and pass the bundled `pipeline_state.py validate` command.
+The run ID and landing, ship, and integration history must not be reused by
+another host receipt.
 
 Do not mark `child_spawn: pass` for a top-level CLI invocation. If any result
 is missing or cannot be reproduced, set the affected field to `unverifiable`.

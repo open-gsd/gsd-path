@@ -1142,6 +1142,32 @@ class InstallerTests(unittest.TestCase):
         self.assertTrue((project / ".git" / "hooks" / "pre-commit").is_file())
         self.assertTrue((project / ".git" / "hooks" / "commit-msg").is_file())
 
+    def test_hooks_init_ignores_unselected_foreign_native_configs(self):
+        project = self.root / "existing-grok-project"
+        (project / ".git").mkdir(parents=True)
+        settings = project / ".claude" / "settings.json"
+        settings.parent.mkdir(parents=True)
+        original = json.dumps({"hooks": {"custom": True}}) + "\n"
+        settings.write_text(original, encoding="utf-8")
+
+        with mock.patch.object(
+            install, "_detect_python_interpreter", return_value="python3"
+        ):
+            status, _, error = self.run_main(
+                [
+                    "--hooks-init",
+                    "--grok",
+                    "--project",
+                    str(project),
+                    "--source-root",
+                    str(self.source),
+                ]
+            )
+
+        self.assertEqual(0, status, error)
+        self.assertEqual(original, settings.read_text(encoding="utf-8"))
+        self.assertTrue((project / ".git" / "hooks" / "pre-commit").is_file())
+
     def test_hooks_install_guard_scripts_settings_and_git_hook(self):
         project = self.root / "project"
         (project / ".git").mkdir(parents=True)

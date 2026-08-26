@@ -1204,6 +1204,7 @@ function validateHooksRefresh(sourceRoot, project, full, hooksDir, selected, ini
       ["cursor", "Cursor", path.join(project, ".cursor", "hooks.json")],
     ]) {
       const exists = lexists(settings);
+      if (initialize && !selected.includes(target)) continue;
       if (!exists && !selected.includes(target)) continue;
       validateDirectoryDestination(
         path.dirname(settings),
@@ -1277,6 +1278,7 @@ function refreshHooks(sourceRoot, project, full, dryRun, selected = [], initiali
         cursorHooksSettings,
       ],
     ]) {
+      if (initialize && !selected.includes(target)) continue;
       const exists = lexists(settings);
       if (exists || selected.includes(target)) {
         if (!dryRun) {
