@@ -28,7 +28,9 @@ npx gsd-path --claude --project /path/to/repo --hooks
 node scripts/install.mjs --claude --project /path/to/repo --hooks
 ```
 
-`--hooks` requires `--project`. Refuses if target files already exist:
+`--hooks` requires `--project`. Valid existing native settings for explicitly
+selected Codex or Cursor hosts are merged, preserving unrelated settings and
+hooks. Other target files are refused if they already exist:
 
 | File | Purpose |
 | --- | --- |

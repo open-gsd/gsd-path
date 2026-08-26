@@ -827,6 +827,18 @@ function projectDestinations(project, selected, hooksEnabled, interpreter, hooks
   return destinations;
 }
 
+function nativeSettingsMergers(project, selected, hooksEnabled) {
+  const mergers = new Map();
+  if (!hooksEnabled) return mergers;
+  if (selected.includes("codex")) {
+    mergers.set(path.join(project, ".codex", "hooks.json"), mergedCodexSettings);
+  }
+  if (selected.includes("cursor")) {
+    mergers.set(path.join(project, ".cursor", "hooks.json"), mergedCursorSettings);
+  }
+  return mergers;
+}
+
 function describeProjectPath(project, destination) {
   const relative = path.relative(project, destination);
   if (relative.startsWith("..") || path.isAbsolute(relative)) {
@@ -852,26 +864,6 @@ function existingContractError(destination) {
 function validateProject(sourceRoot, project, selected, hooksEnabled, reservedRoots, interpreter, hooksDir) {
   const includeClaude = selected.includes("claude");
   validateDirectoryDestination(project, "project path");
-  const sources = ["AGENTS.md", "WORKFLOW.md"];
-  if (hooksEnabled) {
-    sources.push(...GUARD_SCRIPTS.map((name) => path.join("scripts", name)));
-  }
-  for (const sourceName of sources) {
-    const source = path.join(sourceRoot, sourceName);
-    if (isSymlink(source) || !isFile(source)) {
-      throw new InstallerError(`missing project contract: ${source}`);
-    }
-  }
-  for (const [destination] of projectDestinations(project, selected, hooksEnabled, interpreter, hooksDir)) {
-    if (lexists(destination)) {
-      throw existingContractError(destination);
-    }
-    for (const [label, root] of reservedRoots) {
-      if (pathsOverlap(destination, root)) {
-        throw new InstallerError(`project contract overlaps ${label}: ${destination}, ${root}`);
-      }
-    }
-  }
   const projectDirectories = [];
   if (includeClaude) projectDirectories.push(["Claude", path.join(project, ".claude")]);
   if (hooksEnabled && selected.includes("codex")) {
@@ -885,10 +877,36 @@ function validateProject(sourceRoot, project, selected, hooksEnabled, reservedRo
       throw new InstallerError(`unsafe ${label} project directory: ${directory}`);
     }
   }
+  const sources = ["AGENTS.md", "WORKFLOW.md"];
+  if (hooksEnabled) {
+    sources.push(...GUARD_SCRIPTS.map((name) => path.join("scripts", name)));
+  }
+  for (const sourceName of sources) {
+    const source = path.join(sourceRoot, sourceName);
+    if (isSymlink(source) || !isFile(source)) {
+      throw new InstallerError(`missing project contract: ${source}`);
+    }
+  }
+  const mergers = nativeSettingsMergers(project, selected, hooksEnabled);
+  for (const [destination] of projectDestinations(project, selected, hooksEnabled, interpreter, hooksDir)) {
+    if (lexists(destination)) {
+      const merge = mergers.get(destination);
+      if (merge === undefined || isSymlink(destination)) {
+        throw existingContractError(destination);
+      }
+      merge(destination, interpreter);
+    }
+    for (const [label, root] of reservedRoots) {
+      if (pathsOverlap(destination, root)) {
+        throw new InstallerError(`project contract overlaps ${label}: ${destination}, ${root}`);
+      }
+    }
+  }
 }
 
 function applyProject(sourceRoot, project, selected, hooksEnabled, transaction, interpreter, hooksDir) {
   createDirectory(project, transaction.createdDirectories);
+  const mergers = nativeSettingsMergers(project, selected, hooksEnabled);
   for (const [destination, sourceName, literal, executable] of projectDestinations(
     project,
     selected,
@@ -897,6 +915,14 @@ function applyProject(sourceRoot, project, selected, hooksEnabled, transaction, 
     hooksDir
   )) {
     createDirectory(path.dirname(destination), transaction.createdDirectories);
+    const merge = mergers.get(destination);
+    if (lexists(destination) && merge !== undefined && !isSymlink(destination)) {
+      const original = fs.readFileSync(destination);
+      const mode = fs.statSync(destination).mode & 0o777;
+      writeFileAtomic(destination, merge(destination, interpreter), mode);
+      transaction.replaced.push({ destination, original, mode });
+      continue;
+    }
     const content = sourceName
       ? fs.readFileSync(path.join(sourceRoot, sourceName))
       : Buffer.from(literal, "utf8");
@@ -920,6 +946,9 @@ function applyProject(sourceRoot, project, selected, hooksEnabled, transaction, 
 }
 
 function rollbackProject(transaction) {
+  for (const { destination, original, mode } of [...transaction.replaced].reverse()) {
+    writeFileAtomic(destination, original, mode);
+  }
   for (const destination of [...transaction.copied].reverse()) {
     removePath(destination);
   }
@@ -1079,13 +1108,10 @@ function mergedNestedHookSettings(settings, managedEntry) {
     }
     const unrelatedHooks = entry.hooks.filter((hook) => !isManagedCommandHook(hook));
     if (!replaced) {
-      merged.push({
-        ...entry,
-        ...managedEntry,
-        hooks: [...managedEntry.hooks, ...unrelatedHooks],
-      });
+      merged.push(managedEntry);
       replaced = true;
-    } else if (unrelatedHooks.length > 0) {
+    }
+    if (unrelatedHooks.length > 0) {
       merged.push({ ...entry, hooks: unrelatedHooks });
     }
   }
@@ -1739,7 +1765,7 @@ export async function install(sourceRoot, plans, options = {}) {
     if (legacyRoot !== null && isDirectory(legacyRoot)) lockRoots.push(legacyRoot);
     const ownership = acquireInstallLocks(lockRoots);
     const targetTransactions = [];
-    const projectTransaction = { createdDirectories: [], copied: [] };
+    const projectTransaction = { createdDirectories: [], copied: [], replaced: [] };
     try {
       if (legacyRoot !== null && isDirectory(legacyRoot)) {
         await progress("Backing up legacy Codex skills");

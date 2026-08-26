@@ -837,6 +837,55 @@ test("hooks install native Codex and Cursor project configs", async () => {
   assert.equal(cursor.hooks.preToolUse[0].failClosed, true);
 });
 
+test("hooks install merges selected native configs", async () => {
+  installer.hooks.detectPythonInterpreter = () => "python3";
+  const project = path.join(root, "existing-native-hooks-project");
+  fs.mkdirSync(path.join(project, ".git"), { recursive: true });
+  const codexPath = path.join(project, ".codex", "hooks.json");
+  const cursorPath = path.join(project, ".cursor", "hooks.json");
+  fs.mkdirSync(path.dirname(codexPath));
+  fs.mkdirSync(path.dirname(cursorPath));
+  fs.writeFileSync(
+    codexPath,
+    JSON.stringify({
+      userSetting: true,
+      hooks: {
+        PreToolUse: [
+          { matcher: "Write", hooks: [{ type: "command", command: "custom-codex" }] },
+        ],
+      },
+    }) + "\n"
+  );
+  fs.writeFileSync(
+    cursorPath,
+    JSON.stringify({
+      version: 1,
+      userSetting: true,
+      hooks: { preToolUse: [{ command: "custom-cursor" }] },
+    }) + "\n"
+  );
+
+  await runInstall(
+    [
+      installer.targetPlan("codex", path.join(root, "codex", "skills")),
+      installer.targetPlan("cursor", path.join(root, "cursor", "skills")),
+    ],
+    { project, hooks: true }
+  );
+
+  const codex = JSON.parse(fs.readFileSync(codexPath, "utf8"));
+  assert.equal(codex.userSetting, true);
+  assert.equal(codex.hooks.PreToolUse.length, 2);
+  assert.equal(codex.hooks.PreToolUse[0].matcher, "Write");
+  assert.equal(codex.hooks.PreToolUse[0].hooks[0].command, "custom-codex");
+  assert.match(codex.hooks.PreToolUse[1].hooks[0].command, /guard_hook\.py/);
+  const cursor = JSON.parse(fs.readFileSync(cursorPath, "utf8"));
+  assert.equal(cursor.userSetting, true);
+  assert.equal(cursor.hooks.preToolUse.length, 2);
+  assert.equal(cursor.hooks.preToolUse[0].command, "custom-cursor");
+  assert.match(cursor.hooks.preToolUse[1].command, /guard_hook\.py/);
+});
+
 test("native hook install rejects unsafe project directories", async () => {
   installer.hooks.detectPythonInterpreter = () => "python3";
   for (const host of ["codex", "cursor"]) {
@@ -914,6 +963,7 @@ test("hooks refresh full updates native Codex and Cursor configs", async () => {
   const codexPath = path.join(project, ".codex", "hooks.json");
   const codex = JSON.parse(fs.readFileSync(codexPath, "utf8"));
   codex.hooks.PreToolUse[0].hooks[0].command = 'python "C:\\repo\\.gsd-path\\guard_hook.py"';
+  codex.hooks.PreToolUse[0].matcher = "Write";
   codex.hooks.PreToolUse[0].hooks.push({ type: "command", command: "custom-codex" });
   codex.userSetting = true;
   fs.writeFileSync(codexPath, JSON.stringify(codex) + "\n");
@@ -934,9 +984,10 @@ test("hooks refresh full updates native Codex and Cursor configs", async () => {
     'python3 "$(git rev-parse --show-toplevel)/.gsd-path/guard_hook.py"'
   );
   assert.equal(refreshedCodex.userSetting, true);
-  assert.equal(refreshedCodex.hooks.PreToolUse.length, 1);
-  assert.equal(refreshedCodex.hooks.PreToolUse[0].hooks.length, 2);
-  assert.equal(refreshedCodex.hooks.PreToolUse[0].hooks[1].command, "custom-codex");
+  assert.equal(refreshedCodex.hooks.PreToolUse.length, 2);
+  assert.equal(refreshedCodex.hooks.PreToolUse[0].hooks.length, 1);
+  assert.equal(refreshedCodex.hooks.PreToolUse[1].matcher, "Write");
+  assert.equal(refreshedCodex.hooks.PreToolUse[1].hooks[0].command, "custom-codex");
   const refreshedCursor = JSON.parse(fs.readFileSync(cursorPath, "utf8"));
   assert.equal(
     refreshedCursor.hooks.preToolUse[0].command,
@@ -1398,7 +1449,8 @@ test("hooks refresh full preserves user hook events and entries", async () => {
   await runInstall([installer.targetPlan("claude", target)], { project, hooks: true });
   const settingsPath = path.join(project, ".claude", "settings.json");
   const settings = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
-  settings.hooks.PreToolUse[0].matcher = "old";
+  settings.hooks.PreToolUse[0].matcher = "Write";
+  settings.hooks.PreToolUse[0].label = "user-scope";
   settings.hooks.PreToolUse[0].hooks.push({ type: "command", command: "echo nested" });
   settings.hooks.PreToolUse.push({
     matcher: "WebFetch",
@@ -1414,11 +1466,15 @@ test("hooks refresh full preserves user hook events and entries", async () => {
   assert.deepEqual(refreshed.hooks.Stop, [
     { hooks: [{ type: "command", command: "echo done" }] },
   ]);
-  assert.equal(refreshed.hooks.PreToolUse.length, 2);
+  assert.equal(refreshed.hooks.PreToolUse.length, 3);
   assert.equal(refreshed.hooks.PreToolUse[0].matcher, installer.CLAUDE_MATCHER);
-  assert.equal(refreshed.hooks.PreToolUse[0].hooks.length, 2);
-  assert.equal(refreshed.hooks.PreToolUse[0].hooks[1].command, "echo nested");
+  assert.equal(refreshed.hooks.PreToolUse[0].hooks.length, 1);
   assert.deepEqual(refreshed.hooks.PreToolUse[1], {
+    matcher: "Write",
+    label: "user-scope",
+    hooks: [{ type: "command", command: "echo nested" }],
+  });
+  assert.deepEqual(refreshed.hooks.PreToolUse[2], {
     matcher: "WebFetch",
     hooks: [{ type: "command", command: "echo user" }],
   });

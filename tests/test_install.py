@@ -1154,6 +1154,75 @@ class InstallerTests(unittest.TestCase):
         )
         self.assertTrue(cursor["hooks"]["preToolUse"][0]["failClosed"])
 
+    def test_hooks_install_merges_selected_native_configs(self):
+        project = self.root / "existing-native-hooks-project"
+        (project / ".git").mkdir(parents=True)
+        codex_path = project / ".codex" / "hooks.json"
+        cursor_path = project / ".cursor" / "hooks.json"
+        codex_path.parent.mkdir()
+        cursor_path.parent.mkdir()
+        codex_path.write_text(
+            json.dumps(
+                {
+                    "userSetting": True,
+                    "hooks": {
+                        "PreToolUse": [
+                            {
+                                "matcher": "Write",
+                                "hooks": [
+                                    {"type": "command", "command": "custom-codex"}
+                                ],
+                            }
+                        ]
+                    },
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        cursor_path.write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "userSetting": True,
+                    "hooks": {"preToolUse": [{"command": "custom-cursor"}]},
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        plans = [
+            install.TargetPlan("codex", self.root / "codex" / "skills"),
+            install.TargetPlan("cursor", self.root / "cursor" / "skills"),
+        ]
+
+        with mock.patch.object(
+            install, "_detect_python_interpreter", return_value="python3"
+        ):
+            install.install(self.source, plans, project=project, hooks=True)
+
+        codex = json.loads(codex_path.read_text(encoding="utf-8"))
+        self.assertTrue(codex["userSetting"])
+        self.assertEqual(2, len(codex["hooks"]["PreToolUse"]))
+        self.assertEqual("Write", codex["hooks"]["PreToolUse"][0]["matcher"])
+        self.assertEqual(
+            "custom-codex",
+            codex["hooks"]["PreToolUse"][0]["hooks"][0]["command"],
+        )
+        self.assertIn(
+            "guard_hook.py",
+            codex["hooks"]["PreToolUse"][1]["hooks"][0]["command"],
+        )
+        cursor = json.loads(cursor_path.read_text(encoding="utf-8"))
+        self.assertTrue(cursor["userSetting"])
+        self.assertEqual(2, len(cursor["hooks"]["preToolUse"]))
+        self.assertEqual(
+            "custom-cursor", cursor["hooks"]["preToolUse"][0]["command"]
+        )
+        self.assertIn(
+            "guard_hook.py", cursor["hooks"]["preToolUse"][1]["command"]
+        )
+
     def test_native_hook_commands_run_from_supported_working_directories(self):
         project = self.root / "native hooks project"
         project.mkdir()
@@ -1341,6 +1410,7 @@ class InstallerTests(unittest.TestCase):
         codex["hooks"]["PreToolUse"][0]["hooks"][0]["command"] = (
             'python "C:\\repo\\.gsd-path\\guard_hook.py"'
         )
+        codex["hooks"]["PreToolUse"][0]["matcher"] = "Write"
         codex["hooks"]["PreToolUse"][0]["hooks"].append(
             {"type": "command", "command": "custom-codex"}
         )
@@ -1366,11 +1436,14 @@ class InstallerTests(unittest.TestCase):
             refreshed_codex["hooks"]["PreToolUse"][0]["hooks"][0]["command"],
         )
         self.assertTrue(refreshed_codex["userSetting"])
-        self.assertEqual(1, len(refreshed_codex["hooks"]["PreToolUse"]))
-        self.assertEqual(2, len(refreshed_codex["hooks"]["PreToolUse"][0]["hooks"]))
+        self.assertEqual(2, len(refreshed_codex["hooks"]["PreToolUse"]))
+        self.assertEqual(1, len(refreshed_codex["hooks"]["PreToolUse"][0]["hooks"]))
+        self.assertEqual(
+            "Write", refreshed_codex["hooks"]["PreToolUse"][1]["matcher"]
+        )
         self.assertEqual(
             "custom-codex",
-            refreshed_codex["hooks"]["PreToolUse"][0]["hooks"][1]["command"],
+            refreshed_codex["hooks"]["PreToolUse"][1]["hooks"][0]["command"],
         )
         refreshed_cursor = json.loads(cursor_path.read_text(encoding="utf-8"))
         self.assertEqual(
@@ -1645,7 +1718,8 @@ class InstallerTests(unittest.TestCase):
         self.run_main(self.hooks_arguments(project, target))
         settings_path = project / ".claude" / "settings.json"
         settings = json.loads(settings_path.read_text(encoding="utf-8"))
-        settings["hooks"]["PreToolUse"][0]["matcher"] = "old"
+        settings["hooks"]["PreToolUse"][0]["matcher"] = "Write"
+        settings["hooks"]["PreToolUse"][0]["label"] = "user-scope"
         settings["hooks"]["PreToolUse"][0]["hooks"].append(
             {"type": "command", "command": "echo nested"}
         )
@@ -1661,16 +1735,20 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(0, status, error)
         refreshed = json.loads(settings_path.read_text(encoding="utf-8"))
         self.assertEqual(stop_entry, refreshed["hooks"]["Stop"])
-        self.assertEqual(2, len(refreshed["hooks"]["PreToolUse"]))
+        self.assertEqual(3, len(refreshed["hooks"]["PreToolUse"]))
         self.assertEqual(
             install.CLAUDE_MATCHER, refreshed["hooks"]["PreToolUse"][0]["matcher"]
         )
-        self.assertEqual(2, len(refreshed["hooks"]["PreToolUse"][0]["hooks"]))
+        self.assertEqual(1, len(refreshed["hooks"]["PreToolUse"][0]["hooks"]))
         self.assertEqual(
-            "echo nested",
-            refreshed["hooks"]["PreToolUse"][0]["hooks"][1]["command"],
+            {
+                "matcher": "Write",
+                "label": "user-scope",
+                "hooks": [{"type": "command", "command": "echo nested"}],
+            },
+            refreshed["hooks"]["PreToolUse"][1],
         )
-        self.assertEqual(user_entry, refreshed["hooks"]["PreToolUse"][1])
+        self.assertEqual(user_entry, refreshed["hooks"]["PreToolUse"][2])
 
     def test_emitted_hooks_use_probed_interpreter_token(self):
         project = self.root / "project"

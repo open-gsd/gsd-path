@@ -42,6 +42,8 @@ AGENTS.md or WORKFLOW.md template changed upstream
 
 Existing `gsd-path*` skills move to `disabled-gsd-skills` beside each root before replace.
 Unrelated skills are never touched. Failed multi-host updates roll back all selected targets.
+An initial `--hooks` install merges valid native settings for explicitly selected Codex
+or Cursor hosts; other existing project contract and guard files are refused.
 
 ---
 

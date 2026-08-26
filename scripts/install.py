@@ -11,7 +11,7 @@ import sys
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterable, List, Mapping, Optional, Sequence, Tuple
+from typing import Callable, Iterable, List, Mapping, Optional, Sequence, Tuple, Union
 
 try:
     from . import sync_skill_resources
@@ -268,6 +268,7 @@ class TargetTransaction:
 class ProjectTransaction:
     created_directories: List[Path] = field(default_factory=list)
     copied: List[Path] = field(default_factory=list)
+    replaced: List[Tuple[Path, bytes, int]] = field(default_factory=list)
 
 
 def absolute_path(path: Path) -> Path:
@@ -705,6 +706,19 @@ def _project_destinations(
     return destinations
 
 
+def _native_settings_mergers(
+    project: Path, selected: Sequence[str], hooks: bool
+) -> Mapping[Path, Callable[[Path, str], str]]:
+    mergers = {}
+    if not hooks:
+        return mergers
+    if "codex" in selected:
+        mergers[project / ".codex" / "hooks.json"] = _merged_codex_settings
+    if "cursor" in selected:
+        mergers[project / ".cursor" / "hooks.json"] = _merged_cursor_settings
+    return mergers
+
+
 def _describe_project_path(project: Path, destination: Path) -> str:
     try:
         return destination.relative_to(project).as_posix()
@@ -745,23 +759,6 @@ def _validate_project(
     hooks_dir: Optional[Path],
 ) -> None:
     _validate_directory_destination(project, "project path")
-    sources = ["AGENTS.md", "WORKFLOW.md"]
-    if hooks:
-        sources.extend(f"scripts/{name}" for name in GUARD_SCRIPTS)
-    for source_name in sources:
-        source = source_root / source_name
-        if source.is_symlink() or not source.is_file():
-            raise InstallerError(f"missing project contract: {source}")
-    for destination, _, _, _ in _project_destinations(
-        project, selected, hooks, interpreter, hooks_dir
-    ):
-        if _lexists(destination):
-            raise _existing_contract_error(destination)
-        for label, root in reserved_roots:
-            if _paths_overlap(destination, root):
-                raise InstallerError(
-                    f"project contract overlaps {label}: {destination}, {root}"
-                )
     project_directories = []
     if "claude" in selected:
         project_directories.append(("Claude", project / ".claude"))
@@ -774,6 +771,27 @@ def _validate_project(
             directory.is_symlink() or not directory.is_dir()
         ):
             raise InstallerError(f"unsafe {label} project directory: {directory}")
+    sources = ["AGENTS.md", "WORKFLOW.md"]
+    if hooks:
+        sources.extend(f"scripts/{name}" for name in GUARD_SCRIPTS)
+    for source_name in sources:
+        source = source_root / source_name
+        if source.is_symlink() or not source.is_file():
+            raise InstallerError(f"missing project contract: {source}")
+    mergers = _native_settings_mergers(project, selected, hooks)
+    for destination, _, _, _ in _project_destinations(
+        project, selected, hooks, interpreter, hooks_dir
+    ):
+        if _lexists(destination):
+            merge = mergers.get(destination)
+            if merge is None or destination.is_symlink():
+                raise _existing_contract_error(destination)
+            merge(destination, interpreter)
+        for label, root in reserved_roots:
+            if _paths_overlap(destination, root):
+                raise InstallerError(
+                    f"project contract overlaps {label}: {destination}, {root}"
+                )
 
 
 def _apply_project(
@@ -786,10 +804,18 @@ def _apply_project(
     hooks_dir: Optional[Path],
 ) -> None:
     _create_directory(project, transaction.created_directories)
+    mergers = _native_settings_mergers(project, selected, hooks)
     for destination, source_name, content, executable in _project_destinations(
         project, selected, hooks, interpreter, hooks_dir
     ):
         _create_directory(destination.parent, transaction.created_directories)
+        merge = mergers.get(destination)
+        if _lexists(destination) and merge is not None and not destination.is_symlink():
+            original = destination.read_bytes()
+            mode = destination.stat().st_mode & 0o777
+            _atomic_write(destination, merge(destination, interpreter), mode)
+            transaction.replaced.append((destination, original, mode))
+            continue
         created = False
         try:
             if source_name:
@@ -813,6 +839,8 @@ def _apply_project(
 
 
 def _rollback_project(transaction: ProjectTransaction) -> None:
+    for destination, original, mode in reversed(transaction.replaced):
+        _atomic_write(destination, original, mode)
     for destination in reversed(transaction.copied):
         _remove_path(destination)
     _remove_empty_directories(transaction.created_directories)
@@ -849,12 +877,16 @@ def _atomic_temporary(destination: Path) -> Tuple[int, Path]:
 
 
 def _atomic_write(
-    destination: Path, content: str, mode: Optional[int] = None
+    destination: Path, content: Union[str, bytes], mode: Optional[int] = None
 ) -> None:
     descriptor, temporary = _atomic_temporary(destination)
     try:
-        with os.fdopen(descriptor, "w", encoding="utf-8") as output:
-            output.write(content)
+        if isinstance(content, bytes):
+            with os.fdopen(descriptor, "wb") as output:
+                output.write(content)
+        else:
+            with os.fdopen(descriptor, "w", encoding="utf-8") as output:
+                output.write(content)
         if mode is not None:
             temporary.chmod(mode)
         elif destination.is_file() and not destination.is_symlink():
@@ -985,15 +1017,9 @@ def _merged_nested_hook_settings(settings: Path, managed_entry: dict) -> str:
             hook for hook in entry["hooks"] if not _is_managed_command_hook(hook)
         ]
         if not replaced:
-            merged.append(
-                {
-                    **entry,
-                    **managed_entry,
-                    "hooks": [*managed_entry["hooks"], *unrelated_hooks],
-                }
-            )
+            merged.append(managed_entry)
             replaced = True
-        elif unrelated_hooks:
+        if unrelated_hooks:
             merged.append({**entry, "hooks": unrelated_hooks})
     if not replaced:
         merged.append(managed_entry)
