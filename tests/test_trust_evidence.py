@@ -116,6 +116,17 @@ class TrustEvidenceTests(unittest.TestCase):
                     encoding="utf-8",
                 )
             reviewed_head = landing_commit
+        pre_integration_defaults = {fixture_hosts[0]: pre_integration_default}
+        default_tree = git("rev-parse", f"{pre_integration_default}^{{tree}}")
+        for evidence_host in fixture_hosts[1:]:
+            pre_integration_defaults[evidence_host] = git(
+                "commit-tree",
+                default_tree,
+                "-p",
+                pre_integration_default,
+                "-m",
+                f"advance {evidence_host} default",
+            )
         task_branches = {
             evidence_host: f"task/{evidence_host}-milestone"
             for evidence_host in fixture_hosts
@@ -174,7 +185,9 @@ class TrustEvidenceTests(unittest.TestCase):
                 "guard_tier": self.guard_tiers[evidence_host],
                 "fixture_base_commit": base,
                 "landing_commit": landing_commits[evidence_host],
-                "pre_integration_default_commit": pre_integration_default,
+                "pre_integration_default_commit": pre_integration_defaults[
+                    evidence_host
+                ],
                 "task_branch": task_branches[evidence_host],
                 "bound_branch": "gsd-path/M001",
                 "default_branch": "main",
@@ -280,24 +293,60 @@ class TrustEvidenceTests(unittest.TestCase):
             integration_worktree = (
                 repository.parent / f".{repository.name}-gsd-path-integrate-M001"
             )
+        integrations = {fixture_hosts[0]: integration}
         if host in self.keep_fixture_branches:
             git("branch", task_branch, landing)
-        bundle = self.artifact(host, "fixture").with_suffix(".bundle")
-        bundle.parent.mkdir(parents=True, exist_ok=True)
-        git("bundle", "create", str(bundle), "--all")
-        for evidence_host in fixture_hosts:
-            evidence_bundle = self.artifact(evidence_host, "fixture").with_suffix(
+
+        def create_bundle(evidence_host):
+            bundle_path = self.artifact(evidence_host, "fixture").with_suffix(
                 ".bundle"
             )
-            evidence_bundle.parent.mkdir(parents=True, exist_ok=True)
-            if evidence_bundle != bundle:
-                evidence_bundle.write_bytes(bundle.read_bytes())
+            bundle_path.parent.mkdir(parents=True, exist_ok=True)
+            git("bundle", "create", str(bundle_path), "--all")
+
+        create_bundle(fixture_hosts[0])
+        ship_tree = git("rev-parse", f"{ship}^{{tree}}")
+        for evidence_host in fixture_hosts[1:]:
+            alternate_integration = git(
+                "commit-tree",
+                ship_tree,
+                "-p",
+                pre_integration_defaults[evidence_host],
+                "-p",
+                ship,
+                "-m",
+                pipeline_git.integrate_subject(archive_directory.name, "main"),
+                "-m",
+                pipeline_git.integrate_commit_body(
+                    archive, ship, "main", bound_branch
+                ),
+            )
+            integrations[evidence_host] = alternate_integration
+            git(
+                "tag",
+                "-f",
+                "-a",
+                "-m",
+                f"{evidence_host} milestone",
+                milestone_tag,
+                alternate_integration,
+            )
+            tag_object = git("rev-parse", f"refs/tags/{milestone_tag}")
+            git("update-ref", "refs/remotes/origin/main", alternate_integration)
+            git(
+                "update-ref",
+                f"refs/remotes/origin/tags/{milestone_tag}",
+                tag_object,
+            )
+            create_bundle(evidence_host)
+
+        for evidence_host in fixture_hosts:
             self.fixtures[evidence_host] = {
                 "base": base,
                 "landing": landing_commits[evidence_host],
                 "ship": ship,
-                "pre_integration_default": pre_integration_default,
-                "integration": integration,
+                "pre_integration_default": pre_integration_defaults[evidence_host],
+                "integration": integrations[evidence_host],
                 "milestone_tag": milestone_tag,
                 "bound_branch": bound_branch,
                 "default_branch": "main",

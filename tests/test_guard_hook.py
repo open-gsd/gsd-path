@@ -91,6 +91,8 @@ class GuardHookTests(unittest.TestCase):
             "git clean -di",
             "git clean --interactive",
             "git update-ref -d refs/heads/task/demo",
+            "git update-ref refs/heads/task/demo " + "0" * 40,
+            "git update-ref refs/heads/task/demo ''",
             "git update-ref --stdin",
             "rm -rf .project/archive/001-mvp",
             "mv .project/archive/001-mvp /tmp/x",
@@ -199,7 +201,6 @@ class GuardHookTests(unittest.TestCase):
             "rm .project/$(printf archive)/001-mvp/NOTE.md",
             "cd .project && rm archive/001-mvp/NOTE.md",
             'P=.project; rm "$P/archive/001-mvp/NOTE.md"',
-            'rm "$P/001-mvp/MANIFEST.md"',
             "bash -lc '(cd .project && rm archive/001-mvp/NOTE.md)'",
             "bash -lc 'pushd .project >/dev/null && rm archive/001-mvp/PLAN.md'",
         ):
@@ -274,6 +275,7 @@ class GuardHookTests(unittest.TestCase):
             "builtin eval 'git reset --hard HEAD~1'",
             'echo "$(git reset --hard HEAD~1)"',
             "bash -lc 'export HOME=/tmp/aliases; git wipe HEAD~1'",
+            "printf '%s\\0' reset --hard HEAD~1 | xargs -0 git",
         ):
             with self.subTest(command=command):
                 self.assert_denied(
@@ -295,6 +297,48 @@ class GuardHookTests(unittest.TestCase):
                 )
             finally:
                 os.chdir(previous)
+
+    @unittest.skipUnless(os.name == "nt", "requires native Windows paths")
+    def test_denies_deleting_archive_ancestor_on_windows(self):
+        previous = Path.cwd()
+        with tempfile.TemporaryDirectory() as temporary:
+            repository = Path(temporary)
+            (repository / ".project" / "archive" / "001-mvp").mkdir(parents=True)
+            try:
+                os.chdir(repository)
+                self.assert_denied(
+                    {
+                        "tool_name": "PowerShell",
+                        "tool_input": {
+                            "command": "Remove-Item -Recurse .project",
+                            "working_directory": str(repository),
+                        },
+                    }
+                )
+            finally:
+                os.chdir(previous)
+
+    def test_resolves_inherited_archive_parameters(self):
+        for command in (
+            'rm "$P/001-mvp/MANIFEST.md"',
+            r'cmd.exe /c "del %P%\001-mvp\MANIFEST.md"',
+            r'cmd.exe /V:ON /c "del !P!\001-mvp\MANIFEST.md"',
+        ):
+            with self.subTest(command=command), mock.patch.dict(
+                os.environ, {"P": ".project/archive"}
+            ):
+                self.assert_denied(
+                    {"tool_name": "Bash", "tool_input": {"command": command}}
+                )
+
+    def test_allows_inherited_non_archive_parameter(self):
+        with mock.patch.dict(os.environ, {"TMPDIR": "/tmp"}):
+            self.assert_allowed(
+                {
+                    "tool_name": "Bash",
+                    "tool_input": {"command": 'mkdir "$TMPDIR/build"'},
+                }
+            )
 
     def test_allows_reading_unresolved_path(self):
         self.assert_allowed(

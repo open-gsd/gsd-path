@@ -13,8 +13,8 @@ A release that changes pipeline contracts is trusted only when:
 1. `npm run verify` passes.
 2. Every declared host has one current full-milestone receipt and structured,
    tracked per-step evidence under `evidence/releases/<package-version>/`.
-   Each receipt must identify a distinct host run and distinct milestone
-   ship/integration transaction.
+   Each receipt must identify a distinct host run, ship commit, and integration
+   commit.
 3. `npm run verify:release` accepts those receipts and proves that only trust
    evidence or its summaries changed after the tested candidate SHA.
 

@@ -16,6 +16,7 @@ Malformed input or an internal failure denies the tool call.
 
 from fnmatch import fnmatchcase
 import json
+import os
 import re
 import shlex
 import subprocess
@@ -105,6 +106,12 @@ SHELL_EXPANSION_SYNTAX = re.compile(r"`|\$\(|@\(")
 SHELL_PARAMETER_SYNTAX = re.compile(
     r"\$(?:[A-Za-z_][A-Za-z0-9_]*|[0-9]+|[-*@#?$!]|\{[^}\r\n]+\})"
 )
+NAMED_SHELL_PARAMETER_SYNTAX = re.compile(
+    r"\$(?:([A-Za-z_][A-Za-z0-9_]*)|\{([A-Za-z_][A-Za-z0-9_]*)\})"
+)
+CMD_PARAMETER_SYNTAX = re.compile(
+    r"%([A-Za-z_][A-Za-z0-9_]*)%|!([A-Za-z_][A-Za-z0-9_]*)!"
+)
 DIRECTORY_CHANGE_COMMANDS = frozenset(
     {"cd", "chdir", "pushd", "set-location", "sl"}
 )
@@ -127,7 +134,7 @@ POWERSHELL_WRAPPERS = frozenset(
     {"powershell", "powershell.exe", "pwsh", "pwsh.exe"}
 )
 COMMAND_WRAPPERS = frozenset({"command", "exec"})
-UNVALIDATED_EXECUTION_BUILTINS = frozenset(
+UNVALIDATED_EXECUTION_COMMANDS = frozenset(
     {
         ".",
         "builtin",
@@ -144,6 +151,8 @@ UNVALIDATED_EXECUTION_BUILTINS = frozenset(
         "typeset",
         "unset",
         "unsetenv",
+        "xargs",
+        "xargs.exe",
     }
 )
 SHELL_CONTROL_WORDS = frozenset(
@@ -291,7 +300,7 @@ def contains_existing_archive(path, working_directories):
         return False
     search_paths = [target, Path.cwd(), *(Path(value) for value in working_directories)]
     for search_path in search_paths:
-        if re.match(r"^[A-Za-z]:[/\\]", str(search_path)):
+        if os.name != "nt" and re.match(r"^[A-Za-z]:[/\\]", str(search_path)):
             continue
         try:
             resolved = search_path.resolve(strict=False)
@@ -323,7 +332,7 @@ def path_in_archive(path, working_directories=()):
             )
             if in_archive(combined) or expansion_can_match_archive(combined):
                 return True
-            if re.match(r"^[A-Za-z]:[/\\]", combined):
+            if os.name != "nt" and re.match(r"^[A-Za-z]:[/\\]", combined):
                 continue
             try:
                 resolved = Path(combined).resolve(strict=False)
@@ -391,20 +400,32 @@ def command_references_archive(tokens, working_directories):
     return False
 
 
+def environment_parameter_value(match):
+    return os.environ.get(match.group(1) or match.group(2), "")
+
+
+def expand_environment_parameters(command):
+    expanded = NAMED_SHELL_PARAMETER_SYNTAX.sub(environment_parameter_value, command)
+    return CMD_PARAMETER_SYNTAX.sub(environment_parameter_value, expanded)
+
+
 def unresolved_archive_expansion(command, working_directories):
-    if SHELL_PARAMETER_SYNTAX.search(command):
-        return True
-    if not SHELL_EXPANSION_SYNTAX.search(command):
-        return False
-    lowered = command.replace("\\", "/").casefold()
-    return (
+    expanded = expand_environment_parameters(command)
+    lowered = expanded.replace("\\", "/").casefold()
+    if (
         ".project" in lowered
         or "archive" in lowered
         or any(
             "/.project" in normalize_posix(path).casefold()
             for path in working_directories
         )
-    )
+    ):
+        return True
+    if SHELL_PARAMETER_SYNTAX.search(expanded) or CMD_PARAMETER_SYNTAX.search(
+        expanded
+    ):
+        return True
+    return False
 
 
 def patch_paths(payload):
@@ -485,8 +506,8 @@ def command_invocation(segment):
         raise ValueError("shell executable cannot be validated")
     if executable in SHELL_CONTROL_WORDS:
         raise ValueError("shell control syntax cannot be validated")
-    if executable in UNVALIDATED_EXECUTION_BUILTINS:
-        raise ValueError("shell execution builtin cannot be validated")
+    if executable in UNVALIDATED_EXECUTION_COMMANDS:
+        raise ValueError("shell execution command cannot be validated")
     return executable, segment[index + 1:]
 
 
@@ -555,7 +576,10 @@ def wrapped_command_tokens(segment):
             if argument.casefold() in switches:
                 if index + 1 >= len(arguments):
                     raise ValueError("shell wrapper lacks command payload")
-                return shell_tokens(arguments[index + 1])
+                payload = arguments[index + 1]
+                if executable in {"cmd", "cmd.exe"}:
+                    payload = expand_environment_parameters(payload)
+                return shell_tokens(payload)
         raise ValueError("shell wrapper cannot be validated")
     return None
 
@@ -584,6 +608,30 @@ def git_alias(command, git_options):
     if not alias or alias.startswith("!"):
         raise ValueError("git alias configuration cannot be validated")
     return alias
+
+
+def update_ref_deletes(arguments):
+    operands = []
+    index = 0
+    while index < len(arguments):
+        argument = arguments[index]
+        if argument in {"-m", "--message"}:
+            index += 2
+            continue
+        if argument.startswith("--message=") or argument.startswith("-"):
+            index += 1
+            continue
+        operands.append(argument)
+        index += 1
+    zero_value = len(operands) >= 2 and (
+        operands[1] == "" or not operands[1].strip("0")
+    )
+    return (
+        "-d" in arguments
+        or "--delete" in arguments
+        or any(argument.startswith("--stdin") for argument in arguments)
+        or zero_value
+    )
 
 
 def destructive_git_reason(tokens, resolved_aliases=frozenset()):
@@ -651,12 +699,9 @@ def destructive_git_reason(tokens, resolved_aliases=frozenset()):
             )
             if deletes and forces:
                 return GIT_REASONS[command]
-        if command == "update-ref" and (
-            "-d" in arguments
-            or "--delete" in arguments
-            or any(argument.startswith("--stdin") for argument in arguments)
-        ):
-            return GIT_REASONS[command]
+        if command == "update-ref":
+            if update_ref_deletes(arguments):
+                return GIT_REASONS[command]
     return None
 
 

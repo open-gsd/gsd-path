@@ -808,7 +808,8 @@ def validate_repository(repo: Path) -> Mapping:
     candidate = ""
     evidence_paths: List[Path] = []
     run_owners: Dict[str, str] = {}
-    history_owners: Dict[Tuple[str, str], str] = {}
+    ship_owners: Dict[str, str] = {}
+    integration_owners: Dict[str, str] = {}
     for host in hosts:
         contract = host_contracts[host]
         if not isinstance(contract, dict):
@@ -827,16 +828,16 @@ def validate_repository(repo: Path) -> Mapping:
                 f"hosts {previous_host} and {host} share one live run_id"
             )
         run_owners[identity.run_id] = host
-        history = (
-            identity.ship_commit,
-            identity.integration_commit,
-        )
-        previous_host = history_owners.get(history)
-        if previous_host is not None:
-            raise EvidenceError(
-                f"hosts {previous_host} and {host} share one milestone history"
-            )
-        history_owners[history] = host
+        for commit, owners in (
+            (identity.ship_commit, ship_owners),
+            (identity.integration_commit, integration_owners),
+        ):
+            previous_host = owners.get(commit)
+            if previous_host is not None:
+                raise EvidenceError(
+                    f"hosts {previous_host} and {host} share one milestone history"
+                )
+            owners[commit] = host
         evidence_paths.extend((receipt, *artifacts))
     _git(repo, "merge-base", "--is-ancestor", candidate, "HEAD")
     changed = frozenset(
