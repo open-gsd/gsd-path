@@ -918,6 +918,22 @@ class InstallerTests(unittest.TestCase):
             "live install\n",
         )
 
+    def test_active_target_owner_prevents_backup_mutation(self):
+        target = self.root / "owned-install" / "skills"
+        existing = target / "gsd-path-old"
+        existing.mkdir(parents=True)
+        (existing / "marker").write_text("old\n", encoding="utf-8")
+        (target.parent / ".gsd-path-install-lock").mkdir()
+
+        with self.assertRaisesRegex(install.InstallerError, "already in progress"):
+            install.install(self.source, [install.TargetPlan("claude", target)])
+
+        self.assertEqual(
+            "old\n",
+            (existing / "marker").read_text(encoding="utf-8"),
+        )
+        self.assertFalse((target.parent / "disabled-gsd-skills").exists())
+
     def test_failure_restores_cursor_subagent(self):
         cursor = self.root / "cursor-rollback" / "skills"
         agent = cursor.parent / "agents" / install.CURSOR_AGENT_FILENAME

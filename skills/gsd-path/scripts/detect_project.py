@@ -1308,6 +1308,7 @@ def write_state_anchored(
             )
         ):
             raise DetectError(".project changed after classification")
+        fcntl.flock(project_fd, fcntl.LOCK_EX)
         entries = set(os.listdir(project_fd))
         if entries not in (set(), {STATE_TEMP_NAME}):
             raise DetectError(".project changed after classification")

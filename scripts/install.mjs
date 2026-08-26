@@ -26,6 +26,7 @@ export const CLAUDE_BRIDGE = "@../AGENTS.md\n@../WORKFLOW.md\n";
 export const HOOKS_DIRECTORY = ".gsd-path";
 export const GUARD_SCRIPTS = ["guard_hook.py", "git_guard.py"];
 export const GUARD_MARKER = "gsd-path guard";
+const INSTALL_LOCK_NAME = ".gsd-path-install-lock";
 export const CLAUDE_MATCHER =
   "Edit|Write|MultiEdit|NotebookEdit|Delete|StrReplace|ApplyPatch|Create|Shell|Bash";
 // The managed PreToolUse guard entry, as an object.
@@ -569,6 +570,42 @@ function missingDirectories(candidate) {
 function createDirectory(candidate, created) {
   created.push(...missingDirectories(candidate));
   fs.mkdirSync(candidate, { recursive: true });
+}
+
+function releaseInstallLocks(locks, createdDirectories) {
+  for (const lock of [...locks].reverse()) fs.rmdirSync(lock);
+  removeEmptyDirectories(createdDirectories);
+}
+
+function acquireInstallLocks(roots) {
+  const locks = [];
+  for (const root of roots) {
+    const candidate = path.join(path.dirname(root), INSTALL_LOCK_NAME);
+    if (!locks.some((lock) => samePath(lock, candidate))) locks.push(candidate);
+  }
+  locks.sort();
+  const acquired = [];
+  const createdDirectories = [];
+  try {
+    for (const lock of locks) {
+      createDirectory(path.dirname(lock), createdDirectories);
+      try {
+        fs.mkdirSync(lock);
+      } catch (error) {
+        if (error.code === "EEXIST") {
+          throw new InstallerError(
+            `installation already in progress for ${path.dirname(lock)}`
+          );
+        }
+        throw error;
+      }
+      acquired.push(lock);
+    }
+  } catch (error) {
+    releaseInstallLocks(acquired, createdDirectories);
+    throw error;
+  }
+  return { locks: acquired, createdDirectories };
 }
 
 function backupPath(root, reserved = []) {
@@ -1506,6 +1543,9 @@ export async function install(sourceRoot, plans, options = {}) {
       return results;
     }
 
+    const lockRoots = deployments.map((plan) => plan.root);
+    if (legacyRoot !== null && isDirectory(legacyRoot)) lockRoots.push(legacyRoot);
+    const ownership = acquireInstallLocks(lockRoots);
     const targetTransactions = [];
     const projectTransaction = { createdDirectories: [], copied: [] };
     try {
@@ -1581,6 +1621,8 @@ export async function install(sourceRoot, plans, options = {}) {
       throw new InstallerError(
         `installation failed and was rolled back: ${messageOf(error)}${detail}`
       );
+    } finally {
+      releaseInstallLocks(ownership.locks, ownership.createdDirectories);
     }
   } finally {
     fs.rmSync(staging, { recursive: true, force: true });

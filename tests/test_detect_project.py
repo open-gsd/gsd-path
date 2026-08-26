@@ -1830,6 +1830,57 @@ detect_project.initialize(Path(sys.argv[1]), Path(sys.argv[2]))
         ANCHORED_STATE_CREATE_AVAILABLE,
         "anchored state creation is unavailable",
     )
+    def test_initialize_waits_for_project_directory_owner(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            project = repo / ".project"
+            project.mkdir()
+            template = ROOT / "skills" / "gsd-path" / "templates" / "state.md"
+            child = """
+import sys
+from pathlib import Path
+import detect_project
+
+write_state_anchored = detect_project.write_state_anchored
+
+def announce(*args):
+    print("ready", flush=True)
+    return write_state_anchored(*args)
+
+detect_project.write_state_anchored = announce
+detect_project.initialize(Path(sys.argv[1]), Path(sys.argv[2]))
+"""
+            environment = os.environ.copy()
+            environment["PYTHONPATH"] = str(ROOT / "scripts")
+            project_fd = os.open(project, detect_project.directory_flags())
+            detect_project.fcntl.flock(project_fd, detect_project.fcntl.LOCK_EX)
+            process = subprocess.Popen(
+                [sys.executable, "-c", child, str(repo), str(template)],
+                env=environment,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            try:
+                self.assertEqual("ready\n", process.stdout.readline())
+                with self.assertRaises(subprocess.TimeoutExpired):
+                    process.wait(timeout=0.5)
+                self.assertFalse((project / "STATE.md").exists())
+                self.assertFalse((project / detect_project.STATE_TEMP_NAME).exists())
+            finally:
+                detect_project.fcntl.flock(
+                    project_fd,
+                    detect_project.fcntl.LOCK_UN,
+                )
+                os.close(project_fd)
+                _, error = process.communicate(timeout=5)
+            self.assertEqual(0, process.returncode, error)
+            self.assertTrue((project / "STATE.md").exists())
+
+    @unittest.skipUnless(
+        ANCHORED_STATE_CREATE_AVAILABLE,
+        "anchored state creation is unavailable",
+    )
     def test_state_transition_recovers_death_after_state_link(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary)
