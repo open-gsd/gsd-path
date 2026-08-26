@@ -1,7 +1,12 @@
-# GSD Path — Manual & Dogfood Evidence Bar
+# GSD Path — Historical Manual & Dogfood Evidence Bar
+
+> Historical three-host smoke checklist from 2026-08-05. It does not satisfy
+> the current release contract. For all 11 hosts and a full live milestone, use
+> [LIVE-EVIDENCE-TEMPLATE.md](LIVE-EVIDENCE-TEMPLATE.md) and
+> [TRUST-VALIDATION-SPEC.md](TRUST-VALIDATION-SPEC.md).
 
 **Generated:** 2026-08-05 (workstream: Define manual and dogfood evidence bar)
-**Hosts in scope:** Codex, Claude, Cursor ([#7](https://github.com/open-gsd/gsd-path/issues/7))
+**Historical hosts in scope:** Codex, Claude, Cursor ([#7](https://github.com/open-gsd/gsd-path/issues/7))
 
 ## Evidence recording rule
 
@@ -74,7 +79,7 @@ If `guard_hook.py` manually wired: one archive-path deny test counts as bonus ev
 
 ---
 
-## Explicitly deferred (prove-first in spec, not this bar)
+## Explicitly deferred in this historical bar
 
 | Area | Posture |
 |------|---------|

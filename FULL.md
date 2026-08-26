@@ -147,7 +147,7 @@ After upgrading the package:
 
 ```bash
 node scripts/install.mjs --hooks-refresh --project /path/to/project
-node scripts/install.mjs --hooks-refresh-full --project /path/to/project  # + settings/git hooks
+node scripts/install.mjs --hooks-refresh-full --codex --cursor --project /path/to/project  # + create/refresh selected native settings and git hooks
 ```
 
 ### Updating skills
@@ -168,7 +168,8 @@ also print a one-line update notice (24h cache, fail-silent).
 - Validates synchronized package before writing
 - Backs up existing `gsd-path*` entries
 - Rolls back **all** selected targets if any one fails
-- Codex + Zed share one physical root — installed once with a shared bundle
+- Codex, Antigravity, and Zed share one local physical root — installed once
+  with a shared host-aware bundle
 
 Restart the host session after install if skills do not appear.
 

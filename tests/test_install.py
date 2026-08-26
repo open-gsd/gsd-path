@@ -62,7 +62,7 @@ class InstallerTests(unittest.TestCase):
         )
         shared_adapter.parent.mkdir(parents=True)
         shared_adapter.write_text(
-            "shared dispatch for $gsd-path\n", encoding="utf-8"
+            "shared dispatch for $gsd-path with invoke_subagent\n", encoding="utf-8"
         )
         (self.source / "platforms" / "cursor" / "agent.md").write_text(
             "---\nname: gsd-path\ndescription: test\nmodel: inherit\n---\ncursor agent\n",
@@ -247,7 +247,7 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(1, status)
         self.assertIn("no existing GSD Path skills found to update", error)
 
-    def test_all_local_install_and_update_share_codex_zed_bundle(self):
+    def test_all_local_install_and_update_share_agent_bundle(self):
         project = self.root / "project"
         project.mkdir()
         previous = Path.cwd()
@@ -257,8 +257,7 @@ class InstallerTests(unittest.TestCase):
                 ["--all", "--local", "--source-root", str(self.source)]
             )
             self.assertEqual(0, status, error)
-            self.assertIn("codex+zed: installed", output)
-            self.assertIn("skipped installing a second bundle", output)
+            self.assertIn("codex+antigravity+zed: installed", output)
 
             source_skill = self.source / "skills" / "gsd-path" / "SKILL.md"
             source_skill.write_text(
@@ -272,12 +271,13 @@ class InstallerTests(unittest.TestCase):
             os.chdir(previous)
 
         self.assertEqual(0, status, error)
-        self.assertIn("codex+zed: updated", output)
-        self.assertIn("skipped installing a second bundle", output)
+        self.assertIn("codex+antigravity+zed: updated", output)
         installed = project / ".agents" / "skills" / "gsd-path" / "SKILL.md"
         self.assertIn(
             "description: shared update", installed.read_text(encoding="utf-8")
         )
+        dispatch = installed.parent / "references" / "dispatch.md"
+        self.assertIn("invoke_subagent", dispatch.read_text(encoding="utf-8"))
 
     def test_discussion_skill_is_installed_and_invocable(self):
         self.assertIn("gsd-path-discuss", install.SKILL_NAMES)
@@ -467,17 +467,20 @@ class InstallerTests(unittest.TestCase):
         self.assertIn("codex: would install", output)
         self.assertFalse(target.exists())
 
-    def test_codex_and_zed_share_one_deployment_at_the_same_root(self):
+    def test_shared_agent_hosts_use_one_deployment_at_the_same_root(self):
         root = self.root / "shared" / "skills"
         plans = [
             install.TargetPlan("codex", root),
+            install.TargetPlan("antigravity", root),
             install.TargetPlan("zed", root),
         ]
         deployments = install._deployment_plans(plans)
         self.assertEqual(
             [
                 install.DeploymentPlan(
-                    install.SHARED_AGENT_PROFILE, root, ("codex", "zed")
+                    install.SHARED_AGENT_PROFILE,
+                    root,
+                    ("codex", "antigravity", "zed"),
                 )
             ],
             deployments,
@@ -488,8 +491,11 @@ class InstallerTests(unittest.TestCase):
         status, output, error = self.run_main(
             [
                 "--codex",
+                "--antigravity",
                 "--zed",
                 "--codex-root",
+                str(root),
+                "--antigravity-root",
                 str(root),
                 "--zed-root",
                 str(root),
@@ -1130,20 +1136,60 @@ class InstallerTests(unittest.TestCase):
         codex = json.loads(
             (project / ".codex" / "hooks.json").read_text(encoding="utf-8")
         )
-        guard = project.resolve() / install.HOOKS_DIRECTORY / "guard_hook.py"
         self.assertEqual(
-            f'python3 "{guard}"',
+            'python3 "$(git rev-parse --show-toplevel)/.gsd-path/guard_hook.py"',
             codex["hooks"]["PreToolUse"][0]["hooks"][0]["command"],
+        )
+        self.assertIn(
+            ".gsd-path\\guard_hook.py",
+            codex["hooks"]["PreToolUse"][0]["hooks"][0]["commandWindows"],
         )
         cursor = json.loads(
             (project / ".cursor" / "hooks.json").read_text(encoding="utf-8")
         )
         self.assertEqual(1, cursor["version"])
         self.assertEqual(
-            f'python3 "{guard}"',
+            'python3 ".gsd-path/guard_hook.py"',
             cursor["hooks"]["preToolUse"][0]["command"],
         )
         self.assertTrue(cursor["hooks"]["preToolUse"][0]["failClosed"])
+
+    def test_native_hook_commands_run_from_supported_working_directories(self):
+        project = self.root / "native hooks project"
+        project.mkdir()
+        subprocess.run(["git", "init", "-q"], cwd=project, check=True)
+        plans = [
+            install.TargetPlan("codex", self.root / "codex" / "skills"),
+            install.TargetPlan("cursor", self.root / "cursor" / "skills"),
+        ]
+        with mock.patch.object(
+            install, "_detect_python_interpreter", return_value="python3"
+        ):
+            install.install(self.source, plans, project=project, hooks=True)
+        guard = project / install.HOOKS_DIRECTORY / "guard_hook.py"
+        guard.write_text('print("guard-ran")\n', encoding="utf-8")
+        subdirectory = project / "nested"
+        subdirectory.mkdir()
+        codex = json.loads(
+            (project / ".codex" / "hooks.json").read_text(encoding="utf-8")
+        )
+        codex_command = codex["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+        cursor = json.loads(
+            (project / ".cursor" / "hooks.json").read_text(encoding="utf-8")
+        )
+        cursor_command = cursor["hooks"]["preToolUse"][0]["command"]
+
+        codex_result = subprocess.run(
+            codex_command, cwd=subdirectory, shell=True, text=True, capture_output=True
+        )
+        cursor_result = subprocess.run(
+            cursor_command, cwd=project, shell=True, text=True, capture_output=True
+        )
+
+        self.assertEqual(0, codex_result.returncode, codex_result.stderr)
+        self.assertEqual("guard-ran", codex_result.stdout.strip())
+        self.assertEqual(0, cursor_result.returncode, cursor_result.stderr)
+        self.assertEqual("guard-ran", cursor_result.stdout.strip())
 
     def test_native_hook_install_rejects_unsafe_project_directories(self):
         for host in ("codex", "cursor"):
@@ -1311,22 +1357,41 @@ class InstallerTests(unittest.TestCase):
             status, _, error = self.run_main(self.refresh_full_arguments(project))
 
         self.assertEqual(0, status, error)
-        guard = project.resolve() / install.HOOKS_DIRECTORY / "guard_hook.py"
         refreshed_codex = json.loads(codex_path.read_text(encoding="utf-8"))
         self.assertEqual(
-            f'python3 "{guard}"',
+            'python3 "$(git rev-parse --show-toplevel)/.gsd-path/guard_hook.py"',
             refreshed_codex["hooks"]["PreToolUse"][0]["hooks"][0]["command"],
         )
         self.assertTrue(refreshed_codex["userSetting"])
         self.assertEqual(1, len(refreshed_codex["hooks"]["PreToolUse"]))
         refreshed_cursor = json.loads(cursor_path.read_text(encoding="utf-8"))
         self.assertEqual(
-            f'python3 "{guard}"',
+            'python3 ".gsd-path/guard_hook.py"',
             refreshed_cursor["hooks"]["preToolUse"][0]["command"],
         )
         self.assertTrue(refreshed_cursor["hooks"]["preToolUse"][0]["failClosed"])
         self.assertTrue(refreshed_cursor["userSetting"])
         self.assertEqual(1, len(refreshed_cursor["hooks"]["preToolUse"]))
+
+    def test_hooks_refresh_full_creates_selected_missing_native_configs(self):
+        project = self.root / "existing-project"
+        (project / ".git").mkdir(parents=True)
+        target = self.root / "claude" / "skills"
+        self.run_main(self.hooks_arguments(project, target))
+
+        with mock.patch.object(
+            install, "_detect_python_interpreter", return_value="python3"
+        ):
+            status, _, error = self.run_main(
+                [*self.refresh_full_arguments(project), "--codex", "--cursor"]
+            )
+
+        self.assertEqual(0, status, error)
+        self.assertTrue((project / ".codex" / "hooks.json").is_file())
+        self.assertTrue((project / ".cursor" / "hooks.json").is_file())
+        self.assertEqual(
+            "agents\n", (project / "AGENTS.md").read_text(encoding="utf-8")
+        )
 
     def test_hooks_refresh_full_rejects_malformed_managed_settings(self):
         project = self.root / "project"

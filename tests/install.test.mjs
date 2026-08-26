@@ -49,7 +49,7 @@ function makeSource(base) {
   }
   const shared = path.join(src, "platforms", installer.SHARED_AGENT_PROFILE, "dispatch.md");
   fs.mkdirSync(path.dirname(shared), { recursive: true });
-  fs.writeFileSync(shared, "shared dispatch for $gsd-path\n");
+  fs.writeFileSync(shared, "shared dispatch for $gsd-path with invoke_subagent\n");
   fs.writeFileSync(
     path.join(src, "platforms", "cursor", "agent.md"),
     "---\nname: gsd-path\ndescription: test\nmodel: inherit\n---\ncursor agent\n"
@@ -314,6 +314,13 @@ test("local install via main uses project roots and skips legacy migration", asy
     "utf8"
   );
   assert.match(sharedSkill, /Run gsd-path, gsd-path-build, and gsd-path-discuss/);
+  assert.match(
+    fs.readFileSync(
+      path.join(project, ".agents", "skills", "gsd-path", "references", "dispatch.md"),
+      "utf8"
+    ),
+    /invoke_subagent/
+  );
   assert.ok(fs.existsSync(path.join(project, ".cursor", "agents", installer.CURSOR_AGENT_FILENAME)));
   assert.ok(fs.existsSync(legacy), "legacy migration must not run for --local");
   assert.ok(!fs.existsSync(path.join(root, "legacy", "disabled-gsd-skills")));
@@ -339,19 +346,25 @@ test("codex dry run validates the resolved shared profile from the real reposito
   assert.ok(!fs.existsSync(target));
 });
 
-test("codex and zed share one deployment and back up existing entries", async () => {
+test("shared agent hosts use one deployment and back up existing entries", async () => {
   const shared = path.join(root, "shared", "skills");
   const deployments = installer.deploymentPlans([
     installer.targetPlan("codex", shared),
+    installer.targetPlan("antigravity", shared),
     installer.targetPlan("zed", shared),
   ]);
   assert.deepEqual(deployments, [
-    { profile: installer.SHARED_AGENT_PROFILE, root: shared, targets: ["codex", "zed"] },
+    {
+      profile: installer.SHARED_AGENT_PROFILE,
+      root: shared,
+      targets: ["codex", "antigravity", "zed"],
+    },
   ]);
   fs.mkdirSync(path.join(shared, "gsd-path-old"), { recursive: true });
 
   const results = await runInstall([
     installer.targetPlan("codex", shared),
+    installer.targetPlan("antigravity", shared),
     installer.targetPlan("zed", shared),
   ]);
   const joined = results.join("\n");
@@ -813,11 +826,14 @@ test("hooks install native Codex and Cursor project configs", async () => {
   );
 
   const codex = JSON.parse(fs.readFileSync(path.join(project, ".codex", "hooks.json"), "utf8"));
-  const guardCommand = `python3 "${path.join(project, installer.HOOKS_DIRECTORY, "guard_hook.py")}"`;
-  assert.equal(codex.hooks.PreToolUse[0].hooks[0].command, guardCommand);
+  assert.equal(
+    codex.hooks.PreToolUse[0].hooks[0].command,
+    'python3 "$(git rev-parse --show-toplevel)/.gsd-path/guard_hook.py"'
+  );
+  assert.match(codex.hooks.PreToolUse[0].hooks[0].commandWindows, /\.gsd-path\\guard_hook\.py/);
   const cursor = JSON.parse(fs.readFileSync(path.join(project, ".cursor", "hooks.json"), "utf8"));
   assert.equal(cursor.version, 1);
-  assert.equal(cursor.hooks.preToolUse[0].command, guardCommand);
+  assert.equal(cursor.hooks.preToolUse[0].command, 'python3 ".gsd-path/guard_hook.py"');
   assert.equal(cursor.hooks.preToolUse[0].failClosed, true);
 });
 
@@ -914,18 +930,46 @@ test("hooks refresh full updates native Codex and Cursor configs", async () => {
   const refreshedCodex = JSON.parse(fs.readFileSync(codexPath, "utf8"));
   assert.equal(
     refreshedCodex.hooks.PreToolUse[0].hooks[0].command,
-    `python3 "${path.join(project, installer.HOOKS_DIRECTORY, "guard_hook.py")}"`
+    'python3 "$(git rev-parse --show-toplevel)/.gsd-path/guard_hook.py"'
   );
   assert.equal(refreshedCodex.userSetting, true);
   assert.equal(refreshedCodex.hooks.PreToolUse.length, 1);
   const refreshedCursor = JSON.parse(fs.readFileSync(cursorPath, "utf8"));
   assert.equal(
     refreshedCursor.hooks.preToolUse[0].command,
-    `python3 "${path.join(project, installer.HOOKS_DIRECTORY, "guard_hook.py")}"`
+    'python3 ".gsd-path/guard_hook.py"'
   );
   assert.equal(refreshedCursor.hooks.preToolUse[0].failClosed, true);
   assert.equal(refreshedCursor.userSetting, true);
   assert.equal(refreshedCursor.hooks.preToolUse.length, 1);
+});
+
+test("hooks refresh full creates selected missing native configs", async () => {
+  installer.hooks.detectPythonInterpreter = () => "python3";
+  const project = path.join(root, "existing-project");
+  fs.mkdirSync(path.join(project, ".git"), { recursive: true });
+  await runInstall([installer.targetPlan("claude", path.join(root, "claude", "skills"))], {
+    project,
+    hooks: true,
+  });
+
+  const status = await installer.main(
+    [
+      "--hooks-refresh-full",
+      "--codex",
+      "--cursor",
+      "--project",
+      project,
+      "--source-root",
+      source,
+      "--no-color",
+    ]
+  );
+
+  assert.equal(status, 0);
+  assert.ok(fs.existsSync(path.join(project, ".codex", "hooks.json")));
+  assert.ok(fs.existsSync(path.join(project, ".cursor", "hooks.json")));
+  assert.equal(fs.readFileSync(path.join(project, "AGENTS.md"), "utf8"), "agents\n");
 });
 
 test("hooks refresh rejects unmanaged guard scripts", async () => {

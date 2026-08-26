@@ -71,12 +71,22 @@ def claude_hooks_settings(interpreter: str) -> str:
     )
 
 
-def _project_guard_command(interpreter: str, project: Path) -> str:
-    guard = project.resolve(strict=False) / HOOKS_DIRECTORY / "guard_hook.py"
-    return f'{interpreter} "{guard}"'
+def _codex_guard_command(interpreter: str) -> str:
+    return (
+        f'{interpreter} "$(git rev-parse --show-toplevel)/'
+        f'{HOOKS_DIRECTORY}/guard_hook.py"'
+    )
 
 
-def codex_hooks_settings(interpreter: str, project: Path) -> str:
+def _codex_guard_command_windows(interpreter: str) -> str:
+    return (
+        'powershell.exe -NoProfile -NonInteractive -Command '
+        '"$root = git rev-parse --show-toplevel; '
+        f"& {interpreter} (Join-Path $root '{HOOKS_DIRECTORY}\\guard_hook.py')\""
+    )
+
+
+def codex_hooks_settings(interpreter: str) -> str:
     return json.dumps(
         {
             "hooks": {
@@ -86,7 +96,10 @@ def codex_hooks_settings(interpreter: str, project: Path) -> str:
                         "hooks": [
                             {
                                 "type": "command",
-                                "command": _project_guard_command(interpreter, project),
+                                "command": _codex_guard_command(interpreter),
+                                "commandWindows": _codex_guard_command_windows(
+                                    interpreter
+                                ),
                             }
                         ],
                     }
@@ -97,14 +110,14 @@ def codex_hooks_settings(interpreter: str, project: Path) -> str:
     ) + "\n"
 
 
-def cursor_hooks_settings(interpreter: str, project: Path) -> str:
+def cursor_hooks_settings(interpreter: str) -> str:
     return json.dumps(
         {
             "version": 1,
             "hooks": {
                 "preToolUse": [
                     {
-                        "command": _project_guard_command(interpreter, project),
+                        "command": f'{interpreter} "{HOOKS_DIRECTORY}/guard_hook.py"',
                         "matcher": ".*",
                         "failClosed": True,
                     }
@@ -218,7 +231,7 @@ HOST_NOTES = {
 EXPLICIT_ONLY_TARGETS = frozenset(
     {"claude", "grok", "copilot", "qwen", "cursor", "zed", "kimi", "shared-agents"}
 )
-SHARED_AGENT_TARGETS = frozenset({"codex", "zed"})
+SHARED_AGENT_TARGETS = frozenset({"codex", "antigravity", "zed"})
 SHARED_AGENT_PROFILE = "shared-agents"
 CURSOR_AGENT_FILENAME = "gsd-path.md"
 CURSOR_AGENT_BACKUP_NAME = "cursor-agent-gsd-path.md"
@@ -668,7 +681,7 @@ def _project_destinations(
                 (
                     project / ".codex" / "hooks.json",
                     None,
-                    codex_hooks_settings(interpreter, project),
+                    codex_hooks_settings(interpreter),
                     False,
                 )
             )
@@ -677,7 +690,7 @@ def _project_destinations(
                 (
                     project / ".cursor" / "hooks.json",
                     None,
-                    cursor_hooks_settings(interpreter, project),
+                    cursor_hooks_settings(interpreter),
                     False,
                 )
             )
@@ -928,7 +941,7 @@ def _merged_claude_settings(settings: Path, interpreter: str) -> str:
 
 
 def _merged_codex_settings(settings: Path, interpreter: str) -> str:
-    managed = codex_hooks_settings(interpreter, settings.parents[1])
+    managed = codex_hooks_settings(interpreter)
     managed_entry = json.loads(managed)["hooks"]["PreToolUse"][0]
     return _merged_hook_settings(
         settings, "PreToolUse", managed_entry, _is_managed_hook_entry
@@ -936,7 +949,7 @@ def _merged_codex_settings(settings: Path, interpreter: str) -> str:
 
 
 def _merged_cursor_settings(settings: Path, interpreter: str) -> str:
-    managed = cursor_hooks_settings(interpreter, settings.parents[1])
+    managed = cursor_hooks_settings(interpreter)
     managed_entry = json.loads(managed)["hooks"]["preToolUse"][0]
     return _merged_hook_settings(
         settings, "preToolUse", managed_entry, _is_managed_direct_hook_entry
@@ -944,7 +957,11 @@ def _merged_cursor_settings(settings: Path, interpreter: str) -> str:
 
 
 def _validate_hooks_refresh(
-    source_root: Path, project: Path, full: bool, hooks_dir: Optional[Path]
+    source_root: Path,
+    project: Path,
+    full: bool,
+    hooks_dir: Optional[Path],
+    selected: Sequence[str],
 ) -> None:
     _validate_directory_destination(project, "project path")
     for name in GUARD_SCRIPTS:
@@ -957,6 +974,17 @@ def _validate_hooks_refresh(
         if source.is_symlink() or not source.is_file():
             raise InstallerError(f"missing guard script source: {source}")
     if full:
+        native_directories = {
+            "claude": ("Claude", project / ".claude"),
+            "codex": ("Codex", project / ".codex"),
+            "cursor": ("Cursor", project / ".cursor"),
+        }
+        for target in selected:
+            if target in native_directories:
+                label, directory = native_directories[target]
+                _validate_directory_destination(
+                    directory, f"unsafe {label} project directory"
+                )
         for settings in (
             project / ".claude" / "settings.json",
             project / ".codex" / "hooks.json",
@@ -982,12 +1010,16 @@ def _validate_hooks_refresh(
 
 
 def refresh_hooks(
-    source_root: Path, project: Path, full: bool, dry_run: bool = False
+    source_root: Path,
+    project: Path,
+    full: bool,
+    dry_run: bool = False,
+    selected: Sequence[str] = (),
 ) -> List[str]:
     """Refreshed project-relative paths; "note:"-prefixed entries are
     user-facing notes rather than refreshed files."""
     hooks_dir = _git_hooks_directory(project) if full else None
-    _validate_hooks_refresh(source_root, project, full, hooks_dir)
+    _validate_hooks_refresh(source_root, project, full, hooks_dir, selected)
     refreshed: List[str] = []
     for name in GUARD_SCRIPTS:
         destination = project / HOOKS_DIRECTORY / name
@@ -1004,14 +1036,36 @@ def refresh_hooks(
                 "on PATH; skipped native settings and git hook refresh"
             )
             return refreshed
-        for settings, merge in (
-            (project / ".claude" / "settings.json", _merged_claude_settings),
-            (project / ".codex" / "hooks.json", _merged_codex_settings),
-            (project / ".cursor" / "hooks.json", _merged_cursor_settings),
+        for target, settings, merge, generated in (
+            (
+                "claude",
+                project / ".claude" / "settings.json",
+                _merged_claude_settings,
+                claude_hooks_settings,
+            ),
+            (
+                "codex",
+                project / ".codex" / "hooks.json",
+                _merged_codex_settings,
+                codex_hooks_settings,
+            ),
+            (
+                "cursor",
+                project / ".cursor" / "hooks.json",
+                _merged_cursor_settings,
+                cursor_hooks_settings,
+            ),
         ):
-            if _lexists(settings):
+            exists = _lexists(settings)
+            if exists or target in selected:
                 if not dry_run:
-                    _atomic_write(settings, merge(settings, interpreter))
+                    settings.parent.mkdir(parents=True, exist_ok=True)
+                    content = (
+                        merge(settings, interpreter)
+                        if exists
+                        else generated(interpreter)
+                    )
+                    _atomic_write(settings, content)
                 refreshed.append(_describe_project_path(project, settings))
         if hooks_dir is not None:
             for hook_name in ("pre-commit", "commit-msg"):
@@ -1069,7 +1123,8 @@ def _deployment_plans(plans: Sequence[TargetPlan]) -> List[DeploymentPlan]:
             if not target_set <= SHARED_AGENT_TARGETS:
                 labels = ", ".join(targets)
                 raise InstallerError(
-                    f"only Codex and Zed may share a skills root: {labels}"
+                    "only Codex, Antigravity, and Zed may share a skills root: "
+                    f"{labels}"
                 )
             profile = SHARED_AGENT_PROFILE
         elif group[0].name in SHARED_AGENT_TARGETS:
@@ -1427,11 +1482,17 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             print("error: --hooks-refresh requires --project", file=sys.stderr)
             return 2
         try:
+            selected = [
+                target
+                for target in TARGETS
+                if arguments.all_targets or getattr(arguments, target)
+            ]
             refreshed = refresh_hooks(
                 source_root,
                 project,
                 arguments.hooks_refresh_full,
                 arguments.dry_run,
+                selected,
             )
             notes = [line for line in refreshed if line.startswith("note:")]
             files = [line for line in refreshed if not line.startswith("note:")]
@@ -1466,16 +1527,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 else default_root(target)
             )
         )
-    extra_notes = []
-    if "antigravity" in selected and any(
-        target in selected and _same_path(roots[target], roots["antigravity"])
-        for target in ("codex", "zed")
-    ):
-        selected.remove("antigravity")
-        extra_notes.append(
-            "note: antigravity reads the same project .agents/skills directory "
-            "installed for codex/zed; skipped installing a second bundle there."
-        )
     plans = (
         detect_installs(selected, roots)
         if arguments.update
@@ -1501,8 +1552,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             update=arguments.update,
         ):
             print(result)
-        for note in extra_notes:
-            print(note)
     except InstallerError as error:
         print(f"error: {error}", file=sys.stderr)
         return 1

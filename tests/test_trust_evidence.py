@@ -65,13 +65,22 @@ class TrustEvidenceTests(unittest.TestCase):
             "guard_tier": "git-only",
         }
         fields.update(overrides)
-        lines = ["---", *[f"{key}: {value}" for key, value in fields.items()], "---", "", f"# {host} live evidence", ""]
+        lines = [
+            "---",
+            *[f"{key}: {value}" for key, value in fields.items()],
+            "---",
+            "",
+            f"# {host} live evidence",
+            "",
+        ]
         if details:
             lines.extend(
-                [
-                    f"- {label}: proof for {host} at artifacts/{host}.txt"
-                    for label in check_trust_evidence.REQUIRED_DETAILS
-                ]
+                f"- {label}: verified {host} metadata"
+                for label in check_trust_evidence.METADATA_DETAILS
+            )
+            lines.extend(
+                f"- {label}: {host}/proof.txt"
+                for label in check_trust_evidence.ARTIFACT_DETAILS
             )
         path = (
             self.repo
@@ -84,6 +93,10 @@ class TrustEvidenceTests(unittest.TestCase):
         )
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("\n".join(lines), encoding="utf-8")
+        if details:
+            artifact = path.with_suffix("") / "proof.txt"
+            artifact.parent.mkdir(parents=True, exist_ok=True)
+            artifact.write_text(f"reproducible output for {host}\n", encoding="utf-8")
 
     def commit_receipts(self):
         self.git("add", "-A")
@@ -122,6 +135,68 @@ class TrustEvidenceTests(unittest.TestCase):
         with self.assertRaisesRegex(
             check_trust_evidence.EvidenceError, "missing reproducible evidence detail"
         ):
+            check_trust_evidence.validate_repository(self.repo)
+
+    def test_rejects_missing_evidence_artifact(self):
+        self.receipt("alpha")
+        self.receipt("beta")
+        self.artifact("alpha").unlink()
+        self.commit_receipts()
+
+        with self.assertRaisesRegex(
+            check_trust_evidence.EvidenceError, "invalid evidence artifact"
+        ):
+            check_trust_evidence.validate_repository(self.repo)
+
+    def test_rejects_empty_evidence_artifact(self):
+        self.receipt("alpha")
+        self.receipt("beta")
+        self.artifact("alpha").write_text("", encoding="utf-8")
+        self.commit_receipts()
+
+        with self.assertRaisesRegex(
+            check_trust_evidence.EvidenceError, "invalid evidence artifact"
+        ):
+            check_trust_evidence.validate_repository(self.repo)
+
+    def test_rejects_untracked_release_input(self):
+        self.receipt("alpha")
+        self.receipt("beta")
+        self.commit_receipts()
+        (self.repo / "untracked.txt").write_text("not tested\n", encoding="utf-8")
+
+        with self.assertRaisesRegex(check_trust_evidence.EvidenceError, "clean worktree"):
+            check_trust_evidence.validate_repository(self.repo)
+
+    def artifact(self, host):
+        return (
+            self.repo
+            / "docs"
+            / "trust-validation"
+            / "evidence"
+            / "releases"
+            / "1.2.3"
+            / host
+            / "proof.txt"
+        )
+
+    def test_rejects_unstaged_release_input(self):
+        self.receipt("alpha")
+        self.receipt("beta")
+        self.commit_receipts()
+        (self.repo / "package.json").write_text('{"version": "9.9.9"}\n', encoding="utf-8")
+
+        with self.assertRaisesRegex(check_trust_evidence.EvidenceError, "clean worktree"):
+            check_trust_evidence.validate_repository(self.repo)
+
+    def test_rejects_staged_release_input(self):
+        self.receipt("alpha")
+        self.receipt("beta")
+        self.commit_receipts()
+        (self.repo / "staged.txt").write_text("not tested\n", encoding="utf-8")
+        self.git("add", "staged.txt")
+
+        with self.assertRaisesRegex(check_trust_evidence.EvidenceError, "clean worktree"):
             check_trust_evidence.validate_repository(self.repo)
 
     def test_rejects_non_evidence_changes_after_candidate(self):

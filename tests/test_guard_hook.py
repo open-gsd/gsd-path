@@ -5,6 +5,7 @@ import subprocess
 import sys
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import guard_hook
@@ -240,10 +241,14 @@ class GuardHookTests(unittest.TestCase):
             }
         )
 
-    def test_fails_open_on_bad_input(self):
-        for payload in ("not json", "[]", '"string"'):
+    def test_fails_closed_on_bad_input(self):
+        for payload in ("not json", "[]", '"string"', {}, {"tool_name": []}):
             with self.subTest(payload=payload):
-                self.assert_allowed(payload)
+                self.assert_denied(payload)
+
+    def test_fails_closed_on_internal_error(self):
+        with mock.patch.object(guard_hook, "collect", side_effect=RuntimeError("boom")):
+            self.assert_denied({"tool_name": "Edit", "tool_input": {}})
 
     def test_subprocess_contract_end_to_end(self):
         result = subprocess.run(

@@ -18,8 +18,8 @@ Pulled new gsd-path / ran npx gsd-path@latest
 
 Installed with --hooks and upgraded guard scripts
 └─ install.mjs --hooks-refresh --project PATH
-   └─ Also refresh Claude settings / git hooks?
-      → --hooks-refresh-full
+   └─ Also refresh native settings / git hooks?
+      → --hooks-refresh-full [--claude] [--codex] [--cursor]
 
 AGENTS.md or WORKFLOW.md template changed upstream
 └─ Manual diff + merge (installer never overwrites)
@@ -36,7 +36,7 @@ AGENTS.md or WORKFLOW.md template changed upstream
 | Global skills (`~/.claude/skills`, …) | Yes | `--update` |
 | Project-local skills (`.cursor/skills`, …) | Yes | `--update --local` |
 | `.gsd-path/guard_hook.py`, `git_guard.py` | Yes | `--hooks-refresh` |
-| Claude hook settings + git hooks | Yes | `--hooks-refresh-full` |
+| Native hook settings + git hooks | Yes | `--hooks-refresh-full` (host flag creates missing config) |
 | `AGENTS.md`, `WORKFLOW.md` | **No** | Manual merge |
 | `.project/*` (active milestone) | **No** | Pipeline state |
 
@@ -109,19 +109,21 @@ node scripts/install.mjs --hooks-refresh --project /path/to/repo
 
 Overwrites managed `.gsd-path/*.py` (must contain `gsd-path guard` marker).
 
-Include Claude settings and git hooks:
+Include existing native settings and git hooks, and create missing settings for
+explicitly selected hosts:
 
 ```bash
-node scripts/install.mjs --hooks-refresh-full --project /path/to/repo
+node scripts/install.mjs --hooks-refresh-full --codex --cursor --project /path/to/repo
 ```
 
-`--hooks-refresh-full` **merges** `.claude/settings.json` instead of replacing
-it: only the managed PreToolUse guard entry (the one whose command runs
-`.gsd-path/guard_hook.py`) is refreshed. Your other hook events (`Stop`,
-`PostToolUse`, …), your own PreToolUse entries, and all other settings keys are
-preserved. Git hooks are refreshed in the repository's effective hooks
-directory (`git rev-parse --git-path hooks`), so `core.hooksPath` setups and
-linked worktrees are handled.
+`--hooks-refresh-full` **merges** existing Claude, Codex, and Cursor settings
+instead of replacing them. A `--claude`, `--codex`, or `--cursor` flag creates
+that host's missing native config. Only the managed pre-tool guard entry (the
+one whose command runs `.gsd-path/guard_hook.py`) is refreshed. Other hook
+events, custom pre-tool entries, and settings keys are preserved. Git hooks are
+refreshed in the repository's effective hooks directory
+(`git rev-parse --git-path hooks`), so `core.hooksPath` setups and linked
+worktrees are handled.
 
 Details: [HOOKS.md](HOOKS.md)
 

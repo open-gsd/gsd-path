@@ -14,6 +14,11 @@ use exactly one matching branch:
 - A `spawn_agent` tool without those Codex fields is Zed. Spawn one isolated,
   full-capability child per brief. Zed children are not resumable, so retries
   use a fresh child and a complete prompt.
+- An `invoke_subagent` tool advertising `TypeName`, `Workspace`, and `Role` is
+  Antigravity. Use `TypeName: self`, the exact supplied root as `Workspace`,
+  and the logical task name as `Role`. Keep the returned child ID and use
+  `send_message` for follow-up work when available; otherwise start a fresh
+  child with the complete prompt.
 - A `spawn_subagent` tool advertising the `general-purpose` type is Grok. Use
   `subagent_type: general-purpose`, `capability_mode: all`, the exact supplied
   root as `cwd`, `isolation: none`, and `background: true`. Supply the logical

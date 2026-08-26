@@ -47,8 +47,8 @@ when git itself is not runnable does the installer fall back to a plain
 `.git/hooks` directory; if neither works, it reports that git hooks were
 skipped instead of dropping them silently.
 
-Git hooks work for **any** agent that commits. Guards **fail open** on crash or
-bad input — they never brick the host or git permanently.
+Git hooks work for **any** agent that commits. Native guard wiring denies a tool
+call when its event is malformed or the guard cannot validate it.
 
 **Windows / interpreter caveat:** hooks and native host settings invoke a
 Python interpreter that the installer probes at install time — `python3` first,
@@ -64,10 +64,14 @@ npx gsd-path --hooks-refresh --project /path/to/repo
 npx gsd-path --hooks-refresh-full --project /path/to/repo   # + settings/git hooks
 ```
 
-`--hooks-refresh-full` merges `.claude/settings.json`, `.codex/hooks.json`, and
-`.cursor/hooks.json` when present. It replaces only managed guard entries
-(identified by their `.gsd-path/guard_hook.py` command) and preserves unrelated
-entries, hook events, and settings.
+`--hooks-refresh-full` merges existing `.claude/settings.json`,
+`.codex/hooks.json`, and `.cursor/hooks.json`. Add `--claude`, `--codex`, or
+`--cursor` to create that selected host's missing native config during a
+refresh. It replaces only managed guard entries (identified by their
+`.gsd-path/guard_hook.py` command) and preserves unrelated entries, hook events,
+and settings. Codex resolves the guard from the Git root; Cursor runs its
+project hook from the project root, so both configs remain valid after a clone
+or move.
 
 See [UPDATE.md](UPDATE.md).
 
@@ -96,12 +100,10 @@ the remaining hosts:
 
 | Host | Where | Docs |
 | --- | --- | --- |
-| Codex CLI | `.codex/hooks.json` or `config.toml` `PreToolUse` | [Codex hooks](https://developers.openai.com/codex/hooks) |
 | Copilot CLI | `.github/hooks/*.json` `preToolUse` | [Copilot hooks](https://docs.github.com/en/copilot/concepts/agents/hooks) |
 | Grok | reads `.claude/settings.json` — covered if Claude wiring installed | [Grok hooks](https://docs.x.ai/build/features/hooks) |
 | Qwen Code | `.qwen/settings.json` `PreToolUse` | [Qwen hooks](https://qwenlm.github.io/qwen-code-docs/en/users/features/hooks/) |
 | Kimi CLI | `~/.kimi-code/config.toml` `PreToolUse` | [Kimi hooks](https://moonshotai.github.io/kimi-code/en/customization/hooks.html) |
-| Cursor | `.cursor/hooks.json` `preToolUse` | [Cursor hooks](https://cursor.com/docs/hooks) |
 | Kiro CLI | agent config `preToolUse` | [Kiro hooks](https://kiro.dev/docs/cli/hooks/) |
 | Antigravity | `.agents/hooks.json` `PreToolUse` | [Antigravity hooks](https://antigravity.google/docs/hooks) |
 | OpenCode | JS plugin `tool.execute.before` | [OpenCode plugins](https://opencode.ai/docs/plugins/) |
@@ -118,7 +120,7 @@ orchestrator-level.
 | Commit blocked on archive edit | Expected — ship adds to archive; edits after ship are forbidden |
 | `ship:` commit blocked with `app.py` staged | Ship commits may only touch `.project/` |
 | Tool denied editing archive | Pre-tool guard — use active paths, not archive |
-| Hook not running in Cursor | Reinstall with `--cursor --project /path/to/repo --hooks` or run `--hooks-refresh-full` |
+| Hook not running in Cursor | Run `--hooks-refresh-full --cursor --project /path/to/repo` |
 | `--hooks-refresh` rejected | Scripts not from prior `--hooks` install |
 
 More: [DOCS.md](DOCS.md#help) · [UPDATE.md](UPDATE.md)

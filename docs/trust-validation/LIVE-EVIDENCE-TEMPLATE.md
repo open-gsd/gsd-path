@@ -18,8 +18,10 @@ guard_tier: git-only
 # Live milestone evidence — HOST
 
 Copy this file to `evidence/releases/<version>/<host>.md`. Replace every
-placeholder and retain the command output or screenshot paths below. A release
-receipt is valid only when every `pending` field is `pass`.
+placeholder. Put non-empty command output, logs, artifacts, or screenshots in
+`evidence/releases/<version>/<host>/`, then use plain relative paths below. A
+release receipt is valid only when every `pending` field is `pass` and every
+evidence path resolves to a non-empty file in that host directory.
 
 ## Environment
 
@@ -31,16 +33,16 @@ receipt is valid only when every `pending` field is `pass`.
 
 ## Evidence
 
-- Install command and result:
-- Router invocation and state artifact:
-- Child spawn output:
-- Task branch, worktree, and landing commit:
-- Task Verify command and result:
-- Wave and final review artifacts:
-- Archive validation output:
-- Integration merge and milestone tag:
-- Remaining `git worktree list` output:
-- Native guard and Git-hook results:
+- Install command and result: HOST/install.txt
+- Router invocation and state artifact: HOST/router.txt
+- Child spawn output: HOST/child-spawn.txt
+- Task branch, worktree, and landing commit: HOST/task-landing.txt
+- Task Verify command and result: HOST/task-verify.txt
+- Wave and final review artifacts: HOST/reviews.txt
+- Archive validation output: HOST/archive.txt
+- Integration merge and milestone tag: HOST/integration.txt
+- Remaining `git worktree list` output: HOST/worktrees.txt
+- Native guard and Git-hook results: HOST/guards.txt
 
 Do not mark `child_spawn: pass` for a top-level CLI invocation. If any result
 is missing or cannot be reproduced, set the affected field to `unverifiable`.

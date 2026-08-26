@@ -23,12 +23,14 @@ PASS_FIELDS = (
     "integration",
 )
 GUARD_TIERS = frozenset({"native-fail-closed", "native-limited", "git-only"})
-REQUIRED_DETAILS = (
+METADATA_DETAILS = (
     "Host and CLI version",
     "Operator",
     "Date",
     "Fixture repository",
     "Child-agent API used",
+)
+ARTIFACT_DETAILS = (
     "Install command and result",
     "Router invocation and state artifact",
     "Child spawn output",
@@ -40,6 +42,7 @@ REQUIRED_DETAILS = (
     "Remaining `git worktree list` output",
     "Native guard and Git-hook results",
 )
+REQUIRED_DETAILS = METADATA_DETAILS + ARTIFACT_DETAILS
 EMPTY_DETAIL_VALUES = frozenset({"pass", "pending", "yes", "none", "n/a"})
 SUMMARY_PATHS = frozenset(
     {
@@ -100,6 +103,22 @@ def _validate_evidence_details(path: Path) -> None:
         value = details.get(label, "")
         if not value or value.casefold() in EMPTY_DETAIL_VALUES:
             raise EvidenceError(f"{path}: missing reproducible evidence detail: {label}")
+        if label not in ARTIFACT_DETAILS:
+            continue
+        relative_artifact = Path(value)
+        if relative_artifact.is_absolute():
+            raise EvidenceError(f"{path}: evidence artifact must be relative: {label}")
+        artifact_directory = path.with_suffix("")
+        if artifact_directory.is_symlink() or not artifact_directory.is_dir():
+            raise EvidenceError(f"{path}: invalid evidence artifact for {label}: {value}")
+        try:
+            artifact = path.parent / relative_artifact
+            resolved = artifact.resolve(strict=True)
+            resolved.relative_to(artifact_directory.resolve())
+        except (OSError, RuntimeError, ValueError):
+            raise EvidenceError(f"{path}: invalid evidence artifact for {label}: {value}")
+        if artifact.is_symlink() or not resolved.is_file() or resolved.stat().st_size == 0:
+            raise EvidenceError(f"{path}: invalid evidence artifact for {label}: {value}")
 
 
 def _git(repo: Path, *arguments: str) -> str:
@@ -154,6 +173,8 @@ def _validate_receipt(
 
 def validate_repository(repo: Path) -> Mapping:
     repo = repo.resolve()
+    if _git(repo, "status", "--porcelain", "--untracked-files=all"):
+        raise EvidenceError("release evidence requires a clean worktree")
     manifest = _read_json(repo / "scripts" / "skill-resources.json")
     package = _read_json(repo / "package.json")
     hosts = list(manifest.get("hosts", {}))

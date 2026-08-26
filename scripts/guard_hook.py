@@ -11,7 +11,7 @@ Allow: exit 0 with no output. Deny: exit 2, a one-line reason on stderr,
 and a denial JSON on stdout carrying every supported host's decision keys
 (exit code 2 satisfies Claude Code, Codex, Qwen, Kimi, Grok, Cursor, and
 Kiro; the JSON covers hosts that read a decision object instead).
-Any internal failure allows: the guard must never break a host.
+Malformed input or an internal failure denies the tool call.
 """
 
 import json
@@ -67,6 +67,7 @@ ARCHIVE_REASON = (
     "only the bundled archive helper may write there during a ship transaction"
 )
 ARCHIVE_MARKER = ".project/archive"
+INVALID_INPUT_REASON = "GSD Path guard could not validate the tool request"
 # Stay inside one shell command segment so `git status && rm x` cannot
 # join tokens across `|`, `;`, or `&`.
 SEGMENT = r"[^|;&]*"
@@ -202,16 +203,10 @@ def deny(reason):
     sys.exit(2)
 
 
-def main():
-    try:
-        event = json.load(sys.stdin)
-    except Exception:
-        return
-    if not isinstance(event, dict):
-        return
-    tool = str(
-        event.get("tool_name") or event.get("toolName") or event.get("tool") or ""
-    )
+def evaluate(event):
+    tool = event.get("tool_name") or event.get("toolName") or event.get("tool")
+    if not isinstance(tool, str) or not tool.strip():
+        raise ValueError("hook event is missing its tool name")
     paths, commands = [], []
     collect(event, paths, commands)
     if not is_read_tool(tool):
@@ -226,6 +221,18 @@ def main():
         for pattern, reason in COMMAND_RULES:
             if pattern.search(command):
                 deny(reason)
+
+
+def main():
+    try:
+        event = json.load(sys.stdin)
+        if not isinstance(event, dict):
+            raise ValueError("hook event must be an object")
+        evaluate(event)
+    except SystemExit:
+        raise
+    except Exception:
+        deny(INVALID_INPUT_REASON)
 
 
 if __name__ == "__main__":

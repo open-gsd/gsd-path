@@ -33,11 +33,19 @@ export function claudeHooksSettings(interpreter) {
     JSON.stringify({ hooks: { PreToolUse: [claudeGuardEntry(interpreter)] } }, null, 2) + "\n"
   );
 }
-function projectGuardCommand(interpreter, project) {
-  return `${interpreter} "${path.join(path.resolve(project), HOOKS_DIRECTORY, "guard_hook.py")}"`;
+function codexGuardCommand(interpreter) {
+  return `${interpreter} "$(git rev-parse --show-toplevel)/${HOOKS_DIRECTORY}/guard_hook.py"`;
 }
 
-export function codexHooksSettings(interpreter, project) {
+function codexGuardCommandWindows(interpreter) {
+  return (
+    "powershell.exe -NoProfile -NonInteractive -Command " +
+    `"$root = git rev-parse --show-toplevel; & ${interpreter} ` +
+    `(Join-Path $root '${HOOKS_DIRECTORY}\\guard_hook.py')"`
+  );
+}
+
+export function codexHooksSettings(interpreter) {
   return (
     JSON.stringify(
       {
@@ -45,7 +53,13 @@ export function codexHooksSettings(interpreter, project) {
           PreToolUse: [
             {
               matcher: ".*",
-              hooks: [{ type: "command", command: projectGuardCommand(interpreter, project) }],
+              hooks: [
+                {
+                  type: "command",
+                  command: codexGuardCommand(interpreter),
+                  commandWindows: codexGuardCommandWindows(interpreter),
+                },
+              ],
             },
           ],
         },
@@ -55,7 +69,7 @@ export function codexHooksSettings(interpreter, project) {
     ) + "\n"
   );
 }
-export function cursorHooksSettings(interpreter, project) {
+export function cursorHooksSettings(interpreter) {
   return (
     JSON.stringify(
       {
@@ -63,7 +77,7 @@ export function cursorHooksSettings(interpreter, project) {
         hooks: {
           preToolUse: [
             {
-              command: projectGuardCommand(interpreter, project),
+              command: `${interpreter} "${HOOKS_DIRECTORY}/guard_hook.py"`,
               matcher: ".*",
               failClosed: true,
             },
@@ -158,7 +172,7 @@ export const EXPLICIT_ONLY_TARGETS = new Set([
   "kimi",
   "shared-agents",
 ]);
-const SHARED_AGENT_TARGETS = new Set(["codex", "zed"]);
+const SHARED_AGENT_TARGETS = new Set(["codex", "antigravity", "zed"]);
 export const SHARED_AGENT_PROFILE = "shared-agents";
 export const CURSOR_AGENT_FILENAME = "gsd-path.md";
 export const CURSOR_AGENT_BACKUP_NAME = "cursor-agent-gsd-path.md";
@@ -783,7 +797,7 @@ function projectDestinations(project, selected, hooksEnabled, interpreter, hooks
       destinations.push([
         path.join(project, ".codex", "hooks.json"),
         null,
-        codexHooksSettings(interpreter, project),
+        codexHooksSettings(interpreter),
         false,
       ]);
     }
@@ -791,7 +805,7 @@ function projectDestinations(project, selected, hooksEnabled, interpreter, hooks
       destinations.push([
         path.join(project, ".cursor", "hooks.json"),
         null,
-        cursorHooksSettings(interpreter, project),
+        cursorHooksSettings(interpreter),
         false,
       ]);
     }
@@ -1041,18 +1055,16 @@ function mergedClaudeSettings(settings, interpreter) {
 }
 
 function mergedCodexSettings(settings, interpreter) {
-  const project = path.dirname(path.dirname(settings));
-  const managedEntry = JSON.parse(codexHooksSettings(interpreter, project)).hooks.PreToolUse[0];
+  const managedEntry = JSON.parse(codexHooksSettings(interpreter)).hooks.PreToolUse[0];
   return mergedHookSettings(settings, "PreToolUse", managedEntry, isManagedHookEntry);
 }
 
 function mergedCursorSettings(settings, interpreter) {
-  const project = path.dirname(path.dirname(settings));
-  const managedEntry = JSON.parse(cursorHooksSettings(interpreter, project)).hooks.preToolUse[0];
+  const managedEntry = JSON.parse(cursorHooksSettings(interpreter)).hooks.preToolUse[0];
   return mergedHookSettings(settings, "preToolUse", managedEntry, isManagedDirectHookEntry);
 }
 
-function validateHooksRefresh(sourceRoot, project, full, hooksDir) {
+function validateHooksRefresh(sourceRoot, project, full, hooksDir, selected) {
   validateDirectoryDestination(project, "project path");
   for (const name of GUARD_SCRIPTS) {
     const destination = path.join(project, HOOKS_DIRECTORY, name);
@@ -1068,6 +1080,17 @@ function validateHooksRefresh(sourceRoot, project, full, hooksDir) {
     }
   }
   if (full) {
+    const nativeDirectories = {
+      claude: ["Claude", path.join(project, ".claude")],
+      codex: ["Codex", path.join(project, ".codex")],
+      cursor: ["Cursor", path.join(project, ".cursor")],
+    };
+    for (const target of selected) {
+      if (nativeDirectories[target]) {
+        const [label, directory] = nativeDirectories[target];
+        validateDirectoryDestination(directory, `unsafe ${label} project directory`);
+      }
+    }
     for (const settings of [
       path.join(project, ".claude", "settings.json"),
       path.join(project, ".codex", "hooks.json"),
@@ -1096,9 +1119,9 @@ function validateHooksRefresh(sourceRoot, project, full, hooksDir) {
 
 // Returns refreshed project-relative paths; entries prefixed "note:" are
 // user-facing notes rather than refreshed files.
-function refreshHooks(sourceRoot, project, full, dryRun) {
+function refreshHooks(sourceRoot, project, full, dryRun, selected = []) {
   const hooksDir = full ? gitHooksDirectory(project) : null;
-  validateHooksRefresh(sourceRoot, project, full, hooksDir);
+  validateHooksRefresh(sourceRoot, project, full, hooksDir, selected);
   const refreshed = [];
   for (const name of GUARD_SCRIPTS) {
     const destination = path.join(project, HOOKS_DIRECTORY, name);
@@ -1116,13 +1139,33 @@ function refreshHooks(sourceRoot, project, full, dryRun) {
       );
       return refreshed;
     }
-    for (const [settings, merge] of [
-      [path.join(project, ".claude", "settings.json"), mergedClaudeSettings],
-      [path.join(project, ".codex", "hooks.json"), mergedCodexSettings],
-      [path.join(project, ".cursor", "hooks.json"), mergedCursorSettings],
+    for (const [target, settings, merge, generated] of [
+      [
+        "claude",
+        path.join(project, ".claude", "settings.json"),
+        mergedClaudeSettings,
+        claudeHooksSettings,
+      ],
+      [
+        "codex",
+        path.join(project, ".codex", "hooks.json"),
+        mergedCodexSettings,
+        codexHooksSettings,
+      ],
+      [
+        "cursor",
+        path.join(project, ".cursor", "hooks.json"),
+        mergedCursorSettings,
+        cursorHooksSettings,
+      ],
     ]) {
-      if (lexists(settings)) {
-        if (!dryRun) writeFileAtomic(settings, merge(settings, interpreter));
+      const exists = lexists(settings);
+      if (exists || selected.includes(target)) {
+        if (!dryRun) {
+          fs.mkdirSync(path.dirname(settings), { recursive: true });
+          const content = exists ? merge(settings, interpreter) : generated(interpreter);
+          writeFileAtomic(settings, content);
+        }
         refreshed.push(describeProjectPath(project, settings));
       }
     }
@@ -1364,7 +1407,7 @@ export function deploymentPlans(plans) {
     if (group.length > 1) {
       if (!targets.every((name) => SHARED_AGENT_TARGETS.has(name))) {
         throw new InstallerError(
-          `only Codex and Zed may share a skills root: ${targets.join(", ")}`
+          `only Codex, Antigravity, and Zed may share a skills root: ${targets.join(", ")}`
         );
       }
       profile = SHARED_AGENT_PROFILE;
@@ -1853,7 +1896,7 @@ function usage() {
     "  --doctor              read-only health check of installs, hooks, and state\n" +
     "  --hooks               with --project: install guard hooks (see HOOKS.md)\n" +
     "  --hooks-refresh       with --project: overwrite managed .gsd-path scripts\n" +
-    "  --hooks-refresh-full  also refresh managed native settings and git hooks\n" +
+    "  --hooks-refresh-full  refresh native settings/git hooks; target flags create missing configs\n" +
     "  --dry-run             preview without writing\n" +
     "  each target also accepts --<target>-root PATH to override its skills root"
   );
@@ -1930,7 +1973,8 @@ export async function main(argv, env = process.env) {
         sourceRoot,
         project,
         values["hooks-refresh-full"],
-        values["dry-run"]
+        values["dry-run"],
+        TARGETS.filter((target) => values.all || values[target])
       );
       spin.stop();
       const notes = refreshed.filter((line) => line.startsWith("note:"));
@@ -1964,21 +2008,6 @@ export async function main(argv, env = process.env) {
       return 2;
     }
   }
-  const extraNotes = [];
-  if (
-    selected.includes("antigravity") &&
-    ["codex", "zed"].some(
-      (target) =>
-        selected.includes(target) && samePath(rootFor(target), rootFor("antigravity"))
-    )
-  ) {
-    selected = selected.filter((target) => target !== "antigravity");
-    extraNotes.push(
-      "note: antigravity reads the same project .agents/skills directory " +
-        "installed for codex/zed; skipped installing a second bundle there."
-    );
-  }
-
   const sourceRootForInstall = sourceRoot;
   const scope = local ? `project ${values.update ? "update in" : "install into"} ${process.cwd()}` : `global ${values.update ? "update" : "install"}`;
   const mode = scope + (values["dry-run"] ? " · dry run" : "");
@@ -2008,7 +2037,7 @@ export async function main(argv, env = process.env) {
       onProgress: (text) => spin.update(text),
     });
     spin.stop();
-    for (const result of [...results, ...extraNotes]) {
+    for (const result of results) {
       ui.result(result);
     }
     const closing = values["dry-run"]
