@@ -16,6 +16,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import archive_milestone
 import detect_project
+import pipeline_state
 import promote_lookahead
 
 
@@ -34,6 +35,8 @@ ANCHORED_STATE_CREATE_AVAILABLE = (
     DESCRIPTOR_TRAVERSAL_AVAILABLE
     and os.mkdir in getattr(os, "supports_dir_fd", ())
     and os.unlink in getattr(os, "supports_dir_fd", ())
+    and os.link in getattr(os, "supports_dir_fd", ())
+    and os.link in getattr(os, "supports_follow_symlinks", ())
 )
 PROMOTE_SCRIPT = ROOT / "scripts" / "promote_lookahead.py"
 
@@ -1561,7 +1564,7 @@ class DetectProjectTests(unittest.TestCase):
                 nonlocal replaced
                 creating_state = (
                     dir_fd is not None
-                    and path == "STATE.md"
+                    and path == detect_project.STATE_TEMP_NAME
                     and bool(flags & os.O_CREAT)
                 )
                 if creating_state and not replaced:
@@ -1604,7 +1607,7 @@ class DetectProjectTests(unittest.TestCase):
                 nonlocal changed
                 creating_state = (
                     dir_fd is not None
-                    and path == "STATE.md"
+                    and path == detect_project.STATE_TEMP_NAME
                     and bool(flags & os.O_CREAT)
                 )
                 if creating_state and not changed:
@@ -1695,6 +1698,238 @@ class DetectProjectTests(unittest.TestCase):
                         with self.assertRaises(detect_project.DetectError):
                             detect_project.initialize(repo, template)
                     self.assertFalse((repo / ".project" / "STATE.md").exists())
+
+    @unittest.skipUnless(
+        ANCHORED_STATE_CREATE_AVAILABLE,
+        "anchored state creation is unavailable",
+    )
+    def test_initialize_recovers_after_process_death_during_state_write(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            template = ROOT / "skills" / "gsd-path" / "templates" / "state.md"
+            child = """
+import os
+import sys
+from pathlib import Path
+import detect_project
+
+def crash(descriptor, payload):
+    os.write(descriptor, payload[:20])
+    os._exit(99)
+
+detect_project.write_all = crash
+detect_project.initialize(Path(sys.argv[1]), Path(sys.argv[2]))
+"""
+            environment = os.environ.copy()
+            environment["PYTHONPATH"] = str(ROOT / "scripts")
+            crashed = subprocess.run(
+                [sys.executable, "-c", child, str(repo), str(template)],
+                env=environment,
+                check=False,
+            )
+
+            self.assertEqual(crashed.returncode, 99)
+            temporary_state = repo / ".project" / detect_project.STATE_TEMP_NAME
+            self.assertEqual(temporary_state.stat().st_size, 20)
+
+            payload = detect_project.initialize(repo, template)
+
+            self.assertTrue(payload["wrote_state"])
+            self.assertFalse(temporary_state.exists())
+            state = (repo / ".project" / "STATE.md").read_text(encoding="utf-8")
+            self.assertEqual(
+                detect_project.state_frontmatter(state)["pipeline"],
+                "gsd-path/v2",
+            )
+
+    @unittest.skipUnless(
+        ANCHORED_STATE_CREATE_AVAILABLE,
+        "anchored state creation is unavailable",
+    )
+    def test_initialize_rejects_hard_linked_temporary_state(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            project = repo / ".project"
+            project.mkdir(parents=True)
+            victim = Path(temporary) / "victim.txt"
+            original = "do not replace\n"
+            victim.write_text(original, encoding="utf-8")
+            os.link(victim, project / detect_project.STATE_TEMP_NAME)
+            template = ROOT / "skills" / "gsd-path" / "templates" / "state.md"
+
+            classified = detect_project.classify(repo)
+            initialized = detect_project.initialize(repo, template)
+
+            self.assertEqual("orphan", classified["verdict"])
+            self.assertEqual(
+                [f".project/{detect_project.STATE_TEMP_NAME}"],
+                classified["orphan_paths"],
+            )
+            self.assertFalse(initialized["wrote_state"])
+            self.assertEqual(original, victim.read_text(encoding="utf-8"))
+            self.assertFalse((project / "STATE.md").exists())
+
+    def test_classify_does_not_suppress_temporary_state_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            reserved = repo / ".project" / detect_project.STATE_TEMP_NAME
+            reserved.mkdir(parents=True)
+
+            payload = detect_project.classify(repo)
+
+            self.assertEqual("orphan", payload["verdict"])
+            self.assertEqual(
+                [f".project/{detect_project.STATE_TEMP_NAME}"],
+                payload["orphan_paths"],
+            )
+
+    @unittest.skipUnless(
+        ANCHORED_STATE_CREATE_AVAILABLE,
+        "anchored state creation is unavailable",
+    )
+    def test_initialize_does_not_replace_concurrent_state(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            template = ROOT / "skills" / "gsd-path" / "templates" / "state.md"
+            concurrent = "concurrent state\n"
+            real_link = detect_project.os.link
+
+            def racing_link(source, destination, **kwargs):
+                project_fd = kwargs["dst_dir_fd"]
+                descriptor = os.open(
+                    destination,
+                    os.O_CREAT | os.O_EXCL | os.O_WRONLY,
+                    0o644,
+                    dir_fd=project_fd,
+                )
+                try:
+                    os.write(descriptor, concurrent.encode("utf-8"))
+                finally:
+                    os.close(descriptor)
+                return real_link(source, destination, **kwargs)
+
+            with mock.patch.object(
+                detect_project.os,
+                "link",
+                side_effect=racing_link,
+            ):
+                with self.assertRaisesRegex(
+                    detect_project.DetectError,
+                    "STATE.md already exists",
+                ):
+                    detect_project.initialize(repo, template)
+
+            project = repo / ".project"
+            self.assertEqual(
+                concurrent,
+                (project / "STATE.md").read_text(encoding="utf-8"),
+            )
+            self.assertFalse((project / detect_project.STATE_TEMP_NAME).exists())
+
+    @unittest.skipUnless(
+        ANCHORED_STATE_CREATE_AVAILABLE,
+        "anchored state creation is unavailable",
+    )
+    def test_initialize_waits_for_project_directory_owner(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            project = repo / ".project"
+            project.mkdir()
+            template = ROOT / "skills" / "gsd-path" / "templates" / "state.md"
+            child = """
+import sys
+from pathlib import Path
+import detect_project
+
+write_state_anchored = detect_project.write_state_anchored
+
+def announce(*args):
+    print("ready", flush=True)
+    return write_state_anchored(*args)
+
+detect_project.write_state_anchored = announce
+detect_project.initialize(Path(sys.argv[1]), Path(sys.argv[2]))
+"""
+            environment = os.environ.copy()
+            environment["PYTHONPATH"] = str(ROOT / "scripts")
+            project_fd = os.open(project, detect_project.directory_flags())
+            detect_project.fcntl.flock(project_fd, detect_project.fcntl.LOCK_EX)
+            process = subprocess.Popen(
+                [sys.executable, "-c", child, str(repo), str(template)],
+                env=environment,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            try:
+                self.assertEqual("ready\n", process.stdout.readline())
+                with self.assertRaises(subprocess.TimeoutExpired):
+                    process.wait(timeout=0.5)
+                self.assertFalse((project / "STATE.md").exists())
+                self.assertFalse((project / detect_project.STATE_TEMP_NAME).exists())
+            finally:
+                detect_project.fcntl.flock(
+                    project_fd,
+                    detect_project.fcntl.LOCK_UN,
+                )
+                os.close(project_fd)
+                _, error = process.communicate(timeout=5)
+            self.assertEqual(0, process.returncode, error)
+            self.assertTrue((project / "STATE.md").exists())
+
+    @unittest.skipUnless(
+        ANCHORED_STATE_CREATE_AVAILABLE,
+        "anchored state creation is unavailable",
+    )
+    def test_state_transition_recovers_death_after_state_link(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            template = ROOT / "skills" / "gsd-path" / "templates" / "state.md"
+            child = """
+import os
+import sys
+from pathlib import Path
+import detect_project
+
+real_unlink = detect_project.os.unlink
+
+def crash(path, *args, **kwargs):
+    if path == detect_project.STATE_TEMP_NAME:
+        os._exit(99)
+    return real_unlink(path, *args, **kwargs)
+
+detect_project.os.unlink = crash
+detect_project.initialize(Path(sys.argv[1]), Path(sys.argv[2]))
+"""
+            environment = os.environ.copy()
+            environment["PYTHONPATH"] = str(ROOT / "scripts")
+            crashed = subprocess.run(
+                [sys.executable, "-c", child, str(repo), str(template)],
+                env=environment,
+                check=False,
+            )
+
+            self.assertEqual(99, crashed.returncode)
+            project = repo / ".project"
+            temporary_state = project / detect_project.STATE_TEMP_NAME
+            state = project / "STATE.md"
+            self.assertTrue(temporary_state.exists())
+            self.assertTrue(os.path.samestat(state.stat(), temporary_state.stat()))
+
+            result = pipeline_state.transition_state(
+                repo,
+                {
+                    "phase": "define",
+                    "status": "active",
+                    "branch": None,
+                    "archive": None,
+                },
+                {"status": "blocked"},
+                "publication recovery proved",
+            )
+
+            self.assertEqual("blocked", result["state"]["status"])
+            self.assertFalse(temporary_state.exists())
 
     @unittest.skipUnless(
         ANCHORED_STATE_CREATE_AVAILABLE,
@@ -2011,156 +2246,6 @@ archive: null
             for path in project.rglob("*")
             if path.is_file()
         }
-
-    def test_promote_moves_artifacts_and_updates_state_idempotently(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            repo = Path(temporary)
-            integrate = self.setup_repo(repo)
-
-            result = promote_lookahead.promote(
-                repo,
-                "gsd-path/M002",
-                integrate,
-            )
-
-            project = repo / ".project"
-            self.assertEqual(result["status"], "promoted")
-            self.assertFalse((project / "next").exists())
-            for name in promote_lookahead.ARTIFACTS:
-                self.assertTrue((project / name).is_dir())
-            state = (project / "STATE.md").read_text(encoding="utf-8")
-            self.assertEqual(promote_lookahead.state_value(state, "milestone"), "second")
-            self.assertEqual(promote_lookahead.state_value(state, "branch"), "gsd-path/M002")
-            self.assertEqual(promote_lookahead.state_value(state, "archive"), "null")
-            unexpected = repo / "unexpected.txt"
-            unexpected.write_text("unowned\n", encoding="utf-8")
-            with self.assertRaises(promote_lookahead.LookaheadError):
-                promote_lookahead.promote(repo, "gsd-path/M002", integrate)
-            unexpected.unlink()
-            self.assertEqual(
-                promote_lookahead.promote(repo, "gsd-path/M002", integrate)["status"],
-                "already-promoted",
-            )
-
-    def test_interrupted_promotion_resumes_from_journal(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            repo = Path(temporary)
-            integrate = self.setup_repo(repo)
-            source = repo / ".project" / "next" / "intent"
-            destination = repo / ".project" / "intent"
-            original_replace = promote_lookahead.os.replace
-            interrupted = False
-
-            def interrupt_after_intent(old, new) -> None:
-                nonlocal interrupted
-                original_replace(old, new)
-                old_path = Path(old)
-                new_path = Path(new)
-                if (
-                    old_path.name == source.name
-                    and old_path.parent.name == "next"
-                    and new_path.name == destination.name
-                    and new_path.parent.name == ".project"
-                    and not interrupted
-                ):
-                    interrupted = True
-                    raise OSError("simulated interruption")
-
-            with mock.patch.object(
-                promote_lookahead.os,
-                "replace",
-                new=interrupt_after_intent,
-            ):
-                with self.assertRaises(OSError):
-                    promote_lookahead.promote(repo, "gsd-path/M002", integrate)
-
-            project = repo / ".project"
-            self.assertTrue((project / promote_lookahead.JOURNAL_NAME).is_file())
-            unexpected = repo / "unexpected.txt"
-            unexpected.write_text("unowned\n", encoding="utf-8")
-            with self.assertRaises(promote_lookahead.LookaheadError):
-                promote_lookahead.promote(repo, "gsd-path/M002", integrate)
-            unexpected.unlink()
-            result = promote_lookahead.promote(repo, "gsd-path/M002", integrate)
-            self.assertEqual(result["status"], "promoted")
-            self.assertFalse((project / "next").exists())
-            self.assertFalse((project / promote_lookahead.JOURNAL_NAME).exists())
-
-    def test_promote_accepts_shipped_archive_without_docs_audit(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            repo = Path(temporary)
-            integrate = self.setup_repo(repo, archived_audit=False)
-
-            result = promote_lookahead.promote(
-                repo,
-                "gsd-path/M002",
-                integrate,
-            )
-
-            self.assertEqual(result["status"], "promoted")
-            self.assertFalse((repo / ".project" / "next").exists())
-
-    def test_wrong_integration_sha_blocks_without_changes(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            repo = Path(temporary)
-            self.setup_repo(repo)
-            project = repo / ".project"
-            before = self.project_snapshot(project)
-            wrong = self.git(repo, "rev-parse", "HEAD^")
-
-            with self.assertRaises(promote_lookahead.LookaheadError):
-                promote_lookahead.promote(repo, "gsd-path/M002", wrong)
-
-            self.assertEqual(self.project_snapshot(project), before)
-
-    def test_branch_must_match_selected_roadmap_milestone(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            repo = Path(temporary)
-            integrate = self.setup_repo(repo)
-            self.git(repo, "branch", "-m", "gsd-path/M003")
-            project = repo / ".project"
-            before = self.project_snapshot(project)
-
-            with self.assertRaises(promote_lookahead.LookaheadError):
-                promote_lookahead.promote(repo, "gsd-path/M003", integrate)
-
-            self.assertEqual(self.project_snapshot(project), before)
-
-    def test_promotion_rejects_skipping_an_earlier_eligible_milestone(self) -> None:
-        roadmap = """# Roadmap
-
-### M001 — first
-
-Depends on: []
-Status: shipped
-Archive: .project/archive/001-first
-Integrated: null
-
-### M002 — second
-
-Depends on: [M001]
-Status: pending
-Archive: null
-Integrated: null
-
-### M003 — third
-
-Depends on: [M001]
-Status: pending
-Archive: null
-Integrated: null
-"""
-
-        with self.assertRaisesRegex(
-            promote_lookahead.LookaheadError,
-            "next eligible milestone M002",
-        ):
-            promote_lookahead.roadmap_transition(
-                roadmap,
-                "third",
-                ".project/archive/001-first",
-                "a" * 40,
-            )
 
     def test_selector_chooses_first_pending_entry_after_active_dependency(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -2546,174 +2631,6 @@ Integrated: null
             promote_lookahead.select_lookahead(roadmap),
             {"status": "complete"},
         )
-
-    def test_recovery_requires_a_failed_strict_preflight(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            repo = Path(temporary)
-            integrate = self.setup_repo(repo)
-            project = repo / ".project"
-            before = self.project_snapshot(project)
-
-            with self.assertRaises(promote_lookahead.LookaheadError):
-                promote_lookahead.recover(
-                    repo,
-                    "gsd-path/M002",
-                    integrate,
-                    "discard",
-                )
-
-            self.assertEqual(self.project_snapshot(project), before)
-
-    def test_audit_mismatch_is_unchanged_and_recovery_is_idempotent(self) -> None:
-        for strategy in ("rewind", "discard"):
-            with self.subTest(strategy=strategy):
-                with tempfile.TemporaryDirectory() as temporary:
-                    repo = Path(temporary)
-                    integrate = self.setup_repo(repo, mismatched_audit=True)
-                    project = repo / ".project"
-                    before = self.project_snapshot(project)
-
-                    with self.assertRaises(promote_lookahead.NeedsRecovery):
-                        promote_lookahead.promote(repo, "gsd-path/M002", integrate)
-
-                    self.assertEqual(self.project_snapshot(project), before)
-                    result = promote_lookahead.recover(
-                        repo,
-                        "gsd-path/M002",
-                        integrate,
-                        strategy,
-                    )
-                    self.assertEqual(result["status"], "recovered")
-                    self.assertFalse((project / "next").exists())
-                    self.assertFalse((project / "intent").exists())
-                    self.assertFalse((project / "plan").exists())
-                    self.assertFalse((project / "tasks").exists())
-                    self.assertEqual(
-                        (project / "research" / "DOCS-AUDIT.md").read_text(),
-                        self.AUDIT,
-                    )
-                    state = (project / "STATE.md").read_text(encoding="utf-8")
-                    self.assertEqual(promote_lookahead.state_value(state, "phase"), "inspect")
-                    self.assertEqual(promote_lookahead.state_value(state, "status"), "active")
-                    self.assertEqual(
-                        promote_lookahead.recover(
-                            repo,
-                            "gsd-path/M002",
-                            integrate,
-                            strategy,
-                        )["status"],
-                        "already-recovered",
-                    )
-
-    def test_completed_transition_uses_latest_ship_not_roadmap_order(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            repo = Path(temporary)
-            first_integration = self.setup_repo(repo)
-            project = repo / ".project"
-            shutil.rmtree(project / "next")
-            self.git(repo, "branch", "-m", "gsd-path/M003")
-            third_archive = project / "archive" / "003-third"
-            third_archive.mkdir(parents=True)
-            (third_archive / "MANIFEST.md").write_text("# Archive\n", encoding="utf-8")
-            state = (project / "STATE.md").read_text(encoding="utf-8")
-            state = promote_lookahead.update_state(
-                state,
-                {
-                    "phase": "shipped",
-                    "status": "done",
-                    "milestone": "third",
-                    "branch": "gsd-path/M003",
-                    "archive": ".project/archive/003-third",
-                },
-            )
-            (project / "STATE.md").write_text(state, encoding="utf-8")
-            roadmap = (project / "ROADMAP.md").read_text(encoding="utf-8")
-            roadmap = roadmap.replace(
-                "Status: shipped\nArchive: .project/archive/001-first\nIntegrated: null",
-                "Status: shipped\nArchive: .project/archive/001-first\n"
-                f"Integrated: {first_integration}",
-            )
-            roadmap += """
-
-### M003 — third
-
-Depends on: [M001]
-Status: shipped
-Archive: .project/archive/003-third
-Integrated: null
-"""
-            (project / "ROADMAP.md").write_text(roadmap, encoding="utf-8")
-            self.git(repo, "add", ".project")
-            self.git(repo, "commit", "-q", "-m", "ship: M003 — third")
-            ship = self.git(repo, "rev-parse", "HEAD")
-            self.git(repo, "switch", "-q", "main")
-            integration_body = (
-                ".project/archive/003-third",
-                ship,
-                "main",
-                "gsd-path/M003",
-            )
-            self.git(
-                repo,
-                "merge",
-                "-q",
-                "--no-ff",
-                "gsd-path/M003",
-                "-m",
-                "integrate: M003 — merge gsd-path/M003 into main",
-                "-m",
-                archive_milestone.integrate_commit_body(*integration_body),
-            )
-            third_integration = self.git(repo, "rev-parse", "HEAD")
-            self.git(
-                repo,
-                "tag",
-                "-a",
-                "milestone/003-third",
-                "-m",
-                "third milestone",
-                third_integration,
-            )
-            self.git(repo, "update-ref", "refs/remotes/origin/main", third_integration)
-            self.git(repo, "switch", "-q", "-c", "gsd-path/M002", third_integration)
-            state = promote_lookahead.update_state(
-                state,
-                {
-                    "phase": "inspect",
-                    "status": "active",
-                    "milestone": "second",
-                    "branch": "gsd-path/M002",
-                    "archive": "null",
-                },
-            )
-            (project / "STATE.md").write_text(state, encoding="utf-8")
-            roadmap = roadmap.replace(
-                "Status: shipped\nArchive: .project/archive/003-third\nIntegrated: null",
-                "Status: shipped\nArchive: .project/archive/003-third\n"
-                f"Integrated: {third_integration}",
-            ).replace(
-                "### M002 — second\n\nDepends on: [M001]\nStatus: pending",
-                "### M002 — second\n\nDepends on: [M001]\nStatus: active",
-            )
-            (project / "ROADMAP.md").write_text(roadmap, encoding="utf-8")
-
-            with self.assertRaisesRegex(
-                promote_lookahead.LookaheadError,
-                "latest shipped transition",
-            ):
-                promote_lookahead.promote(
-                    repo,
-                    "gsd-path/M002",
-                    first_integration,
-                )
-            self.assertEqual(
-                promote_lookahead.promote(
-                    repo,
-                    "gsd-path/M002",
-                    third_integration,
-                )["status"],
-                "already-promoted",
-            )
 
 if __name__ == "__main__":
     unittest.main()

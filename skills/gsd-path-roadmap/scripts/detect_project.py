@@ -10,8 +10,9 @@ Verdicts:
 
 - owned — `.project/` is a real directory with a regular `STATE.md` and no
   unsafe project paths; route by that file, not detection
-- orphan — `.project/` is unsafe, or it contains a file or directory without
-  a safe regular `STATE.md`
+- orphan — `.project/` is unsafe, or it contains an entry without a safe
+  regular `STATE.md`; the initializer's regular temporary state file is
+  recoverable and does not make the project orphaned
 - brownfield — no owned state, `.project/` empty or absent, and at least one
   in-scope signal (package/build manifest, source file, tracked signal in
   git, or substantive system documentation)
@@ -35,6 +36,11 @@ import sys
 from datetime import date
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Iterable, NamedTuple, Optional, Sequence
+
+try:
+    import fcntl
+except ModuleNotFoundError:  # Windows does not provide POSIX file locks.
+    fcntl = None
 
 
 IGNORE_DIRS = {
@@ -203,9 +209,12 @@ ANCHORED_EVIDENCE_SUPPORTED = (
 LISTDIR_DIR_FD_SUPPORTED = os.listdir in getattr(os, "supports_fd", ())
 ANCHORED_STATE_CREATE_SUPPORTED = (
     ANCHORED_EVIDENCE_SUPPORTED
+    and fcntl is not None
     and LISTDIR_DIR_FD_SUPPORTED
     and os.mkdir in getattr(os, "supports_dir_fd", ())
     and os.unlink in getattr(os, "supports_dir_fd", ())
+    and os.link in getattr(os, "supports_dir_fd", ())
+    and os.link in getattr(os, "supports_follow_symlinks", ())
 )
 GIT_OVERRIDE_VARS = (
     "GIT_DIR",
@@ -218,6 +227,7 @@ GIT_OVERRIDE_VARS = (
     "GIT_NAMESPACE",
 )
 FRONTMATTER_FIELD_RE = re.compile(r"^([A-Za-z][A-Za-z0-9_-]*):[ \t]*(.*)$")
+STATE_TEMP_NAME = ".STATE.md.gsd-path-tmp"
 
 
 class DetectError(RuntimeError):
@@ -1062,6 +1072,20 @@ def classify(repo: Path) -> dict:
     project = root / ".project"
     state = project / "STATE.md"
     orphan_paths, unsafe_paths = project_path_inventory(project, root)
+    temporary_state_status = lstat_evidence(
+        project / STATE_TEMP_NAME,
+        missing_ok=True,
+    )
+    if (
+        ANCHORED_STATE_CREATE_SUPPORTED
+        and orphan_paths == (f".project/{STATE_TEMP_NAME}",)
+        and not unsafe_paths
+        and temporary_state_status is not None
+        and not is_link_like(project / STATE_TEMP_NAME, temporary_state_status)
+        and stat.S_ISREG(temporary_state_status.st_mode)
+        and temporary_state_status.st_nlink == 1
+    ):
+        orphan_paths = ()
     if unsafe_paths:
         return {
             "verdict": "orphan",
@@ -1178,31 +1202,32 @@ def write_all(descriptor: int, payload: bytes) -> None:
 def rollback_created_state(
     project_fd: int,
     created_status: Optional[os.stat_result],
+    name: str,
 ) -> None:
     if created_status is None:
         try:
-            os.unlink("STATE.md", dir_fd=project_fd)
+            os.unlink(name, dir_fd=project_fd)
         except FileNotFoundError:
             return
         except OSError as error:
-            raise DetectError(f"cannot roll back STATE.md: {error}") from error
+            raise DetectError(f"cannot roll back {name}: {error}") from error
         return
     try:
-        current = os.stat("STATE.md", dir_fd=project_fd, follow_symlinks=False)
+        current = os.stat(name, dir_fd=project_fd, follow_symlinks=False)
     except FileNotFoundError:
         return
     except OSError as error:
-        raise DetectError(f"cannot roll back STATE.md: {error}") from error
+        raise DetectError(f"cannot roll back {name}: {error}") from error
     if (
-        is_link_like(Path("STATE.md"), current)
+        is_link_like(Path(name), current)
         or not stat.S_ISREG(current.st_mode)
         or not os.path.samestat(created_status, current)
     ):
         return
     try:
-        os.unlink("STATE.md", dir_fd=project_fd)
+        os.unlink(name, dir_fd=project_fd)
     except OSError as error:
-        raise DetectError(f"cannot roll back STATE.md: {error}") from error
+        raise DetectError(f"cannot roll back {name}: {error}") from error
 
 
 def close_file_descriptors(
@@ -1232,6 +1257,7 @@ def write_state_anchored(
     state_fd = None
     state_created = False
     created_status = None
+    created_name = STATE_TEMP_NAME
     try:
         try:
             root_fd = os.open(root, flags)
@@ -1283,26 +1309,46 @@ def write_state_anchored(
             )
         ):
             raise DetectError(".project changed after classification")
-        if os.listdir(project_fd):
+        fcntl.flock(project_fd, fcntl.LOCK_EX)
+        entries = set(os.listdir(project_fd))
+        if entries not in (set(), {STATE_TEMP_NAME}):
             raise DetectError(".project changed after classification")
         create = (
             os.O_CREAT
-            | os.O_EXCL
-            | os.O_WRONLY
+            | os.O_RDWR
             | os.O_NOFOLLOW
             | getattr(os, "O_BINARY", 0)
         )
         try:
-            state_fd = os.open("STATE.md", create, 0o644, dir_fd=project_fd)
-        except FileExistsError as error:
-            raise DetectError("STATE.md already exists") from error
+            state_fd = os.open(STATE_TEMP_NAME, create, 0o644, dir_fd=project_fd)
+            fcntl.flock(state_fd, fcntl.LOCK_EX)
+        except OSError as error:
+            raise DetectError(f"cannot reserve temporary STATE.md: {error}") from error
         state_created = True
         created_status = os.fstat(state_fd)
         if is_link_like(
-            root / ".project" / "STATE.md", created_status
+            root / ".project" / STATE_TEMP_NAME, created_status
         ) or not stat.S_ISREG(created_status.st_mode):
-            raise DetectError("created STATE.md is not a regular file")
+            raise DetectError("temporary STATE.md is not a regular file")
+        if created_status.st_nlink != 1:
+            raise DetectError("temporary STATE.md has an unexpected link count")
+        try:
+            named_temporary = os.stat(
+                STATE_TEMP_NAME,
+                dir_fd=project_fd,
+                follow_symlinks=False,
+            )
+        except FileNotFoundError as error:
+            if "STATE.md" in os.listdir(project_fd):
+                raise DetectError("STATE.md already exists") from error
+            raise DetectError("temporary STATE.md disappeared") from error
+        if not os.path.samestat(created_status, named_temporary):
+            raise DetectError("temporary STATE.md changed before writing")
+        if "STATE.md" in os.listdir(project_fd):
+            raise DetectError("STATE.md already exists")
+        os.ftruncate(state_fd, 0)
         write_all(state_fd, payload)
+        os.fsync(state_fd)
         current_root = lstat_evidence(root, missing_ok=False)
         current_project = os.stat(
             ".project",
@@ -1311,7 +1357,7 @@ def write_state_anchored(
         )
         current_project_fd = os.fstat(project_fd)
         current_state = os.stat(
-            "STATE.md",
+            STATE_TEMP_NAME,
             dir_fd=project_fd,
             follow_symlinks=False,
         )
@@ -1325,13 +1371,35 @@ def write_state_anchored(
         ):
             raise DetectError("project identity changed while creating STATE.md")
         if (
-            is_link_like(root / ".project" / "STATE.md", current_state)
+            is_link_like(root / ".project" / STATE_TEMP_NAME, current_state)
             or not stat.S_ISREG(current_state.st_mode)
+            or current_state.st_nlink != 1
             or not os.path.samestat(created_status, current_state)
         ):
-            raise DetectError("STATE.md changed while writing")
-        if set(os.listdir(project_fd)) != {"STATE.md"}:
+            raise DetectError("temporary STATE.md changed while writing")
+        if set(os.listdir(project_fd)) != {STATE_TEMP_NAME}:
             raise DetectError(".project contents changed while creating STATE.md")
+        try:
+            os.link(
+                STATE_TEMP_NAME,
+                "STATE.md",
+                src_dir_fd=project_fd,
+                dst_dir_fd=project_fd,
+                follow_symlinks=False,
+            )
+        except FileExistsError as error:
+            raise DetectError("STATE.md already exists") from error
+        created_name = "STATE.md"
+        os.unlink(
+            STATE_TEMP_NAME,
+            dir_fd=project_fd,
+        )
+        published = os.stat("STATE.md", dir_fd=project_fd, follow_symlinks=False)
+        if published.st_nlink != 1 or not os.path.samestat(created_status, published):
+            raise DetectError("STATE.md changed while publishing")
+        if set(os.listdir(project_fd)) != {"STATE.md"}:
+            raise DetectError(".project contents changed while publishing STATE.md")
+        os.fsync(project_fd)
         closing_state_fd = state_fd
         state_fd = None
         try:
@@ -1344,6 +1412,7 @@ def write_state_anchored(
                 rollback_created_state(
                     project_fd,
                     created_status,
+                    created_name,
                 )
             except DetectError as rollback_error:
                 raise rollback_error from error

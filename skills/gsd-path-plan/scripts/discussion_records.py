@@ -13,12 +13,14 @@ from typing import Iterator, Optional, Sequence
 
 try:
     import archive_milestone
+    import pipeline_state
 except ModuleNotFoundError as error:
-    if error.name != "archive_milestone":
+    if error.name not in {"archive_milestone", "pipeline_state"}:
         raise
     shared_scripts = Path(__file__).resolve().parents[2] / "gsd-path" / "scripts"
     sys.path.insert(0, str(shared_scripts))
     import archive_milestone
+    import pipeline_state
 
 
 class DiscussionError(RuntimeError):
@@ -53,12 +55,15 @@ def state_lock(state: Path) -> Iterator[None]:
 
 
 def state_context(state: Path) -> tuple[str, str, str]:
-    content = state.read_text(encoding="utf-8")
-    if archive_milestone.frontmatter_value(content, "pipeline") != archive_milestone.PIPELINE_MARKER:
-        raise DiscussionError("STATE.md is not owned by gsd-path/v2")
-    phase = archive_milestone.frontmatter_value(content, "phase") or ""
-    status = archive_milestone.frontmatter_value(content, "status") or ""
-    configured_archive = archive_milestone.frontmatter_value(content, "archive") or "null"
+    try:
+        current, _content, loaded = pipeline_state.load_state(state.parent.parent)
+    except pipeline_state.PipelineStateError as error:
+        raise DiscussionError(str(error)) from error
+    if loaded != state:
+        raise DiscussionError(f"canonical STATE.md path changed: {loaded}")
+    phase = current.phase
+    status = current.status
+    configured_archive = current.archive or "null"
     if phase not in PHASES or status not in {"active", "blocked", "done"}:
         raise DiscussionError(f"discussion is not available in state {phase}/{status}")
     return phase, status, configured_archive
@@ -542,6 +547,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         arguments = parser().parse_args(argv)
         root, project, state = project_root(arguments.repo)
         with state_lock(state):
+            state_context(state)
             if arguments.command in {"pending", "dispose", "threads"}:
                 discussion = project / "discuss"
                 finish_append(project, discussion)

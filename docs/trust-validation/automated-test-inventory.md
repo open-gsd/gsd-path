@@ -33,7 +33,7 @@ dependency.
 | `tests/test_bootstrap_repository.py` | unittest | `scripts/bootstrap_repository.py` — journaled creation/resume and unjournaled collision refusal |
 | `tests/test_build_state.py` | unittest | `scripts/build_state.py` — dependency-ready task selection and landed-task reconciliation |
 | `tests/test_check_docs_audit.py` | unittest | `scripts/check_docs_audit.py` — tracked/untracked Markdown inventory and docs-audit artifact gate |
-| `tests/test_detect_project.py` | unittest | `scripts/detect_project.py` — owned/orphan/brownfield/greenfield classification and initialization; `scripts/promote_lookahead.py` — promotion and recovery |
+| `tests/test_detect_project.py` | unittest | `scripts/detect_project.py` — owned/orphan/brownfield/greenfield classification and initialization; `scripts/promote_lookahead.py` — lookahead selection, snapshots, and contract comparison |
 | `tests/test_check_update.py` | unittest | `scripts/check_update.py` — version compare, cache, notice |
 | `tests/test_discussion_records.py` | unittest | `scripts/discussion_records.py` — paired append, half-write recovery, pending records, dispositions |
 | `tests/test_dispatch_contract.py` | unittest | runtime dispatch contract — host branches, model selection, and bounded child responsibilities |

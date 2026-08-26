@@ -259,7 +259,7 @@ project: demo
 milestone: demo
 phase: plan
 status: active
-branch: main
+branch: gsd-path/M001
 archive: null
 ---
 """,

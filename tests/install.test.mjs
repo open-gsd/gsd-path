@@ -609,6 +609,47 @@ test("failure after backup move still restores original", async () => {
   assert.ok(!fs.existsSync(path.join(path.dirname(target), "disabled-gsd-skills")));
 });
 
+test("install collision does not remove a concurrent destination", async () => {
+  const target = path.join(root, "concurrent-install", "skills");
+  const destination = path.join(target, installer.SKILL_NAMES[0]);
+  let raced = false;
+  installer.hooks.reserveDirectory = (candidate) => {
+    if (candidate === destination && !raced) {
+      raced = true;
+      fs.mkdirSync(candidate);
+      fs.writeFileSync(path.join(candidate, "other-installer.txt"), "live install\n");
+    }
+    return originalHooks.reserveDirectory(candidate);
+  };
+
+  await assert.rejects(
+    runInstall([installer.targetPlan("claude", target)]),
+    /rolled back/
+  );
+
+  assert.equal(raced, true);
+  assert.equal(
+    fs.readFileSync(path.join(destination, "other-installer.txt"), "utf8"),
+    "live install\n"
+  );
+});
+
+test("active target owner prevents backup mutation", async () => {
+  const target = path.join(root, "owned-install", "skills");
+  const existing = path.join(target, "gsd-path-old");
+  fs.mkdirSync(existing, { recursive: true });
+  fs.writeFileSync(path.join(existing, "marker"), "old\n");
+  fs.mkdirSync(path.join(path.dirname(target), ".gsd-path-install-lock"));
+
+  await assert.rejects(
+    runInstall([installer.targetPlan("claude", target)]),
+    /already in progress/
+  );
+
+  assert.equal(fs.readFileSync(path.join(existing, "marker"), "utf8"), "old\n");
+  assert.ok(!fs.existsSync(path.join(path.dirname(target), "disabled-gsd-skills")));
+});
+
 test("failure restores cursor subagent", async () => {
   const cursorRoot = path.join(root, "cursor-rollback", "skills");
   const agent = path.join(path.dirname(cursorRoot), "agents", installer.CURSOR_AGENT_FILENAME);

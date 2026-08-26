@@ -43,6 +43,7 @@ CLAUDE_BRIDGE = "@../AGENTS.md\n@../WORKFLOW.md\n"
 HOOKS_DIRECTORY = ".gsd-path"
 GUARD_SCRIPTS = ("guard_hook.py", "git_guard.py")
 GUARD_MARKER = "gsd-path guard"
+INSTALL_LOCK_NAME = ".gsd-path-install-lock"
 CLAUDE_MATCHER = (
     "Edit|Write|MultiEdit|NotebookEdit|Delete|StrReplace|ApplyPatch|Create|Shell|Bash"
 )
@@ -448,6 +449,37 @@ def _create_directory(path: Path, created: List[Path]) -> None:
     path.mkdir(parents=True, exist_ok=True)
 
 
+def _release_install_locks(locks: Sequence[Path], created: Sequence[Path]) -> None:
+    for lock in reversed(locks):
+        lock.rmdir()
+    _remove_empty_directories(created)
+
+
+def _acquire_install_locks(roots: Iterable[Path]) -> Tuple[List[Path], List[Path]]:
+    locks: List[Path] = []
+    for root in roots:
+        candidate = root.parent / INSTALL_LOCK_NAME
+        if not any(_same_path(candidate, existing) for existing in locks):
+            locks.append(candidate)
+    locks.sort(key=lambda candidate: os.path.normcase(os.fspath(candidate)))
+    acquired: List[Path] = []
+    created: List[Path] = []
+    try:
+        for lock in locks:
+            _create_directory(lock.parent, created)
+            try:
+                lock.mkdir()
+            except FileExistsError as error:
+                raise InstallerError(
+                    f"installation already in progress for {lock.parent}"
+                ) from error
+            acquired.append(lock)
+    except BaseException:
+        _release_install_locks(acquired, created)
+        raise
+    return acquired, created
+
+
 def _backup_path(root: Path, reserved: Sequence[Path] = ()) -> Path:
     candidate = root.parent / "disabled-gsd-skills"
     number = 1
@@ -481,6 +513,19 @@ def _backup_existing(
             os.replace(entry, stored)
 
 
+def _reserve_directory(path: Path) -> None:
+    path.mkdir()
+
+
+def _reserve_file(path: Path) -> None:
+    descriptor = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+    try:
+        os.close(descriptor)
+    except BaseException:
+        path.unlink(missing_ok=True)
+        raise
+
+
 def _apply_target(
     plan: DeploymentPlan, staged_root: Path, transaction: TargetTransaction
 ) -> None:
@@ -494,9 +539,11 @@ def _apply_target(
     _backup_existing(transaction, extras)
     for name in SKILL_NAMES:
         destination = plan.root / name
+        _reserve_directory(destination)
         transaction.installed.append(destination)
-        shutil.copytree(staged_root / name, destination)
+        shutil.copytree(staged_root / name, destination, dirs_exist_ok=True)
     if cursor_agent is not None:
+        _reserve_file(cursor_agent)
         transaction.installed.append(cursor_agent)
         shutil.copy2(staged_root / CURSOR_AGENT_FILENAME, cursor_agent)
 
@@ -1136,6 +1183,10 @@ def install(
             _append_host_notes(results, selected)
             return results
 
+        lock_roots = [plan.root for plan in deployments]
+        if legacy_root is not None and legacy_root.is_dir():
+            lock_roots.append(legacy_root)
+        install_locks, lock_directories = _acquire_install_locks(lock_roots)
         target_transactions: List[TargetTransaction] = []
         project_transaction = ProjectTransaction()
         try:
@@ -1193,6 +1244,8 @@ def install(
             raise InstallerError(
                 f"installation failed and was rolled back: {reason}{detail}"
             ) from error
+        finally:
+            _release_install_locks(install_locks, lock_directories)
     _append_host_notes(results, selected)
     return results
 
