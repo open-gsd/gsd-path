@@ -100,6 +100,7 @@ GIT_READ_WRITE_OPTIONS = frozenset({"--output", "--ext-diff", "--textconv"})
 ARCHIVE_READ_EXECUTION_OPTIONS = {"rg": frozenset({"--pre"})}
 AMBIGUOUS_SHELL_SYNTAX = re.compile(r"[\r\n|;&<>`]|\$\(|@\(")
 SHELL_EXPANSION_SYNTAX = re.compile(r"`|\$\(|@\(")
+SHELL_VARIABLE_SYNTAX = re.compile(r"\$(?:[A-Za-z_][A-Za-z0-9_]*|\{[^}\r\n]+\})")
 GIT_REASONS = {
     "reset": "git reset --hard discards work the build recovery protocol needs",
     "clean": "git clean -f deletes untracked evidence and retained task worktrees",
@@ -271,7 +272,10 @@ def command_references_archive(tokens, working_directories):
 
 
 def unresolved_archive_expansion(command, working_directories):
-    if not SHELL_EXPANSION_SYNTAX.search(command):
+    if not (
+        SHELL_EXPANSION_SYNTAX.search(command)
+        or SHELL_VARIABLE_SYNTAX.search(command)
+    ):
         return False
     lowered = command.replace("\\", "/").casefold()
     return (
@@ -292,7 +296,7 @@ def patch_paths(payload):
 def shell_tokens(command):
     if "\n" in command or "\r" in command:
         raise ValueError("shell command contains a line separator")
-    lexer = shlex.shlex(command, posix=True, punctuation_chars="|;&")
+    lexer = shlex.shlex(command, posix=True, punctuation_chars="|;&()")
     lexer.whitespace_split = True
     lexer.commenters = ""
     tokens = list(lexer)
@@ -304,7 +308,7 @@ def shell_tokens(command):
 def command_segments(tokens):
     segment = []
     for token in tokens:
-        if token and set(token) <= set("|;&"):
+        if token and set(token) <= set("|;&()"):
             if segment:
                 yield segment
                 segment = []
@@ -348,6 +352,8 @@ def command_invocation(segment):
     if index >= len(segment):
         return None
     executable = segment[index].replace("\\", "/").rsplit("/", 1)[-1].casefold()
+    if SHELL_VARIABLE_SYNTAX.search(executable):
+        raise ValueError("shell executable cannot be validated")
     return executable, segment[index + 1:]
 
 
@@ -358,12 +364,26 @@ def git_command(segment):
     executable, arguments = invocation
     if executable not in {"git", "git.exe"}:
         return None
+    if any(SHELL_VARIABLE_SYNTAX.search(argument) for argument in arguments):
+        raise ValueError("git invocation cannot be validated")
     index = 0
     while index < len(arguments) and arguments[index].startswith("-"):
-        option = arguments[index].split("=", 1)[0]
+        token = arguments[index]
+        if token.startswith("-c") and token != "-c" and not token.startswith("--"):
+            option, value = "-c", token[2:]
+        else:
+            option = token.split("=", 1)[0]
+            value = token.split("=", 1)[1] if "=" in token else None
         index += 1
-        if option in GIT_GLOBAL_OPTIONS_WITH_VALUES and "=" not in arguments[index - 1]:
+        if option in GIT_GLOBAL_OPTIONS_WITH_VALUES and value is None:
+            if index >= len(arguments):
+                raise ValueError("git global option lacks a value")
+            value = arguments[index]
             index += 1
+        if option in {"-c", "--config-env"} and str(value).casefold().startswith(
+            "alias."
+        ):
+            raise ValueError("git alias configuration cannot be validated")
     if index >= len(arguments):
         return None
     return arguments[index].casefold(), arguments[index + 1:]
@@ -454,7 +474,10 @@ def destructive_git_reason(tokens):
 
 
 def archive_command_is_read_only(command, tokens, archive_context=False):
-    if archive_context and AMBIGUOUS_SHELL_SYNTAX.search(command):
+    if archive_context and (
+        AMBIGUOUS_SHELL_SYNTAX.search(command)
+        or SHELL_VARIABLE_SYNTAX.search(command)
+    ):
         return False
     if not archive_context:
         return True

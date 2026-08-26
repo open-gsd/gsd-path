@@ -50,7 +50,7 @@ ARTIFACT_DETAILS = tuple(ARTIFACT_STEPS)
 REQUIRED_DETAILS = METADATA_DETAILS + ARTIFACT_DETAILS
 EMPTY_DETAIL_VALUES = frozenset({"pass", "pending", "yes", "none", "n/a"})
 STEP_STRING_FIELDS = {
-    "install": ("host_version", "install_root"),
+    "install": ("host_version", "install_root", "candidate", "package_version"),
     "router": ("state_artifact",),
     "child-spawn": ("child_id",),
     "task-landing": (
@@ -70,6 +70,7 @@ STEP_STRING_FIELDS = {
         "integration_commit",
         "milestone_tag",
     ),
+    "worktrees": ("primary_worktree",),
     "guards": ("guard_artifact",),
 }
 STEP_EXACT_FIELDS = {
@@ -84,6 +85,9 @@ SUMMARY_PATHS = frozenset(
         "docs/trust-validation/HOST-MATRIX.md",
         "docs/trust-validation/TRUST-EVIDENCE.md",
     }
+)
+WORKTREE_RECORD_KEYS = frozenset(
+    {"worktree", "HEAD", "branch", "bare", "detached", "locked", "prunable"}
 )
 
 
@@ -153,14 +157,6 @@ def _validate_step_artifact(
     for key, value in STEP_EXACT_FIELDS.get(step, {}).items():
         if evidence.get(key) != value:
             raise EvidenceError(f"{path}: {key} must be {value!r}")
-    if step == "worktrees":
-        worktrees = evidence.get("remaining_worktrees")
-        if not isinstance(worktrees, list) or not worktrees or not all(
-            isinstance(item, str) and item.strip() for item in worktrees
-        ):
-            raise EvidenceError(
-                f"{path}: remaining_worktrees must be a non-empty string list"
-            )
     if step == "guards":
         expected_native = "not-applicable" if guard_tier == "git-only" else "pass"
         expected_guards = {
@@ -172,6 +168,46 @@ def _validate_step_artifact(
             if evidence.get(key) != value:
                 raise EvidenceError(f"{path}: {key} must be {value!r}")
     return evidence
+
+
+def _normalized_worktree_path(value: str, path: Path) -> str:
+    normalized = value.replace("\\", "/").rstrip("/") or "/"
+    parts = PurePosixPath(normalized).parts
+    if (
+        ".." in parts
+        or not (
+            normalized.startswith("/")
+            or re.match(r"^[A-Za-z]:/", normalized)
+        )
+    ):
+        raise EvidenceError(f"{path}: worktree path must be absolute: {value}")
+    return normalized
+
+
+def _worktree_records(output: str, path: Path) -> Tuple[Mapping[str, str], ...]:
+    records: List[Mapping[str, str]] = []
+    record: Dict[str, str] = {}
+    for line in (*output.splitlines(), ""):
+        if not line:
+            if not record:
+                continue
+            missing = {"worktree", "HEAD"} - set(record)
+            states = {"branch", "bare", "detached"} & set(record)
+            if missing or len(states) != 1:
+                raise EvidenceError(f"{path}: invalid git worktree porcelain record")
+            if not re.fullmatch(r"[0-9a-f]{40}", record["HEAD"]):
+                raise EvidenceError(f"{path}: worktree HEAD must be a full Git SHA")
+            record["worktree"] = _normalized_worktree_path(record["worktree"], path)
+            records.append(record)
+            record = {}
+            continue
+        key, separator, value = line.partition(" ")
+        if key not in WORKTREE_RECORD_KEYS or key in record:
+            raise EvidenceError(f"{path}: invalid git worktree porcelain line: {line}")
+        record[key] = value if separator else ""
+    if not records:
+        raise EvidenceError(f"{path}: git worktree porcelain output is empty")
+    return tuple(records)
 
 
 def _resolved_artifact(
@@ -273,6 +309,8 @@ def _validate_run_artifacts(
     guard_tier: str,
     integration_commit: str,
     steps: Mapping[str, Mapping],
+    candidate: str,
+    package_version: str,
 ) -> None:
     landing = steps["task-landing"]
     integration = steps["integration"]
@@ -307,6 +345,8 @@ def _validate_run_artifacts(
         "host": host,
         "run_id": run_id,
         "host_version": _required_string(steps["install"], "host_version", bundle),
+        "candidate": candidate,
+        "package_version": package_version,
         "child_id": _required_string(steps["child-spawn"], "child_id", bundle),
         "guard_tier": guard_tier,
         "fixture_base_commit": _full_sha(landing, "fixture_base_commit", bundle),
@@ -358,7 +398,12 @@ def _validate_run_artifacts(
 
 
 def _validate_git_bundle(
-    bundle: Path, host: str, guard_tier: str, steps: Mapping[str, Mapping]
+    bundle: Path,
+    host: str,
+    guard_tier: str,
+    steps: Mapping[str, Mapping],
+    candidate: str,
+    package_version: str,
 ) -> None:
     landing = steps["task-landing"]
     integration = steps["integration"]
@@ -423,6 +468,13 @@ def _validate_git_bundle(
             raise EvidenceError(
                 f"{bundle}: milestone tag must be annotated at integration_commit"
             )
+        task_branch = _required_string(landing, "task_branch", bundle)
+        try:
+            _git(fixture, "check-ref-format", "--branch", task_branch)
+        except EvidenceError:
+            raise EvidenceError(f"{bundle}: task_branch has an invalid name") from None
+        if _git_ref_exists(fixture, f"refs/heads/{task_branch}"):
+            raise EvidenceError(f"{bundle}: task branch was not retired")
         _validate_run_artifacts(
             fixture,
             bundle,
@@ -430,11 +482,17 @@ def _validate_git_bundle(
             guard_tier,
             integration_commit,
             steps,
+            candidate,
+            package_version,
         )
 
 
 def _validate_evidence_details(
-    path: Path, host: str, guard_tier: str
+    path: Path,
+    host: str,
+    guard_tier: str,
+    candidate: str,
+    package_version: str,
 ) -> Tuple[Path, ...]:
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
@@ -469,6 +527,11 @@ def _validate_evidence_details(
         artifacts.append(resolved)
     landing = steps["task-landing"]
     integration = steps["integration"]
+    install = steps["install"]
+    if _full_sha(install, "candidate", path) != candidate:
+        raise EvidenceError(f"{path}: install candidate does not match receipt")
+    if _required_string(install, "package_version", path) != package_version:
+        raise EvidenceError(f"{path}: install package_version does not match receipt")
     run_ids = {
         _required_string(evidence, "run_id", path) for evidence in steps.values()
     }
@@ -478,10 +541,39 @@ def _validate_evidence_details(
     integration_bundle = _required_string(integration, "fixture_bundle", path)
     if landing_bundle != integration_bundle:
         raise EvidenceError(f"{path}: landing and integration must use one fixture bundle")
+    worktree_step = steps["worktrees"]
+    records = _worktree_records(_required_string(worktree_step, "output", path), path)
+    primary_worktree = _normalized_worktree_path(
+        _required_string(worktree_step, "primary_worktree", path), path
+    )
+    task_worktree = _normalized_worktree_path(
+        _required_string(landing, "task_worktree", path), path
+    )
+    task_ref = f"refs/heads/{_required_string(landing, 'task_branch', path)}"
+    primary = next(
+        (
+            record
+            for record in records
+            if record["worktree"].casefold() == primary_worktree.casefold()
+        ),
+        None,
+    )
+    if primary is None or primary["HEAD"] != _full_sha(
+        integration, "integration_commit", path
+    ):
+        raise EvidenceError(f"{path}: primary worktree is missing integration HEAD")
+    if any(
+        record["worktree"].casefold() == task_worktree.casefold()
+        or record.get("branch") == task_ref
+        for record in records
+    ):
+        raise EvidenceError(f"{path}: task worktree was not retired")
     bundle = _resolved_artifact(
         path, artifact_directory, landing_bundle, "fixture Git bundle"
     )
-    _validate_git_bundle(bundle, host, guard_tier, steps)
+    _validate_git_bundle(
+        bundle, host, guard_tier, steps, candidate, package_version
+    )
     artifacts.append(bundle)
     return tuple(artifacts)
 
@@ -499,6 +591,19 @@ def _git(repo: Path, *arguments: str) -> str:
             f"git {' '.join(arguments)} failed: {result.stderr.strip()}"
         )
     return result.stdout.strip()
+
+
+def _git_ref_exists(repo: Path, ref: str) -> bool:
+    result = subprocess.run(
+        ["git", "show-ref", "--verify", "--quiet", ref],
+        cwd=repo,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode not in {0, 1}:
+        raise EvidenceError(f"git show-ref failed: {result.stderr.strip()}")
+    return result.returncode == 0
 
 
 def _validate_receipt(
@@ -543,7 +648,13 @@ def _validate_receipt(
             f"{path}: guard_tier must be {guard_tier!r}, "
             f"found {fields.get('guard_tier')!r}"
         )
-    return receipt_candidate, _validate_evidence_details(path, host, guard_tier)
+    return receipt_candidate, _validate_evidence_details(
+        path,
+        host,
+        guard_tier,
+        receipt_candidate,
+        package_version,
+    )
 
 
 def _require_current_tracked_evidence(

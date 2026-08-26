@@ -15,6 +15,8 @@ class TrustEvidenceTests(unittest.TestCase):
         self.fixtures = {}
         self.omit_fixture_artifact = {}
         self.fixture_states = {}
+        self.fixture_manifest_overrides = {}
+        self.keep_fixture_branches = set()
         self.guard_tiers = {
             "alpha": "native-fail-closed",
             "beta": "git-only",
@@ -87,6 +89,7 @@ class TrustEvidenceTests(unittest.TestCase):
         git("commit", "-qm", "fixture base")
         base = git("rev-parse", "HEAD")
         task_branch = f"task/{host}-milestone"
+        task_worktree = repository.parent / f"{host}-task-worktree"
         git("checkout", "-qb", task_branch)
         (repository / "task.txt").write_text("landed\n", encoding="utf-8")
         git("add", "task.txt")
@@ -143,6 +146,8 @@ class TrustEvidenceTests(unittest.TestCase):
             "host": host,
             "run_id": run_id,
             "host_version": "fixture-cli 1.0",
+            "candidate": self.candidate,
+            "package_version": "1.2.3",
             "child_id": f"{host}-child-1",
             "guard_tier": self.guard_tiers[host],
             "fixture_base_commit": base,
@@ -151,6 +156,7 @@ class TrustEvidenceTests(unittest.TestCase):
             "milestone_tag": f"milestone/001-{host}",
             "artifacts": artifact_paths,
         }
+        manifest.update(self.fixture_manifest_overrides.get(host, {}))
         files[run_manifest] = json.dumps(manifest) + "\n"
         omitted = self.omit_fixture_artifact.get(host)
         for relative, content in files.items():
@@ -173,6 +179,8 @@ class TrustEvidenceTests(unittest.TestCase):
         integration = git("rev-parse", "HEAD")
         milestone_tag = f"milestone/001-{host}"
         git("tag", "-a", "-m", f"{host} milestone", milestone_tag)
+        if host not in self.keep_fixture_branches:
+            git("branch", "-D", task_branch)
         bundle = self.artifact(host, "fixture").with_suffix(".bundle")
         bundle.parent.mkdir(parents=True, exist_ok=True)
         git("bundle", "create", str(bundle), "--all")
@@ -182,7 +190,13 @@ class TrustEvidenceTests(unittest.TestCase):
             "integration": integration,
             "milestone_tag": milestone_tag,
             "task_branch": task_branch,
-            "task_worktree": str(repository),
+            "task_worktree": str(task_worktree),
+            "primary_worktree": str(repository),
+            "worktree_output": (
+                f"worktree {repository}\n"
+                f"HEAD {integration}\n"
+                "branch refs/heads/main\n"
+            ),
             "bundle": f"{host}/fixture.bundle",
             "run_id": run_id,
             "run_manifest": run_manifest,
@@ -205,6 +219,8 @@ class TrustEvidenceTests(unittest.TestCase):
             "install": {
                 "host_version": "fixture-cli 1.0",
                 "install_root": f".{host}/skills",
+                "candidate": self.candidate,
+                "package_version": "1.2.3",
                 "exit_code": 0,
             },
             "router": {
@@ -241,7 +257,10 @@ class TrustEvidenceTests(unittest.TestCase):
                 "integration_commit": fixture["integration"],
                 "milestone_tag": fixture["milestone_tag"],
             },
-            "worktrees": {"remaining_worktrees": [fixture["task_worktree"]]},
+            "worktrees": {
+                "primary_worktree": fixture["primary_worktree"],
+                "output": fixture["worktree_output"],
+            },
             "guards": {
                 "guard_artifact": fixture["artifacts"]["guards"],
                 "declared_tier": self.guard_tiers[host],
@@ -453,6 +472,12 @@ class TrustEvidenceTests(unittest.TestCase):
         evidence = json.loads(integration.read_text(encoding="utf-8"))
         evidence["integration_commit"] = self.fixtures["alpha"]["landing"]
         integration.write_text(json.dumps(evidence) + "\n", encoding="utf-8")
+        worktrees = self.artifact("alpha", "worktrees")
+        evidence = json.loads(worktrees.read_text(encoding="utf-8"))
+        evidence["output"] = evidence["output"].replace(
+            self.fixtures["alpha"]["integration"], self.fixtures["alpha"]["landing"]
+        )
+        worktrees.write_text(json.dumps(evidence) + "\n", encoding="utf-8")
         self.commit_receipts()
 
         with self.assertRaisesRegex(check_trust_evidence.EvidenceError, "merge commit"):
@@ -495,6 +520,72 @@ class TrustEvidenceTests(unittest.TestCase):
         with self.assertRaisesRegex(check_trust_evidence.EvidenceError, "one run_id"):
             check_trust_evidence.validate_repository(self.repo)
 
+    def test_rejects_bundled_run_for_different_candidate(self):
+        self.fixture_manifest_overrides["alpha"] = {"candidate": "0" * 40}
+        self.receipt("alpha")
+        self.receipt("beta")
+        self.commit_receipts()
+
+        with self.assertRaisesRegex(
+            check_trust_evidence.EvidenceError, "run manifest candidate"
+        ):
+            check_trust_evidence.validate_repository(self.repo)
+
+    def test_rejects_bundled_run_for_different_package(self):
+        self.fixture_manifest_overrides["alpha"] = {"package_version": "0.0.1"}
+        self.receipt("alpha")
+        self.receipt("beta")
+        self.commit_receipts()
+
+        with self.assertRaisesRegex(
+            check_trust_evidence.EvidenceError, "run manifest package_version"
+        ):
+            check_trust_evidence.validate_repository(self.repo)
+
+    def test_rejects_unstructured_worktree_output(self):
+        self.receipt("alpha")
+        self.receipt("beta")
+        worktrees = self.artifact("alpha", "worktrees")
+        evidence = json.loads(worktrees.read_text(encoding="utf-8"))
+        evidence["output"] = "still registered"
+        worktrees.write_text(json.dumps(evidence) + "\n", encoding="utf-8")
+        self.commit_receipts()
+
+        with self.assertRaisesRegex(
+            check_trust_evidence.EvidenceError, "git worktree porcelain"
+        ):
+            check_trust_evidence.validate_repository(self.repo)
+
+    def test_rejects_registered_task_worktree(self):
+        self.receipt("alpha")
+        self.receipt("beta")
+        fixture = self.fixtures["alpha"]
+        worktrees = self.artifact("alpha", "worktrees")
+        evidence = json.loads(worktrees.read_text(encoding="utf-8"))
+        evidence["output"] += (
+            f"\nworktree {fixture['task_worktree']}\n"
+            f"HEAD {fixture['landing']}\n"
+            f"branch refs/heads/{fixture['task_branch']}\n"
+        )
+        worktrees.write_text(json.dumps(evidence) + "\n", encoding="utf-8")
+        self.commit_receipts()
+
+        with self.assertRaisesRegex(
+            check_trust_evidence.EvidenceError, "task worktree was not retired"
+        ):
+            check_trust_evidence.validate_repository(self.repo)
+
+    def test_rejects_unretired_task_branch(self):
+        self.keep_fixture_branches.add("alpha")
+        self.receipt("alpha")
+        self.receipt("beta")
+        self.commit_receipts()
+
+        with self.assertRaisesRegex(
+            check_trust_evidence.EvidenceError, "task branch was not retired"
+        ):
+            check_trust_evidence.validate_repository(self.repo)
+
     def test_rejects_guard_tier_that_disagrees_with_manifest(self):
         self.receipt("alpha", guard_tier="git-only")
         self.receipt("beta")
@@ -516,7 +607,7 @@ class TrustEvidenceTests(unittest.TestCase):
         with self.assertRaisesRegex(check_trust_evidence.EvidenceError, "not tracked"):
             check_trust_evidence.validate_repository(self.repo)
 
-    def test_rejects_artifacts_older_than_candidate(self):
+    def test_rejects_artifacts_bound_to_older_candidate(self):
         self.receipt("alpha")
         self.receipt("beta")
         self.commit_receipts()
@@ -529,7 +620,7 @@ class TrustEvidenceTests(unittest.TestCase):
         self.commit_receipts()
 
         with self.assertRaisesRegex(
-            check_trust_evidence.EvidenceError, "not added or updated"
+            check_trust_evidence.EvidenceError, "install candidate does not match receipt"
         ):
             check_trust_evidence.validate_repository(self.repo)
 

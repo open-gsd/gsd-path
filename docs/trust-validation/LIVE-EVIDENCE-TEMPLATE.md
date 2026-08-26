@@ -61,7 +61,7 @@ step-specific fields below:
 
 | Step | Required fields |
 |---|---|
-| `install` | `host_version`, `install_root`, `exit_code: 0` |
+| `install` | `host_version`, `install_root`, `candidate`, `package_version`, `exit_code: 0` |
 | `router` | `state_artifact`, `state_phase: "shipped"` |
 | `child-spawn` | `child_id`, `child_status: "completed"` |
 | `task-landing` | `fixture_bundle`, `run_manifest`, `fixture_base_commit`, `task_branch`, `task_worktree`, `landing_commit` |
@@ -69,7 +69,7 @@ step-specific fields below:
 | `reviews` | `wave_review_artifact`, `final_review_artifact` |
 | `archive` | `archive_path`, `validation_exit_code: 0` |
 | `integration` | `fixture_bundle`, `run_manifest`, `integration_commit`, `milestone_tag` |
-| `worktrees` | non-empty `remaining_worktrees` string list |
+| `worktrees` | `primary_worktree` and normalized `git worktree list --porcelain` in `output`; the task worktree and branch must be absent |
 | `guards` | `guard_artifact` plus manifest `declared_tier`, `native_guard`, and `git_hooks` results |
 
 `fixture_bundle` is one tracked `git bundle` inside the host evidence directory.
@@ -82,7 +82,8 @@ must be `pass` for every host.
 Every step must use one `run_id`. `run_manifest` names a tracked JSON artifact
 inside the bundle at the integration commit. It records the same host, run,
 version, child, guard tier, landing commit, task branch, milestone tag, and the
-exact state, verify, review, archive, and guard paths. Those paths must exist
+tested candidate, package version, and exact state, verify, review, archive,
+and guard paths. Those paths must exist
 and be non-empty at the integration commit. Verify, review, and guard artifacts
 must be inside the archived milestone; state must record `phase: shipped` and
 `status: done` and pass the bundled `pipeline_state.py validate` command.

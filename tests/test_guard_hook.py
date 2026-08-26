@@ -190,6 +190,8 @@ class GuardHookTests(unittest.TestCase):
         for command in (
             "rm .project/$(printf archive)/001-mvp/NOTE.md",
             "cd .project && rm archive/001-mvp/NOTE.md",
+            'P=.project; rm "$P/archive/001-mvp/NOTE.md"',
+            "bash -lc '(cd .project && rm archive/001-mvp/NOTE.md)'",
         ):
             with self.subTest(command=command):
                 self.assert_denied(
@@ -245,6 +247,10 @@ class GuardHookTests(unittest.TestCase):
             "cmd /c 'git clean -fd'",
             "env -- git reset --hard HEAD~1",
             "env -u TOKEN -- git clean -fd",
+            'G=git; "$G" reset --hard HEAD~1',
+            "git -c alias.wipe='reset --hard' wipe HEAD~1",
+            "git -calias.wipe='reset --hard' wipe HEAD~1",
+            "git --config-env=alias.wipe=WIPE wipe HEAD~1",
         ):
             with self.subTest(command=command):
                 self.assert_denied(
@@ -256,6 +262,7 @@ class GuardHookTests(unittest.TestCase):
             "bash -lc 'git status'",
             "command git branch -d merged",
             "env -- git status",
+            "git -c core.quotepath=false status",
         ):
             with self.subTest(command=command):
                 self.assert_allowed(
