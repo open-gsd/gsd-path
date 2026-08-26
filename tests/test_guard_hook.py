@@ -1,8 +1,10 @@
 import contextlib
 import io
 import json
+import os
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -255,11 +257,34 @@ class GuardHookTests(unittest.TestCase):
             "bash -lc 'set -- git; \"$1\" reset --hard HEAD~1'",
             "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=alias.wipe "
             "GIT_CONFIG_VALUE_0='reset --hard' git wipe HEAD~1",
+            "if git reset --hard HEAD~1; then :; fi",
+            "git config alias.wipe 'reset --hard'",
         ):
             with self.subTest(command=command):
                 self.assert_denied(
                     {"tool_name": "Bash", "tool_input": {"command": command}}
                 )
+
+    def test_denies_destructive_persistent_git_alias(self):
+        previous = Path.cwd()
+        with tempfile.TemporaryDirectory() as temporary:
+            repository = Path(temporary)
+            subprocess.run(["git", "init", "-q"], cwd=repository, check=True)
+            subprocess.run(
+                ["git", "config", "alias.wipe", "reset --hard"],
+                cwd=repository,
+                check=True,
+            )
+            try:
+                os.chdir(repository)
+                self.assert_denied(
+                    {
+                        "tool_name": "Bash",
+                        "tool_input": {"command": "git wipe HEAD~1"},
+                    }
+                )
+            finally:
+                os.chdir(previous)
 
     def test_allows_safe_git_through_command_wrappers(self):
         for command in (
@@ -318,6 +343,16 @@ class GuardHookTests(unittest.TestCase):
             {
                 "tool_name": "apply_patch",
                 "tool_input": "*** Begin Patch\n*** Update File: .project/archive/001-mvp/PLAN.md\n@@\n-old\n+new\n*** End Patch",
+            }
+        )
+
+    def test_denies_nested_apply_patch_inside_archive(self):
+        self.assert_denied(
+            {
+                "tool_name": "ApplyPatch",
+                "tool_input": {
+                    "patch": "*** Begin Patch\n*** Update File: .project/archive/001-mvp/PLAN.md\n@@\n-old\n+new\n*** End Patch"
+                },
             }
         )
 

@@ -1353,9 +1353,10 @@ test("doctor reports a healthy install, hooks, and project", async () => {
   assert.ok(findings.some((finding) => /pre-commit wired/.test(finding.text)));
 });
 
-test("doctor fails when a manifest-required native guard config is missing", async () => {
+test("doctor fails when installer-owned native guard config is missing", async () => {
   for (const [targetName, settingsPath] of [
     ["claude", [".claude", "settings.json"]],
+    ["codex", [".codex", "hooks.json"]],
     ["cursor", [".cursor", "hooks.json"]],
   ]) {
     const project = path.join(root, `${targetName}-native-doctor`);

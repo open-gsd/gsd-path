@@ -68,12 +68,13 @@ step-specific fields below:
 | `task-verify` | `verify_artifact`, `verify_exit_code: 0` |
 | `reviews` | `wave_review_artifact`, `final_review_artifact` |
 | `archive` | `archive_path`, `validation_exit_code: 0` |
-| `integration` | `fixture_bundle`, `run_manifest`, `integration_commit`, `milestone_tag` |
+| `integration` | `fixture_bundle`, `run_manifest`, `ship_commit`, `bound_branch`, `default_branch`, `integration_commit`, `milestone_tag` |
 | `worktrees` | `primary_worktree` and normalized `git worktree list --porcelain` in `output`; the task worktree and branch must be absent |
 | `guards` | `guard_artifact` plus manifest `declared_tier`, `native_guard`, and `git_hooks` results |
 
 `fixture_bundle` is one tracked `git bundle` inside the host evidence directory.
-It must contain the base and landing commits, an `integrate:` merge commit, and
+It must contain the base, landing, and canonical ship commits; the exact
+two-parent integration merge; the published default and bound branch refs; and
 an annotated `milestone/<NNN>-<slug>` tag at that merge. The landing and
 integration steps must reference the same bundle. For a `git-only` host set
 `native_guard` to `not-applicable`; otherwise set it to `pass`. `git_hooks`
@@ -81,8 +82,8 @@ must be `pass` for every host.
 
 Every step must use one `run_id`. `run_manifest` names a tracked JSON artifact
 inside the bundle at the integration commit. It records the same host, run,
-version, child, guard tier, landing commit, task branch, milestone tag, and the
-tested candidate, package version, and exact state, verify, review, archive,
+version, child, guard tier, landing commit, task and bound branches, default
+branch, milestone tag, and the tested candidate, package version, and exact state, verify, review, archive,
 and guard paths. Those paths must exist
 and be non-empty at the integration commit. Verify, review, and guard artifacts
 must be inside the archived milestone; state must record `phase: shipped` and

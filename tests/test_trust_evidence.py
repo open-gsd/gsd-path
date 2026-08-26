@@ -17,6 +17,7 @@ class TrustEvidenceTests(unittest.TestCase):
         self.fixture_states = {}
         self.fixture_manifest_overrides = {}
         self.keep_fixture_branches = set()
+        self.unrelated_integration_hosts = set()
         self.guard_tiers = {
             "alpha": "native-fail-closed",
             "beta": "git-only",
@@ -153,6 +154,8 @@ class TrustEvidenceTests(unittest.TestCase):
             "fixture_base_commit": base,
             "landing_commit": landing,
             "task_branch": task_branch,
+            "bound_branch": "gsd-path/M001",
+            "default_branch": "main",
             "milestone_tag": f"milestone/001-{host}",
             "artifacts": artifact_paths,
         }
@@ -166,19 +169,44 @@ class TrustEvidenceTests(unittest.TestCase):
             destination.parent.mkdir(parents=True, exist_ok=True)
             destination.write_text(content, encoding="utf-8")
         git("add", ".project")
-        git("commit", "-qm", f"ship: record {host} evidence")
+        git("commit", "-qm", f"ship: M001 — {host}")
+        ship = git("rev-parse", "HEAD")
+        bound_branch = "gsd-path/M001"
+        git("branch", bound_branch, ship)
         git("checkout", "-q", "main")
+        integration_subject = f"integrate: M001 — merge {bound_branch} into main"
+        integration_body = (
+            f"Archive: {archive}\n"
+            f"Ship: {ship}\n"
+            "Default: main\n"
+            f"Branch: {bound_branch}\n"
+        )
+        merge_branch = task_branch
+        if host in self.unrelated_integration_hosts:
+            git("merge", "--ff-only", "-q", task_branch)
+            merge_branch = f"unrelated/{host}"
+            git("checkout", "-qb", merge_branch, base)
+            (repository / "unrelated.txt").write_text("unrelated\n", encoding="utf-8")
+            git("add", "unrelated.txt")
+            git("commit", "-qm", "unrelated change")
+            git("checkout", "-q", "main")
         git(
             "merge",
             "--no-ff",
             "-q",
             "-m",
-            "integrate: M001 — fixture milestone",
-            task_branch,
+            integration_subject,
+            "-m",
+            integration_body,
+            merge_branch,
         )
         integration = git("rev-parse", "HEAD")
         milestone_tag = f"milestone/001-{host}"
         git("tag", "-a", "-m", f"{host} milestone", milestone_tag)
+        tag_object = git("rev-parse", f"refs/tags/{milestone_tag}")
+        git("update-ref", "refs/remotes/origin/main", integration)
+        git("update-ref", f"refs/remotes/origin/{bound_branch}", ship)
+        git("update-ref", f"refs/remotes/origin/tags/{milestone_tag}", tag_object)
         if host not in self.keep_fixture_branches:
             git("branch", "-D", task_branch)
         bundle = self.artifact(host, "fixture").with_suffix(".bundle")
@@ -187,8 +215,11 @@ class TrustEvidenceTests(unittest.TestCase):
         self.fixtures[host] = {
             "base": base,
             "landing": landing,
+            "ship": ship,
             "integration": integration,
             "milestone_tag": milestone_tag,
+            "bound_branch": bound_branch,
+            "default_branch": "main",
             "task_branch": task_branch,
             "task_worktree": str(task_worktree),
             "primary_worktree": str(repository),
@@ -254,6 +285,9 @@ class TrustEvidenceTests(unittest.TestCase):
             "integration": {
                 "fixture_bundle": fixture["bundle"],
                 "run_manifest": fixture["run_manifest"],
+                "ship_commit": fixture["ship"],
+                "bound_branch": fixture["bound_branch"],
+                "default_branch": fixture["default_branch"],
                 "integration_commit": fixture["integration"],
                 "milestone_tag": fixture["milestone_tag"],
             },
@@ -480,7 +514,21 @@ class TrustEvidenceTests(unittest.TestCase):
         worktrees.write_text(json.dumps(evidence) + "\n", encoding="utf-8")
         self.commit_receipts()
 
-        with self.assertRaisesRegex(check_trust_evidence.EvidenceError, "merge commit"):
+        with self.assertRaisesRegex(
+            check_trust_evidence.EvidenceError, "integration commit subject"
+        ):
+            check_trust_evidence.validate_repository(self.repo)
+
+    def test_rejects_integration_that_merged_an_unrelated_branch(self):
+        self.unrelated_integration_hosts.add("alpha")
+        self.receipt("alpha")
+        self.receipt("beta")
+        self.commit_receipts()
+
+        with self.assertRaisesRegex(
+            check_trust_evidence.EvidenceError,
+            "canonical merge of the ship commit",
+        ):
             check_trust_evidence.validate_repository(self.repo)
 
     def test_rejects_missing_artifact_claimed_by_bundled_run(self):

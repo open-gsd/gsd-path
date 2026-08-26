@@ -1410,10 +1410,11 @@ export function doctor(sourceRoot, { targets, rootFor, project = null }) {
     }
     for (const target of targets) {
       if (!installedTargets.has(target)) continue;
-      if (MANIFEST.hosts[target]?.guard_tier === "git-only") continue;
       const contract = nativeGuardContract(target, project);
       if (contract === null) {
-        push("fail", `hooks: ${target} declares a native guard without a health contract`);
+        if (MANIFEST.hosts[target]?.guard_tier !== "git-only") {
+          push("fail", `hooks: ${target} declares a native guard without a health contract`);
+        }
         continue;
       }
       if (!isFile(contract.settings)) {

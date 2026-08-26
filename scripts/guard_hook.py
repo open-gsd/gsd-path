@@ -18,6 +18,7 @@ from fnmatch import fnmatchcase
 import json
 import re
 import shlex
+import subprocess
 import sys
 from pathlib import PurePosixPath
 
@@ -37,6 +38,7 @@ PATH_KEYS = frozenset(
 )
 WORKING_DIRECTORY_KEYS = frozenset({"working_directory", "workdir", "cwd"})
 COMMAND_KEYS = frozenset({"command", "cmd", "script"})
+PATCH_KEYS = frozenset({"patch", "patch_body", "patch_text", "diff"})
 PATCH_PATH_PATTERN = re.compile(
     r"^\*\*\* (?:Add|Update|Delete) File: (.+)$|^\*\*\* Move to: (.+)$",
     re.MULTILINE,
@@ -124,9 +126,33 @@ POWERSHELL_WRAPPERS = frozenset(
     {"powershell", "powershell.exe", "pwsh", "pwsh.exe"}
 )
 COMMAND_WRAPPERS = frozenset({"command", "exec"})
+SHELL_CONTROL_WORDS = frozenset(
+    {
+        "!",
+        "case",
+        "coproc",
+        "do",
+        "done",
+        "elif",
+        "else",
+        "esac",
+        "fi",
+        "for",
+        "function",
+        "if",
+        "in",
+        "select",
+        "then",
+        "time",
+        "until",
+        "while",
+        "{",
+        "}",
+    }
+)
 
 
-def collect(node, paths, working_directories, commands):
+def collect(node, paths, working_directories, commands, patch_payloads):
     if isinstance(node, dict):
         for key, value in node.items():
             lowered = key.lower()
@@ -137,6 +163,8 @@ def collect(node, paths, working_directories, commands):
                     working_directories.append(value)
                 elif lowered in COMMAND_KEYS:
                     commands.append(value)
+                elif lowered in PATCH_KEYS:
+                    patch_payloads.append(value)
             elif isinstance(value, list):
                 # Argv-style values ({"command": ["bash", "-lc", "..."]})
                 # must be inspected like their joined string form.
@@ -147,12 +175,14 @@ def collect(node, paths, working_directories, commands):
                     working_directories.extend(strings)
                 elif strings and lowered in COMMAND_KEYS:
                     commands.append(" ".join(strings))
-                collect(value, paths, working_directories, commands)
+                elif strings and lowered in PATCH_KEYS:
+                    patch_payloads.extend(strings)
+                collect(value, paths, working_directories, commands, patch_payloads)
             else:
-                collect(value, paths, working_directories, commands)
+                collect(value, paths, working_directories, commands, patch_payloads)
     elif isinstance(node, list):
         for value in node:
-            collect(value, paths, working_directories, commands)
+            collect(value, paths, working_directories, commands, patch_payloads)
 
 
 def normalize_posix(path):
@@ -392,6 +422,8 @@ def command_invocation(segment):
     executable = segment[index].replace("\\", "/").rsplit("/", 1)[-1].casefold()
     if SHELL_PARAMETER_SYNTAX.search(executable):
         raise ValueError("shell executable cannot be validated")
+    if executable in SHELL_CONTROL_WORDS:
+        raise ValueError("shell control syntax cannot be validated")
     return executable, segment[index + 1:]
 
 
@@ -405,6 +437,7 @@ def git_command(segment):
     if any(SHELL_PARAMETER_SYNTAX.search(argument) for argument in arguments):
         raise ValueError("git invocation cannot be validated")
     index = 0
+    git_options = []
     while index < len(arguments) and arguments[index].startswith("-"):
         token = arguments[index]
         if token.startswith("-c") and token != "-c" and not token.startswith("--"):
@@ -422,9 +455,11 @@ def git_command(segment):
             "alias."
         ):
             raise ValueError("git alias configuration cannot be validated")
+        if option in GIT_GLOBAL_OPTIONS_WITH_VALUES:
+            git_options.extend((option, str(value)))
     if index >= len(arguments):
         return None
-    return arguments[index].casefold(), arguments[index + 1:]
+    return arguments[index].casefold(), arguments[index + 1:], git_options
 
 
 def wrapped_command_tokens(segment):
@@ -465,17 +500,53 @@ def has_short_option(arguments, option):
     )
 
 
-def destructive_git_reason(tokens):
+def git_alias(command, git_options):
+    result = subprocess.run(
+        ["git", *git_options, "config", "--get", f"alias.{command}"],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode == 1:
+        return None
+    if result.returncode != 0:
+        raise ValueError("git alias configuration cannot be validated")
+    alias = result.stdout.strip()
+    if not alias or alias.startswith("!"):
+        raise ValueError("git alias configuration cannot be validated")
+    return alias
+
+
+def destructive_git_reason(tokens, resolved_aliases=frozenset()):
     for segment in command_segments(tokens):
         wrapped = wrapped_command_tokens(segment)
         if wrapped is not None:
-            reason = destructive_git_reason(wrapped)
+            reason = destructive_git_reason(wrapped, resolved_aliases)
             if reason is not None:
                 return reason
         invocation = git_command(segment)
         if invocation is None:
             continue
-        command, arguments = invocation
+        command, arguments, git_options = invocation
+        if command == "config":
+            alias_indexes = [
+                index
+                for index, argument in enumerate(arguments)
+                if argument.casefold().startswith("alias.")
+            ]
+            if any(index + 1 < len(arguments) for index in alias_indexes):
+                raise ValueError("git alias configuration cannot be validated")
+        alias = git_alias(command, git_options)
+        if alias is not None:
+            if command in resolved_aliases:
+                raise ValueError("recursive git alias cannot be validated")
+            reason = destructive_git_reason(
+                ["git", *git_options, *shell_tokens(alias), *arguments],
+                resolved_aliases | {command},
+            )
+            if reason is not None:
+                return reason
+            continue
         if command == "reset" and "--hard" in arguments:
             return GIT_REASONS[command]
         if command == "clean":
@@ -569,9 +640,8 @@ def evaluate(event):
     tool = event.get("tool_name") or event.get("toolName") or event.get("tool")
     if not isinstance(tool, str) or not tool.strip():
         raise ValueError("hook event is missing its tool name")
-    paths, working_directories, commands = [], [], []
-    collect(event, paths, working_directories, commands)
-    patch_payloads = []
+    paths, working_directories, commands, patch_payloads = [], [], [], []
+    collect(event, paths, working_directories, commands, patch_payloads)
     if is_patch_tool(tool):
         patch_payloads.extend(commands)
         raw_input = event.get("tool_input", event.get("toolInput"))
@@ -583,10 +653,14 @@ def evaluate(event):
         for path in paths:
             if path_in_archive(path, working_directories):
                 deny(ARCHIVE_REASON)
-        for payload in patch_payloads:
-            for path in patch_paths(payload):
-                if path_in_archive(path, working_directories):
-                    deny(ARCHIVE_REASON)
+        extracted_patch_paths = [
+            path for payload in patch_payloads for path in patch_paths(payload)
+        ]
+        if is_patch_tool(tool) and not paths and not extracted_patch_paths:
+            raise ValueError("patch targets cannot be validated")
+        for path in extracted_patch_paths:
+            if path_in_archive(path, working_directories):
+                deny(ARCHIVE_REASON)
     archive_working_directory = any(in_archive(path) for path in working_directories)
     if archive_working_directory and not commands and not read_tool:
         deny(ARCHIVE_REASON)

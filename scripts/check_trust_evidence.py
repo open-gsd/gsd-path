@@ -10,6 +10,21 @@ import tempfile
 from pathlib import Path, PurePosixPath
 from typing import Dict, FrozenSet, List, Mapping, Sequence, Tuple
 
+try:
+    from archive_milestone import (
+        ArchiveError,
+        require_generated_integration_commit,
+        require_published_integration,
+    )
+    from pipeline_git import bound_branch_name, milestone_number, ship_subject
+except ImportError:
+    from scripts.archive_milestone import (
+        ArchiveError,
+        require_generated_integration_commit,
+        require_published_integration,
+    )
+    from scripts.pipeline_git import bound_branch_name, milestone_number, ship_subject
+
 
 SCHEMA = "gsd-path/live-evidence/v1"
 STEP_SCHEMA = "gsd-path/live-step-evidence/v1"
@@ -67,6 +82,9 @@ STEP_STRING_FIELDS = {
     "integration": (
         "fixture_bundle",
         "run_manifest",
+        "ship_commit",
+        "bound_branch",
+        "default_branch",
         "integration_commit",
         "milestone_tag",
     ),
@@ -352,6 +370,8 @@ def _validate_run_artifacts(
         "fixture_base_commit": _full_sha(landing, "fixture_base_commit", bundle),
         "landing_commit": _full_sha(landing, "landing_commit", bundle),
         "task_branch": _required_string(landing, "task_branch", bundle),
+        "bound_branch": _required_string(integration, "bound_branch", bundle),
+        "default_branch": _required_string(integration, "default_branch", bundle),
         "milestone_tag": _required_string(integration, "milestone_tag", bundle),
         "artifacts": expected_artifacts,
     }
@@ -409,7 +429,10 @@ def _validate_git_bundle(
     integration = steps["integration"]
     base = _full_sha(landing, "fixture_base_commit", bundle)
     landing_commit = _full_sha(landing, "landing_commit", bundle)
+    ship_commit = _full_sha(integration, "ship_commit", bundle)
     integration_commit = _full_sha(integration, "integration_commit", bundle)
+    bound_branch = _required_string(integration, "bound_branch", bundle)
+    default_branch = _required_string(integration, "default_branch", bundle)
     milestone_tag = _required_string(integration, "milestone_tag", bundle)
     if not re.fullmatch(r"milestone/[0-9]{3}-[A-Za-z0-9._-]+", milestone_tag):
         raise EvidenceError(f"{bundle}: milestone_tag has an invalid name")
@@ -418,7 +441,7 @@ def _validate_git_bundle(
         _git(
             bundle.parent,
             "clone",
-            "--bare",
+            "--mirror",
             "--quiet",
             "--",
             str(bundle),
@@ -427,6 +450,7 @@ def _validate_git_bundle(
         for name, commit in (
             ("fixture_base_commit", base),
             ("landing_commit", landing_commit),
+            ("ship_commit", ship_commit),
             ("integration_commit", integration_commit),
         ):
             try:
@@ -437,27 +461,58 @@ def _validate_git_bundle(
                 ) from None
         for ancestor, descendant, relationship in (
             (base, landing_commit, "fixture base must precede landing commit"),
-            (
-                landing_commit,
-                integration_commit,
-                "landing commit must precede integration",
-            ),
+            (landing_commit, ship_commit, "landing commit must precede ship commit"),
         ):
             try:
                 _git(fixture, "merge-base", "--is-ancestor", ancestor, descendant)
             except EvidenceError:
                 raise EvidenceError(f"{bundle}: {relationship}") from None
-        parents = _git(
-            fixture, "rev-list", "--parents", "-n", "1", integration_commit
-        ).split()
-        if len(parents) < 3:
-            raise EvidenceError(f"{bundle}: integration_commit must be a merge commit")
-        if not _git(fixture, "show", "-s", "--format=%s", integration_commit).startswith(
-            "integrate:"
-        ):
-            raise EvidenceError(
-                f"{bundle}: integration commit subject must start with 'integrate:'"
+        archive_path = _bundle_path(
+            _required_string(steps["archive"], "archive_path", bundle),
+            "archive_path",
+            bundle,
+        )
+        archive_name = PurePosixPath(archive_path).name
+        try:
+            expected_branch = bound_branch_name(milestone_number(archive_name))
+            expected_ship_subject = ship_subject(archive_name)
+        except ValueError as error:
+            raise EvidenceError(f"{bundle}: archive name is invalid") from error
+        if bound_branch != expected_branch:
+            raise EvidenceError(f"{bundle}: bound_branch does not match archive")
+        if default_branch != "main":
+            raise EvidenceError(f"{bundle}: default_branch must be main")
+        if milestone_tag != f"milestone/{archive_name}":
+            raise EvidenceError(f"{bundle}: milestone_tag does not match archive")
+        if _git(fixture, "show", "-s", "--format=%s", ship_commit) != expected_ship_subject:
+            raise EvidenceError(f"{bundle}: ship commit subject is not canonical")
+        try:
+            require_generated_integration_commit(
+                fixture,
+                integration_commit,
+                archive_path,
+                archive_name,
+                ship_commit,
+                default_branch,
+                bound_branch,
+                first_parent=base,
             )
+            remote_default = _git(
+                fixture, "rev-parse", f"refs/remotes/origin/{default_branch}"
+            )
+            if remote_default != integration_commit:
+                raise EvidenceError(
+                    f"{bundle}: published default branch is not at integration_commit"
+                )
+            require_published_integration(
+                fixture,
+                bound_branch,
+                ship_commit,
+                milestone_tag,
+                integration_commit,
+            )
+        except ArchiveError as error:
+            raise EvidenceError(f"{bundle}: {error}") from error
         tag_ref = f"refs/tags/{milestone_tag}"
         try:
             tag_type = _git(fixture, "cat-file", "-t", tag_ref)
