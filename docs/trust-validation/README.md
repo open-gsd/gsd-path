@@ -1,6 +1,6 @@
-# Trust validation (2026-08-05)
+# Trust validation
 
-Validation workstream for all 11 hosts declared in the installer manifest. A
+Validation workstream for every host declared in the installer manifest. A
 host remains release-blocking until its current versioned live milestone
 receipt passes the shared evidence validator.
 

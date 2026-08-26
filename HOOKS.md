@@ -3,8 +3,8 @@
 Optional enforcement for two pipeline invariants prompt contracts cannot guarantee:
 
 - committed `.project/archive/` trees stay read-only after ship
-- destructive git commands (`reset --hard`, `clean -f`, force push, `branch -D`)
-  do not break build recovery
+- destructive Git operations do not erase recovery state, untracked evidence,
+  or protected refs
 
 **Docs:** [DOCS.md](DOCS.md) (hub) · [UPDATE.md](UPDATE.md) (refresh hooks) · [QUICK.md](QUICK.md) (first install with `--hooks`)
 
@@ -37,11 +37,12 @@ npx gsd-path --hooks-init --claude --project /path/to/repo
 
 `--hooks` requires `--project`. Valid existing native settings for explicitly
 selected Codex or Cursor hosts are merged, preserving unrelated settings and
-hooks. Other target files are refused if they already exist:
+hooks. Other target files are refused if they already exist.
 
 `--hooks-init` also requires `--project` plus at least one host flag or `--all`.
 It creates the managed guard scripts, merges selected native settings, and
 installs Git hooks without reading or writing existing project contracts.
+Native configs for unselected hosts are ignored.
 
 | File | Purpose |
 | --- | --- |
@@ -98,9 +99,10 @@ See [UPDATE.md](UPDATE.md).
 
 **`guard_hook.py`** (pre-tool-use):
 
-- non-read tools targeting paths under `.project/archive/` (including `..` paths)
-- `git reset --hard`, `git clean -f`, force push (including `+` refspecs),
-  force branch deletion
+- non-read actions targeting archived paths or an existing ancestor of the
+  archive tree
+- `git reset --hard`, destructive `git clean` modes, force pushes (including
+  `+` refspecs), and destructive branch or ref deletion
 - shell commands that reference the archive unless the whole command is a
   recognized standalone read
 - destructive Git commands nested in supported shell and command wrappers

@@ -429,15 +429,7 @@ def shell_assignment_values(tokens):
 
 def unresolved_archive_expansion(command, tokens, working_directories):
     expanded = expand_environment_parameters(command, shell_assignment_values(tokens))
-    lowered = expanded.replace("\\", "/").casefold()
-    if (
-        ".project" in lowered
-        or "archive" in lowered
-        or any(
-            "/.project" in normalize_posix(path).casefold()
-            for path in working_directories
-        )
-    ):
+    if ARCHIVE_REFERENCE.search(expanded):
         return True
     if SHELL_PARAMETER_SYNTAX.search(expanded) or CMD_PARAMETER_SYNTAX.search(
         expanded

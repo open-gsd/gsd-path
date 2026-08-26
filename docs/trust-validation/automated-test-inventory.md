@@ -28,7 +28,7 @@ dependency.
 | `tests/install.test.mjs` | `node --test` | `scripts/install.mjs` — paths, all targets, dry-run, rollback, `--local`, `--update`, hooks + refresh |
 | `tests/package.test.mjs` | `node --test` | npm package manifest / packaging checks |
 | `tests/wizard.test.mjs` | `node --test` | `scripts/wizard.mjs` — interactive installer arguments from a fake key stream |
-| `tests/test_install.py` | unittest | `scripts/install.py` — Python installer (global install, dry-run, rollback, hooks) |
+| `tests/test_install.py` | unittest | `scripts/install.py` — Python installer (global/local install, update, dry-run, rollback, tiered hooks) |
 | `tests/test_archive_milestone.py` | unittest | `scripts/archive_milestone.py` — prepare, derived manifest, validation, ship commit, resumable integration, carry-forward |
 | `tests/test_bootstrap_repository.py` | unittest | `scripts/bootstrap_repository.py` — journaled creation/resume and unjournaled collision refusal |
 | `tests/test_build_state.py` | unittest | `scripts/build_state.py` — dependency-ready task selection and landed-task reconciliation |

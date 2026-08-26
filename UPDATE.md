@@ -49,7 +49,8 @@ Unrelated skills are never touched. Failed multi-host updates roll back all sele
 An initial `--hooks` install merges valid native settings for explicitly selected Codex
 or Cursor hosts; other existing project contract and guard files are refused.
 Use `--hooks-init` to add guards to an existing project without changing its
-`AGENTS.md` or `WORKFLOW.md`.
+`AGENTS.md` or `WORKFLOW.md`. It inspects and merges native configs only for
+the selected hosts; configs for unselected hosts remain untouched.
 
 ---
 
