@@ -49,7 +49,7 @@ function makeSource(base) {
   }
   const shared = path.join(src, "platforms", installer.SHARED_AGENT_PROFILE, "dispatch.md");
   fs.mkdirSync(path.dirname(shared), { recursive: true });
-  fs.writeFileSync(shared, "shared dispatch for $gsd-path\n");
+  fs.writeFileSync(shared, "shared dispatch for $gsd-path with invoke_subagent\n");
   fs.writeFileSync(
     path.join(src, "platforms", "cursor", "agent.md"),
     "---\nname: gsd-path\ndescription: test\nmodel: inherit\n---\ncursor agent\n"
@@ -70,6 +70,13 @@ beforeEach(() => {
   source = makeSource(root);
   env = { CODEX_HOME: path.join(root, "legacy") };
   installer.hooks.mismatches = () => [];
+  installer.hooks.resolveGitHooksPath = (project) => {
+    const resolved = originalHooks.resolveGitHooksPath(project);
+    const dotGit = path.join(project, ".git");
+    return resolved ?? (fs.existsSync(dotGit) && fs.statSync(dotGit).isDirectory()
+      ? path.join(dotGit, "hooks")
+      : null);
+  };
 });
 
 afterEach(() => {
@@ -204,9 +211,10 @@ test("all platform transforms", () => {
         assert.match(dispatch, /opencode dispatch for gsd-path/, label);
         assert.ok(!agentsKept, label);
       } else if (target === installer.SHARED_AGENT_PROFILE) {
-        assert.match(content, /Run gsd-path, gsd-path-build, and gsd-path-discuss/, label);
-        assert.doesNotMatch(content, /[$/]gsd-path/, label);
-        assert.match(dispatch, /shared dispatch for gsd-path/, label);
+        assert.match(content, /\$gsd-path \(Codex\)/, label);
+        assert.match(content, /\/gsd-path \(Antigravity\/Zed\)/, label);
+        assert.match(dispatch, /shared dispatch for \$gsd-path \(Codex\)/, label);
+        assert.match(dispatch, /\/gsd-path \(Antigravity\/Zed\)/, label);
         assert.ok(agentsKept, label);
       } else {
         assert.match(content, /\/gsd-path/, label);
@@ -313,7 +321,14 @@ test("local install via main uses project roots and skips legacy migration", asy
     path.join(project, ".agents", "skills", "gsd-path", "SKILL.md"),
     "utf8"
   );
-  assert.match(sharedSkill, /Run gsd-path, gsd-path-build, and gsd-path-discuss/);
+  assert.match(sharedSkill, /\$gsd-path \(Codex\) or \/gsd-path \(Antigravity\/Zed\)/);
+  assert.match(
+    fs.readFileSync(
+      path.join(project, ".agents", "skills", "gsd-path", "references", "dispatch.md"),
+      "utf8"
+    ),
+    /invoke_subagent/
+  );
   assert.ok(fs.existsSync(path.join(project, ".cursor", "agents", installer.CURSOR_AGENT_FILENAME)));
   assert.ok(fs.existsSync(legacy), "legacy migration must not run for --local");
   assert.ok(!fs.existsSync(path.join(root, "legacy", "disabled-gsd-skills")));
@@ -339,19 +354,25 @@ test("codex dry run validates the resolved shared profile from the real reposito
   assert.ok(!fs.existsSync(target));
 });
 
-test("codex and zed share one deployment and back up existing entries", async () => {
+test("shared agent hosts use one deployment and back up existing entries", async () => {
   const shared = path.join(root, "shared", "skills");
   const deployments = installer.deploymentPlans([
     installer.targetPlan("codex", shared),
+    installer.targetPlan("antigravity", shared),
     installer.targetPlan("zed", shared),
   ]);
   assert.deepEqual(deployments, [
-    { profile: installer.SHARED_AGENT_PROFILE, root: shared, targets: ["codex", "zed"] },
+    {
+      profile: installer.SHARED_AGENT_PROFILE,
+      root: shared,
+      targets: ["codex", "antigravity", "zed"],
+    },
   ]);
   fs.mkdirSync(path.join(shared, "gsd-path-old"), { recursive: true });
 
   const results = await runInstall([
     installer.targetPlan("codex", shared),
+    installer.targetPlan("antigravity", shared),
     installer.targetPlan("zed", shared),
   ]);
   const joined = results.join("\n");
@@ -364,7 +385,7 @@ test("codex and zed share one deployment and back up existing entries", async ()
   assert.ok(fs.statSync(path.join(path.dirname(shared), "disabled-gsd-skills", "gsd-path-old")).isDirectory());
   const content = fs.readFileSync(path.join(shared, "gsd-path", "SKILL.md"), "utf8");
   assert.match(content, /disable-model-invocation: true/);
-  assert.match(content, /Run gsd-path, gsd-path-build, and gsd-path-discuss/);
+  assert.match(content, /\$gsd-path \(Codex\) or \/gsd-path \(Antigravity\/Zed\)/);
   assert.ok(fs.existsSync(path.join(shared, "gsd-path", "agents", "openai.yaml")));
 });
 
@@ -768,6 +789,69 @@ test("hooks require a project", async () => {
   assert.ok(!fs.existsSync(target));
 });
 
+test("hooks init adds guards without changing existing project contracts", async () => {
+  installer.hooks.detectPythonInterpreter = () => "python3";
+  const project = path.join(root, "existing-project");
+  fs.mkdirSync(path.join(project, ".git"), { recursive: true });
+  fs.writeFileSync(path.join(project, "AGENTS.md"), "existing agents\n");
+  fs.writeFileSync(path.join(project, "WORKFLOW.md"), "existing workflow\n");
+
+  assert.equal(
+    await installer.main(
+      [
+        "--hooks-init",
+        "--claude",
+        "--project",
+        project,
+        "--source-root",
+        source,
+        "--no-color",
+      ],
+      env
+    ),
+    0
+  );
+
+  assert.equal(fs.readFileSync(path.join(project, "AGENTS.md"), "utf8"), "existing agents\n");
+  assert.equal(
+    fs.readFileSync(path.join(project, "WORKFLOW.md"), "utf8"),
+    "existing workflow\n"
+  );
+  for (const name of installer.GUARD_SCRIPTS) {
+    assert.ok(fs.existsSync(path.join(project, installer.HOOKS_DIRECTORY, name)));
+  }
+  assert.ok(fs.existsSync(path.join(project, ".claude", "settings.json")));
+  assert.ok(fs.existsSync(path.join(project, ".git", "hooks", "pre-commit")));
+  assert.ok(fs.existsSync(path.join(project, ".git", "hooks", "commit-msg")));
+});
+
+test("hooks init ignores unselected foreign native configs", async () => {
+  installer.hooks.detectPythonInterpreter = () => "python3";
+  const project = path.join(root, "existing-grok-project");
+  fs.mkdirSync(path.join(project, ".git"), { recursive: true });
+  const settings = path.join(project, ".claude", "settings.json");
+  fs.mkdirSync(path.dirname(settings), { recursive: true });
+  const original = JSON.stringify({ hooks: { custom: true } }) + "\n";
+  fs.writeFileSync(settings, original);
+
+  const status = await installer.main(
+    [
+      "--hooks-init",
+      "--grok",
+      "--project",
+      project,
+      "--source-root",
+      source,
+      "--no-color",
+    ],
+    env
+  );
+
+  assert.equal(status, 0);
+  assert.equal(fs.readFileSync(settings, "utf8"), original);
+  assert.ok(fs.existsSync(path.join(project, ".git", "hooks", "pre-commit")));
+});
+
 test("hooks install guard scripts, settings, and git hook", async () => {
   const project = path.join(root, "project");
   fs.mkdirSync(path.join(project, ".git"), { recursive: true });
@@ -787,6 +871,7 @@ test("hooks install guard scripts, settings, and git hook", async () => {
   );
   assert.ok(settings.hooks.PreToolUse);
   assert.equal(settings.hooks.PreToolUse[0].matcher, installer.CLAUDE_MATCHER);
+  assert.match("PowerShell", new RegExp(`^(?:${settings.hooks.PreToolUse[0].matcher})$`));
   const preCommit = path.join(project, ".git", "hooks", "pre-commit");
   const commitMsg = path.join(project, ".git", "hooks", "commit-msg");
   assert.equal(fs.readFileSync(preCommit, "utf8"), installer.preCommitHook("python3"));
@@ -798,6 +883,98 @@ test("hooks install guard scripts, settings, and git hook", async () => {
   assert.match(projectLine, /\.gsd-path\/guard_hook\.py/);
   assert.match(projectLine, /\.git\/hooks\/pre-commit/);
   assert.match(projectLine, /\.git\/hooks\/commit-msg/);
+});
+
+test("hooks install native Codex and Cursor project configs", async () => {
+  installer.hooks.detectPythonInterpreter = () => "python3";
+  const project = path.join(root, "native-hooks-project");
+  fs.mkdirSync(path.join(project, ".git"), { recursive: true });
+  await runInstall(
+    [
+      installer.targetPlan("codex", path.join(root, "codex", "skills")),
+      installer.targetPlan("cursor", path.join(root, "cursor", "skills")),
+    ],
+    { project, hooks: true }
+  );
+
+  const codex = JSON.parse(fs.readFileSync(path.join(project, ".codex", "hooks.json"), "utf8"));
+  assert.equal(
+    codex.hooks.PreToolUse[0].hooks[0].command,
+    'python3 "$(git rev-parse --show-toplevel)/.gsd-path/guard_hook.py"'
+  );
+  assert.match(codex.hooks.PreToolUse[0].hooks[0].commandWindows, /\.gsd-path\\guard_hook\.py/);
+  const cursor = JSON.parse(fs.readFileSync(path.join(project, ".cursor", "hooks.json"), "utf8"));
+  assert.equal(cursor.version, 1);
+  assert.equal(cursor.hooks.preToolUse[0].command, 'python3 ".gsd-path/guard_hook.py"');
+  assert.equal(cursor.hooks.preToolUse[0].failClosed, true);
+});
+
+test("hooks install merges selected native configs", async () => {
+  installer.hooks.detectPythonInterpreter = () => "python3";
+  const project = path.join(root, "existing-native-hooks-project");
+  fs.mkdirSync(path.join(project, ".git"), { recursive: true });
+  const codexPath = path.join(project, ".codex", "hooks.json");
+  const cursorPath = path.join(project, ".cursor", "hooks.json");
+  fs.mkdirSync(path.dirname(codexPath));
+  fs.mkdirSync(path.dirname(cursorPath));
+  fs.writeFileSync(
+    codexPath,
+    JSON.stringify({
+      userSetting: true,
+      hooks: {
+        PreToolUse: [
+          { matcher: "Write", hooks: [{ type: "command", command: "custom-codex" }] },
+        ],
+      },
+    }) + "\n"
+  );
+  fs.writeFileSync(
+    cursorPath,
+    JSON.stringify({
+      version: 1,
+      userSetting: true,
+      hooks: { preToolUse: [{ command: "custom-cursor" }] },
+    }) + "\n"
+  );
+
+  await runInstall(
+    [
+      installer.targetPlan("codex", path.join(root, "codex", "skills")),
+      installer.targetPlan("cursor", path.join(root, "cursor", "skills")),
+    ],
+    { project, hooks: true }
+  );
+
+  const codex = JSON.parse(fs.readFileSync(codexPath, "utf8"));
+  assert.equal(codex.userSetting, true);
+  assert.equal(codex.hooks.PreToolUse.length, 2);
+  assert.equal(codex.hooks.PreToolUse[0].matcher, "Write");
+  assert.equal(codex.hooks.PreToolUse[0].hooks[0].command, "custom-codex");
+  assert.match(codex.hooks.PreToolUse[1].hooks[0].command, /guard_hook\.py/);
+  const cursor = JSON.parse(fs.readFileSync(cursorPath, "utf8"));
+  assert.equal(cursor.userSetting, true);
+  assert.equal(cursor.hooks.preToolUse.length, 2);
+  assert.equal(cursor.hooks.preToolUse[0].command, "custom-cursor");
+  assert.match(cursor.hooks.preToolUse[1].command, /guard_hook\.py/);
+});
+
+test("native hook install rejects unsafe project directories", async () => {
+  installer.hooks.detectPythonInterpreter = () => "python3";
+  for (const host of ["codex", "cursor"]) {
+    const project = path.join(root, `unsafe-${host}-project`);
+    const outside = path.join(root, `outside-${host}`);
+    fs.mkdirSync(path.join(project, ".git"), { recursive: true });
+    fs.mkdirSync(outside);
+    fs.symlinkSync(outside, path.join(project, `.${host}`), "dir");
+    const target = path.join(root, host, "skills");
+
+    await assert.rejects(
+      runInstall([installer.targetPlan(host, target)], { project, hooks: true }),
+      new RegExp(`unsafe ${host[0].toUpperCase()}${host.slice(1)} project directory`)
+    );
+    assert.ok(!fs.existsSync(path.join(outside, "hooks.json")));
+    assert.ok(!fs.existsSync(target));
+  }
 });
 
 test("hooks refresh updates managed guard scripts", async () => {
@@ -842,6 +1019,221 @@ test("hooks refresh full updates settings and git hooks", async () => {
   assert.equal(status, 0);
   const refreshed = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
   assert.equal(refreshed.hooks.PreToolUse[0].matcher, installer.CLAUDE_MATCHER);
+});
+
+test("hooks refresh full updates native Codex and Cursor configs", async () => {
+  installer.hooks.detectPythonInterpreter = () => "python3";
+  const project = path.join(root, "native-hooks-project");
+  fs.mkdirSync(path.join(project, ".git"), { recursive: true });
+  await runInstall(
+    [
+      installer.targetPlan("codex", path.join(root, "codex", "skills")),
+      installer.targetPlan("cursor", path.join(root, "cursor", "skills")),
+    ],
+    { project, hooks: true }
+  );
+  const codexPath = path.join(project, ".codex", "hooks.json");
+  const codex = JSON.parse(fs.readFileSync(codexPath, "utf8"));
+  codex.hooks.PreToolUse[0].hooks[0].command = 'python "C:\\repo\\.gsd-path\\guard_hook.py"';
+  codex.hooks.PreToolUse[0].matcher = "Write";
+  codex.hooks.PreToolUse[0].hooks.push({ type: "command", command: "custom-codex" });
+  codex.userSetting = true;
+  fs.writeFileSync(codexPath, JSON.stringify(codex) + "\n");
+  const cursorPath = path.join(project, ".cursor", "hooks.json");
+  const cursor = JSON.parse(fs.readFileSync(cursorPath, "utf8"));
+  cursor.hooks.preToolUse[0].command = 'python "C:\\repo\\.gsd-path\\guard_hook.py"';
+  cursor.userSetting = true;
+  fs.writeFileSync(cursorPath, JSON.stringify(cursor) + "\n");
+
+  const status = await installer.main(
+    ["--hooks-refresh-full", "--project", project, "--source-root", source, "--no-color"]
+  );
+
+  assert.equal(status, 0);
+  const refreshedCodex = JSON.parse(fs.readFileSync(codexPath, "utf8"));
+  assert.equal(
+    refreshedCodex.hooks.PreToolUse[0].hooks[0].command,
+    'python3 "$(git rev-parse --show-toplevel)/.gsd-path/guard_hook.py"'
+  );
+  assert.equal(refreshedCodex.userSetting, true);
+  assert.equal(refreshedCodex.hooks.PreToolUse.length, 2);
+  assert.equal(refreshedCodex.hooks.PreToolUse[0].hooks.length, 1);
+  assert.equal(refreshedCodex.hooks.PreToolUse[1].matcher, "Write");
+  assert.equal(refreshedCodex.hooks.PreToolUse[1].hooks[0].command, "custom-codex");
+  const refreshedCursor = JSON.parse(fs.readFileSync(cursorPath, "utf8"));
+  assert.equal(
+    refreshedCursor.hooks.preToolUse[0].command,
+    'python3 ".gsd-path/guard_hook.py"'
+  );
+  assert.equal(refreshedCursor.hooks.preToolUse[0].failClosed, true);
+  assert.equal(refreshedCursor.userSetting, true);
+  assert.equal(refreshedCursor.hooks.preToolUse.length, 1);
+});
+
+test("hooks refresh full creates selected missing native configs", async () => {
+  installer.hooks.detectPythonInterpreter = () => "python3";
+  const project = path.join(root, "existing-project");
+  fs.mkdirSync(path.join(project, ".git"), { recursive: true });
+  await runInstall([installer.targetPlan("claude", path.join(root, "claude", "skills"))], {
+    project,
+    hooks: true,
+  });
+
+  const status = await installer.main(
+    [
+      "--hooks-refresh-full",
+      "--codex",
+      "--cursor",
+      "--project",
+      project,
+      "--source-root",
+      source,
+      "--no-color",
+    ]
+  );
+
+  assert.equal(status, 0);
+  assert.ok(fs.existsSync(path.join(project, ".codex", "hooks.json")));
+  assert.ok(fs.existsSync(path.join(project, ".cursor", "hooks.json")));
+  assert.equal(fs.readFileSync(path.join(project, "AGENTS.md"), "utf8"), "agents\n");
+});
+
+test("hooks refresh full merges selected foreign native configs", async () => {
+  installer.hooks.detectPythonInterpreter = () => "python3";
+  const project = path.join(root, "foreign-native-project");
+  fs.mkdirSync(path.join(project, ".git"), { recursive: true });
+  await runInstall([installer.targetPlan("claude", path.join(root, "claude", "skills"))], {
+    project,
+    hooks: true,
+  });
+  const codexPath = path.join(project, ".codex", "hooks.json");
+  const cursorPath = path.join(project, ".cursor", "hooks.json");
+  fs.mkdirSync(path.dirname(codexPath));
+  fs.mkdirSync(path.dirname(cursorPath));
+  fs.writeFileSync(
+    codexPath,
+    JSON.stringify({
+      custom: "codex",
+      hooks: {
+        PreToolUse: [
+          { matcher: "Custom", hooks: [{ type: "command", command: "custom-codex" }] },
+        ],
+      },
+    })
+  );
+  fs.writeFileSync(
+    cursorPath,
+    JSON.stringify({
+      custom: "cursor",
+      hooks: { preToolUse: [{ matcher: "Custom", command: "custom-cursor" }] },
+    })
+  );
+
+  const status = await installer.main([
+    "--hooks-refresh-full",
+    "--codex",
+    "--cursor",
+    "--project",
+    project,
+    "--source-root",
+    source,
+    "--no-color",
+  ]);
+
+  assert.equal(status, 0);
+  const codex = JSON.parse(fs.readFileSync(codexPath, "utf8"));
+  const cursor = JSON.parse(fs.readFileSync(cursorPath, "utf8"));
+  assert.equal(codex.custom, "codex");
+  assert.equal(codex.hooks.PreToolUse[0].hooks[0].command, "custom-codex");
+  assert.equal(codex.hooks.PreToolUse.length, 2);
+  assert.equal(cursor.custom, "cursor");
+  assert.equal(cursor.hooks.preToolUse[0].command, "custom-cursor");
+  assert.equal(cursor.hooks.preToolUse.length, 2);
+});
+
+test("hooks refresh full rejects an unselected foreign native config", async () => {
+  const project = path.join(root, "unselected-foreign-project");
+  fs.mkdirSync(path.join(project, ".git"), { recursive: true });
+  await runInstall([installer.targetPlan("claude", path.join(root, "claude", "skills"))], {
+    project,
+    hooks: true,
+  });
+  const settings = path.join(project, ".codex", "hooks.json");
+  fs.mkdirSync(path.dirname(settings));
+  const original = JSON.stringify({
+    hooks: {
+      PreToolUse: [
+        { matcher: ".*", hooks: [{ type: "command", command: "echo .gsd-path/guard_hook.py" }] },
+      ],
+    },
+  }) + "\n";
+  fs.writeFileSync(settings, original);
+
+  const status = await installer.main([
+    "--hooks-refresh-full",
+    "--project",
+    project,
+    "--source-root",
+    source,
+    "--no-color",
+  ]);
+
+  assert.equal(status, 1);
+  assert.equal(fs.readFileSync(settings, "utf8"), original);
+});
+
+test("hooks refresh full does not follow the legacy temporary symlink", async () => {
+  installer.hooks.detectPythonInterpreter = () => "python3";
+  const project = path.join(root, "temporary-symlink-project");
+  fs.mkdirSync(path.join(project, ".git"), { recursive: true });
+  await runInstall([installer.targetPlan("codex", path.join(root, "codex", "skills"))], {
+    project,
+    hooks: true,
+  });
+  const outside = path.join(root, "outside-hooks.json");
+  fs.writeFileSync(outside, "outside\n");
+  const legacyTemporary = path.join(project, ".codex", ".hooks.json.gsd-path-tmp");
+  fs.symlinkSync(outside, legacyTemporary);
+
+  const status = await installer.main([
+    "--hooks-refresh-full",
+    "--codex",
+    "--project",
+    project,
+    "--source-root",
+    source,
+    "--no-color",
+  ]);
+
+  assert.equal(status, 0);
+  assert.equal(fs.readFileSync(outside, "utf8"), "outside\n");
+  assert.ok(fs.lstatSync(legacyTemporary).isSymbolicLink());
+});
+
+test("hooks refresh full rejects a symlinked native parent", async () => {
+  installer.hooks.detectPythonInterpreter = () => "python3";
+  const project = path.join(root, "symlink-parent-project");
+  fs.mkdirSync(path.join(project, ".git"), { recursive: true });
+  await runInstall([installer.targetPlan("codex", path.join(root, "codex", "skills"))], {
+    project,
+    hooks: true,
+  });
+  const outside = path.join(root, "outside-codex");
+  fs.renameSync(path.join(project, ".codex"), outside);
+  fs.symlinkSync(outside, path.join(project, ".codex"), "dir");
+  const before = fs.readFileSync(path.join(outside, "hooks.json"), "utf8");
+
+  const status = await installer.main([
+    "--hooks-refresh-full",
+    "--project",
+    project,
+    "--source-root",
+    source,
+    "--no-color",
+  ]);
+
+  assert.equal(status, 1);
+  assert.equal(fs.readFileSync(path.join(outside, "hooks.json"), "utf8"), before);
 });
 
 test("hooks refresh rejects unmanaged guard scripts", async () => {
@@ -938,21 +1330,49 @@ test("cli loads from an install path containing spaces", () => {
   assert.equal(result.status, 0, result.stderr);
 });
 
-test("hooks skip the git hook without a repository", async () => {
+test("native hooks require an initialized repository", async () => {
   const project = path.join(root, "project");
   const target = path.join(root, "claude", "skills");
-  const results = await runInstall([installer.targetPlan("claude", target)], {
-    project,
-    hooks: true,
-  });
+  await assert.rejects(
+    runInstall([installer.targetPlan("claude", target)], { project, hooks: true }),
+    /initialized Git repository.*selected hosts: claude/
+  );
   assert.ok(!fs.existsSync(path.join(project, ".git")));
-  assert.ok(fs.existsSync(path.join(project, ".claude", "settings.json")));
-  const projectLine = results.find((line) => line.startsWith("project:"));
-  assert.ok(!/commit-msg/.test(projectLine));
+  assert.ok(!fs.existsSync(path.join(project, ".claude", "settings.json")));
+  assert.ok(!fs.existsSync(target));
+});
+
+test("git-only hooks require an initialized repository", async () => {
+  const project = path.join(root, "plain-project");
+  const target = path.join(root, "grok", "skills");
+
+  await assert.rejects(
+    runInstall([installer.targetPlan("grok", target)], { project, hooks: true }),
+    /initialized Git repository.*selected hosts: grok/
+  );
+
+  assert.ok(!fs.existsSync(target));
+  assert.ok(!fs.existsSync(path.join(project, "AGENTS.md")));
+});
+
+test("git-only hooks require a Python interpreter", async () => {
+  installer.hooks.detectPythonInterpreter = () => null;
+  const project = path.join(root, "grok-project");
+  fs.mkdirSync(path.join(project, ".git"), { recursive: true });
+  const target = path.join(root, "grok", "skills");
+
+  await assert.rejects(
+    runInstall([installer.targetPlan("grok", target)], { project, hooks: true }),
+    /working Python interpreter.*selected hosts: grok/
+  );
+
+  assert.ok(!fs.existsSync(target));
+  assert.ok(!fs.existsSync(path.join(project, "AGENTS.md")));
 });
 
 test("hooks collision rolls back cleanly", async () => {
   const project = path.join(root, "project");
+  fs.mkdirSync(path.join(project, ".git"), { recursive: true });
   fs.mkdirSync(path.join(project, ".claude"), { recursive: true });
   fs.writeFileSync(path.join(project, ".claude", "settings.json"), "{}");
   const target = path.join(root, "claude", "skills");
@@ -995,6 +1415,33 @@ test("doctor reports a healthy install, hooks, and project", async () => {
   assert.ok(findings.some((finding) => finding.text.includes("(v9.9.9)")));
   assert.ok(findings.some((finding) => /guard_hook\.py current/.test(finding.text)));
   assert.ok(findings.some((finding) => /pre-commit wired/.test(finding.text)));
+});
+
+test("doctor fails when installer-owned native guard config is missing", async () => {
+  for (const [targetName, settingsPath] of [
+    ["claude", [".claude", "settings.json"]],
+    ["codex", [".codex", "hooks.json"]],
+    ["cursor", [".cursor", "hooks.json"]],
+  ]) {
+    const project = path.join(root, `${targetName}-native-doctor`);
+    fs.mkdirSync(path.join(project, ".git"), { recursive: true });
+    const target = path.join(root, targetName, "skills");
+    await runInstall([installer.targetPlan(targetName, target)], { project, hooks: true });
+    fs.rmSync(path.join(project, ...settingsPath));
+
+    const findings = installer.doctor(source, {
+      targets: [targetName],
+      rootFor: () => target,
+      project,
+    });
+    assert.ok(
+      findings.some(
+        (finding) =>
+          finding.level === "fail" &&
+          finding.text.includes(`${targetName} native guard wiring is missing`)
+      )
+    );
+  }
 });
 
 test("doctor flags stale versions and incomplete installs", async () => {
@@ -1102,24 +1549,20 @@ test("hooks follow a linked worktree's resolved hooks directory", async () => {
   );
 });
 
-test("hooks report cleanly when a .git file cannot be resolved", async () => {
+test("hooks reject a .git file that cannot be resolved", async () => {
   installer.hooks.detectPythonInterpreter = () => "python3";
   installer.hooks.resolveGitHooksPath = () => null;
   const project = path.join(root, "gitfile-project");
   fs.mkdirSync(project);
   fs.writeFileSync(path.join(project, ".git"), "gitdir: /nonexistent\n");
   const target = path.join(root, "claude", "skills");
-  const results = await runInstall([installer.targetPlan("claude", target)], {
-    project,
-    hooks: true,
-  });
-  assert.ok(
-    results.some((line) => /could not resolve the git hooks directory/.test(line))
+  await assert.rejects(
+    runInstall([installer.targetPlan("claude", target)], { project, hooks: true }),
+    /initialized Git repository.*selected hosts: claude/
   );
-  const projectLine = results.find((line) => line.startsWith("project:"));
-  assert.doesNotMatch(projectLine, /pre-commit/);
-  assert.ok(fs.existsSync(path.join(project, installer.HOOKS_DIRECTORY, "guard_hook.py")));
-  assert.ok(fs.existsSync(path.join(project, ".claude", "settings.json")));
+  assert.ok(!fs.existsSync(path.join(project, installer.HOOKS_DIRECTORY)));
+  assert.ok(!fs.existsSync(path.join(project, ".claude", "settings.json")));
+  assert.ok(!fs.existsSync(target));
 });
 
 test("hooks refresh full preserves user hook events and entries", async () => {
@@ -1129,7 +1572,9 @@ test("hooks refresh full preserves user hook events and entries", async () => {
   await runInstall([installer.targetPlan("claude", target)], { project, hooks: true });
   const settingsPath = path.join(project, ".claude", "settings.json");
   const settings = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
-  settings.hooks.PreToolUse[0].matcher = "old";
+  settings.hooks.PreToolUse[0].matcher = "Write";
+  settings.hooks.PreToolUse[0].label = "user-scope";
+  settings.hooks.PreToolUse[0].hooks.push({ type: "command", command: "echo nested" });
   settings.hooks.PreToolUse.push({
     matcher: "WebFetch",
     hooks: [{ type: "command", command: "echo user" }],
@@ -1144,9 +1589,15 @@ test("hooks refresh full preserves user hook events and entries", async () => {
   assert.deepEqual(refreshed.hooks.Stop, [
     { hooks: [{ type: "command", command: "echo done" }] },
   ]);
-  assert.equal(refreshed.hooks.PreToolUse.length, 2);
+  assert.equal(refreshed.hooks.PreToolUse.length, 3);
   assert.equal(refreshed.hooks.PreToolUse[0].matcher, installer.CLAUDE_MATCHER);
+  assert.equal(refreshed.hooks.PreToolUse[0].hooks.length, 1);
   assert.deepEqual(refreshed.hooks.PreToolUse[1], {
+    matcher: "Write",
+    label: "user-scope",
+    hooks: [{ type: "command", command: "echo nested" }],
+  });
+  assert.deepEqual(refreshed.hooks.PreToolUse[2], {
     matcher: "WebFetch",
     hooks: [{ type: "command", command: "echo user" }],
   });
@@ -1171,23 +1622,22 @@ test("emitted hooks use the probed interpreter token", async () => {
   );
 });
 
-test("hook install is skipped with a note when no interpreter works", async () => {
+test("native hook install requires an interpreter", async () => {
   installer.hooks.detectPythonInterpreter = () => null;
   const project = path.join(root, "project");
   fs.mkdirSync(path.join(project, ".git"), { recursive: true });
   const target = path.join(root, "claude", "skills");
-  const results = await runInstall([installer.targetPlan("claude", target)], {
-    project,
-    hooks: true,
-  });
-  assert.ok(results.some((line) => /no working python3 or python interpreter/.test(line)));
+  await assert.rejects(
+    runInstall([installer.targetPlan("claude", target)], { project, hooks: true }),
+    /working Python interpreter.*selected hosts: claude/
+  );
   assert.ok(!fs.existsSync(path.join(project, installer.HOOKS_DIRECTORY)));
   assert.ok(!fs.existsSync(path.join(project, ".claude", "settings.json")));
   assert.ok(!fs.existsSync(path.join(project, ".git", "hooks", "pre-commit")));
-  assert.ok(fs.existsSync(path.join(project, "AGENTS.md")));
+  assert.ok(!fs.existsSync(path.join(project, "AGENTS.md")));
 });
 
-test("hooks refresh full skips settings and git hooks without an interpreter", async () => {
+test("hooks refresh full rejects before writes without an interpreter", async () => {
   const project = path.join(root, "project");
   fs.mkdirSync(path.join(project, ".git"), { recursive: true });
   const target = path.join(root, "claude", "skills");
@@ -1204,13 +1654,37 @@ test("hooks refresh full skips settings and git hooks without an interpreter", a
   const status = await installer.main(
     ["--hooks-refresh-full", "--project", project, "--source-root", source, "--no-color"]
   );
-  assert.equal(status, 0);
-  assert.match(
+  assert.equal(status, 1);
+  assert.doesNotMatch(
     fs.readFileSync(path.join(project, installer.HOOKS_DIRECTORY, "guard_hook.py"), "utf8"),
     /guard v2/
   );
   assert.equal(fs.readFileSync(settingsPath, "utf8"), settingsBefore);
   assert.equal(fs.readFileSync(preCommit, "utf8"), hookBefore);
+});
+
+test("selected full refresh requires an initialized repository before writes", async () => {
+  installer.hooks.detectPythonInterpreter = () => "python3";
+  const project = path.join(root, "plain-refresh-project");
+  const managed = path.join(project, installer.HOOKS_DIRECTORY);
+  fs.mkdirSync(managed, { recursive: true });
+  for (const name of installer.GUARD_SCRIPTS) {
+    fs.writeFileSync(path.join(managed, name), `old\n${installer.GUARD_MARKER}\n`);
+  }
+  const before = fs.readFileSync(path.join(managed, "guard_hook.py"), "utf8");
+
+  const status = await installer.main([
+    "--hooks-refresh-full",
+    "--grok",
+    "--project",
+    project,
+    "--source-root",
+    source,
+    "--no-color",
+  ]);
+
+  assert.equal(status, 1);
+  assert.equal(fs.readFileSync(path.join(managed, "guard_hook.py"), "utf8"), before);
 });
 
 test("hooks refresh dry run never probes the interpreter", async () => {

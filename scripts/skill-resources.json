@@ -1,4 +1,17 @@
 {
+  "hosts": {
+    "codex": {"local_root": ".agents/skills", "guard_tier": "git-only", "invocation_prefix": "$", "child_apis": ["collaboration.spawn_agent"]},
+    "claude": {"local_root": ".claude/skills", "guard_tier": "native-fail-closed", "child_apis": ["Agent"]},
+    "grok": {"local_root": ".grok/skills", "guard_tier": "git-only", "child_apis": ["spawn_subagent"]},
+    "opencode": {"local_root": ".opencode/skills", "guard_tier": "git-only", "child_apis": ["Task", "subagent"]},
+    "copilot": {"local_root": ".github/skills", "guard_tier": "git-only", "child_apis": ["task"]},
+    "qwen": {"local_root": ".qwen/skills", "guard_tier": "git-only", "child_apis": ["agent"]},
+    "antigravity": {"local_root": ".agents/skills", "guard_tier": "git-only", "invocation_prefix": "/", "child_apis": ["invoke_subagent"]},
+    "cursor": {"local_root": ".cursor/skills", "guard_tier": "native-fail-closed", "child_apis": ["Task"]},
+    "zed": {"local_root": ".agents/skills", "guard_tier": "git-only", "invocation_prefix": "/", "child_apis": ["spawn_agent"]},
+    "kiro": {"local_root": ".kiro/skills", "guard_tier": "git-only", "child_apis": ["invoke_sub_agent"]},
+    "kimi": {"local_root": ".kimi-code/skills", "guard_tier": "git-only", "child_apis": ["Agent"]}
+  },
   "skills": [
     "gsd-path",
     "gsd-path-build",
@@ -17,6 +30,8 @@
   "package_files": [
     "plugin.json",
     "scripts/install.mjs",
+    "scripts/install.py",
+    "scripts/sync_skill_resources.py",
     "scripts/wizard.mjs",
     "scripts/skill-resources.json",
     "scripts/archive_milestone.py",
@@ -29,6 +44,7 @@
     "scripts/check_task_briefs.py",
     "scripts/review_panel.py",
     "scripts/check_update.py",
+    "scripts/check_trust_evidence.py",
     "scripts/guard_hook.py",
     "scripts/git_guard.py",
     "scripts/isolation.py",

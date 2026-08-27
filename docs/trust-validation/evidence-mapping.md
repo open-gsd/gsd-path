@@ -1,5 +1,9 @@
 # GSD Path — Automated Evidence × Trust Criteria Map
 
+> Historical automation snapshot from 2026-08-05. The current release contract
+> and open gaps are in `TRUST-VALIDATION-SPEC.md`; do not use this snapshot as
+> the current posture card.
+
 **Generated:** 2026-08-05 (workstream: Map automated evidence to trust criteria)
 **Schema:** [Define trust criteria dimensions and severity rubric](https://github.com/open-gsd/gsd-path/issues/4)  
 **Inputs:** test inventory (#5), doc gaps (#6), host scope (#7 — Codex, Claude, Cursor in scope)

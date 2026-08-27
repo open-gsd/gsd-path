@@ -80,7 +80,8 @@ treat explicit invocation as an operating rule.
 ### Requirements
 
 - **Node 18.17+** for `scripts/install.mjs` (recommended; also the npm `gsd-path` bin once the package is published to npm)
-- **Python 3** optional — `scripts/install.py` mirrors global install validation and transactions (no `--local` UI)
+- **Python 3** optional — `scripts/install.py` mirrors global and `--local`
+  install transactions and `--update`; it does not provide the interactive wizard
 
 ### Global install (default)
 
@@ -135,17 +136,18 @@ Merge upgrades manually — the installer will not overwrite existing contracts.
 ### Guard hooks (optional)
 
 ```bash
-node scripts/install.mjs --claude --project /path/to/project --hooks
+node scripts/install.mjs --claude --codex --cursor --project /path/to/project --hooks
 ```
 
 Installs `.gsd-path/` guard scripts, git `pre-commit` and `commit-msg` hooks,
-and Claude PreToolUse wiring. See [HOOKS.md](HOOKS.md).
+plus native project wiring for each selected Claude, Codex, or Cursor target.
+See [HOOKS.md](HOOKS.md).
 
 After upgrading the package:
 
 ```bash
 node scripts/install.mjs --hooks-refresh --project /path/to/project
-node scripts/install.mjs --hooks-refresh-full --project /path/to/project  # + settings/git hooks
+node scripts/install.mjs --hooks-refresh-full --codex --cursor --project /path/to/project  # + create/refresh selected native settings and git hooks
 ```
 
 ### Updating skills
@@ -166,7 +168,8 @@ also print a one-line update notice (24h cache, fail-silent).
 - Validates synchronized package before writing
 - Backs up existing `gsd-path*` entries
 - Rolls back **all** selected targets if any one fails
-- Codex + Zed share one physical root — installed once with a shared bundle
+- Codex, Antigravity, and Zed share one local physical root — installed once
+  with a shared host-aware bundle
 
 Restart the host session after install if skills do not appear.
 

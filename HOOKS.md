@@ -3,8 +3,8 @@
 Optional enforcement for two pipeline invariants prompt contracts cannot guarantee:
 
 - committed `.project/archive/` trees stay read-only after ship
-- destructive git commands (`reset --hard`, `clean -f`, force push, `branch -D`)
-  do not break build recovery
+- destructive Git operations do not erase recovery state, untracked evidence,
+  or protected refs
 
 **Docs:** [DOCS.md](DOCS.md) (hub) · [UPDATE.md](UPDATE.md) (refresh hooks) · [QUICK.md](QUICK.md) (first install with `--hooks`)
 
@@ -28,7 +28,21 @@ npx gsd-path --claude --project /path/to/repo --hooks
 node scripts/install.mjs --claude --project /path/to/repo --hooks
 ```
 
-`--hooks` requires `--project`. Refuses if target files already exist:
+For a project that already has `AGENTS.md` and `WORKFLOW.md`, initialize only
+the guards and keep those contracts unchanged:
+
+```bash
+npx gsd-path --hooks-init --claude --project /path/to/repo
+```
+
+`--hooks` requires `--project`. Valid existing native settings for explicitly
+selected Codex or Cursor hosts are merged, preserving unrelated settings and
+hooks. Other target files are refused if they already exist.
+
+`--hooks-init` also requires `--project` plus at least one host flag or `--all`.
+It creates the managed guard scripts, merges selected native settings, and
+installs Git hooks without reading or writing existing project contracts.
+Native configs for unselected hosts are ignored.
 
 | File | Purpose |
 | --- | --- |
@@ -36,24 +50,31 @@ node scripts/install.mjs --claude --project /path/to/repo --hooks
 | `.gsd-path/git_guard.py` | Staged-path + ship-subject validator |
 | `.git/hooks/pre-commit` | Runs `git_guard.py` before commit |
 | `.git/hooks/commit-msg` | Runs `git_guard.py` with commit message |
-| `.claude/settings.json` | Claude PreToolUse wiring (`claude` target only) |
+| `.claude/settings.json` | Claude PreToolUse wiring (`claude` target) |
+| `.codex/hooks.json` | Codex PreToolUse wiring (`codex` target) |
+| `.cursor/hooks.json` | Cursor fail-closed preToolUse wiring (`cursor` target) |
 
 Git hooks are written to the repository's **effective** hooks directory,
 resolved with `git rev-parse --git-path hooks`. That honors `core.hooksPath`
-setups (Husky and friends) and linked worktrees (where `.git` is a file). Only
-when git itself is not runnable does the installer fall back to a plain
-`.git/hooks` directory; if neither works, it reports that git hooks were
-skipped instead of dropping them silently.
+setups (Husky and friends) and linked worktrees (where `.git` is a file).
+Every selected host requires an initialized repository with a resolvable hooks
+directory; otherwise installation stops before writing.
 
-Git hooks work for **any** agent that commits. Guards **fail open** on crash or
-bad input — they never brick the host or git permanently.
+Git hooks work for **any** agent that commits. Native guard wiring denies a tool
+call when its event is malformed or the guard cannot validate it.
 
-**Windows / interpreter caveat:** hooks and the Claude settings command invoke a
+Codex [project hooks](https://learn.chatgpt.com/docs/hooks) are installed but do
+not run until Codex trusts the project `.codex/` layer and the exact hook
+definition. Open `/hooks` in Codex, review both, and trust them. Until that
+manual activation is complete, Codex's guaranteed manifest tier is `git-only`;
+changing the hook requires review again.
+
+**Windows / interpreter caveat:** hooks and native host settings invoke a
 Python interpreter that the installer probes at install time — `python3` first,
 then `python` (plain `python3` usually does not exist on Windows). If neither
-runs, hook install is skipped with a warning rather than wiring an interpreter
-that would make every commit fail. The `sh` hook scripts themselves need a
-POSIX shell (Git for Windows provides one).
+runs, hook installation stops before writing instead of pinning a missing
+interpreter. The `sh` hook scripts themselves need a POSIX shell (Git for
+Windows provides one).
 
 ### Updating after package upgrade
 
@@ -62,10 +83,15 @@ npx gsd-path --hooks-refresh --project /path/to/repo
 npx gsd-path --hooks-refresh-full --project /path/to/repo   # + settings/git hooks
 ```
 
-`--hooks-refresh-full` **merges** `.claude/settings.json`: it replaces only the
-managed PreToolUse guard entry (identified by its `.gsd-path/guard_hook.py`
-command) and preserves every other hook event (`Stop`, `PostToolUse`, …) and
-any PreToolUse entries you added yourself.
+`--hooks-refresh-full` refreshes existing managed `.claude/settings.json`,
+`.codex/hooks.json`, and `.cursor/hooks.json`. Add `--claude`, `--codex`, or
+`--cursor` to create a missing config or merge the guard into that selected
+host's valid existing JSON. Unselected foreign configs are not changed. The
+merge replaces only managed guard entries and preserves unrelated entries,
+hook events, and settings. Codex resolves the guard from the Git root; Cursor
+runs its project hook from the project root, so both configs remain valid after
+a clone or move. A full refresh requires the same working interpreter and
+resolved Git hooks directory as the initial install.
 
 See [UPDATE.md](UPDATE.md).
 
@@ -73,10 +99,15 @@ See [UPDATE.md](UPDATE.md).
 
 **`guard_hook.py`** (pre-tool-use):
 
-- non-read tools targeting paths under `.project/archive/` (including `..` paths)
-- `git reset --hard`, `git clean -f`, force push, `git branch -D`
-- `cp`, `tee`, `git checkout`/`restore` into archive
-- `rm`, `mv`, redirects into archive
+- non-read actions targeting archived paths or an existing ancestor of the
+  archive tree
+- `git reset --hard`, destructive `git clean` modes, force pushes (including
+  `+` refspecs), and destructive branch or ref deletion
+- shell commands that reference the archive unless the whole command is a
+  recognized standalone read
+- destructive Git commands nested in supported shell and command wrappers
+- archive glob/brace expansions and execution-capable read options such as
+  `rg --pre`
 
 Read tools (`Read`, `Grep`, `View`, …) may still open archive paths.
 
@@ -88,17 +119,16 @@ Read tools (`Read`, `Grep`, `View`, …) may still open archive paths.
 
 ## Wire other hosts
 
-Only Claude wiring is installed automatically. Register
-`python3 .gsd-path/guard_hook.py` as a pre-tool-use hook elsewhere:
+Claude, Codex, and Cursor wiring is installed automatically when that target is
+selected. Register `python3 .gsd-path/guard_hook.py` as a pre-tool-use hook on
+the remaining hosts:
 
 | Host | Where | Docs |
 | --- | --- | --- |
-| Codex CLI | `.codex/hooks.json` or `config.toml` `PreToolUse` | [Codex hooks](https://developers.openai.com/codex/hooks) |
 | Copilot CLI | `.github/hooks/*.json` `preToolUse` | [Copilot hooks](https://docs.github.com/en/copilot/concepts/agents/hooks) |
 | Grok | reads `.claude/settings.json` — covered if Claude wiring installed | [Grok hooks](https://docs.x.ai/build/features/hooks) |
 | Qwen Code | `.qwen/settings.json` `PreToolUse` | [Qwen hooks](https://qwenlm.github.io/qwen-code-docs/en/users/features/hooks/) |
 | Kimi CLI | `~/.kimi-code/config.toml` `PreToolUse` | [Kimi hooks](https://moonshotai.github.io/kimi-code/en/customization/hooks.html) |
-| Cursor | `.cursor/hooks.json` `preToolUse` | [Cursor hooks](https://cursor.com/docs/hooks) |
 | Kiro CLI | agent config `preToolUse` | [Kiro hooks](https://kiro.dev/docs/cli/hooks/) |
 | Antigravity | `.agents/hooks.json` `PreToolUse` | [Antigravity hooks](https://antigravity.google/docs/hooks) |
 | OpenCode | JS plugin `tool.execute.before` | [OpenCode plugins](https://opencode.ai/docs/plugins/) |
@@ -115,7 +145,7 @@ orchestrator-level.
 | Commit blocked on archive edit | Expected — ship adds to archive; edits after ship are forbidden |
 | `ship:` commit blocked with `app.py` staged | Ship commits may only touch `.project/` |
 | Tool denied editing archive | Pre-tool guard — use active paths, not archive |
-| Hook not running in Cursor | Wire `.cursor/hooks.json` manually (see table) |
+| Hook not running in Cursor | Run `--hooks-refresh-full --cursor --project /path/to/repo` |
 | `--hooks-refresh` rejected | Scripts not from prior `--hooks` install |
 
 More: [DOCS.md](DOCS.md#help) · [UPDATE.md](UPDATE.md)

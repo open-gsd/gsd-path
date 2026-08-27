@@ -91,12 +91,14 @@ node scripts/install.mjs --claude --project "$(pwd)" --hooks
 
 **Requirements:** Node 18.17+. **Always** restart the agent session after install.
 
-**Host flags** (instead of `--all`): `--codex`, `--claude`, `--cursor`, `--zed`,
-`--grok`, `--opencode`, `--copilot`, `--qwen`, `--antigravity`, `--kiro`, `--kimi`.
+**Host flags** are derived from `scripts/skill-resources.json`. Run
+`node scripts/install.mjs --help` for the current `--<host>` list.
 
 Full roots and invocation table: [README.md](README.md#install-summary).
 
-**Python installer:** `scripts/install.py` — same global install; no `--local` UI.
+**Python installer:** `scripts/install.py` supports global and `--local`
+installs plus `--update`. The Node CLI remains the interactive wizard and npm
+entry point.
 Help: `node scripts/install.mjs --help`
 
 ---

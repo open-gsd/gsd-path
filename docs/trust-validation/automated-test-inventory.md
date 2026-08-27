@@ -28,12 +28,13 @@ dependency.
 | `tests/install.test.mjs` | `node --test` | `scripts/install.mjs` — paths, all targets, dry-run, rollback, `--local`, `--update`, hooks + refresh |
 | `tests/package.test.mjs` | `node --test` | npm package manifest / packaging checks |
 | `tests/wizard.test.mjs` | `node --test` | `scripts/wizard.mjs` — interactive installer arguments from a fake key stream |
-| `tests/test_install.py` | unittest | `scripts/install.py` — Python installer (global install, dry-run, rollback, hooks) |
+| `tests/test_install.py` | unittest | `scripts/install.py` — Python installer (global/local install, update, dry-run, rollback, tiered hooks) |
 | `tests/test_archive_milestone.py` | unittest | `scripts/archive_milestone.py` — prepare, derived manifest, validation, ship commit, resumable integration, carry-forward |
 | `tests/test_bootstrap_repository.py` | unittest | `scripts/bootstrap_repository.py` — journaled creation/resume and unjournaled collision refusal |
 | `tests/test_build_state.py` | unittest | `scripts/build_state.py` — dependency-ready task selection and landed-task reconciliation |
 | `tests/test_check_docs_audit.py` | unittest | `scripts/check_docs_audit.py` — tracked/untracked Markdown inventory and docs-audit artifact gate |
 | `tests/test_detect_project.py` | unittest | `scripts/detect_project.py` — owned/orphan/brownfield/greenfield classification and initialization; `scripts/promote_lookahead.py` — lookahead selection, snapshots, and contract comparison |
+| `tests/test_dogfood.py` | unittest | `tests/dogfood.py` — every declared host has an automated or explicitly blocked manual evidence route |
 | `tests/test_check_update.py` | unittest | `scripts/check_update.py` — version compare, cache, notice |
 | `tests/test_discussion_records.py` | unittest | `scripts/discussion_records.py` — paired append, half-write recovery, pending records, dispositions |
 | `tests/test_dispatch_contract.py` | unittest | runtime dispatch contract — host branches, model selection, and bounded child responsibilities |
@@ -51,17 +52,18 @@ dependency.
 | `tests/test_sync_skill_resources.py` | unittest | generated resources, manifest-owned links, and dispatch branches |
 | `tests/test_task_briefs.py` | unittest | task frontmatter, recorded bases, ownership, commit evidence, and verify scope |
 | `tests/test_wizard_tty.py` | unittest | no-flag CLI opens the wizard on a real PTY and hands off to the installer |
-| `tests/dogfood.py` | script (`--host claude\|codex`) | **Live** host run: local install, headless `/gsd-path-docs-audit`, `check_docs_audit.py` gate, guard deny/allow; writes an evidence record. `.github/workflows/dogfood.yml` runs it on dispatch/weekly with API secrets |
+| `tests/test_trust_evidence.py` | unittest | all-host release receipts, candidate ancestry, pass fields, and evidence-only follow-up diff |
+| `tests/dogfood.py` | script (`--host <declared-host>`) | **Live** host run: Claude/Codex have headless adapters; every other declared host routes explicitly to the manual full-evidence template instead of being silently omitted |
 
-**Note:** `scripts/install.py` is covered by `tests/test_install.py`. The
-remaining parity gap is that `install.py` has no `--local` or
-`--update` flags — those flows are Node-only.
+**Note:** `scripts/install.py` is covered by `tests/test_install.py`, including
+project-local install and managed-install update behavior. The Node CLI remains
+the interactive wizard and npm entry point.
 
 ## Coverage by trust dimension (journey order)
 
 | Dimension | Automated signal | Strength |
 |-----------|------------------|----------|
-| **1. Install & update** | `install.test.mjs`, `test_install.py`, `test_check_update.py`, hook install/refresh tests | **Strong** for both installers; `--local`/`--update` flows remain Node-only |
+| **1. Install & update** | `install.test.mjs`, `test_install.py`, `test_check_update.py`, hook install/refresh tests | **Strong** for Node and Python local/update transactions |
 | **2. Invoke & route** | `test_detect_project.py`, `test_router_contract.py`, `test_pipeline_state.py`, `test_full_cycle.py`, `test_implicit_invocation.py` | **Partial** — classification, initialization, route, and transition decisions are deterministic; live host routing is covered only by dogfood |
 | **3. Phase execution** | `test_full_cycle.py`, `test_handoffs.py`, `test_task_briefs.py` | **Strong** for the disk contract — phase outputs have executable gates |
 | **4. Build orchestration** | `test_build_state.py`, `test_isolation.py`, `test_full_cycle.py` | **Partial** — readiness, recovery, and helper chain are proven; live child-agent dispatch is not automated |
@@ -77,11 +79,11 @@ remaining parity gap is that `install.py` has no `--local` or
 - Live router execution of the deterministic recovery decisions
 - Live orchestrator child-agent scheduling and parallel dispatch
 - Per-host runtime dispatch (Cursor Task, Claude subagents, etc.) beyond install artifacts
-- `scripts/install.py` parity for `--local` / `--update` (Node-only flags; the rest of `install.py` is covered by `test_install.py`)
-- Non-Claude guard hook wiring (only Claude settings + git hooks tested via installer)
+- Native guard wiring outside Claude, Codex, and Cursor
+- Full live release receipts for every advertised host
 - Networked `check_update` fetch (mocked in tests only)
 - OpenCode v2, Kiro, Kimi implicit-invocation behavior (installer notes warnings; no tests)
 
 ## Installer targets exercised in tests
 
-`install.test.mjs` / `test_install.py` exercise multi-target install including: codex, zed (shared root), claude, cursor (+ subagent), grok, opencode, copilot, qwen, kiro, kimi. Antigravity shares codex/zed `.agents/skills` (skipped duplicate install). Global vs `--local` project roots tested.
+`install.test.mjs` / `test_install.py` exercise multi-target install including: codex, antigravity, and zed through one shared `.agents/skills` deployment; claude; cursor (+ subagent); grok; opencode; copilot; qwen; kiro; and kimi. Global vs `--local` project roots tested.

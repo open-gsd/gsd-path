@@ -18,8 +18,11 @@ Pulled new gsd-path / ran npx gsd-path@latest
 
 Installed with --hooks and upgraded guard scripts
 └─ install.mjs --hooks-refresh --project PATH
-   └─ Also refresh Claude settings / git hooks?
-      → --hooks-refresh-full
+   └─ Also refresh native settings / git hooks?
+      → --hooks-refresh-full [--claude] [--codex] [--cursor]
+
+Existing project needs guards for the first time
+└─ install.mjs --hooks-init --claude --project PATH
 
 AGENTS.md or WORKFLOW.md template changed upstream
 └─ Manual diff + merge (installer never overwrites)
@@ -36,12 +39,18 @@ AGENTS.md or WORKFLOW.md template changed upstream
 | Global skills (`~/.claude/skills`, …) | Yes | `--update` |
 | Project-local skills (`.cursor/skills`, …) | Yes | `--update --local` |
 | `.gsd-path/guard_hook.py`, `git_guard.py` | Yes | `--hooks-refresh` |
-| Claude hook settings + git hooks | Yes | `--hooks-refresh-full` |
+| Native hook settings + git hooks | Yes | `--hooks-refresh-full` (host flag creates missing config) |
+| Guards for an existing project | Yes | `--hooks-init` (preserves project contracts) |
 | `AGENTS.md`, `WORKFLOW.md` | **No** | Manual merge |
 | `.project/*` (active milestone) | **No** | Pipeline state |
 
 Existing `gsd-path*` skills move to `disabled-gsd-skills` beside each root before replace.
 Unrelated skills are never touched. Failed multi-host updates roll back all selected targets.
+An initial `--hooks` install merges valid native settings for explicitly selected Codex
+or Cursor hosts; other existing project contract and guard files are refused.
+Use `--hooks-init` to add guards to an existing project without changing its
+`AGENTS.md` or `WORKFLOW.md`. It inspects and merges native configs only for
+the selected hosts; configs for unselected hosts remain untouched.
 
 ---
 
@@ -109,16 +118,21 @@ node scripts/install.mjs --hooks-refresh --project /path/to/repo
 
 Overwrites managed `.gsd-path/*.py` (must contain `gsd-path guard` marker).
 
-Include Claude settings and git hooks:
+Include existing native settings and git hooks, and create missing settings for
+explicitly selected hosts:
 
 ```bash
-node scripts/install.mjs --hooks-refresh-full --project /path/to/repo
+node scripts/install.mjs --hooks-refresh-full --codex --cursor --project /path/to/repo
 ```
 
-`--hooks-refresh-full` **merges** `.claude/settings.json` instead of replacing
-it: only the managed PreToolUse guard entry (the one whose command runs
-`.gsd-path/guard_hook.py`) is refreshed. Your other hook events (`Stop`,
-`PostToolUse`, …), your own PreToolUse entries, and all other settings keys are
+A full refresh requires a working Python interpreter and an initialized Git
+repository whose effective hooks directory can be resolved.
+
+`--hooks-refresh-full` refreshes existing managed Claude, Codex, and Cursor
+settings. A `--claude`, `--codex`, or `--cursor` flag also creates that host's
+missing config or merges into its valid foreign JSON; unselected foreign
+configs are rejected and left unchanged. Only the managed pre-tool guard entry
+is refreshed. Other hook events, custom pre-tool entries, and settings keys are
 preserved. Git hooks are refreshed in the repository's effective hooks
 directory (`git rev-parse --git-path hooks`), so `core.hooksPath` setups and
 linked worktrees are handled.

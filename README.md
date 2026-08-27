@@ -11,6 +11,9 @@ abandoned on an explicit ruling, archiving its partial work for a re-slice.
 
 **Supported hosts:** Codex, Claude Code, Grok, OpenCode, GitHub Copilot CLI,
 Qwen Code, Antigravity CLI, Cursor, Zed, Kiro, and Kimi Code.
+Support means the installer and dispatch contract exist. See the
+[host trust matrix](docs/trust-validation/HOST-MATRIX.md) for live milestone
+proof and each host's guard tier.
 
 ## Documentation
 
@@ -218,7 +221,8 @@ node scripts/install.mjs --update
 | `--kiro` | `~/.kiro/skills` | `/gsd-path` |
 | `--kimi` | `~/.kimi-code/skills` | `/gsd-path` |
 
-`scripts/install.py` — global install in Python. See [FULL.md](FULL.md) and
+`scripts/install.py` — Python install, including `--local` and `--update`.
+The Node CLI remains the interactive and npm entry point. See [FULL.md](FULL.md) and
 [UPDATE.md](UPDATE.md) for `--hooks`, `--hooks-refresh`, `--local`, and host notes.
 
 Optional **`--hooks`** with `--project` — [HOOKS.md](HOOKS.md).

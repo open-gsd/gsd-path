@@ -9,26 +9,13 @@ import path from "node:path";
 import { parseArgs } from "node:util";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-export const TARGETS = [
-  "codex",
-  "claude",
-  "grok",
-  "opencode",
-  "copilot",
-  "qwen",
-  "antigravity",
-  "cursor",
-  "zed",
-  "kiro",
-  "kimi",
-];
 export const CLAUDE_BRIDGE = "@../AGENTS.md\n@../WORKFLOW.md\n";
 export const HOOKS_DIRECTORY = ".gsd-path";
 export const GUARD_SCRIPTS = ["guard_hook.py", "git_guard.py"];
 export const GUARD_MARKER = "gsd-path guard";
 const INSTALL_LOCK_NAME = ".gsd-path-install-lock";
 export const CLAUDE_MATCHER =
-  "Edit|Write|MultiEdit|NotebookEdit|Delete|StrReplace|ApplyPatch|Create|Shell|Bash";
+  "Edit|Write|MultiEdit|NotebookEdit|Delete|StrReplace|ApplyPatch|Create|Shell|Bash|PowerShell";
 // The managed PreToolUse guard entry, as an object.
 export function claudeGuardEntry(interpreter) {
   return {
@@ -44,6 +31,67 @@ export function claudeGuardEntry(interpreter) {
 export function claudeHooksSettings(interpreter) {
   return (
     JSON.stringify({ hooks: { PreToolUse: [claudeGuardEntry(interpreter)] } }, null, 2) + "\n"
+  );
+}
+function codexGuardCommand(interpreter) {
+  return `${interpreter} "$(git rev-parse --show-toplevel)/${HOOKS_DIRECTORY}/guard_hook.py"`;
+}
+
+function codexGuardCommandWindows(interpreter) {
+  return (
+    "powershell.exe -NoProfile -NonInteractive -Command " +
+    `"$root = git rev-parse --show-toplevel; & ${interpreter} ` +
+    `(Join-Path $root '${HOOKS_DIRECTORY}\\guard_hook.py')"`
+  );
+}
+
+function codexGuardEntry(interpreter) {
+  return {
+    matcher: ".*",
+    hooks: [
+      {
+        type: "command",
+        command: codexGuardCommand(interpreter),
+        commandWindows: codexGuardCommandWindows(interpreter),
+      },
+    ],
+  };
+}
+
+export function codexHooksSettings(interpreter) {
+  return (
+    JSON.stringify(
+      {
+        hooks: {
+          PreToolUse: [codexGuardEntry(interpreter)],
+        },
+      },
+      null,
+      2
+    ) + "\n"
+  );
+}
+
+function cursorGuardEntry(interpreter) {
+  return {
+    command: `${interpreter} "${HOOKS_DIRECTORY}/guard_hook.py"`,
+    matcher: ".*",
+    failClosed: true,
+  };
+}
+
+export function cursorHooksSettings(interpreter) {
+  return (
+    JSON.stringify(
+      {
+        version: 1,
+        hooks: {
+          preToolUse: [cursorGuardEntry(interpreter)],
+        },
+      },
+      null,
+      2
+    ) + "\n"
   );
 }
 export function preCommitHook(interpreter) {
@@ -75,9 +123,8 @@ export function detectPythonInterpreter() {
   return null;
 }
 
-// Single owner of the interpreter probe and its policy: returns the probed
-// interpreter, or null when no interpreter works — callers must then skip
-// writing hook content instead of pinning a nonexistent python3.
+// Single owner of the interpreter probe and its policy. Hook installation
+// fails before writing when no interpreter works.
 function effectiveInterpreter() {
   return hooks.detectPythonInterpreter();
 }
@@ -100,12 +147,37 @@ export function resolveGitHooksPath(project) {
 }
 
 function gitHooksDirectory(project) {
+  return gitHooksLocation(project).directory;
+}
+
+function gitHooksLocation(project) {
   const dotGit = path.join(project, ".git");
-  if (!lexists(dotGit)) return null;
+  if (!lexists(dotGit)) return { directory: null, resolved: false };
   const resolved = hooks.resolveGitHooksPath(project);
-  if (resolved !== null) return resolved;
+  if (resolved !== null) return { directory: resolved, resolved: true };
   // Fallback when git is not runnable: only a plain .git directory is safe.
-  return isDirectory(dotGit) ? path.join(dotGit, "hooks") : null;
+  return {
+    directory: isDirectory(dotGit) ? path.join(dotGit, "hooks") : null,
+    resolved: false,
+  };
+}
+
+function requiredHookRuntime(project, command, selected = []) {
+  const targetSuffix = selected.length ? ` for selected hosts: ${selected.join(", ")}` : "";
+  const interpreter = effectiveInterpreter();
+  if (interpreter === null) {
+    throw new InstallerError(
+      `${command} requires a working Python interpreter${targetSuffix}`
+    );
+  }
+  const location = gitHooksLocation(project);
+  if (!location.resolved) {
+    throw new InstallerError(
+      `${command} requires an initialized Git repository with a resolvable hooks ` +
+        `directory${targetSuffix}`
+    );
+  }
+  return { interpreter, hooksDir: location.directory };
 }
 const HOST_NOTES = {
   opencode:
@@ -129,7 +201,7 @@ export const EXPLICIT_ONLY_TARGETS = new Set([
   "kimi",
   "shared-agents",
 ]);
-const SHARED_AGENT_TARGETS = new Set(["codex", "zed"]);
+const SHARED_AGENT_TARGETS = new Set(["codex", "antigravity", "zed"]);
 export const SHARED_AGENT_PROFILE = "shared-agents";
 export const CURSOR_AGENT_FILENAME = "gsd-path.md";
 export const CURSOR_AGENT_BACKUP_NAME = "cursor-agent-gsd-path.md";
@@ -141,10 +213,31 @@ const SCRIPT_DIRECTORY = path.dirname(fileURLToPath(import.meta.url));
 const MANIFEST = JSON.parse(
   fs.readFileSync(path.join(SCRIPT_DIRECTORY, "skill-resources.json"), "utf8")
 );
+
+function sharedInvocations(text) {
+  return text.replace(/\$gsd-path(?:-[a-z0-9]+)*/g, (token) => {
+    const skill = token.slice(1);
+    const codex = `${MANIFEST.hosts.codex.invocation_prefix}${skill}`;
+    const others = `${MANIFEST.hosts.antigravity.invocation_prefix}${skill}`;
+    return `${codex} (Codex) or ${others} (Antigravity/Zed)`;
+  });
+}
 export function skillNamesForManifest(manifest) {
   return [...manifest.skills];
 }
 
+export function targetsForManifest(manifest) {
+  return Object.keys(manifest.hosts);
+}
+
+export function localRootsForManifest(manifest) {
+  return Object.fromEntries(
+    Object.entries(manifest.hosts).map(([target, config]) => [target, config.local_root])
+  );
+}
+
+export const TARGETS = targetsForManifest(MANIFEST);
+export const LOCAL_ROOTS = localRootsForManifest(MANIFEST);
 export const SKILL_NAMES = skillNamesForManifest(MANIFEST);
 export const SKILL_ALIASES = { ...MANIFEST.skill_aliases };
 const PHASE_RESOURCES = MANIFEST.phase_resources;
@@ -544,15 +637,19 @@ export function stageTarget(sourceRoot, target, stagedRoot) {
         if (isDirectory(metadata)) fs.rmSync(metadata, { recursive: true });
       }
     }
-    const invocation =
-      target === "opencode" || target === SHARED_AGENT_PROFILE ? "gsd-path" : "/gsd-path";
+    const invocation = target === "opencode" ? "gsd-path" : "/gsd-path";
     for (const name of SKILL_NAMES) {
       const entrypoint = path.join(stagedRoot, name, "SKILL.md");
       fs.writeFileSync(entrypoint, augmentFrontmatter(fs.readFileSync(entrypoint, "utf8"), target));
     }
     for (const markdown of markdownFiles(stagedRoot)) {
       const content = fs.readFileSync(markdown, "utf8");
-      fs.writeFileSync(markdown, content.replaceAll("$gsd-path", invocation));
+      fs.writeFileSync(
+        markdown,
+        target === SHARED_AGENT_PROFILE
+          ? sharedInvocations(content)
+          : content.replaceAll("$gsd-path", invocation)
+      );
     }
   }
 }
@@ -712,7 +809,8 @@ function rollbackTarget(transaction) {
 // Each entry: [destination, sourceName, literalContent, executable].
 // hooksDir is the pre-resolved git hooks directory (or null); resolving it
 // once per run avoids repeated `git rev-parse` spawns.
-function projectDestinations(project, includeClaude, hooksEnabled, interpreter, hooksDir) {
+function projectDestinations(project, selected, hooksEnabled, interpreter, hooksDir) {
+  const includeClaude = selected.includes("claude");
   const destinations = [
     [path.join(project, "AGENTS.md"), "AGENTS.md", null, false],
     [path.join(project, "WORKFLOW.md"), "WORKFLOW.md", null, false],
@@ -737,6 +835,22 @@ function projectDestinations(project, includeClaude, hooksEnabled, interpreter, 
         false,
       ]);
     }
+    if (selected.includes("codex")) {
+      destinations.push([
+        path.join(project, ".codex", "hooks.json"),
+        null,
+        codexHooksSettings(interpreter),
+        false,
+      ]);
+    }
+    if (selected.includes("cursor")) {
+      destinations.push([
+        path.join(project, ".cursor", "hooks.json"),
+        null,
+        cursorHooksSettings(interpreter),
+        false,
+      ]);
+    }
     if (hooksDir !== null) {
       destinations.push([
         path.join(hooksDir, "pre-commit"),
@@ -755,6 +869,18 @@ function projectDestinations(project, includeClaude, hooksEnabled, interpreter, 
   return destinations;
 }
 
+function nativeSettingsMergers(project, selected, hooksEnabled) {
+  const mergers = new Map();
+  if (!hooksEnabled) return mergers;
+  if (selected.includes("codex")) {
+    mergers.set(path.join(project, ".codex", "hooks.json"), mergedCodexSettings);
+  }
+  if (selected.includes("cursor")) {
+    mergers.set(path.join(project, ".cursor", "hooks.json"), mergedCursorSettings);
+  }
+  return mergers;
+}
+
 function describeProjectPath(project, destination) {
   const relative = path.relative(project, destination);
   if (relative.startsWith("..") || path.isAbsolute(relative)) {
@@ -763,8 +889,8 @@ function describeProjectPath(project, destination) {
   return relative.split(path.sep).join("/");
 }
 
-function projectFiles(project, includeClaude, hooksEnabled, interpreter, hooksDir) {
-  return projectDestinations(project, includeClaude, hooksEnabled, interpreter, hooksDir)
+function projectFiles(project, selected, hooksEnabled, interpreter, hooksDir) {
+  return projectDestinations(project, selected, hooksEnabled, interpreter, hooksDir)
     .map(([destination]) => describeProjectPath(project, destination))
     .join(", ");
 }
@@ -777,8 +903,22 @@ function existingContractError(destination) {
   );
 }
 
-function validateProject(sourceRoot, project, includeClaude, hooksEnabled, reservedRoots, interpreter, hooksDir) {
+function validateProject(sourceRoot, project, selected, hooksEnabled, reservedRoots, interpreter, hooksDir) {
+  const includeClaude = selected.includes("claude");
   validateDirectoryDestination(project, "project path");
+  const projectDirectories = [];
+  if (includeClaude) projectDirectories.push(["Claude", path.join(project, ".claude")]);
+  if (hooksEnabled && selected.includes("codex")) {
+    projectDirectories.push(["Codex", path.join(project, ".codex")]);
+  }
+  if (hooksEnabled && selected.includes("cursor")) {
+    projectDirectories.push(["Cursor", path.join(project, ".cursor")]);
+  }
+  for (const [label, directory] of projectDirectories) {
+    if (lexists(directory) && (isSymlink(directory) || !isDirectory(directory))) {
+      throw new InstallerError(`unsafe ${label} project directory: ${directory}`);
+    }
+  }
   const sources = ["AGENTS.md", "WORKFLOW.md"];
   if (hooksEnabled) {
     sources.push(...GUARD_SCRIPTS.map((name) => path.join("scripts", name)));
@@ -789,9 +929,14 @@ function validateProject(sourceRoot, project, includeClaude, hooksEnabled, reser
       throw new InstallerError(`missing project contract: ${source}`);
     }
   }
-  for (const [destination] of projectDestinations(project, includeClaude, hooksEnabled, interpreter, hooksDir)) {
+  const mergers = nativeSettingsMergers(project, selected, hooksEnabled);
+  for (const [destination] of projectDestinations(project, selected, hooksEnabled, interpreter, hooksDir)) {
     if (lexists(destination)) {
-      throw existingContractError(destination);
+      const merge = mergers.get(destination);
+      if (merge === undefined || isSymlink(destination)) {
+        throw existingContractError(destination);
+      }
+      merge(destination, interpreter);
     }
     for (const [label, root] of reservedRoots) {
       if (pathsOverlap(destination, root)) {
@@ -799,26 +944,27 @@ function validateProject(sourceRoot, project, includeClaude, hooksEnabled, reser
       }
     }
   }
-  const claudeDirectory = path.join(project, ".claude");
-  if (
-    includeClaude &&
-    lexists(claudeDirectory) &&
-    (isSymlink(claudeDirectory) || !isDirectory(claudeDirectory))
-  ) {
-    throw new InstallerError(`unsafe Claude project directory: ${claudeDirectory}`);
-  }
 }
 
-function applyProject(sourceRoot, project, includeClaude, hooksEnabled, transaction, interpreter, hooksDir) {
+function applyProject(sourceRoot, project, selected, hooksEnabled, transaction, interpreter, hooksDir) {
   createDirectory(project, transaction.createdDirectories);
+  const mergers = nativeSettingsMergers(project, selected, hooksEnabled);
   for (const [destination, sourceName, literal, executable] of projectDestinations(
     project,
-    includeClaude,
+    selected,
     hooksEnabled,
     interpreter,
     hooksDir
   )) {
     createDirectory(path.dirname(destination), transaction.createdDirectories);
+    const merge = mergers.get(destination);
+    if (lexists(destination) && merge !== undefined && !isSymlink(destination)) {
+      const original = fs.readFileSync(destination);
+      const mode = fs.statSync(destination).mode & 0o777;
+      writeFileAtomic(destination, merge(destination, interpreter), mode);
+      transaction.replaced.push({ destination, original, mode });
+      continue;
+    }
     const content = sourceName
       ? fs.readFileSync(path.join(sourceRoot, sourceName))
       : Buffer.from(literal, "utf8");
@@ -842,6 +988,9 @@ function applyProject(sourceRoot, project, includeClaude, hooksEnabled, transact
 }
 
 function rollbackProject(transaction) {
+  for (const { destination, original, mode } of [...transaction.replaced].reverse()) {
+    writeFileAtomic(destination, original, mode);
+  }
   for (const destination of [...transaction.copied].reverse()) {
     removePath(destination);
   }
@@ -859,88 +1008,118 @@ function isManagedGitHook(destination) {
   return text.includes(GUARD_MARKER) && text.includes("git_guard.py");
 }
 
-function isManagedClaudeSettings(destination) {
+function isManagedHookSettings(destination) {
   if (!isFile(destination)) return false;
-  const text = fs.readFileSync(destination, "utf8");
-  return text.includes("guard_hook.py") && text.includes(HOOKS_DIRECTORY);
+  try {
+    return hasManagedHookSettings(parsedManagedSettings(destination));
+  } catch {
+    return false;
+  }
 }
 
-function temporaryPathFor(destination) {
-  return path.join(
-    path.dirname(destination),
-    `.${path.basename(destination)}.gsd-path-tmp`
+function atomicTemporary(destination) {
+  const directory = fs.mkdtempSync(
+    path.join(path.dirname(destination), `.${path.basename(destination)}.gsd-path-tmp-`)
   );
+  return { directory, temporary: path.join(directory, "value") };
 }
 
 function writeFileAtomic(destination, content, mode) {
-  const temporary = temporaryPathFor(destination);
+  const { directory, temporary } = atomicTemporary(destination);
   try {
-    fs.writeFileSync(temporary, content);
+    fs.writeFileSync(temporary, content, { flag: "wx" });
     if (mode !== undefined) {
       fs.chmodSync(temporary, mode);
     } else if (isFile(destination) && !isSymlink(destination)) {
       fs.chmodSync(temporary, fs.statSync(destination).mode & 0o777);
     }
     fs.renameSync(temporary, destination);
-  } catch (error) {
-    removePath(temporary);
-    throw error;
+  } finally {
+    removePath(directory);
   }
 }
 
 function copyFileAtomic(source, destination) {
-  const temporary = temporaryPathFor(destination);
+  const { directory, temporary } = atomicTemporary(destination);
   try {
-    fs.copyFileSync(source, temporary);
+    fs.copyFileSync(source, temporary, fs.constants.COPYFILE_EXCL);
     fs.renameSync(temporary, destination);
-  } catch (error) {
-    removePath(temporary);
-    throw error;
+  } finally {
+    removePath(directory);
   }
 }
 
 // A PreToolUse entry is ours when one of its commands runs the guard hook.
+function isGuardCommand(command) {
+  const normalized = command.replaceAll("\\", "/");
+  const match = /^(?:python3|python)\s+(?:"([^"\r\n]+)"|'([^'\r\n]+)'|(\S+))$/.exec(
+    normalized
+  );
+  if (match === null) return false;
+  const script = match[1] || match[2] || match[3];
+  const managedScript = `${HOOKS_DIRECTORY}/guard_hook.py`;
+  return script === managedScript || script.endsWith(`/${managedScript}`);
+}
+
+function isManagedCommandHook(hook) {
+  return Boolean(
+    hook &&
+      typeof hook === "object" &&
+      !Array.isArray(hook) &&
+      typeof hook.command === "string" &&
+      isGuardCommand(hook.command)
+  );
+}
+
 function isManagedHookEntry(entry) {
   return Boolean(
     entry &&
       typeof entry === "object" &&
       !Array.isArray(entry) &&
       Array.isArray(entry.hooks) &&
-      entry.hooks.some(
-        (hook) =>
-          hook &&
-          typeof hook.command === "string" &&
-          hook.command.includes(`${HOOKS_DIRECTORY}/guard_hook.py`)
-      )
+      entry.hooks.some(isManagedCommandHook)
   );
 }
 
-function mergedClaudeSettings(settings, interpreter) {
+function isManagedDirectHookEntry(entry) {
+  return isManagedCommandHook(entry);
+}
+
+function hasManagedHookSettings(parsed) {
+  const hooks = parsed.hooks;
+  if (hooks === null || typeof hooks !== "object" || Array.isArray(hooks)) return false;
+  const nested = hooks.PreToolUse;
+  const direct = hooks.preToolUse;
+  return (
+    (Array.isArray(nested) && nested.some(isManagedHookEntry)) ||
+    (Array.isArray(direct) && direct.some(isManagedDirectHookEntry))
+  );
+}
+
+function parsedManagedSettings(settings) {
   let parsed;
   try {
     parsed = JSON.parse(fs.readFileSync(settings, "utf8"));
   } catch {
-    throw new InstallerError(
-      `managed hook settings file is not valid JSON: ${settings}`
-    );
+    throw new InstallerError(`managed hook settings file is not valid JSON: ${settings}`);
   }
   if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new InstallerError(
-      `managed hook settings file is not a JSON object: ${settings}`
-    );
+    throw new InstallerError(`managed hook settings file is not a JSON object: ${settings}`);
   }
-  // Merge: replace only the managed PreToolUse guard entry; preserve every
-  // other hook event (Stop, PostToolUse, ...) and user PreToolUse entries.
-  const managedEntry = claudeGuardEntry(interpreter);
+  return parsed;
+}
+
+function mergedHookSettings(settings, eventName, managedEntry, isManagedEntry) {
+  const parsed = parsedManagedSettings(settings);
   const hooksObject =
     parsed.hooks && typeof parsed.hooks === "object" && !Array.isArray(parsed.hooks)
       ? parsed.hooks
       : {};
-  const existing = Array.isArray(hooksObject.PreToolUse) ? hooksObject.PreToolUse : [];
+  const existing = Array.isArray(hooksObject[eventName]) ? hooksObject[eventName] : [];
   const merged = [];
   let replaced = false;
   for (const entry of existing) {
-    if (isManagedHookEntry(entry)) {
+    if (isManagedEntry(entry)) {
       if (!replaced) {
         merged.push(managedEntry);
         replaced = true;
@@ -950,19 +1129,67 @@ function mergedClaudeSettings(settings, interpreter) {
     }
   }
   if (!replaced) merged.push(managedEntry);
+  hooksObject[eventName] = merged;
+  parsed.hooks = hooksObject;
+  return JSON.stringify(parsed, null, 2) + "\n";
+}
+
+function mergedNestedHookSettings(settings, managedEntry) {
+  const parsed = parsedManagedSettings(settings);
+  const hooksObject =
+    parsed.hooks && typeof parsed.hooks === "object" && !Array.isArray(parsed.hooks)
+      ? parsed.hooks
+      : {};
+  const existing = Array.isArray(hooksObject.PreToolUse) ? hooksObject.PreToolUse : [];
+  const merged = [];
+  let replaced = false;
+  for (const entry of existing) {
+    if (!isManagedHookEntry(entry)) {
+      merged.push(entry);
+      continue;
+    }
+    const unrelatedHooks = entry.hooks.filter((hook) => !isManagedCommandHook(hook));
+    if (!replaced) {
+      merged.push(managedEntry);
+      replaced = true;
+    }
+    if (unrelatedHooks.length > 0) {
+      merged.push({ ...entry, hooks: unrelatedHooks });
+    }
+  }
+  if (!replaced) merged.push(managedEntry);
   hooksObject.PreToolUse = merged;
   parsed.hooks = hooksObject;
   return JSON.stringify(parsed, null, 2) + "\n";
 }
 
-function validateHooksRefresh(sourceRoot, project, full, hooksDir) {
+function mergedClaudeSettings(settings, interpreter) {
+  return mergedNestedHookSettings(settings, claudeGuardEntry(interpreter));
+}
+
+function mergedCodexSettings(settings, interpreter) {
+  const managedEntry = JSON.parse(codexHooksSettings(interpreter)).hooks.PreToolUse[0];
+  return mergedNestedHookSettings(settings, managedEntry);
+}
+
+function mergedCursorSettings(settings, interpreter) {
+  const managedEntry = JSON.parse(cursorHooksSettings(interpreter)).hooks.preToolUse[0];
+  return mergedHookSettings(settings, "preToolUse", managedEntry, isManagedDirectHookEntry);
+}
+
+function validateHooksRefresh(sourceRoot, project, full, hooksDir, selected, initialize = false) {
   validateDirectoryDestination(project, "project path");
+  validateDirectoryDestination(
+    path.join(project, HOOKS_DIRECTORY),
+    "guard hooks directory"
+  );
   for (const name of GUARD_SCRIPTS) {
     const destination = path.join(project, HOOKS_DIRECTORY, name);
+    const exists = lexists(destination);
     if (isSymlink(destination)) {
       throw new InstallerError(`refusing to refresh a symlink: ${destination}`);
     }
-    if (!isManagedGuardScript(destination)) {
+    if ((exists && !isManagedGuardScript(destination)) || (!exists && !initialize)) {
       throw new InstallerError(`not a managed GSD Path guard script: ${destination}`);
     }
     const source = path.join(sourceRoot, "scripts", name);
@@ -971,12 +1198,27 @@ function validateHooksRefresh(sourceRoot, project, full, hooksDir) {
     }
   }
   if (full) {
-    const settings = path.join(project, ".claude", "settings.json");
-    if (isSymlink(settings)) {
-      throw new InstallerError(`refusing to refresh a symlink: ${settings}`);
-    }
-    if (lexists(settings) && !isManagedClaudeSettings(settings)) {
-      throw new InstallerError(`not a managed GSD Path hook settings file: ${settings}`);
+    for (const [target, label, settings] of [
+      ["claude", "Claude", path.join(project, ".claude", "settings.json")],
+      ["codex", "Codex", path.join(project, ".codex", "hooks.json")],
+      ["cursor", "Cursor", path.join(project, ".cursor", "hooks.json")],
+    ]) {
+      const exists = lexists(settings);
+      if (initialize && !selected.includes(target)) continue;
+      if (!exists && !selected.includes(target)) continue;
+      validateDirectoryDestination(
+        path.dirname(settings),
+        `unsafe ${label} project directory`
+      );
+      if (isSymlink(settings)) {
+        throw new InstallerError(`refusing to refresh a symlink: ${settings}`);
+      }
+      if (exists) {
+        const parsed = parsedManagedSettings(settings);
+        if (!selected.includes(target) && !hasManagedHookSettings(parsed)) {
+          throw new InstallerError(`not a managed GSD Path hook settings file: ${settings}`);
+        }
+      }
     }
     if (hooksDir !== null) {
       for (const hookName of ["pre-commit", "commit-msg"]) {
@@ -994,30 +1236,58 @@ function validateHooksRefresh(sourceRoot, project, full, hooksDir) {
 
 // Returns refreshed project-relative paths; entries prefixed "note:" are
 // user-facing notes rather than refreshed files.
-function refreshHooks(sourceRoot, project, full, dryRun) {
-  const hooksDir = full ? gitHooksDirectory(project) : null;
-  validateHooksRefresh(sourceRoot, project, full, hooksDir);
+function refreshHooks(sourceRoot, project, full, dryRun, selected = [], initialize = false) {
+  let hooksDir = full ? gitHooksDirectory(project) : null;
+  let interpreter = null;
+  if (full && !dryRun) {
+    ({ interpreter, hooksDir } = requiredHookRuntime(
+      project,
+      initialize ? "--hooks-init" : "--hooks-refresh-full",
+      selected
+    ));
+  }
+  validateHooksRefresh(sourceRoot, project, full, hooksDir, selected, initialize);
   const refreshed = [];
   for (const name of GUARD_SCRIPTS) {
     const destination = path.join(project, HOOKS_DIRECTORY, name);
     const source = path.join(sourceRoot, "scripts", name);
-    if (!dryRun) copyFileAtomic(source, destination);
+    if (!dryRun) {
+      fs.mkdirSync(path.dirname(destination), { recursive: true });
+      copyFileAtomic(source, destination);
+    }
     refreshed.push(describeProjectPath(project, destination));
   }
   if (full) {
-    // Dry-run only lists paths, so it never needs the interpreter probe.
-    const interpreter = dryRun ? null : effectiveInterpreter();
-    if (!dryRun && interpreter === null) {
-      refreshed.push(
-        "note: hooks: no working python3 or python interpreter found on PATH; " +
-          "skipped Claude settings and git hook refresh"
-      );
-      return refreshed;
-    }
-    const settings = path.join(project, ".claude", "settings.json");
-    if (lexists(settings)) {
-      if (!dryRun) writeFileAtomic(settings, mergedClaudeSettings(settings, interpreter));
-      refreshed.push(describeProjectPath(project, settings));
+    for (const [target, settings, merge, generated] of [
+      [
+        "claude",
+        path.join(project, ".claude", "settings.json"),
+        mergedClaudeSettings,
+        claudeHooksSettings,
+      ],
+      [
+        "codex",
+        path.join(project, ".codex", "hooks.json"),
+        mergedCodexSettings,
+        codexHooksSettings,
+      ],
+      [
+        "cursor",
+        path.join(project, ".cursor", "hooks.json"),
+        mergedCursorSettings,
+        cursorHooksSettings,
+      ],
+    ]) {
+      if (initialize && !selected.includes(target)) continue;
+      const exists = lexists(settings);
+      if (exists || selected.includes(target)) {
+        if (!dryRun) {
+          fs.mkdirSync(path.dirname(settings), { recursive: true });
+          const content = exists ? merge(settings, interpreter) : generated(interpreter);
+          writeFileAtomic(settings, content);
+        }
+        refreshed.push(describeProjectPath(project, settings));
+      }
     }
     if (hooksDir !== null) {
       for (const hookName of ["pre-commit", "commit-msg"]) {
@@ -1061,6 +1331,31 @@ function isExecutable(candidate) {
   }
 }
 
+function nativeGuardContract(target, project) {
+  if (target === "claude") {
+    return {
+      settings: path.join(project, ".claude", "settings.json"),
+      event: "PreToolUse",
+      entry: claudeGuardEntry,
+    };
+  }
+  if (target === "codex") {
+    return {
+      settings: path.join(project, ".codex", "hooks.json"),
+      event: "PreToolUse",
+      entry: codexGuardEntry,
+    };
+  }
+  if (target === "cursor") {
+    return {
+      settings: path.join(project, ".cursor", "hooks.json"),
+      event: "preToolUse",
+      entry: cursorGuardEntry,
+    };
+  }
+  return null;
+}
+
 // Read-only health check: host installs, project contracts, guard hooks,
 // and pipeline state. Never writes.
 export function doctor(sourceRoot, { targets, rootFor, project = null }) {
@@ -1069,6 +1364,7 @@ export function doctor(sourceRoot, { targets, rootFor, project = null }) {
   const version = readPackageVersion(path.join(sourceRoot, "package.json"));
 
   const seen = [];
+  const installedTargets = new Set();
   for (const target of targets) {
     const root = rootFor(target);
     const prior = seen.find(([, other]) => samePath(other, root));
@@ -1081,6 +1377,7 @@ export function doctor(sourceRoot, { targets, rootFor, project = null }) {
       push("note", `${target}: not installed (${root})`);
       continue;
     }
+    installedTargets.add(target);
     const missing = SKILL_NAMES.filter((name) => !isDirectory(path.join(root, name)));
     if (missing.length) {
       push("fail", `${target}: incomplete install at ${root} — missing ${missing.join(", ")}`);
@@ -1134,34 +1431,39 @@ export function doctor(sourceRoot, { targets, rootFor, project = null }) {
         push("ok", `hooks: ${HOOKS_DIRECTORY}/${name} current`);
       }
     }
-    // Staleness must not depend on which interpreter wins today's probe: a
-    // hook legitimately installed with any known interpreter is current.
-    const managedVariants = INTERPRETER_CANDIDATES.map((candidate) =>
-      JSON.stringify(claudeGuardEntry(candidate))
-    );
-    const settings = path.join(project, ".claude", "settings.json");
-    if (!isFile(settings)) {
-      push("note", "hooks: no .claude/settings.json guard wiring");
-    } else if (!isManagedClaudeSettings(settings)) {
-      push("warn", "hooks: .claude/settings.json is not the managed guard wiring");
-    } else {
-      let hooksCurrent = false;
+    for (const target of targets) {
+      if (!installedTargets.has(target)) continue;
+      const contract = nativeGuardContract(target, project);
+      if (contract === null) {
+        if (MANIFEST.hosts[target]?.guard_tier !== "git-only") {
+          push("fail", `hooks: ${target} declares a native guard without a health contract`);
+        }
+        continue;
+      }
+      if (!isFile(contract.settings)) {
+        push("fail", `hooks: ${target} native guard wiring is missing — run --hooks-refresh-full`);
+        continue;
+      }
+      let current = false;
       try {
-        const parsed = JSON.parse(fs.readFileSync(settings, "utf8"));
+        const parsed = JSON.parse(fs.readFileSync(contract.settings, "utf8"));
         const entries =
           parsed && typeof parsed === "object" && parsed.hooks
-            ? parsed.hooks.PreToolUse
+            ? parsed.hooks[contract.event]
             : null;
-        hooksCurrent =
+        const variants = INTERPRETER_CANDIDATES.map((candidate) =>
+          JSON.stringify(contract.entry(candidate))
+        );
+        current =
           Array.isArray(entries) &&
-          entries.some((entry) => managedVariants.includes(JSON.stringify(entry)));
+          entries.some((entry) => variants.includes(JSON.stringify(entry)));
       } catch {
-        hooksCurrent = false;
+        current = false;
       }
-      if (hooksCurrent) {
-        push("ok", "hooks: .claude/settings.json guard wiring present");
+      if (current) {
+        push("ok", `hooks: ${target} native guard wiring present`);
       } else {
-        push("warn", "hooks: .claude/settings.json guard wiring is stale — run --hooks-refresh-full");
+        push("fail", `hooks: ${target} native guard wiring is stale — run --hooks-refresh-full`);
       }
     }
     const dotGit = path.join(project, ".git");
@@ -1257,7 +1559,7 @@ export function deploymentPlans(plans) {
     if (group.length > 1) {
       if (!targets.every((name) => SHARED_AGENT_TARGETS.has(name))) {
         throw new InstallerError(
-          `only Codex and Zed may share a skills root: ${targets.join(", ")}`
+          `only Codex, Antigravity, and Zed may share a skills root: ${targets.join(", ")}`
         );
       }
       profile = SHARED_AGENT_PROFILE;
@@ -1395,38 +1697,16 @@ export async function install(sourceRoot, plans, options = {}) {
   if (hooksEnabled && project === null) {
     throw new InstallerError("--hooks requires --project");
   }
-  // Resolve per-run environment facts (interpreter, git hooks directory)
-  // once here and thread them down.
-  let effectiveHooks = hooksEnabled;
+  const selected = plans.map((plan) => plan.name);
   let interpreter = "python3";
   let hooksDir = null;
-  const hookNotes = [];
   if (hooksEnabled) {
-    const probed = effectiveInterpreter();
-    if (probed === null) {
-      effectiveHooks = false;
-      hookNotes.push(
-        "note: hooks: no working python3 or python interpreter found on PATH; " +
-          "skipped guard hook install"
-      );
-    } else {
-      interpreter = probed;
-    }
-  }
-  if (effectiveHooks) {
-    hooksDir = gitHooksDirectory(project);
-    if (hooksDir === null && lexists(path.join(project, ".git"))) {
-      hookNotes.push(
-        "note: hooks: found .git but could not resolve the git hooks directory " +
-          "(is git runnable?); git hooks were not installed"
-      );
-    }
+    ({ interpreter, hooksDir } = requiredHookRuntime(project, "--hooks", selected));
   }
   const progress = async (text) => {
     if (onProgress) onProgress(text);
     await tick();
   };
-  const selected = plans.map((plan) => plan.name);
   const deployments = deploymentPlans(plans);
   const adapters = [...new Set(deployments.map((deployment) => deployment.profile))];
   await progress("Validating synchronized package");
@@ -1450,7 +1730,6 @@ export async function install(sourceRoot, plans, options = {}) {
       );
     }
   }
-  const includeClaude = selected.includes("claude");
   let legacyRoot = migrateLegacy && selected.includes("codex") ? legacyCodexRoot(env) : null;
   const reservedRoots = deployments.map((plan) => [
     `${plan.targets.join("+")} skills root`,
@@ -1502,8 +1781,8 @@ export async function install(sourceRoot, plans, options = {}) {
     validateProject(
       sourceRoot,
       project,
-      includeClaude,
-      effectiveHooks,
+      selected,
+      hooksEnabled,
       [...mutationRoots, ...plannedBackups],
       interpreter,
       hooksDir
@@ -1535,10 +1814,9 @@ export async function install(sourceRoot, plans, options = {}) {
         results.push(installResult(plan, true, update) + suffix);
       }
       if (project !== null) {
-        const files = projectFiles(project, includeClaude, effectiveHooks, interpreter, hooksDir);
+        const files = projectFiles(project, selected, hooksEnabled, interpreter, hooksDir);
         results.push(`project: would copy ${files} to ${project}`);
       }
-      results.push(...hookNotes);
       appendHostNotes(results, selected);
       return results;
     }
@@ -1547,7 +1825,7 @@ export async function install(sourceRoot, plans, options = {}) {
     if (legacyRoot !== null && isDirectory(legacyRoot)) lockRoots.push(legacyRoot);
     const ownership = acquireInstallLocks(lockRoots);
     const targetTransactions = [];
-    const projectTransaction = { createdDirectories: [], copied: [] };
+    const projectTransaction = { createdDirectories: [], copied: [], replaced: [] };
     try {
       if (legacyRoot !== null && isDirectory(legacyRoot)) {
         await progress("Backing up legacy Codex skills");
@@ -1591,16 +1869,15 @@ export async function install(sourceRoot, plans, options = {}) {
         applyProject(
           sourceRoot,
           project,
-          includeClaude,
-          effectiveHooks,
+          selected,
+          hooksEnabled,
           projectTransaction,
           interpreter,
           hooksDir
         );
-        const files = projectFiles(project, includeClaude, effectiveHooks, interpreter, hooksDir);
+        const files = projectFiles(project, selected, hooksEnabled, interpreter, hooksDir);
         results.push(`project: copied ${files} to ${project}`);
       }
-      results.push(...hookNotes);
     } catch (error) {
       const rollbackErrors = [];
       try {
@@ -1634,20 +1911,6 @@ export async function install(sourceRoot, plans, options = {}) {
 // Documented project-relative skill roots (verified against each host's
 // official skills docs). Codex, Zed, and Antigravity all discover the
 // project-level .agents/skills standard directory.
-export const LOCAL_ROOTS = {
-  codex: ".agents/skills",
-  claude: ".claude/skills",
-  grok: ".grok/skills",
-  opencode: ".opencode/skills",
-  copilot: ".github/skills",
-  qwen: ".qwen/skills",
-  antigravity: ".agents/skills",
-  cursor: ".cursor/skills",
-  zed: ".agents/skills",
-  kiro: ".kiro/skills",
-  kimi: ".kimi-code/skills",
-};
-
 export function localRoot(target, projectDir) {
   const relative = LOCAL_ROOTS[target];
   if (!relative) throw new Error(`unsupported target: ${target}`);
@@ -1674,6 +1937,7 @@ export function parseCli(argv) {
     project: { type: "string" },
     doctor: { type: "boolean", default: false },
     hooks: { type: "boolean", default: false },
+    "hooks-init": { type: "boolean", default: false },
     "hooks-refresh": { type: "boolean", default: false },
     "hooks-refresh-full": { type: "boolean", default: false },
     "source-root": { type: "string" },
@@ -1750,7 +2014,7 @@ function usage() {
     "Docs: DOCS.md (hub) · QUICK.md (first run) · FULL.md · UPDATE.md\n\n" +
     "usage: gsd-path            (no flags on a terminal opens the interactive wizard)\n" +
     "       gsd-path [--all] [--update] [--local] [--dry-run] [--project PATH]\n" +
-    "              [--hooks] [--hooks-refresh] [--hooks-refresh-full] [target flags]\n\n" +
+    "              [--hooks] [--hooks-init] [--hooks-refresh] [--hooks-refresh-full] [target flags]\n\n" +
     "  First install:  gsd-path --all --dry-run && gsd-path --all\n" +
     "  New repo:       gsd-path --all --project /path/to/repo\n" +
     "  Update skills:  gsd-path --update   (or npx gsd-path@latest --update)\n\n" +
@@ -1760,8 +2024,9 @@ function usage() {
     "  --project PATH        also write AGENTS.md and WORKFLOW.md into PATH\n" +
     "  --doctor              read-only health check of installs, hooks, and state\n" +
     "  --hooks               with --project: install guard hooks (see HOOKS.md)\n" +
+    "  --hooks-init          add guards to an existing project without changing its contracts\n" +
     "  --hooks-refresh       with --project: overwrite managed .gsd-path scripts\n" +
-    "  --hooks-refresh-full  also refresh managed Claude settings and git hooks\n" +
+    "  --hooks-refresh-full  refresh native settings/git hooks; target flags create missing configs\n" +
     "  --dry-run             preview without writing\n" +
     "  each target also accepts --<target>-root PATH to override its skills root"
   );
@@ -1818,14 +2083,21 @@ export async function main(argv, env = process.env) {
     console.log(`\n  ${ui.dim(failed ? `${failed} problem${failed === 1 ? "" : "s"} found.` : "Healthy.")}\n`);
     return failed ? 1 : 0;
   }
+  const hooksInit = values["hooks-init"];
   const hooksRefresh = values["hooks-refresh"] || values["hooks-refresh-full"];
-  if (hooksRefresh) {
+  if (hooksInit || hooksRefresh) {
     if (project === null) {
-      ui.error("--hooks-refresh requires --project");
+      ui.error(`${hooksInit ? "--hooks-init" : "--hooks-refresh"} requires --project`);
+      return 2;
+    }
+    const selected = TARGETS.filter((target) => values.all || values[target]);
+    if (hooksInit && !selected.length) {
+      ui.error("--hooks-init requires at least one target or --all");
       return 2;
     }
     const refreshMode =
-      `hooks refresh for ${project}` + (values["dry-run"] ? " · dry run" : "");
+      `hooks ${hooksInit ? "initialization" : "refresh"} for ${project}` +
+      (values["dry-run"] ? " · dry run" : "");
     ui.banner(refreshMode);
     const spin = ui.spinner("Validating synchronized package");
     try {
@@ -1837,16 +2109,18 @@ export async function main(argv, env = process.env) {
       const refreshed = refreshHooks(
         sourceRoot,
         project,
-        values["hooks-refresh-full"],
-        values["dry-run"]
+        hooksInit || values["hooks-refresh-full"],
+        values["dry-run"],
+        selected,
+        hooksInit
       );
       spin.stop();
       const notes = refreshed.filter((line) => line.startsWith("note:"));
       const files = refreshed.filter((line) => !line.startsWith("note:"));
       ui.result(
         values["dry-run"]
-          ? `hooks: would refresh ${files.join(", ")}`
-          : `hooks: refreshed ${files.join(", ")}`
+          ? `hooks: would ${hooksInit ? "initialize" : "refresh"} ${files.join(", ")}`
+          : `hooks: ${hooksInit ? "initialized" : "refreshed"} ${files.join(", ")}`
       );
       for (const note of notes) ui.result(note);
       console.log(
@@ -1872,21 +2146,6 @@ export async function main(argv, env = process.env) {
       return 2;
     }
   }
-  const extraNotes = [];
-  if (
-    selected.includes("antigravity") &&
-    ["codex", "zed"].some(
-      (target) =>
-        selected.includes(target) && samePath(rootFor(target), rootFor("antigravity"))
-    )
-  ) {
-    selected = selected.filter((target) => target !== "antigravity");
-    extraNotes.push(
-      "note: antigravity reads the same project .agents/skills directory " +
-        "installed for codex/zed; skipped installing a second bundle there."
-    );
-  }
-
   const sourceRootForInstall = sourceRoot;
   const scope = local ? `project ${values.update ? "update in" : "install into"} ${process.cwd()}` : `global ${values.update ? "update" : "install"}`;
   const mode = scope + (values["dry-run"] ? " · dry run" : "");
@@ -1916,7 +2175,7 @@ export async function main(argv, env = process.env) {
       onProgress: (text) => spin.update(text),
     });
     spin.stop();
-    for (const result of [...results, ...extraNotes]) {
+    for (const result of results) {
       ui.result(result);
     }
     const closing = values["dry-run"]
