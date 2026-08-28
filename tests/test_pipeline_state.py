@@ -1,3 +1,4 @@
+import json
 import subprocess
 import shutil
 import sys
@@ -168,6 +169,107 @@ class PipelineStateTests(unittest.TestCase):
             run_git(repo, "reset", "--hard", published)
 
             self.assertTrue(pipeline_state.status_state(repo)["git"]["published"])
+
+    def test_status_ignores_completed_artifact_collection_receipts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            run_git(repo, "init", "-b", "gsd-path/M001")
+            project = repo / ".project"
+            project.mkdir()
+            (project / "STATE.md").write_text(
+                state_text(
+                    milestone="first",
+                    phase="build",
+                    status="active",
+                    branch="gsd-path/M001",
+                ),
+                encoding="utf-8",
+            )
+            run_git(repo, "add", ".project/STATE.md")
+            run_git(
+                repo,
+                "-c",
+                "user.name=Test",
+                "-c",
+                "user.email=test@example.com",
+                "commit",
+                "-m",
+                "fixture",
+            )
+            head = run_git(repo, "rev-parse", "HEAD").stdout.strip()
+            common = Path(run_git(repo, "rev-parse", "--git-common-dir").stdout.strip())
+            if not common.is_absolute():
+                common = repo / common
+            receipt = common / "gsd-path" / "collect-artifact" / "receipt.json"
+            receipt.parent.mkdir(parents=True)
+            receipt.write_text(
+                json.dumps(
+                    {
+                        "schema": "gsd-path/collect-artifact/v1",
+                        "primary_worktree": str(repo.resolve()),
+                        "source_worktree": str(repo.resolve()),
+                        "base": head,
+                        "branch": "gsd-path-verify/demo",
+                        "source": "artifact.md",
+                        "destination": ".project/review/artifact.md",
+                        "expected_destination": None,
+                        "bytes": 4,
+                        "previous_sha256": None,
+                        "replaced": False,
+                        "sha256": "a" * 64,
+                        "stage": "complete",
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            self.assertIsNone(
+                pipeline_state.status_state(repo)["journals"]["collect_artifact"]
+            )
+
+    def test_status_blocks_when_git_ancestry_probe_errors(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            origin = root / "origin.git"
+            subprocess.run(["git", "init", "-q", "--bare", str(origin)], check=True)
+            repo = root / "repo"
+            run_git(root, "init", "-b", "gsd-path/M001", str(repo))
+            project = repo / ".project"
+            project.mkdir()
+            (project / "STATE.md").write_text(
+                state_text(
+                    milestone="first",
+                    phase="build",
+                    status="active",
+                    branch="gsd-path/M001",
+                ),
+                encoding="utf-8",
+            )
+            run_git(repo, "add", ".project/STATE.md")
+            run_git(
+                repo,
+                "-c",
+                "user.name=Test",
+                "-c",
+                "user.email=test@example.com",
+                "commit",
+                "-m",
+                "fixture",
+            )
+            run_git(repo, "remote", "add", "origin", str(origin))
+            run_git(repo, "push", "-u", "origin", "gsd-path/M001")
+            original = pipeline_state._run_git
+
+            def fail_ancestry(path, *arguments, **kwargs):
+                if arguments[:2] == ("merge-base", "--is-ancestor"):
+                    return subprocess.CompletedProcess(arguments, 128, "", "bad object")
+                return original(path, *arguments, **kwargs)
+
+            with mock.patch.object(pipeline_state, "_run_git", side_effect=fail_ancestry):
+                with self.assertRaisesRegex(
+                    pipeline_state.PipelineStateError, "bad object"
+                ):
+                    pipeline_state.status_state(repo)
 
     def test_route_binds_initialized_state_before_phase_work(self) -> None:
         for phase in ("inspect", "define"):

@@ -215,11 +215,12 @@ const MANIFEST = JSON.parse(
 );
 
 function sharedInvocations(text) {
-  return text.replace(/\$gsd-path(?:-[a-z0-9]+)*/g, (token) => {
+  return text.replace(/(\$gsd-path(?:-[a-z0-9]+)*)( status)?/g, (_match, token, arguments_) => {
     const skill = token.slice(1);
+    const argumentsText = arguments_ || "";
     const codex = `${MANIFEST.hosts.codex.invocation_prefix}${skill}`;
     const others = `${MANIFEST.hosts.antigravity.invocation_prefix}${skill}`;
-    return `${codex} (Codex) or ${others} (Antigravity/Zed)`;
+    return `${codex}${argumentsText} (Codex) or ${others}${argumentsText} (Antigravity/Zed)`;
   });
 }
 export function skillNamesForManifest(manifest) {

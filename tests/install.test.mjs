@@ -27,7 +27,8 @@ function makeSource(base) {
     const canonical = installer.SKILL_ALIASES[name];
     const body = canonical
       ? `# Deprecated alias\n\nInvoke $${name}, then read [the canonical skill](CANONICAL.md).\n`
-      : "Run $gsd-path, $gsd-path-build, and $gsd-path-discuss.\n";
+      : "Run $gsd-path, $gsd-path-build, and $gsd-path-discuss.\n" +
+        (name === "gsd-path" ? "Run $gsd-path status.\n" : "");
     fs.writeFileSync(
       path.join(skill, "SKILL.md"),
       `---\nname: ${name}\ndescription: test\n---\n${body}`
@@ -386,6 +387,10 @@ test("shared agent hosts use one deployment and back up existing entries", async
   const content = fs.readFileSync(path.join(shared, "gsd-path", "SKILL.md"), "utf8");
   assert.match(content, /disable-model-invocation: true/);
   assert.match(content, /\$gsd-path \(Codex\) or \/gsd-path \(Antigravity\/Zed\)/);
+  assert.match(
+    content,
+    /\$gsd-path status \(Codex\) or \/gsd-path status \(Antigravity\/Zed\)/
+  );
   assert.ok(fs.existsSync(path.join(shared, "gsd-path", "agents", "openai.yaml")));
 });
 

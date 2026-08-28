@@ -14,27 +14,69 @@ import sys
 from pathlib import Path
 from typing import Callable, Optional, Sequence
 
+
 def _load_diagnose_modules():
     try:
+        import archive_milestone
         import detect_project
+        import discussion_records
         import isolation
+        import pipeline_git
         import pipeline_state
-        return detect_project, isolation, pipeline_state
+        return (
+            archive_milestone,
+            detect_project,
+            discussion_records,
+            isolation,
+            pipeline_git,
+            pipeline_state,
+        )
     except ImportError:
         pass
     try:
-        from scripts import detect_project, isolation, pipeline_state
-        return detect_project, isolation, pipeline_state
+        from scripts import (
+            archive_milestone,
+            detect_project,
+            discussion_records,
+            isolation,
+            pipeline_git,
+            pipeline_state,
+        )
+        return (
+            archive_milestone,
+            detect_project,
+            discussion_records,
+            isolation,
+            pipeline_git,
+            pipeline_state,
+        )
     except ImportError:
         shared = Path(__file__).resolve().parents[2] / "gsd-path" / "scripts"
         sys.path.insert(0, str(shared))
+        import archive_milestone
         import detect_project
+        import discussion_records
         import isolation
+        import pipeline_git
         import pipeline_state
-        return detect_project, isolation, pipeline_state
+        return (
+            archive_milestone,
+            detect_project,
+            discussion_records,
+            isolation,
+            pipeline_git,
+            pipeline_state,
+        )
 
 
-detect_project, isolation, pipeline_state = _load_diagnose_modules()
+(
+    archive_milestone,
+    detect_project,
+    discussion_records,
+    isolation,
+    pipeline_git,
+    pipeline_state,
+) = _load_diagnose_modules()
 DetectError = detect_project.DetectError
 classify = detect_project.classify
 IsolationError = isolation.IsolationError
@@ -44,15 +86,18 @@ status_state = pipeline_state.status_state
 validate_state = pipeline_state.validate_state
 
 try:
-    from pipeline_undo import UndoError, preview as undo_preview
+    import pipeline_undo
 except ImportError:
     try:
-        from scripts.pipeline_undo import UndoError, preview as undo_preview
+        from scripts import pipeline_undo
     except ImportError:
         shared = Path(__file__).resolve().parents[2] / "gsd-path" / "scripts"
         if str(shared) not in sys.path:
             sys.path.insert(0, str(shared))
-        from pipeline_undo import UndoError, preview as undo_preview
+        import pipeline_undo
+
+UndoError = pipeline_undo.UndoError
+undo_preview = pipeline_undo.preview
 
 
 DIAGNOSE_SCHEMA = "gsd-path/diagnose/v1"
@@ -99,19 +144,18 @@ def _finding(
     }
 
 
-def _command(script: str, *arguments: object) -> str:
-    return shlex.join(
-        [sys.executable, str(Path(__file__).with_name(script)), *map(str, arguments)]
-    )
+def _command(module: object, *arguments: object) -> str:
+    script = Path(str(getattr(module, "__file__"))).resolve()
+    return shlex.join([sys.executable, str(script), *map(str, arguments)])
 
 
 def _route_retry(repo: Path, route: dict[str, object]) -> Optional[str]:
     action = route.get("action")
     if action == "resume-checkpoint":
-        return _command("pipeline_state.py", "resume-checkpoint", "--repo", repo)
+        return _command(pipeline_state, "resume-checkpoint", "--repo", repo)
     if action == "resume-shipment":
         return _command(
-            "pipeline_state.py",
+            pipeline_state,
             "record-shipment",
             "--repo",
             repo,
@@ -122,7 +166,7 @@ def _route_retry(repo: Path, route: dict[str, object]) -> Optional[str]:
         )
     if action == "resume-promotion":
         return _command(
-            "pipeline_state.py",
+            pipeline_state,
             "promote-next",
             "--repo",
             repo,
@@ -135,7 +179,7 @@ def _route_retry(repo: Path, route: dict[str, object]) -> Optional[str]:
         )
     if action == "resume-next-handoff":
         return _command(
-            "pipeline_git.py",
+            pipeline_git,
             "bind-next",
             "--repo",
             repo,
@@ -176,6 +220,8 @@ def diagnose(repo: Path) -> dict[str, object]:
         _probe("validate", lambda: validate_state(resolved)),
         _probe("status", lambda: status_state(resolved)),
         _probe("undo-preview", lambda: undo_preview(resolved)),
+        _probe("undo-transaction", lambda: pipeline_undo.pending_transaction(resolved)),
+        _probe("collect-artifacts", lambda: isolation.collect_artifact_recoveries(resolved)),
         _probe("worktrees", lambda: _leftover_worktrees(resolved)),
     ]
     by_name = {probe["name"]: probe for probe in probes}
@@ -191,7 +237,7 @@ def diagnose(repo: Path) -> dict[str, object]:
                     "orphan",
                     "stuck",
                     "detect_project classify returned orphan: " + ", ".join(map(str, paths)),
-                    "python3 <bundled detect_project.py> classify --repo <absolute-root>",
+                    _command(detect_project, "classify", "--repo", resolved),
                 )
             )
     else:
@@ -200,7 +246,7 @@ def diagnose(repo: Path) -> dict[str, object]:
                 "classify",
                 "stuck",
                 classified["error"] or "classify failed",
-                "python3 <bundled detect_project.py> classify --repo <absolute-root>",
+                _command(detect_project, "classify", "--repo", resolved),
             )
         )
 
@@ -211,7 +257,7 @@ def diagnose(repo: Path) -> dict[str, object]:
                 "status",
                 "stuck",
                 status_probe["error"] or "status failed",
-                "python3 <bundled pipeline_state.py> status --repo <absolute-root>",
+                _command(pipeline_state, "status", "--repo", resolved),
             )
         )
     else:
@@ -223,19 +269,21 @@ def diagnose(repo: Path) -> dict[str, object]:
             for key, path in (status.get("journals") or {}).items()
             if path
         }
-        if git.get("branch") and status.get("state", {}).get("branch") not in {
-            None,
-            git.get("branch"),
-        }:
+        route_retry = _route_retry(resolved, route)
+        recorded_branch = status.get("state", {}).get("branch")
+        if (
+            not route_retry
+            and git.get("branch")
+            and recorded_branch not in {None, git.get("branch")}
+        ):
             findings.append(
                 _finding(
                     "branch-mismatch",
                     "stuck",
                     str(route.get("reason") or "current branch does not match STATE.branch"),
-                    "python3 <bundled pipeline_state.py> route --repo <absolute-root>",
+                    _command(pipeline_state, "route", "--repo", resolved),
                 )
             )
-        route_retry = _route_retry(resolved, route)
         if route_retry:
             active = [f"{name}: {path}" for name, path in sorted(journals.items())]
             findings.append(
@@ -252,7 +300,7 @@ def diagnose(repo: Path) -> dict[str, object]:
                     "route-block",
                     "stuck",
                     str(route.get("reason") or "route returned block"),
-                    "python3 <bundled pipeline_state.py> route --repo <absolute-root>",
+                    _command(pipeline_state, "route", "--repo", resolved),
                 )
             )
         pending = status.get("pending_answers") or []
@@ -266,7 +314,7 @@ def diagnose(repo: Path) -> dict[str, object]:
                     "pending-answers",
                     "stuck",
                     f"{len(pending)} required discussion disposition(s): {paths}",
-                    _command("discussion_records.py", "pending", "--repo", resolved),
+                    _command(discussion_records, "pending", "--repo", resolved),
                 )
             )
         if status.get("pending_error"):
@@ -275,7 +323,7 @@ def diagnose(repo: Path) -> dict[str, object]:
                     "pending-error",
                     "stuck",
                     str(status["pending_error"]),
-                    _command("discussion_records.py", "pending", "--repo", resolved),
+                    _command(discussion_records, "pending", "--repo", resolved),
                 )
             )
         dirty = git.get("dirty") or []
@@ -285,7 +333,7 @@ def diagnose(repo: Path) -> dict[str, object]:
                     "dirty-worktree",
                     "info",
                     "uncommitted paths: " + ", ".join(dirty),
-                    "python3 <bundled pipeline_state.py> status --repo <absolute-root>",
+                    _command(pipeline_state, "status", "--repo", resolved),
                 )
             )
 
@@ -293,62 +341,128 @@ def diagnose(repo: Path) -> dict[str, object]:
         archive = state.get("archive")
         if archive and state.get("phase") in {"ship", "shipped"}:
             try:
-                try:
-                    from archive_milestone import ArchiveError, validate, validate_integrated
-                except ImportError:  # pragma: no cover
-                    from scripts.archive_milestone import (
-                        ArchiveError,
-                        validate,
-                        validate_integrated,
-                    )
-            except ImportError:
+                archive_milestone.validate(resolved)
+            except archive_milestone.ArchiveError as error:
                 findings.append(
                     _finding(
-                        "archive-helper",
-                        "info",
-                        "archive_milestone helper is unavailable in this skill copy",
-                        "python3 <bundled archive_milestone.py> validate --repo <absolute-root>",
+                        "archive-validate",
+                        "stuck",
+                        str(error),
+                        _command(archive_milestone, "validate", "--repo", resolved),
                     )
                 )
             else:
-                try:
-                    validate(resolved)
-                except ArchiveError as error:
-                    findings.append(
-                        _finding(
-                            "archive-validate",
-                            "stuck",
-                            str(error),
-                            "python3 <bundled archive_milestone.py> validate --repo <absolute-root>",
+                if state.get("phase") == "shipped" and state.get("milestone"):
+                    try:
+                        archive_milestone.validate_integrated(
+                            resolved, str(state["milestone"])
                         )
-                    )
-                else:
-                    if state.get("phase") == "shipped" and state.get("milestone"):
-                        try:
-                            validate_integrated(resolved, str(state["milestone"]))
-                        except ArchiveError as error:
-                            findings.append(
-                                _finding(
-                                    "integration",
-                                    "stuck",
-                                    str(error),
-                                    "python3 <bundled archive_milestone.py> validate-integrated --repo <absolute-root> --slug <STATE.milestone>",
-                                )
+                    except archive_milestone.ArchiveError as error:
+                        findings.append(
+                            _finding(
+                                "integration",
+                                "stuck",
+                                str(error),
+                                _command(
+                                    archive_milestone,
+                                    "validate-integrated",
+                                    "--repo",
+                                    resolved,
+                                    "--slug",
+                                    state["milestone"],
+                                ),
                             )
+                        )
+
+    undo_transaction = by_name["undo-transaction"]
+    if undo_transaction["ok"] and undo_transaction["result"]:
+        transaction = undo_transaction["result"]
+        findings.append(
+            _finding(
+                "undo-transaction",
+                "stuck",
+                f"{transaction['kind']} undo transaction is incomplete",
+                _command(
+                    pipeline_undo,
+                    "apply",
+                    "--repo",
+                    resolved,
+                    "--kind",
+                    transaction["kind"],
+                    "--expected-head",
+                    transaction["expected_head"],
+                ),
+            )
+        )
+    elif not undo_transaction["ok"]:
+        findings.append(
+            _finding(
+                "undo-transaction",
+                "stuck",
+                undo_transaction["error"] or "undo transaction is unreadable",
+                _command(pipeline_undo, "preview", "--repo", resolved),
+            )
+        )
+
+    collect_probe = by_name["collect-artifacts"]
+    if collect_probe["ok"]:
+        for transaction in collect_probe["result"] or []:
+            arguments: list[object] = [
+                "collect-artifact",
+                "--repo",
+                transaction["primary_worktree"],
+                "--source",
+                transaction["source_worktree"],
+                "--base",
+                transaction["base"],
+                "--branch",
+                transaction["branch"],
+                "--source-path",
+                transaction["source"],
+                "--destination-path",
+                transaction["destination"],
+            ]
+            if transaction["expected_destination"] is not None:
+                arguments.extend(
+                    ["--expected-destination", transaction["expected_destination"]]
+                )
+            findings.append(
+                _finding(
+                    "collect-artifact",
+                    "stuck",
+                    f"{transaction['stage']} journal: {transaction['journal']}",
+                    _command(isolation, *arguments),
+                )
+            )
+    else:
+        findings.append(
+            _finding(
+                "collect-artifact",
+                "stuck",
+                collect_probe["error"] or "artifact collection journal is unreadable",
+                _command(pipeline_state, "status", "--repo", resolved),
+            )
+        )
 
     worktrees = by_name["worktrees"]
     if worktrees["ok"]:
         leftovers = worktrees["result"] or []
-        if leftovers:
-            listed = ", ".join(
-                f"{item['branch']} @ {item['worktree']}" for item in leftovers
-            )
+        for item in leftovers:
             findings.append(
                 _finding(
                     "leftover-worktrees",
                     "info",
-                    listed,
-                    "python3 <bundled isolation.py> retire --repo <absolute-root> --worktree <path> --branch <branch>",
+                    f"{item['branch']} @ {item['worktree']}",
+                    _command(
+                        isolation,
+                        "retire",
+                        "--repo",
+                        resolved,
+                        "--worktree",
+                        item["worktree"],
+                        "--branch",
+                        item["branch"],
+                    ),
                 )
             )
     else:
@@ -357,7 +471,9 @@ def diagnose(repo: Path) -> dict[str, object]:
                 "worktrees",
                 "info",
                 worktrees["error"] or "could not list worktrees",
-                "git worktree list --porcelain",
+                shlex.join(
+                    ["git", "-C", str(resolved), "worktree", "list", "--porcelain"]
+                ),
             )
         )
 
@@ -370,7 +486,7 @@ def diagnose(repo: Path) -> dict[str, object]:
                     "undo-available",
                     "info",
                     f"preview kind {target['kind']} at {target.get('head')}",
-                    "python3 <bundled pipeline_undo.py> preview --repo <absolute-root>",
+                    _command(pipeline_undo, "preview", "--repo", resolved),
                 )
             )
     else:
@@ -379,7 +495,7 @@ def diagnose(repo: Path) -> dict[str, object]:
                 "undo-preview",
                 "info",
                 undo_probe["error"] or "undo preview failed",
-                "python3 <bundled pipeline_undo.py> preview --repo <absolute-root>",
+                _command(pipeline_undo, "preview", "--repo", resolved),
             )
         )
 

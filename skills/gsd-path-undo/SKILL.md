@@ -40,5 +40,5 @@ a commit that is an ancestor of `origin/main`.
   except through this helper.
 - Never undo a ship commit, integration merge, abandon commit, or promotion
   commit. Those are blocked findings, not apply targets.
-- A published HEAD (`origin/<STATE.branch>` equals HEAD) is blocked.
+- A published HEAD (reachable from `origin/<STATE.branch>`) is blocked.
 - Pending helper journals are blocked: resume that transaction instead.

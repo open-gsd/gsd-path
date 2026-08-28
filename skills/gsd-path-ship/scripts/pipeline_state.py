@@ -24,9 +24,17 @@ from pathlib import Path, PurePosixPath
 from typing import Iterator, Mapping, Optional, Sequence
 
 try:
-    from isolation import IsolationError, checkpoint as isolation_checkpoint
+    from isolation import (
+        IsolationError,
+        checkpoint as isolation_checkpoint,
+        collect_artifact_recoveries,
+    )
 except ImportError:  # pragma: no cover - package imports used by tests
-    from scripts.isolation import IsolationError, checkpoint as isolation_checkpoint
+    from scripts.isolation import (
+        IsolationError,
+        checkpoint as isolation_checkpoint,
+        collect_artifact_recoveries,
+    )
 
 try:  # pragma: no cover - exercised only on Windows
     import fcntl
@@ -322,16 +330,11 @@ def transaction_journals(repo: Path) -> dict[str, Optional[str]]:
     found["bind_next"] = (
         str(bind_root) if bind_root.exists() or bind_root.is_symlink() else None
     )
-    common = _run_git(resolved, "rev-parse", "--git-common-dir", check=False)
-    collect: Optional[str] = None
-    if common.returncode == 0 and common.stdout.strip():
-        collect_dir = Path(common.stdout.strip())
-        if not collect_dir.is_absolute():
-            collect_dir = resolved / collect_dir
-        collect_dir = collect_dir / "gsd-path" / "collect-artifact"
-        if collect_dir.exists() or collect_dir.is_symlink():
-            collect = str(collect_dir.resolve())
-    found["collect_artifact"] = collect
+    try:
+        collect = collect_artifact_recoveries(resolved)
+    except IsolationError as error:
+        raise PipelineStateError(str(error)) from error
+    found["collect_artifact"] = str(collect[0]["journal"]) if collect else None
     return found
 
 
@@ -350,7 +353,12 @@ def _is_ancestor(repo: Path, ancestor: str, descendant: str) -> bool:
         descendant,
         check=False,
     )
-    return result.returncode == 0
+    if result.returncode == 0:
+        return True
+    if result.returncode == 1:
+        return False
+    detail = result.stderr.strip() or result.stdout.strip() or "git ancestry probe failed"
+    raise PipelineStateError(detail)
 
 
 def _commit_subject_body(repo: Path, revision: str = "HEAD") -> tuple[str, str]:

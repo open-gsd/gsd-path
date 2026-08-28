@@ -4,6 +4,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from scripts import archive_milestone, isolation, pipeline_state, pipeline_undo
 
@@ -69,6 +70,31 @@ def task_text() -> str:
     )
 
 
+def discussion_text(follow_up: str = "required") -> tuple[str, str]:
+    next_owner = "ship" if follow_up == "required" else "none"
+    target = ".project/plan/PLAN.md" if follow_up == "required" else "none"
+    dialogue = archive_milestone.EMPTY_DISCUSSION_FILES["DIALOGUE.md"] + (
+        "\n### D001 — 2026-08-28 — ship/active — Review\n\n"
+        "- **Thread**: T001\n- **Reply to**: none\n- **User (verbatim)**:\n\n"
+        "  > question\n\n- **Assistant**:\n\n  answer\n\n"
+        "- **Evidence checked**: tests/test_pipeline_undo.py\n"
+        "- **Research**: not needed — local behavior\n- **Thread status**: final\n"
+    )
+    answers = archive_milestone.EMPTY_DISCUSSION_FILES["ANSWERS.md"] + (
+        "\n## Answer A001 — 2026-08-28 — Review\n\n"
+        "- **Thread**: T001\n- **Turn**: D001\n- **Supersedes**: none\n"
+        "- **Question**: question\n- **Status**: final\n"
+        "- **Phase/status**: ship/active\n- **Conclusion**: answer\n"
+        "- **Reasoning / pushback**: evidence supports the answer\n"
+        "- **Evidence**: tests/test_pipeline_undo.py\n"
+        "- **Research**: not needed — local behavior\n- **Confidence**: high\n"
+        f"- **Unresolved**: none\n- **Next owner**: {next_owner}\n"
+        f"- **Target artifact**: {target}\n"
+        f"- **Follow-up**: {follow_up}\n"
+    )
+    return dialogue, answers
+
+
 class PipelineUndoTests(unittest.TestCase):
     def test_preview_and_apply_plan_checkpoint(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -97,6 +123,33 @@ class PipelineUndoTests(unittest.TestCase):
             )
             state = pipeline_state.load_state(repo)[0]
             self.assertEqual((state.phase, state.status), ("plan", "active"))
+
+    def test_checkpoint_undo_preserves_committed_discussion_extension(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = init_repo(Path(tmp))
+            project = repo / ".project"
+            discussion = project / "discuss"
+            discussion.mkdir(parents=True)
+            for name, content in archive_milestone.EMPTY_DISCUSSION_FILES.items():
+                (discussion / name).write_text(content, encoding="utf-8")
+            (project / "STATE.md").write_text(state_text(), encoding="utf-8")
+            run_git(repo, "add", ".project")
+            run_git(repo, "commit", "-m", "fixture: approval base")
+            parent = run_git(repo, "rev-parse", "HEAD").stdout.strip()
+            dialogue, answers = discussion_text("none")
+            (discussion / "DIALOGUE.md").write_text(dialogue, encoding="utf-8")
+            (discussion / "ANSWERS.md").write_text(answers, encoding="utf-8")
+            (project / "plan").mkdir()
+            (project / "plan" / "PLAN.md").write_text("# Plan — first\n", encoding="utf-8")
+            pipeline_state.checkpoint_approval(repo, "plan", parent)
+            approved = run_git(repo, "rev-parse", "HEAD").stdout.strip()
+
+            pipeline_undo.apply_undo(repo, "checkpoint", approved)
+
+            self.assertEqual(
+                (discussion / "ANSWERS.md").read_text(encoding="utf-8"), answers
+            )
+            self.assertIsNone(pipeline_undo.pending_transaction(repo))
 
     def test_apply_refuses_published_head(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -248,24 +301,7 @@ class PipelineUndoTests(unittest.TestCase):
             archived.parent.mkdir(parents=True)
             discussion.replace(archived)
             discussion.mkdir()
-            dialogue += (
-                "\n### D001 — 2026-08-28 — ship/active — Review\n\n"
-                "- **Thread**: T001\n- **Reply to**: none\n- **User (verbatim)**:\n\n"
-                "  > question\n\n- **Assistant**:\n\n  answer\n\n"
-                "- **Evidence checked**: tests/test_pipeline_undo.py\n"
-                "- **Research**: not needed — local behavior\n- **Thread status**: final\n"
-            )
-            answers += (
-                "\n## Answer A001 — 2026-08-28 — Review\n\n"
-                "- **Thread**: T001\n- **Turn**: D001\n- **Supersedes**: none\n"
-                "- **Question**: question\n- **Status**: final\n"
-                "- **Phase/status**: ship/active\n- **Conclusion**: answer\n"
-                "- **Reasoning / pushback**: evidence supports the answer\n"
-                "- **Evidence**: tests/test_pipeline_undo.py\n"
-                "- **Research**: not needed — local behavior\n- **Confidence**: high\n"
-                "- **Unresolved**: none\n- **Next owner**: none\n"
-                "- **Target artifact**: none\n- **Follow-up**: none\n"
-            )
+            dialogue, answers = discussion_text()
             (discussion / "DIALOGUE.md").write_text(dialogue, encoding="utf-8")
             (discussion / "ANSWERS.md").write_text(answers, encoding="utf-8")
             (project / "STATE.md").write_text(
@@ -281,6 +317,74 @@ class PipelineUndoTests(unittest.TestCase):
                 answers,
             )
             self.assertFalse((repo / archive).exists())
+
+    def test_archive_undo_resumes_from_durable_discussion_transaction(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = init_repo(Path(tmp))
+            project = repo / ".project"
+            discussion = project / "discuss"
+            discussion.mkdir(parents=True)
+            for name, content in archive_milestone.EMPTY_DISCUSSION_FILES.items():
+                (discussion / name).write_text(content, encoding="utf-8")
+            (project / "STATE.md").write_text(
+                state_text(phase="ship", status="active"), encoding="utf-8"
+            )
+            run_git(repo, "add", ".project")
+            run_git(repo, "commit", "-m", "fixture: ship active")
+            archive = ".project/archive/001-first"
+            archived = repo / archive / "discuss"
+            archived.parent.mkdir(parents=True)
+            discussion.replace(archived)
+            discussion.mkdir()
+            dialogue, answers = discussion_text()
+            (discussion / "DIALOGUE.md").write_text(dialogue, encoding="utf-8")
+            (discussion / "ANSWERS.md").write_text(answers, encoding="utf-8")
+            (project / "STATE.md").write_text(
+                state_text(phase="ship", status="active", archive=f"{archive}/"),
+                encoding="utf-8",
+            )
+            head = run_git(repo, "rev-parse", "HEAD").stdout.strip()
+
+            with mock.patch.object(
+                pipeline_undo,
+                "_restore_discussion",
+                side_effect=pipeline_undo.UndoError("interrupted"),
+            ):
+                with self.assertRaisesRegex(pipeline_undo.UndoError, "interrupted"):
+                    pipeline_undo.apply_undo(repo, "uncommitted-archive", head)
+            self.assertIsNotNone(pipeline_undo.pending_transaction(repo))
+
+            pipeline_undo.apply_undo(repo, "uncommitted-archive", head)
+
+            self.assertEqual(
+                (discussion / "ANSWERS.md").read_text(encoding="utf-8"), answers
+            )
+            self.assertFalse((repo / archive).exists())
+            self.assertIsNone(pipeline_undo.pending_transaction(repo))
+
+    def test_build_archive_is_not_a_ship_archive_undo(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = init_repo(Path(tmp))
+            project = repo / ".project"
+            project.mkdir()
+            archive = ".project/archive/001-first"
+            (project / "STATE.md").write_text(
+                state_text(
+                    phase="build",
+                    status="active",
+                    archive=f"{archive}/",
+                ),
+                encoding="utf-8",
+            )
+            run_git(repo, "add", ".project/STATE.md")
+            run_git(repo, "commit", "-m", "fixture: abandon recovery")
+            (repo / archive).mkdir(parents=True)
+            (repo / archive / "partial.md").write_text("keep\n", encoding="utf-8")
+
+            previewed = pipeline_undo.preview(repo)
+
+            self.assertIsNone(previewed["target"]["kind"])
+            self.assertTrue((repo / archive / "partial.md").is_file())
 
     def test_lookahead_discard_removes_untracked_next(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

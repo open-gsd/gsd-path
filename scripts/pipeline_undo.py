@@ -54,6 +54,9 @@ _render_transition = pipeline_state._render_transition
 _repo_root = pipeline_state._repo_root
 _run_git = pipeline_state._run_git
 _state_from_text = pipeline_state._state_from_text
+_git_path = pipeline_state._git_path
+_read_json = pipeline_state._read_json
+_write_json = pipeline_state._write_json
 load_state = pipeline_state.load_state
 status_state = pipeline_state.status_state
 is_bound_branch = pipeline_git.is_bound_branch
@@ -61,6 +64,8 @@ is_ship_subject = pipeline_git.is_ship_subject
 
 
 UNDO_SCHEMA = "gsd-path/undo/v1"
+UNDO_TRANSACTION_SCHEMA = "gsd-path/undo-transaction/v1"
+UNDO_TRANSACTION_NAME = "gsd-path-undo.json"
 ROADMAP_APPROVAL_SUBJECT = "roadmap: program roadmap approved"
 TASK_SUBJECT_RE = re.compile(r"^(T\d{3,}): .+")
 KINDS = ("checkpoint", "task", "uncommitted-archive", "lookahead")
@@ -227,7 +232,11 @@ def _discussion_extension(repo: Path, archive: str) -> Optional[dict[str, bytes]
         return None
     archived = repo / archive / "discuss"
     try:
-        archive_milestone.require_append_only_discussion(active, archived)
+        archive_milestone.require_append_only_discussion(
+            active,
+            archived,
+            require_dispositions=False,
+        )
     except (ArchiveError, OSError) as error:
         raise UndoError(f"discussion records cannot be preserved: {error}") from error
     return {
@@ -255,9 +264,154 @@ def _restore_discussion(repo: Path, files: dict[str, bytes]) -> None:
             if temporary_name:
                 Path(temporary_name).unlink(missing_ok=True)
     try:
-        archive_milestone.validate_discussion_directory(discussion)
+        archive_milestone.validate_discussion_directory(
+            discussion,
+            require_dispositions=False,
+        )
     except ArchiveError as error:
         raise UndoError(f"restored discussion records are invalid: {error}") from error
+
+
+def _commit_discussion(repo: Path, revision: str) -> Optional[dict[str, bytes]]:
+    files: dict[str, bytes] = {}
+    for name in archive_milestone.DISCUSSION_FILES:
+        result = _run_git(
+            repo,
+            "show",
+            f"{revision}:.project/discuss/{name}",
+            check=False,
+        )
+        if result.returncode == 0:
+            files[name] = result.stdout.encode()
+    if not files:
+        return None
+    if set(files) != set(archive_milestone.DISCUSSION_FILES):
+        raise UndoError(f"commit {revision} has incomplete discussion records")
+    return files
+
+
+def _checkpoint_discussion(
+    repo: Path, head: str, parent: str
+) -> Optional[dict[str, bytes]]:
+    current = _commit_discussion(repo, head)
+    if current is None:
+        return None
+    previous = _commit_discussion(repo, parent)
+    if previous is not None and any(
+        not current[name].startswith(previous[name]) for name in current
+    ):
+        raise UndoError("checkpoint discussion records are not append-only")
+    with tempfile.TemporaryDirectory() as temporary:
+        directory = Path(temporary)
+        for name, data in current.items():
+            (directory / name).write_bytes(data)
+        try:
+            archive_milestone.validate_discussion_directory(
+                directory,
+                require_dispositions=False,
+            )
+        except ArchiveError as error:
+            raise UndoError(f"checkpoint discussion records are invalid: {error}") from error
+    return current
+
+
+def _encode_discussion(
+    files: Optional[dict[str, bytes]],
+) -> Optional[dict[str, str]]:
+    if files is None:
+        return None
+    return {name: data.decode("utf-8") for name, data in files.items()}
+
+
+def _decode_discussion(value: object) -> Optional[dict[str, bytes]]:
+    if value is None:
+        return None
+    expected = set(archive_milestone.DISCUSSION_FILES)
+    if not isinstance(value, dict) or set(value) != expected:
+        raise UndoError("undo transaction has invalid discussion records")
+    if any(not isinstance(content, str) for content in value.values()):
+        raise UndoError("undo transaction discussion records must be text")
+    return {str(name): content.encode("utf-8") for name, content in value.items()}
+
+
+def pending_transaction(repo: Path) -> Optional[dict[str, object]]:
+    resolved = _repo_root(repo)
+    path = _git_path(resolved, UNDO_TRANSACTION_NAME)
+    if not path.exists() and not path.is_symlink():
+        return None
+    value = _read_json(path)
+    expected = {
+        "schema",
+        "repo",
+        "kind",
+        "expected_head",
+        "parent",
+        "archive",
+        "discussion",
+    }
+    if set(value) != expected or value.get("schema") != UNDO_TRANSACTION_SCHEMA:
+        raise UndoError("undo transaction has invalid fields")
+    if value.get("repo") != str(resolved):
+        raise UndoError("undo transaction belongs to another worktree")
+    if value.get("kind") not in {"checkpoint", "uncommitted-archive"}:
+        raise UndoError("undo transaction has invalid kind")
+    for field in ("expected_head", "parent"):
+        if not isinstance(value.get(field), str) or not re.fullmatch(
+            r"[0-9a-f]{40,64}", str(value[field])
+        ):
+            raise UndoError(f"undo transaction has invalid {field}")
+    archive = value.get("archive")
+    if archive is not None and not isinstance(archive, str):
+        raise UndoError("undo transaction has invalid archive")
+    _decode_discussion(value.get("discussion"))
+    return value
+
+
+def _prepare_transaction(
+    repo: Path,
+    kind: str,
+    expected_head: str,
+    parent: str,
+    archive: Optional[str],
+    discussion: Optional[dict[str, bytes]],
+) -> dict[str, object]:
+    transaction = {
+        "schema": UNDO_TRANSACTION_SCHEMA,
+        "repo": str(repo),
+        "kind": kind,
+        "expected_head": expected_head,
+        "parent": parent,
+        "archive": archive,
+        "discussion": _encode_discussion(discussion),
+    }
+    _write_json(_git_path(repo, UNDO_TRANSACTION_NAME), transaction)
+    return transaction
+
+
+def _finish_transaction(repo: Path, transaction: dict[str, object]) -> None:
+    expected_head = str(transaction["expected_head"])
+    parent = str(transaction["parent"])
+    current = _optional_rev(repo, "HEAD")
+    if transaction["kind"] == "checkpoint":
+        allowed = {expected_head, parent}
+    else:
+        allowed = {expected_head}
+    if current not in allowed:
+        raise UndoError("HEAD moved during undo recovery")
+    _reset_to(repo, parent)
+    discussion = _decode_discussion(transaction.get("discussion"))
+    if discussion is not None:
+        _restore_discussion(repo, discussion)
+    archive = transaction.get("archive")
+    if isinstance(archive, str) and not _archive_in_head(repo, archive):
+        _remove_untracked_tree(repo, archive)
+    path = _git_path(repo, UNDO_TRANSACTION_NAME)
+    path.unlink()
+    descriptor = os.open(path.parent, os.O_RDONLY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
 
 
 def classify_undo(repo: Path) -> dict[str, object]:
@@ -295,7 +449,7 @@ def classify_undo(repo: Path) -> dict[str, object]:
             ["worktree has changes outside .project/: " + ", ".join(product)]
         )
 
-    if archive:
+    if archive and state_fields.get("phase") in {"ship", "shipped"}:
         archive_path = _normalize_archive(str(archive))
         if not _archive_in_head(resolved, archive_path):
             try:
@@ -456,6 +610,21 @@ def apply_undo(repo: Path, kind: str, expected_head: str) -> dict[str, object]:
     if kind not in KINDS:
         raise UndoError(f"unsupported undo kind: {kind}")
     resolved = _repo_root(repo)
+    transaction = pending_transaction(resolved)
+    if transaction is not None:
+        if transaction["kind"] != kind or transaction["expected_head"] != expected_head:
+            raise UndoError("undo transaction differs from this apply request")
+        _finish_transaction(resolved, transaction)
+        after = preview(resolved)
+        return {
+            "schema": UNDO_SCHEMA,
+            "status": "applied",
+            "kind": kind,
+            "head_before": expected_head,
+            "head_after": _optional_rev(resolved, "HEAD"),
+            "state": after["state"],
+            "remaining": after["target"],
+        }
     previewed = preview(resolved)
     target = previewed["target"]
     if target.get("kind") is None:
@@ -470,7 +639,21 @@ def apply_undo(repo: Path, kind: str, expected_head: str) -> dict[str, object]:
     if head != expected_head:
         raise UndoError("HEAD moved after preview; rerun preview")
 
-    if kind in {"checkpoint", "task"}:
+    if kind == "checkpoint":
+        parent = target["parent"]
+        if not parent:
+            raise UndoError("parent revision is not a safe reset target")
+        discussion = _checkpoint_discussion(resolved, expected_head, str(parent))
+        transaction = _prepare_transaction(
+            resolved,
+            kind,
+            expected_head,
+            str(parent),
+            None,
+            discussion,
+        )
+        _finish_transaction(resolved, transaction)
+    elif kind == "task":
         parent = target["parent"]
         if not parent:
             raise UndoError("parent revision is not a safe reset target")
@@ -478,11 +661,15 @@ def apply_undo(repo: Path, kind: str, expected_head: str) -> dict[str, object]:
     elif kind == "uncommitted-archive":
         archive = str(target["archive"])
         discussion = _discussion_extension(resolved, archive)
-        _reset_to(resolved, expected_head)
-        if discussion is not None:
-            _restore_discussion(resolved, discussion)
-        if not _archive_in_head(resolved, archive):
-            _remove_untracked_tree(resolved, archive)
+        transaction = _prepare_transaction(
+            resolved,
+            kind,
+            expected_head,
+            expected_head,
+            archive,
+            discussion,
+        )
+        _finish_transaction(resolved, transaction)
     else:
         _remove_untracked_tree(resolved, ".project/next")
 

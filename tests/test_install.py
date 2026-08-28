@@ -537,6 +537,10 @@ class InstallerTests(unittest.TestCase):
         self.assertIn(
             "$gsd-path (Codex) or /gsd-path (Antigravity/Zed)", content
         )
+        self.assertIn(
+            "$gsd-path status (Codex) or /gsd-path status (Antigravity/Zed)",
+            content,
+        )
         self.assertTrue((root / "gsd-path" / "agents" / "openai.yaml").is_file())
 
     def test_distinct_codex_and_zed_roots_each_use_the_shared_profile(self):
