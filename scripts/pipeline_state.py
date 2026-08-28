@@ -441,7 +441,11 @@ def status_state(repo: Path, project_dir: str = ".project") -> dict[str, object]
             "dirty": _worktree_changes(resolved),
             "origin_branch": origin_branch,
             "origin_main": origin_main,
-            "published": bool(head and origin_branch and head == origin_branch),
+            "published": bool(
+                head
+                and origin_branch
+                and _is_ancestor(resolved, head, origin_branch)
+            ),
             "ancestor_of_origin_main": bool(
                 head and origin_main and _is_ancestor(resolved, head, origin_main)
             ),

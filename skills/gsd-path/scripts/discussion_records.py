@@ -11,16 +11,25 @@ from datetime import date
 from pathlib import Path
 from typing import Iterator, Optional, Sequence
 
-try:
-    import archive_milestone
-    import pipeline_state
-except ModuleNotFoundError as error:
-    if error.name not in {"archive_milestone", "pipeline_state"}:
-        raise
-    shared_scripts = Path(__file__).resolve().parents[2] / "gsd-path" / "scripts"
-    sys.path.insert(0, str(shared_scripts))
-    import archive_milestone
-    import pipeline_state
+def _load_pipeline_modules():
+    try:
+        import archive_milestone
+        import pipeline_state
+        return archive_milestone, pipeline_state
+    except ImportError:
+        pass
+    try:
+        from scripts import archive_milestone, pipeline_state
+        return archive_milestone, pipeline_state
+    except ImportError:
+        shared_scripts = Path(__file__).resolve().parents[2] / "gsd-path" / "scripts"
+        sys.path.insert(0, str(shared_scripts))
+        import archive_milestone
+        import pipeline_state
+        return archive_milestone, pipeline_state
+
+
+archive_milestone, pipeline_state = _load_pipeline_modules()
 
 
 class DiscussionError(RuntimeError):

@@ -11,37 +11,49 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import shutil
 import sys
-from pathlib import Path
+import tempfile
+from pathlib import Path, PurePosixPath
 from typing import Optional, Sequence
 
 def _load_pipeline_modules():
     try:
+        import archive_milestone
+        import isolation
         import pipeline_git
         import pipeline_state
-        return pipeline_git, pipeline_state
+        return archive_milestone, isolation, pipeline_git, pipeline_state
     except ImportError:
         pass
     try:
-        from scripts import pipeline_git, pipeline_state
-        return pipeline_git, pipeline_state
+        from scripts import archive_milestone, isolation, pipeline_git, pipeline_state
+        return archive_milestone, isolation, pipeline_git, pipeline_state
     except ImportError:
         shared = Path(__file__).resolve().parents[2] / "gsd-path" / "scripts"
         sys.path.insert(0, str(shared))
+        import archive_milestone
+        import isolation
         import pipeline_git
         import pipeline_state
-        return pipeline_git, pipeline_state
+        return archive_milestone, isolation, pipeline_git, pipeline_state
 
 
-pipeline_git, pipeline_state = _load_pipeline_modules()
+archive_milestone, isolation, pipeline_git, pipeline_state = _load_pipeline_modules()
+ArchiveError = archive_milestone.ArchiveError
+IsolationError = isolation.IsolationError
 PLAN_APPROVAL_SUBJECT = pipeline_state.PLAN_APPROVAL_SUBJECT
 PipelineStateError = pipeline_state.PipelineStateError
+_activate_roadmap_milestone = pipeline_state._activate_roadmap_milestone
+_approval_details = pipeline_state._approval_details
 _commit_subject_body = pipeline_state._commit_subject_body
 _optional_rev = pipeline_state._optional_rev
+_render_transition = pipeline_state._render_transition
 _repo_root = pipeline_state._repo_root
 _run_git = pipeline_state._run_git
+_state_from_text = pipeline_state._state_from_text
 load_state = pipeline_state.load_state
 status_state = pipeline_state.status_state
 is_bound_branch = pipeline_git.is_bound_branch
@@ -106,6 +118,148 @@ def _blocked(reasons: Sequence[str]) -> dict[str, object]:
     }
 
 
+def _git_text(repo: Path, revision: str, relative: str) -> str:
+    result = _run_git(repo, "show", f"{revision}:{relative}", check=False)
+    if result.returncode != 0:
+        raise UndoError(f"missing {relative} in {revision}")
+    return result.stdout
+
+
+def _checkpoint_proof_error(
+    repo: Path, head: str, parent: str, subject: str
+) -> Optional[str]:
+    changed = set(
+        _run_git(
+            repo,
+            "diff-tree",
+            "--no-commit-id",
+            "--name-only",
+            "-r",
+            head,
+        ).stdout.splitlines()
+    )
+    if not changed or any(not path.startswith(".project/") for path in changed):
+        return "checkpoint changes paths outside .project"
+    state_paths = [
+        path
+        for path in (".project/STATE.md", ".project/next/STATE.md")
+        if path in changed
+    ]
+    if len(state_paths) != 1:
+        return "checkpoint must change exactly one owned STATE.md"
+    state_path = state_paths[0]
+    project_dir = str(PurePosixPath(state_path).parent)
+    try:
+        before_text = _git_text(repo, parent, state_path)
+        after_text = _git_text(repo, head, state_path)
+        before = _state_from_text(before_text, f"{parent}:{state_path}")
+        after = _state_from_text(after_text, f"{head}:{state_path}")
+        body = _commit_subject_body(repo, head)[1].strip()
+        if subject == PLAN_APPROVAL_SUBJECT:
+            kind = "plan"
+            selected = None
+        elif subject == ROADMAP_APPROVAL_SUBJECT:
+            kind = "roadmap"
+            selected = after.milestone
+        else:
+            return "checkpoint subject is not canonical"
+        changes, event, expected_subject, expected_body = _approval_details(
+            kind, before, selected
+        )
+        if subject != expected_subject or body != expected_body:
+            return "checkpoint message does not match its state transition"
+        added_dates = re.findall(
+            rf"^- (\d{{4}}-\d{{2}}-\d{{2}}) — {kind} — {re.escape(event)}$",
+            after_text,
+            re.MULTILINE,
+        )
+        if not added_dates:
+            return "checkpoint state lacks its canonical event"
+        expected = {
+            "phase": before.phase,
+            "status": before.status,
+            "milestone": before.milestone,
+            "branch": before.branch,
+            "archive": before.archive,
+        }
+        _, expected_state, rendered = _render_transition(
+            before,
+            before_text,
+            expected,
+            changes,
+            event,
+            project_dir,
+            added_dates[-1],
+            kind,
+        )
+        if rendered != after_text or expected_state != after:
+            return "checkpoint STATE.md is not the canonical approval result"
+        if kind == "roadmap":
+            roadmap_before = _git_text(repo, parent, ".project/ROADMAP.md")
+            roadmap_after = _git_text(repo, head, ".project/ROADMAP.md")
+            if roadmap_after != _activate_roadmap_milestone(
+                roadmap_before, str(selected)
+            ):
+                return "checkpoint ROADMAP.md is not the canonical approval result"
+    except (PipelineStateError, UndoError) as error:
+        return str(error)
+    return None
+
+
+def _task_proof_error(repo: Path, head: str) -> Optional[str]:
+    try:
+        recovered = isolation.recover(repo, Path(".project/tasks"))
+    except IsolationError as error:
+        return str(error)
+    matches = [
+        task
+        for task in recovered.get("tasks", [])
+        if task.get("verdict") == "recovered" and task.get("commit") == head
+    ]
+    if recovered.get("verdict") != "ok" or len(matches) != 1:
+        return "HEAD is not the uniquely proven last task landing"
+    return None
+
+
+def _discussion_extension(repo: Path, archive: str) -> Optional[dict[str, bytes]]:
+    active = repo / ".project" / "discuss"
+    if not active.exists() and not active.is_symlink():
+        return None
+    archived = repo / archive / "discuss"
+    try:
+        archive_milestone.require_append_only_discussion(active, archived)
+    except (ArchiveError, OSError) as error:
+        raise UndoError(f"discussion records cannot be preserved: {error}") from error
+    return {
+        name: (active / name).read_bytes()
+        for name in archive_milestone.DISCUSSION_FILES
+    }
+
+
+def _restore_discussion(repo: Path, files: dict[str, bytes]) -> None:
+    discussion = repo / ".project" / "discuss"
+    if discussion.is_symlink() or (discussion.exists() and not discussion.is_dir()):
+        raise UndoError("discussion restore destination is unsafe")
+    discussion.mkdir(exist_ok=True)
+    for name, data in files.items():
+        temporary_name: Optional[str] = None
+        try:
+            with tempfile.NamedTemporaryFile(dir=discussion, delete=False) as handle:
+                handle.write(data)
+                handle.flush()
+                os.fsync(handle.fileno())
+                temporary_name = handle.name
+            os.replace(temporary_name, discussion / name)
+            temporary_name = None
+        finally:
+            if temporary_name:
+                Path(temporary_name).unlink(missing_ok=True)
+    try:
+        archive_milestone.validate_discussion_directory(discussion)
+    except ArchiveError as error:
+        raise UndoError(f"restored discussion records are invalid: {error}") from error
+
+
 def classify_undo(repo: Path) -> dict[str, object]:
     resolved = _repo_root(repo)
     status = status_state(resolved)
@@ -144,6 +298,10 @@ def classify_undo(repo: Path) -> dict[str, object]:
     if archive:
         archive_path = _normalize_archive(str(archive))
         if not _archive_in_head(resolved, archive_path):
+            try:
+                _discussion_extension(resolved, archive_path)
+            except UndoError as error:
+                return _blocked([str(error)])
             return {
                 "kind": "uncommitted-archive",
                 "head": head,
@@ -198,6 +356,9 @@ def classify_undo(repo: Path) -> dict[str, object]:
 
     if subject in {PLAN_APPROVAL_SUBJECT, ROADMAP_APPROVAL_SUBJECT}:
         kind = "plan" if subject == PLAN_APPROVAL_SUBJECT else "roadmap"
+        proof_error = _checkpoint_proof_error(resolved, head, parent, subject)
+        if proof_error:
+            return _blocked([f"checkpoint ownership is unproven: {proof_error}"])
         return {
             "kind": "checkpoint",
             "checkpoint": kind,
@@ -212,6 +373,9 @@ def classify_undo(repo: Path) -> dict[str, object]:
         }
 
     if TASK_SUBJECT_RE.fullmatch(subject) and body.lstrip().startswith("Task:"):
+        proof_error = _task_proof_error(resolved, head)
+        if proof_error:
+            return _blocked([f"task landing ownership is unproven: {proof_error}"])
         return {
             "kind": "task",
             "head": head,
@@ -269,11 +433,15 @@ def _reset_to(repo: Path, revision: str) -> None:
 
 
 def _remove_untracked_tree(repo: Path, relative: str) -> None:
-    path = (repo / relative).resolve()
-    try:
-        path.relative_to(repo.resolve())
-    except ValueError as error:
-        raise UndoError(f"refusing to delete a path outside the repo: {path}") from error
+    normalized = PurePosixPath(relative)
+    if normalized.is_absolute() or ".." in normalized.parts or not normalized.parts:
+        raise UndoError(f"refusing to delete an invalid path: {relative}")
+    current = repo
+    for part in normalized.parts[:-1]:
+        current /= part
+        if current.is_symlink():
+            raise UndoError(f"refusing to delete through a symlink parent: {relative}")
+    path = repo.joinpath(*normalized.parts)
     if path.is_symlink():
         path.unlink()
         return
@@ -309,7 +477,10 @@ def apply_undo(repo: Path, kind: str, expected_head: str) -> dict[str, object]:
         _reset_to(resolved, str(parent))
     elif kind == "uncommitted-archive":
         archive = str(target["archive"])
+        discussion = _discussion_extension(resolved, archive)
         _reset_to(resolved, expected_head)
+        if discussion is not None:
+            _restore_discussion(resolved, discussion)
         if not _archive_in_head(resolved, archive):
             _remove_untracked_tree(resolved, archive)
     else:

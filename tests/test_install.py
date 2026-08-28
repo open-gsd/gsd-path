@@ -34,7 +34,10 @@ class InstallerTests(unittest.TestCase):
                 f"# Deprecated alias\n\nInvoke ${name}, then read "
                 "[the canonical skill](CANONICAL.md).\n"
                 if canonical
-                else "Run $gsd-path, $gsd-path-build, and $gsd-path-discuss.\n"
+                else (
+                    "Run $gsd-path, $gsd-path-build, and $gsd-path-discuss.\n"
+                    + ("Run $gsd-path status.\n" if name == "gsd-path" else "")
+                )
             )
             (skill / "SKILL.md").write_text(
                 f"---\nname: {name}\ndescription: test\n---\n{body}",
@@ -376,6 +379,11 @@ class InstallerTests(unittest.TestCase):
                     elif target == install.SHARED_AGENT_PROFILE:
                         self.assertIn("$gsd-path (Codex)", content, name)
                         self.assertIn("/gsd-path (Antigravity/Zed)", content, name)
+                        if name == "gsd-path":
+                            self.assertIn(
+                                "$gsd-path status (Codex) or /gsd-path status (Antigravity/Zed)",
+                                content,
+                            )
                         self.assertIn(
                             "shared dispatch for $gsd-path (Codex)", dispatch, name
                         )

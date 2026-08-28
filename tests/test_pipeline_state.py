@@ -138,6 +138,37 @@ class PipelineStateTests(unittest.TestCase):
             self.assertEqual((project / "STATE.md").read_text(encoding="utf-8"), before)
             self.assertEqual(status["pending_answers"], [])
 
+    def test_status_marks_head_published_when_remote_branch_advanced(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            origin = root / "origin.git"
+            subprocess.run(["git", "init", "-q", "--bare", str(origin)], check=True)
+            repo = root / "repo"
+            run_git(root, "init", "-b", "gsd-path/M001", str(repo))
+            run_git(repo, "config", "user.name", "GSD Path Test")
+            run_git(repo, "config", "user.email", "test@example.com")
+            project = repo / ".project"
+            (project / "intent").mkdir(parents=True)
+            (project / "STATE.md").write_text(
+                state_text(milestone="first", branch="gsd-path/M001"),
+                encoding="utf-8",
+            )
+            (project / "intent" / "INTENT.md").write_text(
+                "# Intent — first\n\nLane: quick\n", encoding="utf-8"
+            )
+            run_git(repo, "add", ".project/STATE.md")
+            run_git(repo, "commit", "-m", "fixture: published ancestor")
+            published = run_git(repo, "rev-parse", "HEAD").stdout.strip()
+            run_git(repo, "remote", "add", "origin", str(origin))
+            run_git(repo, "push", "-u", "origin", "gsd-path/M001")
+            (repo / "later.txt").write_text("later\n", encoding="utf-8")
+            run_git(repo, "add", "later.txt")
+            run_git(repo, "commit", "-m", "fixture: later remote tip")
+            run_git(repo, "push", "origin", "gsd-path/M001")
+            run_git(repo, "reset", "--hard", published)
+
+            self.assertTrue(pipeline_state.status_state(repo)["git"]["published"])
+
     def test_route_binds_initialized_state_before_phase_work(self) -> None:
         for phase in ("inspect", "define"):
             with self.subTest(phase=phase), tempfile.TemporaryDirectory() as tmp:

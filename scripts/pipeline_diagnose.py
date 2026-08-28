@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shlex
 import sys
 from pathlib import Path
 from typing import Callable, Optional, Sequence
@@ -98,6 +99,60 @@ def _finding(
     }
 
 
+def _command(script: str, *arguments: object) -> str:
+    return shlex.join(
+        [sys.executable, str(Path(__file__).with_name(script)), *map(str, arguments)]
+    )
+
+
+def _route_retry(repo: Path, route: dict[str, object]) -> Optional[str]:
+    action = route.get("action")
+    if action == "resume-checkpoint":
+        return _command("pipeline_state.py", "resume-checkpoint", "--repo", repo)
+    if action == "resume-shipment":
+        return _command(
+            "pipeline_state.py",
+            "record-shipment",
+            "--repo",
+            repo,
+            "--archive",
+            route["archive"],
+            "--event",
+            route["event"],
+        )
+    if action == "resume-promotion":
+        return _command(
+            "pipeline_state.py",
+            "promote-next",
+            "--repo",
+            repo,
+            "--milestone",
+            route["milestone"],
+            "--branch",
+            route["branch"],
+            "--integrate",
+            route["integrate"],
+        )
+    if action == "resume-next-handoff":
+        return _command(
+            "pipeline_git.py",
+            "bind-next",
+            "--repo",
+            repo,
+            "--branch",
+            route["branch"],
+            "--previous-branch",
+            route["previous_branch"],
+            "--ship",
+            route["ship"],
+            "--remote-default",
+            route["remote_default"],
+            "--base",
+            route["base"],
+        )
+    return None
+
+
 def _leftover_worktrees(repo: Path) -> list[dict[str, str]]:
     leftovers: list[dict[str, str]] = []
     records = _registered_worktrees(repo)
@@ -180,21 +235,15 @@ def diagnose(repo: Path) -> dict[str, object]:
                     "python3 <bundled pipeline_state.py> route --repo <absolute-root>",
                 )
             )
-        for name, path in sorted(journals.items()):
-            retries = {
-                "checkpoint": "python3 <bundled pipeline_state.py> resume-checkpoint --repo <absolute-root>",
-                "shipment": "python3 <bundled pipeline_state.py> record-shipment --repo <absolute-root> --archive <STATE.archive> --event <journal.event>",
-                "promotion": "python3 <bundled pipeline_state.py> promote-next --repo <absolute-root> --milestone <journal.milestone> --branch <journal.branch> --integrate <journal.integrate>",
-                "bind_next": "python3 <bundled pipeline_git.py> bind-next with the journal's typed fields",
-                "abandon": "python3 <bundled archive_milestone.py> abandon --repo <absolute-root> (via $gsd-path-build)",
-                "collect_artifact": "python3 <bundled isolation.py> collect-artifact using the journal request",
-            }
+        route_retry = _route_retry(resolved, route)
+        if route_retry:
+            active = [f"{name}: {path}" for name, path in sorted(journals.items())]
             findings.append(
                 _finding(
-                    f"journal-{name}",
+                    f"journal-{route.get('action')}",
                     "stuck",
-                    f"{name} journal present: {path}",
-                    retries.get(name, "invoke $gsd-path and follow route.action"),
+                    "; ".join(active),
+                    route_retry,
                 )
             )
         if route.get("action") == "block":
@@ -208,12 +257,16 @@ def diagnose(repo: Path) -> dict[str, object]:
             )
         pending = status.get("pending_answers") or []
         if pending:
+            paths = ", ".join(
+                f"{item.get('answer')} -> {item.get('owner')} -> {item.get('target')}"
+                for item in pending
+            )
             findings.append(
                 _finding(
                     "pending-answers",
-                    "info",
-                    f"{len(pending)} required discussion follow-up(s) without disposition",
-                    "python3 <bundled discussion_records.py> pending --repo <absolute-root>",
+                    "stuck",
+                    f"{len(pending)} required discussion disposition(s): {paths}",
+                    _command("discussion_records.py", "pending", "--repo", resolved),
                 )
             )
         if status.get("pending_error"):
@@ -222,7 +275,7 @@ def diagnose(repo: Path) -> dict[str, object]:
                     "pending-error",
                     "stuck",
                     str(status["pending_error"]),
-                    "python3 <bundled discussion_records.py> pending --repo <absolute-root>",
+                    _command("discussion_records.py", "pending", "--repo", resolved),
                 )
             )
         dirty = git.get("dirty") or []

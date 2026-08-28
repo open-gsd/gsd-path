@@ -264,12 +264,17 @@ def _shared_invocations(text: str) -> str:
     hosts = sync_skill_resources.RESOURCE_MANIFEST["hosts"]
 
     def replace(match: re.Match) -> str:
-        skill = match.group(0)[1:]
+        skill = match.group("skill")[1:]
+        arguments = match.group("arguments") or ""
         codex = f"{hosts['codex']['invocation_prefix']}{skill}"
         others = f"{hosts['antigravity']['invocation_prefix']}{skill}"
-        return f"{codex} (Codex) or {others} (Antigravity/Zed)"
+        return f"{codex}{arguments} (Codex) or {others}{arguments} (Antigravity/Zed)"
 
-    return re.sub(r"\$gsd-path(?:-[a-z0-9]+)*", replace, text)
+    return re.sub(
+        r"(?P<skill>\$gsd-path(?:-[a-z0-9]+)*)(?P<arguments> status)?",
+        replace,
+        text,
+    )
 
 
 class InstallerError(RuntimeError):
