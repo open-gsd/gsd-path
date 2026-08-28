@@ -19,12 +19,14 @@
     "gsd-path-define",
     "gsd-path-discuss",
     "gsd-path-docs-audit",
+    "gsd-path-forensics",
     "gsd-path-inspect",
     "gsd-path-loop",
     "gsd-path-plan",
     "gsd-path-research",
     "gsd-path-roadmap",
-    "gsd-path-ship"
+    "gsd-path-ship",
+    "gsd-path-undo"
   ],
   "skill_aliases": {},
   "package_files": [
@@ -52,6 +54,8 @@
     "scripts/pipeline_state.py",
     "scripts/build_state.py",
     "scripts/loop_run.py",
+    "scripts/pipeline_undo.py",
+    "scripts/pipeline_diagnose.py",
     "README.md",
     "DOCS.md",
     "HOOKS.md",
@@ -95,6 +99,7 @@
       "templates/docs-audit.md",
       "templates/state.md"
     ],
+    "gsd-path-forensics": [],
     "gsd-path-loop": [
       "templates/loop.md"
     ],
@@ -130,7 +135,8 @@
       "references/dispatch.md",
       "references/decider.md",
       "templates/synthesis.md"
-    ]
+    ],
+    "gsd-path-undo": []
   },
   "script_targets": [
     ["scripts/archive_milestone.py", "skills/gsd-path/scripts/archive_milestone.py"],
@@ -186,6 +192,11 @@
     ["scripts/review_panel.py", "skills/gsd-path-roadmap/scripts/review_panel.py"],
     ["scripts/review_panel.py", "skills/gsd-path-ship/scripts/review_panel.py"],
     ["scripts/loop_run.py", "skills/gsd-path-loop/scripts/loop_run.py"],
+    ["scripts/pipeline_undo.py", "skills/gsd-path-undo/scripts/pipeline_undo.py"],
+    ["scripts/discussion_records.py", "skills/gsd-path-undo/scripts/discussion_records.py"],
+    ["scripts/pipeline_diagnose.py", "skills/gsd-path-forensics/scripts/pipeline_diagnose.py"],
+    ["scripts/pipeline_undo.py", "skills/gsd-path-forensics/scripts/pipeline_undo.py"],
+    ["scripts/discussion_records.py", "skills/gsd-path-forensics/scripts/discussion_records.py"],
     ["scripts/isolation.py", "skills/gsd-path/scripts/isolation.py"],
     ["scripts/isolation.py", "skills/gsd-path-build/scripts/isolation.py"],
     ["scripts/isolation.py", "skills/gsd-path-inspect/scripts/isolation.py"],

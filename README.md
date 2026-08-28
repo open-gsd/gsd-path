@@ -45,13 +45,13 @@ npm (once published to npm): `npx gsd-path --all` · Help: `node scripts/install
 
 ## Skills
 
-Twelve canonical explicit-only skills are installed.
-Invoke the **router** by default; use phase skills for one step only, or use the
-discussion sidecar to talk through a question at any non-shipped phase.
+Fourteen canonical explicit-only skills are installed.
+Invoke the **router** by default; use phase skills for one step only, or use a
+sidecar to discuss, diagnose, or undo without advancing.
 
 | Skill | Role |
 | --- | --- |
-| `gsd-path` | Router — detects state, runs next phase |
+| `gsd-path` | Router — detects state, runs next phase (`status` reports without advancing) |
 | `gsd-path-inspect` | Phase 0 — brownfield codebase map + doc audit |
 | `gsd-path-define` | Phase 1 — intent definition |
 | `gsd-path-research` | Phase 2 — parallel evidence researchers |
@@ -63,6 +63,8 @@ discussion sidecar to talk through a question at any non-shipped phase.
 | `gsd-path-discuss` | Any-phase discussion with durable dialogue and answers |
 | `gsd-path-docs-audit` | Standalone doc-vs-code drift check |
 | `gsd-path-loop` | Standalone bounded loop runner driven by a LOOP.md spec |
+| `gsd-path-forensics` | Read-only stuck-pipeline diagnosis |
+| `gsd-path-undo` | Helper-owned undo of unpublished pipeline work |
 
 Codex: `$gsd-path`, `$gsd-path-plan`, … · Other hosts: `/gsd-path`, `/gsd-path-plan`, …
 
@@ -248,7 +250,7 @@ the authoritative host API table and delegation rules.
 | `FULL.md` | Full guide |
 | `UPDATE.md` | Updating |
 | `HOOKS.md` | Guard hooks |
-| `skills/` | Twelve canonical `gsd-path*` skills |
+| `skills/` | Fourteen canonical `gsd-path*` skills |
 | `platforms/` | Host dispatch adapters |
 | `scripts/install.mjs` | Installer (npm `gsd-path` bin) |
 | `scripts/install.py` | Python installer |

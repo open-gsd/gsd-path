@@ -46,7 +46,9 @@ dependency.
 | `tests/test_isolation.py` | unittest | `scripts/isolation.py` — named worktrees, task landing, artifact collection, checkpoints, guarded retirement, CLI E2E |
 | `tests/test_loop_run.py` | unittest | `scripts/loop_run.py` — atomic claims, recovery, admission limits, completion, and status |
 | `tests/test_pipeline_git.py` | unittest | `scripts/pipeline_git.py` — canonical subjects, initial/next branch binding, and mutation refusal |
-| `tests/test_pipeline_state.py` | unittest | `scripts/pipeline_state.py` — state validation, route decisions, transitions, and lookahead promotion recovery |
+| `tests/test_pipeline_state.py` | unittest | `scripts/pipeline_state.py` — state validation, route decisions, status snapshot, transitions, and lookahead promotion recovery |
+| `tests/test_pipeline_undo.py` | unittest | `scripts/pipeline_undo.py` — unpublished checkpoint, task, archive, and lookahead undo |
+| `tests/test_pipeline_diagnose.py` | unittest | `scripts/pipeline_diagnose.py` — read-only stuck/unowned/ok diagnosis |
 | `tests/test_review_panel.py` | unittest | `scripts/review_panel.py` — canonical panel resolution, validation, and merge parsing |
 | `tests/test_router_contract.py` | unittest | executable route phase matrix, bundled phase contracts, and STATE template compatibility |
 | `tests/test_sync_skill_resources.py` | unittest | generated resources, manifest-owned links, and dispatch branches |

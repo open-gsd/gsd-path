@@ -32,6 +32,8 @@
     "scripts/pipeline_state.py",
     "scripts/build_state.py",
     "scripts/loop_run.py",
+    "scripts/pipeline_undo.py",
+    "scripts/pipeline_diagnose.py",
     "README.md",
     "DOCS.md",
     "HOOKS.md",

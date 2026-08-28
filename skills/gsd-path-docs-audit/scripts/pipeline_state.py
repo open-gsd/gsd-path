@@ -68,6 +68,7 @@ PLAN_APPROVAL_SUBJECT = "plan: build plan approved"
 PROMOTION_SCHEMA = "gsd-path/promote-next/v1"
 STATE_SCHEMA = "gsd-path/state/v1"
 ROUTE_SCHEMA = "gsd-path/route/v1"
+STATUS_SCHEMA = "gsd-path/status/v1"
 BIND_NEXT_JOURNAL_SCHEMA = "gsd-path/bind-next-journal/v1"
 BIND_NEXT_JOURNAL_DIR = "gsd-path-bind-next"
 PROMOTION_TRACKS = ("intent", "research", "plan", "tasks", "review")
@@ -301,6 +302,155 @@ def validate_state(repo: Path, project_dir: str = ".project") -> dict[str, objec
         "status": "valid",
         "path": str(path),
         "state": state.json(),
+    }
+
+
+def transaction_journals(repo: Path) -> dict[str, Optional[str]]:
+    """Return paths of any in-progress helper journals. Read-only."""
+    resolved = _repo_root(repo)
+    found: dict[str, Optional[str]] = {}
+    named = {
+        "checkpoint": CHECKPOINT_JOURNAL_NAME,
+        "shipment": SHIPMENT_JOURNAL_NAME,
+        "promotion": "gsd-path-promote-next.json",
+        "abandon": "gsd-path-abandon.json",
+    }
+    for key, name in named.items():
+        path = _git_path(resolved, name)
+        found[key] = str(path) if path.exists() or path.is_symlink() else None
+    bind_root = _git_path(resolved, BIND_NEXT_JOURNAL_DIR)
+    found["bind_next"] = (
+        str(bind_root) if bind_root.exists() or bind_root.is_symlink() else None
+    )
+    common = _run_git(resolved, "rev-parse", "--git-common-dir", check=False)
+    collect: Optional[str] = None
+    if common.returncode == 0 and common.stdout.strip():
+        collect_dir = Path(common.stdout.strip())
+        if not collect_dir.is_absolute():
+            collect_dir = resolved / collect_dir
+        collect_dir = collect_dir / "gsd-path" / "collect-artifact"
+        if collect_dir.exists() or collect_dir.is_symlink():
+            collect = str(collect_dir.resolve())
+    found["collect_artifact"] = collect
+    return found
+
+
+def _optional_rev(repo: Path, spec: str) -> Optional[str]:
+    result = _run_git(repo, "rev-parse", "--verify", "--quiet", spec, check=False)
+    sha = result.stdout.strip()
+    return sha if result.returncode == 0 and sha else None
+
+
+def _is_ancestor(repo: Path, ancestor: str, descendant: str) -> bool:
+    result = _run_git(
+        repo,
+        "merge-base",
+        "--is-ancestor",
+        ancestor,
+        descendant,
+        check=False,
+    )
+    return result.returncode == 0
+
+
+def _commit_subject_body(repo: Path, revision: str = "HEAD") -> tuple[str, str]:
+    raw = _run_git(repo, "cat-file", "commit", revision).stdout
+    try:
+        message = raw.split("\n\n", 1)[1]
+    except IndexError as error:
+        raise PipelineStateError(f"commit {revision} has no message body") from error
+    subject, _, rest = message.partition("\n")
+    return subject.strip(), rest.lstrip("\n")
+
+
+def _pending_answers(repo: Path) -> tuple[list[dict[str, str]], Optional[str]]:
+    answers = repo / ".project" / "discuss" / "ANSWERS.md"
+    if not answers.exists() and not answers.is_symlink():
+        return [], None
+    try:
+        try:
+            from discussion_records import DiscussionError, pending_records
+        except ImportError:  # pragma: no cover - package imports used by tests
+            from scripts.discussion_records import DiscussionError, pending_records
+    except ImportError:
+        return [], "discussion_records helper is unavailable"
+    try:
+        records = pending_records(answers.parent)
+    except (DiscussionError, OSError, UnicodeDecodeError, ValueError) as error:
+        return [], str(error)
+    pending: list[dict[str, str]] = []
+    for record in records:
+        pending.append(
+            {
+                "answer": str(record.get("answer") or ""),
+                "owner": str(record.get("owner") or ""),
+                "target": str(record.get("target") or ""),
+                "status": str(record.get("status") or ""),
+            }
+        )
+    return pending, None
+
+
+def _next_skill(route: Mapping[str, object]) -> Optional[str]:
+    action = route.get("action")
+    phase = route.get("phase")
+    if action == "run-phase" and isinstance(phase, str):
+        return f"gsd-path-{phase}"
+    if action in {
+        "bind-initial",
+        "resume-checkpoint",
+        "resume-shipment",
+        "resume-promotion",
+        "resume-next-handoff",
+        "validate-integrated",
+        "block",
+    }:
+        return "gsd-path"
+    return None
+
+
+def status_state(repo: Path, project_dir: str = ".project") -> dict[str, object]:
+    """Report owned state, route, and git facts without advancing a phase."""
+    resolved = _repo_root(repo)
+    routed = route_state(resolved, project_dir)
+    state = routed["state"]
+    route = routed["route"]
+    head = _optional_rev(resolved, "HEAD")
+    branch = _current_branch(resolved)
+    origin_branch = (
+        _optional_rev(resolved, f"refs/remotes/origin/{branch}")
+        if branch
+        else None
+    )
+    origin_main = _optional_rev(resolved, "refs/remotes/origin/main")
+    pending, pending_error = _pending_answers(resolved)
+    lookahead = resolved / ".project" / "next"
+    subject = ""
+    if head is not None:
+        subject, _ = _commit_subject_body(resolved, head)
+    return {
+        "schema": STATUS_SCHEMA,
+        "advance": False,
+        "state": state,
+        "route": route,
+        "path": str(_track_root(resolved, project_dir) / "STATE.md"),
+        "git": {
+            "branch": branch,
+            "head": head,
+            "subject": subject,
+            "dirty": _worktree_changes(resolved),
+            "origin_branch": origin_branch,
+            "origin_main": origin_main,
+            "published": bool(head and origin_branch and head == origin_branch),
+            "ancestor_of_origin_main": bool(
+                head and origin_main and _is_ancestor(resolved, head, origin_main)
+            ),
+        },
+        "pending_answers": pending,
+        "pending_error": pending_error,
+        "lookahead": lookahead.exists() or lookahead.is_symlink(),
+        "journals": transaction_journals(resolved),
+        "next_skill": _next_skill(route if isinstance(route, dict) else {}),
     }
 
 
@@ -2830,7 +2980,7 @@ def _specified_fields(arguments: argparse.Namespace, prefix: str) -> dict[str, O
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
-    for command in ("validate", "route"):
+    for command in ("validate", "route", "status"):
         subparser = subparsers.add_parser(command)
         subparser.add_argument("--repo", required=True, type=Path)
         subparser.add_argument("--project-dir", default=".project")
@@ -2867,6 +3017,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             result = validate_state(args.repo, args.project_dir)
         elif args.command == "route":
             result = route_state(args.repo, args.project_dir)
+        elif args.command == "status":
+            result = status_state(args.repo, args.project_dir)
         elif args.command == "transition":
             result = transition_state(
                 args.repo,

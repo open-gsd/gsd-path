@@ -102,6 +102,42 @@ class PipelineStateTests(unittest.TestCase):
             self.assertEqual(routed["route"]["action"], "bind-initial")
             self.assertEqual(routed["route"]["branch"], "gsd-path/M001")
 
+    def test_status_reports_route_without_mutating(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            run_git(repo, "init", "-b", "gsd-path/M001")
+            run_git(repo, "config", "user.name", "GSD Path Test")
+            run_git(repo, "config", "user.email", "test@example.com")
+            project = repo / ".project"
+            project.mkdir()
+            (project / "intent").mkdir()
+            (project / "STATE.md").write_text(
+                state_text(
+                    milestone="first",
+                    phase="plan",
+                    status="done",
+                    branch="gsd-path/M001",
+                ),
+                encoding="utf-8",
+            )
+            (project / "intent" / "INTENT.md").write_text(
+                "# Intent — first\n\nLane: quick\n",
+                encoding="utf-8",
+            )
+            run_git(repo, "add", ".project")
+            run_git(repo, "commit", "-m", "fixture: plan done")
+            before = (project / "STATE.md").read_text(encoding="utf-8")
+
+            status = pipeline_state.status_state(repo)
+
+            self.assertEqual(status["schema"], pipeline_state.STATUS_SCHEMA)
+            self.assertFalse(status["advance"])
+            self.assertEqual(status["route"]["action"], "run-phase")
+            self.assertEqual(status["route"]["phase"], "build")
+            self.assertEqual(status["next_skill"], "gsd-path-build")
+            self.assertEqual((project / "STATE.md").read_text(encoding="utf-8"), before)
+            self.assertEqual(status["pending_answers"], [])
+
     def test_route_binds_initialized_state_before_phase_work(self) -> None:
         for phase in ("inspect", "define"):
             with self.subTest(phase=phase), tempfile.TemporaryDirectory() as tmp:

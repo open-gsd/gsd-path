@@ -172,7 +172,7 @@ class SyncSkillResourcesTests(unittest.TestCase):
 
     def test_distribution_layout_is_self_contained(self) -> None:
         skill_directories = sorted((PROJECT_ROOT / "skills").glob("gsd-path*"))
-        self.assertEqual(len(skill_directories), 12)
+        self.assertEqual(len(skill_directories), 14)
 
         link_pattern = re.compile(r"\[[^]]+\]\(([^)#]+)(?:#[^)]*)?\)")
         for skill_directory in skill_directories:

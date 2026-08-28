@@ -1,0 +1,6 @@
+interface:
+  display_name: "GSD Path Forensics"
+  short_description: "Read-only diagnosis of a stuck GSD Path pipeline"
+  default_prompt: "Use $gsd-path-forensics to diagnose a stuck GSD Path pipeline."
+policy:
+  allow_implicit_invocation: false
