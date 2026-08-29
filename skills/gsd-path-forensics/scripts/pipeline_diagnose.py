@@ -99,6 +99,7 @@ DetectError = detect_project.DetectError
 classify = detect_project.classify
 IsolationError = isolation.IsolationError
 _registered_worktrees = isolation._registered_worktrees
+_worktree_report = isolation._worktree_report
 PipelineStateError = pipeline_state.PipelineStateError
 status_state = pipeline_state.status_state
 validate_state = pipeline_state.validate_state
@@ -231,8 +232,8 @@ def _route_retry(repo: Path, route: dict[str, object]) -> Optional[str]:
     return None
 
 
-def _leftover_worktrees(repo: Path) -> list[dict[str, str]]:
-    leftovers: list[dict[str, str]] = []
+def _leftover_worktrees(repo: Path) -> list[dict[str, object]]:
+    leftovers: list[dict[str, object]] = []
     records = _registered_worktrees(repo)
     primary = repo.resolve()
     for path, branch in records.items():
@@ -241,8 +242,23 @@ def _leftover_worktrees(repo: Path) -> list[dict[str, str]]:
         ref = branch or ""
         short = ref.removeprefix("refs/heads/")
         if short.startswith(ISOLATION_WORKTREE_PREFIXES):
+            report, error = _worktree_report(repo, path, short)
+            if error or report is None:
+                recovery = "needs-user"
+                reason = error or "sidecar ownership could not be proven"
+            elif report["clean"]:
+                recovery = "retire"
+                reason = None
+            else:
+                recovery = "needs-user"
+                reason = "dirty sidecar requires its owning retry-retirement workflow"
             leftovers.append(
-                {"worktree": str(path), "branch": short, "recovery": "retire"}
+                {
+                    "worktree": str(path),
+                    "branch": short,
+                    "recovery": recovery,
+                    "reason": reason,
+                }
             )
         elif short.startswith(INTEGRATION_WORKTREE_PREFIX):
             leftovers.append(
@@ -531,9 +547,11 @@ def diagnose(repo: Path) -> dict[str, object]:
                         and state.get("status") == "done"
                         and integration_id == bound_id
                     )
-                    else _needs_user("identify the milestone owning the integration worktree")
+                    else _needs_user(
+                        "identify the milestone owning the integration worktree"
+                    )
                 )
-            else:
+            elif item["recovery"] == "retire":
                 retry = _command(
                     isolation,
                     "retire",
@@ -544,6 +562,8 @@ def diagnose(repo: Path) -> dict[str, object]:
                     "--branch",
                     item["branch"],
                 )
+            else:
+                retry = _needs_user(str(item["reason"]))
             findings.append(
                 _finding(
                     "leftover-worktrees",

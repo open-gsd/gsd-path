@@ -10,6 +10,7 @@ model did not ask this command to perform.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -72,6 +73,8 @@ _state_from_text = pipeline_state._state_from_text
 _git_path = pipeline_state._git_path
 _read_json = pipeline_state._read_json
 _write_json = pipeline_state._write_json
+_validate_next_layout = pipeline_state._validate_next_layout
+_worktree_changes = pipeline_state._worktree_changes
 undo_transaction = pipeline_state.undo_transaction
 load_state = pipeline_state.load_state
 status_state = pipeline_state.status_state
@@ -393,6 +396,55 @@ def _archive_metadata_error(
     if unowned:
         return "archive undo found unowned .project changes: " + ", ".join(unowned)
 
+    archive_path = repo / archive
+    expected_inventory = sorted(
+        path.removeprefix(".project/") for path in tracked
+    )
+    try:
+        actual_inventory = list(archive_milestone.archive_file_inventory(archive_path))
+        actual_directories = sorted(
+            path.relative_to(archive_path).as_posix()
+            for path in archive_path.rglob("*")
+            if path.is_dir()
+        )
+    except (ArchiveError, OSError) as error:
+        return f"archive undo cannot prove archive ownership: {error}"
+    expected_directories = sorted(
+        {
+            parent.as_posix()
+            for relative in expected_inventory
+            for parent in PurePosixPath(relative).parents
+            if parent != PurePosixPath(".")
+        }
+    )
+    if (
+        actual_inventory != expected_inventory
+        or actual_directories != expected_directories
+    ):
+        missing = sorted(set(expected_inventory) - set(actual_inventory))
+        extra = sorted(set(actual_inventory) - set(expected_inventory))
+        extra_directories = sorted(
+            set(actual_directories) - set(expected_directories)
+        )
+        return (
+            "archive undo inventory differs from helper-owned files: "
+            f"missing={missing}, extra={extra}, extra_directories={extra_directories}"
+        )
+    manifest_paths = sorted(
+        path.relative_to(archive_path).as_posix()
+        for path in archive_path.rglob("MANIFEST.md")
+    )
+    if manifest_paths not in ([], ["MANIFEST.md"]):
+        return "archive undo found unowned MANIFEST.md paths: " + ", ".join(
+            manifest_paths
+        )
+    manifest = archive_path / "MANIFEST.md"
+    if manifest.exists() or manifest.is_symlink():
+        try:
+            archive_milestone.validate_manifest(repo, archive_path, load_state(repo)[0])
+        except (ArchiveError, OSError) as error:
+            return f"archive undo cannot prove MANIFEST.md ownership: {error}"
+
     head_state = _git_text(repo, "HEAD", ".project/STATE.md")
     prepared_state = archive_milestone.set_frontmatter_value(
         head_state,
@@ -456,6 +508,7 @@ def _prepare_transaction(
     kind: str,
     expected_head: str,
     parent: str,
+    branch: str,
     archive: Optional[str],
     discussion: Optional[dict[str, bytes]],
 ) -> dict[str, object]:
@@ -465,14 +518,109 @@ def _prepare_transaction(
         "kind": kind,
         "expected_head": expected_head,
         "parent": parent,
+        "branch": branch,
+        "worktree_fingerprint": _worktree_fingerprint(repo),
         "archive": archive,
+        "archive_fingerprint": (
+            _tree_fingerprint(repo / _normalize_archive(archive))
+            if archive is not None
+            else None
+        ),
         "discussion": _encode_discussion(discussion),
     }
     _write_json(_git_path(repo, UNDO_TRANSACTION_NAME), transaction)
     return transaction
 
 
-def _finish_transaction(repo: Path, transaction: dict[str, object]) -> None:
+def _tree_fingerprint(root: Path) -> str:
+    if root.is_symlink() or not root.is_dir():
+        raise UndoError(f"undo-owned tree must be a real directory: {root}")
+    digest = hashlib.sha256()
+    for path in sorted(root.rglob("*")):
+        relative = path.relative_to(root).as_posix()
+        if path.is_symlink():
+            raise UndoError(f"undo-owned tree contains a symlink: {path}")
+        if path.is_dir():
+            digest.update(f"d\0{relative}\0".encode())
+        elif path.is_file():
+            digest.update(f"f\0{relative}\0{path.stat().st_mode & 0o777}\0".encode())
+            digest.update(path.read_bytes())
+        else:
+            raise UndoError(f"undo-owned tree contains a special file: {path}")
+    return digest.hexdigest()
+
+
+def _worktree_fingerprint(repo: Path) -> str:
+    digest = hashlib.sha256()
+    for arguments in (("diff", "--binary"), ("diff", "--cached", "--binary")):
+        output = _run_git(repo, *arguments).stdout
+        digest.update("\0".join(arguments).encode())
+        digest.update(output.encode())
+    untracked = sorted(
+        path
+        for path in _run_git(
+            repo,
+            "ls-files",
+            "--others",
+            "--exclude-standard",
+            "-z",
+        ).stdout.split("\0")
+        if path
+    )
+    for relative in untracked:
+        path = repo / relative
+        digest.update(relative.encode())
+        if path.is_symlink():
+            digest.update(b"l\0")
+            digest.update(os.readlink(path).encode())
+        elif path.is_file():
+            digest.update(f"f\0{path.stat().st_mode & 0o777}\0".encode())
+            digest.update(path.read_bytes())
+        else:
+            digest.update(b"special\0")
+    return digest.hexdigest()
+
+
+def _post_reset_recovery_error(
+    repo: Path,
+    transaction: dict[str, object],
+) -> Optional[str]:
+    dirty = set(_worktree_changes(repo))
+    allowed = set()
+    discussion = transaction.get("discussion")
+    if isinstance(discussion, dict):
+        for name, content in discussion.items():
+            relative = f".project/discuss/{name}"
+            allowed.add(relative)
+            path = repo / relative
+            if relative in dirty and (
+                not path.is_file()
+                or path.is_symlink()
+                or path.read_text(encoding="utf-8") != content
+            ):
+                return f"undo recovery discussion drifted: {relative}"
+    archive = transaction.get("archive")
+    if isinstance(archive, str):
+        archive_path = repo / _normalize_archive(archive)
+        if archive_path.exists() or archive_path.is_symlink():
+            expected = transaction.get("archive_fingerprint")
+            if _tree_fingerprint(archive_path) != expected:
+                return "undo recovery archive inventory drifted"
+            allowed.update(
+                path.relative_to(repo).as_posix()
+                for path in archive_path.rglob("*")
+                if path.is_file()
+            )
+    unexpected = sorted(dirty - allowed)
+    if unexpected:
+        return "undo recovery found unowned worktree changes: " + ", ".join(unexpected)
+    return None
+
+
+def _transaction_recovery_stage(
+    repo: Path,
+    transaction: dict[str, object],
+) -> str:
     expected_head = str(transaction["expected_head"])
     parent = str(transaction["parent"])
     current = _optional_rev(repo, "HEAD")
@@ -482,9 +630,26 @@ def _finish_transaction(repo: Path, transaction: dict[str, object]) -> None:
         allowed = {expected_head}
     if current not in allowed:
         raise UndoError("HEAD moved during undo recovery")
-    if current == expected_head:
-        _require_unpublished_reset(repo)
-    _reset_to(repo, parent)
+    current_branch = status_state(repo)["git"].get("branch")
+    if current_branch != transaction["branch"]:
+        raise UndoError(
+            f"undo recovery is on {current_branch or '<detached>'}, expected {transaction['branch']}"
+        )
+    if current == expected_head and _worktree_fingerprint(repo) == transaction.get(
+        "worktree_fingerprint"
+    ):
+        return "prepared"
+    recovery_error = _post_reset_recovery_error(repo, transaction)
+    if recovery_error:
+        raise UndoError(recovery_error)
+    return "reset"
+
+
+def _finish_transaction(repo: Path, transaction: dict[str, object]) -> None:
+    stage = _transaction_recovery_stage(repo, transaction)
+    if stage == "prepared":
+        _require_unpublished_reset(repo, str(transaction["branch"]))
+        _reset_to(repo, str(transaction["parent"]))
     discussion = _decode_discussion(transaction.get("discussion"))
     if discussion is not None:
         _restore_discussion(repo, discussion)
@@ -556,6 +721,7 @@ def classify_undo(repo: Path) -> dict[str, object]:
                 "parent": head,
                 "subject": subject,
                 "archive": archive_path,
+                "branch": recorded_branch,
                 "effects": [
                     "restore tracked .project/ files to HEAD",
                     f"delete untracked {archive_path}",
@@ -574,7 +740,20 @@ def classify_undo(repo: Path) -> dict[str, object]:
     if (next_dir.exists() or next_dir.is_symlink()) and not any(
         line.strip() for line in next_tracked
     ):
-        extra = [path for path in dirty if path != ".project/next" and not path.startswith(".project/next/")]
+        if next_dir.is_symlink() or not next_dir.is_dir():
+            return _blocked(["lookahead discard requires a real .project/next directory"])
+        try:
+            next_state, _, _ = load_state(resolved, ".project/next")
+            _validate_next_layout(next_dir)
+        except (PipelineStateError, OSError) as error:
+            return _blocked([f"lookahead ownership is unproven: {error}"])
+        if next_state.project != state_fields.get("project"):
+            return _blocked(["lookahead ownership is unproven: project differs"])
+        extra = [
+            path
+            for path in dirty
+            if path != ".project/next" and not path.startswith(".project/next/")
+        ]
         if extra:
             return _blocked(
                 ["lookahead discard requires a clean worktree except .project/next/"]
@@ -584,6 +763,7 @@ def classify_undo(repo: Path) -> dict[str, object]:
             "head": head,
             "parent": head,
             "subject": subject,
+            "branch": recorded_branch,
             "effects": ["delete untracked .project/next/"],
             "blocked": [],
         }
@@ -610,6 +790,7 @@ def classify_undo(repo: Path) -> dict[str, object]:
         return {
             "kind": "checkpoint",
             "checkpoint": kind,
+            "branch": recorded_branch,
             "head": head,
             "parent": parent,
             "subject": subject,
@@ -626,6 +807,7 @@ def classify_undo(repo: Path) -> dict[str, object]:
             return _blocked([f"task landing ownership is unproven: {proof_error}"])
         return {
             "kind": "task",
+            "branch": recorded_branch,
             "head": head,
             "parent": parent,
             "subject": subject,
@@ -655,7 +837,27 @@ def classify_undo(repo: Path) -> dict[str, object]:
 
 def preview(repo: Path) -> dict[str, object]:
     resolved = _repo_root(repo)
-    target = classify_undo(resolved)
+    transaction = pending_transaction(resolved)
+    if transaction is None:
+        target = classify_undo(resolved)
+    else:
+        try:
+            stage = _transaction_recovery_stage(resolved, transaction)
+            if stage == "prepared":
+                _require_unpublished_reset(resolved, str(transaction["branch"]))
+        except UndoError as error:
+            target = _blocked([str(error)])
+        else:
+            target = {
+                "kind": transaction["kind"],
+                "head": transaction["expected_head"],
+                "parent": transaction["parent"],
+                "subject": "interrupted undo transaction",
+                "branch": transaction["branch"],
+                "archive": transaction["archive"],
+                "effects": ["resume the validated interrupted undo transaction"],
+                "blocked": [],
+            }
     state, _, path = load_state(resolved)
     return {
         "schema": UNDO_SCHEMA,
@@ -680,8 +882,12 @@ def _reset_to(repo: Path, revision: str) -> None:
         raise UndoError(f"git reset --hard {revision} failed: {detail}")
 
 
-def _require_unpublished_reset(repo: Path) -> None:
+def _require_unpublished_reset(repo: Path, expected_branch: str) -> None:
     git = status_state(repo)["git"]
+    if git.get("branch") != expected_branch:
+        raise UndoError(
+            f"reset is on {git.get('branch') or '<detached>'}, expected {expected_branch}"
+        )
     if git.get("published"):
         raise UndoError("HEAD became published on its recorded remote branch")
     if git.get("ancestor_of_origin_main"):
@@ -751,6 +957,7 @@ def apply_undo(repo: Path, kind: str, expected_head: str) -> dict[str, object]:
             kind,
             expected_head,
             str(parent),
+            str(target["branch"]),
             None,
             discussion,
         )
@@ -759,7 +966,9 @@ def apply_undo(repo: Path, kind: str, expected_head: str) -> dict[str, object]:
         parent = target["parent"]
         if not parent:
             raise UndoError("parent revision is not a safe reset target")
-        _require_unpublished_reset(resolved)
+        if _worktree_changes(resolved):
+            raise UndoError("worktree changed after task undo preview")
+        _require_unpublished_reset(resolved, str(target["branch"]))
         _reset_to(resolved, str(parent))
     elif kind == "uncommitted-archive":
         archive = str(target["archive"])
@@ -769,6 +978,7 @@ def apply_undo(repo: Path, kind: str, expected_head: str) -> dict[str, object]:
             kind,
             expected_head,
             expected_head,
+            str(target["branch"]),
             archive,
             discussion,
         )

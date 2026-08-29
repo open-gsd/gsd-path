@@ -88,7 +88,7 @@ CHECKPOINT_JOURNAL_NAME = "gsd-path-state-checkpoint.json"
 CHECKPOINT_KINDS = ("plan", "roadmap")
 SHIPMENT_SCHEMA = "gsd-path/shipment/v1"
 SHIPMENT_JOURNAL_NAME = "gsd-path-shipment.json"
-UNDO_TRANSACTION_SCHEMA = "gsd-path/undo-transaction/v1"
+UNDO_TRANSACTION_SCHEMA = "gsd-path/undo-transaction/v2"
 UNDO_TRANSACTION_NAME = "gsd-path-undo.json"
 
 CROSS_PHASE_TRANSITIONS = {
@@ -329,7 +329,10 @@ def undo_transaction(repo: Path) -> Optional[dict[str, object]]:
         "kind",
         "expected_head",
         "parent",
+        "branch",
+        "worktree_fingerprint",
         "archive",
+        "archive_fingerprint",
         "discussion",
     }
     if set(value) != expected or value.get("schema") != UNDO_TRANSACTION_SCHEMA:
@@ -345,13 +348,31 @@ def undo_transaction(repo: Path) -> Optional[dict[str, object]]:
             r"[0-9a-f]{40,64}", field_value
         ):
             raise PipelineStateError(f"undo transaction has invalid {field}")
+    branch = value.get("branch")
+    if not isinstance(branch, str) or BOUND_BRANCH_RE.fullmatch(branch) is None:
+        raise PipelineStateError("undo transaction has invalid branch")
+    fingerprint = value.get("worktree_fingerprint")
+    if not isinstance(fingerprint, str) or not re.fullmatch(
+        r"[0-9a-f]{64}", fingerprint
+    ):
+        raise PipelineStateError("undo transaction has invalid worktree fingerprint")
     archive = value.get("archive")
-    if kind == "checkpoint" and archive is not None:
+    archive_fingerprint = value.get("archive_fingerprint")
+    if kind == "checkpoint" and (
+        archive is not None or archive_fingerprint is not None
+    ):
         raise PipelineStateError("checkpoint undo transaction cannot name an archive")
     if kind == "uncommitted-archive" and (
         not isinstance(archive, str) or ARCHIVE_RE.fullmatch(archive) is None
     ):
         raise PipelineStateError("archive undo transaction has invalid archive")
+    if kind == "uncommitted-archive" and (
+        not isinstance(archive_fingerprint, str)
+        or not re.fullmatch(r"[0-9a-f]{64}", archive_fingerprint)
+    ):
+        raise PipelineStateError(
+            "archive undo transaction has invalid archive fingerprint"
+        )
     discussion = value.get("discussion")
     if discussion is not None and (
         not isinstance(discussion, dict)

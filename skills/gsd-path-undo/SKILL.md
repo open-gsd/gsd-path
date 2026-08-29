@@ -41,4 +41,5 @@ a commit that is an ancestor of `origin/main`.
 - Never undo a ship commit, integration merge, abandon commit, or promotion
   commit. Those are blocked findings, not apply targets.
 - A published HEAD (reachable from `origin/<STATE.branch>`) is blocked.
-- Pending helper journals are blocked: resume that transaction instead.
+- A validated pending undo journal is returned as the resumable preview target.
+  Other pending helper journals are blocked and must be resumed by their owner.

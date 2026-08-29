@@ -295,6 +295,7 @@ class PipelineDiagnoseTests(unittest.TestCase):
             run_git(repo, "add", ".project")
             run_git(repo, "commit", "-m", "fixture: worktrees")
             verify = root / "verify"
+            dirty = root / "dirty"
             integrate = root / "integrate"
             run_git(
                 repo,
@@ -305,6 +306,16 @@ class PipelineDiagnoseTests(unittest.TestCase):
                 str(verify),
                 "HEAD",
             )
+            run_git(
+                repo,
+                "worktree",
+                "add",
+                "-b",
+                "gsd-path-task/T001",
+                str(dirty),
+                "HEAD",
+            )
+            (dirty / "rejected.txt").write_text("keep\n", encoding="utf-8")
             run_git(
                 repo,
                 "worktree",
@@ -323,6 +334,12 @@ class PipelineDiagnoseTests(unittest.TestCase):
 
             retire = next(parts for parts in retries if "retire" in parts)
             self.assertEqual(retire[retire.index("--branch") + 1], "gsd-path-verify/demo")
+            dirty_finding = next(
+                item
+                for item in findings
+                if item["evidence"].startswith("gsd-path-task/T001 @")
+            )
+            self.assertTrue(dirty_finding["retry"].startswith("NEEDS-USER:"))
             integration = next(parts for parts in retries if "integrate" in parts)
             self.assertEqual(Path(integration[1]).name, "archive_milestone.py")
             self.assertEqual(integration[integration.index("--slug") + 1], "first")

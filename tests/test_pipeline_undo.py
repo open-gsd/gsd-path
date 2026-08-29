@@ -210,6 +210,74 @@ class PipelineUndoTests(unittest.TestCase):
                 pipeline_undo.apply_undo(repo, "checkpoint", approved)
             self.assertEqual(run_git(repo, "rev-parse", "HEAD").stdout.strip(), approved)
 
+    def test_checkpoint_recovery_rejects_a_different_branch_at_the_same_head(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = init_repo(Path(tmp))
+            project = repo / ".project"
+            project.mkdir()
+            (project / "STATE.md").write_text(state_text(), encoding="utf-8")
+            run_git(repo, "add", ".project/STATE.md")
+            run_git(repo, "commit", "-m", "fixture: approval base")
+            parent = run_git(repo, "rev-parse", "HEAD").stdout.strip()
+            (project / "plan").mkdir()
+            (project / "plan" / "PLAN.md").write_text("# Plan — first\n", encoding="utf-8")
+            pipeline_state.checkpoint_approval(repo, "plan", parent)
+            approved = run_git(repo, "rev-parse", "HEAD").stdout.strip()
+            with mock.patch.object(
+                pipeline_undo,
+                "_reset_to",
+                side_effect=pipeline_undo.UndoError("interrupted"),
+            ):
+                with self.assertRaisesRegex(pipeline_undo.UndoError, "interrupted"):
+                    pipeline_undo.apply_undo(repo, "checkpoint", approved)
+            run_git(repo, "switch", "-c", "other")
+
+            previewed = pipeline_undo.preview(repo)
+
+            self.assertIsNone(previewed["target"]["kind"])
+            self.assertIn("expected gsd-path/M001", previewed["target"]["blocked"][0])
+            with self.assertRaisesRegex(
+                pipeline_undo.UndoError, "expected gsd-path/M001"
+            ):
+                pipeline_undo.apply_undo(repo, "checkpoint", approved)
+            self.assertEqual(run_git(repo, "rev-parse", "HEAD").stdout.strip(), approved)
+
+    def test_checkpoint_recovery_preserves_new_worktree_edits(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = init_repo(Path(tmp))
+            project = repo / ".project"
+            project.mkdir()
+            state = project / "STATE.md"
+            state.write_text(state_text(), encoding="utf-8")
+            run_git(repo, "add", ".project/STATE.md")
+            run_git(repo, "commit", "-m", "fixture: approval base")
+            parent = run_git(repo, "rev-parse", "HEAD").stdout.strip()
+            (project / "plan").mkdir()
+            (project / "plan" / "PLAN.md").write_text("# Plan — first\n", encoding="utf-8")
+            pipeline_state.checkpoint_approval(repo, "plan", parent)
+            approved = run_git(repo, "rev-parse", "HEAD").stdout.strip()
+            with mock.patch.object(
+                pipeline_undo,
+                "_reset_to",
+                side_effect=pipeline_undo.UndoError("interrupted"),
+            ):
+                with self.assertRaisesRegex(pipeline_undo.UndoError, "interrupted"):
+                    pipeline_undo.apply_undo(repo, "checkpoint", approved)
+            state.write_text(
+                state.read_text(encoding="utf-8") + "user edit\n",
+                encoding="utf-8",
+            )
+
+            previewed = pipeline_undo.preview(repo)
+
+            self.assertIsNone(previewed["target"]["kind"])
+            self.assertIn("unowned worktree changes", previewed["target"]["blocked"][0])
+            with self.assertRaisesRegex(
+                pipeline_undo.UndoError, "unowned worktree changes"
+            ):
+                pipeline_undo.apply_undo(repo, "checkpoint", approved)
+            self.assertTrue(state.read_text(encoding="utf-8").endswith("user edit\n"))
+
     def test_apply_drops_unpublished_task_landing(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             repo = init_repo(Path(tmp))
@@ -386,6 +454,78 @@ class PipelineUndoTests(unittest.TestCase):
             self.assertEqual(notes.read_text(encoding="utf-8"), "user edit\n")
             self.assertEqual(unexpected.read_text(encoding="utf-8"), "user edit\n")
 
+    def test_uncommitted_archive_blocks_unknown_archive_descendants(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = init_repo(Path(tmp))
+            project = repo / ".project"
+            intent = project / "intent"
+            intent.mkdir(parents=True)
+            (project / "STATE.md").write_text(
+                state_text(phase="ship", status="active"), encoding="utf-8"
+            )
+            (intent / "INTENT.md").write_text("# Intent — first\n", encoding="utf-8")
+            run_git(repo, "add", ".project")
+            run_git(repo, "commit", "-m", "fixture: ship active")
+            archive = ".project/archive/001-first"
+            archived_intent = repo / archive / "intent"
+            archived_intent.mkdir(parents=True)
+            (intent / "INTENT.md").replace(archived_intent / "INTENT.md")
+            intent.rmdir()
+            personal = repo / archive / "personal.md"
+            personal.write_text("keep\n", encoding="utf-8")
+            (project / "STATE.md").write_text(
+                state_text(phase="ship", status="active", archive=f"{archive}/"),
+                encoding="utf-8",
+            )
+
+            previewed = pipeline_undo.preview(repo)
+
+            self.assertIsNone(previewed["target"]["kind"])
+            self.assertIn("inventory differs", previewed["target"]["blocked"][0])
+            self.assertEqual(personal.read_text(encoding="utf-8"), "keep\n")
+
+    def test_archive_recovery_rejects_new_archive_descendants(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = init_repo(Path(tmp))
+            project = repo / ".project"
+            intent = project / "intent"
+            intent.mkdir(parents=True)
+            (project / "STATE.md").write_text(
+                state_text(phase="ship", status="active"), encoding="utf-8"
+            )
+            (intent / "INTENT.md").write_text("# Intent — first\n", encoding="utf-8")
+            run_git(repo, "add", ".project")
+            run_git(repo, "commit", "-m", "fixture: ship active")
+            archive = ".project/archive/001-first"
+            archived_intent = repo / archive / "intent"
+            archived_intent.mkdir(parents=True)
+            (intent / "INTENT.md").replace(archived_intent / "INTENT.md")
+            intent.rmdir()
+            (project / "STATE.md").write_text(
+                state_text(phase="ship", status="active", archive=f"{archive}/"),
+                encoding="utf-8",
+            )
+            head = run_git(repo, "rev-parse", "HEAD").stdout.strip()
+            with mock.patch.object(
+                pipeline_undo,
+                "_reset_to",
+                side_effect=pipeline_undo.UndoError("interrupted"),
+            ):
+                with self.assertRaisesRegex(pipeline_undo.UndoError, "interrupted"):
+                    pipeline_undo.apply_undo(repo, "uncommitted-archive", head)
+            personal = repo / archive / "personal.md"
+            personal.write_text("keep\n", encoding="utf-8")
+
+            previewed = pipeline_undo.preview(repo)
+
+            self.assertIsNone(previewed["target"]["kind"])
+            self.assertIn("archive inventory drifted", previewed["target"]["blocked"][0])
+            with self.assertRaisesRegex(
+                pipeline_undo.UndoError, "archive inventory drifted"
+            ):
+                pipeline_undo.apply_undo(repo, "uncommitted-archive", head)
+            self.assertEqual(personal.read_text(encoding="utf-8"), "keep\n")
+
     def test_archive_undo_resumes_from_durable_discussion_transaction(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             repo = init_repo(Path(tmp))
@@ -426,7 +566,15 @@ class PipelineUndoTests(unittest.TestCase):
             self.assertEqual(routed["route"]["kind"], "uncommitted-archive")
             self.assertEqual(routed["route"]["expected_head"], head)
 
-            pipeline_undo.apply_undo(repo, "uncommitted-archive", head)
+            previewed = pipeline_undo.preview(repo)
+            self.assertEqual(previewed["target"]["kind"], "uncommitted-archive")
+            self.assertEqual(previewed["apply"]["expected_head"], head)
+
+            pipeline_undo.apply_undo(
+                repo,
+                previewed["apply"]["kind"],
+                previewed["apply"]["expected_head"],
+            )
 
             self.assertEqual(
                 (discussion / "ANSWERS.md").read_text(encoding="utf-8"), answers
@@ -472,7 +620,7 @@ class PipelineUndoTests(unittest.TestCase):
             next_state = project / "next"
             next_state.mkdir()
             (next_state / "STATE.md").write_text(
-                state_text(phase="inspect", status="active", branch="null"),
+                state_text(phase="plan", status="active", branch="null"),
                 encoding="utf-8",
             )
 
@@ -483,7 +631,7 @@ class PipelineUndoTests(unittest.TestCase):
             )
             self.assertFalse(next_state.exists())
 
-    def test_lookahead_discard_unlinks_target_symlink(self) -> None:
+    def test_lookahead_discard_rejects_target_symlink(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             repo = init_repo(Path(tmp))
             project = repo / ".project"
@@ -498,10 +646,31 @@ class PipelineUndoTests(unittest.TestCase):
             (project / "next").symlink_to(intent, target_is_directory=True)
 
             previewed = pipeline_undo.preview(repo)
-            pipeline_undo.apply_undo(repo, "lookahead", previewed["target"]["head"])
 
-            self.assertFalse((project / "next").exists())
+            self.assertIsNone(previewed["target"]["kind"])
+            self.assertIn("real .project/next", previewed["target"]["blocked"][0])
+            self.assertTrue((project / "next").is_symlink())
             self.assertEqual((intent / "INTENT.md").read_text(encoding="utf-8"), "keep\n")
+
+    def test_lookahead_discard_rejects_arbitrary_notes_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = init_repo(Path(tmp))
+            project = repo / ".project"
+            next_dir = project / "next"
+            next_dir.mkdir(parents=True)
+            notes = next_dir / "notes.md"
+            notes.write_text("keep\n", encoding="utf-8")
+            (project / "STATE.md").write_text(
+                state_text(phase="build", status="active"), encoding="utf-8"
+            )
+            run_git(repo, "add", ".project/STATE.md")
+            run_git(repo, "commit", "-m", "fixture: build")
+
+            previewed = pipeline_undo.preview(repo)
+
+            self.assertIsNone(previewed["target"]["kind"])
+            self.assertIn("ownership is unproven", previewed["target"]["blocked"][0])
+            self.assertEqual(notes.read_text(encoding="utf-8"), "keep\n")
 
     def test_cli_preview_json(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
