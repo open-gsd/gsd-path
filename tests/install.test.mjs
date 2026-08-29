@@ -1035,6 +1035,32 @@ test("hooks refresh updates managed guard scripts", async () => {
   assert.ok(fs.existsSync(target));
 });
 
+test("hooks refresh updates runtime without optional guards", async () => {
+  const project = path.join(root, "hookless-project");
+  const target = path.join(root, "claude", "skills");
+  await runInstall([installer.targetPlan("claude", target)], { project });
+  fs.writeFileSync(
+    path.join(source, "scripts", "pipeline_state.py"),
+    "# runtime v2\n" + installer.PROJECT_RUNTIME_MARKER + "\n"
+  );
+
+  const status = await installer.main(
+    ["--hooks-refresh", "--project", project, "--source-root", source, "--no-color"]
+  );
+
+  assert.equal(status, 0);
+  assert.match(
+    fs.readFileSync(
+      path.join(project, installer.HOOKS_DIRECTORY, "runtime", "pipeline_state.py"),
+      "utf8"
+    ),
+    /runtime v2/
+  );
+  for (const name of installer.GUARD_SCRIPTS) {
+    assert.ok(!fs.existsSync(path.join(project, installer.HOOKS_DIRECTORY, name)));
+  }
+});
+
 test("hooks refresh full updates settings and git hooks", async () => {
   const project = path.join(root, "project");
   fs.mkdirSync(path.join(project, ".git"), { recursive: true });
@@ -1331,6 +1357,47 @@ test("hooks refresh rejects a symlinked project runtime", async () => {
   assert.equal(status, 1);
   assert.ok(fs.lstatSync(runtime).isSymbolicLink());
   assert.match(fs.readFileSync(outside, "utf8"), /gsd-path project runtime/);
+});
+
+test("project install rejects a symlinked runtime directory", async () => {
+  const project = path.join(root, "symlinked-runtime-project");
+  const outside = path.join(root, "outside-runtime");
+  fs.mkdirSync(path.join(project, installer.HOOKS_DIRECTORY), { recursive: true });
+  fs.mkdirSync(outside);
+  fs.symlinkSync(outside, path.join(project, installer.HOOKS_DIRECTORY, "runtime"), "dir");
+  const target = path.join(root, "claude", "skills");
+
+  await assert.rejects(
+    runInstall([installer.targetPlan("claude", target)], { project }),
+    /symlink/
+  );
+
+  assert.deepEqual(fs.readdirSync(outside), []);
+  assert.ok(!fs.existsSync(target));
+});
+
+test("hooks refresh rejects a symlinked runtime directory", async () => {
+  const project = path.join(root, "refresh-symlinked-runtime-project");
+  fs.mkdirSync(path.join(project, ".git"), { recursive: true });
+  const target = path.join(root, "claude", "skills");
+  await runInstall([installer.targetPlan("claude", target)], { project, hooks: true });
+  const runtime = path.join(project, installer.HOOKS_DIRECTORY, "runtime");
+  const outside = path.join(root, "outside-refresh-runtime");
+  fs.renameSync(runtime, outside);
+  fs.symlinkSync(outside, runtime, "dir");
+  const destination = path.join(outside, "pipeline_state.py");
+  const before = fs.readFileSync(destination);
+  fs.writeFileSync(
+    path.join(source, "scripts", "pipeline_state.py"),
+    "# runtime v2\n" + installer.PROJECT_RUNTIME_MARKER + "\n"
+  );
+
+  const status = await installer.main(
+    ["--hooks-refresh", "--project", project, "--source-root", source, "--no-color"]
+  );
+
+  assert.equal(status, 1);
+  assert.deepEqual(fs.readFileSync(destination), before);
 });
 
 test("hooks refresh full merges settings preserving unrelated keys", async () => {

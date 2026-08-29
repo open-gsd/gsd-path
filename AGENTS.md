@@ -96,9 +96,9 @@ full-repo suite on a tiny edit outrank the phase brief.
   requested repository mutation. Treat its JSON as the only route authority.
   A plain change request does not authorize work outside the pipeline: make no
   changes and report **Outcome**, link the returned `path` under **Review**, and
-  name `next_skill` under **Next**. An explicit request to leave or bypass the
-  pipeline is a user ruling; route it through the router's undo or abandon
-  flow instead of editing directly.
+  name `next_skill` under **Next**, or report `route.reason` when `next_skill`
+  is null. An explicit request to leave or bypass the pipeline is a user ruling;
+  route it through the router's undo or abandon flow instead of editing directly.
 - After any other plain-prompt turn with owned state, rerun the same read-only
   status command immediately before the final response and append the same
   **Outcome** / **Review** / **Next** handoff. Report `route.reason` when

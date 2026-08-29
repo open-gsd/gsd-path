@@ -1585,6 +1585,48 @@ class InstallerTests(unittest.TestCase):
         )
         self.assertTrue(target.exists())
 
+    def test_hooks_refresh_updates_runtime_without_optional_guards(self):
+        project = self.root / "hookless-project"
+        target = self.root / "claude" / "skills"
+        status, _, error = self.run_main(
+            [
+                "--claude",
+                "--claude-root",
+                str(target),
+                "--source-root",
+                str(self.source),
+                "--project",
+                str(project),
+            ]
+        )
+        self.assertEqual(0, status, error)
+        (self.source / "scripts" / "pipeline_state.py").write_text(
+            f"# runtime v2\n{install.PROJECT_RUNTIME_MARKER}\n", encoding="utf-8"
+        )
+
+        status, _, error = self.run_main(
+            [
+                "--hooks-refresh",
+                "--project",
+                str(project),
+                "--source-root",
+                str(self.source),
+            ]
+        )
+
+        self.assertEqual(0, status, error)
+        self.assertIn(
+            "runtime v2",
+            (
+                project
+                / install.HOOKS_DIRECTORY
+                / "runtime"
+                / "pipeline_state.py"
+            ).read_text(encoding="utf-8"),
+        )
+        for name in install.GUARD_SCRIPTS:
+            self.assertFalse((project / install.HOOKS_DIRECTORY / name).exists())
+
     def test_hooks_refresh_rejects_unmanaged_guard_scripts(self):
         project = self.root / "project"
         (project / install.HOOKS_DIRECTORY).mkdir(parents=True)
@@ -1662,6 +1704,103 @@ class InstallerTests(unittest.TestCase):
             install.PROJECT_RUNTIME_MARKER,
             outside.read_text(encoding="utf-8"),
         )
+
+    def test_project_install_rejects_symlinked_runtime_directory(self):
+        project = self.root / "symlinked-runtime-project"
+        outside = self.root / "outside-runtime"
+        (project / install.HOOKS_DIRECTORY).mkdir(parents=True)
+        outside.mkdir()
+        (project / install.HOOKS_DIRECTORY / "runtime").symlink_to(
+            outside, target_is_directory=True
+        )
+        target = self.root / "claude" / "skills"
+
+        status, _, error = self.run_main(
+            [
+                "--claude",
+                "--claude-root",
+                str(target),
+                "--source-root",
+                str(self.source),
+                "--project",
+                str(project),
+            ]
+        )
+
+        self.assertEqual(1, status)
+        self.assertIn("symlink", error)
+        self.assertEqual([], list(outside.iterdir()))
+        self.assertFalse(target.exists())
+
+    def test_hooks_refresh_rejects_symlinked_runtime_directory(self):
+        project = self.root / "refresh-symlinked-runtime-project"
+        (project / ".git").mkdir(parents=True)
+        target = self.root / "claude" / "skills"
+        status, _, error = self.run_main(self.hooks_arguments(project, target))
+        self.assertEqual(0, status, error)
+        runtime = project / install.HOOKS_DIRECTORY / "runtime"
+        outside = self.root / "outside-refresh-runtime"
+        runtime.replace(outside)
+        runtime.symlink_to(outside, target_is_directory=True)
+        before = (outside / "pipeline_state.py").read_bytes()
+        (self.source / "scripts" / "pipeline_state.py").write_text(
+            f"# runtime v2\n{install.PROJECT_RUNTIME_MARKER}\n", encoding="utf-8"
+        )
+
+        status, _, error = self.run_main(
+            [
+                "--hooks-refresh",
+                "--project",
+                str(project),
+                "--source-root",
+                str(self.source),
+            ]
+        )
+
+        self.assertEqual(1, status)
+        self.assertIn("symlink", error)
+        self.assertEqual(before, (outside / "pipeline_state.py").read_bytes())
+
+    def test_doctor_checks_install_project_runtime_and_state(self):
+        (self.source / "package.json").write_text(
+            '{"version": "9.9.9"}\n', encoding="utf-8"
+        )
+        project = self.root / "doctor-project"
+        (project / ".git").mkdir(parents=True)
+        target = self.root / "doctor-claude" / "skills"
+        status, _, error = self.run_main(self.hooks_arguments(project, target))
+        self.assertEqual(0, status, error)
+        state = project / ".project" / "STATE.md"
+        state.parent.mkdir()
+        state.write_text(
+            "---\npipeline: gsd-path/v2\nphase: plan\nstatus: done\n---\n",
+            encoding="utf-8",
+        )
+        arguments = [
+            "--doctor",
+            "--claude",
+            "--claude-root",
+            str(target),
+            "--source-root",
+            str(self.source),
+            "--project",
+            str(project),
+        ]
+
+        status, output, error = self.run_main(arguments)
+
+        self.assertEqual(0, status, error)
+        self.assertIn("claude: ", output)
+        self.assertIn("(v9.9.9)", output)
+        self.assertIn("project: runtime pipeline_state.py current", output)
+        self.assertIn("hooks: .gsd-path/guard_hook.py current", output)
+        self.assertIn("hooks: .git/hooks/pre-commit wired", output)
+        self.assertIn("state: plan/done", output)
+
+        shutil.rmtree(target / "gsd-path-plan")
+        status, _, error = self.run_main(arguments)
+        self.assertEqual(1, status)
+        self.assertIn("incomplete install", error)
 
     def refresh_full_arguments(self, project):
         return [

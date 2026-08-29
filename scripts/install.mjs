@@ -928,6 +928,10 @@ function existingContractError(destination) {
 function validateProject(sourceRoot, project, selected, hooksEnabled, reservedRoots, interpreter, hooksDir) {
   const includeClaude = selected.includes("claude");
   validateDirectoryDestination(project, "project path");
+  validateDirectoryDestination(
+    path.join(project, HOOKS_DIRECTORY, "runtime"),
+    "project runtime directory"
+  );
   const projectDirectories = [];
   if (includeClaude) projectDirectories.push(["Claude", path.join(project, ".claude")]);
   if (hooksEnabled && selected.includes("codex")) {
@@ -1208,24 +1212,39 @@ function mergedCursorSettings(settings, interpreter) {
   return mergedHookSettings(settings, "preToolUse", managedEntry, isManagedDirectHookEntry);
 }
 
+function refreshesGuards(project, full, initialize) {
+  return (
+    full ||
+    initialize ||
+    GUARD_SCRIPTS.some((name) => lexists(path.join(project, HOOKS_DIRECTORY, name)))
+  );
+}
+
 function validateHooksRefresh(sourceRoot, project, full, hooksDir, selected, initialize = false) {
   validateDirectoryDestination(project, "project path");
   validateDirectoryDestination(
     path.join(project, HOOKS_DIRECTORY),
     "guard hooks directory"
   );
-  for (const name of GUARD_SCRIPTS) {
-    const destination = path.join(project, HOOKS_DIRECTORY, name);
-    const exists = lexists(destination);
-    if (isSymlink(destination)) {
-      throw new InstallerError(`refusing to refresh a symlink: ${destination}`);
-    }
-    if ((exists && !isManagedGuardScript(destination)) || (!exists && !initialize)) {
-      throw new InstallerError(`not a managed GSD Path guard script: ${destination}`);
-    }
-    const source = path.join(sourceRoot, "scripts", name);
-    if (isSymlink(source) || !isFile(source)) {
-      throw new InstallerError(`missing guard script source: ${source}`);
+  validateDirectoryDestination(
+    path.join(project, HOOKS_DIRECTORY, "runtime"),
+    "project runtime directory"
+  );
+  const refreshGuards = refreshesGuards(project, full, initialize);
+  if (refreshGuards) {
+    for (const name of GUARD_SCRIPTS) {
+      const destination = path.join(project, HOOKS_DIRECTORY, name);
+      const exists = lexists(destination);
+      if (isSymlink(destination)) {
+        throw new InstallerError(`refusing to refresh a symlink: ${destination}`);
+      }
+      if ((exists && !isManagedGuardScript(destination)) || (!exists && !initialize)) {
+        throw new InstallerError(`not a managed GSD Path guard script: ${destination}`);
+      }
+      const source = path.join(sourceRoot, "scripts", name);
+      if (isSymlink(source) || !isFile(source)) {
+        throw new InstallerError(`missing guard script source: ${source}`);
+      }
     }
   }
   for (const name of PROJECT_RUNTIME_SCRIPTS) {
@@ -1292,14 +1311,17 @@ function refreshHooks(sourceRoot, project, full, dryRun, selected = [], initiali
   }
   validateHooksRefresh(sourceRoot, project, full, hooksDir, selected, initialize);
   const refreshed = [];
-  for (const name of GUARD_SCRIPTS) {
-    const destination = path.join(project, HOOKS_DIRECTORY, name);
-    const source = path.join(sourceRoot, "scripts", name);
-    if (!dryRun) {
-      fs.mkdirSync(path.dirname(destination), { recursive: true });
-      copyFileAtomic(source, destination);
+  const refreshGuards = refreshesGuards(project, full, initialize);
+  if (refreshGuards) {
+    for (const name of GUARD_SCRIPTS) {
+      const destination = path.join(project, HOOKS_DIRECTORY, name);
+      const source = path.join(sourceRoot, "scripts", name);
+      if (!dryRun) {
+        fs.mkdirSync(path.dirname(destination), { recursive: true });
+        copyFileAtomic(source, destination);
+      }
+      refreshed.push(describeProjectPath(project, destination));
     }
-    refreshed.push(describeProjectPath(project, destination));
   }
   for (const name of PROJECT_RUNTIME_SCRIPTS) {
     const destination = path.join(project, HOOKS_DIRECTORY, "runtime", name);
