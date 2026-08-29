@@ -215,12 +215,16 @@ const MANIFEST = JSON.parse(
 );
 
 function sharedInvocations(text) {
-  return text.replace(/(\$gsd-path(?:-[a-z0-9]+)*)( status)?/g, (_match, token, arguments_) => {
+  const pattern = /(`?)(\$gsd-path(?:-[a-z0-9]+)*)( status)?\1(?: \(Codex\) (?:and|or) (`?)\/(gsd-path(?:-[a-z0-9]+)*)( status)?\4 \((?:other hosts|Antigravity\/Zed)\))?/g;
+  return text.replace(pattern, (_match, quote, token, arguments_, pairedQuote, pairedSkill, pairedArguments) => {
     const skill = token.slice(1);
     const argumentsText = arguments_ || "";
+    if (pairedSkill && (pairedSkill !== skill || (pairedArguments || "") !== argumentsText || pairedQuote !== quote)) {
+      throw new InstallerError("shared invocation pair is inconsistent");
+    }
     const codex = `${MANIFEST.hosts.codex.invocation_prefix}${skill}`;
     const others = `${MANIFEST.hosts.antigravity.invocation_prefix}${skill}`;
-    return `${codex}${argumentsText} (Codex) or ${others}${argumentsText} (Antigravity/Zed)`;
+    return `${quote}${codex}${argumentsText}${quote} (Codex) or ${quote}${others}${argumentsText}${quote} (Antigravity/Zed)`;
   });
 }
 export function skillNamesForManifest(manifest) {

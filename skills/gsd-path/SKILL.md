@@ -129,6 +129,9 @@ selects a milestone branch.
 ## Transaction recovery first
 
 Run `pipeline_state.py route` before any phase contract. A
+`resume-undo` result means a helper-owned undo transaction was interrupted;
+invoke `$gsd-path-undo` and apply the returned exact kind and expected HEAD.
+Never enter phase work while this recovery remains. A
 `resume-shipment` result means the ROADMAP/STATE shipment record was
 interrupted; rerun `pipeline_state.py record-shipment` with the returned exact
 archive and event, require its typed `recorded` result, then rerun `route`.
@@ -209,6 +212,7 @@ promotion, `resume-next-handoff` resumes the verified `bind-next` transaction,
 `resume-checkpoint` runs the approval recovery command above,
 `resume-shipment` runs the shipment recovery command above,
 `resume-promotion` reruns the returned `promote-next` transaction, and
+`resume-undo` invokes `$gsd-path-undo` with the returned kind and expected HEAD,
 `block` stops with the returned reason. `bind-initial`
 means initialization is complete and phase work must wait for the initial
 router binding: resolve the exact fetched `origin/main` SHA, call `bind-initial` as

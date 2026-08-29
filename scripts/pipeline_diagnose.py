@@ -31,8 +31,16 @@ def _load_diagnose_modules():
             pipeline_git,
             pipeline_state,
         )
-    except ImportError:
-        pass
+    except ModuleNotFoundError as error:
+        if error.name not in {
+            "archive_milestone",
+            "detect_project",
+            "discussion_records",
+            "isolation",
+            "pipeline_git",
+            "pipeline_state",
+        }:
+            raise
     try:
         from scripts import (
             archive_milestone,
@@ -50,7 +58,17 @@ def _load_diagnose_modules():
             pipeline_git,
             pipeline_state,
         )
-    except ImportError:
+    except ModuleNotFoundError as error:
+        if error.name not in {
+            "scripts",
+            "scripts.archive_milestone",
+            "scripts.detect_project",
+            "scripts.discussion_records",
+            "scripts.isolation",
+            "scripts.pipeline_git",
+            "scripts.pipeline_state",
+        }:
+            raise
         shared = Path(__file__).resolve().parents[2] / "gsd-path" / "scripts"
         sys.path.insert(0, str(shared))
         import archive_milestone
@@ -87,10 +105,14 @@ validate_state = pipeline_state.validate_state
 
 try:
     import pipeline_undo
-except ImportError:
+except ModuleNotFoundError as error:
+    if error.name != "pipeline_undo":
+        raise
     try:
         from scripts import pipeline_undo
-    except ImportError:
+    except ModuleNotFoundError as error:
+        if error.name not in {"scripts", "scripts.pipeline_undo"}:
+            raise
         shared = Path(__file__).resolve().parents[2] / "gsd-path" / "scripts"
         if str(shared) not in sys.path:
             sys.path.insert(0, str(shared))
@@ -101,11 +123,8 @@ undo_preview = pipeline_undo.preview
 
 
 DIAGNOSE_SCHEMA = "gsd-path/diagnose/v1"
-PIPELINE_WORKTREE_PREFIXES = (
-    "refs/heads/gsd-path-task/",
-    "refs/heads/gsd-path-verify/",
-    "refs/heads/gsd-path-integrate/",
-)
+ISOLATION_WORKTREE_PREFIXES = ("gsd-path-task/", "gsd-path-verify/")
+INTEGRATION_WORKTREE_PREFIX = "gsd-path-integrate/"
 
 
 class DiagnoseError(RuntimeError):
@@ -142,6 +161,10 @@ def _finding(
         "evidence": evidence,
         "retry": retry,
     }
+
+
+def _needs_user(action: str) -> str:
+    return f"NEEDS-USER: {action}"
 
 
 def _command(module: object, *arguments: object) -> str:
@@ -194,6 +217,17 @@ def _route_retry(repo: Path, route: dict[str, object]) -> Optional[str]:
             "--base",
             route["base"],
         )
+    if action == "resume-undo":
+        return _command(
+            pipeline_undo,
+            "apply",
+            "--repo",
+            repo,
+            "--kind",
+            route["kind"],
+            "--expected-head",
+            route["expected_head"],
+        )
     return None
 
 
@@ -205,8 +239,15 @@ def _leftover_worktrees(repo: Path) -> list[dict[str, str]]:
         if path == primary:
             continue
         ref = branch or ""
-        if any(ref.startswith(prefix) for prefix in PIPELINE_WORKTREE_PREFIXES):
-            leftovers.append({"worktree": str(path), "branch": ref})
+        short = ref.removeprefix("refs/heads/")
+        if short.startswith(ISOLATION_WORKTREE_PREFIXES):
+            leftovers.append(
+                {"worktree": str(path), "branch": short, "recovery": "retire"}
+            )
+        elif short.startswith(INTEGRATION_WORKTREE_PREFIX):
+            leftovers.append(
+                {"worktree": str(path), "branch": short, "recovery": "integrate"}
+            )
     return leftovers
 
 
@@ -237,7 +278,7 @@ def diagnose(repo: Path) -> dict[str, object]:
                     "orphan",
                     "stuck",
                     "detect_project classify returned orphan: " + ", ".join(map(str, paths)),
-                    _command(detect_project, "classify", "--repo", resolved),
+                    _needs_user("choose orphan recovery, migration, or a new location"),
                 )
             )
     else:
@@ -246,7 +287,7 @@ def diagnose(repo: Path) -> dict[str, object]:
                 "classify",
                 "stuck",
                 classified["error"] or "classify failed",
-                _command(detect_project, "classify", "--repo", resolved),
+                _needs_user("repair or relocate the unowned project metadata"),
             )
         )
 
@@ -257,7 +298,7 @@ def diagnose(repo: Path) -> dict[str, object]:
                 "status",
                 "stuck",
                 status_probe["error"] or "status failed",
-                _command(pipeline_state, "status", "--repo", resolved),
+                _needs_user("repair the invalid pipeline state or helper journal"),
             )
         )
     else:
@@ -281,7 +322,7 @@ def diagnose(repo: Path) -> dict[str, object]:
                     "branch-mismatch",
                     "stuck",
                     str(route.get("reason") or "current branch does not match STATE.branch"),
-                    _command(pipeline_state, "route", "--repo", resolved),
+                    _needs_user("restore the worktree to the branch recorded in STATE.md"),
                 )
             )
         if route_retry:
@@ -295,12 +336,23 @@ def diagnose(repo: Path) -> dict[str, object]:
                 )
             )
         if route.get("action") == "block":
+            undo_result = by_name["undo-preview"]
+            undo_target = (
+                (undo_result["result"] or {}).get("target") or {}
+                if undo_result["ok"]
+                else {}
+            )
+            retry = (
+                "$gsd-path-undo"
+                if undo_target.get("kind")
+                else _needs_user(str(route.get("reason") or "resolve the route block"))
+            )
             findings.append(
                 _finding(
                     "route-block",
                     "stuck",
                     str(route.get("reason") or "route returned block"),
-                    _command(pipeline_state, "route", "--repo", resolved),
+                    retry,
                 )
             )
         pending = status.get("pending_answers") or []
@@ -314,7 +366,7 @@ def diagnose(repo: Path) -> dict[str, object]:
                     "pending-answers",
                     "stuck",
                     f"{len(pending)} required discussion disposition(s): {paths}",
-                    _command(discussion_records, "pending", "--repo", resolved),
+                    _needs_user("resolve and dispose the pending discussion answers"),
                 )
             )
         if status.get("pending_error"):
@@ -323,7 +375,7 @@ def diagnose(repo: Path) -> dict[str, object]:
                     "pending-error",
                     "stuck",
                     str(status["pending_error"]),
-                    _command(discussion_records, "pending", "--repo", resolved),
+                    _needs_user("repair the discussion records before routing"),
                 )
             )
         dirty = git.get("dirty") or []
@@ -348,7 +400,7 @@ def diagnose(repo: Path) -> dict[str, object]:
                         "archive-validate",
                         "stuck",
                         str(error),
-                        _command(archive_milestone, "validate", "--repo", resolved),
+                        "$gsd-path-ship",
                     )
                 )
             else:
@@ -363,19 +415,21 @@ def diagnose(repo: Path) -> dict[str, object]:
                                 "integration",
                                 "stuck",
                                 str(error),
-                                _command(
-                                    archive_milestone,
-                                    "validate-integrated",
-                                    "--repo",
-                                    resolved,
-                                    "--slug",
-                                    state["milestone"],
-                                ),
+                                "$gsd-path-ship",
                             )
                         )
 
     undo_transaction = by_name["undo-transaction"]
-    if undo_transaction["ok"] and undo_transaction["result"]:
+    route_action = (
+        ((status_probe["result"] or {}).get("route") or {}).get("action")
+        if status_probe["ok"]
+        else None
+    )
+    if (
+        undo_transaction["ok"]
+        and undo_transaction["result"]
+        and route_action != "resume-undo"
+    ):
         transaction = undo_transaction["result"]
         findings.append(
             _finding(
@@ -400,7 +454,7 @@ def diagnose(repo: Path) -> dict[str, object]:
                 "undo-transaction",
                 "stuck",
                 undo_transaction["error"] or "undo transaction is unreadable",
-                _command(pipeline_undo, "preview", "--repo", resolved),
+                "$gsd-path-undo",
             )
         )
 
@@ -440,7 +494,7 @@ def diagnose(repo: Path) -> dict[str, object]:
                 "collect-artifact",
                 "stuck",
                 collect_probe["error"] or "artifact collection journal is unreadable",
-                _command(pipeline_state, "status", "--repo", resolved),
+                _needs_user("repair the artifact collection journal"),
             )
         )
 
@@ -448,21 +502,54 @@ def diagnose(repo: Path) -> dict[str, object]:
     if worktrees["ok"]:
         leftovers = worktrees["result"] or []
         for item in leftovers:
+            if item["recovery"] == "integrate":
+                state = (
+                    (status_probe["result"] or {}).get("state") or {}
+                    if status_probe["ok"]
+                    else {}
+                )
+                slug = state.get("milestone")
+                integration_id = item["branch"].removeprefix(
+                    INTEGRATION_WORKTREE_PREFIX
+                )
+                bound_id = str(state.get("branch") or "").removeprefix(
+                    "gsd-path/"
+                )
+                retry = (
+                    _command(
+                        archive_milestone,
+                        "integrate",
+                        "--repo",
+                        resolved,
+                        "--slug",
+                        slug,
+                    )
+                    if (
+                        isinstance(slug, str)
+                        and slug
+                        and state.get("phase") == "shipped"
+                        and state.get("status") == "done"
+                        and integration_id == bound_id
+                    )
+                    else _needs_user("identify the milestone owning the integration worktree")
+                )
+            else:
+                retry = _command(
+                    isolation,
+                    "retire",
+                    "--repo",
+                    resolved,
+                    "--worktree",
+                    item["worktree"],
+                    "--branch",
+                    item["branch"],
+                )
             findings.append(
                 _finding(
                     "leftover-worktrees",
                     "info",
                     f"{item['branch']} @ {item['worktree']}",
-                    _command(
-                        isolation,
-                        "retire",
-                        "--repo",
-                        resolved,
-                        "--worktree",
-                        item["worktree"],
-                        "--branch",
-                        item["branch"],
-                    ),
+                    retry,
                 )
             )
     else:
@@ -471,9 +558,7 @@ def diagnose(repo: Path) -> dict[str, object]:
                 "worktrees",
                 "info",
                 worktrees["error"] or "could not list worktrees",
-                shlex.join(
-                    ["git", "-C", str(resolved), "worktree", "list", "--porcelain"]
-                ),
+                _needs_user("repair the worktree registry"),
             )
         )
 

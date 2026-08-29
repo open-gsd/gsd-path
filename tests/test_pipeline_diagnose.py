@@ -1,5 +1,7 @@
 import json
+import os
 import shlex
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -44,6 +46,7 @@ def state_text(
     status: str = "done",
     branch: str = "gsd-path/M001",
     milestone: str = "first",
+    archive: str = "null",
 ) -> str:
     return (
         "---\n"
@@ -53,7 +56,7 @@ def state_text(
         f"phase: {phase}\n"
         f"status: {status}\n"
         f"branch: {branch}\n"
-        "archive: null\n"
+        f"archive: {archive}\n"
         "---\n\n"
         "# Project State\n\n"
         "## Log\n\n"
@@ -93,7 +96,7 @@ class PipelineDiagnoseTests(unittest.TestCase):
             project = repo / ".project"
             project.mkdir()
             (project / "STATE.md").write_text(state_text(), encoding="utf-8")
-            run_git(repo, "add", ".project/STATE.md")
+            run_git(repo, "add", ".project")
             run_git(repo, "commit", "-m", "fixture")
             run_git(repo, "checkout", "-b", "other")
 
@@ -104,6 +107,10 @@ class PipelineDiagnoseTests(unittest.TestCase):
             self.assertTrue(
                 all("<" not in item["retry"] for item in result["findings"])
             )
+            first_stuck = next(
+                item for item in result["findings"] if item["severity"] == "stuck"
+            )
+            self.assertTrue(first_stuck["retry"].startswith("NEEDS-USER:"))
 
     def test_pending_discussion_disposition_is_stuck(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -152,6 +159,7 @@ class PipelineDiagnoseTests(unittest.TestCase):
             assert pending is not None
             self.assertEqual(result["status"], "stuck")
             self.assertIn(".project/plan/PLAN.md", pending["evidence"])
+            self.assertTrue(pending["retry"].startswith("NEEDS-USER:"))
 
     def test_shipment_journal_retry_uses_validated_route_fields(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -264,7 +272,87 @@ class PipelineDiagnoseTests(unittest.TestCase):
 
             result = pipeline_diagnose.diagnose(repo)
             self.assertEqual(result["status"], "unowned")
-            self.assertIn("orphan", {item["id"] for item in result["findings"]})
+            orphan = next(item for item in result["findings"] if item["id"] == "orphan")
+            self.assertTrue(orphan["retry"].startswith("NEEDS-USER:"))
+
+    def test_leftover_worktrees_have_supported_recovery_commands(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = root / "repo"
+            run_git(root, "init", "-b", "gsd-path/M001", str(repo))
+            run_git(repo, "config", "user.name", "GSD Path Test")
+            run_git(repo, "config", "user.email", "test@example.com")
+            project = repo / ".project"
+            (project / "archive" / "001-first").mkdir(parents=True)
+            (project / "STATE.md").write_text(
+                state_text(
+                    phase="shipped",
+                    status="done",
+                    archive=".project/archive/001-first/",
+                ),
+                encoding="utf-8",
+            )
+            run_git(repo, "add", ".project")
+            run_git(repo, "commit", "-m", "fixture: worktrees")
+            verify = root / "verify"
+            integrate = root / "integrate"
+            run_git(
+                repo,
+                "worktree",
+                "add",
+                "-b",
+                "gsd-path-verify/demo",
+                str(verify),
+                "HEAD",
+            )
+            run_git(
+                repo,
+                "worktree",
+                "add",
+                "-b",
+                "gsd-path-integrate/M001",
+                str(integrate),
+                "HEAD",
+            )
+
+            result = pipeline_diagnose.diagnose(repo)
+            findings = [
+                item for item in result["findings"] if item["id"] == "leftover-worktrees"
+            ]
+            retries = [shlex.split(item["retry"]) for item in findings]
+
+            retire = next(parts for parts in retries if "retire" in parts)
+            self.assertEqual(retire[retire.index("--branch") + 1], "gsd-path-verify/demo")
+            integration = next(parts for parts in retries if "integrate" in parts)
+            self.assertEqual(Path(integration[1]).name, "archive_milestone.py")
+            self.assertEqual(integration[integration.index("--slug") + 1], "first")
+
+    def test_helper_loaders_surface_internal_import_failures(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            (directory / "archive_milestone.py").write_text(
+                "import missing_helper_dependency\n",
+                encoding="utf-8",
+            )
+            environment = os.environ.copy()
+            environment["PYTHONPATH"] = str(directory)
+            for name in (
+                "pipeline_undo.py",
+                "pipeline_diagnose.py",
+                "discussion_records.py",
+            ):
+                with self.subTest(helper=name):
+                    target = directory / name
+                    shutil.copy2(PROJECT_ROOT / "scripts" / name, target)
+                    completed = subprocess.run(
+                        [sys.executable, str(target), "--help"],
+                        cwd=PROJECT_ROOT,
+                        env=environment,
+                        capture_output=True,
+                        text=True,
+                    )
+                    self.assertNotEqual(completed.returncode, 0)
+                    self.assertIn("missing_helper_dependency", completed.stderr)
 
     def test_cli_diagnose_json(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

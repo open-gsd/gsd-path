@@ -29,7 +29,9 @@ try:
         checkpoint as isolation_checkpoint,
         collect_artifact_recoveries,
     )
-except ImportError:  # pragma: no cover - package imports used by tests
+except ModuleNotFoundError as error:  # pragma: no cover - package imports used by tests
+    if error.name != "isolation":
+        raise
     from scripts.isolation import (
         IsolationError,
         checkpoint as isolation_checkpoint,
@@ -86,6 +88,8 @@ CHECKPOINT_JOURNAL_NAME = "gsd-path-state-checkpoint.json"
 CHECKPOINT_KINDS = ("plan", "roadmap")
 SHIPMENT_SCHEMA = "gsd-path/shipment/v1"
 SHIPMENT_JOURNAL_NAME = "gsd-path-shipment.json"
+UNDO_TRANSACTION_SCHEMA = "gsd-path/undo-transaction/v1"
+UNDO_TRANSACTION_NAME = "gsd-path-undo.json"
 
 CROSS_PHASE_TRANSITIONS = {
     ("inspect", "done", "define", "active"),
@@ -313,6 +317,51 @@ def validate_state(repo: Path, project_dir: str = ".project") -> dict[str, objec
     }
 
 
+def undo_transaction(repo: Path) -> Optional[dict[str, object]]:
+    resolved = _repo_root(repo)
+    path = _git_path(resolved, UNDO_TRANSACTION_NAME)
+    if not path.exists() and not path.is_symlink():
+        return None
+    value = _read_json(path)
+    expected = {
+        "schema",
+        "repo",
+        "kind",
+        "expected_head",
+        "parent",
+        "archive",
+        "discussion",
+    }
+    if set(value) != expected or value.get("schema") != UNDO_TRANSACTION_SCHEMA:
+        raise PipelineStateError("undo transaction has invalid fields")
+    if value.get("repo") != str(resolved):
+        raise PipelineStateError("undo transaction belongs to another worktree")
+    kind = value.get("kind")
+    if kind not in {"checkpoint", "uncommitted-archive"}:
+        raise PipelineStateError("undo transaction has invalid kind")
+    for field in ("expected_head", "parent"):
+        field_value = value.get(field)
+        if not isinstance(field_value, str) or not re.fullmatch(
+            r"[0-9a-f]{40,64}", field_value
+        ):
+            raise PipelineStateError(f"undo transaction has invalid {field}")
+    archive = value.get("archive")
+    if kind == "checkpoint" and archive is not None:
+        raise PipelineStateError("checkpoint undo transaction cannot name an archive")
+    if kind == "uncommitted-archive" and (
+        not isinstance(archive, str) or ARCHIVE_RE.fullmatch(archive) is None
+    ):
+        raise PipelineStateError("archive undo transaction has invalid archive")
+    discussion = value.get("discussion")
+    if discussion is not None and (
+        not isinstance(discussion, dict)
+        or set(discussion) != {"DIALOGUE.md", "ANSWERS.md"}
+        or any(not isinstance(content, str) for content in discussion.values())
+    ):
+        raise PipelineStateError("undo transaction has invalid discussion records")
+    return value
+
+
 def transaction_journals(repo: Path) -> dict[str, Optional[str]]:
     """Return paths of any in-progress helper journals. Read-only."""
     resolved = _repo_root(repo)
@@ -326,9 +375,18 @@ def transaction_journals(repo: Path) -> dict[str, Optional[str]]:
     for key, name in named.items():
         path = _git_path(resolved, name)
         found[key] = str(path) if path.exists() or path.is_symlink() else None
-    bind_root = _git_path(resolved, BIND_NEXT_JOURNAL_DIR)
+    state, _, _ = load_state(resolved)
+    bind_recovery = _bind_next_recovery(resolved, state)
     found["bind_next"] = (
-        str(bind_root) if bind_root.exists() or bind_root.is_symlink() else None
+        str(bind_recovery["route"]["journal"])
+        if bind_recovery is not None
+        else None
+    )
+    transaction = undo_transaction(resolved)
+    found["undo"] = (
+        str(_git_path(resolved, UNDO_TRANSACTION_NAME))
+        if transaction is not None
+        else None
     )
     try:
         collect = collect_artifact_recoveries(resolved)
@@ -378,9 +436,13 @@ def _pending_answers(repo: Path) -> tuple[list[dict[str, str]], Optional[str]]:
     try:
         try:
             from discussion_records import DiscussionError, pending_records
-        except ImportError:  # pragma: no cover - package imports used by tests
+        except ModuleNotFoundError as error:  # pragma: no cover - package imports used by tests
+            if error.name != "discussion_records":
+                raise
             from scripts.discussion_records import DiscussionError, pending_records
-    except ImportError:
+    except ModuleNotFoundError as error:
+        if error.name not in {"scripts", "scripts.discussion_records"}:
+            raise
         return [], "discussion_records helper is unavailable"
     try:
         records = pending_records(answers.parent)
@@ -410,10 +472,11 @@ def _next_skill(route: Mapping[str, object]) -> Optional[str]:
         "resume-shipment",
         "resume-promotion",
         "resume-next-handoff",
+        "resume-undo",
         "validate-integrated",
         "block",
     }:
-        return "gsd-path"
+        return "gsd-path-undo" if action == "resume-undo" else "gsd-path"
     return None
 
 
@@ -715,6 +778,21 @@ def route_state(repo: Path, project_dir: str = ".project") -> dict[str, object]:
     if not lookahead:
         git_dir = _run_git(resolved, "rev-parse", "--git-dir", check=False)
         if git_dir.returncode == 0:
+            undo = undo_transaction(resolved)
+            if undo is not None:
+                result = _route_result(
+                    state,
+                    "resume-undo",
+                    reason="a journaled undo transaction is incomplete",
+                )
+                result["route"].update(
+                    {
+                        "kind": undo["kind"],
+                        "expected_head": undo["expected_head"],
+                        "journal": str(_git_path(resolved, UNDO_TRANSACTION_NAME)),
+                    }
+                )
+                return result
             shipment_journal = _git_path(resolved, SHIPMENT_JOURNAL_NAME)
             if shipment_journal.exists() or shipment_journal.is_symlink():
                 transaction = _read_json(shipment_journal)

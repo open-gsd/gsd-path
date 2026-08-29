@@ -256,6 +256,12 @@ test("staging from the real repo applies the real platform adapter to every skil
       assert.equal(fs.readFileSync(dispatch, "utf8"), expected, `${target}/${name}`);
     }
     assert.ok(checked >= 2, `expected multiple dispatch-bearing skills, saw ${checked}`);
+    if (target === installer.SHARED_AGENT_PROFILE) {
+      const router = fs.readFileSync(path.join(staged, "gsd-path", "SKILL.md"), "utf8");
+      const invocation = "`$gsd-path status` (Codex) or `/gsd-path status` (Antigravity/Zed)";
+      assert.equal(router.split(invocation).length - 1, 1);
+      assert.doesNotMatch(router, /\(other hosts\)/);
+    }
   }
 });
 

@@ -1284,6 +1284,9 @@ class PipelineStateTests(unittest.TestCase):
                 ("second", "plan", "done"),
             )
             self.assertEqual(state.branch, "gsd-path/M002")
+            self.assertIsNone(
+                pipeline_state.status_state(repo)["journals"]["bind_next"]
+            )
             roadmap = (repo / ".project" / "ROADMAP.md").read_text(encoding="utf-8")
             self.assertIn(f"Integrated: {integrate}", roadmap)
             self.assertEqual(

@@ -26,12 +26,26 @@ def _load_pipeline_modules():
         import pipeline_git
         import pipeline_state
         return archive_milestone, isolation, pipeline_git, pipeline_state
-    except ImportError:
-        pass
+    except ModuleNotFoundError as error:
+        if error.name not in {
+            "archive_milestone",
+            "isolation",
+            "pipeline_git",
+            "pipeline_state",
+        }:
+            raise
     try:
         from scripts import archive_milestone, isolation, pipeline_git, pipeline_state
         return archive_milestone, isolation, pipeline_git, pipeline_state
-    except ImportError:
+    except ModuleNotFoundError as error:
+        if error.name not in {
+            "scripts",
+            "scripts.archive_milestone",
+            "scripts.isolation",
+            "scripts.pipeline_git",
+            "scripts.pipeline_state",
+        }:
+            raise
         shared = Path(__file__).resolve().parents[2] / "gsd-path" / "scripts"
         sys.path.insert(0, str(shared))
         import archive_milestone
@@ -51,12 +65,14 @@ _approval_details = pipeline_state._approval_details
 _commit_subject_body = pipeline_state._commit_subject_body
 _optional_rev = pipeline_state._optional_rev
 _render_transition = pipeline_state._render_transition
+_shipment_roadmap = pipeline_state._shipment_roadmap
 _repo_root = pipeline_state._repo_root
 _run_git = pipeline_state._run_git
 _state_from_text = pipeline_state._state_from_text
 _git_path = pipeline_state._git_path
 _read_json = pipeline_state._read_json
 _write_json = pipeline_state._write_json
+undo_transaction = pipeline_state.undo_transaction
 load_state = pipeline_state.load_state
 status_state = pipeline_state.status_state
 is_bound_branch = pipeline_git.is_bound_branch
@@ -64,8 +80,8 @@ is_ship_subject = pipeline_git.is_ship_subject
 
 
 UNDO_SCHEMA = "gsd-path/undo/v1"
-UNDO_TRANSACTION_SCHEMA = "gsd-path/undo-transaction/v1"
-UNDO_TRANSACTION_NAME = "gsd-path-undo.json"
+UNDO_TRANSACTION_SCHEMA = pipeline_state.UNDO_TRANSACTION_SCHEMA
+UNDO_TRANSACTION_NAME = pipeline_state.UNDO_TRANSACTION_NAME
 ROADMAP_APPROVAL_SUBJECT = "roadmap: program roadmap approved"
 TASK_SUBJECT_RE = re.compile(r"^(T\d{3,}): .+")
 KINDS = ("checkpoint", "task", "uncommitted-archive", "lookahead")
@@ -335,36 +351,104 @@ def _decode_discussion(value: object) -> Optional[dict[str, bytes]]:
 
 
 def pending_transaction(repo: Path) -> Optional[dict[str, object]]:
-    resolved = _repo_root(repo)
-    path = _git_path(resolved, UNDO_TRANSACTION_NAME)
-    if not path.exists() and not path.is_symlink():
-        return None
-    value = _read_json(path)
-    expected = {
-        "schema",
-        "repo",
-        "kind",
-        "expected_head",
-        "parent",
-        "archive",
-        "discussion",
+    try:
+        return undo_transaction(_repo_root(repo))
+    except PipelineStateError as error:
+        raise UndoError(str(error)) from error
+
+
+def _archive_metadata_error(
+    repo: Path,
+    state_fields: dict[str, object],
+    configured: str,
+    dirty: Sequence[str],
+) -> Optional[str]:
+    archive = _normalize_archive(configured)
+    tracked = _run_git(
+        repo,
+        "ls-tree",
+        "-r",
+        "--name-only",
+        "HEAD",
+        "--",
+        *(f".project/{name}" for name in archive_milestone.TRANSACTION_DIRECTORIES),
+    ).stdout.splitlines()
+    allowed = {
+        ".project/STATE.md",
+        *tracked,
+        *(
+            f".project/discuss/{name}"
+            for name in archive_milestone.DISCUSSION_FILES
+        ),
     }
-    if set(value) != expected or value.get("schema") != UNDO_TRANSACTION_SCHEMA:
-        raise UndoError("undo transaction has invalid fields")
-    if value.get("repo") != str(resolved):
-        raise UndoError("undo transaction belongs to another worktree")
-    if value.get("kind") not in {"checkpoint", "uncommitted-archive"}:
-        raise UndoError("undo transaction has invalid kind")
-    for field in ("expected_head", "parent"):
-        if not isinstance(value.get(field), str) or not re.fullmatch(
-            r"[0-9a-f]{40,64}", str(value[field])
-        ):
-            raise UndoError(f"undo transaction has invalid {field}")
-    archive = value.get("archive")
-    if archive is not None and not isinstance(archive, str):
-        raise UndoError("undo transaction has invalid archive")
-    _decode_discussion(value.get("discussion"))
-    return value
+    if state_fields.get("phase") == "shipped":
+        allowed.add(".project/ROADMAP.md")
+    unowned = sorted(
+        path
+        for path in dirty
+        if path not in allowed
+        and path != archive
+        and not path.startswith(f"{archive}/")
+    )
+    if unowned:
+        return "archive undo found unowned .project changes: " + ", ".join(unowned)
+
+    head_state = _git_text(repo, "HEAD", ".project/STATE.md")
+    prepared_state = archive_milestone.set_frontmatter_value(
+        head_state,
+        "archive",
+        configured,
+    )
+    current_state = (repo / ".project" / "STATE.md").read_text(encoding="utf-8")
+    phase = state_fields.get("phase")
+    status = state_fields.get("status")
+    if (phase, status) == ("ship", "active"):
+        if current_state != prepared_state:
+            return "archive undo found unowned STATE.md changes"
+        if ".project/ROADMAP.md" in dirty:
+            return "archive undo found unowned ROADMAP.md changes"
+        return None
+    if (phase, status) != ("shipped", "done"):
+        return "archive undo requires ship/active or shipped/done"
+
+    prepared = _state_from_text(prepared_state, "prepared archive STATE.md")
+    events = (
+        "archive preflight passed; shipment recorded",
+        "archive preflight passed; shipment recorded; program complete",
+    )
+    rendered_states = []
+    for event in events:
+        try:
+            _, _, rendered = _render_transition(
+                prepared,
+                prepared_state,
+                {
+                    "phase": "ship",
+                    "status": "active",
+                    "branch": prepared.branch,
+                    "archive": configured,
+                },
+                {"phase": "shipped", "status": "done"},
+                event,
+                ".project",
+            )
+        except PipelineStateError:
+            continue
+        rendered_states.append(rendered)
+    if current_state not in rendered_states:
+        return "archive undo found unowned shipment STATE.md changes"
+    if ".project/ROADMAP.md" in dirty:
+        try:
+            head_roadmap = _git_text(repo, "HEAD", ".project/ROADMAP.md")
+            expected_roadmap = _shipment_roadmap(head_roadmap, prepared, configured)
+        except (PipelineStateError, UndoError):
+            return "archive undo cannot prove ROADMAP.md shipment ownership"
+        current_roadmap = (repo / ".project" / "ROADMAP.md").read_text(
+            encoding="utf-8"
+        )
+        if current_roadmap != expected_roadmap:
+            return "archive undo found unowned ROADMAP.md changes"
+    return None
 
 
 def _prepare_transaction(
@@ -398,6 +482,8 @@ def _finish_transaction(repo: Path, transaction: dict[str, object]) -> None:
         allowed = {expected_head}
     if current not in allowed:
         raise UndoError("HEAD moved during undo recovery")
+    if current == expected_head:
+        _require_unpublished_reset(repo)
     _reset_to(repo, parent)
     discussion = _decode_discussion(transaction.get("discussion"))
     if discussion is not None:
@@ -456,6 +542,14 @@ def classify_undo(repo: Path) -> dict[str, object]:
                 _discussion_extension(resolved, archive_path)
             except UndoError as error:
                 return _blocked([str(error)])
+            metadata_error = _archive_metadata_error(
+                resolved,
+                state_fields,
+                str(archive),
+                dirty,
+            )
+            if metadata_error:
+                return _blocked([metadata_error])
             return {
                 "kind": "uncommitted-archive",
                 "head": head,
@@ -586,6 +680,14 @@ def _reset_to(repo: Path, revision: str) -> None:
         raise UndoError(f"git reset --hard {revision} failed: {detail}")
 
 
+def _require_unpublished_reset(repo: Path) -> None:
+    git = status_state(repo)["git"]
+    if git.get("published"):
+        raise UndoError("HEAD became published on its recorded remote branch")
+    if git.get("ancestor_of_origin_main"):
+        raise UndoError("HEAD became published through origin/main")
+
+
 def _remove_untracked_tree(repo: Path, relative: str) -> None:
     normalized = PurePosixPath(relative)
     if normalized.is_absolute() or ".." in normalized.parts or not normalized.parts:
@@ -657,6 +759,7 @@ def apply_undo(repo: Path, kind: str, expected_head: str) -> dict[str, object]:
         parent = target["parent"]
         if not parent:
             raise UndoError("parent revision is not a safe reset target")
+        _require_unpublished_reset(resolved)
         _reset_to(resolved, str(parent))
     elif kind == "uncommitted-archive":
         archive = str(target["archive"])

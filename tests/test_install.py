@@ -430,6 +430,16 @@ class InstallerTests(unittest.TestCase):
                 self.assertGreaterEqual(
                     checked, 2, "expected multiple dispatch-bearing skills"
                 )
+                if target == install.SHARED_AGENT_PROFILE:
+                    router = (staged / "gsd-path" / "SKILL.md").read_text(
+                        encoding="utf-8"
+                    )
+                    invocation = (
+                        "`$gsd-path status` (Codex) or "
+                        "`/gsd-path status` (Antigravity/Zed)"
+                    )
+                    self.assertEqual(router.count(invocation), 1)
+                    self.assertNotIn("(other hosts)", router)
 
     def test_stage_target_stamps_version_from_package_manifest(self):
         staged = self.root / "staged-unstamped"
