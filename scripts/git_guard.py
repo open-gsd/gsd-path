@@ -40,7 +40,7 @@ ARCHIVE_NAME = re.compile(
 )
 SLUG = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 BOUND_BRANCH = re.compile(r"^gsd-path/M(?P<number>\d{3,})$")
-STATE_FIELDS = {
+LEGACY_STATE_FIELDS = {
     "pipeline",
     "project",
     "milestone",
@@ -49,6 +49,13 @@ STATE_FIELDS = {
     "branch",
     "archive",
 }
+INTEGRATION_STATE_FIELDS = LEGACY_STATE_FIELDS | {
+    "integration_default",
+    "integration",
+}
+PROVENANCE_STATE_FIELDS = INTEGRATION_STATE_FIELDS | {"integration_source"}
+INTEGRATION_MODES = {"direct", "pull-request"}
+INTEGRATION_SOURCES = {"default", "milestone"}
 
 
 def staged_entries():
@@ -152,8 +159,26 @@ def staged_frontmatter():
 
 
 def strict_ship_state(state, archive):
-    if set(state) != STATE_FIELDS:
+    fields = frozenset(state)
+    if fields not in {
+        frozenset(LEGACY_STATE_FIELDS),
+        frozenset(INTEGRATION_STATE_FIELDS),
+        frozenset(PROVENANCE_STATE_FIELDS),
+    }:
         return False
+    if fields != frozenset(LEGACY_STATE_FIELDS):
+        if state.get("integration_default") not in INTEGRATION_MODES:
+            return False
+        if state.get("integration") not in INTEGRATION_MODES:
+            return False
+    if fields == frozenset(PROVENANCE_STATE_FIELDS):
+        source = state.get("integration_source")
+        if source not in INTEGRATION_SOURCES:
+            return False
+        if source == "default" and state.get("integration") != state.get(
+            "integration_default"
+        ):
+            return False
     archive_match = ARCHIVE_NAME.fullmatch(archive or "")
     branch_match = BOUND_BRANCH.fullmatch(state.get("branch", ""))
     if archive_match is None or branch_match is None:

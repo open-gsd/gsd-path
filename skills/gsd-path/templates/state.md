@@ -12,6 +12,7 @@ branch: null        # bound per milestone as gsd-path/M00N; after integration
 archive: null       # persisted archive transaction path; never recomputed
 integration_default: direct # direct | pull-request; project setting
 integration: direct # current milestone; may override the default before build
+integration_source: default # default | milestone; preserves override provenance
 ---
 
 # Project State

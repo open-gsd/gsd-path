@@ -451,7 +451,9 @@ binding resolves remote SHAs. `STATE.integration_default` stores the project
 choice and `STATE.integration` stores the current milestone choice. Both are
 `direct` or `pull-request`; they may change only before build, and the current
 milestone resets to the project default at the next handoff. Older v2 state
-without these fields means `direct`.
+without these fields means `direct`. `STATE.integration_source` is `default` or
+`milestone` so an explicit override remains distinct when its value happens to
+match the project default.
 
 Ship fetches origin, refreshes `origin/HEAD`, mirrors published milestone tags,
 and requires the remote default to be `main`. It then follows the locked mode:

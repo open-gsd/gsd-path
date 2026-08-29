@@ -460,7 +460,7 @@ class PipelineGitTests(unittest.TestCase):
                 "retired",
             )
 
-    def test_bind_next_starts_m002_after_pull_request_branch_auto_delete(self) -> None:
+    def test_bind_next_requires_pull_request_tag_after_branch_auto_delete(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             origin = Path(tmp) / "origin.git"
             default_checkout = Path(tmp) / "repo"
@@ -551,6 +551,32 @@ class PipelineGitTests(unittest.TestCase):
                     allow_remote_absent=True,
                 )
             nested.rmdir()
+
+            rejected = subprocess.run(
+                bind_next,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(rejected.returncode, 1)
+            self.assertIn("pull-request integration proof", rejected.stderr)
+
+            tag_message = (
+                "milestone 001-first\n\n"
+                "Mode: pull-request\n"
+                "Pull-Request: https://github.com/open-gsd/demo/pull/7\n"
+                f"Ship: {m001_ship}\n"
+                f"Landing: {integrated_main}"
+            )
+            run_git(
+                default_checkout,
+                "tag",
+                "-a",
+                "-m",
+                tag_message,
+                "milestone/001-first",
+                integrated_main,
+            )
+            run_git(default_checkout, "push", "origin", "milestone/001-first")
 
             result = subprocess.run(
                 bind_next,

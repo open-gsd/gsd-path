@@ -228,6 +228,47 @@ class GitGuardEndToEndTests(unittest.TestCase):
         self.assertEqual(1, ordinary.returncode)
         self.assertIn("requires a ship commit", ordinary.stderr)
 
+    def test_ship_accepts_complete_integration_state(self) -> None:
+        self.git("branch", "-m", "gsd-path/M002")
+        archived = self.repo / ".project" / "archive" / "002-next"
+        archived.mkdir()
+        (archived / "MANIFEST.md").write_text("manifest\n", encoding="utf-8")
+        (self.repo / ".project" / "STATE.md").write_text(
+            "---\npipeline: gsd-path/v2\nproject: demo\nmilestone: next\n"
+            "phase: shipped\nstatus: done\nbranch: gsd-path/M002\n"
+            "archive: .project/archive/002-next\n"
+            "integration_default: direct\nintegration: direct\n---\n",
+            encoding="utf-8",
+        )
+        self.git("add", "-A")
+        reviewed_head = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=self.repo,
+            text=True,
+            capture_output=True,
+            check=True,
+        ).stdout.strip()
+        body = (
+            "Archive: .project/archive/002-next\n"
+            f"Reviewed-HEAD: {reviewed_head}"
+        )
+
+        result = self.run_guard("ship: M002 — next", body)
+
+        self.assertEqual(0, result.returncode, result.stderr)
+
+        state_path = self.repo / ".project" / "STATE.md"
+        state_path.write_text(
+            state_path.read_text(encoding="utf-8").replace(
+                "integration: direct\n",
+                "integration: direct\nintegration_source: default\n",
+            ),
+            encoding="utf-8",
+        )
+        self.git("add", ".project/STATE.md")
+        result = self.run_guard("ship: M002 — next", body)
+        self.assertEqual(0, result.returncode, result.stderr)
+
     def test_blocks_malformed_or_duplicate_ship_commits(self):
         self.git("branch", "-m", "gsd-path/M002")
         archive = self.repo / ".project/archive/002-next"

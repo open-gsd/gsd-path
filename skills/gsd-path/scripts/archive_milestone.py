@@ -3535,6 +3535,41 @@ def find_pull_request(repository: str, branch: str, ship_commit: str) -> Optiona
     return pull
 
 
+def pull_request_body(archive_path: str, ship_commit: str, branch: str) -> str:
+    return (
+        f"{integrate_commit_body(archive_path, ship_commit, 'main', branch)}"
+        f"\n\n---\n{PR_CREDIT_LINE}"
+    )
+
+
+def update_pull_request_body(
+    repository: str,
+    pull: dict,
+    archive_path: str,
+    ship_commit: str,
+    branch: str,
+) -> dict:
+    expected = pull_request_body(archive_path, ship_commit, branch)
+    current = pull.get("body")
+    if isinstance(current, str) and current.rstrip().endswith(PR_CREDIT_LINE):
+        return pull
+    response = github_api_json(
+        f"repos/{repository}/pulls/{pull['number']}",
+        "--method",
+        "PATCH",
+        "-f",
+        f"body={expected}",
+    )
+    updated = require_pull_request_shape(response)
+    if updated["base"].get("ref") != "main" or updated["head"].get("ref") != branch:
+        raise ArchiveError("updated GitHub pull request has unexpected refs")
+    if updated["head"].get("sha") != ship_commit:
+        raise ArchiveError("updated GitHub pull request head is not the ship commit")
+    if updated.get("body") != expected:
+        raise ArchiveError("updated GitHub pull request is missing the credit footer")
+    return updated
+
+
 def create_pull_request(
     repository: str,
     branch: str,
@@ -3542,10 +3577,7 @@ def create_pull_request(
     archive_name: str,
     ship_commit: str,
 ) -> dict:
-    body = (
-        f"{integrate_commit_body(archive_path, ship_commit, 'main', branch)}"
-        f"\n\n---\n{PR_CREDIT_LINE}"
-    )
+    body = pull_request_body(archive_path, ship_commit, branch)
     response = github_api_json(
         f"repos/{repository}/pulls",
         "--method",
@@ -3647,6 +3679,14 @@ def integrate_pull_request(
             archive_path,
             archive_name,
             ship_commit,
+        )
+    else:
+        pull = update_pull_request_body(
+            repository,
+            pull,
+            archive_path,
+            ship_commit,
+            branch,
         )
     if pull["merged_at"] is None:
         if pull["state"] != "open":

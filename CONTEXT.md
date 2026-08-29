@@ -32,7 +32,8 @@ _Avoid_: ship, land (unless you mean this)
 **Integration mode**:
 The closeout path selected before build: `direct` or `pull-request`.
 `STATE.integration_default` is the project setting and `STATE.integration` is
-the locked choice for the current milestone.
+the locked choice for the current milestone. `STATE.integration_source` records
+whether that choice follows the default or is an explicit milestone override.
 _Avoid_: merge strategy (GitHub uses that term for merge, squash, or rebase)
 
 **Default ancestry**:

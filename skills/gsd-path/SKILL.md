@@ -128,7 +128,8 @@ selects a milestone branch.
 
 ## Integration choice
 
-New state starts with `integration_default: direct` and `integration: direct`.
+New state starts with `integration_default: direct`, `integration: direct`, and
+`integration_source: default`.
 When the user asks to change closeout behavior before build, use the state
 helper; never edit these fields by hand:
 
@@ -141,6 +142,7 @@ python3 <absolute-bundled-pipeline-state.py> configure-integration \
 
 `default` changes the project setting and changes the current milestone only
 when it has no override. `milestone` changes only the current milestone.
+`integration_source` records that distinction even when both modes match.
 The current value resets from the project default at the next milestone.
 Both settings lock when build starts. A lookahead STATE inherits the active
 project's `integration_default` and uses it for `integration`.
@@ -307,7 +309,8 @@ active milestone. On acceptance, create `.project/next/STATE.md` from the local 
 template](templates/state.md) with `pipeline: gsd-path/v2`, `phase:
 inspect`, `status: active`, the selector's exact returned `milestone` slug as
 `milestone`, `branch: null`, and `archive: null`. Copy the active project's
-`integration_default` into both integration fields. Then follow the bundled
+`integration_default` into both integration mode fields and set
+`integration_source: default`. Then follow the bundled
 phase contracts in their Lookahead mode — inspect, define (milestone +
 brownfield), research (only when the entry lists open questions), decide, and
 plan — rooted at `.project/next/`.
@@ -371,7 +374,8 @@ python3 <absolute-bundled-pipeline-git.py> bind-next \
 Add `--allow-missing-previous` when `validate-integrated` returned
 `mode: pull-request` and `origin/<STATE.branch>` is absent. GitHub may delete
 that head branch after merge; the local branch and exact ship SHA still bind
-the handoff.
+the handoff. The helper independently verifies the published pull-request
+milestone tag and merge topology before accepting the missing branch.
 
 The helper requires the previous branch, while it still exists locally, to
 remain at the ship SHA, proves the ship commit is integrated into the exact

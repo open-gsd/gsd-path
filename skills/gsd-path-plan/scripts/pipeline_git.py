@@ -293,6 +293,90 @@ def _remote_branch_exists(repo: Path, branch: str) -> bool:
     return _remote_ref_sha(repo, f"refs/heads/{branch}") is not None
 
 
+def _pull_request_tag_fields(repo: Path, ref: str) -> dict[str, str]:
+    if _run_git(repo, "cat-file", "-t", ref).stdout.strip() != "tag":
+        return {}
+    contents = _run_git(repo, "for-each-ref", "--format=%(contents)", ref).stdout
+    fields: dict[str, str] = {}
+    for line in contents.splitlines():
+        match = re.fullmatch(r"(Mode|Pull-Request|Ship|Landing): (.+)", line)
+        if match:
+            if match.group(1) in fields:
+                raise PipelineGitError("pull-request milestone tag repeats metadata")
+            fields[match.group(1)] = match.group(2)
+    return fields
+
+
+def _require_pull_request_integration_proof(
+    repo: Path,
+    ship: str,
+    base: str,
+) -> None:
+    refs = _run_git(
+        repo,
+        "for-each-ref",
+        "--format=%(refname)",
+        "refs/tags/milestone/",
+    ).stdout.splitlines()
+    candidates: list[tuple[str, dict[str, str]]] = []
+    for ref in refs:
+        fields = _pull_request_tag_fields(repo, ref)
+        if fields.get("Mode") == "pull-request" and fields.get("Ship") == ship:
+            candidates.append((ref, fields))
+    if len(candidates) != 1:
+        raise PipelineGitError("missing unique pull-request integration proof")
+    ref, fields = candidates[0]
+    if set(fields) != {"Mode", "Pull-Request", "Ship", "Landing"}:
+        raise PipelineGitError("pull-request integration proof is incomplete")
+    pull_request = fields["Pull-Request"]
+    if re.fullmatch(
+        r"https://github\.com/[^/]+/[^/]+/pull/[1-9][0-9]*",
+        pull_request,
+    ) is None:
+        raise PipelineGitError("pull-request integration proof has an invalid PR URL")
+    landing = fields["Landing"]
+    if re.fullmatch(r"[0-9a-f]{40}", landing) is None:
+        raise PipelineGitError("pull-request integration proof has an invalid landing")
+    local_object = _run_git(repo, "rev-parse", ref).stdout.strip()
+    local_target = _run_git(repo, "rev-parse", f"{ref}^{{commit}}").stdout.strip()
+    if local_target != landing:
+        raise PipelineGitError("pull-request integration tag does not point at landing")
+    remote = _run_git(
+        repo,
+        "ls-remote",
+        "--exit-code",
+        "--tags",
+        "origin",
+        ref,
+        f"{ref}^{{}}",
+        check=False,
+    )
+    if remote.returncode != 0:
+        raise PipelineGitError("pull-request integration tag is not published")
+    rows = dict(
+        line.split("\t", 1)[::-1]
+        for line in remote.stdout.splitlines()
+        if "\t" in line
+    )
+    if rows != {ref: local_object, f"{ref}^{{}}": landing}:
+        raise PipelineGitError("published pull-request integration tag differs")
+    parents = _run_git(
+        repo,
+        "rev-list",
+        "--parents",
+        "-n",
+        "1",
+        landing,
+    ).stdout.split()
+    if len(parents) != 3 or parents[2] != ship:
+        raise PipelineGitError("pull-request integration proof has invalid merge topology")
+    first_parent = _run_git(repo, "rev-list", "--first-parent", base).stdout.splitlines()
+    if landing not in first_parent:
+        raise PipelineGitError(
+            "pull-request integration landing is not on main first-parent history"
+        )
+
+
 def _git_path(repo: Path, name: str) -> Path:
     value = _run_git(repo, "rev-parse", "--git-path", name).stdout.strip()
     path = Path(value)
@@ -555,6 +639,8 @@ def bind_next_milestone_branch(
     if integrated.returncode != 0:
         detail = integrated.stderr.strip() or integrated.stdout.strip()
         raise PipelineGitError(f"could not verify integrated branch: {detail}")
+    if allow_remote_absent:
+        _require_pull_request_integration_proof(repo, ship_sha, base_sha)
 
     symbolic_branch = _run_git(
         repo,

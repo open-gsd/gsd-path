@@ -67,9 +67,11 @@ STATE_FIELDS = (
     "archive",
     "integration_default",
     "integration",
+    "integration_source",
 )
-LEGACY_STATE_FIELDS = STATE_FIELDS[:-2]
+LEGACY_STATE_FIELDS = STATE_FIELDS[:7]
 INTEGRATION_MODES = ("direct", "pull-request")
+INTEGRATION_SOURCES = ("default", "milestone")
 NULL = "null"
 SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 BOUND_BRANCH_RE = re.compile(r"^gsd-path/M(\d{3,})$")
@@ -144,6 +146,7 @@ class PipelineState:
     archive: Optional[str]
     integration_default: str
     integration: str
+    integration_source: str
 
     def json(self) -> dict[str, Optional[str]]:
         return asdict(self)
@@ -248,10 +251,20 @@ def _state_from_text(text: str, label: str = "STATE.md") -> PipelineState:
         raise PipelineStateError(f"{label} is missing fields: {', '.join(missing)}")
     if extra:
         raise PipelineStateError(f"{label} has unknown fields: {', '.join(extra)}")
-    integration_fields = {"integration_default", "integration"} & set(values)
-    if integration_fields and len(integration_fields) != 2:
+    integration_pair = {"integration_default", "integration"}
+    integration_fields = integration_pair | {"integration_source"}
+    present_integration_fields = integration_fields & set(values)
+    if present_integration_fields not in (set(), integration_pair, integration_fields):
         raise PipelineStateError(
             f"{label} integration_default and integration must appear together"
+        )
+
+    integration_default = values.get("integration_default", "direct")
+    integration = values.get("integration", "direct")
+    integration_source = values.get("integration_source")
+    if integration_source is None:
+        integration_source = (
+            "default" if integration == integration_default else "milestone"
         )
 
     state = PipelineState(
@@ -262,8 +275,9 @@ def _state_from_text(text: str, label: str = "STATE.md") -> PipelineState:
         status=values["status"],
         branch=_nullable(values["branch"]),
         archive=_nullable(values["archive"]),
-        integration_default=values.get("integration_default", "direct"),
-        integration=values.get("integration", "direct"),
+        integration_default=integration_default,
+        integration=integration,
+        integration_source=integration_source,
     )
     _validate_state_values(state, label)
     return state
@@ -286,6 +300,17 @@ def _validate_state_values(state: PipelineState, label: str) -> None:
         )
     if state.integration not in INTEGRATION_MODES:
         raise PipelineStateError(f"{label} has invalid integration: {state.integration}")
+    if state.integration_source not in INTEGRATION_SOURCES:
+        raise PipelineStateError(
+            f"{label} has invalid integration_source: {state.integration_source}"
+        )
+    if (
+        state.integration_source == "default"
+        and state.integration != state.integration_default
+    ):
+        raise PipelineStateError(
+            f"{label} default-sourced integration must match integration_default"
+        )
     if state.branch is not None and _bound_branch_number(state.branch) is None:
         raise PipelineStateError(f"{label} has invalid branch: {state.branch}")
     archive_match = ARCHIVE_RE.fullmatch(state.archive or "")
@@ -1117,10 +1142,15 @@ def _set_frontmatter(text: str, changes: Mapping[str, str]) -> str:
     if closing is None:
         raise PipelineStateError("STATE.md frontmatter is not closed")
     missing = set(changes) - seen
-    unsupported_missing = missing - {"integration_default", "integration"}
+    integration_fields = (
+        "integration_default",
+        "integration",
+        "integration_source",
+    )
+    unsupported_missing = missing - set(integration_fields)
     if unsupported_missing:
         raise PipelineStateError(f"STATE.md is missing fields: {', '.join(sorted(missing))}")
-    for key in ("integration_default", "integration"):
+    for key in integration_fields:
         if key in missing:
             lines.insert(closing, f"{key}: {changes[key]}\n")
             closing += 1
@@ -1266,6 +1296,7 @@ def _validate_transition(
     integration_changed = (
         before.integration_default != after.integration_default
         or before.integration != after.integration
+        or before.integration_source != after.integration_source
     )
     if integration_changed and not next_binding:
         if before.phase in {"build", "ship", "shipped"}:
@@ -1289,6 +1320,8 @@ def _validate_transition(
             raise PipelineStateError("next milestone must preserve integration_default")
         if after.integration != before.integration_default:
             raise PipelineStateError("next milestone must reset its integration override")
+        if after.integration_source != "default":
+            raise PipelineStateError("next milestone integration must use the project default")
     if branch_changed and not (initial_binding or next_binding):
         raise PipelineStateError("illegal STATE.branch transition")
     if initial_binding:
@@ -1439,14 +1472,21 @@ def configure_integration(
         state, text, path = load_state(resolved, project_dir)
         if state.phase in {"build", "ship", "shipped"}:
             raise PipelineStateError("integration mode is locked when build starts")
-        changes = {
-            "integration_default": state.integration_default,
-            "integration": mode,
-        }
         if scope == "default":
-            changes["integration_default"] = mode
-            if state.integration != state.integration_default:
-                changes["integration"] = state.integration
+            integration = (
+                mode if state.integration_source == "default" else state.integration
+            )
+            changes = {
+                "integration_default": mode,
+                "integration": integration,
+                "integration_source": state.integration_source,
+            }
+        else:
+            changes = {
+                "integration_default": state.integration_default,
+                "integration": mode,
+                "integration_source": "milestone",
+            }
         rendered = _set_frontmatter(text, changes)
         rendered = _append_event(
             rendered,
@@ -2593,6 +2633,7 @@ def _promotion_state(
             "archive": NULL,
             "integration_default": next_state.integration_default,
             "integration": next_state.integration,
+            "integration_source": next_state.integration_source,
         },
     )
     rendered = _append_event(
@@ -2953,6 +2994,19 @@ def _prepare_promotion(
         raise PipelineStateError("promotion requires active STATE shipped/done")
     if active_state.milestone is None:
         raise PipelineStateError("active STATE does not name the shipped milestone")
+    archive_name = PurePosixPath(active_state.archive or "").name
+    tag_ref = f"refs/tags/milestone/{archive_name}"
+    tag_type = _run_git(repo, "cat-file", "-t", tag_ref, check=False)
+    if tag_type.returncode != 0 or tag_type.stdout.strip() != "tag":
+        raise PipelineStateError("shipped milestone tag is missing or not annotated")
+    tag_landing = _run_git(
+        repo,
+        "rev-parse",
+        "--verify",
+        f"{tag_ref}^{{commit}}",
+    ).stdout.strip()
+    if tag_landing != landing:
+        raise PipelineStateError("milestone tag does not point at landing")
     next_root = project / "next"
     next_state, next_text, _ = load_state(repo, ".project/next")
     if next_state.project != active_state.project:

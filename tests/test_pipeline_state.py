@@ -29,12 +29,15 @@ def state_text(
     archive: str = "null",
     integration_default=None,
     integration=None,
+    integration_source=None,
 ) -> str:
     integration_fields = ""
     if integration_default is not None:
         integration_fields += f"integration_default: {integration_default}\n"
     if integration is not None:
         integration_fields += f"integration: {integration}\n"
+    if integration_source is not None:
+        integration_fields += f"integration_source: {integration_source}\n"
     return (
         "---\n"
         "pipeline: gsd-path/v2\n"
@@ -172,6 +175,30 @@ class PipelineStateTests(unittest.TestCase):
             self.assertEqual(configured["state"]["integration"], "pull-request")
             self.assertEqual(overridden["state"]["integration_default"], "pull-request")
             self.assertEqual(overridden["state"]["integration"], "direct")
+
+    def test_explicit_milestone_override_survives_matching_default_changes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            run_git(repo, "init", "-b", "gsd-path/M001")
+            project = repo / ".project"
+            project.mkdir()
+            (project / "STATE.md").write_text(
+                state_text(
+                    milestone="first",
+                    phase="plan",
+                    status="active",
+                    branch="gsd-path/M001",
+                ),
+                encoding="utf-8",
+            )
+
+            pipeline_state.configure_integration(repo, "milestone", "pull-request")
+            pipeline_state.configure_integration(repo, "default", "pull-request")
+            configured = pipeline_state.configure_integration(repo, "default", "direct")
+
+            self.assertEqual(configured["state"]["integration_default"], "direct")
+            self.assertEqual(configured["state"]["integration"], "pull-request")
+            self.assertEqual(configured["state"]["integration_source"], "milestone")
 
     def test_configure_integration_rejects_build_or_later(self) -> None:
         positions = (("build", "active"), ("ship", "active"), ("shipped", "done"))
@@ -1441,6 +1468,15 @@ class PipelineStateTests(unittest.TestCase):
             "integrate: M001 — merge gsd-path/M001 into main",
         )
         integrate = run_git(repo, "rev-parse", "HEAD").stdout.strip()
+        run_git(
+            repo,
+            "tag",
+            "-a",
+            "-m",
+            "milestone 001-first",
+            "milestone/001-first",
+            integrate,
+        )
         run_git(repo, "update-ref", "refs/remotes/origin/main", integrate)
         run_git(repo, "switch", "-c", "gsd-path/M002")
         return repo, integrate
@@ -1539,6 +1575,23 @@ class PipelineStateTests(unittest.TestCase):
             roadmap = (repo / ".project" / "ROADMAP.md").read_text(encoding="utf-8")
             self.assertIn(f"Integrated: {landing}", roadmap)
             self.assertNotIn(f"Integrated: {base}", roadmap)
+
+    def test_promote_next_rejects_ancestor_other_than_milestone_tag(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, landing = self._promotion_repo(tmp, drift=False)
+            older_ancestor = run_git(repo, "rev-parse", f"{landing}^1").stdout.strip()
+
+            with self.assertRaisesRegex(
+                pipeline_state.PipelineStateError,
+                "milestone tag does not point at landing",
+            ):
+                pipeline_state.promote_next(
+                    repo,
+                    "second",
+                    "gsd-path/M002",
+                    landing,
+                    older_ancestor,
+                )
 
     def test_promote_next_reopens_plan_when_task_paths_drifted(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

@@ -77,9 +77,11 @@ full-repo suite on a tiny edit outrank the phase brief.
   marker rule, owns no task frontmatter, and never binds a branch.
 - STATE.integration_default is the project closeout choice and
   STATE.integration is the current milestone choice. Both are `direct` or
-  `pull-request`, default to `direct` for older v2 state, and may be changed
-  only through `pipeline_state.py configure-integration` before build. A next
-  milestone resets its current choice from the project default.
+  `pull-request`; STATE.integration_source is `default` or `milestone` and
+  preserves explicit override provenance. Older v2 state defaults to `direct`,
+  and modes may be changed only through `pipeline_state.py
+  configure-integration` before build. A next milestone resets its current
+  choice from the project default.
 - Spawned agents have isolated context. Follow the installed runtime dispatch
   contract and brief them with exact input and output paths, constraints, a
   deterministic logical task name, and a bounded responsibility. Independent
