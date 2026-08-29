@@ -3658,12 +3658,15 @@ def require_pull_request_merge(
         raise ArchiveError("pull-request merge is not on origin/main first-parent history")
 
 
-def require_pull_request_not_queued(repository: str, number: int) -> None:
+def require_pull_request_merge_provenance(repository: str, number: int) -> None:
     owner, name = repository.split("/", 1)
     query = """query($owner:String!,$name:String!,$number:Int!){
   repository(owner:$owner,name:$name){
     pullRequest(number:$number){
-      timelineItems(first:1,itemTypes:[ADDED_TO_MERGE_QUEUE_EVENT]){
+      mergeQueue:timelineItems(first:1,itemTypes:[ADDED_TO_MERGE_QUEUE_EVENT]){
+        nodes{__typename}
+      }
+      autoMerge:timelineItems(first:1,itemTypes:[AUTO_MERGE_ENABLED_EVENT]){
         nodes{__typename}
       }
     }
@@ -3687,22 +3690,32 @@ def require_pull_request_not_queued(repository: str, number: int) -> None:
         if isinstance(repository_data, dict)
         else None
     )
-    timeline = (
-        pull_request.get("timelineItems")
-        if isinstance(pull_request, dict)
-        else None
+    checks = (
+        (
+            "mergeQueue",
+            "AddedToMergeQueueEvent",
+            "GitHub merge-queue provenance is invalid",
+            "pull-request integration cannot use a merge queue",
+        ),
+        (
+            "autoMerge",
+            "AutoMergeEnabledEvent",
+            "GitHub auto-merge provenance is invalid",
+            "pull-request integration cannot use auto-merge",
+        ),
     )
-    nodes = timeline.get("nodes") if isinstance(timeline, dict) else None
-    if not isinstance(nodes, list):
-        raise ArchiveError("GitHub merge-queue provenance is invalid")
-    if nodes:
-        if any(
-            not isinstance(node, dict)
-            or node.get("__typename") != "AddedToMergeQueueEvent"
-            for node in nodes
-        ):
-            raise ArchiveError("GitHub merge-queue provenance is invalid")
-        raise ArchiveError("pull-request integration cannot use a merge queue")
+    for field, typename, invalid_message, rejection_message in checks:
+        timeline = pull_request.get(field) if isinstance(pull_request, dict) else None
+        nodes = timeline.get("nodes") if isinstance(timeline, dict) else None
+        if not isinstance(nodes, list):
+            raise ArchiveError(invalid_message)
+        if nodes:
+            if any(
+                not isinstance(node, dict) or node.get("__typename") != typename
+                for node in nodes
+            ):
+                raise ArchiveError(invalid_message)
+            raise ArchiveError(rejection_message)
 
 
 def integrate_pull_request(
@@ -3750,7 +3763,7 @@ def integrate_pull_request(
     merge_commit = pull["merge_commit_sha"]
     if pull["state"] != "closed" or not isinstance(merge_commit, str):
         raise ArchiveError("GitHub pull request merge metadata is invalid")
-    require_pull_request_not_queued(repository, pull["number"])
+    require_pull_request_merge_provenance(repository, pull["number"])
     remote_default = refresh_origin(project)["remote_default"]
     require_pull_request_merge(project, merge_commit, ship_commit, remote_default)
     tag_name = f"milestone/{archive_name}"

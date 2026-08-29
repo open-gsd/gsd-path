@@ -969,6 +969,7 @@ class PipelineStateTests(unittest.TestCase):
                     archive=archive,
                     integration_default="pull-request",
                     integration="direct",
+                    integration_source="milestone",
                 ),
                 encoding="utf-8",
             )
@@ -986,7 +987,6 @@ class PipelineStateTests(unittest.TestCase):
                 "milestone": "second",
                 "branch": "gsd-path/M002",
                 "archive": None,
-                "integration": "pull-request",
             }
 
             result = pipeline_state.transition_state(
@@ -998,6 +998,7 @@ class PipelineStateTests(unittest.TestCase):
 
             self.assertEqual(result["state"]["integration_default"], "pull-request")
             self.assertEqual(result["state"]["integration"], "pull-request")
+            self.assertEqual(result["state"]["integration_source"], "default")
 
     def test_transition_requires_canonical_patch_reopen_event(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1477,6 +1478,17 @@ class PipelineStateTests(unittest.TestCase):
             "milestone/001-first",
             integrate,
         )
+        tag_object = run_git(
+            repo,
+            "rev-parse",
+            "refs/tags/milestone/001-first",
+        ).stdout.strip()
+        run_git(
+            repo,
+            "update-ref",
+            "refs/remotes/origin/tags/milestone/001-first",
+            tag_object,
+        )
         run_git(repo, "update-ref", "refs/remotes/origin/main", integrate)
         run_git(repo, "switch", "-c", "gsd-path/M002")
         return repo, integrate
@@ -1590,6 +1602,33 @@ class PipelineStateTests(unittest.TestCase):
                     "second",
                     "gsd-path/M002",
                     landing,
+                    older_ancestor,
+                )
+
+    def test_promote_next_rejects_local_tag_that_differs_from_published_tag(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, base = self._promotion_repo(tmp, drift=False)
+            older_ancestor = run_git(repo, "rev-parse", f"{base}^1").stdout.strip()
+            run_git(
+                repo,
+                "tag",
+                "-f",
+                "-a",
+                "-m",
+                "spoofed milestone landing",
+                "milestone/001-first",
+                older_ancestor,
+            )
+
+            with self.assertRaisesRegex(
+                pipeline_state.PipelineStateError,
+                "published milestone tag",
+            ):
+                pipeline_state.promote_next(
+                    repo,
+                    "second",
+                    "gsd-path/M002",
+                    base,
                     older_ancestor,
                 )
 

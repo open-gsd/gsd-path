@@ -1647,11 +1647,26 @@ def _render_transition(
         raise PipelineStateError(
             f"expected state does not match: {json.dumps(mismatches, sort_keys=True)}"
         )
+    effective_changes = dict(changes)
+    next_binding = (
+        state.phase == "shipped"
+        and state.status == "done"
+        and effective_changes.get("phase", state.phase) in {"define", "inspect"}
+        and effective_changes.get("status", state.status) == "active"
+        and state.branch is not None
+        and effective_changes.get("branch", state.branch) is not None
+    )
+    if next_binding:
+        effective_changes["integration"] = state.integration_default
+        effective_changes["integration_source"] = "default"
     rendered = _set_frontmatter(
         text,
-        {key: NULL if value is None else value for key, value in changes.items()},
+        {
+            key: NULL if value is None else value
+            for key, value in effective_changes.items()
+        },
     )
-    next_phase = changes.get("phase", state.phase)
+    next_phase = effective_changes.get("phase", state.phase)
     if not isinstance(next_phase, str):
         raise PipelineStateError("phase cannot be null")
     normalized_event = " ".join(event.split())
@@ -2996,9 +3011,28 @@ def _prepare_promotion(
         raise PipelineStateError("active STATE does not name the shipped milestone")
     archive_name = PurePosixPath(active_state.archive or "").name
     tag_ref = f"refs/tags/milestone/{archive_name}"
+    published_tag_ref = f"refs/remotes/origin/tags/milestone/{archive_name}"
     tag_type = _run_git(repo, "cat-file", "-t", tag_ref, check=False)
     if tag_type.returncode != 0 or tag_type.stdout.strip() != "tag":
         raise PipelineStateError("shipped milestone tag is missing or not annotated")
+    published_tag_type = _run_git(
+        repo,
+        "cat-file",
+        "-t",
+        published_tag_ref,
+        check=False,
+    )
+    if published_tag_type.returncode != 0 or published_tag_type.stdout.strip() != "tag":
+        raise PipelineStateError("published milestone tag is missing or not annotated")
+    tag_object = _run_git(repo, "rev-parse", "--verify", tag_ref).stdout.strip()
+    published_tag_object = _run_git(
+        repo,
+        "rev-parse",
+        "--verify",
+        published_tag_ref,
+    ).stdout.strip()
+    if tag_object != published_tag_object:
+        raise PipelineStateError("local milestone tag does not match published milestone tag")
     tag_landing = _run_git(
         repo,
         "rev-parse",
@@ -3007,6 +3041,14 @@ def _prepare_promotion(
     ).stdout.strip()
     if tag_landing != landing:
         raise PipelineStateError("milestone tag does not point at landing")
+    published_tag_landing = _run_git(
+        repo,
+        "rev-parse",
+        "--verify",
+        f"{published_tag_ref}^{{commit}}",
+    ).stdout.strip()
+    if published_tag_landing != landing:
+        raise PipelineStateError("published milestone tag does not point at landing")
     next_root = project / "next"
     next_state, next_text, _ = load_state(repo, ".project/next")
     if next_state.project != active_state.project:
