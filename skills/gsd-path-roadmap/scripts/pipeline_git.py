@@ -294,7 +294,8 @@ def _remote_branch_exists(repo: Path, branch: str) -> bool:
 
 
 def _pull_request_tag_fields(repo: Path, ref: str) -> dict[str, str]:
-    if _run_git(repo, "cat-file", "-t", ref).stdout.strip() != "tag":
+    tag_type = _run_git(repo, "cat-file", "-t", ref, check=False)
+    if tag_type.returncode != 0 or tag_type.stdout.strip() != "tag":
         return {}
     contents = _run_git(repo, "for-each-ref", "--format=%(contents)", ref).stdout
     fields: dict[str, str] = {}
@@ -307,27 +308,60 @@ def _pull_request_tag_fields(repo: Path, ref: str) -> dict[str, str]:
     return fields
 
 
+def _validated_shipped_state(repo: Path) -> dict[str, object]:
+    validator = Path(__file__).with_name("pipeline_state.py")
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(validator),
+            "validate",
+            "--repo",
+            str(repo),
+        ],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip()
+        raise PipelineGitError(f"could not validate shipped STATE.md: {detail}")
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError as error:
+        raise PipelineGitError("pipeline state validator returned invalid JSON") from error
+    state = payload.get("state") if isinstance(payload, dict) else None
+    if not isinstance(state, dict):
+        raise PipelineGitError("pipeline state validator omitted state")
+    return state
+
+
 def _require_pull_request_integration_proof(
     repo: Path,
     ship: str,
     base: str,
+    previous_branch: str,
 ) -> None:
-    refs = _run_git(
-        repo,
-        "for-each-ref",
-        "--format=%(refname)",
-        "refs/tags/milestone/",
-    ).stdout.splitlines()
-    candidates: list[tuple[str, dict[str, str]]] = []
-    for ref in refs:
-        fields = _pull_request_tag_fields(repo, ref)
-        if fields.get("Mode") == "pull-request" and fields.get("Ship") == ship:
-            candidates.append((ref, fields))
-    if len(candidates) != 1:
-        raise PipelineGitError("missing unique pull-request integration proof")
-    ref, fields = candidates[0]
+    state = _validated_shipped_state(repo)
+    if state.get("phase") != "shipped" or state.get("status") != "done":
+        raise PipelineGitError("bind-next requires shipped/done state")
+    if state.get("branch") != previous_branch:
+        raise PipelineGitError("shipped state does not name the previous branch")
+    if state.get("integration") != "pull-request":
+        raise PipelineGitError("shipped integration mode is not pull-request")
+    archive = state.get("archive")
+    if not isinstance(archive, str):
+        raise PipelineGitError("shipped state does not name an archive")
+    archive_pattern = r"\.project/archive/(\d{3,}-[a-z0-9][a-z0-9-]*)/?"
+    match = re.fullmatch(archive_pattern, archive)
+    if match is None or milestone_number(match.group(1)) != milestone_number(
+        previous_branch
+    ):
+        raise PipelineGitError("shipped archive does not match the previous branch")
+    ref = f"refs/tags/milestone/{match.group(1)}"
+    fields = _pull_request_tag_fields(repo, ref)
     if set(fields) != {"Mode", "Pull-Request", "Ship", "Landing"}:
         raise PipelineGitError("pull-request integration proof is incomplete")
+    if fields["Mode"] != "pull-request" or fields["Ship"] != ship:
+        raise PipelineGitError("pull-request integration proof does not match shipped state")
     pull_request = fields["Pull-Request"]
     if re.fullmatch(
         r"https://github\.com/[^/]+/[^/]+/pull/[1-9][0-9]*",
@@ -640,7 +674,12 @@ def bind_next_milestone_branch(
         detail = integrated.stderr.strip() or integrated.stdout.strip()
         raise PipelineGitError(f"could not verify integrated branch: {detail}")
     if allow_remote_absent:
-        _require_pull_request_integration_proof(repo, ship_sha, base_sha)
+        _require_pull_request_integration_proof(
+            repo,
+            ship_sha,
+            base_sha,
+            previous_branch,
+        )
 
     symbolic_branch = _run_git(
         repo,

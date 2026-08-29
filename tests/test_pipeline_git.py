@@ -486,7 +486,21 @@ class PipelineGitTests(unittest.TestCase):
 
             project = primary / ".project"
             project.mkdir()
-            (project / "STATE.md").write_text("status: shipped\n", encoding="utf-8")
+            (project / "STATE.md").write_text(
+                "---\n"
+                "pipeline: gsd-path/v2\n"
+                "project: demo\n"
+                "milestone: first\n"
+                "phase: shipped\n"
+                "status: done\n"
+                "branch: gsd-path/M001\n"
+                "archive: .project/archive/001-first/\n"
+                "integration_default: pull-request\n"
+                "integration: pull-request\n"
+                "integration_source: default\n"
+                "---\n\n# Project State\n\n## Log\n",
+                encoding="utf-8",
+            )
             run_git(primary, "add", ".project/STATE.md")
             run_git(
                 primary,
@@ -636,6 +650,98 @@ class PipelineGitTests(unittest.TestCase):
             dirty_retry = subprocess.run(bind_next, capture_output=True, text=True)
             self.assertEqual(dirty_retry.returncode, 1)
             self.assertIn("primary worktree is not clean", dirty_retry.stderr)
+
+    def test_bind_next_rejects_direct_state_with_forged_pr_tag(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            origin = Path(tmp) / "origin.git"
+            main = Path(tmp) / "repo"
+            primary = Path(tmp) / "repo-gsd-path"
+            run_git(Path(tmp), "init", "--bare", "-b", "main", str(origin))
+            run_git(Path(tmp), "init", "-b", "main", str(main))
+            run_git(main, "config", "user.name", "GSD Path Test")
+            run_git(main, "config", "user.email", "test@example.com")
+            (main / "product.txt").write_text("base\n", encoding="utf-8")
+            run_git(main, "add", "product.txt")
+            run_git(main, "commit", "-m", "base")
+            run_git(main, "remote", "add", "origin", str(origin))
+            run_git(main, "push", "-u", "origin", "main")
+            run_git(
+                main,
+                "worktree",
+                "add",
+                "-b",
+                "gsd-path/M001",
+                str(primary),
+                "main",
+            )
+            project = primary / ".project"
+            project.mkdir()
+            (project / "STATE.md").write_text(
+                "---\n"
+                "pipeline: gsd-path/v2\n"
+                "project: demo\n"
+                "milestone: first\n"
+                "phase: shipped\n"
+                "status: done\n"
+                "branch: gsd-path/M001\n"
+                "archive: .project/archive/001-first/\n"
+                "integration_default: direct\n"
+                "integration: direct\n"
+                "integration_source: default\n"
+                "---\n\n# Project State\n\n## Log\n",
+                encoding="utf-8",
+            )
+            run_git(primary, "add", ".project/STATE.md")
+            run_git(primary, "commit", "-m", "ship: M001 — first")
+            ship = run_git(primary, "rev-parse", "HEAD").stdout.strip()
+            run_git(primary, "push", "origin", "gsd-path/M001")
+            run_git(main, "merge", "--no-ff", "gsd-path/M001", "-m", "direct merge")
+            landing = run_git(main, "rev-parse", "HEAD").stdout.strip()
+            run_git(main, "push", "origin", "main")
+            run_git(main, "push", "origin", "--delete", "gsd-path/M001")
+            tag_message = (
+                "milestone 001-first\n\n"
+                "Mode: pull-request\n"
+                "Pull-Request: https://github.com/open-gsd/demo/pull/7\n"
+                f"Ship: {ship}\n"
+                f"Landing: {landing}"
+            )
+            run_git(
+                main,
+                "tag",
+                "-a",
+                "-m",
+                tag_message,
+                "milestone/001-first",
+                landing,
+            )
+            run_git(main, "push", "origin", "milestone/001-first")
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(PIPELINE_GIT),
+                    "bind-next",
+                    "--repo",
+                    str(primary),
+                    "--branch",
+                    "gsd-path/M002",
+                    "--previous-branch",
+                    "gsd-path/M001",
+                    "--ship",
+                    ship,
+                    "--remote-default",
+                    "origin/main",
+                    "--base",
+                    landing,
+                    "--allow-missing-previous",
+                ],
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("shipped integration mode is not pull-request", result.stderr)
 
     def test_bind_next_retires_previous_branch_on_origin(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

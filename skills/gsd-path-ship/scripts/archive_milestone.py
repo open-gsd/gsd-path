@@ -3658,6 +3658,53 @@ def require_pull_request_merge(
         raise ArchiveError("pull-request merge is not on origin/main first-parent history")
 
 
+def require_pull_request_not_queued(repository: str, number: int) -> None:
+    owner, name = repository.split("/", 1)
+    query = """query($owner:String!,$name:String!,$number:Int!){
+  repository(owner:$owner,name:$name){
+    pullRequest(number:$number){
+      timelineItems(first:1,itemTypes:[ADDED_TO_MERGE_QUEUE_EVENT]){
+        nodes{__typename}
+      }
+    }
+  }
+}"""
+    payload = github_api_json(
+        "graphql",
+        "-f",
+        f"query={query}",
+        "-F",
+        f"owner={owner}",
+        "-F",
+        f"name={name}",
+        "-F",
+        f"number={number}",
+    )
+    data = payload.get("data") if isinstance(payload, dict) else None
+    repository_data = data.get("repository") if isinstance(data, dict) else None
+    pull_request = (
+        repository_data.get("pullRequest")
+        if isinstance(repository_data, dict)
+        else None
+    )
+    timeline = (
+        pull_request.get("timelineItems")
+        if isinstance(pull_request, dict)
+        else None
+    )
+    nodes = timeline.get("nodes") if isinstance(timeline, dict) else None
+    if not isinstance(nodes, list):
+        raise ArchiveError("GitHub merge-queue provenance is invalid")
+    if nodes:
+        if any(
+            not isinstance(node, dict)
+            or node.get("__typename") != "AddedToMergeQueueEvent"
+            for node in nodes
+        ):
+            raise ArchiveError("GitHub merge-queue provenance is invalid")
+        raise ArchiveError("pull-request integration cannot use a merge queue")
+
+
 def integrate_pull_request(
     project: Path,
     state: PipelineState,
@@ -3703,6 +3750,7 @@ def integrate_pull_request(
     merge_commit = pull["merge_commit_sha"]
     if pull["state"] != "closed" or not isinstance(merge_commit, str):
         raise ArchiveError("GitHub pull request merge metadata is invalid")
+    require_pull_request_not_queued(repository, pull["number"])
     remote_default = refresh_origin(project)["remote_default"]
     require_pull_request_merge(project, merge_commit, ship_commit, remote_default)
     tag_name = f"milestone/{archive_name}"

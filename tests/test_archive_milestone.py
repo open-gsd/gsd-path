@@ -2780,6 +2780,17 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
         def run(*arguments: str) -> subprocess.CompletedProcess[str]:
             if arguments == ("gh", "auth", "status"):
                 return subprocess.CompletedProcess(arguments, 0, "", "")
+            if arguments[:3] == ("gh", "api", "graphql"):
+                payload = {
+                    "data": {
+                        "repository": {
+                            "pullRequest": {"timelineItems": {"nodes": []}}
+                        }
+                    }
+                }
+                return subprocess.CompletedProcess(
+                    arguments, 0, json.dumps(payload), ""
+                )
             if arguments[:3] == ("gh", "api", "repos/open-gsd/demo/pulls"):
                 if "GET" in arguments:
                     return subprocess.CompletedProcess(
@@ -3043,6 +3054,77 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
             )
             validated = archive_milestone.validate_integrated(repo, "demo")
             self.assertEqual(validated["landing"], merge_sha)
+
+    def test_pull_request_integration_rejects_merge_queue_before_tag(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            repo = root / "primary"
+            repo.mkdir()
+            remote = root / "origin.git"
+            self.make_publishable_bound_repo(repo, remote)
+            self.enable_pull_request_integration(repo)
+            archive_name, ship_sha = self.ship_canonical_bound(repo)
+            self.git(repo, "push", "-q", "origin", "gsd-path/M001")
+            merge_sha = self.integrate_bound(
+                repo,
+                archive_name,
+                ship_sha,
+                tag=False,
+                subject="Merge pull request #7 from open-gsd/gsd-path/M001",
+            )
+            self.git(repo, "push", "-q", "origin", f"{merge_sha}:refs/heads/main")
+            pull = self.merged_pull_request(ship_sha, merge_sha)
+
+            def github_api(*arguments: str) -> subprocess.CompletedProcess[str]:
+                if arguments == ("gh", "auth", "status"):
+                    return subprocess.CompletedProcess(arguments, 0, "", "")
+                if arguments[:3] == ("gh", "api", "repos/open-gsd/demo/pulls"):
+                    return subprocess.CompletedProcess(
+                        arguments, 0, json.dumps([pull]), ""
+                    )
+                if arguments[:3] == ("gh", "api", "graphql"):
+                    payload = {
+                        "data": {
+                            "repository": {
+                                "pullRequest": {
+                                    "timelineItems": {
+                                        "nodes": [
+                                            {"__typename": "AddedToMergeQueueEvent"}
+                                        ]
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    return subprocess.CompletedProcess(
+                        arguments, 0, json.dumps(payload), ""
+                    )
+                return subprocess.CompletedProcess(
+                    arguments, 1, "", "unexpected command"
+                )
+
+            with (
+                mock.patch.object(
+                    archive_milestone,
+                    "github_repository",
+                    return_value="open-gsd/demo",
+                ),
+                mock.patch.object(
+                    archive_milestone,
+                    "run_command",
+                    side_effect=github_api,
+                ),
+            ):
+                with self.assertRaisesRegex(
+                    archive_milestone.ArchiveError,
+                    "merge queue",
+                ):
+                    archive_milestone.integrate(repo, "demo")
+
+            self.assertNotEqual(
+                self.git(remote, "show-ref", "--tags", "--quiet").returncode,
+                0,
+            )
 
     def test_pull_request_integration_rejects_non_merge_landing(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
