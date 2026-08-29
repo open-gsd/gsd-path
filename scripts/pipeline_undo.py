@@ -73,7 +73,6 @@ _state_from_text = pipeline_state._state_from_text
 _git_path = pipeline_state._git_path
 _read_json = pipeline_state._read_json
 _write_json = pipeline_state._write_json
-_validate_next_layout = pipeline_state._validate_next_layout
 _worktree_changes = pipeline_state._worktree_changes
 undo_transaction = pipeline_state.undo_transaction
 load_state = pipeline_state.load_state
@@ -397,11 +396,20 @@ def _archive_metadata_error(
         return "archive undo found unowned .project changes: " + ", ".join(unowned)
 
     archive_path = repo / archive
-    expected_inventory = sorted(
-        path.removeprefix(".project/") for path in tracked
-    )
+    expected_inventory = {path.removeprefix(".project/") for path in tracked}
     try:
         actual_inventory = list(archive_milestone.archive_file_inventory(archive_path))
+        final_review = archive_path / "review" / "FINAL.md"
+        gap_reviews = sorted((archive_path / "review").glob("final-gap-*.md"))
+        if final_review.exists() or gap_reviews:
+            reviewed_head, _ = archive_milestone.parse_final_review(archive_path)
+            archive_milestone.validate_gap_reviews(archive_path, reviewed_head)
+            if reviewed_head != _optional_rev(repo, "HEAD"):
+                return "archive undo final review does not match current HEAD"
+            expected_inventory.add("review/FINAL.md")
+            expected_inventory.update(
+                path.relative_to(archive_path).as_posix() for path in gap_reviews
+            )
         actual_directories = sorted(
             path.relative_to(archive_path).as_posix()
             for path in archive_path.rglob("*")
@@ -409,6 +417,7 @@ def _archive_metadata_error(
         )
     except (ArchiveError, OSError) as error:
         return f"archive undo cannot prove archive ownership: {error}"
+    expected_inventory = sorted(expected_inventory)
     expected_directories = sorted(
         {
             parent.as_posix()
@@ -744,7 +753,6 @@ def classify_undo(repo: Path) -> dict[str, object]:
             return _blocked(["lookahead discard requires a real .project/next directory"])
         try:
             next_state, _, _ = load_state(resolved, ".project/next")
-            _validate_next_layout(next_dir)
         except (PipelineStateError, OSError) as error:
             return _blocked([f"lookahead ownership is unproven: {error}"])
         if next_state.project != state_fields.get("project"):

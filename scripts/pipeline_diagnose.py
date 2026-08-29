@@ -173,7 +173,11 @@ def _command(module: object, *arguments: object) -> str:
     return shlex.join([sys.executable, str(script), *map(str, arguments)])
 
 
-def _route_retry(repo: Path, route: dict[str, object]) -> Optional[str]:
+def _route_retry(
+    repo: Path,
+    route: dict[str, object],
+    undo_result: Optional[dict[str, object]],
+) -> Optional[str]:
     action = route.get("action")
     if action == "resume-checkpoint":
         return _command(pipeline_state, "resume-checkpoint", "--repo", repo)
@@ -219,6 +223,16 @@ def _route_retry(repo: Path, route: dict[str, object]) -> Optional[str]:
             route["base"],
         )
     if action == "resume-undo":
+        apply = (undo_result or {}).get("apply") or {}
+        if (
+            apply.get("kind") != route.get("kind")
+            or apply.get("expected_head") != route.get("expected_head")
+        ):
+            blocked = (
+                ((undo_result or {}).get("target") or {}).get("blocked") or []
+            )
+            reason = "; ".join(map(str, blocked)) or "undo recovery is not resumable"
+            return _needs_user(reason)
         return _command(
             pipeline_undo,
             "apply",
@@ -326,7 +340,9 @@ def diagnose(repo: Path) -> dict[str, object]:
             for key, path in (status.get("journals") or {}).items()
             if path
         }
-        route_retry = _route_retry(resolved, route)
+        undo_probe = by_name["undo-preview"]
+        undo_result = undo_probe["result"] if undo_probe["ok"] else None
+        route_retry = _route_retry(resolved, route, undo_result)
         recorded_branch = status.get("state", {}).get("branch")
         if (
             not route_retry
@@ -525,12 +541,16 @@ def diagnose(repo: Path) -> dict[str, object]:
                     else {}
                 )
                 slug = state.get("milestone")
-                integration_id = item["branch"].removeprefix(
-                    INTEGRATION_WORKTREE_PREFIX
-                )
-                bound_id = str(state.get("branch") or "").removeprefix(
-                    "gsd-path/"
-                )
+                archive = str(state.get("archive") or "").rstrip("/")
+                expected_branch = None
+                expected_worktree = None
+                if archive:
+                    expected_branch, expected_worktree = (
+                        archive_milestone.integration_names(
+                            resolved,
+                            Path(archive).name,
+                        )
+                    )
                 retry = (
                     _command(
                         archive_milestone,
@@ -545,10 +565,14 @@ def diagnose(repo: Path) -> dict[str, object]:
                         and slug
                         and state.get("phase") == "shipped"
                         and state.get("status") == "done"
-                        and integration_id == bound_id
+                        and item["branch"] == expected_branch
+                        and expected_worktree is not None
+                        and Path(str(item["worktree"])).resolve()
+                        == expected_worktree.resolve()
                     )
                     else _needs_user(
-                        "identify the milestone owning the integration worktree"
+                        "reconcile the integration worktree with the shipped milestone "
+                        "and canonical helper path"
                     )
                 )
             elif item["recovery"] == "retire":

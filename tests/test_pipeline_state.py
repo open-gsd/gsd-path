@@ -375,10 +375,6 @@ class PipelineStateTests(unittest.TestCase):
                 "lookahead cannot enter build",
             ),
             (
-                state_text(phase="inspect", status="active"),
-                "lookahead cannot enter inspect",
-            ),
-            (
                 state_text(phase="roadmap", status="active"),
                 "lookahead cannot enter roadmap",
             ),
@@ -395,6 +391,20 @@ class PipelineStateTests(unittest.TestCase):
                     message,
                 ):
                     pipeline_state.validate_state(repo, ".project/next")
+
+    def test_validate_accepts_initial_lookahead_inspect_state(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            next_root = repo / ".project" / "next"
+            next_root.mkdir(parents=True)
+            (next_root / "STATE.md").write_text(
+                state_text(phase="inspect", status="active"),
+                encoding="utf-8",
+            )
+
+            result = pipeline_state.validate_state(repo, ".project/next")
+
+            self.assertEqual(result["state"]["phase"], "inspect")
 
     def test_route_keeps_approved_lookahead_unbound(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

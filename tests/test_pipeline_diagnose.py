@@ -7,8 +7,14 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
-from scripts import pipeline_diagnose
+from scripts import (
+    archive_milestone,
+    pipeline_diagnose,
+    pipeline_state,
+    pipeline_undo,
+)
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -111,6 +117,47 @@ class PipelineDiagnoseTests(unittest.TestCase):
                 item for item in result["findings"] if item["severity"] == "stuck"
             )
             self.assertTrue(first_stuck["retry"].startswith("NEEDS-USER:"))
+
+    def test_blocked_undo_transaction_does_not_emit_apply_retry(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp) / "repo"
+            run_git(Path(tmp), "init", "-b", "gsd-path/M001", str(repo))
+            run_git(repo, "config", "user.name", "GSD Path Test")
+            run_git(repo, "config", "user.email", "test@example.com")
+            project = repo / ".project"
+            project.mkdir()
+            (project / "STATE.md").write_text(
+                state_text(phase="plan", status="active"),
+                encoding="utf-8",
+            )
+            run_git(repo, "add", ".project/STATE.md")
+            run_git(repo, "commit", "-m", "fixture: approval base")
+            parent = run_git(repo, "rev-parse", "HEAD").stdout.strip()
+            (project / "plan").mkdir()
+            (project / "plan" / "PLAN.md").write_text(
+                "# Plan — first\n",
+                encoding="utf-8",
+            )
+            pipeline_state.checkpoint_approval(repo, "plan", parent)
+            approved = run_git(repo, "rev-parse", "HEAD").stdout.strip()
+            with mock.patch.object(
+                pipeline_undo,
+                "_reset_to",
+                side_effect=pipeline_undo.UndoError("interrupted"),
+            ):
+                with self.assertRaisesRegex(pipeline_undo.UndoError, "interrupted"):
+                    pipeline_undo.apply_undo(repo, "checkpoint", approved)
+            run_git(repo, "switch", "-c", "other")
+
+            result = pipeline_diagnose.diagnose(repo)
+
+            finding = next(
+                item
+                for item in result["findings"]
+                if item["id"] == "journal-resume-undo"
+            )
+            self.assertTrue(finding["retry"].startswith("NEEDS-USER:"))
+            self.assertNotIn("pipeline_undo.py apply", finding["retry"])
 
     def test_pending_discussion_disposition_is_stuck(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -296,7 +343,7 @@ class PipelineDiagnoseTests(unittest.TestCase):
             run_git(repo, "commit", "-m", "fixture: worktrees")
             verify = root / "verify"
             dirty = root / "dirty"
-            integrate = root / "integrate"
+            integrate = archive_milestone.integration_names(repo, "001-first")[1]
             run_git(
                 repo,
                 "worktree",
@@ -343,6 +390,27 @@ class PipelineDiagnoseTests(unittest.TestCase):
             integration = next(parts for parts in retries if "integrate" in parts)
             self.assertEqual(Path(integration[1]).name, "archive_milestone.py")
             self.assertEqual(integration[integration.index("--slug") + 1], "first")
+
+            run_git(repo, "worktree", "remove", str(integrate))
+            run_git(repo, "branch", "-D", "gsd-path-integrate/M001")
+            noncanonical = root / "integrate"
+            run_git(
+                repo,
+                "worktree",
+                "add",
+                "-b",
+                "gsd-path-integrate/M001",
+                str(noncanonical),
+                "HEAD",
+            )
+
+            blocked = pipeline_diagnose.diagnose(repo)
+            blocked_finding = next(
+                item
+                for item in blocked["findings"]
+                if item["evidence"].startswith("gsd-path-integrate/M001 @")
+            )
+            self.assertTrue(blocked_finding["retry"].startswith("NEEDS-USER:"))
 
     def test_helper_loaders_surface_internal_import_failures(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

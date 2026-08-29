@@ -82,6 +82,19 @@ STATUS_SCHEMA = "gsd-path/status/v1"
 BIND_NEXT_JOURNAL_SCHEMA = "gsd-path/bind-next-journal/v1"
 BIND_NEXT_JOURNAL_DIR = "gsd-path-bind-next"
 PROMOTION_TRACKS = ("intent", "research", "plan", "tasks", "review")
+LOOKAHEAD_PHASES = ("inspect", "define", "research", "decide", "plan")
+LOOKAHEAD_FIXED_ARTIFACTS = {
+    "STATE.md": "inspect",
+    "research/evidence-codebase.md": "inspect",
+    "research/DOCS-AUDIT.md": "inspect",
+    "intent/INTENT.md": "define",
+    "research/RESEARCH.md": "research",
+    "research/SYNTHESIS.md": "decide",
+    "plan/PLAN.md": "plan",
+    "review/PLAN-PANEL.md": "plan",
+    "review/PLAN-PANEL.skipped.json": "plan",
+}
+LOOKAHEAD_EVIDENCE_RE = re.compile(r"^research/evidence-[a-z0-9][a-z0-9-]*\.md$")
 PROMOTION_RESIDUAL = ".gsd-path-promote-next-residual"
 CHECKPOINT_SCHEMA = "gsd-path/state-checkpoint/v1"
 CHECKPOINT_JOURNAL_NAME = "gsd-path-state-checkpoint.json"
@@ -292,8 +305,7 @@ def _validate_state_context(
         return
     if state.branch is not None or state.archive is not None:
         raise PipelineStateError(f"{label} lookahead branch and archive must be null")
-    allowed_phases = {"define", "research", "decide", "plan"}
-    if state.phase not in allowed_phases:
+    if state.phase not in LOOKAHEAD_PHASES:
         raise PipelineStateError(f"{label} lookahead cannot enter {state.phase}")
 
 
@@ -303,6 +315,8 @@ def load_state(repo: Path, project_dir: str = ".project") -> tuple[PipelineState
     text = _read_real_file(path, "STATE.md")
     state = _state_from_text(text)
     _validate_state_context(state, project_dir, "STATE.md")
+    if _is_lookahead(project_dir):
+        _validate_next_layout(root, state)
     return state, text, path
 
 
@@ -2629,16 +2643,38 @@ def _promotion_tree_mapping(
     return expected_changes
 
 
-def _validate_next_layout(next_root: Path) -> None:
-    for child in next_root.iterdir():
-        if child.name == "STATE.md":
-            if child.is_symlink() or not child.is_file():
-                raise PipelineStateError("lookahead STATE.md must be a real file")
+def _validate_next_layout(next_root: Path, state: PipelineState) -> None:
+    phase_index = LOOKAHEAD_PHASES.index(state.phase)
+    for path in next_root.rglob("*"):
+        relative = path.relative_to(next_root)
+        if path.is_symlink():
+            raise PipelineStateError(f"lookahead artifacts must not be symlinks: {path}")
+        if path.is_dir():
+            if (
+                relative.parent != PurePosixPath(".")
+                or path.name not in PROMOTION_TRACKS
+            ):
+                raise PipelineStateError(f"lookahead has unowned directory: {path}")
             continue
-        if child.name not in PROMOTION_TRACKS:
-            raise PipelineStateError(f"lookahead has unowned artifact: {child}")
-        if child.is_symlink() or not child.is_dir():
-            raise PipelineStateError(f"lookahead track must be a real directory: {child}")
+        if not path.is_file():
+            raise PipelineStateError(f"lookahead has unsafe artifact: {path}")
+        artifact = relative.as_posix()
+        required_phase = LOOKAHEAD_FIXED_ARTIFACTS.get(artifact)
+        if required_phase is None and LOOKAHEAD_EVIDENCE_RE.fullmatch(artifact):
+            required_phase = "research"
+        if (
+            required_phase is None
+            and relative.parent == PurePosixPath("tasks")
+            and TASK_FILE_RE.fullmatch(path.name)
+        ):
+            required_phase = "plan"
+        if (
+            required_phase is None
+            or LOOKAHEAD_PHASES.index(required_phase) > phase_index
+        ):
+            raise PipelineStateError(
+                f"lookahead has artifact not owned by {state.phase}: {path}"
+            )
 
 
 def _worktree_changes(repo: Path) -> list[str]:
@@ -2795,7 +2831,6 @@ def _prepare_promotion(
         raise PipelineStateError("active STATE does not name the shipped milestone")
     next_root = project / "next"
     next_state, next_text, _ = load_state(repo, ".project/next")
-    _validate_next_layout(next_root)
     if next_state.project != active_state.project:
         raise PipelineStateError(
             "lookahead STATE project does not match active STATE project"

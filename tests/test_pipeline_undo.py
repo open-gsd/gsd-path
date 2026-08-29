@@ -418,6 +418,82 @@ class PipelineUndoTests(unittest.TestCase):
             )
             self.assertFalse((repo / archive).exists())
 
+    def test_uncommitted_archive_accepts_uncommitted_final_review_outputs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = init_repo(Path(tmp))
+            project = repo / ".project"
+            intent = project / "intent"
+            intent.mkdir(parents=True)
+            (project / "STATE.md").write_text(
+                state_text(phase="ship", status="active"),
+                encoding="utf-8",
+            )
+            (intent / "INTENT.md").write_text(
+                "# Intent — first\n\n## Success criteria\n\n1. demo works\n",
+                encoding="utf-8",
+            )
+            run_git(repo, "add", ".project")
+            run_git(repo, "commit", "-m", "fixture: ship active")
+            head = run_git(repo, "rev-parse", "HEAD").stdout.strip()
+            archive = ".project/archive/001-first"
+            archive_root = repo / archive
+            archived_intent = archive_root / "intent"
+            archived_intent.parent.mkdir(parents=True)
+            intent.replace(archived_intent)
+            review = archive_root / "review"
+            review.mkdir()
+            (review / "FINAL.md").write_text(
+                f"""# Final Review — first
+
+Reviewed HEAD: {head}
+Overall verdict: pass
+
+## Success criteria
+
+### SC1 — demo works
+
+- **Verdict**: met
+- **Check**: `python -m unittest`
+- **Observed**: focused tests passed
+- **Reference**: tests
+- **Finding**: none
+- **Fix direction**: none
+""",
+                encoding="utf-8",
+            )
+            (review / "final-gap-1.md").write_text(
+                f"""# Gap Review — 1: project Verify command
+
+Reviewed HEAD: {head}
+Gap verdict: pass
+Risk: project Verify command
+Waves checked: 1
+
+## Checked evidence
+
+- **Check**: `python -m unittest`
+- **Observed**: focused project verification passed.
+- **Reference**: `tests/test_pipeline_undo.py`
+
+## Finding
+
+- **Found**: The project Verify command passed at the reviewed HEAD.
+- **Fix direction**: none
+""",
+                encoding="utf-8",
+            )
+            (project / "STATE.md").write_text(
+                state_text(phase="ship", status="active", archive=f"{archive}/"),
+                encoding="utf-8",
+            )
+
+            previewed = pipeline_undo.preview(repo)
+            self.assertEqual(previewed["target"]["kind"], "uncommitted-archive")
+            pipeline_undo.apply_undo(repo, "uncommitted-archive", head)
+
+            self.assertTrue((intent / "INTENT.md").is_file())
+            self.assertFalse(archive_root.exists())
+
     def test_uncommitted_archive_blocks_unowned_project_edits(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             repo = init_repo(Path(tmp))
@@ -620,7 +696,7 @@ class PipelineUndoTests(unittest.TestCase):
             next_state = project / "next"
             next_state.mkdir()
             (next_state / "STATE.md").write_text(
-                state_text(phase="plan", status="active", branch="null"),
+                state_text(phase="inspect", status="active", branch="null"),
                 encoding="utf-8",
             )
 
@@ -671,6 +747,33 @@ class PipelineUndoTests(unittest.TestCase):
             self.assertIsNone(previewed["target"]["kind"])
             self.assertIn("ownership is unproven", previewed["target"]["blocked"][0])
             self.assertEqual(notes.read_text(encoding="utf-8"), "keep\n")
+
+    def test_lookahead_discard_rejects_unowned_track_descendants(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = init_repo(Path(tmp))
+            project = repo / ".project"
+            next_dir = project / "next"
+            plan = next_dir / "plan"
+            plan.mkdir(parents=True)
+            (next_dir / "STATE.md").write_text(
+                state_text(phase="plan", status="active", branch="null"),
+                encoding="utf-8",
+            )
+            (plan / "PLAN.md").write_text("# Plan — next\n", encoding="utf-8")
+            personal = plan / "personal.md"
+            personal.write_text("keep\n", encoding="utf-8")
+            (project / "STATE.md").write_text(
+                state_text(phase="build", status="active"),
+                encoding="utf-8",
+            )
+            run_git(repo, "add", ".project/STATE.md")
+            run_git(repo, "commit", "-m", "fixture: build")
+
+            previewed = pipeline_undo.preview(repo)
+
+            self.assertIsNone(previewed["target"]["kind"])
+            self.assertIn("not owned by plan", previewed["target"]["blocked"][0])
+            self.assertEqual(personal.read_text(encoding="utf-8"), "keep\n")
 
     def test_cli_preview_json(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
