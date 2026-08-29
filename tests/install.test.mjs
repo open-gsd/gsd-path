@@ -1376,6 +1376,23 @@ test("project install rejects a symlinked runtime directory", async () => {
   assert.ok(!fs.existsSync(target));
 });
 
+test("project install rejects a symlinked runtime parent", async () => {
+  const project = path.join(root, "symlinked-runtime-parent-project");
+  const outside = path.join(root, "outside-runtime-parent");
+  fs.mkdirSync(project);
+  fs.mkdirSync(path.join(outside, "runtime"), { recursive: true });
+  fs.symlinkSync(outside, path.join(project, installer.HOOKS_DIRECTORY), "dir");
+  const target = path.join(root, "claude-parent", "skills");
+
+  await assert.rejects(
+    runInstall([installer.targetPlan("claude", target)], { project }),
+    /symlink/
+  );
+
+  assert.deepEqual(fs.readdirSync(path.join(outside, "runtime")), []);
+  assert.ok(!fs.existsSync(target));
+});
+
 test("hooks refresh rejects a symlinked runtime directory", async () => {
   const project = path.join(root, "refresh-symlinked-runtime-project");
   fs.mkdirSync(path.join(project, ".git"), { recursive: true });
@@ -1630,21 +1647,27 @@ test("doctor flags stale guard scripts", async () => {
   );
 });
 
-test("doctor validates pipeline state frontmatter", async () => {
+test("doctor uses canonical pipeline state validation", async () => {
   const project = path.join(root, "project");
+  fs.mkdirSync(project);
+  git("init", "-q", project);
   fs.mkdirSync(path.join(project, ".project"), { recursive: true });
   fs.writeFileSync(path.join(project, "AGENTS.md"), "a\n");
   fs.writeFileSync(path.join(project, "WORKFLOW.md"), "w\n");
   fs.writeFileSync(
     path.join(project, ".project", "STATE.md"),
+    "---\npipeline: gsd-path/v2\nproject: demo\nmilestone: demo\n" +
+      "phase: plan\nstatus: done\nbranch: null\narchive: null\n---\n"
+  );
+  let findings = installer.doctor(REPO_ROOT, { targets: [], rootFor: () => "", project });
+  assert.ok(findings.some((finding) => finding.level === "ok" && finding.text === "state: plan/done"));
+  fs.writeFileSync(
+    path.join(project, ".project", "STATE.md"),
     "---\npipeline: gsd-path/v2\nphase: plan\nstatus: done\n---\n"
   );
-  let findings = installer.doctor(source, { targets: [], rootFor: () => "", project });
-  assert.ok(findings.some((finding) => finding.level === "ok" && finding.text === "state: plan/done"));
-  fs.writeFileSync(path.join(project, ".project", "STATE.md"), "---\npipeline: other\n---\n");
-  findings = installer.doctor(source, { targets: [], rootFor: () => "", project });
+  findings = installer.doctor(REPO_ROOT, { targets: [], rootFor: () => "", project });
   assert.ok(
-    findings.some((finding) => finding.level === "fail" && /pipeline marker/.test(finding.text))
+    findings.some((finding) => finding.level === "fail" && /^state:/.test(finding.text))
   );
 });
 

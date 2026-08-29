@@ -98,6 +98,11 @@ class GuardHookTests(unittest.TestCase):
         self.assertEqual(status, 2, error)
         self.assertIn("gsd-path-plan", json.loads(output)["reason"])
 
+    def test_non_file_tools_are_not_treated_as_direct_writes(self):
+        for tool in ("UpdatePlan", "CreateIssue", "SetGoal", "PostMessage"):
+            with self.subTest(tool=tool):
+                self.assert_allowed({"tool_name": tool, "tool_input": {}})
+
     def test_plain_prompt_allows_pipeline_artifact_write(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

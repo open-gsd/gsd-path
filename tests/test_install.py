@@ -1732,6 +1732,33 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual([], list(outside.iterdir()))
         self.assertFalse(target.exists())
 
+    def test_project_install_rejects_symlinked_runtime_parent(self):
+        project = self.root / "symlinked-runtime-parent-project"
+        outside = self.root / "outside-runtime-parent"
+        project.mkdir()
+        (outside / "runtime").mkdir(parents=True)
+        (project / install.HOOKS_DIRECTORY).symlink_to(
+            outside, target_is_directory=True
+        )
+        target = self.root / "claude-parent" / "skills"
+
+        status, _, error = self.run_main(
+            [
+                "--claude",
+                "--claude-root",
+                str(target),
+                "--source-root",
+                str(self.source),
+                "--project",
+                str(project),
+            ]
+        )
+
+        self.assertEqual(1, status)
+        self.assertIn("symlink", error)
+        self.assertEqual([], list((outside / "runtime").iterdir()))
+        self.assertFalse(target.exists())
+
     def test_hooks_refresh_rejects_symlinked_runtime_directory(self):
         project = self.root / "refresh-symlinked-runtime-project"
         (project / ".git").mkdir(parents=True)
@@ -1765,6 +1792,11 @@ class InstallerTests(unittest.TestCase):
         (self.source / "package.json").write_text(
             '{"version": "9.9.9"}\n', encoding="utf-8"
         )
+        for name in install.PROJECT_RUNTIME_SCRIPTS:
+            shutil.copy2(
+                PROJECT_ROOT / "scripts" / name,
+                self.source / "scripts" / name,
+            )
         project = self.root / "doctor-project"
         (project / ".git").mkdir(parents=True)
         target = self.root / "doctor-claude" / "skills"
@@ -1773,7 +1805,15 @@ class InstallerTests(unittest.TestCase):
         state = project / ".project" / "STATE.md"
         state.parent.mkdir()
         state.write_text(
-            "---\npipeline: gsd-path/v2\nphase: plan\nstatus: done\n---\n",
+            "---\n"
+            "pipeline: gsd-path/v2\n"
+            "project: demo\n"
+            "milestone: demo\n"
+            "phase: plan\n"
+            "status: done\n"
+            "branch: null\n"
+            "archive: null\n"
+            "---\n",
             encoding="utf-8",
         )
         arguments = [
@@ -1801,6 +1841,33 @@ class InstallerTests(unittest.TestCase):
         status, _, error = self.run_main(arguments)
         self.assertEqual(1, status)
         self.assertIn("incomplete install", error)
+
+    def test_doctor_uses_canonical_state_validation(self):
+        project = self.root / "canonical-doctor-project"
+        subprocess.run(
+            ["git", "init", "-q", str(project)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        (project / "AGENTS.md").write_text("agents\n", encoding="utf-8")
+        (project / "WORKFLOW.md").write_text("workflow\n", encoding="utf-8")
+        state = project / ".project" / "STATE.md"
+        state.parent.mkdir()
+        state.write_text(
+            "---\npipeline: gsd-path/v2\nphase: plan\nstatus: done\n---\n",
+            encoding="utf-8",
+        )
+
+        findings = install.doctor(PROJECT_ROOT, [], lambda _target: Path(), project)
+
+        self.assertTrue(
+            any(
+                finding["level"] == "fail"
+                and finding["text"].startswith("state:")
+                for finding in findings
+            )
+        )
 
     def refresh_full_arguments(self, project):
         return [

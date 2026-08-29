@@ -929,6 +929,10 @@ function validateProject(sourceRoot, project, selected, hooksEnabled, reservedRo
   const includeClaude = selected.includes("claude");
   validateDirectoryDestination(project, "project path");
   validateDirectoryDestination(
+    path.join(project, HOOKS_DIRECTORY),
+    "project runtime parent directory"
+  );
+  validateDirectoryDestination(
     path.join(project, HOOKS_DIRECTORY, "runtime"),
     "project runtime directory"
   );
@@ -1380,18 +1384,51 @@ function refreshHooks(sourceRoot, project, full, dryRun, selected = [], initiali
   return refreshed;
 }
 
-const PIPELINE_MARKER = "gsd-path/v2";
+const STATE_SCHEMA = "gsd-path/state/v1";
 
-function stateFrontmatter(text) {
-  const lines = splitLines(text);
-  if (lines[0] !== "---") return null;
-  const values = {};
-  for (const line of lines.slice(1)) {
-    if (line === "---") return values;
-    const match = /^([a-z_]+):\s*([^#]*?)(?:\s+#.*)?$/.exec(line);
-    if (match) values[match[1]] = match[2].trim().replace(/^["']|["']$/g, "");
+function validatedProjectState(sourceRoot, project) {
+  const validator = path.join(sourceRoot, "scripts", "pipeline_state.py");
+  if (isSymlink(validator) || !isFile(validator)) {
+    throw new InstallerError(`canonical state validator is unavailable: ${validator}`);
   }
-  return null;
+  const interpreter = effectiveInterpreter();
+  if (interpreter === null) {
+    throw new InstallerError("canonical state validation requires a working Python interpreter");
+  }
+  const result = spawnSync(
+    interpreter,
+    [validator, "validate", "--repo", project],
+    { cwd: project, encoding: "utf8" }
+  );
+  if (result.error || result.status !== 0) {
+    const detail =
+      result.error?.message ||
+      (result.stderr || "").trim() ||
+      (result.stdout || "").trim() ||
+      "unknown failure";
+    throw new InstallerError(`canonical state validation failed: ${detail}`);
+  }
+  let payload;
+  try {
+    payload = JSON.parse(result.stdout);
+  } catch {
+    throw new InstallerError("canonical state validator returned invalid JSON");
+  }
+  if (!payload || typeof payload !== "object") {
+    throw new InstallerError("canonical state validator returned an invalid payload");
+  }
+  const state = payload.state;
+  if (
+    payload.schema !== STATE_SCHEMA ||
+    payload.status !== "valid" ||
+    !state ||
+    typeof state !== "object" ||
+    typeof state.phase !== "string" ||
+    typeof state.status !== "string"
+  ) {
+    throw new InstallerError("canonical state validator returned an invalid payload");
+  }
+  return state;
 }
 
 function hasManagedInstall(root) {
@@ -1615,15 +1652,11 @@ export function doctor(sourceRoot, { targets, rootFor, project = null }) {
   } else if (!isFile(stateFile)) {
     push("warn", "state: .project/ exists but STATE.md is missing");
   } else {
-    const values = stateFrontmatter(fs.readFileSync(stateFile, "utf8"));
-    if (values === null) {
-      push("fail", "state: STATE.md frontmatter is malformed");
-    } else if (values.pipeline !== PIPELINE_MARKER) {
-      push("fail", `state: STATE.md has the wrong pipeline marker (${values.pipeline || "<missing>"})`);
-    } else if (!values.phase || !values.status) {
-      push("fail", "state: STATE.md is missing phase or status");
-    } else {
-      push("ok", `state: ${values.phase}/${values.status}`);
+    try {
+      const state = validatedProjectState(sourceRoot, project);
+      push("ok", `state: ${state.phase}/${state.status}`);
+    } catch (error) {
+      push("fail", `state: ${messageOf(error)}`);
     }
   }
   return findings;

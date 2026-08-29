@@ -830,6 +830,9 @@ def _validate_project(
 ) -> None:
     _validate_directory_destination(project, "project path")
     _validate_directory_destination(
+        project / HOOKS_DIRECTORY, "project runtime parent directory"
+    )
+    _validate_directory_destination(
         project / HOOKS_DIRECTORY / "runtime", "project runtime directory"
     )
     project_directories = []
@@ -1429,7 +1432,7 @@ def _has_managed_install(root: Path) -> bool:
     return root.is_dir() and any(_is_managed_name(entry.name) for entry in root.iterdir())
 
 
-PIPELINE_MARKER = "gsd-path/v2"
+STATE_SCHEMA = "gsd-path/state/v1"
 
 
 def _read_package_version(manifest: Path) -> Optional[str]:
@@ -1441,19 +1444,39 @@ def _read_package_version(manifest: Path) -> Optional[str]:
     return version if isinstance(version, str) and version else None
 
 
-def _state_frontmatter(text: str) -> Optional[dict]:
-    lines = text.splitlines()
-    if not lines or lines[0] != "---":
-        return None
-    values = {}
-    for line in lines[1:]:
-        if line == "---":
-            return values
-        match = re.fullmatch(r"([a-z_]+):\s*([^#]*?)(?:\s+#.*)?", line)
-        if match:
-            value = match.group(2).strip()
-            values[match.group(1)] = re.sub(r'^["\']|["\']$', "", value)
-    return None
+def _validated_project_state(source_root: Path, project: Path) -> dict:
+    validator = source_root / "scripts" / "pipeline_state.py"
+    if validator.is_symlink() or not validator.is_file():
+        raise InstallerError(f"canonical state validator is unavailable: {validator}")
+    try:
+        result = subprocess.run(
+            [sys.executable, str(validator), "validate", "--repo", str(project)],
+            cwd=project,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError as error:
+        raise InstallerError(f"canonical state validation failed: {error}") from error
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip() or "unknown failure"
+        raise InstallerError(f"canonical state validation failed: {detail}")
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError as error:
+        raise InstallerError("canonical state validator returned invalid JSON") from error
+    if not isinstance(payload, dict):
+        raise InstallerError("canonical state validator returned an invalid payload")
+    state = payload.get("state")
+    if (
+        payload.get("schema") != STATE_SCHEMA
+        or payload.get("status") != "valid"
+        or not isinstance(state, dict)
+        or not isinstance(state.get("phase"), str)
+        or not isinstance(state.get("status"), str)
+    ):
+        raise InstallerError("canonical state validator returned an invalid payload")
+    return state
 
 
 def _is_executable(path: Path) -> bool:
@@ -1660,16 +1683,12 @@ def doctor(
     elif not state_file.is_file():
         push("warn", "state: .project/ exists but STATE.md is missing")
     else:
-        values = _state_frontmatter(state_file.read_text(encoding="utf-8"))
-        if values is None:
-            push("fail", "state: STATE.md frontmatter is malformed")
-        elif values.get("pipeline") != PIPELINE_MARKER:
-            marker = values.get("pipeline") or "<missing>"
-            push("fail", f"state: STATE.md has the wrong pipeline marker ({marker})")
-        elif not values.get("phase") or not values.get("status"):
-            push("fail", "state: STATE.md is missing phase or status")
+        try:
+            state = _validated_project_state(source_root, project)
+        except InstallerError as error:
+            push("fail", f"state: {error}")
         else:
-            push("ok", f"state: {values['phase']}/{values['status']}")
+            push("ok", f"state: {state['phase']}/{state['status']}")
     return findings
 
 

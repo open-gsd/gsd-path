@@ -66,6 +66,9 @@ WRITE_VERBS = frozenset(
         "replace",
     }
 )
+AMBIGUOUS_WRITE_VERBS = frozenset({"create", "update", "set", "put", "post"})
+DIRECT_FILE_WRITE_VERBS = WRITE_VERBS - AMBIGUOUS_WRITE_VERBS
+FILE_TARGET_TOKENS = frozenset({"file", "path", "notebook"})
 TOOL_TOKEN_PATTERN = re.compile(r"[A-Z]?[a-z]+|[A-Z]+(?![a-z])|\d+")
 SHELL_ASSIGNMENT_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 
@@ -252,7 +255,12 @@ def is_patch_tool(tool):
 
 
 def is_direct_write_tool(tool):
-    return bool(tool_tokens(tool) & WRITE_VERBS)
+    tokens = tool_tokens(tool)
+    if tokens & DIRECT_FILE_WRITE_VERBS:
+        return True
+    if tokens == {"create"}:
+        return True
+    return bool((tokens & AMBIGUOUS_WRITE_VERBS) and (tokens & FILE_TARGET_TOKENS))
 
 
 def repository_root():
