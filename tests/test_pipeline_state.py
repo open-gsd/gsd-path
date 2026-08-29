@@ -1,3 +1,4 @@
+import json
 import subprocess
 import shutil
 import sys
@@ -101,6 +102,174 @@ class PipelineStateTests(unittest.TestCase):
             self.assertEqual(validated["status"], "valid")
             self.assertEqual(routed["route"]["action"], "bind-initial")
             self.assertEqual(routed["route"]["branch"], "gsd-path/M001")
+
+    def test_status_reports_route_without_mutating(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            run_git(repo, "init", "-b", "gsd-path/M001")
+            run_git(repo, "config", "user.name", "GSD Path Test")
+            run_git(repo, "config", "user.email", "test@example.com")
+            project = repo / ".project"
+            project.mkdir()
+            (project / "intent").mkdir()
+            (project / "STATE.md").write_text(
+                state_text(
+                    milestone="first",
+                    phase="plan",
+                    status="done",
+                    branch="gsd-path/M001",
+                ),
+                encoding="utf-8",
+            )
+            (project / "intent" / "INTENT.md").write_text(
+                "# Intent — first\n\nLane: quick\n",
+                encoding="utf-8",
+            )
+            run_git(repo, "add", ".project")
+            run_git(repo, "commit", "-m", "fixture: plan done")
+            before = (project / "STATE.md").read_text(encoding="utf-8")
+
+            status = pipeline_state.status_state(repo)
+
+            self.assertEqual(status["schema"], pipeline_state.STATUS_SCHEMA)
+            self.assertFalse(status["advance"])
+            self.assertEqual(status["route"]["action"], "run-phase")
+            self.assertEqual(status["route"]["phase"], "build")
+            self.assertEqual(status["next_skill"], "gsd-path-build")
+            self.assertEqual((project / "STATE.md").read_text(encoding="utf-8"), before)
+            self.assertEqual(status["pending_answers"], [])
+
+    def test_status_marks_head_published_when_remote_branch_advanced(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            origin = root / "origin.git"
+            subprocess.run(["git", "init", "-q", "--bare", str(origin)], check=True)
+            repo = root / "repo"
+            run_git(root, "init", "-b", "gsd-path/M001", str(repo))
+            run_git(repo, "config", "user.name", "GSD Path Test")
+            run_git(repo, "config", "user.email", "test@example.com")
+            project = repo / ".project"
+            (project / "intent").mkdir(parents=True)
+            (project / "STATE.md").write_text(
+                state_text(milestone="first", branch="gsd-path/M001"),
+                encoding="utf-8",
+            )
+            (project / "intent" / "INTENT.md").write_text(
+                "# Intent — first\n\nLane: quick\n", encoding="utf-8"
+            )
+            run_git(repo, "add", ".project/STATE.md")
+            run_git(repo, "commit", "-m", "fixture: published ancestor")
+            published = run_git(repo, "rev-parse", "HEAD").stdout.strip()
+            run_git(repo, "remote", "add", "origin", str(origin))
+            run_git(repo, "push", "-u", "origin", "gsd-path/M001")
+            (repo / "later.txt").write_text("later\n", encoding="utf-8")
+            run_git(repo, "add", "later.txt")
+            run_git(repo, "commit", "-m", "fixture: later remote tip")
+            run_git(repo, "push", "origin", "gsd-path/M001")
+            run_git(repo, "reset", "--hard", published)
+
+            self.assertTrue(pipeline_state.status_state(repo)["git"]["published"])
+
+    def test_status_ignores_completed_artifact_collection_receipts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            run_git(repo, "init", "-b", "gsd-path/M001")
+            project = repo / ".project"
+            project.mkdir()
+            (project / "STATE.md").write_text(
+                state_text(
+                    milestone="first",
+                    phase="build",
+                    status="active",
+                    branch="gsd-path/M001",
+                ),
+                encoding="utf-8",
+            )
+            run_git(repo, "add", ".project/STATE.md")
+            run_git(
+                repo,
+                "-c",
+                "user.name=Test",
+                "-c",
+                "user.email=test@example.com",
+                "commit",
+                "-m",
+                "fixture",
+            )
+            head = run_git(repo, "rev-parse", "HEAD").stdout.strip()
+            common = Path(run_git(repo, "rev-parse", "--git-common-dir").stdout.strip())
+            if not common.is_absolute():
+                common = repo / common
+            receipt = common / "gsd-path" / "collect-artifact" / "receipt.json"
+            receipt.parent.mkdir(parents=True)
+            receipt.write_text(
+                json.dumps(
+                    {
+                        "schema": "gsd-path/collect-artifact/v1",
+                        "primary_worktree": str(repo.resolve()),
+                        "source_worktree": str(repo.resolve()),
+                        "base": head,
+                        "branch": "gsd-path-verify/demo",
+                        "source": "artifact.md",
+                        "destination": ".project/review/artifact.md",
+                        "expected_destination": None,
+                        "bytes": 4,
+                        "previous_sha256": None,
+                        "replaced": False,
+                        "sha256": "a" * 64,
+                        "stage": "complete",
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            self.assertIsNone(
+                pipeline_state.status_state(repo)["journals"]["collect_artifact"]
+            )
+
+    def test_status_blocks_when_git_ancestry_probe_errors(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            origin = root / "origin.git"
+            subprocess.run(["git", "init", "-q", "--bare", str(origin)], check=True)
+            repo = root / "repo"
+            run_git(root, "init", "-b", "gsd-path/M001", str(repo))
+            project = repo / ".project"
+            project.mkdir()
+            (project / "STATE.md").write_text(
+                state_text(
+                    milestone="first",
+                    phase="build",
+                    status="active",
+                    branch="gsd-path/M001",
+                ),
+                encoding="utf-8",
+            )
+            run_git(repo, "add", ".project/STATE.md")
+            run_git(
+                repo,
+                "-c",
+                "user.name=Test",
+                "-c",
+                "user.email=test@example.com",
+                "commit",
+                "-m",
+                "fixture",
+            )
+            run_git(repo, "remote", "add", "origin", str(origin))
+            run_git(repo, "push", "-u", "origin", "gsd-path/M001")
+            original = pipeline_state._run_git
+
+            def fail_ancestry(path, *arguments, **kwargs):
+                if arguments[:2] == ("merge-base", "--is-ancestor"):
+                    return subprocess.CompletedProcess(arguments, 128, "", "bad object")
+                return original(path, *arguments, **kwargs)
+
+            with mock.patch.object(pipeline_state, "_run_git", side_effect=fail_ancestry):
+                with self.assertRaisesRegex(
+                    pipeline_state.PipelineStateError, "bad object"
+                ):
+                    pipeline_state.status_state(repo)
 
     def test_route_binds_initialized_state_before_phase_work(self) -> None:
         for phase in ("inspect", "define"):
@@ -206,10 +375,6 @@ class PipelineStateTests(unittest.TestCase):
                 "lookahead cannot enter build",
             ),
             (
-                state_text(phase="inspect", status="active"),
-                "lookahead cannot enter inspect",
-            ),
-            (
                 state_text(phase="roadmap", status="active"),
                 "lookahead cannot enter roadmap",
             ),
@@ -226,6 +391,20 @@ class PipelineStateTests(unittest.TestCase):
                     message,
                 ):
                     pipeline_state.validate_state(repo, ".project/next")
+
+    def test_validate_accepts_initial_lookahead_inspect_state(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            next_root = repo / ".project" / "next"
+            next_root.mkdir(parents=True)
+            (next_root / "STATE.md").write_text(
+                state_text(phase="inspect", status="active"),
+                encoding="utf-8",
+            )
+
+            result = pipeline_state.validate_state(repo, ".project/next")
+
+            self.assertEqual(result["state"]["phase"], "inspect")
 
     def test_route_keeps_approved_lookahead_unbound(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1115,6 +1294,9 @@ class PipelineStateTests(unittest.TestCase):
                 ("second", "plan", "done"),
             )
             self.assertEqual(state.branch, "gsd-path/M002")
+            self.assertIsNone(
+                pipeline_state.status_state(repo)["journals"]["bind_next"]
+            )
             roadmap = (repo / ".project" / "ROADMAP.md").read_text(encoding="utf-8")
             self.assertIn(f"Integrated: {integrate}", roadmap)
             self.assertEqual(

@@ -125,7 +125,7 @@ Run one phase only; stops at handoff:
 
 | Skill | Invoke (slash hosts) | Purpose |
 | --- | --- | --- |
-| `gsd-path` | `/gsd-path` | Router — default |
+| `gsd-path` | `/gsd-path` | Router — default (`/gsd-path status` reports without advancing) |
 | `gsd-path-discuss` | `/gsd-path-discuss` | Any-phase discussion and durable answers |
 | `gsd-path-inspect` | `/gsd-path-inspect` | Brownfield scan only |
 | `gsd-path-define` | `/gsd-path-define` | Intent definition only |
@@ -137,6 +137,8 @@ Run one phase only; stops at handoff:
 | `gsd-path-ship` | `/gsd-path-ship` | Review + ship gate |
 | `gsd-path-docs-audit` | `/gsd-path-docs-audit` | Standalone doc drift check |
 | `gsd-path-loop` | `/gsd-path-loop` | Bounded loop runner driven by a LOOP.md spec |
+| `gsd-path-forensics` | `/gsd-path-forensics` | Read-only stuck-pipeline diagnosis |
+| `gsd-path-undo` | `/gsd-path-undo` | Helper-owned undo of unpublished pipeline work |
 
 Codex: use `$` instead of `/` (e.g. `$gsd-path-plan`).
 
@@ -289,6 +291,14 @@ contract updates manually ([UPDATE.md](UPDATE.md)).
 
 **How do I undo a skill update?**
 Restore from `disabled-gsd-skills` beside the skills root ([UPDATE.md](UPDATE.md)).
+
+**How do I see status without advancing?**
+`$gsd-path status` (or `/gsd-path status`). It reports the helper-owned state
+snapshot and stops.
+
+**The pipeline is stuck. Do I invent git commands?**
+No. `$gsd-path-forensics` is read-only diagnosis. `$gsd-path-undo` previews
+then applies helper-owned undo of unpublished work. Neither force-pushes.
 
 **Brownfield vs greenfield?**
 The router runs the bundled `scripts/detect_project.py initialize --repo

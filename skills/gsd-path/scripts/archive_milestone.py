@@ -1034,9 +1034,14 @@ def validate_discussion_directory(
         )
 
 
-def require_append_only_discussion(source: Path, destination: Path) -> None:
-    validate_discussion_directory(source)
-    validate_discussion_directory(destination)
+def require_append_only_discussion(
+    source: Path,
+    destination: Path,
+    *,
+    require_dispositions: bool = True,
+) -> None:
+    validate_discussion_directory(source, require_dispositions=require_dispositions)
+    validate_discussion_directory(destination, require_dispositions=require_dispositions)
     for name in DISCUSSION_FILES:
         active = (source / name).read_bytes()
         archived = (destination / name).read_bytes()

@@ -264,12 +264,35 @@ def _shared_invocations(text: str) -> str:
     hosts = sync_skill_resources.RESOURCE_MANIFEST["hosts"]
 
     def replace(match: re.Match) -> str:
-        skill = match.group(0)[1:]
+        quote = match.group("quote") or ""
+        skill = match.group("skill")[1:]
+        arguments = match.group("arguments") or ""
+        paired_quote = match.group("paired_quote") or ""
+        paired_skill = match.group("paired_skill")
+        paired_arguments = match.group("paired_arguments") or ""
+        if paired_skill is not None and (
+            paired_skill != skill
+            or paired_arguments != arguments
+            or paired_quote != quote
+        ):
+            raise InstallerError("shared invocation pair is inconsistent")
         codex = f"{hosts['codex']['invocation_prefix']}{skill}"
         others = f"{hosts['antigravity']['invocation_prefix']}{skill}"
-        return f"{codex} (Codex) or {others} (Antigravity/Zed)"
+        return (
+            f"{quote}{codex}{arguments}{quote} (Codex) or "
+            f"{quote}{others}{arguments}{quote} (Antigravity/Zed)"
+        )
 
-    return re.sub(r"\$gsd-path(?:-[a-z0-9]+)*", replace, text)
+    return re.sub(
+        r"(?P<quote>`?)(?P<skill>\$gsd-path(?:-[a-z0-9]+)*)"
+        r"(?P<arguments> status)?(?P=quote)"
+        r"(?: \(Codex\) (?:and|or) (?P<paired_quote>`?)/"
+        r"(?P<paired_skill>gsd-path(?:-[a-z0-9]+)*)"
+        r"(?P<paired_arguments> status)?(?P=paired_quote)"
+        r" \((?:other hosts|Antigravity/Zed)\))?",
+        replace,
+        text,
+    )
 
 
 class InstallerError(RuntimeError):

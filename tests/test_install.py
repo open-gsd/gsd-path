@@ -34,7 +34,10 @@ class InstallerTests(unittest.TestCase):
                 f"# Deprecated alias\n\nInvoke ${name}, then read "
                 "[the canonical skill](CANONICAL.md).\n"
                 if canonical
-                else "Run $gsd-path, $gsd-path-build, and $gsd-path-discuss.\n"
+                else (
+                    "Run $gsd-path, $gsd-path-build, and $gsd-path-discuss.\n"
+                    + ("Run $gsd-path status.\n" if name == "gsd-path" else "")
+                )
             )
             (skill / "SKILL.md").write_text(
                 f"---\nname: {name}\ndescription: test\n---\n{body}",
@@ -376,6 +379,11 @@ class InstallerTests(unittest.TestCase):
                     elif target == install.SHARED_AGENT_PROFILE:
                         self.assertIn("$gsd-path (Codex)", content, name)
                         self.assertIn("/gsd-path (Antigravity/Zed)", content, name)
+                        if name == "gsd-path":
+                            self.assertIn(
+                                "$gsd-path status (Codex) or /gsd-path status (Antigravity/Zed)",
+                                content,
+                            )
                         self.assertIn(
                             "shared dispatch for $gsd-path (Codex)", dispatch, name
                         )
@@ -422,6 +430,16 @@ class InstallerTests(unittest.TestCase):
                 self.assertGreaterEqual(
                     checked, 2, "expected multiple dispatch-bearing skills"
                 )
+                if target == install.SHARED_AGENT_PROFILE:
+                    router = (staged / "gsd-path" / "SKILL.md").read_text(
+                        encoding="utf-8"
+                    )
+                    invocation = (
+                        "`$gsd-path status` (Codex) or "
+                        "`/gsd-path status` (Antigravity/Zed)"
+                    )
+                    self.assertEqual(router.count(invocation), 1)
+                    self.assertNotIn("(other hosts)", router)
 
     def test_stage_target_stamps_version_from_package_manifest(self):
         staged = self.root / "staged-unstamped"
@@ -528,6 +546,10 @@ class InstallerTests(unittest.TestCase):
         self.assertIn("disable-model-invocation: true", content)
         self.assertIn(
             "$gsd-path (Codex) or /gsd-path (Antigravity/Zed)", content
+        )
+        self.assertIn(
+            "$gsd-path status (Codex) or /gsd-path status (Antigravity/Zed)",
+            content,
         )
         self.assertTrue((root / "gsd-path" / "agents" / "openai.yaml").is_file())
 

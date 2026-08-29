@@ -184,7 +184,9 @@ full-repo suite on a tiny edit outrank the phase brief.
   membership with the bundled `scripts/review_panel.py` helper; do not invent
   model families or slugs. Create task isolation and verify sidecars with the
   bundled `scripts/isolation.py` helper; do not invent `git worktree add` or
-  `--detach`.
+  `--detach`. Undo unpublished pipeline work with `scripts/pipeline_undo.py`;
+  do not invent `git reset`. Diagnose a stuck pipeline with
+  `scripts/pipeline_diagnose.py`.
 - The discussion sidecar may run during any non-shipped phase. It grounds
   answers in code and phase artifacts, may perform focused research when
   needed, and writes only its discussion artifacts; it never changes phase
@@ -303,7 +305,7 @@ STATE.md.
 | Path | Purpose |
 |------|---------|
 | `plugin.json` | Agent Plugins manifest (`agent-plugins.org` 1.0.0 schema) |
-| `skills/` | Twelve canonical `gsd-path*` skills |
+| `skills/` | Canonical `gsd-path*` skills |
 | `skills/gsd-path/templates/` | Required artifact formats |
 | `skills/gsd-path/references/` | Agent role and dispatch contracts |
 | `WORKFLOW.md` | Phase-by-phase SOP |

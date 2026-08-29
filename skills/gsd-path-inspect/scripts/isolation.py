@@ -223,6 +223,81 @@ def _read_collect_journal(path: Path) -> Dict[str, object]:
     return payload
 
 
+def _validated_collect_journal(primary: Path, path: Path) -> Dict[str, object]:
+    journal = _read_collect_journal(path)
+    request_fields = {
+        "schema",
+        "primary_worktree",
+        "source_worktree",
+        "base",
+        "branch",
+        "source",
+        "destination",
+        "expected_destination",
+    }
+    expected_fields = request_fields | {
+        "bytes", "previous_sha256", "replaced", "sha256", "stage",
+    }
+    if set(journal) != expected_fields:
+        raise IsolationError("artifact collection journal has invalid fields")
+    if journal.get("schema") != COLLECT_JOURNAL_SCHEMA:
+        raise IsolationError("artifact collection journal has invalid schema")
+    string_fields = request_fields - {"schema", "expected_destination"}
+    if any(not isinstance(journal.get(field), str) for field in string_fields):
+        raise IsolationError("artifact collection journal has invalid request fields")
+    if journal.get("primary_worktree") != str(primary):
+        raise IsolationError("artifact collection journal belongs to another worktree")
+    try:
+        require_full_sha(str(journal["base"]))
+        relative_posix(str(journal["source"]))
+        relative_posix(str(journal["destination"]))
+    except IsolationError as error:
+        raise IsolationError(
+            f"artifact collection journal has an invalid request: {error}"
+        ) from error
+    source_worktree = Path(str(journal["source_worktree"]))
+    if not source_worktree.is_absolute():
+        raise IsolationError("artifact collection source worktree must be absolute")
+    if not str(journal["branch"]).startswith(VERIFY_BRANCH_PREFIX):
+        raise IsolationError("artifact collection journal has an invalid verify branch")
+    if journal.get("stage") not in {"prepared", "collected", "complete"}:
+        raise IsolationError("artifact collection journal has an invalid stage")
+    count = journal.get("bytes")
+    if not isinstance(count, int) or isinstance(count, bool):
+        raise IsolationError("artifact collection journal has invalid byte count")
+    if not isinstance(journal.get("replaced"), bool):
+        raise IsolationError("artifact collection journal has invalid replacement state")
+    if not re.fullmatch(r"[0-9a-f]{64}", str(journal.get("sha256", ""))):
+        raise IsolationError("artifact collection journal has invalid content hash")
+    previous = journal.get("previous_sha256")
+    if previous is not None and not re.fullmatch(r"[0-9a-f]{64}", str(previous)):
+        raise IsolationError("artifact collection journal has invalid previous hash")
+    expected = journal.get("expected_destination")
+    if expected is not None and expected != "base" and not re.fullmatch(
+        r"[0-9a-f]{64}", str(expected)
+    ):
+        raise IsolationError("artifact collection journal has invalid expected destination")
+    return journal
+
+
+def collect_artifact_recoveries(primary: Path) -> list[Dict[str, object]]:
+    """Return validated incomplete artifact collection transactions."""
+    primary = require_directory(primary, "primary worktree")
+    root = common_git_dir(primary) / "gsd-path" / "collect-artifact"
+    if not root.exists() and not root.is_symlink():
+        return []
+    if root.is_symlink() or not root.is_dir():
+        raise IsolationError(f"artifact collection journal root is unsafe: {root}")
+    recoveries = []
+    for path in sorted(root.iterdir()):
+        if path.suffix != ".json" or path.is_symlink() or not path.is_file():
+            raise IsolationError(f"artifact collection journal entry is unsafe: {path}")
+        journal = _validated_collect_journal(primary, path)
+        if journal["stage"] != "complete":
+            recoveries.append({**journal, "journal": str(path)})
+    return recoveries
+
+
 def _git_file(repo: Path, revision: str, path: str) -> bytes:
     result = subprocess.run(
         ("git", "-C", str(repo), "show", f"{revision}:{path}"),
@@ -1951,20 +2026,11 @@ def collect_artifact(
     changed = uncommitted_paths(source)
     journal: Optional[Dict[str, object]] = None
     if journal_path.exists() or journal_path.is_symlink():
-        journal = _read_collect_journal(journal_path)
-        expected_fields = set(request) | {
-            "bytes",
-            "previous_sha256",
-            "replaced",
-            "sha256",
-            "stage",
-        }
-        if set(journal) != expected_fields or any(
+        journal = _validated_collect_journal(primary, journal_path)
+        if any(
             journal.get(key) != value for key, value in request.items()
         ):
             raise IsolationError("artifact collection journal does not match request")
-        if journal.get("stage") not in {"prepared", "collected", "complete"}:
-            raise IsolationError("artifact collection journal has an invalid stage")
         if journal["stage"] == "complete" and changed == {normalized_source}:
             journal = None  # a later sidecar run reuses the same branch and paths
 

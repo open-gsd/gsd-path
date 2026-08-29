@@ -1,12 +1,30 @@
 ---
 name: gsd-path
-description: Inspect .project/STATE.md, report GSD Path progress, and run the next valid phase. Use only when the user explicitly invokes $gsd-path; do not infer it from generic project, status, next-step, or resume requests.
+description: Inspect .project/STATE.md, report GSD Path progress, and run the next valid phase. Use only when the user explicitly invokes $gsd-path. The status argument reports state without advancing. Do not infer this skill from generic project, next-step, or resume requests.
 ---
 
 # GSD Path Router
 
 Determine the current pipeline phase, report it briefly, and run the next valid
 phase. Disk is the only phase memory.
+
+## Status-only mode
+
+When the invocation argument is exactly `status`, report and stop:
+
+1. Run `python3 <absolute-bundled-pipeline-state.py> status --repo
+   <absolute-root>`. Treat the JSON as the only status authority. Do not
+   initialize STATE.md, bind a branch, or create a repository from this mode.
+2. Present **Outcome** as `state.phase`/`state.status`, `route.action`,
+   `next_skill`, and the pending-answer count. **Review** links the JSON
+   `path` (STATE.md). **Next** names `next_skill` or the `route.reason` when
+   `route.action` is `block`, without invoking either.
+3. Do not run a phase contract, auto-advance, spawn agents, or apply undo.
+
+`$gsd-path status` (Codex) and `/gsd-path status` (other hosts) are the only
+entry. Do not enter this mode from a generic "status" or "progress" chat
+message. A helper error stops here; offer `$gsd-path-forensics` when the
+pipeline looks stuck.
 
 ## Bundled phase execution
 
@@ -111,6 +129,9 @@ selects a milestone branch.
 ## Transaction recovery first
 
 Run `pipeline_state.py route` before any phase contract. A
+`resume-undo` result means a helper-owned undo transaction was interrupted;
+invoke `$gsd-path-undo` and apply the returned exact kind and expected HEAD.
+Never enter phase work while this recovery remains. A
 `resume-shipment` result means the ROADMAP/STATE shipment record was
 interrupted; rerun `pipeline_state.py record-shipment` with the returned exact
 archive and event, require its typed `recorded` result, then rerun `route`.
@@ -191,6 +212,7 @@ promotion, `resume-next-handoff` resumes the verified `bind-next` transaction,
 `resume-checkpoint` runs the approval recovery command above,
 `resume-shipment` runs the shipment recovery command above,
 `resume-promotion` reruns the returned `promote-next` transaction, and
+`resume-undo` invokes `$gsd-path-undo` with the returned kind and expected HEAD,
 `block` stops with the returned reason. `bind-initial`
 means initialization is complete and phase work must wait for the initial
 router binding: resolve the exact fetched `origin/main` SHA, call `bind-initial` as

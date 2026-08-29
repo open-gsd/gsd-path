@@ -1,0 +1,6 @@
+interface:
+  display_name: "GSD Path Undo"
+  short_description: "Helper-owned undo of unpublished pipeline work"
+  default_prompt: "Use $gsd-path-undo to preview and apply helper-owned undo."
+policy:
+  allow_implicit_invocation: false
