@@ -1326,12 +1326,19 @@ def _validate_transition(
         and before.branch is not None
         and after.branch is not None
     )
+    abandon = (
+        before.phase == "build"
+        and after.phase == "roadmap"
+        and after.status == "active"
+        and before.archive is not None
+        and after.archive is None
+    )
     integration_changed = (
         before.integration_default != after.integration_default
         or before.integration != after.integration
         or before.integration_source != after.integration_source
     )
-    if integration_changed and not next_binding:
+    if integration_changed and not (next_binding or abandon):
         if before.phase in {"build", "ship", "shipped"}:
             raise PipelineStateError("integration mode is locked when build starts")
         if not allow_integration_configuration:
@@ -1355,6 +1362,13 @@ def _validate_transition(
             raise PipelineStateError("next milestone must reset its integration override")
         if after.integration_source != "default":
             raise PipelineStateError("next milestone integration must use the project default")
+    if abandon:
+        if after.integration_default != before.integration_default:
+            raise PipelineStateError("milestone abandon must preserve integration_default")
+        if after.integration != before.integration_default:
+            raise PipelineStateError("milestone abandon must reset its integration override")
+        if after.integration_source != "default":
+            raise PipelineStateError("milestone abandon integration must use the project default")
     if branch_changed and not (initial_binding or next_binding):
         raise PipelineStateError("illegal STATE.branch transition")
     if initial_binding:
@@ -1366,13 +1380,6 @@ def _validate_transition(
             )
 
     archive_changed = before.archive != after.archive
-    abandon = (
-        before.phase == "build"
-        and after.phase == "roadmap"
-        and after.status == "active"
-        and before.archive is not None
-        and after.archive is None
-    )
     next_milestone = (
         before.phase == "shipped"
         and before.status == "done"
@@ -1694,6 +1701,17 @@ def _render_transition(
         and effective_changes.get("branch", state.branch) is not None
     )
     if next_binding:
+        effective_changes["integration_default"] = state.integration_default
+        effective_changes["integration"] = state.integration_default
+        effective_changes["integration_source"] = "default"
+    abandon = (
+        state.phase == "build"
+        and effective_changes.get("phase", state.phase) == "roadmap"
+        and effective_changes.get("status", state.status) == "active"
+        and state.archive is not None
+        and effective_changes.get("archive", state.archive) is None
+    )
+    if abandon:
         effective_changes["integration_default"] = state.integration_default
         effective_changes["integration"] = state.integration_default
         effective_changes["integration_source"] = "default"
@@ -3485,8 +3503,18 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         elif args.command == "resume-checkpoint":
             result = resume_checkpoint(args.repo)
         elif args.command == "promote-next":
-            base = args.base or args.integrate
-            landing = args.landing or args.integrate or base
+            if args.integrate is not None and (
+                args.base is not None or args.landing is not None
+            ):
+                raise PipelineStateError(
+                    "promote-next cannot combine --integrate with --base or --landing"
+                )
+            base = args.integrate if args.integrate is not None else args.base
+            landing = (
+                args.integrate
+                if args.integrate is not None
+                else args.landing or base
+            )
             if base is None:
                 raise PipelineStateError(
                     "promote-next requires --base or legacy --integrate"

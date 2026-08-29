@@ -3521,33 +3521,73 @@ def require_pull_request_shape(value: object) -> dict:
     return value
 
 
-def find_pull_request(repository: str, branch: str, ship_commit: str) -> Optional[dict]:
-    response = github_api_json(
-        f"repos/{repository}/commits/{ship_commit}/pulls",
-        "--method",
-        "GET",
-        "--paginate",
-        "--slurp",
-    )
-    if not isinstance(response, list) or any(
-        not isinstance(page, list) for page in response
+def require_pull_request_pages(value: object) -> list[dict]:
+    if not isinstance(value, list) or any(
+        not isinstance(page, list) for page in value
     ):
         raise ArchiveError("GitHub pull request pages are invalid")
-    pulls = [
-        require_pull_request_shape(item)
-        for page in response
-        for item in page
-    ]
-    pulls = [pull for pull in pulls if pull["base"].get("ref") == "main"]
+    return [require_pull_request_shape(item) for page in value for item in page]
+
+
+def require_pull_request_identity(
+    repository: str,
+    pull: dict,
+    branch: str,
+    ship_commit: str,
+) -> None:
+    if pull["base"].get("ref") != "main":
+        raise ArchiveError("GitHub pull request base is not main")
+    if pull["head"].get("ref") != branch:
+        raise ArchiveError("GitHub pull request head is not the bound branch")
+    if pull["head"].get("sha") != ship_commit:
+        raise ArchiveError("GitHub pull request head is not the ship commit")
+    head_repository = pull["head"].get("repo")
+    if (
+        not isinstance(head_repository, dict)
+        or head_repository.get("full_name") != repository
+    ):
+        raise ArchiveError("GitHub pull request head repository is not origin")
+
+
+def find_pull_request(repository: str, branch: str, ship_commit: str) -> Optional[dict]:
+    owner = repository.split("/", 1)[0]
+    canonical = require_pull_request_pages(
+        github_api_json(
+            f"repos/{repository}/pulls",
+            "--method",
+            "GET",
+            "-f",
+            "state=all",
+            "-f",
+            "base=main",
+            "-f",
+            f"head={owner}:{branch}",
+            "--paginate",
+            "--slurp",
+        )
+    )
+    associated = require_pull_request_pages(
+        github_api_json(
+            f"repos/{repository}/commits/{ship_commit}/pulls",
+            "--method",
+            "GET",
+            "--paginate",
+            "--slurp",
+        )
+    )
+    pulls_by_number = {
+        pull["number"]: pull
+        for pull in associated
+        if pull["base"].get("ref") == "main"
+    }
+    pulls_by_number.update({pull["number"]: pull for pull in canonical})
+    pulls = list(pulls_by_number.values())
     if len(pulls) > 1:
         raise ArchiveError("multiple pull requests target main from the ship commit")
     if not pulls:
         return None
     pull = pulls[0]
-    if pull["head"].get("ref") != branch:
-        raise ArchiveError("GitHub pull request head is not the bound branch")
-    if pull["head"].get("sha") != ship_commit:
-        raise ArchiveError("GitHub pull request head is not the ship commit")
+    require_pull_request_identity(repository, pull, branch, ship_commit)
     return pull
 
 
@@ -3577,10 +3617,7 @@ def update_pull_request_body(
         f"body={expected}",
     )
     updated = require_pull_request_shape(response)
-    if updated["base"].get("ref") != "main" or updated["head"].get("ref") != branch:
-        raise ArchiveError("updated GitHub pull request has unexpected refs")
-    if updated["head"].get("sha") != ship_commit:
-        raise ArchiveError("updated GitHub pull request head is not the ship commit")
+    require_pull_request_identity(repository, updated, branch, ship_commit)
     if updated.get("body") != expected:
         raise ArchiveError("updated GitHub pull request is missing the credit footer")
     return updated
@@ -3608,10 +3645,7 @@ def create_pull_request(
         f"body={body}",
     )
     pull = require_pull_request_shape(response)
-    if pull["base"].get("ref") != "main" or pull["head"].get("ref") != branch:
-        raise ArchiveError("created GitHub pull request has unexpected refs")
-    if pull["head"].get("sha") != ship_commit:
-        raise ArchiveError("created GitHub pull request head is not the ship commit")
+    require_pull_request_identity(repository, pull, branch, ship_commit)
     return pull
 
 
@@ -3798,8 +3832,8 @@ def integrate_pull_request(
             archive_name,
             ship_commit,
         )
-    else:
-        if pull["merged_at"] is None and pull["state"] != "open":
+    elif pull["merged_at"] is None:
+        if pull["state"] != "open":
             raise ArchiveError("GitHub pull request was closed without merging")
         pull = update_pull_request_body(
             repository,
@@ -3831,6 +3865,13 @@ def integrate_pull_request(
     )
     remote_default = refresh_origin(project)["remote_default"]
     require_pull_request_merge(project, merge_commit, ship_commit, remote_default)
+    pull = update_pull_request_body(
+        repository,
+        pull,
+        archive_path,
+        ship_commit,
+        branch,
+    )
     tag_name = f"milestone/{archive_name}"
     message = pull_request_tag_message(
         archive_name,

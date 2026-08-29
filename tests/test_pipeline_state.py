@@ -1,3 +1,4 @@
+import io
 import json
 import subprocess
 import shutil
@@ -907,6 +908,9 @@ class PipelineStateTests(unittest.TestCase):
                 status="active",
                 branch="gsd-path/M001",
                 archive=".project/archive/001-first/",
+                integration_default="direct",
+                integration="pull-request",
+                integration_source="milestone",
             )
             state_path.write_text(content, encoding="utf-8")
             expected = {
@@ -944,6 +948,38 @@ class PipelineStateTests(unittest.TestCase):
                 (result["state"]["phase"], result["state"]["milestone"]),
                 ("roadmap", None),
             )
+            self.assertEqual(result["state"]["integration_default"], "direct")
+            self.assertEqual(result["state"]["integration"], "direct")
+            self.assertEqual(result["state"]["integration_source"], "default")
+
+    def test_main_rejects_mixed_promote_next_argument_forms(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            error = io.StringIO()
+            with (
+                mock.patch.object(sys, "stderr", error),
+                mock.patch.object(pipeline_state, "promote_next") as promote,
+            ):
+                result = pipeline_state.main(
+                    [
+                        "promote-next",
+                        "--repo",
+                        tmp,
+                        "--milestone",
+                        "second",
+                        "--branch",
+                        "gsd-path/M002",
+                        "--integrate",
+                        "a" * 40,
+                        "--base",
+                        "b" * 40,
+                        "--landing",
+                        "c" * 40,
+                    ]
+                )
+
+            self.assertEqual(result, 1)
+            self.assertIn("cannot combine", error.getvalue())
+            promote.assert_not_called()
 
     def test_transition_requires_a_higher_branch_after_shipment(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

@@ -2784,6 +2784,12 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
             and arguments[2].endswith("/pulls")
         )
 
+    def is_canonical_pull_request_query(self, arguments: tuple[str, ...]) -> bool:
+        return (
+            arguments[:3] == ("gh", "api", "repos/open-gsd/demo/pulls")
+            and "GET" in arguments
+        )
+
     def github_api(self, pulls, merge_actor: str = "User"):
         def run(*arguments: str) -> subprocess.CompletedProcess[str]:
             if arguments == ("gh", "auth", "status"):
@@ -2829,6 +2835,10 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                 return subprocess.CompletedProcess(
                     arguments, 0, json.dumps([pulls]), ""
                 )
+            if self.is_canonical_pull_request_query(arguments):
+                return subprocess.CompletedProcess(
+                    arguments, 0, json.dumps([pulls]), ""
+                )
             if arguments[:3] == ("gh", "api", "repos/open-gsd/demo/pulls"):
                 created = {
                     "number": 7,
@@ -2837,9 +2847,17 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                     "merged_at": None,
                     "merge_commit_sha": None,
                     "base": {"ref": "main"},
-                    "head": {"ref": "gsd-path/M001", "sha": pulls[0]["head"]["sha"]}
+                    "head": {
+                        "ref": "gsd-path/M001",
+                        "sha": pulls[0]["head"]["sha"],
+                        "repo": {"full_name": "open-gsd/demo"},
+                    }
                     if pulls
-                    else {"ref": "gsd-path/M001", "sha": "created-by-github"},
+                    else {
+                        "ref": "gsd-path/M001",
+                        "sha": "created-by-github",
+                        "repo": {"full_name": "open-gsd/demo"},
+                    },
                 }
                 return subprocess.CompletedProcess(
                     arguments, 0, json.dumps(created), ""
@@ -2856,7 +2874,11 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
             "merged_at": "2026-08-29T12:00:00Z",
             "merge_commit_sha": merge_sha,
             "base": {"ref": "main"},
-            "head": {"ref": "gsd-path/M001", "sha": ship_sha},
+            "head": {
+                "ref": "gsd-path/M001",
+                "sha": ship_sha,
+                "repo": {"full_name": "open-gsd/demo"},
+            },
             "body": archive_milestone.PR_CREDIT_LINE,
         }
 
@@ -2890,7 +2912,9 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                     return subprocess.CompletedProcess(
                         arguments, 0, json.dumps(payload), ""
                     )
-                if self.is_associated_pull_request_query(arguments):
+                if self.is_associated_pull_request_query(
+                    arguments
+                ) or self.is_canonical_pull_request_query(arguments):
                     return subprocess.CompletedProcess(arguments, 0, "[[]]", "")
                 if arguments[:3] != ("gh", "api", "repos/open-gsd/demo/pulls"):
                     return subprocess.CompletedProcess(
@@ -2903,7 +2927,11 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                     "merged_at": None,
                     "merge_commit_sha": None,
                     "base": {"ref": "main"},
-                    "head": {"ref": "gsd-path/M001", "sha": ship_sha},
+                    "head": {
+                        "ref": "gsd-path/M001",
+                        "sha": ship_sha,
+                        "repo": {"full_name": "open-gsd/demo"},
+                    },
                 }
                 return subprocess.CompletedProcess(
                     arguments, 0, json.dumps(created), ""
@@ -2957,7 +2985,11 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                 "merged_at": None,
                 "merge_commit_sha": None,
                 "base": {"ref": "main"},
-                "head": {"ref": "gsd-path/M001", "sha": ship_sha},
+                "head": {
+                    "ref": "gsd-path/M001",
+                    "sha": ship_sha,
+                    "repo": {"full_name": "open-gsd/demo"},
+                },
                 "body": archive_milestone.PR_CREDIT_LINE,
             }
 
@@ -3005,14 +3037,22 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                 "merged_at": None,
                 "merge_commit_sha": None,
                 "base": {"ref": "main"},
-                "head": {"ref": "gsd-path/M001", "sha": ship_sha},
+                "head": {
+                    "ref": "gsd-path/M001",
+                    "sha": ship_sha,
+                    "repo": {"full_name": "open-gsd/demo"},
+                },
                 "body": archive_milestone.PR_CREDIT_LINE,
             }
             competing_pull = {
                 **canonical_pull,
                 "number": 8,
                 "html_url": "https://github.com/open-gsd/demo/pull/8",
-                "head": {"ref": "alternate-closeout", "sha": ship_sha},
+                "head": {
+                    "ref": "alternate-closeout",
+                    "sha": ship_sha,
+                    "repo": {"full_name": "open-gsd/demo"},
+                },
             }
             requests = []
 
@@ -3020,11 +3060,13 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                 requests.append(arguments)
                 if arguments == ("gh", "auth", "status"):
                     return subprocess.CompletedProcess(arguments, 0, "", "")
-                if arguments[:3] == ("gh", "api", "repos/open-gsd/demo/pulls"):
+                if self.is_canonical_pull_request_query(arguments):
                     return subprocess.CompletedProcess(
-                        arguments, 0, json.dumps([canonical_pull]), ""
+                        arguments, 0, json.dumps([[canonical_pull]]), ""
                     )
-                if self.is_associated_pull_request_query(arguments):
+                if self.is_associated_pull_request_query(
+                    arguments
+                ) or self.is_canonical_pull_request_query(arguments):
                     return subprocess.CompletedProcess(
                         arguments,
                         0,
@@ -3074,6 +3116,66 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                 0,
             )
 
+    def test_pull_request_integration_rejects_fork_head_repository(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            repo = root / "primary"
+            repo.mkdir()
+            remote = root / "origin.git"
+            self.make_publishable_bound_repo(repo, remote)
+            self.enable_pull_request_integration(repo)
+            _archive_name, ship_sha = self.ship_canonical_bound(repo)
+            fork_pull = {
+                "number": 7,
+                "state": "open",
+                "html_url": "https://github.com/open-gsd/demo/pull/7",
+                "merged_at": None,
+                "merge_commit_sha": None,
+                "base": {"ref": "main"},
+                "head": {
+                    "ref": "gsd-path/M001",
+                    "sha": ship_sha,
+                    "repo": {"full_name": "someone/demo"},
+                },
+                "body": archive_milestone.PR_CREDIT_LINE,
+            }
+
+            def github_api(*arguments: str) -> subprocess.CompletedProcess[str]:
+                if arguments == ("gh", "auth", "status"):
+                    return subprocess.CompletedProcess(arguments, 0, "", "")
+                if self.is_canonical_pull_request_query(arguments):
+                    return subprocess.CompletedProcess(arguments, 0, "[[]]", "")
+                if self.is_associated_pull_request_query(arguments):
+                    return subprocess.CompletedProcess(
+                        arguments, 0, json.dumps([[fork_pull]]), ""
+                    )
+                return subprocess.CompletedProcess(
+                    arguments, 1, "", "unexpected command"
+                )
+
+            with (
+                mock.patch.object(
+                    archive_milestone,
+                    "github_repository",
+                    return_value="open-gsd/demo",
+                ),
+                mock.patch.object(
+                    archive_milestone,
+                    "run_command",
+                    side_effect=github_api,
+                ),
+            ):
+                with self.assertRaisesRegex(
+                    archive_milestone.ArchiveError,
+                    "head repository",
+                ):
+                    archive_milestone.integrate(repo, "demo")
+
+            self.assertNotEqual(
+                self.git(remote, "rev-parse", "refs/heads/gsd-path/M001").returncode,
+                0,
+            )
+
     def test_pull_request_integration_repairs_reused_pr_body(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
@@ -3090,7 +3192,11 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                 "merged_at": None,
                 "merge_commit_sha": None,
                 "base": {"ref": "main"},
-                "head": {"ref": "gsd-path/M001", "sha": ship_sha},
+                "head": {
+                    "ref": "gsd-path/M001",
+                    "sha": ship_sha,
+                    "repo": {"full_name": "open-gsd/demo"},
+                },
                 "body": "",
             }
             requests = []
@@ -3114,7 +3220,9 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                     return subprocess.CompletedProcess(
                         arguments, 0, json.dumps(payload), ""
                     )
-                if self.is_associated_pull_request_query(arguments):
+                if self.is_associated_pull_request_query(
+                    arguments
+                ) or self.is_canonical_pull_request_query(arguments):
                     return subprocess.CompletedProcess(
                         arguments, 0, json.dumps([[open_pull]]), ""
                     )
@@ -3174,7 +3282,11 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                 "merged_at": None,
                 "merge_commit_sha": None,
                 "base": {"ref": "main"},
-                "head": {"ref": "gsd-path/M001", "sha": ship_sha},
+                "head": {
+                    "ref": "gsd-path/M001",
+                    "sha": ship_sha,
+                    "repo": {"full_name": "open-gsd/demo"},
+                },
                 "body": "",
             }
             requests = []
@@ -3183,10 +3295,14 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                 requests.append(arguments)
                 if arguments == ("gh", "auth", "status"):
                     return subprocess.CompletedProcess(arguments, 0, "", "")
-                if self.is_associated_pull_request_query(arguments):
+                if self.is_canonical_pull_request_query(arguments):
                     return subprocess.CompletedProcess(
                         arguments, 0, json.dumps([[closed_pull]]), ""
                     )
+                if self.is_associated_pull_request_query(
+                    arguments
+                ) or self.is_canonical_pull_request_query(arguments):
+                    return subprocess.CompletedProcess(arguments, 0, "[[]]", "")
                 return subprocess.CompletedProcess(
                     arguments, 1, "", "unexpected command"
                 )
@@ -3227,14 +3343,20 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                 "merged_at": None,
                 "merge_commit_sha": None,
                 "base": {"ref": "main"},
-                "head": {"ref": "gsd-path/M001", "sha": ship_sha},
+                "head": {
+                    "ref": "gsd-path/M001",
+                    "sha": ship_sha,
+                    "repo": {"full_name": "open-gsd/demo"},
+                },
                 "body": archive_milestone.PR_CREDIT_LINE,
             }
 
             def github_api(*arguments: str) -> subprocess.CompletedProcess[str]:
                 if arguments == ("gh", "auth", "status"):
                     return subprocess.CompletedProcess(arguments, 0, "", "")
-                if self.is_associated_pull_request_query(arguments):
+                if self.is_associated_pull_request_query(
+                    arguments
+                ) or self.is_canonical_pull_request_query(arguments):
                     return subprocess.CompletedProcess(
                         arguments, 0, json.dumps([[open_pull]]), ""
                     )
@@ -3487,7 +3609,9 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
             def github_api(*arguments: str) -> subprocess.CompletedProcess[str]:
                 if arguments == ("gh", "auth", "status"):
                     return subprocess.CompletedProcess(arguments, 0, "", "")
-                if self.is_associated_pull_request_query(arguments):
+                if self.is_associated_pull_request_query(
+                    arguments
+                ) or self.is_canonical_pull_request_query(arguments):
                     return subprocess.CompletedProcess(
                         arguments, 0, json.dumps([[pull]]), ""
                     )
@@ -3571,7 +3695,9 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
             def github_api(*arguments: str) -> subprocess.CompletedProcess[str]:
                 if arguments == ("gh", "auth", "status"):
                     return subprocess.CompletedProcess(arguments, 0, "", "")
-                if self.is_associated_pull_request_query(arguments):
+                if self.is_associated_pull_request_query(
+                    arguments
+                ) or self.is_canonical_pull_request_query(arguments):
                     return subprocess.CompletedProcess(
                         arguments, 0, json.dumps([[pull]]), ""
                     )
@@ -3686,6 +3812,20 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
             _archive_name, ship_sha = self.ship_canonical_bound(repo)
             self.git(repo, "push", "-q", "origin", f"{ship_sha}:refs/heads/main")
             pull = self.merged_pull_request(ship_sha, ship_sha)
+            pull["body"] = ""
+            requests = []
+            normal_api = self.github_api([pull])
+
+            def github_api(*arguments: str) -> subprocess.CompletedProcess[str]:
+                requests.append(arguments)
+                if arguments[:3] == ("gh", "api", "repos/open-gsd/demo/pulls/7"):
+                    return subprocess.CompletedProcess(
+                        arguments,
+                        0,
+                        json.dumps({**pull, "body": archive_milestone.PR_CREDIT_LINE}),
+                        "",
+                    )
+                return normal_api(*arguments)
 
             with (
                 mock.patch.object(
@@ -3696,7 +3836,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                 mock.patch.object(
                     archive_milestone,
                     "run_command",
-                    side_effect=self.github_api([pull]),
+                    side_effect=github_api,
                 ),
             ):
                 with self.assertRaisesRegex(
@@ -3704,6 +3844,8 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                     "must use a two-parent merge commit",
                 ):
                     archive_milestone.integrate(repo, "demo")
+
+            self.assertFalse(any("PATCH" in arguments for arguments in requests))
 
     def reject_remote_ref(self, remote: Path, ref: str) -> Path:
         hook = remote / "hooks" / "pre-receive"
