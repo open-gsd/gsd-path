@@ -3752,6 +3752,7 @@ def integrate_pull_request(
         if pull["state"] != "open":
             raise ArchiveError("GitHub pull request was closed without merging")
         publish_bound_branch(project, branch, ship_commit)
+        require_pull_request_merge_provenance(repository, pull["number"])
         return {
             "status": "awaiting-merge",
             "mode": "pull-request",

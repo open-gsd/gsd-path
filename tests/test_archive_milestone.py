@@ -2844,6 +2844,20 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                 requests.append(arguments)
                 if arguments == ("gh", "auth", "status"):
                     return subprocess.CompletedProcess(arguments, 0, "", "")
+                if arguments[:3] == ("gh", "api", "graphql"):
+                    payload = {
+                        "data": {
+                            "repository": {
+                                "pullRequest": {
+                                    "mergeQueue": {"nodes": []},
+                                    "autoMerge": {"nodes": []},
+                                }
+                            }
+                        }
+                    }
+                    return subprocess.CompletedProcess(
+                        arguments, 0, json.dumps(payload), ""
+                    )
                 if arguments[:3] != ("gh", "api", "repos/open-gsd/demo/pulls"):
                     return subprocess.CompletedProcess(
                         arguments, 1, "", "unexpected command"
@@ -2966,6 +2980,20 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                 requests.append(arguments)
                 if arguments == ("gh", "auth", "status"):
                     return subprocess.CompletedProcess(arguments, 0, "", "")
+                if arguments[:3] == ("gh", "api", "graphql"):
+                    payload = {
+                        "data": {
+                            "repository": {
+                                "pullRequest": {
+                                    "mergeQueue": {"nodes": []},
+                                    "autoMerge": {"nodes": []},
+                                }
+                            }
+                        }
+                    }
+                    return subprocess.CompletedProcess(
+                        arguments, 0, json.dumps(payload), ""
+                    )
                 if arguments[:3] == ("gh", "api", "repos/open-gsd/demo/pulls"):
                     return subprocess.CompletedProcess(
                         arguments, 0, json.dumps([open_pull]), ""
@@ -3008,6 +3036,82 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
             body = next(argument for argument in patch if argument.startswith("body="))
             self.assertTrue(
                 body.endswith(f"\n\n---\n{archive_milestone.PR_CREDIT_LINE}")
+            )
+
+    def test_pull_request_integration_rejects_open_pr_auto_merge(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            repo = root / "primary"
+            repo.mkdir()
+            remote = root / "origin.git"
+            self.make_publishable_bound_repo(repo, remote)
+            self.enable_pull_request_integration(repo)
+            _archive_name, ship_sha = self.ship_canonical_bound(repo)
+            open_pull = {
+                "number": 7,
+                "state": "open",
+                "html_url": "https://github.com/open-gsd/demo/pull/7",
+                "merged_at": None,
+                "merge_commit_sha": None,
+                "base": {"ref": "main"},
+                "head": {"ref": "gsd-path/M001", "sha": ship_sha},
+                "body": archive_milestone.PR_CREDIT_LINE,
+            }
+
+            def github_api(*arguments: str) -> subprocess.CompletedProcess[str]:
+                if arguments == ("gh", "auth", "status"):
+                    return subprocess.CompletedProcess(arguments, 0, "", "")
+                if arguments[:3] == ("gh", "api", "repos/open-gsd/demo/pulls"):
+                    return subprocess.CompletedProcess(
+                        arguments, 0, json.dumps([open_pull]), ""
+                    )
+                if arguments[:3] == ("gh", "api", "graphql"):
+                    payload = {
+                        "data": {
+                            "repository": {
+                                "pullRequest": {
+                                    "mergeQueue": {"nodes": []},
+                                    "autoMerge": {
+                                        "nodes": [
+                                            {"__typename": "AutoMergeEnabledEvent"}
+                                        ]
+                                    },
+                                }
+                            }
+                        }
+                    }
+                    return subprocess.CompletedProcess(
+                        arguments, 0, json.dumps(payload), ""
+                    )
+                return subprocess.CompletedProcess(
+                    arguments, 1, "", "unexpected command"
+                )
+
+            with (
+                mock.patch.object(
+                    archive_milestone,
+                    "github_repository",
+                    return_value="open-gsd/demo",
+                ),
+                mock.patch.object(
+                    archive_milestone,
+                    "run_command",
+                    side_effect=github_api,
+                ),
+            ):
+                with self.assertRaisesRegex(
+                    archive_milestone.ArchiveError,
+                    "auto-merge",
+                ):
+                    archive_milestone.integrate(repo, "demo")
+
+            self.assertEqual(
+                self.git(remote, "rev-parse", "gsd-path/M001").stdout.strip(),
+                ship_sha,
+            )
+            self.assertNotEqual(
+                self.git(remote, "show-ref", "--tags", "--quiet").returncode,
+                0,
             )
 
     def test_pull_request_integration_accepts_merge_and_deleted_head_branch(self) -> None:

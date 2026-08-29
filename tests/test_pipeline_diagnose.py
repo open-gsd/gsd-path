@@ -12,6 +12,7 @@ from unittest import mock
 from scripts import (
     archive_milestone,
     pipeline_diagnose,
+    pipeline_git,
     pipeline_state,
     pipeline_undo,
 )
@@ -71,6 +72,49 @@ def state_text(
 
 
 class PipelineDiagnoseTests(unittest.TestCase):
+    def test_promotion_retry_preserves_base_and_landing(self) -> None:
+        base = "a" * 40
+        landing = "b" * 40
+        retry = pipeline_diagnose._route_retry(
+            Path("/tmp/repo with spaces"),
+            {
+                "action": "resume-promotion",
+                "milestone": "second",
+                "branch": "gsd-path/M002",
+                "integrate": landing,
+                "landing": landing,
+                "base": base,
+            },
+            None,
+        )
+
+        self.assertIsNotNone(retry)
+        arguments = pipeline_state.parse_args(shlex.split(retry)[2:])
+        self.assertEqual(arguments.base, base)
+        self.assertEqual(arguments.landing, landing)
+        self.assertIsNone(arguments.integrate)
+
+    def test_handoff_retry_preserves_missing_remote_permission(self) -> None:
+        route = {
+            "action": "resume-next-handoff",
+            "branch": "gsd-path/M002",
+            "previous_branch": "gsd-path/M001",
+            "ship": "a" * 40,
+            "remote_default": "origin/main",
+            "base": "b" * 40,
+        }
+        for allowed in (False, True):
+            with self.subTest(allowed=allowed):
+                retry = pipeline_diagnose._route_retry(
+                    Path("/tmp/repo with spaces"),
+                    {**route, "allow_remote_absent": allowed},
+                    None,
+                )
+
+                self.assertIsNotNone(retry)
+                arguments = pipeline_git.parse_args(shlex.split(retry)[2:])
+                self.assertEqual(arguments.allow_missing_previous, allowed)
+
     def test_healthy_bound_plan_is_ok(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             repo = Path(tmp) / "repo"
