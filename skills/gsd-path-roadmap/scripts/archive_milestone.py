@@ -3522,28 +3522,30 @@ def require_pull_request_shape(value: object) -> dict:
 
 
 def find_pull_request(repository: str, branch: str, ship_commit: str) -> Optional[dict]:
-    owner = repository.split("/", 1)[0]
     response = github_api_json(
-        f"repos/{repository}/pulls",
+        f"repos/{repository}/commits/{ship_commit}/pulls",
         "--method",
         "GET",
-        "-f",
-        "state=all",
-        "-f",
-        "base=main",
-        "-f",
-        f"head={owner}:{branch}",
+        "--paginate",
+        "--slurp",
     )
-    if not isinstance(response, list):
-        raise ArchiveError("GitHub pull request list is not an array")
-    pulls = [require_pull_request_shape(item) for item in response]
+    if not isinstance(response, list) or any(
+        not isinstance(page, list) for page in response
+    ):
+        raise ArchiveError("GitHub pull request pages are invalid")
+    pulls = [
+        require_pull_request_shape(item)
+        for page in response
+        for item in page
+    ]
+    pulls = [pull for pull in pulls if pull["base"].get("ref") == "main"]
     if len(pulls) > 1:
-        raise ArchiveError(f"multiple pull requests target main from {branch}")
+        raise ArchiveError("multiple pull requests target main from the ship commit")
     if not pulls:
         return None
     pull = pulls[0]
-    if pull["base"].get("ref") != "main" or pull["head"].get("ref") != branch:
-        raise ArchiveError("GitHub pull request base or head changed")
+    if pull["head"].get("ref") != branch:
+        raise ArchiveError("GitHub pull request head is not the bound branch")
     if pull["head"].get("sha") != ship_commit:
         raise ArchiveError("GitHub pull request head is not the ship commit")
     return pull
