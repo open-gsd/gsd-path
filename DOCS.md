@@ -293,7 +293,8 @@ contract updates manually ([UPDATE.md](UPDATE.md)).
 Restore from `disabled-gsd-skills` beside the skills root ([UPDATE.md](UPDATE.md)).
 
 **How do I see status without advancing?**
-`$gsd-path status` (or `/gsd-path status`). It prints helper JSON and stops.
+`$gsd-path status` (or `/gsd-path status`). It reports the helper-owned state
+snapshot and stops.
 
 **The pipeline is stuck. Do I invent git commands?**
 No. `$gsd-path-forensics` is read-only diagnosis. `$gsd-path-undo` previews

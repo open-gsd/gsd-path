@@ -77,10 +77,10 @@ help the decision. Write the artifact before asking, never present a bare
 approval question, and after the answer relink the updated artifact before the
 router continues or a direct invocation names its exact next skill.
 
-`$gsd-path status` reports `pipeline_state.py status` JSON and stops — it does
-not auto-advance. `$gsd-path-forensics` is read-only diagnosis when a helper
-blocks. `$gsd-path-undo` previews then applies helper-owned undo of unpublished
-work; it never invents `git reset`.
+`$gsd-path status` reports the `pipeline_state.py status` snapshot and stops —
+it does not auto-advance. `$gsd-path-forensics` is read-only diagnosis when a
+helper blocks. `$gsd-path-undo` previews then applies helper-owned undo of
+unpublished work; it never invents `git reset`.
 
 ### New GitHub repository creation
 

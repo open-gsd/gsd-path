@@ -45,7 +45,7 @@ npm (once published to npm): `npx gsd-path --all` · Help: `node scripts/install
 
 ## Skills
 
-Fourteen canonical explicit-only skills are installed.
+Canonical explicit-only skills are installed.
 Invoke the **router** by default; use phase skills for one step only, or use a
 sidecar to discuss, diagnose, or undo without advancing.
 
@@ -250,7 +250,7 @@ the authoritative host API table and delegation rules.
 | `FULL.md` | Full guide |
 | `UPDATE.md` | Updating |
 | `HOOKS.md` | Guard hooks |
-| `skills/` | Fourteen canonical `gsd-path*` skills |
+| `skills/` | Canonical `gsd-path*` skills |
 | `platforms/` | Host dispatch adapters |
 | `scripts/install.mjs` | Installer (npm `gsd-path` bin) |
 | `scripts/install.py` | Python installer |

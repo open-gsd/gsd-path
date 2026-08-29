@@ -58,6 +58,8 @@ gsd-path  (router: reads STATE.md, runs the next valid phase)
   any non-shipped phase to answer a question, ground it in code and artifacts,
   use focused research when needed, and save the dialogue and answer without
   changing phase state.
+- **Operator commands**: status, forensics, and undo do not add pipeline
+  phases. See the [canonical skill table](DOCS.md#skills-optional).
 
 All skills are **explicit-only** on most hosts — generic “continue the project”
 does not inject the pipeline. On OpenCode stable, Antigravity CLI, and Kiro,
