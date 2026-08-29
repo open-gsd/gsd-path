@@ -3,7 +3,8 @@
 
 Also validates milestone integration: the read-only validate-integrated
 command checks the shipped transaction, the selected mode's two-parent merge
-on the remote default branch, and the milestone tag without network access.
+on the remote default branch, and the milestone tag. Pull-request validation
+requires network access to verify live origin publication.
 """
 
 import argparse
@@ -3687,7 +3688,7 @@ def require_pull_request_merge_provenance(
         nodes{__typename}
       }
       mergeAction:timelineItems(last:1,itemTypes:[MERGED_EVENT]){
-        nodes{__typename ... on MergedEvent{commit{oid}}}
+        nodes{__typename ... on MergedEvent{actor{__typename login} commit{oid}}}
       }
     }
   }
@@ -3756,6 +3757,7 @@ def require_pull_request_merge_provenance(
         raise ArchiveError("pull request was not merged by a GitHub merge action")
     merge_node = merge_nodes[0]
     commit = merge_node.get("commit") if isinstance(merge_node, dict) else None
+    actor = merge_node.get("actor") if isinstance(merge_node, dict) else None
     if (
         not isinstance(merge_node, dict)
         or merge_node.get("__typename") != "MergedEvent"
@@ -3763,6 +3765,13 @@ def require_pull_request_merge_provenance(
         or commit.get("oid") != merge_commit
     ):
         raise ArchiveError("GitHub pull-request merge action does not match landing")
+    if (
+        not isinstance(actor, dict)
+        or actor.get("__typename") != "User"
+        or not isinstance(actor.get("login"), str)
+        or not actor["login"]
+    ):
+        raise ArchiveError("pull request must be merged by a human GitHub user")
 
 
 def integrate_pull_request(
@@ -4094,8 +4103,7 @@ def validate_integrated(repo: Path, slug: str) -> dict:
     ship_commit = shipped["commit"]
     archive_name = PurePosixPath(configured).name
 
-    # Read-only and network-free: only existing origin/* refs are consulted;
-    # fetching is the phase's job.
+    # Pull-request mode checks live origin publication without fetching.
     remote_default = resolve_remote_default(project)
     default_name = default_branch_name(remote_default)
     bound_branch = state.branch
@@ -4286,7 +4294,10 @@ def parser() -> argparse.ArgumentParser:
 
     validate_integrated_parser = subparsers.add_parser(
         "validate-integrated",
-        help="validate the committed ship transaction and its default-branch integration",
+        help=(
+            "validate the committed ship transaction and its default-branch integration; "
+            "pull-request mode requires origin network access"
+        ),
     )
     validate_integrated_parser.add_argument("--repo", required=True, type=Path)
     validate_integrated_parser.add_argument("--slug", required=True)

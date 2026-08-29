@@ -2776,7 +2776,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
             encoding="utf-8",
         )
 
-    def github_api(self, pulls):
+    def github_api(self, pulls, merge_actor: str = "User"):
         def run(*arguments: str) -> subprocess.CompletedProcess[str]:
             if arguments == ("gh", "auth", "status"):
                 return subprocess.CompletedProcess(arguments, 0, "", "")
@@ -2793,6 +2793,10 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                     [
                         {
                             "__typename": "MergedEvent",
+                            "actor": {
+                                "__typename": merge_actor,
+                                "login": "merge-user",
+                            },
                             "commit": {"oid": merge_sha},
                         }
                     ]
@@ -3407,6 +3411,10 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                                         "nodes": [
                                             {
                                                 "__typename": "MergedEvent",
+                                                "actor": {
+                                                    "__typename": "User",
+                                                    "login": "merge-user",
+                                                },
                                                 "commit": {"oid": merge_sha},
                                             }
                                         ]
@@ -3487,6 +3495,10 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                                         "nodes": [
                                             {
                                                 "__typename": "MergedEvent",
+                                                "actor": {
+                                                    "__typename": "User",
+                                                    "login": "merge-user",
+                                                },
                                                 "commit": {"oid": merge_sha},
                                             }
                                         ]
@@ -3517,6 +3529,49 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                 with self.assertRaisesRegex(
                     archive_milestone.ArchiveError,
                     "auto-merge",
+                ):
+                    archive_milestone.integrate(repo, "demo")
+
+            self.assertNotEqual(
+                self.git(remote, "show-ref", "--tags", "--quiet").returncode,
+                0,
+            )
+
+    def test_pull_request_integration_rejects_bot_merge_before_tag(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            repo = root / "primary"
+            repo.mkdir()
+            remote = root / "origin.git"
+            self.make_publishable_bound_repo(repo, remote)
+            self.enable_pull_request_integration(repo)
+            archive_name, ship_sha = self.ship_canonical_bound(repo)
+            self.git(repo, "push", "-q", "origin", "gsd-path/M001")
+            merge_sha = self.integrate_bound(
+                repo,
+                archive_name,
+                ship_sha,
+                tag=False,
+                subject="Merge pull request #7 from open-gsd/gsd-path/M001",
+            )
+            self.git(repo, "push", "-q", "origin", f"{merge_sha}:refs/heads/main")
+            pull = self.merged_pull_request(ship_sha, merge_sha)
+
+            with (
+                mock.patch.object(
+                    archive_milestone,
+                    "github_repository",
+                    return_value="open-gsd/demo",
+                ),
+                mock.patch.object(
+                    archive_milestone,
+                    "run_command",
+                    side_effect=self.github_api([pull], merge_actor="Bot"),
+                ),
+            ):
+                with self.assertRaisesRegex(
+                    archive_milestone.ArchiveError,
+                    "human GitHub user",
                 ):
                     archive_milestone.integrate(repo, "demo")
 

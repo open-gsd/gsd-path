@@ -500,7 +500,8 @@ command then proves the matching integration merge commit, its
 `milestone/<NNN>-<slug>` tag, and the merge on origin/main before the router
 reports shipped or starts a new milestone. The ship contract owns accepted
 historical subject forms. Direct-mode commits use the canonical form above;
-PR-mode validation uses tag metadata and topology instead of merge text.
+PR-mode validation requires origin network access to prove live publication
+and uses tag metadata and topology instead of merge text.
 `integrate:` subjects in HEAD history are expected in direct mode; the
 no-`.project`-change-after-ship drift rule lives on the gsd-path branch, which
 receives no further `.project` commits before the next milestone. Product

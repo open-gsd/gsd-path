@@ -190,7 +190,8 @@ Before ordinary routing, inspect `STATE.archive`.
   `python3 <absolute-bundled-script> validate --repo <root>`. When it returns
   the same archive path and exact ship SHA, run the bundled
   `python3 <absolute-bundled-script> validate-integrated --repo <root> --slug <slug>`
-  with the shipped milestone slug from STATE.milestone. Report shipped only
+  with the shipped milestone slug from STATE.milestone and origin network
+  access available for PR-mode live publication checks. Report shipped only
   when both pass.
   When archive validation passes but integration is pending, invoke the
   bundled [ship contract](SHIP.md) to complete integration; never report

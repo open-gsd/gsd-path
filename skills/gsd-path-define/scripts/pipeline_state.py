@@ -498,6 +498,39 @@ def _is_ancestor(repo: Path, ancestor: str, descendant: str) -> bool:
     raise PipelineStateError(detail)
 
 
+def _live_annotated_tag(repo: Path, tag_ref: str) -> tuple[str, str]:
+    result = _run_git(
+        repo,
+        "ls-remote",
+        "--exit-code",
+        "origin",
+        tag_ref,
+        f"{tag_ref}^{{}}",
+        check=False,
+    )
+    if result.returncode == 2:
+        raise PipelineStateError("published milestone tag is missing on origin")
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip()
+        raise PipelineStateError(
+            f"could not inspect published milestone tag on origin: {detail}"
+        )
+    refs: dict[str, str] = {}
+    for line in result.stdout.splitlines():
+        fields = line.split("\t", 1)
+        if (
+            len(fields) != 2
+            or fields[1] in refs
+            or re.fullmatch(r"[0-9a-f]{40}", fields[0]) is None
+        ):
+            raise PipelineStateError("origin returned invalid milestone tag data")
+        refs[fields[1]] = fields[0]
+    peeled_ref = f"{tag_ref}^{{}}"
+    if set(refs) != {tag_ref, peeled_ref}:
+        raise PipelineStateError("origin milestone tag is missing or not annotated")
+    return refs[tag_ref], refs[peeled_ref]
+
+
 def _commit_subject_body(repo: Path, revision: str = "HEAD") -> tuple[str, str]:
     raw = _run_git(repo, "cat-file", "commit", revision).stdout
     try:
@@ -3054,6 +3087,20 @@ def _prepare_promotion(
     ).stdout.strip()
     if published_tag_landing != landing:
         raise PipelineStateError("published milestone tag does not point at landing")
+    if active_state.integration == "pull-request":
+        remote_tag_ref = f"refs/tags/milestone/{archive_name}"
+        live_tag_object, live_tag_landing = _live_annotated_tag(
+            repo,
+            remote_tag_ref,
+        )
+        if live_tag_object != published_tag_object:
+            raise PipelineStateError(
+                "published milestone tag does not match the live origin tag"
+            )
+        if live_tag_landing != landing:
+            raise PipelineStateError(
+                "live origin milestone tag does not point at landing"
+            )
     next_root = project / "next"
     next_state, next_text, _ = load_state(repo, ".project/next")
     if next_state.project != active_state.project:

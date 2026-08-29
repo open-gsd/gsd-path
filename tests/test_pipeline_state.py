@@ -1415,11 +1415,17 @@ class PipelineStateTests(unittest.TestCase):
         next_phase: str = "plan",
         next_status: str = "done",
         duplicate_approval: bool = False,
+        pull_request: bool = False,
     ) -> tuple[Path, str]:
         repo = Path(tmp) / "repo"
+        remote = Path(tmp) / "origin.git"
+        if pull_request:
+            run_git(Path(tmp), "init", "--bare", "-b", "main", str(remote))
         run_git(Path(tmp), "init", "-b", "main", str(repo))
         run_git(repo, "config", "user.name", "GSD Path Test")
         run_git(repo, "config", "user.email", "test@example.com")
+        if pull_request:
+            run_git(repo, "remote", "add", "origin", str(remote))
         project = repo / ".project"
         (project / "next" / "tasks").mkdir(parents=True)
         (project / "next" / "plan").mkdir()
@@ -1443,6 +1449,8 @@ class PipelineStateTests(unittest.TestCase):
                 project=next_project,
                 phase=next_phase,
                 status="active" if next_phase == "plan" and next_status == "done" else next_status,
+                integration_default="pull-request" if pull_request else None,
+                integration="pull-request" if pull_request else None,
             ),
             encoding="utf-8",
         )
@@ -1519,6 +1527,8 @@ class PipelineStateTests(unittest.TestCase):
                 status="done",
                 branch="gsd-path/M001",
                 archive=".project/archive/001-first/",
+                integration_default="pull-request" if pull_request else None,
+                integration="pull-request" if pull_request else None,
             ),
             encoding="utf-8",
         )
@@ -1560,6 +1570,8 @@ class PipelineStateTests(unittest.TestCase):
             tag_object,
         )
         run_git(repo, "update-ref", "refs/remotes/origin/main", integrate)
+        if pull_request:
+            run_git(repo, "push", "origin", "main", "milestone/001-first")
         run_git(repo, "switch", "-c", "gsd-path/M002")
         return repo, integrate
 
@@ -1701,6 +1713,49 @@ class PipelineStateTests(unittest.TestCase):
                     base,
                     older_ancestor,
                 )
+
+    def test_promote_next_rejects_deleted_live_pull_request_tag(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, landing = self._promotion_repo(
+                tmp,
+                drift=False,
+                pull_request=True,
+            )
+            remote = Path(tmp) / "origin.git"
+            run_git(
+                remote,
+                "update-ref",
+                "-d",
+                "refs/tags/milestone/001-first",
+            )
+
+            with self.assertRaisesRegex(
+                pipeline_state.PipelineStateError,
+                "missing on origin",
+            ):
+                pipeline_state.promote_next(
+                    repo,
+                    "second",
+                    "gsd-path/M002",
+                    landing,
+                )
+
+    def test_promote_next_accepts_live_pull_request_tag(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, landing = self._promotion_repo(
+                tmp,
+                drift=False,
+                pull_request=True,
+            )
+
+            result = pipeline_state.promote_next(
+                repo,
+                "second",
+                "gsd-path/M002",
+                landing,
+            )
+
+            self.assertEqual(result["landing"], landing)
 
     def test_promote_next_reopens_plan_when_task_paths_drifted(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
