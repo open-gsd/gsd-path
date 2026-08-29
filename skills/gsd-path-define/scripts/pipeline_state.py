@@ -1466,6 +1466,10 @@ def configure_integration(
         raise PipelineStateError(f"invalid integration scope: {scope}")
     if mode not in INTEGRATION_MODES:
         raise PipelineStateError(f"invalid integration mode: {mode}")
+    if scope == "default" and _is_lookahead(project_dir):
+        raise PipelineStateError(
+            "project integration default must be configured on the active track"
+        )
     resolved = _repo_root(repo)
     project = _track_root(resolved, project_dir)
     with _state_lock(project):
@@ -1657,6 +1661,7 @@ def _render_transition(
         and effective_changes.get("branch", state.branch) is not None
     )
     if next_binding:
+        effective_changes["integration_default"] = state.integration_default
         effective_changes["integration"] = state.integration_default
         effective_changes["integration_source"] = "default"
     rendered = _set_frontmatter(

@@ -2781,12 +2781,31 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
             if arguments == ("gh", "auth", "status"):
                 return subprocess.CompletedProcess(arguments, 0, "", "")
             if arguments[:3] == ("gh", "api", "graphql"):
+                merge_sha = next(
+                    (
+                        pull.get("merge_commit_sha")
+                        for pull in pulls
+                        if pull.get("merged_at") is not None
+                    ),
+                    None,
+                )
+                merge_nodes = (
+                    [
+                        {
+                            "__typename": "MergedEvent",
+                            "commit": {"oid": merge_sha},
+                        }
+                    ]
+                    if isinstance(merge_sha, str)
+                    else []
+                )
                 payload = {
                     "data": {
                         "repository": {
                             "pullRequest": {
                                 "mergeQueue": {"nodes": []},
                                 "autoMerge": {"nodes": []},
+                                "mergeAction": {"nodes": merge_nodes},
                             }
                         }
                     }
@@ -2851,6 +2870,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                                 "pullRequest": {
                                     "mergeQueue": {"nodes": []},
                                     "autoMerge": {"nodes": []},
+                                    "mergeAction": {"nodes": []},
                                 }
                             }
                         }
@@ -2987,6 +3007,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                                 "pullRequest": {
                                     "mergeQueue": {"nodes": []},
                                     "autoMerge": {"nodes": []},
+                                    "mergeAction": {"nodes": []},
                                 }
                             }
                         }
@@ -3038,6 +3059,59 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                 body.endswith(f"\n\n---\n{archive_milestone.PR_CREDIT_LINE}")
             )
 
+    def test_pull_request_integration_rejects_closed_pr_without_editing(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            repo = root / "primary"
+            repo.mkdir()
+            remote = root / "origin.git"
+            self.make_publishable_bound_repo(repo, remote)
+            self.enable_pull_request_integration(repo)
+            _archive_name, ship_sha = self.ship_canonical_bound(repo)
+            closed_pull = {
+                "number": 7,
+                "state": "closed",
+                "html_url": "https://github.com/open-gsd/demo/pull/7",
+                "merged_at": None,
+                "merge_commit_sha": None,
+                "base": {"ref": "main"},
+                "head": {"ref": "gsd-path/M001", "sha": ship_sha},
+                "body": "",
+            }
+            requests = []
+
+            def github_api(*arguments: str) -> subprocess.CompletedProcess[str]:
+                requests.append(arguments)
+                if arguments == ("gh", "auth", "status"):
+                    return subprocess.CompletedProcess(arguments, 0, "", "")
+                if arguments[:3] == ("gh", "api", "repos/open-gsd/demo/pulls"):
+                    return subprocess.CompletedProcess(
+                        arguments, 0, json.dumps([closed_pull]), ""
+                    )
+                return subprocess.CompletedProcess(
+                    arguments, 1, "", "unexpected command"
+                )
+
+            with (
+                mock.patch.object(
+                    archive_milestone,
+                    "github_repository",
+                    return_value="open-gsd/demo",
+                ),
+                mock.patch.object(
+                    archive_milestone,
+                    "run_command",
+                    side_effect=github_api,
+                ),
+            ):
+                with self.assertRaisesRegex(
+                    archive_milestone.ArchiveError,
+                    "closed without merging",
+                ):
+                    archive_milestone.integrate(repo, "demo")
+
+            self.assertFalse(any("PATCH" in arguments for arguments in requests))
+
     def test_pull_request_integration_rejects_open_pr_auto_merge(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
@@ -3076,6 +3150,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                                             {"__typename": "AutoMergeEnabledEvent"}
                                         ]
                                     },
+                                    "mergeAction": {"nodes": []},
                                 }
                             }
                         }
@@ -3162,6 +3237,134 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
             validated = archive_milestone.validate_integrated(repo, "demo")
             self.assertEqual(validated["landing"], merge_sha)
 
+    def test_pull_request_integration_republishes_deleted_remote_tag(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            repo = root / "primary"
+            repo.mkdir()
+            remote = root / "origin.git"
+            self.make_publishable_bound_repo(repo, remote)
+            self.enable_pull_request_integration(repo)
+            archive_name, ship_sha = self.ship_canonical_bound(repo)
+            self.git(repo, "push", "-q", "origin", "gsd-path/M001")
+            merge_sha = self.integrate_bound(
+                repo,
+                archive_name,
+                ship_sha,
+                tag=False,
+                subject="Merge pull request #7 from open-gsd/gsd-path/M001",
+            )
+            self.git(repo, "push", "-q", "origin", f"{merge_sha}:refs/heads/main")
+            pull = self.merged_pull_request(ship_sha, merge_sha)
+
+            with (
+                mock.patch.object(
+                    archive_milestone,
+                    "github_repository",
+                    return_value="open-gsd/demo",
+                ),
+                mock.patch.object(
+                    archive_milestone,
+                    "run_command",
+                    side_effect=self.github_api([pull]),
+                ),
+            ):
+                archive_milestone.integrate(repo, "demo")
+
+            remote_tag = f"refs/tags/milestone/{archive_name}"
+            tracking_tag = f"refs/remotes/origin/tags/milestone/{archive_name}"
+            self.git(remote, "update-ref", "-d", remote_tag)
+            self.assertEqual(
+                self.git(repo, "rev-parse", tracking_tag).returncode,
+                0,
+            )
+            with self.assertRaisesRegex(
+                archive_milestone.ArchiveError,
+                "missing published milestone tag",
+            ):
+                archive_milestone.validate_integrated(repo, "demo")
+
+            with (
+                mock.patch.object(
+                    archive_milestone,
+                    "github_repository",
+                    return_value="open-gsd/demo",
+                ),
+                mock.patch.object(
+                    archive_milestone,
+                    "run_command",
+                    side_effect=self.github_api([pull]),
+                ),
+            ):
+                archive_milestone.integrate(repo, "demo")
+
+            self.assertEqual(
+                self.git(remote, "rev-parse", f"{remote_tag}^{{commit}}").stdout.strip(),
+                merge_sha,
+            )
+
+    def test_pull_request_integration_rejects_indirect_merge_before_tag(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            repo = root / "primary"
+            repo.mkdir()
+            remote = root / "origin.git"
+            self.make_publishable_bound_repo(repo, remote)
+            self.enable_pull_request_integration(repo)
+            archive_name, ship_sha = self.ship_canonical_bound(repo)
+            self.git(repo, "push", "-q", "origin", "gsd-path/M001")
+            merge_sha = self.integrate_bound(
+                repo,
+                archive_name,
+                ship_sha,
+                tag=False,
+                subject="Merge pull request #7 from open-gsd/gsd-path/M001",
+            )
+            self.git(repo, "push", "-q", "origin", f"{merge_sha}:refs/heads/main")
+            pull = self.merged_pull_request(ship_sha, merge_sha)
+            normal_api = self.github_api([pull])
+
+            def github_api(*arguments: str) -> subprocess.CompletedProcess[str]:
+                if arguments[:3] == ("gh", "api", "graphql"):
+                    payload = {
+                        "data": {
+                            "repository": {
+                                "pullRequest": {
+                                    "mergeQueue": {"nodes": []},
+                                    "autoMerge": {"nodes": []},
+                                    "mergeAction": {"nodes": []},
+                                }
+                            }
+                        }
+                    }
+                    return subprocess.CompletedProcess(
+                        arguments, 0, json.dumps(payload), ""
+                    )
+                return normal_api(*arguments)
+
+            with (
+                mock.patch.object(
+                    archive_milestone,
+                    "github_repository",
+                    return_value="open-gsd/demo",
+                ),
+                mock.patch.object(
+                    archive_milestone,
+                    "run_command",
+                    side_effect=github_api,
+                ),
+            ):
+                with self.assertRaisesRegex(
+                    archive_milestone.ArchiveError,
+                    "not merged by a GitHub merge action",
+                ):
+                    archive_milestone.integrate(repo, "demo")
+
+            self.assertNotEqual(
+                self.git(remote, "show-ref", "--tags", "--quiet").returncode,
+                0,
+            )
+
     def test_pull_request_integration_rejects_merge_queue_before_tag(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
@@ -3200,6 +3403,14 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                                         ]
                                     },
                                     "autoMerge": {"nodes": []},
+                                    "mergeAction": {
+                                        "nodes": [
+                                            {
+                                                "__typename": "MergedEvent",
+                                                "commit": {"oid": merge_sha},
+                                            }
+                                        ]
+                                    },
                                 }
                             }
                         }
@@ -3270,6 +3481,14 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                                     "autoMerge": {
                                         "nodes": [
                                             {"__typename": "AutoMergeEnabledEvent"}
+                                        ]
+                                    },
+                                    "mergeAction": {
+                                        "nodes": [
+                                            {
+                                                "__typename": "MergedEvent",
+                                                "commit": {"oid": merge_sha},
+                                            }
                                         ]
                                     },
                                 }

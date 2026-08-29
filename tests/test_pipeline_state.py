@@ -230,6 +230,36 @@ class PipelineStateTests(unittest.TestCase):
                         repo, "milestone", "pull-request"
                     )
 
+    def test_lookahead_cannot_change_project_integration_default(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            run_git(repo, "init", "-b", "gsd-path/M001")
+            next_project = repo / ".project" / "next"
+            next_project.mkdir(parents=True)
+            state_path = next_project / "STATE.md"
+            state_path.write_text(
+                state_text(
+                    milestone="second",
+                    phase="plan",
+                    status="active",
+                ),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(
+                pipeline_state.PipelineStateError,
+                "active track",
+            ):
+                pipeline_state.configure_integration(
+                    repo,
+                    "default",
+                    "pull-request",
+                    ".project/next",
+                )
+
+            state, _, _ = pipeline_state.load_state(repo, ".project/next")
+            self.assertEqual(state.integration_default, "direct")
+
     def test_transition_cannot_bypass_integration_configuration(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             repo = Path(tmp)
@@ -998,6 +1028,46 @@ class PipelineStateTests(unittest.TestCase):
 
             self.assertEqual(result["state"]["integration_default"], "pull-request")
             self.assertEqual(result["state"]["integration"], "pull-request")
+            self.assertEqual(result["state"]["integration_source"], "default")
+
+    def test_legacy_next_milestone_materializes_direct_integration(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            project = repo / ".project"
+            project.mkdir()
+            archive = ".project/archive/001-first/"
+            (project / "STATE.md").write_text(
+                state_text(
+                    milestone="first",
+                    phase="shipped",
+                    status="done",
+                    branch="gsd-path/M001",
+                    archive=archive,
+                ),
+                encoding="utf-8",
+            )
+
+            result = pipeline_state.transition_state(
+                repo,
+                {
+                    "phase": "shipped",
+                    "status": "done",
+                    "milestone": "first",
+                    "branch": "gsd-path/M001",
+                    "archive": archive,
+                },
+                {
+                    "phase": "inspect",
+                    "status": "active",
+                    "milestone": "second",
+                    "branch": "gsd-path/M002",
+                    "archive": None,
+                },
+                "next milestone bound",
+            )
+
+            self.assertEqual(result["state"]["integration_default"], "direct")
+            self.assertEqual(result["state"]["integration"], "direct")
             self.assertEqual(result["state"]["integration_source"], "default")
 
     def test_transition_requires_canonical_patch_reopen_event(self) -> None:

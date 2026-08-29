@@ -3065,6 +3065,7 @@ def refresh_origin(repo: Path) -> dict:
     mirrored = run_git(
         project,
         "fetch",
+        "--prune",
         "origin",
         "refs/tags/milestone/*:refs/remotes/origin/tags/milestone/*",
     )
@@ -3390,22 +3391,34 @@ def ensure_integration_tag(
     merge_commit: str,
     message: Optional[str] = None,
 ) -> tuple[str, bool]:
-    local_ref = f"refs/tags/{tag_name}"
-    remote_ref = f"refs/remotes/origin/tags/{tag_name}"
-    local_object = optional_ref(project, local_ref)
-    remote_object = optional_ref(project, remote_ref)
-    if remote_object is not None:
-        remote_object = require_annotated_tag(
+    tag_ref = f"refs/tags/{tag_name}"
+    tracking_ref = f"refs/remotes/origin/tags/{tag_name}"
+    local_object = optional_ref(project, tag_ref)
+    published_object = live_remote_ref(project, tag_ref)
+    tracking_object = optional_ref(project, tracking_ref)
+    if tracking_object != published_object:
+        if published_object is None:
+            require_git_success(
+                run_git(project, "update-ref", "-d", tracking_ref, tracking_object),
+                "prune local milestone-tag ref",
+            )
+        else:
+            require_git_success(
+                run_git(project, "update-ref", tracking_ref, published_object),
+                "refresh local milestone-tag ref",
+            )
+    if published_object is not None:
+        published_object = require_annotated_tag(
             project,
-            remote_ref,
+            tracking_ref,
             merge_commit,
             f"published milestone tag {tag_name}",
             message,
         )
     if local_object is None:
-        if remote_object is not None:
+        if published_object is not None:
             require_git_success(
-                run_git(project, "update-ref", local_ref, remote_object),
+                run_git(project, "update-ref", tag_ref, published_object),
                 "restore local milestone tag",
             )
         else:
@@ -3424,14 +3437,14 @@ def ensure_integration_tag(
             )
     local_object = require_annotated_tag(
         project,
-        local_ref,
+        tag_ref,
         merge_commit,
         f"milestone tag {tag_name}",
         message,
     )
-    if remote_object is not None and remote_object != local_object:
+    if published_object is not None and published_object != local_object:
         raise ArchiveError(f"local and published milestone tag {tag_name} differ")
-    return local_object, remote_object is not None
+    return local_object, published_object is not None
 
 
 def github_repository(project: Path) -> str:
@@ -3658,7 +3671,11 @@ def require_pull_request_merge(
         raise ArchiveError("pull-request merge is not on origin/main first-parent history")
 
 
-def require_pull_request_merge_provenance(repository: str, number: int) -> None:
+def require_pull_request_merge_provenance(
+    repository: str,
+    number: int,
+    merge_commit: Optional[str] = None,
+) -> None:
     owner, name = repository.split("/", 1)
     query = """query($owner:String!,$name:String!,$number:Int!){
   repository(owner:$owner,name:$name){
@@ -3668,6 +3685,9 @@ def require_pull_request_merge_provenance(repository: str, number: int) -> None:
       }
       autoMerge:timelineItems(first:1,itemTypes:[AUTO_MERGE_ENABLED_EVENT]){
         nodes{__typename}
+      }
+      mergeAction:timelineItems(last:1,itemTypes:[MERGED_EVENT]){
+        nodes{__typename ... on MergedEvent{commit{oid}}}
       }
     }
   }
@@ -3716,6 +3736,33 @@ def require_pull_request_merge_provenance(repository: str, number: int) -> None:
             ):
                 raise ArchiveError(invalid_message)
             raise ArchiveError(rejection_message)
+    merge_timeline = (
+        pull_request.get("mergeAction")
+        if isinstance(pull_request, dict)
+        else None
+    )
+    merge_nodes = (
+        merge_timeline.get("nodes")
+        if isinstance(merge_timeline, dict)
+        else None
+    )
+    if not isinstance(merge_nodes, list):
+        raise ArchiveError("GitHub pull-request merge provenance is invalid")
+    if merge_commit is None:
+        if merge_nodes:
+            raise ArchiveError("open pull request has invalid merge provenance")
+        return
+    if len(merge_nodes) != 1:
+        raise ArchiveError("pull request was not merged by a GitHub merge action")
+    merge_node = merge_nodes[0]
+    commit = merge_node.get("commit") if isinstance(merge_node, dict) else None
+    if (
+        not isinstance(merge_node, dict)
+        or merge_node.get("__typename") != "MergedEvent"
+        or not isinstance(commit, dict)
+        or commit.get("oid") != merge_commit
+    ):
+        raise ArchiveError("GitHub pull-request merge action does not match landing")
 
 
 def integrate_pull_request(
@@ -3741,6 +3788,8 @@ def integrate_pull_request(
             ship_commit,
         )
     else:
+        if pull["merged_at"] is None and pull["state"] != "open":
+            raise ArchiveError("GitHub pull request was closed without merging")
         pull = update_pull_request_body(
             repository,
             pull,
@@ -3764,7 +3813,11 @@ def integrate_pull_request(
     merge_commit = pull["merge_commit_sha"]
     if pull["state"] != "closed" or not isinstance(merge_commit, str):
         raise ArchiveError("GitHub pull request merge metadata is invalid")
-    require_pull_request_merge_provenance(repository, pull["number"])
+    require_pull_request_merge_provenance(
+        repository,
+        pull["number"],
+        merge_commit,
+    )
     remote_default = refresh_origin(project)["remote_default"]
     require_pull_request_merge(project, merge_commit, ship_commit, remote_default)
     tag_name = f"milestone/{archive_name}"
@@ -4155,6 +4208,26 @@ def require_published_integration(
     merge_commit: str,
     allow_missing_bound: bool = False,
 ) -> None:
+    if allow_missing_bound:
+        published_ship = live_remote_ref(project, f"refs/heads/{bound_branch}")
+        if published_ship is not None and published_ship != ship_commit:
+            raise ArchiveError(
+                f"origin/{bound_branch} is {published_ship}, expected ship commit {ship_commit}"
+            )
+        published_tag = live_remote_ref(project, f"refs/tags/{tag_name}")
+        if published_tag is None:
+            raise ArchiveError(f"missing published milestone tag: origin/tags/{tag_name}")
+        local_tag = optional_ref(project, f"refs/tags/{tag_name}")
+        if local_tag != published_tag:
+            raise ArchiveError(f"local and published milestone tag {tag_name} differ")
+        require_annotated_tag(
+            project,
+            published_tag,
+            merge_commit,
+            f"published milestone tag {tag_name}",
+        )
+        return
+
     bound_ref = f"refs/remotes/origin/{bound_branch}"
     if run_git(project, "rev-parse", "--verify", "--quiet", bound_ref).returncode != 0:
         if not allow_missing_bound:
