@@ -65,7 +65,11 @@ STATE_FIELDS = (
     "status",
     "branch",
     "archive",
+    "integration_default",
+    "integration",
 )
+LEGACY_STATE_FIELDS = STATE_FIELDS[:-2]
+INTEGRATION_MODES = ("direct", "pull-request")
 NULL = "null"
 SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 BOUND_BRANCH_RE = re.compile(r"^gsd-path/M(\d{3,})$")
@@ -138,6 +142,8 @@ class PipelineState:
     status: str
     branch: Optional[str]
     archive: Optional[str]
+    integration_default: str
+    integration: str
 
     def json(self) -> dict[str, Optional[str]]:
         return asdict(self)
@@ -236,12 +242,17 @@ def _bound_branch_number(value: str) -> Optional[int]:
 
 def _state_from_text(text: str, label: str = "STATE.md") -> PipelineState:
     values = _parse_frontmatter(text, label)
-    missing = [field for field in STATE_FIELDS if field not in values]
+    missing = [field for field in LEGACY_STATE_FIELDS if field not in values]
     extra = sorted(set(values) - set(STATE_FIELDS))
     if missing:
         raise PipelineStateError(f"{label} is missing fields: {', '.join(missing)}")
     if extra:
         raise PipelineStateError(f"{label} has unknown fields: {', '.join(extra)}")
+    integration_fields = {"integration_default", "integration"} & set(values)
+    if integration_fields and len(integration_fields) != 2:
+        raise PipelineStateError(
+            f"{label} integration_default and integration must appear together"
+        )
 
     state = PipelineState(
         pipeline=values["pipeline"],
@@ -251,6 +262,8 @@ def _state_from_text(text: str, label: str = "STATE.md") -> PipelineState:
         status=values["status"],
         branch=_nullable(values["branch"]),
         archive=_nullable(values["archive"]),
+        integration_default=values.get("integration_default", "direct"),
+        integration=values.get("integration", "direct"),
     )
     _validate_state_values(state, label)
     return state
@@ -267,6 +280,12 @@ def _validate_state_values(state: PipelineState, label: str) -> None:
         raise PipelineStateError(f"{label} has invalid phase: {state.phase}")
     if state.status not in STATUSES:
         raise PipelineStateError(f"{label} has invalid status: {state.status}")
+    if state.integration_default not in INTEGRATION_MODES:
+        raise PipelineStateError(
+            f"{label} has invalid integration_default: {state.integration_default}"
+        )
+    if state.integration not in INTEGRATION_MODES:
+        raise PipelineStateError(f"{label} has invalid integration: {state.integration}")
     if state.branch is not None and _bound_branch_number(state.branch) is None:
         raise PipelineStateError(f"{label} has invalid branch: {state.branch}")
     archive_match = ARCHIVE_RE.fullmatch(state.archive or "")
@@ -733,10 +752,14 @@ def _bind_next_recovery(
     path, transaction = matches[0]
     required = ("branch", "previous_branch", "ship", "remote_default", "base", "stage")
     expected_fields = {"schema", "repo", *required}
-    if set(transaction) != expected_fields:
+    optional_fields = {"allow_remote_absent"}
+    if not expected_fields <= set(transaction) or set(transaction) - expected_fields - optional_fields:
         raise PipelineStateError("bind-next journal has unsupported fields")
     if any(not isinstance(transaction.get(key), str) for key in required):
         raise PipelineStateError("bind-next journal is missing request fields")
+    allow_remote_absent = transaction.get("allow_remote_absent", False)
+    if not isinstance(allow_remote_absent, bool):
+        raise PipelineStateError("bind-next journal has invalid allow_remote_absent")
     branch = str(transaction["branch"])
     previous = str(transaction["previous_branch"])
     ship = str(transaction["ship"])
@@ -796,6 +819,7 @@ def _bind_next_recovery(
             "ship": ship,
             "remote_default": transaction["remote_default"],
             "base": base,
+            "allow_remote_absent": allow_remote_absent,
             "journal": str(path),
         }
     )
@@ -885,11 +909,17 @@ def route_state(repo: Path, project_dir: str = ".project") -> dict[str, object]:
                 }
                 if not all(isinstance(value, str) for value in fields.values()):
                     raise PipelineStateError("promotion journal is missing request fields")
+                landing = transaction.get("landing", fields["integrate"])
+                base = transaction.get("base", fields["integrate"])
+                if not isinstance(landing, str) or not isinstance(base, str):
+                    raise PipelineStateError("promotion journal has invalid landing or base")
                 result = _route_result(
                     state,
                     "resume-promotion",
                     reason="a journaled lookahead promotion is incomplete",
                 )
+                fields["landing"] = landing
+                fields["base"] = base
                 result["route"].update(fields)
                 result["route"]["journal"] = str(promotion_journal)
                 return result
@@ -1087,8 +1117,13 @@ def _set_frontmatter(text: str, changes: Mapping[str, str]) -> str:
     if closing is None:
         raise PipelineStateError("STATE.md frontmatter is not closed")
     missing = set(changes) - seen
-    if missing:
+    unsupported_missing = missing - {"integration_default", "integration"}
+    if unsupported_missing:
         raise PipelineStateError(f"STATE.md is missing fields: {', '.join(sorted(missing))}")
+    for key in ("integration_default", "integration"):
+        if key in missing:
+            lines.insert(closing, f"{key}: {changes[key]}\n")
+            closing += 1
     return "".join(lines)
 
 
@@ -1175,6 +1210,7 @@ def _validate_transition(
     event: str,
     project_dir: str,
     approval_kind: Optional[str] = None,
+    allow_integration_configuration: bool = False,
 ) -> None:
     before_position = (before.phase, before.status)
     after_position = (after.phase, after.status)
@@ -1227,6 +1263,17 @@ def _validate_transition(
         and before.branch is not None
         and after.branch is not None
     )
+    integration_changed = (
+        before.integration_default != after.integration_default
+        or before.integration != after.integration
+    )
+    if integration_changed and not next_binding:
+        if before.phase in {"build", "ship", "shipped"}:
+            raise PipelineStateError("integration mode is locked when build starts")
+        if not allow_integration_configuration:
+            raise PipelineStateError(
+                "integration mode changes require configure-integration"
+            )
     if next_binding:
         before_number = _bound_branch_number(before.branch or "")
         after_number = _bound_branch_number(after.branch or "")
@@ -1238,6 +1285,10 @@ def _validate_transition(
             raise PipelineStateError(
                 "next milestone requires a higher router-bound branch"
             )
+        if after.integration_default != before.integration_default:
+            raise PipelineStateError("next milestone must preserve integration_default")
+        if after.integration != before.integration_default:
+            raise PipelineStateError("next milestone must reset its integration override")
     if branch_changed and not (initial_binding or next_binding):
         raise PipelineStateError("illegal STATE.branch transition")
     if initial_binding:
@@ -1367,6 +1418,56 @@ def transition_state(
         "status": "transitioned",
         "path": str(path),
         "previous": before,
+        "state": after.json(),
+    }
+
+
+def configure_integration(
+    repo: Path,
+    scope: str,
+    mode: str,
+    project_dir: str = ".project",
+) -> dict[str, object]:
+    """Set the project default or current milestone integration before build."""
+    if scope not in {"default", "milestone"}:
+        raise PipelineStateError(f"invalid integration scope: {scope}")
+    if mode not in INTEGRATION_MODES:
+        raise PipelineStateError(f"invalid integration mode: {mode}")
+    resolved = _repo_root(repo)
+    project = _track_root(resolved, project_dir)
+    with _state_lock(project):
+        state, text, path = load_state(resolved, project_dir)
+        if state.phase in {"build", "ship", "shipped"}:
+            raise PipelineStateError("integration mode is locked when build starts")
+        changes = {
+            "integration_default": state.integration_default,
+            "integration": mode,
+        }
+        if scope == "default":
+            changes["integration_default"] = mode
+            if state.integration != state.integration_default:
+                changes["integration"] = state.integration
+        rendered = _set_frontmatter(text, changes)
+        rendered = _append_event(
+            rendered,
+            state.phase,
+            f"integration {scope} set to {mode}",
+        )
+        after = _state_from_text(rendered)
+        _validate_state_context(after, project_dir, "STATE.md")
+        _validate_transition(
+            state,
+            after,
+            f"integration {scope} set to {mode}",
+            project_dir,
+            allow_integration_configuration=True,
+        )
+        _atomic_write(path, rendered)
+    return {
+        "schema": STATE_SCHEMA,
+        "status": "configured",
+        "path": str(path),
+        "previous": state.json(),
         "state": after.json(),
     }
 
@@ -2453,9 +2554,12 @@ def _render_roadmap(
 def _promotion_event(
     drift: Mapping[str, object],
     branch: str,
-    integrate: str,
+    landing: str,
+    base: Optional[str] = None,
 ) -> str:
-    prefix = f"lookahead promoted on {branch} from integrate {integrate}"
+    prefix = f"lookahead promoted on {branch} from integrate {landing}"
+    if base is not None and base != landing:
+        prefix = f"{prefix} at main base {base}"
     drift_class = drift["class"]
     if drift_class == "changed":
         task_ids = drift.get("task_ids")
@@ -2471,9 +2575,10 @@ def _promotion_state(
     active_text: str,
     next_state: PipelineState,
     branch: str,
-    integrate: str,
+    landing: str,
     drift: Mapping[str, object],
     event_date: Optional[str] = None,
+    base: Optional[str] = None,
 ) -> str:
     status = next_state.status
     if next_state.phase == "plan" and next_state.status == "done" and drift["class"] != "clean":
@@ -2486,12 +2591,14 @@ def _promotion_state(
             "status": status,
             "branch": branch,
             "archive": NULL,
+            "integration_default": next_state.integration_default,
+            "integration": next_state.integration,
         },
     )
     rendered = _append_event(
         rendered,
         next_state.phase,
-        _promotion_event(drift, branch, integrate),
+        _promotion_event(drift, branch, landing, base),
         event_date,
     )
     _state_from_text(rendered)
@@ -2698,7 +2805,8 @@ def _completed_promotion(
     project: Path,
     milestone: str,
     branch: str,
-    integrate: str,
+    base: str,
+    landing: str,
 ) -> Optional[dict[str, object]]:
     next_root = project / "next"
     if next_root.exists() or next_root.is_symlink():
@@ -2713,22 +2821,24 @@ def _completed_promotion(
 
     head = _run_git(repo, "rev-parse", "HEAD").stdout.strip()
     parents = _run_git(repo, "show", "-s", "--format=%P", head).stdout.split()
-    if parents != [integrate]:
+    if parents != [base]:
         raise PipelineStateError(
-            "completed promotion must be current HEAD with integrate as its single parent"
+            "completed promotion must be current HEAD with base as its single parent"
         )
     subject = f"router: promote lookahead milestone {milestone}"
     fields = {
         "Why": "promote lookahead track",
         "Milestone": milestone,
-        "Integrate": integrate,
+        "Integrate": landing,
     }
+    if base != landing:
+        fields["Base"] = base
     if _head_with_exact_message(repo, subject, fields) != head:
         raise PipelineStateError("completed promotion has the wrong commit message")
 
-    active_text = _git_text_at(repo, integrate, ".project/STATE.md")
-    next_text = _git_text_at(repo, integrate, ".project/next/STATE.md")
-    roadmap_text = _git_text_at(repo, integrate, ".project/ROADMAP.md")
+    active_text = _git_text_at(repo, base, ".project/STATE.md")
+    next_text = _git_text_at(repo, base, ".project/next/STATE.md")
+    roadmap_text = _git_text_at(repo, base, ".project/ROADMAP.md")
     if active_text is None or next_text is None or roadmap_text is None:
         raise PipelineStateError("promotion parent is missing required metadata")
     active_state = _state_from_text(active_text, "promotion parent STATE.md")
@@ -2747,14 +2857,14 @@ def _completed_promotion(
             f"promotion parent lookahead cannot be in phase {next_state.phase}"
         )
 
-    _promotion_tree_mapping(repo, integrate, head)
-    drift = _classify_plan_drift(repo, next_state, integrate)
+    _promotion_tree_mapping(repo, base, head)
+    drift = _classify_plan_drift(repo, next_state, base)
     expected_roadmap = _render_roadmap(
         roadmap_text,
         active_state.milestone,
         milestone,
         branch,
-        integrate,
+        landing,
     )
     current_roadmap = _git_text_at(repo, head, ".project/ROADMAP.md")
     if current_roadmap != expected_roadmap:
@@ -2763,7 +2873,7 @@ def _completed_promotion(
     current_state = _git_text_at(repo, head, ".project/STATE.md")
     if current_state is None:
         raise PipelineStateError("completed promotion has no STATE.md")
-    event = re.escape(_promotion_event(drift, branch, integrate))
+    event = re.escape(_promotion_event(drift, branch, landing, base))
     suffix = re.search(
         rf"(?m)^- (\d{{4}}-\d{{2}}-\d{{2}}) — {re.escape(next_state.phase)} — {event}\n\Z",
         current_state,
@@ -2774,9 +2884,10 @@ def _completed_promotion(
         active_text,
         next_state,
         branch,
-        integrate,
+        landing,
         drift,
         suffix.group(1),
+        base,
     )
     if current_state != expected_state:
         raise PipelineStateError("completed promotion has invalid STATE.md")
@@ -2785,7 +2896,9 @@ def _completed_promotion(
         "status": "already-complete",
         "milestone": milestone,
         "branch": branch,
-        "integrate": integrate,
+        "integrate": landing,
+        "landing": landing,
+        "base": base,
         "commit": head,
         "drift": drift,
     }
@@ -2796,7 +2909,8 @@ def _prepare_promotion(
     project: Path,
     milestone: str,
     branch: str,
-    integrate: str,
+    base: str,
+    landing: str,
 ) -> dict[str, object]:
     if _bound_branch_number(branch) is None:
         raise PipelineStateError(f"invalid promoted branch: {branch}")
@@ -2805,22 +2919,32 @@ def _prepare_promotion(
         raise PipelineStateError(
             f"current branch {current or '<detached>'} != promoted branch {branch}"
         )
-    resolved_integrate = _run_git(
+    resolved_base = _run_git(
         repo,
         "rev-parse",
         "--verify",
-        f"{integrate}^{{commit}}",
+        f"{base}^{{commit}}",
     ).stdout.strip()
-    if integrate != resolved_integrate:
-        raise PipelineStateError("integrate must be an exact full commit SHA")
+    if base != resolved_base:
+        raise PipelineStateError("base must be an exact full commit SHA")
+    resolved_landing = _run_git(
+        repo,
+        "rev-parse",
+        "--verify",
+        f"{landing}^{{commit}}",
+    ).stdout.strip()
+    if landing != resolved_landing:
+        raise PipelineStateError("landing must be an exact full commit SHA")
     head = _run_git(repo, "rev-parse", "HEAD").stdout.strip()
-    if head != integrate:
-        raise PipelineStateError(f"promotion must start at integrate SHA: {head} != {integrate}")
+    if head != base:
+        raise PipelineStateError(f"promotion must start at base SHA: {head} != {base}")
     remote = _run_git(repo, "rev-parse", "--verify", "origin/main^{commit}").stdout.strip()
-    if remote != integrate:
+    if remote != base:
         raise PipelineStateError(
-            f"integrate SHA is not current origin/main: {integrate} != {remote}"
+            f"base SHA is not current origin/main: {base} != {remote}"
         )
+    if not _is_ancestor(repo, landing, base):
+        raise PipelineStateError("landing is not an ancestor of the current main base")
     if _run_git(repo, "status", "--porcelain", "--untracked-files=all").stdout:
         raise PipelineStateError("promotion must start from a clean worktree")
 
@@ -2834,6 +2958,10 @@ def _prepare_promotion(
     if next_state.project != active_state.project:
         raise PipelineStateError(
             "lookahead STATE project does not match active STATE project"
+        )
+    if next_state.integration_default != active_state.integration_default:
+        raise PipelineStateError(
+            "lookahead integration_default does not match the active project"
         )
     if next_state.milestone != milestone:
         raise PipelineStateError(
@@ -2852,16 +2980,18 @@ def _prepare_promotion(
             tracks[name] = _tree_digest(source)
     if not tracks:
         raise PipelineStateError("lookahead track has no promotable artifacts")
-    drift = _classify_plan_drift(repo, next_state, integrate)
+    drift = _classify_plan_drift(repo, next_state, base)
     roadmap_path = project / "ROADMAP.md"
     roadmap_text = _read_real_file(roadmap_path, "ROADMAP.md")
-    target_state = _promotion_state(active_text, next_state, branch, integrate, drift)
+    target_state = _promotion_state(
+        active_text, next_state, branch, landing, drift, base=base
+    )
     target_roadmap = _render_roadmap(
         roadmap_text,
         active_state.milestone,
         milestone,
         branch,
-        integrate,
+        landing,
     )
     return {
         "schema": PROMOTION_SCHEMA,
@@ -2869,7 +2999,9 @@ def _prepare_promotion(
         "milestone": milestone,
         "previous_milestone": active_state.milestone,
         "branch": branch,
-        "integrate": integrate,
+        "integrate": landing,
+        "landing": landing,
+        "base": base,
         "tracks": tracks,
         "residual_sha256": _tree_digest(next_root, tuple(tracks)),
         "next_state_sha256": _sha256(next_text),
@@ -2887,14 +3019,15 @@ def _require_journal_request(
     repo: Path,
     milestone: str,
     branch: str,
-    integrate: str,
+    base: str,
+    landing: str,
 ) -> None:
     expected = {
         "schema": PROMOTION_SCHEMA,
         "repo": str(repo),
         "milestone": milestone,
         "branch": branch,
-        "integrate": integrate,
+        "integrate": landing,
     }
     mismatches = {
         key: {"expected": value, "actual": journal.get(key)}
@@ -2905,6 +3038,9 @@ def _require_journal_request(
         raise PipelineStateError(
             f"promotion journal does not match request: {json.dumps(mismatches, sort_keys=True)}"
         )
+    journal_base = journal.get("base", journal.get("integrate"))
+    if journal_base != base:
+        raise PipelineStateError("promotion journal does not match the requested base")
 
 
 def _resume_track_moves(project: Path, journal: dict[str, object], path: Path) -> None:
@@ -2984,7 +3120,8 @@ def _resume_next_removal(
 def _commit_promotion(
     repo: Path,
     milestone: str,
-    integrate: str,
+    landing: str,
+    base: str,
     journal: dict[str, object],
     journal_path: Path,
     residual: Path,
@@ -2993,8 +3130,10 @@ def _commit_promotion(
     fields = {
         "Why": "promote lookahead track",
         "Milestone": milestone,
-        "Integrate": integrate,
+        "Integrate": landing,
     }
+    if base != landing:
+        fields["Base"] = base
     existing = _head_with_exact_message(repo, subject, fields)
     residual_name = residual.relative_to(repo).as_posix()
 
@@ -3041,7 +3180,8 @@ def promote_next(
     repo: Path,
     milestone: str,
     branch: str,
-    integrate: str,
+    base: str,
+    landing: Optional[str] = None,
 ) -> dict[str, object]:
     """Promote `.project/next` through a journaled, idempotent transaction."""
     resolved = _repo_root(repo)
@@ -3049,14 +3189,15 @@ def promote_next(
         raise PipelineStateError(f"invalid promoted milestone: {milestone}")
     if _bound_branch_number(branch) is None:
         raise PipelineStateError(f"invalid promoted branch: {branch}")
-    resolved_integrate = _run_git(
+    landing = landing or base
+    resolved_base = _run_git(
         resolved,
         "rev-parse",
         "--verify",
-        f"{integrate}^{{commit}}",
+        f"{base}^{{commit}}",
     ).stdout.strip()
-    if integrate != resolved_integrate:
-        raise PipelineStateError("integrate must be an exact full commit SHA")
+    if base != resolved_base:
+        raise PipelineStateError("base must be an exact full commit SHA")
     project = _track_root(resolved, ".project")
     journal_path = _git_path(resolved, "gsd-path-promote-next.json")
     residual = resolved / PROMOTION_RESIDUAL
@@ -3067,7 +3208,8 @@ def promote_next(
                 project,
                 milestone,
                 branch,
-                integrate,
+                base,
+                landing,
             )
             if completed is not None:
                 return completed
@@ -3078,19 +3220,21 @@ def promote_next(
                 project,
                 milestone,
                 branch,
-                integrate,
+                base,
+                landing,
             )
             _write_json(journal_path, journal)
         else:
             journal = _read_json(journal_path)
-        _require_journal_request(journal, resolved, milestone, branch, integrate)
+        _require_journal_request(journal, resolved, milestone, branch, base, landing)
         _resume_track_moves(project, journal, journal_path)
         _resume_metadata(project, journal, journal_path)
         _resume_next_removal(project, journal, journal_path, residual)
         commit = _commit_promotion(
             resolved,
             milestone,
-            integrate,
+            landing,
+            base,
             journal,
             journal_path,
             residual,
@@ -3103,7 +3247,9 @@ def promote_next(
         "status": "promoted",
         "milestone": milestone,
         "branch": branch,
-        "integrate": integrate,
+        "integrate": landing,
+        "landing": landing,
+        "base": base,
         "commit": commit,
         "drift": journal["drift"],
     }
@@ -3148,7 +3294,14 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     promote.add_argument("--repo", required=True, type=Path)
     promote.add_argument("--milestone", required=True)
     promote.add_argument("--branch", required=True)
-    promote.add_argument("--integrate", required=True)
+    promote.add_argument("--integrate")
+    promote.add_argument("--base")
+    promote.add_argument("--landing")
+    configure = subparsers.add_parser("configure-integration")
+    configure.add_argument("--repo", required=True, type=Path)
+    configure.add_argument("--project-dir", default=".project")
+    configure.add_argument("--scope", required=True, choices=("default", "milestone"))
+    configure.add_argument("--mode", required=True, choices=INTEGRATION_MODES)
     shipment = subparsers.add_parser("record-shipment")
     shipment.add_argument("--repo", required=True, type=Path)
     shipment.add_argument("--archive", required=True)
@@ -3184,9 +3337,28 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         elif args.command == "resume-checkpoint":
             result = resume_checkpoint(args.repo)
         elif args.command == "promote-next":
-            result = promote_next(args.repo, args.milestone, args.branch, args.integrate)
+            base = args.base or args.integrate
+            landing = args.landing or args.integrate or base
+            if base is None:
+                raise PipelineStateError(
+                    "promote-next requires --base or legacy --integrate"
+                )
+            result = promote_next(
+                args.repo,
+                args.milestone,
+                args.branch,
+                base,
+                landing,
+            )
         elif args.command == "record-shipment":
             result = record_shipment(args.repo, args.archive, args.event)
+        elif args.command == "configure-integration":
+            result = configure_integration(
+                args.repo,
+                args.scope,
+                args.mode,
+                args.project_dir,
+            )
         else:  # pragma: no cover - argparse rejects unknown commands
             raise PipelineStateError(f"unknown command: {args.command}")
     except PipelineStateError as error:

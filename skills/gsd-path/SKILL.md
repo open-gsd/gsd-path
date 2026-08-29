@@ -126,6 +126,25 @@ selects a milestone branch.
      `define/active`; report that no brownfield signal fired, and route to
      the bundled [define contract](DEFINE.md).
 
+## Integration choice
+
+New state starts with `integration_default: direct` and `integration: direct`.
+When the user asks to change closeout behavior before build, use the state
+helper; never edit these fields by hand:
+
+```text
+python3 <absolute-bundled-pipeline-state.py> configure-integration \
+  --repo <absolute-root> \
+  --scope <default-or-milestone> \
+  --mode <direct-or-pull-request>
+```
+
+`default` changes the project setting and changes the current milestone only
+when it has no override. `milestone` changes only the current milestone.
+The current value resets from the project default at the next milestone.
+Both settings lock when build starts. A lookahead STATE inherits the active
+project's `integration_default` and uses it for `integration`.
+
 ## Transaction recovery first
 
 Run `pipeline_state.py route` before any phase contract. A
@@ -141,9 +160,8 @@ run `pipeline_state.py resume-checkpoint --repo <absolute-root>`, require its
 typed `approved` result and current commit, then rerun `route`. The journal
 owns recovery even when STATE or ROADMAP.md already contains the approved
 values. Never repeat those edits or call a phase while recovery remains.
-A
-`resume-promotion` result means a promotion journal exists; rerun
-`promote-next` with the returned milestone, branch, and integration SHA. The
+A `resume-promotion` result means a promotion journal exists; rerun
+`promote-next` with the returned milestone, branch, base, and landing SHAs. The
 journal owns recovery even if STATE already contains some promoted values.
 Never route a phase while that result remains.
 
@@ -159,6 +177,9 @@ the switch. `bind-next` rechecks the live remote refs, exact SHAs, integration
 ancestry, cleanliness, and journal ownership before continuing. After it
 returns, continue the state transition or lookahead promotion below. Do not
 reconstruct this classification from Git output or Log prose.
+When the route returns `allow_remote_absent: true`, also pass
+`--allow-missing-previous`; this is valid only because a merged PR may have
+auto-deleted the published bound branch.
 
 Before ordinary routing, inspect `STATE.archive`.
 
@@ -285,7 +306,8 @@ roadmap-ordered `pending` entry has dependencies that are all `shipped` or the
 active milestone. On acceptance, create `.project/next/STATE.md` from the local [state
 template](templates/state.md) with `pipeline: gsd-path/v2`, `phase:
 inspect`, `status: active`, the selector's exact returned `milestone` slug as
-`milestone`, `branch: null`, and `archive: null`, then follow the bundled
+`milestone`, `branch: null`, and `archive: null`. Copy the active project's
+`integration_default` into both integration fields. Then follow the bundled
 phase contracts in their Lookahead mode — inspect, define (milestone +
 brownfield), research (only when the entry lists open questions), decide, and
 plan — rooted at `.project/next/`.
@@ -346,6 +368,11 @@ python3 <absolute-bundled-pipeline-git.py> bind-next \
   --base <exact-origin-main-sha>
 ```
 
+Add `--allow-missing-previous` when `validate-integrated` returned
+`mode: pull-request` and `origin/<STATE.branch>` is absent. GitHub may delete
+that head branch after merge; the local branch and exact ship SHA still bind
+the handoff.
+
 The helper requires the previous branch, while it still exists locally, to
 remain at the ship SHA, proves the ship commit is integrated into the exact
 base, rejects local or remote branch collisions,
@@ -366,7 +393,8 @@ Log, then:
     --repo <absolute-primary-root> \
     --milestone <next-slug> \
     --branch gsd-path/M00N \
-    --integrate <exact-integration-merge-sha>
+    --base <exact-current-origin-main-sha> \
+    --landing <exact-milestone-merge-sha>
   ```
 
   The helper journals before mutation, verifies or resumes each documented
@@ -378,7 +406,8 @@ Log, then:
   promotion commit. Rerun the same command after interruption; any request or
   filesystem drift blocks. Route from its returned state and `drift` result.
   With no lookahead track, mark the selected entry `active` in ROADMAP.md and
-  fill the previously shipped entry's `Integrated:` field with the merge SHA.
+  fill the previously shipped entry's `Integrated:` field with the landing
+  merge SHA.
   Then call `pipeline_state.py transition`, expecting the complete
   `shipped/done` state including its previous branch and archive, and set
   `phase: inspect`, `status: active`, `milestone` to the selected pending slug,

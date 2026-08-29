@@ -2,8 +2,8 @@
 """Prepare, render, validate, integrate, and abandon GSD Path milestone archives.
 
 Also validates milestone integration: the read-only validate-integrated
-command checks the shipped transaction, the integration merge commit on the
-remote default branch, and the milestone tag without any network access.
+command checks the shipped transaction, the selected mode's two-parent merge
+on the remote default branch, and the milestone tag without network access.
 """
 
 import argparse
@@ -216,6 +216,9 @@ class ArchiveError(RuntimeError):
 
 
 PIPELINE_MARKER = "gsd-path/v2"
+PR_CREDIT_LINE = (
+    "PR prepared with [GSD Path](https://github.com/open-gsd/gsd-path)."
+)
 
 
 @contextmanager
@@ -2569,7 +2572,23 @@ def run_git(repo: Path, *arguments: str) -> subprocess.CompletedProcess:
     )
 
 
+def run_command(*arguments: str) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        arguments,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+
 def require_git_success(result: subprocess.CompletedProcess, action: str) -> str:
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip()
+        raise ArchiveError(f"{action} failed: {detail}")
+    return result.stdout.strip()
+
+
+def require_command_success(result: subprocess.CompletedProcess, action: str) -> str:
     if result.returncode != 0:
         detail = result.stderr.strip() or result.stdout.strip()
         raise ArchiveError(f"{action} failed: {detail}")
@@ -3335,7 +3354,13 @@ def create_integration_merge(
     return merge_commit, True
 
 
-def require_annotated_tag(project: Path, ref: str, merge_commit: str, label: str) -> str:
+def require_annotated_tag(
+    project: Path,
+    ref: str,
+    merge_commit: str,
+    label: str,
+    message: Optional[str] = None,
+) -> str:
     object_id = optional_ref(project, ref)
     if object_id is None:
         raise ArchiveError(f"missing {label}")
@@ -3349,17 +3374,33 @@ def require_annotated_tag(project: Path, ref: str, merge_commit: str, label: str
     )
     if target != merge_commit:
         raise ArchiveError(f"{label} does not point at the integration merge")
+    if message is not None:
+        actual_message = require_git_success(
+            run_git(project, "for-each-ref", "--format=%(contents)", ref),
+            f"inspect {label} message",
+        )
+        if actual_message != message.strip():
+            raise ArchiveError(f"{label} has unexpected metadata")
     return object_id
 
 
-def ensure_integration_tag(project: Path, tag_name: str, merge_commit: str) -> tuple[str, bool]:
+def ensure_integration_tag(
+    project: Path,
+    tag_name: str,
+    merge_commit: str,
+    message: Optional[str] = None,
+) -> tuple[str, bool]:
     local_ref = f"refs/tags/{tag_name}"
     remote_ref = f"refs/remotes/origin/tags/{tag_name}"
     local_object = optional_ref(project, local_ref)
     remote_object = optional_ref(project, remote_ref)
     if remote_object is not None:
         remote_object = require_annotated_tag(
-            project, remote_ref, merge_commit, f"published milestone tag {tag_name}"
+            project,
+            remote_ref,
+            merge_commit,
+            f"published milestone tag {tag_name}",
+            message,
         )
     if local_object is None:
         if remote_object is not None:
@@ -3368,7 +3409,7 @@ def ensure_integration_tag(project: Path, tag_name: str, merge_commit: str) -> t
                 "restore local milestone tag",
             )
         else:
-            tag_message = f"milestone {tag_name.removeprefix('milestone/')}"
+            tag_message = message or f"milestone {tag_name.removeprefix('milestone/')}"
             require_git_success(
                 run_git(
                     project,
@@ -3382,11 +3423,281 @@ def ensure_integration_tag(project: Path, tag_name: str, merge_commit: str) -> t
                 "create milestone tag",
             )
     local_object = require_annotated_tag(
-        project, local_ref, merge_commit, f"milestone tag {tag_name}"
+        project,
+        local_ref,
+        merge_commit,
+        f"milestone tag {tag_name}",
+        message,
     )
     if remote_object is not None and remote_object != local_object:
         raise ArchiveError(f"local and published milestone tag {tag_name} differ")
     return local_object, remote_object is not None
+
+
+def github_repository(project: Path) -> str:
+    remote = require_git_success(
+        run_git(project, "remote", "get-url", "origin"),
+        "resolve origin URL",
+    )
+    patterns = (
+        r"https://github\.com/([^/]+/[^/]+?)(?:\.git)?$",
+        r"git@github\.com:([^/]+/[^/]+?)(?:\.git)?$",
+        r"ssh://git@github\.com/([^/]+/[^/]+?)(?:\.git)?$",
+    )
+    for pattern in patterns:
+        match = re.fullmatch(pattern, remote)
+        if match:
+            return match.group(1)
+    raise ArchiveError("pull-request integration requires a GitHub.com origin")
+
+
+def github_api_json(*arguments: str) -> object:
+    output = require_command_success(
+        run_command("gh", "api", *arguments),
+        "call GitHub API",
+    )
+    try:
+        return json.loads(output)
+    except json.JSONDecodeError as error:
+        raise ArchiveError("GitHub API returned invalid JSON") from error
+
+
+def require_pull_request_shape(value: object) -> dict:
+    if not isinstance(value, dict):
+        raise ArchiveError("GitHub pull request response is not an object")
+    required = {
+        "number",
+        "state",
+        "html_url",
+        "merged_at",
+        "merge_commit_sha",
+        "base",
+        "head",
+    }
+    if not required.issubset(value):
+        raise ArchiveError("GitHub pull request response is missing fields")
+    if not isinstance(value["base"], dict) or not isinstance(value["head"], dict):
+        raise ArchiveError("GitHub pull request refs are invalid")
+    number = value["number"]
+    if not isinstance(number, int) or isinstance(number, bool) or number < 1:
+        raise ArchiveError("GitHub pull request response has invalid fields")
+    if value["state"] not in {"open", "closed"}:
+        raise ArchiveError("GitHub pull request response has invalid fields")
+    html_url = value["html_url"]
+    if not isinstance(html_url, str) or re.fullmatch(
+        rf"https://github\.com/[^/]+/[^/]+/pull/{number}", html_url
+    ) is None:
+        raise ArchiveError("GitHub pull request response has invalid fields")
+    merged_at = value["merged_at"]
+    if merged_at is not None and not isinstance(merged_at, str):
+        raise ArchiveError("GitHub pull request response has invalid fields")
+    merge_commit = value["merge_commit_sha"]
+    if merge_commit is not None and (
+        not isinstance(merge_commit, str)
+        or re.fullmatch(r"[0-9a-f]{40}", merge_commit) is None
+    ):
+        raise ArchiveError("GitHub pull request response has invalid fields")
+    if not isinstance(value["base"].get("ref"), str):
+        raise ArchiveError("GitHub pull request response has invalid fields")
+    if not isinstance(value["head"].get("ref"), str):
+        raise ArchiveError("GitHub pull request response has invalid fields")
+    head_sha = value["head"].get("sha")
+    if not isinstance(head_sha, str) or re.fullmatch(r"[0-9a-f]{40}", head_sha) is None:
+        raise ArchiveError("GitHub pull request response has invalid fields")
+    return value
+
+
+def find_pull_request(repository: str, branch: str, ship_commit: str) -> Optional[dict]:
+    owner = repository.split("/", 1)[0]
+    response = github_api_json(
+        f"repos/{repository}/pulls",
+        "--method",
+        "GET",
+        "-f",
+        "state=all",
+        "-f",
+        "base=main",
+        "-f",
+        f"head={owner}:{branch}",
+    )
+    if not isinstance(response, list):
+        raise ArchiveError("GitHub pull request list is not an array")
+    pulls = [require_pull_request_shape(item) for item in response]
+    if len(pulls) > 1:
+        raise ArchiveError(f"multiple pull requests target main from {branch}")
+    if not pulls:
+        return None
+    pull = pulls[0]
+    if pull["base"].get("ref") != "main" or pull["head"].get("ref") != branch:
+        raise ArchiveError("GitHub pull request base or head changed")
+    if pull["head"].get("sha") != ship_commit:
+        raise ArchiveError("GitHub pull request head is not the ship commit")
+    return pull
+
+
+def create_pull_request(
+    repository: str,
+    branch: str,
+    archive_path: str,
+    archive_name: str,
+    ship_commit: str,
+) -> dict:
+    body = (
+        f"{integrate_commit_body(archive_path, ship_commit, 'main', branch)}"
+        f"\n\n---\n{PR_CREDIT_LINE}"
+    )
+    response = github_api_json(
+        f"repos/{repository}/pulls",
+        "--method",
+        "POST",
+        "-f",
+        f"title={integrate_subject(archive_name, 'main')}",
+        "-f",
+        f"head={branch}",
+        "-f",
+        "base=main",
+        "-f",
+        f"body={body}",
+    )
+    pull = require_pull_request_shape(response)
+    if pull["base"].get("ref") != "main" or pull["head"].get("ref") != branch:
+        raise ArchiveError("created GitHub pull request has unexpected refs")
+    if pull["head"].get("sha") != ship_commit:
+        raise ArchiveError("created GitHub pull request head is not the ship commit")
+    return pull
+
+
+def pull_request_tag_message(
+    archive_name: str,
+    pull_request: str,
+    ship_commit: str,
+    landing: str,
+) -> str:
+    return (
+        f"milestone {archive_name}\n\n"
+        "Mode: pull-request\n"
+        f"Pull-Request: {pull_request}\n"
+        f"Ship: {ship_commit}\n"
+        f"Landing: {landing}"
+    )
+
+
+def pull_request_tag_metadata(project: Path, tag_ref: str) -> dict[str, str]:
+    message = require_git_success(
+        run_git(project, "for-each-ref", "--format=%(contents)", tag_ref),
+        "inspect pull-request milestone tag",
+    )
+    fields: dict[str, str] = {}
+    for line in message.splitlines():
+        match = re.fullmatch(r"(Mode|Pull-Request|Ship|Landing): (.+)", line)
+        if match:
+            if match.group(1) in fields:
+                raise ArchiveError("pull-request milestone tag repeats metadata")
+            fields[match.group(1)] = match.group(2)
+    if set(fields) != {"Mode", "Pull-Request", "Ship", "Landing"}:
+        raise ArchiveError("pull-request milestone tag is missing metadata")
+    if fields["Mode"] != "pull-request":
+        raise ArchiveError("pull-request milestone tag has the wrong mode")
+    return fields
+
+
+def require_pull_request_merge(
+    project: Path,
+    merge_commit: str,
+    ship_commit: str,
+    remote_default: str,
+) -> None:
+    resolved = optional_ref(project, merge_commit)
+    if resolved != merge_commit:
+        raise ArchiveError("GitHub merge commit is unavailable after fetch")
+    parents = require_git_success(
+        run_git(project, "rev-list", "--parents", "-n", "1", merge_commit),
+        "inspect pull-request merge parents",
+    ).split()
+    if len(parents) != 3:
+        raise ArchiveError("pull-request integration must use a two-parent merge commit")
+    if parents[2] != ship_commit:
+        raise ArchiveError("pull-request merge second parent is not the ship commit")
+    first_parent = require_git_success(
+        run_git(project, "rev-list", "--first-parent", remote_default),
+        "inspect remote-default first-parent history",
+    ).splitlines()
+    if merge_commit not in first_parent:
+        raise ArchiveError("pull-request merge is not on origin/main first-parent history")
+
+
+def integrate_pull_request(
+    project: Path,
+    state: PipelineState,
+    archive_path: str,
+    archive_name: str,
+    ship_commit: str,
+) -> dict:
+    branch = state.branch
+    if branch is None:
+        raise ArchiveError("pull-request integration requires a bound branch")
+    require_command_success(run_command("gh", "auth", "status"), "verify GitHub authentication")
+    repository = github_repository(project)
+    pull = find_pull_request(repository, branch, ship_commit)
+    if pull is None:
+        publish_bound_branch(project, branch, ship_commit)
+        pull = create_pull_request(
+            repository,
+            branch,
+            archive_path,
+            archive_name,
+            ship_commit,
+        )
+    if pull["merged_at"] is None:
+        if pull["state"] != "open":
+            raise ArchiveError("GitHub pull request was closed without merging")
+        publish_bound_branch(project, branch, ship_commit)
+        return {
+            "status": "awaiting-merge",
+            "mode": "pull-request",
+            "archive": archive_path,
+            "commit": ship_commit,
+            "pull_request": pull["html_url"],
+        }
+
+    merge_commit = pull["merge_commit_sha"]
+    if pull["state"] != "closed" or not isinstance(merge_commit, str):
+        raise ArchiveError("GitHub pull request merge metadata is invalid")
+    remote_default = refresh_origin(project)["remote_default"]
+    require_pull_request_merge(project, merge_commit, ship_commit, remote_default)
+    tag_name = f"milestone/{archive_name}"
+    message = pull_request_tag_message(
+        archive_name,
+        pull["html_url"],
+        ship_commit,
+        merge_commit,
+    )
+    tag_object, tag_published = ensure_integration_tag(
+        project,
+        tag_name,
+        merge_commit,
+        message,
+    )
+    if not tag_published:
+        require_git_success(
+            run_git(
+                project,
+                "push",
+                "origin",
+                f"refs/tags/{tag_name}:refs/tags/{tag_name}",
+            ),
+            "push milestone tag",
+        )
+        require_git_success(
+            run_git(
+                project,
+                "update-ref",
+                f"refs/remotes/origin/tags/{tag_name}",
+                tag_object,
+            ),
+            "refresh local milestone-tag ref",
+        )
+    return validate_integrated(project, milestone_slug(state))
 
 
 def integrate(repo: Path, slug: str) -> dict:
@@ -3430,6 +3741,14 @@ def integrate(repo: Path, slug: str) -> dict:
     remote_default_sha = require_git_success(
         run_git(project, "rev-parse", remote_default), "resolve remote default"
     )
+    if state.integration == "pull-request":
+        return integrate_pull_request(
+            project,
+            state,
+            archive_path,
+            archive_name,
+            ship_commit,
+        )
     integration_branch, worktree = integration_names(project, archive_name)
     interrupted_worktree = registered_worktree(project, integration_branch)
     if (
@@ -3649,36 +3968,52 @@ def validate_integrated(repo: Path, slug: str) -> dict:
     if default_name != "main":
         raise ArchiveError(f"remote default must be main, got {default_name!r}")
 
-    # (b) The integration merge must sit on the remote default's first-parent
-    # history with the ship commit as its second parent.
-    merge_commit = find_integrate_commit(project, remote_default, archive_name, ship_commit)
-    require_canonical_commit_body(
-        project,
-        merge_commit,
-        integrate_subject(archive_name, default_name),
-        integrate_commit_body(configured, ship_commit, default_name, bound_branch),
-        "integration",
-    )
-
-    # (c) The milestone tag must be annotated and point at the merge commit.
+    # (b) Resolve the integration proof selected before build.
     tag_name = f"milestone/{archive_name}"
     tag_ref = f"refs/tags/{tag_name}"
-    if run_git(project, "rev-parse", "--verify", "--quiet", tag_ref).returncode != 0:
-        raise ArchiveError(f"missing milestone tag: {tag_name}")
-    tag_type = require_git_success(
-        run_git(project, "cat-file", "-t", tag_ref),
-        "inspect milestone tag type",
-    )
-    if tag_type != "tag":
-        raise ArchiveError(f"milestone tag {tag_name} must be annotated")
-    tag_target = require_git_success(
-        run_git(project, "rev-parse", f"{tag_ref}^{{commit}}"),
-        "resolve milestone tag target",
-    )
-    if tag_target != merge_commit:
-        raise ArchiveError(f"milestone tag {tag_name} does not point at the integration merge")
+    pull_request = None
+    if state.integration == "pull-request":
+        if run_git(project, "rev-parse", "--verify", "--quiet", tag_ref).returncode != 0:
+            raise ArchiveError(f"missing milestone tag: {tag_name}")
+        metadata = pull_request_tag_metadata(project, tag_ref)
+        if metadata["Ship"] != ship_commit:
+            raise ArchiveError("pull-request milestone tag names the wrong ship commit")
+        merge_commit = metadata["Landing"]
+        pull_request = metadata["Pull-Request"]
+        require_pull_request_merge(project, merge_commit, ship_commit, remote_default)
+        require_annotated_tag(
+            project,
+            tag_ref,
+            merge_commit,
+            f"milestone tag {tag_name}",
+            pull_request_tag_message(
+                archive_name,
+                pull_request,
+                ship_commit,
+                merge_commit,
+            ),
+        )
+    else:
+        merge_commit = find_integrate_commit(
+            project, remote_default, archive_name, ship_commit
+        )
+        require_canonical_commit_body(
+            project,
+            merge_commit,
+            integrate_subject(archive_name, default_name),
+            integrate_commit_body(configured, ship_commit, default_name, bound_branch),
+            "integration",
+        )
+        if run_git(project, "rev-parse", "--verify", "--quiet", tag_ref).returncode != 0:
+            raise ArchiveError(f"missing milestone tag: {tag_name}")
+        require_annotated_tag(
+            project,
+            tag_ref,
+            merge_commit,
+            f"milestone tag {tag_name}",
+        )
 
-    # (d) The remote default must contain the merge commit.
+    # (c) The remote default must contain the merge commit.
     contains = run_git(project, "merge-base", "--is-ancestor", merge_commit, remote_default)
     if contains.returncode != 0:
         raise ArchiveError(f"{remote_default} does not contain the integration merge")
@@ -3690,14 +4025,24 @@ def validate_integrated(repo: Path, slug: str) -> dict:
         ship_commit,
         tag_name,
         merge_commit,
+        allow_missing_bound=state.integration == "pull-request",
     )
 
-    return {
+    result = {
         "archive": configured,
         "commit": ship_commit,
         "integrate": merge_commit,
+        "landing": merge_commit,
+        "base": require_git_success(
+            run_git(project, "rev-parse", remote_default),
+            "resolve integrated remote default",
+        ),
+        "mode": state.integration,
         "tag": tag_name,
     }
+    if pull_request is not None:
+        result["pull_request"] = pull_request
+    return result
 
 
 def require_published_integration(
@@ -3706,18 +4051,21 @@ def require_published_integration(
     ship_commit: str,
     tag_name: str,
     merge_commit: str,
+    allow_missing_bound: bool = False,
 ) -> None:
     bound_ref = f"refs/remotes/origin/{bound_branch}"
     if run_git(project, "rev-parse", "--verify", "--quiet", bound_ref).returncode != 0:
-        raise ArchiveError(f"missing published bound branch: origin/{bound_branch}")
-    published_ship = require_git_success(
-        run_git(project, "rev-parse", bound_ref),
-        "resolve published bound branch",
-    )
-    if published_ship != ship_commit:
-        raise ArchiveError(
-            f"origin/{bound_branch} is {published_ship}, expected ship commit {ship_commit}"
+        if not allow_missing_bound:
+            raise ArchiveError(f"missing published bound branch: origin/{bound_branch}")
+    else:
+        published_ship = require_git_success(
+            run_git(project, "rev-parse", bound_ref),
+            "resolve published bound branch",
         )
+        if published_ship != ship_commit:
+            raise ArchiveError(
+                f"origin/{bound_branch} is {published_ship}, expected ship commit {ship_commit}"
+            )
 
     remote_tag = f"refs/remotes/origin/tags/{tag_name}"
     if run_git(project, "rev-parse", "--verify", "--quiet", remote_tag).returncode != 0:

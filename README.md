@@ -99,7 +99,7 @@ flowchart TD
     MB --> MQ
     B -->|"explicit ruling: abandon milestone"| AB["archive partial work → re-slice roadmap"]
     AB --> RM
-    S -->|"approved → archive + ship commit"| MG["merge gsd-path/M00N into main + tag"]
+    S -->|"approved → archive + ship commit"| MG["direct merge or user-merged PR + tag"]
     MG -->|"validate-integrated passes"| A["shipped"]
     A -->|"another program milestone → bind next gsd-path/M00N"| MI
     A -->|"single-milestone restart → bind next gsd-path/M00N"| I
@@ -189,9 +189,11 @@ partial remote/clone/worktree transaction; the default checkout stays clean.
   archive/<NNN>-<slug>/       shipped milestones (read-only after ship)
 ```
 
-Shipping moves milestone artifacts into `archive/` with a MANIFEST, merges the
-milestone's `gsd-path/M00N` branch into `main`, and reports shipped only after
-integration validates. Before any next-milestone files change, the router binds
+Shipping moves milestone artifacts into `archive/` with a MANIFEST. It then
+either merges the milestone's `gsd-path/M00N` branch into `main` directly or
+opens/reuses a GitHub PR and waits for its user-controlled merge. Path reports
+shipped only after a two-parent merge and the milestone tag validate. Before
+any next-milestone files change, the router binds
 a new `gsd-path/M00N` at the updated `origin/main`. `STATE.md`, `REPOSITORY.md`,
 `LESSONS.md`, `next/`, and the program artifacts (`CHARTER.md`, `ROADMAP.md`,
 top-level `SYNTHESIS.md`) remain active project metadata.

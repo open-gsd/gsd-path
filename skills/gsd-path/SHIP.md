@@ -263,22 +263,39 @@ The persisted `STATE.archive` field is the transaction identity.
 7. Integrate only after the postcommit `validate` passes, with the recorded
    ship commit and exact reviewed HEAD unchanged. Run `python3 <absolute
    archive_milestone.py> integrate --repo <root> --slug <STATE.milestone>`.
-   This helper owns the resumable transaction: it validates the ship commit,
-   fetches origin, requires remote default `main`, creates the canonical named
-   integration worktree, performs the normal hook-verified `--no-ff` merge,
-   refuses to resolve conflicts, creates the annotated milestone tag, pushes
-   main then the bound branch then the tag, and removes its worktree and branch.
-   Immediately before publishing the bound branch it reads the live origin ref:
-   absence is created with an absent-ref lease, the exact ship commit is an
-   idempotent success, and every other value blocks without overwriting it.
-   If origin/main advances after the local merge but rejects the push, a retry
-   may discard and rebuild only that canonical local merge and tag, and only
-   when the merge is unpublished and both the live remote bound branch and
-   milestone tag are absent. Any published or colliding state blocks.
-   It finishes by running the same checks exposed by `validate-integrated` and
-   returns that result. A non-zero result blocks; rerun the exact `integrate`
-   command to resume a safe partial transaction instead of repairing refs or
-   Git state manually. For a later read-only recheck, run `python3 <absolute
+   This helper validates the ship commit, fetches origin, requires remote
+   default `main`, and follows the locked `STATE.integration` mode:
+
+   - `direct` owns the resumable merge transaction. It creates the canonical
+     named integration worktree, performs the hook-verified `--no-ff` merge,
+     refuses to resolve conflicts, creates the annotated milestone tag, pushes
+     main then the bound branch then the tag, and removes its worktree and
+     branch. Before publishing the bound branch it reads the live origin ref:
+     absence is created with an absent-ref lease, the exact ship commit is an
+     idempotent success, and every other value blocks. If origin/main advances
+     after the local merge but rejects the push, a retry may discard and
+     rebuild only the unpublished canonical merge and tag under the helper's
+     existing recovery checks.
+   - `pull-request` requires `gh` authentication and a GitHub.com origin. It
+     publishes the exact ship commit, reuses the single matching PR to `main`
+     or creates one with the canonical integration title and body plus the GSD
+     Path credit footer, and returns `status: awaiting-merge` while that PR is
+     open. Present **Outcome**, link
+     the returned PR as **Review**, and state in **Next** that the user must
+     merge it with GitHub's merge-commit method. Stop this ship invocation;
+     Path never enables auto-merge or merges the PR. On rerun after merge, the
+     helper requires the PR head to remain the ship commit and its landing to
+     be a two-parent merge with that ship commit as second parent on
+     `origin/main` first-parent history. It then writes and pushes the annotated
+     milestone tag containing the PR URL, ship SHA, and landing SHA. A closed
+     unmerged PR, squash, rebase, merge queue, moved head, duplicate PR, or
+     non-GitHub.com origin blocks. The remote bound branch may be absent after
+     a valid merge because GitHub may auto-delete it.
+
+   A passing run returns the same proof exposed by `validate-integrated`.
+   A non-zero result blocks; rerun the exact `integrate` command to resume a
+   safe partial transaction instead of repairing refs or Git state manually.
+   For a later read-only recheck, run `python3 <absolute
    archive_milestone.py> validate-integrated --repo <root> --slug
    <STATE.milestone>`; it uses existing `origin/*` refs without fetching.
    Report shipped only when the integration result passes.
@@ -301,8 +318,9 @@ The persisted `STATE.archive` field is the transaction identity.
 
 Legacy ship and integration subjects may be ignored only while scanning older
 milestones. They never satisfy the current milestone transaction. Current
-validation requires exactly one canonical ship commit and one canonical
-integration commit, each with its canonical body.
+validation requires exactly one canonical ship commit. Direct integration
+also requires the canonical integration subject and body; PR integration uses
+the exact PR metadata, annotated tag metadata, and merge topology instead.
 
 ## Rules
 

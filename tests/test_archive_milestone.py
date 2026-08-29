@@ -2764,6 +2764,245 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
             cwd=PROJECT_ROOT,
         )
 
+    def enable_pull_request_integration(self, repo: Path) -> None:
+        state = repo / ".project" / "STATE.md"
+        state.write_text(
+            state.read_text(encoding="utf-8").replace(
+                "archive: null\n",
+                "archive: null\n"
+                "integration_default: pull-request\n"
+                "integration: pull-request\n",
+            ),
+            encoding="utf-8",
+        )
+
+    def github_api(self, pulls):
+        def run(*arguments: str) -> subprocess.CompletedProcess[str]:
+            if arguments == ("gh", "auth", "status"):
+                return subprocess.CompletedProcess(arguments, 0, "", "")
+            if arguments[:3] == ("gh", "api", "repos/open-gsd/demo/pulls"):
+                if "GET" in arguments:
+                    return subprocess.CompletedProcess(
+                        arguments, 0, json.dumps(pulls), ""
+                    )
+                created = {
+                    "number": 7,
+                    "state": "open",
+                    "html_url": "https://github.com/open-gsd/demo/pull/7",
+                    "merged_at": None,
+                    "merge_commit_sha": None,
+                    "base": {"ref": "main"},
+                    "head": {"ref": "gsd-path/M001", "sha": pulls[0]["head"]["sha"]}
+                    if pulls
+                    else {"ref": "gsd-path/M001", "sha": "created-by-github"},
+                }
+                return subprocess.CompletedProcess(
+                    arguments, 0, json.dumps(created), ""
+                )
+            return subprocess.CompletedProcess(arguments, 1, "", "unexpected command")
+
+        return run
+
+    def merged_pull_request(self, ship_sha: str, merge_sha: str) -> dict:
+        return {
+            "number": 7,
+            "state": "closed",
+            "html_url": "https://github.com/open-gsd/demo/pull/7",
+            "merged_at": "2026-08-29T12:00:00Z",
+            "merge_commit_sha": merge_sha,
+            "base": {"ref": "main"},
+            "head": {"ref": "gsd-path/M001", "sha": ship_sha},
+        }
+
+    def test_pull_request_integration_creates_pr_after_publishing_ship(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            repo = root / "primary"
+            repo.mkdir()
+            remote = root / "origin.git"
+            self.make_publishable_bound_repo(repo, remote)
+            self.enable_pull_request_integration(repo)
+            archive_name, ship_sha = self.ship_canonical_bound(repo)
+            requests = []
+
+            def github_api(*arguments: str) -> subprocess.CompletedProcess[str]:
+                requests.append(arguments)
+                if arguments == ("gh", "auth", "status"):
+                    return subprocess.CompletedProcess(arguments, 0, "", "")
+                if arguments[:3] != ("gh", "api", "repos/open-gsd/demo/pulls"):
+                    return subprocess.CompletedProcess(
+                        arguments, 1, "", "unexpected command"
+                    )
+                if "GET" in arguments:
+                    return subprocess.CompletedProcess(arguments, 0, "[]", "")
+                created = {
+                    "number": 7,
+                    "state": "open",
+                    "html_url": "https://github.com/open-gsd/demo/pull/7",
+                    "merged_at": None,
+                    "merge_commit_sha": None,
+                    "base": {"ref": "main"},
+                    "head": {"ref": "gsd-path/M001", "sha": ship_sha},
+                }
+                return subprocess.CompletedProcess(
+                    arguments, 0, json.dumps(created), ""
+                )
+
+            with (
+                mock.patch.object(
+                    archive_milestone,
+                    "github_repository",
+                    return_value="open-gsd/demo",
+                ),
+                mock.patch.object(
+                    archive_milestone,
+                    "run_command",
+                    side_effect=github_api,
+                ),
+            ):
+                result = archive_milestone.integrate(repo, "demo")
+
+            self.assertEqual(result["status"], "awaiting-merge")
+            self.assertEqual(
+                self.git(remote, "rev-parse", "gsd-path/M001").stdout.strip(),
+                ship_sha,
+            )
+            post = next(arguments for arguments in requests if "POST" in arguments)
+            self.assertIn(
+                f"title={pipeline_git.integrate_subject(archive_name, 'main')}",
+                post,
+            )
+            self.assertIn("base=main", post)
+            self.assertIn("head=gsd-path/M001", post)
+            body = next(argument for argument in post if argument.startswith("body="))
+            self.assertTrue(
+                body.endswith(f"\n\n---\n{archive_milestone.PR_CREDIT_LINE}")
+            )
+
+    def test_pull_request_integration_waits_without_touching_main(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            repo = root / "primary"
+            repo.mkdir()
+            remote = root / "origin.git"
+            self.make_publishable_bound_repo(repo, remote)
+            self.enable_pull_request_integration(repo)
+            _archive_name, ship_sha = self.ship_canonical_bound(repo)
+            baseline = self.git(remote, "rev-parse", "main").stdout.strip()
+            open_pull = {
+                "number": 7,
+                "state": "open",
+                "html_url": "https://github.com/open-gsd/demo/pull/7",
+                "merged_at": None,
+                "merge_commit_sha": None,
+                "base": {"ref": "main"},
+                "head": {"ref": "gsd-path/M001", "sha": ship_sha},
+            }
+
+            with (
+                mock.patch.object(
+                    archive_milestone,
+                    "github_repository",
+                    return_value="open-gsd/demo",
+                ),
+                mock.patch.object(
+                    archive_milestone,
+                    "run_command",
+                    side_effect=self.github_api([open_pull]),
+                ),
+            ):
+                result = archive_milestone.integrate(repo, "demo")
+
+            self.assertEqual(result["status"], "awaiting-merge")
+            self.assertEqual(result["pull_request"], open_pull["html_url"])
+            self.assertEqual(self.git(remote, "rev-parse", "main").stdout.strip(), baseline)
+            self.assertEqual(
+                self.git(remote, "rev-parse", "gsd-path/M001").stdout.strip(),
+                ship_sha,
+            )
+            self.assertNotEqual(
+                self.git(remote, "show-ref", "--tags", "--quiet").returncode,
+                0,
+            )
+
+    def test_pull_request_integration_accepts_merge_and_deleted_head_branch(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            repo = root / "primary"
+            repo.mkdir()
+            remote = root / "origin.git"
+            self.make_publishable_bound_repo(repo, remote)
+            self.enable_pull_request_integration(repo)
+            archive_name, ship_sha = self.ship_canonical_bound(repo)
+            self.git(repo, "push", "-q", "origin", "gsd-path/M001")
+            merge_sha = self.integrate_bound(
+                repo,
+                archive_name,
+                ship_sha,
+                tag=False,
+                subject="Merge pull request #7 from open-gsd/gsd-path/M001",
+            )
+            self.git(repo, "push", "-q", "origin", f"{merge_sha}:refs/heads/main")
+            self.git(repo, "push", "-q", "origin", "--delete", "gsd-path/M001")
+            pull = self.merged_pull_request(ship_sha, merge_sha)
+
+            with (
+                mock.patch.object(
+                    archive_milestone,
+                    "github_repository",
+                    return_value="open-gsd/demo",
+                ),
+                mock.patch.object(
+                    archive_milestone,
+                    "run_command",
+                    side_effect=self.github_api([pull]),
+                ),
+            ):
+                result = archive_milestone.integrate(repo, "demo")
+
+            self.assertEqual(result["mode"], "pull-request")
+            self.assertEqual(result["landing"], merge_sha)
+            self.assertEqual(result["base"], merge_sha)
+            self.assertEqual(result["pull_request"], pull["html_url"])
+            self.assertEqual(
+                self.git(
+                    remote, "rev-parse", f"milestone/{archive_name}^{{commit}}"
+                ).stdout.strip(),
+                merge_sha,
+            )
+            validated = archive_milestone.validate_integrated(repo, "demo")
+            self.assertEqual(validated["landing"], merge_sha)
+
+    def test_pull_request_integration_rejects_non_merge_landing(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            repo = root / "primary"
+            repo.mkdir()
+            remote = root / "origin.git"
+            self.make_publishable_bound_repo(repo, remote)
+            self.enable_pull_request_integration(repo)
+            _archive_name, ship_sha = self.ship_canonical_bound(repo)
+            self.git(repo, "push", "-q", "origin", f"{ship_sha}:refs/heads/main")
+            pull = self.merged_pull_request(ship_sha, ship_sha)
+
+            with (
+                mock.patch.object(
+                    archive_milestone,
+                    "github_repository",
+                    return_value="open-gsd/demo",
+                ),
+                mock.patch.object(
+                    archive_milestone,
+                    "run_command",
+                    side_effect=self.github_api([pull]),
+                ),
+            ):
+                with self.assertRaisesRegex(
+                    archive_milestone.ArchiveError,
+                    "must use a two-parent merge commit",
+                ):
+                    archive_milestone.integrate(repo, "demo")
+
     def reject_remote_ref(self, remote: Path, ref: str) -> Path:
         hook = remote / "hooks" / "pre-receive"
         hook.write_text(

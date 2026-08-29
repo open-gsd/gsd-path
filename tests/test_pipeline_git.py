@@ -460,7 +460,7 @@ class PipelineGitTests(unittest.TestCase):
                 "retired",
             )
 
-    def test_bind_next_starts_m002_from_integrated_main(self) -> None:
+    def test_bind_next_starts_m002_after_pull_request_branch_auto_delete(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             origin = Path(tmp) / "origin.git"
             default_checkout = Path(tmp) / "repo"
@@ -515,6 +515,7 @@ class PipelineGitTests(unittest.TestCase):
                 "HEAD",
             ).stdout.strip()
             run_git(default_checkout, "push", "origin", "main")
+            run_git(default_checkout, "push", "origin", "--delete", "gsd-path/M001")
 
             bind_next = [
                 sys.executable,
@@ -532,6 +533,7 @@ class PipelineGitTests(unittest.TestCase):
                 "origin/main",
                 "--base",
                 integrated_main,
+                "--allow-missing-previous",
             ]
             nested = primary / "nested"
             nested.mkdir()
@@ -546,6 +548,7 @@ class PipelineGitTests(unittest.TestCase):
                     m001_ship,
                     "origin/main",
                     integrated_main,
+                    allow_remote_absent=True,
                 )
             nested.rmdir()
 

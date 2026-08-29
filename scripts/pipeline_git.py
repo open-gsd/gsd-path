@@ -486,6 +486,7 @@ def bind_next_milestone_branch(
     ship: str,
     remote_default: str,
     base: str,
+    allow_remote_absent: bool = False,
 ) -> dict[str, str]:
     """Move a clean primary worktree onto a new bound branch after integration."""
     repo = _require_worktree_root(repo)
@@ -581,6 +582,8 @@ def bind_next_milestone_branch(
         "remote_default": remote_default,
         "base": base_sha,
     }
+    if allow_remote_absent:
+        request["allow_remote_absent"] = True
     journal_path = bind_next_journal_path(repo, branch)
     new_journal = False
     if journal_path.exists() or journal_path.is_symlink():
@@ -634,7 +637,9 @@ def bind_next_milestone_branch(
 
     remote_previous = _remote_ref_sha(repo, f"refs/heads/{previous_branch}")
     if remote_previous is None:
-        if current != branch or journal["stage"] not in {"switched", "retired"}:
+        if not allow_remote_absent and (
+            current != branch or journal["stage"] not in {"switched", "retired"}
+        ):
             raise PipelineGitError(
                 f"origin/{previous_branch} is missing before retirement"
             )
@@ -654,7 +659,9 @@ def bind_next_milestone_branch(
         repo,
         previous_branch,
         ship_sha,
-        allow_remote_absent=journal["stage"] in {"switched", "retired"},
+        allow_remote_absent=(
+            allow_remote_absent or journal["stage"] in {"switched", "retired"}
+        ),
     )
     journal["stage"] = "retired"
     _write_bind_next_journal(journal_path, journal)
@@ -683,6 +690,7 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     bind_next.add_argument("--ship", required=True)
     bind_next.add_argument("--remote-default", required=True)
     bind_next.add_argument("--base", required=True)
+    bind_next.add_argument("--allow-missing-previous", action="store_true")
     bind_initial = subparsers.add_parser(
         "bind-initial",
         help="bind the first milestone branch at the exact fetched remote default",
@@ -705,6 +713,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 args.ship,
                 args.remote_default,
                 args.base,
+                args.allow_missing_previous,
             )
         elif args.command == "bind-initial":
             result = bind_initial_milestone_branch(

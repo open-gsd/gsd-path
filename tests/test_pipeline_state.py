@@ -27,7 +27,14 @@ def state_text(
     status: str = "done",
     branch: str = "null",
     archive: str = "null",
+    integration_default=None,
+    integration=None,
 ) -> str:
+    integration_fields = ""
+    if integration_default is not None:
+        integration_fields += f"integration_default: {integration_default}\n"
+    if integration is not None:
+        integration_fields += f"integration: {integration}\n"
     return (
         "---\n"
         "pipeline: gsd-path/v2\n"
@@ -37,6 +44,7 @@ def state_text(
         f"status: {status}\n"
         f"branch: {branch}\n"
         f"archive: {archive}\n"
+        f"{integration_fields}"
         "---\n\n"
         "# Project State\n\n"
         "## Log\n\n"
@@ -88,6 +96,148 @@ def task_text() -> str:
 
 
 class PipelineStateTests(unittest.TestCase):
+    def test_legacy_state_defaults_to_direct_integration(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            run_git(repo, "init", "-b", "main")
+            project = repo / ".project"
+            project.mkdir()
+            (project / "STATE.md").write_text(state_text(), encoding="utf-8")
+
+            state, _, _ = pipeline_state.load_state(repo)
+
+            self.assertEqual(state.integration_default, "direct")
+            self.assertEqual(state.integration, "direct")
+
+    def test_state_accepts_explicit_pull_request_integration(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            run_git(repo, "init", "-b", "main")
+            project = repo / ".project"
+            project.mkdir()
+            (project / "STATE.md").write_text(
+                state_text(
+                    integration_default="pull-request",
+                    integration="pull-request",
+                ),
+                encoding="utf-8",
+            )
+
+            state, _, _ = pipeline_state.load_state(repo)
+
+            self.assertEqual(state.integration_default, "pull-request")
+            self.assertEqual(state.integration, "pull-request")
+
+    def test_state_rejects_partial_integration_configuration(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            run_git(repo, "init", "-b", "main")
+            project = repo / ".project"
+            project.mkdir()
+            (project / "STATE.md").write_text(
+                state_text(integration_default="pull-request"),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(
+                pipeline_state.PipelineStateError,
+                "integration_default and integration must appear together",
+            ):
+                pipeline_state.load_state(repo)
+
+    def test_configure_integration_updates_default_and_milestone_before_build(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            run_git(repo, "init", "-b", "gsd-path/M001")
+            project = repo / ".project"
+            project.mkdir()
+            (project / "STATE.md").write_text(
+                state_text(
+                    milestone="first",
+                    phase="plan",
+                    status="active",
+                    branch="gsd-path/M001",
+                ),
+                encoding="utf-8",
+            )
+
+            configured = pipeline_state.configure_integration(
+                repo, "default", "pull-request"
+            )
+            overridden = pipeline_state.configure_integration(
+                repo, "milestone", "direct"
+            )
+
+            self.assertEqual(configured["state"]["integration_default"], "pull-request")
+            self.assertEqual(configured["state"]["integration"], "pull-request")
+            self.assertEqual(overridden["state"]["integration_default"], "pull-request")
+            self.assertEqual(overridden["state"]["integration"], "direct")
+
+    def test_configure_integration_rejects_build_or_later(self) -> None:
+        positions = (("build", "active"), ("ship", "active"), ("shipped", "done"))
+        for phase, status in positions:
+            with self.subTest(phase=phase), tempfile.TemporaryDirectory() as tmp:
+                repo = Path(tmp)
+                run_git(repo, "init", "-b", "gsd-path/M001")
+                project = repo / ".project"
+                project.mkdir()
+                archive = (
+                    ".project/archive/001-first/" if phase == "shipped" else "null"
+                )
+                (project / "STATE.md").write_text(
+                    state_text(
+                        milestone="first",
+                        phase=phase,
+                        status=status,
+                        branch="gsd-path/M001",
+                        archive=archive,
+                    ),
+                    encoding="utf-8",
+                )
+
+                with self.assertRaisesRegex(
+                    pipeline_state.PipelineStateError,
+                    "integration mode is locked when build starts",
+                ):
+                    pipeline_state.configure_integration(
+                        repo, "milestone", "pull-request"
+                    )
+
+    def test_transition_cannot_bypass_integration_configuration(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            run_git(repo, "init", "-b", "gsd-path/M001")
+            project = repo / ".project"
+            project.mkdir()
+            (project / "STATE.md").write_text(
+                state_text(
+                    milestone="first",
+                    phase="plan",
+                    status="active",
+                    branch="gsd-path/M001",
+                    integration_default="direct",
+                    integration="direct",
+                ),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(
+                pipeline_state.PipelineStateError,
+                "integration mode changes require configure-integration",
+            ):
+                pipeline_state.transition_state(
+                    repo,
+                    {
+                        "phase": "plan",
+                        "status": "active",
+                        "branch": "gsd-path/M001",
+                        "archive": None,
+                        "integration": "direct",
+                    },
+                    {"integration": "pull-request"},
+                    "bypass integration helper",
+                )
+
     def test_validate_and_route_approved_unbound_plan(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             repo = Path(tmp)
@@ -777,6 +927,51 @@ class PipelineStateTests(unittest.TestCase):
                     "next milestone bound",
                 )
 
+    def test_next_milestone_resets_integration_from_project_default(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            project = repo / ".project"
+            project.mkdir()
+            archive = ".project/archive/001-first/"
+            (project / "STATE.md").write_text(
+                state_text(
+                    milestone="first",
+                    phase="shipped",
+                    status="done",
+                    branch="gsd-path/M001",
+                    archive=archive,
+                    integration_default="pull-request",
+                    integration="direct",
+                ),
+                encoding="utf-8",
+            )
+            expected = {
+                "phase": "shipped",
+                "status": "done",
+                "milestone": "first",
+                "branch": "gsd-path/M001",
+                "archive": archive,
+                "integration": "direct",
+            }
+            changes = {
+                "phase": "inspect",
+                "status": "active",
+                "milestone": "second",
+                "branch": "gsd-path/M002",
+                "archive": None,
+                "integration": "pull-request",
+            }
+
+            result = pipeline_state.transition_state(
+                repo,
+                expected,
+                changes,
+                "next milestone bound",
+            )
+
+            self.assertEqual(result["state"]["integration_default"], "pull-request")
+            self.assertEqual(result["state"]["integration"], "pull-request")
+
     def test_transition_requires_canonical_patch_reopen_event(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             repo = Path(tmp)
@@ -1268,6 +1463,7 @@ class PipelineStateTests(unittest.TestCase):
                     "ship": integrate,
                     "remote_default": "origin/main",
                     "base": integrate,
+                    "allow_remote_absent": True,
                     "stage": "switched",
                 },
             )
@@ -1275,6 +1471,7 @@ class PipelineStateTests(unittest.TestCase):
             self.assertEqual(handoff["route"]["action"], "resume-next-handoff")
             self.assertEqual(handoff["route"]["previous_branch"], "gsd-path/M001")
             self.assertEqual(handoff["route"]["branch"], "gsd-path/M002")
+            self.assertTrue(handoff["route"]["allow_remote_absent"])
 
             result = pipeline_state.promote_next(
                 repo,
@@ -1312,6 +1509,36 @@ class PipelineStateTests(unittest.TestCase):
             )
             self.assertEqual(retry["status"], "already-complete")
             self.assertEqual(retry["commit"], result["commit"])
+
+    def test_promote_next_separates_landing_from_a_later_main_base(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, landing = self._promotion_repo(tmp, drift=False)
+            run_git(repo, "switch", "main")
+            (repo / "after-landing.txt").write_text("later\n", encoding="utf-8")
+            run_git(repo, "add", "after-landing.txt")
+            run_git(repo, "commit", "-m", "product: after milestone landing")
+            base = run_git(repo, "rev-parse", "HEAD").stdout.strip()
+            run_git(repo, "update-ref", "refs/remotes/origin/main", base)
+            run_git(repo, "branch", "-f", "gsd-path/M002", base)
+            run_git(repo, "switch", "gsd-path/M002")
+
+            result = pipeline_state.promote_next(
+                repo,
+                "second",
+                "gsd-path/M002",
+                base,
+                landing,
+            )
+
+            self.assertEqual(result["base"], base)
+            self.assertEqual(result["landing"], landing)
+            self.assertEqual(
+                run_git(repo, "show", "-s", "--format=%P", "HEAD").stdout.strip(),
+                base,
+            )
+            roadmap = (repo / ".project" / "ROADMAP.md").read_text(encoding="utf-8")
+            self.assertIn(f"Integrated: {landing}", roadmap)
+            self.assertNotIn(f"Integrated: {base}", roadmap)
 
     def test_promote_next_reopens_plan_when_task_paths_drifted(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1584,6 +1811,8 @@ class PipelineStateTests(unittest.TestCase):
             recovery = pipeline_state.route_state(repo)
             self.assertEqual(recovery["route"]["action"], "resume-promotion")
             self.assertEqual(recovery["route"]["milestone"], "second")
+            self.assertEqual(recovery["route"]["base"], integrate)
+            self.assertEqual(recovery["route"]["landing"], integrate)
 
             result = pipeline_state.promote_next(
                 repo,
