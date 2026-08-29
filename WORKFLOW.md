@@ -82,6 +82,21 @@ it does not auto-advance. `$gsd-path-forensics` is read-only diagnosis when a
 helper blocks. `$gsd-path-undo` previews then applies helper-owned undo of
 unpublished work; it never invents `git reset`.
 
+### Plain-prompt re-entry
+
+Project installs include the router's read-only status engine at
+`.gsd-path/runtime/`. On any turn that did not explicitly invoke a GSD Path
+skill, an owned `.project/STATE.md` activates re-entry. Informational prompts
+finish read-only and end with the current **Outcome** / **Review** / **Next**
+handoff. Mutation prompts make no changes and point to the status result's
+`next_skill`. The runtime never initializes state or advances a phase.
+
+The optional pre-tool guard backs this up where it has deterministic evidence:
+outside a routed build phase, direct write/edit/patch requests may touch only
+`.project/` or `.gsd-path/`. Shell provenance and edits during build cannot
+prove which skill initiated them, so the always-loaded AGENTS.md contract owns
+those cases.
+
 ### New GitHub repository creation
 
 An explicit request to create a GitHub repository enters a pre-initialization

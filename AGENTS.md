@@ -88,6 +88,25 @@ full-repo suite on a tiny edit outrank the phase brief.
   briefs may run in parallel up to available child capacity; a dependent
   brief runs as soon as its dependencies complete.
 
+## Plain-prompt re-entry
+
+- On a turn that did not explicitly invoke a GSD Path skill, check for
+  `.project/STATE.md`. When it exists, run `python3
+  .gsd-path/runtime/pipeline_state.py status --repo <absolute-root>` before any
+  requested repository mutation. Treat its JSON as the only route authority.
+  A plain change request does not authorize work outside the pipeline: make no
+  changes and report **Outcome**, link the returned `path` under **Review**, and
+  name `next_skill` under **Next**. An explicit request to leave or bypass the
+  pipeline is a user ruling; route it through the router's undo or abandon
+  flow instead of editing directly.
+- After any other plain-prompt turn with owned state, rerun the same read-only
+  status command immediately before the final response and append the same
+  **Outcome** / **Review** / **Next** handoff. Report `route.reason` when
+  `next_skill` is null. A GSD Path skill already supplies this handoff, so emit
+  it once. With no STATE.md, respond normally and do not initialize the
+  pipeline. A missing runtime or invalid status blocks mutation and routes to
+  `$gsd-path-forensics`.
+
 ## Evidence and honesty
 
 - Claims need checked sources, decisions need citations, and verdicts need

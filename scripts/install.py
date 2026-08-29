@@ -42,6 +42,15 @@ CLAUDE_BRIDGE = "@../AGENTS.md\n@../WORKFLOW.md\n"
 HOOKS_DIRECTORY = ".gsd-path"
 GUARD_SCRIPTS = ("guard_hook.py", "git_guard.py")
 GUARD_MARKER = "gsd-path guard"
+PROJECT_RUNTIME_SCRIPTS = (
+    "pipeline_state.py",
+    "isolation.py",
+    "discussion_records.py",
+    "pipeline_git.py",
+    "archive_milestone.py",
+    "review_panel.py",
+)
+PROJECT_RUNTIME_MARKER = "gsd-path project runtime"
 INSTALL_LOCK_NAME = ".gsd-path-install-lock"
 CLAUDE_MATCHER = (
     "Edit|Write|MultiEdit|NotebookEdit|Delete|StrReplace|ApplyPatch|Create|Shell|Bash|PowerShell"
@@ -716,6 +725,15 @@ def _project_destinations(
         (project / "AGENTS.md", "AGENTS.md", None, False),
         (project / "WORKFLOW.md", "WORKFLOW.md", None, False),
     ]
+    destinations.extend(
+        (
+            project / HOOKS_DIRECTORY / "runtime" / name,
+            f"scripts/{name}",
+            None,
+            False,
+        )
+        for name in PROJECT_RUNTIME_SCRIPTS
+    )
     if "claude" in selected:
         destinations.append(
             (project / ".claude" / "CLAUDE.md", None, CLAUDE_BRIDGE, False)
@@ -827,7 +845,11 @@ def _validate_project(
             directory.is_symlink() or not directory.is_dir()
         ):
             raise InstallerError(f"unsafe {label} project directory: {directory}")
-    sources = ["AGENTS.md", "WORKFLOW.md"]
+    sources = [
+        "AGENTS.md",
+        "WORKFLOW.md",
+        *(f"scripts/{name}" for name in PROJECT_RUNTIME_SCRIPTS),
+    ]
     if hooks:
         sources.extend(f"scripts/{name}" for name in GUARD_SCRIPTS)
     for source_name in sources:
@@ -906,6 +928,14 @@ def _is_managed_guard_script(destination: Path) -> bool:
     if not destination.is_file():
         return False
     return GUARD_MARKER in destination.read_text(encoding="utf-8", errors="replace")
+
+
+def _is_managed_project_runtime(destination: Path) -> bool:
+    if not destination.is_file():
+        return False
+    return PROJECT_RUNTIME_MARKER in destination.read_text(
+        encoding="utf-8", errors="replace"
+    )
 
 
 def _is_managed_git_hook(destination: Path) -> bool:
@@ -1130,6 +1160,17 @@ def _validate_hooks_refresh(
         source = source_root / "scripts" / name
         if source.is_symlink() or not source.is_file():
             raise InstallerError(f"missing guard script source: {source}")
+    for name in PROJECT_RUNTIME_SCRIPTS:
+        destination = project / HOOKS_DIRECTORY / "runtime" / name
+        if destination.is_symlink():
+            raise InstallerError(f"refusing to refresh a symlink: {destination}")
+        if _lexists(destination) and not _is_managed_project_runtime(destination):
+            raise InstallerError(
+                f"not a managed GSD Path project runtime: {destination}"
+            )
+        source = source_root / "scripts" / name
+        if source.is_symlink() or not source.is_file():
+            raise InstallerError(f"missing project runtime source: {source}")
     if full:
         for target, label, settings in (
             ("claude", "Claude", project / ".claude" / "settings.json"),
@@ -1187,6 +1228,13 @@ def refresh_hooks(
     refreshed: List[str] = []
     for name in GUARD_SCRIPTS:
         destination = project / HOOKS_DIRECTORY / name
+        source = source_root / "scripts" / name
+        if not dry_run:
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            _atomic_copy(source, destination)
+        refreshed.append(_describe_project_path(project, destination))
+    for name in PROJECT_RUNTIME_SCRIPTS:
+        destination = project / HOOKS_DIRECTORY / "runtime" / name
         source = source_root / "scripts" / name
         if not dry_run:
             destination.parent.mkdir(parents=True, exist_ok=True)

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# gsd-path project runtime
 """Named checkouts for task isolation, verify sidecars, and task landing.
 
 The orchestrator calls this helper instead of inventing git worktree, commit,

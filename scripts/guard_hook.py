@@ -75,6 +75,10 @@ ARCHIVE_REASON = (
 )
 ARCHIVE_MARKER = ".project/archive"
 INVALID_INPUT_REASON = "GSD Path guard could not validate the tool request"
+REENTRY_FAILURE_REASON = (
+    "GSD Path status could not be verified; review .project/STATE.md and invoke "
+    "gsd-path-forensics before changing product files"
+)
 ARCHIVE_REFERENCE = re.compile(r"(?i:\.project[\\/]archive)")
 ARCHIVE_READ_COMMANDS = frozenset(
     {
@@ -245,6 +249,92 @@ def is_read_tool(tool):
 
 def is_patch_tool(tool):
     return "patch" in tool_tokens(tool)
+
+
+def is_direct_write_tool(tool):
+    return bool(tool_tokens(tool) & WRITE_VERBS)
+
+
+def repository_root():
+    candidate = Path(__file__).resolve().parent.parent
+    result = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"],
+        cwd=candidate,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0 or not result.stdout.strip():
+        raise ValueError("repository root cannot be resolved")
+    return Path(result.stdout.strip()).resolve()
+
+
+def project_status(repo):
+    script_root = Path(__file__).resolve().parent
+    candidates = (
+        script_root / "runtime" / "pipeline_state.py",
+        script_root / "pipeline_state.py",
+    )
+    script = next((path for path in candidates if path.is_file()), None)
+    if script is None:
+        raise ValueError("project status runtime is unavailable")
+    result = subprocess.run(
+        [sys.executable, str(script), "status", "--repo", str(repo)],
+        cwd=repo,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise ValueError("project status failed")
+    payload = json.loads(result.stdout)
+    if not isinstance(payload, dict) or payload.get("schema") != "gsd-path/status/v1":
+        raise ValueError("project status returned an invalid payload")
+    return payload
+
+
+def pipeline_control_path(path, working_directories, repo):
+    repo = repo.resolve()
+    candidate = Path(path)
+    if not candidate.is_absolute():
+        base = Path(working_directories[0]) if working_directories else repo
+        if not base.is_absolute():
+            base = repo / base
+        candidate = base / candidate
+    resolved = candidate.resolve(strict=False)
+    return any(
+        resolved == root or root in resolved.parents
+        for root in (repo / ".project", repo / ".gsd-path")
+    )
+
+
+def enforce_pipeline_reentry(paths, working_directories):
+    repo = repository_root()
+    state = repo / ".project" / "STATE.md"
+    if not os.path.lexists(state):
+        return
+    try:
+        status = project_status(repo)
+    except (OSError, ValueError, json.JSONDecodeError):
+        deny(REENTRY_FAILURE_REASON)
+    route = status.get("route")
+    if (
+        isinstance(route, dict)
+        and route.get("action") == "run-phase"
+        and route.get("phase") == "build"
+    ):
+        return
+    if all(pipeline_control_path(path, working_directories, repo) for path in paths):
+        return
+    state_data = status.get("state") if isinstance(status.get("state"), dict) else {}
+    phase = state_data.get("phase", "unknown")
+    next_step = status.get("next_skill") or (
+        route.get("reason") if isinstance(route, dict) else None
+    )
+    deny(
+        f"GSD Path is {phase}; direct product-file changes require the routed "
+        f"build phase. Review {status.get('path', state)}; next: {next_step or 'gsd-path'}"
+    )
 
 
 def in_archive(path):
@@ -789,6 +879,7 @@ def evaluate(event):
             patch_payloads.append(raw_input)
         commands = []
     read_tool = is_read_tool(tool)
+    extracted_patch_paths = []
     if not read_tool:
         for path in paths:
             if path_in_archive(path, working_directories):
@@ -801,6 +892,11 @@ def evaluate(event):
         for path in extracted_patch_paths:
             if path_in_archive(path, working_directories):
                 deny(ARCHIVE_REASON)
+        if is_direct_write_tool(tool):
+            write_paths = [*paths, *extracted_patch_paths]
+            if not write_paths:
+                raise ValueError("write targets cannot be validated")
+            enforce_pipeline_reentry(write_paths, working_directories)
     archive_working_directory = any(
         path_in_archive(path) for path in working_directories
     )

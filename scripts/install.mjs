@@ -13,6 +13,15 @@ export const CLAUDE_BRIDGE = "@../AGENTS.md\n@../WORKFLOW.md\n";
 export const HOOKS_DIRECTORY = ".gsd-path";
 export const GUARD_SCRIPTS = ["guard_hook.py", "git_guard.py"];
 export const GUARD_MARKER = "gsd-path guard";
+export const PROJECT_RUNTIME_SCRIPTS = [
+  "pipeline_state.py",
+  "isolation.py",
+  "discussion_records.py",
+  "pipeline_git.py",
+  "archive_milestone.py",
+  "review_panel.py",
+];
+export const PROJECT_RUNTIME_MARKER = "gsd-path project runtime";
 const INSTALL_LOCK_NAME = ".gsd-path-install-lock";
 export const CLAUDE_MATCHER =
   "Edit|Write|MultiEdit|NotebookEdit|Delete|StrReplace|ApplyPatch|Create|Shell|Bash|PowerShell";
@@ -820,6 +829,14 @@ function projectDestinations(project, selected, hooksEnabled, interpreter, hooks
     [path.join(project, "AGENTS.md"), "AGENTS.md", null, false],
     [path.join(project, "WORKFLOW.md"), "WORKFLOW.md", null, false],
   ];
+  for (const name of PROJECT_RUNTIME_SCRIPTS) {
+    destinations.push([
+      path.join(project, HOOKS_DIRECTORY, "runtime", name),
+      path.join("scripts", name),
+      null,
+      false,
+    ]);
+  }
   if (includeClaude) {
     destinations.push([path.join(project, ".claude", "CLAUDE.md"), null, CLAUDE_BRIDGE, false]);
   }
@@ -924,7 +941,11 @@ function validateProject(sourceRoot, project, selected, hooksEnabled, reservedRo
       throw new InstallerError(`unsafe ${label} project directory: ${directory}`);
     }
   }
-  const sources = ["AGENTS.md", "WORKFLOW.md"];
+  const sources = [
+    "AGENTS.md",
+    "WORKFLOW.md",
+    ...PROJECT_RUNTIME_SCRIPTS.map((name) => path.join("scripts", name)),
+  ];
   if (hooksEnabled) {
     sources.push(...GUARD_SCRIPTS.map((name) => path.join("scripts", name)));
   }
@@ -1005,6 +1026,11 @@ function rollbackProject(transaction) {
 function isManagedGuardScript(destination) {
   if (!isFile(destination)) return false;
   return fs.readFileSync(destination, "utf8").includes(GUARD_MARKER);
+}
+
+function isManagedProjectRuntime(destination) {
+  if (!isFile(destination)) return false;
+  return fs.readFileSync(destination, "utf8").includes(PROJECT_RUNTIME_MARKER);
 }
 
 function isManagedGitHook(destination) {
@@ -1202,6 +1228,19 @@ function validateHooksRefresh(sourceRoot, project, full, hooksDir, selected, ini
       throw new InstallerError(`missing guard script source: ${source}`);
     }
   }
+  for (const name of PROJECT_RUNTIME_SCRIPTS) {
+    const destination = path.join(project, HOOKS_DIRECTORY, "runtime", name);
+    if (isSymlink(destination)) {
+      throw new InstallerError(`refusing to refresh a symlink: ${destination}`);
+    }
+    if (lexists(destination) && !isManagedProjectRuntime(destination)) {
+      throw new InstallerError(`not a managed GSD Path project runtime: ${destination}`);
+    }
+    const source = path.join(sourceRoot, "scripts", name);
+    if (isSymlink(source) || !isFile(source)) {
+      throw new InstallerError(`missing project runtime source: ${source}`);
+    }
+  }
   if (full) {
     for (const [target, label, settings] of [
       ["claude", "Claude", path.join(project, ".claude", "settings.json")],
@@ -1255,6 +1294,15 @@ function refreshHooks(sourceRoot, project, full, dryRun, selected = [], initiali
   const refreshed = [];
   for (const name of GUARD_SCRIPTS) {
     const destination = path.join(project, HOOKS_DIRECTORY, name);
+    const source = path.join(sourceRoot, "scripts", name);
+    if (!dryRun) {
+      fs.mkdirSync(path.dirname(destination), { recursive: true });
+      copyFileAtomic(source, destination);
+    }
+    refreshed.push(describeProjectPath(project, destination));
+  }
+  for (const name of PROJECT_RUNTIME_SCRIPTS) {
+    const destination = path.join(project, HOOKS_DIRECTORY, "runtime", name);
     const source = path.join(sourceRoot, "scripts", name);
     if (!dryRun) {
       fs.mkdirSync(path.dirname(destination), { recursive: true });
@@ -1418,7 +1466,26 @@ export function doctor(sourceRoot, { targets, rootFor, project = null }) {
     push("note", "project: .claude/CLAUDE.md exists but is not the managed bridge");
   }
 
-  if (!isDirectory(path.join(project, HOOKS_DIRECTORY))) {
+  for (const name of PROJECT_RUNTIME_SCRIPTS) {
+    const destination = path.join(project, HOOKS_DIRECTORY, "runtime", name);
+    if (!isFile(destination)) {
+      push("fail", `project: missing runtime ${name}`);
+      continue;
+    }
+    const content = fs.readFileSync(destination);
+    if (!content.toString("utf8").includes(PROJECT_RUNTIME_MARKER)) {
+      push("warn", `project: runtime ${name} is not managed`);
+    } else if (!content.equals(fs.readFileSync(path.join(sourceRoot, "scripts", name)))) {
+      push("warn", `project: runtime ${name} is stale — refresh it with the project contracts`);
+    } else {
+      push("ok", `project: runtime ${name} current`);
+    }
+  }
+
+  const guardInstalled = GUARD_SCRIPTS.some((name) =>
+    lexists(path.join(project, HOOKS_DIRECTORY, name))
+  );
+  if (!guardInstalled) {
     push("note", "hooks: guard hooks not installed (opt in with --hooks; see HOOKS.md)");
   } else {
     for (const name of GUARD_SCRIPTS) {

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# gsd-path project runtime
 """Prepare, render, validate, integrate, and abandon GSD Path milestone archives.
 
 Also validates milestone integration: the read-only validate-integrated

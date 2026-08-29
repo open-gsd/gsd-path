@@ -33,6 +33,15 @@ def run_guard(payload):
 
 
 class GuardHookTests(unittest.TestCase):
+    def status(self, root, phase="plan", action="run-phase"):
+        return {
+            "schema": "gsd-path/status/v1",
+            "state": {"phase": phase},
+            "route": {"action": action, "phase": phase},
+            "path": str(root / ".project" / "STATE.md"),
+            "next_skill": f"gsd-path-{phase}" if action == "run-phase" else "gsd-path",
+        }
+
     def assert_denied(self, payload):
         status, output, error = run_guard(payload)
         self.assertEqual(status, 2, error)
@@ -71,6 +80,96 @@ class GuardHookTests(unittest.TestCase):
                 "tool_input": {"file_path": ".project/plan/PLAN.md"},
             }
         )
+
+    def test_plain_prompt_denies_product_write_outside_build(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / ".project").mkdir()
+            (root / ".project" / "STATE.md").write_text("owned\n", encoding="utf-8")
+            with (
+                mock.patch.object(guard_hook, "repository_root", return_value=root),
+                mock.patch.object(
+                    guard_hook, "project_status", return_value=self.status(root)
+                ),
+            ):
+                status, output, error = run_guard(
+                    {"tool_name": "Edit", "tool_input": {"file_path": "src/app.py"}}
+                )
+        self.assertEqual(status, 2, error)
+        self.assertIn("gsd-path-plan", json.loads(output)["reason"])
+
+    def test_plain_prompt_allows_pipeline_artifact_write(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / ".project").mkdir()
+            (root / ".project" / "STATE.md").write_text("owned\n", encoding="utf-8")
+            with (
+                mock.patch.object(guard_hook, "repository_root", return_value=root),
+                mock.patch.object(
+                    guard_hook, "project_status", return_value=self.status(root)
+                ),
+            ):
+                self.assert_allowed(
+                    {
+                        "tool_name": "Write",
+                        "tool_input": {"file_path": ".project/intent/INTENT.md"},
+                    }
+                )
+
+    def test_plain_prompt_allows_product_write_during_routed_build(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / ".project").mkdir()
+            (root / ".project" / "STATE.md").write_text("owned\n", encoding="utf-8")
+            with (
+                mock.patch.object(guard_hook, "repository_root", return_value=root),
+                mock.patch.object(
+                    guard_hook,
+                    "project_status",
+                    return_value=self.status(root, phase="build"),
+                ),
+            ):
+                self.assert_allowed(
+                    {"tool_name": "Edit", "tool_input": {"file_path": "src/app.py"}}
+                )
+
+    def test_plain_prompt_denies_mixed_product_patch(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / ".project").mkdir()
+            (root / ".project" / "STATE.md").write_text("owned\n", encoding="utf-8")
+            with (
+                mock.patch.object(guard_hook, "repository_root", return_value=root),
+                mock.patch.object(
+                    guard_hook, "project_status", return_value=self.status(root)
+                ),
+            ):
+                self.assert_denied(
+                    {
+                        "tool_name": "ApplyPatch",
+                        "tool_input": {
+                            "patch": "*** Update File: .project/STATE.md\n"
+                            "*** Update File: src/app.py\n"
+                        },
+                    }
+                )
+
+    def test_plain_prompt_fails_loud_when_status_is_invalid(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / ".project").mkdir()
+            (root / ".project" / "STATE.md").write_text("invalid\n", encoding="utf-8")
+            with (
+                mock.patch.object(guard_hook, "repository_root", return_value=root),
+                mock.patch.object(
+                    guard_hook, "project_status", side_effect=ValueError("invalid")
+                ),
+            ):
+                status, output, error = run_guard(
+                    {"tool_name": "Edit", "tool_input": {"file_path": "src/app.py"}}
+                )
+        self.assertEqual(status, 2, error)
+        self.assertIn("gsd-path-forensics", json.loads(output)["reason"])
 
     def test_allows_reading_archive(self):
         self.assert_allowed(

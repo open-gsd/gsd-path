@@ -5,6 +5,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -79,6 +80,10 @@ class InstallerTests(unittest.TestCase):
             (scripts / name).write_text(
                 f"# {name}\n{install.GUARD_MARKER}\n", encoding="utf-8"
             )
+        for name in install.PROJECT_RUNTIME_SCRIPTS:
+            (scripts / name).write_text(
+                f"# {name}\n{install.PROJECT_RUNTIME_MARKER}\n", encoding="utf-8"
+            )
         self.sync_patch = mock.patch.object(
             install.sync_skill_resources, "mismatches", return_value=[]
         )
@@ -124,6 +129,52 @@ class InstallerTests(unittest.TestCase):
             self.root / "skills",
             install.default_root("opencode", {"OPENCODE_CONFIG": str(config)}),
         )
+
+    def test_project_runtime_dependency_set_imports(self):
+        project = self.root / "runtime-project"
+        runtime = project / install.HOOKS_DIRECTORY / "runtime"
+        runtime.mkdir(parents=True)
+        for name in install.PROJECT_RUNTIME_SCRIPTS:
+            shutil.copy2(PROJECT_ROOT / "scripts" / name, runtime / name)
+        subprocess.run(
+            ["git", "init", "-b", "main", str(project)],
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        state = project / ".project" / "STATE.md"
+        state.parent.mkdir()
+        state.write_text(
+            "---\n"
+            "pipeline: gsd-path/v2\n"
+            "project: demo\n"
+            "milestone: demo\n"
+            "phase: plan\n"
+            "status: done\n"
+            "branch: null\n"
+            "archive: null\n"
+            "---\n\n"
+            "# Project State\n\n"
+            "## Log\n\n"
+            "- 2026-08-29 — plan — fixture\n",
+            encoding="utf-8",
+        )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(runtime / "pipeline_state.py"),
+                "status",
+                "--repo",
+                str(project),
+            ],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual("gsd-path/status/v1", json.loads(result.stdout)["schema"])
 
         self.assertEqual(
             self.root / "future" / "skills",
@@ -839,6 +890,10 @@ class InstallerTests(unittest.TestCase):
             install.CLAUDE_BRIDGE,
             (project / ".claude" / "CLAUDE.md").read_text(encoding="utf-8"),
         )
+        for name in install.PROJECT_RUNTIME_SCRIPTS:
+            self.assertTrue(
+                (project / install.HOOKS_DIRECTORY / "runtime" / name).is_file()
+            )
 
         second_target = self.root / "claude-2" / "skills"
         status, _, error = self.run_main(
@@ -1160,6 +1215,10 @@ class InstallerTests(unittest.TestCase):
         )
         for name in install.GUARD_SCRIPTS:
             self.assertTrue((project / install.HOOKS_DIRECTORY / name).is_file())
+        for name in install.PROJECT_RUNTIME_SCRIPTS:
+            self.assertTrue(
+                (project / install.HOOKS_DIRECTORY / "runtime" / name).is_file()
+            )
         self.assertTrue((project / ".claude" / "settings.json").is_file())
         self.assertTrue((project / ".git" / "hooks" / "pre-commit").is_file())
         self.assertTrue((project / ".git" / "hooks" / "commit-msg").is_file())
@@ -1496,6 +1555,9 @@ class InstallerTests(unittest.TestCase):
         (self.source / "scripts" / "guard_hook.py").write_text(
             f"# guard v2\n{install.GUARD_MARKER}\n", encoding="utf-8"
         )
+        (self.source / "scripts" / "pipeline_state.py").write_text(
+            f"# runtime v2\n{install.PROJECT_RUNTIME_MARKER}\n", encoding="utf-8"
+        )
         status, output, error = self.run_main(
             [
                 "--hooks-refresh",
@@ -1511,6 +1573,15 @@ class InstallerTests(unittest.TestCase):
             (project / install.HOOKS_DIRECTORY / "guard_hook.py").read_text(
                 encoding="utf-8"
             ),
+        )
+        self.assertIn(
+            "runtime v2",
+            (
+                project
+                / install.HOOKS_DIRECTORY
+                / "runtime"
+                / "pipeline_state.py"
+            ).read_text(encoding="utf-8"),
         )
         self.assertTrue(target.exists())
 
@@ -1531,6 +1602,66 @@ class InstallerTests(unittest.TestCase):
         )
         self.assertEqual(1, status)
         self.assertIn("not a managed GSD Path guard script", error)
+
+    def test_hooks_refresh_rejects_unmanaged_project_runtime(self):
+        project = self.root / "project"
+        (project / ".git").mkdir(parents=True)
+        target = self.root / "claude" / "skills"
+        self.run_main(self.hooks_arguments(project, target))
+        runtime = (
+            project
+            / install.HOOKS_DIRECTORY
+            / "runtime"
+            / "pipeline_state.py"
+        )
+        runtime.write_text("custom\n", encoding="utf-8")
+
+        status, _, error = self.run_main(
+            [
+                "--hooks-refresh",
+                "--project",
+                str(project),
+                "--source-root",
+                str(self.source),
+            ]
+        )
+
+        self.assertEqual(1, status)
+        self.assertIn("not a managed GSD Path project runtime", error)
+        self.assertEqual("custom\n", runtime.read_text(encoding="utf-8"))
+
+    def test_hooks_refresh_rejects_symlinked_project_runtime(self):
+        project = self.root / "project"
+        (project / ".git").mkdir(parents=True)
+        target = self.root / "claude" / "skills"
+        self.run_main(self.hooks_arguments(project, target))
+        runtime = (
+            project
+            / install.HOOKS_DIRECTORY
+            / "runtime"
+            / "pipeline_state.py"
+        )
+        outside = self.root / "outside-runtime.py"
+        runtime.replace(outside)
+        runtime.symlink_to(outside)
+
+        status, _, error = self.run_main(
+            [
+                "--hooks-refresh",
+                "--project",
+                str(project),
+                "--source-root",
+                str(self.source),
+            ]
+        )
+
+        self.assertEqual(1, status)
+        self.assertIn("refusing to refresh a symlink", error)
+        self.assertTrue(runtime.is_symlink())
+        self.assertIn(
+            install.PROJECT_RUNTIME_MARKER,
+            outside.read_text(encoding="utf-8"),
+        )
 
     def refresh_full_arguments(self, project):
         return [

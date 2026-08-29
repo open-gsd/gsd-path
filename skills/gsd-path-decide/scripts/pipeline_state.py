@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# gsd-path project runtime
 """Validate, route, and change GSD Path state without model-side parsing.
 
 The helper owns the fixed-format STATE.md interface. It checkpoints plan and

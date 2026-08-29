@@ -39,6 +39,7 @@ AGENTS.md or WORKFLOW.md template changed upstream
 | Global skills (`~/.claude/skills`, …) | Yes | `--update` |
 | Project-local skills (`.cursor/skills`, …) | Yes | `--update --local` |
 | `.gsd-path/guard_hook.py`, `git_guard.py` | Yes | `--hooks-refresh` |
+| `.gsd-path/runtime/*.py` | Yes | `--hooks-refresh` |
 | Native hook settings + git hooks | Yes | `--hooks-refresh-full` (host flag creates missing config) |
 | Guards for an existing project | Yes | `--hooks-init` (preserves project contracts) |
 | `AGENTS.md`, `WORKFLOW.md` | **No** | Manual merge |
@@ -116,7 +117,9 @@ If you used `--hooks` on install:
 node scripts/install.mjs --hooks-refresh --project /path/to/repo
 ```
 
-Overwrites managed `.gsd-path/*.py` (must contain `gsd-path guard` marker).
+Overwrites managed guard scripts and the project status runtime. Guard files
+must contain `gsd-path guard`; runtime files must contain
+`gsd-path project runtime`.
 
 Include existing native settings and git hooks, and create missing settings for
 explicitly selected hosts:
@@ -151,7 +154,8 @@ To adopt upstream template changes:
 1. Open new templates in the gsd-path repo or npm package
 2. `diff` against your project copies
 3. Merge manually
-4. Never delete active `.project/` milestone state
+4. Refresh or initialize hooks to install the matching `.gsd-path/runtime/`
+5. Never delete active `.project/` milestone state
 
 An in-flight milestone whose `INTENT.md` or `ROADMAP.md` predates `Surfaces:`
 fails the plan and roadmap gates with `is missing Surfaces`. Add the field by

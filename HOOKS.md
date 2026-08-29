@@ -1,10 +1,11 @@
 # HOOKS.md — Deterministic Guard Hooks
 
-Optional enforcement for two pipeline invariants prompt contracts cannot guarantee:
+Optional enforcement for pipeline invariants prompt contracts cannot guarantee:
 
 - committed `.project/archive/` trees stay read-only after ship
 - destructive Git operations do not erase recovery state, untracked evidence,
   or protected refs
+- direct product-file writes do not bypass a routed non-build phase
 
 **Docs:** [DOCS.md](DOCS.md) (hub) · [UPDATE.md](UPDATE.md) (refresh hooks) · [QUICK.md](QUICK.md) (first install with `--hooks`)
 
@@ -48,6 +49,7 @@ Native configs for unselected hosts are ignored.
 | --- | --- |
 | `.gsd-path/guard_hook.py` | Pre-tool-use guard (stdin JSON → exit 2 + denial JSON) |
 | `.gsd-path/git_guard.py` | Staged-path + ship-subject validator |
+| `.gsd-path/runtime/` | Canonical read-only state validation and routing used for plain-prompt re-entry |
 | `.git/hooks/pre-commit` | Runs `git_guard.py` before commit |
 | `.git/hooks/commit-msg` | Runs `git_guard.py` with commit message |
 | `.claude/settings.json` | Claude PreToolUse wiring (`claude` target) |
@@ -108,6 +110,8 @@ See [UPDATE.md](UPDATE.md).
 - destructive Git commands nested in supported shell and command wrappers
 - archive glob/brace expansions and execution-capable read options such as
   `rg --pre`
+- direct write, edit, and patch tool calls that target product files while the
+  deterministic route is outside build
 
 Read tools (`Read`, `Grep`, `View`, …) may still open archive paths.
 
@@ -134,9 +138,10 @@ the remaining hosts:
 | OpenCode | JS plugin `tool.execute.before` | [OpenCode plugins](https://opencode.ai/docs/plugins/) |
 | Zed | no hook API — git hooks only | — |
 
-**Caveats:** Grok and Kimi fail-open on hook errors by design. Copilot, Kimi,
-Kiro, and Antigravity may not intercept subagent tools — treat coverage as
-orchestrator-level.
+**Caveats:** The hook cannot prove which skill initiated a shell command or a
+build-phase edit, so AGENTS.md owns those re-entry cases. Grok and Kimi
+fail-open on hook errors by design. Copilot, Kimi, Kiro, and Antigravity may
+not intercept subagent tools — treat coverage as orchestrator-level.
 
 ## Troubleshooting
 

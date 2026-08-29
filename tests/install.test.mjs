@@ -63,6 +63,12 @@ function makeSource(base) {
       `# ${name}\n${installer.GUARD_MARKER}\n`
     );
   }
+  for (const name of installer.PROJECT_RUNTIME_SCRIPTS) {
+    fs.writeFileSync(
+      path.join(src, "scripts", name),
+      `# ${name}\n${installer.PROJECT_RUNTIME_MARKER}\n`
+    );
+  }
   return src;
 }
 
@@ -539,6 +545,11 @@ test("claude project bridge uses imports and never overwrites", async () => {
     fs.readFileSync(path.join(project, ".claude", "CLAUDE.md"), "utf8"),
     installer.CLAUDE_BRIDGE
   );
+  for (const name of installer.PROJECT_RUNTIME_SCRIPTS) {
+    assert.ok(
+      fs.existsSync(path.join(project, installer.HOOKS_DIRECTORY, "runtime", name))
+    );
+  }
 
   const secondTarget = path.join(root, "claude-2", "skills");
   await assert.rejects(
@@ -831,6 +842,11 @@ test("hooks init adds guards without changing existing project contracts", async
   for (const name of installer.GUARD_SCRIPTS) {
     assert.ok(fs.existsSync(path.join(project, installer.HOOKS_DIRECTORY, name)));
   }
+  for (const name of installer.PROJECT_RUNTIME_SCRIPTS) {
+    assert.ok(
+      fs.existsSync(path.join(project, installer.HOOKS_DIRECTORY, "runtime", name))
+    );
+  }
   assert.ok(fs.existsSync(path.join(project, ".claude", "settings.json")));
   assert.ok(fs.existsSync(path.join(project, ".git", "hooks", "pre-commit")));
   assert.ok(fs.existsSync(path.join(project, ".git", "hooks", "commit-msg")));
@@ -997,6 +1013,10 @@ test("hooks refresh updates managed guard scripts", async () => {
     path.join(source, "scripts", "guard_hook.py"),
     "# guard v2\n" + installer.GUARD_MARKER + "\n"
   );
+  fs.writeFileSync(
+    path.join(source, "scripts", "pipeline_state.py"),
+    "# runtime v2\n" + installer.PROJECT_RUNTIME_MARKER + "\n"
+  );
   const status = await installer.main(
     ["--hooks-refresh", "--project", project, "--source-root", source, "--no-color"]
   );
@@ -1004,6 +1024,13 @@ test("hooks refresh updates managed guard scripts", async () => {
   assert.match(
     fs.readFileSync(path.join(project, installer.HOOKS_DIRECTORY, "guard_hook.py"), "utf8"),
     /guard v2/
+  );
+  assert.match(
+    fs.readFileSync(
+      path.join(project, installer.HOOKS_DIRECTORY, "runtime", "pipeline_state.py"),
+      "utf8"
+    ),
+    /runtime v2/
   );
   assert.ok(fs.existsSync(target));
 });
@@ -1255,6 +1282,55 @@ test("hooks refresh rejects unmanaged guard scripts", async () => {
     ["--hooks-refresh", "--project", project, "--source-root", source, "--no-color"]
   );
   assert.equal(status, 1);
+});
+
+test("hooks refresh rejects an unmanaged project runtime", async () => {
+  const project = path.join(root, "project");
+  fs.mkdirSync(path.join(project, ".git"), { recursive: true });
+  await runInstall([installer.targetPlan("claude", path.join(root, "claude", "skills"))], {
+    project,
+    hooks: true,
+  });
+  const runtime = path.join(
+    project,
+    installer.HOOKS_DIRECTORY,
+    "runtime",
+    "pipeline_state.py"
+  );
+  fs.writeFileSync(runtime, "custom\n");
+
+  const status = await installer.main(
+    ["--hooks-refresh", "--project", project, "--source-root", source, "--no-color"]
+  );
+
+  assert.equal(status, 1);
+  assert.equal(fs.readFileSync(runtime, "utf8"), "custom\n");
+});
+
+test("hooks refresh rejects a symlinked project runtime", async () => {
+  const project = path.join(root, "project");
+  fs.mkdirSync(path.join(project, ".git"), { recursive: true });
+  await runInstall([installer.targetPlan("claude", path.join(root, "claude", "skills"))], {
+    project,
+    hooks: true,
+  });
+  const runtime = path.join(
+    project,
+    installer.HOOKS_DIRECTORY,
+    "runtime",
+    "pipeline_state.py"
+  );
+  const outside = path.join(root, "outside-runtime.py");
+  fs.renameSync(runtime, outside);
+  fs.symlinkSync(outside, runtime);
+
+  const status = await installer.main(
+    ["--hooks-refresh", "--project", project, "--source-root", source, "--no-color"]
+  );
+
+  assert.equal(status, 1);
+  assert.ok(fs.lstatSync(runtime).isSymbolicLink());
+  assert.match(fs.readFileSync(outside, "utf8"), /gsd-path project runtime/);
 });
 
 test("hooks refresh full merges settings preserving unrelated keys", async () => {

@@ -43,7 +43,8 @@ DOCS.md (here)     four journeys in one place
 GSD Path has two install layers:
 
 1. **Skills** — router + phase skills for your AI host(s)
-2. **Project contracts** (optional) — `AGENTS.md` and `WORKFLOW.md` in the repo
+2. **Project contracts** (optional) — `AGENTS.md`, `WORKFLOW.md`, and the
+   read-only `.gsd-path/runtime/` status engine in the repo
 
 ### Decision tree
 
@@ -53,7 +54,7 @@ Where should skills live?
 └─ This repo only (team pin)  → local:   install.mjs --all --local  (from repo root)
 
 Will this repo run the pipeline?
-├─ yes → add --project "$(pwd)"  (AGENTS.md + WORKFLOW.md)
+├─ yes → add --project "$(pwd)"  (contracts + plain-prompt re-entry runtime)
 └─ no  → skills only
 
 Want archive / destructive-git enforcement?

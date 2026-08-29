@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# gsd-path project runtime
 """Deterministic GSD Path branch names and pipeline commit messages.
 
 Bound work lives on `gsd-path/M00N` for that milestone. The required remote
