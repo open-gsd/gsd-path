@@ -14,6 +14,7 @@ Kiro; the JSON covers hosts that read a decision object instead).
 Malformed input or an internal failure denies the tool call.
 """
 
+import ast
 from fnmatch import fnmatchcase
 import json
 import os
@@ -45,7 +46,7 @@ PATCH_PATH_PATTERN = re.compile(
     re.MULTILINE,
 )
 UNIFIED_DIFF_PATH_PATTERN = re.compile(
-    r"^(?:---|\+\+\+) (?:[ab]/)?([^\t\r\n]+)$", re.MULTILINE
+    r"^(?:---|\+\+\+) ([^\t\r\n]+)$", re.MULTILINE
 )
 
 # A tool skips path checks only when its name carries a read-only verb and
@@ -814,6 +815,17 @@ def patch_paths(payload):
         yield (match.group(1) or match.group(2)).strip()
     for match in UNIFIED_DIFF_PATH_PATTERN.finditer(payload):
         path = match.group(1).strip()
+        if path.startswith('"'):
+            try:
+                path = ast.literal_eval(path)
+            except (SyntaxError, ValueError) as error:
+                raise ValueError("quoted patch path cannot be validated") from error
+            if not isinstance(path, str):
+                raise ValueError("quoted patch path cannot be validated")
+        elif '"' in path:
+            raise ValueError("quoted patch path cannot be validated")
+        if path.startswith(("a/", "b/")):
+            path = path[2:]
         if path != "/dev/null":
             yield path
 

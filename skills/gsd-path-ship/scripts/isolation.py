@@ -783,7 +783,7 @@ def _activated_task_text(
     fields, error = task_frontmatter(text)
     if error is not None or fields is None:
         raise IsolationError(error or "task frontmatter is unreadable")
-    expected = {
+    pending = {
         "id": task_id,
         "status": "pending",
         "agent": "null",
@@ -791,9 +791,6 @@ def _activated_task_text(
         "worktree": "null",
         "task_branch": "null",
     }
-    for key, value in expected.items():
-        if fields.get(key) != value:
-            raise IsolationError(f"task activation requires {key}: {value}")
     values = {
         "status": "in-progress",
         "agent": agent,
@@ -801,6 +798,12 @@ def _activated_task_text(
         "worktree": str(worktree),
         "task_branch": task_branch or "null",
     }
+    active = {"id": task_id, **values}
+    if all(fields.get(key) == value for key, value in active.items()):
+        return text
+    for key, value in pending.items():
+        if fields.get(key) != value:
+            raise IsolationError(f"task activation requires {key}: {value}")
     found = set()
     lines = []
     for line in head:
@@ -855,16 +858,24 @@ def activate_task(
     )
     _replace_regular_file(task_path, activated.encode("utf-8"), mode)
     if task_branch is not None:
+        authorization_ref = task_authorization_ref(task_id)
         authorized = run_git(
             worktree,
             "update-ref",
-            task_authorization_ref(task_id),
+            authorization_ref,
             resolved_base,
             "0" * len(resolved_base),
         )
         if authorized.returncode != 0:
-            _replace_regular_file(task_path, text.encode("utf-8"), mode)
-            raise IsolationError("could not record task worktree authorization")
+            existing = run_git(
+                worktree,
+                "rev-parse",
+                "--verify",
+                authorization_ref,
+            )
+            if existing.returncode != 0 or existing.stdout.strip() != resolved_base:
+                _replace_regular_file(task_path, text.encode("utf-8"), mode)
+                raise IsolationError("could not record task worktree authorization")
     return {
         "agent": agent,
         "base": resolved_base,

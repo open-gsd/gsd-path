@@ -732,6 +732,34 @@ class GuardHookTests(unittest.TestCase):
                     }
                 )
 
+    def test_routed_build_denies_quoted_control_path_diff(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / ".project").mkdir()
+            (root / ".project" / "STATE.md").write_text(
+                "owned\n", encoding="utf-8"
+            )
+            with (
+                mock.patch.object(guard_hook, "repository_root", return_value=root),
+                mock.patch.object(
+                    guard_hook,
+                    "project_status",
+                    return_value=self.status(root, phase="build"),
+                ),
+            ):
+                self.assert_denied(
+                    {
+                        "tool_name": "ApplyDiff",
+                        "tool_input": {
+                            "diff": (
+                                '--- "a/.project/STATE.md"\n'
+                                '+++ "b/.project/STATE.md"\n'
+                                "@@ -1 +1 @@\n-old\n+new\n"
+                            )
+                        },
+                    }
+                )
+
     def test_plain_prompt_fails_loud_when_status_is_invalid(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

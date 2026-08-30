@@ -142,6 +142,27 @@ class IsolationTests(unittest.TestCase):
             self.assertTrue(
                 isolation.authorized_task_worktree(worktree, "gsd-path/M001")
             )
+            git(
+                worktree,
+                "update-ref",
+                "-d",
+                isolation.task_authorization_ref("T001"),
+            )
+            self.assertFalse(
+                isolation.authorized_task_worktree(worktree, "gsd-path/M001")
+            )
+            recovered = isolation.activate_task(
+                worktree,
+                base,
+                "T001",
+                "coder",
+                ".project/tasks/T001.md",
+                "gsd-path-task/T001",
+            )
+            self.assertEqual("in-progress", recovered["status"])
+            self.assertTrue(
+                isolation.authorized_task_worktree(worktree, "gsd-path/M001")
+            )
             deactivated = isolation.deactivate_task(
                 worktree, "T001", "gsd-path-task/T001"
             )
