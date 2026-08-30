@@ -48,9 +48,10 @@ Review depth: <full | deep | verify-only>
      entirely when it is. One block per declared surface, named exactly as
      INTENT.md names it, owned by the task that delivers it. That task must
      name in Criteria the success criteria this surface is proven by — the
-     owning task must own exactly those in its Intent coverage. This is what
-     the final reviewer walks before the milestone is called done, and
-     FINAL.md records the surface it was walked on. -->
+     owning task must own every listed criterion in its Intent coverage. A
+     criterion may appear in only one surface block. This is what the final
+     reviewer walks before the milestone is called done, and FINAL.md records
+     the surface it was walked on. -->
 
 ### <surface name as INTENT.md writes it> — T001
 

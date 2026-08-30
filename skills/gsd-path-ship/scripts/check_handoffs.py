@@ -556,6 +556,7 @@ def _surface_contract(
         for heading in SURFACE_HEADING.finditer(body)
     }
     owners: Dict[str, Tuple[str, List[str]]] = {}
+    surface_by_criterion: Dict[str, str] = {}
     for surface in surfaces:
         key = surface.casefold()
         if key not in blocks:
@@ -567,10 +568,16 @@ def _surface_contract(
             _non_placeholder(_line_value(block, f"{field}:"), f"{label} {field}")
         if not _numbered_items(_roadmap_segment(block, "Walkthrough:", None, label)):
             raise HandoffError(f"{label} Walkthrough has no steps")
-        owners[surface] = (
-            task_id,
-            _criterion_ids(_roadmap_field(block, "Criteria", label), label),
-        )
+        criteria = _criterion_ids(_roadmap_field(block, "Criteria", label), label)
+        for criterion in criteria:
+            previous_surface = surface_by_criterion.get(criterion)
+            if previous_surface is not None:
+                raise HandoffError(
+                    f"Surface contract {criterion} is shared by surfaces "
+                    f"{previous_surface} and {surface}"
+                )
+            surface_by_criterion[criterion] = surface
+        owners[surface] = (task_id, criteria)
     if blocks:
         raise HandoffError(
             "Surface contract names undeclared surfaces: "

@@ -68,9 +68,10 @@ plan order above, which still keeps plan-invalidating risk in wave 1.
   block per surface with its entry point, what empty, loading, error, and
   success each show, and the walkthrough a reviewer performs. Give each
   surface to the task that delivers it, list in Criteria the success criteria
-  that surface is proven by — the same SCn ids that task owns in Intent
-  coverage — and put the surface in the same wave as the capability behind
-  it. A milestone with a surface is not done when only its internals run.
+  that prove that surface, which the task also owns in Intent coverage. A
+  criterion may appear in only one surface block. Put the surface in the same
+  wave as the capability behind it. A milestone with a surface is not done
+  when only its internals run.
 - Make `files` exhaustive, including imports, routes, generated artifacts,
   tests, and wiring. Require disjoint files for same-wave tasks.
 - Write an Interface contract in every task: `None` for independent tasks;

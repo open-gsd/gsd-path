@@ -837,6 +837,26 @@ The task implements the demo.
             result = check_handoffs.validate_plan(root)
             self.assertEqual(result["surfaces"], {"Demo web app": "T001"})
 
+    def test_plan_rejects_a_criterion_shared_by_multiple_surfaces(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_plan_handoff(root)
+            self.write_intent_criteria(root, surfaces="Demo web app, Demo CLI")
+            self.write_plan_coverage(
+                root,
+                surface_contract=SURFACE_CONTRACT
+                + SURFACE_CONTRACT.replace("## Surface contract\n\n", "").replace(
+                    "Demo web app", "Demo CLI"
+                ),
+            )
+
+            with self.assertRaises(check_handoffs.HandoffError) as failure:
+                check_handoffs.validate_plan(root)
+            message = str(failure.exception)
+            self.assertIn("SC1", message)
+            self.assertIn("Demo web app", message)
+            self.assertIn("Demo CLI", message)
+
     def test_plan_rejects_a_surface_block_without_a_walkthrough(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
