@@ -211,20 +211,24 @@ class InstallerTests(unittest.TestCase):
             "pipeline: gsd-path/v2\n"
             "project: demo\n"
             "milestone: demo\n"
-            "phase: plan\n"
-            "status: done\n"
-            "branch: null\n"
+            "phase: ship\n"
+            "status: blocked\n"
+            "branch: gsd-path/M001\n"
             "archive: null\n"
             "---\n\n"
             "# Project State\n\n"
             "## Log\n\n"
-            "- 2026-08-29 — plan — fixture\n",
+            "- 2026-08-29 — ship — fixture\n",
             encoding="utf-8",
         )
+        findings = project / ".project" / "review" / "PATCH-FINDINGS.md"
+        findings.parent.mkdir()
+        findings.write_text("invalid\n", encoding="utf-8")
 
         result = subprocess.run(
             [
                 sys.executable,
+                "-B",
                 str(runtime / "pipeline_state.py"),
                 "status",
                 "--repo",
@@ -236,7 +240,10 @@ class InstallerTests(unittest.TestCase):
         )
 
         self.assertEqual(0, result.returncode, result.stderr)
-        self.assertEqual("gsd-path/status/v1", json.loads(result.stdout)["schema"])
+        payload = json.loads(result.stdout)
+        self.assertEqual("gsd-path/status/v1", payload["schema"])
+        self.assertEqual("block", payload["route"]["action"])
+        self.assertFalse((runtime / "__pycache__").exists())
 
     def test_skill_names_are_derived_from_resource_manifest(self):
         manifest = {

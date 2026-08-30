@@ -89,7 +89,8 @@ Project installs include the router's read-only status engine at
 skill, an owned `.project/STATE.md` activates re-entry. Informational prompts
 finish read-only and end with the current **Outcome** / **Review** / **Next**
 handoff. Mutation prompts make no changes and point to the status result's
-`next_skill`. The runtime never initializes state or advances a phase.
+`next_skill`, or its `route.reason` when `next_skill` is null. The runtime never
+initializes state or advances a phase.
 
 The optional pre-tool guard backs this up where it has deterministic evidence:
 outside a routed build phase, direct write/edit/patch requests may touch only

@@ -1839,6 +1839,21 @@ test("native hook install requires an interpreter", async () => {
   assert.ok(!fs.existsSync(path.join(project, "AGENTS.md")));
 });
 
+test("hookless project install requires an interpreter", async () => {
+  installer.hooks.detectPythonInterpreter = () => null;
+  const project = path.join(root, "project");
+  const target = path.join(root, "claude", "skills");
+
+  await assert.rejects(
+    runInstall([installer.targetPlan("claude", target)], { project }),
+    /--project requires a working Python interpreter.*selected hosts: claude/
+  );
+
+  assert.ok(!fs.existsSync(target));
+  assert.ok(!fs.existsSync(path.join(project, "AGENTS.md")));
+  assert.ok(!fs.existsSync(path.join(project, installer.HOOKS_DIRECTORY)));
+});
+
 test("hooks refresh full rejects before writes without an interpreter", async () => {
   const project = path.join(root, "project");
   fs.mkdirSync(path.join(project, ".git"), { recursive: true });

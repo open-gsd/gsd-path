@@ -287,7 +287,7 @@ def project_status(repo):
     if script is None:
         raise ValueError("project status runtime is unavailable")
     result = subprocess.run(
-        [sys.executable, str(script), "status", "--repo", str(repo)],
+        [sys.executable, "-B", str(script), "status", "--repo", str(repo)],
         cwd=repo,
         text=True,
         capture_output=True,

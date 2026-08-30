@@ -15,6 +15,7 @@ export const GUARD_SCRIPTS = ["guard_hook.py", "git_guard.py"];
 export const GUARD_MARKER = "gsd-path guard";
 export const PROJECT_RUNTIME_SCRIPTS = [
   "pipeline_state.py",
+  "check_handoffs.py",
   "isolation.py",
   "discussion_records.py",
   "pipeline_git.py",
@@ -171,7 +172,7 @@ function gitHooksLocation(project) {
   };
 }
 
-function requiredHookRuntime(project, command, selected = []) {
+function requiredPythonRuntime(command, selected = []) {
   const targetSuffix = selected.length ? ` for selected hosts: ${selected.join(", ")}` : "";
   const interpreter = effectiveInterpreter();
   if (interpreter === null) {
@@ -179,6 +180,12 @@ function requiredHookRuntime(project, command, selected = []) {
       `${command} requires a working Python interpreter${targetSuffix}`
     );
   }
+  return interpreter;
+}
+
+function requiredHookRuntime(project, command, selected = []) {
+  const targetSuffix = selected.length ? ` for selected hosts: ${selected.join(", ")}` : "";
+  const interpreter = requiredPythonRuntime(command, selected);
   const location = gitHooksLocation(project);
   if (!location.resolved) {
     throw new InstallerError(
@@ -1846,7 +1853,9 @@ export async function install(sourceRoot, plans, options = {}) {
   const selected = plans.map((plan) => plan.name);
   let interpreter = "python3";
   let hooksDir = null;
-  if (hooksEnabled) {
+  if (project !== null && !hooksEnabled && !dryRun) {
+    interpreter = requiredPythonRuntime("--project", selected);
+  } else if (hooksEnabled) {
     ({ interpreter, hooksDir } = requiredHookRuntime(project, "--hooks", selected));
   }
   const progress = async (text) => {

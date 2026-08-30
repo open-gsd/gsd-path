@@ -716,6 +716,7 @@ def _valid_patch_findings(repo: Path) -> bool:
     result = subprocess.run(
         [
             sys.executable,
+            "-B",
             str(validator),
             "patch",
             "--repo",

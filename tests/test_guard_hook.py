@@ -3,6 +3,7 @@ import io
 import json
 import os
 import shlex
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -157,6 +158,62 @@ class GuardHookTests(unittest.TestCase):
                 self.assert_denied(
                     {"tool_name": "Edit", "tool_input": {"file_path": "src/app.py"}}
                 )
+
+    def test_plain_prompt_status_does_not_write_runtime_bytecode(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            subprocess.run(
+                ["git", "init", "-q", "-b", "main", str(root)],
+                check=True,
+            )
+            managed = root / ".gsd-path"
+            runtime = managed / "runtime"
+            runtime.mkdir(parents=True)
+            shutil.copy2(SCRIPT, managed / "guard_hook.py")
+            scripts = SCRIPT.parent
+            for name in (
+                "pipeline_state.py",
+                "check_handoffs.py",
+                "isolation.py",
+                "discussion_records.py",
+                "pipeline_git.py",
+                "archive_milestone.py",
+                "review_panel.py",
+            ):
+                shutil.copy2(scripts / name, runtime / name)
+            state = root / ".project" / "STATE.md"
+            state.parent.mkdir()
+            state.write_text(
+                "---\n"
+                "pipeline: gsd-path/v2\n"
+                "project: demo\n"
+                "milestone: demo\n"
+                "phase: plan\n"
+                "status: done\n"
+                "branch: null\n"
+                "archive: null\n"
+                "---\n",
+                encoding="utf-8",
+            )
+            environment = os.environ.copy()
+            environment.pop("PYTHONDONTWRITEBYTECODE", None)
+            result = subprocess.run(
+                [sys.executable, str(managed / "guard_hook.py")],
+                cwd=root,
+                env=environment,
+                input=json.dumps(
+                    {
+                        "tool_name": "Edit",
+                        "tool_input": {"file_path": "src/app.py"},
+                    }
+                ),
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(2, result.returncode, result.stderr)
+            self.assertFalse((runtime / "__pycache__").exists())
 
     def test_plain_prompt_denies_mixed_product_patch(self):
         with tempfile.TemporaryDirectory() as temporary:
