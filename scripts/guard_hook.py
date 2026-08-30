@@ -508,8 +508,27 @@ def repository_control_roots(repo):
     return tuple(roots)
 
 
+def _same_existing_path(left, right):
+    try:
+        return os.path.samefile(left, right)
+    except OSError:
+        return False
+
+
+def _within_existing_root(candidate, root):
+    return any(
+        _same_existing_path(ancestor, root)
+        for ancestor in (candidate, *candidate.parents)
+    )
+
+
 def path_kind(candidate, repo, control_roots=()):
-    if any(candidate == root or root in candidate.parents for root in control_roots):
+    if any(
+        candidate == root
+        or root in candidate.parents
+        or _within_existing_root(candidate, root)
+        for root in control_roots
+    ):
         return "protected"
     if candidate != repo and repo not in candidate.parents:
         return "external"
@@ -522,7 +541,18 @@ def path_kind(candidate, repo, control_roots=()):
         (".project", "next", "STATE.md"),
     }:
         return "protected"
-    if parts and parts[0] == ".gsd-path":
+    protected_paths = (
+        repo / ".project",
+        repo / ".project" / "STATE.md",
+        repo / ".project" / "next",
+        repo / ".project" / "next" / "STATE.md",
+    )
+    if any(_same_existing_path(candidate, path) for path in protected_paths):
+        return "protected"
+    managed_root = repo / ".gsd-path"
+    if (parts and parts[0] == ".gsd-path") or _within_existing_root(
+        candidate, managed_root
+    ):
         return "protected"
     if parts and parts[0] == ".project":
         return "artifact"

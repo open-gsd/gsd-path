@@ -371,6 +371,21 @@ test("local install via main uses project roots and skips legacy migration", asy
   assert.ok(!fs.existsSync(path.join(root, "legacy", "disabled-gsd-skills")));
 });
 
+test("project install rejects a nested Git directory", async () => {
+  const repository = path.join(root, "repository");
+  const project = path.join(repository, "nested");
+  const target = path.join(root, "nested-target", "skills");
+  fs.mkdirSync(project, { recursive: true });
+  spawnSync("git", ["init", "-q"], { cwd: repository });
+
+  await assert.rejects(
+    runInstall([installer.targetPlan("claude", target)], { project }),
+    /not the Git worktree root/
+  );
+  assert.ok(!fs.existsSync(target));
+  assert.deepEqual(fs.readdirSync(project), []);
+});
+
 test("codex dry run validates the resolved shared profile from the real repository", async () => {
   const target = path.join(root, "real-codex", "skills");
 
@@ -2078,6 +2093,14 @@ test("doctor fails when managed wiring points to deleted guards", async () => {
         (finding) => finding.level === "fail" && finding.text.includes(`missing .gsd-path/${name}`)
       )
     );
+  }
+
+  const status = await installer.main(
+    ["--hooks-refresh", "--project", project, "--source-root", source, "--no-color"]
+  );
+  assert.equal(status, 0);
+  for (const name of installer.GUARD_SCRIPTS) {
+    assert.ok(fs.existsSync(path.join(project, installer.HOOKS_DIRECTORY, name)));
   }
 });
 

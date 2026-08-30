@@ -459,6 +459,18 @@ function samePath(left, right) {
   return comparisonPath(left) === comparisonPath(right);
 }
 
+function validateProjectGitRoot(project) {
+  const result = spawnSync("git", ["rev-parse", "--show-toplevel"], {
+    cwd: project,
+    encoding: "utf8",
+    env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
+  });
+  const topLevel = result.status === 0 ? result.stdout.trim() : "";
+  if (topLevel && !samePath(topLevel, project)) {
+    throw new InstallerError(`project path is not the Git worktree root: ${project}`);
+  }
+}
+
 function validateDirectoryDestination(candidate, label) {
   if (lexists(candidate)) {
     if (isSymlink(candidate)) throw new InstallerError(`${label} is a symlink: ${candidate}`);
@@ -1095,6 +1107,7 @@ function existingContractError(destination) {
 function validateProject(sourceRoot, project, selected, hooksEnabled, reservedRoots, interpreter, hooksDir) {
   const includeClaude = selected.includes("claude");
   validateDirectoryDestination(project, "project path");
+  validateProjectGitRoot(project);
   validateDirectoryDestination(
     path.join(project, HOOKS_DIRECTORY),
     "project runtime parent directory"
@@ -1230,6 +1243,20 @@ function isManagedHookSettings(destination) {
   } catch {
     return false;
   }
+}
+
+function hasManagedGuardWiring(project) {
+  const settings = [
+    path.join(project, ".claude", "settings.json"),
+    path.join(project, ".codex", "hooks.json"),
+    path.join(project, ".cursor", "hooks.json"),
+  ];
+  if (settings.some(isManagedHookSettings)) return true;
+  const hooksDir = gitHooksDirectory(project);
+  return (
+    hooksDir !== null &&
+    ["pre-commit", "commit-msg"].some((name) => isManagedGitHook(path.join(hooksDir, name)))
+  );
 }
 
 function atomicTemporary(destination) {
@@ -1396,6 +1423,7 @@ function refreshesGuards(project, full, initialize) {
   return (
     full ||
     initialize ||
+    hasManagedGuardWiring(project) ||
     GUARD_SCRIPTS.some((name) => lexists(path.join(project, HOOKS_DIRECTORY, name)))
   );
 }
@@ -1431,6 +1459,7 @@ function hasLegacyProjectContracts(sourceRoot, project) {
 
 function validateHooksRefresh(sourceRoot, project, full, hooksDir, selected, initialize = false) {
   validateDirectoryDestination(project, "project path");
+  validateProjectGitRoot(project);
   validateDirectoryDestination(
     path.join(project, HOOKS_DIRECTORY),
     "guard hooks directory"
@@ -1477,7 +1506,7 @@ function validateHooksRefresh(sourceRoot, project, full, hooksDir, selected, ini
       if (isSymlink(destination)) {
         throw new InstallerError(`refusing to refresh a symlink: ${destination}`);
       }
-      if ((exists && !isManagedGuardScript(destination)) || (!exists && !initialize)) {
+      if (exists && !isManagedGuardScript(destination)) {
         throw new InstallerError(`not a managed GSD Path guard script: ${destination}`);
       }
       const source = path.join(sourceRoot, "scripts", name);

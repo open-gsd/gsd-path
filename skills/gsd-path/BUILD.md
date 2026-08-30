@@ -275,12 +275,18 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
      when the ruling changes it — except a ruling that changes a success
      criterion, constraint, or veto, which follows the define-Corrections
      path above. A question block creates no product commit
-     and preserves the isolated worktree under the same retirement rule.
+     and preserves the isolated worktree under the same retirement rule. Before
+     preserving a parallel isolate, revoke its active dispatch with
+     `python3 <absolute isolation.py> deactivate-task --repo <isolated worktree>
+     --task-id <id> --task-branch <task_branch>`.
    - A blocked report, invalid diff, or failed Verify creates no product
      commit. Validate and copy the isolated task's append-only Log delta once;
      it is the coder's sole block/implementation narrative. Add orchestrator
      evidence only for a distinct diff or Verify rejection, set the task
-     `blocked` or `failed`, checkpoint the bookkeeping, and apply the recovery
+     `blocked` or `failed`; before preserving a parallel isolate, revoke its
+     active dispatch with `python3 <absolute isolation.py> deactivate-task
+     --repo <isolated worktree> --task-id <id> --task-branch <task_branch>`.
+     Then checkpoint the bookkeeping and apply the recovery
      rule. Preserve the isolated worktree unless and until the explicit clean
      retry-retirement procedure in step 2 owns and removes it.
 

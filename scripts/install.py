@@ -1017,6 +1017,27 @@ def _existing_contract_error(destination: Path) -> "InstallerError":
     )
 
 
+def _validate_project_git_root(project: Path) -> None:
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            cwd=project,
+            capture_output=True,
+            text=True,
+            check=False,
+            env={**os.environ, "GIT_OPTIONAL_LOCKS": "0"},
+        )
+    except OSError:
+        return
+    top_level = result.stdout.strip()
+    if (
+        result.returncode == 0
+        and top_level
+        and not _same_path(Path(top_level), project)
+    ):
+        raise InstallerError(f"project path is not the Git worktree root: {project}")
+
+
 def _validate_project(
     source_root: Path,
     project: Path,
@@ -1027,6 +1048,7 @@ def _validate_project(
     hooks_dir: Optional[Path],
 ) -> None:
     _validate_directory_destination(project, "project path")
+    _validate_project_git_root(project)
     _validate_directory_destination(
         project / HOOKS_DIRECTORY, "project runtime parent directory"
     )
@@ -1167,6 +1189,21 @@ def _is_managed_hook_settings(destination: Path) -> bool:
     except InstallerError:
         return False
     return _has_managed_hook_settings(parsed)
+
+
+def _has_managed_guard_wiring(project: Path) -> bool:
+    settings = (
+        project / ".claude" / "settings.json",
+        project / ".codex" / "hooks.json",
+        project / ".cursor" / "hooks.json",
+    )
+    if any(_is_managed_hook_settings(path) for path in settings):
+        return True
+    hooks_dir = _git_hooks_directory(project)
+    return hooks_dir is not None and any(
+        _is_managed_git_hook(hooks_dir / name)
+        for name in ("pre-commit", "commit-msg")
+    )
 
 
 def _atomic_temporary(destination: Path) -> Tuple[int, Path]:
@@ -1353,7 +1390,7 @@ def _merged_cursor_settings(settings: Path, interpreter: str) -> str:
 
 
 def _refreshes_guards(project: Path, full: bool, initialize: bool) -> bool:
-    return full or initialize or any(
+    return full or initialize or _has_managed_guard_wiring(project) or any(
         _lexists(project / HOOKS_DIRECTORY / name) for name in GUARD_SCRIPTS
     )
 
@@ -1402,6 +1439,7 @@ def _validate_hooks_refresh(
     initialize: bool = False,
 ) -> None:
     _validate_directory_destination(project, "project path")
+    _validate_project_git_root(project)
     _validate_directory_destination(project / HOOKS_DIRECTORY, "guard hooks directory")
     _validate_directory_destination(
         project / HOOKS_DIRECTORY / "runtime", "project runtime directory"
@@ -1445,9 +1483,7 @@ def _validate_hooks_refresh(
             exists = _lexists(destination)
             if destination.is_symlink():
                 raise InstallerError(f"refusing to refresh a symlink: {destination}")
-            if (exists and not _is_managed_guard_script(destination)) or (
-                not exists and not initialize
-            ):
+            if exists and not _is_managed_guard_script(destination):
                 raise InstallerError(
                     f"not a managed GSD Path guard script: {destination}"
                 )

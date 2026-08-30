@@ -142,6 +142,14 @@ class IsolationTests(unittest.TestCase):
             self.assertTrue(
                 isolation.authorized_task_worktree(worktree, "gsd-path/M001")
             )
+            deactivated = isolation.deactivate_task(
+                worktree, "T001", "gsd-path-task/T001"
+            )
+            self.assertEqual("deactivated", deactivated["status"])
+            self.assertFalse(
+                isolation.authorized_task_worktree(worktree, "gsd-path/M001")
+            )
+            self.assertTrue(worktree.exists())
             task.write_text(
                 task.read_text(encoding="utf-8").replace(
                     f"worktree: {worktree}", "worktree: /tmp/unowned"

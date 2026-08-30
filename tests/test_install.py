@@ -838,6 +838,30 @@ class InstallerTests(unittest.TestCase):
         self.assertFalse(target.exists())
         self.assertIn("already exists", error)
 
+    def test_project_install_rejects_a_nested_git_directory(self):
+        repository = self.root / "repository"
+        project = repository / "nested"
+        project.mkdir(parents=True)
+        subprocess.run(["git", "init", "-q"], cwd=repository, check=True)
+        target = self.root / "nested-target" / "skills"
+
+        status, _, error = self.run_main(
+            [
+                "--claude",
+                "--claude-root",
+                str(target),
+                "--source-root",
+                str(self.source),
+                "--project",
+                str(project),
+            ]
+        )
+
+        self.assertEqual(1, status)
+        self.assertIn("not the Git worktree root", error)
+        self.assertFalse(target.exists())
+        self.assertEqual([], list(project.iterdir()))
+
     def test_project_contract_created_after_validation_is_preserved(self):
         project = self.root / "project-race"
         project.mkdir()
@@ -2385,6 +2409,19 @@ class InstallerTests(unittest.TestCase):
                     for finding in findings
                 )
             )
+
+        status, _, error = self.run_main(
+            [
+                "--hooks-refresh",
+                "--project",
+                str(project),
+                "--source-root",
+                str(self.source),
+            ]
+        )
+        self.assertEqual(0, status, error)
+        for name in install.GUARD_SCRIPTS:
+            self.assertTrue((project / install.HOOKS_DIRECTORY / name).is_file())
 
     def test_doctor_rejects_symlinked_and_unreadable_project_scripts(self):
         project = self.root / "doctor-unsafe-scripts"

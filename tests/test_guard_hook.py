@@ -384,6 +384,35 @@ class GuardHookTests(unittest.TestCase):
                     }
                 )
 
+    def test_case_insensitive_state_alias_is_protected(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / ".project").mkdir()
+            (root / ".project" / "STATE.md").write_text(
+                "owned\n", encoding="utf-8"
+            )
+
+            def case_insensitive_samefile(left, right):
+                return os.path.abspath(left).casefold() == os.path.abspath(
+                    right
+                ).casefold()
+
+            with (
+                mock.patch.object(guard_hook, "repository_root", return_value=root),
+                mock.patch.object(
+                    os.path, "samefile", side_effect=case_insensitive_samefile
+                ),
+                mock.patch.object(
+                    guard_hook, "project_status", return_value=self.status(root)
+                ),
+            ):
+                self.assert_denied(
+                    {
+                        "tool_name": "Write",
+                        "tool_input": {"file_path": ".project/state.md"},
+                    }
+                )
+
     def test_plain_prompt_allows_external_file_write(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

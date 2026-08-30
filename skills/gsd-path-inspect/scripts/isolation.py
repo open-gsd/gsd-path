@@ -875,6 +875,28 @@ def activate_task(
     }
 
 
+def deactivate_task(
+    worktree: Path, task_id: str, task_branch: str
+) -> Dict[str, object]:
+    worktree = require_directory(worktree, "task worktree")
+    if worktree_root(worktree) != worktree:
+        raise IsolationError(f"task worktree is not its Git root: {worktree}")
+    task_id = validate_task_id(task_id)
+    expected_branch = task_branch_name(task_id)
+    if (
+        task_branch != expected_branch
+        or require_attached(worktree) != expected_branch
+    ):
+        raise IsolationError("task deactivation branch does not match the task worktree")
+    _delete_task_authorization(worktree, task_branch)
+    return {
+        "status": "deactivated",
+        "task_branch": task_branch,
+        "task_id": task_id,
+        "worktree": str(worktree),
+    }
+
+
 def _landed_task_text(text: str, base: str) -> str:
     head, body = split_frontmatter(text)
     values = {**LANDED_FIELDS, "base": base}
@@ -2601,6 +2623,13 @@ def parser() -> argparse.ArgumentParser:
     activate_task_parser.add_argument("--task-file", required=True)
     activate_task_parser.add_argument("--task-branch")
 
+    deactivate_task_parser = subparsers.add_parser(
+        "deactivate-task", help="revoke one helper-owned task dispatch"
+    )
+    deactivate_task_parser.add_argument("--repo", type=Path, required=True)
+    deactivate_task_parser.add_argument("--task-id", required=True)
+    deactivate_task_parser.add_argument("--task-branch", required=True)
+
     isolate_verify_parser = subparsers.add_parser(
         "isolate-verify", help="create a named verify sidecar"
     )
@@ -2675,6 +2704,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 arguments.task_id,
                 arguments.agent,
                 arguments.task_file,
+                arguments.task_branch,
+            )
+        elif arguments.command == "deactivate-task":
+            result = deactivate_task(
+                arguments.repo,
+                arguments.task_id,
                 arguments.task_branch,
             )
         elif arguments.command == "isolate-verify":
