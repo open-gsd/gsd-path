@@ -3428,6 +3428,7 @@ def ensure_integration_tag(
                 run_git(
                     project,
                     "tag",
+                    "--no-sign",
                     "-a",
                     "-m",
                     tag_message,
@@ -3542,16 +3543,20 @@ def require_pull_request_identity(
     if pull["head"].get("sha") != ship_commit:
         raise ArchiveError("GitHub pull request head is not the ship commit")
     head_repository = pull["head"].get("repo")
+    head_repository_name = (
+        head_repository.get("full_name")
+        if isinstance(head_repository, dict)
+        else None
+    )
     if (
-        not isinstance(head_repository, dict)
-        or head_repository.get("full_name") != repository
+        not isinstance(head_repository_name, str)
+        or head_repository_name.casefold() != repository.casefold()
     ):
         raise ArchiveError("GitHub pull request head repository is not origin")
 
 
 def find_pull_request(repository: str, branch: str, ship_commit: str) -> Optional[dict]:
-    owner = repository.split("/", 1)[0]
-    canonical = require_pull_request_pages(
+    pulls = require_pull_request_pages(
         github_api_json(
             f"repos/{repository}/pulls",
             "--method",
@@ -3560,28 +3565,19 @@ def find_pull_request(repository: str, branch: str, ship_commit: str) -> Optiona
             "state=all",
             "-f",
             "base=main",
-            "-f",
-            f"head={owner}:{branch}",
             "--paginate",
             "--slurp",
         )
     )
-    associated = require_pull_request_pages(
-        github_api_json(
-            f"repos/{repository}/commits/{ship_commit}/pulls",
-            "--method",
-            "GET",
-            "--paginate",
-            "--slurp",
-        )
-    )
-    pulls_by_number = {
-        pull["number"]: pull
-        for pull in associated
+    pulls = [
+        pull
+        for pull in pulls
         if pull["base"].get("ref") == "main"
-    }
-    pulls_by_number.update({pull["number"]: pull for pull in canonical})
-    pulls = list(pulls_by_number.values())
+        and (
+            pull["head"].get("sha") == ship_commit
+            or pull["head"].get("ref") == branch
+        )
+    ]
     if len(pulls) > 1:
         raise ArchiveError("multiple pull requests target main from the ship commit")
     if not pulls:
@@ -4146,8 +4142,10 @@ def validate_integrated(repo: Path, slug: str) -> dict:
     ship_commit = shipped["commit"]
     archive_name = PurePosixPath(configured).name
 
-    # Pull-request mode checks live origin publication without fetching.
-    remote_default = resolve_remote_default(project)
+    if state.integration == "pull-request":
+        remote_default = refresh_origin(project)["remote_default"]
+    else:
+        remote_default = resolve_remote_default(project)
     default_name = default_branch_name(remote_default)
     bound_branch = state.branch
     if bound_branch is None:
