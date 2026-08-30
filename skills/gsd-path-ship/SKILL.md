@@ -295,9 +295,10 @@ The persisted `STATE.archive` field is the transaction identity.
    A passing run returns the same proof exposed by `validate-integrated`.
    A non-zero result blocks; rerun the exact `integrate` command to resume a
    safe partial transaction instead of repairing refs or Git state manually.
-   For a later read-only recheck, with origin network access available, run `python3 <absolute
-   archive_milestone.py> validate-integrated --repo <root> --slug
-   <STATE.milestone>`; PR mode checks live branch and tag publication without fetching.
+   For a later read-only recheck with origin network access, run
+   `python3 <absolute archive_milestone.py> validate-integrated --repo <root>
+   --slug <STATE.milestone>`; PR mode fetches and refreshes `origin/main` and
+   mirrored milestone-tag refs, then checks live branch and tag publication.
    Report shipped only when the integration result passes.
    Leave the primary worktree and STATE.branch on the shipped
    `gsd-path/M00N` at the ship commit. The router owns the later handoff to a

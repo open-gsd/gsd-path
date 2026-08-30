@@ -3564,8 +3564,88 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                 ).stdout.strip(),
                 merge_sha,
             )
-            validated = archive_milestone.validate_integrated(repo, "demo")
+            with (
+                mock.patch.object(
+                    archive_milestone,
+                    "github_repository",
+                    return_value="open-gsd/demo",
+                ),
+                mock.patch.object(
+                    archive_milestone,
+                    "run_command",
+                    side_effect=self.github_api([pull]),
+                ),
+            ):
+                validated = archive_milestone.validate_integrated(repo, "demo")
             self.assertEqual(validated["landing"], merge_sha)
+
+    def test_validate_integrated_rejects_open_tagged_pull_request(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            repo = root / "primary"
+            repo.mkdir()
+            remote = root / "origin.git"
+            self.make_publishable_bound_repo(repo, remote)
+            self.enable_pull_request_integration(repo)
+            archive_name, ship_sha = self.ship_canonical_bound(repo)
+            self.git(repo, "push", "-q", "origin", "gsd-path/M001")
+            merge_sha = self.integrate_bound(
+                repo,
+                archive_name,
+                ship_sha,
+                tag=False,
+                subject="Merge pull request #7 from open-gsd/gsd-path/M001",
+            )
+            self.git(repo, "push", "-q", "origin", f"{merge_sha}:refs/heads/main")
+            pull_url = "https://github.com/open-gsd/demo/pull/7"
+            self.git(
+                repo,
+                "tag",
+                "--no-sign",
+                "-a",
+                "-m",
+                archive_milestone.pull_request_tag_message(
+                    archive_name,
+                    pull_url,
+                    ship_sha,
+                    merge_sha,
+                ),
+                f"milestone/{archive_name}",
+                merge_sha,
+            )
+            self.git(repo, "push", "-q", "origin", f"milestone/{archive_name}")
+            open_pull = {
+                "number": 7,
+                "state": "open",
+                "html_url": pull_url,
+                "merged_at": None,
+                "merge_commit_sha": None,
+                "base": {"ref": "main"},
+                "head": {
+                    "ref": "gsd-path/M001",
+                    "sha": ship_sha,
+                    "repo": {"full_name": "open-gsd/demo"},
+                },
+                "body": archive_milestone.PR_CREDIT_LINE,
+            }
+
+            with (
+                mock.patch.object(
+                    archive_milestone,
+                    "github_repository",
+                    return_value="open-gsd/demo",
+                ),
+                mock.patch.object(
+                    archive_milestone,
+                    "run_command",
+                    side_effect=self.github_api([open_pull]),
+                ),
+            ):
+                with self.assertRaisesRegex(
+                    archive_milestone.ArchiveError,
+                    "not merged at the tagged landing",
+                ):
+                    archive_milestone.validate_integrated(repo, "demo")
 
     def test_validate_integrated_refreshes_pull_request_main(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -3607,11 +3687,23 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                 self.git(repo, "rev-parse", "refs/remotes/origin/main").stdout.strip(),
                 merge_sha,
             )
-            with self.assertRaisesRegex(
-                archive_milestone.ArchiveError,
-                "first-parent history",
+            with (
+                mock.patch.object(
+                    archive_milestone,
+                    "github_repository",
+                    return_value="open-gsd/demo",
+                ),
+                mock.patch.object(
+                    archive_milestone,
+                    "run_command",
+                    side_effect=self.github_api([pull]),
+                ),
             ):
-                archive_milestone.validate_integrated(repo, "demo")
+                with self.assertRaisesRegex(
+                    archive_milestone.ArchiveError,
+                    "first-parent history",
+                ):
+                    archive_milestone.validate_integrated(repo, "demo")
 
     def test_pull_request_integration_republishes_deleted_remote_tag(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -3654,11 +3746,23 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                 self.git(repo, "rev-parse", tracking_tag).returncode,
                 0,
             )
-            with self.assertRaisesRegex(
-                archive_milestone.ArchiveError,
-                "missing published milestone tag",
+            with (
+                mock.patch.object(
+                    archive_milestone,
+                    "github_repository",
+                    return_value="open-gsd/demo",
+                ),
+                mock.patch.object(
+                    archive_milestone,
+                    "run_command",
+                    side_effect=self.github_api([pull]),
+                ),
             ):
-                archive_milestone.validate_integrated(repo, "demo")
+                with self.assertRaisesRegex(
+                    archive_milestone.ArchiveError,
+                    "missing published milestone tag",
+                ):
+                    archive_milestone.validate_integrated(repo, "demo")
 
             with (
                 mock.patch.object(

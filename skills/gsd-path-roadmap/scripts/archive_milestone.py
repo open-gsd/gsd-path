@@ -4184,6 +4184,27 @@ def validate_integrated(repo: Path, slug: str) -> dict:
             raise ArchiveError("pull-request milestone tag names the wrong ship commit")
         merge_commit = metadata["Landing"]
         pull_request = metadata["Pull-Request"]
+        require_command_success(
+            run_command("gh", "auth", "status"),
+            "verify GitHub authentication",
+        )
+        repository = github_repository(project)
+        pull = find_pull_request(repository, bound_branch, ship_commit)
+        if pull is None:
+            raise ArchiveError("GitHub pull request for the ship commit is missing")
+        if pull["html_url"] != pull_request:
+            raise ArchiveError("milestone tag names the wrong pull request")
+        if (
+            pull["state"] != "closed"
+            or pull["merged_at"] is None
+            or pull["merge_commit_sha"] != merge_commit
+        ):
+            raise ArchiveError("GitHub pull request is not merged at the tagged landing")
+        require_pull_request_merge_provenance(
+            repository,
+            pull["number"],
+            merge_commit,
+        )
         require_pull_request_merge(project, merge_commit, ship_commit, remote_default)
         require_annotated_tag(
             project,
