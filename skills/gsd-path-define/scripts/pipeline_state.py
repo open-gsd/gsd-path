@@ -85,7 +85,8 @@ PROMOTION_SCHEMA = "gsd-path/promote-next/v1"
 STATE_SCHEMA = "gsd-path/state/v1"
 ROUTE_SCHEMA = "gsd-path/route/v1"
 STATUS_SCHEMA = "gsd-path/status/v1"
-BIND_NEXT_JOURNAL_SCHEMA = "gsd-path/bind-next-journal/v1"
+LEGACY_BIND_NEXT_JOURNAL_SCHEMA = "gsd-path/bind-next-journal/v1"
+BIND_NEXT_JOURNAL_SCHEMA = "gsd-path/bind-next-journal/v2"
 BIND_NEXT_JOURNAL_DIR = "gsd-path-bind-next"
 PROMOTION_TRACKS = ("intent", "research", "plan", "tasks", "review")
 LOOKAHEAD_PHASES = ("inspect", "define", "research", "decide", "plan")
@@ -781,6 +782,48 @@ def _route_result(
     return {"schema": ROUTE_SCHEMA, "state": state.json(), "route": route}
 
 
+def _legacy_bind_next_landing(repo: Path, state: PipelineState) -> str:
+    if ARCHIVE_RE.fullmatch(state.archive or "") is None:
+        raise PipelineStateError("legacy bind-next journal requires a shipped archive")
+    archive_name = PurePosixPath(state.archive or "").name
+    tag_ref = f"refs/tags/milestone/{archive_name}"
+    published_ref = f"refs/remotes/origin/tags/milestone/{archive_name}"
+    for label, ref in (("local", tag_ref), ("published", published_ref)):
+        tag_type = _run_git(repo, "cat-file", "-t", ref, check=False)
+        if tag_type.returncode != 0 or tag_type.stdout.strip() != "tag":
+            raise PipelineStateError(
+                f"legacy bind-next journal {label} milestone tag is missing or not annotated"
+            )
+    local_object = _run_git(repo, "rev-parse", "--verify", tag_ref).stdout.strip()
+    published_object = _run_git(
+        repo,
+        "rev-parse",
+        "--verify",
+        published_ref,
+    ).stdout.strip()
+    if local_object != published_object:
+        raise PipelineStateError(
+            "legacy bind-next journal milestone tags do not match"
+        )
+    landing = _run_git(
+        repo,
+        "rev-parse",
+        "--verify",
+        f"{tag_ref}^{{commit}}",
+    ).stdout.strip()
+    published_landing = _run_git(
+        repo,
+        "rev-parse",
+        "--verify",
+        f"{published_ref}^{{commit}}",
+    ).stdout.strip()
+    if landing != published_landing:
+        raise PipelineStateError(
+            "legacy bind-next journal milestone tag landings do not match"
+        )
+    return landing
+
+
 def _bind_next_recovery(
     repo: Path,
     state: PipelineState,
@@ -794,7 +837,10 @@ def _bind_next_recovery(
     matches: list[tuple[Path, dict[str, object]]] = []
     for path in sorted(journal_root.glob("*.json")):
         transaction = _read_json(path)
-        if transaction.get("schema") != BIND_NEXT_JOURNAL_SCHEMA:
+        if transaction.get("schema") not in {
+            LEGACY_BIND_NEXT_JOURNAL_SCHEMA,
+            BIND_NEXT_JOURNAL_SCHEMA,
+        }:
             raise PipelineStateError(f"bind-next journal has invalid schema: {path}")
         if transaction.get("repo") != str(repo):
             raise PipelineStateError(f"bind-next journal belongs to another worktree: {path}")
@@ -814,15 +860,28 @@ def _bind_next_recovery(
         "ship",
         "remote_default",
         "base",
-        "landing",
         "stage",
     )
     expected_fields = {"schema", "repo", *required}
     optional_fields = {"allow_remote_absent"}
-    if not expected_fields <= set(transaction) or set(transaction) - expected_fields - optional_fields:
+    if transaction["schema"] == BIND_NEXT_JOURNAL_SCHEMA:
+        expected_fields.add("landing")
+    else:
+        optional_fields.add("landing")
+    if (
+        not expected_fields <= set(transaction)
+        or set(transaction) - expected_fields - optional_fields
+    ):
         raise PipelineStateError("bind-next journal has unsupported fields")
     if any(not isinstance(transaction.get(key), str) for key in required):
         raise PipelineStateError("bind-next journal is missing request fields")
+    landing_value = transaction.get("landing")
+    if transaction["schema"] == BIND_NEXT_JOURNAL_SCHEMA and not isinstance(
+        landing_value, str
+    ):
+        raise PipelineStateError("bind-next journal is missing request fields")
+    if landing_value is not None and not isinstance(landing_value, str):
+        raise PipelineStateError("bind-next journal has invalid landing")
     allow_remote_absent = transaction.get("allow_remote_absent", False)
     if not isinstance(allow_remote_absent, bool):
         raise PipelineStateError("bind-next journal has invalid allow_remote_absent")
@@ -830,7 +889,6 @@ def _bind_next_recovery(
     previous = str(transaction["previous_branch"])
     ship = str(transaction["ship"])
     base = str(transaction["base"])
-    landing = str(transaction["landing"])
     stage = str(transaction["stage"])
     branch_number = _bound_branch_number(branch)
     previous_number = _bound_branch_number(previous)
@@ -840,12 +898,9 @@ def _bind_next_recovery(
         raise PipelineStateError("bind-next journal target does not follow previous branch")
     if path.name != f"M{branch_number:03d}.json":
         raise PipelineStateError("bind-next journal path does not match target branch")
-    if any(
-        not re.fullmatch(r"[0-9a-f]{40}", value)
-        for value in (ship, base, landing)
-    ):
-        raise PipelineStateError("bind-next journal has invalid ship, base, or landing SHA")
-    for label, value in (("ship", ship), ("base", base), ("landing", landing)):
+    if any(not re.fullmatch(r"[0-9a-f]{40}", value) for value in (ship, base)):
+        raise PipelineStateError("bind-next journal has invalid ship or base SHA")
+    for label, value in (("ship", ship), ("base", base)):
         resolved = _run_git(
             repo,
             "rev-parse",
@@ -855,6 +910,26 @@ def _bind_next_recovery(
         )
         if resolved.returncode != 0 or resolved.stdout.strip() != value:
             raise PipelineStateError(f"bind-next journal {label} is not an existing full SHA")
+    landing = (
+        landing_value
+        if isinstance(landing_value, str)
+        else _legacy_bind_next_landing(repo, state)
+    )
+    if re.fullmatch(r"[0-9a-f]{40}", landing) is None:
+        raise PipelineStateError("bind-next journal has invalid landing SHA")
+    resolved_landing = _run_git(
+        repo,
+        "rev-parse",
+        "--verify",
+        f"{landing}^{{commit}}",
+        check=False,
+    )
+    if resolved_landing.returncode != 0 or resolved_landing.stdout.strip() != landing:
+        raise PipelineStateError("bind-next journal landing is not an existing full SHA")
+    if not _is_ancestor(repo, ship, landing):
+        raise PipelineStateError("bind-next journal landing does not contain ship")
+    if not _is_ancestor(repo, landing, base):
+        raise PipelineStateError("bind-next journal landing is not an ancestor of base")
     if transaction["remote_default"] != "origin/main":
         raise PipelineStateError("bind-next journal has invalid remote default")
     if stage not in {"prepared", "switched", "retired"}:

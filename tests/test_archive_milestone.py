@@ -2778,25 +2778,98 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
 
     def is_associated_pull_request_query(self, arguments: tuple[str, ...]) -> bool:
         return (
-            len(arguments) >= 3
-            and arguments[:2] == ("gh", "api")
-            and arguments[2].casefold().startswith("repos/open-gsd/demo/commits/")
-            and arguments[2].casefold().endswith("/pulls")
+            len(arguments) >= 5
+            and arguments[:4] == ("gh", "api", "--hostname", "github.com")
+            and arguments[4].casefold().startswith("repos/open-gsd/demo/commits/")
+            and arguments[4].casefold().endswith("/pulls")
         )
 
     def is_canonical_pull_request_query(self, arguments: tuple[str, ...]) -> bool:
         return (
-            len(arguments) >= 3
-            and arguments[:2] == ("gh", "api")
-            and arguments[2].casefold() == "repos/open-gsd/demo/pulls"
+            len(arguments) >= 5
+            and arguments[:4] == ("gh", "api", "--hostname", "github.com")
+            and arguments[4].casefold() == "repos/open-gsd/demo/pulls"
             and "GET" in arguments
         )
 
+    def is_github_authentication(self, arguments: tuple[str, ...]) -> bool:
+        return arguments == (
+            "gh",
+            "auth",
+            "status",
+            "--hostname",
+            "github.com",
+        )
+
+    def is_github_api(self, arguments: tuple[str, ...], path: str) -> bool:
+        return arguments[:5] == (
+            "gh",
+            "api",
+            "--hostname",
+            "github.com",
+            path,
+        )
+
+    def test_github_commands_pin_github_com(self) -> None:
+        calls: list[tuple[str, ...]] = []
+
+        def run(*arguments: str) -> subprocess.CompletedProcess[str]:
+            calls.append(arguments)
+            return subprocess.CompletedProcess(arguments, 0, "{}", "")
+
+        with mock.patch.object(archive_milestone, "run_command", side_effect=run):
+            archive_milestone.require_github_authentication()
+            self.assertEqual(
+                archive_milestone.github_api_json("repos/open-gsd/demo/pulls"),
+                {},
+            )
+
+        self.assertEqual(
+            calls,
+            [
+                ("gh", "auth", "status", "--hostname", "github.com"),
+                (
+                    "gh",
+                    "api",
+                    "--hostname",
+                    "github.com",
+                    "repos/open-gsd/demo/pulls",
+                ),
+            ],
+        )
+
+    def test_pull_request_discovery_ignores_unrelated_fork_branch(self) -> None:
+        pull = {
+            "number": 7,
+            "state": "open",
+            "html_url": "https://github.com/someone/demo/pull/7",
+            "merged_at": None,
+            "merge_commit_sha": None,
+            "base": {"ref": "main"},
+            "head": {
+                "ref": "gsd-path/M001",
+                "sha": "a" * 40,
+                "repo": {"full_name": "someone/demo"},
+            },
+        }
+        with mock.patch.object(
+            archive_milestone,
+            "github_api_json",
+            return_value=[[pull]],
+        ):
+            result = archive_milestone.find_pull_request(
+                "open-gsd/demo",
+                "gsd-path/M001",
+                "b" * 40,
+            )
+
+        self.assertIsNone(result)
+
     def github_api(self, pulls, merge_actor: str = "User"):
         def run(*arguments: str) -> subprocess.CompletedProcess[str]:
-            if arguments == ("gh", "auth", "status"):
+            if self.is_github_authentication(arguments):
                 return subprocess.CompletedProcess(arguments, 0, "", "")
-            if arguments[:3] == ("gh", "api", "graphql"):
+            if self.is_github_api(arguments, "graphql"):
                 merge_sha = next(
                     (
                         pull.get("merge_commit_sha")
@@ -2841,7 +2914,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                 return subprocess.CompletedProcess(
                     arguments, 0, json.dumps([pulls]), ""
                 )
-            if arguments[:3] == ("gh", "api", "repos/open-gsd/demo/pulls"):
+            if self.is_github_api(arguments, "repos/open-gsd/demo/pulls"):
                 created = {
                     "number": 7,
                     "state": "open",
@@ -2897,9 +2970,9 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
 
             def github_api(*arguments: str) -> subprocess.CompletedProcess[str]:
                 requests.append(arguments)
-                if arguments == ("gh", "auth", "status"):
+                if self.is_github_authentication(arguments):
                     return subprocess.CompletedProcess(arguments, 0, "", "")
-                if arguments[:3] == ("gh", "api", "graphql"):
+                if self.is_github_api(arguments, "graphql"):
                     payload = {
                         "data": {
                             "repository": {
@@ -2918,7 +2991,10 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                     arguments
                 ) or self.is_canonical_pull_request_query(arguments):
                     return subprocess.CompletedProcess(arguments, 0, "[[]]", "")
-                if arguments[:3] != ("gh", "api", "repos/open-gsd/demo/pulls"):
+                if not self.is_github_api(
+                    arguments,
+                    "repos/open-gsd/demo/pulls",
+                ):
                     return subprocess.CompletedProcess(
                         arguments, 1, "", "unexpected command"
                     )
@@ -3060,7 +3136,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
 
             def github_api(*arguments: str) -> subprocess.CompletedProcess[str]:
                 requests.append(arguments)
-                if arguments == ("gh", "auth", "status"):
+                if self.is_github_authentication(arguments):
                     return subprocess.CompletedProcess(arguments, 0, "", "")
                 if self.is_canonical_pull_request_query(arguments):
                     pulls = (
@@ -3080,7 +3156,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                         json.dumps([[canonical_pull], [competing_pull]]),
                         "",
                     )
-                if arguments[:3] == ("gh", "api", "graphql"):
+                if self.is_github_api(arguments, "graphql"):
                     payload = {
                         "data": {
                             "repository": {
@@ -3148,7 +3224,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
             }
 
             def github_api(*arguments: str) -> subprocess.CompletedProcess[str]:
-                if arguments == ("gh", "auth", "status"):
+                if self.is_github_authentication(arguments):
                     return subprocess.CompletedProcess(arguments, 0, "", "")
                 if self.is_canonical_pull_request_query(arguments):
                     pulls = (
@@ -3217,7 +3293,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
 
             def github_api(*arguments: str) -> subprocess.CompletedProcess[str]:
                 requests.append(arguments)
-                if arguments == ("gh", "auth", "status"):
+                if self.is_github_authentication(arguments):
                     return subprocess.CompletedProcess(arguments, 0, "", "")
                 if self.is_canonical_pull_request_query(arguments):
                     pulls = (
@@ -3230,7 +3306,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                     )
                 if self.is_associated_pull_request_query(arguments):
                     return subprocess.CompletedProcess(arguments, 0, "[[]]", "")
-                if arguments[:3] == ("gh", "api", "repos/open-gsd/demo/pulls"):
+                if self.is_github_api(arguments, "repos/open-gsd/demo/pulls"):
                     created = {
                         **closed_pull,
                         "number": 8,
@@ -3245,7 +3321,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                     return subprocess.CompletedProcess(
                         arguments, 0, json.dumps(created), ""
                     )
-                if arguments[:3] == ("gh", "api", "graphql"):
+                if self.is_github_api(arguments, "graphql"):
                     payload = {
                         "data": {
                             "repository": {
@@ -3311,9 +3387,9 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
 
             def github_api(*arguments: str) -> subprocess.CompletedProcess[str]:
                 requests.append(arguments)
-                if arguments == ("gh", "auth", "status"):
+                if self.is_github_authentication(arguments):
                     return subprocess.CompletedProcess(arguments, 0, "", "")
-                if arguments[:3] == ("gh", "api", "graphql"):
+                if self.is_github_api(arguments, "graphql"):
                     payload = {
                         "data": {
                             "repository": {
@@ -3334,7 +3410,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                     return subprocess.CompletedProcess(
                         arguments, 0, json.dumps([[open_pull]]), ""
                     )
-                if arguments[:3] == ("gh", "api", "repos/open-gsd/demo/pulls/7"):
+                if self.is_github_api(arguments, "repos/open-gsd/demo/pulls/7"):
                     body = next(
                         argument.removeprefix("body=")
                         for argument in arguments
@@ -3401,7 +3477,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
 
             def github_api(*arguments: str) -> subprocess.CompletedProcess[str]:
                 requests.append(arguments)
-                if arguments == ("gh", "auth", "status"):
+                if self.is_github_authentication(arguments):
                     return subprocess.CompletedProcess(arguments, 0, "", "")
                 if self.is_canonical_pull_request_query(arguments):
                     return subprocess.CompletedProcess(
@@ -3460,7 +3536,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
             }
 
             def github_api(*arguments: str) -> subprocess.CompletedProcess[str]:
-                if arguments == ("gh", "auth", "status"):
+                if self.is_github_authentication(arguments):
                     return subprocess.CompletedProcess(arguments, 0, "", "")
                 if self.is_associated_pull_request_query(
                     arguments
@@ -3468,7 +3544,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                     return subprocess.CompletedProcess(
                         arguments, 0, json.dumps([[open_pull]]), ""
                     )
-                if arguments[:3] == ("gh", "api", "graphql"):
+                if self.is_github_api(arguments, "graphql"):
                     payload = {
                         "data": {
                             "repository": {
@@ -3805,7 +3881,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
             normal_api = self.github_api([pull])
 
             def github_api(*arguments: str) -> subprocess.CompletedProcess[str]:
-                if arguments[:3] == ("gh", "api", "graphql"):
+                if self.is_github_api(arguments, "graphql"):
                     payload = {
                         "data": {
                             "repository": {
@@ -3866,7 +3942,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
             pull = self.merged_pull_request(ship_sha, merge_sha)
 
             def github_api(*arguments: str) -> subprocess.CompletedProcess[str]:
-                if arguments == ("gh", "auth", "status"):
+                if self.is_github_authentication(arguments):
                     return subprocess.CompletedProcess(arguments, 0, "", "")
                 if self.is_associated_pull_request_query(
                     arguments
@@ -3874,7 +3950,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                     return subprocess.CompletedProcess(
                         arguments, 0, json.dumps([[pull]]), ""
                     )
-                if arguments[:3] == ("gh", "api", "graphql"):
+                if self.is_github_api(arguments, "graphql"):
                     payload = {
                         "data": {
                             "repository": {
@@ -3952,7 +4028,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
             pull = self.merged_pull_request(ship_sha, merge_sha)
 
             def github_api(*arguments: str) -> subprocess.CompletedProcess[str]:
-                if arguments == ("gh", "auth", "status"):
+                if self.is_github_authentication(arguments):
                     return subprocess.CompletedProcess(arguments, 0, "", "")
                 if self.is_associated_pull_request_query(
                     arguments
@@ -3960,7 +4036,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                     return subprocess.CompletedProcess(
                         arguments, 0, json.dumps([[pull]]), ""
                     )
-                if arguments[:3] == ("gh", "api", "graphql"):
+                if self.is_github_api(arguments, "graphql"):
                     payload = {
                         "data": {
                             "repository": {
@@ -4077,7 +4153,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
 
             def github_api(*arguments: str) -> subprocess.CompletedProcess[str]:
                 requests.append(arguments)
-                if arguments[:3] == ("gh", "api", "repos/open-gsd/demo/pulls/7"):
+                if self.is_github_api(arguments, "repos/open-gsd/demo/pulls/7"):
                     return subprocess.CompletedProcess(
                         arguments,
                         0,

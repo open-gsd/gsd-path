@@ -401,6 +401,64 @@ class PipelineGitTests(unittest.TestCase):
                 "retired",
             )
 
+    def test_bind_next_migrates_legacy_journal_with_tag_landing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            _, repo, ship, landing = make_integrated_milestone(tmp)
+            tag_name = "milestone/001-first"
+            run_git(
+                repo,
+                "tag",
+                "-a",
+                "-m",
+                "milestone 001-first",
+                tag_name,
+                landing,
+            )
+            run_git(repo, "push", "origin", tag_name)
+            tag_object = run_git(
+                repo,
+                "rev-parse",
+                f"refs/tags/{tag_name}",
+            ).stdout.strip()
+            run_git(
+                repo,
+                "update-ref",
+                f"refs/remotes/origin/tags/{tag_name}",
+                tag_object,
+            )
+            journal_path = pipeline_git.bind_next_journal_path(repo, "gsd-path/M002")
+            pipeline_git._write_bind_next_journal(
+                journal_path,
+                {
+                    "schema": pipeline_git.LEGACY_BIND_NEXT_JOURNAL_SCHEMA,
+                    "repo": str(repo.resolve()),
+                    "branch": "gsd-path/M002",
+                    "previous_branch": "gsd-path/M001",
+                    "ship": ship,
+                    "remote_default": "origin/main",
+                    "base": landing,
+                    "stage": "prepared",
+                },
+            )
+
+            recovery = pipeline_state.route_state(repo)["route"]
+            self.assertEqual(recovery["action"], "resume-next-handoff")
+            self.assertEqual(recovery["landing"], landing)
+            result = pipeline_git.bind_next_milestone_branch(
+                repo,
+                "gsd-path/M002",
+                "gsd-path/M001",
+                ship,
+                "origin/main",
+                landing,
+                landing,
+            )
+
+            self.assertEqual(result["landing"], landing)
+            migrated = json.loads(journal_path.read_text(encoding="utf-8"))
+            self.assertEqual(migrated["schema"], pipeline_git.BIND_NEXT_JOURNAL_SCHEMA)
+            self.assertEqual(migrated["landing"], landing)
+
     def test_bind_next_persists_ownership_before_switch_and_resumes(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             _, repo, ship, integrate = make_integrated_milestone(tmp)

@@ -220,6 +220,7 @@ PIPELINE_MARKER = "gsd-path/v2"
 PR_CREDIT_LINE = (
     "PR prepared with [GSD Path](https://github.com/open-gsd/gsd-path)."
 )
+GITHUB_HOST = "github.com"
 
 
 @contextmanager
@@ -3466,9 +3467,16 @@ def github_repository(project: Path) -> str:
     raise ArchiveError("pull-request integration requires a GitHub.com origin")
 
 
+def require_github_authentication() -> None:
+    require_command_success(
+        run_command("gh", "auth", "status", "--hostname", GITHUB_HOST),
+        "verify GitHub authentication",
+    )
+
+
 def github_api_json(*arguments: str) -> object:
     output = require_command_success(
-        run_command("gh", "api", *arguments),
+        run_command("gh", "api", "--hostname", GITHUB_HOST, *arguments),
         "call GitHub API",
     )
     try:
@@ -3530,6 +3538,16 @@ def require_pull_request_pages(value: object) -> list[dict]:
     return [require_pull_request_shape(item) for page in value for item in page]
 
 
+def pull_request_head_matches_repository(pull: dict, repository: str) -> bool:
+    head_repository = pull["head"].get("repo")
+    full_name = (
+        head_repository.get("full_name")
+        if isinstance(head_repository, dict)
+        else None
+    )
+    return isinstance(full_name, str) and full_name.casefold() == repository.casefold()
+
+
 def require_pull_request_identity(
     repository: str,
     pull: dict,
@@ -3542,16 +3560,7 @@ def require_pull_request_identity(
         raise ArchiveError("GitHub pull request head is not the bound branch")
     if pull["head"].get("sha") != ship_commit:
         raise ArchiveError("GitHub pull request head is not the ship commit")
-    head_repository = pull["head"].get("repo")
-    head_repository_name = (
-        head_repository.get("full_name")
-        if isinstance(head_repository, dict)
-        else None
-    )
-    if (
-        not isinstance(head_repository_name, str)
-        or head_repository_name.casefold() != repository.casefold()
-    ):
+    if not pull_request_head_matches_repository(pull, repository):
         raise ArchiveError("GitHub pull request head repository is not origin")
 
 
@@ -3575,7 +3584,10 @@ def find_pull_request(repository: str, branch: str, ship_commit: str) -> Optiona
         if pull["base"].get("ref") == "main"
         and (
             pull["head"].get("sha") == ship_commit
-            or pull["head"].get("ref") == branch
+            or (
+                pull["head"].get("ref") == branch
+                and pull_request_head_matches_repository(pull, repository)
+            )
         )
     ]
     if len(pulls) > 1:
@@ -3816,7 +3828,7 @@ def integrate_pull_request(
     branch = state.branch
     if branch is None:
         raise ArchiveError("pull-request integration requires a bound branch")
-    require_command_success(run_command("gh", "auth", "status"), "verify GitHub authentication")
+    require_github_authentication()
     repository = github_repository(project)
     pull = find_pull_request(repository, branch, ship_commit)
     if pull is None:
@@ -4184,10 +4196,7 @@ def validate_integrated(repo: Path, slug: str) -> dict:
             raise ArchiveError("pull-request milestone tag names the wrong ship commit")
         merge_commit = metadata["Landing"]
         pull_request = metadata["Pull-Request"]
-        require_command_success(
-            run_command("gh", "auth", "status"),
-            "verify GitHub authentication",
-        )
+        require_github_authentication()
         repository = github_repository(project)
         pull = find_pull_request(repository, bound_branch, ship_commit)
         if pull is None:

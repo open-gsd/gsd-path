@@ -27,7 +27,8 @@ ROADMAP_STATUS_RE = re.compile(r"^Status:\s*(\S+)", re.MULTILINE)
 
 LEGACY_SHIP_PREFIX = "ship: "
 LEGACY_INTEGRATE_PREFIX = "integrate: "
-BIND_NEXT_JOURNAL_SCHEMA = "gsd-path/bind-next-journal/v1"
+LEGACY_BIND_NEXT_JOURNAL_SCHEMA = "gsd-path/bind-next-journal/v1"
+BIND_NEXT_JOURNAL_SCHEMA = "gsd-path/bind-next-journal/v2"
 BIND_NEXT_JOURNAL_DIR = "gsd-path-bind-next"
 
 
@@ -739,19 +740,36 @@ def bind_next_milestone_branch(
     new_journal = False
     if journal_path.exists() or journal_path.is_symlink():
         journal = _read_bind_next_journal(journal_path)
-        if set(journal) != set(request) | {"stage"}:
+        legacy = journal.get("schema") == LEGACY_BIND_NEXT_JOURNAL_SCHEMA
+        expected_fields = set(request) | {"stage"}
+        if legacy:
+            legacy_fields = expected_fields - {"landing"}
+            if set(journal) != legacy_fields and set(journal) != expected_fields:
+                raise PipelineGitError("bind-next journal has unsupported fields")
+        elif set(journal) != expected_fields:
             raise PipelineGitError("bind-next journal has unsupported fields")
         mismatches = {
             key: {"expected": value, "actual": journal.get(key)}
             for key, value in request.items()
-            if journal.get(key) != value
+            if key != "schema"
+            and (key != "landing" or "landing" in journal)
+            and journal.get(key) != value
         }
+        if not legacy and journal.get("schema") != BIND_NEXT_JOURNAL_SCHEMA:
+            mismatches["schema"] = {
+                "expected": BIND_NEXT_JOURNAL_SCHEMA,
+                "actual": journal.get("schema"),
+            }
         if mismatches:
             raise PipelineGitError(
                 f"bind-next journal does not match request: {json.dumps(mismatches, sort_keys=True)}"
             )
         if journal.get("stage") not in {"prepared", "switched", "retired"}:
             raise PipelineGitError("bind-next journal has invalid stage")
+        if legacy:
+            journal["schema"] = BIND_NEXT_JOURNAL_SCHEMA
+            journal["landing"] = landing_sha
+            _write_bind_next_journal(journal_path, journal)
     else:
         if current == branch:
             raise PipelineGitError(
