@@ -808,7 +808,15 @@ def _bind_next_recovery(
         raise PipelineStateError("bind-next journal requires STATE shipped/done")
 
     path, transaction = matches[0]
-    required = ("branch", "previous_branch", "ship", "remote_default", "base", "stage")
+    required = (
+        "branch",
+        "previous_branch",
+        "ship",
+        "remote_default",
+        "base",
+        "landing",
+        "stage",
+    )
     expected_fields = {"schema", "repo", *required}
     optional_fields = {"allow_remote_absent"}
     if not expected_fields <= set(transaction) or set(transaction) - expected_fields - optional_fields:
@@ -822,6 +830,7 @@ def _bind_next_recovery(
     previous = str(transaction["previous_branch"])
     ship = str(transaction["ship"])
     base = str(transaction["base"])
+    landing = str(transaction["landing"])
     stage = str(transaction["stage"])
     branch_number = _bound_branch_number(branch)
     previous_number = _bound_branch_number(previous)
@@ -831,9 +840,12 @@ def _bind_next_recovery(
         raise PipelineStateError("bind-next journal target does not follow previous branch")
     if path.name != f"M{branch_number:03d}.json":
         raise PipelineStateError("bind-next journal path does not match target branch")
-    if any(not re.fullmatch(r"[0-9a-f]{40}", value) for value in (ship, base)):
-        raise PipelineStateError("bind-next journal has invalid ship or base SHA")
-    for label, value in (("ship", ship), ("base", base)):
+    if any(
+        not re.fullmatch(r"[0-9a-f]{40}", value)
+        for value in (ship, base, landing)
+    ):
+        raise PipelineStateError("bind-next journal has invalid ship, base, or landing SHA")
+    for label, value in (("ship", ship), ("base", base), ("landing", landing)):
         resolved = _run_git(
             repo,
             "rev-parse",
@@ -877,6 +889,7 @@ def _bind_next_recovery(
             "ship": ship,
             "remote_default": transaction["remote_default"],
             "base": base,
+            "landing": landing,
             "allow_remote_absent": allow_remote_absent,
             "journal": str(path),
         }

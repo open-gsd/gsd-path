@@ -102,6 +102,7 @@ class PipelineDiagnoseTests(unittest.TestCase):
             "ship": "a" * 40,
             "remote_default": "origin/main",
             "base": "b" * 40,
+            "landing": "c" * 40,
         }
         for allowed in (False, True):
             with self.subTest(allowed=allowed):
@@ -114,6 +115,7 @@ class PipelineDiagnoseTests(unittest.TestCase):
                 self.assertIsNotNone(retry)
                 arguments = pipeline_git.parse_args(shlex.split(retry)[2:])
                 self.assertEqual(arguments.allow_missing_previous, allowed)
+                self.assertEqual(arguments.landing, "c" * 40)
 
     def test_healthy_bound_plan_is_ok(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

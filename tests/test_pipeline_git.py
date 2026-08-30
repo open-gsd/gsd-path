@@ -350,6 +350,7 @@ class PipelineGitTests(unittest.TestCase):
                     ship,
                     "origin/main",
                     integrate,
+                    integrate,
                 )
 
     def test_bind_next_resumes_after_switch_from_matching_journal(self) -> None:
@@ -371,6 +372,7 @@ class PipelineGitTests(unittest.TestCase):
                         ship,
                         "origin/main",
                         integrate,
+                        integrate,
                     )
 
             self.assertEqual(
@@ -390,6 +392,7 @@ class PipelineGitTests(unittest.TestCase):
                 ship,
                 "origin/main",
                 integrate,
+                integrate,
             )
 
             self.assertEqual(result["status"], "already-bound")
@@ -401,6 +404,13 @@ class PipelineGitTests(unittest.TestCase):
     def test_bind_next_persists_ownership_before_switch_and_resumes(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             _, repo, ship, integrate = make_integrated_milestone(tmp)
+            run_git(repo, "switch", "main")
+            (repo / "later.txt").write_text("later\n", encoding="utf-8")
+            run_git(repo, "add", "later.txt")
+            run_git(repo, "commit", "-m", "later main change")
+            base = run_git(repo, "rev-parse", "HEAD").stdout.strip()
+            run_git(repo, "push", "origin", "main")
+            run_git(repo, "switch", "gsd-path/M001")
             original = pipeline_git._run_git
 
             def interrupt_switch(
@@ -427,6 +437,7 @@ class PipelineGitTests(unittest.TestCase):
                         "gsd-path/M001",
                         ship,
                         "origin/main",
+                        base,
                         integrate,
                     )
 
@@ -436,6 +447,8 @@ class PipelineGitTests(unittest.TestCase):
             )
             journal = json.loads(journal_path.read_text(encoding="utf-8"))
             self.assertEqual(journal["stage"], "prepared")
+            self.assertEqual(journal["base"], base)
+            self.assertEqual(journal["landing"], integrate)
             self.assertEqual(
                 run_git(repo, "branch", "--show-current").stdout.strip(),
                 "gsd-path/M001",
@@ -444,6 +457,8 @@ class PipelineGitTests(unittest.TestCase):
             recovery = pipeline_state.route_state(repo)["route"]
             self.assertEqual(recovery["action"], "resume-next-handoff")
             self.assertEqual(recovery["previous_branch"], "gsd-path/M001")
+            self.assertEqual(recovery["base"], base)
+            self.assertEqual(recovery["landing"], integrate)
 
             result = pipeline_git.bind_next_milestone_branch(
                 repo,
@@ -452,9 +467,12 @@ class PipelineGitTests(unittest.TestCase):
                 str(recovery["ship"]),
                 str(recovery["remote_default"]),
                 str(recovery["base"]),
+                str(recovery["landing"]),
             )
 
             self.assertEqual(result["status"], "bound")
+            self.assertEqual(result["base"], base)
+            self.assertEqual(result["landing"], integrate)
             self.assertEqual(
                 json.loads(journal_path.read_text(encoding="utf-8"))["stage"],
                 "retired",
@@ -547,6 +565,8 @@ class PipelineGitTests(unittest.TestCase):
                 "origin/main",
                 "--base",
                 integrated_main,
+                "--landing",
+                integrated_main,
                 "--allow-missing-previous",
             ]
             nested = primary / "nested"
@@ -561,6 +581,7 @@ class PipelineGitTests(unittest.TestCase):
                     "gsd-path/M001",
                     m001_ship,
                     "origin/main",
+                    integrated_main,
                     integrated_main,
                     allow_remote_absent=True,
                 )
@@ -734,6 +755,8 @@ class PipelineGitTests(unittest.TestCase):
                     "origin/main",
                     "--base",
                     landing,
+                    "--landing",
+                    landing,
                     "--allow-missing-previous",
                 ],
                 capture_output=True,
@@ -813,6 +836,8 @@ class PipelineGitTests(unittest.TestCase):
                 "--remote-default",
                 "origin/main",
                 "--base",
+                integrated_main,
+                "--landing",
                 integrated_main,
             ]
             run_git(

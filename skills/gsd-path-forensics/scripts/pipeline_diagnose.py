@@ -222,6 +222,8 @@ def _route_retry(
             route["remote_default"],
             "--base",
             route["base"],
+            "--landing",
+            route["landing"],
         ]
         if route.get("allow_remote_absent") is True:
             arguments.append("--allow-missing-previous")

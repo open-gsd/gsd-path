@@ -604,6 +604,7 @@ class FullCycleTests(unittest.TestCase):
             bound = self.gate(
                 "pipeline_git.py", "bind-next", "--repo", str(repo), "--branch", "gsd-path/M002",
                 "--previous-branch", BRANCH, "--ship", ship_sha, "--remote-default", "origin/main", "--base", merge_sha,
+                "--landing", merge_sha,
             )
             self.assertEqual(bound["branch"], "gsd-path/M002")
             self.assertEqual(git(repo, "branch", "--show-current").stdout.strip(), "gsd-path/M002")

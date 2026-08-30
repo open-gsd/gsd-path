@@ -1629,6 +1629,7 @@ class PipelineStateTests(unittest.TestCase):
                     "ship": integrate,
                     "remote_default": "origin/main",
                     "base": integrate,
+                    "landing": integrate,
                     "allow_remote_absent": True,
                     "stage": "switched",
                 },
@@ -1637,6 +1638,7 @@ class PipelineStateTests(unittest.TestCase):
             self.assertEqual(handoff["route"]["action"], "resume-next-handoff")
             self.assertEqual(handoff["route"]["previous_branch"], "gsd-path/M001")
             self.assertEqual(handoff["route"]["branch"], "gsd-path/M002")
+            self.assertEqual(handoff["route"]["landing"], integrate)
             self.assertTrue(handoff["route"]["allow_remote_absent"])
 
             result = pipeline_state.promote_next(

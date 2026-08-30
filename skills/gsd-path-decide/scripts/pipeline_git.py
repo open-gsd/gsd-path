@@ -339,7 +339,7 @@ def _require_pull_request_integration_proof(
     ship: str,
     base: str,
     previous_branch: str,
-) -> None:
+) -> str:
     state = _validated_shipped_state(repo)
     if state.get("phase") != "shipped" or state.get("status") != "done":
         raise PipelineGitError("bind-next requires shipped/done state")
@@ -409,6 +409,7 @@ def _require_pull_request_integration_proof(
         raise PipelineGitError(
             "pull-request integration landing is not on main first-parent history"
         )
+    return landing
 
 
 def _git_path(repo: Path, name: str) -> Path:
@@ -604,6 +605,7 @@ def bind_next_milestone_branch(
     ship: str,
     remote_default: str,
     base: str,
+    landing: str,
     allow_remote_absent: bool = False,
 ) -> dict[str, str]:
     """Move a clean primary worktree onto a new bound branch after integration."""
@@ -646,8 +648,14 @@ def bind_next_milestone_branch(
     ).stdout.strip()
     if ship != ship_sha:
         raise PipelineGitError(f"ship must be the full commit SHA: {ship}")
-    # A retired previous branch is absent locally; the ship SHA alone then
-    # carries the integration proof so a repeated bind-next still converges.
+    landing_sha = _run_git(
+        repo,
+        "rev-parse",
+        "--verify",
+        f"{landing}^{{commit}}",
+    ).stdout.strip()
+    if landing != landing_sha:
+        raise PipelineGitError(f"landing must be the full commit SHA: {landing}")
     previous_ref = f"refs/heads/{previous_branch}"
     if _ref_exists(repo, previous_ref):
         previous_sha = _run_git(
@@ -665,21 +673,38 @@ def bind_next_milestone_branch(
         "merge-base",
         "--is-ancestor",
         ship_sha,
-        base_sha,
+        landing_sha,
         check=False,
     )
     if integrated.returncode == 1:
-        raise PipelineGitError(f"{previous_branch} is not integrated into {remote_default}")
+        raise PipelineGitError("milestone landing does not contain the ship commit")
     if integrated.returncode != 0:
         detail = integrated.stderr.strip() or integrated.stdout.strip()
+        raise PipelineGitError(f"could not verify milestone landing: {detail}")
+    landing_integrated = _run_git(
+        repo,
+        "merge-base",
+        "--is-ancestor",
+        landing_sha,
+        base_sha,
+        check=False,
+    )
+    if landing_integrated.returncode == 1:
+        raise PipelineGitError("milestone landing is not integrated into the validated base")
+    if landing_integrated.returncode != 0:
+        detail = landing_integrated.stderr.strip() or landing_integrated.stdout.strip()
         raise PipelineGitError(f"could not verify integrated branch: {detail}")
     if allow_remote_absent:
-        _require_pull_request_integration_proof(
+        proven_landing = _require_pull_request_integration_proof(
             repo,
             ship_sha,
             base_sha,
             previous_branch,
         )
+        if proven_landing != landing_sha:
+            raise PipelineGitError(
+                "validated landing does not match pull-request integration proof"
+            )
 
     symbolic_branch = _run_git(
         repo,
@@ -706,6 +731,7 @@ def bind_next_milestone_branch(
         "ship": ship_sha,
         "remote_default": remote_default,
         "base": base_sha,
+        "landing": landing_sha,
     }
     if allow_remote_absent:
         request["allow_remote_absent"] = True
@@ -794,6 +820,7 @@ def bind_next_milestone_branch(
         "schema": "gsd-path/bind-next/v1",
         "status": status,
         "base": default_sha,
+        "landing": landing_sha,
         "branch": branch,
         "previous_branch": previous_branch,
     }
@@ -815,6 +842,7 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     bind_next.add_argument("--ship", required=True)
     bind_next.add_argument("--remote-default", required=True)
     bind_next.add_argument("--base", required=True)
+    bind_next.add_argument("--landing", required=True)
     bind_next.add_argument("--allow-missing-previous", action="store_true")
     bind_initial = subparsers.add_parser(
         "bind-initial",
@@ -838,6 +866,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 args.ship,
                 args.remote_default,
                 args.base,
+                args.landing,
                 args.allow_missing_previous,
             )
         elif args.command == "bind-initial":

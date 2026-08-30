@@ -172,13 +172,13 @@ result is `resume-next-handoff`: state is `shipped/done` on the returned
 previous bound branch, and the durable journal proves the current branch and
 HEAD match its prepared, switched, or retired stage. Promotion-journal recovery
 returns `resume-promotion` earlier instead. Rerun `bind-next` immediately with
-the returned typed branch, previous branch, ship, remote-default, and base
-fields. Do not rerun the old-branch archive or integration validators in this
-recovery path: they passed before the journal was created and cannot run after
-the switch. `bind-next` rechecks the live remote refs, exact SHAs, integration
-ancestry, cleanliness, and journal ownership before continuing. After it
-returns, continue the state transition or lookahead promotion below. Do not
-reconstruct this classification from Git output or Log prose.
+the returned typed branch, previous branch, ship, remote-default, base, and
+landing fields. Do not rerun the old-branch archive or integration validators
+in this recovery path: they passed before the journal was created and cannot
+run after the switch. `bind-next` rechecks the live remote refs, exact SHAs,
+integration ancestry, cleanliness, and journal ownership before continuing.
+After it returns, continue the state transition or lookahead promotion below.
+Do not reconstruct this classification from Git output or Log prose.
 When the route returns `allow_remote_absent: true`, also pass
 `--allow-missing-previous`; this is valid only because a merged PR may have
 auto-deleted the published bound branch.
@@ -369,7 +369,8 @@ python3 <absolute-bundled-pipeline-git.py> bind-next \
   --previous-branch <STATE.branch> \
   --ship <exact-ship-sha> \
   --remote-default origin/main \
-  --base <exact-origin-main-sha>
+  --base <exact-origin-main-sha> \
+  --landing <validate-integrated-landing-sha>
 ```
 
 Add `--allow-missing-previous` when `validate-integrated` returned
