@@ -769,6 +769,8 @@ def _create_install_lock(lock: Path) -> None:
                 shutil.rmtree(lock)
             if not _lexists(lock):
                 quarantine.rename(lock)
+            else:
+                shutil.rmtree(quarantine)
         if _lexists(lock):
             raise InstallerError(
                 f"installation already in progress for {lock.parent}"
@@ -1836,16 +1838,19 @@ def _validated_project_state(source_root: Path, project: Path) -> dict:
     return state
 
 
-def _validate_project_runtime_status(project: Path) -> None:
+def _validate_project_runtime_status(source_root: Path, project: Path) -> None:
     interpreter = _required_python_runtime("--doctor")
-    runtime = project / HOOKS_DIRECTORY / PROJECT_STATUS_LAUNCHER
+    runtime = source_root / "scripts" / "pipeline_state.py"
+    environment = os.environ.copy()
+    environment["GIT_OPTIONAL_LOCKS"] = "0"
     try:
         result = subprocess.run(
-            [interpreter, "-B", str(runtime), "--repo", str(project)],
+            [interpreter, "-B", str(runtime), "status", "--repo", str(project)],
             cwd=project,
             capture_output=True,
             text=True,
             check=False,
+            env=environment,
         )
     except OSError as error:
         raise InstallerError(f"project runtime status failed: {error}") from error
@@ -1858,6 +1863,31 @@ def _validate_project_runtime_status(project: Path) -> None:
         raise InstallerError("project runtime status returned invalid JSON") from error
     if not _valid_status_payload(payload, project):
         raise InstallerError("project runtime status returned an invalid payload")
+
+
+def _project_runtime_matches(source_root: Path, project: Path) -> bool:
+    pairs = [
+        (
+            project / HOOKS_DIRECTORY / PROJECT_STATUS_LAUNCHER,
+            source_root / "scripts" / PROJECT_STATUS_LAUNCHER,
+        ),
+        *(
+            (
+                project / HOOKS_DIRECTORY / "runtime" / name,
+                source_root / "scripts" / name,
+            )
+            for name in PROJECT_RUNTIME_SCRIPTS
+        ),
+    ]
+    try:
+        return all(
+            not destination.is_symlink()
+            and destination.is_file()
+            and destination.read_bytes() == source.read_bytes()
+            for destination, source in pairs
+        )
+    except OSError:
+        return False
 
 
 def _valid_status_payload(payload: object, project: Path) -> bool:
@@ -2167,6 +2197,22 @@ def doctor(
     guard_installed = any(
         _lexists(project / HOOKS_DIRECTORY / name) for name in GUARD_SCRIPTS
     )
+    guard_wired = any(
+        contract is not None and _is_managed_hook_settings(contract[0])
+        for target in targets
+        if target in installed_targets
+        for contract in (_native_guard_contract(target, project),)
+    )
+    if _lexists(project / ".git"):
+        hooks_dir = _git_hooks_directory(project)
+        guard_wired = guard_wired or (
+            hooks_dir is not None
+            and any(
+                _is_managed_git_hook(hooks_dir / name)
+                for name in ("pre-commit", "commit-msg")
+            )
+        )
+    guard_installed = guard_installed or guard_wired
     if not guard_installed:
         push("note", "hooks: guard hooks not installed (opt in with --hooks; see HOOKS.md)")
     else:
@@ -2284,7 +2330,9 @@ def doctor(
                 raise InstallerError(
                     "project runtime status was not executed because the installed runtime is not current"
                 )
-            _validate_project_runtime_status(project)
+            _validate_project_runtime_status(source_root, project)
+            if not _project_runtime_matches(source_root, project):
+                raise InstallerError("project runtime changed during doctor validation")
         except InstallerError as error:
             push("fail", f"state: {error}")
         else:

@@ -183,6 +183,26 @@ class GuardHookTests(unittest.TestCase):
                     }
                 )
 
+    def test_copy_and_touch_file_tools_are_direct_writes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / ".project").mkdir()
+            (root / ".project" / "STATE.md").write_text("owned\n", encoding="utf-8")
+            with (
+                mock.patch.object(guard_hook, "repository_root", return_value=root),
+                mock.patch.object(
+                    guard_hook, "project_status", return_value=self.status(root)
+                ),
+            ):
+                for tool_name in ("CopyFile", "TouchFile"):
+                    with self.subTest(tool_name=tool_name):
+                        self.assert_denied(
+                            {
+                                "tool_name": tool_name,
+                                "tool_input": {"target_file": "src/app.py"},
+                            }
+                        )
+
     def test_project_status_rejects_incomplete_payload(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -237,11 +257,6 @@ class GuardHookTests(unittest.TestCase):
                     mock.patch.object(guard_hook, "repository_root", return_value=root),
                     mock.patch.object(
                         guard_hook,
-                        "filesystem_case_insensitive",
-                        return_value=True,
-                    ),
-                    mock.patch.object(
-                        guard_hook,
                         "project_status",
                         return_value=self.status(root, phase=phase),
                     ),
@@ -253,7 +268,6 @@ class GuardHookTests(unittest.TestCase):
                         link.symlink_to(root / "src" / "app.py")
                     protected_paths = [
                         ".project",
-                        ".project/state.md",
                         ".project/STATE.md",
                         ".gsd-path/guard_hook.py",
                     ]
@@ -268,20 +282,22 @@ class GuardHookTests(unittest.TestCase):
                                 }
                             )
 
-    def test_case_sensitive_project_alias_is_a_product_path(self):
+    def test_project_alias_symlink_does_not_spoof_case_behavior(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             (root / ".project").mkdir()
+            try:
+                (root / ".PROJECT").symlink_to(
+                    root / ".project", target_is_directory=True
+                )
+                (root / ".Project").mkdir()
+            except FileExistsError:
+                self.skipTest("requires a case-sensitive test filesystem")
             (root / ".project" / "STATE.md").write_text(
                 "owned\n", encoding="utf-8"
             )
             with (
                 mock.patch.object(guard_hook, "repository_root", return_value=root),
-                mock.patch.object(
-                    guard_hook,
-                    "filesystem_case_insensitive",
-                    return_value=False,
-                ),
                 mock.patch.object(
                     guard_hook, "project_status", return_value=self.status(root)
                 ),
@@ -465,6 +481,7 @@ class GuardHookTests(unittest.TestCase):
 
             self.assertEqual(2, len(calls))
             self.assertEqual("new route\n", output.getvalue())
+            self.assertEqual("0", calls[0][1]["env"]["GIT_OPTIONAL_LOCKS"])
 
     def test_status_launcher_waits_before_running_during_install(self):
         with tempfile.TemporaryDirectory() as temporary:

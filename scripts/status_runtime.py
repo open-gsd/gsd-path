@@ -77,6 +77,8 @@ def launch(repo: Path) -> int:
     runtime = parent / "runtime" / "pipeline_state.py"
     lock = repo / ".gsd-path-install-lock"
     command = [sys.executable, "-B", str(runtime), "status", "--repo", str(repo)]
+    environment = os.environ.copy()
+    environment["GIT_OPTIONAL_LOCKS"] = "0"
     while True:
         if install_lock_active(lock):
             time.sleep(0.05)
@@ -92,7 +94,9 @@ def launch(repo: Path) -> int:
             print(f"GSD Path status runtime is unavailable: {runtime}", file=sys.stderr)
             return 2
         try:
-            result = subprocess.run(command, capture_output=True, check=False)
+            result = subprocess.run(
+                command, capture_output=True, check=False, env=environment
+            )
         except OSError as error:
             print(f"GSD Path status runtime failed: {error}", file=sys.stderr)
             return 2

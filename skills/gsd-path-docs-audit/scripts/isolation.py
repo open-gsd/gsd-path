@@ -32,6 +32,7 @@ except ImportError:  # pragma: no cover - package import used by tests
 
 
 TASK_BRANCH_PREFIX = "gsd-path-task/"
+TASK_AUTHORIZATION_PREFIX = "refs/gsd-path/task-authorizations/"
 VERIFY_BRANCH_PREFIX = "gsd-path-verify/"
 TASK_ID_RE = re.compile(r"^[A-Za-z][A-Za-z0-9._-]*$")
 NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
@@ -137,6 +138,16 @@ def task_branch_name(task_id: str) -> str:
     return f"{TASK_BRANCH_PREFIX}{validate_task_id(task_id)}"
 
 
+def task_authorization_ref(task_id: str) -> str:
+    return f"{TASK_AUTHORIZATION_PREFIX}{validate_task_id(task_id)}"
+
+
+def _delete_task_authorization(primary: Path, branch: str) -> None:
+    if branch.startswith(TASK_BRANCH_PREFIX):
+        task_id = validate_task_id(branch.removeprefix(TASK_BRANCH_PREFIX))
+        run_git(primary, "update-ref", "-d", task_authorization_ref(task_id))
+
+
 def authorized_task_worktree(worktree: Path, bound_branch: str) -> bool:
     try:
         worktree = require_directory(worktree, "task worktree")
@@ -159,6 +170,11 @@ def authorized_task_worktree(worktree: Path, bound_branch: str) -> bool:
         ):
             return False
         head = current_sha(worktree)
+        authorization = run_git(
+            worktree, "rev-parse", "--verify", task_authorization_ref(task_id)
+        )
+        if authorization.returncode != 0 or authorization.stdout.strip() != head:
+            return False
         matches = []
         tasks_dir = worktree / ".project" / "tasks"
         if tasks_dir.is_symlink() or tasks_dir.resolve() != tasks_dir:
@@ -497,6 +513,17 @@ def isolate_task(
     branch = task_branch_name(task_id)
     destination = sidecar_root(primary, "task", task_id)
     create_named_worktree(primary, branch, destination, resolved_base)
+    authorized = run_git(
+        primary,
+        "update-ref",
+        task_authorization_ref(task_id),
+        resolved_base,
+        "0" * len(resolved_base),
+    )
+    if authorized.returncode != 0:
+        run_git(primary, "worktree", "remove", "--force", str(destination))
+        run_git(primary, "branch", "-D", branch)
+        raise IsolationError("could not record task worktree authorization")
     return {
         "base": resolved_base,
         "bound_branch": bound,
@@ -2397,6 +2424,7 @@ def retire(
                             or f"could not delete {branch}"
                         )
                 branch_retired = True
+                _delete_task_authorization(primary, branch)
         return {
             "bound_branch": bound,
             "branch": branch,
@@ -2441,6 +2469,7 @@ def retire(
         raise IsolationError(
             (deleted.stderr or deleted.stdout).strip() or f"could not delete {retire_branch}"
         )
+    _delete_task_authorization(primary, retire_branch)
     return {
         "bound_branch": bound,
         "branch": retire_branch,

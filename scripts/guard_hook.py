@@ -51,6 +51,8 @@ WRITE_VERBS = frozenset(
     {
         "write",
         "save",
+        "copy",
+        "touch",
         "edit",
         "create",
         "delete",
@@ -477,20 +479,11 @@ def target_paths(path, working_directories, repo):
     return Path(os.path.abspath(candidate)), candidate.resolve(strict=False)
 
 
-def filesystem_case_insensitive(repo):
-    try:
-        return os.path.samefile(repo / ".project", repo / ".PROJECT")
-    except OSError:
-        return False
-
-
-def path_kind(candidate, repo, case_insensitive):
+def path_kind(candidate, repo):
     if candidate != repo and repo not in candidate.parents:
         return "external"
     relative = candidate.relative_to(repo)
-    parts = tuple(
-        part.casefold() if case_insensitive else part for part in relative.parts
-    )
+    parts = relative.parts
     if parts in {
         (".project",),
         (".project", "state.md"),
@@ -508,9 +501,8 @@ def path_kind(candidate, repo, case_insensitive):
 def target_kind(path, working_directories, repo):
     lexical, resolved = target_paths(path, working_directories, repo)
     repo = repo.resolve()
-    case_insensitive = filesystem_case_insensitive(repo)
     kinds = {
-        path_kind(candidate, repo, case_insensitive)
+        path_kind(candidate, repo)
         for candidate in (lexical, resolved)
     }
     for kind in ("protected", "product", "artifact", "external"):

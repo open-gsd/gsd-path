@@ -1277,6 +1277,49 @@ class InstallerTests(unittest.TestCase):
         )
         self.assertFalse(target.exists())
 
+    def test_lost_stale_lock_race_removes_only_the_quarantine(self):
+        target = self.root / "lost-stale-owner" / "skills"
+        lock = target.parent / install.INSTALL_LOCK_NAME
+        lock.mkdir(parents=True)
+        owner_path = lock / install.INSTALL_LOCK_OWNER
+        owner_path.write_text(
+            json.dumps(
+                {
+                    "schema": install.INSTALL_LOCK_SCHEMA,
+                    "pid": os.getpid(),
+                    "identity": "reused-pid",
+                }
+            ),
+            encoding="utf-8",
+        )
+        original_rename = Path.rename
+        raced = False
+
+        def publish_competitor(candidate, destination):
+            nonlocal raced
+            if candidate.name.startswith(".install-lock-stage-") and not raced:
+                raced = True
+                lock.mkdir()
+                owner_path.write_text(
+                    json.dumps(
+                        {
+                            "schema": install.INSTALL_LOCK_SCHEMA,
+                            "pid": os.getpid(),
+                            "identity": install._process_identity(os.getpid()),
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+            return original_rename(candidate, destination)
+
+        with mock.patch.object(Path, "rename", new=publish_competitor):
+            with self.assertRaisesRegex(install.InstallerError, "already in progress"):
+                install.install(self.source, [install.TargetPlan("claude", target)])
+
+        self.assertTrue(raced)
+        self.assertTrue(lock.is_dir())
+        self.assertFalse(lock.with_name(f"{lock.name}.stale").exists())
+
     def test_failure_restores_cursor_subagent(self):
         cursor = self.root / "cursor-rollback" / "skills"
         agent = cursor.parent / "agents" / install.CURSOR_AGENT_FILENAME
@@ -2259,6 +2302,36 @@ class InstallerTests(unittest.TestCase):
         self.assertFalse(doctor_side_effect.exists())
         runtime_script.write_bytes(original_runtime)
 
+        original_validator = install._validated_project_state
+
+        def replace_runtime_after_validation(source_root, candidate):
+            state = original_validator(source_root, candidate)
+            runtime_script.write_text(
+                "from pathlib import Path\n"
+                f"Path({str(doctor_side_effect)!r}).write_text('executed')\n"
+                f"# {install.PROJECT_RUNTIME_MARKER}\n",
+                encoding="utf-8",
+            )
+            return state
+
+        with mock.patch.object(
+            install,
+            "_validated_project_state",
+            side_effect=replace_runtime_after_validation,
+        ):
+            findings = install.doctor(
+                self.source, ["claude"], lambda _target: target, project
+            )
+        self.assertFalse(doctor_side_effect.exists())
+        self.assertTrue(
+            any(
+                finding["level"] == "fail"
+                and "runtime changed during doctor validation" in finding["text"]
+                for finding in findings
+            )
+        )
+        runtime_script.write_bytes(original_runtime)
+
         shutil.rmtree(target / "gsd-path-plan")
         status, _, error = self.run_main(arguments)
         self.assertEqual(1, status)
@@ -2289,6 +2362,29 @@ class InstallerTests(unittest.TestCase):
                 for finding in findings
             )
         )
+
+    def test_doctor_reports_deleted_guards_with_managed_wiring(self):
+        project = self.root / "doctor-dangling-guards"
+        project.mkdir()
+        subprocess.run(["git", "init", "-q"], cwd=project, check=True)
+        target = self.root / "doctor-dangling-guards-claude" / "skills"
+        status, _, error = self.run_main(self.hooks_arguments(project, target))
+        self.assertEqual(0, status, error)
+        for name in install.GUARD_SCRIPTS:
+            (project / install.HOOKS_DIRECTORY / name).unlink()
+
+        findings = install.doctor(
+            self.source, ["claude"], lambda _target: target, project
+        )
+
+        for name in install.GUARD_SCRIPTS:
+            self.assertTrue(
+                any(
+                    finding["level"] == "fail"
+                    and f"missing .gsd-path/{name}" in finding["text"]
+                    for finding in findings
+                )
+            )
 
     def test_doctor_rejects_symlinked_and_unreadable_project_scripts(self):
         project = self.root / "doctor-unsafe-scripts"

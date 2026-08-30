@@ -115,6 +115,21 @@ class IsolationTests(unittest.TestCase):
             self.assertTrue(
                 isolation.authorized_task_worktree(worktree, "gsd-path/M001")
             )
+            git(
+                repo,
+                "update-ref",
+                "-d",
+                isolation.task_authorization_ref("T001"),
+            )
+            self.assertFalse(
+                isolation.authorized_task_worktree(worktree, "gsd-path/M001")
+            )
+            git(
+                repo,
+                "update-ref",
+                isolation.task_authorization_ref("T001"),
+                base,
+            )
             task.write_text(
                 task.read_text(encoding="utf-8").replace(
                     f"worktree: {worktree}", "worktree: /tmp/unowned"

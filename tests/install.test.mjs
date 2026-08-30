@@ -787,6 +787,36 @@ test("stale lock recovery preserves a replacement owner", async () => {
   assert.ok(!fs.existsSync(target));
 });
 
+test("lost stale lock race removes only the quarantine", async () => {
+  const target = path.join(root, "lost-stale-owner", "skills");
+  const lock = path.join(path.dirname(target), ".gsd-path-install-lock");
+  const ownerPath = path.join(lock, "owner.json");
+  fs.mkdirSync(lock, { recursive: true });
+  fs.writeFileSync(ownerPath, JSON.stringify({
+    schema: "gsd-path/install-lock/v2", pid: process.pid, identity: "reused-pid",
+  }));
+  let raced = false;
+  installer.hooks.renameInstallStage = (from, to) => {
+    raced = true;
+    fs.mkdirSync(lock);
+    fs.writeFileSync(ownerPath, JSON.stringify({
+      schema: "gsd-path/install-lock/v2",
+      pid: process.pid,
+      identity: originalHooks.processIdentity(process.pid),
+    }));
+    fs.renameSync(from, to);
+  };
+
+  await assert.rejects(
+    runInstall([installer.targetPlan("claude", target)]),
+    /already in progress/
+  );
+
+  assert.equal(raced, true);
+  assert.ok(fs.existsSync(lock));
+  assert.ok(!fs.existsSync(`${lock}.stale`));
+});
+
 test("failure restores cursor subagent", async () => {
   const cursorRoot = path.join(root, "cursor-rollback", "skills");
   const agent = path.join(path.dirname(cursorRoot), "agents", installer.CURSOR_AGENT_FILENAME);
@@ -2027,6 +2057,30 @@ test("doctor fails when installer-owned native guard config is missing", async (
   }
 });
 
+test("doctor fails when managed wiring points to deleted guards", async () => {
+  const project = path.join(root, "dangling-guards");
+  fs.mkdirSync(path.join(project, ".git"), { recursive: true });
+  const target = path.join(root, "dangling-guards-claude", "skills");
+  await runInstall([installer.targetPlan("claude", target)], { project, hooks: true });
+  for (const name of installer.GUARD_SCRIPTS) {
+    fs.rmSync(path.join(project, installer.HOOKS_DIRECTORY, name));
+  }
+
+  const findings = installer.doctor(source, {
+    targets: ["claude"],
+    rootFor: () => target,
+    project,
+  });
+
+  for (const name of installer.GUARD_SCRIPTS) {
+    assert.ok(
+      findings.some(
+        (finding) => finding.level === "fail" && finding.text.includes(`missing .gsd-path/${name}`)
+      )
+    );
+  }
+});
+
 test("doctor flags stale versions and incomplete installs", async () => {
   const target = path.join(root, "claude", "skills");
   await runInstall([installer.targetPlan("claude", target)]);
@@ -2103,6 +2157,27 @@ test("doctor uses canonical pipeline state validation", async () => {
     )
   );
   assert.ok(!fs.existsSync(doctorSideEffect));
+  fs.writeFileSync(runtimeState, originalRuntime);
+  const originalValidator = originalHooks.validatedProjectState;
+  installer.hooks.validatedProjectState = (...args) => {
+    const state = originalValidator(...args);
+    fs.writeFileSync(
+      runtimeState,
+      "import pathlib\n" +
+        `pathlib.Path(${JSON.stringify(doctorSideEffect)}).write_text("executed")\n` +
+        `# ${installer.PROJECT_RUNTIME_MARKER}\n`
+    );
+    return state;
+  };
+  findings = installer.doctor(source, { targets: [], rootFor: () => "", project });
+  assert.ok(!fs.existsSync(doctorSideEffect));
+  assert.ok(
+    findings.some(
+      (finding) =>
+        finding.level === "fail" && /runtime changed during doctor validation/.test(finding.text)
+    )
+  );
+  installer.hooks.validatedProjectState = originalValidator;
   fs.writeFileSync(runtimeState, originalRuntime);
   fs.writeFileSync(
     path.join(project, ".project", "STATE.md"),

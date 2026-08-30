@@ -841,7 +841,7 @@ function createInstallLock(lock) {
       { flag: "wx" }
     );
     quarantine = recoverStaleInstallLock(lock);
-    fs.renameSync(staging, lock);
+    hooks.renameInstallStage(staging, lock);
     published = true;
     if (quarantine !== null) fs.rmSync(quarantine, { recursive: true });
   } catch (error) {
@@ -849,6 +849,7 @@ function createInstallLock(lock) {
     if (quarantine !== null && lexists(quarantine)) {
       if (published && lexists(lock)) fs.rmSync(lock, { recursive: true });
       if (!lexists(lock)) fs.renameSync(quarantine, lock);
+      else fs.rmSync(quarantine, { recursive: true });
     }
     if (lexists(lock)) {
       throw new InstallerError(`installation already in progress for ${path.dirname(lock)}`);
@@ -1738,13 +1739,17 @@ function hasManagedInstall(root) {
   return isDirectory(root) && fs.readdirSync(root).some((name) => isManagedName(name));
 }
 
-function validateProjectRuntimeStatus(project) {
+function validateProjectRuntimeStatus(sourceRoot, project) {
   const interpreter = requiredPythonRuntime("--doctor");
-  const runtime = path.join(project, HOOKS_DIRECTORY, PROJECT_STATUS_LAUNCHER);
+  const runtime = path.join(sourceRoot, "scripts", "pipeline_state.py");
   const result = spawnSync(
     interpreter,
-    ["-B", runtime, "--repo", project],
-    { cwd: project, encoding: "utf8" }
+    ["-B", runtime, "status", "--repo", project],
+    {
+      cwd: project,
+      encoding: "utf8",
+      env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
+    }
   );
   if (result.error || result.status !== 0) {
     const detail = result.error?.message || result.stderr?.trim() || result.stdout?.trim() || "unknown failure";
@@ -1758,6 +1763,29 @@ function validateProjectRuntimeStatus(project) {
   }
   if (!validStatusPayload(payload, project)) {
     throw new InstallerError("project runtime status returned an invalid payload");
+  }
+}
+
+function projectRuntimeMatches(sourceRoot, project) {
+  const pairs = [
+    [
+      path.join(project, HOOKS_DIRECTORY, PROJECT_STATUS_LAUNCHER),
+      path.join(sourceRoot, "scripts", PROJECT_STATUS_LAUNCHER),
+    ],
+    ...PROJECT_RUNTIME_SCRIPTS.map((name) => [
+      path.join(project, HOOKS_DIRECTORY, "runtime", name),
+      path.join(sourceRoot, "scripts", name),
+    ]),
+  ];
+  try {
+    return pairs.every(
+      ([destination, source]) =>
+        !isSymlink(destination) &&
+        isFile(destination) &&
+        fs.readFileSync(destination).equals(fs.readFileSync(source))
+    );
+  } catch {
+    return false;
   }
 }
 
@@ -2055,9 +2083,24 @@ export function doctor(sourceRoot, { targets, rootFor, project = null }) {
     }
   }
 
-  const guardInstalled = GUARD_SCRIPTS.some((name) =>
+  let guardInstalled = GUARD_SCRIPTS.some((name) =>
     lexists(path.join(project, HOOKS_DIRECTORY, name))
   );
+  let guardWired = targets.some((target) => {
+    if (!installedTargets.has(target)) return false;
+    const contract = nativeGuardContract(target, project);
+    return contract !== null && isManagedHookSettings(contract.settings);
+  });
+  if (lexists(path.join(project, ".git"))) {
+    const hooksDir = gitHooksDirectory(project);
+    guardWired =
+      guardWired ||
+      (hooksDir !== null &&
+        ["pre-commit", "commit-msg"].some((name) =>
+          isManagedGitHook(path.join(hooksDir, name))
+        ));
+  }
+  guardInstalled = guardInstalled || guardWired;
   if (!guardInstalled) {
     push("note", "hooks: guard hooks not installed (opt in with --hooks; see HOOKS.md)");
   } else {
@@ -2182,13 +2225,16 @@ export function doctor(sourceRoot, { targets, rootFor, project = null }) {
     push("warn", "state: .project/ exists but STATE.md is missing");
   } else {
     try {
-      const state = validatedProjectState(sourceRoot, project);
+      const state = hooks.validatedProjectState(sourceRoot, project);
       if (!runtimeCurrent) {
         throw new InstallerError(
           "project runtime status was not executed because the installed runtime is not current"
         );
       }
-      validateProjectRuntimeStatus(project);
+      validateProjectRuntimeStatus(sourceRoot, project);
+      if (!projectRuntimeMatches(sourceRoot, project)) {
+        throw new InstallerError("project runtime changed during doctor validation");
+      }
       push("ok", `state: ${state.phase}/${state.status}`);
     } catch (error) {
       push("fail", `state: ${messageOf(error)}`);
@@ -2341,6 +2387,8 @@ export const hooks = {
   applyTarget,
   rename: fs.renameSync.bind(fs),
   renameInstallLock: fs.renameSync.bind(fs),
+  renameInstallStage: fs.renameSync.bind(fs),
+  validatedProjectState,
   processIdentity,
   reserveDirectory,
   reserveFile,
