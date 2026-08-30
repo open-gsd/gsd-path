@@ -1238,6 +1238,21 @@ function refreshesGuards(project, full, initialize) {
   );
 }
 
+function hasLegacyProjectContracts(project) {
+  const contracts = [
+    ["AGENTS.md", "# AGENTS.md — Operating Rules for the GSD Path Pipeline"],
+    ["WORKFLOW.md", "# WORKFLOW.md — GSD Path Pipeline SOP"],
+  ];
+  return contracts.every(([name, marker]) => {
+    const candidate = path.join(project, name);
+    return (
+      !isSymlink(candidate) &&
+      isFile(candidate) &&
+      fs.readFileSync(candidate, "utf8").includes(marker)
+    );
+  });
+}
+
 function validateHooksRefresh(sourceRoot, project, full, hooksDir, selected, initialize = false) {
   validateDirectoryDestination(project, "project path");
   validateDirectoryDestination(
@@ -1252,7 +1267,12 @@ function validateHooksRefresh(sourceRoot, project, full, hooksDir, selected, ini
   const runtimeExists = PROJECT_RUNTIME_SCRIPTS.some((name) =>
     lexists(path.join(project, HOOKS_DIRECTORY, "runtime", name))
   );
-  if (!initialize && !refreshGuards && !runtimeExists) {
+  if (
+    !initialize &&
+    !refreshGuards &&
+    !runtimeExists &&
+    !hasLegacyProjectContracts(project)
+  ) {
     throw new InstallerError(
       `no managed GSD Path hooks or runtime found in project: ${project}`
     );
@@ -1323,6 +1343,36 @@ function validateHooksRefresh(sourceRoot, project, full, hooksDir, selected, ini
   }
 }
 
+function publishProjectRuntime(sourceRoot, project) {
+  const parent = path.join(project, HOOKS_DIRECTORY);
+  const runtime = path.join(parent, "runtime");
+  fs.mkdirSync(parent, { recursive: true });
+  const staging = fs.mkdtempSync(path.join(parent, ".runtime-stage-"));
+  const previous = `${staging}-previous`;
+  let movedPrevious = false;
+  try {
+    for (const name of PROJECT_RUNTIME_SCRIPTS) {
+      hooks.copyRuntimeFile(
+        path.join(sourceRoot, "scripts", name),
+        path.join(staging, name)
+      );
+    }
+    if (lexists(runtime)) {
+      fs.renameSync(runtime, previous);
+      movedPrevious = true;
+    }
+    fs.renameSync(staging, runtime);
+    if (movedPrevious) removePath(previous);
+  } catch (error) {
+    if (!lexists(runtime) && movedPrevious && lexists(previous)) {
+      fs.renameSync(previous, runtime);
+    }
+    throw new InstallerError(`project runtime refresh failed: ${error.message}`);
+  } finally {
+    removePath(staging);
+  }
+}
+
 // Returns refreshed project-relative paths; entries prefixed "note:" are
 // user-facing notes rather than refreshed files.
 function refreshHooks(sourceRoot, project, full, dryRun, selected = [], initialize = false) {
@@ -1353,14 +1403,11 @@ function refreshHooks(sourceRoot, project, full, dryRun, selected = [], initiali
       refreshed.push(describeProjectPath(project, destination));
     }
   }
+  if (!dryRun) publishProjectRuntime(sourceRoot, project);
   for (const name of PROJECT_RUNTIME_SCRIPTS) {
-    const destination = path.join(project, HOOKS_DIRECTORY, "runtime", name);
-    const source = path.join(sourceRoot, "scripts", name);
-    if (!dryRun) {
-      fs.mkdirSync(path.dirname(destination), { recursive: true });
-      copyFileAtomic(source, destination);
-    }
-    refreshed.push(describeProjectPath(project, destination));
+    refreshed.push(
+      describeProjectPath(project, path.join(project, HOOKS_DIRECTORY, "runtime", name))
+    );
   }
   if (full) {
     for (const [target, settings, merge, generated] of [
@@ -1590,9 +1637,14 @@ export function doctor(sourceRoot, { targets, rootFor, project = null }) {
       }
       const content = readProjectFile(destination, `project: runtime ${name}`);
       if (content === null) continue;
+      const source = readProjectFile(
+        path.join(sourceRoot, "scripts", name),
+        `package: runtime ${name}`
+      );
+      if (source === null) continue;
       if (!content.toString("utf8").includes(PROJECT_RUNTIME_MARKER)) {
         push("warn", `project: runtime ${name} is not managed`);
-      } else if (!content.equals(fs.readFileSync(path.join(sourceRoot, "scripts", name)))) {
+      } else if (!content.equals(source)) {
         push("warn", `project: runtime ${name} is stale — refresh it with the project contracts`);
       } else {
         push("ok", `project: runtime ${name} current`);
@@ -1618,9 +1670,14 @@ export function doctor(sourceRoot, { targets, rootFor, project = null }) {
       }
       const content = readProjectFile(destination, `hooks: ${HOOKS_DIRECTORY}/${name}`);
       if (content === null) continue;
+      const source = readProjectFile(
+        path.join(sourceRoot, "scripts", name),
+        `package: guard ${name}`
+      );
+      if (source === null) continue;
       if (!content.toString("utf8").includes(GUARD_MARKER)) {
         push("warn", `hooks: ${HOOKS_DIRECTORY}/${name} is not a managed guard script`);
-      } else if (!content.equals(fs.readFileSync(path.join(sourceRoot, "scripts", name)))) {
+      } else if (!content.equals(source)) {
         push("warn", `hooks: ${HOOKS_DIRECTORY}/${name} is stale — run --hooks-refresh`);
       } else {
         push("ok", `hooks: ${HOOKS_DIRECTORY}/${name} current`);
@@ -1878,6 +1935,7 @@ export const hooks = {
   reserveFile,
   detectPythonInterpreter,
   resolveGitHooksPath,
+  copyRuntimeFile: fs.copyFileSync.bind(fs),
 };
 
 export async function install(sourceRoot, plans, options = {}) {

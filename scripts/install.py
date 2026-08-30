@@ -1171,6 +1171,19 @@ def _refreshes_guards(project: Path, full: bool, initialize: bool) -> bool:
     )
 
 
+def _has_legacy_project_contracts(project: Path) -> bool:
+    contracts = (
+        ("AGENTS.md", "# AGENTS.md — Operating Rules for the GSD Path Pipeline"),
+        ("WORKFLOW.md", "# WORKFLOW.md — GSD Path Pipeline SOP"),
+    )
+    return all(
+        not (project / name).is_symlink()
+        and (project / name).is_file()
+        and marker in (project / name).read_text(encoding="utf-8", errors="replace")
+        for name, marker in contracts
+    )
+
+
 def _validate_hooks_refresh(
     source_root: Path,
     project: Path,
@@ -1189,7 +1202,12 @@ def _validate_hooks_refresh(
         _lexists(project / HOOKS_DIRECTORY / "runtime" / name)
         for name in PROJECT_RUNTIME_SCRIPTS
     )
-    if not initialize and not refresh_guards and not runtime_exists:
+    if (
+        not initialize
+        and not refresh_guards
+        and not runtime_exists
+        and not _has_legacy_project_contracts(project)
+    ):
         raise InstallerError(
             f"no managed GSD Path hooks or runtime found in project: {project}"
         )
@@ -1288,13 +1306,33 @@ def refresh_hooks(
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 _atomic_copy(source, destination)
             refreshed.append(_describe_project_path(project, destination))
+    runtime = project / HOOKS_DIRECTORY / "runtime"
+    if not dry_run:
+        runtime.parent.mkdir(parents=True, exist_ok=True)
+        staging = Path(tempfile.mkdtemp(prefix=".runtime-stage-", dir=runtime.parent))
+        previous = staging.with_name(staging.name + "-previous")
+        moved_previous = False
+        try:
+            for name in PROJECT_RUNTIME_SCRIPTS:
+                shutil.copy2(source_root / "scripts" / name, staging / name)
+            if _lexists(runtime):
+                os.replace(runtime, previous)
+                moved_previous = True
+            os.replace(staging, runtime)
+            if moved_previous:
+                _remove_path(previous)
+        except BaseException as error:
+            if not _lexists(runtime) and moved_previous and _lexists(previous):
+                os.replace(previous, runtime)
+            if isinstance(error, Exception):
+                raise InstallerError(
+                    f"project runtime refresh failed: {error}"
+                ) from error
+            raise
+        finally:
+            _remove_path(staging)
     for name in PROJECT_RUNTIME_SCRIPTS:
-        destination = project / HOOKS_DIRECTORY / "runtime" / name
-        source = source_root / "scripts" / name
-        if not dry_run:
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            _atomic_copy(source, destination)
-        refreshed.append(_describe_project_path(project, destination))
+        refreshed.append(_describe_project_path(project, runtime / name))
     if full:
         for target, settings, merge, generated in (
             (
@@ -1643,9 +1681,14 @@ def doctor(
             content = read_project_file(destination, f"project: runtime {name}")
             if content is None:
                 continue
+            source = read_project_file(
+                source_root / "scripts" / name, f"package: runtime {name}"
+            )
+            if source is None:
+                continue
             if PROJECT_RUNTIME_MARKER.encode() not in content:
                 push("warn", f"project: runtime {name} is not managed")
-            elif content != (source_root / "scripts" / name).read_bytes():
+            elif content != source:
                 push(
                     "warn",
                     f"project: runtime {name} is stale — refresh it with the project contracts",
@@ -1670,9 +1713,14 @@ def doctor(
             content = read_project_file(destination, f"hooks: {HOOKS_DIRECTORY}/{name}")
             if content is None:
                 continue
+            source = read_project_file(
+                source_root / "scripts" / name, f"package: guard {name}"
+            )
+            if source is None:
+                continue
             if GUARD_MARKER.encode() not in content:
                 push("warn", f"hooks: {HOOKS_DIRECTORY}/{name} is not a managed guard script")
-            elif content != (source_root / "scripts" / name).read_bytes():
+            elif content != source:
                 push("warn", f"hooks: {HOOKS_DIRECTORY}/{name} is stale — run --hooks-refresh")
             else:
                 push("ok", f"hooks: {HOOKS_DIRECTORY}/{name} current")

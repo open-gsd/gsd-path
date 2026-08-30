@@ -1674,6 +1674,52 @@ class InstallerTests(unittest.TestCase):
         self.assertIn("no managed GSD Path hooks or runtime", error)
         self.assertFalse((project / install.HOOKS_DIRECTORY).exists())
 
+    def test_hooks_refresh_initializes_runtime_for_legacy_project(self):
+        project = self.root / "legacy-project"
+        project.mkdir()
+        shutil.copy2(PROJECT_ROOT / "AGENTS.md", project / "AGENTS.md")
+        shutil.copy2(PROJECT_ROOT / "WORKFLOW.md", project / "WORKFLOW.md")
+
+        status, _, error = self.run_main(
+            ["--hooks-refresh", "--project", str(project), "--source-root", str(self.source)]
+        )
+
+        self.assertEqual(0, status, error)
+        self.assertTrue(
+            (project / install.HOOKS_DIRECTORY / "runtime" / "pipeline_state.py").is_file()
+        )
+        self.assertFalse((project / install.HOOKS_DIRECTORY / "guard_hook.py").exists())
+
+    def test_runtime_refresh_restores_prior_set_after_copy_failure(self):
+        project = self.root / "transactional-runtime-project"
+        target = self.root / "transactional-claude" / "skills"
+        status, _, error = self.run_main(
+            ["--claude", "--claude-root", str(target), "--source-root", str(self.source), "--project", str(project)]
+        )
+        self.assertEqual(0, status, error)
+        runtime = project / install.HOOKS_DIRECTORY / "runtime"
+        before = {name: (runtime / name).read_bytes() for name in install.PROJECT_RUNTIME_SCRIPTS}
+        (self.source / "scripts" / "pipeline_state.py").write_text(
+            f"# changed\n{install.PROJECT_RUNTIME_MARKER}\n", encoding="utf-8"
+        )
+        original_copy = shutil.copy2
+        copies = 0
+
+        def failing_copy(source, destination):
+            nonlocal copies
+            copies += 1
+            if copies == 2:
+                raise OSError("injected runtime copy failure")
+            return original_copy(source, destination)
+
+        with mock.patch.object(install.shutil, "copy2", side_effect=failing_copy):
+            status, _, _ = self.run_main(
+                ["--hooks-refresh", "--project", str(project), "--source-root", str(self.source)]
+            )
+
+        self.assertEqual(1, status)
+        self.assertEqual(before, {name: (runtime / name).read_bytes() for name in install.PROJECT_RUNTIME_SCRIPTS})
+
     def test_hooks_refresh_updates_runtime_without_optional_guards(self):
         project = self.root / "hookless-project"
         target = self.root / "claude" / "skills"
@@ -2035,6 +2081,25 @@ class InstallerTests(unittest.TestCase):
             any(
                 finding["level"] == "fail"
                 and "runtime pipeline_state.py cannot be read" in finding["text"]
+                for finding in findings
+            )
+        )
+
+    def test_doctor_reports_missing_canonical_runtime_source(self):
+        project = self.root / "doctor-missing-source"
+        target = self.root / "doctor-missing-source-claude" / "skills"
+        status, _, error = self.run_main(
+            ["--claude", "--claude-root", str(target), "--source-root", str(self.source), "--project", str(project)]
+        )
+        self.assertEqual(0, status, error)
+        (self.source / "scripts" / "pipeline_state.py").unlink()
+
+        findings = install.doctor(self.source, [], lambda _target: Path(), project)
+
+        self.assertTrue(
+            any(
+                finding["level"] == "fail"
+                and "package: runtime pipeline_state.py cannot be read" in finding["text"]
                 for finding in findings
             )
         )

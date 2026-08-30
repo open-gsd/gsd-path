@@ -1367,6 +1367,49 @@ test("hooks refresh rejects a project without managed ownership", async () => {
   assert.ok(!fs.existsSync(path.join(project, installer.HOOKS_DIRECTORY)));
 });
 
+test("hooks refresh initializes runtime for a legacy project install", async () => {
+  const project = path.join(root, "legacy-project");
+  fs.mkdirSync(project);
+  fs.copyFileSync(path.join(REPO_ROOT, "AGENTS.md"), path.join(project, "AGENTS.md"));
+  fs.copyFileSync(path.join(REPO_ROOT, "WORKFLOW.md"), path.join(project, "WORKFLOW.md"));
+
+  const status = await installer.main(
+    ["--hooks-refresh", "--project", project, "--source-root", source, "--no-color"]
+  );
+
+  assert.equal(status, 0);
+  assert.ok(fs.existsSync(path.join(project, installer.HOOKS_DIRECTORY, "runtime", "pipeline_state.py")));
+  assert.ok(!fs.existsSync(path.join(project, installer.HOOKS_DIRECTORY, "guard_hook.py")));
+});
+
+test("runtime refresh restores the complete prior set after copy failure", async () => {
+  const project = path.join(root, "transactional-runtime-project");
+  await runInstall([installer.targetPlan("claude", path.join(root, "claude", "skills"))], { project });
+  const runtime = path.join(project, installer.HOOKS_DIRECTORY, "runtime");
+  const before = new Map(
+    installer.PROJECT_RUNTIME_SCRIPTS.map((name) => [name, fs.readFileSync(path.join(runtime, name))])
+  );
+  fs.writeFileSync(
+    path.join(source, "scripts", "pipeline_state.py"),
+    `# changed\n${installer.PROJECT_RUNTIME_MARKER}\n`
+  );
+  let copies = 0;
+  installer.hooks.copyRuntimeFile = (sourceFile, destination) => {
+    copies += 1;
+    if (copies === 2) throw new Error("injected runtime copy failure");
+    fs.copyFileSync(sourceFile, destination);
+  };
+
+  const status = await installer.main(
+    ["--hooks-refresh", "--project", project, "--source-root", source, "--no-color"]
+  );
+
+  assert.equal(status, 1);
+  for (const [name, content] of before) {
+    assert.ok(fs.readFileSync(path.join(runtime, name)).equals(content));
+  }
+});
+
 test("hooks refresh rejects an unmanaged project runtime", async () => {
   const project = path.join(root, "project");
   fs.mkdirSync(path.join(project, ".git"), { recursive: true });
@@ -1704,6 +1747,21 @@ test("doctor rejects symlinked and unreadable project scripts", () => {
     findings.some(
       (finding) =>
         finding.level === "fail" && /runtime pipeline_state\.py cannot be read/.test(finding.text)
+    )
+  );
+});
+
+test("doctor reports a missing canonical runtime source", async () => {
+  const project = path.join(root, "doctor-missing-source");
+  await runInstall([installer.targetPlan("claude", path.join(root, "claude", "skills"))], { project });
+  fs.unlinkSync(path.join(source, "scripts", "pipeline_state.py"));
+
+  const findings = installer.doctor(source, { targets: [], rootFor: () => "", project });
+
+  assert.ok(
+    findings.some(
+      ({ level, text }) =>
+        level === "fail" && /package: runtime pipeline_state\.py cannot be read/.test(text)
     )
   );
 });
