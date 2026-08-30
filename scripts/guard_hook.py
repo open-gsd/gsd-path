@@ -15,7 +15,6 @@ Malformed input or an internal failure denies the tool call.
 """
 
 from fnmatch import fnmatchcase
-import importlib.util
 import json
 import os
 import re
@@ -478,42 +477,33 @@ def target_paths(path, working_directories, repo):
     return Path(os.path.abspath(candidate)), candidate.resolve(strict=False)
 
 
-def target_kind(path, working_directories, repo):
-    lexical, resolved = target_paths(path, working_directories, repo)
-    repo = repo.resolve()
-    lexical_inside = lexical == repo or repo in lexical.parents
-    resolved_inside = resolved == repo or repo in resolved.parents
-    if not lexical_inside and not resolved_inside:
+def path_kind(candidate, repo):
+    if candidate != repo and repo not in candidate.parents:
         return "external"
-    relative = (lexical if lexical_inside else resolved).relative_to(repo)
-    if relative in {Path(".project/STATE.md"), Path(".project/next/STATE.md")}:
+    relative = candidate.relative_to(repo)
+    folded = tuple(part.casefold() for part in relative.parts)
+    if folded in {
+        (".project",),
+        (".project", "state.md"),
+        (".project", "next"),
+        (".project", "next", "state.md"),
+    }:
         return "protected"
-    if relative.parts and relative.parts[0] == ".gsd-path":
+    if folded and folded[0] == ".gsd-path":
         return "protected"
-    if relative.parts and relative.parts[0] == ".project":
+    if folded and folded[0] == ".project":
         return "artifact"
     return "product"
 
 
-def authorized_task_worktree(repo, bound_branch):
-    runtime = Path(__file__).resolve().parent / "runtime"
-    isolation_path = runtime / "isolation.py"
-    if not isolation_path.is_file():
-        return False
-    sys.path.insert(0, str(runtime))
-    try:
-        spec = importlib.util.spec_from_file_location(
-            "_gsd_path_guard_isolation", isolation_path
-        )
-        if spec is None or spec.loader is None:
-            return False
-        isolation = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(isolation)
-        return isolation.authorized_task_worktree(repo, bound_branch)
-    except (ImportError, AttributeError, OSError):
-        return False
-    finally:
-        sys.path.pop(0)
+def target_kind(path, working_directories, repo):
+    lexical, resolved = target_paths(path, working_directories, repo)
+    repo = repo.resolve()
+    kinds = {path_kind(candidate, repo) for candidate in (lexical, resolved)}
+    for kind in ("protected", "product", "artifact", "external"):
+        if kind in kinds:
+            return kind
+    return "external"
 
 
 def enforce_pipeline_reentry(paths, working_directories):
@@ -538,10 +528,7 @@ def enforce_pipeline_reentry(paths, working_directories):
         and route.get("action") == "run-phase"
         and route.get("phase") == "build"
     )
-    isolated_build = state_data.get("phase") == "build" and authorized_task_worktree(
-        repo, state_data.get("branch")
-    )
-    if routed_build or isolated_build:
+    if routed_build:
         return
     if all(kind in {"external", "artifact"} for kind in kinds):
         return

@@ -241,7 +241,20 @@ class GuardHookTests(unittest.TestCase):
                         return_value=self.status(root, phase=phase),
                     ),
                 ):
-                    for path in (".project/STATE.md", ".gsd-path/guard_hook.py"):
+                    (root / "src").mkdir(exist_ok=True)
+                    (root / "src" / "app.py").write_text("app\n", encoding="utf-8")
+                    link = root / ".project" / "link"
+                    if not link.exists():
+                        link.symlink_to(root / "src" / "app.py")
+                    protected_paths = [
+                        ".project",
+                        ".project/state.md",
+                        ".project/STATE.md",
+                        ".gsd-path/guard_hook.py",
+                    ]
+                    if phase != "build":
+                        protected_paths.append(".project/link")
+                    for path in protected_paths:
                         with self.subTest(phase=phase, path=path):
                             self.assert_denied(
                                 {
@@ -270,18 +283,42 @@ class GuardHookTests(unittest.TestCase):
                     }
                 )
 
-    def test_plain_prompt_allows_proven_parallel_build_worktree(self):
+    def test_plain_prompt_allows_routed_parallel_build_worktree(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             (root / ".project").mkdir()
             (root / ".project" / "STATE.md").write_text("owned\n", encoding="utf-8")
-            blocked = self.status(root, phase="build", action="block")
             with (
                 mock.patch.object(guard_hook, "repository_root", return_value=root),
-                mock.patch.object(guard_hook, "project_status", return_value=blocked),
-                mock.patch.object(guard_hook, "authorized_task_worktree", return_value=True),
+                mock.patch.object(
+                    guard_hook,
+                    "project_status",
+                    return_value=self.status(root, phase="build"),
+                ),
             ):
-                self.assert_allowed({"tool_name": "Edit", "tool_input": {"file_path": "src/app.py"}})
+                self.assert_allowed(
+                    {
+                        "tool_name": "Edit",
+                        "tool_input": {"file_path": "src/app.py"},
+                    }
+                )
+
+    def test_parallel_build_worktree_does_not_override_recovery_route(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / ".project").mkdir()
+            (root / ".project" / "STATE.md").write_text("owned\n", encoding="utf-8")
+            recovery = self.status(root, phase="build", action="resume-undo")
+            with (
+                mock.patch.object(guard_hook, "repository_root", return_value=root),
+                mock.patch.object(guard_hook, "project_status", return_value=recovery),
+            ):
+                self.assert_denied(
+                    {
+                        "tool_name": "Edit",
+                        "tool_input": {"file_path": "src/app.py"},
+                    }
+                )
 
     def test_plain_prompt_allows_product_write_during_routed_build(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -457,6 +494,23 @@ class GuardHookTests(unittest.TestCase):
                 self.assertEqual(2, status_runtime.launch(root))
 
             self.assertIn("status runtime is unavailable", error.getvalue())
+
+    def test_status_launcher_uses_pid_liveness_when_identity_probe_fails(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            lock = Path(temporary) / ".gsd-path-install-lock"
+            lock.mkdir()
+            (lock / status_runtime.INSTALL_LOCK_OWNER).write_text(
+                json.dumps(
+                    {
+                        "schema": status_runtime.INSTALL_LOCK_SCHEMA,
+                        "pid": os.getpid(),
+                        "identity": "temporarily unavailable",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with mock.patch.object(status_runtime, "process_identity", return_value=None):
+                self.assertTrue(status_runtime.install_lock_active(lock))
 
     def test_plain_prompt_denies_mixed_product_patch(self):
         with tempfile.TemporaryDirectory() as temporary:

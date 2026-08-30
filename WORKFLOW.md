@@ -96,11 +96,14 @@ handoff. Mutation prompts make no changes and point to the status result's
 its exact `route.action` and `route.reason`. The runtime never initializes state
 or advances a phase.
 
-The optional pre-tool guard backs this up where it has deterministic evidence:
-outside a routed build phase, direct write/edit/patch requests may touch only
-`.project/` or `.gsd-path/`. Shell provenance and edits during build cannot
-prove which skill initiated them, so the always-loaded AGENTS.md contract owns
-those cases.
+The optional pre-tool guard backs this up where it has deterministic evidence.
+Direct write/edit/patch requests may update ordinary `.project/` artifacts,
+but never `.project/STATE.md`, `.project/next/STATE.md`, their protected parent
+directories, or anything under `.gsd-path/`. Product files are writable only
+when status returns `run-phase/build`, including helper-proven parallel task
+worktrees. External paths are outside this project guard. Shell provenance
+cannot prove which skill initiated a command, so the always-loaded AGENTS.md
+contract owns shell cases.
 
 ### New GitHub repository creation
 

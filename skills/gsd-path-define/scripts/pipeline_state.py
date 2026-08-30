@@ -27,6 +27,7 @@ from typing import Iterator, Mapping, Optional, Sequence
 try:
     from isolation import (
         IsolationError,
+        authorized_task_worktree,
         checkpoint as isolation_checkpoint,
         collect_artifact_recoveries,
     )
@@ -35,6 +36,7 @@ except ModuleNotFoundError as error:  # pragma: no cover - package imports used 
         raise
     from scripts.isolation import (
         IsolationError,
+        authorized_task_worktree,
         checkpoint as isolation_checkpoint,
         collect_artifact_recoveries,
     )
@@ -1087,11 +1089,19 @@ def route_state(repo: Path, project_dir: str = ".project") -> dict[str, object]:
     if state.branch is not None:
         current = _current_branch(resolved)
         if current != state.branch:
-            return _route_result(
-                state,
-                "block",
-                reason=f"current branch {current or '<detached>'} != STATE.branch {state.branch}",
+            isolated_build = (
+                state.phase == "build"
+                and authorized_task_worktree(resolved, state.branch)
             )
+            if not isolated_build:
+                return _route_result(
+                    state,
+                    "block",
+                    reason=(
+                        f"current branch {current or '<detached>'} != "
+                        f"STATE.branch {state.branch}"
+                    ),
+                )
 
     if state.archive is not None:
         if state.phase == "build":

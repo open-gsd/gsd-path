@@ -100,6 +100,36 @@ def task_text() -> str:
 
 
 class PipelineStateTests(unittest.TestCase):
+    def test_authorized_task_worktree_routes_build_but_not_over_recovery(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            run_git(repo, "init", "-b", "gsd-path-task/T001")
+            project = repo / ".project"
+            project.mkdir()
+            (project / "STATE.md").write_text(
+                state_text(
+                    phase="build",
+                    status="active",
+                    branch="gsd-path/M001",
+                ),
+                encoding="utf-8",
+            )
+            with mock.patch.object(
+                pipeline_state, "authorized_task_worktree", return_value=True
+            ):
+                routed = pipeline_state.route_state(repo)
+                self.assertEqual("run-phase", routed["route"]["action"])
+                self.assertEqual("build", routed["route"]["phase"])
+
+                with mock.patch.object(
+                    pipeline_state,
+                    "undo_transaction",
+                    return_value={"kind": "task", "expected_head": "a" * 40},
+                ):
+                    recovery = pipeline_state.route_state(repo)
+
+            self.assertEqual("resume-undo", recovery["route"]["action"])
+
     def test_legacy_state_defaults_to_direct_integration(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             repo = Path(tmp)

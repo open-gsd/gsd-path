@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Launch the project status runtime across an atomic refresh handoff."""
 
+import errno
 import json
 import os
 import subprocess
@@ -41,6 +42,14 @@ def runtime_identity(runtime: Path):
     return (status.st_dev, status.st_ino, status.st_mtime_ns, status.st_size)
 
 
+def process_alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except OSError as error:
+        return error.errno == errno.EPERM
+    return True
+
+
 def install_lock_active(lock: Path) -> bool:
     if lock.is_symlink() or not lock.is_dir():
         return False
@@ -57,7 +66,10 @@ def install_lock_active(lock: Path) -> bool:
         or not isinstance(identity, str)
     ):
         return False
-    return process_identity(pid) == identity
+    current_identity = process_identity(pid)
+    if current_identity is None:
+        return process_alive(pid)
+    return current_identity == identity
 
 
 def launch(repo: Path) -> int:
