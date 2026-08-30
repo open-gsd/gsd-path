@@ -337,6 +337,41 @@ class GuardHookTests(unittest.TestCase):
 
             self.assertEqual(2, len(calls))
 
+    def test_status_launcher_rejects_stale_refresh_lock(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            lock = root / ".gsd-path-install-lock"
+            lock.mkdir()
+            owner_path = lock / status_runtime.INSTALL_LOCK_OWNER
+            owner_path.write_text(
+                json.dumps(
+                    {
+                        "schema": status_runtime.INSTALL_LOCK_SCHEMA,
+                        "pid": os.getpid(),
+                    }
+                ),
+                encoding="utf-8",
+            )
+            self.assertTrue(status_runtime.install_lock_active(lock))
+            finished = subprocess.Popen([sys.executable, "-c", "pass"])
+            finished.wait()
+            owner_path.write_text(
+                json.dumps(
+                    {
+                        "schema": status_runtime.INSTALL_LOCK_SCHEMA,
+                        "pid": finished.pid,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            self.assertFalse(status_runtime.install_lock_active(lock))
+            error = io.StringIO()
+
+            with contextlib.redirect_stderr(error):
+                self.assertEqual(2, status_runtime.launch(root))
+
+            self.assertIn("status runtime is unavailable", error.getvalue())
+
     def test_plain_prompt_denies_mixed_product_patch(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

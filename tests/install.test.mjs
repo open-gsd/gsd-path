@@ -717,6 +717,21 @@ test("active target owner prevents backup mutation", async () => {
   assert.ok(!fs.existsSync(path.join(path.dirname(target), "disabled-gsd-skills")));
 });
 
+test("install lock publishes a live owner", async () => {
+  const target = path.join(root, "live-owner", "skills");
+  const lock = path.join(path.dirname(target), ".gsd-path-install-lock");
+  let owner = null;
+  installer.hooks.applyTarget = async (...args) => {
+    owner = JSON.parse(fs.readFileSync(path.join(lock, "owner.json"), "utf8"));
+    return originalHooks.applyTarget(...args);
+  };
+
+  await runInstall([installer.targetPlan("claude", target)]);
+
+  assert.deepEqual(owner, { schema: "gsd-path/install-lock/v1", pid: process.pid });
+  assert.ok(!fs.existsSync(lock));
+});
+
 test("failure restores cursor subagent", async () => {
   const cursorRoot = path.join(root, "cursor-rollback", "skills");
   const agent = path.join(path.dirname(cursorRoot), "agents", installer.CURSOR_AGENT_FILENAME);
@@ -923,6 +938,7 @@ test("hooks install guard scripts, settings, and git hook", async () => {
   assert.ok(settings.hooks.PreToolUse);
   assert.equal(settings.hooks.PreToolUse[0].matcher, installer.CLAUDE_MATCHER);
   assert.match("PowerShell", new RegExp(`^(?:${settings.hooks.PreToolUse[0].matcher})$`));
+  assert.match("SaveFile", new RegExp(`^(?:${settings.hooks.PreToolUse[0].matcher})$`));
   const preCommit = path.join(project, ".git", "hooks", "pre-commit");
   const commitMsg = path.join(project, ".git", "hooks", "commit-msg");
   assert.equal(fs.readFileSync(preCommit, "utf8"), installer.preCommitHook("python3"));

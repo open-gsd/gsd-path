@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 """Launch the project status runtime across an atomic refresh handoff."""
 
+import errno
+import json
+import os
 import subprocess
 import sys
 from pathlib import Path
 from typing import Sequence
 
 PROJECT_STATUS_MARKER = "gsd-path project status launcher"
+INSTALL_LOCK_OWNER = "owner.json"
+INSTALL_LOCK_SCHEMA = "gsd-path/install-lock/v1"
 
 
 def runtime_identity(runtime: Path):
@@ -17,6 +22,24 @@ def runtime_identity(runtime: Path):
     return (status.st_dev, status.st_ino, status.st_mtime_ns, status.st_size)
 
 
+def install_lock_active(lock: Path) -> bool:
+    if lock.is_symlink() or not lock.is_dir():
+        return False
+    try:
+        owner = json.loads((lock / INSTALL_LOCK_OWNER).read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return False
+    pid = owner.get("pid")
+    valid_pid = isinstance(pid, int) and not isinstance(pid, bool) and pid > 0
+    if owner.get("schema") != INSTALL_LOCK_SCHEMA or not valid_pid:
+        return False
+    try:
+        os.kill(pid, 0)
+    except OSError as error:
+        return error.errno == errno.EPERM
+    return True
+
+
 def launch(repo: Path) -> int:
     parent = repo / ".gsd-path"
     runtime = parent / "runtime" / "pipeline_state.py"
@@ -25,8 +48,7 @@ def launch(repo: Path) -> int:
     while True:
         before = runtime_identity(runtime)
         if before is None:
-            staging = lock.is_dir() and any(parent.glob(".runtime-stage-*"))
-            if staging:
+            if install_lock_active(lock):
                 continue
             print(f"GSD Path status runtime is unavailable: {runtime}", file=sys.stderr)
             return 2
@@ -39,7 +61,7 @@ def launch(repo: Path) -> int:
             sys.stdout.write(result.stdout.decode())
             sys.stderr.write(result.stderr.decode())
             return 0
-        if lock.is_dir() or runtime_identity(runtime) != before:
+        if install_lock_active(lock) or runtime_identity(runtime) != before:
             continue
         sys.stdout.write(result.stdout.decode())
         sys.stderr.write(result.stderr.decode())

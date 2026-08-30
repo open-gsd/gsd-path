@@ -1187,6 +1187,28 @@ class InstallerTests(unittest.TestCase):
         )
         self.assertFalse((target.parent / "disabled-gsd-skills").exists())
 
+    def test_install_lock_publishes_live_owner(self):
+        target = self.root / "live-owner" / "skills"
+        lock = target.parent / install.INSTALL_LOCK_NAME
+        original = install._apply_target
+        owner = {}
+
+        def inspect_owner(*args):
+            owner.update(
+                json.loads(
+                    (lock / install.INSTALL_LOCK_OWNER).read_text(encoding="utf-8")
+                )
+            )
+            return original(*args)
+
+        with mock.patch.object(install, "_apply_target", side_effect=inspect_owner):
+            install.install(self.source, [install.TargetPlan("claude", target)])
+
+        self.assertEqual(
+            {"schema": install.INSTALL_LOCK_SCHEMA, "pid": os.getpid()}, owner
+        )
+        self.assertFalse(lock.exists())
+
     def test_failure_restores_cursor_subagent(self):
         cursor = self.root / "cursor-rollback" / "skills"
         agent = cursor.parent / "agents" / install.CURSOR_AGENT_FILENAME
@@ -1326,6 +1348,9 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(settings["hooks"]["PreToolUse"][0]["matcher"], install.CLAUDE_MATCHER)
         self.assertIsNotNone(
             re.fullmatch(settings["hooks"]["PreToolUse"][0]["matcher"], "PowerShell")
+        )
+        self.assertIsNotNone(
+            re.fullmatch(settings["hooks"]["PreToolUse"][0]["matcher"], "SaveFile")
         )
         pre_commit = project / ".git" / "hooks" / "pre-commit"
         commit_msg = project / ".git" / "hooks" / "commit-msg"

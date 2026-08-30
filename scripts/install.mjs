@@ -26,6 +26,8 @@ export const PROJECT_RUNTIME_MARKER = "gsd-path project runtime";
 export const PROJECT_STATUS_LAUNCHER = "status_runtime.py";
 export const PROJECT_STATUS_MARKER = "gsd-path project status launcher";
 const INSTALL_LOCK_NAME = ".gsd-path-install-lock";
+const INSTALL_LOCK_OWNER = "owner.json";
+const INSTALL_LOCK_SCHEMA = "gsd-path/install-lock/v1";
 const PROJECT_CONTRACTS = [
   ["AGENTS.md", "## Plain-prompt re-entry"],
   ["WORKFLOW.md", "### Plain-prompt re-entry"],
@@ -60,7 +62,7 @@ const STATUS_SLUG = /^[a-z0-9][a-z0-9-]*$/;
 const STATUS_BRANCH = /^gsd-path\/M(\d{3,})$/;
 const STATUS_ARCHIVE = /^\.project\/archive\/(\d{3,})-([a-z0-9][a-z0-9-]*)\/?$/;
 export const CLAUDE_MATCHER =
-  "Edit|Write|MultiEdit|NotebookEdit|Delete|StrReplace|ApplyPatch|Create|Shell|Bash|PowerShell";
+  "Edit|Write|SaveFile|MultiEdit|NotebookEdit|Delete|StrReplace|ApplyPatch|Create|Shell|Bash|PowerShell";
 // The managed PreToolUse guard entry, as an object.
 export function claudeGuardEntry(interpreter) {
   return {
@@ -731,8 +733,32 @@ function createDirectory(candidate, created) {
 }
 
 function releaseInstallLocks(locks, createdDirectories) {
-  for (const lock of [...locks].reverse()) fs.rmdirSync(lock);
+  for (const lock of [...locks].reverse()) {
+    fs.rmSync(path.join(lock, INSTALL_LOCK_OWNER), { force: true });
+    fs.rmdirSync(lock);
+  }
   removeEmptyDirectories(createdDirectories);
+}
+
+function createInstallLock(lock) {
+  if (lexists(lock)) {
+    throw new InstallerError(`installation already in progress for ${path.dirname(lock)}`);
+  }
+  const staging = fs.mkdtempSync(path.join(path.dirname(lock), ".install-lock-stage-"));
+  try {
+    fs.writeFileSync(
+      path.join(staging, INSTALL_LOCK_OWNER),
+      JSON.stringify({ schema: INSTALL_LOCK_SCHEMA, pid: process.pid }) + "\n",
+      { flag: "wx" }
+    );
+    fs.renameSync(staging, lock);
+  } catch (error) {
+    fs.rmSync(staging, { recursive: true, force: true });
+    if (lexists(lock)) {
+      throw new InstallerError(`installation already in progress for ${path.dirname(lock)}`);
+    }
+    throw error;
+  }
 }
 
 function acquireInstallLocks(roots) {
@@ -747,16 +773,7 @@ function acquireInstallLocks(roots) {
   try {
     for (const lock of locks) {
       createDirectory(path.dirname(lock), createdDirectories);
-      try {
-        fs.mkdirSync(lock);
-      } catch (error) {
-        if (error.code === "EEXIST") {
-          throw new InstallerError(
-            `installation already in progress for ${path.dirname(lock)}`
-          );
-        }
-        throw error;
-      }
+      createInstallLock(lock);
       acquired.push(lock);
     }
   } catch (error) {

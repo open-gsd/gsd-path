@@ -57,6 +57,8 @@ PROJECT_RUNTIME_MARKER = "gsd-path project runtime"
 PROJECT_STATUS_LAUNCHER = "status_runtime.py"
 PROJECT_STATUS_MARKER = "gsd-path project status launcher"
 INSTALL_LOCK_NAME = ".gsd-path-install-lock"
+INSTALL_LOCK_OWNER = "owner.json"
+INSTALL_LOCK_SCHEMA = "gsd-path/install-lock/v1"
 PROJECT_CONTRACTS = (
     ("AGENTS.md", "## Plain-prompt re-entry"),
     ("WORKFLOW.md", "### Plain-prompt re-entry"),
@@ -107,7 +109,7 @@ STATUS_TRANSITIONS = {
     "shipped": frozenset({"ship"}),
 }
 CLAUDE_MATCHER = (
-    "Edit|Write|MultiEdit|NotebookEdit|Delete|StrReplace|ApplyPatch|Create|Shell|Bash|PowerShell"
+    "Edit|Write|SaveFile|MultiEdit|NotebookEdit|Delete|StrReplace|ApplyPatch|Create|Shell|Bash|PowerShell"
 )
 def _claude_guard_entry(interpreter: str) -> dict:
     """The managed PreToolUse guard entry, as an object."""
@@ -646,8 +648,28 @@ def _create_directory(path: Path, created: List[Path]) -> None:
 
 def _release_install_locks(locks: Sequence[Path], created: Sequence[Path]) -> None:
     for lock in reversed(locks):
+        (lock / INSTALL_LOCK_OWNER).unlink(missing_ok=True)
         lock.rmdir()
     _remove_empty_directories(created)
+
+
+def _create_install_lock(lock: Path) -> None:
+    if _lexists(lock):
+        raise InstallerError(f"installation already in progress for {lock.parent}")
+    staging = Path(tempfile.mkdtemp(prefix=".install-lock-stage-", dir=lock.parent))
+    try:
+        (staging / INSTALL_LOCK_OWNER).write_text(
+            json.dumps({"schema": INSTALL_LOCK_SCHEMA, "pid": os.getpid()}) + "\n",
+            encoding="utf-8",
+        )
+        staging.rename(lock)
+    except BaseException:
+        shutil.rmtree(staging, ignore_errors=True)
+        if _lexists(lock):
+            raise InstallerError(
+                f"installation already in progress for {lock.parent}"
+            )
+        raise
 
 
 def _acquire_install_locks(roots: Iterable[Path]) -> Tuple[List[Path], List[Path]]:
@@ -662,12 +684,7 @@ def _acquire_install_locks(roots: Iterable[Path]) -> Tuple[List[Path], List[Path
     try:
         for lock in locks:
             _create_directory(lock.parent, created)
-            try:
-                lock.mkdir()
-            except FileExistsError as error:
-                raise InstallerError(
-                    f"installation already in progress for {lock.parent}"
-                ) from error
+            _create_install_lock(lock)
             acquired.append(lock)
     except BaseException:
         _release_install_locks(acquired, created)
