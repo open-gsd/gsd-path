@@ -15,6 +15,7 @@ Malformed input or an internal failure denies the tool call.
 """
 
 from fnmatch import fnmatchcase
+import importlib.util
 import json
 import os
 import re
@@ -82,6 +83,9 @@ INVALID_INPUT_REASON = "GSD Path guard could not validate the tool request"
 REENTRY_FAILURE_REASON = (
     "GSD Path status could not be verified; review .project/STATE.md and invoke "
     "gsd-path-forensics before changing product files"
+)
+CONTROL_FILE_REASON = (
+    "GSD Path routing controls cannot be changed by direct write, edit, or patch tools"
 )
 STATUS_ACTIONS = frozenset(
     {
@@ -463,7 +467,7 @@ def valid_status_branch(value):
     return match if match is not None and int(match.group(1)) >= 1 else None
 
 
-def pipeline_control_path(path, working_directories, repo):
+def target_paths(path, working_directories, repo):
     repo = repo.resolve()
     candidate = Path(path)
     if not candidate.is_absolute():
@@ -471,11 +475,45 @@ def pipeline_control_path(path, working_directories, repo):
         if not base.is_absolute():
             base = repo / base
         candidate = base / candidate
-    resolved = candidate.resolve(strict=False)
-    return any(
-        resolved == root or root in resolved.parents
-        for root in (repo / ".project", repo / ".gsd-path")
-    )
+    return Path(os.path.abspath(candidate)), candidate.resolve(strict=False)
+
+
+def target_kind(path, working_directories, repo):
+    lexical, resolved = target_paths(path, working_directories, repo)
+    repo = repo.resolve()
+    lexical_inside = lexical == repo or repo in lexical.parents
+    resolved_inside = resolved == repo or repo in resolved.parents
+    if not lexical_inside and not resolved_inside:
+        return "external"
+    relative = (lexical if lexical_inside else resolved).relative_to(repo)
+    if relative in {Path(".project/STATE.md"), Path(".project/next/STATE.md")}:
+        return "protected"
+    if relative.parts and relative.parts[0] == ".gsd-path":
+        return "protected"
+    if relative.parts and relative.parts[0] == ".project":
+        return "artifact"
+    return "product"
+
+
+def authorized_task_worktree(repo, bound_branch):
+    runtime = Path(__file__).resolve().parent / "runtime"
+    isolation_path = runtime / "isolation.py"
+    if not isolation_path.is_file():
+        return False
+    sys.path.insert(0, str(runtime))
+    try:
+        spec = importlib.util.spec_from_file_location(
+            "_gsd_path_guard_isolation", isolation_path
+        )
+        if spec is None or spec.loader is None:
+            return False
+        isolation = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(isolation)
+        return isolation.authorized_task_worktree(repo, bound_branch)
+    except (ImportError, AttributeError, OSError):
+        return False
+    finally:
+        sys.path.pop(0)
 
 
 def enforce_pipeline_reentry(paths, working_directories):
@@ -483,20 +521,29 @@ def enforce_pipeline_reentry(paths, working_directories):
     state = repo / ".project" / "STATE.md"
     if not os.path.lexists(state):
         return
+    kinds = [target_kind(path, working_directories, repo) for path in paths]
+    if "protected" in kinds:
+        deny(CONTROL_FILE_REASON)
+    if all(kind == "external" for kind in kinds):
+        return
     try:
         status = project_status(repo)
     except (OSError, ValueError, json.JSONDecodeError):
         deny(REENTRY_FAILURE_REASON)
     route = status.get("route")
     state_data = status.get("state") if isinstance(status.get("state"), dict) else {}
-    if (
+    routed_build = (
         state_data.get("phase") == "build"
         and isinstance(route, dict)
         and route.get("action") == "run-phase"
         and route.get("phase") == "build"
-    ):
+    )
+    isolated_build = state_data.get("phase") == "build" and authorized_task_worktree(
+        repo, state_data.get("branch")
+    )
+    if routed_build or isolated_build:
         return
-    if all(pipeline_control_path(path, working_directories, repo) for path in paths):
+    if all(kind in {"external", "artifact"} for kind in kinds):
         return
     phase = state_data.get("phase", "unknown")
     if isinstance(route, dict) and route.get("action") != "run-phase":

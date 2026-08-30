@@ -97,6 +97,34 @@ class IsolationTests(unittest.TestCase):
             self.assertNotIn("detached", listed)
             self.assertIn("gsd-path-task/T002", second["task_branch"])
 
+    def test_parallel_worktree_authorization_requires_isolation_proof(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            base = self.init_bound_repo(repo)
+            isolated = isolation.isolate_task(repo, base, "T001", 2)
+            worktree = Path(isolated["worktree"])
+            task = worktree / ".project" / "tasks" / "T001.md"
+            task.write_text(
+                TASK_FILE.replace("base: null", f"base: {base}")
+                .replace("worktree: active", f"worktree: {worktree}")
+                .replace("task_branch: active", "task_branch: gsd-path-task/T001"),
+                encoding="utf-8",
+            )
+
+            self.assertTrue(
+                isolation.authorized_task_worktree(worktree, "gsd-path/M001")
+            )
+            task.write_text(
+                task.read_text(encoding="utf-8").replace(
+                    f"worktree: {worktree}", "worktree: /tmp/unowned"
+                ),
+                encoding="utf-8",
+            )
+            self.assertFalse(
+                isolation.authorized_task_worktree(worktree, "gsd-path/M001")
+            )
+
     def test_parallel_isolation_does_not_remove_a_concurrent_worktree(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary) / "repo"

@@ -5,6 +5,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Sequence
 
@@ -65,10 +66,11 @@ def launch(repo: Path) -> int:
     lock = repo / ".gsd-path-install-lock"
     command = [sys.executable, "-B", str(runtime), "status", "--repo", str(repo)]
     while True:
+        if install_lock_active(lock):
+            time.sleep(0.05)
+            continue
         before = runtime_identity(runtime)
         if before is None:
-            if install_lock_active(lock):
-                continue
             print(f"GSD Path status runtime is unavailable: {runtime}", file=sys.stderr)
             return 2
         try:

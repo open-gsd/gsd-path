@@ -137,6 +137,54 @@ def task_branch_name(task_id: str) -> str:
     return f"{TASK_BRANCH_PREFIX}{validate_task_id(task_id)}"
 
 
+def authorized_task_worktree(worktree: Path, bound_branch: str) -> bool:
+    try:
+        worktree = require_directory(worktree, "task worktree")
+        branch = require_attached(worktree)
+        if not branch.startswith(TASK_BRANCH_PREFIX):
+            return False
+        task_id = validate_task_id(branch.removeprefix(TASK_BRANCH_PREFIX))
+        records = _registered_worktrees(worktree)
+        primary_matches = [
+            path
+            for path, record_branch in records.items()
+            if record_branch == f"refs/heads/{bound_branch}"
+        ]
+        if len(primary_matches) != 1:
+            return False
+        primary = primary_matches[0]
+        if (
+            worktree != sidecar_root(primary, "task", task_id).resolve()
+            or common_git_dir(worktree) != common_git_dir(primary)
+        ):
+            return False
+        head = current_sha(worktree)
+        matches = []
+        tasks_dir = worktree / ".project" / "tasks"
+        if tasks_dir.is_symlink() or tasks_dir.resolve() != tasks_dir:
+            return False
+        for task_path in tasks_dir.glob("*.md") if tasks_dir.is_dir() else ():
+            if task_path.is_symlink() or not task_path.is_file():
+                return False
+            fields, error = task_frontmatter(task_path.read_text(encoding="utf-8"))
+            if error is None and fields is not None and fields.get("id") == task_id:
+                matches.append(fields)
+        if len(matches) != 1:
+            return False
+        fields = matches[0]
+        agent = fields.get("agent")
+        return (
+            fields.get("status") == "in-progress"
+            and fields.get("base") == head
+            and fields.get("task_branch") == branch
+            and Path(str(fields.get("worktree", ""))).resolve() == worktree
+            and isinstance(agent, str)
+            and agent not in {"", "null"}
+        )
+    except (IsolationError, OSError, UnicodeError):
+        return False
+
+
 def verify_branch_name(name: str) -> str:
     return f"{VERIFY_BRANCH_PREFIX}{validate_name(name, 'verify name')}"
 

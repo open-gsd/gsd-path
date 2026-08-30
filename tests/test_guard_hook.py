@@ -223,6 +223,66 @@ class GuardHookTests(unittest.TestCase):
                     }
                 )
 
+    def test_plain_prompt_denies_pipeline_control_writes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "repo"
+            root.mkdir()
+            outside = Path(temporary) / "outside"
+            outside.mkdir()
+            (root / ".gsd-path").symlink_to(outside, target_is_directory=True)
+            (root / ".project").mkdir()
+            (root / ".project" / "STATE.md").write_text("owned\n", encoding="utf-8")
+            for phase in ("plan", "build"):
+                with (
+                    mock.patch.object(guard_hook, "repository_root", return_value=root),
+                    mock.patch.object(
+                        guard_hook,
+                        "project_status",
+                        return_value=self.status(root, phase=phase),
+                    ),
+                ):
+                    for path in (".project/STATE.md", ".gsd-path/guard_hook.py"):
+                        with self.subTest(phase=phase, path=path):
+                            self.assert_denied(
+                                {
+                                    "tool_name": "Write",
+                                    "tool_input": {"file_path": path},
+                                }
+                            )
+
+    def test_plain_prompt_allows_external_file_write(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / ".project").mkdir()
+            (root / ".project" / "STATE.md").write_text("owned\n", encoding="utf-8")
+            with (
+                mock.patch.object(guard_hook, "repository_root", return_value=root),
+                mock.patch.object(
+                    guard_hook,
+                    "project_status",
+                    side_effect=ValueError("external writes do not need status"),
+                ),
+            ):
+                self.assert_allowed(
+                    {
+                        "tool_name": "Edit",
+                        "tool_input": {"file_path": str(root.parent / "note.txt")},
+                    }
+                )
+
+    def test_plain_prompt_allows_proven_parallel_build_worktree(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / ".project").mkdir()
+            (root / ".project" / "STATE.md").write_text("owned\n", encoding="utf-8")
+            blocked = self.status(root, phase="build", action="block")
+            with (
+                mock.patch.object(guard_hook, "repository_root", return_value=root),
+                mock.patch.object(guard_hook, "project_status", return_value=blocked),
+                mock.patch.object(guard_hook, "authorized_task_worktree", return_value=True),
+            ):
+                self.assert_allowed({"tool_name": "Edit", "tool_input": {"file_path": "src/app.py"}})
+
     def test_plain_prompt_allows_product_write_during_routed_build(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -338,6 +398,28 @@ class GuardHookTests(unittest.TestCase):
 
             self.assertEqual(2, len(calls))
             self.assertEqual("new route\n", output.getvalue())
+
+    def test_status_launcher_waits_before_running_during_install(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            runtime = root / ".gsd-path" / "runtime" / "pipeline_state.py"
+            runtime.parent.mkdir(parents=True)
+            runtime.write_text("runtime\n", encoding="utf-8")
+            result = subprocess.CompletedProcess([], 0, b"route\n", b"")
+            with (
+                mock.patch.object(
+                    status_runtime,
+                    "install_lock_active",
+                    side_effect=[True, False, False],
+                ),
+                mock.patch.object(status_runtime.time, "sleep") as sleep,
+                mock.patch.object(status_runtime.subprocess, "run", return_value=result) as run,
+                contextlib.redirect_stdout(io.StringIO()),
+            ):
+                self.assertEqual(0, status_runtime.launch(root))
+
+            sleep.assert_called_once()
+            run.assert_called_once()
 
     def test_status_launcher_rejects_stale_refresh_lock(self):
         with tempfile.TemporaryDirectory() as temporary:
