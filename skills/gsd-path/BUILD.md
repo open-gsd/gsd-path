@@ -200,10 +200,13 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
    number of tasks in this dispatch round. Serial (`N=1`) returns the primary
    worktree and `task_branch: null` — the coder works on the bound branch.
    Parallel (`N>=2`) creates a named `gsd-path-task/<id>` branch and linked
-   worktree at that base; never a detached HEAD. Set frontmatter `base`,
-   `worktree`, `task_branch`, `status: in-progress`, and `agent` from the
-   helper's JSON in the task file **inside the isolated worktree** (the
-   primary itself when serial). Do not commit this dispatch state: it lands
+   worktree at that base; never a detached HEAD. Record dispatch through
+   `python3 <absolute isolation.py> activate-task --repo <returned worktree>
+   --base <recorded base> --task-id <id> --agent build_<id> --task-file
+   .project/tasks/<id>.md [--task-branch <returned task_branch>]`. The helper
+   sets `base`, `worktree`, `task_branch`, `status: in-progress`, and `agent`
+   in the isolated task and records parallel build authorization. Do not edit
+   those fields directly. Do not commit this dispatch state: it lands
    inside the task's own commit, and `recover` derives it from the task
    branch and worktree meanwhile. The primary stays clean during a parallel
    round. Do not append a dispatch Log entry: the isolated task later appends

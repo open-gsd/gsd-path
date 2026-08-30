@@ -203,6 +203,24 @@ class GuardHookTests(unittest.TestCase):
                             }
                         )
 
+    def test_download_file_tool_is_a_direct_write(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / ".project").mkdir()
+            (root / ".project" / "STATE.md").write_text("owned\n", encoding="utf-8")
+            with (
+                mock.patch.object(guard_hook, "repository_root", return_value=root),
+                mock.patch.object(
+                    guard_hook, "project_status", return_value=self.status(root)
+                ),
+            ):
+                self.assert_denied(
+                    {
+                        "tool_name": "DownloadFile",
+                        "tool_input": {"target_file": "src/generated.bin"},
+                    }
+                )
+
     def test_project_status_rejects_incomplete_payload(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -269,6 +287,7 @@ class GuardHookTests(unittest.TestCase):
                     protected_paths = [
                         ".project",
                         ".project/STATE.md",
+                        ".project/next/STATE.md",
                         ".gsd-path/guard_hook.py",
                     ]
                     if phase != "build":
@@ -281,6 +300,62 @@ class GuardHookTests(unittest.TestCase):
                                     "tool_input": {"file_path": path},
                                 }
                             )
+
+    def test_linked_worktree_common_git_files_are_protected(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            primary = Path(temporary) / "primary"
+            linked = Path(temporary) / "linked"
+            primary.mkdir()
+            subprocess.run(
+                ["git", "init", "-q", "-b", "main"], cwd=primary, check=True
+            )
+            subprocess.run(
+                ["git", "config", "user.name", "Test"], cwd=primary, check=True
+            )
+            subprocess.run(
+                ["git", "config", "user.email", "test@example.test"],
+                cwd=primary,
+                check=True,
+            )
+            (primary / ".project").mkdir()
+            (primary / ".project" / "STATE.md").write_text(
+                "owned\n", encoding="utf-8"
+            )
+            subprocess.run(["git", "add", "."], cwd=primary, check=True)
+            subprocess.run(
+                ["git", "commit", "-q", "-m", "fixture"], cwd=primary, check=True
+            )
+            subprocess.run(
+                ["git", "worktree", "add", "-q", "-b", "task", str(linked)],
+                cwd=primary,
+                check=True,
+            )
+            common = Path(
+                subprocess.run(
+                    ["git", "rev-parse", "--git-common-dir"],
+                    cwd=linked,
+                    text=True,
+                    capture_output=True,
+                    check=True,
+                ).stdout.strip()
+            )
+            if not common.is_absolute():
+                common = linked / common
+            authorization = common.resolve() / "refs/gsd-path/task-authorizations/T001"
+            with (
+                mock.patch.object(guard_hook, "repository_root", return_value=linked),
+                mock.patch.object(
+                    guard_hook,
+                    "project_status",
+                    return_value=self.status(linked, phase="build"),
+                ),
+            ):
+                self.assert_denied(
+                    {
+                        "tool_name": "Write",
+                        "tool_input": {"file_path": str(authorization)},
+                    }
+                )
 
     def test_project_alias_symlink_does_not_spoof_case_behavior(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -400,13 +475,9 @@ class GuardHookTests(unittest.TestCase):
                     {"tool_name": "Edit", "tool_input": {"file_path": "src/app.py"}}
                 )
 
-    def test_plain_prompt_status_does_not_write_runtime_bytecode(self):
+    def test_plain_prompt_status_routes_before_git_without_writing_bytecode(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            subprocess.run(
-                ["git", "init", "-q", "-b", "main", str(root)],
-                check=True,
-            )
             managed = root / ".gsd-path"
             runtime = managed / "runtime"
             runtime.mkdir(parents=True)
@@ -455,6 +526,7 @@ class GuardHookTests(unittest.TestCase):
             )
 
             self.assertEqual(2, result.returncode, result.stderr)
+            self.assertIn("bind-initial", result.stderr)
             self.assertFalse((runtime / "__pycache__").exists())
 
     def test_status_launcher_retries_runtime_publication_gap(self):

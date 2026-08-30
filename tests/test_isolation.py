@@ -102,33 +102,45 @@ class IsolationTests(unittest.TestCase):
             repo = Path(temporary) / "repo"
             repo.mkdir()
             base = self.init_bound_repo(repo)
+            pending = (
+                TASK_FILE.replace("status: in-progress", "status: pending")
+                .replace("agent: coder", "agent: null")
+                .replace("worktree: active", "worktree: null")
+                .replace("task_branch: active", "task_branch: null")
+            )
+            (repo / ".project" / "tasks" / "T001.md").write_text(
+                pending, encoding="utf-8"
+            )
+            git(repo, "add", ".project/tasks/T001.md")
+            git(repo, "commit", "--amend", "-q", "--no-edit")
+            base = git(repo, "rev-parse", "HEAD")
             isolated = isolation.isolate_task(repo, base, "T001", 2)
             worktree = Path(isolated["worktree"])
             task = worktree / ".project" / "tasks" / "T001.md"
             task.write_text(
-                TASK_FILE.replace("base: null", f"base: {base}")
-                .replace("worktree: active", f"worktree: {worktree}")
-                .replace("task_branch: active", "task_branch: gsd-path-task/T001"),
+                pending.replace("status: pending", "status: in-progress")
+                .replace("agent: null", "agent: coder")
+                .replace("base: null", f"base: {base}")
+                .replace("worktree: null", f"worktree: {worktree}")
+                .replace("task_branch: null", "task_branch: gsd-path-task/T001"),
                 encoding="utf-8",
             )
 
-            self.assertTrue(
-                isolation.authorized_task_worktree(worktree, "gsd-path/M001")
-            )
-            git(
-                repo,
-                "update-ref",
-                "-d",
-                isolation.task_authorization_ref("T001"),
-            )
             self.assertFalse(
                 isolation.authorized_task_worktree(worktree, "gsd-path/M001")
             )
-            git(
-                repo,
-                "update-ref",
-                isolation.task_authorization_ref("T001"),
+            task.write_text(pending, encoding="utf-8")
+            result = isolation.activate_task(
+                worktree,
                 base,
+                "T001",
+                "coder",
+                ".project/tasks/T001.md",
+                "gsd-path-task/T001",
+            )
+            self.assertEqual("in-progress", result["status"])
+            self.assertTrue(
+                isolation.authorized_task_worktree(worktree, "gsd-path/M001")
             )
             task.write_text(
                 task.read_text(encoding="utf-8").replace(
@@ -1617,6 +1629,35 @@ class IsolationTests(unittest.TestCase):
             self.assertNotEqual(
                 subprocess.run(
                     ("git", "-C", str(repo), "show-ref", "--verify", "--quiet", f"refs/heads/{branch}"),
+                    check=False,
+                ).returncode,
+                0,
+            )
+
+    def test_retire_cleans_authorization_when_branch_is_already_absent(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            base = self.init_bound_repo(repo)
+            branch = "gsd-path-task/T001"
+            authorization = isolation.task_authorization_ref("T001")
+            git(repo, "update-ref", authorization, base)
+            missing = isolation.sidecar_root(repo.resolve(), "task", "T001")
+
+            result = isolation.retire(repo, missing, branch, True)
+
+            self.assertEqual("already-absent", result["reason"])
+            self.assertNotEqual(
+                subprocess.run(
+                    (
+                        "git",
+                        "-C",
+                        str(repo),
+                        "show-ref",
+                        "--verify",
+                        "--quiet",
+                        authorization,
+                    ),
                     check=False,
                 ).returncode,
                 0,

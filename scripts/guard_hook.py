@@ -46,7 +46,9 @@ PATCH_PATH_PATTERN = re.compile(
 )
 # A tool skips path checks only when its name carries a read-only verb and
 # no write-capable verb: `get_and_write` must still be path-checked.
-READ_VERBS = frozenset({"read", "grep", "search", "view", "list", "get", "cat"})
+READ_VERBS = frozenset(
+    {"read", "grep", "search", "view", "list", "get", "cat", "open"}
+)
 WRITE_VERBS = frozenset(
     {
         "write",
@@ -306,6 +308,8 @@ def is_patch_tool(tool):
 
 
 def is_direct_write_tool(tool, has_file_targets=False):
+    if has_file_targets:
+        return not is_read_tool(tool)
     tokens = tool_tokens(tool)
     if tokens & DIRECT_FILE_WRITE_VERBS:
         return (
@@ -331,6 +335,13 @@ def repository_root():
         check=False,
     )
     if result.returncode != 0 or not result.stdout.strip():
+        state = candidate / ".project" / "STATE.md"
+        if (
+            candidate.is_dir()
+            and not candidate.is_symlink()
+            and os.path.lexists(state)
+        ):
+            return candidate
         raise ValueError("repository root cannot be resolved")
     return Path(result.stdout.strip()).resolve()
 
@@ -479,16 +490,36 @@ def target_paths(path, working_directories, repo):
     return Path(os.path.abspath(candidate)), candidate.resolve(strict=False)
 
 
-def path_kind(candidate, repo):
+def repository_control_roots(repo):
+    roots = [(repo / ".git").resolve(strict=False)]
+    result = subprocess.run(
+        ["git", "rev-parse", "--git-common-dir"],
+        cwd=repo,
+        text=True,
+        capture_output=True,
+        env={**os.environ, "GIT_OPTIONAL_LOCKS": "0"},
+        check=False,
+    )
+    if result.returncode == 0 and result.stdout.strip():
+        common = Path(result.stdout.strip())
+        if not common.is_absolute():
+            common = repo / common
+        roots.append(common.resolve(strict=False))
+    return tuple(roots)
+
+
+def path_kind(candidate, repo, control_roots=()):
+    if any(candidate == root or root in candidate.parents for root in control_roots):
+        return "protected"
     if candidate != repo and repo not in candidate.parents:
         return "external"
     relative = candidate.relative_to(repo)
     parts = relative.parts
     if parts in {
         (".project",),
-        (".project", "state.md"),
+        (".project", "STATE.md"),
         (".project", "next"),
-        (".project", "next", "state.md"),
+        (".project", "next", "STATE.md"),
     }:
         return "protected"
     if parts and parts[0] == ".gsd-path":
@@ -498,11 +529,13 @@ def path_kind(candidate, repo):
     return "product"
 
 
-def target_kind(path, working_directories, repo):
+def target_kind(path, working_directories, repo, control_roots=None):
     lexical, resolved = target_paths(path, working_directories, repo)
     repo = repo.resolve()
+    if control_roots is None:
+        control_roots = repository_control_roots(repo)
     kinds = {
-        path_kind(candidate, repo)
+        path_kind(candidate, repo, control_roots)
         for candidate in (lexical, resolved)
     }
     for kind in ("protected", "product", "artifact", "external"):
@@ -516,7 +549,10 @@ def enforce_pipeline_reentry(paths, working_directories):
     state = repo / ".project" / "STATE.md"
     if not os.path.lexists(state):
         return
-    kinds = [target_kind(path, working_directories, repo) for path in paths]
+    control_roots = repository_control_roots(repo)
+    kinds = [
+        target_kind(path, working_directories, repo, control_roots) for path in paths
+    ]
     if "protected" in kinds:
         deny(CONTROL_FILE_REASON)
     if all(kind == "external" for kind in kinds):

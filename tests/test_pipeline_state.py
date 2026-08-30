@@ -341,6 +341,34 @@ class PipelineStateTests(unittest.TestCase):
             self.assertEqual(routed["route"]["action"], "bind-initial")
             self.assertEqual(routed["route"]["branch"], "gsd-path/M001")
 
+    def test_status_reports_bind_initial_before_git_exists(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            project = repo / ".project"
+            project.mkdir()
+            (project / "STATE.md").write_text(state_text(), encoding="utf-8")
+
+            status = pipeline_state.status_state(repo)
+
+            self.assertEqual("bind-initial", status["route"]["action"])
+            self.assertEqual("gsd-path/M001", status["route"]["branch"])
+            self.assertEqual(
+                {
+                    "branch": None,
+                    "head": None,
+                    "subject": "",
+                    "dirty": [],
+                    "origin_branch": None,
+                    "origin_main": None,
+                    "published": False,
+                    "ancestor_of_origin_main": False,
+                },
+                status["git"],
+            )
+            self.assertTrue(
+                all(value is None for value in status["journals"].values())
+            )
+
     def test_status_reports_route_without_mutating(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             repo = Path(tmp)

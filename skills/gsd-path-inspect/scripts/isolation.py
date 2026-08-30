@@ -145,7 +145,14 @@ def task_authorization_ref(task_id: str) -> str:
 def _delete_task_authorization(primary: Path, branch: str) -> None:
     if branch.startswith(TASK_BRANCH_PREFIX):
         task_id = validate_task_id(branch.removeprefix(TASK_BRANCH_PREFIX))
-        run_git(primary, "update-ref", "-d", task_authorization_ref(task_id))
+        deleted = run_git(
+            primary, "update-ref", "-d", task_authorization_ref(task_id)
+        )
+        if deleted.returncode != 0:
+            detail = deleted.stderr.strip() or deleted.stdout.strip()
+            raise IsolationError(
+                detail or f"could not clear task authorization for {task_id}"
+            )
 
 
 def authorized_task_worktree(worktree: Path, bound_branch: str) -> bool:
@@ -513,17 +520,6 @@ def isolate_task(
     branch = task_branch_name(task_id)
     destination = sidecar_root(primary, "task", task_id)
     create_named_worktree(primary, branch, destination, resolved_base)
-    authorized = run_git(
-        primary,
-        "update-ref",
-        task_authorization_ref(task_id),
-        resolved_base,
-        "0" * len(resolved_base),
-    )
-    if authorized.returncode != 0:
-        run_git(primary, "worktree", "remove", "--force", str(destination))
-        run_git(primary, "branch", "-D", branch)
-        raise IsolationError("could not record task worktree authorization")
     return {
         "base": resolved_base,
         "bound_branch": bound,
@@ -773,6 +769,110 @@ def task_frontmatter(text: str) -> tuple[Optional[Dict[str, object]], Optional[s
 
 LANDED_FIELDS = {"status": "done", "worktree": "null", "task_branch": "null"}
 LANDING_MUTABLE_FIELDS = ("status", "agent", "base", "worktree", "task_branch")
+
+
+def _activated_task_text(
+    text: str,
+    task_id: str,
+    agent: str,
+    base: str,
+    worktree: Path,
+    task_branch: Optional[str],
+) -> str:
+    head, body = split_frontmatter(text)
+    fields, error = task_frontmatter(text)
+    if error is not None or fields is None:
+        raise IsolationError(error or "task frontmatter is unreadable")
+    expected = {
+        "id": task_id,
+        "status": "pending",
+        "agent": "null",
+        "base": "null",
+        "worktree": "null",
+        "task_branch": "null",
+    }
+    for key, value in expected.items():
+        if fields.get(key) != value:
+            raise IsolationError(f"task activation requires {key}: {value}")
+    values = {
+        "status": "in-progress",
+        "agent": agent,
+        "base": base,
+        "worktree": str(worktree),
+        "task_branch": task_branch or "null",
+    }
+    found = set()
+    lines = []
+    for line in head:
+        key = _frontmatter_key(line)
+        if key in values:
+            if key in found:
+                raise IsolationError(f"task frontmatter repeats {key}")
+            found.add(key)
+            lines.append(f"{key}: {values[key]}")
+        else:
+            lines.append(line)
+    missing = sorted(values.keys() - found)
+    if missing:
+        raise IsolationError(
+            "task frontmatter missing activation fields: " + ", ".join(missing)
+        )
+    return "---\n" + "\n".join(lines) + "\n---\n" + body
+
+
+def activate_task(
+    worktree: Path,
+    base: str,
+    task_id: str,
+    agent: str,
+    task_file: str,
+    task_branch: Optional[str],
+) -> Dict[str, object]:
+    worktree = require_directory(worktree, "task worktree")
+    if worktree_root(worktree) != worktree:
+        raise IsolationError(f"task worktree is not its Git root: {worktree}")
+    resolved_base = require_commit(worktree, require_full_sha(base))
+    if current_sha(worktree) != resolved_base:
+        raise IsolationError(
+            "task activation requires worktree HEAD at the recorded base"
+        )
+    task_id = validate_task_id(task_id)
+    if not agent or agent == "null" or "\n" in agent:
+        raise IsolationError("task activation requires an assigned agent")
+    branch = require_attached(worktree)
+    if task_branch is None:
+        if branch.startswith(TASK_BRANCH_PREFIX):
+            raise IsolationError("parallel task activation requires --task-branch")
+    elif task_branch != task_branch_name(task_id) or branch != task_branch:
+        raise IsolationError("task activation branch does not match the task worktree")
+    normalized_task = relative_posix(task_file)
+    if not normalized_task.startswith(".project/tasks/"):
+        raise IsolationError("task activation file must stay under .project/tasks/")
+    task_path = _real_file(worktree, normalized_task, "task activation file")
+    text, mode = _read_task_text(task_path)
+    activated = _activated_task_text(
+        text, task_id, agent, resolved_base, worktree, task_branch
+    )
+    _replace_regular_file(task_path, activated.encode("utf-8"), mode)
+    if task_branch is not None:
+        authorized = run_git(
+            worktree,
+            "update-ref",
+            task_authorization_ref(task_id),
+            resolved_base,
+            "0" * len(resolved_base),
+        )
+        if authorized.returncode != 0:
+            _replace_regular_file(task_path, text.encode("utf-8"), mode)
+            raise IsolationError("could not record task worktree authorization")
+    return {
+        "agent": agent,
+        "base": resolved_base,
+        "status": "in-progress",
+        "task_branch": task_branch,
+        "task_file": normalized_task,
+        "worktree": str(worktree),
+    }
 
 
 def _landed_task_text(text: str, base: str) -> str:
@@ -2385,6 +2485,7 @@ def retire(
                 or branch.startswith(VERIFY_BRANCH_PREFIX)
             ):
                 raise IsolationError(f"refusing to retire unrecognized branch {branch}")
+            _delete_task_authorization(primary, branch)
             existing = run_git(
                 primary, "show-ref", "--verify", "--quiet", f"refs/heads/{branch}"
             )
@@ -2424,7 +2525,6 @@ def retire(
                             or f"could not delete {branch}"
                         )
                 branch_retired = True
-                _delete_task_authorization(primary, branch)
         return {
             "bound_branch": bound,
             "branch": branch,
@@ -2445,6 +2545,7 @@ def retire(
         retire_branch = current
     else:
         raise IsolationError(f"refusing to retire unrecognized branch {current}")
+    _delete_task_authorization(primary, retire_branch)
     if not force:
         dirty = git_output(
             resolved_worktree, "status", "--porcelain", "--untracked-files=all"
@@ -2469,7 +2570,6 @@ def retire(
         raise IsolationError(
             (deleted.stderr or deleted.stdout).strip() or f"could not delete {retire_branch}"
         )
-    _delete_task_authorization(primary, retire_branch)
     return {
         "bound_branch": bound,
         "branch": retire_branch,
@@ -2490,6 +2590,16 @@ def parser() -> argparse.ArgumentParser:
     isolate_task_parser.add_argument("--base", required=True)
     isolate_task_parser.add_argument("--task-id", required=True)
     isolate_task_parser.add_argument("--round-size", type=int, required=True)
+
+    activate_task_parser = subparsers.add_parser(
+        "activate-task", help="record one helper-owned task dispatch"
+    )
+    activate_task_parser.add_argument("--repo", type=Path, required=True)
+    activate_task_parser.add_argument("--base", required=True)
+    activate_task_parser.add_argument("--task-id", required=True)
+    activate_task_parser.add_argument("--agent", required=True)
+    activate_task_parser.add_argument("--task-file", required=True)
+    activate_task_parser.add_argument("--task-branch")
 
     isolate_verify_parser = subparsers.add_parser(
         "isolate-verify", help="create a named verify sidecar"
@@ -2557,6 +2667,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 arguments.base,
                 arguments.task_id,
                 arguments.round_size,
+            )
+        elif arguments.command == "activate-task":
+            result = activate_task(
+                arguments.repo,
+                arguments.base,
+                arguments.task_id,
+                arguments.agent,
+                arguments.task_file,
+                arguments.task_branch,
             )
         elif arguments.command == "isolate-verify":
             result = isolate_verify(arguments.repo, arguments.base, arguments.name)
