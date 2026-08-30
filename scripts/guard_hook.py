@@ -50,6 +50,7 @@ READ_VERBS = frozenset({"read", "grep", "search", "view", "list", "get", "cat"})
 WRITE_VERBS = frozenset(
     {
         "write",
+        "save",
         "edit",
         "create",
         "delete",
@@ -81,6 +82,20 @@ INVALID_INPUT_REASON = "GSD Path guard could not validate the tool request"
 REENTRY_FAILURE_REASON = (
     "GSD Path status could not be verified; review .project/STATE.md and invoke "
     "gsd-path-forensics before changing product files"
+)
+STATUS_ACTIONS = frozenset(
+    {
+        "bind-initial",
+        "block",
+        "resume-checkpoint",
+        "resume-next-handoff",
+        "resume-promotion",
+        "resume-shipment",
+        "resume-undo",
+        "run-phase",
+        "validate-integrated",
+        "wait",
+    }
 )
 ARCHIVE_REFERENCE = re.compile(r"(?i:\.project[\\/]archive)")
 ARCHIVE_READ_COMMANDS = frozenset(
@@ -303,9 +318,50 @@ def project_status(repo):
     if result.returncode != 0:
         raise ValueError("project status failed")
     payload = json.loads(result.stdout)
-    if not isinstance(payload, dict) or payload.get("schema") != "gsd-path/status/v1":
+    if not valid_status_payload(payload, repo):
         raise ValueError("project status returned an invalid payload")
     return payload
+
+
+def valid_status_payload(payload, repo):
+    if not isinstance(payload, dict) or payload.get("schema") != "gsd-path/status/v1":
+        return False
+    state = payload.get("state")
+    route = payload.get("route")
+    status_path = payload.get("path")
+    next_skill = payload.get("next_skill")
+    if (
+        payload.get("advance") is not False
+        or not isinstance(state, dict)
+        or not isinstance(state.get("phase"), str)
+        or not state["phase"]
+        or not isinstance(state.get("status"), str)
+        or not state["status"]
+        or not isinstance(route, dict)
+        or route.get("action") not in STATUS_ACTIONS
+        or not isinstance(route.get("reason"), str)
+        or not route["reason"]
+        or not isinstance(status_path, str)
+        or not Path(status_path).is_absolute()
+        or Path(status_path).resolve(strict=False)
+        != (repo / ".project" / "STATE.md").resolve(strict=False)
+    ):
+        return False
+    action = route["action"]
+    if action == "run-phase":
+        phase = route.get("phase")
+        return (
+            isinstance(phase, str)
+            and bool(phase)
+            and next_skill == f"gsd-path-{phase}"
+        )
+    if action == "resume-undo":
+        expected = "gsd-path-undo"
+    elif action == "wait":
+        expected = None
+    else:
+        expected = "gsd-path"
+    return next_skill == expected
 
 
 def pipeline_control_path(path, working_directories, repo):

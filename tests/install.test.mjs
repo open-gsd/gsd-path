@@ -18,8 +18,14 @@ const originalHooks = { ...installer.hooks };
 function makeSource(base) {
   const src = path.join(base, "source");
   fs.mkdirSync(path.join(src, "skills"), { recursive: true });
-  fs.writeFileSync(path.join(src, "AGENTS.md"), "agents\n");
-  fs.writeFileSync(path.join(src, "WORKFLOW.md"), "workflow\n");
+  fs.writeFileSync(
+    path.join(src, "AGENTS.md"),
+    "# AGENTS.md — Operating Rules for the GSD Path Pipeline\n\n## Plain-prompt re-entry\n"
+  );
+  fs.writeFileSync(
+    path.join(src, "WORKFLOW.md"),
+    "# WORKFLOW.md — GSD Path Pipeline SOP\n\n### Plain-prompt re-entry\n"
+  );
   for (const name of installer.SKILL_NAMES) {
     const skill = path.join(src, "skills", name);
     fs.mkdirSync(path.join(skill, "references"), { recursive: true });
@@ -1204,7 +1210,10 @@ test("hooks refresh full creates selected missing native configs", async () => {
   assert.equal(status, 0);
   assert.ok(fs.existsSync(path.join(project, ".codex", "hooks.json")));
   assert.ok(fs.existsSync(path.join(project, ".cursor", "hooks.json")));
-  assert.equal(fs.readFileSync(path.join(project, "AGENTS.md"), "utf8"), "agents\n");
+  assert.equal(
+    fs.readFileSync(path.join(project, "AGENTS.md"), "utf8"),
+    fs.readFileSync(path.join(source, "AGENTS.md"), "utf8")
+  );
 });
 
 test("hooks refresh full merges selected foreign native configs", async () => {
@@ -1380,6 +1389,37 @@ test("hooks refresh initializes runtime for a legacy project install", async () 
   assert.equal(status, 0);
   assert.ok(fs.existsSync(path.join(project, installer.HOOKS_DIRECTORY, "runtime", "pipeline_state.py")));
   assert.ok(!fs.existsSync(path.join(project, installer.HOOKS_DIRECTORY, "guard_hook.py")));
+});
+
+test("hooks refresh and doctor reject legacy contracts without re-entry", async () => {
+  const project = path.join(root, "stale-legacy-project");
+  fs.mkdirSync(project);
+  fs.writeFileSync(path.join(project, "AGENTS.md"), "# AGENTS.md — Operating Rules for the GSD Path Pipeline\n");
+  fs.writeFileSync(path.join(project, "WORKFLOW.md"), "# WORKFLOW.md — GSD Path Pipeline SOP\n");
+
+  const status = await installer.main(
+    ["--hooks-refresh", "--project", project, "--source-root", source, "--no-color"]
+  );
+  const findings = installer.doctor(source, { targets: [], rootFor: () => "", project });
+
+  assert.equal(status, 1);
+  assert.ok(!fs.existsSync(path.join(project, installer.HOOKS_DIRECTORY)));
+  assert.ok(findings.some(({ level, text }) => level === "fail" && /lacks plain-prompt re-entry/.test(text)));
+});
+
+test("hooks refresh honors the project ownership lock", async () => {
+  const project = path.join(root, "locked-refresh-project");
+  await runInstall([installer.targetPlan("claude", path.join(root, "locked-claude", "skills"))], { project });
+  const runtime = path.join(project, installer.HOOKS_DIRECTORY, "runtime", "pipeline_state.py");
+  const before = fs.readFileSync(runtime);
+  fs.mkdirSync(path.join(project, ".gsd-path-install-lock"));
+
+  const status = await installer.main(
+    ["--hooks-refresh", "--project", project, "--source-root", source, "--no-color"]
+  );
+
+  assert.equal(status, 1);
+  assert.ok(fs.readFileSync(runtime).equals(before));
 });
 
 test("runtime refresh restores the complete prior set after copy failure", async () => {
@@ -1946,6 +1986,17 @@ test("doctor uses canonical pipeline state validation", async () => {
   assert.ok(
     findings.some(
       (finding) => finding.level === "fail" && /project runtime status failed/.test(finding.text)
+    )
+  );
+  fs.writeFileSync(runtimeState, originalRuntime);
+  fs.writeFileSync(
+    runtimeState,
+    'print("{\\"schema\\":\\"gsd-path/status/v1\\"}")\n' + `# ${installer.PROJECT_RUNTIME_MARKER}\n`
+  );
+  findings = installer.doctor(source, { targets: [], rootFor: () => "", project });
+  assert.ok(
+    findings.some(
+      (finding) => finding.level === "fail" && /invalid payload/.test(finding.text)
     )
   );
   fs.writeFileSync(runtimeState, originalRuntime);

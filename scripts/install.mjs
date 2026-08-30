@@ -24,6 +24,22 @@ export const PROJECT_RUNTIME_SCRIPTS = [
 ];
 export const PROJECT_RUNTIME_MARKER = "gsd-path project runtime";
 const INSTALL_LOCK_NAME = ".gsd-path-install-lock";
+const PROJECT_CONTRACTS = [
+  ["AGENTS.md", ["# AGENTS.md — Operating Rules for the GSD Path Pipeline", "## Plain-prompt re-entry"]],
+  ["WORKFLOW.md", ["# WORKFLOW.md — GSD Path Pipeline SOP", "### Plain-prompt re-entry"]],
+];
+const STATUS_ACTIONS = new Set([
+  "bind-initial",
+  "block",
+  "resume-checkpoint",
+  "resume-next-handoff",
+  "resume-promotion",
+  "resume-shipment",
+  "resume-undo",
+  "run-phase",
+  "validate-integrated",
+  "wait",
+]);
 export const CLAUDE_MATCHER =
   "Edit|Write|MultiEdit|NotebookEdit|Delete|StrReplace|ApplyPatch|Create|Shell|Bash|PowerShell";
 // The managed PreToolUse guard entry, as an object.
@@ -1240,17 +1256,11 @@ function refreshesGuards(project, full, initialize) {
 }
 
 function hasLegacyProjectContracts(project) {
-  const contracts = [
-    ["AGENTS.md", "# AGENTS.md — Operating Rules for the GSD Path Pipeline"],
-    ["WORKFLOW.md", "# WORKFLOW.md — GSD Path Pipeline SOP"],
-  ];
-  return contracts.every(([name, marker]) => {
+  return PROJECT_CONTRACTS.every(([name, markers]) => {
     const candidate = path.join(project, name);
-    return (
-      !isSymlink(candidate) &&
-      isFile(candidate) &&
-      fs.readFileSync(candidate, "utf8").includes(marker)
-    );
+    if (isSymlink(candidate) || !isFile(candidate)) return false;
+    const content = fs.readFileSync(candidate, "utf8");
+    return markers.every((marker) => content.includes(marker));
   });
 }
 
@@ -1403,7 +1413,7 @@ function publishProjectRuntime(sourceRoot, project, refreshGuards) {
 
 // Returns refreshed project-relative paths; entries prefixed "note:" are
 // user-facing notes rather than refreshed files.
-function refreshHooks(sourceRoot, project, full, dryRun, selected = [], initialize = false) {
+function refreshHooksUnlocked(sourceRoot, project, full, dryRun, selected, initialize) {
   let hooksDir = full ? gitHooksDirectory(project) : null;
   let interpreter = null;
   if (!dryRun) {
@@ -1480,6 +1490,19 @@ function refreshHooks(sourceRoot, project, full, dryRun, selected = [], initiali
   return refreshed;
 }
 
+function refreshHooks(sourceRoot, project, full, dryRun, selected = [], initialize = false) {
+  if (dryRun) {
+    return refreshHooksUnlocked(sourceRoot, project, full, true, selected, initialize);
+  }
+  validateDirectoryDestination(project, "project path");
+  const ownership = acquireInstallLocks([path.join(project, HOOKS_DIRECTORY)]);
+  try {
+    return refreshHooksUnlocked(sourceRoot, project, full, false, selected, initialize);
+  } finally {
+    releaseInstallLocks(ownership.locks, ownership.createdDirectories);
+  }
+}
+
 const STATE_SCHEMA = "gsd-path/state/v1";
 
 function validatedProjectState(sourceRoot, project) {
@@ -1549,9 +1572,45 @@ function validateProjectRuntimeStatus(project) {
   } catch {
     throw new InstallerError("project runtime status returned invalid JSON");
   }
-  if (!payload || payload.schema !== "gsd-path/status/v1") {
+  if (!validStatusPayload(payload, project)) {
     throw new InstallerError("project runtime status returned an invalid payload");
   }
+}
+
+function validStatusPayload(payload, project) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return false;
+  const state = payload.state;
+  const route = payload.route;
+  if (
+    payload.schema !== "gsd-path/status/v1" ||
+    payload.advance !== false ||
+    !state ||
+    typeof state !== "object" ||
+    typeof state.phase !== "string" ||
+    !state.phase ||
+    typeof state.status !== "string" ||
+    !state.status ||
+    !route ||
+    typeof route !== "object" ||
+    !STATUS_ACTIONS.has(route.action) ||
+    typeof route.reason !== "string" ||
+    !route.reason ||
+    typeof payload.path !== "string" ||
+    !path.isAbsolute(payload.path) ||
+    !samePath(payload.path, path.join(project, ".project", "STATE.md"))
+  ) {
+    return false;
+  }
+  let expectedNextSkill = null;
+  if (route.action === "run-phase") {
+    if (typeof route.phase !== "string" || !route.phase) return false;
+    expectedNextSkill = `gsd-path-${route.phase}`;
+  } else if (route.action === "resume-undo") {
+    expectedNextSkill = "gsd-path-undo";
+  } else if (route.action !== "wait") {
+    expectedNextSkill = "gsd-path";
+  }
+  return payload.next_skill === expectedNextSkill;
 }
 
 function isExecutable(candidate) {
@@ -1647,9 +1706,19 @@ export function doctor(sourceRoot, { targets, rootFor, project = null }) {
 
   if (project === null) return findings;
 
-  for (const name of ["AGENTS.md", "WORKFLOW.md"]) {
-    if (isFile(path.join(project, name))) push("ok", `project: ${name} present`);
-    else push("fail", `project: missing contract ${name} — run --project "${project}"`);
+  for (const [name, markers] of PROJECT_CONTRACTS) {
+    const contract = path.join(project, name);
+    if (!isFile(contract)) {
+      push("fail", `project: missing contract ${name} — run --project "${project}"`);
+      continue;
+    }
+    const content = readProjectFile(contract, `project: ${name}`);
+    if (content === null) continue;
+    if (markers.every((marker) => content.toString("utf8").includes(marker))) {
+      push("ok", `project: ${name} present`);
+    } else {
+      push("fail", `project: ${name} lacks plain-prompt re-entry — merge the current contract`);
+    }
   }
   const bridge = path.join(project, ".claude", "CLAUDE.md");
   if (!isFile(bridge)) {

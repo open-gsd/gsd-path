@@ -38,8 +38,13 @@ class GuardHookTests(unittest.TestCase):
         route_phase = route_phase or phase
         return {
             "schema": "gsd-path/status/v1",
-            "state": {"phase": phase},
-            "route": {"action": action, "phase": route_phase},
+            "advance": False,
+            "state": {"phase": phase, "status": "active"},
+            "route": {
+                "action": action,
+                "phase": route_phase,
+                "reason": f"state is {phase}/active",
+            },
             "path": str(root / ".project" / "STATE.md"),
             "next_skill": (
                 f"gsd-path-{route_phase}" if action == "run-phase" else "gsd-path"
@@ -148,6 +153,34 @@ class GuardHookTests(unittest.TestCase):
                         "tool_input": {"file_path": "src/app.py"},
                     }
                 )
+
+    def test_save_file_with_file_target_is_guarded(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / ".project").mkdir()
+            (root / ".project" / "STATE.md").write_text("owned\n", encoding="utf-8")
+            with (
+                mock.patch.object(guard_hook, "repository_root", return_value=root),
+                mock.patch.object(
+                    guard_hook, "project_status", return_value=self.status(root)
+                ),
+            ):
+                self.assert_denied(
+                    {
+                        "tool_name": "SaveFile",
+                        "tool_input": {"file_path": "src/app.py", "content": "x"},
+                    }
+                )
+
+    def test_project_status_rejects_incomplete_payload(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            result = subprocess.CompletedProcess(
+                [], 0, stdout='{"schema":"gsd-path/status/v1"}\n', stderr=""
+            )
+            with mock.patch.object(guard_hook.subprocess, "run", return_value=result):
+                with self.assertRaisesRegex(ValueError, "invalid payload"):
+                    guard_hook.project_status(root)
 
     def test_plain_prompt_allows_pipeline_artifact_write(self):
         with tempfile.TemporaryDirectory() as temporary:

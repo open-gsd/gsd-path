@@ -55,6 +55,36 @@ PROJECT_RUNTIME_SCRIPTS = (
 )
 PROJECT_RUNTIME_MARKER = "gsd-path project runtime"
 INSTALL_LOCK_NAME = ".gsd-path-install-lock"
+PROJECT_CONTRACTS = (
+    (
+        "AGENTS.md",
+        (
+            "# AGENTS.md — Operating Rules for the GSD Path Pipeline",
+            "## Plain-prompt re-entry",
+        ),
+    ),
+    (
+        "WORKFLOW.md",
+        (
+            "# WORKFLOW.md — GSD Path Pipeline SOP",
+            "### Plain-prompt re-entry",
+        ),
+    ),
+)
+STATUS_ACTIONS = frozenset(
+    {
+        "bind-initial",
+        "block",
+        "resume-checkpoint",
+        "resume-next-handoff",
+        "resume-promotion",
+        "resume-shipment",
+        "resume-undo",
+        "run-phase",
+        "validate-integrated",
+        "wait",
+    }
+)
 CLAUDE_MATCHER = (
     "Edit|Write|MultiEdit|NotebookEdit|Delete|StrReplace|ApplyPatch|Create|Shell|Bash|PowerShell"
 )
@@ -1172,16 +1202,14 @@ def _refreshes_guards(project: Path, full: bool, initialize: bool) -> bool:
 
 
 def _has_legacy_project_contracts(project: Path) -> bool:
-    contracts = (
-        ("AGENTS.md", "# AGENTS.md — Operating Rules for the GSD Path Pipeline"),
-        ("WORKFLOW.md", "# WORKFLOW.md — GSD Path Pipeline SOP"),
-    )
-    return all(
-        not (project / name).is_symlink()
-        and (project / name).is_file()
-        and marker in (project / name).read_text(encoding="utf-8", errors="replace")
-        for name, marker in contracts
-    )
+    for name, markers in PROJECT_CONTRACTS:
+        contract = project / name
+        if contract.is_symlink() or not contract.is_file():
+            return False
+        content = contract.read_text(encoding="utf-8", errors="replace")
+        if not all(marker in content for marker in markers):
+            return False
+    return True
 
 
 def _validate_hooks_refresh(
@@ -1281,7 +1309,7 @@ def _validate_hooks_refresh(
                     )
 
 
-def refresh_hooks(
+def _refresh_hooks_unlocked(
     source_root: Path,
     project: Path,
     full: bool,
@@ -1406,6 +1434,28 @@ def refresh_hooks(
                     _atomic_write(hook_path, content, mode=0o755)
                 refreshed.append(_describe_project_path(project, hook_path))
     return refreshed
+
+
+def refresh_hooks(
+    source_root: Path,
+    project: Path,
+    full: bool,
+    dry_run: bool = False,
+    selected: Sequence[str] = (),
+    initialize: bool = False,
+) -> List[str]:
+    if dry_run:
+        return _refresh_hooks_unlocked(
+            source_root, project, full, True, selected, initialize
+        )
+    _validate_directory_destination(project, "project path")
+    locks, created = _acquire_install_locks([project / HOOKS_DIRECTORY])
+    try:
+        return _refresh_hooks_unlocked(
+            source_root, project, full, False, selected, initialize
+        )
+    finally:
+        _release_install_locks(locks, created)
 
 
 def _comparison_path(path: Path) -> Path:
@@ -1602,8 +1652,41 @@ def _validate_project_runtime_status(project: Path) -> None:
         payload = json.loads(result.stdout)
     except json.JSONDecodeError as error:
         raise InstallerError("project runtime status returned invalid JSON") from error
-    if not isinstance(payload, dict) or payload.get("schema") != "gsd-path/status/v1":
+    if not _valid_status_payload(payload, project):
         raise InstallerError("project runtime status returned an invalid payload")
+
+
+def _valid_status_payload(payload: object, project: Path) -> bool:
+    if not isinstance(payload, dict) or payload.get("schema") != "gsd-path/status/v1":
+        return False
+    state = payload.get("state")
+    route = payload.get("route")
+    status_path = payload.get("path")
+    if (
+        payload.get("advance") is not False
+        or not isinstance(state, dict)
+        or not isinstance(state.get("phase"), str)
+        or not state["phase"]
+        or not isinstance(state.get("status"), str)
+        or not state["status"]
+        or not isinstance(route, dict)
+        or route.get("action") not in STATUS_ACTIONS
+        or not isinstance(route.get("reason"), str)
+        or not route["reason"]
+        or not isinstance(status_path, str)
+        or not Path(status_path).is_absolute()
+        or not _same_path(Path(status_path), project / ".project" / "STATE.md")
+    ):
+        return False
+    action = route["action"]
+    if action == "run-phase":
+        phase = route.get("phase")
+        expected = f"gsd-path-{phase}" if isinstance(phase, str) and phase else None
+        return expected is not None and payload.get("next_skill") == expected
+    expected = "gsd-path-undo" if action == "resume-undo" else None
+    if action not in {"resume-undo", "wait"}:
+        expected = "gsd-path"
+    return payload.get("next_skill") == expected
 
 
 def _is_executable(path: Path) -> bool:
@@ -1695,11 +1778,22 @@ def doctor(
     if project is None:
         return findings
 
-    for name in ("AGENTS.md", "WORKFLOW.md"):
-        if (project / name).is_file():
+    for name, markers in PROJECT_CONTRACTS:
+        contract = project / name
+        if not contract.is_file():
+            push("fail", f'project: missing contract {name} — run --project "{project}"')
+            continue
+        content = read_project_file(contract, f"project: {name}")
+        if content is None:
+            continue
+        text = content.decode("utf-8", errors="replace")
+        if all(marker in text for marker in markers):
             push("ok", f"project: {name} present")
         else:
-            push("fail", f'project: missing contract {name} — run --project "{project}"')
+            push(
+                "fail",
+                f"project: {name} lacks plain-prompt re-entry — merge the current contract",
+            )
 
     bridge = project / ".claude" / "CLAUDE.md"
     if not bridge.is_file():

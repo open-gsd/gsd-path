@@ -24,8 +24,16 @@ class InstallerTests(unittest.TestCase):
         self.root = Path(self.temporary.name)
         self.source = self.root / "source"
         (self.source / "skills").mkdir(parents=True)
-        (self.source / "AGENTS.md").write_text("agents\n", encoding="utf-8")
-        (self.source / "WORKFLOW.md").write_text("workflow\n", encoding="utf-8")
+        (self.source / "AGENTS.md").write_text(
+            "# AGENTS.md — Operating Rules for the GSD Path Pipeline\n\n"
+            "## Plain-prompt re-entry\n",
+            encoding="utf-8",
+        )
+        (self.source / "WORKFLOW.md").write_text(
+            "# WORKFLOW.md — GSD Path Pipeline SOP\n\n"
+            "### Plain-prompt re-entry\n",
+            encoding="utf-8",
+        )
         (self.source / "package.json").write_text(
             '{"version": "9.9.9"}\n', encoding="utf-8"
         )
@@ -1693,6 +1701,51 @@ class InstallerTests(unittest.TestCase):
         )
         self.assertFalse((project / install.HOOKS_DIRECTORY / "guard_hook.py").exists())
 
+    def test_refresh_and_doctor_reject_legacy_contracts_without_reentry(self):
+        project = self.root / "stale-legacy-project"
+        project.mkdir()
+        (project / "AGENTS.md").write_text(
+            "# AGENTS.md — Operating Rules for the GSD Path Pipeline\n",
+            encoding="utf-8",
+        )
+        (project / "WORKFLOW.md").write_text(
+            "# WORKFLOW.md — GSD Path Pipeline SOP\n", encoding="utf-8"
+        )
+
+        status, _, error = self.run_main(
+            ["--hooks-refresh", "--project", str(project), "--source-root", str(self.source)]
+        )
+        findings = install.doctor(self.source, [], lambda _target: Path(), project)
+
+        self.assertEqual(1, status, error)
+        self.assertFalse((project / install.HOOKS_DIRECTORY).exists())
+        self.assertTrue(
+            any(
+                finding["level"] == "fail"
+                and "lacks plain-prompt re-entry" in finding["text"]
+                for finding in findings
+            )
+        )
+
+    def test_hooks_refresh_honors_project_ownership_lock(self):
+        project = self.root / "locked-refresh-project"
+        target = self.root / "locked-refresh-claude" / "skills"
+        status, _, error = self.run_main(
+            ["--claude", "--claude-root", str(target), "--source-root", str(self.source), "--project", str(project)]
+        )
+        self.assertEqual(0, status, error)
+        runtime = project / install.HOOKS_DIRECTORY / "runtime" / "pipeline_state.py"
+        before = runtime.read_bytes()
+        (project / install.INSTALL_LOCK_NAME).mkdir()
+
+        status, _, error = self.run_main(
+            ["--hooks-refresh", "--project", str(project), "--source-root", str(self.source)]
+        )
+
+        self.assertEqual(1, status)
+        self.assertIn("already in progress", error)
+        self.assertEqual(before, runtime.read_bytes())
+
     def test_runtime_refresh_restores_prior_set_after_copy_failure(self):
         project = self.root / "transactional-runtime-project"
         target = self.root / "transactional-claude" / "skills"
@@ -2078,6 +2131,15 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(1, status)
         self.assertIn("project runtime status failed", error)
         runtime_script.write_bytes(original_runtime)
+        runtime_script.write_text(
+            'print("{\\"schema\\":\\"gsd-path/status/v1\\"}")\n'
+            f"# {install.PROJECT_RUNTIME_MARKER}\n",
+            encoding="utf-8",
+        )
+        status, _, error = self.run_main(arguments)
+        self.assertEqual(1, status)
+        self.assertIn("invalid payload", error)
+        runtime_script.write_bytes(original_runtime)
 
         shutil.rmtree(target / "gsd-path-plan")
         status, _, error = self.run_main(arguments)
@@ -2414,7 +2476,8 @@ class InstallerTests(unittest.TestCase):
         self.assertTrue((project / ".codex" / "hooks.json").is_file())
         self.assertTrue((project / ".cursor" / "hooks.json").is_file())
         self.assertEqual(
-            "agents\n", (project / "AGENTS.md").read_text(encoding="utf-8")
+            (self.source / "AGENTS.md").read_text(encoding="utf-8"),
+            (project / "AGENTS.md").read_text(encoding="utf-8"),
         )
 
     def test_hooks_refresh_full_merges_selected_foreign_native_configs(self):
