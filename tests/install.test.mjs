@@ -1695,6 +1695,39 @@ test("doctor rejects symlinked and unreadable project scripts", () => {
   );
 });
 
+test("doctor reports unreadable bridge and git hooks", async () => {
+  const project = path.join(root, "doctor-unreadable-contracts");
+  fs.mkdirSync(path.join(project, ".git"), { recursive: true });
+  const target = path.join(root, "claude", "skills");
+  await runInstall([installer.targetPlan("claude", target)], { project, hooks: true });
+  const bridge = path.join(project, ".claude", "CLAUDE.md");
+  const preCommit = path.join(project, ".git", "hooks", "pre-commit");
+  fs.chmodSync(bridge, 0);
+  fs.chmodSync(preCommit, 0);
+  let findings;
+  try {
+    findings = installer.doctor(source, {
+      targets: ["claude"],
+      rootFor: () => target,
+      project,
+    });
+  } finally {
+    fs.chmodSync(bridge, 0o644);
+    fs.chmodSync(preCommit, 0o755);
+  }
+
+  assert.ok(
+    findings.some(
+      (finding) => finding.level === "fail" && /\.claude\/CLAUDE\.md cannot be read/.test(finding.text)
+    )
+  );
+  assert.ok(
+    findings.some(
+      (finding) => finding.level === "fail" && /pre-commit cannot be read/.test(finding.text)
+    )
+  );
+});
+
 test("doctor fails when installer-owned native guard config is missing", async () => {
   for (const [targetName, settingsPath] of [
     ["claude", [".claude", "settings.json"]],

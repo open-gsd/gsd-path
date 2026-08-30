@@ -91,10 +91,13 @@ full-repo suite on a tiny edit outrank the phase brief.
 ## Plain-prompt re-entry
 
 - On a turn that did not explicitly invoke a GSD Path skill, check for
-  `.project/STATE.md`. When it exists, run `python3 -B
-  .gsd-path/runtime/pipeline_state.py status --repo <absolute-root>`, or use
-  `python -B` when `python3` is unavailable, before any requested repository
-  mutation. Treat its JSON as the only route authority.
+  `.project/STATE.md`. When it exists, first select the compatible interpreter:
+  probe `python3 -B -c "import sys; raise SystemExit(sys.version_info < (3, 9))"`,
+  then probe `python -B -c "import sys; raise SystemExit(sys.version_info < (3, 9))"`
+  only if the first command fails. Run the first successful interpreter
+  with `-B .gsd-path/runtime/pipeline_state.py status --repo <absolute-root>`
+  before any requested repository mutation. Treat its JSON as the only route
+  authority.
   A plain change request does not authorize work outside the pipeline: make no
   changes and report **Outcome**, link the returned `path` under **Review**, and
   name `next_skill` under **Next**, or report `route.reason` when `next_skill`

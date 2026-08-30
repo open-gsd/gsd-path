@@ -1054,7 +1054,10 @@ function isManagedProjectRuntime(destination) {
 
 function isManagedGitHook(destination) {
   if (!isFile(destination)) return false;
-  const text = fs.readFileSync(destination, "utf8");
+  return isManagedGitHookContent(fs.readFileSync(destination, "utf8"));
+}
+
+function isManagedGitHookContent(text) {
   return text.includes(GUARD_MARKER) && text.includes("git_guard.py");
 }
 
@@ -1542,10 +1545,15 @@ export function doctor(sourceRoot, { targets, rootFor, project = null }) {
   const bridge = path.join(project, ".claude", "CLAUDE.md");
   if (!isFile(bridge)) {
     push("note", "project: no .claude/CLAUDE.md bridge (only written for --claude installs)");
-  } else if (fs.readFileSync(bridge, "utf8") === CLAUDE_BRIDGE) {
-    push("ok", "project: .claude/CLAUDE.md bridge present");
   } else {
-    push("note", "project: .claude/CLAUDE.md exists but is not the managed bridge");
+    const bridgeContent = readProjectFile(bridge, "project: .claude/CLAUDE.md");
+    if (bridgeContent !== null) {
+      if (bridgeContent.toString("utf8") === CLAUDE_BRIDGE) {
+        push("ok", "project: .claude/CLAUDE.md bridge present");
+      } else {
+        push("note", "project: .claude/CLAUDE.md exists but is not the managed bridge");
+      }
+    }
   }
 
   const runtime = path.join(project, HOOKS_DIRECTORY, "runtime");
@@ -1669,18 +1677,23 @@ export function doctor(sourceRoot, { targets, rootFor, project = null }) {
                 `${hooksDir} — run --hooks-refresh-full`
             );
             if (custom) missingFromCustom = true;
-          } else if (!isManagedGitHook(hookPath)) {
-            push("warn", `hooks: ${label} is not a managed GSD Path git hook`);
-          } else if (
-            !INTERPRETER_CANDIDATES.some(
-              (candidate) => fs.readFileSync(hookPath, "utf8") === generator(candidate)
-            )
-          ) {
-            push("warn", `hooks: ${label} is stale — run --hooks-refresh-full`);
-          } else if (!isExecutable(hookPath)) {
-            push("warn", `hooks: ${label} is not executable — run --hooks-refresh-full`);
           } else {
-            push("ok", `hooks: ${label} wired`);
+            const hookContent = readProjectFile(hookPath, `hooks: ${label}`);
+            if (hookContent === null) continue;
+            const hookText = hookContent.toString("utf8");
+            if (!isManagedGitHookContent(hookText)) {
+              push("warn", `hooks: ${label} is not a managed GSD Path git hook`);
+            } else if (
+              !INTERPRETER_CANDIDATES.some(
+                (candidate) => hookText === generator(candidate)
+              )
+            ) {
+              push("warn", `hooks: ${label} is stale — run --hooks-refresh-full`);
+            } else if (!isExecutable(hookPath)) {
+              push("warn", `hooks: ${label} is not executable — run --hooks-refresh-full`);
+            } else {
+              push("ok", `hooks: ${label} wired`);
+            }
           }
         }
         if (missingFromCustom) {
