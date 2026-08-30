@@ -2,6 +2,7 @@
 """Install GSD Path skills for supported coding agents."""
 
 import argparse
+import errno
 import json
 import os
 import re
@@ -58,7 +59,7 @@ PROJECT_STATUS_LAUNCHER = "status_runtime.py"
 PROJECT_STATUS_MARKER = "gsd-path project status launcher"
 INSTALL_LOCK_NAME = ".gsd-path-install-lock"
 INSTALL_LOCK_OWNER = "owner.json"
-INSTALL_LOCK_SCHEMA = "gsd-path/install-lock/v1"
+INSTALL_LOCK_SCHEMA = "gsd-path/install-lock/v2"
 PROJECT_CONTRACTS = (
     ("AGENTS.md", "## Plain-prompt re-entry"),
     ("WORKFLOW.md", "### Plain-prompt re-entry"),
@@ -653,13 +654,88 @@ def _release_install_locks(locks: Sequence[Path], created: Sequence[Path]) -> No
     _remove_empty_directories(created)
 
 
-def _create_install_lock(lock: Path) -> None:
-    if _lexists(lock):
+def _process_identity(pid: int) -> Optional[str]:
+    if os.name == "nt":
+        command = [
+            "powershell.exe",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            f"(Get-Process -Id {pid} -ErrorAction Stop).StartTime.ToUniversalTime().Ticks",
+        ]
+    else:
+        command = ["ps", "-o", "lstart=", "-p", str(pid)]
+    try:
+        result = subprocess.run(command, capture_output=True, text=True, check=False)
+    except OSError:
+        return None
+    value = result.stdout.strip()
+    return f"{os.name}:{value}" if result.returncode == 0 and value else None
+
+
+def _process_alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except OSError as error:
+        return error.errno == errno.EPERM
+    return True
+
+
+def _recover_stale_install_lock(lock: Path) -> None:
+    if not _lexists(lock):
+        return
+    if lock.is_symlink() or not lock.is_dir():
+        raise InstallerError(f"unsafe installation lock: {lock}")
+    try:
+        entries = list(lock.iterdir())
+        owner = json.loads((lock / INSTALL_LOCK_OWNER).read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        raise InstallerError(
+            f"installation already in progress for {lock.parent}"
+        ) from error
+    pid = owner.get("pid")
+    identity = owner.get("identity")
+    valid = (
+        owner.get("schema") == INSTALL_LOCK_SCHEMA
+        and isinstance(pid, int)
+        and not isinstance(pid, bool)
+        and pid > 0
+        and isinstance(identity, str)
+        and identity
+        and len(entries) == 1
+        and entries[0].name == INSTALL_LOCK_OWNER
+    )
+    current_identity = _process_identity(pid) if valid else None
+    if (
+        not valid
+        or current_identity == identity
+        or (current_identity is None and _process_alive(pid))
+    ):
         raise InstallerError(f"installation already in progress for {lock.parent}")
+    quarantine = lock.with_name(f"{lock.name}.stale-{os.getpid()}")
+    try:
+        lock.rename(quarantine)
+    except FileNotFoundError:
+        return
+    shutil.rmtree(quarantine)
+
+
+def _create_install_lock(lock: Path) -> None:
+    _recover_stale_install_lock(lock)
+    identity = _process_identity(os.getpid())
+    if identity is None:
+        raise InstallerError("cannot determine installer process identity")
     staging = Path(tempfile.mkdtemp(prefix=".install-lock-stage-", dir=lock.parent))
     try:
         (staging / INSTALL_LOCK_OWNER).write_text(
-            json.dumps({"schema": INSTALL_LOCK_SCHEMA, "pid": os.getpid()}) + "\n",
+            json.dumps(
+                {
+                    "schema": INSTALL_LOCK_SCHEMA,
+                    "pid": os.getpid(),
+                    "identity": identity,
+                }
+            )
+            + "\n",
             encoding="utf-8",
         )
         staging.rename(lock)

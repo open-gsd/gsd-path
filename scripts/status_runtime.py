@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Launch the project status runtime across an atomic refresh handoff."""
 
-import errno
 import json
 import os
 import subprocess
@@ -11,7 +10,26 @@ from typing import Sequence
 
 PROJECT_STATUS_MARKER = "gsd-path project status launcher"
 INSTALL_LOCK_OWNER = "owner.json"
-INSTALL_LOCK_SCHEMA = "gsd-path/install-lock/v1"
+INSTALL_LOCK_SCHEMA = "gsd-path/install-lock/v2"
+
+
+def process_identity(pid: int):
+    if os.name == "nt":
+        command = [
+            "powershell.exe",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            f"(Get-Process -Id {pid} -ErrorAction Stop).StartTime.ToUniversalTime().Ticks",
+        ]
+    else:
+        command = ["ps", "-o", "lstart=", "-p", str(pid)]
+    try:
+        result = subprocess.run(command, capture_output=True, text=True, check=False)
+    except OSError:
+        return None
+    value = result.stdout.strip()
+    return f"{os.name}:{value}" if result.returncode == 0 and value else None
 
 
 def runtime_identity(runtime: Path):
@@ -31,13 +49,14 @@ def install_lock_active(lock: Path) -> bool:
         return False
     pid = owner.get("pid")
     valid_pid = isinstance(pid, int) and not isinstance(pid, bool) and pid > 0
-    if owner.get("schema") != INSTALL_LOCK_SCHEMA or not valid_pid:
+    identity = owner.get("identity")
+    if (
+        owner.get("schema") != INSTALL_LOCK_SCHEMA
+        or not valid_pid
+        or not isinstance(identity, str)
+    ):
         return False
-    try:
-        os.kill(pid, 0)
-    except OSError as error:
-        return error.errno == errno.EPERM
-    return True
+    return process_identity(pid) == identity
 
 
 def launch(repo: Path) -> int:
@@ -57,10 +76,6 @@ def launch(repo: Path) -> int:
         except OSError as error:
             print(f"GSD Path status runtime failed: {error}", file=sys.stderr)
             return 2
-        if result.returncode == 0:
-            sys.stdout.write(result.stdout.decode())
-            sys.stderr.write(result.stderr.decode())
-            return 0
         if install_lock_active(lock) or runtime_identity(runtime) != before:
             continue
         sys.stdout.write(result.stdout.decode())

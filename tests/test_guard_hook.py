@@ -328,14 +328,16 @@ class GuardHookTests(unittest.TestCase):
                 if len(calls) == 1:
                     runtime.unlink()
                     runtime.write_text("new runtime with a new inode\n", encoding="utf-8")
-                    return subprocess.CompletedProcess(command, 2, b"", b"missing runtime")
-                return subprocess.CompletedProcess(command, 0, b"route\n", b"")
+                    return subprocess.CompletedProcess(command, 0, b"old route\n", b"")
+                return subprocess.CompletedProcess(command, 0, b"new route\n", b"")
 
             with mock.patch.object(status_runtime.subprocess, "run", side_effect=exec_runtime):
-                with contextlib.redirect_stdout(io.StringIO()):
+                output = io.StringIO()
+                with contextlib.redirect_stdout(output):
                     self.assertEqual(0, status_runtime.launch(root))
 
             self.assertEqual(2, len(calls))
+            self.assertEqual("new route\n", output.getvalue())
 
     def test_status_launcher_rejects_stale_refresh_lock(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -348,6 +350,7 @@ class GuardHookTests(unittest.TestCase):
                     {
                         "schema": status_runtime.INSTALL_LOCK_SCHEMA,
                         "pid": os.getpid(),
+                        "identity": status_runtime.process_identity(os.getpid()),
                     }
                 ),
                 encoding="utf-8",
@@ -360,6 +363,7 @@ class GuardHookTests(unittest.TestCase):
                     {
                         "schema": status_runtime.INSTALL_LOCK_SCHEMA,
                         "pid": finished.pid,
+                        "identity": "expired",
                     }
                 ),
                 encoding="utf-8",

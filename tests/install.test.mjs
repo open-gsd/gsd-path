@@ -728,7 +728,23 @@ test("install lock publishes a live owner", async () => {
 
   await runInstall([installer.targetPlan("claude", target)]);
 
-  assert.deepEqual(owner, { schema: "gsd-path/install-lock/v1", pid: process.pid });
+  assert.equal(owner.schema, "gsd-path/install-lock/v2");
+  assert.equal(owner.pid, process.pid);
+  assert.ok(owner.identity);
+  assert.ok(!fs.existsSync(lock));
+});
+
+test("install recovers a stale owned lock", async () => {
+  const target = path.join(root, "stale-owner", "skills");
+  const lock = path.join(path.dirname(target), ".gsd-path-install-lock");
+  fs.mkdirSync(lock, { recursive: true });
+  fs.writeFileSync(path.join(lock, "owner.json"), JSON.stringify({
+    schema: "gsd-path/install-lock/v2", pid: process.pid, identity: "reused-pid",
+  }));
+
+  await runInstall([installer.targetPlan("claude", target)]);
+
+  assert.ok(fs.existsSync(path.join(target, installer.SKILL_NAMES[0])));
   assert.ok(!fs.existsSync(lock));
 });
 

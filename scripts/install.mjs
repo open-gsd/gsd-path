@@ -27,7 +27,7 @@ export const PROJECT_STATUS_LAUNCHER = "status_runtime.py";
 export const PROJECT_STATUS_MARKER = "gsd-path project status launcher";
 const INSTALL_LOCK_NAME = ".gsd-path-install-lock";
 const INSTALL_LOCK_OWNER = "owner.json";
-const INSTALL_LOCK_SCHEMA = "gsd-path/install-lock/v1";
+const INSTALL_LOCK_SCHEMA = "gsd-path/install-lock/v2";
 const PROJECT_CONTRACTS = [
   ["AGENTS.md", "## Plain-prompt re-entry"],
   ["WORKFLOW.md", "### Plain-prompt re-entry"],
@@ -740,15 +740,81 @@ function releaseInstallLocks(locks, createdDirectories) {
   removeEmptyDirectories(createdDirectories);
 }
 
-function createInstallLock(lock) {
-  if (lexists(lock)) {
+function processIdentity(pid) {
+  const windows = process.platform === "win32";
+  const command = windows
+    ? [
+        "powershell.exe",
+        [
+          "-NoProfile",
+          "-NonInteractive",
+          "-Command",
+          `(Get-Process -Id ${pid} -ErrorAction Stop).StartTime.ToUniversalTime().Ticks`,
+        ],
+      ]
+    : ["ps", ["-o", "lstart=", "-p", String(pid)]];
+  const result = spawnSync(command[0], command[1], { encoding: "utf8", windowsHide: true });
+  const value = result.status === 0 ? result.stdout.trim() : "";
+  return value ? `${windows ? "nt" : "posix"}:${value}` : null;
+}
+
+function processAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error.code !== "ESRCH";
+  }
+}
+
+function recoverStaleInstallLock(lock) {
+  if (!lexists(lock)) return;
+  if (isSymlink(lock) || !isDirectory(lock)) {
+    throw new InstallerError(`unsafe installation lock: ${lock}`);
+  }
+  let entries;
+  let owner;
+  try {
+    entries = fs.readdirSync(lock);
+    owner = JSON.parse(fs.readFileSync(path.join(lock, INSTALL_LOCK_OWNER), "utf8"));
+  } catch {
     throw new InstallerError(`installation already in progress for ${path.dirname(lock)}`);
   }
+  const valid =
+    owner.schema === INSTALL_LOCK_SCHEMA &&
+    Number.isInteger(owner.pid) &&
+    owner.pid > 0 &&
+    typeof owner.identity === "string" &&
+    owner.identity &&
+    entries.length === 1 &&
+    entries[0] === INSTALL_LOCK_OWNER;
+  const currentIdentity = valid ? processIdentity(owner.pid) : null;
+  if (
+    !valid ||
+    currentIdentity === owner.identity ||
+    (currentIdentity === null && processAlive(owner.pid))
+  ) {
+    throw new InstallerError(`installation already in progress for ${path.dirname(lock)}`);
+  }
+  const quarantine = `${lock}.stale-${process.pid}`;
+  try {
+    fs.renameSync(lock, quarantine);
+  } catch (error) {
+    if (error.code === "ENOENT") return;
+    throw error;
+  }
+  fs.rmSync(quarantine, { recursive: true });
+}
+
+function createInstallLock(lock) {
+  recoverStaleInstallLock(lock);
+  const identity = processIdentity(process.pid);
+  if (identity === null) throw new InstallerError("cannot determine installer process identity");
   const staging = fs.mkdtempSync(path.join(path.dirname(lock), ".install-lock-stage-"));
   try {
     fs.writeFileSync(
       path.join(staging, INSTALL_LOCK_OWNER),
-      JSON.stringify({ schema: INSTALL_LOCK_SCHEMA, pid: process.pid }) + "\n",
+      JSON.stringify({ schema: INSTALL_LOCK_SCHEMA, pid: process.pid, identity }) + "\n",
       { flag: "wx" }
     );
     fs.renameSync(staging, lock);

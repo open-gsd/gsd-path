@@ -1204,9 +1204,29 @@ class InstallerTests(unittest.TestCase):
         with mock.patch.object(install, "_apply_target", side_effect=inspect_owner):
             install.install(self.source, [install.TargetPlan("claude", target)])
 
-        self.assertEqual(
-            {"schema": install.INSTALL_LOCK_SCHEMA, "pid": os.getpid()}, owner
+        self.assertEqual(install.INSTALL_LOCK_SCHEMA, owner["schema"])
+        self.assertEqual(os.getpid(), owner["pid"])
+        self.assertTrue(owner["identity"])
+        self.assertFalse(lock.exists())
+
+    def test_install_recovers_stale_owned_lock(self):
+        target = self.root / "stale-owner" / "skills"
+        lock = target.parent / install.INSTALL_LOCK_NAME
+        lock.mkdir(parents=True)
+        (lock / install.INSTALL_LOCK_OWNER).write_text(
+            json.dumps(
+                {
+                    "schema": install.INSTALL_LOCK_SCHEMA,
+                    "pid": os.getpid(),
+                    "identity": "reused-pid",
+                }
+            ),
+            encoding="utf-8",
         )
+
+        install.install(self.source, [install.TargetPlan("claude", target)])
+
+        self.assertTrue((target / install.SKILL_NAMES[0]).is_dir())
         self.assertFalse(lock.exists())
 
     def test_failure_restores_cursor_subagent(self):
