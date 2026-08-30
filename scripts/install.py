@@ -1185,6 +1185,14 @@ def _validate_hooks_refresh(
         project / HOOKS_DIRECTORY / "runtime", "project runtime directory"
     )
     refresh_guards = _refreshes_guards(project, full, initialize)
+    runtime_exists = any(
+        _lexists(project / HOOKS_DIRECTORY / "runtime" / name)
+        for name in PROJECT_RUNTIME_SCRIPTS
+    )
+    if not initialize and not refresh_guards and not runtime_exists:
+        raise InstallerError(
+            f"no managed GSD Path hooks or runtime found in project: {project}"
+        )
     if refresh_guards:
         for name in GUARD_SCRIPTS:
             destination = project / HOOKS_DIRECTORY / name
@@ -1478,9 +1486,10 @@ def _validated_project_state(source_root: Path, project: Path) -> dict:
     validator = source_root / "scripts" / "pipeline_state.py"
     if validator.is_symlink() or not validator.is_file():
         raise InstallerError(f"canonical state validator is unavailable: {validator}")
+    interpreter = _required_python_runtime("--doctor")
     try:
         result = subprocess.run(
-            [sys.executable, "-B", str(validator), "validate", "--repo", str(project)],
+            [interpreter, "-B", str(validator), "validate", "--repo", str(project)],
             cwd=project,
             capture_output=True,
             text=True,

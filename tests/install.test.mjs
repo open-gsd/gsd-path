@@ -1355,6 +1355,18 @@ test("hooks refresh rejects unmanaged guard scripts", async () => {
   assert.equal(status, 1);
 });
 
+test("hooks refresh rejects a project without managed ownership", async () => {
+  const project = path.join(root, "unowned-project");
+  fs.mkdirSync(project);
+
+  const status = await installer.main(
+    ["--hooks-refresh", "--project", project, "--source-root", source, "--no-color"]
+  );
+
+  assert.equal(status, 1);
+  assert.ok(!fs.existsSync(path.join(project, installer.HOOKS_DIRECTORY)));
+});
+
 test("hooks refresh rejects an unmanaged project runtime", async () => {
   const project = path.join(root, "project");
   fs.mkdirSync(path.join(project, ".git"), { recursive: true });

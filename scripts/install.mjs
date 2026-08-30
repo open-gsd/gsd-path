@@ -1249,6 +1249,14 @@ function validateHooksRefresh(sourceRoot, project, full, hooksDir, selected, ini
     "project runtime directory"
   );
   const refreshGuards = refreshesGuards(project, full, initialize);
+  const runtimeExists = PROJECT_RUNTIME_SCRIPTS.some((name) =>
+    lexists(path.join(project, HOOKS_DIRECTORY, "runtime", name))
+  );
+  if (!initialize && !refreshGuards && !runtimeExists) {
+    throw new InstallerError(
+      `no managed GSD Path hooks or runtime found in project: ${project}`
+    );
+  }
   if (refreshGuards) {
     for (const name of GUARD_SCRIPTS) {
       const destination = path.join(project, HOOKS_DIRECTORY, name);

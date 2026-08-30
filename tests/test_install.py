@@ -1621,6 +1621,24 @@ class InstallerTests(unittest.TestCase):
         )
         self.assertTrue(target.exists())
 
+    def test_hooks_refresh_rejects_project_without_managed_ownership(self):
+        project = self.root / "unowned-project"
+        project.mkdir()
+
+        status, _, error = self.run_main(
+            [
+                "--hooks-refresh",
+                "--project",
+                str(project),
+                "--source-root",
+                str(self.source),
+            ]
+        )
+
+        self.assertEqual(1, status)
+        self.assertIn("no managed GSD Path hooks or runtime", error)
+        self.assertFalse((project / install.HOOKS_DIRECTORY).exists())
+
     def test_hooks_refresh_updates_runtime_without_optional_guards(self):
         project = self.root / "hookless-project"
         target = self.root / "claude" / "skills"
@@ -2051,6 +2069,26 @@ class InstallerTests(unittest.TestCase):
             )
         )
         self.assertFalse((self.source / "scripts" / "__pycache__").exists())
+
+    def test_doctor_uses_the_reentry_interpreter_probe(self):
+        project = self.root / "doctor-without-path-python"
+        state = project / ".project" / "STATE.md"
+        state.parent.mkdir(parents=True)
+        state.write_text("owned\n", encoding="utf-8")
+
+        with mock.patch.dict(os.environ, {"PATH": ""}):
+            findings = install.doctor(
+                self.source, [], lambda _target: Path(), project
+            )
+
+        self.assertTrue(
+            any(
+                finding["level"] == "fail"
+                and "--doctor requires a working Python interpreter"
+                in finding["text"]
+                for finding in findings
+            )
+        )
 
     def test_doctor_entrypoint_does_not_write_import_bytecode(self):
         entrypoint = self.root / "doctor-entrypoint"
