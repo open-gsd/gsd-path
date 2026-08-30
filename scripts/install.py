@@ -679,9 +679,7 @@ def _process_alive(pid: int) -> bool:
     return True
 
 
-def _recover_stale_install_lock(lock: Path) -> Optional[Path]:
-    if not _lexists(lock):
-        return None
+def _stale_install_lock_snapshot(lock: Path) -> Tuple[os.stat_result, bytes]:
     if lock.is_symlink() or not lock.is_dir():
         raise InstallerError(f"unsafe installation lock: {lock}")
     try:
@@ -712,9 +710,20 @@ def _recover_stale_install_lock(lock: Path) -> Optional[Path]:
         or (current_identity is None and _process_alive(pid))
     ):
         raise InstallerError(f"installation already in progress for {lock.parent}")
+    return observed, owner_bytes
+
+
+def _recover_stale_install_lock(lock: Path) -> Optional[Path]:
     quarantine = lock.with_name(f"{lock.name}.stale")
+    if not _lexists(lock):
+        if _lexists(quarantine):
+            _stale_install_lock_snapshot(quarantine)
+            shutil.rmtree(quarantine)
+        return None
+    observed, owner_bytes = _stale_install_lock_snapshot(lock)
     if _lexists(quarantine):
-        raise InstallerError(f"installation already in progress for {lock.parent}")
+        _stale_install_lock_snapshot(quarantine)
+        shutil.rmtree(quarantine)
     try:
         lock.rename(quarantine)
     except (FileNotFoundError, FileExistsError) as error:
@@ -1018,10 +1027,13 @@ def _existing_contract_error(destination: Path) -> "InstallerError":
 
 
 def _validate_project_git_root(project: Path) -> None:
+    probe = project
+    while not _lexists(probe):
+        probe = probe.parent
     try:
         result = subprocess.run(
             ["git", "rev-parse", "--show-toplevel"],
-            cwd=project,
+            cwd=probe,
             capture_output=True,
             text=True,
             check=False,

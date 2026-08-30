@@ -44,6 +44,10 @@ PATCH_PATH_PATTERN = re.compile(
     r"^\*\*\* (?:Add|Update|Delete) File: (.+)$|^\*\*\* Move to: (.+)$",
     re.MULTILINE,
 )
+UNIFIED_DIFF_PATH_PATTERN = re.compile(
+    r"^(?:---|\+\+\+) (?:[ab]/)?([^\t\r\n]+)$", re.MULTILINE
+)
+
 # A tool skips path checks only when its name carries a read-only verb and
 # no write-capable verb: `get_and_write` must still be path-checked.
 READ_VERBS = frozenset(
@@ -808,6 +812,10 @@ def unresolved_archive_expansion(command, tokens, working_directories):
 def patch_paths(payload):
     for match in PATCH_PATH_PATTERN.finditer(payload):
         yield (match.group(1) or match.group(2)).strip()
+    for match in UNIFIED_DIFF_PATH_PATTERN.finditer(payload):
+        path = match.group(1).strip()
+        if path != "/dev/null":
+            yield path
 
 
 def shell_tokens(command):
@@ -1164,7 +1172,7 @@ def evaluate(event):
         extracted_patch_paths = [
             path for payload in patch_payloads for path in patch_paths(payload)
         ]
-        if is_patch_tool(tool) and not paths and not extracted_patch_paths:
+        if patch_payloads and not paths and not extracted_patch_paths:
             raise ValueError("patch targets cannot be validated")
         for path in extracted_patch_paths:
             if path_in_archive(path, working_directories):

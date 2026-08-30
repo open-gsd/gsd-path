@@ -460,8 +460,10 @@ function samePath(left, right) {
 }
 
 function validateProjectGitRoot(project) {
+  let probe = project;
+  while (!lexists(probe)) probe = path.dirname(probe);
   const result = spawnSync("git", ["rev-parse", "--show-toplevel"], {
-    cwd: project,
+    cwd: probe,
     encoding: "utf8",
     env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
   });
@@ -778,8 +780,7 @@ function processAlive(pid) {
   }
 }
 
-function recoverStaleInstallLock(lock) {
-  if (!lexists(lock)) return null;
+function staleInstallLockSnapshot(lock) {
   if (isSymlink(lock) || !isDirectory(lock)) {
     throw new InstallerError(`unsafe installation lock: ${lock}`);
   }
@@ -811,9 +812,22 @@ function recoverStaleInstallLock(lock) {
   ) {
     throw new InstallerError(`installation already in progress for ${path.dirname(lock)}`);
   }
+  return { observed, ownerBytes };
+}
+
+function recoverStaleInstallLock(lock) {
   const quarantine = `${lock}.stale`;
+  if (!lexists(lock)) {
+    if (lexists(quarantine)) {
+      staleInstallLockSnapshot(quarantine);
+      fs.rmSync(quarantine, { recursive: true });
+    }
+    return null;
+  }
+  const { observed, ownerBytes } = staleInstallLockSnapshot(lock);
   if (lexists(quarantine)) {
-    throw new InstallerError(`installation already in progress for ${path.dirname(lock)}`);
+    staleInstallLockSnapshot(quarantine);
+    fs.rmSync(quarantine, { recursive: true });
   }
   try {
     hooks.renameInstallLock(lock, quarantine);
@@ -1594,18 +1608,18 @@ function publishProjectRuntime(sourceRoot, project, refreshGuards) {
     if (refreshGuards) {
       for (const name of GUARD_SCRIPTS) {
         const destination = path.join(parent, name);
-        guardOriginals.push([
-          destination,
-          lexists(destination) ? fs.readFileSync(destination) : null,
-        ]);
+        const original = lexists(destination) ? fs.readFileSync(destination) : null;
+        const mode =
+          original === null ? undefined : fs.statSync(destination).mode & 0o777;
+        guardOriginals.push([destination, original, mode]);
         hooks.copyGuardFile(path.join(sourceRoot, "scripts", name), destination);
       }
     }
     if (movedPrevious) removePath(previous);
   } catch (error) {
-    for (const [destination, original] of guardOriginals.reverse()) {
+    for (const [destination, original, mode] of guardOriginals.reverse()) {
       if (original === null) removePath(destination);
-      else writeFileAtomic(destination, original);
+      else writeFileAtomic(destination, original, mode);
     }
     if (launcherOriginal === null) removePath(launcher);
     else writeFileAtomic(launcher, launcherOriginal, launcherMode);

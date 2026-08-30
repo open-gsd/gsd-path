@@ -796,6 +796,31 @@ class InstallerTests(unittest.TestCase):
         self.assertIn(f"would install {len(install.SKILL_NAMES)} skills", output)
         self.assertIn(".claude/CLAUDE.md", output)
 
+    def test_dry_run_rejects_a_missing_project_nested_in_git(self):
+        repository = self.root / "dry-repository"
+        repository.mkdir()
+        subprocess.run(["git", "init", "-q"], cwd=repository, check=True)
+        project = repository / "missing" / "project"
+        target = self.root / "dry-nested-target" / "skills"
+
+        status, _, error = self.run_main(
+            [
+                "--claude",
+                "--claude-root",
+                str(target),
+                "--source-root",
+                str(self.source),
+                "--project",
+                str(project),
+                "--dry-run",
+            ]
+        )
+
+        self.assertEqual(1, status)
+        self.assertIn("not the Git worktree root", error)
+        self.assertFalse(project.exists())
+        self.assertFalse(target.exists())
+
     def test_dry_run_reports_the_registered_skill_count(self):
         extra_name = "gsd-path-extra"
         shutil.copytree(
@@ -1252,6 +1277,27 @@ class InstallerTests(unittest.TestCase):
 
         self.assertTrue((target / install.SKILL_NAMES[0]).is_dir())
         self.assertFalse(lock.exists())
+
+    def test_install_reclaims_an_orphaned_stale_quarantine(self):
+        target = self.root / "orphaned-quarantine" / "skills"
+        lock = target.parent / install.INSTALL_LOCK_NAME
+        quarantine = lock.with_name(f"{lock.name}.stale")
+        quarantine.mkdir(parents=True)
+        (quarantine / install.INSTALL_LOCK_OWNER).write_text(
+            json.dumps(
+                {
+                    "schema": install.INSTALL_LOCK_SCHEMA,
+                    "pid": os.getpid(),
+                    "identity": "reused-pid",
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        install.install(self.source, [install.TargetPlan("claude", target)])
+
+        self.assertTrue((target / install.SKILL_NAMES[0]).is_dir())
+        self.assertFalse(quarantine.exists())
 
     def test_stale_lock_recovery_preserves_a_replacement_owner(self):
         target = self.root / "raced-stale-owner" / "skills"

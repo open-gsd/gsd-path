@@ -105,7 +105,9 @@ class GuardHookTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             (root / ".project").mkdir()
-            (root / ".project" / "STATE.md").write_text("owned\n", encoding="utf-8")
+            (root / ".project" / "STATE.md").write_text(
+                "owned\n", encoding="utf-8"
+            )
             with (
                 mock.patch.object(guard_hook, "repository_root", return_value=root),
                 mock.patch.object(
@@ -703,6 +705,29 @@ class GuardHookTests(unittest.TestCase):
                         "tool_input": {
                             "patch": "*** Update File: .project/STATE.md\n"
                             "*** Update File: src/app.py\n"
+                        },
+                    }
+                )
+
+    def test_plain_prompt_denies_standard_unified_diff(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / ".project").mkdir()
+            (root / ".project" / "STATE.md").write_text("owned\n", encoding="utf-8")
+            with (
+                mock.patch.object(guard_hook, "repository_root", return_value=root),
+                mock.patch.object(
+                    guard_hook, "project_status", return_value=self.status(root)
+                ),
+            ):
+                self.assert_denied(
+                    {
+                        "tool_name": "ApplyDiff",
+                        "tool_input": {
+                            "diff": (
+                                "--- a/src/app.py\n+++ b/src/app.py\n"
+                                "@@ -1 +1 @@\n-old\n+new\n"
+                            )
                         },
                     }
                 )

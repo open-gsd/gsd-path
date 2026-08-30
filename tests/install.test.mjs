@@ -386,6 +386,21 @@ test("project install rejects a nested Git directory", async () => {
   assert.deepEqual(fs.readdirSync(project), []);
 });
 
+test("dry run rejects a missing project nested in Git", async () => {
+  const repository = path.join(root, "dry-repository");
+  const project = path.join(repository, "missing", "project");
+  const target = path.join(root, "dry-nested-target", "skills");
+  fs.mkdirSync(repository);
+  spawnSync("git", ["init", "-q"], { cwd: repository });
+
+  await assert.rejects(
+    runInstall([installer.targetPlan("claude", target)], { project, dryRun: true }),
+    /not the Git worktree root/
+  );
+  assert.ok(!fs.existsSync(project));
+  assert.ok(!fs.existsSync(target));
+});
+
 test("codex dry run validates the resolved shared profile from the real repository", async () => {
   const target = path.join(root, "real-codex", "skills");
 
@@ -761,6 +776,26 @@ test("install recovers a stale owned lock", async () => {
 
   assert.ok(fs.existsSync(path.join(target, installer.SKILL_NAMES[0])));
   assert.ok(!fs.existsSync(lock));
+});
+
+test("install reclaims an orphaned stale quarantine", async () => {
+  const target = path.join(root, "orphaned-quarantine", "skills");
+  const lock = path.join(path.dirname(target), ".gsd-path-install-lock");
+  const quarantine = `${lock}.stale`;
+  fs.mkdirSync(quarantine, { recursive: true });
+  fs.writeFileSync(
+    path.join(quarantine, "owner.json"),
+    JSON.stringify({
+      schema: "gsd-path/install-lock/v2",
+      pid: process.pid,
+      identity: "reused-pid",
+    })
+  );
+
+  await runInstall([installer.targetPlan("claude", target)]);
+
+  assert.ok(fs.existsSync(path.join(target, installer.SKILL_NAMES[0])));
+  assert.ok(!fs.existsSync(quarantine));
 });
 
 test("stale lock recovery preserves a replacement owner", async () => {
@@ -1620,9 +1655,14 @@ test("guard failure rolls back the published runtime and guards", async () => {
   fs.rmSync(runtime, { recursive: true });
   const guard = path.join(project, installer.HOOKS_DIRECTORY, "guard_hook.py");
   const before = fs.readFileSync(guard);
+  fs.chmodSync(guard, 0o600);
   fs.writeFileSync(path.join(source, "scripts", "guard_hook.py"), `# changed\n${installer.GUARD_MARKER}\n`);
-  installer.hooks.copyGuardFile = () => {
-    throw new Error("injected guard failure");
+  let guardCopies = 0;
+  installer.hooks.copyGuardFile = (sourceFile, destination) => {
+    guardCopies += 1;
+    if (guardCopies === 2) throw new Error("injected guard failure");
+    originalHooks.copyGuardFile(sourceFile, destination);
+    fs.chmodSync(destination, 0o755);
   };
 
   const status = await installer.main(
@@ -1631,6 +1671,7 @@ test("guard failure rolls back the published runtime and guards", async () => {
 
   assert.equal(status, 1);
   assert.ok(fs.readFileSync(guard).equals(before));
+  assert.equal(fs.statSync(guard).mode & 0o777, 0o600);
   assert.ok(!fs.existsSync(runtime));
 });
 
