@@ -97,6 +97,37 @@ STATUS_ACTIONS = frozenset(
         "wait",
     }
 )
+STATUS_PHASES = frozenset(
+    {
+        "inspect",
+        "define",
+        "research",
+        "decide",
+        "roadmap",
+        "plan",
+        "build",
+        "ship",
+        "shipped",
+    }
+)
+STATUS_VALUES = frozenset({"active", "done", "blocked"})
+STATUS_STATE_FIELDS = frozenset(
+    {"pipeline", "project", "milestone", "phase", "status", "branch", "archive"}
+)
+STATUS_SLUG = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+STATUS_BRANCH = re.compile(r"^gsd-path/M(\d{3,})$")
+STATUS_ARCHIVE = re.compile(r"^\.project/archive/(\d{3,})-([a-z0-9][a-z0-9-]*)/?$")
+STATUS_TRANSITIONS = {
+    "inspect": frozenset({"inspect", "define"}),
+    "define": frozenset({"define", "research", "plan"}),
+    "research": frozenset({"research", "decide"}),
+    "decide": frozenset({"decide", "roadmap", "plan"}),
+    "roadmap": frozenset({"roadmap", "define"}),
+    "plan": frozenset({"plan", "build"}),
+    "build": frozenset({"build"}),
+    "ship": frozenset({"ship", "plan"}),
+    "shipped": frozenset({"ship"}),
+}
 ARCHIVE_REFERENCE = re.compile(r"(?i:\.project[\\/]archive)")
 ARCHIVE_READ_COMMANDS = frozenset(
     {
@@ -333,10 +364,7 @@ def valid_status_payload(payload, repo):
     if (
         payload.get("advance") is not False
         or not isinstance(state, dict)
-        or not isinstance(state.get("phase"), str)
-        or not state["phase"]
-        or not isinstance(state.get("status"), str)
-        or not state["status"]
+        or not valid_status_state(state)
         or not isinstance(route, dict)
         or route.get("action") not in STATUS_ACTIONS
         or not isinstance(route.get("reason"), str)
@@ -352,9 +380,29 @@ def valid_status_payload(payload, repo):
         phase = route.get("phase")
         return (
             isinstance(phase, str)
-            and bool(phase)
+            and phase in STATUS_TRANSITIONS[state["phase"]]
+            and state["branch"] is not None
             and next_skill == f"gsd-path-{phase}"
         )
+    if "phase" in route:
+        return False
+    if action == "bind-initial":
+        return (
+            state["branch"] is None
+            and isinstance(route.get("branch"), str)
+            and valid_status_branch(route["branch"]) is not None
+            and next_skill == "gsd-path"
+        )
+    if state["branch"] is None:
+        return False
+    if action == "validate-integrated" and not (
+        state["phase"] == "shipped" and state["status"] == "done"
+    ):
+        return False
+    if action == "wait" and not (
+        state["phase"] == "plan" and state["status"] == "done"
+    ):
+        return False
     if action == "resume-undo":
         expected = "gsd-path-undo"
     elif action == "wait":
@@ -362,6 +410,61 @@ def valid_status_payload(payload, repo):
     else:
         expected = "gsd-path"
     return next_skill == expected
+
+
+def valid_status_state(state):
+    if set(state) != STATUS_STATE_FIELDS:
+        return False
+    milestone = state["milestone"]
+    branch = state["branch"]
+    archive = state["archive"]
+    archive_match = (
+        STATUS_ARCHIVE.fullmatch(archive or "")
+        if isinstance(archive, (str, type(None)))
+        else None
+    )
+    if (
+        state["pipeline"] != "gsd-path/v2"
+        or not isinstance(state["project"], str)
+        or STATUS_SLUG.fullmatch(state["project"]) is None
+        or not (
+            milestone is None
+            or isinstance(milestone, str)
+            and STATUS_SLUG.fullmatch(milestone) is not None
+        )
+        or not isinstance(state["phase"], str)
+        or state["phase"] not in STATUS_PHASES
+        or not isinstance(state["status"], str)
+        or state["status"] not in STATUS_VALUES
+        or not (
+            branch is None
+            or isinstance(branch, str)
+            and valid_status_branch(branch) is not None
+        )
+        or not (archive is None or archive_match is not None)
+    ):
+        return False
+    if state["phase"] == "shipped" and (
+        state["status"] != "done" or archive is None
+    ):
+        return False
+    if archive is not None and state["phase"] not in {"build", "ship", "shipped"}:
+        return False
+    if state["phase"] in {"ship", "shipped"} and branch is None:
+        return False
+    if archive_match is not None:
+        branch_match = valid_status_branch(branch)
+        return (
+            milestone == archive_match.group(2)
+            and branch_match is not None
+            and int(branch_match.group(1)) == int(archive_match.group(1))
+        )
+    return True
+
+
+def valid_status_branch(value):
+    match = STATUS_BRANCH.fullmatch(value) if isinstance(value, str) else None
+    return match if match is not None and int(match.group(1)) >= 1 else None
 
 
 def pipeline_control_path(path, working_directories, repo):

@@ -84,6 +84,8 @@ unpublished work; it never invents `git reset`.
 
 ### Plain-prompt re-entry
 
+<!-- gsd-path/plain-prompt-reentry/v1 -->
+
 Project installs include the router's read-only status engine at
 `.gsd-path/runtime/`. On any turn that did not explicitly invoke a GSD Path
 skill, an owned `.project/STATE.md` activates re-entry. Informational prompts

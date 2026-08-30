@@ -24,9 +24,10 @@ export const PROJECT_RUNTIME_SCRIPTS = [
 ];
 export const PROJECT_RUNTIME_MARKER = "gsd-path project runtime";
 const INSTALL_LOCK_NAME = ".gsd-path-install-lock";
+const PLAIN_REENTRY_CONTRACT = "<!-- gsd-path/plain-prompt-reentry/v1 -->";
 const PROJECT_CONTRACTS = [
-  ["AGENTS.md", ["# AGENTS.md — Operating Rules for the GSD Path Pipeline", "## Plain-prompt re-entry"]],
-  ["WORKFLOW.md", ["# WORKFLOW.md — GSD Path Pipeline SOP", "### Plain-prompt re-entry"]],
+  ["AGENTS.md", ["# AGENTS.md — Operating Rules for the GSD Path Pipeline", "## Plain-prompt re-entry", PLAIN_REENTRY_CONTRACT]],
+  ["WORKFLOW.md", ["# WORKFLOW.md — GSD Path Pipeline SOP", "### Plain-prompt re-entry", PLAIN_REENTRY_CONTRACT]],
 ];
 const STATUS_ACTIONS = new Set([
   "bind-initial",
@@ -40,6 +41,23 @@ const STATUS_ACTIONS = new Set([
   "validate-integrated",
   "wait",
 ]);
+const STATUS_PHASES = new Set(["inspect", "define", "research", "decide", "roadmap", "plan", "build", "ship", "shipped"]);
+const STATUS_VALUES = new Set(["active", "done", "blocked"]);
+const STATUS_STATE_FIELDS = ["archive", "branch", "milestone", "phase", "pipeline", "project", "status"];
+const STATUS_TRANSITIONS = new Map([
+  ["inspect", new Set(["inspect", "define"])],
+  ["define", new Set(["define", "research", "plan"])],
+  ["research", new Set(["research", "decide"])],
+  ["decide", new Set(["decide", "roadmap", "plan"])],
+  ["roadmap", new Set(["roadmap", "define"])],
+  ["plan", new Set(["plan", "build"])],
+  ["build", new Set(["build"])],
+  ["ship", new Set(["ship", "plan"])],
+  ["shipped", new Set(["ship"])],
+]);
+const STATUS_SLUG = /^[a-z0-9][a-z0-9-]*$/;
+const STATUS_BRANCH = /^gsd-path\/M(\d{3,})$/;
+const STATUS_ARCHIVE = /^\.project\/archive\/(\d{3,})-([a-z0-9][a-z0-9-]*)\/?$/;
 export const CLAUDE_MATCHER =
   "Edit|Write|MultiEdit|NotebookEdit|Delete|StrReplace|ApplyPatch|Create|Shell|Bash|PowerShell";
 // The managed PreToolUse guard entry, as an object.
@@ -1586,10 +1604,7 @@ function validStatusPayload(payload, project) {
     payload.advance !== false ||
     !state ||
     typeof state !== "object" ||
-    typeof state.phase !== "string" ||
-    !state.phase ||
-    typeof state.status !== "string" ||
-    !state.status ||
+    !validStatusState(state) ||
     !route ||
     typeof route !== "object" ||
     !STATUS_ACTIONS.has(route.action) ||
@@ -1603,14 +1618,64 @@ function validStatusPayload(payload, project) {
   }
   let expectedNextSkill = null;
   if (route.action === "run-phase") {
-    if (typeof route.phase !== "string" || !route.phase) return false;
+    if (
+      typeof route.phase !== "string" ||
+      !STATUS_TRANSITIONS.get(state.phase).has(route.phase) ||
+      state.branch === null
+    ) return false;
     expectedNextSkill = `gsd-path-${route.phase}`;
+  } else if (Object.hasOwn(route, "phase")) {
+    return false;
+  } else if (route.action === "bind-initial") {
+    return (
+      state.branch === null &&
+      typeof route.branch === "string" &&
+      validStatusBranch(route.branch) !== null &&
+      payload.next_skill === "gsd-path"
+    );
   } else if (route.action === "resume-undo") {
     expectedNextSkill = "gsd-path-undo";
   } else if (route.action !== "wait") {
     expectedNextSkill = "gsd-path";
   }
+  if (state.branch === null) return false;
+  if (route.action === "validate-integrated" && !(state.phase === "shipped" && state.status === "done")) return false;
+  if (route.action === "wait" && !(state.phase === "plan" && state.status === "done")) return false;
   return payload.next_skill === expectedNextSkill;
+}
+
+function validStatusState(state) {
+  if (Object.keys(state).sort().join("\0") !== STATUS_STATE_FIELDS.join("\0")) return false;
+  const archiveMatch = typeof state.archive === "string" ? STATUS_ARCHIVE.exec(state.archive) : null;
+  if (
+    state.pipeline !== "gsd-path/v2" ||
+    typeof state.project !== "string" ||
+    !STATUS_SLUG.test(state.project) ||
+    !(state.milestone === null || typeof state.milestone === "string" && STATUS_SLUG.test(state.milestone)) ||
+    !STATUS_PHASES.has(state.phase) ||
+    !STATUS_VALUES.has(state.status) ||
+    !(state.branch === null || validStatusBranch(state.branch) !== null) ||
+    !(state.archive === null || archiveMatch)
+  ) return false;
+  if (state.phase === "shipped" && (state.status !== "done" || state.archive === null)) return false;
+  if (
+    state.archive !== null &&
+    state.phase !== "build" &&
+    state.phase !== "ship" &&
+    state.phase !== "shipped"
+  ) return false;
+  if ((state.phase === "ship" || state.phase === "shipped") && state.branch === null) return false;
+  if (archiveMatch) {
+    const branchMatch = validStatusBranch(state.branch);
+    return state.milestone === archiveMatch[2] && branchMatch !== null && Number(branchMatch[1]) === Number(archiveMatch[1]);
+  }
+  return true;
+}
+
+function validStatusBranch(value) {
+  if (typeof value !== "string") return null;
+  const match = STATUS_BRANCH.exec(value);
+  return match !== null && Number(match[1]) >= 1 ? match : null;
 }
 
 function isExecutable(candidate) {
@@ -2159,15 +2224,18 @@ export async function install(sourceRoot, plans, options = {}) {
   }
 
   if (project !== null) {
-    validateProject(
-      sourceRoot,
-      project,
-      selected,
-      hooksEnabled,
-      [...mutationRoots, ...plannedBackups],
-      interpreter,
-      hooksDir
-    );
+    validateDirectoryDestination(project, "project path");
+    if (dryRun) {
+      validateProject(
+        sourceRoot,
+        project,
+        selected,
+        hooksEnabled,
+        [...mutationRoots, ...plannedBackups],
+        interpreter,
+        hooksDir
+      );
+    }
   }
 
   const results = [];
@@ -2204,10 +2272,22 @@ export async function install(sourceRoot, plans, options = {}) {
 
     const lockRoots = deployments.map((plan) => plan.root);
     if (legacyRoot !== null && isDirectory(legacyRoot)) lockRoots.push(legacyRoot);
+    if (project !== null) lockRoots.push(path.join(project, HOOKS_DIRECTORY));
     const ownership = acquireInstallLocks(lockRoots);
     const targetTransactions = [];
     const projectTransaction = { createdDirectories: [], copied: [], replaced: [] };
     try {
+      if (project !== null) {
+        validateProject(
+          sourceRoot,
+          project,
+          selected,
+          hooksEnabled,
+          [...mutationRoots, ...plannedBackups],
+          interpreter,
+          hooksDir
+        );
+      }
       if (legacyRoot !== null && isDirectory(legacyRoot)) {
         await progress("Backing up legacy Codex skills");
         const legacyTransaction = {

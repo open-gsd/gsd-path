@@ -90,6 +90,8 @@ full-repo suite on a tiny edit outrank the phase brief.
 
 ## Plain-prompt re-entry
 
+<!-- gsd-path/plain-prompt-reentry/v1 -->
+
 - On a turn that did not explicitly invoke a GSD Path skill, check for
   `.project/STATE.md`. When it exists, first select the compatible interpreter:
   probe `python3 -B -c "import sys; raise SystemExit(sys.version_info < (3, 9))"`,

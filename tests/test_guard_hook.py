@@ -36,15 +36,25 @@ def run_guard(payload):
 class GuardHookTests(unittest.TestCase):
     def status(self, root, phase="plan", action="run-phase", route_phase=None):
         route_phase = route_phase or phase
+        route = {
+            "action": action,
+            "reason": f"state is {phase}/active",
+        }
+        if action == "run-phase":
+            route["phase"] = route_phase
         return {
             "schema": "gsd-path/status/v1",
             "advance": False,
-            "state": {"phase": phase, "status": "active"},
-            "route": {
-                "action": action,
-                "phase": route_phase,
-                "reason": f"state is {phase}/active",
+            "state": {
+                "pipeline": "gsd-path/v2",
+                "project": "demo",
+                "milestone": "demo",
+                "phase": phase,
+                "status": "active",
+                "branch": "gsd-path/M001",
+                "archive": None,
             },
+            "route": route,
             "path": str(root / ".project" / "STATE.md"),
             "next_skill": (
                 f"gsd-path-{route_phase}" if action == "run-phase" else "gsd-path"
@@ -177,6 +187,18 @@ class GuardHookTests(unittest.TestCase):
             root = Path(temporary)
             result = subprocess.CompletedProcess(
                 [], 0, stdout='{"schema":"gsd-path/status/v1"}\n', stderr=""
+            )
+            with mock.patch.object(guard_hook.subprocess, "run", return_value=result):
+                with self.assertRaisesRegex(ValueError, "invalid payload"):
+                    guard_hook.project_status(root)
+
+    def test_project_status_rejects_semantically_invalid_build_state(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            payload = self.status(root, phase="build")
+            payload["state"]["status"] = "invented"
+            result = subprocess.CompletedProcess(
+                [], 0, stdout=json.dumps(payload), stderr=""
             )
             with mock.patch.object(guard_hook.subprocess, "run", return_value=result):
                 with self.assertRaisesRegex(ValueError, "invalid payload"):

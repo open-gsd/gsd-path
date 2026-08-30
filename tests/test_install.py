@@ -26,12 +26,14 @@ class InstallerTests(unittest.TestCase):
         (self.source / "skills").mkdir(parents=True)
         (self.source / "AGENTS.md").write_text(
             "# AGENTS.md — Operating Rules for the GSD Path Pipeline\n\n"
-            "## Plain-prompt re-entry\n",
+            "## Plain-prompt re-entry\n\n"
+            "<!-- gsd-path/plain-prompt-reentry/v1 -->\n",
             encoding="utf-8",
         )
         (self.source / "WORKFLOW.md").write_text(
             "# WORKFLOW.md — GSD Path Pipeline SOP\n\n"
-            "### Plain-prompt re-entry\n",
+            "### Plain-prompt re-entry\n\n"
+            "<!-- gsd-path/plain-prompt-reentry/v1 -->\n",
             encoding="utf-8",
         )
         (self.source / "package.json").write_text(
@@ -1701,15 +1703,18 @@ class InstallerTests(unittest.TestCase):
         )
         self.assertFalse((project / install.HOOKS_DIRECTORY / "guard_hook.py").exists())
 
-    def test_refresh_and_doctor_reject_legacy_contracts_without_reentry(self):
+    def test_refresh_and_doctor_reject_heading_only_legacy_contracts(self):
         project = self.root / "stale-legacy-project"
         project.mkdir()
         (project / "AGENTS.md").write_text(
-            "# AGENTS.md — Operating Rules for the GSD Path Pipeline\n",
+            "# AGENTS.md — Operating Rules for the GSD Path Pipeline\n\n"
+            "## Plain-prompt re-entry\n",
             encoding="utf-8",
         )
         (project / "WORKFLOW.md").write_text(
-            "# WORKFLOW.md — GSD Path Pipeline SOP\n", encoding="utf-8"
+            "# WORKFLOW.md — GSD Path Pipeline SOP\n\n"
+            "### Plain-prompt re-entry\n",
+            encoding="utf-8",
         )
 
         status, _, error = self.run_main(
@@ -1745,6 +1750,29 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(1, status)
         self.assertIn("already in progress", error)
         self.assertEqual(before, runtime.read_bytes())
+
+    def test_project_install_honors_project_ownership_lock(self):
+        project = self.root / "locked-install-project"
+        target = self.root / "locked-install-claude" / "skills"
+        project.mkdir()
+        (project / ".gsd-path-install-lock").mkdir()
+
+        status, _, error = self.run_main(
+            [
+                "--claude",
+                "--claude-root",
+                str(target),
+                "--source-root",
+                str(self.source),
+                "--project",
+                str(project),
+            ]
+        )
+
+        self.assertEqual(1, status)
+        self.assertIn("installation already in progress", error)
+        self.assertFalse((project / "AGENTS.md").exists())
+        self.assertFalse(target.exists())
 
     def test_runtime_refresh_restores_prior_set_after_copy_failure(self):
         project = self.root / "transactional-runtime-project"
@@ -2131,8 +2159,28 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(1, status)
         self.assertIn("project runtime status failed", error)
         runtime_script.write_bytes(original_runtime)
+        invalid_status = {
+            "schema": "gsd-path/status/v1",
+            "advance": False,
+            "state": {
+                "pipeline": "gsd-path/v2",
+                "project": "demo",
+                "milestone": "demo",
+                "phase": "build",
+                "status": "invented",
+                "branch": "gsd-path/M001",
+                "archive": None,
+            },
+            "route": {
+                "action": "run-phase",
+                "phase": "build",
+                "reason": "state is build/invented",
+            },
+            "path": str(project / ".project" / "STATE.md"),
+            "next_skill": "gsd-path-build",
+        }
         runtime_script.write_text(
-            'print("{\\"schema\\":\\"gsd-path/status/v1\\"}")\n'
+            f"print({json.dumps(json.dumps(invalid_status))})\n"
             f"# {install.PROJECT_RUNTIME_MARKER}\n",
             encoding="utf-8",
         )

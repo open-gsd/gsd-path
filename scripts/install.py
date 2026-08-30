@@ -55,12 +55,14 @@ PROJECT_RUNTIME_SCRIPTS = (
 )
 PROJECT_RUNTIME_MARKER = "gsd-path project runtime"
 INSTALL_LOCK_NAME = ".gsd-path-install-lock"
+PLAIN_REENTRY_CONTRACT = "<!-- gsd-path/plain-prompt-reentry/v1 -->"
 PROJECT_CONTRACTS = (
     (
         "AGENTS.md",
         (
             "# AGENTS.md — Operating Rules for the GSD Path Pipeline",
             "## Plain-prompt re-entry",
+            PLAIN_REENTRY_CONTRACT,
         ),
     ),
     (
@@ -68,6 +70,7 @@ PROJECT_CONTRACTS = (
         (
             "# WORKFLOW.md — GSD Path Pipeline SOP",
             "### Plain-prompt re-entry",
+            PLAIN_REENTRY_CONTRACT,
         ),
     ),
 )
@@ -85,6 +88,37 @@ STATUS_ACTIONS = frozenset(
         "wait",
     }
 )
+STATUS_PHASES = frozenset(
+    {
+        "inspect",
+        "define",
+        "research",
+        "decide",
+        "roadmap",
+        "plan",
+        "build",
+        "ship",
+        "shipped",
+    }
+)
+STATUS_VALUES = frozenset({"active", "done", "blocked"})
+STATUS_STATE_FIELDS = frozenset(
+    {"pipeline", "project", "milestone", "phase", "status", "branch", "archive"}
+)
+STATUS_SLUG = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+STATUS_BRANCH = re.compile(r"^gsd-path/M(\d{3,})$")
+STATUS_ARCHIVE = re.compile(r"^\.project/archive/(\d{3,})-([a-z0-9][a-z0-9-]*)/?$")
+STATUS_TRANSITIONS = {
+    "inspect": frozenset({"inspect", "define"}),
+    "define": frozenset({"define", "research", "plan"}),
+    "research": frozenset({"research", "decide"}),
+    "decide": frozenset({"decide", "roadmap", "plan"}),
+    "roadmap": frozenset({"roadmap", "define"}),
+    "plan": frozenset({"plan", "build"}),
+    "build": frozenset({"build"}),
+    "ship": frozenset({"ship", "plan"}),
+    "shipped": frozenset({"ship"}),
+}
 CLAUDE_MATCHER = (
     "Edit|Write|MultiEdit|NotebookEdit|Delete|StrReplace|ApplyPatch|Create|Shell|Bash|PowerShell"
 )
@@ -1665,10 +1699,7 @@ def _valid_status_payload(payload: object, project: Path) -> bool:
     if (
         payload.get("advance") is not False
         or not isinstance(state, dict)
-        or not isinstance(state.get("phase"), str)
-        or not state["phase"]
-        or not isinstance(state.get("status"), str)
-        or not state["status"]
+        or not _valid_status_state(state)
         or not isinstance(route, dict)
         or route.get("action") not in STATUS_ACTIONS
         or not isinstance(route.get("reason"), str)
@@ -1681,12 +1712,85 @@ def _valid_status_payload(payload: object, project: Path) -> bool:
     action = route["action"]
     if action == "run-phase":
         phase = route.get("phase")
-        expected = f"gsd-path-{phase}" if isinstance(phase, str) and phase else None
-        return expected is not None and payload.get("next_skill") == expected
+        return (
+            isinstance(phase, str)
+            and phase in STATUS_TRANSITIONS[state["phase"]]
+            and state["branch"] is not None
+            and payload.get("next_skill") == f"gsd-path-{phase}"
+        )
+    if "phase" in route:
+        return False
+    if action == "bind-initial":
+        branch = route.get("branch")
+        return (
+            state["branch"] is None
+            and isinstance(branch, str)
+            and _valid_status_branch(branch) is not None
+            and payload.get("next_skill") == "gsd-path"
+        )
+    if state["branch"] is None:
+        return False
+    if action == "validate-integrated" and not (
+        state["phase"] == "shipped" and state["status"] == "done"
+    ):
+        return False
+    if action == "wait" and not (
+        state["phase"] == "plan" and state["status"] == "done"
+    ):
+        return False
     expected = "gsd-path-undo" if action == "resume-undo" else None
     if action not in {"resume-undo", "wait"}:
         expected = "gsd-path"
     return payload.get("next_skill") == expected
+
+
+def _valid_status_state(state: dict) -> bool:
+    if set(state) != STATUS_STATE_FIELDS:
+        return False
+    milestone = state["milestone"]
+    branch = state["branch"]
+    archive = state["archive"]
+    archive_match = (
+        STATUS_ARCHIVE.fullmatch(archive or "")
+        if isinstance(archive, (str, type(None)))
+        else None
+    )
+    if (
+        state["pipeline"] != "gsd-path/v2"
+        or not isinstance(state["project"], str)
+        or STATUS_SLUG.fullmatch(state["project"]) is None
+        or not (
+            milestone is None
+            or isinstance(milestone, str)
+            and STATUS_SLUG.fullmatch(milestone) is not None
+        )
+        or not isinstance(state["phase"], str)
+        or state["phase"] not in STATUS_PHASES
+        or not isinstance(state["status"], str)
+        or state["status"] not in STATUS_VALUES
+        or not (branch is None or _valid_status_branch(branch) is not None)
+        or not (archive is None or archive_match is not None)
+    ):
+        return False
+    if state["phase"] == "shipped" and (state["status"] != "done" or archive is None):
+        return False
+    if archive is not None and state["phase"] not in {"build", "ship", "shipped"}:
+        return False
+    if state["phase"] in {"ship", "shipped"} and branch is None:
+        return False
+    if archive_match is not None:
+        branch_match = _valid_status_branch(branch)
+        return (
+            milestone == archive_match.group(2)
+            and branch_match is not None
+            and int(branch_match.group(1)) == int(archive_match.group(1))
+        )
+    return True
+
+
+def _valid_status_branch(value: object) -> Optional[re.Match[str]]:
+    match = STATUS_BRANCH.fullmatch(value) if isinstance(value, str) else None
+    return match if match is not None and int(match.group(1)) >= 1 else None
 
 
 def _is_executable(path: Path) -> bool:
@@ -2083,15 +2187,17 @@ def install(
                 )
 
     if project is not None:
-        _validate_project(
-            source_root,
-            project,
-            selected,
-            hooks,
-            [*mutation_roots, *planned_backups],
-            interpreter,
-            hooks_dir,
-        )
+        _validate_directory_destination(project, "project path")
+        if dry_run:
+            _validate_project(
+                source_root,
+                project,
+                selected,
+                hooks,
+                [*mutation_roots, *planned_backups],
+                interpreter,
+                hooks_dir,
+            )
 
     results = []
     with tempfile.TemporaryDirectory(prefix="gsd-path-install-") as temporary:
@@ -2129,10 +2235,22 @@ def install(
         lock_roots = [plan.root for plan in deployments]
         if legacy_root is not None and legacy_root.is_dir():
             lock_roots.append(legacy_root)
+        if project is not None:
+            lock_roots.append(project / HOOKS_DIRECTORY)
         install_locks, lock_directories = _acquire_install_locks(lock_roots)
         target_transactions: List[TargetTransaction] = []
         project_transaction = ProjectTransaction()
         try:
+            if project is not None:
+                _validate_project(
+                    source_root,
+                    project,
+                    selected,
+                    hooks,
+                    [*mutation_roots, *planned_backups],
+                    interpreter,
+                    hooks_dir,
+                )
             if legacy_root is not None and legacy_root.is_dir():
                 legacy_transaction = TargetTransaction(legacy_root)
                 target_transactions.append(legacy_transaction)
