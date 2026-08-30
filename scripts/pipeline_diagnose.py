@@ -202,12 +202,13 @@ def _route_retry(
             route["milestone"],
             "--branch",
             route["branch"],
-            "--integrate",
-            route["integrate"],
+            "--base",
+            route["base"],
+            "--landing",
+            route["landing"],
         )
     if action == "resume-next-handoff":
-        return _command(
-            pipeline_git,
+        arguments: list[object] = [
             "bind-next",
             "--repo",
             repo,
@@ -221,7 +222,12 @@ def _route_retry(
             route["remote_default"],
             "--base",
             route["base"],
-        )
+            "--landing",
+            route["landing"],
+        ]
+        if route.get("allow_remote_absent") is True:
+            arguments.append("--allow-missing-previous")
+        return _command(pipeline_git, *arguments)
     if action == "resume-undo":
         apply = (undo_result or {}).get("apply") or {}
         if (

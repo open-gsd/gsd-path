@@ -447,37 +447,44 @@ After the postcommit validator passes, ship performs integration — the only
 path from the bound branch to the default branch. The bound branch never
 receives merges or back-merges, and the default checkout is never entered;
 the local default branch ref may lag origin, which is harmless because
-binding resolves remote SHAs. Ship runs `refresh-origin` (fetch, refresh
-`origin/HEAD`, mirror published milestone tags), resolves the remote-default
-name and SHA, and requires the name to be exactly `main` and different from
-the bound branch. It then creates a
-temporary named worktree (`gsd-path-integrate/M00N`) at the remote-default
-SHA and merges the ship commit with `--no-ff` under the subject
-`integrate: M00N — merge gsd-path/M00N into main` (never
-`ship:` — the guard restricts those subjects to `.project/`-only paths).
-When the default has no commits the ship commit lacks
-(`git merge-base --is-ancestor <remote-default-sha> <ship-commit>`), the merge
-is trivial; when the default has diverged, ship still attempts the merge and
-lets Git decide — a conflict-free merge proceeds, and any conflict aborts the
-merge, removes the temporary worktree, blocks, and escalates to the user.
-Ship never auto-resolves a diverged default's conflicts. It
-pushes in order the merge to `main`, the bound branch, and an
-annotated tag `milestone/<NNN>-<slug>` pointing at the merge commit, and
-removes the temporary worktree. Ship leaves the primary worktree and
-STATE.branch on the shipped `gsd-path/M00N`; the router owns the later branch
-handoff. NNN always comes from the persisted
-STATE.archive sequence — never recomputed.
+binding resolves remote SHAs. `STATE.integration_default` stores the project
+choice and `STATE.integration` stores the current milestone choice. Both are
+`direct` or `pull-request`; they may change only before build, and the current
+milestone resets to the project default at the next handoff. Older v2 state
+without these fields means `direct`. `STATE.integration_source` is `default` or
+`milestone` so an explicit override remains distinct when its value happens to
+match the project default.
 
-Integration is pending from the ship commit until a commit with a recognized
-integration subject exists whose second parent is the ship commit and which is
-an ancestor of origin/main. The ship commit itself is the
-crash-recovery transaction id, discoverable via `find_ship_commit`; no new
-STATE field. Resume is idempotent: merge only if the ship commit is not yet
-an ancestor of origin/main, tag only if absent, and retry pushes freely.
+Ship fetches origin, refreshes `origin/HEAD`, mirrors published milestone tags,
+and requires the remote default to be `main`. It then follows the locked mode:
+
+- `direct` creates a temporary named worktree (`gsd-path-integrate/M00N`) at
+  the fetched remote-default SHA and merges the ship commit with `--no-ff`
+  under subject `integrate: M00N — merge gsd-path/M00N into main`. A clean
+  merge is pushed to `main`; a conflict is aborted and surfaced to the user.
+  Path never resolves it automatically. The bound branch and annotated
+  `milestone/<NNN>-<slug>` tag are then published, and the temporary worktree
+  is removed.
+- `pull-request` requires `gh` authentication for GitHub.com and a GitHub.com
+  origin. Path publishes the exact ship commit and creates or reuses the one
+  eligible PR to `main` with a GSD Path credit footer. It returns
+  `awaiting-merge` until a human GitHub user merges it with a merge commit; Path
+  never enables auto-merge or merges the PR. After validation, Path creates the
+  annotated milestone tag. The [ship contract](skills/gsd-path-ship/SKILL.md)
+  owns the candidate, provenance, topology, publication, and recovery rules.
+
+Ship leaves the primary worktree and `STATE.branch` on the shipped local
+`gsd-path/M00N`; the router owns the later branch handoff. NNN always comes
+from the persisted `STATE.archive` sequence. Integration is pending from the
+ship commit until the selected mode's merge and tag proof passes. The ship
+commit is the crash-recovery transaction id. Resume is idempotent: direct mode
+resumes its merge/tag/push transaction; PR mode reuses the exact PR and waits
+or completes its tag after merge.
 The router must not report shipped or start the next milestone while
 integration is pending — it routes back to ship. Once validation passes, the
-router binds the next milestone branch, when one remains, before any
-next-milestone file change.
+router fetches the latest `origin/main`, binds the next milestone there, and
+records both that base and the earlier milestone landing. A missing remote
+bound branch is allowed only for validated PR integration.
 
 **Gate:** the bundled validator proves the committed shipped state, complete
 archive and manifest, valid carry-forward, clean worktree, the newest commit
@@ -486,8 +493,10 @@ commit, and no `.project` change after it; the bundled `validate-integrated`
 command then proves the matching integration merge commit, its
 `milestone/<NNN>-<slug>` tag, and the merge on origin/main before the router
 reports shipped or starts a new milestone. The ship contract owns accepted
-historical subject forms; new commits use the canonical forms above.
-`integrate:` subjects in HEAD history are expected; the
+historical subject forms. Direct-mode commits use the canonical form above;
+PR-mode validation requires origin network access to prove live publication
+and uses tag metadata and topology instead of merge text.
+`integrate:` subjects in HEAD history are expected in direct mode; the
 no-`.project`-change-after-ship drift rule lives on the gsd-path branch, which
 receives no further `.project` commits before the next milestone. Product
 commits after shipping do not disturb a validated shipment.

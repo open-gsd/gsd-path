@@ -45,7 +45,7 @@ gsd-path  (router: reads STATE.md, runs the next valid phase)
   |-- 3.5 roadmap     program flow: charter → milestone slicing
   |-- 4. plan         waves + task contracts
   |-- 5. build        parallel coders, serial task landing
-  `-- 6. ship         verify + final approval → archive + merge to main
+  `-- 6. ship         verify + final approval → archive + integrate with main
 ```
 
 ### Router vs phase skills
@@ -313,9 +313,15 @@ approve **Archive and ship**, the archive transaction begins:
   `ROADMAP.md`, top-level `SYNTHESIS.md`) remain active project metadata
 - `MANIFEST.md` records contents and ship metadata
 - One **ship commit** (subject `ship: M00N — <slug>`) touches only `.project/`
-- Ship then merges `gsd-path/M00N` onto `main` (the remote default) and tags
-  `milestone/<NNN>-<slug>`
+- Ship then either merges `gsd-path/M00N` onto `main` directly or opens a
+  GitHub PR and waits for you to merge it with a merge commit. Path-created PRs
+  include a GSD Path credit footer.
+- After the two-parent merge validates, Path tags `milestone/<NNN>-<slug>`
 - Archives are **read-only** — guard hooks enforce this if installed
+
+Direct integration is the project default. Before build, ask the router to set
+`pull-request` as the project default or as an override for the current
+milestone. The setting locks when build starts.
 
 After `validate-integrated` passes, the next milestone starts clean on a new
 `gsd-path/M00N` cut from `origin/main`. Invoke the router again; brownfield

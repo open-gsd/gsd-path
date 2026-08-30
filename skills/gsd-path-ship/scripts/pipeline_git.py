@@ -27,7 +27,8 @@ ROADMAP_STATUS_RE = re.compile(r"^Status:\s*(\S+)", re.MULTILINE)
 
 LEGACY_SHIP_PREFIX = "ship: "
 LEGACY_INTEGRATE_PREFIX = "integrate: "
-BIND_NEXT_JOURNAL_SCHEMA = "gsd-path/bind-next-journal/v1"
+LEGACY_BIND_NEXT_JOURNAL_SCHEMA = "gsd-path/bind-next-journal/v1"
+BIND_NEXT_JOURNAL_SCHEMA = "gsd-path/bind-next-journal/v2"
 BIND_NEXT_JOURNAL_DIR = "gsd-path-bind-next"
 
 
@@ -293,6 +294,125 @@ def _remote_branch_exists(repo: Path, branch: str) -> bool:
     return _remote_ref_sha(repo, f"refs/heads/{branch}") is not None
 
 
+def _pull_request_tag_fields(repo: Path, ref: str) -> dict[str, str]:
+    tag_type = _run_git(repo, "cat-file", "-t", ref, check=False)
+    if tag_type.returncode != 0 or tag_type.stdout.strip() != "tag":
+        return {}
+    contents = _run_git(repo, "for-each-ref", "--format=%(contents)", ref).stdout
+    fields: dict[str, str] = {}
+    for line in contents.splitlines():
+        match = re.fullmatch(r"(Mode|Pull-Request|Ship|Landing): (.+)", line)
+        if match:
+            if match.group(1) in fields:
+                raise PipelineGitError("pull-request milestone tag repeats metadata")
+            fields[match.group(1)] = match.group(2)
+    return fields
+
+
+def _validated_shipped_state(repo: Path) -> dict[str, object]:
+    validator = Path(__file__).with_name("pipeline_state.py")
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(validator),
+            "validate",
+            "--repo",
+            str(repo),
+        ],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip()
+        raise PipelineGitError(f"could not validate shipped STATE.md: {detail}")
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError as error:
+        raise PipelineGitError("pipeline state validator returned invalid JSON") from error
+    state = payload.get("state") if isinstance(payload, dict) else None
+    if not isinstance(state, dict):
+        raise PipelineGitError("pipeline state validator omitted state")
+    return state
+
+
+def _require_pull_request_integration_proof(
+    repo: Path,
+    ship: str,
+    base: str,
+    previous_branch: str,
+) -> str:
+    state = _validated_shipped_state(repo)
+    if state.get("phase") != "shipped" or state.get("status") != "done":
+        raise PipelineGitError("bind-next requires shipped/done state")
+    if state.get("branch") != previous_branch:
+        raise PipelineGitError("shipped state does not name the previous branch")
+    if state.get("integration") != "pull-request":
+        raise PipelineGitError("shipped integration mode is not pull-request")
+    archive = state.get("archive")
+    if not isinstance(archive, str):
+        raise PipelineGitError("shipped state does not name an archive")
+    archive_pattern = r"\.project/archive/(\d{3,}-[a-z0-9][a-z0-9-]*)/?"
+    match = re.fullmatch(archive_pattern, archive)
+    if match is None or milestone_number(match.group(1)) != milestone_number(
+        previous_branch
+    ):
+        raise PipelineGitError("shipped archive does not match the previous branch")
+    ref = f"refs/tags/milestone/{match.group(1)}"
+    fields = _pull_request_tag_fields(repo, ref)
+    if set(fields) != {"Mode", "Pull-Request", "Ship", "Landing"}:
+        raise PipelineGitError("pull-request integration proof is incomplete")
+    if fields["Mode"] != "pull-request" or fields["Ship"] != ship:
+        raise PipelineGitError("pull-request integration proof does not match shipped state")
+    pull_request = fields["Pull-Request"]
+    if re.fullmatch(
+        r"https://github\.com/[^/]+/[^/]+/pull/[1-9][0-9]*",
+        pull_request,
+    ) is None:
+        raise PipelineGitError("pull-request integration proof has an invalid PR URL")
+    landing = fields["Landing"]
+    if re.fullmatch(r"[0-9a-f]{40}", landing) is None:
+        raise PipelineGitError("pull-request integration proof has an invalid landing")
+    local_object = _run_git(repo, "rev-parse", ref).stdout.strip()
+    local_target = _run_git(repo, "rev-parse", f"{ref}^{{commit}}").stdout.strip()
+    if local_target != landing:
+        raise PipelineGitError("pull-request integration tag does not point at landing")
+    remote = _run_git(
+        repo,
+        "ls-remote",
+        "--exit-code",
+        "--tags",
+        "origin",
+        ref,
+        f"{ref}^{{}}",
+        check=False,
+    )
+    if remote.returncode != 0:
+        raise PipelineGitError("pull-request integration tag is not published")
+    rows = dict(
+        line.split("\t", 1)[::-1]
+        for line in remote.stdout.splitlines()
+        if "\t" in line
+    )
+    if rows != {ref: local_object, f"{ref}^{{}}": landing}:
+        raise PipelineGitError("published pull-request integration tag differs")
+    parents = _run_git(
+        repo,
+        "rev-list",
+        "--parents",
+        "-n",
+        "1",
+        landing,
+    ).stdout.split()
+    if len(parents) != 3 or parents[2] != ship:
+        raise PipelineGitError("pull-request integration proof has invalid merge topology")
+    first_parent = _run_git(repo, "rev-list", "--first-parent", base).stdout.splitlines()
+    if landing not in first_parent:
+        raise PipelineGitError(
+            "pull-request integration landing is not on main first-parent history"
+        )
+    return landing
+
+
 def _git_path(repo: Path, name: str) -> Path:
     value = _run_git(repo, "rev-parse", "--git-path", name).stdout.strip()
     path = Path(value)
@@ -486,6 +606,8 @@ def bind_next_milestone_branch(
     ship: str,
     remote_default: str,
     base: str,
+    landing: str,
+    allow_remote_absent: bool = False,
 ) -> dict[str, str]:
     """Move a clean primary worktree onto a new bound branch after integration."""
     repo = _require_worktree_root(repo)
@@ -527,8 +649,14 @@ def bind_next_milestone_branch(
     ).stdout.strip()
     if ship != ship_sha:
         raise PipelineGitError(f"ship must be the full commit SHA: {ship}")
-    # A retired previous branch is absent locally; the ship SHA alone then
-    # carries the integration proof so a repeated bind-next still converges.
+    landing_sha = _run_git(
+        repo,
+        "rev-parse",
+        "--verify",
+        f"{landing}^{{commit}}",
+    ).stdout.strip()
+    if landing != landing_sha:
+        raise PipelineGitError(f"landing must be the full commit SHA: {landing}")
     previous_ref = f"refs/heads/{previous_branch}"
     if _ref_exists(repo, previous_ref):
         previous_sha = _run_git(
@@ -546,14 +674,38 @@ def bind_next_milestone_branch(
         "merge-base",
         "--is-ancestor",
         ship_sha,
-        base_sha,
+        landing_sha,
         check=False,
     )
     if integrated.returncode == 1:
-        raise PipelineGitError(f"{previous_branch} is not integrated into {remote_default}")
+        raise PipelineGitError("milestone landing does not contain the ship commit")
     if integrated.returncode != 0:
         detail = integrated.stderr.strip() or integrated.stdout.strip()
+        raise PipelineGitError(f"could not verify milestone landing: {detail}")
+    landing_integrated = _run_git(
+        repo,
+        "merge-base",
+        "--is-ancestor",
+        landing_sha,
+        base_sha,
+        check=False,
+    )
+    if landing_integrated.returncode == 1:
+        raise PipelineGitError("milestone landing is not integrated into the validated base")
+    if landing_integrated.returncode != 0:
+        detail = landing_integrated.stderr.strip() or landing_integrated.stdout.strip()
         raise PipelineGitError(f"could not verify integrated branch: {detail}")
+    if allow_remote_absent:
+        proven_landing = _require_pull_request_integration_proof(
+            repo,
+            ship_sha,
+            base_sha,
+            previous_branch,
+        )
+        if proven_landing != landing_sha:
+            raise PipelineGitError(
+                "validated landing does not match pull-request integration proof"
+            )
 
     symbolic_branch = _run_git(
         repo,
@@ -580,24 +732,44 @@ def bind_next_milestone_branch(
         "ship": ship_sha,
         "remote_default": remote_default,
         "base": base_sha,
+        "landing": landing_sha,
     }
+    if allow_remote_absent:
+        request["allow_remote_absent"] = True
     journal_path = bind_next_journal_path(repo, branch)
     new_journal = False
     if journal_path.exists() or journal_path.is_symlink():
         journal = _read_bind_next_journal(journal_path)
-        if set(journal) != set(request) | {"stage"}:
+        legacy = journal.get("schema") == LEGACY_BIND_NEXT_JOURNAL_SCHEMA
+        expected_fields = set(request) | {"stage"}
+        if legacy:
+            legacy_fields = expected_fields - {"landing"}
+            if set(journal) != legacy_fields and set(journal) != expected_fields:
+                raise PipelineGitError("bind-next journal has unsupported fields")
+        elif set(journal) != expected_fields:
             raise PipelineGitError("bind-next journal has unsupported fields")
         mismatches = {
             key: {"expected": value, "actual": journal.get(key)}
             for key, value in request.items()
-            if journal.get(key) != value
+            if key != "schema"
+            and (key != "landing" or "landing" in journal)
+            and journal.get(key) != value
         }
+        if not legacy and journal.get("schema") != BIND_NEXT_JOURNAL_SCHEMA:
+            mismatches["schema"] = {
+                "expected": BIND_NEXT_JOURNAL_SCHEMA,
+                "actual": journal.get("schema"),
+            }
         if mismatches:
             raise PipelineGitError(
                 f"bind-next journal does not match request: {json.dumps(mismatches, sort_keys=True)}"
             )
         if journal.get("stage") not in {"prepared", "switched", "retired"}:
             raise PipelineGitError("bind-next journal has invalid stage")
+        if legacy:
+            journal["schema"] = BIND_NEXT_JOURNAL_SCHEMA
+            journal["landing"] = landing_sha
+            _write_bind_next_journal(journal_path, journal)
     else:
         if current == branch:
             raise PipelineGitError(
@@ -634,7 +806,9 @@ def bind_next_milestone_branch(
 
     remote_previous = _remote_ref_sha(repo, f"refs/heads/{previous_branch}")
     if remote_previous is None:
-        if current != branch or journal["stage"] not in {"switched", "retired"}:
+        if not allow_remote_absent and (
+            current != branch or journal["stage"] not in {"switched", "retired"}
+        ):
             raise PipelineGitError(
                 f"origin/{previous_branch} is missing before retirement"
             )
@@ -654,7 +828,9 @@ def bind_next_milestone_branch(
         repo,
         previous_branch,
         ship_sha,
-        allow_remote_absent=journal["stage"] in {"switched", "retired"},
+        allow_remote_absent=(
+            allow_remote_absent or journal["stage"] in {"switched", "retired"}
+        ),
     )
     journal["stage"] = "retired"
     _write_bind_next_journal(journal_path, journal)
@@ -662,6 +838,7 @@ def bind_next_milestone_branch(
         "schema": "gsd-path/bind-next/v1",
         "status": status,
         "base": default_sha,
+        "landing": landing_sha,
         "branch": branch,
         "previous_branch": previous_branch,
     }
@@ -683,6 +860,8 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     bind_next.add_argument("--ship", required=True)
     bind_next.add_argument("--remote-default", required=True)
     bind_next.add_argument("--base", required=True)
+    bind_next.add_argument("--landing", required=True)
+    bind_next.add_argument("--allow-missing-previous", action="store_true")
     bind_initial = subparsers.add_parser(
         "bind-initial",
         help="bind the first milestone branch at the exact fetched remote default",
@@ -705,6 +884,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 args.ship,
                 args.remote_default,
                 args.base,
+                args.landing,
+                args.allow_missing_previous,
             )
         elif args.command == "bind-initial":
             result = bind_initial_milestone_branch(

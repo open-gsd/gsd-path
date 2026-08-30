@@ -75,6 +75,13 @@ full-repo suite on a tiny edit outrank the phase brief.
   During a program build, `.project/next/STATE.md` may hold
   the lookahead planning track for the next milestone; it follows the same
   marker rule, owns no task frontmatter, and never binds a branch.
+- STATE.integration_default is the project closeout choice and
+  STATE.integration is the current milestone choice. Both are `direct` or
+  `pull-request`; STATE.integration_source is `default` or `milestone` and
+  preserves explicit override provenance. Older v2 state defaults to `direct`,
+  and modes may be changed only through `pipeline_state.py
+  configure-integration` before build. A next milestone resets its current
+  choice from the project default.
 - Spawned agents have isolated context. Follow the installed runtime dispatch
   contract and brief them with exact input and output paths, constraints, a
   deterministic logical task name, and a bounded responsibility. Independent
@@ -123,8 +130,9 @@ full-repo suite on a tiny edit outrank the phase brief.
   …) bound in STATE.branch. The next milestone binds a new unused
   `gsd-path/M00N` at the remote default after the previous ship integrates.
   Integration at ship is the only path from the bound branch to the default
-  branch — the bound branch never receives merges or back-merges, is never
-  the GitHub default, and nothing else merges, pushes, or tags on its behalf.
+  branch — either Path's direct merge or a Path-owned PR merged by the user.
+  The bound branch never receives merges or back-merges and is never the
+  GitHub default.
 - After initialization writes STATE.md, and before entering the first pipeline
   phase in an existing Git repository, the router calls
   `scripts/pipeline_git.py bind-initial` with the selected M00N and exact
@@ -141,6 +149,9 @@ full-repo suite on a tiny edit outrank the phase brief.
   previous branch — deleted locally and on origin; the ship commit stays
   reachable from the integration merge and its annotated tag. The router
   persists the new branch in STATE; a wrong-SHA or colliding branch blocks.
+  After validated PR integration, `bind-next --allow-missing-previous` may
+  retire only the local previous branch when GitHub already auto-deleted its
+  remote branch.
   `bind-initial`, this handoff, and the approved new-repository bootstrap are
   the only bound-branch creation authorities, and the handoff's retirement
   push is the router's only bound-branch deletion authority. When a lookahead
@@ -154,15 +165,19 @@ full-repo suite on a tiny edit outrank the phase brief.
   milestone ship and integrate commits inherited through main. A ship commit
   for the current STATE.branch milestone must be an ancestor of origin/main;
   if it is not, that milestone's integration is incomplete and control routes
-  to ship, not build. A current-milestone ship on main without its matching
-  `integrate:` commit is externally polluted and blocks. A null branch returns
+  to ship, not build. Direct mode requires the matching canonical `integrate:`
+  commit; PR mode requires tag metadata and a two-parent merge whose second
+  parent is the ship commit. A null branch returns
   to the router; build never creates, selects, switches, or rebinds it.
 - The ship phase makes exactly one commit on the bound branch — the
   `.project/`-only ship commit recording
   STATE.md, the final-review artifacts, and the archive — and additionally
-  owns the integration leg: one `--no-ff` merge onto `main` with subject
-  `integrate: M00N — merge gsd-path/M00N into main`, one annotated
-  `milestone/<NNN>-<slug>` tag, and the pushes.
+  owns the integration leg. Direct mode creates and pushes one `--no-ff` merge
+  onto `main` with subject
+  `integrate: M00N — merge gsd-path/M00N into main`. Pull-request mode creates
+  or reuses one GitHub.com PR and waits for the user to merge it with a merge
+  commit; it never auto-merges. Both modes create one annotated
+  `milestone/<NNN>-<slug>` tag after merge validation.
   The roadmap and
   plan phases each make exactly one approval checkpoint commit
   (`.project/`-only, deferred to the build transition commit during a
@@ -227,7 +242,7 @@ full-repo suite on a tiny edit outrank the phase brief.
   canonical contents, carry-forward, and manifest pass the bundled precommit
   validator; report shipped only after the exact `.project/`-only ship commit
   passes the postcommit validator and `validate-integrated` proves the
-  integration merge commit, its tag, and its ancestry on origin/main —
+  two-parent integration merge, its tag, and its ancestry on origin/main —
   while integration is pending the router routes back to ship instead of
   reporting shipped or starting the next milestone.
 

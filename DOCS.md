@@ -197,7 +197,7 @@ Details: [FULL.md](FULL.md) (phases, shipping, troubleshooting).
 inspect (brownfield only)
   → define → research → decide → plan
   → build (parallel coders, serial task landing)
-  → ship (verify, archive, and merge to main)
+  → ship (verify, archive, and integrate with main)
 
 Program flow inserts roadmap between decide and plan: define
 (program mode) writes CHARTER.md, roadmap slices it into ROADMAP.md,
