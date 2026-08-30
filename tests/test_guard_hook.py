@@ -103,7 +103,13 @@ class GuardHookTests(unittest.TestCase):
         self.assertIn("gsd-path-plan", json.loads(output)["reason"])
 
     def test_non_file_tools_are_not_treated_as_direct_writes(self):
-        for tool in ("UpdatePlan", "CreateIssue", "SetGoal", "PostMessage"):
+        for tool in (
+            "UpdatePlan",
+            "CreateIssue",
+            "SetGoal",
+            "PostMessage",
+            "write_stdin",
+        ):
             with self.subTest(tool=tool):
                 self.assert_allowed({"tool_name": tool, "tool_input": {}})
 

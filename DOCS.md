@@ -90,7 +90,8 @@ node scripts/install.mjs --all --project "$(pwd)"
 node scripts/install.mjs --claude --project "$(pwd)" --hooks
 ```
 
-**Requirements:** Node 18.17+. **Always** restart the agent session after install.
+**Requirements:** Node 18.17+. Project installs also require Python 3.9+ as
+`python3` or `python`. **Always** restart the agent session after install.
 
 **Host flags** are derived from `scripts/skill-resources.json`. Run
 `node scripts/install.mjs --help` for the current `--<host>` list.

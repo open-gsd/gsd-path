@@ -192,6 +192,16 @@ class InstallerTests(unittest.TestCase):
             install.legacy_codex_root({"CODEX_HOME": ""}),
         )
 
+    def test_interpreter_probe_rejects_unsupported_python(self):
+        def probe(arguments, **_kwargs):
+            return subprocess.CompletedProcess(
+                arguments,
+                0 if "--version" in arguments else 1,
+            )
+
+        with mock.patch.object(install.subprocess, "run", side_effect=probe):
+            self.assertIsNone(install._detect_python_interpreter())
+
     def test_project_runtime_dependency_set_imports(self):
         project = self.root / "runtime-project"
         runtime = project / install.HOOKS_DIRECTORY / "runtime"
@@ -1935,6 +1945,43 @@ class InstallerTests(unittest.TestCase):
             any(
                 finding["level"] == "ok"
                 and finding["text"].startswith("project: runtime")
+                for finding in findings
+            )
+        )
+
+    def test_doctor_rejects_symlinked_and_unreadable_project_scripts(self):
+        project = self.root / "doctor-unsafe-scripts"
+        managed = project / install.HOOKS_DIRECTORY
+        runtime = managed / "runtime"
+        runtime.mkdir(parents=True)
+        for name in install.PROJECT_RUNTIME_SCRIPTS:
+            shutil.copy2(self.source / "scripts" / name, runtime / name)
+        outside_guard = self.root / "outside-guard.py"
+        shutil.copy2(self.source / "scripts" / "guard_hook.py", outside_guard)
+        (managed / "guard_hook.py").symlink_to(outside_guard)
+        shutil.copy2(
+            self.source / "scripts" / "git_guard.py", managed / "git_guard.py"
+        )
+        unreadable = runtime / "pipeline_state.py"
+        unreadable.chmod(0)
+        try:
+            findings = install.doctor(
+                self.source, [], lambda _target: self.root, project
+            )
+        finally:
+            unreadable.chmod(0o644)
+
+        self.assertTrue(
+            any(
+                finding["level"] == "fail"
+                and "guard_hook.py is a symlink" in finding["text"]
+                for finding in findings
+            )
+        )
+        self.assertTrue(
+            any(
+                finding["level"] == "fail"
+                and "runtime pipeline_state.py cannot be read" in finding["text"]
                 for finding in findings
             )
         )

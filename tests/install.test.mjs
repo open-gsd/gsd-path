@@ -130,6 +130,26 @@ test("default path resolution", () => {
   assert.equal(installer.legacyCodexRoot({ CODEX_HOME: "" }), path.join(home, ".codex", "skills"));
 });
 
+test("interpreter probe rejects unsupported Python", () => {
+  const bin = path.join(root, "old-python");
+  fs.mkdirSync(bin);
+  for (const name of ["python3", "python"]) {
+    const executable = path.join(bin, name);
+    fs.writeFileSync(
+      executable,
+      '#!/bin/sh\n[ "$1" = "--version" ] && exit 0\nexit 1\n',
+      { mode: 0o755 }
+    );
+  }
+  const originalPath = process.env.PATH;
+  process.env.PATH = bin;
+  try {
+    assert.equal(installer.detectPythonInterpreter(), null);
+  } finally {
+    process.env.PATH = originalPath;
+  }
+});
+
 test("skill names are derived from resource manifest", () => {
   const manifest = {
     skills: ["gsd-path", "gsd-path-alpha", "gsd-path-zeta"],
@@ -1634,6 +1654,43 @@ test("doctor rejects a symlinked project runtime", async () => {
   assert.ok(
     !findings.some(
       (finding) => finding.level === "ok" && finding.text.startsWith("project: runtime")
+    )
+  );
+});
+
+test("doctor rejects symlinked and unreadable project scripts", () => {
+  const project = path.join(root, "doctor-unsafe-scripts");
+  const managed = path.join(project, installer.HOOKS_DIRECTORY);
+  const runtime = path.join(managed, "runtime");
+  fs.mkdirSync(runtime, { recursive: true });
+  for (const name of installer.PROJECT_RUNTIME_SCRIPTS) {
+    fs.copyFileSync(path.join(source, "scripts", name), path.join(runtime, name));
+  }
+  const outsideGuard = path.join(root, "outside-guard.py");
+  fs.copyFileSync(path.join(source, "scripts", "guard_hook.py"), outsideGuard);
+  fs.symlinkSync(outsideGuard, path.join(managed, "guard_hook.py"));
+  fs.copyFileSync(
+    path.join(source, "scripts", "git_guard.py"),
+    path.join(managed, "git_guard.py")
+  );
+  const unreadable = path.join(runtime, "pipeline_state.py");
+  fs.chmodSync(unreadable, 0);
+  let findings;
+  try {
+    findings = installer.doctor(source, { targets: [], rootFor: () => "", project });
+  } finally {
+    fs.chmodSync(unreadable, 0o644);
+  }
+
+  assert.ok(
+    findings.some(
+      (finding) => finding.level === "fail" && /guard_hook\.py is a symlink/.test(finding.text)
+    )
+  );
+  assert.ok(
+    findings.some(
+      (finding) =>
+        finding.level === "fail" && /runtime pipeline_state\.py cannot be read/.test(finding.text)
     )
   );
 });

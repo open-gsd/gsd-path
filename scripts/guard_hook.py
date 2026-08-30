@@ -254,10 +254,14 @@ def is_patch_tool(tool):
     return "patch" in tool_tokens(tool)
 
 
-def is_direct_write_tool(tool):
+def is_direct_write_tool(tool, has_file_targets=False):
     tokens = tool_tokens(tool)
     if tokens & DIRECT_FILE_WRITE_VERBS:
-        return True
+        return (
+            len(tokens) == 1
+            or bool(tokens & FILE_TARGET_TOKENS)
+            or has_file_targets
+        )
     if tokens == {"create"}:
         return True
     return bool((tokens & AMBIGUOUS_WRITE_VERBS) and (tokens & FILE_TARGET_TOKENS))
@@ -901,7 +905,7 @@ def evaluate(event):
         for path in extracted_patch_paths:
             if path_in_archive(path, working_directories):
                 deny(ARCHIVE_REASON)
-        if is_direct_write_tool(tool):
+        if is_direct_write_tool(tool, bool(paths or extracted_patch_paths)):
             write_paths = [*paths, *extracted_patch_paths]
             if not write_paths:
                 raise ValueError("write targets cannot be validated")

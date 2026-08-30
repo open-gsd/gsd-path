@@ -151,6 +151,7 @@ not intercept subagent tools — treat coverage as orchestrator-level.
 | `ship:` commit blocked with `app.py` staged | Ship commits may only touch `.project/` |
 | Tool denied editing archive | Pre-tool guard — use active paths, not archive |
 | Hook not running in Cursor | Run `--hooks-refresh-full --cursor --project /path/to/repo` |
-| `--hooks-refresh` rejected | Scripts not from prior `--hooks` install |
+| `--hooks-refresh` rejects an unmanaged guard | Move the foreign guard aside, then rerun refresh; use `--hooks-init` if guards are wanted |
+| `--hooks-refresh` rejects an unmanaged runtime file | Back up or merge that file, move it aside, then rerun refresh |
 
 More: [DOCS.md](DOCS.md#help) · [UPDATE.md](UPDATE.md)

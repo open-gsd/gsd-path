@@ -127,7 +127,11 @@ const INTERPRETER_CANDIDATES = ["python3", "python"];
 // (python3 is typically absent on Windows).
 export function detectPythonInterpreter() {
   for (const candidate of INTERPRETER_CANDIDATES) {
-    const result = spawnSync(candidate, ["--version"], { stdio: "ignore" });
+    const result = spawnSync(
+      candidate,
+      ["-B", "-c", "import sys; raise SystemExit(sys.version_info < (3, 9))"],
+      { stdio: "ignore" }
+    );
     if (!result.error && result.status === 0) return candidate;
   }
   return null;
@@ -1484,6 +1488,14 @@ function nativeGuardContract(target, project) {
 export function doctor(sourceRoot, { targets, rootFor, project = null }) {
   const findings = [];
   const push = (level, text) => findings.push({ level, text });
+  function readProjectFile(candidate, label) {
+    try {
+      return fs.readFileSync(candidate);
+    } catch (error) {
+      push("fail", `${label} cannot be read: ${error.message}`);
+      return null;
+    }
+  }
   const version = readPackageVersion(path.join(sourceRoot, "package.json"));
 
   const seen = [];
@@ -1560,7 +1572,8 @@ export function doctor(sourceRoot, { targets, rootFor, project = null }) {
         push("fail", `project: missing runtime ${name}`);
         continue;
       }
-      const content = fs.readFileSync(destination);
+      const content = readProjectFile(destination, `project: runtime ${name}`);
+      if (content === null) continue;
       if (!content.toString("utf8").includes(PROJECT_RUNTIME_MARKER)) {
         push("warn", `project: runtime ${name} is not managed`);
       } else if (!content.equals(fs.readFileSync(path.join(sourceRoot, "scripts", name)))) {
@@ -1579,11 +1592,16 @@ export function doctor(sourceRoot, { targets, rootFor, project = null }) {
   } else {
     for (const name of GUARD_SCRIPTS) {
       const destination = path.join(project, HOOKS_DIRECTORY, name);
+      if (isSymlink(destination)) {
+        push("fail", `hooks: ${HOOKS_DIRECTORY}/${name} is a symlink`);
+        continue;
+      }
       if (!isFile(destination)) {
         push("fail", `hooks: missing ${HOOKS_DIRECTORY}/${name} — run --hooks-refresh`);
         continue;
       }
-      const content = fs.readFileSync(destination);
+      const content = readProjectFile(destination, `hooks: ${HOOKS_DIRECTORY}/${name}`);
+      if (content === null) continue;
       if (!content.toString("utf8").includes(GUARD_MARKER)) {
         push("warn", `hooks: ${HOOKS_DIRECTORY}/${name} is not a managed guard script`);
       } else if (!content.equals(fs.readFileSync(path.join(sourceRoot, "scripts", name)))) {

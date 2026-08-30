@@ -164,7 +164,14 @@ def _detect_python_interpreter() -> Optional[str]:
     for candidate in ("python3", "python"):
         try:
             result = subprocess.run(
-                [candidate, "--version"], capture_output=True, check=False
+                [
+                    candidate,
+                    "-B",
+                    "-c",
+                    "import sys; raise SystemExit(sys.version_info < (3, 9))",
+                ],
+                capture_output=True,
+                check=False,
             )
         except OSError:
             continue
@@ -1525,6 +1532,13 @@ def doctor(
     def push(level: str, text: str) -> None:
         findings.append({"level": level, "text": text})
 
+    def read_project_file(path: Path, label: str) -> Optional[bytes]:
+        try:
+            return path.read_bytes()
+        except OSError as error:
+            push("fail", f"{label} cannot be read: {error}")
+            return None
+
     version = _read_package_version(source_root / "package.json")
     seen: List[Tuple[str, Path]] = []
     installed_targets = set()
@@ -1609,7 +1623,9 @@ def doctor(
             if not destination.is_file():
                 push("fail", f"project: missing runtime {name}")
                 continue
-            content = destination.read_bytes()
+            content = read_project_file(destination, f"project: runtime {name}")
+            if content is None:
+                continue
             if PROJECT_RUNTIME_MARKER.encode() not in content:
                 push("warn", f"project: runtime {name} is not managed")
             elif content != (source_root / "scripts" / name).read_bytes():
@@ -1628,10 +1644,15 @@ def doctor(
     else:
         for name in GUARD_SCRIPTS:
             destination = project / HOOKS_DIRECTORY / name
+            if destination.is_symlink():
+                push("fail", f"hooks: {HOOKS_DIRECTORY}/{name} is a symlink")
+                continue
             if not destination.is_file():
                 push("fail", f"hooks: missing {HOOKS_DIRECTORY}/{name} — run --hooks-refresh")
                 continue
-            content = destination.read_bytes()
+            content = read_project_file(destination, f"hooks: {HOOKS_DIRECTORY}/{name}")
+            if content is None:
+                continue
             if GUARD_MARKER.encode() not in content:
                 push("warn", f"hooks: {HOOKS_DIRECTORY}/{name} is not a managed guard script")
             elif content != (source_root / "scripts" / name).read_bytes():
