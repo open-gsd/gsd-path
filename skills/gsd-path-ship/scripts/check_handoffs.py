@@ -57,6 +57,9 @@ PLAN_TASK_ROW = re.compile(
 MILESTONE_HEADING = re.compile(
     r"(?m)^### (?P<id>M\d{3}) — (?P<slug>\S.*?)\s*$"
 )
+SURFACE_HEADING = re.compile(
+    r"(?m)^### (?P<surface>\S.*?) — (?P<task>T\d{3})\s*$"
+)
 GAP_NAME_PATTERN = re.compile(r"^final-gap-(?P<number>[1-9]\d*)\.md$")
 GAP_HEADING_PATTERN = re.compile(
     r"^# Gap Review — (?P<number>[1-9]\d*): (?P<risk>\S.*)$"
@@ -496,6 +499,86 @@ def _success_criteria(intent: str) -> Dict[str, str]:
     return {f"SC{number}": text for number, text in items.items()}
 
 
+def _surfaces(text: str, label: str) -> List[str]:
+    """Human-facing surfaces one milestone delivers; empty when `none`."""
+
+    value = _roadmap_field(_strip_comments(text), "Surfaces", label, allow_none=True)
+    if value.casefold() == "none":
+        return []
+    named = [
+        _non_placeholder(item, f"{label} Surfaces")
+        for item in value.split(",")
+        if item.strip()
+    ]
+    if not named:
+        raise HandoffError(f"{label} Surfaces names no surface and is not none")
+    return named
+
+
+def _surface_keys(surfaces: Sequence[str]) -> List[str]:
+    return sorted(surface.casefold() for surface in surfaces)
+
+
+def _roadmap_surfaces(root: Path, milestone: str) -> Optional[List[str]]:
+    """Surfaces the program roadmap declares for one milestone, when it has an entry."""
+
+    # The program roadmap always lives at `.project/`; a lookahead track reads
+    # program inputs from there, not from its own root.
+    relative = f"{DEFAULT_PROJECT_DIR}/ROADMAP.md"
+    if not (root / relative).is_file():
+        return None
+    for _entry, slug, block, _raw in _milestone_blocks(_read(root, relative)):
+        if slug == milestone:
+            return _surfaces(block, f"ROADMAP.md {milestone}")
+    return None
+
+
+def _criterion_ids(value: str, label: str) -> List[str]:
+    ids = [item.strip().strip("`") for item in value.split(",") if item.strip()]
+    if not ids or any(not CRITERION_LOCATOR_PATTERN.fullmatch(item) for item in ids):
+        raise HandoffError(f"{label} Criteria must name success criteria: {value}")
+    if len(ids) != len(set(ids)):
+        raise HandoffError(f"{label} Criteria repeats an id")
+    return ids
+
+
+def _surface_contract(
+    plan: str, surfaces: Sequence[str]
+) -> Dict[str, Tuple[str, List[str]]]:
+    """Map each declared surface to the task that delivers it and its criteria."""
+
+    body = _strip_comments(_section(plan, "Surface contract"))
+    blocks: Dict[str, Tuple[str, str]] = {
+        heading.group("surface").casefold(): (
+            heading.group("task"),
+            _heading_block(body, heading),
+        )
+        for heading in SURFACE_HEADING.finditer(body)
+    }
+    owners: Dict[str, Tuple[str, List[str]]] = {}
+    for surface in surfaces:
+        key = surface.casefold()
+        if key not in blocks:
+            raise HandoffError(f"Surface contract is missing the {surface} surface")
+        task_id, block = blocks.pop(key)
+        label = f"{surface} surface"
+        for field in ("Entry", "States"):
+            # Read the whole line: `#` is legal inside a route or a command.
+            _non_placeholder(_line_value(block, f"{field}:"), f"{label} {field}")
+        if not _numbered_items(_roadmap_segment(block, "Walkthrough:", None, label)):
+            raise HandoffError(f"{label} Walkthrough has no steps")
+        owners[surface] = (
+            task_id,
+            _criterion_ids(_roadmap_field(block, "Criteria", label), label),
+        )
+    if blocks:
+        raise HandoffError(
+            "Surface contract names undeclared surfaces: "
+            + ", ".join(sorted(blocks))
+        )
+    return owners
+
+
 def _coverage_rows(plan: str) -> List[Tuple[str, str, str]]:
     body = _section(plan, "Intent coverage")
     rows: List[Tuple[str, str, str]] = []
@@ -875,12 +958,21 @@ def validate_decide(
     return {"phase": "decide", "synthesis": relative, "decisions": decisions}
 
 
-def _roadmap_field(block: str, field: str, milestone: str, *, allow_null: bool = False) -> str:
+def _roadmap_field(
+    block: str,
+    field: str,
+    milestone: str,
+    *,
+    allow_null: bool = False,
+    allow_none: bool = False,
+) -> str:
     match = re.search(rf"(?m)^{re.escape(field)}:\s*([^#]*?)(?:\s+#.*)?$", block)
     if not match:
         raise HandoffError(f"{milestone} is missing {field}")
     value = match.group(1).strip().strip("`\"'")
     if allow_null and value == "null":
+        return value
+    if allow_none and value.casefold() == "none":
         return value
     return _non_placeholder(value, f"{milestone} {field}")
 
@@ -986,6 +1078,8 @@ def validate_roadmap(
         status = _roadmap_field(block, "Status", milestone)
         if status not in {"pending", "active", "shipped", "abandoned"}:
             raise HandoffError(f"{milestone} Status is invalid")
+        if status in {"pending", "active"}:
+            _surfaces(block, milestone)
         _roadmap_field(block, "Archive", milestone, allow_null=True)
         _roadmap_field(block, "Integrated", milestone, allow_null=True)
         _roadmap_bullets(
@@ -1075,6 +1169,28 @@ def validate_plan(
         owned = set(_owned_criteria(text, task_id))
         if owned != assigned[task_id]:
             raise HandoffError(f"{task_id} Intent coverage does not match PLAN.md")
+    surfaces = _surfaces(intent, "INTENT.md")
+    milestone = _require_pipeline(root, project_dir).get("milestone", "null")
+    if milestone != "null":
+        declared = _roadmap_surfaces(root, milestone)
+        if declared is not None and _surface_keys(declared) != _surface_keys(surfaces):
+            raise HandoffError(
+                f"INTENT.md Surfaces do not match ROADMAP.md {milestone}"
+            )
+    owners = _surface_contract(plan, surfaces) if surfaces else {}
+    for surface, (task_id, owned_criteria) in owners.items():
+        if task_id not in tasks:
+            raise HandoffError(f"{surface} surface names unknown {task_id}")
+        unowned = [
+            criterion
+            for criterion in owned_criteria
+            if criterion not in assigned[task_id]
+        ]
+        if unowned:
+            raise HandoffError(
+                f"{surface} surface criteria are not owned by {task_id}: "
+                + ", ".join(unowned)
+            )
     project_verify = _normalize_ws(_line_value(plan, "Project verify:"))
     for task_id, text in tasks.items():
         command = _verify_command(text)
@@ -1097,6 +1213,7 @@ def validate_plan(
         "rows": len(rows),
         "tasks": len(tasks),
         "waves": waves,
+        "surfaces": {surface: task for surface, (task, _) in owners.items()},
     }
 
 
@@ -1282,7 +1399,15 @@ def validate_final(
     """Require FINAL.md to give an evidenced verdict for every INTENT SC."""
 
     _require_state(root, "ship", "active", project_dir)
-    criteria = _success_criteria(_read(root, _intent_path(project_dir)))
+    intent = _read(root, _intent_path(project_dir))
+    criteria = _success_criteria(intent)
+    surface_of: Dict[str, str] = {}
+    surfaces = _surfaces(intent, "INTENT.md")
+    if surfaces:
+        plan = _read(root, f"{project_dir}/plan/PLAN.md")
+        for surface, (_task, owned) in _surface_contract(plan, surfaces).items():
+            for criterion in owned:
+                surface_of[criterion] = surface
     relative = f"{project_dir}/review/FINAL.md"
     text = _read(root, relative)
     reviewed_head = _reviewed_head(text, relative)
@@ -1329,6 +1454,15 @@ def validate_final(
             raise HandoffError(f"FINAL.md {sc_id} lacks a Check or Reference")
         if observed.casefold() == "none":
             raise HandoffError(f"FINAL.md {sc_id} lacks an Observed result")
+        surface = surface_of.get(sc_id)
+        if surface is not None:
+            named = _source_field(block, "Surface", label)
+            if _normalize_ws(named).casefold() != _normalize_ws(surface).casefold():
+                raise HandoffError(f"FINAL.md {sc_id} Surface must name {surface}")
+            if check.casefold() == "none":
+                raise HandoffError(
+                    f"FINAL.md {sc_id} lacks the walked Check for the {surface} surface"
+                )
         if verdict == "met":
             if finding.casefold() != "none" or fix_direction.casefold() != "none":
                 raise HandoffError(

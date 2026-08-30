@@ -18,6 +18,14 @@ Review panel: off   <!-- off | detected | claude,gpt,grok,composer — this
                       advertised host families except the parent, at most 3.
                       Named families are an assertion. Quick lane stays off. -->
 
+Surfaces: none   <!-- none | comma-separated list of the human-facing
+                      surfaces this milestone delivers: a web app, a CLI, an
+                      HTTP API. Anything a person opens, sees, or types into
+                      is a surface. Use none only when nobody touches this
+                      work directly — a library, a migration, internals.
+                      Every named surface needs a success criterion
+                      observable there and a PLAN.md Surface contract. -->
+
 ## Summary
 
 <3–5 sentences: the problem, who has it, what the first release does. This is the
@@ -35,7 +43,10 @@ paragraph the user signed off on — do not edit without a new sign-off.>
 
 <!-- Observable statements, numbered from 1. PLAN.md maps each to a task
      AC and Verify as SC1, SC2, …. Wave review checks the SCs a wave owns.
-     Final review checks every SC. -->
+     Final review checks every SC.
+     Every surface named above needs at least one criterion a person can
+     observe at that surface — a screen reached, an output seen — never a
+     passing test standing in for the experience. -->
 1. <criterion — a thing you can run/measure/see>
 2. ...
 

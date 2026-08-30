@@ -1,7 +1,9 @@
 # Final Review — <project name>
 
 <!-- Written by the final integration reviewer. Each INTENT.md success
-     criterion appears exactly once and carries checked evidence. -->
+     criterion appears exactly once and carries checked evidence. A criterion
+     listed in PLAN.md's Surface contract also names its Surface, and its
+     Check is the walkthrough performed — never internal test output. -->
 
 Reviewed HEAD: <full SHA>
 Overall verdict: <pass | blocked>
@@ -14,6 +16,7 @@ Overall verdict: <pass | blocked>
 ### SC1 — <criterion copied verbatim from INTENT.md>
 
 - **Verdict**: <met | not-met | unverifiable>
+- **Surface**: <the surface PLAN.md's Surface contract lists this criterion under; omit the whole field for any other criterion>
 - **Check**: `<command actually run, or "none">`
 - **Observed**: <relevant output or observed behavior>
 - **Reference**: <file:line, artifact path, or "none">

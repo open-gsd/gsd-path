@@ -91,6 +91,12 @@ Obtain a confident answer in every area before finishing:
 5. **Scope out** — explicit vetoes that downstream phases must not include.
 6. **Constraints** — stack, deadline, budget, code, integrations, compliance.
 7. **Risks** — the assumptions and unknowns research must investigate.
+8. **Surfaces** — what a person opens, sees, or types into to get the
+   result: screens, commands, endpoints. Record them on INTENT.md
+   `Surfaces:` (`none` only when nobody touches this work directly), and
+   give every named surface at least one success criterion observable
+   there. A criterion satisfied by a passing test alone does not cover a
+   surface.
 
 ## Program mode
 
@@ -136,7 +142,8 @@ State ownership. There is no re-interview of charter or roadmap scope:
 2. Draft INTENT.md from the resolved entry: Summary from its Goal, Scope
    in/out and Success criteria from the entry, Constraints inherited from the charter,
    Risks and Open questions from the entry (tagged `RESEARCH`/`NEEDS-USER`),
-   `Lane: milestone`, and `Review panel:` copied from CHARTER.md (default
+   `Lane: milestone`, `Surfaces:` copied verbatim from the entry, and
+   `Review panel:` copied from CHARTER.md (default
    `off` when CHARTER omits it). The confirmation may override the copied
    panel value; do not invent `detected` or a named list. When brownfield,
    fill `## Current state` from the map, record doc-vs-code rulings as in

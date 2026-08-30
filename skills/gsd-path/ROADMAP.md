@@ -84,9 +84,12 @@ precondition fails.
    checks below.
    - Every CHARTER.md `Full scope: in` item maps to at least one milestone,
      and every milestone traces back to charter scope.
-   - Every milestone entry has Goal, Depends on, Status, Archive, Scope in/out,
-     Success criteria, Risks, and Open questions fields; ids are unique and
-     ordered.
+   - Every milestone entry has Goal, Depends on, Surfaces, Status, Archive,
+     Scope in/out, Success criteria, Risks, and Open questions fields; ids are
+     unique and ordered.
+   - Every milestone whose Surfaces is not `none` has at least one success
+     criterion observable at each named surface. A milestone that delivers
+     something a person uses never carries `Surfaces: none`.
    - Dependencies reference earlier milestone ids and form an acyclic graph.
    - M001 is the thinnest end-to-end skeleton that burns the riskiest
      synthesis decisions.

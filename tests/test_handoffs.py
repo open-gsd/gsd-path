@@ -27,6 +27,43 @@ def git_output(root: Path, *arguments: str) -> str:
     ).stdout.strip()
 
 
+ROADMAP = """# Roadmap — demo
+
+## Milestones
+
+### M001 — demo
+Goal: First release
+Depends on: []
+Surfaces: Demo web app
+Status: active
+Archive: null
+Integrated: null
+Scope: in
+- First capability
+Scope: out
+- None
+Success criteria
+1. First works
+Risks
+- Delivery risk
+Open questions
+- None
+"""
+
+
+SURFACE_CONTRACT = """
+## Surface contract
+
+### Demo web app — T001
+
+Criteria: SC1
+Entry: `/demo`
+States: empty shows the starter card, loading a spinner, error a retry, success the report.
+Walkthrough:
+1. Open `/demo` and see the starter card.
+"""
+
+
 class HandoffValidationTests(unittest.TestCase):
     def write(self, root: Path, relative: str, content: str) -> None:
         path = root / relative
@@ -494,12 +531,14 @@ State: ship/blocked
             check_handoffs.main(["research", "--repo", ".", "--project-dir", "../x"])
 
     def write_intent_criteria(
-        self, root: Path, project_dir: str = ".project"
+        self, root: Path, project_dir: str = ".project", surfaces: str = "none"
     ) -> None:
         self.write(
             root,
             f"{project_dir}/intent/INTENT.md",
-            """# Intent — demo
+            f"""# Intent — demo
+
+Surfaces: {surfaces}
 
 ## Success criteria
 
@@ -516,6 +555,7 @@ State: ship/blocked
             "| T001 | Demo task T001 | — | src/app.py |\n"
             "| T002 | Demo task T002 | — | tests/test_app.py |\n"
         ),
+        surface_contract: str = "",
         project_dir: str = ".project",
     ) -> None:
         self.write(
@@ -539,7 +579,7 @@ Review depth: full
 | Task | Title | Deps | Files |
 |------|-------|------|-------|
 {task_rows}
-
+{surface_contract}
 ## Intent coverage
 
 | Criterion | Task | Acceptance |
@@ -777,6 +817,123 @@ The task implements the demo.
                 check_handoffs.validate_plan(root)
             self.assertIn("T001 Verify must not copy Project verify", str(failure.exception))
 
+    def test_plan_requires_a_surface_contract_for_each_declared_surface(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_plan_handoff(root)
+            self.write_intent_criteria(root, surfaces="Demo web app")
+
+            with self.assertRaises(check_handoffs.HandoffError) as failure:
+                check_handoffs.validate_plan(root)
+            self.assertIn("missing ## Surface contract", str(failure.exception))
+
+    def test_plan_accepts_a_complete_surface_contract(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_plan_handoff(root)
+            self.write_intent_criteria(root, surfaces="Demo web app")
+            self.write_plan_coverage(root, surface_contract=SURFACE_CONTRACT)
+
+            result = check_handoffs.validate_plan(root)
+            self.assertEqual(result["surfaces"], {"Demo web app": "T001"})
+
+    def test_plan_rejects_a_surface_block_without_a_walkthrough(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_plan_handoff(root)
+            self.write_intent_criteria(root, surfaces="Demo web app")
+            self.write_plan_coverage(
+                root,
+                surface_contract=SURFACE_CONTRACT.replace(
+                    "1. Open `/demo` and see the starter card.\n", ""
+                ),
+            )
+
+            with self.assertRaises(check_handoffs.HandoffError) as failure:
+                check_handoffs.validate_plan(root)
+            self.assertIn("Walkthrough has no steps", str(failure.exception))
+
+    def test_plan_rejects_surface_criteria_the_owning_task_does_not_own(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_plan_handoff(root)
+            self.write_intent_criteria(root, surfaces="Demo web app")
+            self.write_plan_coverage(
+                root,
+                rows="| SC1 | T002 | AC1 |\n| SC2 | T002 | AC2 |\n",
+                surface_contract=SURFACE_CONTRACT,
+            )
+            self.write_coverage_task(root, "T001", "- None")
+            self.write_coverage_task(
+                root,
+                "T002",
+                "- SC1\n- SC2",
+                acceptance=(
+                    "1. The demo command prints hello.\n"
+                    "2. The demo test suite is green."
+                ),
+            )
+
+            with self.assertRaises(check_handoffs.HandoffError) as failure:
+                check_handoffs.validate_plan(root)
+            self.assertIn(
+                "surface criteria are not owned by T001: SC1", str(failure.exception)
+            )
+
+    def test_plan_rejects_an_empty_surface_list(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_plan_handoff(root)
+            self.write_intent_criteria(root, surfaces=",")
+
+            with self.assertRaises(check_handoffs.HandoffError) as failure:
+                check_handoffs.validate_plan(root)
+            self.assertIn("names no surface", str(failure.exception))
+
+    def test_plan_rejects_walkthrough_steps_outside_the_walkthrough(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_plan_handoff(root)
+            self.write_intent_criteria(root, surfaces="Demo web app")
+            self.write_plan_coverage(
+                root,
+                surface_contract=SURFACE_CONTRACT.replace(
+                    "Walkthrough:\n1. Open `/demo` and see the starter card.",
+                    "1. Open `/demo` and see the starter card.\nWalkthrough:",
+                ),
+            )
+
+            with self.assertRaises(check_handoffs.HandoffError) as failure:
+                check_handoffs.validate_plan(root)
+            self.assertIn("Walkthrough has no steps", str(failure.exception))
+
+    def test_plan_rejects_surfaces_that_differ_from_the_roadmap_entry(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_plan_handoff(root)
+            self.write_intent_criteria(root, surfaces="none")
+            self.write(root, ".project/ROADMAP.md", ROADMAP)
+
+            with self.assertRaises(check_handoffs.HandoffError) as failure:
+                check_handoffs.validate_plan(root)
+            self.assertIn("do not match ROADMAP.md demo", str(failure.exception))
+
+    def test_roadmap_gate_requires_surfaces_on_an_unshipped_milestone(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_state(root, "roadmap", "active")
+            self.write(
+                root,
+                ".project/ROADMAP.md",
+                ROADMAP.replace("Surfaces: Demo web app\n", "").replace(
+                    "Status: active", "Status: pending"
+                ),
+            )
+
+            with self.assertRaises(check_handoffs.HandoffError) as failure:
+                check_handoffs.validate_roadmap(root)
+            self.assertIn("M001 is missing Surfaces", str(failure.exception))
+
     def test_plan_allows_project_verify_when_an_owned_sc_names_it(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -785,6 +942,8 @@ The task implements the demo.
                 root,
                 ".project/intent/INTENT.md",
                 """# Intent — demo
+
+Surfaces: none
 
 ## Success criteria
 
@@ -1247,6 +1406,7 @@ Tasks reviewed: 2
         verdict: str = "pass",
         sc1: str = "met",
         check: str = "`python3 hello.py`",
+        surface: str = "",
         project_dir: str = ".project",
     ) -> None:
         if not (root / ".git").exists():
@@ -1256,6 +1416,7 @@ Tasks reviewed: 2
             git(root, "add", ".")
             git(root, "commit", "-q", "-m", "reviewed product")
         reviewed_head = git_output(root, "rev-parse", "HEAD")
+        surface = f"\n- **Surface**: {surface}" if surface else ""
         self.write(
             root,
             f"{project_dir}/review/FINAL.md",
@@ -1270,7 +1431,7 @@ Overall verdict: {verdict}
 
 - **Verdict**: {sc1}
 - **Check**: {check}
-- **Observed**: hello
+- **Observed**: hello{surface}
 - **Reference**: hello.py:1
 - **Finding**: none
 - **Fix direction**: none
@@ -1317,6 +1478,54 @@ Waves checked: 1
 
             self.assertEqual(result["criteria"], ["SC1", "SC2"])
             self.assertEqual(result["verdict"], "pass")
+
+    def test_final_requires_a_surface_criterion_to_name_its_surface(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_state(root, "ship", "active")
+            self.write_intent_criteria(root, surfaces="Demo web app")
+            self.write_plan_coverage(root, surface_contract=SURFACE_CONTRACT)
+            self.write_final_review(root)
+
+            with self.assertRaises(check_handoffs.HandoffError) as failure:
+                check_handoffs.validate_final(root)
+            self.assertIn("SC1 is missing Surface", str(failure.exception))
+
+    def test_final_rejects_a_surface_criterion_walked_on_another_surface(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_state(root, "ship", "active")
+            self.write_intent_criteria(root, surfaces="Demo web app")
+            self.write_plan_coverage(root, surface_contract=SURFACE_CONTRACT)
+            self.write_final_review(root, surface="Some other screen")
+
+            with self.assertRaises(check_handoffs.HandoffError) as failure:
+                check_handoffs.validate_final(root)
+            self.assertIn("SC1 Surface must name Demo web app", str(failure.exception))
+
+    def test_final_accepts_a_walked_surface_criterion(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_state(root, "ship", "active")
+            self.write_intent_criteria(root, surfaces="Demo web app")
+            self.write_plan_coverage(root, surface_contract=SURFACE_CONTRACT)
+            self.write_final_review(root, surface="Demo web app")
+
+            result = check_handoffs.validate_final(root)
+
+            self.assertEqual(result["verdict"], "pass")
+
+    def test_final_rejects_a_surface_criterion_without_a_walked_check(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_state(root, "ship", "active")
+            self.write_intent_criteria(root, surfaces="Demo web app")
+            self.write_plan_coverage(root, surface_contract=SURFACE_CONTRACT)
+            self.write_final_review(root, surface="Demo web app", check="none")
+
+            with self.assertRaises(check_handoffs.HandoffError) as failure:
+                check_handoffs.validate_final(root)
+            self.assertIn("lacks the walked Check", str(failure.exception))
 
     def test_final_rejects_pass_without_a_check_or_reference(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

@@ -64,6 +64,13 @@ plan order above, which still keeps plan-invalidating risk in wave 1.
 - In Approach, give constraints, applicable pitfalls, and pointers to real
   paths, symbols, endpoints, and schemas — not an ordered edit script. The
   coder owns implementation decisions inside those constraints.
+- When INTENT.md names surfaces, write PLAN.md `## Surface contract`: one
+  block per surface with its entry point, what empty, loading, error, and
+  success each show, and the walkthrough a reviewer performs. Give each
+  surface to the task that delivers it, list in Criteria the success criteria
+  that surface is proven by — the same SCn ids that task owns in Intent
+  coverage — and put the surface in the same wave as the capability behind
+  it. A milestone with a surface is not done when only its internals run.
 - Make `files` exhaustive, including imports, routes, generated artifacts,
   tests, and wiring. Require disjoint files for same-wave tasks.
 - Write an Interface contract in every task: `None` for independent tasks;
@@ -84,7 +91,8 @@ otherwise write `review_panel: off`. Never invent `detected` or a named
 family list. Quick-lane plans always write `off`.
 
 Before returning, check veto exclusion, decision coverage, Intent coverage,
-dependencies, file overlap, task size, criteria, and Verify commands.
+the Surface contract, dependencies, file overlap, task size, criteria, and
+Verify commands.
 
 Return a brief structured summary: wave count, task count, and the wave-1
 risk list.
