@@ -1525,19 +1525,38 @@ export function doctor(sourceRoot, { targets, rootFor, project = null }) {
     push("note", "project: .claude/CLAUDE.md exists but is not the managed bridge");
   }
 
-  for (const name of PROJECT_RUNTIME_SCRIPTS) {
-    const destination = path.join(project, HOOKS_DIRECTORY, "runtime", name);
-    if (!isFile(destination)) {
-      push("fail", `project: missing runtime ${name}`);
-      continue;
-    }
-    const content = fs.readFileSync(destination);
-    if (!content.toString("utf8").includes(PROJECT_RUNTIME_MARKER)) {
-      push("warn", `project: runtime ${name} is not managed`);
-    } else if (!content.equals(fs.readFileSync(path.join(sourceRoot, "scripts", name)))) {
-      push("warn", `project: runtime ${name} is stale — refresh it with the project contracts`);
-    } else {
-      push("ok", `project: runtime ${name} current`);
+  const runtime = path.join(project, HOOKS_DIRECTORY, "runtime");
+  let runtimeSafe = true;
+  try {
+    validateDirectoryDestination(
+      path.join(project, HOOKS_DIRECTORY),
+      "project runtime parent directory"
+    );
+    validateDirectoryDestination(runtime, "project runtime directory");
+  } catch (error) {
+    if (!(error instanceof InstallerError)) throw error;
+    push("fail", `project: unsafe runtime — ${error.message}`);
+    runtimeSafe = false;
+  }
+  if (runtimeSafe) {
+    for (const name of PROJECT_RUNTIME_SCRIPTS) {
+      const destination = path.join(runtime, name);
+      if (isSymlink(destination)) {
+        push("fail", `project: runtime ${name} is a symlink`);
+        continue;
+      }
+      if (!isFile(destination)) {
+        push("fail", `project: missing runtime ${name}`);
+        continue;
+      }
+      const content = fs.readFileSync(destination);
+      if (!content.toString("utf8").includes(PROJECT_RUNTIME_MARKER)) {
+        push("warn", `project: runtime ${name} is not managed`);
+      } else if (!content.equals(fs.readFileSync(path.join(sourceRoot, "scripts", name)))) {
+        push("warn", `project: runtime ${name} is stale — refresh it with the project contracts`);
+      } else {
+        push("ok", `project: runtime ${name} current`);
+      }
     }
   }
 

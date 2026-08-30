@@ -130,52 +130,6 @@ class InstallerTests(unittest.TestCase):
             install.default_root("opencode", {"OPENCODE_CONFIG": str(config)}),
         )
 
-    def test_project_runtime_dependency_set_imports(self):
-        project = self.root / "runtime-project"
-        runtime = project / install.HOOKS_DIRECTORY / "runtime"
-        runtime.mkdir(parents=True)
-        for name in install.PROJECT_RUNTIME_SCRIPTS:
-            shutil.copy2(PROJECT_ROOT / "scripts" / name, runtime / name)
-        subprocess.run(
-            ["git", "init", "-b", "main", str(project)],
-            text=True,
-            capture_output=True,
-            check=True,
-        )
-        state = project / ".project" / "STATE.md"
-        state.parent.mkdir()
-        state.write_text(
-            "---\n"
-            "pipeline: gsd-path/v2\n"
-            "project: demo\n"
-            "milestone: demo\n"
-            "phase: plan\n"
-            "status: done\n"
-            "branch: null\n"
-            "archive: null\n"
-            "---\n\n"
-            "# Project State\n\n"
-            "## Log\n\n"
-            "- 2026-08-29 — plan — fixture\n",
-            encoding="utf-8",
-        )
-
-        result = subprocess.run(
-            [
-                sys.executable,
-                str(runtime / "pipeline_state.py"),
-                "status",
-                "--repo",
-                str(project),
-            ],
-            text=True,
-            capture_output=True,
-            check=False,
-        )
-
-        self.assertEqual(0, result.returncode, result.stderr)
-        self.assertEqual("gsd-path/status/v1", json.loads(result.stdout)["schema"])
-
         self.assertEqual(
             self.root / "future" / "skills",
             install.default_root(
@@ -237,6 +191,52 @@ class InstallerTests(unittest.TestCase):
             Path.home() / ".codex" / "skills",
             install.legacy_codex_root({"CODEX_HOME": ""}),
         )
+
+    def test_project_runtime_dependency_set_imports(self):
+        project = self.root / "runtime-project"
+        runtime = project / install.HOOKS_DIRECTORY / "runtime"
+        runtime.mkdir(parents=True)
+        for name in install.PROJECT_RUNTIME_SCRIPTS:
+            shutil.copy2(PROJECT_ROOT / "scripts" / name, runtime / name)
+        subprocess.run(
+            ["git", "init", "-b", "main", str(project)],
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        state = project / ".project" / "STATE.md"
+        state.parent.mkdir()
+        state.write_text(
+            "---\n"
+            "pipeline: gsd-path/v2\n"
+            "project: demo\n"
+            "milestone: demo\n"
+            "phase: plan\n"
+            "status: done\n"
+            "branch: null\n"
+            "archive: null\n"
+            "---\n\n"
+            "# Project State\n\n"
+            "## Log\n\n"
+            "- 2026-08-29 — plan — fixture\n",
+            encoding="utf-8",
+        )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(runtime / "pipeline_state.py"),
+                "status",
+                "--repo",
+                str(project),
+            ],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual("gsd-path/status/v1", json.loads(result.stdout)["schema"])
 
     def test_skill_names_are_derived_from_resource_manifest(self):
         manifest = {
@@ -1841,6 +1841,32 @@ class InstallerTests(unittest.TestCase):
         status, _, error = self.run_main(arguments)
         self.assertEqual(1, status)
         self.assertIn("incomplete install", error)
+
+    def test_doctor_rejects_symlinked_project_runtime(self):
+        project = self.root / "doctor-symlinked-runtime"
+        runtime_parent = project / install.HOOKS_DIRECTORY
+        runtime_parent.mkdir(parents=True)
+        outside = self.root / "outside-runtime"
+        outside.mkdir()
+        for name in install.PROJECT_RUNTIME_SCRIPTS:
+            shutil.copy2(self.source / "scripts" / name, outside / name)
+        (runtime_parent / "runtime").symlink_to(outside, target_is_directory=True)
+
+        findings = install.doctor(self.source, [], lambda _: self.root, project)
+
+        self.assertTrue(
+            any(
+                finding["level"] == "fail" and "symlink" in finding["text"]
+                for finding in findings
+            )
+        )
+        self.assertFalse(
+            any(
+                finding["level"] == "ok"
+                and finding["text"].startswith("project: runtime")
+                for finding in findings
+            )
+        )
 
     def test_doctor_uses_canonical_state_validation(self):
         project = self.root / "canonical-doctor-project"

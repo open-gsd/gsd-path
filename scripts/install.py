@@ -1571,21 +1571,33 @@ def doctor(
     else:
         push("note", "project: .claude/CLAUDE.md exists but is not the managed bridge")
 
-    for name in PROJECT_RUNTIME_SCRIPTS:
-        destination = project / HOOKS_DIRECTORY / "runtime" / name
-        if not destination.is_file():
-            push("fail", f"project: missing runtime {name}")
-            continue
-        content = destination.read_bytes()
-        if PROJECT_RUNTIME_MARKER.encode() not in content:
-            push("warn", f"project: runtime {name} is not managed")
-        elif content != (source_root / "scripts" / name).read_bytes():
-            push(
-                "warn",
-                f"project: runtime {name} is stale — refresh it with the project contracts",
-            )
-        else:
-            push("ok", f"project: runtime {name} current")
+    runtime = project / HOOKS_DIRECTORY / "runtime"
+    try:
+        _validate_directory_destination(
+            project / HOOKS_DIRECTORY, "project runtime parent directory"
+        )
+        _validate_directory_destination(runtime, "project runtime directory")
+    except InstallerError as error:
+        push("fail", f"project: unsafe runtime — {error}")
+    else:
+        for name in PROJECT_RUNTIME_SCRIPTS:
+            destination = runtime / name
+            if destination.is_symlink():
+                push("fail", f"project: runtime {name} is a symlink")
+                continue
+            if not destination.is_file():
+                push("fail", f"project: missing runtime {name}")
+                continue
+            content = destination.read_bytes()
+            if PROJECT_RUNTIME_MARKER.encode() not in content:
+                push("warn", f"project: runtime {name} is not managed")
+            elif content != (source_root / "scripts" / name).read_bytes():
+                push(
+                    "warn",
+                    f"project: runtime {name} is stale — refresh it with the project contracts",
+                )
+            else:
+                push("ok", f"project: runtime {name} current")
 
     guard_installed = any(
         _lexists(project / HOOKS_DIRECTORY / name) for name in GUARD_SCRIPTS

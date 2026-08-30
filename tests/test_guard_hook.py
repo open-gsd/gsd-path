@@ -33,13 +33,16 @@ def run_guard(payload):
 
 
 class GuardHookTests(unittest.TestCase):
-    def status(self, root, phase="plan", action="run-phase"):
+    def status(self, root, phase="plan", action="run-phase", route_phase=None):
+        route_phase = route_phase or phase
         return {
             "schema": "gsd-path/status/v1",
             "state": {"phase": phase},
-            "route": {"action": action, "phase": phase},
+            "route": {"action": action, "phase": route_phase},
             "path": str(root / ".project" / "STATE.md"),
-            "next_skill": f"gsd-path-{phase}" if action == "run-phase" else "gsd-path",
+            "next_skill": (
+                f"gsd-path-{route_phase}" if action == "run-phase" else "gsd-path"
+            ),
         }
 
     def assert_denied(self, payload):
@@ -135,6 +138,23 @@ class GuardHookTests(unittest.TestCase):
                 ),
             ):
                 self.assert_allowed(
+                    {"tool_name": "Edit", "tool_input": {"file_path": "src/app.py"}}
+                )
+
+    def test_plain_prompt_denies_product_write_before_routed_build_starts(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / ".project").mkdir()
+            (root / ".project" / "STATE.md").write_text("owned\n", encoding="utf-8")
+            with (
+                mock.patch.object(guard_hook, "repository_root", return_value=root),
+                mock.patch.object(
+                    guard_hook,
+                    "project_status",
+                    return_value=self.status(root, phase="plan", route_phase="build"),
+                ),
+            ):
+                self.assert_denied(
                     {"tool_name": "Edit", "tool_input": {"file_path": "src/app.py"}}
                 )
 

@@ -326,15 +326,16 @@ def enforce_pipeline_reentry(paths, working_directories):
     except (OSError, ValueError, json.JSONDecodeError):
         deny(REENTRY_FAILURE_REASON)
     route = status.get("route")
+    state_data = status.get("state") if isinstance(status.get("state"), dict) else {}
     if (
-        isinstance(route, dict)
+        state_data.get("phase") == "build"
+        and isinstance(route, dict)
         and route.get("action") == "run-phase"
         and route.get("phase") == "build"
     ):
         return
     if all(pipeline_control_path(path, working_directories, repo) for path in paths):
         return
-    state_data = status.get("state") if isinstance(status.get("state"), dict) else {}
     phase = state_data.get("phase", "unknown")
     next_step = status.get("next_skill") or (
         route.get("reason") if isinstance(route, dict) else None

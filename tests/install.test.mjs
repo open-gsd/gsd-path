@@ -1588,6 +1588,31 @@ test("doctor reports a healthy install, hooks, and project", async () => {
   assert.ok(findings.some((finding) => /pre-commit wired/.test(finding.text)));
 });
 
+test("doctor rejects a symlinked project runtime", async () => {
+  const project = path.join(root, "doctor-symlinked-runtime");
+  const runtimeParent = path.join(project, installer.HOOKS_DIRECTORY);
+  fs.mkdirSync(runtimeParent, { recursive: true });
+  const outside = path.join(root, "outside-runtime");
+  fs.mkdirSync(outside);
+  for (const name of installer.PROJECT_RUNTIME_SCRIPTS) {
+    fs.copyFileSync(path.join(source, "scripts", name), path.join(outside, name));
+  }
+  fs.symlinkSync(outside, path.join(runtimeParent, "runtime"), "dir");
+
+  const findings = installer.doctor(source, {
+    targets: [],
+    rootFor: () => "",
+    project,
+  });
+
+  assert.ok(findings.some((finding) => finding.level === "fail" && /symlink/.test(finding.text)));
+  assert.ok(
+    !findings.some(
+      (finding) => finding.level === "ok" && finding.text.startsWith("project: runtime")
+    )
+  );
+});
+
 test("doctor fails when installer-owned native guard config is missing", async () => {
   for (const [targetName, settingsPath] of [
     ["claude", [".claude", "settings.json"]],
