@@ -1061,6 +1061,31 @@ test("hooks refresh updates runtime without optional guards", async () => {
   }
 });
 
+test("hookless refresh requires an interpreter before writes", async () => {
+  const project = path.join(root, "hookless-refresh-project");
+  const target = path.join(root, "claude", "skills");
+  await runInstall([installer.targetPlan("claude", target)], { project });
+  const runtime = path.join(
+    project,
+    installer.HOOKS_DIRECTORY,
+    "runtime",
+    "pipeline_state.py"
+  );
+  const before = fs.readFileSync(runtime);
+  fs.writeFileSync(
+    path.join(source, "scripts", "pipeline_state.py"),
+    "# runtime v2\n" + installer.PROJECT_RUNTIME_MARKER + "\n"
+  );
+  installer.hooks.detectPythonInterpreter = () => null;
+
+  const status = await installer.main(
+    ["--hooks-refresh", "--project", project, "--source-root", source, "--no-color"]
+  );
+
+  assert.equal(status, 1);
+  assert.deepEqual(fs.readFileSync(runtime), before);
+});
+
 test("hooks refresh full updates settings and git hooks", async () => {
   const project = path.join(root, "project");
   fs.mkdirSync(path.join(project, ".git"), { recursive: true });
@@ -1673,6 +1698,9 @@ test("doctor flags stale guard scripts", async () => {
 });
 
 test("doctor uses canonical pipeline state validation", async () => {
+  for (const name of installer.PROJECT_RUNTIME_SCRIPTS) {
+    fs.copyFileSync(path.join(REPO_ROOT, "scripts", name), path.join(source, "scripts", name));
+  }
   const project = path.join(root, "project");
   fs.mkdirSync(project);
   git("init", "-q", project);
@@ -1684,13 +1712,14 @@ test("doctor uses canonical pipeline state validation", async () => {
     "---\npipeline: gsd-path/v2\nproject: demo\nmilestone: demo\n" +
       "phase: plan\nstatus: done\nbranch: null\narchive: null\n---\n"
   );
-  let findings = installer.doctor(REPO_ROOT, { targets: [], rootFor: () => "", project });
+  let findings = installer.doctor(source, { targets: [], rootFor: () => "", project });
   assert.ok(findings.some((finding) => finding.level === "ok" && finding.text === "state: plan/done"));
+  assert.ok(!fs.existsSync(path.join(source, "scripts", "__pycache__")));
   fs.writeFileSync(
     path.join(project, ".project", "STATE.md"),
     "---\npipeline: gsd-path/v2\nphase: plan\nstatus: done\n---\n"
   );
-  findings = installer.doctor(REPO_ROOT, { targets: [], rootFor: () => "", project });
+  findings = installer.doctor(source, { targets: [], rootFor: () => "", project });
   assert.ok(
     findings.some((finding) => finding.level === "fail" && /^state:/.test(finding.text))
   );

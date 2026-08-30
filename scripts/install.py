@@ -13,6 +13,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Iterable, List, Mapping, Optional, Sequence, Tuple, Union
 
+sys.dont_write_bytecode = True
+
 try:
     from . import sync_skill_resources
 except ImportError:  # Direct execution from scripts/.
@@ -221,15 +223,23 @@ def _git_hooks_location(project: "Path") -> Tuple[Optional["Path"], bool]:
     return (dot_git / "hooks" if dot_git.is_dir() else None), False
 
 
-def _required_hook_runtime(
-    project: Path, command: str, selected: Sequence[str] = ()
-) -> Tuple[str, Path]:
+def _required_python_runtime(
+    command: str, selected: Sequence[str] = ()
+) -> str:
     suffix = f" for selected hosts: {', '.join(selected)}" if selected else ""
     interpreter = _effective_interpreter()
     if interpreter is None:
         raise InstallerError(
             f"{command} requires a working Python interpreter{suffix}"
         )
+    return interpreter
+
+
+def _required_hook_runtime(
+    project: Path, command: str, selected: Sequence[str] = ()
+) -> Tuple[str, Path]:
+    suffix = f" for selected hosts: {', '.join(selected)}" if selected else ""
+    interpreter = _required_python_runtime(command, selected)
     hooks_dir, resolved = _git_hooks_location(project)
     if not resolved or hooks_dir is None:
         raise InstallerError(
@@ -1234,10 +1244,15 @@ def refresh_hooks(
     user-facing notes rather than refreshed files."""
     hooks_dir = _git_hooks_directory(project) if full else None
     interpreter: Optional[str] = None
-    if full and not dry_run:
-        interpreter, hooks_dir = _required_hook_runtime(
-            project, "--hooks-init" if initialize else "--hooks-refresh-full", selected
-        )
+    if not dry_run:
+        if full:
+            interpreter, hooks_dir = _required_hook_runtime(
+                project,
+                "--hooks-init" if initialize else "--hooks-refresh-full",
+                selected,
+            )
+        else:
+            interpreter = _required_python_runtime("--hooks-refresh", selected)
     _validate_hooks_refresh(
         source_root, project, full, hooks_dir, selected, initialize
     )
@@ -1451,7 +1466,7 @@ def _validated_project_state(source_root: Path, project: Path) -> dict:
         raise InstallerError(f"canonical state validator is unavailable: {validator}")
     try:
         result = subprocess.run(
-            [sys.executable, str(validator), "validate", "--repo", str(project)],
+            [sys.executable, "-B", str(validator), "validate", "--repo", str(project)],
             cwd=project,
             capture_output=True,
             text=True,
@@ -1567,10 +1582,15 @@ def doctor(
             "note",
             "project: no .claude/CLAUDE.md bridge (only written for --claude installs)",
         )
-    elif bridge.read_text(encoding="utf-8") == CLAUDE_BRIDGE:
-        push("ok", "project: .claude/CLAUDE.md bridge present")
     else:
-        push("note", "project: .claude/CLAUDE.md exists but is not the managed bridge")
+        try:
+            bridge_managed = bridge.read_text(encoding="utf-8") == CLAUDE_BRIDGE
+        except (OSError, UnicodeError):
+            bridge_managed = False
+        if bridge_managed:
+            push("ok", "project: .claude/CLAUDE.md bridge present")
+        else:
+            push("note", "project: .claude/CLAUDE.md exists but is not the managed bridge")
 
     runtime = project / HOOKS_DIRECTORY / "runtime"
     try:
@@ -1752,7 +1772,9 @@ def install(
     selected = [plan.name for plan in plans]
     interpreter = "python3"
     hooks_dir: Optional[Path] = None
-    if hooks:
+    if project is not None and not hooks and not dry_run:
+        interpreter = _required_python_runtime("--project", selected)
+    elif hooks:
         interpreter, hooks_dir = _required_hook_runtime(project, "--hooks", selected)
     deployments = _deployment_plans(plans)
     adapters = list(dict.fromkeys(deployment.profile for deployment in deployments))

@@ -175,7 +175,8 @@ Unrecognized or foreign `.project/` state is never auto-migrated — the router 
 | `no existing GSD Path skills found to update` | Run normal install first (`--all` or host flags) |
 | Skills still old | Restart session; confirm root with `--update --dry-run` |
 | Update rolled back | Read installer error; fix path overlap; retry |
-| `--hooks-refresh` rejected | Files must be from prior `--hooks` install |
+| `--hooks-refresh` rejects an unmanaged guard | Move the foreign guard aside, then rerun refresh; use `--hooks-init` if guards are wanted |
+| `--hooks-refresh` rejects an unmanaged runtime file | Back up or merge that file, move it aside, then rerun refresh |
 | Undo skill update | Copy from `disabled-gsd-skills` next to skills root |
 | npm vs clone confusion | Pick one: `npx gsd-path@latest --update` **or** clone + `install.mjs --update` |
 | Router still shows update line | Run update; or ignore — notice is informational |

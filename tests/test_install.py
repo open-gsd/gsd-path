@@ -1526,6 +1526,25 @@ class InstallerTests(unittest.TestCase):
         self.assertFalse(target.exists())
         self.assertFalse((project / "AGENTS.md").exists())
 
+    def test_hookless_project_install_requires_python_interpreter(self):
+        project = self.root / "project"
+        target = self.root / "claude" / "skills"
+        with mock.patch.object(
+            install, "_detect_python_interpreter", return_value=None
+        ):
+            with self.assertRaisesRegex(
+                install.InstallerError,
+                "--project requires a working Python interpreter.*selected hosts: claude",
+            ):
+                install.install(
+                    self.source,
+                    [install.TargetPlan("claude", target)],
+                    project=project,
+                )
+
+        self.assertFalse(target.exists())
+        self.assertFalse((project / "AGENTS.md").exists())
+
     def test_hooks_collision_rolls_back_cleanly(self):
         project = self.root / "project"
         (project / ".git").mkdir(parents=True)
@@ -1633,6 +1652,44 @@ class InstallerTests(unittest.TestCase):
         )
         for name in install.GUARD_SCRIPTS:
             self.assertFalse((project / install.HOOKS_DIRECTORY / name).exists())
+
+    def test_hookless_refresh_requires_interpreter_before_writes(self):
+        project = self.root / "hookless-refresh-project"
+        target = self.root / "claude" / "skills"
+        status, _, error = self.run_main(
+            [
+                "--claude",
+                "--claude-root",
+                str(target),
+                "--source-root",
+                str(self.source),
+                "--project",
+                str(project),
+            ]
+        )
+        self.assertEqual(0, status, error)
+        runtime = project / install.HOOKS_DIRECTORY / "runtime" / "pipeline_state.py"
+        before = runtime.read_bytes()
+        (self.source / "scripts" / "pipeline_state.py").write_text(
+            f"# runtime v2\n{install.PROJECT_RUNTIME_MARKER}\n", encoding="utf-8"
+        )
+
+        with mock.patch.object(
+            install, "_detect_python_interpreter", return_value=None
+        ):
+            status, _, error = self.run_main(
+                [
+                    "--hooks-refresh",
+                    "--project",
+                    str(project),
+                    "--source-root",
+                    str(self.source),
+                ]
+            )
+
+        self.assertEqual(1, status)
+        self.assertIn("working Python interpreter", error)
+        self.assertEqual(before, runtime.read_bytes())
 
     def test_hooks_refresh_rejects_unmanaged_guard_scripts(self):
         project = self.root / "project"
@@ -1843,6 +1900,13 @@ class InstallerTests(unittest.TestCase):
         self.assertIn("hooks: .gsd-path/guard_hook.py current", output)
         self.assertIn("hooks: .git/hooks/pre-commit wired", output)
         self.assertIn("state: plan/done", output)
+        self.assertFalse((self.source / "scripts" / "__pycache__").exists())
+
+        bridge = project / ".claude" / "CLAUDE.md"
+        bridge.write_bytes(b"\xff")
+        status, output, error = self.run_main(arguments)
+        self.assertEqual(0, status, error)
+        self.assertIn("exists but is not the managed bridge", output)
 
         shutil.rmtree(target / "gsd-path-plan")
         status, _, error = self.run_main(arguments)
@@ -1876,6 +1940,11 @@ class InstallerTests(unittest.TestCase):
         )
 
     def test_doctor_uses_canonical_state_validation(self):
+        for name in install.PROJECT_RUNTIME_SCRIPTS:
+            shutil.copy2(
+                PROJECT_ROOT / "scripts" / name,
+                self.source / "scripts" / name,
+            )
         project = self.root / "canonical-doctor-project"
         subprocess.run(
             ["git", "init", "-q", str(project)],
@@ -1892,7 +1961,7 @@ class InstallerTests(unittest.TestCase):
             encoding="utf-8",
         )
 
-        findings = install.doctor(PROJECT_ROOT, [], lambda _target: Path(), project)
+        findings = install.doctor(self.source, [], lambda _target: Path(), project)
 
         self.assertTrue(
             any(
@@ -1901,6 +1970,35 @@ class InstallerTests(unittest.TestCase):
                 for finding in findings
             )
         )
+        self.assertFalse((self.source / "scripts" / "__pycache__").exists())
+
+    def test_doctor_entrypoint_does_not_write_import_bytecode(self):
+        entrypoint = self.root / "doctor-entrypoint"
+        entrypoint.mkdir()
+        for name in ("install.py", "sync_skill_resources.py", "skill-resources.json"):
+            shutil.copy2(PROJECT_ROOT / "scripts" / name, entrypoint / name)
+        environment = os.environ.copy()
+        environment.pop("PYTHONDONTWRITEBYTECODE", None)
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(entrypoint / "install.py"),
+                "--doctor",
+                "--claude",
+                "--claude-root",
+                str(self.root / "empty-skills"),
+                "--source-root",
+                str(self.source),
+            ],
+            env=environment,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertFalse((entrypoint / "__pycache__").exists())
 
     def refresh_full_arguments(self, project):
         return [

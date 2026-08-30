@@ -1313,12 +1313,16 @@ function validateHooksRefresh(sourceRoot, project, full, hooksDir, selected, ini
 function refreshHooks(sourceRoot, project, full, dryRun, selected = [], initialize = false) {
   let hooksDir = full ? gitHooksDirectory(project) : null;
   let interpreter = null;
-  if (full && !dryRun) {
-    ({ interpreter, hooksDir } = requiredHookRuntime(
-      project,
-      initialize ? "--hooks-init" : "--hooks-refresh-full",
-      selected
-    ));
+  if (!dryRun) {
+    if (full) {
+      ({ interpreter, hooksDir } = requiredHookRuntime(
+        project,
+        initialize ? "--hooks-init" : "--hooks-refresh-full",
+        selected
+      ));
+    } else {
+      interpreter = requiredPythonRuntime("--hooks-refresh", selected);
+    }
   }
   validateHooksRefresh(sourceRoot, project, full, hooksDir, selected, initialize);
   const refreshed = [];
@@ -1404,7 +1408,7 @@ function validatedProjectState(sourceRoot, project) {
   }
   const result = spawnSync(
     interpreter,
-    [validator, "validate", "--repo", project],
+    ["-B", validator, "validate", "--repo", project],
     { cwd: project, encoding: "utf8" }
   );
   if (result.error || result.status !== 0) {
