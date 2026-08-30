@@ -341,12 +341,13 @@ def enforce_pipeline_reentry(paths, working_directories):
     if all(pipeline_control_path(path, working_directories, repo) for path in paths):
         return
     phase = state_data.get("phase", "unknown")
-    next_step = status.get("next_skill") or (
-        route.get("reason") if isinstance(route, dict) else None
-    )
+    if isinstance(route, dict) and route.get("action") != "run-phase":
+        next_step = f"{route.get('action', 'route')}: {route.get('reason', 'no reason')}"
+    else:
+        next_step = status.get("next_skill") or "gsd-path"
     deny(
         f"GSD Path is {phase}; direct product-file changes require the routed "
-        f"build phase. Review {status.get('path', state)}; next: {next_step or 'gsd-path'}"
+        f"build phase. Review {status.get('path', state)}; next: {next_step}"
     )
 
 

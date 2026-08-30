@@ -102,6 +102,24 @@ class GuardHookTests(unittest.TestCase):
         self.assertEqual(status, 2, error)
         self.assertIn("gsd-path-plan", json.loads(output)["reason"])
 
+    def test_plain_prompt_reports_exact_block_route(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / ".project").mkdir()
+            (root / ".project" / "STATE.md").write_text("owned\n", encoding="utf-8")
+            blocked = self.status(root, action="block")
+            blocked["route"]["reason"] = "branch mismatch"
+            with (
+                mock.patch.object(guard_hook, "repository_root", return_value=root),
+                mock.patch.object(guard_hook, "project_status", return_value=blocked),
+            ):
+                status, output, error = run_guard(
+                    {"tool_name": "Edit", "tool_input": {"file_path": "src/app.py"}}
+                )
+
+        self.assertEqual(status, 2, error)
+        self.assertIn("next: block: branch mismatch", json.loads(output)["reason"])
+
     def test_non_file_tools_are_not_treated_as_direct_writes(self):
         for tool in (
             "UpdatePlan",

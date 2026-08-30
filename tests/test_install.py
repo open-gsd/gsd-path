@@ -1986,6 +1986,39 @@ class InstallerTests(unittest.TestCase):
             )
         )
 
+    def test_doctor_reports_unreadable_bridge_and_git_hooks(self):
+        project = self.root / "doctor-unreadable-contracts"
+        (project / ".git").mkdir(parents=True)
+        target = self.root / "doctor-unreadable-claude" / "skills"
+        status, _, error = self.run_main(self.hooks_arguments(project, target))
+        self.assertEqual(0, status, error)
+        bridge = project / ".claude" / "CLAUDE.md"
+        pre_commit = project / ".git" / "hooks" / "pre-commit"
+        bridge.chmod(0)
+        pre_commit.chmod(0)
+        try:
+            findings = install.doctor(
+                self.source, ["claude"], lambda _target: target, project
+            )
+        finally:
+            bridge.chmod(0o644)
+            pre_commit.chmod(0o755)
+
+        self.assertTrue(
+            any(
+                finding["level"] == "fail"
+                and ".claude/CLAUDE.md cannot be read" in finding["text"]
+                for finding in findings
+            )
+        )
+        self.assertTrue(
+            any(
+                finding["level"] == "fail"
+                and "pre-commit cannot be read" in finding["text"]
+                for finding in findings
+            )
+        )
+
     def test_doctor_uses_canonical_state_validation(self):
         for name in install.PROJECT_RUNTIME_SCRIPTS:
             shutil.copy2(

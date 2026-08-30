@@ -109,17 +109,18 @@ You can update proactively with [commands above](#update-skills) without waiting
 
 ---
 
-## Update guard hooks
+## Update the project runtime and guard hooks
 
-If you used `--hooks` on install:
+After any `--project` install, refresh the project status runtime with:
 
 ```bash
 node scripts/install.mjs --hooks-refresh --project /path/to/repo
 ```
 
-Overwrites managed guard scripts and the project status runtime. Guard files
-must contain `gsd-path guard`; runtime files must contain
-`gsd-path project runtime`.
+This refresh works for hookless project installs. It overwrites the managed
+project status runtime and also refreshes managed guard scripts when they are
+installed. Guard files must contain `gsd-path guard`; runtime files must
+contain `gsd-path project runtime`.
 
 Include existing native settings and git hooks, and create missing settings for
 explicitly selected hosts:

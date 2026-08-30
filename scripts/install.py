@@ -958,11 +958,18 @@ def _is_managed_project_runtime(destination: Path) -> bool:
     )
 
 
+def _is_managed_git_hook_content(text: str) -> bool:
+    return GUARD_MARKER in text and "git_guard.py" in text
+
+
 def _is_managed_git_hook(destination: Path) -> bool:
     if not destination.is_file():
         return False
-    text = destination.read_text(encoding="utf-8", errors="replace")
-    return GUARD_MARKER in text and "git_guard.py" in text
+    try:
+        text = destination.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+    return _is_managed_git_hook_content(text)
 
 
 def _is_managed_hook_settings(destination: Path) -> bool:
@@ -1597,14 +1604,15 @@ def doctor(
             "project: no .claude/CLAUDE.md bridge (only written for --claude installs)",
         )
     else:
-        try:
-            bridge_managed = bridge.read_text(encoding="utf-8") == CLAUDE_BRIDGE
-        except (OSError, UnicodeError):
-            bridge_managed = False
-        if bridge_managed:
-            push("ok", "project: .claude/CLAUDE.md bridge present")
-        else:
-            push("note", "project: .claude/CLAUDE.md exists but is not the managed bridge")
+        content = read_project_file(bridge, "project: .claude/CLAUDE.md")
+        if content is not None:
+            if content == CLAUDE_BRIDGE.encode():
+                push("ok", "project: .claude/CLAUDE.md bridge present")
+            else:
+                push(
+                    "note",
+                    "project: .claude/CLAUDE.md exists but is not the managed bridge",
+                )
 
     runtime = project / HOOKS_DIRECTORY / "runtime"
     try:
@@ -1712,17 +1720,25 @@ def doctor(
                         )
                         if custom:
                             missing_from_custom = True
-                    elif not _is_managed_git_hook(hook_path):
-                        push("warn", f"hooks: {label} is not a managed GSD Path git hook")
-                    elif not any(
-                        hook_path.read_text(encoding="utf-8") == generator(candidate)
-                        for candidate in ("python3", "python")
-                    ):
-                        push("warn", f"hooks: {label} is stale — run --hooks-refresh-full")
-                    elif not _is_executable(hook_path):
-                        push("warn", f"hooks: {label} is not executable — run --hooks-refresh-full")
                     else:
-                        push("ok", f"hooks: {label} wired")
+                        content = read_project_file(hook_path, f"hooks: {label}")
+                        if content is None:
+                            continue
+                        hook_text = content.decode("utf-8", errors="replace")
+                        if not _is_managed_git_hook_content(hook_text):
+                            push("warn", f"hooks: {label} is not a managed GSD Path git hook")
+                        elif not any(
+                            hook_text == generator(candidate)
+                            for candidate in ("python3", "python")
+                        ):
+                            push("warn", f"hooks: {label} is stale — run --hooks-refresh-full")
+                        elif not _is_executable(hook_path):
+                            push(
+                                "warn",
+                                f"hooks: {label} is not executable — run --hooks-refresh-full",
+                            )
+                        else:
+                            push("ok", f"hooks: {label} wired")
                 if missing_from_custom:
                     push(
                         "warn",

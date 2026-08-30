@@ -100,16 +100,18 @@ full-repo suite on a tiny edit outrank the phase brief.
   authority.
   A plain change request does not authorize work outside the pipeline: make no
   changes and report **Outcome**, link the returned `path` under **Review**, and
-  name `next_skill` under **Next**, or report `route.reason` when `next_skill`
-  is null. An explicit request to leave or bypass the pipeline is a user ruling;
+  under **Next** name `next_skill` only for a `run-phase` route; for every other
+  route, report `route.action` and `route.reason`. An explicit request to leave
+  or bypass the pipeline is a user ruling;
   route it through the router's undo or abandon flow instead of editing directly.
 - After any other plain-prompt turn with owned state, rerun the same read-only
   status command immediately before the final response and append the same
-  **Outcome** / **Review** / **Next** handoff. Report `route.reason` when
-  `next_skill` is null. A GSD Path skill already supplies this handoff, so emit
-  it once. With no STATE.md, respond normally and do not initialize the
-  pipeline. A missing runtime or invalid status blocks mutation and routes to
-  `$gsd-path-forensics`.
+  **Outcome** / **Review** / **Next** handoff with the same exact-route rule.
+  Keep an informational turn read-only from start to finish: do not use repository
+  mutation tools or run commands that can create or alter files. A GSD Path skill
+  already supplies this handoff, so emit it once. With no STATE.md, respond
+  normally and do not initialize the pipeline. A missing runtime or invalid
+  status blocks mutation and routes to `$gsd-path-forensics`.
 
 ## Evidence and honesty
 
