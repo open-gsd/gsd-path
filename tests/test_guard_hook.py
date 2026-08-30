@@ -13,6 +13,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import guard_hook
+import status_runtime
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "guard_hook.py"
 
@@ -267,6 +268,7 @@ class GuardHookTests(unittest.TestCase):
             runtime = managed / "runtime"
             runtime.mkdir(parents=True)
             shutil.copy2(SCRIPT, managed / "guard_hook.py")
+            shutil.copy2(SCRIPT.parent / "status_runtime.py", managed / "status_runtime.py")
             scripts = SCRIPT.parent
             for name in (
                 "pipeline_state.py",
@@ -311,6 +313,29 @@ class GuardHookTests(unittest.TestCase):
 
             self.assertEqual(2, result.returncode, result.stderr)
             self.assertFalse((runtime / "__pycache__").exists())
+
+    def test_status_launcher_retries_runtime_publication_gap(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            managed = root / ".gsd-path"
+            runtime = managed / "runtime" / "pipeline_state.py"
+            runtime.parent.mkdir(parents=True)
+            runtime.write_text("old runtime\n", encoding="utf-8")
+            calls = []
+
+            def exec_runtime(command, **options):
+                calls.append((command, options))
+                if len(calls) == 1:
+                    runtime.unlink()
+                    runtime.write_text("new runtime with a new inode\n", encoding="utf-8")
+                    return subprocess.CompletedProcess(command, 2, b"", b"missing runtime")
+                return subprocess.CompletedProcess(command, 0, b"route\n", b"")
+
+            with mock.patch.object(status_runtime.subprocess, "run", side_effect=exec_runtime):
+                with contextlib.redirect_stdout(io.StringIO()):
+                    self.assertEqual(0, status_runtime.launch(root))
+
+            self.assertEqual(2, len(calls))
 
     def test_plain_prompt_denies_mixed_product_patch(self):
         with tempfile.TemporaryDirectory() as temporary:

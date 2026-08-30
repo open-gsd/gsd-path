@@ -332,15 +332,11 @@ def repository_root():
 
 def project_status(repo):
     script_root = Path(__file__).resolve().parent
-    candidates = (
-        script_root / "runtime" / "pipeline_state.py",
-        script_root / "pipeline_state.py",
-    )
-    script = next((path for path in candidates if path.is_file()), None)
-    if script is None:
+    launcher = script_root / "status_runtime.py"
+    if not launcher.is_file():
         raise ValueError("project status runtime is unavailable")
     result = subprocess.run(
-        [sys.executable, "-B", str(script), "status", "--repo", str(repo)],
+        [sys.executable, "-B", str(launcher), "--repo", str(repo)],
         cwd=repo,
         text=True,
         capture_output=True,

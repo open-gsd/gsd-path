@@ -54,25 +54,12 @@ PROJECT_RUNTIME_SCRIPTS = (
     "review_panel.py",
 )
 PROJECT_RUNTIME_MARKER = "gsd-path project runtime"
+PROJECT_STATUS_LAUNCHER = "status_runtime.py"
+PROJECT_STATUS_MARKER = "gsd-path project status launcher"
 INSTALL_LOCK_NAME = ".gsd-path-install-lock"
-PLAIN_REENTRY_CONTRACT = "<!-- gsd-path/plain-prompt-reentry/v1 -->"
 PROJECT_CONTRACTS = (
-    (
-        "AGENTS.md",
-        (
-            "# AGENTS.md — Operating Rules for the GSD Path Pipeline",
-            "## Plain-prompt re-entry",
-            PLAIN_REENTRY_CONTRACT,
-        ),
-    ),
-    (
-        "WORKFLOW.md",
-        (
-            "# WORKFLOW.md — GSD Path Pipeline SOP",
-            "### Plain-prompt re-entry",
-            PLAIN_REENTRY_CONTRACT,
-        ),
-    ),
+    ("AGENTS.md", "## Plain-prompt re-entry"),
+    ("WORKFLOW.md", "### Plain-prompt re-entry"),
 )
 STATUS_ACTIONS = frozenset(
     {
@@ -802,6 +789,12 @@ def _project_destinations(
     destinations: List[Tuple[Path, Optional[str], Optional[str], bool]] = [
         (project / "AGENTS.md", "AGENTS.md", None, False),
         (project / "WORKFLOW.md", "WORKFLOW.md", None, False),
+        (
+            project / HOOKS_DIRECTORY / PROJECT_STATUS_LAUNCHER,
+            f"scripts/{PROJECT_STATUS_LAUNCHER}",
+            None,
+            False,
+        ),
     ]
     destinations.extend(
         (
@@ -932,6 +925,7 @@ def _validate_project(
     sources = [
         "AGENTS.md",
         "WORKFLOW.md",
+        f"scripts/{PROJECT_STATUS_LAUNCHER}",
         *(f"scripts/{name}" for name in PROJECT_RUNTIME_SCRIPTS),
     ]
     if hooks:
@@ -1012,6 +1006,12 @@ def _is_managed_guard_script(destination: Path) -> bool:
     if not destination.is_file():
         return False
     return GUARD_MARKER in destination.read_text(encoding="utf-8", errors="replace")
+
+
+def _is_managed_project_status_launcher(destination: Path) -> bool:
+    return destination.is_file() and PROJECT_STATUS_MARKER in destination.read_text(
+        encoding="utf-8", errors="replace"
+    )
 
 
 def _is_managed_project_runtime(destination: Path) -> bool:
@@ -1235,13 +1235,37 @@ def _refreshes_guards(project: Path, full: bool, initialize: bool) -> bool:
     )
 
 
-def _has_legacy_project_contracts(project: Path) -> bool:
-    for name, markers in PROJECT_CONTRACTS:
+def _contract_section(content: str, heading: str) -> Optional[str]:
+    normalized = content.replace("\r\n", "\n")
+    match = re.search(rf"(?m)^{re.escape(heading)}$", normalized)
+    if match is None:
+        return None
+    depth = heading.index(" ")
+    after_heading = normalized.find("\n", match.start())
+    body_start = len(normalized) if after_heading == -1 else after_heading + 1
+    next_heading = re.search(rf"(?m)^#{{1,{depth}}}\s", normalized[body_start:])
+    end = len(normalized) if next_heading is None else body_start + next_heading.start()
+    return normalized[match.start():end].rstrip()
+
+
+def _has_legacy_project_contracts(source_root: Path, project: Path) -> bool:
+    for name, heading in PROJECT_CONTRACTS:
         contract = project / name
-        if contract.is_symlink() or not contract.is_file():
+        source = source_root / name
+        if (
+            contract.is_symlink()
+            or not contract.is_file()
+            or source.is_symlink()
+            or not source.is_file()
+        ):
             return False
-        content = contract.read_text(encoding="utf-8", errors="replace")
-        if not all(marker in content for marker in markers):
+        installed = contract.read_text(encoding="utf-8", errors="replace")
+        canonical = source.read_text(encoding="utf-8", errors="replace")
+        installed_section = _contract_section(installed, heading)
+        if (
+            installed_section is None
+            or installed_section != _contract_section(canonical, heading)
+        ):
             return False
     return True
 
@@ -1268,12 +1292,22 @@ def _validate_hooks_refresh(
         not initialize
         and not refresh_guards
         and not runtime_exists
-        and not _has_legacy_project_contracts(project)
+        and not _has_legacy_project_contracts(source_root, project)
     ):
         raise InstallerError(
             f"no managed GSD Path hooks or runtime found in project: {project}"
         )
     runtime = project / HOOKS_DIRECTORY / "runtime"
+    launcher = project / HOOKS_DIRECTORY / PROJECT_STATUS_LAUNCHER
+    launcher_source = source_root / "scripts" / PROJECT_STATUS_LAUNCHER
+    if launcher.is_symlink() or (
+        _lexists(launcher) and not _is_managed_project_status_launcher(launcher)
+    ):
+        raise InstallerError(f"not a managed GSD Path status launcher: {launcher}")
+    if launcher_source.is_symlink() or not launcher_source.is_file():
+        raise InstallerError(
+            f"missing project status launcher source: {launcher_source}"
+        )
     if runtime.is_dir():
         unexpected = [
             entry.name for entry in runtime.iterdir() if entry.name not in PROJECT_RUNTIME_SCRIPTS
@@ -1376,10 +1410,16 @@ def _refresh_hooks_unlocked(
         previous = staging.with_name(staging.name + "-previous")
         moved_previous = False
         published_runtime = False
+        launcher = runtime.parent / PROJECT_STATUS_LAUNCHER
+        launcher_original = launcher.read_bytes() if _lexists(launcher) else None
+        launcher_mode = (
+            launcher.stat().st_mode & 0o777 if launcher_original is not None else None
+        )
         guard_originals: List[Tuple[Path, Optional[bytes], Optional[int]]] = []
         try:
             for name in PROJECT_RUNTIME_SCRIPTS:
                 shutil.copy2(source_root / "scripts" / name, staging / name)
+            _atomic_copy(source_root / "scripts" / PROJECT_STATUS_LAUNCHER, launcher)
             if _lexists(runtime):
                 os.replace(runtime, previous)
                 moved_previous = True
@@ -1404,6 +1444,10 @@ def _refresh_hooks_unlocked(
                     _remove_path(destination)
                 else:
                     _atomic_write(destination, original, mode)
+            if launcher_original is None:
+                _remove_path(launcher)
+            else:
+                _atomic_write(launcher, launcher_original, launcher_mode)
             if published_runtime and _lexists(runtime):
                 _remove_path(runtime)
             if not _lexists(runtime) and moved_previous and _lexists(previous):
@@ -1417,6 +1461,11 @@ def _refresh_hooks_unlocked(
             _remove_path(staging)
     for name in PROJECT_RUNTIME_SCRIPTS:
         refreshed.append(_describe_project_path(project, runtime / name))
+    refreshed.append(
+        _describe_project_path(
+            project, project / HOOKS_DIRECTORY / PROJECT_STATUS_LAUNCHER
+        )
+    )
     if refresh_guards:
         for name in GUARD_SCRIPTS:
             destination = project / HOOKS_DIRECTORY / name
@@ -1668,10 +1717,10 @@ def _validated_project_state(source_root: Path, project: Path) -> dict:
 
 def _validate_project_runtime_status(project: Path) -> None:
     interpreter = _required_python_runtime("--doctor")
-    runtime = project / HOOKS_DIRECTORY / "runtime" / "pipeline_state.py"
+    runtime = project / HOOKS_DIRECTORY / PROJECT_STATUS_LAUNCHER
     try:
         result = subprocess.run(
-            [interpreter, "-B", str(runtime), "status", "--repo", str(project)],
+            [interpreter, "-B", str(runtime), "--repo", str(project)],
             cwd=project,
             capture_output=True,
             text=True,
@@ -1882,7 +1931,7 @@ def doctor(
     if project is None:
         return findings
 
-    for name, markers in PROJECT_CONTRACTS:
+    for name, heading in PROJECT_CONTRACTS:
         contract = project / name
         if not contract.is_file():
             push("fail", f'project: missing contract {name} — run --project "{project}"')
@@ -1890,8 +1939,16 @@ def doctor(
         content = read_project_file(contract, f"project: {name}")
         if content is None:
             continue
-        text = content.decode("utf-8", errors="replace")
-        if all(marker in text for marker in markers):
+        canonical = read_project_file(source_root / name, f"package: {name}")
+        if canonical is None:
+            continue
+        installed_section = _contract_section(
+            content.decode("utf-8", errors="replace"), heading
+        )
+        canonical_section = _contract_section(
+            canonical.decode("utf-8", errors="replace"), heading
+        )
+        if installed_section is not None and installed_section == canonical_section:
             push("ok", f"project: {name} present")
         else:
             push(
@@ -1917,6 +1974,27 @@ def doctor(
                 )
 
     runtime = project / HOOKS_DIRECTORY / "runtime"
+    launcher = project / HOOKS_DIRECTORY / PROJECT_STATUS_LAUNCHER
+    if launcher.is_symlink():
+        push("fail", "project: status launcher is a symlink")
+    elif not launcher.is_file():
+        push("fail", "project: missing status launcher")
+    else:
+        launcher_content = read_project_file(launcher, "project: status launcher")
+        launcher_source = read_project_file(
+            source_root / "scripts" / PROJECT_STATUS_LAUNCHER,
+            "package: status launcher",
+        )
+        if launcher_content is not None and launcher_source is not None:
+            if PROJECT_STATUS_MARKER.encode() not in launcher_content:
+                push("warn", "project: status launcher is not managed")
+            elif launcher_content != launcher_source:
+                push(
+                    "warn",
+                    "project: status launcher is stale — refresh it with the project contracts",
+                )
+            else:
+                push("ok", "project: status launcher current")
     try:
         _validate_directory_destination(
             project / HOOKS_DIRECTORY, "project runtime parent directory"

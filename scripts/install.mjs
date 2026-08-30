@@ -23,11 +23,12 @@ export const PROJECT_RUNTIME_SCRIPTS = [
   "review_panel.py",
 ];
 export const PROJECT_RUNTIME_MARKER = "gsd-path project runtime";
+export const PROJECT_STATUS_LAUNCHER = "status_runtime.py";
+export const PROJECT_STATUS_MARKER = "gsd-path project status launcher";
 const INSTALL_LOCK_NAME = ".gsd-path-install-lock";
-const PLAIN_REENTRY_CONTRACT = "<!-- gsd-path/plain-prompt-reentry/v1 -->";
 const PROJECT_CONTRACTS = [
-  ["AGENTS.md", ["# AGENTS.md — Operating Rules for the GSD Path Pipeline", "## Plain-prompt re-entry", PLAIN_REENTRY_CONTRACT]],
-  ["WORKFLOW.md", ["# WORKFLOW.md — GSD Path Pipeline SOP", "### Plain-prompt re-entry", PLAIN_REENTRY_CONTRACT]],
+  ["AGENTS.md", "## Plain-prompt re-entry"],
+  ["WORKFLOW.md", "### Plain-prompt re-entry"],
 ];
 const STATUS_ACTIONS = new Set([
   "bind-initial",
@@ -874,6 +875,12 @@ function projectDestinations(project, selected, hooksEnabled, interpreter, hooks
   const destinations = [
     [path.join(project, "AGENTS.md"), "AGENTS.md", null, false],
     [path.join(project, "WORKFLOW.md"), "WORKFLOW.md", null, false],
+    [
+      path.join(project, HOOKS_DIRECTORY, PROJECT_STATUS_LAUNCHER),
+      path.join("scripts", PROJECT_STATUS_LAUNCHER),
+      null,
+      false,
+    ],
   ];
   for (const name of PROJECT_RUNTIME_SCRIPTS) {
     destinations.push([
@@ -998,6 +1005,7 @@ function validateProject(sourceRoot, project, selected, hooksEnabled, reservedRo
   const sources = [
     "AGENTS.md",
     "WORKFLOW.md",
+    path.join("scripts", PROJECT_STATUS_LAUNCHER),
     ...PROJECT_RUNTIME_SCRIPTS.map((name) => path.join("scripts", name)),
   ];
   if (hooksEnabled) {
@@ -1085,6 +1093,11 @@ function isManagedGuardScript(destination) {
 function isManagedProjectRuntime(destination) {
   if (!isFile(destination)) return false;
   return fs.readFileSync(destination, "utf8").includes(PROJECT_RUNTIME_MARKER);
+}
+
+function isManagedProjectStatusLauncher(destination) {
+  if (!isFile(destination)) return false;
+  return fs.readFileSync(destination, "utf8").includes(PROJECT_STATUS_MARKER);
 }
 
 function isManagedGitHook(destination) {
@@ -1273,12 +1286,32 @@ function refreshesGuards(project, full, initialize) {
   );
 }
 
-function hasLegacyProjectContracts(project) {
-  return PROJECT_CONTRACTS.every(([name, markers]) => {
+function contractSection(content, heading) {
+  const normalized = content.replaceAll("\r\n", "\n");
+  const startPattern = new RegExp(`^${heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "m");
+  const startMatch = startPattern.exec(normalized);
+  if (startMatch === null) return null;
+  const depth = heading.indexOf(" ");
+  const afterHeading = normalized.indexOf("\n", startMatch.index);
+  const bodyStart = afterHeading === -1 ? normalized.length : afterHeading + 1;
+  const nextHeading = new RegExp(`^#{1,${depth}}\\s`, "m").exec(normalized.slice(bodyStart));
+  const end = nextHeading === null ? normalized.length : bodyStart + nextHeading.index;
+  return normalized.slice(startMatch.index, end).trimEnd();
+}
+
+function hasLegacyProjectContracts(sourceRoot, project) {
+  return PROJECT_CONTRACTS.every(([name, heading]) => {
     const candidate = path.join(project, name);
-    if (isSymlink(candidate) || !isFile(candidate)) return false;
-    const content = fs.readFileSync(candidate, "utf8");
-    return markers.every((marker) => content.includes(marker));
+    const source = path.join(sourceRoot, name);
+    if (
+      isSymlink(candidate) ||
+      !isFile(candidate) ||
+      isSymlink(source) ||
+      !isFile(source)
+    ) return false;
+    const installed = contractSection(fs.readFileSync(candidate, "utf8"), heading);
+    const canonical = contractSection(fs.readFileSync(source, "utf8"), heading);
+    return installed !== null && installed === canonical;
   });
 }
 
@@ -1300,13 +1333,21 @@ function validateHooksRefresh(sourceRoot, project, full, hooksDir, selected, ini
     !initialize &&
     !refreshGuards &&
     !runtimeExists &&
-    !hasLegacyProjectContracts(project)
+    !hasLegacyProjectContracts(sourceRoot, project)
   ) {
     throw new InstallerError(
       `no managed GSD Path hooks or runtime found in project: ${project}`
     );
   }
   const runtime = path.join(project, HOOKS_DIRECTORY, "runtime");
+  const launcher = path.join(project, HOOKS_DIRECTORY, PROJECT_STATUS_LAUNCHER);
+  const launcherSource = path.join(sourceRoot, "scripts", PROJECT_STATUS_LAUNCHER);
+  if (isSymlink(launcher) || (lexists(launcher) && !isManagedProjectStatusLauncher(launcher))) {
+    throw new InstallerError(`not a managed GSD Path status launcher: ${launcher}`);
+  }
+  if (isSymlink(launcherSource) || !isFile(launcherSource)) {
+    throw new InstallerError(`missing project status launcher source: ${launcherSource}`);
+  }
   if (isDirectory(runtime)) {
     const unexpected = fs
       .readdirSync(runtime)
@@ -1389,6 +1430,9 @@ function publishProjectRuntime(sourceRoot, project, refreshGuards) {
   const previous = `${staging}-previous`;
   let movedPrevious = false;
   let publishedRuntime = false;
+  const launcher = path.join(parent, PROJECT_STATUS_LAUNCHER);
+  const launcherOriginal = lexists(launcher) ? fs.readFileSync(launcher) : null;
+  const launcherMode = launcherOriginal === null ? undefined : fs.statSync(launcher).mode & 0o777;
   const guardOriginals = [];
   try {
     for (const name of PROJECT_RUNTIME_SCRIPTS) {
@@ -1397,6 +1441,7 @@ function publishProjectRuntime(sourceRoot, project, refreshGuards) {
         path.join(staging, name)
       );
     }
+    copyFileAtomic(path.join(sourceRoot, "scripts", PROJECT_STATUS_LAUNCHER), launcher);
     if (lexists(runtime)) {
       fs.renameSync(runtime, previous);
       movedPrevious = true;
@@ -1419,6 +1464,8 @@ function publishProjectRuntime(sourceRoot, project, refreshGuards) {
       if (original === null) removePath(destination);
       else writeFileAtomic(destination, original);
     }
+    if (launcherOriginal === null) removePath(launcher);
+    else writeFileAtomic(launcher, launcherOriginal, launcherMode);
     if (publishedRuntime && lexists(runtime)) removePath(runtime);
     if (!lexists(runtime) && movedPrevious && lexists(previous)) {
       fs.renameSync(previous, runtime);
@@ -1454,6 +1501,12 @@ function refreshHooksUnlocked(sourceRoot, project, full, dryRun, selected, initi
       describeProjectPath(project, path.join(project, HOOKS_DIRECTORY, "runtime", name))
     );
   }
+  refreshed.push(
+    describeProjectPath(
+      project,
+      path.join(project, HOOKS_DIRECTORY, PROJECT_STATUS_LAUNCHER)
+    )
+  );
   if (refreshGuards) {
     for (const name of GUARD_SCRIPTS) {
       const destination = path.join(project, HOOKS_DIRECTORY, name);
@@ -1574,10 +1627,10 @@ function hasManagedInstall(root) {
 
 function validateProjectRuntimeStatus(project) {
   const interpreter = requiredPythonRuntime("--doctor");
-  const runtime = path.join(project, HOOKS_DIRECTORY, "runtime", "pipeline_state.py");
+  const runtime = path.join(project, HOOKS_DIRECTORY, PROJECT_STATUS_LAUNCHER);
   const result = spawnSync(
     interpreter,
-    ["-B", runtime, "status", "--repo", project],
+    ["-B", runtime, "--repo", project],
     { cwd: project, encoding: "utf8" }
   );
   if (result.error || result.status !== 0) {
@@ -1771,7 +1824,7 @@ export function doctor(sourceRoot, { targets, rootFor, project = null }) {
 
   if (project === null) return findings;
 
-  for (const [name, markers] of PROJECT_CONTRACTS) {
+  for (const [name, heading] of PROJECT_CONTRACTS) {
     const contract = path.join(project, name);
     if (!isFile(contract)) {
       push("fail", `project: missing contract ${name} — run --project "${project}"`);
@@ -1779,7 +1832,14 @@ export function doctor(sourceRoot, { targets, rootFor, project = null }) {
     }
     const content = readProjectFile(contract, `project: ${name}`);
     if (content === null) continue;
-    if (markers.every((marker) => content.toString("utf8").includes(marker))) {
+    const canonical = readProjectFile(
+      path.join(sourceRoot, name),
+      `package: ${name}`
+    );
+    if (canonical === null) continue;
+    const installedSection = contractSection(content.toString("utf8"), heading);
+    const canonicalSection = contractSection(canonical.toString("utf8"), heading);
+    if (installedSection !== null && installedSection === canonicalSection) {
       push("ok", `project: ${name} present`);
     } else {
       push("fail", `project: ${name} lacks plain-prompt re-entry — merge the current contract`);
@@ -1800,6 +1860,30 @@ export function doctor(sourceRoot, { targets, rootFor, project = null }) {
   }
 
   const runtime = path.join(project, HOOKS_DIRECTORY, "runtime");
+  const launcher = path.join(project, HOOKS_DIRECTORY, PROJECT_STATUS_LAUNCHER);
+  if (isSymlink(launcher)) {
+    push("fail", "project: status launcher is a symlink");
+  } else if (!isFile(launcher)) {
+    push("fail", "project: missing status launcher");
+  } else {
+    const launcherContent = readProjectFile(launcher, "project: status launcher");
+    const launcherSource = readProjectFile(
+      path.join(sourceRoot, "scripts", PROJECT_STATUS_LAUNCHER),
+      "package: status launcher"
+    );
+    if (launcherContent !== null && launcherSource !== null) {
+      if (!launcherContent.toString("utf8").includes(PROJECT_STATUS_MARKER)) {
+        push("warn", "project: status launcher is not managed");
+      } else if (!launcherContent.equals(launcherSource)) {
+        push(
+          "warn",
+          "project: status launcher is stale — refresh it with the project contracts"
+        );
+      } else {
+        push("ok", "project: status launcher current");
+      }
+    }
+  }
   let runtimeSafe = true;
   try {
     validateDirectoryDestination(

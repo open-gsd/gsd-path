@@ -24,18 +24,8 @@ class InstallerTests(unittest.TestCase):
         self.root = Path(self.temporary.name)
         self.source = self.root / "source"
         (self.source / "skills").mkdir(parents=True)
-        (self.source / "AGENTS.md").write_text(
-            "# AGENTS.md — Operating Rules for the GSD Path Pipeline\n\n"
-            "## Plain-prompt re-entry\n\n"
-            "<!-- gsd-path/plain-prompt-reentry/v1 -->\n",
-            encoding="utf-8",
-        )
-        (self.source / "WORKFLOW.md").write_text(
-            "# WORKFLOW.md — GSD Path Pipeline SOP\n\n"
-            "### Plain-prompt re-entry\n\n"
-            "<!-- gsd-path/plain-prompt-reentry/v1 -->\n",
-            encoding="utf-8",
-        )
+        shutil.copy2(PROJECT_ROOT / "AGENTS.md", self.source / "AGENTS.md")
+        shutil.copy2(PROJECT_ROOT / "WORKFLOW.md", self.source / "WORKFLOW.md")
         (self.source / "package.json").write_text(
             '{"version": "9.9.9"}\n', encoding="utf-8"
         )
@@ -97,6 +87,10 @@ class InstallerTests(unittest.TestCase):
             (scripts / name).write_text(
                 f"# {name}\n{install.PROJECT_RUNTIME_MARKER}\n", encoding="utf-8"
             )
+        shutil.copy2(
+            PROJECT_ROOT / "scripts" / install.PROJECT_STATUS_LAUNCHER,
+            scripts / install.PROJECT_STATUS_LAUNCHER,
+        )
         self.sync_patch = mock.patch.object(
             install.sync_skill_resources, "mismatches", return_value=[]
         )
@@ -1703,17 +1697,19 @@ class InstallerTests(unittest.TestCase):
         )
         self.assertFalse((project / install.HOOKS_DIRECTORY / "guard_hook.py").exists())
 
-    def test_refresh_and_doctor_reject_heading_only_legacy_contracts(self):
+    def test_refresh_and_doctor_reject_marker_only_legacy_contracts(self):
         project = self.root / "stale-legacy-project"
         project.mkdir()
         (project / "AGENTS.md").write_text(
             "# AGENTS.md — Operating Rules for the GSD Path Pipeline\n\n"
-            "## Plain-prompt re-entry\n",
+            "## Plain-prompt re-entry\n\n"
+            "<!-- gsd-path/plain-prompt-reentry/v1 -->\n",
             encoding="utf-8",
         )
         (project / "WORKFLOW.md").write_text(
             "# WORKFLOW.md — GSD Path Pipeline SOP\n\n"
-            "### Plain-prompt re-entry\n",
+            "### Plain-prompt re-entry\n\n"
+            "<!-- gsd-path/plain-prompt-reentry/v1 -->\n",
             encoding="utf-8",
         )
 

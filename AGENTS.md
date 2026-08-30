@@ -97,7 +97,7 @@ full-repo suite on a tiny edit outrank the phase brief.
   probe `python3 -B -c "import sys; raise SystemExit(sys.version_info < (3, 9))"`,
   then probe `python -B -c "import sys; raise SystemExit(sys.version_info < (3, 9))"`
   only if the first command fails. Run the first successful interpreter
-  with `-B .gsd-path/runtime/pipeline_state.py status --repo <absolute-root>`
+  with `-B .gsd-path/status_runtime.py --repo <absolute-root>`
   before any requested repository mutation. Treat its JSON as the only route
   authority.
   A plain change request does not authorize work outside the pipeline: make no

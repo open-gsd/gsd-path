@@ -18,16 +18,8 @@ const originalHooks = { ...installer.hooks };
 function makeSource(base) {
   const src = path.join(base, "source");
   fs.mkdirSync(path.join(src, "skills"), { recursive: true });
-  fs.writeFileSync(
-    path.join(src, "AGENTS.md"),
-    "# AGENTS.md — Operating Rules for the GSD Path Pipeline\n\n## Plain-prompt re-entry\n\n" +
-      "<!-- gsd-path/plain-prompt-reentry/v1 -->\n"
-  );
-  fs.writeFileSync(
-    path.join(src, "WORKFLOW.md"),
-    "# WORKFLOW.md — GSD Path Pipeline SOP\n\n### Plain-prompt re-entry\n\n" +
-      "<!-- gsd-path/plain-prompt-reentry/v1 -->\n"
-  );
+  fs.copyFileSync(path.join(REPO_ROOT, "AGENTS.md"), path.join(src, "AGENTS.md"));
+  fs.copyFileSync(path.join(REPO_ROOT, "WORKFLOW.md"), path.join(src, "WORKFLOW.md"));
   for (const name of installer.SKILL_NAMES) {
     const skill = path.join(src, "skills", name);
     fs.mkdirSync(path.join(skill, "references"), { recursive: true });
@@ -77,6 +69,10 @@ function makeSource(base) {
       `# ${name}\n${installer.PROJECT_RUNTIME_MARKER}\n`
     );
   }
+  fs.copyFileSync(
+    path.join(REPO_ROOT, "scripts", installer.PROJECT_STATUS_LAUNCHER),
+    path.join(src, "scripts", installer.PROJECT_STATUS_LAUNCHER)
+  );
   return src;
 }
 
@@ -1393,16 +1389,18 @@ test("hooks refresh initializes runtime for a legacy project install", async () 
   assert.ok(!fs.existsSync(path.join(project, installer.HOOKS_DIRECTORY, "guard_hook.py")));
 });
 
-test("hooks refresh and doctor reject heading-only legacy contracts", async () => {
+test("hooks refresh and doctor reject marker-only legacy contracts", async () => {
   const project = path.join(root, "stale-legacy-project");
   fs.mkdirSync(project);
   fs.writeFileSync(
     path.join(project, "AGENTS.md"),
-    "# AGENTS.md — Operating Rules for the GSD Path Pipeline\n\n## Plain-prompt re-entry\n"
+    "# AGENTS.md — Operating Rules for the GSD Path Pipeline\n\n## Plain-prompt re-entry\n\n" +
+      "<!-- gsd-path/plain-prompt-reentry/v1 -->\n"
   );
   fs.writeFileSync(
     path.join(project, "WORKFLOW.md"),
-    "# WORKFLOW.md — GSD Path Pipeline SOP\n\n### Plain-prompt re-entry\n"
+    "# WORKFLOW.md — GSD Path Pipeline SOP\n\n### Plain-prompt re-entry\n\n" +
+      "<!-- gsd-path/plain-prompt-reentry/v1 -->\n"
   );
 
   const status = await installer.main(
@@ -1998,6 +1996,10 @@ test("doctor uses canonical pipeline state validation", async () => {
   fs.writeFileSync(path.join(project, "WORKFLOW.md"), "w\n");
   const runtime = path.join(project, installer.HOOKS_DIRECTORY, "runtime");
   fs.mkdirSync(runtime, { recursive: true });
+  fs.copyFileSync(
+    path.join(source, "scripts", installer.PROJECT_STATUS_LAUNCHER),
+    path.join(project, installer.HOOKS_DIRECTORY, installer.PROJECT_STATUS_LAUNCHER)
+  );
   for (const name of installer.PROJECT_RUNTIME_SCRIPTS) {
     fs.copyFileSync(path.join(source, "scripts", name), path.join(runtime, name));
   }
