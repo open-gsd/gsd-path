@@ -748,6 +748,45 @@ test("install recovers a stale owned lock", async () => {
   assert.ok(!fs.existsSync(lock));
 });
 
+test("stale lock recovery preserves a replacement owner", async () => {
+  const target = path.join(root, "raced-stale-owner", "skills");
+  const lock = path.join(path.dirname(target), ".gsd-path-install-lock");
+  const ownerPath = path.join(lock, "owner.json");
+  fs.mkdirSync(lock, { recursive: true });
+  fs.writeFileSync(ownerPath, JSON.stringify({
+    schema: "gsd-path/install-lock/v2",
+    pid: process.pid,
+    identity: "reused-pid",
+  }));
+  const displaced = path.join(path.dirname(target), "displaced-stale-lock");
+  let raced = false;
+  installer.hooks.renameInstallLock = (from, to) => {
+    if (!raced) {
+      raced = true;
+      fs.renameSync(from, displaced);
+      fs.mkdirSync(lock);
+      fs.writeFileSync(ownerPath, JSON.stringify({
+        schema: "gsd-path/install-lock/v2",
+        pid: process.pid,
+        identity: originalHooks.processIdentity(process.pid),
+      }));
+    }
+    fs.renameSync(from, to);
+  };
+
+  await assert.rejects(
+    runInstall([installer.targetPlan("claude", target)]),
+    /already in progress/
+  );
+
+  assert.equal(raced, true);
+  assert.equal(
+    JSON.parse(fs.readFileSync(ownerPath, "utf8")).identity,
+    originalHooks.processIdentity(process.pid)
+  );
+  assert.ok(!fs.existsSync(target));
+});
+
 test("failure restores cursor subagent", async () => {
   const cursorRoot = path.join(root, "cursor-rollback", "skills");
   const agent = path.join(path.dirname(cursorRoot), "agents", installer.CURSOR_AGENT_FILENAME);
@@ -955,6 +994,10 @@ test("hooks install guard scripts, settings, and git hook", async () => {
   assert.equal(settings.hooks.PreToolUse[0].matcher, installer.CLAUDE_MATCHER);
   assert.match("PowerShell", new RegExp(`^(?:${settings.hooks.PreToolUse[0].matcher})$`));
   assert.match("SaveFile", new RegExp(`^(?:${settings.hooks.PreToolUse[0].matcher})$`));
+  assert.match(
+    "mcp__filesystem__write_file",
+    new RegExp(`^(?:${settings.hooks.PreToolUse[0].matcher})$`)
+  );
   const preCommit = path.join(project, ".git", "hooks", "pre-commit");
   const commitMsg = path.join(project, ".git", "hooks", "commit-msg");
   assert.equal(fs.readFileSync(preCommit, "utf8"), installer.preCommitHook("python3"));
@@ -2045,41 +2088,21 @@ test("doctor uses canonical pipeline state validation", async () => {
   assert.ok(!fs.existsSync(path.join(source, "scripts", "__pycache__")));
   const runtimeState = path.join(runtime, "pipeline_state.py");
   const originalRuntime = fs.readFileSync(runtimeState);
-  fs.writeFileSync(runtimeState, `this is invalid python\n# ${installer.PROJECT_RUNTIME_MARKER}\n`);
-  findings = installer.doctor(source, { targets: [], rootFor: () => "", project });
-  assert.ok(
-    findings.some(
-      (finding) => finding.level === "fail" && /project runtime status failed/.test(finding.text)
-    )
-  );
-  fs.writeFileSync(runtimeState, originalRuntime);
-  const invalidStatus = {
-    schema: "gsd-path/status/v1",
-    advance: false,
-    state: {
-      pipeline: "gsd-path/v2",
-      project: "demo",
-      milestone: "demo",
-      phase: "build",
-      status: "invented",
-      branch: "gsd-path/M001",
-      archive: null,
-    },
-    route: { action: "run-phase", phase: "build", reason: "state is build/invented" },
-    path: path.join(project, ".project", "STATE.md"),
-    next_skill: "gsd-path-build",
-  };
+  const doctorSideEffect = path.join(project, "doctor-runtime-executed");
   fs.writeFileSync(
     runtimeState,
-    `print(${JSON.stringify(JSON.stringify(invalidStatus))})\n` +
+    "from pathlib import Path\n" +
+      `Path(${JSON.stringify(doctorSideEffect)}).write_text("executed")\n` +
       `# ${installer.PROJECT_RUNTIME_MARKER}\n`
   );
   findings = installer.doctor(source, { targets: [], rootFor: () => "", project });
   assert.ok(
     findings.some(
-      (finding) => finding.level === "fail" && /invalid payload/.test(finding.text)
+      (finding) =>
+        finding.level === "fail" && /project runtime status was not executed/.test(finding.text)
     )
   );
+  assert.ok(!fs.existsSync(doctorSideEffect));
   fs.writeFileSync(runtimeState, originalRuntime);
   fs.writeFileSync(
     path.join(project, ".project", "STATE.md"),

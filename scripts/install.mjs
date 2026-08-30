@@ -61,8 +61,7 @@ const STATUS_TRANSITIONS = new Map([
 const STATUS_SLUG = /^[a-z0-9][a-z0-9-]*$/;
 const STATUS_BRANCH = /^gsd-path\/M(\d{3,})$/;
 const STATUS_ARCHIVE = /^\.project\/archive\/(\d{3,})-([a-z0-9][a-z0-9-]*)\/?$/;
-export const CLAUDE_MATCHER =
-  "Edit|Write|SaveFile|MultiEdit|NotebookEdit|Delete|StrReplace|ApplyPatch|Create|Shell|Bash|PowerShell";
+export const CLAUDE_MATCHER = ".*";
 // The managed PreToolUse guard entry, as an object.
 export function claudeGuardEntry(interpreter) {
   return {
@@ -768,15 +767,19 @@ function processAlive(pid) {
 }
 
 function recoverStaleInstallLock(lock) {
-  if (!lexists(lock)) return;
+  if (!lexists(lock)) return null;
   if (isSymlink(lock) || !isDirectory(lock)) {
     throw new InstallerError(`unsafe installation lock: ${lock}`);
   }
   let entries;
+  let observed;
+  let ownerBytes;
   let owner;
   try {
+    observed = fs.statSync(lock);
     entries = fs.readdirSync(lock);
-    owner = JSON.parse(fs.readFileSync(path.join(lock, INSTALL_LOCK_OWNER), "utf8"));
+    ownerBytes = fs.readFileSync(path.join(lock, INSTALL_LOCK_OWNER));
+    owner = JSON.parse(ownerBytes.toString("utf8"));
   } catch {
     throw new InstallerError(`installation already in progress for ${path.dirname(lock)}`);
   }
@@ -796,30 +799,57 @@ function recoverStaleInstallLock(lock) {
   ) {
     throw new InstallerError(`installation already in progress for ${path.dirname(lock)}`);
   }
-  const quarantine = `${lock}.stale-${process.pid}`;
-  try {
-    fs.renameSync(lock, quarantine);
-  } catch (error) {
-    if (error.code === "ENOENT") return;
-    throw error;
+  const quarantine = `${lock}.stale`;
+  if (lexists(quarantine)) {
+    throw new InstallerError(`installation already in progress for ${path.dirname(lock)}`);
   }
-  fs.rmSync(quarantine, { recursive: true });
+  try {
+    hooks.renameInstallLock(lock, quarantine);
+  } catch (error) {
+    if (error.code !== "ENOENT" && !lexists(quarantine)) throw error;
+    throw new InstallerError(`installation already in progress for ${path.dirname(lock)}`);
+  }
+  let moved;
+  let movedOwner;
+  try {
+    moved = fs.statSync(quarantine);
+    movedOwner = fs.readFileSync(path.join(quarantine, INSTALL_LOCK_OWNER));
+  } catch {
+    throw new InstallerError(`installation already in progress for ${path.dirname(lock)}`);
+  }
+  if (
+    moved.dev !== observed.dev ||
+    moved.ino !== observed.ino ||
+    !movedOwner.equals(ownerBytes)
+  ) {
+    if (!lexists(lock)) fs.renameSync(quarantine, lock);
+    throw new InstallerError(`installation already in progress for ${path.dirname(lock)}`);
+  }
+  return quarantine;
 }
 
 function createInstallLock(lock) {
-  recoverStaleInstallLock(lock);
   const identity = processIdentity(process.pid);
   if (identity === null) throw new InstallerError("cannot determine installer process identity");
   const staging = fs.mkdtempSync(path.join(path.dirname(lock), ".install-lock-stage-"));
+  let quarantine = null;
+  let published = false;
   try {
     fs.writeFileSync(
       path.join(staging, INSTALL_LOCK_OWNER),
       JSON.stringify({ schema: INSTALL_LOCK_SCHEMA, pid: process.pid, identity }) + "\n",
       { flag: "wx" }
     );
+    quarantine = recoverStaleInstallLock(lock);
     fs.renameSync(staging, lock);
+    published = true;
+    if (quarantine !== null) fs.rmSync(quarantine, { recursive: true });
   } catch (error) {
     fs.rmSync(staging, { recursive: true, force: true });
+    if (quarantine !== null && lexists(quarantine)) {
+      if (published && lexists(lock)) fs.rmSync(lock, { recursive: true });
+      if (!lexists(lock)) fs.renameSync(quarantine, lock);
+    }
     if (lexists(lock)) {
       throw new InstallerError(`installation already in progress for ${path.dirname(lock)}`);
     }
@@ -1944,24 +1974,31 @@ export function doctor(sourceRoot, { targets, rootFor, project = null }) {
 
   const runtime = path.join(project, HOOKS_DIRECTORY, "runtime");
   const launcher = path.join(project, HOOKS_DIRECTORY, PROJECT_STATUS_LAUNCHER);
+  let runtimeCurrent = true;
   if (isSymlink(launcher)) {
     push("fail", "project: status launcher is a symlink");
+    runtimeCurrent = false;
   } else if (!isFile(launcher)) {
     push("fail", "project: missing status launcher");
+    runtimeCurrent = false;
   } else {
     const launcherContent = readProjectFile(launcher, "project: status launcher");
     const launcherSource = readProjectFile(
       path.join(sourceRoot, "scripts", PROJECT_STATUS_LAUNCHER),
       "package: status launcher"
     );
-    if (launcherContent !== null && launcherSource !== null) {
+    if (launcherContent === null || launcherSource === null) {
+      runtimeCurrent = false;
+    } else {
       if (!launcherContent.toString("utf8").includes(PROJECT_STATUS_MARKER)) {
         push("warn", "project: status launcher is not managed");
+        runtimeCurrent = false;
       } else if (!launcherContent.equals(launcherSource)) {
         push(
           "warn",
           "project: status launcher is stale — refresh it with the project contracts"
         );
+        runtimeCurrent = false;
       } else {
         push("ok", "project: status launcher current");
       }
@@ -1978,29 +2015,40 @@ export function doctor(sourceRoot, { targets, rootFor, project = null }) {
     if (!(error instanceof InstallerError)) throw error;
     push("fail", `project: unsafe runtime — ${error.message}`);
     runtimeSafe = false;
+    runtimeCurrent = false;
   }
   if (runtimeSafe) {
     for (const name of PROJECT_RUNTIME_SCRIPTS) {
       const destination = path.join(runtime, name);
       if (isSymlink(destination)) {
         push("fail", `project: runtime ${name} is a symlink`);
+        runtimeCurrent = false;
         continue;
       }
       if (!isFile(destination)) {
         push("fail", `project: missing runtime ${name}`);
+        runtimeCurrent = false;
         continue;
       }
       const content = readProjectFile(destination, `project: runtime ${name}`);
-      if (content === null) continue;
+      if (content === null) {
+        runtimeCurrent = false;
+        continue;
+      }
       const source = readProjectFile(
         path.join(sourceRoot, "scripts", name),
         `package: runtime ${name}`
       );
-      if (source === null) continue;
+      if (source === null) {
+        runtimeCurrent = false;
+        continue;
+      }
       if (!content.toString("utf8").includes(PROJECT_RUNTIME_MARKER)) {
         push("warn", `project: runtime ${name} is not managed`);
+        runtimeCurrent = false;
       } else if (!content.equals(source)) {
         push("warn", `project: runtime ${name} is stale — refresh it with the project contracts`);
+        runtimeCurrent = false;
       } else {
         push("ok", `project: runtime ${name} current`);
       }
@@ -2135,6 +2183,11 @@ export function doctor(sourceRoot, { targets, rootFor, project = null }) {
   } else {
     try {
       const state = validatedProjectState(sourceRoot, project);
+      if (!runtimeCurrent) {
+        throw new InstallerError(
+          "project runtime status was not executed because the installed runtime is not current"
+        );
+      }
       validateProjectRuntimeStatus(project);
       push("ok", `state: ${state.phase}/${state.status}`);
     } catch (error) {
@@ -2287,6 +2340,8 @@ export const hooks = {
   mismatches,
   applyTarget,
   rename: fs.renameSync.bind(fs),
+  renameInstallLock: fs.renameSync.bind(fs),
+  processIdentity,
   reserveDirectory,
   reserveFile,
   detectPythonInterpreter,

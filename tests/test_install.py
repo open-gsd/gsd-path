@@ -1229,6 +1229,54 @@ class InstallerTests(unittest.TestCase):
         self.assertTrue((target / install.SKILL_NAMES[0]).is_dir())
         self.assertFalse(lock.exists())
 
+    def test_stale_lock_recovery_preserves_a_replacement_owner(self):
+        target = self.root / "raced-stale-owner" / "skills"
+        lock = target.parent / install.INSTALL_LOCK_NAME
+        lock.mkdir(parents=True)
+        owner_path = lock / install.INSTALL_LOCK_OWNER
+        owner_path.write_text(
+            json.dumps(
+                {
+                    "schema": install.INSTALL_LOCK_SCHEMA,
+                    "pid": os.getpid(),
+                    "identity": "reused-pid",
+                }
+            ),
+            encoding="utf-8",
+        )
+        displaced = target.parent / "displaced-stale-lock"
+        original_rename = Path.rename
+        raced = False
+
+        def replace_before_takeover(candidate, destination):
+            nonlocal raced
+            if candidate == lock and not raced:
+                raced = True
+                original_rename(candidate, displaced)
+                lock.mkdir()
+                owner_path.write_text(
+                    json.dumps(
+                        {
+                            "schema": install.INSTALL_LOCK_SCHEMA,
+                            "pid": os.getpid(),
+                            "identity": install._process_identity(os.getpid()),
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+            return original_rename(candidate, destination)
+
+        with mock.patch.object(Path, "rename", new=replace_before_takeover):
+            with self.assertRaisesRegex(install.InstallerError, "already in progress"):
+                install.install(self.source, [install.TargetPlan("claude", target)])
+
+        self.assertTrue(raced)
+        live_owner = json.loads(owner_path.read_text(encoding="utf-8"))
+        self.assertEqual(
+            install._process_identity(os.getpid()), live_owner["identity"]
+        )
+        self.assertFalse(target.exists())
+
     def test_failure_restores_cursor_subagent(self):
         cursor = self.root / "cursor-rollback" / "skills"
         agent = cursor.parent / "agents" / install.CURSOR_AGENT_FILENAME
@@ -1371,6 +1419,12 @@ class InstallerTests(unittest.TestCase):
         )
         self.assertIsNotNone(
             re.fullmatch(settings["hooks"]["PreToolUse"][0]["matcher"], "SaveFile")
+        )
+        self.assertIsNotNone(
+            re.fullmatch(
+                settings["hooks"]["PreToolUse"][0]["matcher"],
+                "mcp__filesystem__write_file",
+            )
         )
         pre_commit = project / ".git" / "hooks" / "pre-commit"
         commit_msg = project / ".git" / "hooks" / "commit-msg"
@@ -2192,42 +2246,17 @@ class InstallerTests(unittest.TestCase):
 
         runtime_script = project / install.HOOKS_DIRECTORY / "runtime" / "pipeline_state.py"
         original_runtime = runtime_script.read_bytes()
+        doctor_side_effect = project / "doctor-runtime-executed"
         runtime_script.write_text(
-            f"this is invalid python\n# {install.PROJECT_RUNTIME_MARKER}\n",
-            encoding="utf-8",
-        )
-        status, _, error = self.run_main(arguments)
-        self.assertEqual(1, status)
-        self.assertIn("project runtime status failed", error)
-        runtime_script.write_bytes(original_runtime)
-        invalid_status = {
-            "schema": "gsd-path/status/v1",
-            "advance": False,
-            "state": {
-                "pipeline": "gsd-path/v2",
-                "project": "demo",
-                "milestone": "demo",
-                "phase": "build",
-                "status": "invented",
-                "branch": "gsd-path/M001",
-                "archive": None,
-            },
-            "route": {
-                "action": "run-phase",
-                "phase": "build",
-                "reason": "state is build/invented",
-            },
-            "path": str(project / ".project" / "STATE.md"),
-            "next_skill": "gsd-path-build",
-        }
-        runtime_script.write_text(
-            f"print({json.dumps(json.dumps(invalid_status))})\n"
+            "from pathlib import Path\n"
+            f"Path({str(doctor_side_effect)!r}).write_text('executed')\n"
             f"# {install.PROJECT_RUNTIME_MARKER}\n",
             encoding="utf-8",
         )
         status, _, error = self.run_main(arguments)
         self.assertEqual(1, status)
-        self.assertIn("invalid payload", error)
+        self.assertIn("project runtime status was not executed", error)
+        self.assertFalse(doctor_side_effect.exists())
         runtime_script.write_bytes(original_runtime)
 
         shutil.rmtree(target / "gsd-path-plan")

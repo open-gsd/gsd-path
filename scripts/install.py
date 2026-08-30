@@ -109,9 +109,7 @@ STATUS_TRANSITIONS = {
     "ship": frozenset({"ship", "plan"}),
     "shipped": frozenset({"ship"}),
 }
-CLAUDE_MATCHER = (
-    "Edit|Write|SaveFile|MultiEdit|NotebookEdit|Delete|StrReplace|ApplyPatch|Create|Shell|Bash|PowerShell"
-)
+CLAUDE_MATCHER = ".*"
 def _claude_guard_entry(interpreter: str) -> dict:
     """The managed PreToolUse guard entry, as an object."""
     return {
@@ -681,14 +679,16 @@ def _process_alive(pid: int) -> bool:
     return True
 
 
-def _recover_stale_install_lock(lock: Path) -> None:
+def _recover_stale_install_lock(lock: Path) -> Optional[Path]:
     if not _lexists(lock):
-        return
+        return None
     if lock.is_symlink() or not lock.is_dir():
         raise InstallerError(f"unsafe installation lock: {lock}")
     try:
+        observed = lock.stat()
         entries = list(lock.iterdir())
-        owner = json.loads((lock / INSTALL_LOCK_OWNER).read_text(encoding="utf-8"))
+        owner_bytes = (lock / INSTALL_LOCK_OWNER).read_bytes()
+        owner = json.loads(owner_bytes)
     except (OSError, UnicodeError, json.JSONDecodeError) as error:
         raise InstallerError(
             f"installation already in progress for {lock.parent}"
@@ -712,20 +712,39 @@ def _recover_stale_install_lock(lock: Path) -> None:
         or (current_identity is None and _process_alive(pid))
     ):
         raise InstallerError(f"installation already in progress for {lock.parent}")
-    quarantine = lock.with_name(f"{lock.name}.stale-{os.getpid()}")
+    quarantine = lock.with_name(f"{lock.name}.stale")
+    if _lexists(quarantine):
+        raise InstallerError(f"installation already in progress for {lock.parent}")
     try:
         lock.rename(quarantine)
-    except FileNotFoundError:
-        return
-    shutil.rmtree(quarantine)
+    except (FileNotFoundError, FileExistsError) as error:
+        raise InstallerError(
+            f"installation already in progress for {lock.parent}"
+        ) from error
+    try:
+        moved = quarantine.stat()
+        moved_owner = (quarantine / INSTALL_LOCK_OWNER).read_bytes()
+    except OSError as error:
+        raise InstallerError(
+            f"installation already in progress for {lock.parent}"
+        ) from error
+    if (
+        (moved.st_dev, moved.st_ino) != (observed.st_dev, observed.st_ino)
+        or moved_owner != owner_bytes
+    ):
+        if not _lexists(lock):
+            quarantine.rename(lock)
+        raise InstallerError(f"installation already in progress for {lock.parent}")
+    return quarantine
 
 
 def _create_install_lock(lock: Path) -> None:
-    _recover_stale_install_lock(lock)
     identity = _process_identity(os.getpid())
     if identity is None:
         raise InstallerError("cannot determine installer process identity")
     staging = Path(tempfile.mkdtemp(prefix=".install-lock-stage-", dir=lock.parent))
+    quarantine = None
+    published = False
     try:
         (staging / INSTALL_LOCK_OWNER).write_text(
             json.dumps(
@@ -738,9 +757,18 @@ def _create_install_lock(lock: Path) -> None:
             + "\n",
             encoding="utf-8",
         )
+        quarantine = _recover_stale_install_lock(lock)
         staging.rename(lock)
+        published = True
+        if quarantine is not None:
+            shutil.rmtree(quarantine)
     except BaseException:
         shutil.rmtree(staging, ignore_errors=True)
+        if quarantine is not None and _lexists(quarantine):
+            if published and _lexists(lock):
+                shutil.rmtree(lock)
+            if not _lexists(lock):
+                quarantine.rename(lock)
         if _lexists(lock):
             raise InstallerError(
                 f"installation already in progress for {lock.parent}"
@@ -2068,24 +2096,31 @@ def doctor(
 
     runtime = project / HOOKS_DIRECTORY / "runtime"
     launcher = project / HOOKS_DIRECTORY / PROJECT_STATUS_LAUNCHER
+    runtime_current = True
     if launcher.is_symlink():
         push("fail", "project: status launcher is a symlink")
+        runtime_current = False
     elif not launcher.is_file():
         push("fail", "project: missing status launcher")
+        runtime_current = False
     else:
         launcher_content = read_project_file(launcher, "project: status launcher")
         launcher_source = read_project_file(
             source_root / "scripts" / PROJECT_STATUS_LAUNCHER,
             "package: status launcher",
         )
-        if launcher_content is not None and launcher_source is not None:
+        if launcher_content is None or launcher_source is None:
+            runtime_current = False
+        else:
             if PROJECT_STATUS_MARKER.encode() not in launcher_content:
                 push("warn", "project: status launcher is not managed")
+                runtime_current = False
             elif launcher_content != launcher_source:
                 push(
                     "warn",
                     "project: status launcher is stale — refresh it with the project contracts",
                 )
+                runtime_current = False
             else:
                 push("ok", "project: status launcher current")
     try:
@@ -2095,30 +2130,37 @@ def doctor(
         _validate_directory_destination(runtime, "project runtime directory")
     except InstallerError as error:
         push("fail", f"project: unsafe runtime — {error}")
+        runtime_current = False
     else:
         for name in PROJECT_RUNTIME_SCRIPTS:
             destination = runtime / name
             if destination.is_symlink():
                 push("fail", f"project: runtime {name} is a symlink")
+                runtime_current = False
                 continue
             if not destination.is_file():
                 push("fail", f"project: missing runtime {name}")
+                runtime_current = False
                 continue
             content = read_project_file(destination, f"project: runtime {name}")
             if content is None:
+                runtime_current = False
                 continue
             source = read_project_file(
                 source_root / "scripts" / name, f"package: runtime {name}"
             )
             if source is None:
+                runtime_current = False
                 continue
             if PROJECT_RUNTIME_MARKER.encode() not in content:
                 push("warn", f"project: runtime {name} is not managed")
+                runtime_current = False
             elif content != source:
                 push(
                     "warn",
                     f"project: runtime {name} is stale — refresh it with the project contracts",
                 )
+                runtime_current = False
             else:
                 push("ok", f"project: runtime {name} current")
 
@@ -2238,6 +2280,10 @@ def doctor(
     else:
         try:
             state = _validated_project_state(source_root, project)
+            if not runtime_current:
+                raise InstallerError(
+                    "project runtime status was not executed because the installed runtime is not current"
+                )
             _validate_project_runtime_status(project)
         except InstallerError as error:
             push("fail", f"state: {error}")

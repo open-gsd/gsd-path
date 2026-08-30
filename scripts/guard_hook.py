@@ -477,21 +477,30 @@ def target_paths(path, working_directories, repo):
     return Path(os.path.abspath(candidate)), candidate.resolve(strict=False)
 
 
-def path_kind(candidate, repo):
+def filesystem_case_insensitive(repo):
+    try:
+        return os.path.samefile(repo / ".project", repo / ".PROJECT")
+    except OSError:
+        return False
+
+
+def path_kind(candidate, repo, case_insensitive):
     if candidate != repo and repo not in candidate.parents:
         return "external"
     relative = candidate.relative_to(repo)
-    folded = tuple(part.casefold() for part in relative.parts)
-    if folded in {
+    parts = tuple(
+        part.casefold() if case_insensitive else part for part in relative.parts
+    )
+    if parts in {
         (".project",),
         (".project", "state.md"),
         (".project", "next"),
         (".project", "next", "state.md"),
     }:
         return "protected"
-    if folded and folded[0] == ".gsd-path":
+    if parts and parts[0] == ".gsd-path":
         return "protected"
-    if folded and folded[0] == ".project":
+    if parts and parts[0] == ".project":
         return "artifact"
     return "product"
 
@@ -499,7 +508,11 @@ def path_kind(candidate, repo):
 def target_kind(path, working_directories, repo):
     lexical, resolved = target_paths(path, working_directories, repo)
     repo = repo.resolve()
-    kinds = {path_kind(candidate, repo) for candidate in (lexical, resolved)}
+    case_insensitive = filesystem_case_insensitive(repo)
+    kinds = {
+        path_kind(candidate, repo, case_insensitive)
+        for candidate in (lexical, resolved)
+    }
     for kind in ("protected", "product", "artifact", "external"):
         if kind in kinds:
             return kind

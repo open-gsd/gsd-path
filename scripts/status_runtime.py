@@ -83,6 +83,12 @@ def launch(repo: Path) -> int:
             continue
         before = runtime_identity(runtime)
         if before is None:
+            if install_lock_active(lock):
+                continue
+            if runtime_identity(runtime) is not None:
+                continue
+            if install_lock_active(lock):
+                continue
             print(f"GSD Path status runtime is unavailable: {runtime}", file=sys.stderr)
             return 2
         try:

@@ -237,6 +237,11 @@ class GuardHookTests(unittest.TestCase):
                     mock.patch.object(guard_hook, "repository_root", return_value=root),
                     mock.patch.object(
                         guard_hook,
+                        "filesystem_case_insensitive",
+                        return_value=True,
+                    ),
+                    mock.patch.object(
+                        guard_hook,
                         "project_status",
                         return_value=self.status(root, phase=phase),
                     ),
@@ -262,6 +267,31 @@ class GuardHookTests(unittest.TestCase):
                                     "tool_input": {"file_path": path},
                                 }
                             )
+
+    def test_case_sensitive_project_alias_is_a_product_path(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / ".project").mkdir()
+            (root / ".project" / "STATE.md").write_text(
+                "owned\n", encoding="utf-8"
+            )
+            with (
+                mock.patch.object(guard_hook, "repository_root", return_value=root),
+                mock.patch.object(
+                    guard_hook,
+                    "filesystem_case_insensitive",
+                    return_value=False,
+                ),
+                mock.patch.object(
+                    guard_hook, "project_status", return_value=self.status(root)
+                ),
+            ):
+                self.assert_denied(
+                    {
+                        "tool_name": "Write",
+                        "tool_input": {"file_path": ".Project/app.py"},
+                    }
+                )
 
     def test_plain_prompt_allows_external_file_write(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -511,6 +541,32 @@ class GuardHookTests(unittest.TestCase):
             )
             with mock.patch.object(status_runtime, "process_identity", return_value=None):
                 self.assertTrue(status_runtime.install_lock_active(lock))
+
+    def test_status_launcher_rechecks_lock_when_runtime_is_missing(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            result = subprocess.CompletedProcess([], 0, b"route\n", b"")
+            identity = (1, 2, 3, 4)
+            with (
+                mock.patch.object(
+                    status_runtime,
+                    "install_lock_active",
+                    side_effect=[False, True, False, False],
+                ),
+                mock.patch.object(
+                    status_runtime,
+                    "runtime_identity",
+                    side_effect=[None, identity, identity],
+                ),
+                mock.patch.object(
+                    status_runtime.subprocess, "run", return_value=result
+                ) as run,
+                contextlib.redirect_stdout(io.StringIO()) as output,
+            ):
+                self.assertEqual(0, status_runtime.launch(root))
+
+            run.assert_called_once()
+            self.assertEqual("route\n", output.getvalue())
 
     def test_plain_prompt_denies_mixed_product_patch(self):
         with tempfile.TemporaryDirectory() as temporary:
