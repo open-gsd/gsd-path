@@ -1410,6 +1410,42 @@ test("runtime refresh restores the complete prior set after copy failure", async
   }
 });
 
+test("hooks refresh rejects unexpected runtime entries", async () => {
+  const project = path.join(root, "runtime-extra-project");
+  await runInstall([installer.targetPlan("claude", path.join(root, "claude", "skills"))], { project });
+  const extra = path.join(project, installer.HOOKS_DIRECTORY, "runtime", "site_policy.py");
+  fs.writeFileSync(extra, "keep\n");
+
+  const status = await installer.main(
+    ["--hooks-refresh", "--project", project, "--source-root", source, "--no-color"]
+  );
+
+  assert.equal(status, 1);
+  assert.equal(fs.readFileSync(extra, "utf8"), "keep\n");
+});
+
+test("guard failure rolls back the published runtime and guards", async () => {
+  const project = path.join(root, "guard-runtime-transaction");
+  fs.mkdirSync(path.join(project, ".git"), { recursive: true });
+  await runInstall([installer.targetPlan("claude", path.join(root, "claude", "skills"))], { project, hooks: true });
+  const runtime = path.join(project, installer.HOOKS_DIRECTORY, "runtime");
+  fs.rmSync(runtime, { recursive: true });
+  const guard = path.join(project, installer.HOOKS_DIRECTORY, "guard_hook.py");
+  const before = fs.readFileSync(guard);
+  fs.writeFileSync(path.join(source, "scripts", "guard_hook.py"), `# changed\n${installer.GUARD_MARKER}\n`);
+  installer.hooks.copyGuardFile = () => {
+    throw new Error("injected guard failure");
+  };
+
+  const status = await installer.main(
+    ["--hooks-refresh", "--project", project, "--source-root", source, "--no-color"]
+  );
+
+  assert.equal(status, 1);
+  assert.ok(fs.readFileSync(guard).equals(before));
+  assert.ok(!fs.existsSync(runtime));
+});
+
 test("hooks refresh rejects an unmanaged project runtime", async () => {
   const project = path.join(root, "project");
   fs.mkdirSync(path.join(project, ".git"), { recursive: true });
@@ -1766,6 +1802,28 @@ test("doctor reports a missing canonical runtime source", async () => {
   );
 });
 
+test("doctor reports missing package version", () => {
+  fs.unlinkSync(path.join(source, "package.json"));
+
+  const findings = installer.doctor(source, { targets: [], rootFor: () => "" });
+
+  assert.ok(findings.some(({ level, text }) => level === "fail" && text === "package: version cannot be read"));
+});
+
+test("doctor reports an unreadable skills root", () => {
+  const skills = path.join(root, "unreadable-skills");
+  fs.mkdirSync(skills);
+  fs.chmodSync(skills, 0);
+  let findings;
+  try {
+    findings = installer.doctor(source, { targets: ["claude"], rootFor: () => skills });
+  } finally {
+    fs.chmodSync(skills, 0o755);
+  }
+
+  assert.ok(findings.some(({ level, text }) => level === "fail" && /skills root cannot be read/.test(text)));
+});
+
 test("doctor reports unreadable bridge and git hooks", async () => {
   const project = path.join(root, "doctor-unreadable-contracts");
   fs.mkdirSync(path.join(project, ".git"), { recursive: true });
@@ -1868,6 +1926,11 @@ test("doctor uses canonical pipeline state validation", async () => {
   fs.mkdirSync(path.join(project, ".project"), { recursive: true });
   fs.writeFileSync(path.join(project, "AGENTS.md"), "a\n");
   fs.writeFileSync(path.join(project, "WORKFLOW.md"), "w\n");
+  const runtime = path.join(project, installer.HOOKS_DIRECTORY, "runtime");
+  fs.mkdirSync(runtime, { recursive: true });
+  for (const name of installer.PROJECT_RUNTIME_SCRIPTS) {
+    fs.copyFileSync(path.join(source, "scripts", name), path.join(runtime, name));
+  }
   fs.writeFileSync(
     path.join(project, ".project", "STATE.md"),
     "---\npipeline: gsd-path/v2\nproject: demo\nmilestone: demo\n" +
@@ -1876,6 +1939,16 @@ test("doctor uses canonical pipeline state validation", async () => {
   let findings = installer.doctor(source, { targets: [], rootFor: () => "", project });
   assert.ok(findings.some((finding) => finding.level === "ok" && finding.text === "state: plan/done"));
   assert.ok(!fs.existsSync(path.join(source, "scripts", "__pycache__")));
+  const runtimeState = path.join(runtime, "pipeline_state.py");
+  const originalRuntime = fs.readFileSync(runtimeState);
+  fs.writeFileSync(runtimeState, `this is invalid python\n# ${installer.PROJECT_RUNTIME_MARKER}\n`);
+  findings = installer.doctor(source, { targets: [], rootFor: () => "", project });
+  assert.ok(
+    findings.some(
+      (finding) => finding.level === "fail" && /project runtime status failed/.test(finding.text)
+    )
+  );
+  fs.writeFileSync(runtimeState, originalRuntime);
   fs.writeFileSync(
     path.join(project, ".project", "STATE.md"),
     "---\npipeline: gsd-path/v2\nphase: plan\nstatus: done\n---\n"

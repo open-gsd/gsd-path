@@ -278,7 +278,8 @@ const messageOf = (error) => String(error && error.message ? error.message : err
 
 function readPackageVersion(manifest) {
   try {
-    return JSON.parse(fs.readFileSync(manifest, "utf8")).version || null;
+    const version = JSON.parse(fs.readFileSync(manifest, "utf8")).version;
+    return typeof version === "string" && version ? version : null;
   } catch {
     return null;
   }
@@ -1277,6 +1278,15 @@ function validateHooksRefresh(sourceRoot, project, full, hooksDir, selected, ini
       `no managed GSD Path hooks or runtime found in project: ${project}`
     );
   }
+  const runtime = path.join(project, HOOKS_DIRECTORY, "runtime");
+  if (isDirectory(runtime)) {
+    const unexpected = fs
+      .readdirSync(runtime)
+      .filter((name) => !PROJECT_RUNTIME_SCRIPTS.includes(name));
+    if (unexpected.length) {
+      throw new InstallerError(`unexpected project runtime entries: ${unexpected.join(", ")}`);
+    }
+  }
   if (refreshGuards) {
     for (const name of GUARD_SCRIPTS) {
       const destination = path.join(project, HOOKS_DIRECTORY, name);
@@ -1343,13 +1353,15 @@ function validateHooksRefresh(sourceRoot, project, full, hooksDir, selected, ini
   }
 }
 
-function publishProjectRuntime(sourceRoot, project) {
+function publishProjectRuntime(sourceRoot, project, refreshGuards) {
   const parent = path.join(project, HOOKS_DIRECTORY);
   const runtime = path.join(parent, "runtime");
   fs.mkdirSync(parent, { recursive: true });
   const staging = fs.mkdtempSync(path.join(parent, ".runtime-stage-"));
   const previous = `${staging}-previous`;
   let movedPrevious = false;
+  let publishedRuntime = false;
+  const guardOriginals = [];
   try {
     for (const name of PROJECT_RUNTIME_SCRIPTS) {
       hooks.copyRuntimeFile(
@@ -1362,8 +1374,24 @@ function publishProjectRuntime(sourceRoot, project) {
       movedPrevious = true;
     }
     fs.renameSync(staging, runtime);
+    publishedRuntime = true;
+    if (refreshGuards) {
+      for (const name of GUARD_SCRIPTS) {
+        const destination = path.join(parent, name);
+        guardOriginals.push([
+          destination,
+          lexists(destination) ? fs.readFileSync(destination) : null,
+        ]);
+        hooks.copyGuardFile(path.join(sourceRoot, "scripts", name), destination);
+      }
+    }
     if (movedPrevious) removePath(previous);
   } catch (error) {
+    for (const [destination, original] of guardOriginals.reverse()) {
+      if (original === null) removePath(destination);
+      else writeFileAtomic(destination, original);
+    }
+    if (publishedRuntime && lexists(runtime)) removePath(runtime);
     if (!lexists(runtime) && movedPrevious && lexists(previous)) {
       fs.renameSync(previous, runtime);
     }
@@ -1392,22 +1420,17 @@ function refreshHooks(sourceRoot, project, full, dryRun, selected = [], initiali
   validateHooksRefresh(sourceRoot, project, full, hooksDir, selected, initialize);
   const refreshed = [];
   const refreshGuards = refreshesGuards(project, full, initialize);
-  if (refreshGuards) {
-    for (const name of GUARD_SCRIPTS) {
-      const destination = path.join(project, HOOKS_DIRECTORY, name);
-      const source = path.join(sourceRoot, "scripts", name);
-      if (!dryRun) {
-        fs.mkdirSync(path.dirname(destination), { recursive: true });
-        copyFileAtomic(source, destination);
-      }
-      refreshed.push(describeProjectPath(project, destination));
-    }
-  }
-  if (!dryRun) publishProjectRuntime(sourceRoot, project);
+  if (!dryRun) publishProjectRuntime(sourceRoot, project, refreshGuards);
   for (const name of PROJECT_RUNTIME_SCRIPTS) {
     refreshed.push(
       describeProjectPath(project, path.join(project, HOOKS_DIRECTORY, "runtime", name))
     );
+  }
+  if (refreshGuards) {
+    for (const name of GUARD_SCRIPTS) {
+      const destination = path.join(project, HOOKS_DIRECTORY, name);
+      refreshed.push(describeProjectPath(project, destination));
+    }
   }
   if (full) {
     for (const [target, settings, merge, generated] of [
@@ -1508,6 +1531,29 @@ function hasManagedInstall(root) {
   return isDirectory(root) && fs.readdirSync(root).some((name) => isManagedName(name));
 }
 
+function validateProjectRuntimeStatus(project) {
+  const interpreter = requiredPythonRuntime("--doctor");
+  const runtime = path.join(project, HOOKS_DIRECTORY, "runtime", "pipeline_state.py");
+  const result = spawnSync(
+    interpreter,
+    ["-B", runtime, "status", "--repo", project],
+    { cwd: project, encoding: "utf8" }
+  );
+  if (result.error || result.status !== 0) {
+    const detail = result.error?.message || result.stderr?.trim() || result.stdout?.trim() || "unknown failure";
+    throw new InstallerError(`project runtime status failed: ${detail}`);
+  }
+  let payload;
+  try {
+    payload = JSON.parse(result.stdout);
+  } catch {
+    throw new InstallerError("project runtime status returned invalid JSON");
+  }
+  if (!payload || payload.schema !== "gsd-path/status/v1") {
+    throw new InstallerError("project runtime status returned an invalid payload");
+  }
+}
+
 function isExecutable(candidate) {
   try {
     return (fs.statSync(candidate).mode & 0o111) !== 0;
@@ -1555,6 +1601,7 @@ export function doctor(sourceRoot, { targets, rootFor, project = null }) {
     }
   }
   const version = readPackageVersion(path.join(sourceRoot, "package.json"));
+  if (version === null) push("fail", "package: version cannot be read");
 
   const seen = [];
   const installedTargets = new Set();
@@ -1566,7 +1613,14 @@ export function doctor(sourceRoot, { targets, rootFor, project = null }) {
       continue;
     }
     seen.push([target, root]);
-    if (!hasManagedInstall(root)) {
+    let managedInstall;
+    try {
+      managedInstall = hasManagedInstall(root);
+    } catch (error) {
+      push("fail", `${target}: skills root cannot be read: ${error.message}`);
+      continue;
+    }
+    if (!managedInstall) {
       push("note", `${target}: not installed (${root})`);
       continue;
     }
@@ -1780,6 +1834,7 @@ export function doctor(sourceRoot, { targets, rootFor, project = null }) {
   } else {
     try {
       const state = validatedProjectState(sourceRoot, project);
+      validateProjectRuntimeStatus(project);
       push("ok", `state: ${state.phase}/${state.status}`);
     } catch (error) {
       push("fail", `state: ${messageOf(error)}`);
@@ -1936,6 +1991,7 @@ export const hooks = {
   detectPythonInterpreter,
   resolveGitHooksPath,
   copyRuntimeFile: fs.copyFileSync.bind(fs),
+  copyGuardFile: copyFileAtomic,
 };
 
 export async function install(sourceRoot, plans, options = {}) {

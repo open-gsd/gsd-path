@@ -1211,6 +1211,15 @@ def _validate_hooks_refresh(
         raise InstallerError(
             f"no managed GSD Path hooks or runtime found in project: {project}"
         )
+    runtime = project / HOOKS_DIRECTORY / "runtime"
+    if runtime.is_dir():
+        unexpected = [
+            entry.name for entry in runtime.iterdir() if entry.name not in PROJECT_RUNTIME_SCRIPTS
+        ]
+        if unexpected:
+            raise InstallerError(
+                "unexpected project runtime entries: " + ", ".join(unexpected)
+            )
     if refresh_guards:
         for name in GUARD_SCRIPTS:
             destination = project / HOOKS_DIRECTORY / name
@@ -1298,20 +1307,14 @@ def refresh_hooks(
     )
     refreshed: List[str] = []
     refresh_guards = _refreshes_guards(project, full, initialize)
-    if refresh_guards:
-        for name in GUARD_SCRIPTS:
-            destination = project / HOOKS_DIRECTORY / name
-            source = source_root / "scripts" / name
-            if not dry_run:
-                destination.parent.mkdir(parents=True, exist_ok=True)
-                _atomic_copy(source, destination)
-            refreshed.append(_describe_project_path(project, destination))
     runtime = project / HOOKS_DIRECTORY / "runtime"
     if not dry_run:
         runtime.parent.mkdir(parents=True, exist_ok=True)
         staging = Path(tempfile.mkdtemp(prefix=".runtime-stage-", dir=runtime.parent))
         previous = staging.with_name(staging.name + "-previous")
         moved_previous = False
+        published_runtime = False
+        guard_originals: List[Tuple[Path, Optional[bytes], Optional[int]]] = []
         try:
             for name in PROJECT_RUNTIME_SCRIPTS:
                 shutil.copy2(source_root / "scripts" / name, staging / name)
@@ -1319,9 +1322,28 @@ def refresh_hooks(
                 os.replace(runtime, previous)
                 moved_previous = True
             os.replace(staging, runtime)
+            published_runtime = True
+            if refresh_guards:
+                for name in GUARD_SCRIPTS:
+                    destination = project / HOOKS_DIRECTORY / name
+                    original = destination.read_bytes() if _lexists(destination) else None
+                    mode = (
+                        destination.stat().st_mode & 0o777
+                        if original is not None
+                        else None
+                    )
+                    guard_originals.append((destination, original, mode))
+                    _atomic_copy(source_root / "scripts" / name, destination)
             if moved_previous:
                 _remove_path(previous)
         except BaseException as error:
+            for destination, original, mode in reversed(guard_originals):
+                if original is None:
+                    _remove_path(destination)
+                else:
+                    _atomic_write(destination, original, mode)
+            if published_runtime and _lexists(runtime):
+                _remove_path(runtime)
             if not _lexists(runtime) and moved_previous and _lexists(previous):
                 os.replace(previous, runtime)
             if isinstance(error, Exception):
@@ -1333,6 +1355,10 @@ def refresh_hooks(
             _remove_path(staging)
     for name in PROJECT_RUNTIME_SCRIPTS:
         refreshed.append(_describe_project_path(project, runtime / name))
+    if refresh_guards:
+        for name in GUARD_SCRIPTS:
+            destination = project / HOOKS_DIRECTORY / name
+            refreshed.append(_describe_project_path(project, destination))
     if full:
         for target, settings, merge, generated in (
             (
@@ -1556,6 +1582,30 @@ def _validated_project_state(source_root: Path, project: Path) -> dict:
     return state
 
 
+def _validate_project_runtime_status(project: Path) -> None:
+    interpreter = _required_python_runtime("--doctor")
+    runtime = project / HOOKS_DIRECTORY / "runtime" / "pipeline_state.py"
+    try:
+        result = subprocess.run(
+            [interpreter, "-B", str(runtime), "status", "--repo", str(project)],
+            cwd=project,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError as error:
+        raise InstallerError(f"project runtime status failed: {error}") from error
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip() or "unknown failure"
+        raise InstallerError(f"project runtime status failed: {detail}")
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError as error:
+        raise InstallerError("project runtime status returned invalid JSON") from error
+    if not isinstance(payload, dict) or payload.get("schema") != "gsd-path/status/v1":
+        raise InstallerError("project runtime status returned an invalid payload")
+
+
 def _is_executable(path: Path) -> bool:
     try:
         return bool(path.stat().st_mode & 0o111)
@@ -1594,6 +1644,8 @@ def doctor(
             return None
 
     version = _read_package_version(source_root / "package.json")
+    if version is None:
+        push("fail", "package: version cannot be read")
     seen: List[Tuple[str, Path]] = []
     installed_targets = set()
     for target in targets:
@@ -1605,7 +1657,12 @@ def doctor(
             push("note", f"{target}: shares {prior}'s skills root")
             continue
         seen.append((target, root))
-        if not _has_managed_install(root):
+        try:
+            managed_install = _has_managed_install(root)
+        except OSError as error:
+            push("fail", f"{target}: skills root cannot be read: {error}")
+            continue
+        if not managed_install:
             push("note", f"{target}: not installed ({root})")
             continue
         installed_targets.add(target)
@@ -1812,6 +1869,7 @@ def doctor(
     else:
         try:
             state = _validated_project_state(source_root, project)
+            _validate_project_runtime_status(project)
         except InstallerError as error:
             push("fail", f"state: {error}")
         else:

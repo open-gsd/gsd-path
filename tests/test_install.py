@@ -26,6 +26,9 @@ class InstallerTests(unittest.TestCase):
         (self.source / "skills").mkdir(parents=True)
         (self.source / "AGENTS.md").write_text("agents\n", encoding="utf-8")
         (self.source / "WORKFLOW.md").write_text("workflow\n", encoding="utf-8")
+        (self.source / "package.json").write_text(
+            '{"version": "9.9.9"}\n', encoding="utf-8"
+        )
         for name in install.SKILL_NAMES:
             skill = self.source / "skills" / name
             (skill / "references").mkdir(parents=True)
@@ -1720,6 +1723,53 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(1, status)
         self.assertEqual(before, {name: (runtime / name).read_bytes() for name in install.PROJECT_RUNTIME_SCRIPTS})
 
+    def test_hooks_refresh_rejects_unexpected_runtime_entries(self):
+        project = self.root / "runtime-extra-project"
+        target = self.root / "runtime-extra-claude" / "skills"
+        status, _, error = self.run_main(
+            ["--claude", "--claude-root", str(target), "--source-root", str(self.source), "--project", str(project)]
+        )
+        self.assertEqual(0, status, error)
+        extra = project / install.HOOKS_DIRECTORY / "runtime" / "site_policy.py"
+        extra.write_text("keep\n", encoding="utf-8")
+
+        status, _, error = self.run_main(
+            ["--hooks-refresh", "--project", str(project), "--source-root", str(self.source)]
+        )
+
+        self.assertEqual(1, status)
+        self.assertIn("unexpected project runtime entries", error)
+        self.assertEqual("keep\n", extra.read_text(encoding="utf-8"))
+
+    def test_guard_failure_rolls_back_runtime_and_guards(self):
+        project = self.root / "guard-runtime-transaction"
+        (project / ".git").mkdir(parents=True)
+        target = self.root / "guard-runtime-claude" / "skills"
+        status, _, error = self.run_main(self.hooks_arguments(project, target))
+        self.assertEqual(0, status, error)
+        runtime = project / install.HOOKS_DIRECTORY / "runtime"
+        shutil.rmtree(runtime)
+        guard = project / install.HOOKS_DIRECTORY / "guard_hook.py"
+        before = guard.read_bytes()
+        (self.source / "scripts" / "guard_hook.py").write_text(
+            f"# changed\n{install.GUARD_MARKER}\n", encoding="utf-8"
+        )
+        original_copy = install._atomic_copy
+
+        def failing_guard_copy(source, destination):
+            if source.name == "guard_hook.py":
+                raise OSError("injected guard failure")
+            return original_copy(source, destination)
+
+        with mock.patch.object(install, "_atomic_copy", side_effect=failing_guard_copy):
+            status, _, _ = self.run_main(
+                ["--hooks-refresh", "--project", str(project), "--source-root", str(self.source)]
+            )
+
+        self.assertEqual(1, status)
+        self.assertEqual(before, guard.read_bytes())
+        self.assertFalse(runtime.exists())
+
     def test_hooks_refresh_updates_runtime_without_optional_guards(self):
         project = self.root / "hookless-project"
         target = self.root / "claude" / "skills"
@@ -1971,7 +2021,8 @@ class InstallerTests(unittest.TestCase):
                 self.source / "scripts" / name,
             )
         project = self.root / "doctor-project"
-        (project / ".git").mkdir(parents=True)
+        project.mkdir()
+        subprocess.run(["git", "init", "-q"], cwd=project, check=True)
         target = self.root / "doctor-claude" / "skills"
         status, _, error = self.run_main(self.hooks_arguments(project, target))
         self.assertEqual(0, status, error)
@@ -2016,6 +2067,17 @@ class InstallerTests(unittest.TestCase):
         status, output, error = self.run_main(arguments)
         self.assertEqual(0, status, error)
         self.assertIn("exists but is not the managed bridge", output)
+
+        runtime_script = project / install.HOOKS_DIRECTORY / "runtime" / "pipeline_state.py"
+        original_runtime = runtime_script.read_bytes()
+        runtime_script.write_text(
+            f"this is invalid python\n# {install.PROJECT_RUNTIME_MARKER}\n",
+            encoding="utf-8",
+        )
+        status, _, error = self.run_main(arguments)
+        self.assertEqual(1, status)
+        self.assertIn("project runtime status failed", error)
+        runtime_script.write_bytes(original_runtime)
 
         shutil.rmtree(target / "gsd-path-plan")
         status, _, error = self.run_main(arguments)
@@ -2100,6 +2162,34 @@ class InstallerTests(unittest.TestCase):
             any(
                 finding["level"] == "fail"
                 and "package: runtime pipeline_state.py cannot be read" in finding["text"]
+                for finding in findings
+            )
+        )
+
+    def test_doctor_reports_missing_package_version(self):
+        (self.source / "package.json").unlink()
+
+        findings = install.doctor(self.source, [], lambda _target: Path())
+
+        self.assertIn(
+            {"level": "fail", "text": "package: version cannot be read"}, findings
+        )
+
+    def test_doctor_reports_unreadable_skills_root(self):
+        root = self.root / "unreadable-skills"
+        root.mkdir()
+        root.chmod(0)
+        try:
+            findings = install.doctor(
+                self.source, ["claude"], lambda _target: root
+            )
+        finally:
+            root.chmod(0o755)
+
+        self.assertTrue(
+            any(
+                finding["level"] == "fail"
+                and "skills root cannot be read" in finding["text"]
                 for finding in findings
             )
         )
