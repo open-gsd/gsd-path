@@ -276,29 +276,32 @@ The persisted `STATE.archive` field is the transaction identity.
      after the local merge but rejects the push, a retry may discard and
      rebuild only the unpublished canonical merge and tag under the helper's
      existing recovery checks.
-   - `pull-request` requires `gh` authentication and a GitHub.com origin. It
-     publishes the exact ship commit, reuses the single matching PR to `main`
-     or creates one with the canonical integration title and body plus the GSD
-     Path credit footer, and returns `status: awaiting-merge` while that PR is
-     open. Present **Outcome**, link
+   - `pull-request` requires `gh` authentication for GitHub.com and a
+     GitHub.com origin. It publishes the exact ship commit, reuses only the
+     single PR from origin's bound branch at that commit or creates one with
+     the canonical integration title and body plus the GSD Path credit footer.
+     Any competing PR to `main` at the ship commit blocks. While the eligible
+     PR is open, the helper returns `status: awaiting-merge`. Present
+     **Outcome**, link
      the returned PR as **Review**, and state in **Next** that the user must
      merge it with GitHub's merge-commit method. Stop this ship invocation;
-     Path never enables auto-merge or merges the PR. On rerun after merge, the
-     helper requires the PR head to remain the ship commit and its landing to
-     be a two-parent merge with that ship commit as second parent on
-     `origin/main` first-parent history. It then writes and pushes the annotated
-     milestone tag containing the PR URL, ship SHA, and landing SHA. A closed
-     unmerged PR, squash, rebase, merge queue, moved head, duplicate PR, or
-     non-GitHub.com origin blocks. The remote bound branch may be absent after
-     a valid merge because GitHub may auto-delete it.
+     Path never enables auto-merge or merges the PR. On rerun after a human
+     GitHub user merges it, the helper requires the PR head to remain the ship
+     commit and its landing to be a two-parent merge with that ship commit as
+     second parent on `origin/main` first-parent history. It then writes and
+     pushes the annotated milestone tag containing the PR URL, ship SHA, and
+     landing SHA. A closed unmerged PR, squash, rebase, merge queue, moved
+     head, duplicate PR, or non-GitHub.com origin blocks. The remote bound
+     branch may be absent after a valid merge because GitHub may auto-delete it.
 
    A passing run returns the same proof exposed by `validate-integrated`.
    A non-zero result blocks; rerun the exact `integrate` command to resume a
    safe partial transaction instead of repairing refs or Git state manually.
-   For a later read-only recheck with origin network access, run
+   For a later validation recheck with origin network access, run
    `python3 <absolute archive_milestone.py> validate-integrated --repo <root>
    --slug <STATE.milestone>`; PR mode fetches and refreshes `origin/main` and
-   mirrored milestone-tag refs, then checks live branch and tag publication.
+   mirrored milestone-tag refs, then revalidates the PR identity, state, merge
+   provenance, and live branch and tag publication.
    Report shipped only when the integration result passes.
    Leave the primary worktree and STATE.branch on the shipped
    `gsd-path/M00N` at the ship commit. The router owns the later handoff to a

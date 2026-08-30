@@ -8,7 +8,7 @@ phase: define       # v2 tokens: inspect | define | research | decide | roadmap 
 status: active      # active | done | blocked; shipped is only phase: shipped + status: done
 branch: null        # bound per milestone as gsd-path/M00N; after integration
                     # the router rebinds before any next-milestone file change
-                    # the bound branch is never main; ship merges it there
+                    # the bound branch is never main; ship integrates it there
 archive: null       # persisted archive transaction path; never recomputed
 integration_default: direct # direct | pull-request; project setting
 integration: direct # current milestone; may override the default before build

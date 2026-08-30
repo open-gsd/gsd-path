@@ -45,7 +45,7 @@ gsd-path  (router: reads STATE.md, runs the next valid phase)
   |-- 3.5 roadmap     program flow: charter → milestone slicing
   |-- 4. plan         waves + task contracts
   |-- 5. build        parallel coders, serial task landing
-  `-- 6. ship         verify + final approval → archive + merge to main
+  `-- 6. ship         verify + final approval → archive + integrate with main
 ```
 
 ### Router vs phase skills

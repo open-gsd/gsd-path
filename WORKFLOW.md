@@ -465,19 +465,13 @@ and requires the remote default to be `main`. It then follows the locked mode:
   Path never resolves it automatically. The bound branch and annotated
   `milestone/<NNN>-<slug>` tag are then published, and the temporary worktree
   is removed.
-- `pull-request` requires an authenticated GitHub.com origin. Path publishes
-  the exact ship commit on the bound branch, finds at most one PR from that
-  branch to `main`, and creates it when absent with the canonical integration
-  title and body plus the GSD Path credit footer. It never enables auto-merge
-  or merges the PR. An open PR
-  returns `awaiting-merge` and leaves `main` and the milestone tag unchanged.
-  After a user merges it, Path accepts GitHub's merge message but requires the
-  reported landing to be a two-parent merge whose second parent is the exact
-  ship commit and which appears on `origin/main` first-parent history. Squash,
-  rebase, merge queue, a moved PR head, duplicate PRs, and a closed unmerged PR
-  fail closed. GitHub may auto-delete the remote bound branch after merge.
-  Path then creates the annotated milestone tag with PR URL, ship SHA, and
-  landing SHA as durable metadata.
+- `pull-request` requires `gh` authentication for GitHub.com and a GitHub.com
+  origin. Path publishes the exact ship commit and creates or reuses the one
+  eligible PR to `main` with a GSD Path credit footer. It returns
+  `awaiting-merge` until a human GitHub user merges it with a merge commit; Path
+  never enables auto-merge or merges the PR. After validation, Path creates the
+  annotated milestone tag. The [ship contract](skills/gsd-path-ship/SKILL.md)
+  owns the candidate, provenance, topology, publication, and recovery rules.
 
 Ship leaves the primary worktree and `STATE.branch` on the shipped local
 `gsd-path/M00N`; the router owns the later branch handoff. NNN always comes

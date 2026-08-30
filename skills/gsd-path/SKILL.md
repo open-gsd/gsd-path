@@ -143,6 +143,10 @@ python3 <absolute-bundled-pipeline-state.py> configure-integration \
 `default` changes the project setting and changes the current milestone only
 when it has no override. `milestone` changes only the current milestone.
 `integration_source` records that distinction even when both modes match.
+Configure the project default only on the active `.project` track. A lookahead
+track may receive only its own milestone override through `--project-dir
+.project/next`; promotion requires its project default to still match the
+active track.
 The current value resets from the project default at the next milestone.
 Both settings lock when build starts. A lookahead STATE inherits the active
 project's `integration_default` and uses it for `integration`.

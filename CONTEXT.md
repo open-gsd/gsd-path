@@ -59,7 +59,7 @@ _Avoid_: feature branch, worktree branch, `gsd-path/<project-slug>`
 
 **Default branch**:
 The repository's remote default, required to be `main`. New repositories keep
-GitHub's `main`, and ship merges onto it.
+GitHub's `main`, and ship integrates onto it.
 _Avoid_: production branch
 
 **Shipped**:
