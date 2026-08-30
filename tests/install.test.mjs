@@ -1556,6 +1556,7 @@ test("cli loads from an install path containing spaces", () => {
     encoding: "utf8",
   });
   assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /project contracts and status runtime; requires Python 3\.9\+/);
 });
 
 test("native hooks require an initialized repository", async () => {

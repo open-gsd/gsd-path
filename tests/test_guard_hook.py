@@ -131,6 +131,24 @@ class GuardHookTests(unittest.TestCase):
             with self.subTest(tool=tool):
                 self.assert_allowed({"tool_name": tool, "tool_input": {}})
 
+    def test_ambiguous_write_with_file_target_is_guarded(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / ".project").mkdir()
+            (root / ".project" / "STATE.md").write_text("owned\n", encoding="utf-8")
+            with (
+                mock.patch.object(guard_hook, "repository_root", return_value=root),
+                mock.patch.object(
+                    guard_hook, "project_status", return_value=self.status(root)
+                ),
+            ):
+                self.assert_denied(
+                    {
+                        "tool_name": "Update",
+                        "tool_input": {"file_path": "src/app.py"},
+                    }
+                )
+
     def test_plain_prompt_allows_pipeline_artifact_write(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

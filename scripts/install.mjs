@@ -2219,7 +2219,7 @@ function usage() {
     `targets: ${flags}\n` +
     "  --update              refresh existing installs in place\n" +
     "  --local               install into this project's per-host skill dirs\n" +
-    "  --project PATH        also write AGENTS.md and WORKFLOW.md into PATH\n" +
+    "  --project PATH        write project contracts and status runtime; requires Python 3.9+\n" +
     "  --doctor              read-only health check of installs, hooks, and state\n" +
     "  --hooks               with --project: install guard hooks (see HOOKS.md)\n" +
     "  --hooks-init          add guards to an existing project without changing its contracts\n" +

@@ -264,7 +264,10 @@ def is_direct_write_tool(tool, has_file_targets=False):
         )
     if tokens == {"create"}:
         return True
-    return bool((tokens & AMBIGUOUS_WRITE_VERBS) and (tokens & FILE_TARGET_TOKENS))
+    return bool(
+        (tokens & AMBIGUOUS_WRITE_VERBS)
+        and ((tokens & FILE_TARGET_TOKENS) or has_file_targets)
+    )
 
 
 def repository_root():

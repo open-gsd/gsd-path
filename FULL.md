@@ -82,8 +82,10 @@ treat explicit invocation as an operating rule.
 ### Requirements
 
 - **Node 18.17+** for `scripts/install.mjs` (recommended; also the npm `gsd-path` bin once the package is published to npm)
-- **Python 3** optional — `scripts/install.py` mirrors global and `--local`
-  install transactions and `--update`; it does not provide the interactive wizard
+- **Python 3.9+** required for project installs, project refresh, and project-state
+  doctor checks; optional for global-only Node installs. `scripts/install.py`
+  mirrors global and `--local` install transactions and `--update`; it does not
+  provide the interactive wizard
 
 ### Global install (default)
 
@@ -132,7 +134,8 @@ Install shared rules into a repo (refuses if managed files already exist):
 node scripts/install.mjs --all --project /path/to/project
 ```
 
-Writes `AGENTS.md` and `WORKFLOW.md`; with Claude, also `.claude/CLAUDE.md`.
+Writes `AGENTS.md`, `WORKFLOW.md`, and `.gsd-path/runtime/`; with Claude, also
+`.claude/CLAUDE.md`.
 Merge upgrades manually — the installer will not overwrite existing contracts.
 
 ### Guard hooks (optional)

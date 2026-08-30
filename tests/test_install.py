@@ -940,6 +940,41 @@ class InstallerTests(unittest.TestCase):
         self.assertFalse(target.exists())
         self.assertIn("source resources are stale", error)
 
+    def test_hooks_refresh_rejects_stale_resources_before_mutation(self):
+        project = self.root / "stale-refresh-project"
+        target = self.root / "stale-refresh-claude" / "skills"
+        status, _, error = self.run_main(
+            [
+                "--claude",
+                "--claude-root",
+                str(target),
+                "--source-root",
+                str(self.source),
+                "--project",
+                str(project),
+            ]
+        )
+        self.assertEqual(0, status, error)
+        runtime = project / install.HOOKS_DIRECTORY / "runtime" / "pipeline_state.py"
+        before = runtime.read_bytes()
+        install.sync_skill_resources.mismatches.return_value = [
+            "stale generated resource: skills/gsd-path-build/scripts/pipeline_state.py"
+        ]
+
+        status, _, error = self.run_main(
+            [
+                "--hooks-refresh",
+                "--project",
+                str(project),
+                "--source-root",
+                str(self.source),
+            ]
+        )
+
+        self.assertEqual(1, status)
+        self.assertIn("source resources are stale", error)
+        self.assertEqual(before, runtime.read_bytes())
+
     def test_target_root_must_not_contain_or_descend_from_source(self):
         parent_alias = self.root / "parent-alias"
         parent_alias.symlink_to(self.root.parent, target_is_directory=True)

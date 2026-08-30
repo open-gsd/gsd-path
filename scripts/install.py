@@ -2070,6 +2070,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                     file=sys.stderr,
                 )
                 return 2
+            problems = sync_skill_resources.mismatches(source_root)
+            if problems:
+                raise InstallerError(
+                    "source resources are stale: " + "; ".join(problems)
+                )
             refreshed = refresh_hooks(
                 source_root,
                 project,
