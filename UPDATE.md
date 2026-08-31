@@ -153,6 +153,13 @@ To adopt upstream template changes:
 3. Merge manually
 4. Never delete active `.project/` milestone state
 
+An in-flight milestone whose `INTENT.md` or `ROADMAP.md` predates `Surfaces:`
+fails the plan and roadmap gates with `is missing Surfaces`. Add the field by
+hand — `Surfaces: none` when nobody touches the work directly, otherwise the
+surfaces it delivers, matching its roadmap entry. A milestone that names a
+surface also needs PLAN.md's `## Surface contract`, which is a plan change:
+reopen planning in patch mode rather than editing an approved plan in place.
+
 Unrecognized or foreign `.project/` state is never auto-migrated — the router reports it and waits for explicit direction.
 
 ---

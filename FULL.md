@@ -191,7 +191,9 @@ previews the repository and linked-worktree targets for approval as described
 in [README.md](README.md#the-flow).
 
 Define interviews across: problem, users, observable success, scope in,
-scope out (vetoes), constraints, risks. It challenges contradictions, writes a
+scope out (vetoes), constraints, risks, and surfaces. A surface is anything a
+person opens, sees, or types into to get the result; `Surfaces: none` is only
+for work nobody touches directly. It challenges contradictions, writes a
 complete `.project/intent/INTENT.md` draft with the proposed `quick` or
 `standard` lane, and links that draft alongside its **playback summary** before
 asking for approval. For a multi-milestone program, define instead interviews
@@ -262,7 +264,8 @@ surface as `NEEDS-USER` — never guessed.
 Reads INTENT + SYNTHESIS. Produces waves, dependency layers, and task contracts
 (clean base SHA, allowed files, acceptance). **Wave 1** often spikes risk;
 **wave 2** is the thinnest end-to-end slice. Build does not start without your
-plan approval.
+plan approval. When INTENT names a surface, PLAN.md includes the entry, states,
+walkthrough, delivering task, and success criteria that prove it.
 
 ### Build
 
@@ -298,14 +301,16 @@ wider work into more waves at plan time.
 ### Ship
 
 Final review audits every success criterion (`met` / `not-met` /
-`unverifiable`) and cross-wave gaps. Failed criteria become **patch waves** —
-the same build/review loop runs until the final gate passes.
+`unverifiable`) and cross-wave gaps. For every surface criterion, the reviewer
+performs PLAN.md's walkthrough and records what the surface showed; internal
+test output alone cannot mark it `met`. Failed criteria become **patch waves**
+— the same build/review loop runs until the final gate passes.
 
 ---
 
 ## Shipping
 
-Passing the final gate produces a final review surface. After you explicitly
+Passing the final gate produces a final review artifact. After you explicitly
 approve **Archive and ship**, the archive transaction begins:
 
 - Milestone artifacts move to `.project/archive/<NNN>-<slug>/`; `STATE.md`,

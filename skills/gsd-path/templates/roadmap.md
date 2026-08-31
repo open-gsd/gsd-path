@@ -13,6 +13,9 @@
 
 Goal: <one sentence — the independently shippable outcome>
 Depends on: []        # milestone ids; acyclic; earlier ids only
+Surfaces: none        # none | the human-facing surfaces this milestone
+                      # delivers (web app, CLI, HTTP API). Each one needs a
+                      # success criterion observable there.
 Status: pending       # pending | active | shipped | abandoned
 Archive: null         # .project/archive/<NNN>-<slug>/ recorded at ship
 Integrated: null      # optional; merge SHA of the integrate commit onto

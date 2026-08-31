@@ -77,12 +77,39 @@ Wave mode rule above applies to both lenses.
 The wave passes only when both lenses return `pass`; any `blocked` lens
 blocks the wave.
 
+## Skeptic mode
+
+Use only skeptic.md. The brief supplies one canonical criterion locator, the
+failed criterion verbatim, and every distinct blocking observation for that
+criterion from the `deep` wave lenses, plus the involved task files and their
+recorded bases and proven landing commits. The only job is to refute all of
+those observations.
+
+- Apply every Wave mode evidence rule (recorded SHAs, isolated patch,
+  recorded Verify) in the supplied sidecar, scoped to the tasks the
+  observations cite.
+- Address every distinct observation separately. Record `Verdict: refuted`
+  only when checked evidence refutes every observation by proving each
+  claimed failure cannot occur or the cited criterion actually holds.
+  Anything short of that is `Verdict: stands`.
+- Stage
+  `.project/review/wave-N.cycleC.skeptic-<criterion_locator>.md` under the
+  supplied sidecar.
+- Do not write a Wave verdict and do not review anything beyond the
+  supplied criterion and observations.
+
 ## Final integration mode
 
 Use only final-review.md. Treat INTENT.md success criteria as the rubric.
 Exercise the running system and record `met`, `not-met`, or `unverifiable`
-with checked command output or a precise file reference. Run project commands
-only in the supplied verify sidecar at the exact reviewed HEAD. Do not
+with checked command output or a precise file reference. When PLAN.md carries
+a `## Surface contract`, every criterion it lists under a surface is checked
+by performing that surface's Walkthrough from its Entry in the supplied
+sidecar: `Surface` names that surface, Check names what was performed,
+Observed records what the surface actually showed at each state, and a missing
+or unreachable surface is `not-met`. A surface criterion is never `met` on
+internal test output alone. Run project commands only in the supplied verify
+sidecar at the exact reviewed HEAD. Do not
 re-run PLAN.md's project Verify; cite the orchestrator's recorded
 project-verify sidecar output. `pass`
 requires every criterion to be `met`.

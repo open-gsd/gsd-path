@@ -102,9 +102,10 @@ settled brownfield input.
    | similar | `evidence-similar.md` | comparable products and reusable lessons |
 
    Dispatch up to the available child capacity, then dispatch each remaining
-   dimension when a slot opens. Keep all briefs independent. A custom fifth
-   dimension supplements at least one dispatched standard dimension; it never
-   replaces the standard set.
+   dimension when a slot opens. A pending corrected redispatch takes the slot
+   before any queued not-yet-dispatched dimension. Keep all briefs independent.
+   A custom fifth dimension supplements at least one dispatched standard
+   dimension; it never replaces the standard set.
 
    In brownfield work, require stack research to weigh migration cost and
    pitfalls research to check which failure modes already exist in the mapped
@@ -115,20 +116,25 @@ settled brownfield input.
    Derive its filename deterministically as `evidence-<dimension-slug>.md`:
    lowercase the label, replace non-alphanumeric runs with one hyphen, and
    trim hyphens. Append `-2` only if it collides with an existing dimension.
-4. Validate every dispatched evidence file after all agents finish. Confirm
-   every extracted `RESEARCH` question was assigned and answered. Require at
-   least one `## Finding` — a documented `no reliable source found` null
+4. Validate each dispatched evidence file as its researcher returns. Require
+   at least one `## Finding` — a documented `no reliable source found` null
    result recorded as a finding satisfies this gate, with the searches that
-   came up empty noted as its evidence — and require Claim, Source,
-   Confidence, and Why it matters fields for every finding. Then run:
+   came up empty noted as its evidence — require Claim, Source, Confidence,
+   and Why it matters fields for every finding, and require an answer for
+   every question assigned to that dimension. For a missing or invalid file,
+   redispatch one complete corrected brief under the same logical task name,
+   following the runtime dispatch contract, as soon as a child slot allows —
+   never held until the remaining dimensions settle.
+5. After every dimension settles — validated, or its one corrected
+   redispatch collected — confirm every extracted `RESEARCH` question was
+   assigned to a dispatched dimension. Then run:
 
    `python3 <absolute check_handoffs.py> research --repo <absolute repo root>`
 
    The manifest is the source of truth for dispatched and skipped dimensions;
    the STATE log records only a human-readable summary.
-5. Redispatch one complete corrected brief under the same logical task name for
-   each missing or invalid file, following the runtime dispatch contract. If
-   any expected file still fails, run `pipeline_state.py transition` with
+   If any expected file still fails after its one corrected redispatch,
+   run `pipeline_state.py transition` with
    expected `research/active`, exact branch and archive values,
    `--set-status blocked`, and an event listing the failed evidence gate; then
    present **Outcome** with the

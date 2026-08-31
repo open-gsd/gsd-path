@@ -87,3 +87,12 @@ _Avoid_: integration, ship commit, cherry-pick
 A named throwaway checkout at a recorded revision used only for review,
 inspect, or project Verify. It is never the bound branch.
 _Avoid_: detached HEAD, disposable worktree (unless you mean the filesystem path)
+
+**Surface**:
+Something a person opens, sees, or types into to get a milestone's outcome:
+a screen, a command, an endpoint. `Surfaces:` on the roadmap entry and
+INTENT.md names them; `none` means nobody touches the work directly. Each
+named surface carries a success criterion observable there and a PLAN.md
+Surface contract.
+_Avoid_: UI (unless you mean a screen only), frontend, interface (that is the
+task-to-task Interface contract)

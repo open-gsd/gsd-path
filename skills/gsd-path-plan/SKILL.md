@@ -137,6 +137,14 @@ as stated in Lookahead mode.
      quick-lane single waves may use `verify-only`. The planner assigns `deep`
      sparingly to waves where a wrong merge is irreversible or
      security-critical.
+   - When INTENT.md `Surfaces:` is not `none`, require a PLAN.md
+     `## Surface contract` block per named surface with its Criteria, Entry,
+     States, Walkthrough, and the task that delivers it. Those criteria must be
+     among the SCn ids that task owns in its Intent coverage, and their Verify
+     must exercise the surface a person uses — a rendered page, a real
+     command's output — not an internal unit test.
+     Require the surface to land in the same wave as the capability behind
+     it, never in a later polish wave.
    - Prove every intent constraint and synthesis decision is covered, that no
      scope-out veto appears in a task, and that `Project verify` is a real,
      non-placeholder command in PLAN.md.
@@ -264,7 +272,8 @@ the artifacts directly:
    verify-only` permitted — and at most two deliverable-sized task files
    (project policy),
    honoring every task-contract rule above and `.project/LESSONS.md` when it
-   exists. Write `review_panel: off` regardless of INTENT.md.
+   exists. Write `review_panel: off` and `finding_skeptics: off` regardless
+   of INTENT.md.
 3. Gate exactly as step 3 above and use the same outcome, Review link, and
    single approval question as normal mode.
    A quick plan that cannot satisfy the gates — more than two tasks, an open
