@@ -1958,6 +1958,75 @@ Tasks reviewed: 1
             preflight = self.preflight(repo)
             self.assertEqual(preflight.returncode, 0, preflight.stderr)
 
+    def test_archive_accepts_skeptic_files_as_auxiliary_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            skeptic_text = """# Skeptic — wave 1, cycle 1
+
+- Criterion: demo works
+- Criterion locator: t001_ac1
+- Lenses: contract
+
+## Observations
+
+### Observation 1 — contract
+
+The reported failure cannot occur.
+
+## Observation verdicts
+
+### Observation 1: refuted
+
+The archived evidence proves the criterion holds.
+
+## Verdict
+
+refuted
+"""
+            skeptic = (
+                repo
+                / ".project"
+                / "review"
+                / "wave-1.cycle1.skeptic-t001_ac1.md"
+            )
+            skeptic.write_text(skeptic_text, encoding="utf-8")
+
+            archive = self.prepare_archive(repo)
+            archived_skeptic = archive / "review" / skeptic.name
+            self.assertEqual(
+                archived_skeptic.read_text(encoding="utf-8"), skeptic_text
+            )
+            self.write_manifest(archive)
+            preflight = self.preflight(repo)
+
+            self.assertEqual(preflight.returncode, 0, preflight.stderr)
+
+    def test_skeptic_file_cannot_replace_canonical_wave_review(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            review = repo / ".project" / "review"
+            (review / "wave-1.cycle1.md").unlink()
+            (review / "wave-1.cycle1.skeptic-t001_ac1.md").write_text(
+                "# Skeptic — wave 1, cycle 1\n\n## Verdict\n\nrefuted\n",
+                encoding="utf-8",
+            )
+
+            prepare = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "prepare",
+                "--repo",
+                str(repo),
+                "--slug",
+                "demo",
+                cwd=PROJECT_ROOT,
+            )
+
+            self.assertNotEqual(prepare.returncode, 0)
+            self.assertIn("review/wave-N.cycleC.md", prepare.stderr)
+
     def test_preflight_rejects_base_review_for_deep_plan_wave(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             repo = Path(temporary_directory)

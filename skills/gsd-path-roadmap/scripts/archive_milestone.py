@@ -87,6 +87,10 @@ WAVE_FILE_PATTERN = re.compile(
 WAVE_PANEL_SKIP_PATTERN = re.compile(
     r"^wave-([1-9]\d*)\.cycle([1-9]\d*)\.panel\.skipped\.json$"
 )
+WAVE_SKEPTIC_PATTERN = re.compile(
+    r"^wave-([1-9]\d*)\.cycle([1-9]\d*)\.skeptic-"
+    r"([a-z0-9]+(?:_[a-z0-9]+)*)\.md$"
+)
 FINAL_CRITERION_PATTERN = re.compile(r"^### SC([1-9]\d*) — (.+)$")
 INTENT_CRITERION_PATTERN = re.compile(r"^([1-9]\d*)\.\s+(\S.*)$")
 HTML_COMMENT_PATTERN = re.compile(r"<!--.*?-->", re.DOTALL)
@@ -685,14 +689,19 @@ def canonical_wave_files(reviews: Path) -> Sequence[WaveArtifact]:
     candidates = sorted(path for path in reviews.iterdir() if path.name.startswith("wave-"))
     matches = [(path, WAVE_FILE_PATTERN.fullmatch(path.name)) for path in candidates]
     if any(
-        (match is None and WAVE_PANEL_SKIP_PATTERN.fullmatch(path.name) is None)
+        (
+            match is None
+            and WAVE_PANEL_SKIP_PATTERN.fullmatch(path.name) is None
+            and WAVE_SKEPTIC_PATTERN.fullmatch(path.name) is None
+        )
         or not is_real_file(path)
         for path, match in matches
     ):
         raise ArchiveError(
             "canonical wave artifacts must be real wave-N.cycleC.md files "
             "(a .contract, .adversarial, or .panel lens suffix is allowed), "
-            "or canonical .panel.skipped.json receipts"
+            "canonical .panel.skipped.json receipts, or auxiliary "
+            ".skeptic-<locator>.md evidence"
         )
     return [
         WaveArtifact(

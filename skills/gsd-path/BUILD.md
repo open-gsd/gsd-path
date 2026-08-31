@@ -397,8 +397,10 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
    without another skeptic. A `stands` verdict, a missing file, or an invalid
    skeptic file leaves the criterion group blocking. The all-refuted branch
    requires at least one eligible criterion group and no other blocking
-   failure. When every blocking criterion group is refuted, stop and ask:
-   present **Outcome** with the blocked verdict
+   failure, and the current cycle must be below `max_review_cycles`. At the
+   cap, skip this branch and use the cycle-cap escalation below. When every
+   blocking criterion group is refuted, stop and ask: present **Outcome** with
+   the blocked verdict
    and the refutation count, **Review** linking the lens and skeptic
    files, and **Next** listing `Re-run the review cycle with the skeptic
    files in the reviewer briefs (recommended — no finding survived
@@ -433,11 +435,13 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
    never spawns a duplicate fix task for a finding already carried. Write
    each fix task to `.project/tasks/` with `wave` set to the current wave or
    a newly appended `## Wave N` heading in PLAN.md before dispatch. Run them
-   through the same isolated layer loop. At the cap, record all attempts in the STATE.md
-   log and ask the user — through an interactive user-input tool when
-   available — after linking the resolved absolute blocking wave review,
-   whether to redirect the approach, raise the cap, or send define to amend
-   INTENT.md `## Corrections` — never rewrite an AC from a Log waiver — or,
+   through the same isolated layer loop. At the cap, record all attempts in
+   the STATE.md log and ask the user — through an interactive user-input tool
+   when available — after linking the resolved absolute blocking wave review,
+   every deep lens file for the cycle, and every skeptic file collected for
+   the wave, plus the STATE.md attempt log. Ask whether to redirect the
+   approach, raise the cap, or send define to amend INTENT.md `## Corrections`
+   — never rewrite an AC from a Log waiver — or,
    in program flow (ROADMAP.md exists), to abandon the
    milestone under the Milestone abandon procedure — listing the
    orchestrator's recommended option first marked
