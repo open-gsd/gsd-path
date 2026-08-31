@@ -426,10 +426,14 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
    ruling before acting`, and `Wave: <N>`. Do not start the selected review
    cycle or create, batch, or dispatch fix tasks until the checkpoint returns
    its commit. When the persisted ruling selects `Open fix tasks from the
-   findings anyway`, derive the exact override set from that cycle's
-   checkpointed skeptic artifacts: every refuted criterion group with all of
-   its preserved lens observations. Add that set to the surviving findings
-   for fix-task batching. No other ruling re-admits refuted groups. Preserve
+   findings anyway`, derive the exact override set from the current cycle's
+   lens finding groups. Pair each group with its governing valid refutation
+   artifact: the current cycle's skeptic file, or the earlier cycle's recorded
+   skeptic file for a same-evidence repeat. Re-admit every paired group with
+   its current preserved lens observations, using the earlier file when a
+   same-evidence group has no current-cycle skeptic file. Add that set to the
+   surviving findings for fix-task batching. No other ruling re-admits
+   refuted groups. Preserve
    their skeptic verdicts and eligibility history. After a crash, resume the
    recorded choice without asking again. A re-raised locator still gets no
    second skeptic.
