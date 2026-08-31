@@ -20,7 +20,8 @@ Review panel: off   <!-- off | detected | claude,gpt,grok,composer,gemini,deepse
 
 Finding skeptics: off   <!-- off | on — build spawns one read-only skeptic
                       per blocking deep-review finding before fix tasks
-                      are opened; a refuted finding spawns no fix task.
+                      are opened; a refuted finding spawns no fix task unless
+                      the user explicitly overrides all cycle refutations.
                       off is the default. Quick lane stays off. -->
 
 Surfaces: none   <!-- none | comma-separated list of the human-facing

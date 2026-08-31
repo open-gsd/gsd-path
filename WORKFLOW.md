@@ -228,8 +228,10 @@ confidence, and a tie-back to INTENT.md.
 dispatched file exists, matches the evidence template, contains at least one
 finding, and answers its assigned `RESEARCH` questions; every skipped
 dimension is recorded with its reason. Each file is validated as its
-researcher returns, a failed agent may be respawned once, and the
-cross-file gate runs after all settle.
+researcher returns. A missing or invalid file gets one corrected redispatch
+as soon as a child slot opens, ahead of queued initial dimensions and while
+other researchers may still be running. The cross-file gate runs only after
+all dimensions settle.
 
 ## Phase 3 — Decide (`gsd-path-decide`)
 
@@ -324,7 +326,8 @@ The panel is advisory: it never averages findings or replaces user
 approval. Quick lane stays `off`. Config may also set
 `finding_skeptics: on` (default `off`) to have the build spawn one
 read-only skeptic per failed criterion group from a blocking `deep` review
-before fix tasks are opened; a refuted group spawns no fix task.
+before fix tasks are opened; a refuted group spawns no fix task unless the
+user explicitly overrides all refutations for that cycle.
 Same-wave tasks may depend on each other only when their file scopes do not
 overlap; the build executes those tasks in dependency layers. No two tasks
 that can run concurrently may share a file.
@@ -621,7 +624,8 @@ with their exact ordered source-file and row list.
   research/SYNTHESIS.md      decision artifact; authoritative after decide gate
   plan/PLAN.md               waves, config, and project verify
   tasks/T###-slug.md         full contract, clean base SHA, status
-  review/wave-N.cycleC.md    per-wave verdicts
+  review/wave-N.cycleC.md    per-wave verdicts (deep uses contract/adversarial lenses)
+  review/wave-N.cycleC.skeptic-<locator>.md  optional deep-review refutation evidence
   review/wave-N.cycleC.panel.md  optional cross-model wave panel
   review/PLAN-PANEL.md       optional cross-model plan panel
   review/final-gap-N.md      cross-wave gap verdicts
