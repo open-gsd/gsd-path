@@ -815,19 +815,19 @@ function staleInstallLockSnapshot(lock) {
   return { observed, ownerBytes };
 }
 
-function recoverStaleInstallLock(lock) {
-  const quarantine = `${lock}.stale`;
+function recoverStaleInstallLock(lock, quarantine) {
+  const legacyQuarantine = `${lock}.stale`;
   if (!lexists(lock)) {
-    if (lexists(quarantine)) {
-      staleInstallLockSnapshot(quarantine);
-      fs.rmSync(quarantine, { recursive: true });
+    if (lexists(legacyQuarantine)) {
+      staleInstallLockSnapshot(legacyQuarantine);
+      fs.rmSync(legacyQuarantine, { recursive: true });
     }
     return null;
   }
   const { observed, ownerBytes } = staleInstallLockSnapshot(lock);
-  if (lexists(quarantine)) {
-    staleInstallLockSnapshot(quarantine);
-    fs.rmSync(quarantine, { recursive: true });
+  if (lexists(legacyQuarantine)) {
+    staleInstallLockSnapshot(legacyQuarantine);
+    fs.rmSync(legacyQuarantine, { recursive: true });
   }
   try {
     hooks.renameInstallLock(lock, quarantine);
@@ -858,6 +858,7 @@ function createInstallLock(lock) {
   const identity = processIdentity(process.pid);
   if (identity === null) throw new InstallerError("cannot determine installer process identity");
   const staging = fs.mkdtempSync(path.join(path.dirname(lock), ".install-lock-stage-"));
+  const recovery = `${lock}.stale-${path.basename(staging)}`;
   let quarantine = null;
   let published = false;
   try {
@@ -866,7 +867,7 @@ function createInstallLock(lock) {
       JSON.stringify({ schema: INSTALL_LOCK_SCHEMA, pid: process.pid, identity }) + "\n",
       { flag: "wx" }
     );
-    quarantine = recoverStaleInstallLock(lock);
+    quarantine = recoverStaleInstallLock(lock, recovery);
     hooks.renameInstallStage(staging, lock);
     published = true;
     if (quarantine !== null) fs.rmSync(quarantine, { recursive: true });

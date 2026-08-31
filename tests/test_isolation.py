@@ -167,6 +167,10 @@ class IsolationTests(unittest.TestCase):
                 worktree, "T001", "gsd-path-task/T001"
             )
             self.assertEqual("deactivated", deactivated["status"])
+            retried = isolation.deactivate_task(
+                worktree, "T001", "gsd-path-task/T001"
+            )
+            self.assertEqual("deactivated", retried["status"])
             self.assertFalse(
                 isolation.authorized_task_worktree(worktree, "gsd-path/M001")
             )

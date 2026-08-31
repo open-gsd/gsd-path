@@ -1278,6 +1278,50 @@ class InstallerTests(unittest.TestCase):
         self.assertTrue((target / install.SKILL_NAMES[0]).is_dir())
         self.assertFalse(lock.exists())
 
+    def test_concurrent_stale_recovery_keeps_each_quarantine_owned(self):
+        parent = self.root / "concurrent-stale-owner"
+        first_target = parent / "first-skills"
+        second_target = parent / "second-skills"
+        lock = parent / install.INSTALL_LOCK_NAME
+        lock.mkdir(parents=True)
+        (lock / install.INSTALL_LOCK_OWNER).write_text(
+            json.dumps(
+                {
+                    "schema": install.INSTALL_LOCK_SCHEMA,
+                    "pid": os.getpid(),
+                    "identity": "reused-pid",
+                }
+            ),
+            encoding="utf-8",
+        )
+        original_rename = Path.rename
+        raced = False
+
+        def install_competitor(candidate, destination):
+            nonlocal raced
+            result = original_rename(candidate, destination)
+            if candidate == lock and not raced:
+                raced = True
+                install.install(
+                    self.source,
+                    [install.TargetPlan("claude", second_target)],
+                )
+            return result
+
+        with mock.patch.object(Path, "rename", new=install_competitor):
+            install.install(
+                self.source,
+                [install.TargetPlan("claude", first_target)],
+            )
+
+        self.assertTrue(raced)
+        self.assertTrue((first_target / install.SKILL_NAMES[0]).is_dir())
+        self.assertTrue((second_target / install.SKILL_NAMES[0]).is_dir())
+        self.assertFalse(lock.exists())
+        self.assertEqual(
+            [], list(parent.glob(f"{install.INSTALL_LOCK_NAME}.stale-*"))
+        )
+
     def test_install_reclaims_an_orphaned_stale_quarantine(self):
         target = self.root / "orphaned-quarantine" / "skills"
         lock = target.parent / install.INSTALL_LOCK_NAME

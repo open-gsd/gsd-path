@@ -778,6 +778,54 @@ test("install recovers a stale owned lock", async () => {
   assert.ok(!fs.existsSync(lock));
 });
 
+test("concurrent stale recovery keeps each quarantine owned", async () => {
+  const parent = path.join(root, "concurrent-stale-owner");
+  const firstTarget = path.join(parent, "first-skills");
+  const secondTarget = path.join(parent, "second-skills");
+  const lock = path.join(parent, ".gsd-path-install-lock");
+  fs.mkdirSync(lock, { recursive: true });
+  fs.writeFileSync(path.join(lock, "owner.json"), JSON.stringify({
+    schema: "gsd-path/install-lock/v2",
+    pid: process.pid,
+    identity: "reused-pid",
+  }));
+  let raced = false;
+  installer.hooks.renameInstallLock = (from, to) => {
+    fs.renameSync(from, to);
+    if (raced) return;
+    raced = true;
+    const moduleUrl = new URL("../scripts/install.mjs", import.meta.url).href;
+    const script = `
+      import * as installer from ${JSON.stringify(moduleUrl)};
+      installer.hooks.mismatches = () => [];
+      await installer.install(
+        ${JSON.stringify(source)},
+        [installer.targetPlan("claude", ${JSON.stringify(secondTarget)})],
+        { env: ${JSON.stringify(env)} }
+      );
+    `;
+    const competitor = spawnSync(
+      process.execPath,
+      ["--input-type=module", "-e", script],
+      { encoding: "utf8" }
+    );
+    assert.equal(competitor.status, 0, competitor.stderr || competitor.stdout);
+  };
+
+  await runInstall([installer.targetPlan("claude", firstTarget)]);
+
+  assert.equal(raced, true);
+  assert.ok(fs.existsSync(path.join(firstTarget, installer.SKILL_NAMES[0])));
+  assert.ok(fs.existsSync(path.join(secondTarget, installer.SKILL_NAMES[0])));
+  assert.ok(!fs.existsSync(lock));
+  assert.deepEqual(
+    fs.readdirSync(parent).filter((entry) =>
+      entry.startsWith(".gsd-path-install-lock.stale-")
+    ),
+    []
+  );
+});
+
 test("install reclaims an orphaned stale quarantine", async () => {
   const target = path.join(root, "orphaned-quarantine", "skills");
   const lock = path.join(path.dirname(target), ".gsd-path-install-lock");

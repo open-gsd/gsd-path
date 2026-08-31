@@ -527,6 +527,19 @@ def _within_existing_root(candidate, root):
     )
 
 
+def _canonical_control_alias(candidate, repo, control_roots):
+    roots = (*control_roots, repo / ".project", repo / ".gsd-path")
+    suffix = []
+    current = candidate
+    while current != current.parent:
+        for root in roots:
+            if _same_existing_path(current, root):
+                return root.joinpath(*reversed(suffix))
+        suffix.append(current.name)
+        current = current.parent
+    return candidate
+
+
 def path_kind(candidate, repo, control_roots=()):
     if any(
         candidate == root
@@ -569,9 +582,13 @@ def target_kind(path, working_directories, repo, control_roots=None):
     repo = repo.resolve()
     if control_roots is None:
         control_roots = repository_control_roots(repo)
+    aliases = (
+        _canonical_control_alias(lexical, repo, control_roots),
+        _canonical_control_alias(resolved, repo, control_roots),
+    )
     kinds = {
         path_kind(candidate, repo, control_roots)
-        for candidate in (lexical, resolved)
+        for candidate in (lexical, resolved, *aliases)
     }
     for kind in ("protected", "product", "artifact", "external"):
         if kind in kinds:

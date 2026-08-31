@@ -713,17 +713,17 @@ def _stale_install_lock_snapshot(lock: Path) -> Tuple[os.stat_result, bytes]:
     return observed, owner_bytes
 
 
-def _recover_stale_install_lock(lock: Path) -> Optional[Path]:
-    quarantine = lock.with_name(f"{lock.name}.stale")
+def _recover_stale_install_lock(lock: Path, quarantine: Path) -> Optional[Path]:
+    legacy_quarantine = lock.with_name(f"{lock.name}.stale")
     if not _lexists(lock):
-        if _lexists(quarantine):
-            _stale_install_lock_snapshot(quarantine)
-            shutil.rmtree(quarantine)
+        if _lexists(legacy_quarantine):
+            _stale_install_lock_snapshot(legacy_quarantine)
+            shutil.rmtree(legacy_quarantine)
         return None
     observed, owner_bytes = _stale_install_lock_snapshot(lock)
-    if _lexists(quarantine):
-        _stale_install_lock_snapshot(quarantine)
-        shutil.rmtree(quarantine)
+    if _lexists(legacy_quarantine):
+        _stale_install_lock_snapshot(legacy_quarantine)
+        shutil.rmtree(legacy_quarantine)
     try:
         lock.rename(quarantine)
     except (FileNotFoundError, FileExistsError) as error:
@@ -752,6 +752,7 @@ def _create_install_lock(lock: Path) -> None:
     if identity is None:
         raise InstallerError("cannot determine installer process identity")
     staging = Path(tempfile.mkdtemp(prefix=".install-lock-stage-", dir=lock.parent))
+    recovery = lock.with_name(f"{lock.name}.stale-{staging.name}")
     quarantine = None
     published = False
     try:
@@ -766,7 +767,7 @@ def _create_install_lock(lock: Path) -> None:
             + "\n",
             encoding="utf-8",
         )
-        quarantine = _recover_stale_install_lock(lock)
+        quarantine = _recover_stale_install_lock(lock, recovery)
         staging.rename(lock)
         published = True
         if quarantine is not None:

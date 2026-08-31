@@ -30,6 +30,7 @@
     "scripts/isolation.py",
     "scripts/pipeline_git.py",
     "scripts/pipeline_state.py",
+    "scripts/status_runtime.py",
     "scripts/build_state.py",
     "scripts/loop_run.py",
     "scripts/pipeline_undo.py",
