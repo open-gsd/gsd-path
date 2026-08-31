@@ -3,6 +3,7 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from scripts import check_trust_evidence, pipeline_git
 from tests import test_archive_milestone
@@ -100,7 +101,14 @@ class TrustEvidenceTests(unittest.TestCase):
             self.assertEqual(0, result.returncode, result.stderr)
             return result.stdout.strip()
 
-        builder.make_publishable_bound_repo(repository, remote)
+        with mock.patch.dict(
+            "os.environ",
+            {
+                "GIT_AUTHOR_NAME": f"Trust Evidence {host}",
+                "GIT_COMMITTER_NAME": f"Trust Evidence {host}",
+            },
+        ):
+            builder.make_publishable_bound_repo(repository, remote)
         landing = git("rev-parse", "HEAD")
         base = git("rev-parse", "HEAD^")
         pre_integration_default = git("rev-parse", "main")
@@ -531,6 +539,13 @@ class TrustEvidenceTests(unittest.TestCase):
         self.git("add", "-A")
         self.git("commit", "-qm", "trust evidence")
 
+    @mock.patch.dict(
+        "os.environ",
+        {
+            "GIT_AUTHOR_DATE": "2026-08-31T13:25:19+00:00",
+            "GIT_COMMITTER_DATE": "2026-08-31T13:25:19+00:00",
+        },
+    )
     def test_accepts_complete_current_evidence(self):
         self.receipt("alpha")
         self.receipt("beta")
