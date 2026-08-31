@@ -165,7 +165,7 @@ partial remote/clone/worktree transaction; the default checkout stays clean.
   ROADMAP.md                  milestone slicing; never archives
   SYNTHESIS.md                program decisions (top level); never archives
   next/                       lookahead track: next milestone's artifacts during build
-  intent/INTENT.md            goal, vetoes, constraints
+  intent/INTENT.md            goal, vetoes, constraints, surfaces
   research/
     evidence-codebase.md      brownfield ground truth (inspect)
     DOCS-AUDIT.md             doc verdicts + remediation queue
@@ -175,13 +175,13 @@ partial remote/clone/worktree transaction; the default checkout stays clean.
     evidence-pitfalls.md      pitfalls evidence
     evidence-similar.md       similar projects evidence
     SYNTHESIS.md              gated decisions
-  plan/PLAN.md                waves, dependencies, verify
+  plan/PLAN.md                waves, dependencies, surface contract, verify
   tasks/T###-slug.md          task contract: files, interface, criteria, base SHA, status
   review/wave-N.cycleC.md     wave review (deep: .contract.md + .adversarial.md)
   review/wave-N.cycleC.panel.md  optional cross-model wave panel
   review/PLAN-PANEL.md        optional cross-model plan panel
   review/final-gap-N.md       gap review
-  review/FINAL.md             success-criteria audit
+  review/FINAL.md             success-criteria and surface audit
   review/PATCH-FINDINGS.md    patch-wave findings (when review blocks)
   discuss/DIALOGUE.md         any-phase dialogue transcript
   discuss/ANSWERS.md          durable discussion answers and decisions
