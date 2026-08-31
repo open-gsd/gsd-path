@@ -517,6 +517,7 @@ class InstallerTests(unittest.TestCase):
                     self.assertNotIn("(other hosts)", router)
 
     def test_stage_target_stamps_version_from_package_manifest(self):
+        (self.source / "package.json").unlink()
         staged = self.root / "staged-unstamped"
         staged.mkdir()
         install.stage_target(self.source, "claude", staged)
