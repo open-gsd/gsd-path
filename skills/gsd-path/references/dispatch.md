@@ -56,7 +56,8 @@ For every branch:
   `plan_patch`, `build_<task_id>`, `review_wave_<wave>_cycle_<cycle>`
   (a `deep` wave review appends the lens suffix `_contract` or
   `_adversarial`; an optional review panel uses
-  `review_wave_<wave>_cycle_<cycle>_panel_<family>`),
+  `review_wave_<wave>_cycle_<cycle>_panel_<family>`; an optional finding
+  skeptic uses `review_wave_<wave>_cycle_<cycle>_skeptic_<criterion_locator>`),
   `review_plan_panel_<family>`,
   `review_final`, or `review_gap_<number>`. Normalize variable parts to
   lowercase ASCII and replace non-alphanumeric runs with one underscore.

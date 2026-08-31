@@ -87,6 +87,10 @@ WAVE_FILE_PATTERN = re.compile(
 WAVE_PANEL_SKIP_PATTERN = re.compile(
     r"^wave-([1-9]\d*)\.cycle([1-9]\d*)\.panel\.skipped\.json$"
 )
+WAVE_SKEPTIC_PATTERN = re.compile(
+    r"^wave-([1-9]\d*)\.cycle([1-9]\d*)\.skeptic-"
+    r"([a-z0-9]+(?:_[a-z0-9]+)*)\.md$"
+)
 FINAL_CRITERION_PATTERN = re.compile(r"^### SC([1-9]\d*) — (.+)$")
 INTENT_CRITERION_PATTERN = re.compile(r"^([1-9]\d*)\.\s+(\S.*)$")
 HTML_COMMENT_PATTERN = re.compile(r"<!--.*?-->", re.DOTALL)
@@ -679,20 +683,32 @@ class WaveArtifact(NamedTuple):
     lens: Optional[str]
 
 
+class SkepticArtifact(NamedTuple):
+    path: Path
+    wave: int
+    cycle: int
+    locator: str
+
+
 def canonical_wave_files(reviews: Path) -> Sequence[WaveArtifact]:
     if reviews.is_symlink() or not reviews.is_dir():
         return ()
     candidates = sorted(path for path in reviews.iterdir() if path.name.startswith("wave-"))
     matches = [(path, WAVE_FILE_PATTERN.fullmatch(path.name)) for path in candidates]
     if any(
-        (match is None and WAVE_PANEL_SKIP_PATTERN.fullmatch(path.name) is None)
+        (
+            match is None
+            and WAVE_PANEL_SKIP_PATTERN.fullmatch(path.name) is None
+            and WAVE_SKEPTIC_PATTERN.fullmatch(path.name) is None
+        )
         or not is_real_file(path)
         for path, match in matches
     ):
         raise ArchiveError(
             "canonical wave artifacts must be real wave-N.cycleC.md files "
             "(a .contract, .adversarial, or .panel lens suffix is allowed), "
-            "or canonical .panel.skipped.json receipts"
+            "canonical .panel.skipped.json receipts, or auxiliary "
+            ".skeptic-<locator>.md evidence"
         )
     return [
         WaveArtifact(
@@ -704,6 +720,62 @@ def canonical_wave_files(reviews: Path) -> Sequence[WaveArtifact]:
         for path, match in matches
         if match is not None
     ]
+
+
+def canonical_wave_skeptic_files(reviews: Path) -> Sequence[SkepticArtifact]:
+    if reviews.is_symlink() or not reviews.is_dir():
+        return ()
+    artifacts = []
+    for path in sorted(reviews.iterdir()):
+        match = WAVE_SKEPTIC_PATTERN.fullmatch(path.name)
+        if match is None:
+            continue
+        if not is_real_file(path):
+            raise ArchiveError(f"skeptic evidence must be a real file: {path.name}")
+        artifacts.append(
+            SkepticArtifact(
+                path,
+                int(match.group(1)),
+                int(match.group(2)),
+                match.group(3),
+            )
+        )
+    return artifacts
+
+
+def validate_wave_skeptic_files(
+    reviews: Path,
+    wave_depths: dict[int, str],
+    wave_artifacts: Sequence[WaveArtifact],
+) -> None:
+    deep_cycles = {}
+    for artifact in wave_artifacts:
+        if artifact.lens in {"contract", "adversarial"}:
+            deep_cycles.setdefault((artifact.wave, artifact.cycle), set()).add(
+                artifact.lens
+            )
+    required_lenses = {"contract", "adversarial"}
+    for artifact in canonical_wave_skeptic_files(reviews):
+        key = (artifact.wave, artifact.cycle)
+        if (
+            wave_depths.get(artifact.wave) != "deep"
+            or deep_cycles.get(key) != required_lenses
+        ):
+            raise ArchiveError(
+                f"{artifact.path.name} does not match a canonical deep review cycle"
+            )
+        lines = artifact.path.read_text(encoding="utf-8").splitlines()
+        heading = f"# Skeptic — wave {artifact.wave}, cycle {artifact.cycle}"
+        if lines.count(heading) != 1:
+            raise ArchiveError(
+                f"{artifact.path.name} heading does not match its filename"
+            )
+        completed_field(lines, "- Criterion:", artifact.path.name)
+        locator = completed_field(lines, "- Criterion locator:", artifact.path.name)
+        if locator != artifact.locator:
+            raise ArchiveError(
+                f"{artifact.path.name} Criterion locator does not match its filename"
+            )
 
 
 def canonical_wave_panel_skip_files(reviews: Path) -> dict[tuple[int, int], Path]:
@@ -730,13 +802,17 @@ def require_canonical_transaction_inputs(active_root: Path, archive: Path) -> No
     reviews = selected_transaction_path(active_root, archive, "review")
     if not canonical_task_files(tasks):
         missing.append("tasks/T###-slug.md")
-    if not canonical_wave_files(reviews):
+    wave_artifacts = canonical_wave_files(reviews)
+    if not wave_artifacts:
         missing.append("review/wave-N.cycleC.md")
     plan = selected_transaction_path(active_root, archive, "plan/PLAN.md")
     if missing:
         raise ArchiveError(f"canonical milestone artifacts are missing: {', '.join(missing)}")
+    plan_text = plan.read_text(encoding="utf-8")
+    _, wave_depths = plan_wave_depths(plan_text)
+    validate_wave_skeptic_files(reviews, wave_depths, wave_artifacts)
     require_plan_panel_evidence(
-        plan.read_text(encoding="utf-8"),
+        plan_text,
         selected_transaction_path(active_root, archive, "review/PLAN-PANEL.md"),
         selected_transaction_path(
             active_root, archive, "review/PLAN-PANEL.skipped.json"
@@ -1605,9 +1681,7 @@ def validate_wave_review(
     return verdicts
 
 
-def review_cycle_counts(archive: Path) -> Sequence[int]:
-    plan = archive / "plan" / "PLAN.md"
-    plan_text = plan.read_text(encoding="utf-8")
+def plan_wave_depths(plan_text: str) -> tuple[Sequence[int], dict[int, str]]:
     wave_matches = list(re.finditer(r"^## Wave (\d+)\b", plan_text, re.MULTILINE))
     wave_numbers = [int(match.group(1)) for match in wave_matches]
     if not wave_numbers or wave_numbers != list(range(1, len(wave_numbers) + 1)):
@@ -1632,13 +1706,22 @@ def review_cycle_counts(archive: Path) -> Sequence[int]:
         if depth not in {"full", "deep", "verify-only"}:
             raise ArchiveError(f"plan wave {wave} has an invalid review depth")
         wave_depths[wave] = depth
+    return wave_numbers, wave_depths
+
+
+def review_cycle_counts(archive: Path) -> Sequence[int]:
+    plan = archive / "plan" / "PLAN.md"
+    plan_text = plan.read_text(encoding="utf-8")
+    wave_numbers, wave_depths = plan_wave_depths(plan_text)
     wave_tasks = archived_wave_tasks(archive, wave_numbers)
     wave_criteria = plan_wave_criteria(archive, plan_text, wave_tasks)
 
     artifacts = {}
     panel_config = plan_review_panel_config(plan_text)
     panel_skip_receipts = canonical_wave_panel_skip_files(archive / "review")
-    for path, wave, cycle, lens in canonical_wave_files(archive / "review"):
+    wave_artifacts = canonical_wave_files(archive / "review")
+    validate_wave_skeptic_files(archive / "review", wave_depths, wave_artifacts)
+    for path, wave, cycle, lens in wave_artifacts:
         if lens == "panel":
             artifacts.setdefault(wave, {}).setdefault(cycle, {})[lens] = path
             continue

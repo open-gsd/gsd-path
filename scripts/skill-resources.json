@@ -75,7 +75,8 @@
       "references/reviewer.md",
       "templates/task.md",
       "templates/wave-review.md",
-      "templates/wave-panel.md"
+      "templates/wave-panel.md",
+      "templates/skeptic.md"
     ],
     "gsd-path-discuss": [
       "templates/answers.md",

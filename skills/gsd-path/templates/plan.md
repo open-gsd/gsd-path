@@ -20,6 +20,12 @@ Project verify: `<command that builds + tests the whole project>`
                              Named families are an assertion. Quick lane stays
                              off. The planner copies INTENT.md; it does not
                              invent a non-off value. -->
+- finding_skeptics: off  <!-- off | on — deep waves only. on spawns one
+                             read-only skeptic per blocking finding before
+                             fix tasks are batched; a refuted finding spawns
+                             no fix task unless the user explicitly overrides
+                             all cycle refutations. off is default. The planner
+                             copies INTENT.md; it does not invent on. -->
 
 ## Wave 1 — risk burn-down
 

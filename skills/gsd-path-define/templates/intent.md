@@ -11,12 +11,18 @@ Lane: standard   <!-- standard | quick | milestone — quick: at most two
                       research/decide run only when the entry has open
                       questions. -->
 
-Review panel: off   <!-- off | detected | claude,gpt,grok,composer — this
+Review panel: off   <!-- off | detected | claude,gpt,grok,composer,gemini,deepseek,kimi,qwen — this
                       milestone's panel setting. In program flow, copy
                       CHARTER.md's durable default and override only when
                       the user says so. off is the default. detected uses
                       advertised host families except the parent, at most 3.
                       Named families are an assertion. Quick lane stays off. -->
+
+Finding skeptics: off   <!-- off | on — build spawns one read-only skeptic
+                      per blocking deep-review finding before fix tasks
+                      are opened; a refuted finding spawns no fix task unless
+                      the user explicitly overrides all cycle refutations.
+                      off is the default. Quick lane stays off. -->
 
 Surfaces: none   <!-- none | comma-separated list of the human-facing
                       surfaces this milestone delivers: a web app, a CLI, an

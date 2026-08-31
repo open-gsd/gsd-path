@@ -57,7 +57,7 @@ cancellation is a blocked result, not a skipped result.
 | --- | --- | --- | --- |
 | inspect | codebase mapper, docs auditor | two concurrent briefs | validate and transfer both artifacts |
 | define | none | coordinator-led user gate | write approved INTENT.md (program mode: CHARTER.md) |
-| research | assigned dimensions | concurrent up to capacity, then batches | validate RESEARCH.md and evidence |
+| research | assigned dimensions | concurrent up to capacity, then batches | validate each evidence file as it returns; RESEARCH.md gate after all settle |
 | decide | one decider | serial | validate SYNTHESIS.md |
 | roadmap | one roadmapper | serial; program flow only | validate ROADMAP.md |
 | plan | one planner; zero in quick mode | serial | validate PLAN.md and task wave assignments |
@@ -227,7 +227,11 @@ confidence, and a tie-back to INTENT.md.
 **Gate:** RESEARCH.md records every standard dimension exactly once, every
 dispatched file exists, matches the evidence template, contains at least one
 finding, and answers its assigned `RESEARCH` questions; every skipped
-dimension is recorded with its reason. One failed agent may be respawned once.
+dimension is recorded with its reason. Each file is validated as its
+researcher returns. A missing or invalid file gets one corrected redispatch
+as soon as a child slot opens, ahead of queued initial dimensions and while
+other researchers may still be running. The cross-file gate runs only after
+all dimensions settle.
 
 ## Phase 3 — Decide (`gsd-path-decide`)
 
@@ -319,7 +323,11 @@ override. After the structural gate
 and before approval, the planner runs `scripts/review_panel.py` against
 advertised host model slugs and may write `.project/review/PLAN-PANEL.md`.
 The panel is advisory: it never averages findings or replaces user
-approval. Quick lane stays `off`.
+approval. Quick lane stays `off`. Config may also set
+`finding_skeptics: on` (default `off`) to have the build spawn one
+read-only skeptic per failed criterion group from a blocking `deep` review
+before fix tasks are opened; a refuted group spawns no fix task unless the
+user explicitly overrides all refutations for that cycle.
 Same-wave tasks may depend on each other only when their file scopes do not
 overlap; the build executes those tasks in dependency layers. No two tasks
 that can run concurrently may share a file.
@@ -616,7 +624,8 @@ with their exact ordered source-file and row list.
   research/SYNTHESIS.md      decision artifact; authoritative after decide gate
   plan/PLAN.md               waves, config, and project verify
   tasks/T###-slug.md         full contract, clean base SHA, status
-  review/wave-N.cycleC.md    per-wave verdicts
+  review/wave-N.cycleC.md    per-wave verdicts (deep uses contract/adversarial lenses)
+  review/wave-N.cycleC.skeptic-<locator>.md  optional deep-review refutation evidence
   review/wave-N.cycleC.panel.md  optional cross-model wave panel
   review/PLAN-PANEL.md       optional cross-model plan panel
   review/final-gap-N.md      cross-wave gap verdicts

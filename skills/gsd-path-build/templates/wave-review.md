@@ -49,7 +49,7 @@ Contract violations (blocking):
 
 ## Summary for orchestrator
 
-- blocked → fix tasks needed: <one per disjoint file scope, findings
-  batched: T00xF<C> — scope + findings covered, ...>
+- blocked findings: <failed criteria grouped by disjoint file scope; the
+  orchestrator applies the configured skeptic or fix-task path>
 - repeat offenders: <criteria failing across cycles — possible plan defect>
 - warnings worth a human eye: <...or none>

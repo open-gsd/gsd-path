@@ -89,7 +89,7 @@ flowchart TD
     W -->|"briefs linted at base SHA"| C["parallel coders, isolated worktrees"]
     C -->|"streaming: dependents dispatch as deps land"| V{"wave review"}
     V -->|"full — or deep: contract + adversarial lenses"| F{"verdict"}
-    F -->|"blocked → fix tasks (findings deduped by criterion)"| W
+    F -->|"blocked → criterion triage"| W
     F -->|"pass → next wave"| W
     F -->|"all waves pass"| S["6 · ship — final review"]
     C -.->|"NEEDS-ORCHESTRATOR question"| O["orchestrator answers from artifacts, or asks you"]
@@ -132,7 +132,9 @@ advance past an unresolved required follow-up.
   stays serial and every Verify reruns in the isolated worktree.
 - Wave review depth is `full`, `verify-only`, or `deep` — two independent
   fresh-context reviewers (contract + adversarial lenses) that must both
-  pass — and findings carry forward by criterion across fix cycles.
+  pass — and findings carry forward by criterion across fix cycles. Optional
+  skeptic triage for blocked `deep` reviews is defined in
+  [WORKFLOW.md](WORKFLOW.md#phase-4--plan-gsd-path-plan).
 - A coder with an ambiguous contract asks `NEEDS-ORCHESTRATOR` instead of
   guessing; on hosts with a blocking ask/reply channel the worker stays
   alive for the answer.
@@ -177,12 +179,7 @@ partial remote/clone/worktree transaction; the default checkout stays clean.
     SYNTHESIS.md              gated decisions
   plan/PLAN.md                waves, dependencies, surface contract, verify
   tasks/T###-slug.md          task contract: files, interface, criteria, base SHA, status
-  review/wave-N.cycleC.md     wave review (deep: .contract.md + .adversarial.md)
-  review/wave-N.cycleC.panel.md  optional cross-model wave panel
-  review/PLAN-PANEL.md        optional cross-model plan panel
-  review/final-gap-N.md       gap review
-  review/FINAL.md             success-criteria and surface audit
-  review/PATCH-FINDINGS.md    patch-wave findings (when review blocks)
+  review/                      review evidence; see WORKFLOW.md#handoff-contract
   discuss/DIALOGUE.md         any-phase dialogue transcript
   discuss/ANSWERS.md          durable discussion answers and decisions
   LESSONS.md                  optional carried-forward planning lessons
