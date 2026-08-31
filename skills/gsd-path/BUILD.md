@@ -403,8 +403,19 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
    files, and **Next** listing `Re-run the review cycle with the skeptic
    files in the reviewer briefs (recommended — no finding survived
    scrutiny)` first, then `Open fix tasks from the findings anyway (an
-   explicit ruling that overrides their refutations)`. That re-run consumes
-   a cycle.
+   explicit ruling that overrides their refutations)`. A selected re-run
+   consumes a cycle. After the user selects either option, record exact full
+   HEAD, then use `pipeline_state.py transition` with the exact current phase,
+   status, branch, and archive as expected and unchanged phase/status as the
+   result.
+   Append `wave <N> cycle <C> all-refuted ruling: <selected option verbatim>`
+   to the STATE.md Log and require the returned position to remain
+   `build/active`. Checkpoint STATE.md and the collected skeptic artifacts
+   through the Bookkeeping checkpoint rule with subject `build: record wave
+   <N> cycle <C> skeptic ruling`, body `Why: persist the all-refuted user
+   ruling before acting`, and `Wave: <N>`. Do not start the selected review
+   cycle or create, batch, or dispatch fix tasks until the checkpoint returns
+   its commit.
    While cycles remain below the cap, batch the surviving
    findings into complete fix tasks from the task template — one task per
    disjoint file scope, not one per finding — each carrying its findings'
