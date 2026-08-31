@@ -77,6 +77,25 @@ Wave mode rule above applies to both lenses.
 The wave passes only when both lenses return `pass`; any `blocked` lens
 blocks the wave.
 
+## Skeptic mode
+
+Used only when PLAN.md Config records `finding_skeptics: on` and the wave's
+Review depth is `deep`. The brief supplies exactly one blocking finding
+verbatim plus the involved task files, their recorded bases and proven
+landing commits, and a verify sidecar. The only job is to refute that
+finding.
+
+- Apply the Wave mode evidence rules: recorded SHAs, isolated patch in the
+  supplied sidecar, the recorded isolated Verify output as Verify evidence.
+- Record `Verdict: refuted` only with checked evidence — a command re-run
+  in the sidecar or an artifact re-read — proving the claimed failure
+  cannot occur or the cited criterion actually holds. Anything short of
+  that is `Verdict: stands`; uncertainty stands.
+- Stage `.project/review/wave-N.cycleC.skeptic<n>.md` under the supplied
+  sidecar containing the finding verbatim, the verdict, and the evidence.
+- Do not write a Wave verdict, edit the canonical wave-review or lens
+  files, or review anything beyond the one supplied finding.
+
 ## Final integration mode
 
 Use only final-review.md. Treat INTENT.md success criteria as the rubric.
