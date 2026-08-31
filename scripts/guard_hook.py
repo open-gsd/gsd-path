@@ -38,6 +38,28 @@ PATH_KEYS = frozenset(
         "directory",
     }
 )
+MUTATION_OPERAND_KEYS = frozenset(
+    {
+        "destination",
+        "destination_directory",
+        "destination_file",
+        "destination_path",
+        "from",
+        "from_file",
+        "from_path",
+        "old_file",
+        "old_path",
+        "source",
+        "source_directory",
+        "source_file",
+        "source_notebook",
+        "source_path",
+        "target_path",
+        "to",
+        "to_file",
+        "to_path",
+    }
+)
 WORKING_DIRECTORY_KEYS = frozenset({"working_directory", "workdir", "cwd"})
 COMMAND_KEYS = frozenset({"command", "cmd", "script"})
 PATCH_KEYS = frozenset({"patch", "patch_body", "patch_text", "diff"})
@@ -273,6 +295,7 @@ def collect(
     working_directories,
     commands,
     patch_payloads,
+    path_keys=PATH_KEYS,
     inherited_working_directories=(),
 ):
     if isinstance(node, dict):
@@ -294,7 +317,7 @@ def collect(
         for key, value in node.items():
             lowered = key.lower()
             if isinstance(value, str):
-                if lowered in PATH_KEYS:
+                if lowered in path_keys:
                     paths.append((value, context))
                 elif lowered in COMMAND_KEYS:
                     commands.append((value, context))
@@ -302,7 +325,7 @@ def collect(
                     patch_payloads.append((value, context))
             elif isinstance(value, list):
                 strings = [item for item in value if isinstance(item, str)]
-                if strings and lowered in PATH_KEYS:
+                if strings and lowered in path_keys:
                     paths.extend((item, context) for item in strings)
                 elif lowered in COMMAND_KEYS:
                     if not strings or len(strings) != len(value):
@@ -316,6 +339,7 @@ def collect(
                     working_directories,
                     commands,
                     patch_payloads,
+                    path_keys,
                     context,
                 )
             else:
@@ -325,6 +349,7 @@ def collect(
                     working_directories,
                     commands,
                     patch_payloads,
+                    path_keys,
                     context,
                 )
     elif isinstance(node, list):
@@ -335,6 +360,7 @@ def collect(
                 working_directories,
                 commands,
                 patch_payloads,
+                path_keys,
                 inherited_working_directories,
             )
 
@@ -1273,7 +1299,17 @@ def evaluate(event):
     if not isinstance(tool, str) or not tool.strip():
         raise ValueError("hook event is missing its tool name")
     paths, working_directories, commands, patch_payloads = [], [], [], []
-    collect(event, paths, working_directories, commands, patch_payloads)
+    path_keys = PATH_KEYS
+    if is_direct_write_tool(tool):
+        path_keys |= MUTATION_OPERAND_KEYS
+    collect(
+        event,
+        paths,
+        working_directories,
+        commands,
+        patch_payloads,
+        path_keys,
+    )
     raw_input = event.get("tool_input", event.get("toolInput"))
     raw_patch = isinstance(raw_input, str) and has_patch_headers(raw_input)
     if is_patch_tool(tool) or raw_patch:

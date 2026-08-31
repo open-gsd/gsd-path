@@ -2176,18 +2176,40 @@ export function doctor(sourceRoot, { targets, rootFor, project = null }) {
   let guardInstalled = GUARD_SCRIPTS.some((name) =>
     lexists(path.join(project, HOOKS_DIRECTORY, name))
   );
-  let guardWired = targets.some((target) => {
+  const nativeWiredTargets = new Set();
+  for (const target of targets) {
     const contract = nativeGuardContract(target, project);
-    return contract !== null && isManagedHookSettings(contract.settings);
-  });
+    if (
+      contract !== null &&
+      (isSymlink(contract.settings) || isManagedHookSettings(contract.settings))
+    ) {
+      nativeWiredTargets.add(target);
+    }
+  }
+  let guardWired = nativeWiredTargets.size > 0;
+  const unreadableGitHooks = new Map();
   if (lexists(path.join(project, ".git"))) {
     const hooksDir = gitHooksDirectory(project);
-    guardWired =
-      guardWired ||
-      (hooksDir !== null &&
-        ["pre-commit", "commit-msg"].some((name) =>
-          isManagedGitHook(path.join(hooksDir, name))
-        ));
+    if (hooksDir !== null) {
+      for (const name of ["pre-commit", "commit-msg"]) {
+        const hookPath = path.join(hooksDir, name);
+        if (!lexists(hookPath)) continue;
+        if (isSymlink(hookPath)) {
+          guardWired = true;
+          continue;
+        }
+        try {
+          const managed = isManagedGitHookContent(fs.readFileSync(hookPath, "utf8"));
+          guardWired = managed || guardWired;
+        } catch (error) {
+          unreadableGitHooks.set(hookPath, error.message);
+        }
+      }
+    }
+  }
+  for (const [hookPath, error] of unreadableGitHooks) {
+    const label = describeProjectPath(project, hookPath);
+    push("fail", `hooks: ${label} cannot be read: ${error}`);
   }
   guardInstalled = guardInstalled || guardWired;
   if (!guardInstalled) {
@@ -2219,12 +2241,16 @@ export function doctor(sourceRoot, { targets, rootFor, project = null }) {
       }
     }
     for (const target of targets) {
-      if (!installedTargets.has(target)) continue;
+      if (!installedTargets.has(target) && !nativeWiredTargets.has(target)) continue;
       const contract = nativeGuardContract(target, project);
       if (contract === null) {
         if (MANIFEST.hosts[target]?.guard_tier !== "git-only") {
           push("fail", `hooks: ${target} declares a native guard without a health contract`);
         }
+        continue;
+      }
+      if (isSymlink(contract.settings)) {
+        push("fail", `hooks: ${target} native guard wiring is a symlink`);
         continue;
       }
       if (!isFile(contract.settings)) {
@@ -2270,6 +2296,9 @@ export function doctor(sourceRoot, { targets, rootFor, project = null }) {
         ]) {
           const hookPath = path.join(hooksDir, hookName);
           const label = describeProjectPath(project, hookPath);
+          if (unreadableGitHooks.has(hookPath)) {
+            continue;
+          }
           if (!lexists(hookPath)) {
             push(
               "fail",
@@ -2277,6 +2306,8 @@ export function doctor(sourceRoot, { targets, rootFor, project = null }) {
                 `${hooksDir} — run --hooks-refresh-full`
             );
             if (custom) missingFromCustom = true;
+          } else if (isSymlink(hookPath)) {
+            push("fail", `hooks: ${label} is a symlink`);
           } else {
             const hookContent = readProjectFile(hookPath, `hooks: ${label}`);
             if (hookContent === null) continue;

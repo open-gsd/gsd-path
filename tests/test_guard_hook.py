@@ -227,6 +227,30 @@ class GuardHookTests(unittest.TestCase):
                             }
                         )
 
+    def test_move_file_guards_product_source_with_external_target(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "repo"
+            root.mkdir()
+            (root / ".project").mkdir()
+            (root / ".project" / "STATE.md").write_text(
+                "owned\n", encoding="utf-8"
+            )
+            with (
+                mock.patch.object(guard_hook, "repository_root", return_value=root),
+                mock.patch.object(
+                    guard_hook, "project_status", return_value=self.status(root)
+                ),
+            ):
+                self.assert_denied(
+                    {
+                        "tool_name": "MoveFile",
+                        "tool_input": {
+                            "source_file": "src/app.py",
+                            "target_file": str(Path(temporary) / "app.py"),
+                        },
+                    }
+                )
+
     def test_download_file_tool_is_a_direct_write(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

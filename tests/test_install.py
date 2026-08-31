@@ -2588,6 +2588,101 @@ class InstallerTests(unittest.TestCase):
         for name in install.GUARD_SCRIPTS:
             self.assertTrue((project / install.HOOKS_DIRECTORY / name).is_file())
 
+    def test_doctor_validates_detected_native_wiring_without_skills(self):
+        project = self.root / "doctor-stale-native-wiring"
+        project.mkdir()
+        subprocess.run(["git", "init", "-q"], cwd=project, check=True)
+        target = self.root / "doctor-stale-native-claude" / "skills"
+        status, _, error = self.run_main(self.hooks_arguments(project, target))
+        self.assertEqual(0, status, error)
+        shutil.rmtree(target)
+        settings = project / ".claude" / "settings.json"
+        parsed = json.loads(settings.read_text(encoding="utf-8"))
+        parsed["hooks"]["PreToolUse"][0]["matcher"] = "Write"
+        settings.write_text(json.dumps(parsed) + "\n", encoding="utf-8")
+
+        findings = install.doctor(
+            self.source, ["claude"], lambda _target: target, project
+        )
+
+        self.assertTrue(
+            any(
+                finding["level"] == "fail"
+                and "claude native guard wiring is stale" in finding["text"]
+                for finding in findings
+            )
+        )
+
+    def test_doctor_rejects_symlinked_native_and_git_wiring(self):
+        project = self.root / "doctor-symlinked-wiring"
+        project.mkdir()
+        subprocess.run(["git", "init", "-q"], cwd=project, check=True)
+        target = self.root / "doctor-symlinked-wiring-claude" / "skills"
+        status, _, error = self.run_main(self.hooks_arguments(project, target))
+        self.assertEqual(0, status, error)
+        settings = project / ".claude" / "settings.json"
+        outside_settings = self.root / "outside-settings.json"
+        shutil.copy2(settings, outside_settings)
+        settings.unlink()
+        settings.symlink_to(outside_settings)
+        pre_commit = project / ".git" / "hooks" / "pre-commit"
+        outside_hook = self.root / "outside-pre-commit"
+        shutil.copy2(pre_commit, outside_hook)
+        pre_commit.unlink()
+        pre_commit.symlink_to(outside_hook)
+
+        findings = install.doctor(
+            self.source, ["claude"], lambda _target: target, project
+        )
+
+        self.assertTrue(
+            any(
+                finding["level"] == "fail"
+                and "claude native guard wiring is a symlink" in finding["text"]
+                for finding in findings
+            )
+        )
+        self.assertTrue(
+            any(
+                finding["level"] == "fail"
+                and "pre-commit is a symlink" in finding["text"]
+                for finding in findings
+            )
+        )
+
+    def test_doctor_reports_unreadable_effective_git_hooks(self):
+        project = self.root / "doctor-unreadable-git-wiring"
+        project.mkdir()
+        subprocess.run(["git", "init", "-q"], cwd=project, check=True)
+        target = self.root / "doctor-unreadable-git-claude" / "skills"
+        status, _, error = self.run_main(self.hooks_arguments(project, target))
+        self.assertEqual(0, status, error)
+        for name in install.GUARD_SCRIPTS:
+            (project / install.HOOKS_DIRECTORY / name).unlink()
+        hooks = [
+            project / ".git" / "hooks" / name
+            for name in ("pre-commit", "commit-msg")
+        ]
+        for hook in hooks:
+            hook.chmod(0)
+        try:
+            findings = install.doctor(
+                self.source, [], lambda _target: target, project
+            )
+        finally:
+            for hook in hooks:
+                hook.chmod(0o755)
+
+        for name in ("pre-commit", "commit-msg"):
+            self.assertTrue(
+                any(
+                    finding["level"] == "fail"
+                    and name in finding["text"]
+                    and "cannot be read" in finding["text"]
+                    for finding in findings
+                )
+            )
+
     def test_doctor_rejects_symlinked_and_unreadable_project_scripts(self):
         project = self.root / "doctor-unsafe-scripts"
         managed = project / install.HOOKS_DIRECTORY

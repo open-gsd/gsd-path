@@ -2279,6 +2279,99 @@ test("doctor fails when managed wiring points to deleted guards", async () => {
   }
 });
 
+test("doctor validates detected native wiring without installed skills", async () => {
+  const project = path.join(root, "stale-native-wiring");
+  fs.mkdirSync(path.join(project, ".git"), { recursive: true });
+  const target = path.join(root, "stale-native-wiring-claude", "skills");
+  await runInstall([installer.targetPlan("claude", target)], { project, hooks: true });
+  fs.rmSync(target, { recursive: true });
+  const settings = path.join(project, ".claude", "settings.json");
+  const parsed = JSON.parse(fs.readFileSync(settings, "utf8"));
+  parsed.hooks.PreToolUse[0].matcher = "Write";
+  fs.writeFileSync(settings, `${JSON.stringify(parsed)}\n`);
+
+  const findings = installer.doctor(source, {
+    targets: ["claude"],
+    rootFor: () => target,
+    project,
+  });
+
+  assert.ok(
+    findings.some(
+      ({ level, text }) =>
+        level === "fail" && text.includes("claude native guard wiring is stale")
+    )
+  );
+});
+
+test("doctor rejects symlinked native and git wiring", async () => {
+  const project = path.join(root, "symlinked-wiring");
+  fs.mkdirSync(path.join(project, ".git"), { recursive: true });
+  const target = path.join(root, "symlinked-wiring-claude", "skills");
+  await runInstall([installer.targetPlan("claude", target)], { project, hooks: true });
+  const settings = path.join(project, ".claude", "settings.json");
+  const outsideSettings = path.join(root, "outside-settings.json");
+  fs.copyFileSync(settings, outsideSettings);
+  fs.rmSync(settings);
+  fs.symlinkSync(outsideSettings, settings);
+  const preCommit = path.join(project, ".git", "hooks", "pre-commit");
+  const outsideHook = path.join(root, "outside-pre-commit");
+  fs.copyFileSync(preCommit, outsideHook);
+  fs.rmSync(preCommit);
+  fs.symlinkSync(outsideHook, preCommit);
+
+  const findings = installer.doctor(source, {
+    targets: ["claude"],
+    rootFor: () => target,
+    project,
+  });
+
+  assert.ok(
+    findings.some(
+      ({ level, text }) =>
+        level === "fail" && text.includes("claude native guard wiring is a symlink")
+    )
+  );
+  assert.ok(
+    findings.some(
+      ({ level, text }) => level === "fail" && text.includes("pre-commit is a symlink")
+    )
+  );
+});
+
+test("doctor reports unreadable effective git hooks", async () => {
+  const project = path.join(root, "unreadable-git-wiring");
+  fs.mkdirSync(path.join(project, ".git"), { recursive: true });
+  const target = path.join(root, "unreadable-git-wiring-claude", "skills");
+  await runInstall([installer.targetPlan("claude", target)], { project, hooks: true });
+  for (const name of installer.GUARD_SCRIPTS) {
+    fs.rmSync(path.join(project, installer.HOOKS_DIRECTORY, name));
+  }
+  const hooks = ["pre-commit", "commit-msg"].map((name) =>
+    path.join(project, ".git", "hooks", name)
+  );
+  for (const hook of hooks) fs.chmodSync(hook, 0);
+  let findings;
+  try {
+    findings = installer.doctor(source, {
+      targets: [],
+      rootFor: () => target,
+      project,
+    });
+  } finally {
+    for (const hook of hooks) fs.chmodSync(hook, 0o755);
+  }
+
+  for (const name of ["pre-commit", "commit-msg"]) {
+    assert.ok(
+      findings.some(
+        ({ level, text }) =>
+          level === "fail" && text.includes(name) && text.includes("cannot be read")
+      )
+    );
+  }
+});
+
 test("doctor flags stale versions and incomplete installs", async () => {
   const target = path.join(root, "claude", "skills");
   await runInstall([installer.targetPlan("claude", target)]);

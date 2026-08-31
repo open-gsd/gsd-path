@@ -2290,20 +2290,39 @@ def doctor(
     guard_installed = any(
         _lexists(project / HOOKS_DIRECTORY / name) for name in GUARD_SCRIPTS
     )
-    guard_wired = any(
-        contract is not None and _is_managed_hook_settings(contract[0])
-        for target in targets
-        for contract in (_native_guard_contract(target, project),)
-    )
+    native_wired_targets = set()
+    for target in targets:
+        contract = _native_guard_contract(target, project)
+        if contract is not None and (
+            contract[0].is_symlink()
+            or _is_managed_hook_settings(contract[0])
+        ):
+            native_wired_targets.add(target)
+    guard_wired = bool(native_wired_targets)
+    unreadable_git_hooks = {}
     if _lexists(project / ".git"):
         hooks_dir = _git_hooks_directory(project)
-        guard_wired = guard_wired or (
-            hooks_dir is not None
-            and any(
-                _is_managed_git_hook(hooks_dir / name)
-                for name in ("pre-commit", "commit-msg")
-            )
-        )
+        if hooks_dir is not None:
+            for name in ("pre-commit", "commit-msg"):
+                hook_path = hooks_dir / name
+                if not _lexists(hook_path):
+                    continue
+                if hook_path.is_symlink():
+                    guard_wired = True
+                    continue
+                try:
+                    hook_text = hook_path.read_text(
+                        encoding="utf-8", errors="replace"
+                    )
+                except OSError as error:
+                    unreadable_git_hooks[hook_path] = error
+                else:
+                    guard_wired = (
+                        _is_managed_git_hook_content(hook_text) or guard_wired
+                    )
+    for hook_path, error in unreadable_git_hooks.items():
+        label = _describe_project_path(project, hook_path)
+        push("fail", f"hooks: {label} cannot be read: {error}")
     guard_installed = guard_installed or guard_wired
     if not guard_installed:
         push("note", "hooks: guard hooks not installed (opt in with --hooks; see HOOKS.md)")
@@ -2333,7 +2352,7 @@ def doctor(
 
         hosts = sync_skill_resources.RESOURCE_MANIFEST["hosts"]
         for target in targets:
-            if target not in installed_targets:
+            if target not in installed_targets and target not in native_wired_targets:
                 continue
             contract = _native_guard_contract(target, project)
             if contract is None:
@@ -2341,6 +2360,9 @@ def doctor(
                     push("fail", f"hooks: {target} declares a native guard without a health contract")
                 continue
             settings, event, entry = contract
+            if settings.is_symlink():
+                push("fail", f"hooks: {target} native guard wiring is a symlink")
+                continue
             if not settings.is_file():
                 push("fail", f"hooks: {target} native guard wiring is missing — run --hooks-refresh-full")
                 continue
@@ -2375,6 +2397,8 @@ def doctor(
                 ):
                     hook_path = hooks_dir / hook_name
                     label = _describe_project_path(project, hook_path)
+                    if hook_path in unreadable_git_hooks:
+                        continue
                     if not _lexists(hook_path):
                         push(
                             "fail",
@@ -2383,6 +2407,8 @@ def doctor(
                         )
                         if custom:
                             missing_from_custom = True
+                    elif hook_path.is_symlink():
+                        push("fail", f"hooks: {label} is a symlink")
                     else:
                         content = read_project_file(hook_path, f"hooks: {label}")
                         if content is None:
