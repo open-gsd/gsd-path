@@ -415,7 +415,14 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
    <N> cycle <C> skeptic ruling`, body `Why: persist the all-refuted user
    ruling before acting`, and `Wave: <N>`. Do not start the selected review
    cycle or create, batch, or dispatch fix tasks until the checkpoint returns
-   its commit.
+   its commit. When the persisted ruling selects `Open fix tasks from the
+   findings anyway`, derive the exact override set from that cycle's
+   checkpointed skeptic artifacts: every refuted criterion group with all of
+   its preserved lens observations. Add that set to the surviving findings
+   for fix-task batching. No other ruling re-admits refuted groups. Preserve
+   their skeptic verdicts and eligibility history. After a crash, resume the
+   recorded choice without asking again. A re-raised locator still gets no
+   second skeptic.
    While cycles remain below the cap, batch the surviving
    findings into complete fix tasks from the task template — one task per
    disjoint file scope, not one per finding — each carrying its findings'
