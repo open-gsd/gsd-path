@@ -102,9 +102,10 @@ settled brownfield input.
    | similar | `evidence-similar.md` | comparable products and reusable lessons |
 
    Dispatch up to the available child capacity, then dispatch each remaining
-   dimension when a slot opens. Keep all briefs independent. A custom fifth
-   dimension supplements at least one dispatched standard dimension; it never
-   replaces the standard set.
+   dimension when a slot opens. A pending corrected redispatch takes the slot
+   before any queued not-yet-dispatched dimension. Keep all briefs independent.
+   A custom fifth dimension supplements at least one dispatched standard
+   dimension; it never replaces the standard set.
 
    In brownfield work, require stack research to weigh migration cost and
    pitfalls research to check which failure modes already exist in the mapped

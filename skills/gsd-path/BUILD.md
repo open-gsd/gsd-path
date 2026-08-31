@@ -394,17 +394,20 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
    validate each against the skeptic template, atomically copy it to the
    primary canonical path, then retire that sidecar. A criterion group whose
    valid skeptic file records `Verdict: refuted` only after every observation
-   is individually refuted; it spawns no fix task and is not carried forward.
+   is individually refuted; it joins the current cycle's refuted set, spawns
+   no fix task, and is not carried forward.
    A criterion locator whose valid skeptic file recorded `Verdict: refuted`
    in an earlier cycle never gets a second skeptic. If a later review re-raises
-   it with new evidence, leave it blocking and send it to fix-task batching
-   without another skeptic. A `stands` verdict leaves the criterion group
-   blocking. A missing or invalid skeptic file follows the structural-failure
-   handling above. The all-refuted branch
-   requires at least one eligible criterion group and no other blocking
+   it with unchanged evidence, add it to the current cycle's refuted set; it
+   gets no fix task and is not carried forward. If the evidence is new, leave
+   it blocking and send it to fix-task batching without another skeptic. A
+   `stands` verdict leaves the criterion group blocking. A missing or invalid
+   skeptic file follows the structural-failure handling above. The all-refuted
+   branch requires a non-empty current-cycle refuted set and no other blocking
    failure, and the current cycle must be below `max_review_cycles`. At the
-   cap, skip this branch and use the cycle-cap escalation below. When every
-   blocking criterion group is refuted, stop and ask: present **Outcome** with
+   cap, skip this branch and use the cycle-cap escalation below. When the
+   refuted set contains every blocking criterion group, stop and ask: present
+   **Outcome** with
    the blocked verdict
    and the refutation count, **Review** linking the lens and skeptic
    files, and **Next** listing `Re-run the review cycle with the skeptic
