@@ -93,8 +93,21 @@ STATUS_PHASES = frozenset(
 )
 STATUS_VALUES = frozenset({"active", "done", "blocked"})
 STATUS_STATE_FIELDS = frozenset(
-    {"pipeline", "project", "milestone", "phase", "status", "branch", "archive"}
+    {
+        "pipeline",
+        "project",
+        "milestone",
+        "phase",
+        "status",
+        "branch",
+        "archive",
+        "integration_default",
+        "integration",
+        "integration_source",
+    }
 )
+STATUS_INTEGRATION_MODES = frozenset({"direct", "pull-request"})
+STATUS_INTEGRATION_SOURCES = frozenset({"default", "milestone"})
 STATUS_SLUG = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 STATUS_BRANCH = re.compile(r"^gsd-path/M(\d{3,})$")
 STATUS_ARCHIVE = re.compile(r"^\.project/archive/(\d{3,})-([a-z0-9][a-z0-9-]*)/?$")
@@ -2017,6 +2030,9 @@ def _valid_status_state(state: dict) -> bool:
     milestone = state["milestone"]
     branch = state["branch"]
     archive = state["archive"]
+    integration_default = state["integration_default"]
+    integration = state["integration"]
+    integration_source = state["integration_source"]
     archive_match = (
         STATUS_ARCHIVE.fullmatch(archive or "")
         if isinstance(archive, (str, type(None)))
@@ -2035,6 +2051,13 @@ def _valid_status_state(state: dict) -> bool:
         or state["phase"] not in STATUS_PHASES
         or not isinstance(state["status"], str)
         or state["status"] not in STATUS_VALUES
+        or integration_default not in STATUS_INTEGRATION_MODES
+        or integration not in STATUS_INTEGRATION_MODES
+        or integration_source not in STATUS_INTEGRATION_SOURCES
+        or (
+            integration_source == "default"
+            and integration != integration_default
+        )
         or not (branch is None or _valid_status_branch(branch) is not None)
         or not (archive is None or archive_match is not None)
     ):
@@ -2151,6 +2174,9 @@ def doctor(
 
     for name, heading in PROJECT_CONTRACTS:
         contract = project / name
+        if contract.is_symlink():
+            push("fail", f"project: contract {name} is a symlink")
+            continue
         if not contract.is_file():
             push("fail", f'project: missing contract {name} — run --project "{project}"')
             continue
@@ -2267,7 +2293,6 @@ def doctor(
     guard_wired = any(
         contract is not None and _is_managed_hook_settings(contract[0])
         for target in targets
-        if target in installed_targets
         for contract in (_native_guard_contract(target, project),)
     )
     if _lexists(project / ".git"):

@@ -2089,6 +2089,29 @@ test("doctor rejects a symlinked project runtime", async () => {
   );
 });
 
+test("doctor rejects symlinked project contracts", () => {
+  const project = path.join(root, "doctor-symlinked-contracts");
+  fs.mkdirSync(project);
+  for (const name of ["AGENTS.md", "WORKFLOW.md"]) {
+    fs.symlinkSync(path.join(source, name), path.join(project, name));
+  }
+
+  const findings = installer.doctor(source, {
+    targets: [],
+    rootFor: () => "",
+    project,
+  });
+
+  for (const name of ["AGENTS.md", "WORKFLOW.md"]) {
+    assert.ok(
+      findings.some(
+        ({ level, text }) =>
+          level === "fail" && text === `project: contract ${name} is a symlink`
+      )
+    );
+  }
+});
+
 test("doctor rejects symlinked and unreadable project scripts", () => {
   const project = path.join(root, "doctor-unsafe-scripts");
   const managed = path.join(project, installer.HOOKS_DIRECTORY);
@@ -2228,6 +2251,7 @@ test("doctor fails when managed wiring points to deleted guards", async () => {
   fs.mkdirSync(path.join(project, ".git"), { recursive: true });
   const target = path.join(root, "dangling-guards-claude", "skills");
   await runInstall([installer.targetPlan("claude", target)], { project, hooks: true });
+  fs.rmSync(target, { recursive: true });
   for (const name of installer.GUARD_SCRIPTS) {
     fs.rmSync(path.join(project, installer.HOOKS_DIRECTORY, name));
   }

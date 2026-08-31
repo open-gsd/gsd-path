@@ -48,6 +48,13 @@ PATCH_PATH_PATTERN = re.compile(
 UNIFIED_DIFF_PATH_PATTERN = re.compile(
     r"^(?:---|\+\+\+) ([^\t\r\n]+)$", re.MULTILINE
 )
+GIT_DIFF_PATH_PATTERN = re.compile(
+    r'^diff --git ("(?:\\.|[^"])*"|\S+) ("(?:\\.|[^"])*"|\S+)$',
+    re.MULTILINE,
+)
+GIT_RENAME_PATH_PATTERN = re.compile(
+    r"^(?:rename from|rename to) (.+)$", re.MULTILINE
+)
 
 # A tool skips path checks only when its name carries a read-only verb and
 # no write-capable verb: `get_and_write` must still be path-checked.
@@ -124,8 +131,21 @@ STATUS_PHASES = frozenset(
 )
 STATUS_VALUES = frozenset({"active", "done", "blocked"})
 STATUS_STATE_FIELDS = frozenset(
-    {"pipeline", "project", "milestone", "phase", "status", "branch", "archive"}
+    {
+        "pipeline",
+        "project",
+        "milestone",
+        "phase",
+        "status",
+        "branch",
+        "archive",
+        "integration_default",
+        "integration",
+        "integration_source",
+    }
 )
+STATUS_INTEGRATION_MODES = frozenset({"direct", "pull-request"})
+STATUS_INTEGRATION_SOURCES = frozenset({"default", "milestone"})
 STATUS_SLUG = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 STATUS_BRANCH = re.compile(r"^gsd-path/M(\d{3,})$")
 STATUS_ARCHIVE = re.compile(r"^\.project/archive/(\d{3,})-([a-z0-9][a-z0-9-]*)/?$")
@@ -247,37 +267,76 @@ SHELL_CONTROL_WORDS = frozenset(
 )
 
 
-def collect(node, paths, working_directories, commands, patch_payloads):
+def collect(
+    node,
+    paths,
+    working_directories,
+    commands,
+    patch_payloads,
+    inherited_working_directories=(),
+):
     if isinstance(node, dict):
+        local_working_directories = []
+        for key, value in node.items():
+            if key.lower() not in WORKING_DIRECTORY_KEYS:
+                continue
+            if isinstance(value, str):
+                local_working_directories.append(value)
+            elif isinstance(value, list):
+                strings = [item for item in value if isinstance(item, str)]
+                if len(strings) != len(value):
+                    raise ValueError("working directories cannot be validated")
+                local_working_directories.extend(strings)
+        if len(local_working_directories) > 1:
+            raise ValueError("working directory is ambiguous")
+        working_directories.extend(local_working_directories)
+        context = tuple(local_working_directories) or inherited_working_directories
         for key, value in node.items():
             lowered = key.lower()
             if isinstance(value, str):
                 if lowered in PATH_KEYS:
-                    paths.append(value)
-                elif lowered in WORKING_DIRECTORY_KEYS:
-                    working_directories.append(value)
+                    paths.append((value, context))
                 elif lowered in COMMAND_KEYS:
-                    commands.append(value)
+                    commands.append((value, context))
                 elif lowered in PATCH_KEYS:
-                    patch_payloads.append(value)
+                    patch_payloads.append((value, context))
             elif isinstance(value, list):
                 strings = [item for item in value if isinstance(item, str)]
                 if strings and lowered in PATH_KEYS:
-                    paths.extend(strings)
-                elif strings and lowered in WORKING_DIRECTORY_KEYS:
-                    working_directories.extend(strings)
+                    paths.extend((item, context) for item in strings)
                 elif lowered in COMMAND_KEYS:
                     if not strings or len(strings) != len(value):
                         raise ValueError("command argv cannot be validated")
-                    commands.append(shlex.join(strings))
+                    commands.append((shlex.join(strings), context))
                 elif strings and lowered in PATCH_KEYS:
-                    patch_payloads.extend(strings)
-                collect(value, paths, working_directories, commands, patch_payloads)
+                    patch_payloads.extend((item, context) for item in strings)
+                collect(
+                    value,
+                    paths,
+                    working_directories,
+                    commands,
+                    patch_payloads,
+                    context,
+                )
             else:
-                collect(value, paths, working_directories, commands, patch_payloads)
+                collect(
+                    value,
+                    paths,
+                    working_directories,
+                    commands,
+                    patch_payloads,
+                    context,
+                )
     elif isinstance(node, list):
         for value in node:
-            collect(value, paths, working_directories, commands, patch_payloads)
+            collect(
+                value,
+                paths,
+                working_directories,
+                commands,
+                patch_payloads,
+                inherited_working_directories,
+            )
 
 
 def normalize_posix(path):
@@ -316,6 +375,8 @@ def has_patch_headers(payload):
     return bool(
         PATCH_PATH_PATTERN.search(payload)
         or UNIFIED_DIFF_PATH_PATTERN.search(payload)
+        or GIT_DIFF_PATH_PATTERN.search(payload)
+        or GIT_RENAME_PATH_PATTERN.search(payload)
     )
 
 
@@ -442,6 +503,9 @@ def valid_status_state(state):
     milestone = state["milestone"]
     branch = state["branch"]
     archive = state["archive"]
+    integration_default = state["integration_default"]
+    integration = state["integration"]
+    integration_source = state["integration_source"]
     archive_match = (
         STATUS_ARCHIVE.fullmatch(archive or "")
         if isinstance(archive, (str, type(None)))
@@ -460,6 +524,13 @@ def valid_status_state(state):
         or state["phase"] not in STATUS_PHASES
         or not isinstance(state["status"], str)
         or state["status"] not in STATUS_VALUES
+        or integration_default not in STATUS_INTEGRATION_MODES
+        or integration not in STATUS_INTEGRATION_MODES
+        or integration_source not in STATUS_INTEGRATION_SOURCES
+        or (
+            integration_source == "default"
+            and integration != integration_default
+        )
         or not (
             branch is None
             or isinstance(branch, str)
@@ -838,20 +909,30 @@ def patch_paths(payload):
     for match in PATCH_PATH_PATTERN.finditer(payload):
         yield (match.group(1) or match.group(2)).strip()
     for match in UNIFIED_DIFF_PATH_PATTERN.finditer(payload):
-        path = match.group(1).strip()
-        if path.startswith('"'):
-            try:
-                path = ast.literal_eval(path)
-            except (SyntaxError, ValueError) as error:
-                raise ValueError("quoted patch path cannot be validated") from error
-            if not isinstance(path, str):
-                raise ValueError("quoted patch path cannot be validated")
-        elif '"' in path:
-            raise ValueError("quoted patch path cannot be validated")
-        if path.startswith(("a/", "b/")):
-            path = path[2:]
+        path = decode_patch_path(match.group(1), strip_prefix=True)
         if path != "/dev/null":
             yield path
+    for match in GIT_DIFF_PATH_PATTERN.finditer(payload):
+        for raw_path in match.groups():
+            yield decode_patch_path(raw_path, strip_prefix=True)
+    for match in GIT_RENAME_PATH_PATTERN.finditer(payload):
+        yield decode_patch_path(match.group(1), strip_prefix=False)
+
+
+def decode_patch_path(raw_path, strip_prefix):
+    path = raw_path.strip()
+    if path.startswith('"'):
+        try:
+            path = ast.literal_eval(path)
+        except (SyntaxError, ValueError) as error:
+            raise ValueError("quoted patch path cannot be validated") from error
+        if not isinstance(path, str):
+            raise ValueError("quoted patch path cannot be validated")
+    elif '"' in path:
+        raise ValueError("quoted patch path cannot be validated")
+    if strip_prefix and path.startswith(("a/", "b/")):
+        return path[2:]
+    return path
 
 
 def shell_tokens(command):
@@ -1198,41 +1279,49 @@ def evaluate(event):
     if is_patch_tool(tool) or raw_patch:
         patch_payloads.extend(commands)
         if isinstance(raw_input, str):
-            patch_payloads.append(raw_input)
+            patch_payloads.append((raw_input, tuple(working_directories)))
         commands = []
     read_tool = is_read_tool(tool)
     extracted_patch_paths = []
     if not read_tool:
-        for path in paths:
-            if path_in_archive(path, working_directories):
+        for path, path_working_directories in paths:
+            if path_in_archive(path, path_working_directories):
                 deny(ARCHIVE_REASON)
         extracted_patch_paths = [
-            path for payload in patch_payloads for path in patch_paths(payload)
+            (path, patch_working_directories)
+            for payload, patch_working_directories in patch_payloads
+            for path in patch_paths(payload)
         ]
         if patch_payloads and not paths and not extracted_patch_paths:
             raise ValueError("patch targets cannot be validated")
-        for path in extracted_patch_paths:
-            if path_in_archive(path, working_directories):
+        for path, path_working_directories in extracted_patch_paths:
+            if path_in_archive(path, path_working_directories):
                 deny(ARCHIVE_REASON)
         if is_direct_write_tool(tool, bool(paths or extracted_patch_paths)):
             write_paths = [*paths, *extracted_patch_paths]
             if not write_paths:
                 raise ValueError("write targets cannot be validated")
-            enforce_pipeline_reentry(write_paths, working_directories)
+            grouped_paths = {}
+            for path, path_working_directories in write_paths:
+                grouped_paths.setdefault(path_working_directories, []).append(path)
+            for path_working_directories, targets in grouped_paths.items():
+                enforce_pipeline_reentry(targets, path_working_directories)
     archive_working_directory = any(
         path_in_archive(path) for path in working_directories
     )
     if archive_working_directory and not commands and not read_tool:
         deny(ARCHIVE_REASON)
-    for command in commands:
+    for command, command_working_directories in commands:
         if SHELL_EXPANSION_SYNTAX.search(command):
             raise ValueError("dynamic shell execution cannot be validated")
         tokens = shell_tokens(command)
         archive_context = (
-            archive_working_directory
+            any(path_in_archive(path) for path in command_working_directories)
             or bool(ARCHIVE_REFERENCE.search(command))
-            or command_references_archive(tokens, working_directories)
-            or unresolved_archive_expansion(command, tokens, working_directories)
+            or command_references_archive(tokens, command_working_directories)
+            or unresolved_archive_expansion(
+                command, tokens, command_working_directories
+            )
         )
         if not archive_command_is_read_only(command, tokens, archive_context):
             deny(ARCHIVE_REASON)

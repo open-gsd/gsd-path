@@ -2534,6 +2534,23 @@ class InstallerTests(unittest.TestCase):
             )
         )
 
+    def test_doctor_rejects_symlinked_project_contracts(self):
+        project = self.root / "doctor-symlinked-contracts"
+        project.mkdir()
+        for name in ("AGENTS.md", "WORKFLOW.md"):
+            (project / name).symlink_to(self.source / name)
+
+        findings = install.doctor(self.source, [], lambda _: self.root, project)
+
+        for name in ("AGENTS.md", "WORKFLOW.md"):
+            self.assertTrue(
+                any(
+                    finding["level"] == "fail"
+                    and finding["text"] == f"project: contract {name} is a symlink"
+                    for finding in findings
+                )
+            )
+
     def test_doctor_reports_deleted_guards_with_managed_wiring(self):
         project = self.root / "doctor-dangling-guards"
         project.mkdir()
@@ -2541,6 +2558,7 @@ class InstallerTests(unittest.TestCase):
         target = self.root / "doctor-dangling-guards-claude" / "skills"
         status, _, error = self.run_main(self.hooks_arguments(project, target))
         self.assertEqual(0, status, error)
+        shutil.rmtree(target)
         for name in install.GUARD_SCRIPTS:
             (project / install.HOOKS_DIRECTORY / name).unlink()
 

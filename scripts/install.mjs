@@ -46,7 +46,20 @@ const STATUS_ACTIONS = new Set([
 ]);
 const STATUS_PHASES = new Set(["inspect", "define", "research", "decide", "roadmap", "plan", "build", "ship", "shipped"]);
 const STATUS_VALUES = new Set(["active", "done", "blocked"]);
-const STATUS_STATE_FIELDS = ["archive", "branch", "milestone", "phase", "pipeline", "project", "status"];
+const STATUS_STATE_FIELDS = [
+  "archive",
+  "branch",
+  "integration",
+  "integration_default",
+  "integration_source",
+  "milestone",
+  "phase",
+  "pipeline",
+  "project",
+  "status",
+];
+const STATUS_INTEGRATION_MODES = new Set(["direct", "pull-request"]);
+const STATUS_INTEGRATION_SOURCES = new Set(["default", "milestone"]);
 const STATUS_TRANSITIONS = new Map([
   ["inspect", new Set(["inspect", "define"])],
   ["define", new Set(["define", "research", "plan"])],
@@ -1916,6 +1929,11 @@ function validStatusState(state) {
     !(state.milestone === null || typeof state.milestone === "string" && STATUS_SLUG.test(state.milestone)) ||
     !STATUS_PHASES.has(state.phase) ||
     !STATUS_VALUES.has(state.status) ||
+    !STATUS_INTEGRATION_MODES.has(state.integration_default) ||
+    !STATUS_INTEGRATION_MODES.has(state.integration) ||
+    !STATUS_INTEGRATION_SOURCES.has(state.integration_source) ||
+    (state.integration_source === "default" &&
+      state.integration !== state.integration_default) ||
     !(state.branch === null || validStatusBranch(state.branch) !== null) ||
     !(state.archive === null || archiveMatch)
   ) return false;
@@ -2035,6 +2053,10 @@ export function doctor(sourceRoot, { targets, rootFor, project = null }) {
 
   for (const [name, heading] of PROJECT_CONTRACTS) {
     const contract = path.join(project, name);
+    if (isSymlink(contract)) {
+      push("fail", `project: contract ${name} is a symlink`);
+      continue;
+    }
     if (!isFile(contract)) {
       push("fail", `project: missing contract ${name} — run --project "${project}"`);
       continue;
@@ -2155,7 +2177,6 @@ export function doctor(sourceRoot, { targets, rootFor, project = null }) {
     lexists(path.join(project, HOOKS_DIRECTORY, name))
   );
   let guardWired = targets.some((target) => {
-    if (!installedTargets.has(target)) return false;
     const contract = nativeGuardContract(target, project);
     return contract !== null && isManagedHookSettings(contract.settings);
   });

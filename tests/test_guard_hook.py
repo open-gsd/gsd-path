@@ -54,6 +54,9 @@ class GuardHookTests(unittest.TestCase):
                 "status": "active",
                 "branch": "gsd-path/M001",
                 "archive": None,
+                "integration_default": "direct",
+                "integration": "direct",
+                "integration_source": "default",
             },
             "route": route,
             "path": str(root / ".project" / "STATE.md"),
@@ -264,11 +267,61 @@ class GuardHookTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "invalid payload"):
                     guard_hook.project_status(root)
 
+    def test_project_status_accepts_canonical_integration_fields(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            payload = self.status(root, phase="build")
+            result = subprocess.CompletedProcess(
+                [], 0, stdout=json.dumps(payload), stderr=""
+            )
+            with mock.patch.object(guard_hook.subprocess, "run", return_value=result):
+                self.assertEqual(payload, guard_hook.project_status(root))
+
+    def test_project_status_rejects_inconsistent_default_integration(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            payload = self.status(root, phase="build")
+            payload["state"]["integration"] = "pull-request"
+            result = subprocess.CompletedProcess(
+                [], 0, stdout=json.dumps(payload), stderr=""
+            )
+            with mock.patch.object(guard_hook.subprocess, "run", return_value=result):
+                with self.assertRaisesRegex(ValueError, "invalid payload"):
+                    guard_hook.project_status(root)
+
+    def test_batch_write_preserves_each_path_working_directory(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "repo"
+            root.mkdir()
+            (root / ".project").mkdir()
+            (root / ".project" / "STATE.md").write_text(
+                "owned\n", encoding="utf-8"
+            )
+            with (
+                mock.patch.object(guard_hook, "repository_root", return_value=root),
+                mock.patch.object(
+                    guard_hook, "project_status", return_value=self.status(root)
+                ),
+            ):
+                self.assert_denied(
+                    {
+                        "tool_name": "BatchWrite",
+                        "tool_input": {
+                            "operations": [
+                                {"cwd": str(Path(temporary)), "path": "outside.txt"},
+                                {"cwd": str(root), "path": "src/app.py"},
+                            ]
+                        },
+                    }
+                )
+
     def test_plain_prompt_allows_pipeline_artifact_write(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             (root / ".project").mkdir()
-            (root / ".project" / "STATE.md").write_text("owned\n", encoding="utf-8")
+            (root / ".project" / "STATE.md").write_text(
+                "owned\n", encoding="utf-8"
+            )
             with (
                 mock.patch.object(guard_hook, "repository_root", return_value=root),
                 mock.patch.object(
@@ -803,6 +856,29 @@ class GuardHookTests(unittest.TestCase):
                         "tool_input": (
                             "--- a/src/app.py\n+++ b/src/app.py\n"
                             "@@ -1 +1 @@\n-old\n+new\n"
+                        ),
+                    }
+                )
+
+    def test_plain_prompt_denies_raw_rename_only_diff(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / ".project").mkdir()
+            (root / ".project" / "STATE.md").write_text("owned\n", encoding="utf-8")
+            with (
+                mock.patch.object(guard_hook, "repository_root", return_value=root),
+                mock.patch.object(
+                    guard_hook, "project_status", return_value=self.status(root)
+                ),
+            ):
+                self.assert_denied(
+                    {
+                        "tool_name": "ApplyDiff",
+                        "tool_input": (
+                            "diff --git a/src/old.py b/src/new.py\n"
+                            "similarity index 100%\n"
+                            "rename from src/old.py\n"
+                            "rename to src/new.py\n"
                         ),
                     }
                 )
