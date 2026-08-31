@@ -206,6 +206,19 @@ def _non_placeholder(value: str, label: str) -> str:
     return cleaned
 
 
+def _unquoted(value: str) -> str:
+    return value.strip().strip("`\"'")
+
+
+def _surface_value(value: str, label: str) -> str:
+    cleaned = _unquoted(value)
+    if not cleaned or cleaned.casefold() in {"none", "n/a", "null"}:
+        raise HandoffError(f"{label} is empty")
+    if cleaned.startswith("<") and cleaned.endswith(">"):
+        raise HandoffError(f"{label} is still a placeholder")
+    return cleaned
+
+
 def _evidence_field(text: str, field: str, relative: str) -> str:
     matches = re.findall(
         rf"(?m)^- \*\*{re.escape(field)}\*\*:\s*(.*)$", text
@@ -510,15 +523,24 @@ def _surfaces(text: str, label: str) -> List[str]:
         raise HandoffError(f"{label} is missing Surfaces")
     if len(matches) != 1:
         raise HandoffError(f"{label} repeats Surfaces")
-    value = matches[0].strip().strip("`\"'")
+    value = _unquoted(matches[0])
     if value.casefold() == "none":
         return []
     value = _non_placeholder(value, f"{label} Surfaces")
-    named = [
-        _non_placeholder(item, f"{label} Surfaces")
-        for item in value.split(",")
-        if item.strip()
-    ]
+    named: List[str] = []
+    seen = set()
+    for item in value.split(","):
+        if not item.strip():
+            continue
+        surface = _unquoted(item)
+        if surface.casefold() == "none":
+            raise HandoffError(f"{label} Surfaces includes reserved value {surface}")
+        surface = _non_placeholder(surface, f"{label} Surfaces")
+        key = surface.casefold()
+        if key in seen:
+            raise HandoffError(f"{label} Surfaces repeats {surface}")
+        seen.add(key)
+        named.append(surface)
     if not named:
         raise HandoffError(f"{label} Surfaces names no surface and is not none")
     return named
@@ -536,10 +558,16 @@ def _roadmap_surfaces(root: Path, milestone: str) -> Optional[List[str]]:
     relative = f"{DEFAULT_PROJECT_DIR}/ROADMAP.md"
     if not (root / relative).is_file():
         return None
-    for _entry, slug, block, _raw in _milestone_blocks(_read(root, relative)):
-        if slug == milestone:
-            return _surfaces(block, f"ROADMAP.md {milestone}")
-    return None
+    matches = [
+        block
+        for _entry, slug, block, _raw in _milestone_blocks(_read(root, relative))
+        if slug == milestone
+    ]
+    if not matches:
+        raise HandoffError(f"ROADMAP.md is missing milestone slug {milestone}")
+    if len(matches) > 1:
+        raise HandoffError(f"ROADMAP.md repeats milestone slug {milestone}")
+    return _surfaces(matches[0], f"ROADMAP.md {milestone}")
 
 
 def _criterion_ids(value: str, label: str) -> List[str]:
@@ -591,16 +619,19 @@ def _surface_contract(
         label = f"{surface} surface"
         for field in ("Entry", "States"):
             # Read the whole line: `#` is legal inside a route or a command.
-            if len(re.findall(rf"(?m)^{re.escape(field)}:", block)) > 1:
+            values = re.findall(rf"(?m)^{re.escape(field)}:\s*(.*)$", block)
+            if len(values) > 1:
                 raise HandoffError(f"{label} repeats {field}")
-            _non_placeholder(_line_value(block, f"{field}:"), f"{label} {field}")
+            if not values:
+                raise HandoffError(f"missing {field}:")
+            _surface_value(values[0], f"{label} {field}")
         walkthrough = _numbered_items(
             _roadmap_segment(block, "Walkthrough:", None, label)
         )
         if not walkthrough:
             raise HandoffError(f"{label} Walkthrough has no steps")
         for number, step in walkthrough.items():
-            _non_placeholder(step, f"{label} Walkthrough step {number}")
+            _surface_value(step, f"{label} Walkthrough step {number}")
         if len(re.findall(r"(?m)^Criteria:", block)) > 1:
             raise HandoffError(f"{label} repeats Criteria")
         criteria = _criterion_ids(_roadmap_field(block, "Criteria", label), label)
@@ -1505,12 +1536,14 @@ def validate_final(
             named = _source_field(block, "Surface", label)
             if _normalize_ws(named).casefold() != _normalize_ws(surface).casefold():
                 raise HandoffError(f"FINAL.md {sc_id} Surface must name {surface}")
-            if check.casefold() == "none":
+            surface_check = _unquoted(check)
+            surface_observed = _unquoted(observed)
+            if surface_check.casefold() == "none":
                 raise HandoffError(
                     f"FINAL.md {sc_id} lacks the walked Check for the {surface} surface"
                 )
-            _non_placeholder(check, f"FINAL.md {sc_id} surface Check")
-            _non_placeholder(observed, f"FINAL.md {sc_id} surface Observed")
+            _non_placeholder(surface_check, f"FINAL.md {sc_id} surface Check")
+            _non_placeholder(surface_observed, f"FINAL.md {sc_id} surface Observed")
         if verdict == "met":
             if finding.casefold() != "none" or fix_direction.casefold() != "none":
                 raise HandoffError(

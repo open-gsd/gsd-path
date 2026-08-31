@@ -837,6 +837,42 @@ The task implements the demo.
             result = check_handoffs.validate_plan(root)
             self.assertEqual(result["surfaces"], {"Demo web app": "T001"})
 
+    def test_plan_allows_embedded_angle_brackets_in_surface_fields(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_plan_handoff(root)
+            self.write_intent_criteria(root, surfaces="Demo web app")
+            contract = (
+                SURFACE_CONTRACT.replace("Entry: `/demo`", "Entry: GET /users/<id>")
+                .replace(
+                    "States: empty shows the starter card, loading a spinner, "
+                    "error a retry, success the report.",
+                    "States: inline <empty> state, loading, error, and success.",
+                )
+                .replace(
+                    "Open `/demo` and see the starter card.",
+                    "Run tool < request.json and inspect the response.",
+                )
+            )
+            self.write_plan_coverage(root, surface_contract=contract)
+
+            result = check_handoffs.validate_plan(root)
+            self.assertEqual(result["surfaces"], {"Demo web app": "T001"})
+
+            self.write_plan_coverage(
+                root,
+                surface_contract=contract.replace(
+                    "Entry: GET /users/<id>",
+                    "Entry: <the route, screen, or command a person opens>",
+                ),
+            )
+            with self.assertRaises(check_handoffs.HandoffError) as failure:
+                check_handoffs.validate_plan(root)
+            self.assertIn(
+                "Demo web app surface Entry is still a placeholder",
+                str(failure.exception),
+            )
+
     def test_plan_rejects_surface_blocks_when_intent_declares_none(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -1071,6 +1107,37 @@ The task implements the demo.
                 check_handoffs.validate_plan(root)
             self.assertIn("do not match ROADMAP.md demo", str(failure.exception))
 
+    def test_plan_requires_one_matching_roadmap_milestone_slug(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_plan_handoff(root)
+            self.write_intent_criteria(root, surfaces="Demo web app")
+            self.write_plan_coverage(root, surface_contract=SURFACE_CONTRACT)
+            self.write(
+                root,
+                ".project/ROADMAP.md",
+                ROADMAP.replace("### M001 — demo", "### M001 — demo-ui"),
+            )
+
+            with self.assertRaises(check_handoffs.HandoffError) as failure:
+                check_handoffs.validate_plan(root)
+            self.assertIn(
+                "ROADMAP.md is missing milestone slug demo",
+                str(failure.exception),
+            )
+
+            duplicate = ROADMAP.replace(
+                "# Roadmap — demo\n\n## Milestones\n\n### M001 — demo",
+                "### M002 — demo",
+            )
+            self.write(root, ".project/ROADMAP.md", ROADMAP + "\n" + duplicate)
+            with self.assertRaises(check_handoffs.HandoffError) as failure:
+                check_handoffs.validate_plan(root)
+            self.assertIn(
+                "ROADMAP.md repeats milestone slug demo",
+                str(failure.exception),
+            )
+
     def test_roadmap_gate_requires_surfaces_on_an_unshipped_milestone(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -1113,6 +1180,26 @@ The task implements the demo.
             with self.assertRaises(check_handoffs.HandoffError) as failure:
                 check_handoffs.validate_roadmap(root)
             self.assertIn("M001 repeats Surfaces", str(failure.exception))
+
+    def test_roadmap_rejects_duplicate_and_mixed_none_surfaces(self) -> None:
+        cases = (
+            ("Demo web app, demo WEB APP", "demo WEB APP"),
+            ("none, Demo web app", "none"),
+        )
+        for surfaces, offending in cases:
+            with self.subTest(surfaces=surfaces):
+                with tempfile.TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    self.write_state(root, "roadmap", "active")
+                    self.write(
+                        root,
+                        ".project/ROADMAP.md",
+                        ROADMAP.replace("Demo web app", surfaces),
+                    )
+
+                    with self.assertRaises(check_handoffs.HandoffError) as failure:
+                        check_handoffs.validate_roadmap(root)
+                    self.assertIn(offending, str(failure.exception))
 
     def test_plan_allows_project_verify_when_an_owned_sc_names_it(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -1733,6 +1820,30 @@ Waves checked: 1
                         f"FINAL.md SC1 surface {field} is empty",
                         str(failure.exception),
                     )
+
+    def test_final_rejects_quoted_absence_values_for_surface_evidence(self) -> None:
+        cases = (
+            ("Check", '"none"', "hello", "lacks the walked Check"),
+            ("Observed", "`python3 hello.py`", "'null'", "surface Observed is empty"),
+            ("Check", "`n/a`", "hello", "surface Check is empty"),
+        )
+        for field, check, observed, message in cases:
+            with self.subTest(field=field, value=check if field == "Check" else observed):
+                with tempfile.TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    self.write_state(root, "ship", "active")
+                    self.write_intent_criteria(root, surfaces="Demo web app")
+                    self.write_plan_coverage(root, surface_contract=SURFACE_CONTRACT)
+                    self.write_final_review(
+                        root,
+                        check=check,
+                        observed=observed,
+                        surface="Demo web app",
+                    )
+
+                    with self.assertRaises(check_handoffs.HandoffError) as failure:
+                        check_handoffs.validate_final(root)
+                    self.assertIn(message, str(failure.exception))
 
     def test_final_rejects_pass_without_a_check_or_reference(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

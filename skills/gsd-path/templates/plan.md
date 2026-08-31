@@ -51,7 +51,9 @@ Review depth: <full | deep | verify-only>
      owning task must own every listed criterion in its Intent coverage. A
      criterion may appear in only one surface block. This is what the final
      reviewer walks before the milestone is called done, and FINAL.md records
-     the surface it was walked on. -->
+     the surface it was walked on. Replace every whole-value angle-bracket
+     placeholder; angle brackets may appear inside concrete routes, commands,
+     states, and walkthrough steps. -->
 
 ### <surface name as INTENT.md writes it> — T001
 
