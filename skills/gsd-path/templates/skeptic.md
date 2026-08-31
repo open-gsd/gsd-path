@@ -4,11 +4,24 @@
      only: the inherit reviewer owns Wave verdict. -->
 
 - Criterion: <the failed criterion, verbatim from the lens file>
-- Lens: <contract | adversarial | both>
+- Criterion locator: <t001_ac2 | t001_files | sc3>
+- Lenses: <contract | adversarial | both>
 
-## Finding
+## Observations
 
-<the finding verbatim: criterion, observed result, file:line>
+<!-- Repeat for every distinct lens observation. Collapse only true
+     duplicates. The criterion locator, not these local numbers, is the
+     finding identity across cycles. -->
+
+### Observation <n> — <contract | adversarial>
+
+<the observation verbatim: criterion, observed result, file:line>
+
+## Observation verdicts
+
+### Observation <n>: <refuted | stands>
+
+<checked evidence for this observation>
 
 ## Verdict
 
@@ -17,6 +30,5 @@
 ## Evidence
 
 <checked evidence: the command re-run in the sidecar or the artifact
-re-read, with its result. A refuted verdict requires proof the claimed
-failure cannot occur or the cited criterion actually holds; anything
-short of that is stands.>
+re-read, with its result. A refuted verdict requires every observation above
+to be individually refuted; anything short of that is stands.>

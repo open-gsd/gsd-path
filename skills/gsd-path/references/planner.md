@@ -89,7 +89,9 @@ Put the full-project build-and-test command in PLAN.md. Copy `Review panel:`
 from INTENT.md into PLAN.md Config as `review_panel:` when INTENT names one;
 otherwise copy CHARTER.md's durable default when that file is supplied;
 otherwise write `review_panel: off`. Never invent `detected` or a named
-family list. Quick-lane plans always write `off`.
+family list. Copy `Finding skeptics:` from INTENT.md into PLAN.md Config as
+`finding_skeptics:`; when it is absent, write `finding_skeptics: off`. Never
+invent `on`. Quick-lane plans always write both values as `off`.
 
 Before returning, check veto exclusion, decision coverage, Intent coverage,
 the Surface contract, dependencies, file overlap, task size, criteria, and
