@@ -173,7 +173,10 @@ start at `planned: no`; accepted
 `## Current state` so downstream phases inherit ground truth.
 
 Cover the problem, users, observable success, scope in, scope out, constraints,
-and risks. Chase contradictions and challenge the core assumption. Record
+risks, and surfaces — what a person opens, sees, or types into to get the
+result. INTENT.md records them as `Surfaces:` (`none` only when nobody touches
+the work directly), and every named surface carries a success criterion
+observable there rather than a passing test standing in for it. Chase contradictions and challenge the core assumption. Record
 vetoes and corrections verbatim. Unresolved items remain tagged `RESEARCH` or
 `NEEDS-USER`. A user-supplied document (PRD, issue, design doc) is read
 first and presented as settled coverage for correction; the interview covers
@@ -293,7 +296,14 @@ meaningful `verify` command that names a path from that task's files,
 declared files, deps, and
 orchestrator-owned `base`/`worktree`/`task_branch` fields initialized
 to null. PLAN.md Intent coverage maps every INTENT.md success criterion to a
-task AC; that task's Verify must fail if the SC is skipped.
+task AC; that task's Verify must fail if the SC is skipped. When INTENT.md
+names surfaces, PLAN.md also carries a `## Surface contract`: per surface, the
+entry point, what empty, loading, error, and success show, the walkthrough a
+reviewer performs, the task that delivers it, and the criteria it is proven
+by — which that task must own, in the same wave as the capability behind it.
+`check_handoffs.py final` then requires each of those criteria to name its
+surface in FINAL.md with the walkthrough as its Check, so a surface criterion
+cannot be marked `met` on internal test output.
 `scripts/check_handoffs.py plan` gates the table; `wave` and `final`
 require a verdict per owned SC id. Acceptance criteria,
 owned SCs, and Verify are the contract; the coder owns

@@ -36,6 +36,11 @@ independently shippable milestones. You scope; you do not plan tasks.
    that can answer it, and record it under that milestone's `Open questions`
    so milestone-scoped research runs before its planning.
 7. Keep the dependency graph acyclic; depend on earlier milestone ids.
+8. Set `Surfaces:` on every milestone: the screens, commands, or endpoints a
+   person touches to get that milestone's outcome, or `none` when nobody
+   touches it directly. Each named surface needs a success criterion
+   observable there. Never defer a milestone's own surface to a later
+   milestone — that leaves an unusable slice, not a shippable one.
 
 ## Return
 

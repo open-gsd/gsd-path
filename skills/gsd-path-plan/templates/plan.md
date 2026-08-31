@@ -42,6 +42,27 @@ Review depth: <full | deep | verify-only>
      - no two same-wave tasks share files
      - nothing from INTENT.md scope-out appears anywhere -->
 
+## Surface contract
+
+<!-- Required when INTENT.md `Surfaces:` is not `none`; omit the section
+     entirely when it is. One block per declared surface, named exactly as
+     INTENT.md names it, owned by the task that delivers it. That task must
+     name in Criteria the success criteria this surface is proven by — the
+     owning task must own every listed criterion in its Intent coverage. A
+     criterion may appear in only one surface block. This is what the final
+     reviewer walks before the milestone is called done, and FINAL.md records
+     the surface it was walked on. Replace every whole-value angle-bracket
+     placeholder; angle brackets may appear inside concrete routes, commands,
+     states, and walkthrough steps. -->
+
+### <surface name as INTENT.md writes it> — T001
+
+Criteria: SC1
+Entry: <the route, screen, or command a person opens>
+States: <what empty, loading, error, and success each show>
+Walkthrough:
+1. <step a reviewer performs to see this surface working>
+
 ## Intent coverage
 
 <!-- Every INTENT.md success criterion, as SCn, maps to at least one task

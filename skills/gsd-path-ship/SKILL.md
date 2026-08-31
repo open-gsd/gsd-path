@@ -117,8 +117,10 @@ before dispatch or ship. Then:
    and dispatch the integration reviewer under logical task name
    `review_final`, assigning only
    `.project/review/FINAL.md`. Its complete brief includes the exact recorded
-   project Verify output and every collected gap verdict so Overall verdict is
-   consistent with them. Collect FINAL.md and retire its sidecar through the
+   project Verify output, every collected gap verdict so Overall verdict is
+   consistent with them, and PLAN.md's `## Surface contract` when INTENT.md
+   names surfaces — that reviewer performs each Walkthrough and records the
+   surface and what it showed on every criterion the contract lists. Collect FINAL.md and retire its sidecar through the
    same helper flow.
 5. Only after `final-gap-1.md` and every dispatched reviewer artifact have
    been collected and all review sidecars retired, validate every artifact.
@@ -129,8 +131,10 @@ before dispatch or ship. Then:
    risk. Run
    `python3 <absolute check_handoffs.py> final --repo <absolute repo root>`
    before any archive question: FINAL.md needs one `### SCn — ...` block per
-   INTENT success criterion, and `Overall verdict: pass` requires every
-   verdict `met` with a non-`none` Check or Reference. A non-zero exit is
+   INTENT success criterion, `Overall verdict: pass` requires every
+   verdict `met` with a non-`none` Check or Reference, and every criterion
+   listed in PLAN.md's Surface contract requires a matching `Surface` field
+   and a non-`none` Check. A non-zero exit is
    `ship/blocked`; never rerun project Verify to repair the evidence.
 6. Redispatch one complete corrected brief for a missing or invalid reviewer
    artifact under the same logical task name, following the runtime dispatch
@@ -328,7 +332,8 @@ the exact PR metadata, annotated tag metadata, and merge topology instead.
 
 ## Rules
 
-- Judge written expectations only: INTENT.md criteria in final mode.
+- Judge written expectations only: INTENT.md criteria in final mode, walked
+  through PLAN.md's Surface contract for every criterion covering a surface.
 - Require criterion, observed result, exact file or command evidence, and fix
   direction for every failure.
 - Warn on ambiguity, but do not invent stronger requirements.

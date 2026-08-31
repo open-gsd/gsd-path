@@ -56,6 +56,7 @@ INTENT = """# Intent — demo
 
 Lane: standard
 Review panel: off
+Surfaces: none
 
 ## Summary
 Add a greeting renderer.
