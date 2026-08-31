@@ -323,8 +323,8 @@ advertised host model slugs and may write `.project/review/PLAN-PANEL.md`.
 The panel is advisory: it never averages findings or replaces user
 approval. Quick lane stays `off`. Config may also set
 `finding_skeptics: on` (default `off`) to have the build spawn one
-read-only skeptic per blocking `deep`-review finding before fix tasks
-are opened; a refuted finding spawns no fix task.
+read-only skeptic per failed criterion group from a blocking `deep` review
+before fix tasks are opened; a refuted group spawns no fix task.
 Same-wave tasks may depend on each other only when their file scopes do not
 overlap; the build executes those tasks in dependency layers. No two tasks
 that can run concurrently may share a file.
