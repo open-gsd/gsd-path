@@ -365,8 +365,12 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
    When PLAN.md Config records `finding_skeptics: on` and the wave's Review
    depth is `deep`, run the skeptic pass before batching fix tasks.
    Only valid blocking findings from the deep lens files enter this pass.
-   Helper, panel, missing-artifact, and other structural failures remain
-   blocking and bypass skepticism.
+   At the collection boundary, separate criterion findings from structural
+   blockers. A missing or invalid lens, panel, or skeptic artifact, a helper
+   non-zero exit, or another non-criterion failure never enters skeptic
+   filtering or refutation accounting. Keep it blocking through the ordinary
+   blocked-wave handling — a fix task when applicable or `build/blocked`
+   escalation otherwise — exactly as when the skeptic pass is off.
    Group blocking observations by failed criterion. Derive each group's
    canonical criterion locator from identifiers already owned by the
    contract: the lowercased task id plus its one-based acceptance-criterion
@@ -394,8 +398,9 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
    A criterion locator whose valid skeptic file recorded `Verdict: refuted`
    in an earlier cycle never gets a second skeptic. If a later review re-raises
    it with new evidence, leave it blocking and send it to fix-task batching
-   without another skeptic. A `stands` verdict, a missing file, or an invalid
-   skeptic file leaves the criterion group blocking. The all-refuted branch
+   without another skeptic. A `stands` verdict leaves the criterion group
+   blocking. A missing or invalid skeptic file follows the structural-failure
+   handling above. The all-refuted branch
    requires at least one eligible criterion group and no other blocking
    failure, and the current cycle must be below `max_review_cycles`. At the
    cap, skip this branch and use the cycle-cap escalation below. When every
