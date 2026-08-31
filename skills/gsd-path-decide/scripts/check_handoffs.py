@@ -60,6 +60,7 @@ MILESTONE_HEADING = re.compile(
 SURFACE_HEADING = re.compile(
     r"(?m)^### (?P<surface>\S.*?) — (?P<task>T\d{3})\s*$"
 )
+SURFACE_CONTRACT_HEADING = re.compile(r"(?m)^## Surface contract\s*$")
 GAP_NAME_PATTERN = re.compile(r"^final-gap-(?P<number>[1-9]\d*)\.md$")
 GAP_HEADING_PATTERN = re.compile(
     r"^# Gap Review — (?P<number>[1-9]\d*): (?P<risk>\S.*)$"
@@ -555,11 +556,21 @@ def _surface_contract(
 ) -> Dict[str, Tuple[str, List[str]]]:
     """Map each declared surface to the task that delivers it and its criteria."""
 
-    if len(re.findall(r"(?m)^## Surface contract\s*$", plan)) > 1:
+    if len(SURFACE_CONTRACT_HEADING.findall(plan)) > 1:
         raise HandoffError("PLAN.md repeats ## Surface contract")
     body = _strip_comments(_section(plan, "Surface contract"))
+    headings = list(SURFACE_HEADING.finditer(body))
+    if not surfaces:
+        names = ", ".join(heading.group("surface") for heading in headings)
+        if names:
+            raise HandoffError(
+                f"Surface contract names {names}, but INTENT.md declares no surfaces"
+            )
+        raise HandoffError(
+            "PLAN.md has ## Surface contract but INTENT.md declares no surfaces"
+        )
     blocks: Dict[str, Tuple[str, str]] = {}
-    for heading in SURFACE_HEADING.finditer(body):
+    for heading in headings:
         heading_surface = heading.group("surface")
         key = heading_surface.casefold()
         if key in blocks:
@@ -580,6 +591,8 @@ def _surface_contract(
         label = f"{surface} surface"
         for field in ("Entry", "States"):
             # Read the whole line: `#` is legal inside a route or a command.
+            if len(re.findall(rf"(?m)^{re.escape(field)}:", block)) > 1:
+                raise HandoffError(f"{label} repeats {field}")
             _non_placeholder(_line_value(block, f"{field}:"), f"{label} {field}")
         walkthrough = _numbered_items(
             _roadmap_segment(block, "Walkthrough:", None, label)
@@ -1206,7 +1219,11 @@ def validate_plan(
             raise HandoffError(
                 f"INTENT.md Surfaces do not match ROADMAP.md {milestone}"
             )
-    owners = _surface_contract(plan, surfaces) if surfaces else {}
+    owners = (
+        _surface_contract(plan, surfaces)
+        if surfaces or SURFACE_CONTRACT_HEADING.search(plan)
+        else {}
+    )
     for surface, (task_id, owned_criteria) in owners.items():
         if task_id not in tasks:
             raise HandoffError(f"{surface} surface names unknown {task_id}")

@@ -837,6 +837,18 @@ The task implements the demo.
             result = check_handoffs.validate_plan(root)
             self.assertEqual(result["surfaces"], {"Demo web app": "T001"})
 
+    def test_plan_rejects_surface_blocks_when_intent_declares_none(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_plan_handoff(root)
+            self.write_plan_coverage(root, surface_contract=SURFACE_CONTRACT)
+
+            with self.assertRaises(check_handoffs.HandoffError) as failure:
+                check_handoffs.validate_plan(root)
+            message = str(failure.exception)
+            self.assertIn("Demo web app", message)
+            self.assertIn("INTENT.md declares no surfaces", message)
+
     def test_plan_rejects_a_criterion_shared_by_multiple_surfaces(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -985,6 +997,41 @@ The task implements the demo.
                 "Demo web app surface repeats Criteria",
                 str(failure.exception),
             )
+
+    def test_plan_rejects_repeated_entry_and_states_fields(self) -> None:
+        fields = (
+            ("Entry", "Entry: `/demo#tab`", "Entry: `/admin`"),
+            (
+                "States",
+                "States: empty, loading, error, and success are visible.",
+                "States: success only.",
+            ),
+        )
+        for field, first, duplicate in fields:
+            with self.subTest(field=field):
+                with tempfile.TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    self.write_plan_handoff(root)
+                    self.write_intent_criteria(root, surfaces="Demo web app")
+                    original = next(
+                        line
+                        for line in SURFACE_CONTRACT.splitlines()
+                        if line.startswith(f"{field}:")
+                    )
+                    self.write_plan_coverage(
+                        root,
+                        surface_contract=SURFACE_CONTRACT.replace(
+                            original,
+                            f"{first}\n{duplicate}",
+                        ),
+                    )
+
+                    with self.assertRaises(check_handoffs.HandoffError) as failure:
+                        check_handoffs.validate_plan(root)
+                    self.assertIn(
+                        f"Demo web app surface repeats {field}",
+                        str(failure.exception),
+                    )
 
     def test_plan_rejects_an_empty_surface_list(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
