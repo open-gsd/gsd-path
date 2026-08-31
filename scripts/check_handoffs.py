@@ -555,6 +555,8 @@ def _surface_contract(
 ) -> Dict[str, Tuple[str, List[str]]]:
     """Map each declared surface to the task that delivers it and its criteria."""
 
+    if len(re.findall(r"(?m)^## Surface contract\s*$", plan)) > 1:
+        raise HandoffError("PLAN.md repeats ## Surface contract")
     body = _strip_comments(_section(plan, "Surface contract"))
     blocks: Dict[str, Tuple[str, str]] = {}
     for heading in SURFACE_HEADING.finditer(body):
@@ -586,6 +588,8 @@ def _surface_contract(
             raise HandoffError(f"{label} Walkthrough has no steps")
         for number, step in walkthrough.items():
             _non_placeholder(step, f"{label} Walkthrough step {number}")
+        if len(re.findall(r"(?m)^Criteria:", block)) > 1:
+            raise HandoffError(f"{label} repeats Criteria")
         criteria = _criterion_ids(_roadmap_field(block, "Criteria", label), label)
         for criterion in criteria:
             previous_surface = surface_by_criterion.get(criterion)
@@ -1488,6 +1492,8 @@ def validate_final(
                 raise HandoffError(
                     f"FINAL.md {sc_id} lacks the walked Check for the {surface} surface"
                 )
+            _non_placeholder(check, f"FINAL.md {sc_id} surface Check")
+            _non_placeholder(observed, f"FINAL.md {sc_id} surface Observed")
         if verdict == "met":
             if finding.casefold() != "none" or fix_direction.casefold() != "none":
                 raise HandoffError(
