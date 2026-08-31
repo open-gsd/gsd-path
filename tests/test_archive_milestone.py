@@ -339,6 +339,79 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
             cwd=PROJECT_ROOT,
         )
 
+    def write_deep_review_cycle(self, repo: Path) -> None:
+        plan = repo / ".project" / "plan" / "PLAN.md"
+        plan.write_text(
+            plan.read_text(encoding="utf-8").replace(
+                "Review depth: full", "Review depth: deep"
+            ),
+            encoding="utf-8",
+        )
+        review = repo / ".project" / "review"
+        (review / "wave-1.cycle1.md").unlink()
+        for lens in ("contract", "adversarial"):
+            (review / f"wave-1.cycle1.{lens}.md").write_text(
+                f"""# Review — wave 1, cycle 1
+
+Wave verdict: pass
+Cycle: 1
+Depth: deep
+Lens: {lens}
+Tasks reviewed: 1
+
+## T001 — demo: pass
+
+- ✅ demo works — {lens} evidence passed
+
+## Intent coverage
+
+### SC1 — demo works: pass
+
+- ✅ {lens} evidence passed in focused tests
+""",
+                encoding="utf-8",
+            )
+
+    def write_skeptic(
+        self,
+        repo: Path,
+        *,
+        recorded_locator: Optional[str] = None,
+    ) -> Path:
+        locator = "t001_ac1" if recorded_locator is None else recorded_locator
+        path = (
+            repo
+            / ".project"
+            / "review"
+            / "wave-1.cycle1.skeptic-t001_ac1.md"
+        )
+        path.write_text(
+            f"""# Skeptic — wave 1, cycle 1
+
+- Criterion: demo works
+- Criterion locator: {locator}
+- Lenses: contract
+
+## Observations
+
+### Observation 1 — contract
+
+The reported failure cannot occur.
+
+## Observation verdicts
+
+### Observation 1: refuted
+
+The archived evidence proves the criterion holds.
+
+## Verdict
+
+refuted
+""",
+            encoding="utf-8",
+        )
+        return path
+
     def render_manifest(self, repo: Path) -> subprocess.CompletedProcess[str]:
         return self.run_command(
             sys.executable,
@@ -1922,33 +1995,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
         with tempfile.TemporaryDirectory() as temporary_directory:
             repo = Path(temporary_directory)
             self.make_repo(repo)
-            plan = repo / ".project" / "plan" / "PLAN.md"
-            plan.write_text(
-                plan.read_text().replace("Review depth: full", "Review depth: deep")
-            )
-            review = repo / ".project" / "review"
-            (review / "wave-1.cycle1.md").unlink()
-            for lens in ("contract", "adversarial"):
-                (review / f"wave-1.cycle1.{lens}.md").write_text(
-                    f"""# Review — wave 1, cycle 1
-
-Wave verdict: pass
-Cycle: 1
-Depth: deep
-Lens: {lens}
-Tasks reviewed: 1
-
-## T001 — demo: pass
-
-- ✅ demo works — {lens} evidence passed
-
-## Intent coverage
-
-### SC1 — demo works: pass
-
-- ✅ {lens} evidence passed in focused tests
-"""
-                )
+            self.write_deep_review_cycle(repo)
 
             archive = self.prepare_archive(repo)
 
@@ -1962,35 +2009,9 @@ Tasks reviewed: 1
         with tempfile.TemporaryDirectory() as temporary_directory:
             repo = Path(temporary_directory)
             self.make_repo(repo)
-            skeptic_text = """# Skeptic — wave 1, cycle 1
-
-- Criterion: demo works
-- Criterion locator: t001_ac1
-- Lenses: contract
-
-## Observations
-
-### Observation 1 — contract
-
-The reported failure cannot occur.
-
-## Observation verdicts
-
-### Observation 1: refuted
-
-The archived evidence proves the criterion holds.
-
-## Verdict
-
-refuted
-"""
-            skeptic = (
-                repo
-                / ".project"
-                / "review"
-                / "wave-1.cycle1.skeptic-t001_ac1.md"
-            )
-            skeptic.write_text(skeptic_text, encoding="utf-8")
+            self.write_deep_review_cycle(repo)
+            skeptic = self.write_skeptic(repo)
+            skeptic_text = skeptic.read_text(encoding="utf-8")
 
             archive = self.prepare_archive(repo)
             archived_skeptic = archive / "review" / skeptic.name
@@ -2001,6 +2022,52 @@ refuted
             preflight = self.preflight(repo)
 
             self.assertEqual(preflight.returncode, 0, preflight.stderr)
+
+    def test_prepare_rejects_orphan_skeptic_file(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            skeptic = self.write_skeptic(repo)
+
+            prepare = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "prepare",
+                "--repo",
+                str(repo),
+                "--slug",
+                "demo",
+                cwd=PROJECT_ROOT,
+            )
+
+            self.assertNotEqual(prepare.returncode, 0)
+            self.assertIn(
+                "does not match a canonical deep review cycle", prepare.stderr
+            )
+            self.assertTrue(skeptic.is_file())
+
+    def test_prepare_rejects_invalid_skeptic_locator(self) -> None:
+        for locator in ("", "sc1"):
+            with self.subTest(locator=locator):
+                with tempfile.TemporaryDirectory() as temporary_directory:
+                    repo = Path(temporary_directory)
+                    self.make_repo(repo)
+                    self.write_deep_review_cycle(repo)
+                    self.write_skeptic(repo, recorded_locator=locator)
+
+                    prepare = self.run_command(
+                        sys.executable,
+                        str(ARCHIVE_SCRIPT),
+                        "prepare",
+                        "--repo",
+                        str(repo),
+                        "--slug",
+                        "demo",
+                        cwd=PROJECT_ROOT,
+                    )
+
+                    self.assertNotEqual(prepare.returncode, 0)
+                    self.assertIn("Criterion locator", prepare.stderr)
 
     def test_skeptic_file_cannot_replace_canonical_wave_review(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
