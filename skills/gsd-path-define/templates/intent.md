@@ -16,7 +16,8 @@ Review panel: off   <!-- off | detected | claude,gpt,grok,composer,gemini,deepse
                       CHARTER.md's durable default and override only when
                       the user says so. off is the default. detected uses
                       advertised host families except the parent, at most 3.
-                      Named families are an assertion. Quick lane stays off. -->
+                      Named families are an assertion, at most 3. Quick
+                      lane stays off. -->
 
 Finding skeptics: off   <!-- off | on — build spawns one read-only skeptic
                       per blocking deep-review finding before fix tasks

@@ -5,10 +5,12 @@
      explicit user ruling recorded under Corrections. Lives at .project/
      top level and persists across milestones; it never archives. -->
 
-Review panel: off   <!-- off | detected | claude,gpt,grok,composer — durable
+Review panel: off   <!-- off | detected | claude,gpt,grok,composer,gemini,
+                      deepseek,kimi,qwen — durable
                       program default for optional cross-model plan and
                       wave review. Milestone INTENT copies this value and
-                      may override it. off is the default. -->
+                      may override it. off is the default. Named values
+                      name at most 3 families. -->
 
 ## Vision
 

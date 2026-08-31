@@ -18,7 +18,16 @@ from pathlib import Path
 from typing import Iterable, Optional, Sequence
 
 
-KNOWN_FAMILIES = ("claude", "gpt", "grok", "composer")
+KNOWN_FAMILIES = (
+    "claude",
+    "gpt",
+    "grok",
+    "composer",
+    "gemini",
+    "deepseek",
+    "kimi",
+    "qwen",
+)
 FAMILY_ALIASES = {
     "claude": "claude",
     "opus": "claude",
@@ -28,6 +37,11 @@ FAMILY_ALIASES = {
     "openai": "gpt",
     "grok": "grok",
     "composer": "composer",
+    "gemini": "gemini",
+    "deepseek": "deepseek",
+    "kimi": "kimi",
+    "moonshot": "kimi",
+    "qwen": "qwen",
 }
 MAX_FAMILIES = 3
 PLAN_LINE = re.compile(
@@ -154,9 +168,14 @@ def family_of_slug(slug: str) -> Optional[str]:
     normalized = slug.strip().casefold()
     if not normalized or normalized == "inherit":
         return None
-    for token in TOKEN_SPLIT.split(normalized):
+    tokens = TOKEN_SPLIT.split(normalized)
+    for token in tokens:
         if token in FAMILY_ALIASES:
             return FAMILY_ALIASES[token]
+    for token in tokens:
+        stem = token.rstrip("0123456789")
+        if stem and stem in FAMILY_ALIASES:
+            return FAMILY_ALIASES[stem]
     return None
 
 
