@@ -57,7 +57,7 @@ cancellation is a blocked result, not a skipped result.
 | --- | --- | --- | --- |
 | inspect | codebase mapper, docs auditor | two concurrent briefs | validate and transfer both artifacts |
 | define | none | coordinator-led user gate | write approved INTENT.md (program mode: CHARTER.md) |
-| research | assigned dimensions | concurrent up to capacity, then batches | validate RESEARCH.md and evidence |
+| research | assigned dimensions | concurrent up to capacity, then batches | validate each evidence file as it returns; RESEARCH.md gate after all settle |
 | decide | one decider | serial | validate SYNTHESIS.md |
 | roadmap | one roadmapper | serial; program flow only | validate ROADMAP.md |
 | plan | one planner; zero in quick mode | serial | validate PLAN.md and task wave assignments |
@@ -227,7 +227,9 @@ confidence, and a tie-back to INTENT.md.
 **Gate:** RESEARCH.md records every standard dimension exactly once, every
 dispatched file exists, matches the evidence template, contains at least one
 finding, and answers its assigned `RESEARCH` questions; every skipped
-dimension is recorded with its reason. One failed agent may be respawned once.
+dimension is recorded with its reason. Each file is validated as its
+researcher returns, and a failed agent may be respawned once, concurrently
+with still-running dimensions; the cross-file gate runs after all settle.
 
 ## Phase 3 — Decide (`gsd-path-decide`)
 

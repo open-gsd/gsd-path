@@ -115,19 +115,24 @@ settled brownfield input.
    Derive its filename deterministically as `evidence-<dimension-slug>.md`:
    lowercase the label, replace non-alphanumeric runs with one hyphen, and
    trim hyphens. Append `-2` only if it collides with an existing dimension.
-4. Validate every dispatched evidence file after all agents finish. Confirm
-   every extracted `RESEARCH` question was assigned and answered. Require at
-   least one `## Finding` — a documented `no reliable source found` null
-   result recorded as a finding satisfies this gate, with the searches that
-   came up empty noted as its evidence — and require Claim, Source,
-   Confidence, and Why it matters fields for every finding. Then run:
+4. Validate each dispatched evidence file as its researcher returns; do not
+   hold an early result behind still-running dimensions. Require at least
+   one `## Finding` — a documented `no reliable source found` null result
+   recorded as a finding satisfies this gate, with the searches that came up
+   empty noted as its evidence — require Claim, Source, Confidence, and Why
+   it matters fields for every finding, and require an answer for every
+   question assigned to that dimension. For a missing or invalid file,
+   redispatch one complete corrected brief under the same logical task name,
+   following the runtime dispatch contract, immediately and concurrently
+   with the still-running dimensions.
+5. After every dimension settles — validated, or its one corrected
+   redispatch collected — confirm every extracted `RESEARCH` question was
+   assigned and answered across the full set. Then run:
 
    `python3 <absolute check_handoffs.py> research --repo <absolute repo root>`
 
    The manifest is the source of truth for dispatched and skipped dimensions;
-   the STATE log records only a human-readable summary.
-5. Redispatch one complete corrected brief under the same logical task name for
-   each missing or invalid file, following the runtime dispatch contract. If
+   the STATE log records only a human-readable summary. If
    any expected file still fails, run `pipeline_state.py transition` with
    expected `research/active`, exact branch and archive values,
    `--set-status blocked`, and an event listing the failed evidence gate; then
