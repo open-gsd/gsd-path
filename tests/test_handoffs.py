@@ -1783,6 +1783,23 @@ Waves checked: 1
 
             self.assertEqual(result["verdict"], "pass")
 
+    def test_final_accepts_embedded_angle_brackets_in_surface_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_state(root, "ship", "active")
+            self.write_intent_criteria(root, surfaces="Demo web app")
+            self.write_plan_coverage(root, surface_contract=SURFACE_CONTRACT)
+            self.write_final_review(
+                root,
+                check="tool < request.json",
+                observed="the <empty> state renders the starter card",
+                surface="Demo web app",
+            )
+
+            result = check_handoffs.validate_final(root)
+
+            self.assertEqual(result["verdict"], "pass")
+
     def test_final_rejects_a_surface_criterion_without_a_walked_check(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -1844,6 +1861,43 @@ Waves checked: 1
                     with self.assertRaises(check_handoffs.HandoffError) as failure:
                         check_handoffs.validate_final(root)
                     self.assertIn(message, str(failure.exception))
+
+    def test_surface_values_reject_nested_quoted_placeholders_and_absence(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_plan_handoff(root)
+            self.write_intent_criteria(root, surfaces="Demo web app")
+            self.write_plan_coverage(
+                root,
+                surface_contract=SURFACE_CONTRACT.replace(
+                    "Entry: `/demo`",
+                    'Entry: " <the route, screen, or command a person opens> "',
+                ),
+            )
+
+            with self.assertRaises(check_handoffs.HandoffError) as failure:
+                check_handoffs.validate_plan(root)
+            self.assertIn(
+                "surface Entry is still a placeholder",
+                str(failure.exception),
+            )
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_state(root, "ship", "active")
+            self.write_intent_criteria(root, surfaces="Demo web app")
+            self.write_plan_coverage(root, surface_contract=SURFACE_CONTRACT)
+            self.write_final_review(
+                root,
+                observed='" \'null\' "',
+                surface="Demo web app",
+            )
+
+            with self.assertRaises(check_handoffs.HandoffError) as failure:
+                check_handoffs.validate_final(root)
+            self.assertIn("surface Observed is empty", str(failure.exception))
 
     def test_final_rejects_pass_without_a_check_or_reference(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

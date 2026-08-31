@@ -207,7 +207,14 @@ def _non_placeholder(value: str, label: str) -> str:
 
 
 def _unquoted(value: str) -> str:
-    return value.strip().strip("`\"'")
+    cleaned = value.strip()
+    while (
+        len(cleaned) >= 2
+        and cleaned[0] == cleaned[-1]
+        and cleaned[0] in "`\"'"
+    ):
+        cleaned = cleaned[1:-1].strip()
+    return cleaned
 
 
 def _surface_value(value: str, label: str) -> str:
@@ -436,13 +443,17 @@ def _field(block: str, field: str) -> str:
     return _non_placeholder(match.group(1), f"patch finding {field}")
 
 
-def _source_field(block: str, field: str, source: str) -> str:
+def _raw_source_field(block: str, field: str, source: str) -> str:
     matches = re.findall(rf"(?m)^- \*\*{re.escape(field)}\*\*:\s*(.*)$", block)
     if not matches:
         raise HandoffError(f"{source} is missing {field}")
     if len(matches) != 1:
         raise HandoffError(f"{source} repeats {field}")
-    value = matches[0].strip().strip("`")
+    return matches[0]
+
+
+def _source_field(block: str, field: str, source: str) -> str:
+    value = _raw_source_field(block, field, source).strip().strip("`")
     if not value or "<" in value or ">" in value:
         raise HandoffError(f"{source} has an incomplete {field}")
     return value
@@ -1522,28 +1533,30 @@ def validate_final(
         if verdict not in {"met", "not-met", "unverifiable"}:
             raise HandoffError(f"FINAL.md {sc_id} Verdict is invalid")
         verdicts[sc_id] = verdict
-        check = _source_field(block, "Check", label)
-        observed = _source_field(block, "Observed", label)
+        surface = surface_of.get(sc_id)
+        if surface is None:
+            check = _source_field(block, "Check", label)
+            observed = _source_field(block, "Observed", label)
+        else:
+            check = _unquoted(_raw_source_field(block, "Check", label))
+            observed = _unquoted(_raw_source_field(block, "Observed", label))
         reference = _source_field(block, "Reference", label)
         finding = _source_field(block, "Finding", label)
         fix_direction = _source_field(block, "Fix direction", label)
-        if check.casefold() == "none" and reference.casefold() == "none":
-            raise HandoffError(f"FINAL.md {sc_id} lacks a Check or Reference")
-        if observed.casefold() == "none":
-            raise HandoffError(f"FINAL.md {sc_id} lacks an Observed result")
-        surface = surface_of.get(sc_id)
         if surface is not None:
             named = _source_field(block, "Surface", label)
             if _normalize_ws(named).casefold() != _normalize_ws(surface).casefold():
                 raise HandoffError(f"FINAL.md {sc_id} Surface must name {surface}")
-            surface_check = _unquoted(check)
-            surface_observed = _unquoted(observed)
-            if surface_check.casefold() == "none":
+            if check.casefold() == "none":
                 raise HandoffError(
                     f"FINAL.md {sc_id} lacks the walked Check for the {surface} surface"
                 )
-            _non_placeholder(surface_check, f"FINAL.md {sc_id} surface Check")
-            _non_placeholder(surface_observed, f"FINAL.md {sc_id} surface Observed")
+            _surface_value(check, f"FINAL.md {sc_id} surface Check")
+            _surface_value(observed, f"FINAL.md {sc_id} surface Observed")
+        if check.casefold() == "none" and reference.casefold() == "none":
+            raise HandoffError(f"FINAL.md {sc_id} lacks a Check or Reference")
+        if observed.casefold() == "none":
+            raise HandoffError(f"FINAL.md {sc_id} lacks an Observed result")
         if verdict == "met":
             if finding.casefold() != "none" or fix_direction.casefold() != "none":
                 raise HandoffError(
