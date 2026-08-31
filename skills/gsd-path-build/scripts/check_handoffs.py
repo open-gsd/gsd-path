@@ -221,7 +221,7 @@ def _surface_value(value: str, label: str) -> str:
     cleaned = _unquoted(value)
     if not cleaned or cleaned.casefold() in {"none", "n/a", "null"}:
         raise HandoffError(f"{label} is empty")
-    if cleaned.startswith("<") and cleaned.endswith(">"):
+    if re.fullmatch(r"<[^<>]*>", cleaned):
         raise HandoffError(f"{label} is still a placeholder")
     return cleaned
 

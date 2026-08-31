@@ -873,6 +873,36 @@ The task implements the demo.
                 str(failure.exception),
             )
 
+    def test_plan_distinguishes_bracketed_states_from_a_placeholder(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_plan_handoff(root)
+            self.write_intent_criteria(root, surfaces="Demo web app")
+            states = "<empty> shows help; <success> shows the report"
+            contract = SURFACE_CONTRACT.replace(
+                "empty shows the starter card, loading a spinner, "
+                "error a retry, success the report.",
+                states,
+            )
+            self.write_plan_coverage(root, surface_contract=contract)
+
+            result = check_handoffs.validate_plan(root)
+            self.assertEqual(result["surfaces"], {"Demo web app": "T001"})
+
+            self.write_plan_coverage(
+                root,
+                surface_contract=contract.replace(
+                    states,
+                    "<what empty, loading, error, and success each show>",
+                ),
+            )
+            with self.assertRaises(check_handoffs.HandoffError) as failure:
+                check_handoffs.validate_plan(root)
+            self.assertIn(
+                "Demo web app surface States is still a placeholder",
+                str(failure.exception),
+            )
+
     def test_plan_rejects_surface_blocks_when_intent_declares_none(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
