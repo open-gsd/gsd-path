@@ -15,7 +15,7 @@ Apply this contract whenever a GSD Path skill delegates work:
   appends the lens suffix `_contract` or `_adversarial`; an optional review
   panel uses `review_wave_<wave>_cycle_<cycle>_panel_<family>`; an
   optional finding skeptic uses
-  `review_wave_<wave>_cycle_<cycle>_skeptic_<n>`),
+  `review_wave_<wave>_cycle_<cycle>_skeptic_<criterion>`),
   `review_plan_panel_<family>`,
   `review_final`, or
   `review_gap_<number>`. Normalize variable parts to lowercase ASCII and

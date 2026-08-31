@@ -228,8 +228,8 @@ confidence, and a tie-back to INTENT.md.
 dispatched file exists, matches the evidence template, contains at least one
 finding, and answers its assigned `RESEARCH` questions; every skipped
 dimension is recorded with its reason. Each file is validated as its
-researcher returns, and a failed agent may be respawned once, concurrently
-with still-running dimensions; the cross-file gate runs after all settle.
+researcher returns, a failed agent may be respawned once, and the
+cross-file gate runs after all settle.
 
 ## Phase 3 — Decide (`gsd-path-decide`)
 
@@ -321,7 +321,10 @@ override. After the structural gate
 and before approval, the planner runs `scripts/review_panel.py` against
 advertised host model slugs and may write `.project/review/PLAN-PANEL.md`.
 The panel is advisory: it never averages findings or replaces user
-approval. Quick lane stays `off`.
+approval. Quick lane stays `off`. Config may also set
+`finding_skeptics: on` (default `off`) to have the build spawn one
+read-only skeptic per blocking `deep`-review finding before fix tasks
+are opened; a refuted finding spawns no fix task.
 Same-wave tasks may depend on each other only when their file scopes do not
 overlap; the build executes those tasks in dependency layers. No two tasks
 that can run concurrently may share a file.

@@ -272,7 +272,8 @@ the artifacts directly:
    verify-only` permitted — and at most two deliverable-sized task files
    (project policy),
    honoring every task-contract rule above and `.project/LESSONS.md` when it
-   exists. Write `review_panel: off` regardless of INTENT.md.
+   exists. Write `review_panel: off` and `finding_skeptics: off` regardless
+   of INTENT.md.
 3. Gate exactly as step 3 above and use the same outcome, Review link, and
    single approval question as normal mode.
    A quick plan that cannot satisfy the gates — more than two tasks, an open

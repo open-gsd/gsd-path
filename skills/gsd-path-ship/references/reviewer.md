@@ -79,22 +79,21 @@ blocks the wave.
 
 ## Skeptic mode
 
-Used only when PLAN.md Config records `finding_skeptics: on` and the wave's
-Review depth is `deep`. The brief supplies exactly one blocking finding
-verbatim plus the involved task files, their recorded bases and proven
-landing commits, and a verify sidecar. The only job is to refute that
+Use only skeptic.md. The brief supplies exactly one blocking finding from
+a `deep` wave review, verbatim, plus the involved task files and their
+recorded bases and proven landing commits. The only job is to refute that
 finding.
 
-- Apply the Wave mode evidence rules: recorded SHAs, isolated patch in the
-  supplied sidecar, the recorded isolated Verify output as Verify evidence.
-- Record `Verdict: refuted` only with checked evidence — a command re-run
-  in the sidecar or an artifact re-read — proving the claimed failure
-  cannot occur or the cited criterion actually holds. Anything short of
-  that is `Verdict: stands`; uncertainty stands.
-- Stage `.project/review/wave-N.cycleC.skeptic<n>.md` under the supplied
-  sidecar containing the finding verbatim, the verdict, and the evidence.
-- Do not write a Wave verdict, edit the canonical wave-review or lens
-  files, or review anything beyond the one supplied finding.
+- Apply every Wave mode evidence rule (recorded SHAs, isolated patch,
+  recorded Verify) in the supplied sidecar, scoped to the tasks the
+  finding cites.
+- Record `Verdict: refuted` only with checked evidence proving the claimed
+  failure cannot occur or the cited criterion actually holds. Anything
+  short of that is `Verdict: stands`.
+- Stage `.project/review/wave-N.cycleC.skeptic-<criterion>.md` under the
+  supplied sidecar.
+- Do not write a Wave verdict and do not review anything beyond the
+  supplied finding.
 
 ## Final integration mode
 

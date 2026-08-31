@@ -29,8 +29,9 @@ explicitly invokes it.
 - Read the local [coder role](references/coder.md),
   [reviewer role](references/reviewer.md), [dispatch contract](references/dispatch.md),
   [task template](templates/task.md),
-  [wave-review template](templates/wave-review.md), and
-  [wave-panel template](templates/wave-panel.md). Resolve them to absolute
+  [wave-review template](templates/wave-review.md),
+  [wave-panel template](templates/wave-panel.md), and
+  [skeptic template](templates/skeptic.md). Resolve them to absolute
   paths before briefing agents. Resolve `scripts/review_panel.py` when
   PLAN.md Config names a review panel. Resolve `scripts/check_handoffs.py`
   for Intent coverage. Resolve `scripts/pipeline_state.py` for guarded state
@@ -362,28 +363,32 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
    actionable review-panel finding is waiting for a user ruling. On `blocked`, read
    `max_review_cycles` from PLAN.md (default 3).
    When PLAN.md Config records `finding_skeptics: on` and the wave's Review
-   depth is `deep`, run the skeptic pass before batching fix tasks: number
-   the blocking findings in file order (contract lens file first, then
-   adversarial), and for each spawn one independent read-only skeptic with
-   logical task name `review_wave_<wave>_cycle_<cycle>_skeptic_<n>`, the
-   reviewer role in skeptic mode, and its own verify sidecar from
-   `isolate-verify` (`--name wave-<N>-cycle-<C>-skeptic-<n>`) at the
-   recorded review base. Brief each with its one finding verbatim, the
-   involved task files, their recorded bases and proven landing commits,
-   and the absolute INTENT.md path. Each skeptic stages
-   `.project/review/wave-N.cycleC.skeptic<n>.md` in its sidecar; the
-   orchestrator validates each file, atomically copies it to the primary
-   canonical path, and only then retires that sidecar. A finding whose
-   skeptic file records `Verdict: refuted` with checked evidence spawns no
-   fix task and is not carried forward; a `stands` verdict, a missing file,
-   or an invalid skeptic file leaves the finding blocking. The skeptic pass
-   never changes the canonical verdict. When it refutes every blocking
-   finding, do not advance silently: present **Outcome** with the blocked
-   verdict and the refutation count, **Review** linking the lens and
-   skeptic files, and **Next** listing `Re-run the review cycle with the
-   skeptic files in the reviewer briefs (recommended)` first — that re-run
-   consumes a cycle — then `Open fix tasks from the findings anyway`.
-   Before the cap, batch the surviving
+   depth is `deep`, run the skeptic pass before batching fix tasks.
+   Identify the blocking findings by failed criterion — both lenses
+   flagging one criterion is one finding — and spawn one independent
+   read-only skeptic per finding, concurrently up to the advertised child
+   capacity, with logical task name
+   `review_wave_<wave>_cycle_<cycle>_skeptic_<criterion>`, the reviewer
+   role in skeptic mode, the skeptic template, and its own verify sidecar
+   from `isolate-verify` (`--name wave-<N>-cycle-<C>-skeptic-<criterion>`)
+   at the recorded review base. Brief each with its one finding verbatim,
+   the involved task files, their recorded bases and proven landing
+   commits, and the absolute INTENT.md path. Each skeptic stages
+   `.project/review/wave-N.cycleC.skeptic-<criterion>.md` in its sidecar;
+   validate each against the skeptic template, atomically copy it to the
+   primary canonical path, then retire that sidecar. A finding whose valid
+   skeptic file records `Verdict: refuted` spawns no fix task and is not
+   carried forward, and a criterion refuted in an earlier cycle gets no
+   second skeptic — its recorded refutation stands unless a later review
+   cites new evidence. A `stands` verdict, a missing file, or an invalid
+   skeptic file leaves the finding blocking. When every blocking finding
+   is refuted, stop and ask: present **Outcome** with the blocked verdict
+   and the refutation count, **Review** linking the lens and skeptic
+   files, and **Next** listing `Re-run the review cycle with the skeptic
+   files in the reviewer briefs (recommended — no finding survived
+   scrutiny)` first, then `Open fix tasks from the findings anyway`. That
+   re-run consumes a cycle.
+   While cycles remain below the cap, batch the surviving
    findings into complete fix tasks from the task template — one task per
    disjoint file scope, not one per finding — each carrying its findings'
    failed criteria and observed evidence verbatim. Identify every finding by
