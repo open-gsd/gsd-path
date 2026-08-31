@@ -76,7 +76,10 @@ does not route the pipeline.
    absolute path printed if the host cannot render links; **Next** — the one
    question or action now required. `python3 scripts/loop_run.py status
    --spec <path>` gives the aggregate counters when the user asks how the
-   loop is trending.
+   loop is trending; `acceptance_rate` divides accepted by accepted plus
+   rejected — blocked and skipped runs are not evaluations.
+   `wall_clock_per_accept_seconds` divides total all-run wall clock by
+   accepts, so blocked and rejected runs raise it.
 
 ## Rules
 
@@ -85,6 +88,8 @@ does not route the pipeline.
 - Never edit tests to match broken code. If the test is the bug, say so in
   the report and stop; weakening a verifier is a human-gate action.
 - Never touch paths the spec's Worker scope declares read-only.
+- Verify output tails are persisted to the spec's log; a verify command must
+  never echo secrets or credentials.
 - Human gates are never-auto: reaching one means `BLOCKED: <reason>`, not a
   judgment call.
 - The helper's atomic `claim` output decides whether a pass runs. `check` is

@@ -762,15 +762,21 @@ def command_status(fields: dict) -> dict:
         wall_clock_used += integer_field(record, "wall_clock_used", path, number)
         if record.get("rescue"):
             human_rescues += 1
+    accepted = counts["pass"]
+    evaluated = accepted + counts["fail"]
     return {
         "loop": fields["loop"],
         "runs": len(outcomes),
-        "accepted": counts["pass"],
+        "accepted": accepted,
         "rejected": counts["fail"],
         "blocked": counts["blocked"],
         "skipped": counts["skipped"],
         "human_rescues": human_rescues,
         "wall_clock_used_seconds": wall_clock_used,
+        "acceptance_rate": round(accepted / evaluated, 4) if evaluated else None,
+        "wall_clock_per_accept_seconds": (
+            round(wall_clock_used / accepted, 2) if accepted else None
+        ),
         "active_claim": active["claim"] if active is not None else None,
     }
 

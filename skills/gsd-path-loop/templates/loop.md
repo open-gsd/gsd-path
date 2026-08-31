@@ -14,7 +14,10 @@ status: active              <!-- active | paused | done -->
 trigger: manual             <!-- who invokes one pass: manual | event | schedule -->
 cooldown: 15m               <!-- optional: minimum gap between recorded passes -->
 skip_when: <shell command>  <!-- optional: exit 0 = skip this pass -->
-verify: <shell command>     <!-- repeat the line per verifier command, in order -->
+verify: <shell command>     <!-- repeat the line per verifier command, in order;
+                                 include a secret-scan or dependency-audit
+                                 verifier when the loop touches code or
+                                 dependencies -->
 max_iterations: 3           <!-- fix → verify cycles allowed in one pass -->
 wall_clock: 30m             <!-- per-pass wall-clock budget -->
 period: 24h                 <!-- optional: rolling window for period_budget -->

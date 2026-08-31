@@ -313,7 +313,50 @@ class LoopRunTests(unittest.TestCase):
             self.assertEqual(1, payload["accepted"])
             self.assertEqual(1, payload["blocked"])
             self.assertEqual(1, payload["human_rescues"])
+            self.assertEqual(1.0, payload["acceptance_rate"])
+            self.assertEqual(
+                payload["wall_clock_used_seconds"],
+                payload["wall_clock_per_accept_seconds"],
+            )
             self.assertIsNone(payload["active_claim"])
+
+    def test_status_acceptance_rate_ignores_blocked_and_skipped(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            spec = write_spec(root)
+            append_log(
+                root,
+                [
+                    log_record(result="pass"),
+                    log_record(result="fail"),
+                    log_record(result="blocked"),
+                    log_record(result="skipped"),
+                ],
+            )
+            payload = json.loads(self.command(spec, "status").stdout)
+            self.assertEqual(0.5, payload["acceptance_rate"])
+
+    def test_status_acceptance_rate_null_without_evaluated_runs(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            spec = write_spec(root)
+            append_log(
+                root,
+                [log_record(result="blocked"), log_record(result="skipped")],
+            )
+            payload = json.loads(self.command(spec, "status").stdout)
+            self.assertIsNone(payload["acceptance_rate"])
+
+    def test_status_with_no_runs_reports_null_rates(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            spec = write_spec(root)
+            status = self.command(spec, "status")
+            self.assertEqual(0, status.returncode, status.stderr)
+            payload = json.loads(status.stdout)
+            self.assertEqual(0, payload["runs"])
+            self.assertIsNone(payload["acceptance_rate"])
+            self.assertIsNone(payload["wall_clock_per_accept_seconds"])
 
     def test_finish_requires_result(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

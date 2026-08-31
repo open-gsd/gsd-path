@@ -81,6 +81,10 @@ class ReviewPanelParseTests(unittest.TestCase):
         with self.assertRaises(review_panel.ReviewPanelError):
             review_panel.parse_review_panel_value("claude,gpt,grok,composer")
 
+    def test_named_new_families_parse(self) -> None:
+        parsed = review_panel.parse_review_panel_value("kimi,qwen")
+        self.assertEqual(parsed, {"mode": "named", "families": ("kimi", "qwen")})
+
     def test_plan_review_panel_enabled(self) -> None:
         self.assertFalse(review_panel.plan_review_panel_enabled("# Plan\n"))
         self.assertFalse(
@@ -157,6 +161,43 @@ class ReviewPanelResolveTests(unittest.TestCase):
             parent_family="grok",
         )
         self.assertEqual(resolved["status"], "skipped")
+
+    def test_new_family_slugs_classify(self) -> None:
+        cases = {
+            "gemini-2.5-pro": "gemini",
+            "deepseek-v3.2-exp": "deepseek",
+            "kimi-k2-thinking": "kimi",
+            "moonshot-v1-128k": "kimi",
+            "qwen3-coder-plus": "qwen",
+        }
+        for slug, family in cases.items():
+            with self.subTest(slug=slug):
+                self.assertEqual(review_panel.family_of_slug(slug), family)
+
+    def test_exact_match_beats_digit_stem(self) -> None:
+        self.assertEqual(review_panel.family_of_slug("composer2-claude"), "claude")
+        self.assertEqual(review_panel.family_of_slug("gpt4"), "gpt")
+
+    def test_detected_caps_new_families_in_known_order(self) -> None:
+        resolved = review_panel.resolve_panel(
+            {"mode": "detected", "families": ()},
+            (
+                "qwen3-coder-plus",
+                "kimi-k2-thinking",
+                "deepseek-v3.2-exp",
+                "gemini-2.5-pro",
+            ),
+            parent_family="claude",
+        )
+        self.assertEqual(resolved["status"], "ready")
+        families = [item["family"] for item in resolved["selected"]]
+        self.assertEqual(families, ["gemini", "deepseek", "kimi"])
+        self.assertTrue(
+            any(
+                item["family"] == "qwen" and item["reason"] == "cap"
+                for item in resolved["skipped"]
+            )
+        )
 
     def test_off_does_not_inspect_slugs(self) -> None:
         resolved = review_panel.resolve_panel(

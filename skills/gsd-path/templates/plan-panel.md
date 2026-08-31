@@ -5,7 +5,7 @@
      Kind criterion requires a named PLAN/task criterion; preference is
      taste or an alternate design and must not flip approval. -->
 
-- Family: <claude | gpt | grok | composer>
+- Family: <claude | gpt | grok | composer | gemini | deepseek | kimi | qwen>
 - Model: <exact advertised slug>
 
 ## Findings
