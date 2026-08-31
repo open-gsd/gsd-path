@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# gsd-path project runtime
 """Manage GSD Path discussion records as a recoverable paired transaction."""
 
 import argparse

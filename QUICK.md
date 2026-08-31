@@ -32,7 +32,8 @@ Cursor, Zed, Kiro, Kimi Code.
 
 ## 1. Install skills
 
-**Node 18.17+.** Preview first (never writes files):
+**Node 18.17+. Project installs in step 2 also require Python 3.9+.** Preview
+first (never writes files):
 
 ```bash
 # From a clone of this repository (primary path)
@@ -63,7 +64,8 @@ cd /path/to/your/repo
 node scripts/install.mjs --all --project "$(pwd)"
 ```
 
-Installs `AGENTS.md` + `WORKFLOW.md` (+ `.claude/CLAUDE.md` if Claude selected).
+Installs `AGENTS.md`, `WORKFLOW.md`, and `.gsd-path/runtime/`
+(+ `.claude/CLAUDE.md` if Claude is selected).
 If those managed files already exist, the installer **refuses and installs
 nothing** — use `--update` to refresh skills, and merge project-contract
 changes by hand ([UPDATE.md](UPDATE.md)).

@@ -2,6 +2,7 @@
 """Install GSD Path skills for supported coding agents."""
 
 import argparse
+import errno
 import json
 import os
 import re
@@ -12,6 +13,8 @@ import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Iterable, List, Mapping, Optional, Sequence, Tuple, Union
+
+sys.dont_write_bytecode = True
 
 try:
     from . import sync_skill_resources
@@ -42,10 +45,84 @@ CLAUDE_BRIDGE = "@../AGENTS.md\n@../WORKFLOW.md\n"
 HOOKS_DIRECTORY = ".gsd-path"
 GUARD_SCRIPTS = ("guard_hook.py", "git_guard.py")
 GUARD_MARKER = "gsd-path guard"
-INSTALL_LOCK_NAME = ".gsd-path-install-lock"
-CLAUDE_MATCHER = (
-    "Edit|Write|MultiEdit|NotebookEdit|Delete|StrReplace|ApplyPatch|Create|Shell|Bash|PowerShell"
+PROJECT_RUNTIME_SCRIPTS = (
+    "pipeline_state.py",
+    "check_handoffs.py",
+    "isolation.py",
+    "discussion_records.py",
+    "pipeline_git.py",
+    "archive_milestone.py",
+    "review_panel.py",
 )
+PROJECT_RUNTIME_MARKER = "gsd-path project runtime"
+PROJECT_STATUS_LAUNCHER = "status_runtime.py"
+PROJECT_STATUS_MARKER = "gsd-path project status launcher"
+INSTALL_LOCK_NAME = ".gsd-path-install-lock"
+INSTALL_LOCK_OWNER = "owner.json"
+INSTALL_LOCK_SCHEMA = "gsd-path/install-lock/v2"
+PROJECT_CONTRACTS = (
+    ("AGENTS.md", "## Plain-prompt re-entry"),
+    ("WORKFLOW.md", "### Plain-prompt re-entry"),
+)
+STATUS_ACTIONS = frozenset(
+    {
+        "bind-initial",
+        "block",
+        "resume-checkpoint",
+        "resume-next-handoff",
+        "resume-promotion",
+        "resume-shipment",
+        "resume-undo",
+        "run-phase",
+        "validate-integrated",
+        "wait",
+    }
+)
+STATUS_PHASES = frozenset(
+    {
+        "inspect",
+        "define",
+        "research",
+        "decide",
+        "roadmap",
+        "plan",
+        "build",
+        "ship",
+        "shipped",
+    }
+)
+STATUS_VALUES = frozenset({"active", "done", "blocked"})
+STATUS_STATE_FIELDS = frozenset(
+    {
+        "pipeline",
+        "project",
+        "milestone",
+        "phase",
+        "status",
+        "branch",
+        "archive",
+        "integration_default",
+        "integration",
+        "integration_source",
+    }
+)
+STATUS_INTEGRATION_MODES = frozenset({"direct", "pull-request"})
+STATUS_INTEGRATION_SOURCES = frozenset({"default", "milestone"})
+STATUS_SLUG = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+STATUS_BRANCH = re.compile(r"^gsd-path/M(\d{3,})$")
+STATUS_ARCHIVE = re.compile(r"^\.project/archive/(\d{3,})-([a-z0-9][a-z0-9-]*)/?$")
+STATUS_TRANSITIONS = {
+    "inspect": frozenset({"inspect", "define"}),
+    "define": frozenset({"define", "research", "plan"}),
+    "research": frozenset({"research", "decide"}),
+    "decide": frozenset({"decide", "roadmap", "plan"}),
+    "roadmap": frozenset({"roadmap", "define"}),
+    "plan": frozenset({"plan", "build"}),
+    "build": frozenset({"build"}),
+    "ship": frozenset({"ship", "plan"}),
+    "shipped": frozenset({"ship"}),
+}
+CLAUDE_MATCHER = ".*"
 def _claude_guard_entry(interpreter: str) -> dict:
     """The managed PreToolUse guard entry, as an object."""
     return {
@@ -89,44 +166,40 @@ def _codex_guard_command_windows(interpreter: str) -> str:
 
 def codex_hooks_settings(interpreter: str) -> str:
     return json.dumps(
-        {
-            "hooks": {
-                "PreToolUse": [
-                    {
-                        "matcher": ".*",
-                        "hooks": [
-                            {
-                                "type": "command",
-                                "command": _codex_guard_command(interpreter),
-                                "commandWindows": _codex_guard_command_windows(
-                                    interpreter
-                                ),
-                            }
-                        ],
-                    }
-                ]
-            }
-        },
+        {"hooks": {"PreToolUse": [_codex_guard_entry(interpreter)]}},
         indent=2,
     ) + "\n"
+
+
+def _codex_guard_entry(interpreter: str) -> dict:
+    return {
+        "matcher": ".*",
+        "hooks": [
+            {
+                "type": "command",
+                "command": _codex_guard_command(interpreter),
+                "commandWindows": _codex_guard_command_windows(interpreter),
+            }
+        ],
+    }
 
 
 def cursor_hooks_settings(interpreter: str) -> str:
     return json.dumps(
         {
             "version": 1,
-            "hooks": {
-                "preToolUse": [
-                    {
-                        "command": f'{interpreter} "{HOOKS_DIRECTORY}/guard_hook.py"',
-                        "matcher": ".*",
-                        "failClosed": True,
-                    }
-                ]
-            },
+            "hooks": {"preToolUse": [_cursor_guard_entry(interpreter)]},
         },
         indent=2,
     ) + "\n"
+
+
+def _cursor_guard_entry(interpreter: str) -> dict:
+    return {
+        "command": f'{interpreter} "{HOOKS_DIRECTORY}/guard_hook.py"',
+        "matcher": ".*",
+        "failClosed": True,
+    }
 
 
 def pre_commit_hook(interpreter: str) -> str:
@@ -156,7 +229,14 @@ def _detect_python_interpreter() -> Optional[str]:
     for candidate in ("python3", "python"):
         try:
             result = subprocess.run(
-                [candidate, "--version"], capture_output=True, check=False
+                [
+                    candidate,
+                    "-B",
+                    "-c",
+                    "import sys; raise SystemExit(sys.version_info < (3, 9))",
+                ],
+                capture_output=True,
+                check=False,
             )
         except OSError:
             continue
@@ -215,15 +295,23 @@ def _git_hooks_location(project: "Path") -> Tuple[Optional["Path"], bool]:
     return (dot_git / "hooks" if dot_git.is_dir() else None), False
 
 
-def _required_hook_runtime(
-    project: Path, command: str, selected: Sequence[str] = ()
-) -> Tuple[str, Path]:
+def _required_python_runtime(
+    command: str, selected: Sequence[str] = ()
+) -> str:
     suffix = f" for selected hosts: {', '.join(selected)}" if selected else ""
     interpreter = _effective_interpreter()
     if interpreter is None:
         raise InstallerError(
             f"{command} requires a working Python interpreter{suffix}"
         )
+    return interpreter
+
+
+def _required_hook_runtime(
+    project: Path, command: str, selected: Sequence[str] = ()
+) -> Tuple[str, Path]:
+    suffix = f" for selected hosts: {', '.join(selected)}" if selected else ""
+    interpreter = _required_python_runtime(command, selected)
     hooks_dir, resolved = _git_hooks_location(project)
     if not resolved or hooks_dir is None:
         raise InstallerError(
@@ -572,8 +660,157 @@ def _create_directory(path: Path, created: List[Path]) -> None:
 
 def _release_install_locks(locks: Sequence[Path], created: Sequence[Path]) -> None:
     for lock in reversed(locks):
+        (lock / INSTALL_LOCK_OWNER).unlink(missing_ok=True)
         lock.rmdir()
     _remove_empty_directories(created)
+
+
+def _process_identity(pid: int) -> Optional[str]:
+    if os.name == "nt":
+        command = [
+            "powershell.exe",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            f"(Get-Process -Id {pid} -ErrorAction Stop).StartTime.ToUniversalTime().Ticks",
+        ]
+    else:
+        command = ["ps", "-o", "lstart=", "-p", str(pid)]
+    try:
+        result = subprocess.run(command, capture_output=True, text=True, check=False)
+    except OSError:
+        return None
+    value = result.stdout.strip()
+    return f"{os.name}:{value}" if result.returncode == 0 and value else None
+
+
+def _process_alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except OSError as error:
+        return error.errno == errno.EPERM
+    return True
+
+
+def _stale_install_lock_snapshot(lock: Path) -> Tuple[os.stat_result, bytes]:
+    if lock.is_symlink() or not lock.is_dir():
+        raise InstallerError(f"unsafe installation lock: {lock}")
+    try:
+        observed = lock.stat()
+        entries = list(lock.iterdir())
+        owner_bytes = (lock / INSTALL_LOCK_OWNER).read_bytes()
+        owner = json.loads(owner_bytes)
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        raise InstallerError(
+            f"installation already in progress for {lock.parent}"
+        ) from error
+    pid = owner.get("pid")
+    identity = owner.get("identity")
+    valid = (
+        owner.get("schema") == INSTALL_LOCK_SCHEMA
+        and isinstance(pid, int)
+        and not isinstance(pid, bool)
+        and pid > 0
+        and isinstance(identity, str)
+        and identity
+        and len(entries) == 1
+        and entries[0].name == INSTALL_LOCK_OWNER
+    )
+    current_identity = _process_identity(pid) if valid else None
+    if (
+        not valid
+        or current_identity == identity
+        or (current_identity is None and _process_alive(pid))
+    ):
+        raise InstallerError(f"installation already in progress for {lock.parent}")
+    return observed, owner_bytes
+
+
+def _recover_stale_install_lock(lock: Path, quarantine: Path) -> Optional[Path]:
+    legacy_quarantine = lock.with_name(f"{lock.name}.stale")
+    if not _lexists(lock):
+        prefix = f"{lock.name}.stale-"
+        for orphan in lock.parent.glob(f"{prefix}*"):
+            staging = lock.parent / orphan.name.removeprefix(prefix)
+            try:
+                _stale_install_lock_snapshot(orphan)
+                if _lexists(staging):
+                    _stale_install_lock_snapshot(staging)
+            except InstallerError:
+                continue
+            if _lexists(staging):
+                shutil.rmtree(staging)
+            shutil.rmtree(orphan)
+        if _lexists(legacy_quarantine):
+            _stale_install_lock_snapshot(legacy_quarantine)
+            shutil.rmtree(legacy_quarantine)
+        return None
+    observed, owner_bytes = _stale_install_lock_snapshot(lock)
+    if _lexists(legacy_quarantine):
+        _stale_install_lock_snapshot(legacy_quarantine)
+        shutil.rmtree(legacy_quarantine)
+    try:
+        lock.rename(quarantine)
+    except (FileNotFoundError, FileExistsError) as error:
+        raise InstallerError(
+            f"installation already in progress for {lock.parent}"
+        ) from error
+    try:
+        moved = quarantine.stat()
+        moved_owner = (quarantine / INSTALL_LOCK_OWNER).read_bytes()
+    except OSError as error:
+        raise InstallerError(
+            f"installation already in progress for {lock.parent}"
+        ) from error
+    if (
+        (moved.st_dev, moved.st_ino) != (observed.st_dev, observed.st_ino)
+        or moved_owner != owner_bytes
+    ):
+        if not _lexists(lock):
+            quarantine.rename(lock)
+        raise InstallerError(f"installation already in progress for {lock.parent}")
+    return quarantine
+
+
+def _create_install_lock(lock: Path) -> None:
+    identity = _process_identity(os.getpid())
+    if identity is None:
+        raise InstallerError("cannot determine installer process identity")
+    staging = Path(tempfile.mkdtemp(prefix=".install-lock-stage-", dir=lock.parent))
+    recovery = lock.with_name(f"{lock.name}.stale-{staging.name}")
+    quarantine = None
+    published = False
+    try:
+        (staging / INSTALL_LOCK_OWNER).write_text(
+            json.dumps(
+                {
+                    "schema": INSTALL_LOCK_SCHEMA,
+                    "pid": os.getpid(),
+                    "identity": identity,
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        quarantine = _recover_stale_install_lock(lock, recovery)
+        staging.rename(lock)
+        published = True
+        if quarantine is not None:
+            shutil.rmtree(quarantine)
+    except BaseException:
+        shutil.rmtree(staging, ignore_errors=True)
+        if quarantine is not None and _lexists(quarantine):
+            if published and _lexists(lock):
+                shutil.rmtree(lock)
+            if not _lexists(lock):
+                quarantine.rename(lock)
+            else:
+                shutil.rmtree(quarantine)
+        if _lexists(lock):
+            raise InstallerError(
+                f"installation already in progress for {lock.parent}"
+            )
+        raise
 
 
 def _acquire_install_locks(roots: Iterable[Path]) -> Tuple[List[Path], List[Path]]:
@@ -588,12 +825,7 @@ def _acquire_install_locks(roots: Iterable[Path]) -> Tuple[List[Path], List[Path
     try:
         for lock in locks:
             _create_directory(lock.parent, created)
-            try:
-                lock.mkdir()
-            except FileExistsError as error:
-                raise InstallerError(
-                    f"installation already in progress for {lock.parent}"
-                ) from error
+            _create_install_lock(lock)
             acquired.append(lock)
     except BaseException:
         _release_install_locks(acquired, created)
@@ -715,7 +947,22 @@ def _project_destinations(
     destinations: List[Tuple[Path, Optional[str], Optional[str], bool]] = [
         (project / "AGENTS.md", "AGENTS.md", None, False),
         (project / "WORKFLOW.md", "WORKFLOW.md", None, False),
+        (
+            project / HOOKS_DIRECTORY / PROJECT_STATUS_LAUNCHER,
+            f"scripts/{PROJECT_STATUS_LAUNCHER}",
+            None,
+            False,
+        ),
     ]
+    destinations.extend(
+        (
+            project / HOOKS_DIRECTORY / "runtime" / name,
+            f"scripts/{name}",
+            None,
+            False,
+        )
+        for name in PROJECT_RUNTIME_SCRIPTS
+    )
     if "claude" in selected:
         destinations.append(
             (project / ".claude" / "CLAUDE.md", None, CLAUDE_BRIDGE, False)
@@ -805,6 +1052,30 @@ def _existing_contract_error(destination: Path) -> "InstallerError":
     )
 
 
+def _validate_project_git_root(project: Path) -> None:
+    probe = project
+    while not _lexists(probe):
+        probe = probe.parent
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            cwd=probe,
+            capture_output=True,
+            text=True,
+            check=False,
+            env={**os.environ, "GIT_OPTIONAL_LOCKS": "0"},
+        )
+    except OSError:
+        return
+    top_level = result.stdout.strip()
+    if (
+        result.returncode == 0
+        and top_level
+        and not _same_path(Path(top_level), project)
+    ):
+        raise InstallerError(f"project path is not the Git worktree root: {project}")
+
+
 def _validate_project(
     source_root: Path,
     project: Path,
@@ -815,6 +1086,13 @@ def _validate_project(
     hooks_dir: Optional[Path],
 ) -> None:
     _validate_directory_destination(project, "project path")
+    _validate_project_git_root(project)
+    _validate_directory_destination(
+        project / HOOKS_DIRECTORY, "project runtime parent directory"
+    )
+    _validate_directory_destination(
+        project / HOOKS_DIRECTORY / "runtime", "project runtime directory"
+    )
     project_directories = []
     if "claude" in selected:
         project_directories.append(("Claude", project / ".claude"))
@@ -827,7 +1105,12 @@ def _validate_project(
             directory.is_symlink() or not directory.is_dir()
         ):
             raise InstallerError(f"unsafe {label} project directory: {directory}")
-    sources = ["AGENTS.md", "WORKFLOW.md"]
+    sources = [
+        "AGENTS.md",
+        "WORKFLOW.md",
+        f"scripts/{PROJECT_STATUS_LAUNCHER}",
+        *(f"scripts/{name}" for name in PROJECT_RUNTIME_SCRIPTS),
+    ]
     if hooks:
         sources.extend(f"scripts/{name}" for name in GUARD_SCRIPTS)
     for source_name in sources:
@@ -902,17 +1185,44 @@ def _rollback_project(transaction: ProjectTransaction) -> None:
     _remove_empty_directories(transaction.created_directories)
 
 
-def _is_managed_guard_script(destination: Path) -> bool:
+def _managed_file_contains(destination: Path, marker: str, label: str) -> bool:
     if not destination.is_file():
         return False
-    return GUARD_MARKER in destination.read_text(encoding="utf-8", errors="replace")
+    try:
+        content = destination.read_text(encoding="utf-8", errors="replace")
+    except OSError as error:
+        raise InstallerError(f"cannot read {label}: {destination}") from error
+    return marker in content
+
+
+def _is_managed_guard_script(destination: Path) -> bool:
+    return _managed_file_contains(destination, GUARD_MARKER, "guard script")
+
+
+def _is_managed_project_status_launcher(destination: Path) -> bool:
+    return _managed_file_contains(
+        destination, PROJECT_STATUS_MARKER, "project status launcher"
+    )
+
+
+def _is_managed_project_runtime(destination: Path) -> bool:
+    return _managed_file_contains(
+        destination, PROJECT_RUNTIME_MARKER, "project runtime"
+    )
+
+
+def _is_managed_git_hook_content(text: str) -> bool:
+    return GUARD_MARKER in text and "git_guard.py" in text
 
 
 def _is_managed_git_hook(destination: Path) -> bool:
     if not destination.is_file():
         return False
-    text = destination.read_text(encoding="utf-8", errors="replace")
-    return GUARD_MARKER in text and "git_guard.py" in text
+    try:
+        text = destination.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+    return _is_managed_git_hook_content(text)
 
 
 def _is_managed_hook_settings(destination: Path) -> bool:
@@ -923,6 +1233,21 @@ def _is_managed_hook_settings(destination: Path) -> bool:
     except InstallerError:
         return False
     return _has_managed_hook_settings(parsed)
+
+
+def _has_managed_guard_wiring(project: Path) -> bool:
+    settings = (
+        project / ".claude" / "settings.json",
+        project / ".codex" / "hooks.json",
+        project / ".cursor" / "hooks.json",
+    )
+    if any(_is_managed_hook_settings(path) for path in settings):
+        return True
+    hooks_dir = _git_hooks_directory(project)
+    return hooks_dir is not None and any(
+        _is_managed_git_hook(hooks_dir / name)
+        for name in ("pre-commit", "commit-msg")
+    )
 
 
 def _atomic_temporary(destination: Path) -> Tuple[int, Path]:
@@ -1108,6 +1433,47 @@ def _merged_cursor_settings(settings: Path, interpreter: str) -> str:
     )
 
 
+def _refreshes_guards(project: Path, full: bool, initialize: bool) -> bool:
+    return full or initialize or _has_managed_guard_wiring(project) or any(
+        _lexists(project / HOOKS_DIRECTORY / name) for name in GUARD_SCRIPTS
+    )
+
+
+def _contract_section(content: str, heading: str) -> Optional[str]:
+    normalized = content.replace("\r\n", "\n")
+    match = re.search(rf"(?m)^{re.escape(heading)}$", normalized)
+    if match is None:
+        return None
+    depth = heading.index(" ")
+    after_heading = normalized.find("\n", match.start())
+    body_start = len(normalized) if after_heading == -1 else after_heading + 1
+    next_heading = re.search(rf"(?m)^#{{1,{depth}}}\s", normalized[body_start:])
+    end = len(normalized) if next_heading is None else body_start + next_heading.start()
+    return normalized[match.start():end].rstrip()
+
+
+def _has_legacy_project_contracts(source_root: Path, project: Path) -> bool:
+    for name, heading in PROJECT_CONTRACTS:
+        contract = project / name
+        source = source_root / name
+        if (
+            contract.is_symlink()
+            or not contract.is_file()
+            or source.is_symlink()
+            or not source.is_file()
+        ):
+            return False
+        installed = contract.read_text(encoding="utf-8", errors="replace")
+        canonical = source.read_text(encoding="utf-8", errors="replace")
+        installed_section = _contract_section(installed, heading)
+        if (
+            installed_section is None
+            or installed_section != _contract_section(canonical, heading)
+        ):
+            return False
+    return True
+
+
 def _validate_hooks_refresh(
     source_root: Path,
     project: Path,
@@ -1117,19 +1483,68 @@ def _validate_hooks_refresh(
     initialize: bool = False,
 ) -> None:
     _validate_directory_destination(project, "project path")
+    _validate_project_git_root(project)
     _validate_directory_destination(project / HOOKS_DIRECTORY, "guard hooks directory")
-    for name in GUARD_SCRIPTS:
-        destination = project / HOOKS_DIRECTORY / name
-        exists = _lexists(destination)
+    _validate_directory_destination(
+        project / HOOKS_DIRECTORY / "runtime", "project runtime directory"
+    )
+    refresh_guards = _refreshes_guards(project, full, initialize)
+    runtime_exists = any(
+        _lexists(project / HOOKS_DIRECTORY / "runtime" / name)
+        for name in PROJECT_RUNTIME_SCRIPTS
+    )
+    if (
+        not initialize
+        and not refresh_guards
+        and not runtime_exists
+        and not _has_legacy_project_contracts(source_root, project)
+    ):
+        raise InstallerError(
+            f"no managed GSD Path hooks or runtime found in project: {project}"
+        )
+    runtime = project / HOOKS_DIRECTORY / "runtime"
+    launcher = project / HOOKS_DIRECTORY / PROJECT_STATUS_LAUNCHER
+    launcher_source = source_root / "scripts" / PROJECT_STATUS_LAUNCHER
+    if launcher.is_symlink() or (
+        _lexists(launcher) and not _is_managed_project_status_launcher(launcher)
+    ):
+        raise InstallerError(f"not a managed GSD Path status launcher: {launcher}")
+    if launcher_source.is_symlink() or not launcher_source.is_file():
+        raise InstallerError(
+            f"missing project status launcher source: {launcher_source}"
+        )
+    if runtime.is_dir():
+        unexpected = [
+            entry.name for entry in runtime.iterdir() if entry.name not in PROJECT_RUNTIME_SCRIPTS
+        ]
+        if unexpected:
+            raise InstallerError(
+                "unexpected project runtime entries: " + ", ".join(unexpected)
+            )
+    if refresh_guards:
+        for name in GUARD_SCRIPTS:
+            destination = project / HOOKS_DIRECTORY / name
+            exists = _lexists(destination)
+            if destination.is_symlink():
+                raise InstallerError(f"refusing to refresh a symlink: {destination}")
+            if exists and not _is_managed_guard_script(destination):
+                raise InstallerError(
+                    f"not a managed GSD Path guard script: {destination}"
+                )
+            source = source_root / "scripts" / name
+            if source.is_symlink() or not source.is_file():
+                raise InstallerError(f"missing guard script source: {source}")
+    for name in PROJECT_RUNTIME_SCRIPTS:
+        destination = project / HOOKS_DIRECTORY / "runtime" / name
         if destination.is_symlink():
             raise InstallerError(f"refusing to refresh a symlink: {destination}")
-        if (exists and not _is_managed_guard_script(destination)) or (
-            not exists and not initialize
-        ):
-            raise InstallerError(f"not a managed GSD Path guard script: {destination}")
+        if _lexists(destination) and not _is_managed_project_runtime(destination):
+            raise InstallerError(
+                f"not a managed GSD Path project runtime: {destination}"
+            )
         source = source_root / "scripts" / name
         if source.is_symlink() or not source.is_file():
-            raise InstallerError(f"missing guard script source: {source}")
+            raise InstallerError(f"missing project runtime source: {source}")
     if full:
         for target, label, settings in (
             ("claude", "Claude", project / ".claude" / "settings.json"),
@@ -1165,7 +1580,7 @@ def _validate_hooks_refresh(
                     )
 
 
-def refresh_hooks(
+def _refresh_hooks_unlocked(
     source_root: Path,
     project: Path,
     full: bool,
@@ -1177,21 +1592,87 @@ def refresh_hooks(
     user-facing notes rather than refreshed files."""
     hooks_dir = _git_hooks_directory(project) if full else None
     interpreter: Optional[str] = None
-    if full and not dry_run:
-        interpreter, hooks_dir = _required_hook_runtime(
-            project, "--hooks-init" if initialize else "--hooks-refresh-full", selected
-        )
+    if not dry_run:
+        if full:
+            interpreter, hooks_dir = _required_hook_runtime(
+                project,
+                "--hooks-init" if initialize else "--hooks-refresh-full",
+                selected,
+            )
+        else:
+            interpreter = _required_python_runtime("--hooks-refresh", selected)
     _validate_hooks_refresh(
         source_root, project, full, hooks_dir, selected, initialize
     )
     refreshed: List[str] = []
-    for name in GUARD_SCRIPTS:
-        destination = project / HOOKS_DIRECTORY / name
-        source = source_root / "scripts" / name
-        if not dry_run:
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            _atomic_copy(source, destination)
-        refreshed.append(_describe_project_path(project, destination))
+    refresh_guards = _refreshes_guards(project, full, initialize)
+    runtime = project / HOOKS_DIRECTORY / "runtime"
+    if not dry_run:
+        runtime.parent.mkdir(parents=True, exist_ok=True)
+        staging = Path(tempfile.mkdtemp(prefix=".runtime-stage-", dir=runtime.parent))
+        previous = staging.with_name(staging.name + "-previous")
+        moved_previous = False
+        published_runtime = False
+        launcher = runtime.parent / PROJECT_STATUS_LAUNCHER
+        launcher_original = launcher.read_bytes() if _lexists(launcher) else None
+        launcher_mode = (
+            launcher.stat().st_mode & 0o777 if launcher_original is not None else None
+        )
+        guard_originals: List[Tuple[Path, Optional[bytes], Optional[int]]] = []
+        try:
+            for name in PROJECT_RUNTIME_SCRIPTS:
+                shutil.copy2(source_root / "scripts" / name, staging / name)
+            _atomic_copy(source_root / "scripts" / PROJECT_STATUS_LAUNCHER, launcher)
+            if _lexists(runtime):
+                os.replace(runtime, previous)
+                moved_previous = True
+            os.replace(staging, runtime)
+            published_runtime = True
+            if refresh_guards:
+                for name in GUARD_SCRIPTS:
+                    destination = project / HOOKS_DIRECTORY / name
+                    original = destination.read_bytes() if _lexists(destination) else None
+                    mode = (
+                        destination.stat().st_mode & 0o777
+                        if original is not None
+                        else None
+                    )
+                    guard_originals.append((destination, original, mode))
+                    _atomic_copy(source_root / "scripts" / name, destination)
+            if moved_previous:
+                _remove_path(previous)
+        except BaseException as error:
+            for destination, original, mode in reversed(guard_originals):
+                if original is None:
+                    _remove_path(destination)
+                else:
+                    _atomic_write(destination, original, mode)
+            if launcher_original is None:
+                _remove_path(launcher)
+            else:
+                _atomic_write(launcher, launcher_original, launcher_mode)
+            if published_runtime and _lexists(runtime):
+                _remove_path(runtime)
+            if not _lexists(runtime) and moved_previous and _lexists(previous):
+                os.replace(previous, runtime)
+            if isinstance(error, Exception):
+                raise InstallerError(
+                    f"project runtime refresh failed: {error}"
+                ) from error
+            raise
+        finally:
+            _remove_path(staging)
+    for name in PROJECT_RUNTIME_SCRIPTS:
+        refreshed.append(_describe_project_path(project, runtime / name))
+    refreshed.append(
+        _describe_project_path(
+            project, project / HOOKS_DIRECTORY / PROJECT_STATUS_LAUNCHER
+        )
+    )
+    if refresh_guards:
+        for name in GUARD_SCRIPTS:
+            destination = project / HOOKS_DIRECTORY / name
+            refreshed.append(_describe_project_path(project, destination))
     if full:
         for target, settings, merge, generated in (
             (
@@ -1239,6 +1720,28 @@ def refresh_hooks(
                     _atomic_write(hook_path, content, mode=0o755)
                 refreshed.append(_describe_project_path(project, hook_path))
     return refreshed
+
+
+def refresh_hooks(
+    source_root: Path,
+    project: Path,
+    full: bool,
+    dry_run: bool = False,
+    selected: Sequence[str] = (),
+    initialize: bool = False,
+) -> List[str]:
+    if dry_run:
+        return _refresh_hooks_unlocked(
+            source_root, project, full, True, selected, initialize
+        )
+    _validate_directory_destination(project, "project path")
+    locks, created = _acquire_install_locks([project / HOOKS_DIRECTORY])
+    try:
+        return _refresh_hooks_unlocked(
+            source_root, project, full, False, selected, initialize
+        )
+    finally:
+        _release_install_locks(locks, created)
 
 
 def _comparison_path(path: Path) -> Path:
@@ -1367,6 +1870,594 @@ def _has_managed_install(root: Path) -> bool:
     return root.is_dir() and any(_is_managed_name(entry.name) for entry in root.iterdir())
 
 
+STATE_SCHEMA = "gsd-path/state/v1"
+
+
+def _read_package_version(manifest: Path) -> Optional[str]:
+    try:
+        parsed = json.loads(manifest.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return None
+    version = parsed.get("version") if isinstance(parsed, dict) else None
+    return version if isinstance(version, str) and version else None
+
+
+def _validated_project_state(source_root: Path, project: Path) -> dict:
+    validator = source_root / "scripts" / "pipeline_state.py"
+    if validator.is_symlink() or not validator.is_file():
+        raise InstallerError(f"canonical state validator is unavailable: {validator}")
+    interpreter = _required_python_runtime("--doctor")
+    try:
+        result = subprocess.run(
+            [interpreter, "-B", str(validator), "validate", "--repo", str(project)],
+            cwd=project,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError as error:
+        raise InstallerError(f"canonical state validation failed: {error}") from error
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip() or "unknown failure"
+        raise InstallerError(f"canonical state validation failed: {detail}")
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError as error:
+        raise InstallerError("canonical state validator returned invalid JSON") from error
+    if not isinstance(payload, dict):
+        raise InstallerError("canonical state validator returned an invalid payload")
+    state = payload.get("state")
+    if (
+        payload.get("schema") != STATE_SCHEMA
+        or payload.get("status") != "valid"
+        or not isinstance(state, dict)
+        or not isinstance(state.get("phase"), str)
+        or not isinstance(state.get("status"), str)
+    ):
+        raise InstallerError("canonical state validator returned an invalid payload")
+    return state
+
+
+def _validate_project_runtime_status(source_root: Path, project: Path) -> None:
+    interpreter = _required_python_runtime("--doctor")
+    runtime = source_root / "scripts" / "pipeline_state.py"
+    environment = os.environ.copy()
+    environment["GIT_OPTIONAL_LOCKS"] = "0"
+    try:
+        result = subprocess.run(
+            [interpreter, "-B", str(runtime), "status", "--repo", str(project)],
+            cwd=project,
+            capture_output=True,
+            text=True,
+            check=False,
+            env=environment,
+        )
+    except OSError as error:
+        raise InstallerError(f"project runtime status failed: {error}") from error
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip() or "unknown failure"
+        raise InstallerError(f"project runtime status failed: {detail}")
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError as error:
+        raise InstallerError("project runtime status returned invalid JSON") from error
+    if not _valid_status_payload(payload, project):
+        raise InstallerError("project runtime status returned an invalid payload")
+
+
+def _project_runtime_matches(source_root: Path, project: Path) -> bool:
+    pairs = [
+        (
+            project / HOOKS_DIRECTORY / PROJECT_STATUS_LAUNCHER,
+            source_root / "scripts" / PROJECT_STATUS_LAUNCHER,
+        ),
+        *(
+            (
+                project / HOOKS_DIRECTORY / "runtime" / name,
+                source_root / "scripts" / name,
+            )
+            for name in PROJECT_RUNTIME_SCRIPTS
+        ),
+    ]
+    try:
+        return all(
+            not destination.is_symlink()
+            and destination.is_file()
+            and destination.read_bytes() == source.read_bytes()
+            for destination, source in pairs
+        )
+    except OSError:
+        return False
+
+
+def _valid_status_payload(payload: object, project: Path) -> bool:
+    if not isinstance(payload, dict) or payload.get("schema") != "gsd-path/status/v1":
+        return False
+    state = payload.get("state")
+    route = payload.get("route")
+    status_path = payload.get("path")
+    if (
+        payload.get("advance") is not False
+        or not isinstance(state, dict)
+        or not _valid_status_state(state)
+        or not isinstance(route, dict)
+        or route.get("action") not in STATUS_ACTIONS
+        or not isinstance(route.get("reason"), str)
+        or not route["reason"]
+        or not isinstance(status_path, str)
+        or not Path(status_path).is_absolute()
+        or not _same_path(Path(status_path), project / ".project" / "STATE.md")
+    ):
+        return False
+    action = route["action"]
+    if action == "run-phase":
+        phase = route.get("phase")
+        return (
+            isinstance(phase, str)
+            and phase in STATUS_TRANSITIONS[state["phase"]]
+            and state["branch"] is not None
+            and payload.get("next_skill") == f"gsd-path-{phase}"
+        )
+    if "phase" in route:
+        return False
+    if action == "bind-initial":
+        branch = route.get("branch")
+        return (
+            state["branch"] is None
+            and isinstance(branch, str)
+            and _valid_status_branch(branch) is not None
+            and payload.get("next_skill") == "gsd-path"
+        )
+    if state["branch"] is None:
+        return False
+    if action == "validate-integrated" and not (
+        state["phase"] == "shipped" and state["status"] == "done"
+    ):
+        return False
+    if action == "wait" and not (
+        state["phase"] == "plan" and state["status"] == "done"
+    ):
+        return False
+    expected = "gsd-path-undo" if action == "resume-undo" else None
+    if action not in {"resume-undo", "wait"}:
+        expected = "gsd-path"
+    return payload.get("next_skill") == expected
+
+
+def _valid_status_state(state: dict) -> bool:
+    if set(state) != STATUS_STATE_FIELDS:
+        return False
+    milestone = state["milestone"]
+    branch = state["branch"]
+    archive = state["archive"]
+    integration_default = state["integration_default"]
+    integration = state["integration"]
+    integration_source = state["integration_source"]
+    archive_match = (
+        STATUS_ARCHIVE.fullmatch(archive or "")
+        if isinstance(archive, (str, type(None)))
+        else None
+    )
+    if (
+        state["pipeline"] != "gsd-path/v2"
+        or not isinstance(state["project"], str)
+        or STATUS_SLUG.fullmatch(state["project"]) is None
+        or not (
+            milestone is None
+            or isinstance(milestone, str)
+            and STATUS_SLUG.fullmatch(milestone) is not None
+        )
+        or not isinstance(state["phase"], str)
+        or state["phase"] not in STATUS_PHASES
+        or not isinstance(state["status"], str)
+        or state["status"] not in STATUS_VALUES
+        or integration_default not in STATUS_INTEGRATION_MODES
+        or integration not in STATUS_INTEGRATION_MODES
+        or integration_source not in STATUS_INTEGRATION_SOURCES
+        or (
+            integration_source == "default"
+            and integration != integration_default
+        )
+        or not (branch is None or _valid_status_branch(branch) is not None)
+        or not (archive is None or archive_match is not None)
+    ):
+        return False
+    if state["phase"] == "shipped" and (state["status"] != "done" or archive is None):
+        return False
+    if archive is not None and state["phase"] not in {"build", "ship", "shipped"}:
+        return False
+    if state["phase"] in {"ship", "shipped"} and branch is None:
+        return False
+    if archive_match is not None:
+        branch_match = _valid_status_branch(branch)
+        return (
+            milestone == archive_match.group(2)
+            and branch_match is not None
+            and int(branch_match.group(1)) == int(archive_match.group(1))
+        )
+    return True
+
+
+def _valid_status_branch(value: object) -> Optional[re.Match[str]]:
+    match = STATUS_BRANCH.fullmatch(value) if isinstance(value, str) else None
+    return match if match is not None and int(match.group(1)) >= 1 else None
+
+
+def _is_executable(path: Path) -> bool:
+    try:
+        return bool(path.stat().st_mode & 0o111)
+    except OSError:
+        return False
+
+
+def _native_guard_contract(
+    target: str, project: Path
+) -> Optional[Tuple[Path, str, Callable[[str], dict]]]:
+    if target == "claude":
+        return project / ".claude" / "settings.json", "PreToolUse", _claude_guard_entry
+    if target == "codex":
+        return project / ".codex" / "hooks.json", "PreToolUse", _codex_guard_entry
+    if target == "cursor":
+        return project / ".cursor" / "hooks.json", "preToolUse", _cursor_guard_entry
+    return None
+
+
+def doctor(
+    source_root: Path,
+    targets: Sequence[str],
+    root_for: Callable[[str], Path],
+    project: Optional[Path] = None,
+) -> List[dict]:
+    findings: List[dict] = []
+
+    def push(level: str, text: str) -> None:
+        findings.append({"level": level, "text": text})
+
+    def read_project_file(path: Path, label: str) -> Optional[bytes]:
+        try:
+            return path.read_bytes()
+        except OSError as error:
+            push("fail", f"{label} cannot be read: {error}")
+            return None
+
+    version = _read_package_version(source_root / "package.json")
+    if version is None:
+        push("fail", "package: version cannot be read")
+    seen: List[Tuple[str, Path]] = []
+    installed_targets = set()
+    for target in targets:
+        root = root_for(target)
+        prior = next(
+            (name for name, other in seen if _same_path(other, root)), None
+        )
+        if prior is not None:
+            push("note", f"{target}: shares {prior}'s skills root")
+            continue
+        seen.append((target, root))
+        try:
+            managed_install = _has_managed_install(root)
+        except OSError as error:
+            push("fail", f"{target}: skills root cannot be read: {error}")
+            continue
+        if not managed_install:
+            push("note", f"{target}: not installed ({root})")
+            continue
+        installed_targets.add(target)
+        missing = [name for name in SKILL_NAMES if not (root / name).is_dir()]
+        if missing:
+            push(
+                "fail",
+                f"{target}: incomplete install at {root} — missing {', '.join(missing)}",
+            )
+            continue
+        try:
+            stamp = (root / "gsd-path" / "VERSION").read_text(
+                encoding="utf-8"
+            ).strip()
+        except (OSError, UnicodeError):
+            stamp = ""
+        if not stamp:
+            push(
+                "warn",
+                f"{target}: {len(SKILL_NAMES)} skills at {root}, no VERSION stamp — run --update",
+            )
+        elif version and stamp != version:
+            push(
+                "warn",
+                f"{target}: stale install at {root} (v{stamp}, current v{version}) — run --update",
+            )
+        else:
+            push("ok", f"{target}: {len(SKILL_NAMES)} skills at {root} (v{stamp})")
+
+    if project is None:
+        return findings
+
+    for name, heading in PROJECT_CONTRACTS:
+        contract = project / name
+        if contract.is_symlink():
+            push("fail", f"project: contract {name} is a symlink")
+            continue
+        if not contract.is_file():
+            push("fail", f'project: missing contract {name} — run --project "{project}"')
+            continue
+        content = read_project_file(contract, f"project: {name}")
+        if content is None:
+            continue
+        canonical = read_project_file(source_root / name, f"package: {name}")
+        if canonical is None:
+            continue
+        installed_section = _contract_section(
+            content.decode("utf-8", errors="replace"), heading
+        )
+        canonical_section = _contract_section(
+            canonical.decode("utf-8", errors="replace"), heading
+        )
+        if installed_section is not None and installed_section == canonical_section:
+            push("ok", f"project: {name} present")
+        else:
+            push(
+                "fail",
+                f"project: {name} lacks plain-prompt re-entry — merge the current contract",
+            )
+
+    bridge = project / ".claude" / "CLAUDE.md"
+    if not bridge.is_file():
+        push(
+            "note",
+            "project: no .claude/CLAUDE.md bridge (only written for --claude installs)",
+        )
+    else:
+        content = read_project_file(bridge, "project: .claude/CLAUDE.md")
+        if content is not None:
+            if content == CLAUDE_BRIDGE.encode():
+                push("ok", "project: .claude/CLAUDE.md bridge present")
+            else:
+                push(
+                    "note",
+                    "project: .claude/CLAUDE.md exists but is not the managed bridge",
+                )
+
+    runtime = project / HOOKS_DIRECTORY / "runtime"
+    launcher = project / HOOKS_DIRECTORY / PROJECT_STATUS_LAUNCHER
+    runtime_current = True
+    if launcher.is_symlink():
+        push("fail", "project: status launcher is a symlink")
+        runtime_current = False
+    elif not launcher.is_file():
+        push("fail", "project: missing status launcher")
+        runtime_current = False
+    else:
+        launcher_content = read_project_file(launcher, "project: status launcher")
+        launcher_source = read_project_file(
+            source_root / "scripts" / PROJECT_STATUS_LAUNCHER,
+            "package: status launcher",
+        )
+        if launcher_content is None or launcher_source is None:
+            runtime_current = False
+        else:
+            if PROJECT_STATUS_MARKER.encode() not in launcher_content:
+                push("warn", "project: status launcher is not managed")
+                runtime_current = False
+            elif launcher_content != launcher_source:
+                push(
+                    "warn",
+                    "project: status launcher is stale — refresh it with the project contracts",
+                )
+                runtime_current = False
+            else:
+                push("ok", "project: status launcher current")
+    try:
+        _validate_directory_destination(
+            project / HOOKS_DIRECTORY, "project runtime parent directory"
+        )
+        _validate_directory_destination(runtime, "project runtime directory")
+    except InstallerError as error:
+        push("fail", f"project: unsafe runtime — {error}")
+        runtime_current = False
+    else:
+        for name in PROJECT_RUNTIME_SCRIPTS:
+            destination = runtime / name
+            if destination.is_symlink():
+                push("fail", f"project: runtime {name} is a symlink")
+                runtime_current = False
+                continue
+            if not destination.is_file():
+                push("fail", f"project: missing runtime {name}")
+                runtime_current = False
+                continue
+            content = read_project_file(destination, f"project: runtime {name}")
+            if content is None:
+                runtime_current = False
+                continue
+            source = read_project_file(
+                source_root / "scripts" / name, f"package: runtime {name}"
+            )
+            if source is None:
+                runtime_current = False
+                continue
+            if PROJECT_RUNTIME_MARKER.encode() not in content:
+                push("warn", f"project: runtime {name} is not managed")
+                runtime_current = False
+            elif content != source:
+                push(
+                    "warn",
+                    f"project: runtime {name} is stale — refresh it with the project contracts",
+                )
+                runtime_current = False
+            else:
+                push("ok", f"project: runtime {name} current")
+
+    guard_installed = any(
+        _lexists(project / HOOKS_DIRECTORY / name) for name in GUARD_SCRIPTS
+    )
+    native_wired_targets = set()
+    for target in targets:
+        contract = _native_guard_contract(target, project)
+        if contract is not None and (
+            contract[0].is_symlink()
+            or _is_managed_hook_settings(contract[0])
+        ):
+            native_wired_targets.add(target)
+    guard_wired = bool(native_wired_targets)
+    unreadable_git_hooks = {}
+    if _lexists(project / ".git"):
+        hooks_dir = _git_hooks_directory(project)
+        if hooks_dir is not None:
+            for name in ("pre-commit", "commit-msg"):
+                hook_path = hooks_dir / name
+                if not _lexists(hook_path):
+                    continue
+                if hook_path.is_symlink():
+                    guard_wired = True
+                    continue
+                try:
+                    hook_text = hook_path.read_text(
+                        encoding="utf-8", errors="replace"
+                    )
+                except OSError as error:
+                    unreadable_git_hooks[hook_path] = error
+                else:
+                    guard_wired = (
+                        _is_managed_git_hook_content(hook_text) or guard_wired
+                    )
+    for hook_path, error in unreadable_git_hooks.items():
+        label = _describe_project_path(project, hook_path)
+        push("fail", f"hooks: {label} cannot be read: {error}")
+    guard_installed = guard_installed or guard_wired
+    if not guard_installed:
+        push("note", "hooks: guard hooks not installed (opt in with --hooks; see HOOKS.md)")
+    else:
+        for name in GUARD_SCRIPTS:
+            destination = project / HOOKS_DIRECTORY / name
+            if destination.is_symlink():
+                push("fail", f"hooks: {HOOKS_DIRECTORY}/{name} is a symlink")
+                continue
+            if not destination.is_file():
+                push("fail", f"hooks: missing {HOOKS_DIRECTORY}/{name} — run --hooks-refresh")
+                continue
+            content = read_project_file(destination, f"hooks: {HOOKS_DIRECTORY}/{name}")
+            if content is None:
+                continue
+            source = read_project_file(
+                source_root / "scripts" / name, f"package: guard {name}"
+            )
+            if source is None:
+                continue
+            if GUARD_MARKER.encode() not in content:
+                push("warn", f"hooks: {HOOKS_DIRECTORY}/{name} is not a managed guard script")
+            elif content != source:
+                push("warn", f"hooks: {HOOKS_DIRECTORY}/{name} is stale — run --hooks-refresh")
+            else:
+                push("ok", f"hooks: {HOOKS_DIRECTORY}/{name} current")
+
+        hosts = sync_skill_resources.RESOURCE_MANIFEST["hosts"]
+        for target in targets:
+            if target not in installed_targets and target not in native_wired_targets:
+                continue
+            contract = _native_guard_contract(target, project)
+            if contract is None:
+                if hosts[target].get("guard_tier") != "git-only":
+                    push("fail", f"hooks: {target} declares a native guard without a health contract")
+                continue
+            settings, event, entry = contract
+            if settings.is_symlink():
+                push("fail", f"hooks: {target} native guard wiring is a symlink")
+                continue
+            if not settings.is_file():
+                push("fail", f"hooks: {target} native guard wiring is missing — run --hooks-refresh-full")
+                continue
+            try:
+                parsed = json.loads(settings.read_text(encoding="utf-8"))
+                entries = parsed.get("hooks", {}).get(event)
+                variants = [entry(candidate) for candidate in ("python3", "python")]
+                current = isinstance(entries, list) and any(
+                    candidate in variants for candidate in entries
+                )
+            except (OSError, UnicodeError, json.JSONDecodeError, AttributeError):
+                current = False
+            if current:
+                push("ok", f"hooks: {target} native guard wiring present")
+            else:
+                push("fail", f"hooks: {target} native guard wiring is stale — run --hooks-refresh-full")
+
+        dot_git = project / ".git"
+        if _lexists(dot_git):
+            hooks_dir = _git_hooks_directory(project)
+            if hooks_dir is None:
+                push(
+                    "fail",
+                    "hooks: cannot resolve the git hooks directory (is git runnable?); git hooks unverified",
+                )
+            else:
+                custom = not _same_path(hooks_dir, dot_git / "hooks")
+                missing_from_custom = False
+                for hook_name, generator in (
+                    ("pre-commit", pre_commit_hook),
+                    ("commit-msg", commit_msg_hook),
+                ):
+                    hook_path = hooks_dir / hook_name
+                    label = _describe_project_path(project, hook_path)
+                    if hook_path in unreadable_git_hooks:
+                        continue
+                    if not _lexists(hook_path):
+                        push(
+                            "fail",
+                            f"hooks: {hook_name} is missing from the effective git hooks directory "
+                            f"{hooks_dir} — run --hooks-refresh-full",
+                        )
+                        if custom:
+                            missing_from_custom = True
+                    elif hook_path.is_symlink():
+                        push("fail", f"hooks: {label} is a symlink")
+                    else:
+                        content = read_project_file(hook_path, f"hooks: {label}")
+                        if content is None:
+                            continue
+                        hook_text = content.decode("utf-8", errors="replace")
+                        if not _is_managed_git_hook_content(hook_text):
+                            push("warn", f"hooks: {label} is not a managed GSD Path git hook")
+                        elif not any(
+                            hook_text == generator(candidate)
+                            for candidate in ("python3", "python")
+                        ):
+                            push("warn", f"hooks: {label} is stale — run --hooks-refresh-full")
+                        elif not _is_executable(hook_path):
+                            push(
+                                "warn",
+                                f"hooks: {label} is not executable — run --hooks-refresh-full",
+                            )
+                        else:
+                            push("ok", f"hooks: {label} wired")
+                if missing_from_custom:
+                    push(
+                        "warn",
+                        f"hooks: core.hooksPath points this repository at {hooks_dir}, "
+                        "but the guard hooks are not wired there",
+                    )
+
+    project_state = project / ".project"
+    state_file = project_state / "STATE.md"
+    if not project_state.is_dir():
+        push("note", "state: no .project/ pipeline state (nothing started yet)")
+    elif not state_file.is_file():
+        push("warn", "state: .project/ exists but STATE.md is missing")
+    else:
+        try:
+            state = _validated_project_state(source_root, project)
+            if not runtime_current:
+                raise InstallerError(
+                    "project runtime status was not executed because the installed runtime is not current"
+                )
+            _validate_project_runtime_status(source_root, project)
+            if not _project_runtime_matches(source_root, project):
+                raise InstallerError("project runtime changed during doctor validation")
+        except InstallerError as error:
+            push("fail", f"state: {error}")
+        else:
+            push("ok", f"state: {state['phase']}/{state['status']}")
+    return findings
+
+
 def detect_installs(
     targets: Sequence[str], roots: Mapping[str, Path]
 ) -> List[TargetPlan]:
@@ -1414,7 +2505,9 @@ def install(
     selected = [plan.name for plan in plans]
     interpreter = "python3"
     hooks_dir: Optional[Path] = None
-    if hooks:
+    if project is not None and not hooks and not dry_run:
+        interpreter = _required_python_runtime("--project", selected)
+    elif hooks:
         interpreter, hooks_dir = _required_hook_runtime(project, "--hooks", selected)
     deployments = _deployment_plans(plans)
     adapters = list(dict.fromkeys(deployment.profile for deployment in deployments))
@@ -1477,15 +2570,17 @@ def install(
                 )
 
     if project is not None:
-        _validate_project(
-            source_root,
-            project,
-            selected,
-            hooks,
-            [*mutation_roots, *planned_backups],
-            interpreter,
-            hooks_dir,
-        )
+        _validate_directory_destination(project, "project path")
+        if dry_run:
+            _validate_project(
+                source_root,
+                project,
+                selected,
+                hooks,
+                [*mutation_roots, *planned_backups],
+                interpreter,
+                hooks_dir,
+            )
 
     results = []
     with tempfile.TemporaryDirectory(prefix="gsd-path-install-") as temporary:
@@ -1523,10 +2618,22 @@ def install(
         lock_roots = [plan.root for plan in deployments]
         if legacy_root is not None and legacy_root.is_dir():
             lock_roots.append(legacy_root)
+        if project is not None:
+            lock_roots.append(project / HOOKS_DIRECTORY)
         install_locks, lock_directories = _acquire_install_locks(lock_roots)
         target_transactions: List[TargetTransaction] = []
         project_transaction = ProjectTransaction()
         try:
+            if project is not None:
+                _validate_project(
+                    source_root,
+                    project,
+                    selected,
+                    hooks,
+                    [*mutation_roots, *planned_backups],
+                    interpreter,
+                    hooks_dir,
+                )
             if legacy_root is not None and legacy_root.is_dir():
                 legacy_transaction = TargetTransaction(legacy_root)
                 target_transactions.append(legacy_transaction)
@@ -1596,6 +2703,7 @@ def parser() -> argparse.ArgumentParser:
     argument_parser.add_argument("--local", action="store_true")
     argument_parser.add_argument("--dry-run", action="store_true")
     argument_parser.add_argument("--project", type=Path)
+    argument_parser.add_argument("--doctor", action="store_true")
     argument_parser.add_argument("--hooks", action="store_true")
     argument_parser.add_argument("--hooks-init", action="store_true")
     argument_parser.add_argument("--hooks-refresh", action="store_true")
@@ -1616,6 +2724,35 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     project = (
         absolute_path(arguments.project) if arguments.project is not None else None
     )
+    if arguments.doctor:
+        named = [target for target in TARGETS if getattr(arguments, target)]
+        selected = named if named and not arguments.all_targets else list(TARGETS)
+
+        def root_for(target: str) -> Path:
+            override = getattr(arguments, f"{target}_root")
+            if override is not None:
+                return absolute_path(override)
+            if arguments.local:
+                return local_root(target, Path.cwd())
+            return default_root(target)
+
+        findings = doctor(source_root, selected, root_for, project)
+        for finding in findings:
+            level = finding["level"]
+            text = finding["text"]
+            if level == "fail":
+                print(f"error: {text}", file=sys.stderr)
+            elif level == "ok":
+                print(text)
+            else:
+                print(f"note: {text}")
+        failed = sum(finding["level"] == "fail" for finding in findings)
+        print(
+            f"{failed} problem{'s' if failed != 1 else ''} found."
+            if failed
+            else "Healthy."
+        )
+        return 1 if failed else 0
     hooks_init = arguments.hooks_init
     if hooks_init or arguments.hooks_refresh or arguments.hooks_refresh_full:
         if project is None:
@@ -1634,6 +2771,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                     file=sys.stderr,
                 )
                 return 2
+            problems = sync_skill_resources.mismatches(source_root)
+            if problems:
+                raise InstallerError(
+                    "source resources are stale: " + "; ".join(problems)
+                )
             refreshed = refresh_hooks(
                 source_root,
                 project,

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# gsd-path project runtime
 """Validate the durable hand-off packets that bridge GSD Path phases."""
 
 import argparse

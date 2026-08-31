@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# gsd-path project runtime
 """Validate, route, and change GSD Path state without model-side parsing.
 
 The helper owns the fixed-format STATE.md interface. It checkpoints plan and
@@ -26,6 +27,7 @@ from typing import Iterator, Mapping, Optional, Sequence
 try:
     from isolation import (
         IsolationError,
+        authorized_task_worktree,
         checkpoint as isolation_checkpoint,
         collect_artifact_recoveries,
     )
@@ -34,6 +36,7 @@ except ModuleNotFoundError as error:  # pragma: no cover - package imports used 
         raise
     from scripts.isolation import (
         IsolationError,
+        authorized_task_worktree,
         checkpoint as isolation_checkpoint,
         collect_artifact_recoveries,
     )
@@ -599,19 +602,33 @@ def status_state(repo: Path, project_dir: str = ".project") -> dict[str, object]
     routed = route_state(resolved, project_dir)
     state = routed["state"]
     route = routed["route"]
-    head = _optional_rev(resolved, "HEAD")
-    branch = _current_branch(resolved)
+    has_git = (
+        _run_git(resolved, "rev-parse", "--git-dir", check=False).returncode == 0
+    )
+    head = _optional_rev(resolved, "HEAD") if has_git else None
+    branch = _current_branch(resolved) if has_git else None
     origin_branch = (
         _optional_rev(resolved, f"refs/remotes/origin/{branch}")
         if branch
         else None
     )
-    origin_main = _optional_rev(resolved, "refs/remotes/origin/main")
+    origin_main = (
+        _optional_rev(resolved, "refs/remotes/origin/main") if has_git else None
+    )
     pending, pending_error = _pending_answers(resolved)
     lookahead = resolved / ".project" / "next"
     subject = ""
     if head is not None:
         subject, _ = _commit_subject_body(resolved, head)
+    journals = transaction_journals(resolved) if has_git else {
+        "checkpoint": None,
+        "shipment": None,
+        "promotion": None,
+        "abandon": None,
+        "bind_next": None,
+        "undo": None,
+        "collect_artifact": None,
+    }
     return {
         "schema": STATUS_SCHEMA,
         "advance": False,
@@ -622,7 +639,7 @@ def status_state(repo: Path, project_dir: str = ".project") -> dict[str, object]
             "branch": branch,
             "head": head,
             "subject": subject,
-            "dirty": _worktree_changes(resolved),
+            "dirty": _worktree_changes(resolved) if has_git else [],
             "origin_branch": origin_branch,
             "origin_main": origin_main,
             "published": bool(
@@ -637,7 +654,7 @@ def status_state(repo: Path, project_dir: str = ".project") -> dict[str, object]
         "pending_answers": pending,
         "pending_error": pending_error,
         "lookahead": lookahead.exists() or lookahead.is_symlink(),
-        "journals": transaction_journals(resolved),
+        "journals": journals,
         "next_skill": _next_skill(route if isinstance(route, dict) else {}),
     }
 
@@ -715,6 +732,7 @@ def _valid_patch_findings(repo: Path) -> bool:
     result = subprocess.run(
         [
             sys.executable,
+            "-B",
             str(validator),
             "patch",
             "--repo",
@@ -1085,11 +1103,19 @@ def route_state(repo: Path, project_dir: str = ".project") -> dict[str, object]:
     if state.branch is not None:
         current = _current_branch(resolved)
         if current != state.branch:
-            return _route_result(
-                state,
-                "block",
-                reason=f"current branch {current or '<detached>'} != STATE.branch {state.branch}",
+            isolated_build = (
+                state.phase == "build"
+                and authorized_task_worktree(resolved, state.branch)
             )
+            if not isolated_build:
+                return _route_result(
+                    state,
+                    "block",
+                    reason=(
+                        f"current branch {current or '<detached>'} != "
+                        f"STATE.branch {state.branch}"
+                    ),
+                )
 
     if state.archive is not None:
         if state.phase == "build":

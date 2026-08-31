@@ -82,6 +82,29 @@ it does not auto-advance. `$gsd-path-forensics` is read-only diagnosis when a
 helper blocks. `$gsd-path-undo` previews then applies helper-owned undo of
 unpublished work; it never invents `git reset`.
 
+### Plain-prompt re-entry
+
+<!-- gsd-path/plain-prompt-reentry/v1 -->
+
+Project installs include the router's read-only status engine at
+`.gsd-path/runtime/` and its stable launcher at `.gsd-path/status_runtime.py`.
+On any turn that did not explicitly invoke a GSD Path
+skill, an owned `.project/STATE.md` activates re-entry. Informational prompts
+finish read-only and end with the current **Outcome** / **Review** / **Next**
+handoff. Mutation prompts make no changes and point to the status result's
+`next_skill` only when `route.action` is `run-phase`. Every other route reports
+its exact `route.action` and `route.reason`. The runtime never initializes state
+or advances a phase.
+
+The optional pre-tool guard backs this up where it has deterministic evidence.
+Direct write/edit/patch requests may update ordinary `.project/` artifacts,
+but never `.project/STATE.md`, `.project/next/STATE.md`, their protected parent
+directories, or anything under `.gsd-path/`. Product files are writable only
+when status returns `run-phase/build`, including helper-proven parallel task
+worktrees. External paths are outside this project guard. Shell provenance
+cannot prove which skill initiated a command, so the always-loaded AGENTS.md
+contract owns shell cases.
+
 ### New GitHub repository creation
 
 An explicit request to create a GitHub repository enters a pre-initialization

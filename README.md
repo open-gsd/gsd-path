@@ -197,7 +197,8 @@ top-level `SYNTHESIS.md`) remain active project metadata.
 
 ## Install (summary)
 
-Node 18.17+. Validates package, backs up existing skills, rolls back on failure.
+Node 18.17+. Project installs also require Python 3.9+. Validates package,
+backs up existing skills, and rolls back on failure.
 **Always** `--dry-run` first when unsure.
 
 ```bash

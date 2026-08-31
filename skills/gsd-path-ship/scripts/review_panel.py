@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# gsd-path project runtime
 """Resolve optional GSD Path cross-model review panels without model reasoning.
 
 The orchestrator inspects the host's advertised child-model slugs and passes

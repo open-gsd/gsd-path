@@ -22,9 +22,10 @@ When the invocation argument is exactly `status`, report and stop:
 3. Do not run a phase contract, auto-advance, spawn agents, or apply undo.
 
 `$gsd-path status` (Codex) and `/gsd-path status` (other hosts) are the only
-entry. Do not enter this mode from a generic "status" or "progress" chat
-message. A helper error stops here; offer `$gsd-path-forensics` when the
-pipeline looks stuck.
+router entry. The installed AGENTS.md re-entry contract may run the same
+project-local status helper after a generic prompt, but it does not invoke this
+router or advance a phase. A helper error stops here; offer
+`$gsd-path-forensics` when the pipeline looks stuck.
 
 ## Bundled phase execution
 

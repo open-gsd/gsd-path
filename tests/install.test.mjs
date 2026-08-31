@@ -18,8 +18,8 @@ const originalHooks = { ...installer.hooks };
 function makeSource(base) {
   const src = path.join(base, "source");
   fs.mkdirSync(path.join(src, "skills"), { recursive: true });
-  fs.writeFileSync(path.join(src, "AGENTS.md"), "agents\n");
-  fs.writeFileSync(path.join(src, "WORKFLOW.md"), "workflow\n");
+  fs.copyFileSync(path.join(REPO_ROOT, "AGENTS.md"), path.join(src, "AGENTS.md"));
+  fs.copyFileSync(path.join(REPO_ROOT, "WORKFLOW.md"), path.join(src, "WORKFLOW.md"));
   for (const name of installer.SKILL_NAMES) {
     const skill = path.join(src, "skills", name);
     fs.mkdirSync(path.join(skill, "references"), { recursive: true });
@@ -63,6 +63,16 @@ function makeSource(base) {
       `# ${name}\n${installer.GUARD_MARKER}\n`
     );
   }
+  for (const name of installer.PROJECT_RUNTIME_SCRIPTS) {
+    fs.writeFileSync(
+      path.join(src, "scripts", name),
+      `# ${name}\n${installer.PROJECT_RUNTIME_MARKER}\n`
+    );
+  }
+  fs.copyFileSync(
+    path.join(REPO_ROOT, "scripts", installer.PROJECT_STATUS_LAUNCHER),
+    path.join(src, "scripts", installer.PROJECT_STATUS_LAUNCHER)
+  );
   return src;
 }
 
@@ -122,6 +132,26 @@ test("default path resolution", () => {
   }
   assert.equal(installer.defaultRoot("opencode", {}), installer.defaultRoot("opencode", { XDG_CONFIG_HOME: "" }));
   assert.equal(installer.legacyCodexRoot({ CODEX_HOME: "" }), path.join(home, ".codex", "skills"));
+});
+
+test("interpreter probe rejects unsupported Python", () => {
+  const bin = path.join(root, "old-python");
+  fs.mkdirSync(bin);
+  for (const name of ["python3", "python"]) {
+    const executable = path.join(bin, name);
+    fs.writeFileSync(
+      executable,
+      '#!/bin/sh\n[ "$1" = "--version" ] && exit 0\nexit 1\n',
+      { mode: 0o755 }
+    );
+  }
+  const originalPath = process.env.PATH;
+  process.env.PATH = bin;
+  try {
+    assert.equal(installer.detectPythonInterpreter(), null);
+  } finally {
+    process.env.PATH = originalPath;
+  }
 });
 
 test("skill names are derived from resource manifest", () => {
@@ -341,6 +371,36 @@ test("local install via main uses project roots and skips legacy migration", asy
   assert.ok(!fs.existsSync(path.join(root, "legacy", "disabled-gsd-skills")));
 });
 
+test("project install rejects a nested Git directory", async () => {
+  const repository = path.join(root, "repository");
+  const project = path.join(repository, "nested");
+  const target = path.join(root, "nested-target", "skills");
+  fs.mkdirSync(project, { recursive: true });
+  spawnSync("git", ["init", "-q"], { cwd: repository });
+
+  await assert.rejects(
+    runInstall([installer.targetPlan("claude", target)], { project }),
+    /not the Git worktree root/
+  );
+  assert.ok(!fs.existsSync(target));
+  assert.deepEqual(fs.readdirSync(project), []);
+});
+
+test("dry run rejects a missing project nested in Git", async () => {
+  const repository = path.join(root, "dry-repository");
+  const project = path.join(repository, "missing", "project");
+  const target = path.join(root, "dry-nested-target", "skills");
+  fs.mkdirSync(repository);
+  spawnSync("git", ["init", "-q"], { cwd: repository });
+
+  await assert.rejects(
+    runInstall([installer.targetPlan("claude", target)], { project, dryRun: true }),
+    /not the Git worktree root/
+  );
+  assert.ok(!fs.existsSync(project));
+  assert.ok(!fs.existsSync(target));
+});
+
 test("codex dry run validates the resolved shared profile from the real repository", async () => {
   const target = path.join(root, "real-codex", "skills");
 
@@ -539,6 +599,11 @@ test("claude project bridge uses imports and never overwrites", async () => {
     fs.readFileSync(path.join(project, ".claude", "CLAUDE.md"), "utf8"),
     installer.CLAUDE_BRIDGE
   );
+  for (const name of installer.PROJECT_RUNTIME_SCRIPTS) {
+    assert.ok(
+      fs.existsSync(path.join(project, installer.HOOKS_DIRECTORY, "runtime", name))
+    );
+  }
 
   const secondTarget = path.join(root, "claude-2", "skills");
   await assert.rejects(
@@ -680,6 +745,196 @@ test("active target owner prevents backup mutation", async () => {
 
   assert.equal(fs.readFileSync(path.join(existing, "marker"), "utf8"), "old\n");
   assert.ok(!fs.existsSync(path.join(path.dirname(target), "disabled-gsd-skills")));
+});
+
+test("install lock publishes a live owner", async () => {
+  const target = path.join(root, "live-owner", "skills");
+  const lock = path.join(path.dirname(target), ".gsd-path-install-lock");
+  let owner = null;
+  installer.hooks.applyTarget = async (...args) => {
+    owner = JSON.parse(fs.readFileSync(path.join(lock, "owner.json"), "utf8"));
+    return originalHooks.applyTarget(...args);
+  };
+
+  await runInstall([installer.targetPlan("claude", target)]);
+
+  assert.equal(owner.schema, "gsd-path/install-lock/v2");
+  assert.equal(owner.pid, process.pid);
+  assert.ok(owner.identity);
+  assert.ok(!fs.existsSync(lock));
+});
+
+test("install recovers a stale owned lock", async () => {
+  const target = path.join(root, "stale-owner", "skills");
+  const lock = path.join(path.dirname(target), ".gsd-path-install-lock");
+  fs.mkdirSync(lock, { recursive: true });
+  fs.writeFileSync(path.join(lock, "owner.json"), JSON.stringify({
+    schema: "gsd-path/install-lock/v2", pid: process.pid, identity: "reused-pid",
+  }));
+
+  await runInstall([installer.targetPlan("claude", target)]);
+
+  assert.ok(fs.existsSync(path.join(target, installer.SKILL_NAMES[0])));
+  assert.ok(!fs.existsSync(lock));
+});
+
+test("concurrent stale recovery keeps each quarantine owned", async () => {
+  const parent = path.join(root, "concurrent-stale-owner");
+  const firstTarget = path.join(parent, "first-skills");
+  const secondTarget = path.join(parent, "second-skills");
+  const lock = path.join(parent, ".gsd-path-install-lock");
+  fs.mkdirSync(lock, { recursive: true });
+  fs.writeFileSync(path.join(lock, "owner.json"), JSON.stringify({
+    schema: "gsd-path/install-lock/v2",
+    pid: process.pid,
+    identity: "reused-pid",
+  }));
+  let raced = false;
+  installer.hooks.renameInstallLock = (from, to) => {
+    fs.renameSync(from, to);
+    if (raced) return;
+    raced = true;
+    const moduleUrl = new URL("../scripts/install.mjs", import.meta.url).href;
+    const script = `
+      import * as installer from ${JSON.stringify(moduleUrl)};
+      installer.hooks.mismatches = () => [];
+      await installer.install(
+        ${JSON.stringify(source)},
+        [installer.targetPlan("claude", ${JSON.stringify(secondTarget)})],
+        { env: ${JSON.stringify(env)} }
+      );
+    `;
+    const competitor = spawnSync(
+      process.execPath,
+      ["--input-type=module", "-e", script],
+      { encoding: "utf8" }
+    );
+    assert.equal(competitor.status, 0, competitor.stderr || competitor.stdout);
+  };
+
+  await runInstall([installer.targetPlan("claude", firstTarget)]);
+
+  assert.equal(raced, true);
+  assert.ok(fs.existsSync(path.join(firstTarget, installer.SKILL_NAMES[0])));
+  assert.ok(fs.existsSync(path.join(secondTarget, installer.SKILL_NAMES[0])));
+  assert.ok(!fs.existsSync(lock));
+  assert.deepEqual(
+    fs.readdirSync(parent).filter((entry) =>
+      entry.startsWith(".gsd-path-install-lock.stale-")
+    ),
+    []
+  );
+});
+
+test("install reclaims an orphaned stale quarantine", async () => {
+  const target = path.join(root, "orphaned-quarantine", "skills");
+  const lock = path.join(path.dirname(target), ".gsd-path-install-lock");
+  const quarantine = `${lock}.stale`;
+  fs.mkdirSync(quarantine, { recursive: true });
+  fs.writeFileSync(
+    path.join(quarantine, "owner.json"),
+    JSON.stringify({
+      schema: "gsd-path/install-lock/v2",
+      pid: process.pid,
+      identity: "reused-pid",
+    })
+  );
+
+  await runInstall([installer.targetPlan("claude", target)]);
+
+  assert.ok(fs.existsSync(path.join(target, installer.SKILL_NAMES[0])));
+  assert.ok(!fs.existsSync(quarantine));
+});
+
+test("install reclaims a unique orphaned stale quarantine", async () => {
+  const target = path.join(root, "unique-orphaned-quarantine", "skills");
+  const lock = path.join(path.dirname(target), ".gsd-path-install-lock");
+  const staging = path.join(path.dirname(target), ".install-lock-stage-abandoned");
+  const quarantine = `${lock}.stale-${path.basename(staging)}`;
+  const owner = JSON.stringify({
+    schema: "gsd-path/install-lock/v2",
+    pid: process.pid,
+    identity: "reused-pid",
+  });
+  for (const directory of [staging, quarantine]) {
+    fs.mkdirSync(directory, { recursive: true });
+    fs.writeFileSync(path.join(directory, "owner.json"), owner);
+  }
+
+  await runInstall([installer.targetPlan("claude", target)]);
+
+  assert.ok(fs.existsSync(path.join(target, installer.SKILL_NAMES[0])));
+  assert.ok(!fs.existsSync(staging));
+  assert.ok(!fs.existsSync(quarantine));
+});
+
+test("stale lock recovery preserves a replacement owner", async () => {
+  const target = path.join(root, "raced-stale-owner", "skills");
+  const lock = path.join(path.dirname(target), ".gsd-path-install-lock");
+  const ownerPath = path.join(lock, "owner.json");
+  fs.mkdirSync(lock, { recursive: true });
+  fs.writeFileSync(ownerPath, JSON.stringify({
+    schema: "gsd-path/install-lock/v2",
+    pid: process.pid,
+    identity: "reused-pid",
+  }));
+  const displaced = path.join(path.dirname(target), "displaced-stale-lock");
+  let raced = false;
+  installer.hooks.renameInstallLock = (from, to) => {
+    if (!raced) {
+      raced = true;
+      fs.renameSync(from, displaced);
+      fs.mkdirSync(lock);
+      fs.writeFileSync(ownerPath, JSON.stringify({
+        schema: "gsd-path/install-lock/v2",
+        pid: process.pid,
+        identity: originalHooks.processIdentity(process.pid),
+      }));
+    }
+    fs.renameSync(from, to);
+  };
+
+  await assert.rejects(
+    runInstall([installer.targetPlan("claude", target)]),
+    /already in progress/
+  );
+
+  assert.equal(raced, true);
+  assert.equal(
+    JSON.parse(fs.readFileSync(ownerPath, "utf8")).identity,
+    originalHooks.processIdentity(process.pid)
+  );
+  assert.ok(!fs.existsSync(target));
+});
+
+test("lost stale lock race removes only the quarantine", async () => {
+  const target = path.join(root, "lost-stale-owner", "skills");
+  const lock = path.join(path.dirname(target), ".gsd-path-install-lock");
+  const ownerPath = path.join(lock, "owner.json");
+  fs.mkdirSync(lock, { recursive: true });
+  fs.writeFileSync(ownerPath, JSON.stringify({
+    schema: "gsd-path/install-lock/v2", pid: process.pid, identity: "reused-pid",
+  }));
+  let raced = false;
+  installer.hooks.renameInstallStage = (from, to) => {
+    raced = true;
+    fs.mkdirSync(lock);
+    fs.writeFileSync(ownerPath, JSON.stringify({
+      schema: "gsd-path/install-lock/v2",
+      pid: process.pid,
+      identity: originalHooks.processIdentity(process.pid),
+    }));
+    fs.renameSync(from, to);
+  };
+
+  await assert.rejects(
+    runInstall([installer.targetPlan("claude", target)]),
+    /already in progress/
+  );
+
+  assert.equal(raced, true);
+  assert.ok(fs.existsSync(lock));
+  assert.ok(!fs.existsSync(`${lock}.stale`));
 });
 
 test("failure restores cursor subagent", async () => {
@@ -831,6 +1086,11 @@ test("hooks init adds guards without changing existing project contracts", async
   for (const name of installer.GUARD_SCRIPTS) {
     assert.ok(fs.existsSync(path.join(project, installer.HOOKS_DIRECTORY, name)));
   }
+  for (const name of installer.PROJECT_RUNTIME_SCRIPTS) {
+    assert.ok(
+      fs.existsSync(path.join(project, installer.HOOKS_DIRECTORY, "runtime", name))
+    );
+  }
   assert.ok(fs.existsSync(path.join(project, ".claude", "settings.json")));
   assert.ok(fs.existsSync(path.join(project, ".git", "hooks", "pre-commit")));
   assert.ok(fs.existsSync(path.join(project, ".git", "hooks", "commit-msg")));
@@ -883,6 +1143,11 @@ test("hooks install guard scripts, settings, and git hook", async () => {
   assert.ok(settings.hooks.PreToolUse);
   assert.equal(settings.hooks.PreToolUse[0].matcher, installer.CLAUDE_MATCHER);
   assert.match("PowerShell", new RegExp(`^(?:${settings.hooks.PreToolUse[0].matcher})$`));
+  assert.match("SaveFile", new RegExp(`^(?:${settings.hooks.PreToolUse[0].matcher})$`));
+  assert.match(
+    "mcp__filesystem__write_file",
+    new RegExp(`^(?:${settings.hooks.PreToolUse[0].matcher})$`)
+  );
   const preCommit = path.join(project, ".git", "hooks", "pre-commit");
   const commitMsg = path.join(project, ".git", "hooks", "commit-msg");
   assert.equal(fs.readFileSync(preCommit, "utf8"), installer.preCommitHook("python3"));
@@ -997,6 +1262,10 @@ test("hooks refresh updates managed guard scripts", async () => {
     path.join(source, "scripts", "guard_hook.py"),
     "# guard v2\n" + installer.GUARD_MARKER + "\n"
   );
+  fs.writeFileSync(
+    path.join(source, "scripts", "pipeline_state.py"),
+    "# runtime v2\n" + installer.PROJECT_RUNTIME_MARKER + "\n"
+  );
   const status = await installer.main(
     ["--hooks-refresh", "--project", project, "--source-root", source, "--no-color"]
   );
@@ -1005,7 +1274,65 @@ test("hooks refresh updates managed guard scripts", async () => {
     fs.readFileSync(path.join(project, installer.HOOKS_DIRECTORY, "guard_hook.py"), "utf8"),
     /guard v2/
   );
+  assert.match(
+    fs.readFileSync(
+      path.join(project, installer.HOOKS_DIRECTORY, "runtime", "pipeline_state.py"),
+      "utf8"
+    ),
+    /runtime v2/
+  );
   assert.ok(fs.existsSync(target));
+});
+
+test("hooks refresh updates runtime without optional guards", async () => {
+  const project = path.join(root, "hookless-project");
+  const target = path.join(root, "claude", "skills");
+  await runInstall([installer.targetPlan("claude", target)], { project });
+  fs.writeFileSync(
+    path.join(source, "scripts", "pipeline_state.py"),
+    "# runtime v2\n" + installer.PROJECT_RUNTIME_MARKER + "\n"
+  );
+
+  const status = await installer.main(
+    ["--hooks-refresh", "--project", project, "--source-root", source, "--no-color"]
+  );
+
+  assert.equal(status, 0);
+  assert.match(
+    fs.readFileSync(
+      path.join(project, installer.HOOKS_DIRECTORY, "runtime", "pipeline_state.py"),
+      "utf8"
+    ),
+    /runtime v2/
+  );
+  for (const name of installer.GUARD_SCRIPTS) {
+    assert.ok(!fs.existsSync(path.join(project, installer.HOOKS_DIRECTORY, name)));
+  }
+});
+
+test("hookless refresh requires an interpreter before writes", async () => {
+  const project = path.join(root, "hookless-refresh-project");
+  const target = path.join(root, "claude", "skills");
+  await runInstall([installer.targetPlan("claude", target)], { project });
+  const runtime = path.join(
+    project,
+    installer.HOOKS_DIRECTORY,
+    "runtime",
+    "pipeline_state.py"
+  );
+  const before = fs.readFileSync(runtime);
+  fs.writeFileSync(
+    path.join(source, "scripts", "pipeline_state.py"),
+    "# runtime v2\n" + installer.PROJECT_RUNTIME_MARKER + "\n"
+  );
+  installer.hooks.detectPythonInterpreter = () => null;
+
+  const status = await installer.main(
+    ["--hooks-refresh", "--project", project, "--source-root", source, "--no-color"]
+  );
+
+  assert.equal(status, 1);
+  assert.deepEqual(fs.readFileSync(runtime), before);
 });
 
 test("hooks refresh full updates settings and git hooks", async () => {
@@ -1106,7 +1433,10 @@ test("hooks refresh full creates selected missing native configs", async () => {
   assert.equal(status, 0);
   assert.ok(fs.existsSync(path.join(project, ".codex", "hooks.json")));
   assert.ok(fs.existsSync(path.join(project, ".cursor", "hooks.json")));
-  assert.equal(fs.readFileSync(path.join(project, "AGENTS.md"), "utf8"), "agents\n");
+  assert.equal(
+    fs.readFileSync(path.join(project, "AGENTS.md"), "utf8"),
+    fs.readFileSync(path.join(source, "AGENTS.md"), "utf8")
+  );
 });
 
 test("hooks refresh full merges selected foreign native configs", async () => {
@@ -1257,6 +1587,311 @@ test("hooks refresh rejects unmanaged guard scripts", async () => {
   assert.equal(status, 1);
 });
 
+test("hooks refresh rejects a project without managed ownership", async () => {
+  const project = path.join(root, "unowned-project");
+  fs.mkdirSync(project);
+
+  const status = await installer.main(
+    ["--hooks-refresh", "--project", project, "--source-root", source, "--no-color"]
+  );
+
+  assert.equal(status, 1);
+  assert.ok(!fs.existsSync(path.join(project, installer.HOOKS_DIRECTORY)));
+});
+
+test("hooks refresh initializes runtime for a legacy project install", async () => {
+  const project = path.join(root, "legacy-project");
+  fs.mkdirSync(project);
+  fs.copyFileSync(path.join(REPO_ROOT, "AGENTS.md"), path.join(project, "AGENTS.md"));
+  fs.copyFileSync(path.join(REPO_ROOT, "WORKFLOW.md"), path.join(project, "WORKFLOW.md"));
+
+  const status = await installer.main(
+    ["--hooks-refresh", "--project", project, "--source-root", source, "--no-color"]
+  );
+
+  assert.equal(status, 0);
+  assert.ok(fs.existsSync(path.join(project, installer.HOOKS_DIRECTORY, "runtime", "pipeline_state.py")));
+  assert.ok(!fs.existsSync(path.join(project, installer.HOOKS_DIRECTORY, "guard_hook.py")));
+});
+
+test("hooks refresh and doctor reject marker-only legacy contracts", async () => {
+  const project = path.join(root, "stale-legacy-project");
+  fs.mkdirSync(project);
+  fs.writeFileSync(
+    path.join(project, "AGENTS.md"),
+    "# AGENTS.md — Operating Rules for the GSD Path Pipeline\n\n## Plain-prompt re-entry\n\n" +
+      "<!-- gsd-path/plain-prompt-reentry/v1 -->\n"
+  );
+  fs.writeFileSync(
+    path.join(project, "WORKFLOW.md"),
+    "# WORKFLOW.md — GSD Path Pipeline SOP\n\n### Plain-prompt re-entry\n\n" +
+      "<!-- gsd-path/plain-prompt-reentry/v1 -->\n"
+  );
+
+  const status = await installer.main(
+    ["--hooks-refresh", "--project", project, "--source-root", source, "--no-color"]
+  );
+  const findings = installer.doctor(source, { targets: [], rootFor: () => "", project });
+
+  assert.equal(status, 1);
+  assert.ok(!fs.existsSync(path.join(project, installer.HOOKS_DIRECTORY)));
+  assert.ok(findings.some(({ level, text }) => level === "fail" && /lacks plain-prompt re-entry/.test(text)));
+});
+
+test("hooks refresh honors the project ownership lock", async () => {
+  const project = path.join(root, "locked-refresh-project");
+  await runInstall([installer.targetPlan("claude", path.join(root, "locked-claude", "skills"))], { project });
+  const runtime = path.join(project, installer.HOOKS_DIRECTORY, "runtime", "pipeline_state.py");
+  const before = fs.readFileSync(runtime);
+  fs.mkdirSync(path.join(project, ".gsd-path-install-lock"));
+
+  const status = await installer.main(
+    ["--hooks-refresh", "--project", project, "--source-root", source, "--no-color"]
+  );
+
+  assert.equal(status, 1);
+  assert.ok(fs.readFileSync(runtime).equals(before));
+});
+
+test("project install honors the project ownership lock", async () => {
+  const project = path.join(root, "locked-install-project");
+  const target = path.join(root, "locked-install-claude", "skills");
+  fs.mkdirSync(project);
+  fs.mkdirSync(path.join(project, ".gsd-path-install-lock"));
+
+  const status = await installer.main([
+    "--claude",
+    "--claude-root",
+    target,
+    "--source-root",
+    source,
+    "--project",
+    project,
+    "--no-color",
+  ]);
+
+  assert.equal(status, 1);
+  assert.ok(!fs.existsSync(path.join(project, "AGENTS.md")));
+  assert.ok(!fs.existsSync(target));
+});
+
+test("runtime refresh restores the complete prior set after copy failure", async () => {
+  const project = path.join(root, "transactional-runtime-project");
+  await runInstall([installer.targetPlan("claude", path.join(root, "claude", "skills"))], { project });
+  const runtime = path.join(project, installer.HOOKS_DIRECTORY, "runtime");
+  const before = new Map(
+    installer.PROJECT_RUNTIME_SCRIPTS.map((name) => [name, fs.readFileSync(path.join(runtime, name))])
+  );
+  fs.writeFileSync(
+    path.join(source, "scripts", "pipeline_state.py"),
+    `# changed\n${installer.PROJECT_RUNTIME_MARKER}\n`
+  );
+  let copies = 0;
+  installer.hooks.copyRuntimeFile = (sourceFile, destination) => {
+    copies += 1;
+    if (copies === 2) throw new Error("injected runtime copy failure");
+    fs.copyFileSync(sourceFile, destination);
+  };
+
+  const status = await installer.main(
+    ["--hooks-refresh", "--project", project, "--source-root", source, "--no-color"]
+  );
+
+  assert.equal(status, 1);
+  for (const [name, content] of before) {
+    assert.ok(fs.readFileSync(path.join(runtime, name)).equals(content));
+  }
+});
+
+test("hooks refresh rejects unexpected runtime entries", async () => {
+  const project = path.join(root, "runtime-extra-project");
+  await runInstall([installer.targetPlan("claude", path.join(root, "claude", "skills"))], { project });
+  const extra = path.join(project, installer.HOOKS_DIRECTORY, "runtime", "site_policy.py");
+  fs.writeFileSync(extra, "keep\n");
+
+  const status = await installer.main(
+    ["--hooks-refresh", "--project", project, "--source-root", source, "--no-color"]
+  );
+
+  assert.equal(status, 1);
+  assert.equal(fs.readFileSync(extra, "utf8"), "keep\n");
+});
+
+test("guard failure rolls back the published runtime and guards", async () => {
+  const project = path.join(root, "guard-runtime-transaction");
+  fs.mkdirSync(path.join(project, ".git"), { recursive: true });
+  await runInstall([installer.targetPlan("claude", path.join(root, "claude", "skills"))], { project, hooks: true });
+  const runtime = path.join(project, installer.HOOKS_DIRECTORY, "runtime");
+  fs.rmSync(runtime, { recursive: true });
+  const guard = path.join(project, installer.HOOKS_DIRECTORY, "guard_hook.py");
+  const before = fs.readFileSync(guard);
+  fs.chmodSync(guard, 0o600);
+  fs.writeFileSync(path.join(source, "scripts", "guard_hook.py"), `# changed\n${installer.GUARD_MARKER}\n`);
+  let guardCopies = 0;
+  installer.hooks.copyGuardFile = (sourceFile, destination) => {
+    guardCopies += 1;
+    if (guardCopies === 2) throw new Error("injected guard failure");
+    originalHooks.copyGuardFile(sourceFile, destination);
+    fs.chmodSync(destination, 0o755);
+  };
+
+  const status = await installer.main(
+    ["--hooks-refresh", "--project", project, "--source-root", source, "--no-color"]
+  );
+
+  assert.equal(status, 1);
+  assert.ok(fs.readFileSync(guard).equals(before));
+  assert.equal(fs.statSync(guard).mode & 0o777, 0o600);
+  assert.ok(!fs.existsSync(runtime));
+});
+
+test("hooks refresh rejects an unmanaged project runtime", async () => {
+  const project = path.join(root, "project");
+  fs.mkdirSync(path.join(project, ".git"), { recursive: true });
+  await runInstall([installer.targetPlan("claude", path.join(root, "claude", "skills"))], {
+    project,
+    hooks: true,
+  });
+  const runtime = path.join(
+    project,
+    installer.HOOKS_DIRECTORY,
+    "runtime",
+    "pipeline_state.py"
+  );
+  fs.writeFileSync(runtime, "custom\n");
+
+  const status = await installer.main(
+    ["--hooks-refresh", "--project", project, "--source-root", source, "--no-color"]
+  );
+
+  assert.equal(status, 1);
+  assert.equal(fs.readFileSync(runtime, "utf8"), "custom\n");
+});
+
+test("hooks refresh reports an unreadable project runtime", async () => {
+  const project = path.join(root, "unreadable-runtime-project");
+  fs.mkdirSync(path.join(project, ".git"), { recursive: true });
+  const target = path.join(root, "unreadable-runtime-claude", "skills");
+  await runInstall(
+    [installer.targetPlan("claude", target)],
+    { project, hooks: true }
+  );
+  const runtime = path.join(
+    project,
+    installer.HOOKS_DIRECTORY,
+    "runtime",
+    "pipeline_state.py"
+  );
+  const originalReadFileSync = fs.readFileSync;
+  fs.readFileSync = (candidate, ...args) => {
+    if (path.resolve(candidate) === path.resolve(runtime)) {
+      const error = new Error("injected unreadable runtime");
+      error.code = "EACCES";
+      throw error;
+    }
+    return originalReadFileSync(candidate, ...args);
+  };
+  let status;
+  try {
+    status = await installer.main([
+      "--hooks-refresh",
+      "--project",
+      project,
+      "--source-root",
+      source,
+      "--no-color",
+    ]);
+  } finally {
+    fs.readFileSync = originalReadFileSync;
+  }
+
+  assert.equal(status, 1);
+});
+
+test("hooks refresh rejects a symlinked project runtime", async () => {
+  const project = path.join(root, "project");
+  fs.mkdirSync(path.join(project, ".git"), { recursive: true });
+  await runInstall([installer.targetPlan("claude", path.join(root, "claude", "skills"))], {
+    project,
+    hooks: true,
+  });
+  const runtime = path.join(
+    project,
+    installer.HOOKS_DIRECTORY,
+    "runtime",
+    "pipeline_state.py"
+  );
+  const outside = path.join(root, "outside-runtime.py");
+  fs.renameSync(runtime, outside);
+  fs.symlinkSync(outside, runtime);
+
+  const status = await installer.main(
+    ["--hooks-refresh", "--project", project, "--source-root", source, "--no-color"]
+  );
+
+  assert.equal(status, 1);
+  assert.ok(fs.lstatSync(runtime).isSymbolicLink());
+  assert.match(fs.readFileSync(outside, "utf8"), /gsd-path project runtime/);
+});
+
+test("project install rejects a symlinked runtime directory", async () => {
+  const project = path.join(root, "symlinked-runtime-project");
+  const outside = path.join(root, "outside-runtime");
+  fs.mkdirSync(path.join(project, installer.HOOKS_DIRECTORY), { recursive: true });
+  fs.mkdirSync(outside);
+  fs.symlinkSync(outside, path.join(project, installer.HOOKS_DIRECTORY, "runtime"), "dir");
+  const target = path.join(root, "claude", "skills");
+
+  await assert.rejects(
+    runInstall([installer.targetPlan("claude", target)], { project }),
+    /symlink/
+  );
+
+  assert.deepEqual(fs.readdirSync(outside), []);
+  assert.ok(!fs.existsSync(target));
+});
+
+test("project install rejects a symlinked runtime parent", async () => {
+  const project = path.join(root, "symlinked-runtime-parent-project");
+  const outside = path.join(root, "outside-runtime-parent");
+  fs.mkdirSync(project);
+  fs.mkdirSync(path.join(outside, "runtime"), { recursive: true });
+  fs.symlinkSync(outside, path.join(project, installer.HOOKS_DIRECTORY), "dir");
+  const target = path.join(root, "claude-parent", "skills");
+
+  await assert.rejects(
+    runInstall([installer.targetPlan("claude", target)], { project }),
+    /symlink/
+  );
+
+  assert.deepEqual(fs.readdirSync(path.join(outside, "runtime")), []);
+  assert.ok(!fs.existsSync(target));
+});
+
+test("hooks refresh rejects a symlinked runtime directory", async () => {
+  const project = path.join(root, "refresh-symlinked-runtime-project");
+  fs.mkdirSync(path.join(project, ".git"), { recursive: true });
+  const target = path.join(root, "claude", "skills");
+  await runInstall([installer.targetPlan("claude", target)], { project, hooks: true });
+  const runtime = path.join(project, installer.HOOKS_DIRECTORY, "runtime");
+  const outside = path.join(root, "outside-refresh-runtime");
+  fs.renameSync(runtime, outside);
+  fs.symlinkSync(outside, runtime, "dir");
+  const destination = path.join(outside, "pipeline_state.py");
+  const before = fs.readFileSync(destination);
+  fs.writeFileSync(
+    path.join(source, "scripts", "pipeline_state.py"),
+    "# runtime v2\n" + installer.PROJECT_RUNTIME_MARKER + "\n"
+  );
+
+  const status = await installer.main(
+    ["--hooks-refresh", "--project", project, "--source-root", source, "--no-color"]
+  );
+
+  assert.equal(status, 1);
+  assert.deepEqual(fs.readFileSync(destination), before);
+});
+
 test("hooks refresh full merges settings preserving unrelated keys", async () => {
   const project = path.join(root, "project");
   fs.mkdirSync(path.join(project, ".git"), { recursive: true });
@@ -1339,6 +1974,7 @@ test("cli loads from an install path containing spaces", () => {
     encoding: "utf8",
   });
   assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /project contracts and status runtime; requires Python 3\.9\+/);
 });
 
 test("native hooks require an initialized repository", async () => {
@@ -1428,6 +2064,161 @@ test("doctor reports a healthy install, hooks, and project", async () => {
   assert.ok(findings.some((finding) => /pre-commit wired/.test(finding.text)));
 });
 
+test("doctor rejects a symlinked project runtime", async () => {
+  const project = path.join(root, "doctor-symlinked-runtime");
+  const runtimeParent = path.join(project, installer.HOOKS_DIRECTORY);
+  fs.mkdirSync(runtimeParent, { recursive: true });
+  const outside = path.join(root, "outside-runtime");
+  fs.mkdirSync(outside);
+  for (const name of installer.PROJECT_RUNTIME_SCRIPTS) {
+    fs.copyFileSync(path.join(source, "scripts", name), path.join(outside, name));
+  }
+  fs.symlinkSync(outside, path.join(runtimeParent, "runtime"), "dir");
+
+  const findings = installer.doctor(source, {
+    targets: [],
+    rootFor: () => "",
+    project,
+  });
+
+  assert.ok(findings.some((finding) => finding.level === "fail" && /symlink/.test(finding.text)));
+  assert.ok(
+    !findings.some(
+      (finding) => finding.level === "ok" && finding.text.startsWith("project: runtime")
+    )
+  );
+});
+
+test("doctor rejects symlinked project contracts", () => {
+  const project = path.join(root, "doctor-symlinked-contracts");
+  fs.mkdirSync(project);
+  for (const name of ["AGENTS.md", "WORKFLOW.md"]) {
+    fs.symlinkSync(path.join(source, name), path.join(project, name));
+  }
+
+  const findings = installer.doctor(source, {
+    targets: [],
+    rootFor: () => "",
+    project,
+  });
+
+  for (const name of ["AGENTS.md", "WORKFLOW.md"]) {
+    assert.ok(
+      findings.some(
+        ({ level, text }) =>
+          level === "fail" && text === `project: contract ${name} is a symlink`
+      )
+    );
+  }
+});
+
+test("doctor rejects symlinked and unreadable project scripts", () => {
+  const project = path.join(root, "doctor-unsafe-scripts");
+  const managed = path.join(project, installer.HOOKS_DIRECTORY);
+  const runtime = path.join(managed, "runtime");
+  fs.mkdirSync(runtime, { recursive: true });
+  for (const name of installer.PROJECT_RUNTIME_SCRIPTS) {
+    fs.copyFileSync(path.join(source, "scripts", name), path.join(runtime, name));
+  }
+  const outsideGuard = path.join(root, "outside-guard.py");
+  fs.copyFileSync(path.join(source, "scripts", "guard_hook.py"), outsideGuard);
+  fs.symlinkSync(outsideGuard, path.join(managed, "guard_hook.py"));
+  fs.copyFileSync(
+    path.join(source, "scripts", "git_guard.py"),
+    path.join(managed, "git_guard.py")
+  );
+  const unreadable = path.join(runtime, "pipeline_state.py");
+  fs.chmodSync(unreadable, 0);
+  let findings;
+  try {
+    findings = installer.doctor(source, { targets: [], rootFor: () => "", project });
+  } finally {
+    fs.chmodSync(unreadable, 0o644);
+  }
+
+  assert.ok(
+    findings.some(
+      (finding) => finding.level === "fail" && /guard_hook\.py is a symlink/.test(finding.text)
+    )
+  );
+  assert.ok(
+    findings.some(
+      (finding) =>
+        finding.level === "fail" && /runtime pipeline_state\.py cannot be read/.test(finding.text)
+    )
+  );
+});
+
+test("doctor reports a missing canonical runtime source", async () => {
+  const project = path.join(root, "doctor-missing-source");
+  await runInstall([installer.targetPlan("claude", path.join(root, "claude", "skills"))], { project });
+  fs.unlinkSync(path.join(source, "scripts", "pipeline_state.py"));
+
+  const findings = installer.doctor(source, { targets: [], rootFor: () => "", project });
+
+  assert.ok(
+    findings.some(
+      ({ level, text }) =>
+        level === "fail" && /package: runtime pipeline_state\.py cannot be read/.test(text)
+    )
+  );
+});
+
+test("doctor reports missing package version", () => {
+  fs.unlinkSync(path.join(source, "package.json"));
+
+  const findings = installer.doctor(source, { targets: [], rootFor: () => "" });
+
+  assert.ok(findings.some(({ level, text }) => level === "fail" && text === "package: version cannot be read"));
+});
+
+test("doctor reports an unreadable skills root", () => {
+  const skills = path.join(root, "unreadable-skills");
+  fs.mkdirSync(skills);
+  fs.chmodSync(skills, 0);
+  let findings;
+  try {
+    findings = installer.doctor(source, { targets: ["claude"], rootFor: () => skills });
+  } finally {
+    fs.chmodSync(skills, 0o755);
+  }
+
+  assert.ok(findings.some(({ level, text }) => level === "fail" && /skills root cannot be read/.test(text)));
+});
+
+test("doctor reports unreadable bridge and git hooks", async () => {
+  const project = path.join(root, "doctor-unreadable-contracts");
+  fs.mkdirSync(path.join(project, ".git"), { recursive: true });
+  const target = path.join(root, "claude", "skills");
+  await runInstall([installer.targetPlan("claude", target)], { project, hooks: true });
+  const bridge = path.join(project, ".claude", "CLAUDE.md");
+  const preCommit = path.join(project, ".git", "hooks", "pre-commit");
+  fs.chmodSync(bridge, 0);
+  fs.chmodSync(preCommit, 0);
+  let findings;
+  try {
+    findings = installer.doctor(source, {
+      targets: ["claude"],
+      rootFor: () => target,
+      project,
+    });
+  } finally {
+    fs.chmodSync(bridge, 0o644);
+    fs.chmodSync(preCommit, 0o755);
+  }
+
+  assert.ok(
+    findings.some(
+      (finding) => finding.level === "fail" && /\.claude\/CLAUDE\.md cannot be read/.test(finding.text)
+    )
+  );
+  assert.ok(
+    findings.some(
+      (finding) => finding.level === "fail" && /pre-commit cannot be read/.test(finding.text)
+    )
+  );
+});
+
 test("doctor fails when installer-owned native guard config is missing", async () => {
   for (const [targetName, settingsPath] of [
     ["claude", [".claude", "settings.json"]],
@@ -1450,6 +2241,132 @@ test("doctor fails when installer-owned native guard config is missing", async (
         (finding) =>
           finding.level === "fail" &&
           finding.text.includes(`${targetName} native guard wiring is missing`)
+      )
+    );
+  }
+});
+
+test("doctor fails when managed wiring points to deleted guards", async () => {
+  const project = path.join(root, "dangling-guards");
+  fs.mkdirSync(path.join(project, ".git"), { recursive: true });
+  const target = path.join(root, "dangling-guards-claude", "skills");
+  await runInstall([installer.targetPlan("claude", target)], { project, hooks: true });
+  fs.rmSync(target, { recursive: true });
+  for (const name of installer.GUARD_SCRIPTS) {
+    fs.rmSync(path.join(project, installer.HOOKS_DIRECTORY, name));
+  }
+
+  const findings = installer.doctor(source, {
+    targets: ["claude"],
+    rootFor: () => target,
+    project,
+  });
+
+  for (const name of installer.GUARD_SCRIPTS) {
+    assert.ok(
+      findings.some(
+        (finding) => finding.level === "fail" && finding.text.includes(`missing .gsd-path/${name}`)
+      )
+    );
+  }
+
+  const status = await installer.main(
+    ["--hooks-refresh", "--project", project, "--source-root", source, "--no-color"]
+  );
+  assert.equal(status, 0);
+  for (const name of installer.GUARD_SCRIPTS) {
+    assert.ok(fs.existsSync(path.join(project, installer.HOOKS_DIRECTORY, name)));
+  }
+});
+
+test("doctor validates detected native wiring without installed skills", async () => {
+  const project = path.join(root, "stale-native-wiring");
+  fs.mkdirSync(path.join(project, ".git"), { recursive: true });
+  const target = path.join(root, "stale-native-wiring-claude", "skills");
+  await runInstall([installer.targetPlan("claude", target)], { project, hooks: true });
+  fs.rmSync(target, { recursive: true });
+  const settings = path.join(project, ".claude", "settings.json");
+  const parsed = JSON.parse(fs.readFileSync(settings, "utf8"));
+  parsed.hooks.PreToolUse[0].matcher = "Write";
+  fs.writeFileSync(settings, `${JSON.stringify(parsed)}\n`);
+
+  const findings = installer.doctor(source, {
+    targets: ["claude"],
+    rootFor: () => target,
+    project,
+  });
+
+  assert.ok(
+    findings.some(
+      ({ level, text }) =>
+        level === "fail" && text.includes("claude native guard wiring is stale")
+    )
+  );
+});
+
+test("doctor rejects symlinked native and git wiring", async () => {
+  const project = path.join(root, "symlinked-wiring");
+  fs.mkdirSync(path.join(project, ".git"), { recursive: true });
+  const target = path.join(root, "symlinked-wiring-claude", "skills");
+  await runInstall([installer.targetPlan("claude", target)], { project, hooks: true });
+  const settings = path.join(project, ".claude", "settings.json");
+  const outsideSettings = path.join(root, "outside-settings.json");
+  fs.copyFileSync(settings, outsideSettings);
+  fs.rmSync(settings);
+  fs.symlinkSync(outsideSettings, settings);
+  const preCommit = path.join(project, ".git", "hooks", "pre-commit");
+  const outsideHook = path.join(root, "outside-pre-commit");
+  fs.copyFileSync(preCommit, outsideHook);
+  fs.rmSync(preCommit);
+  fs.symlinkSync(outsideHook, preCommit);
+
+  const findings = installer.doctor(source, {
+    targets: ["claude"],
+    rootFor: () => target,
+    project,
+  });
+
+  assert.ok(
+    findings.some(
+      ({ level, text }) =>
+        level === "fail" && text.includes("claude native guard wiring is a symlink")
+    )
+  );
+  assert.ok(
+    findings.some(
+      ({ level, text }) => level === "fail" && text.includes("pre-commit is a symlink")
+    )
+  );
+});
+
+test("doctor reports unreadable effective git hooks", async () => {
+  const project = path.join(root, "unreadable-git-wiring");
+  fs.mkdirSync(path.join(project, ".git"), { recursive: true });
+  const target = path.join(root, "unreadable-git-wiring-claude", "skills");
+  await runInstall([installer.targetPlan("claude", target)], { project, hooks: true });
+  for (const name of installer.GUARD_SCRIPTS) {
+    fs.rmSync(path.join(project, installer.HOOKS_DIRECTORY, name));
+  }
+  const hooks = ["pre-commit", "commit-msg"].map((name) =>
+    path.join(project, ".git", "hooks", name)
+  );
+  for (const hook of hooks) fs.chmodSync(hook, 0);
+  let findings;
+  try {
+    findings = installer.doctor(source, {
+      targets: [],
+      rootFor: () => target,
+      project,
+    });
+  } finally {
+    for (const hook of hooks) fs.chmodSync(hook, 0o755);
+  }
+
+  for (const name of ["pre-commit", "commit-msg"]) {
+    assert.ok(
+      findings.some(
+        ({ level, text }) =>
+          level === "fail" && text.includes(name) && text.includes("cannot be read")
       )
     );
   }
@@ -1487,21 +2404,79 @@ test("doctor flags stale guard scripts", async () => {
   );
 });
 
-test("doctor validates pipeline state frontmatter", async () => {
+test("doctor uses canonical pipeline state validation", async () => {
+  for (const name of installer.PROJECT_RUNTIME_SCRIPTS) {
+    fs.copyFileSync(path.join(REPO_ROOT, "scripts", name), path.join(source, "scripts", name));
+  }
   const project = path.join(root, "project");
+  fs.mkdirSync(project);
+  git("init", "-q", project);
   fs.mkdirSync(path.join(project, ".project"), { recursive: true });
   fs.writeFileSync(path.join(project, "AGENTS.md"), "a\n");
   fs.writeFileSync(path.join(project, "WORKFLOW.md"), "w\n");
+  const runtime = path.join(project, installer.HOOKS_DIRECTORY, "runtime");
+  fs.mkdirSync(runtime, { recursive: true });
+  fs.copyFileSync(
+    path.join(source, "scripts", installer.PROJECT_STATUS_LAUNCHER),
+    path.join(project, installer.HOOKS_DIRECTORY, installer.PROJECT_STATUS_LAUNCHER)
+  );
+  for (const name of installer.PROJECT_RUNTIME_SCRIPTS) {
+    fs.copyFileSync(path.join(source, "scripts", name), path.join(runtime, name));
+  }
+  fs.writeFileSync(
+    path.join(project, ".project", "STATE.md"),
+    "---\npipeline: gsd-path/v2\nproject: demo\nmilestone: demo\n" +
+      "phase: plan\nstatus: done\nbranch: null\narchive: null\n---\n"
+  );
+  let findings = installer.doctor(source, { targets: [], rootFor: () => "", project });
+  assert.ok(findings.some((finding) => finding.level === "ok" && finding.text === "state: plan/done"));
+  assert.ok(!fs.existsSync(path.join(source, "scripts", "__pycache__")));
+  const runtimeState = path.join(runtime, "pipeline_state.py");
+  const originalRuntime = fs.readFileSync(runtimeState);
+  const doctorSideEffect = path.join(project, "doctor-runtime-executed");
+  fs.writeFileSync(
+    runtimeState,
+    "from pathlib import Path\n" +
+      `Path(${JSON.stringify(doctorSideEffect)}).write_text("executed")\n` +
+      `# ${installer.PROJECT_RUNTIME_MARKER}\n`
+  );
+  findings = installer.doctor(source, { targets: [], rootFor: () => "", project });
+  assert.ok(
+    findings.some(
+      (finding) =>
+        finding.level === "fail" && /project runtime status was not executed/.test(finding.text)
+    )
+  );
+  assert.ok(!fs.existsSync(doctorSideEffect));
+  fs.writeFileSync(runtimeState, originalRuntime);
+  const originalValidator = originalHooks.validatedProjectState;
+  installer.hooks.validatedProjectState = (...args) => {
+    const state = originalValidator(...args);
+    fs.writeFileSync(
+      runtimeState,
+      "import pathlib\n" +
+        `pathlib.Path(${JSON.stringify(doctorSideEffect)}).write_text("executed")\n` +
+        `# ${installer.PROJECT_RUNTIME_MARKER}\n`
+    );
+    return state;
+  };
+  findings = installer.doctor(source, { targets: [], rootFor: () => "", project });
+  assert.ok(!fs.existsSync(doctorSideEffect));
+  assert.ok(
+    findings.some(
+      (finding) =>
+        finding.level === "fail" && /runtime changed during doctor validation/.test(finding.text)
+    )
+  );
+  installer.hooks.validatedProjectState = originalValidator;
+  fs.writeFileSync(runtimeState, originalRuntime);
   fs.writeFileSync(
     path.join(project, ".project", "STATE.md"),
     "---\npipeline: gsd-path/v2\nphase: plan\nstatus: done\n---\n"
   );
-  let findings = installer.doctor(source, { targets: [], rootFor: () => "", project });
-  assert.ok(findings.some((finding) => finding.level === "ok" && finding.text === "state: plan/done"));
-  fs.writeFileSync(path.join(project, ".project", "STATE.md"), "---\npipeline: other\n---\n");
   findings = installer.doctor(source, { targets: [], rootFor: () => "", project });
   assert.ok(
-    findings.some((finding) => finding.level === "fail" && /pipeline marker/.test(finding.text))
+    findings.some((finding) => finding.level === "fail" && /^state:/.test(finding.text))
   );
 });
 
@@ -1646,6 +2621,21 @@ test("native hook install requires an interpreter", async () => {
   assert.ok(!fs.existsSync(path.join(project, ".claude", "settings.json")));
   assert.ok(!fs.existsSync(path.join(project, ".git", "hooks", "pre-commit")));
   assert.ok(!fs.existsSync(path.join(project, "AGENTS.md")));
+});
+
+test("hookless project install requires an interpreter", async () => {
+  installer.hooks.detectPythonInterpreter = () => null;
+  const project = path.join(root, "project");
+  const target = path.join(root, "claude", "skills");
+
+  await assert.rejects(
+    runInstall([installer.targetPlan("claude", target)], { project }),
+    /--project requires a working Python interpreter.*selected hosts: claude/
+  );
+
+  assert.ok(!fs.existsSync(target));
+  assert.ok(!fs.existsSync(path.join(project, "AGENTS.md")));
+  assert.ok(!fs.existsSync(path.join(project, installer.HOOKS_DIRECTORY)));
 });
 
 test("hooks refresh full rejects before writes without an interpreter", async () => {

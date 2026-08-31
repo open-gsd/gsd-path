@@ -48,6 +48,7 @@ test("npm package includes the pipeline helpers", () => {
     assert.ok(packagedPaths.has(`scripts/${helper}`));
     assert.ok(packagedPaths.has(`skills/gsd-path/scripts/${helper}`));
   }
+  assert.ok(packagedPaths.has("scripts/status_runtime.py"));
   assert.ok(packagedPaths.has("skills/gsd-path-build/scripts/build_state.py"));
   assert.ok(packagedPaths.has("skills/gsd-path-build/scripts/pipeline_state.py"));
   for (const canonical of ["inspect", "define", "decide", "roadmap", "ship"]) {

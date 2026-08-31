@@ -200,10 +200,13 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
    number of tasks in this dispatch round. Serial (`N=1`) returns the primary
    worktree and `task_branch: null` — the coder works on the bound branch.
    Parallel (`N>=2`) creates a named `gsd-path-task/<id>` branch and linked
-   worktree at that base; never a detached HEAD. Set frontmatter `base`,
-   `worktree`, `task_branch`, `status: in-progress`, and `agent` from the
-   helper's JSON in the task file **inside the isolated worktree** (the
-   primary itself when serial). Do not commit this dispatch state: it lands
+   worktree at that base; never a detached HEAD. Record dispatch through
+   `python3 <absolute isolation.py> activate-task --repo <returned worktree>
+   --base <recorded base> --task-id <id> --agent build_<id> --task-file
+   <exact selected task-file path> [--task-branch <returned task_branch>]`.
+   The helper sets `base`, `worktree`, `task_branch`, `status: in-progress`,
+   and `agent` in the isolated task and records parallel build authorization.
+   Do not edit those fields directly. Do not commit this dispatch state: it lands
    inside the task's own commit, and `recover` derives it from the task
    branch and worktree meanwhile. The primary stays clean during a parallel
    round. Do not append a dispatch Log entry: the isolated task later appends
@@ -272,12 +275,18 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
      when the ruling changes it — except a ruling that changes a success
      criterion, constraint, or veto, which follows the define-Corrections
      path above. A question block creates no product commit
-     and preserves the isolated worktree under the same retirement rule.
+     and preserves the isolated worktree under the same retirement rule. Before
+     changing its canonical bookkeeping, revoke a parallel isolate's active
+     dispatch with `python3 <absolute isolation.py> deactivate-task --repo
+     <isolated worktree> --task-id <id> --task-branch <task_branch>`.
    - A blocked report, invalid diff, or failed Verify creates no product
      commit. Validate and copy the isolated task's append-only Log delta once;
      it is the coder's sole block/implementation narrative. Add orchestrator
-     evidence only for a distinct diff or Verify rejection, set the task
-     `blocked` or `failed`, checkpoint the bookkeeping, and apply the recovery
+     evidence only for a distinct diff or Verify rejection. Before changing the
+     task to `blocked` or `failed`, revoke a parallel isolate's active dispatch
+     with `python3 <absolute isolation.py> deactivate-task
+     --repo <isolated worktree> --task-id <id> --task-branch <task_branch>`.
+     Then update and checkpoint the bookkeeping and apply the recovery
      rule. Preserve the isolated worktree unless and until the explicit clean
      retry-retirement procedure in step 2 owns and removes it.
 

@@ -97,6 +97,94 @@ class IsolationTests(unittest.TestCase):
             self.assertNotIn("detached", listed)
             self.assertIn("gsd-path-task/T002", second["task_branch"])
 
+    def test_parallel_worktree_authorization_requires_isolation_proof(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            base = self.init_bound_repo(repo)
+            pending = (
+                TASK_FILE.replace("status: in-progress", "status: pending")
+                .replace("agent: coder", "agent: null")
+                .replace("worktree: active", "worktree: null")
+                .replace("task_branch: active", "task_branch: null")
+            )
+            (repo / ".project" / "tasks" / "T001.md").write_text(
+                pending, encoding="utf-8"
+            )
+            git(repo, "add", ".project/tasks/T001.md")
+            git(repo, "commit", "--amend", "-q", "--no-edit")
+            base = git(repo, "rev-parse", "HEAD")
+            isolated = isolation.isolate_task(repo, base, "T001", 2)
+            worktree = Path(isolated["worktree"])
+            task = worktree / ".project" / "tasks" / "T001.md"
+            task.write_text(
+                pending.replace("status: pending", "status: in-progress")
+                .replace("agent: null", "agent: coder")
+                .replace("base: null", f"base: {base}")
+                .replace("worktree: null", f"worktree: {worktree}")
+                .replace("task_branch: null", "task_branch: gsd-path-task/T001"),
+                encoding="utf-8",
+            )
+
+            self.assertFalse(
+                isolation.authorized_task_worktree(worktree, "gsd-path/M001")
+            )
+            task.write_text(pending, encoding="utf-8")
+            result = isolation.activate_task(
+                worktree,
+                base,
+                "T001",
+                "coder",
+                ".project/tasks/T001.md",
+                "gsd-path-task/T001",
+            )
+            self.assertEqual("in-progress", result["status"])
+            self.assertTrue(
+                isolation.authorized_task_worktree(worktree, "gsd-path/M001")
+            )
+            git(
+                worktree,
+                "update-ref",
+                "-d",
+                isolation.task_authorization_ref("T001"),
+            )
+            self.assertFalse(
+                isolation.authorized_task_worktree(worktree, "gsd-path/M001")
+            )
+            recovered = isolation.activate_task(
+                worktree,
+                base,
+                "T001",
+                "coder",
+                ".project/tasks/T001.md",
+                "gsd-path-task/T001",
+            )
+            self.assertEqual("in-progress", recovered["status"])
+            self.assertTrue(
+                isolation.authorized_task_worktree(worktree, "gsd-path/M001")
+            )
+            deactivated = isolation.deactivate_task(
+                worktree, "T001", "gsd-path-task/T001"
+            )
+            self.assertEqual("deactivated", deactivated["status"])
+            retried = isolation.deactivate_task(
+                worktree, "T001", "gsd-path-task/T001"
+            )
+            self.assertEqual("deactivated", retried["status"])
+            self.assertFalse(
+                isolation.authorized_task_worktree(worktree, "gsd-path/M001")
+            )
+            self.assertTrue(worktree.exists())
+            task.write_text(
+                task.read_text(encoding="utf-8").replace(
+                    f"worktree: {worktree}", "worktree: /tmp/unowned"
+                ),
+                encoding="utf-8",
+            )
+            self.assertFalse(
+                isolation.authorized_task_worktree(worktree, "gsd-path/M001")
+            )
+
     def test_parallel_isolation_does_not_remove_a_concurrent_worktree(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary) / "repo"
@@ -1574,6 +1662,35 @@ class IsolationTests(unittest.TestCase):
             self.assertNotEqual(
                 subprocess.run(
                     ("git", "-C", str(repo), "show-ref", "--verify", "--quiet", f"refs/heads/{branch}"),
+                    check=False,
+                ).returncode,
+                0,
+            )
+
+    def test_retire_cleans_authorization_when_branch_is_already_absent(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            base = self.init_bound_repo(repo)
+            branch = "gsd-path-task/T001"
+            authorization = isolation.task_authorization_ref("T001")
+            git(repo, "update-ref", authorization, base)
+            missing = isolation.sidecar_root(repo.resolve(), "task", "T001")
+
+            result = isolation.retire(repo, missing, branch, True)
+
+            self.assertEqual("already-absent", result["reason"])
+            self.assertNotEqual(
+                subprocess.run(
+                    (
+                        "git",
+                        "-C",
+                        str(repo),
+                        "show-ref",
+                        "--verify",
+                        "--quiet",
+                        authorization,
+                    ),
                     check=False,
                 ).returncode,
                 0,

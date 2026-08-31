@@ -14,6 +14,7 @@ Kiro; the JSON covers hosts that read a decision object instead).
 Malformed input or an internal failure denies the tool call.
 """
 
+import ast
 from fnmatch import fnmatchcase
 import json
 import os
@@ -37,6 +38,28 @@ PATH_KEYS = frozenset(
         "directory",
     }
 )
+MUTATION_OPERAND_KEYS = frozenset(
+    {
+        "destination",
+        "destination_directory",
+        "destination_file",
+        "destination_path",
+        "from",
+        "from_file",
+        "from_path",
+        "old_file",
+        "old_path",
+        "source",
+        "source_directory",
+        "source_file",
+        "source_notebook",
+        "source_path",
+        "target_path",
+        "to",
+        "to_file",
+        "to_path",
+    }
+)
 WORKING_DIRECTORY_KEYS = frozenset({"working_directory", "workdir", "cwd"})
 COMMAND_KEYS = frozenset({"command", "cmd", "script"})
 PATCH_KEYS = frozenset({"patch", "patch_body", "patch_text", "diff"})
@@ -44,12 +67,28 @@ PATCH_PATH_PATTERN = re.compile(
     r"^\*\*\* (?:Add|Update|Delete) File: (.+)$|^\*\*\* Move to: (.+)$",
     re.MULTILINE,
 )
+UNIFIED_DIFF_PATH_PATTERN = re.compile(
+    r"^(?:---|\+\+\+) ([^\t\r\n]+)$", re.MULTILINE
+)
+GIT_DIFF_PATH_PATTERN = re.compile(
+    r'^diff --git ("(?:\\.|[^"])*"|\S+) ("(?:\\.|[^"])*"|\S+)$',
+    re.MULTILINE,
+)
+GIT_RENAME_PATH_PATTERN = re.compile(
+    r"^(?:rename from|rename to) (.+)$", re.MULTILINE
+)
+
 # A tool skips path checks only when its name carries a read-only verb and
 # no write-capable verb: `get_and_write` must still be path-checked.
-READ_VERBS = frozenset({"read", "grep", "search", "view", "list", "get", "cat"})
+READ_VERBS = frozenset(
+    {"read", "grep", "glob", "search", "view", "list", "get", "cat", "open"}
+)
 WRITE_VERBS = frozenset(
     {
         "write",
+        "save",
+        "copy",
+        "touch",
         "edit",
         "create",
         "delete",
@@ -66,6 +105,9 @@ WRITE_VERBS = frozenset(
         "replace",
     }
 )
+AMBIGUOUS_WRITE_VERBS = frozenset({"create", "update", "set", "put", "post"})
+DIRECT_FILE_WRITE_VERBS = WRITE_VERBS - AMBIGUOUS_WRITE_VERBS
+FILE_TARGET_TOKENS = frozenset({"file", "path", "notebook"})
 TOOL_TOKEN_PATTERN = re.compile(r"[A-Z]?[a-z]+|[A-Z]+(?![a-z])|\d+")
 SHELL_ASSIGNMENT_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 
@@ -75,6 +117,71 @@ ARCHIVE_REASON = (
 )
 ARCHIVE_MARKER = ".project/archive"
 INVALID_INPUT_REASON = "GSD Path guard could not validate the tool request"
+REENTRY_FAILURE_REASON = (
+    "GSD Path status could not be verified; review .project/STATE.md and invoke "
+    "gsd-path-forensics before changing product files"
+)
+CONTROL_FILE_REASON = (
+    "GSD Path routing controls cannot be changed by direct write, edit, or patch tools"
+)
+STATUS_ACTIONS = frozenset(
+    {
+        "bind-initial",
+        "block",
+        "resume-checkpoint",
+        "resume-next-handoff",
+        "resume-promotion",
+        "resume-shipment",
+        "resume-undo",
+        "run-phase",
+        "validate-integrated",
+        "wait",
+    }
+)
+STATUS_PHASES = frozenset(
+    {
+        "inspect",
+        "define",
+        "research",
+        "decide",
+        "roadmap",
+        "plan",
+        "build",
+        "ship",
+        "shipped",
+    }
+)
+STATUS_VALUES = frozenset({"active", "done", "blocked"})
+STATUS_STATE_FIELDS = frozenset(
+    {
+        "pipeline",
+        "project",
+        "milestone",
+        "phase",
+        "status",
+        "branch",
+        "archive",
+        "integration_default",
+        "integration",
+        "integration_source",
+    }
+)
+STATUS_INTEGRATION_MODES = frozenset({"direct", "pull-request"})
+STATUS_INTEGRATION_SOURCES = frozenset({"default", "milestone"})
+STATUS_SLUG = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+STATUS_BRANCH = re.compile(r"^gsd-path/M(\d{3,})$")
+STATUS_ARCHIVE = re.compile(r"^\.project/archive/(\d{3,})-([a-z0-9][a-z0-9-]*)/?$")
+STATUS_TRANSITIONS = {
+    "inspect": frozenset({"inspect", "define"}),
+    "define": frozenset({"define", "research", "plan"}),
+    "research": frozenset({"research", "decide"}),
+    "decide": frozenset({"decide", "roadmap", "plan"}),
+    "roadmap": frozenset({"roadmap", "define"}),
+    "plan": frozenset({"plan", "build"}),
+    "build": frozenset({"build"}),
+    "ship": frozenset({"ship", "plan"}),
+    "shipped": frozenset({"ship"}),
+}
 ARCHIVE_REFERENCE = re.compile(r"(?i:\.project[\\/]archive)")
 ARCHIVE_READ_COMMANDS = frozenset(
     {
@@ -182,37 +289,80 @@ SHELL_CONTROL_WORDS = frozenset(
 )
 
 
-def collect(node, paths, working_directories, commands, patch_payloads):
+def collect(
+    node,
+    paths,
+    working_directories,
+    commands,
+    patch_payloads,
+    path_keys=PATH_KEYS,
+    inherited_working_directories=(),
+):
     if isinstance(node, dict):
+        local_working_directories = []
+        for key, value in node.items():
+            if key.lower() not in WORKING_DIRECTORY_KEYS:
+                continue
+            if isinstance(value, str):
+                local_working_directories.append(value)
+            elif isinstance(value, list):
+                strings = [item for item in value if isinstance(item, str)]
+                if len(strings) != len(value):
+                    raise ValueError("working directories cannot be validated")
+                local_working_directories.extend(strings)
+        if len(local_working_directories) > 1:
+            raise ValueError("working directory is ambiguous")
+        working_directories.extend(local_working_directories)
+        context = tuple(local_working_directories) or inherited_working_directories
         for key, value in node.items():
             lowered = key.lower()
             if isinstance(value, str):
-                if lowered in PATH_KEYS:
-                    paths.append(value)
-                elif lowered in WORKING_DIRECTORY_KEYS:
-                    working_directories.append(value)
+                if lowered in path_keys:
+                    paths.append((value, context))
                 elif lowered in COMMAND_KEYS:
-                    commands.append(value)
+                    commands.append((value, context))
                 elif lowered in PATCH_KEYS:
-                    patch_payloads.append(value)
+                    patch_payloads.append((value, context))
             elif isinstance(value, list):
                 strings = [item for item in value if isinstance(item, str)]
-                if strings and lowered in PATH_KEYS:
-                    paths.extend(strings)
-                elif strings and lowered in WORKING_DIRECTORY_KEYS:
-                    working_directories.extend(strings)
+                if strings and lowered in path_keys:
+                    paths.extend((item, context) for item in strings)
                 elif lowered in COMMAND_KEYS:
                     if not strings or len(strings) != len(value):
                         raise ValueError("command argv cannot be validated")
-                    commands.append(shlex.join(strings))
+                    commands.append((shlex.join(strings), context))
                 elif strings and lowered in PATCH_KEYS:
-                    patch_payloads.extend(strings)
-                collect(value, paths, working_directories, commands, patch_payloads)
+                    patch_payloads.extend((item, context) for item in strings)
+                collect(
+                    value,
+                    paths,
+                    working_directories,
+                    commands,
+                    patch_payloads,
+                    path_keys,
+                    context,
+                )
             else:
-                collect(value, paths, working_directories, commands, patch_payloads)
+                collect(
+                    value,
+                    paths,
+                    working_directories,
+                    commands,
+                    patch_payloads,
+                    path_keys,
+                    context,
+                )
     elif isinstance(node, list):
         for value in node:
-            collect(value, paths, working_directories, commands, patch_payloads)
+            collect(
+                value,
+                paths,
+                working_directories,
+                commands,
+                patch_payloads,
+                path_keys,
+                inherited_working_directories,
+            )
 
 
 def normalize_posix(path):
@@ -245,6 +395,349 @@ def is_read_tool(tool):
 
 def is_patch_tool(tool):
     return "patch" in tool_tokens(tool)
+
+
+def has_patch_headers(payload):
+    return bool(
+        PATCH_PATH_PATTERN.search(payload)
+        or UNIFIED_DIFF_PATH_PATTERN.search(payload)
+        or GIT_DIFF_PATH_PATTERN.search(payload)
+        or GIT_RENAME_PATH_PATTERN.search(payload)
+    )
+
+
+def is_direct_write_tool(tool, has_file_targets=False):
+    if has_file_targets:
+        return not is_read_tool(tool)
+    tokens = tool_tokens(tool)
+    if tokens & DIRECT_FILE_WRITE_VERBS:
+        return (
+            len(tokens) == 1
+            or bool(tokens & FILE_TARGET_TOKENS)
+            or has_file_targets
+        )
+    if tokens == {"create"}:
+        return True
+    return bool(
+        (tokens & AMBIGUOUS_WRITE_VERBS)
+        and ((tokens & FILE_TARGET_TOKENS) or has_file_targets)
+    )
+
+
+def repository_root():
+    candidate = Path(__file__).resolve().parent.parent
+    result = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"],
+        cwd=candidate,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0 or not result.stdout.strip():
+        state = candidate / ".project" / "STATE.md"
+        if (
+            candidate.is_dir()
+            and not candidate.is_symlink()
+            and os.path.lexists(state)
+        ):
+            return candidate
+        raise ValueError("repository root cannot be resolved")
+    return Path(result.stdout.strip()).resolve()
+
+
+def project_status(repo):
+    script_root = Path(__file__).resolve().parent
+    launcher = script_root / "status_runtime.py"
+    if not launcher.is_file():
+        raise ValueError("project status runtime is unavailable")
+    result = subprocess.run(
+        [sys.executable, "-B", str(launcher), "--repo", str(repo)],
+        cwd=repo,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise ValueError("project status failed")
+    payload = json.loads(result.stdout)
+    if not valid_status_payload(payload, repo):
+        raise ValueError("project status returned an invalid payload")
+    return payload
+
+
+def valid_status_payload(payload, repo):
+    if not isinstance(payload, dict) or payload.get("schema") != "gsd-path/status/v1":
+        return False
+    state = payload.get("state")
+    route = payload.get("route")
+    status_path = payload.get("path")
+    next_skill = payload.get("next_skill")
+    if (
+        payload.get("advance") is not False
+        or not isinstance(state, dict)
+        or not valid_status_state(state)
+        or not isinstance(route, dict)
+        or route.get("action") not in STATUS_ACTIONS
+        or not isinstance(route.get("reason"), str)
+        or not route["reason"]
+        or not isinstance(status_path, str)
+        or not Path(status_path).is_absolute()
+        or Path(status_path).resolve(strict=False)
+        != (repo / ".project" / "STATE.md").resolve(strict=False)
+    ):
+        return False
+    action = route["action"]
+    if action == "run-phase":
+        phase = route.get("phase")
+        return (
+            isinstance(phase, str)
+            and phase in STATUS_TRANSITIONS[state["phase"]]
+            and state["branch"] is not None
+            and next_skill == f"gsd-path-{phase}"
+        )
+    if "phase" in route:
+        return False
+    if action == "bind-initial":
+        return (
+            state["branch"] is None
+            and isinstance(route.get("branch"), str)
+            and valid_status_branch(route["branch"]) is not None
+            and next_skill == "gsd-path"
+        )
+    if state["branch"] is None:
+        return False
+    if action == "validate-integrated" and not (
+        state["phase"] == "shipped" and state["status"] == "done"
+    ):
+        return False
+    if action == "wait" and not (
+        state["phase"] == "plan" and state["status"] == "done"
+    ):
+        return False
+    if action == "resume-undo":
+        expected = "gsd-path-undo"
+    elif action == "wait":
+        expected = None
+    else:
+        expected = "gsd-path"
+    return next_skill == expected
+
+
+def valid_status_state(state):
+    if set(state) != STATUS_STATE_FIELDS:
+        return False
+    milestone = state["milestone"]
+    branch = state["branch"]
+    archive = state["archive"]
+    integration_default = state["integration_default"]
+    integration = state["integration"]
+    integration_source = state["integration_source"]
+    archive_match = (
+        STATUS_ARCHIVE.fullmatch(archive or "")
+        if isinstance(archive, (str, type(None)))
+        else None
+    )
+    if (
+        state["pipeline"] != "gsd-path/v2"
+        or not isinstance(state["project"], str)
+        or STATUS_SLUG.fullmatch(state["project"]) is None
+        or not (
+            milestone is None
+            or isinstance(milestone, str)
+            and STATUS_SLUG.fullmatch(milestone) is not None
+        )
+        or not isinstance(state["phase"], str)
+        or state["phase"] not in STATUS_PHASES
+        or not isinstance(state["status"], str)
+        or state["status"] not in STATUS_VALUES
+        or integration_default not in STATUS_INTEGRATION_MODES
+        or integration not in STATUS_INTEGRATION_MODES
+        or integration_source not in STATUS_INTEGRATION_SOURCES
+        or (
+            integration_source == "default"
+            and integration != integration_default
+        )
+        or not (
+            branch is None
+            or isinstance(branch, str)
+            and valid_status_branch(branch) is not None
+        )
+        or not (archive is None or archive_match is not None)
+    ):
+        return False
+    if state["phase"] == "shipped" and (
+        state["status"] != "done" or archive is None
+    ):
+        return False
+    if archive is not None and state["phase"] not in {"build", "ship", "shipped"}:
+        return False
+    if state["phase"] in {"ship", "shipped"} and branch is None:
+        return False
+    if archive_match is not None:
+        branch_match = valid_status_branch(branch)
+        return (
+            milestone == archive_match.group(2)
+            and branch_match is not None
+            and int(branch_match.group(1)) == int(archive_match.group(1))
+        )
+    return True
+
+
+def valid_status_branch(value):
+    match = STATUS_BRANCH.fullmatch(value) if isinstance(value, str) else None
+    return match if match is not None and int(match.group(1)) >= 1 else None
+
+
+def target_paths(path, working_directories, repo):
+    repo = repo.resolve()
+    candidate = Path(path)
+    if not candidate.is_absolute():
+        base = Path(working_directories[0]) if working_directories else repo
+        if not base.is_absolute():
+            base = repo / base
+        candidate = base / candidate
+    return Path(os.path.abspath(candidate)), candidate.resolve(strict=False)
+
+
+def repository_control_roots(repo):
+    roots = [(repo / ".git").resolve(strict=False)]
+    result = subprocess.run(
+        ["git", "rev-parse", "--git-common-dir"],
+        cwd=repo,
+        text=True,
+        capture_output=True,
+        env={**os.environ, "GIT_OPTIONAL_LOCKS": "0"},
+        check=False,
+    )
+    if result.returncode == 0 and result.stdout.strip():
+        common = Path(result.stdout.strip())
+        if not common.is_absolute():
+            common = repo / common
+        roots.append(common.resolve(strict=False))
+    return tuple(roots)
+
+
+def _same_existing_path(left, right):
+    try:
+        return os.path.samefile(left, right)
+    except OSError:
+        return False
+
+
+def _within_existing_root(candidate, root):
+    return any(
+        _same_existing_path(ancestor, root)
+        for ancestor in (candidate, *candidate.parents)
+    )
+
+
+def _canonical_control_alias(candidate, repo, control_roots):
+    roots = (*control_roots, repo / ".project", repo / ".gsd-path")
+    suffix = []
+    current = candidate
+    while current != current.parent:
+        for root in roots:
+            if _same_existing_path(current, root):
+                return root.joinpath(*reversed(suffix))
+        suffix.append(current.name)
+        current = current.parent
+    return candidate
+
+
+def path_kind(candidate, repo, control_roots=()):
+    if any(
+        candidate == root
+        or root in candidate.parents
+        or _within_existing_root(candidate, root)
+        for root in control_roots
+    ):
+        return "protected"
+    if candidate != repo and repo not in candidate.parents:
+        return "external"
+    relative = candidate.relative_to(repo)
+    parts = relative.parts
+    if parts in {
+        (".project",),
+        (".project", "STATE.md"),
+        (".project", "next"),
+        (".project", "next", "STATE.md"),
+    }:
+        return "protected"
+    protected_paths = (
+        repo / ".project",
+        repo / ".project" / "STATE.md",
+        repo / ".project" / "next",
+        repo / ".project" / "next" / "STATE.md",
+    )
+    if any(_same_existing_path(candidate, path) for path in protected_paths):
+        return "protected"
+    managed_root = repo / ".gsd-path"
+    if (parts and parts[0] == ".gsd-path") or _within_existing_root(
+        candidate, managed_root
+    ):
+        return "protected"
+    if parts and parts[0] == ".project":
+        return "artifact"
+    return "product"
+
+
+def target_kind(path, working_directories, repo, control_roots=None):
+    lexical, resolved = target_paths(path, working_directories, repo)
+    repo = repo.resolve()
+    if control_roots is None:
+        control_roots = repository_control_roots(repo)
+    aliases = (
+        _canonical_control_alias(lexical, repo, control_roots),
+        _canonical_control_alias(resolved, repo, control_roots),
+    )
+    kinds = {
+        path_kind(candidate, repo, control_roots)
+        for candidate in (lexical, resolved, *aliases)
+    }
+    for kind in ("protected", "product", "artifact", "external"):
+        if kind in kinds:
+            return kind
+    return "external"
+
+
+def enforce_pipeline_reentry(paths, working_directories):
+    repo = repository_root()
+    state = repo / ".project" / "STATE.md"
+    if not os.path.lexists(state):
+        return
+    control_roots = repository_control_roots(repo)
+    kinds = [
+        target_kind(path, working_directories, repo, control_roots) for path in paths
+    ]
+    if "protected" in kinds:
+        deny(CONTROL_FILE_REASON)
+    if all(kind == "external" for kind in kinds):
+        return
+    try:
+        status = project_status(repo)
+    except (OSError, ValueError, json.JSONDecodeError):
+        deny(REENTRY_FAILURE_REASON)
+    route = status.get("route")
+    state_data = status.get("state") if isinstance(status.get("state"), dict) else {}
+    routed_build = (
+        state_data.get("phase") == "build"
+        and isinstance(route, dict)
+        and route.get("action") == "run-phase"
+        and route.get("phase") == "build"
+    )
+    if routed_build:
+        return
+    if all(kind in {"external", "artifact"} for kind in kinds):
+        return
+    phase = state_data.get("phase", "unknown")
+    if isinstance(route, dict) and route.get("action") != "run-phase":
+        next_step = f"{route.get('action', 'route')}: {route.get('reason', 'no reason')}"
+    else:
+        next_step = status.get("next_skill") or "gsd-path"
+    deny(
+        f"GSD Path is {phase}; direct product-file changes require the routed "
+        f"build phase. Review {status.get('path', state)}; next: {next_step}"
+    )
 
 
 def in_archive(path):
@@ -441,6 +934,31 @@ def unresolved_archive_expansion(command, tokens, working_directories):
 def patch_paths(payload):
     for match in PATCH_PATH_PATTERN.finditer(payload):
         yield (match.group(1) or match.group(2)).strip()
+    for match in UNIFIED_DIFF_PATH_PATTERN.finditer(payload):
+        path = decode_patch_path(match.group(1), strip_prefix=True)
+        if path != "/dev/null":
+            yield path
+    for match in GIT_DIFF_PATH_PATTERN.finditer(payload):
+        for raw_path in match.groups():
+            yield decode_patch_path(raw_path, strip_prefix=True)
+    for match in GIT_RENAME_PATH_PATTERN.finditer(payload):
+        yield decode_patch_path(match.group(1), strip_prefix=False)
+
+
+def decode_patch_path(raw_path, strip_prefix):
+    path = raw_path.strip()
+    if path.startswith('"'):
+        try:
+            path = ast.literal_eval(path)
+        except (SyntaxError, ValueError) as error:
+            raise ValueError("quoted patch path cannot be validated") from error
+        if not isinstance(path, str):
+            raise ValueError("quoted patch path cannot be validated")
+    elif '"' in path:
+        raise ValueError("quoted patch path cannot be validated")
+    if strip_prefix and path.startswith(("a/", "b/")):
+        return path[2:]
+    return path
 
 
 def shell_tokens(command):
@@ -781,40 +1299,65 @@ def evaluate(event):
     if not isinstance(tool, str) or not tool.strip():
         raise ValueError("hook event is missing its tool name")
     paths, working_directories, commands, patch_payloads = [], [], [], []
-    collect(event, paths, working_directories, commands, patch_payloads)
-    if is_patch_tool(tool):
+    path_keys = PATH_KEYS
+    if is_direct_write_tool(tool):
+        path_keys |= MUTATION_OPERAND_KEYS
+    collect(
+        event,
+        paths,
+        working_directories,
+        commands,
+        patch_payloads,
+        path_keys,
+    )
+    raw_input = event.get("tool_input", event.get("toolInput"))
+    raw_patch = isinstance(raw_input, str) and has_patch_headers(raw_input)
+    if is_patch_tool(tool) or raw_patch:
         patch_payloads.extend(commands)
-        raw_input = event.get("tool_input", event.get("toolInput"))
         if isinstance(raw_input, str):
-            patch_payloads.append(raw_input)
+            patch_payloads.append((raw_input, tuple(working_directories)))
         commands = []
     read_tool = is_read_tool(tool)
+    extracted_patch_paths = []
     if not read_tool:
-        for path in paths:
-            if path_in_archive(path, working_directories):
+        for path, path_working_directories in paths:
+            if path_in_archive(path, path_working_directories):
                 deny(ARCHIVE_REASON)
         extracted_patch_paths = [
-            path for payload in patch_payloads for path in patch_paths(payload)
+            (path, patch_working_directories)
+            for payload, patch_working_directories in patch_payloads
+            for path in patch_paths(payload)
         ]
-        if is_patch_tool(tool) and not paths and not extracted_patch_paths:
+        if patch_payloads and not paths and not extracted_patch_paths:
             raise ValueError("patch targets cannot be validated")
-        for path in extracted_patch_paths:
-            if path_in_archive(path, working_directories):
+        for path, path_working_directories in extracted_patch_paths:
+            if path_in_archive(path, path_working_directories):
                 deny(ARCHIVE_REASON)
+        if is_direct_write_tool(tool, bool(paths or extracted_patch_paths)):
+            write_paths = [*paths, *extracted_patch_paths]
+            if not write_paths:
+                raise ValueError("write targets cannot be validated")
+            grouped_paths = {}
+            for path, path_working_directories in write_paths:
+                grouped_paths.setdefault(path_working_directories, []).append(path)
+            for path_working_directories, targets in grouped_paths.items():
+                enforce_pipeline_reentry(targets, path_working_directories)
     archive_working_directory = any(
         path_in_archive(path) for path in working_directories
     )
     if archive_working_directory and not commands and not read_tool:
         deny(ARCHIVE_REASON)
-    for command in commands:
+    for command, command_working_directories in commands:
         if SHELL_EXPANSION_SYNTAX.search(command):
             raise ValueError("dynamic shell execution cannot be validated")
         tokens = shell_tokens(command)
         archive_context = (
-            archive_working_directory
+            any(path_in_archive(path) for path in command_working_directories)
             or bool(ARCHIVE_REFERENCE.search(command))
-            or command_references_archive(tokens, working_directories)
-            or unresolved_archive_expansion(command, tokens, working_directories)
+            or command_references_archive(tokens, command_working_directories)
+            or unresolved_archive_expansion(
+                command, tokens, command_working_directories
+            )
         )
         if not archive_command_is_read_only(command, tokens, archive_context):
             deny(ARCHIVE_REASON)
