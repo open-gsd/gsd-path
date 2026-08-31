@@ -716,6 +716,18 @@ def _stale_install_lock_snapshot(lock: Path) -> Tuple[os.stat_result, bytes]:
 def _recover_stale_install_lock(lock: Path, quarantine: Path) -> Optional[Path]:
     legacy_quarantine = lock.with_name(f"{lock.name}.stale")
     if not _lexists(lock):
+        prefix = f"{lock.name}.stale-"
+        for orphan in lock.parent.glob(f"{prefix}*"):
+            staging = lock.parent / orphan.name.removeprefix(prefix)
+            try:
+                _stale_install_lock_snapshot(orphan)
+                if _lexists(staging):
+                    _stale_install_lock_snapshot(staging)
+            except InstallerError:
+                continue
+            if _lexists(staging):
+                shutil.rmtree(staging)
+            shutil.rmtree(orphan)
         if _lexists(legacy_quarantine):
             _stale_install_lock_snapshot(legacy_quarantine)
             shutil.rmtree(legacy_quarantine)
@@ -1160,23 +1172,29 @@ def _rollback_project(transaction: ProjectTransaction) -> None:
     _remove_empty_directories(transaction.created_directories)
 
 
-def _is_managed_guard_script(destination: Path) -> bool:
+def _managed_file_contains(destination: Path, marker: str, label: str) -> bool:
     if not destination.is_file():
         return False
-    return GUARD_MARKER in destination.read_text(encoding="utf-8", errors="replace")
+    try:
+        content = destination.read_text(encoding="utf-8", errors="replace")
+    except OSError as error:
+        raise InstallerError(f"cannot read {label}: {destination}") from error
+    return marker in content
+
+
+def _is_managed_guard_script(destination: Path) -> bool:
+    return _managed_file_contains(destination, GUARD_MARKER, "guard script")
 
 
 def _is_managed_project_status_launcher(destination: Path) -> bool:
-    return destination.is_file() and PROJECT_STATUS_MARKER in destination.read_text(
-        encoding="utf-8", errors="replace"
+    return _managed_file_contains(
+        destination, PROJECT_STATUS_MARKER, "project status launcher"
     )
 
 
 def _is_managed_project_runtime(destination: Path) -> bool:
-    if not destination.is_file():
-        return False
-    return PROJECT_RUNTIME_MARKER in destination.read_text(
-        encoding="utf-8", errors="replace"
+    return _managed_file_contains(
+        destination, PROJECT_RUNTIME_MARKER, "project runtime"
     )
 
 

@@ -846,6 +846,28 @@ test("install reclaims an orphaned stale quarantine", async () => {
   assert.ok(!fs.existsSync(quarantine));
 });
 
+test("install reclaims a unique orphaned stale quarantine", async () => {
+  const target = path.join(root, "unique-orphaned-quarantine", "skills");
+  const lock = path.join(path.dirname(target), ".gsd-path-install-lock");
+  const staging = path.join(path.dirname(target), ".install-lock-stage-abandoned");
+  const quarantine = `${lock}.stale-${path.basename(staging)}`;
+  const owner = JSON.stringify({
+    schema: "gsd-path/install-lock/v2",
+    pid: process.pid,
+    identity: "reused-pid",
+  });
+  for (const directory of [staging, quarantine]) {
+    fs.mkdirSync(directory, { recursive: true });
+    fs.writeFileSync(path.join(directory, "owner.json"), owner);
+  }
+
+  await runInstall([installer.targetPlan("claude", target)]);
+
+  assert.ok(fs.existsSync(path.join(target, installer.SKILL_NAMES[0])));
+  assert.ok(!fs.existsSync(staging));
+  assert.ok(!fs.existsSync(quarantine));
+});
+
 test("stale lock recovery preserves a replacement owner", async () => {
   const target = path.join(root, "raced-stale-owner", "skills");
   const lock = path.join(path.dirname(target), ".gsd-path-install-lock");
@@ -1744,6 +1766,46 @@ test("hooks refresh rejects an unmanaged project runtime", async () => {
 
   assert.equal(status, 1);
   assert.equal(fs.readFileSync(runtime, "utf8"), "custom\n");
+});
+
+test("hooks refresh reports an unreadable project runtime", async () => {
+  const project = path.join(root, "unreadable-runtime-project");
+  fs.mkdirSync(path.join(project, ".git"), { recursive: true });
+  const target = path.join(root, "unreadable-runtime-claude", "skills");
+  await runInstall(
+    [installer.targetPlan("claude", target)],
+    { project, hooks: true }
+  );
+  const runtime = path.join(
+    project,
+    installer.HOOKS_DIRECTORY,
+    "runtime",
+    "pipeline_state.py"
+  );
+  const originalReadFileSync = fs.readFileSync;
+  fs.readFileSync = (candidate, ...args) => {
+    if (path.resolve(candidate) === path.resolve(runtime)) {
+      const error = new Error("injected unreadable runtime");
+      error.code = "EACCES";
+      throw error;
+    }
+    return originalReadFileSync(candidate, ...args);
+  };
+  let status;
+  try {
+    status = await installer.main([
+      "--hooks-refresh",
+      "--project",
+      project,
+      "--source-root",
+      source,
+      "--no-color",
+    ]);
+  } finally {
+    fs.readFileSync = originalReadFileSync;
+  }
+
+  assert.equal(status, 1);
 });
 
 test("hooks refresh rejects a symlinked project runtime", async () => {

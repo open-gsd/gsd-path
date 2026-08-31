@@ -1343,6 +1343,30 @@ class InstallerTests(unittest.TestCase):
         self.assertTrue((target / install.SKILL_NAMES[0]).is_dir())
         self.assertFalse(quarantine.exists())
 
+    def test_install_reclaims_a_unique_orphaned_stale_quarantine(self):
+        target = self.root / "unique-orphaned-quarantine" / "skills"
+        lock = target.parent / install.INSTALL_LOCK_NAME
+        staging = target.parent / ".install-lock-stage-abandoned"
+        quarantine = lock.with_name(f"{lock.name}.stale-{staging.name}")
+        owner = json.dumps(
+            {
+                "schema": install.INSTALL_LOCK_SCHEMA,
+                "pid": os.getpid(),
+                "identity": "reused-pid",
+            }
+        )
+        for directory in (staging, quarantine):
+            directory.mkdir(parents=True)
+            (directory / install.INSTALL_LOCK_OWNER).write_text(
+                owner, encoding="utf-8"
+            )
+
+        install.install(self.source, [install.TargetPlan("claude", target)])
+
+        self.assertTrue((target / install.SKILL_NAMES[0]).is_dir())
+        self.assertFalse(staging.exists())
+        self.assertFalse(quarantine.exists())
+
     def test_stale_lock_recovery_preserves_a_replacement_owner(self):
         target = self.root / "raced-stale-owner" / "skills"
         lock = target.parent / install.INSTALL_LOCK_NAME
@@ -2227,6 +2251,39 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(1, status)
         self.assertIn("not a managed GSD Path project runtime", error)
         self.assertEqual("custom\n", runtime.read_text(encoding="utf-8"))
+
+    def test_hooks_refresh_reports_an_unreadable_project_runtime(self):
+        project = self.root / "unreadable-runtime-project"
+        (project / ".git").mkdir(parents=True)
+        target = self.root / "unreadable-runtime-claude" / "skills"
+        self.run_main(self.hooks_arguments(project, target))
+        runtime = (
+            project
+            / install.HOOKS_DIRECTORY
+            / "runtime"
+            / "pipeline_state.py"
+        )
+        original_read_text = Path.read_text
+
+        def unreadable(candidate, *args, **kwargs):
+            if candidate == runtime:
+                raise PermissionError("injected unreadable runtime")
+            return original_read_text(candidate, *args, **kwargs)
+
+        with mock.patch.object(Path, "read_text", new=unreadable):
+            status, _, error = self.run_main(
+                [
+                    "--hooks-refresh",
+                    "--project",
+                    str(project),
+                    "--source-root",
+                    str(self.source),
+                ]
+            )
+
+        self.assertEqual(1, status)
+        self.assertIn("cannot read project runtime", error)
+        self.assertNotIn("Traceback", error)
 
     def test_hooks_refresh_rejects_symlinked_project_runtime(self):
         project = self.root / "project"

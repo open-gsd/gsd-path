@@ -818,6 +818,20 @@ function staleInstallLockSnapshot(lock) {
 function recoverStaleInstallLock(lock, quarantine) {
   const legacyQuarantine = `${lock}.stale`;
   if (!lexists(lock)) {
+    const prefix = `${path.basename(lock)}.stale-`;
+    for (const name of fs.readdirSync(path.dirname(lock))) {
+      if (!name.startsWith(prefix)) continue;
+      const orphan = path.join(path.dirname(lock), name);
+      const staging = path.join(path.dirname(lock), name.slice(prefix.length));
+      try {
+        staleInstallLockSnapshot(orphan);
+        if (lexists(staging)) staleInstallLockSnapshot(staging);
+      } catch {
+        continue;
+      }
+      if (lexists(staging)) fs.rmSync(staging, { recursive: true });
+      fs.rmSync(orphan, { recursive: true });
+    }
     if (lexists(legacyQuarantine)) {
       staleInstallLockSnapshot(legacyQuarantine);
       fs.rmSync(legacyQuarantine, { recursive: true });
@@ -1227,19 +1241,29 @@ function rollbackProject(transaction) {
   removeEmptyDirectories(transaction.createdDirectories);
 }
 
-function isManagedGuardScript(destination) {
+function managedFileContains(destination, marker, label) {
   if (!isFile(destination)) return false;
-  return fs.readFileSync(destination, "utf8").includes(GUARD_MARKER);
+  try {
+    return fs.readFileSync(destination, "utf8").includes(marker);
+  } catch {
+    throw new InstallerError(`cannot read ${label}: ${destination}`);
+  }
+}
+
+function isManagedGuardScript(destination) {
+  return managedFileContains(destination, GUARD_MARKER, "guard script");
 }
 
 function isManagedProjectRuntime(destination) {
-  if (!isFile(destination)) return false;
-  return fs.readFileSync(destination, "utf8").includes(PROJECT_RUNTIME_MARKER);
+  return managedFileContains(destination, PROJECT_RUNTIME_MARKER, "project runtime");
 }
 
 function isManagedProjectStatusLauncher(destination) {
-  if (!isFile(destination)) return false;
-  return fs.readFileSync(destination, "utf8").includes(PROJECT_STATUS_MARKER);
+  return managedFileContains(
+    destination,
+    PROJECT_STATUS_MARKER,
+    "project status launcher"
+  );
 }
 
 function isManagedGitHook(destination) {

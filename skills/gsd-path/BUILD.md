@@ -203,10 +203,10 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
    worktree at that base; never a detached HEAD. Record dispatch through
    `python3 <absolute isolation.py> activate-task --repo <returned worktree>
    --base <recorded base> --task-id <id> --agent build_<id> --task-file
-   .project/tasks/<id>.md [--task-branch <returned task_branch>]`. The helper
-   sets `base`, `worktree`, `task_branch`, `status: in-progress`, and `agent`
-   in the isolated task and records parallel build authorization. Do not edit
-   those fields directly. Do not commit this dispatch state: it lands
+   <exact selected task-file path> [--task-branch <returned task_branch>]`.
+   The helper sets `base`, `worktree`, `task_branch`, `status: in-progress`,
+   and `agent` in the isolated task and records parallel build authorization.
+   Do not edit those fields directly. Do not commit this dispatch state: it lands
    inside the task's own commit, and `recover` derives it from the task
    branch and worktree meanwhile. The primary stays clean during a parallel
    round. Do not append a dispatch Log entry: the isolated task later appends

@@ -52,7 +52,7 @@ UNIFIED_DIFF_PATH_PATTERN = re.compile(
 # A tool skips path checks only when its name carries a read-only verb and
 # no write-capable verb: `get_and_write` must still be path-checked.
 READ_VERBS = frozenset(
-    {"read", "grep", "search", "view", "list", "get", "cat", "open"}
+    {"read", "grep", "glob", "search", "view", "list", "get", "cat", "open"}
 )
 WRITE_VERBS = frozenset(
     {
@@ -310,6 +310,13 @@ def is_read_tool(tool):
 
 def is_patch_tool(tool):
     return "patch" in tool_tokens(tool)
+
+
+def has_patch_headers(payload):
+    return bool(
+        PATCH_PATH_PATTERN.search(payload)
+        or UNIFIED_DIFF_PATH_PATTERN.search(payload)
+    )
 
 
 def is_direct_write_tool(tool, has_file_targets=False):
@@ -1186,9 +1193,10 @@ def evaluate(event):
         raise ValueError("hook event is missing its tool name")
     paths, working_directories, commands, patch_payloads = [], [], [], []
     collect(event, paths, working_directories, commands, patch_payloads)
-    if is_patch_tool(tool):
+    raw_input = event.get("tool_input", event.get("toolInput"))
+    raw_patch = isinstance(raw_input, str) and has_patch_headers(raw_input)
+    if is_patch_tool(tool) or raw_patch:
         patch_payloads.extend(commands)
-        raw_input = event.get("tool_input", event.get("toolInput"))
         if isinstance(raw_input, str):
             patch_payloads.append(raw_input)
         commands = []
