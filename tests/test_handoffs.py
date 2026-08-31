@@ -857,6 +857,24 @@ The task implements the demo.
             self.assertIn("Demo web app", message)
             self.assertIn("Demo CLI", message)
 
+    def test_plan_rejects_a_duplicate_surface_heading(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_plan_handoff(root)
+            self.write_intent_criteria(root, surfaces="Demo web app")
+            self.write_plan_coverage(
+                root,
+                surface_contract=SURFACE_CONTRACT
+                + SURFACE_CONTRACT.replace("## Surface contract\n\n", ""),
+            )
+
+            with self.assertRaises(check_handoffs.HandoffError) as failure:
+                check_handoffs.validate_plan(root)
+            self.assertIn(
+                "Surface contract repeats the Demo web app surface",
+                str(failure.exception),
+            )
+
     def test_plan_rejects_a_surface_block_without_a_walkthrough(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -872,6 +890,26 @@ The task implements the demo.
             with self.assertRaises(check_handoffs.HandoffError) as failure:
                 check_handoffs.validate_plan(root)
             self.assertIn("Walkthrough has no steps", str(failure.exception))
+
+    def test_plan_rejects_a_placeholder_walkthrough_step(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_plan_handoff(root)
+            self.write_intent_criteria(root, surfaces="Demo web app")
+            self.write_plan_coverage(
+                root,
+                surface_contract=SURFACE_CONTRACT.replace(
+                    "Open `/demo` and see the starter card.",
+                    "<step a reviewer performs>",
+                ),
+            )
+
+            with self.assertRaises(check_handoffs.HandoffError) as failure:
+                check_handoffs.validate_plan(root)
+            self.assertIn(
+                "Demo web app surface Walkthrough step 1 is still a placeholder",
+                str(failure.exception),
+            )
 
     def test_plan_rejects_surface_criteria_the_owning_task_does_not_own(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -953,6 +991,33 @@ The task implements the demo.
             with self.assertRaises(check_handoffs.HandoffError) as failure:
                 check_handoffs.validate_roadmap(root)
             self.assertIn("M001 is missing Surfaces", str(failure.exception))
+
+    def test_roadmap_rejects_repeated_surfaces_within_one_milestone(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_state(root, "roadmap", "active")
+            second_milestone = ROADMAP.replace(
+                "# Roadmap — demo\n\n## Milestones\n\n### M001 — demo",
+                "### M002 — second",
+            ).replace("Surfaces: Demo web app", "Surfaces: Demo CLI")
+            roadmap = ROADMAP + "\n" + second_milestone
+            self.write(root, ".project/ROADMAP.md", roadmap)
+
+            result = check_handoffs.validate_roadmap(root)
+            self.assertEqual(result["milestones"], ["M001", "M002"])
+
+            self.write(
+                root,
+                ".project/ROADMAP.md",
+                roadmap.replace(
+                    "Surfaces: Demo web app\n",
+                    "Surfaces: Demo web app\nSurfaces: Demo CLI\n",
+                    1,
+                ),
+            )
+            with self.assertRaises(check_handoffs.HandoffError) as failure:
+                check_handoffs.validate_roadmap(root)
+            self.assertIn("M001 repeats Surfaces", str(failure.exception))
 
     def test_plan_allows_project_verify_when_an_owned_sc_names_it(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

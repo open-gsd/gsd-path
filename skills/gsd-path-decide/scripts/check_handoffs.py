@@ -502,9 +502,17 @@ def _success_criteria(intent: str) -> Dict[str, str]:
 def _surfaces(text: str, label: str) -> List[str]:
     """Human-facing surfaces one milestone delivers; empty when `none`."""
 
-    value = _roadmap_field(_strip_comments(text), "Surfaces", label, allow_none=True)
+    matches = re.findall(
+        r"(?m)^Surfaces:\s*([^#]*?)(?:\s+#.*)?$", _strip_comments(text)
+    )
+    if not matches:
+        raise HandoffError(f"{label} is missing Surfaces")
+    if len(matches) != 1:
+        raise HandoffError(f"{label} repeats Surfaces")
+    value = matches[0].strip().strip("`\"'")
     if value.casefold() == "none":
         return []
+    value = _non_placeholder(value, f"{label} Surfaces")
     named = [
         _non_placeholder(item, f"{label} Surfaces")
         for item in value.split(",")
@@ -548,13 +556,18 @@ def _surface_contract(
     """Map each declared surface to the task that delivers it and its criteria."""
 
     body = _strip_comments(_section(plan, "Surface contract"))
-    blocks: Dict[str, Tuple[str, str]] = {
-        heading.group("surface").casefold(): (
+    blocks: Dict[str, Tuple[str, str]] = {}
+    for heading in SURFACE_HEADING.finditer(body):
+        heading_surface = heading.group("surface")
+        key = heading_surface.casefold()
+        if key in blocks:
+            raise HandoffError(
+                f"Surface contract repeats the {heading_surface} surface"
+            )
+        blocks[key] = (
             heading.group("task"),
             _heading_block(body, heading),
         )
-        for heading in SURFACE_HEADING.finditer(body)
-    }
     owners: Dict[str, Tuple[str, List[str]]] = {}
     surface_by_criterion: Dict[str, str] = {}
     for surface in surfaces:
@@ -566,8 +579,13 @@ def _surface_contract(
         for field in ("Entry", "States"):
             # Read the whole line: `#` is legal inside a route or a command.
             _non_placeholder(_line_value(block, f"{field}:"), f"{label} {field}")
-        if not _numbered_items(_roadmap_segment(block, "Walkthrough:", None, label)):
+        walkthrough = _numbered_items(
+            _roadmap_segment(block, "Walkthrough:", None, label)
+        )
+        if not walkthrough:
             raise HandoffError(f"{label} Walkthrough has no steps")
+        for number, step in walkthrough.items():
+            _non_placeholder(step, f"{label} Walkthrough step {number}")
         criteria = _criterion_ids(_roadmap_field(block, "Criteria", label), label)
         for criterion in criteria:
             previous_surface = surface_by_criterion.get(criterion)
