@@ -338,8 +338,8 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
      `python3 <absolute review_panel.py> resolve --plan <absolute PLAN.md>
      --intent <absolute INTENT.md> --advertised <comma slugs>
      --parent-slug <current model slug when known>` and `--charter
-     <absolute .project/CHARTER.md>` when that file exists. `off` or
-     `off` continues with no current-cycle panel artifact. For `skipped`,
+     <absolute .project/CHARTER.md>` when that file exists. `status: off`
+     continues with no current-cycle panel artifact. For `skipped`,
      persist the helper's exact JSON stdout as
      `.project/review/wave-N.cycleC.panel.skipped.json` and continue without
      a panel; do not translate or summarize the receipt. Exit 2 / `error`

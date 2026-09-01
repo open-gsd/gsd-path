@@ -197,8 +197,8 @@ as stated in Lookahead mode.
      in plan-panel mode, the plan-panel template, and the exact helper-returned
      model slug when the host advertises model selection. Never override the
      model on the planner. Each child stages its family file under a
-     disposable root; the parent validates and copies those files, then runs
-     remove any stale `<track>/review/PLAN-PANEL.skipped.json`, then run
+     disposable root; the parent validates and copies those files, removes
+     any stale `<track>/review/PLAN-PANEL.skipped.json`, then runs
      `python3 <absolute review_panel.py> merge --kind plan --inputs <family
      files> --output <absolute <track>/review/PLAN-PANEL.md> --mode
      <detected|named>`. Do not average findings or auto-replan.

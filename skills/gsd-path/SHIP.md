@@ -39,7 +39,11 @@ artifacts. Pass the record's exact stored owner to `dispose` so the disposition
 receipt preserves that durable owner name; use `gsd-path-ship` for new records.
 If it changes approved intent/plan or names another owner, keep
 `ship/blocked`, link ANSWERS.md and the target artifact, and ask the user
-before dispatch or ship. Then:
+before dispatch or ship. Every `ship/blocked` write and the step 7 log-only
+event use `pipeline_state.py transition` with expected `ship/active` and the
+exact current branch and archive values: blocking passes `--set-status
+blocked`; the log-only event passes `--set-status active` and the event text,
+so the position is unchanged. Then:
 
 1. Require STATE `ship/active` produced and committed by the build
    orchestrator, `.project/intent/INTENT.md`,

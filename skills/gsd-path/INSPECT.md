@@ -105,8 +105,7 @@ same milestone; a later milestone's `inspect/active` is a new scan.
    name, following the runtime dispatch contract. If it still fails, run
    `pipeline_state.py transition` with expected `inspect/active`, the exact
    current branch and archive values, `--set-status blocked`, and an event
-   naming the failed artifact gate
-   if it still fails. Present **Outcome** with the failed gate, **Review**
+   naming the failed artifact gate. Present **Outcome** with the failed gate, **Review**
    linking each malformed output that exists or STATE.md when an output is
    missing, and **Next** naming the one correction or user decision required;
    then stop.
