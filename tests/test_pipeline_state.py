@@ -5,6 +5,7 @@ import shutil
 import sys
 import tempfile
 import unittest
+from datetime import date
 from pathlib import Path
 from unittest import mock
 
@@ -2387,6 +2388,49 @@ class PipelineStateTests(unittest.TestCase):
             roadmap = (project / "ROADMAP.md").read_text()
             self.assertIn("Status: shipped", roadmap)
             self.assertIn("Archive: .project/archive/001-first", roadmap)
+
+    def test_record_shipment_resumes_on_a_later_day(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            run_git(repo, "init", "-b", "gsd-path/M001")
+            project = repo / ".project"
+            project.mkdir()
+            (project / "STATE.md").write_text(
+                state_text(
+                    milestone="first", phase="ship", status="active",
+                    branch="gsd-path/M001", archive=".project/archive/001-first",
+                ), encoding="utf-8",
+            )
+            original = pipeline_state._atomic_write
+
+            def interrupt(path: Path, content: str) -> None:
+                if path.name == "STATE.md":
+                    raise pipeline_state.PipelineStateError("simulated interruption")
+                original(path, content)
+
+            with mock.patch.object(pipeline_state, "_atomic_write", side_effect=interrupt):
+                with self.assertRaisesRegex(pipeline_state.PipelineStateError, "interruption"):
+                    pipeline_state.record_shipment(
+                        repo, ".project/archive/001-first",
+                        "archive preflight passed; shipment recorded",
+                    )
+            journal_path = pipeline_state._git_path(repo, pipeline_state.SHIPMENT_JOURNAL_NAME)
+            journal = json.loads(journal_path.read_text(encoding="utf-8"))
+            today = date.today().isoformat()
+            self.assertIn(today, journal["state_after"])
+            journal["state_after"] = journal["state_after"].replace(today, "2000-01-01")
+            journal_path.write_text(json.dumps(journal), encoding="utf-8")
+
+            result = pipeline_state.record_shipment(
+                repo, ".project/archive/001-first",
+                "archive preflight passed; shipment recorded",
+            )
+
+            self.assertEqual(result["status"], "recorded")
+            self.assertIn(
+                "- 2000-01-01 — shipped — archive preflight passed; shipment recorded",
+                (project / "STATE.md").read_text(encoding="utf-8"),
+            )
 
     def test_record_shipment_preserves_single_milestone_flow(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

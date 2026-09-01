@@ -1734,6 +1734,16 @@ def record_shipment(repo: Path, archive: str, event: str) -> dict[str, object]:
             target_roadmap: Optional[str] = _shipment_roadmap(roadmap_text, state, archive)
         else:
             roadmap_text = target_roadmap = None
+        journal: Optional[dict[str, object]] = None
+        event_date: Optional[str] = None
+        if journal_path.exists() or journal_path.is_symlink():
+            journal = _read_json(journal_path)
+            # Reuse the journaled event date so a next-day resume still matches.
+            recorded = re.match(
+                r"- (\S+) — ",
+                str(journal.get("state_after", "")).rstrip("\n").rsplit("\n", 1)[-1],
+            )
+            event_date = recorded.group(1) if recorded else None
         if (state.phase, state.status) == ("ship", "active"):
             _, after, target_state = _render_transition(
                 state,
@@ -1747,6 +1757,7 @@ def record_shipment(repo: Path, archive: str, event: str) -> dict[str, object]:
                 {"phase": "shipped", "status": "done"},
                 event,
                 ".project",
+                event_date,
             )
         elif (state.phase, state.status) == ("shipped", "done"):
             if " ".join(event.split()) not in {
@@ -1763,8 +1774,7 @@ def record_shipment(repo: Path, archive: str, event: str) -> dict[str, object]:
             "archive": archive,
             "event": " ".join(event.split()),
         }
-        if journal_path.exists() or journal_path.is_symlink():
-            journal = _read_json(journal_path)
+        if journal is not None:
             expected_keys = {
                 *request,
                 "roadmap_before",
