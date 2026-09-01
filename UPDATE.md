@@ -14,6 +14,7 @@ Pulled new gsd-path / ran npx gsd-path@latest
 └─ Skills feel stale or router shows old behavior?
    ├─ Global install     → install.mjs --update
    ├─ Project-local      → install.mjs --update --local  (from repo root)
+   ├─ Project runtime    → install.mjs --update --project PATH  (refreshes .gsd-path/, keeps contracts)
    └─ npm only           → npx gsd-path@latest --update
 
 Installed with --hooks and upgraded guard scripts
@@ -38,8 +39,8 @@ AGENTS.md or WORKFLOW.md template changed upstream
 | --- | --- | --- |
 | Global skills (`~/.claude/skills`, …) | Yes | `--update` |
 | Project-local skills (`.cursor/skills`, …) | Yes | `--update --local` |
-| `.gsd-path/guard_hook.py`, `git_guard.py` | Yes | `--hooks-refresh` |
-| `.gsd-path/runtime/*.py` | Yes | `--hooks-refresh` |
+| `.gsd-path/guard_hook.py`, `git_guard.py` | Yes | `--hooks-refresh` or `--update --project PATH` |
+| `.gsd-path/runtime/*.py` | Yes | `--hooks-refresh` or `--update --project PATH` |
 | Native hook settings + git hooks | Yes | `--hooks-refresh-full` (host flag creates missing config) |
 | Guards for an existing project | Yes | `--hooks-init` (preserves project contracts) |
 | `AGENTS.md`, `WORKFLOW.md` | **No** | Manual merge |
@@ -47,8 +48,10 @@ AGENTS.md or WORKFLOW.md template changed upstream
 
 Existing `gsd-path*` skills move to `disabled-gsd-skills` beside each root before replace.
 Unrelated skills are never touched. Failed multi-host updates roll back all selected targets.
-An initial `--hooks` install merges valid native settings for explicitly selected Codex
-or Cursor hosts; other existing project contract and guard files are refused.
+An initial `--hooks` install merges valid native settings for explicitly selected Claude,
+Codex, or Cursor hosts; other existing project contract and guard files are refused.
+`--update --project PATH` keeps `AGENTS.md`, `WORKFLOW.md`, and `.claude/CLAUDE.md`
+and refreshes the managed `.gsd-path/` files, native settings, and git hooks.
 Use `--hooks-init` to add guards to an existing project without changing its
 `AGENTS.md` or `WORKFLOW.md`. It inspects and merges native configs only for
 the selected hosts; configs for unselected hosts remain untouched.
@@ -147,8 +150,8 @@ Details: [HOOKS.md](HOOKS.md)
 
 ## Update project contracts
 
-`AGENTS.md` and `WORKFLOW.md` are installed once with `--project`. The installer
-**refuses** if they already exist.
+`AGENTS.md` and `WORKFLOW.md` are installed once with `--project`. A plain install
+**refuses** if they already exist; `--update --project PATH` keeps them unchanged.
 
 To adopt upstream template changes:
 

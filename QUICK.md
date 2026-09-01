@@ -66,9 +66,10 @@ node scripts/install.mjs --all --project "$(pwd)"
 
 Installs `AGENTS.md`, `WORKFLOW.md`, and `.gsd-path/runtime/`
 (+ `.claude/CLAUDE.md` if Claude is selected).
-If those managed files already exist, the installer **refuses and installs
-nothing** — use `--update` to refresh skills, and merge project-contract
-changes by hand ([UPDATE.md](UPDATE.md)).
+If those managed files already exist, a plain install **refuses and installs
+nothing** — use `--update --project PATH` to refresh skills and `.gsd-path/`
+while keeping your contracts, and merge project-contract changes by hand
+([UPDATE.md](UPDATE.md)).
 
 **Optional** archive/git guards:
 

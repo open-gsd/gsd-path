@@ -37,8 +37,8 @@ npx gsd-path --hooks-init --claude --project /path/to/repo
 ```
 
 `--hooks` requires `--project`. Valid existing native settings for explicitly
-selected Codex or Cursor hosts are merged, preserving unrelated settings and
-hooks. Other target files are refused if they already exist.
+selected Claude, Codex, or Cursor hosts are merged, preserving unrelated
+settings and hooks. Other target files are refused if they already exist.
 
 `--hooks-init` also requires `--project` plus at least one host flag or `--all`.
 It creates the managed guard scripts, merges selected native settings, and

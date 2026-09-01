@@ -1115,6 +1115,9 @@ function projectDestinations(project, selected, hooksEnabled, interpreter, hooks
 function nativeSettingsMergers(project, selected, hooksEnabled) {
   const mergers = new Map();
   if (!hooksEnabled) return mergers;
+  if (selected.includes("claude")) {
+    mergers.set(path.join(project, ".claude", "settings.json"), mergedClaudeSettings);
+  }
   if (selected.includes("codex")) {
     mergers.set(path.join(project, ".codex", "hooks.json"), mergedCodexSettings);
   }
@@ -1122,6 +1125,23 @@ function nativeSettingsMergers(project, selected, hooksEnabled) {
     mergers.set(path.join(project, ".cursor", "hooks.json"), mergedCursorSettings);
   }
   return mergers;
+}
+
+// --update replaces managed runtime, guard, and git hook files in place and
+// keeps everything else (AGENTS.md, WORKFLOW.md, CLAUDE.md). Returns the
+// managed-file check for a replaceable destination, or null for a kept one.
+function updateReplacement(project, destination, hooksDir) {
+  const parent = path.join(project, HOOKS_DIRECTORY);
+  const directory = path.dirname(destination);
+  if (samePath(directory, path.join(parent, "runtime"))) return isManagedProjectRuntime;
+  if (samePath(destination, path.join(parent, PROJECT_STATUS_LAUNCHER))) {
+    return isManagedProjectStatusLauncher;
+  }
+  if (GUARD_SCRIPTS.some((name) => samePath(destination, path.join(parent, name)))) {
+    return isManagedGuardScript;
+  }
+  if (hooksDir !== null && samePath(directory, hooksDir)) return isManagedGitHook;
+  return null;
 }
 
 function describeProjectPath(project, destination) {
@@ -1138,15 +1158,33 @@ function projectFiles(project, selected, hooksEnabled, interpreter, hooksDir) {
     .join(", ");
 }
 
+function projectResult(project, selected, hooksEnabled, interpreter, hooksDir, update, dryRun) {
+  if (!update) {
+    const files = projectFiles(project, selected, hooksEnabled, interpreter, hooksDir);
+    return `project: ${dryRun ? "would copy" : "copied"} ${files} to ${project}`;
+  }
+  const mergers = nativeSettingsMergers(project, selected, hooksEnabled);
+  const refreshed = [];
+  const kept = [];
+  for (const [destination] of projectDestinations(project, selected, hooksEnabled, interpreter, hooksDir)) {
+    const replaceable =
+      mergers.has(destination) || updateReplacement(project, destination, hooksDir) !== null;
+    (lexists(destination) && !replaceable ? kept : refreshed).push(describeProjectPath(project, destination));
+  }
+  let line = `project: ${dryRun ? "would refresh" : "refreshed"} ${refreshed.join(", ")} in ${project}`;
+  if (kept.length) line += `; kept ${kept.join(", ")}`;
+  return line;
+}
+
 function existingContractError(destination) {
   return new InstallerError(
     `project contract already exists: ${destination} — the installer never ` +
-      "overwrites project files. Run --update to refresh installed skills; " +
-      "merge template changes manually (see UPDATE.md)."
+      "overwrites project files. Run --update --project PATH to refresh managed " +
+      "runtime files; merge template changes manually (see UPDATE.md)."
   );
 }
 
-function validateProject(sourceRoot, project, selected, hooksEnabled, reservedRoots, interpreter, hooksDir) {
+function validateProject(sourceRoot, project, selected, hooksEnabled, reservedRoots, interpreter, hooksDir, update = false) {
   const includeClaude = selected.includes("claude");
   validateDirectoryDestination(project, "project path");
   validateProjectGitRoot(project);
@@ -1190,10 +1228,15 @@ function validateProject(sourceRoot, project, selected, hooksEnabled, reservedRo
   for (const [destination] of projectDestinations(project, selected, hooksEnabled, interpreter, hooksDir)) {
     if (lexists(destination)) {
       const merge = mergers.get(destination);
-      if (merge === undefined || isSymlink(destination)) {
+      const managed = update ? updateReplacement(project, destination, hooksDir) : null;
+      if (isSymlink(destination) || (merge === undefined && !update)) {
         throw existingContractError(destination);
       }
-      merge(destination, interpreter);
+      if (merge !== undefined) {
+        merge(destination, interpreter);
+      } else if (managed !== null && !managed(destination)) {
+        throw new InstallerError(`not a managed GSD Path project file: ${destination}`);
+      }
     }
     for (const [label, root] of reservedRoots) {
       if (pathsOverlap(destination, root)) {
@@ -1203,7 +1246,7 @@ function validateProject(sourceRoot, project, selected, hooksEnabled, reservedRo
   }
 }
 
-function applyProject(sourceRoot, project, selected, hooksEnabled, transaction, interpreter, hooksDir) {
+function applyProject(sourceRoot, project, selected, hooksEnabled, transaction, interpreter, hooksDir, update = false) {
   createDirectory(project, transaction.createdDirectories);
   const mergers = nativeSettingsMergers(project, selected, hooksEnabled);
   for (const [destination, sourceName, literal, executable] of projectDestinations(
@@ -1215,16 +1258,21 @@ function applyProject(sourceRoot, project, selected, hooksEnabled, transaction, 
   )) {
     createDirectory(path.dirname(destination), transaction.createdDirectories);
     const merge = mergers.get(destination);
-    if (lexists(destination) && merge !== undefined && !isSymlink(destination)) {
-      const original = fs.readFileSync(destination);
-      const mode = fs.statSync(destination).mode & 0o777;
-      writeFileAtomic(destination, merge(destination, interpreter), mode);
-      transaction.replaced.push({ destination, original, mode });
-      continue;
-    }
     const content = sourceName
       ? fs.readFileSync(path.join(sourceRoot, sourceName))
       : Buffer.from(literal, "utf8");
+    if (lexists(destination) && !isSymlink(destination)) {
+      const replaceable = update && updateReplacement(project, destination, hooksDir) !== null;
+      if (merge !== undefined || replaceable) {
+        const original = fs.readFileSync(destination);
+        const mode = fs.statSync(destination).mode & 0o777;
+        const replacement = merge !== undefined ? merge(destination, interpreter) : content;
+        writeFileAtomic(destination, replacement, executable ? 0o755 : mode);
+        transaction.replaced.push({ destination, original, mode });
+        continue;
+      }
+      if (update) continue;
+    }
     let fd = null;
     try {
       fd = fs.openSync(destination, "wx");
@@ -2623,7 +2671,8 @@ export async function install(sourceRoot, plans, options = {}) {
         hooksEnabled,
         [...mutationRoots, ...plannedBackups],
         interpreter,
-        hooksDir
+        hooksDir,
+        update
       );
     }
   }
@@ -2653,8 +2702,7 @@ export async function install(sourceRoot, plans, options = {}) {
         results.push(installResult(plan, true, update) + suffix);
       }
       if (project !== null) {
-        const files = projectFiles(project, selected, hooksEnabled, interpreter, hooksDir);
-        results.push(`project: would copy ${files} to ${project}`);
+        results.push(projectResult(project, selected, hooksEnabled, interpreter, hooksDir, update, true));
       }
       appendHostNotes(results, selected);
       return results;
@@ -2675,7 +2723,8 @@ export async function install(sourceRoot, plans, options = {}) {
           hooksEnabled,
           [...mutationRoots, ...plannedBackups],
           interpreter,
-          hooksDir
+          hooksDir,
+          update
         );
       }
       if (legacyRoot !== null && isDirectory(legacyRoot)) {
@@ -2717,6 +2766,7 @@ export async function install(sourceRoot, plans, options = {}) {
       }
       if (project !== null) {
         await progress("Writing project contracts");
+        const resultLine = projectResult(project, selected, hooksEnabled, interpreter, hooksDir, update, false);
         applyProject(
           sourceRoot,
           project,
@@ -2724,10 +2774,10 @@ export async function install(sourceRoot, plans, options = {}) {
           hooksEnabled,
           projectTransaction,
           interpreter,
-          hooksDir
+          hooksDir,
+          update
         );
-        const files = projectFiles(project, selected, hooksEnabled, interpreter, hooksDir);
-        results.push(`project: copied ${files} to ${project}`);
+        results.push(resultLine);
       }
     } catch (error) {
       const rollbackErrors = [];
@@ -2870,7 +2920,8 @@ function usage() {
     "  New repo:       gsd-path --all --project /path/to/repo\n" +
     "  Update skills:  gsd-path --update   (or npx gsd-path@latest --update)\n\n" +
     `targets: ${flags}\n` +
-    "  --update              refresh existing installs in place\n" +
+    "  --update              refresh existing installs in place; with --project also\n" +
+    "                        refreshes .gsd-path/ and keeps AGENTS.md/WORKFLOW.md\n" +
     "  --local               install into this project's per-host skill dirs\n" +
     "  --project PATH        write project contracts and status runtime; requires Python 3.9+\n" +
     "  --doctor              read-only health check of installs, hooks, and state\n" +

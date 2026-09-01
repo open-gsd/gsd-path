@@ -37,6 +37,7 @@ cd your-repo && node scripts/install.mjs --all --project "$(pwd)"
 
 # Already installed
 node scripts/install.mjs --update
+cd your-repo && node scripts/install.mjs --update --project "$(pwd)"   # also refresh .gsd-path/
 ```
 
 Interactive: `npx gsd-path` with no flags opens the OpenGSD wizard (pick hosts, scope, contracts, hooks; dry-run first)
@@ -208,6 +209,7 @@ node scripts/install.mjs --claude --cursor
 node scripts/install.mjs --all --local
 node scripts/install.mjs --all --project /path/to/project
 node scripts/install.mjs --update
+node scripts/install.mjs --all --update --project /path/to/project   # refresh .gsd-path/; keeps contracts
 ```
 
 | Flag | User skills root | Invoke |

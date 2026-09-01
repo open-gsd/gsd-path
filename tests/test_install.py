@@ -1878,20 +1878,144 @@ class InstallerTests(unittest.TestCase):
         self.assertFalse(target.exists())
         self.assertFalse((project / "AGENTS.md").exists())
 
+    def test_hooks_install_merges_an_existing_claude_settings_file(self):
+        project = self.root / "project"
+        (project / ".git").mkdir(parents=True)
+        (project / ".claude").mkdir(parents=True)
+        settings_path = project / ".claude" / "settings.json"
+        settings_path.write_text(
+            json.dumps(
+                {
+                    "userSetting": True,
+                    "hooks": {
+                        "PreToolUse": [
+                            {
+                                "matcher": "Write",
+                                "hooks": [{"type": "command", "command": "custom"}],
+                            }
+                        ]
+                    },
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        target = self.root / "claude" / "skills"
+        status, _, error = self.run_main(self.hooks_arguments(project, target))
+        self.assertEqual(0, status, error)
+        settings = json.loads(settings_path.read_text(encoding="utf-8"))
+        self.assertTrue(settings["userSetting"])
+        self.assertEqual(2, len(settings["hooks"]["PreToolUse"]))
+        self.assertEqual(
+            "custom", settings["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+        )
+        self.assertIn(
+            "guard_hook.py", settings["hooks"]["PreToolUse"][1]["hooks"][0]["command"]
+        )
+        self.assertTrue((project / "AGENTS.md").exists())
+
     def test_hooks_collision_rolls_back_cleanly(self):
         project = self.root / "project"
         (project / ".git").mkdir(parents=True)
         (project / ".claude").mkdir(parents=True)
-        (project / ".claude" / "settings.json").write_text("{}", encoding="utf-8")
+        (project / ".claude" / "settings.json").write_text("not json", encoding="utf-8")
         target = self.root / "claude" / "skills"
         status, _, error = self.run_main(self.hooks_arguments(project, target))
         self.assertEqual(1, status)
-        self.assertIn("already exists", error)
+        self.assertIn("settings", error)
         self.assertFalse(target.exists())
         self.assertFalse((project / "AGENTS.md").exists())
         self.assertEqual(
-            "{}", (project / ".claude" / "settings.json").read_text(encoding="utf-8")
+            "not json",
+            (project / ".claude" / "settings.json").read_text(encoding="utf-8"),
         )
+
+    def test_update_keeps_project_contracts_and_refreshes_the_managed_runtime(self):
+        project = self.root / "update-project"
+        (project / ".git").mkdir(parents=True)
+        target = self.root / "claude" / "skills"
+        status, _, error = self.run_main(self.hooks_arguments(project, target))
+        self.assertEqual(0, status, error)
+        (project / "AGENTS.md").write_text("edited contract\n", encoding="utf-8")
+        (project / ".claude" / "CLAUDE.md").write_text("edited bridge\n", encoding="utf-8")
+        runtime_file = (
+            project
+            / install.HOOKS_DIRECTORY
+            / "runtime"
+            / install.PROJECT_RUNTIME_SCRIPTS[0]
+        )
+        guard_file = project / install.HOOKS_DIRECTORY / install.GUARD_SCRIPTS[0]
+        stale_runtime = f"# stale\n{install.PROJECT_RUNTIME_MARKER}\n"
+        runtime_file.write_text(stale_runtime, encoding="utf-8")
+        guard_file.write_text(f"# stale\n{install.GUARD_MARKER}\n", encoding="utf-8")
+        settings_path = project / ".claude" / "settings.json"
+        settings = json.loads(settings_path.read_text(encoding="utf-8"))
+        settings["userSetting"] = True
+        settings_path.write_text(json.dumps(settings) + "\n", encoding="utf-8")
+
+        status, output, error = self.run_main(
+            [*self.hooks_arguments(project, target), "--update", "--dry-run"]
+        )
+        self.assertEqual(0, status, error)
+        self.assertRegex(
+            output,
+            r"project: would refresh .*; kept AGENTS\.md, WORKFLOW\.md, \.claude/CLAUDE\.md",
+        )
+        self.assertEqual(stale_runtime, runtime_file.read_text(encoding="utf-8"))
+
+        status, output, error = self.run_main(
+            [*self.hooks_arguments(project, target), "--update"]
+        )
+        self.assertEqual(0, status, error)
+        self.assertRegex(
+            output,
+            r"project: refreshed .*; kept AGENTS\.md, WORKFLOW\.md, \.claude/CLAUDE\.md\n",
+        )
+        self.assertEqual(
+            "edited contract\n", (project / "AGENTS.md").read_text(encoding="utf-8")
+        )
+        self.assertEqual(
+            "edited bridge\n",
+            (project / ".claude" / "CLAUDE.md").read_text(encoding="utf-8"),
+        )
+        self.assertEqual(
+            (self.source / "scripts" / install.PROJECT_RUNTIME_SCRIPTS[0]).read_text(
+                encoding="utf-8"
+            ),
+            runtime_file.read_text(encoding="utf-8"),
+        )
+        self.assertEqual(
+            (self.source / "scripts" / install.GUARD_SCRIPTS[0]).read_text(
+                encoding="utf-8"
+            ),
+            guard_file.read_text(encoding="utf-8"),
+        )
+        merged = json.loads(settings_path.read_text(encoding="utf-8"))
+        self.assertTrue(merged["userSetting"])
+        self.assertEqual(1, len(merged["hooks"]["PreToolUse"]))
+        self.assertEqual(
+            install.pre_commit_hook("python3"),
+            (project / ".git" / "hooks" / "pre-commit").read_text(encoding="utf-8"),
+        )
+
+    def test_update_refuses_to_replace_an_unmanaged_project_runtime_file(self):
+        project = self.root / "update-project"
+        (project / ".git").mkdir(parents=True)
+        target = self.root / "claude" / "skills"
+        arguments = self.hooks_arguments(project, target)[:-1]
+        status, _, error = self.run_main(arguments)
+        self.assertEqual(0, status, error)
+        runtime_file = (
+            project
+            / install.HOOKS_DIRECTORY
+            / "runtime"
+            / install.PROJECT_RUNTIME_SCRIPTS[0]
+        )
+        runtime_file.write_text("foreign\n", encoding="utf-8")
+        status, _, error = self.run_main([*arguments, "--update"])
+        self.assertEqual(1, status)
+        self.assertIn("not a managed GSD Path project file", error)
+        self.assertEqual("foreign\n", runtime_file.read_text(encoding="utf-8"))
 
     def test_hooks_dry_run_lists_files_without_writing(self):
         project = self.root / "project"
