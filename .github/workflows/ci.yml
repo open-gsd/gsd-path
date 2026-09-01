@@ -7,22 +7,17 @@ on:
   pull_request:
 
 jobs:
-  node-tests:
+  verify:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: ["18", "20"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
-      - run: npm test
-
-  python-tests:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+          node-version: ${{ matrix.node-version }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install pytest
-      - run: python3 -m pytest tests/ -q
-      - run: python3 scripts/sync_skill_resources.py --check
+      - run: npm run verify
