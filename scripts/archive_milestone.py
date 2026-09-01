@@ -2962,9 +2962,6 @@ def validate(repo: Path) -> dict:
         raise ArchiveError("ship transaction worktree is not clean")
 
     ship_commit = find_ship_commit(project, archive.name)
-    head = require_git_success(run_git(project, "rev-parse", "HEAD"), "resolve HEAD")
-    if head != ship_commit:
-        raise ArchiveError("bound worktree HEAD must equal the canonical ship commit")
 
     parents = require_git_success(
         run_git(project, "rev-list", "--parents", "-n", "1", ship_commit),
@@ -3078,9 +3075,16 @@ def validate(repo: Path) -> dict:
     manifest_path = f"{ship_commit}:{configured}/MANIFEST.md"
     require_git_success(run_git(project, "cat-file", "-e", manifest_path), "verify committed manifest")
 
-    project_drift = run_git(project, "diff", "--quiet", ship_commit, "HEAD", "--", ".project")
-    if project_drift.returncode != 0:
-        raise ArchiveError(".project changed in history after the ship commit")
+    project_drift = require_git_success(
+        run_git(project, "diff", "--name-only", ship_commit, "HEAD", "--", ".project"),
+        "inspect .project history after the ship commit",
+    )
+    if project_drift:
+        raise ArchiveError(
+            ".project changed in history after the ship commit: "
+            + ", ".join(project_drift.splitlines())
+            + f"; run: git -C {project} revert <commits after {ship_commit[:12]} that touch .project>"
+        )
 
     return {"archive": configured, "commit": ship_commit}
 

@@ -2679,7 +2679,7 @@ Tasks reviewed: 1
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn("reviewed head", result.stderr.lower())
 
-    def test_validate_rejects_product_commits_after_shipping(self) -> None:
+    def test_validate_accepts_product_commits_after_shipping(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             repo = Path(temporary_directory)
             self.make_repo(repo)
@@ -2702,8 +2702,11 @@ Tasks reviewed: 1
                 str(repo),
                 cwd=PROJECT_ROOT,
             )
-            self.assertNotEqual(validate.returncode, 0)
-            self.assertIn("HEAD must equal", validate.stderr)
+            self.assertEqual(validate.returncode, 0, validate.stderr)
+            self.assertEqual(
+                json.loads(validate.stdout)["commit"],
+                self.git(repo, "rev-parse", "HEAD~1").stdout.strip(),
+            )
 
     def test_validate_rejects_project_history_changes_after_shipping(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -2731,7 +2734,11 @@ Tasks reviewed: 1
                 cwd=PROJECT_ROOT,
             )
             self.assertNotEqual(validate.returncode, 0)
-            self.assertIn("HEAD must equal", validate.stderr)
+            self.assertIn(
+                ".project changed in history after the ship commit: "
+                ".project/archive/001-demo/plan/PLAN.md",
+                validate.stderr,
+            )
 
     def test_evidence_allows_comparison_operators_and_escaped_pipes(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
