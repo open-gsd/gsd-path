@@ -24,8 +24,7 @@ When the invocation argument is exactly `status`, report and stop:
 `$gsd-path status` (Codex) and `/gsd-path status` (other hosts) are the only
 router entry. The installed AGENTS.md re-entry contract may run the same
 project-local status helper after a generic prompt, but it does not invoke this
-router or advance a phase. A helper error stops here; offer
-`$gsd-path-forensics` when the pipeline looks stuck.
+router or advance a phase.
 
 ## Bundled phase execution
 

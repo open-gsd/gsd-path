@@ -139,9 +139,9 @@ words verbatim in both the dialogue and answer records and identify which
 formal artifact the owning phase must update. Such a record uses `Follow-up:
 required`; it remains pending until the owner appends a fixed-format
 `Disposition X###` receipt. The discussion sidecar never writes its own
-disposition. If the helper fails, report its exact error and do not claim the
-dialogue or answer was saved; the next `prepare` recovers an interrupted paired
-publication before accepting another turn.
+disposition. After a helper failure, do not claim the dialogue or answer was
+saved; the next `prepare` recovers an interrupted paired publication before
+accepting another turn.
 
 ## Output contract
 

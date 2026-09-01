@@ -229,6 +229,12 @@ full-repo suite on a tiny edit outrank the phase brief.
   `--detach`. Undo unpublished pipeline work with `scripts/pipeline_undo.py`;
   do not invent `git reset`. Diagnose a stuck pipeline with
   `scripts/pipeline_diagnose.py`.
+- A bundled helper that exits non-zero stops the current step. Print its
+  stderr verbatim, run `scripts/pipeline_diagnose.py diagnose --repo
+  <absolute-root>` (bundled with `$gsd-path-forensics`), and report both.
+  Do not rerun the same command unchanged unless the helper's own contract
+  names that exact rerun as its interruption recovery. Never repair state or
+  Git by hand instead.
 - The discussion sidecar may run during any non-shipped phase. It grounds
   answers in code and phase artifacts, may perform focused research when
   needed, and writes only its discussion artifacts; it never changes phase
