@@ -1391,6 +1391,11 @@ refuted
 
             self.assertNotEqual(prepare.returncode, 0)
             self.assertIn("missing both active and archived plan", prepare.stderr)
+            self.assertIn(
+                "archive: null",
+                (repo / ".project" / "STATE.md").read_text(encoding="utf-8"),
+            )
+            self.assertFalse((repo / ".project" / "archive").exists())
 
     def test_prepare_rejects_state_owned_by_another_pipeline(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

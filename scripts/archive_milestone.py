@@ -2041,6 +2041,12 @@ def prepare_locked(project: Path, active_root: Path, slug: str) -> dict:
         require_uncommitted_archive(project, configured)
     if state_temporary.exists() or state_temporary.is_symlink():
         state_temporary.unlink()
+    if configured is None:
+        # Prove the inputs before STATE.archive is persisted or any directory exists.
+        target = resolved_archive_target(project, slug, parsed_state)
+        require_archive_milestone(target.name, parsed_state)
+        require_complete_transaction_inputs(active_root, target)
+        require_canonical_transaction_inputs(active_root, target)
 
     archive = persisted_archive(project, state_path, slug, parsed_state)
     require_archive_milestone(archive.name, parsed_state)
