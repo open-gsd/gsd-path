@@ -1902,6 +1902,33 @@ class PipelineStateTests(unittest.TestCase):
             self.assertEqual(retry["status"], "already-complete")
             self.assertEqual(retry["commit"], result["commit"])
 
+    def test_route_and_status_report_a_journaled_handoff_on_a_dirty_worktree(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, integrate = self._promotion_repo(tmp, drift=False)
+            pipeline_git._write_bind_next_journal(
+                pipeline_git.bind_next_journal_path(repo, "gsd-path/M002"),
+                {
+                    "schema": pipeline_git.BIND_NEXT_JOURNAL_SCHEMA,
+                    "repo": str(repo.resolve()),
+                    "branch": "gsd-path/M002",
+                    "previous_branch": "gsd-path/M001",
+                    "ship": integrate,
+                    "remote_default": "origin/main",
+                    "base": integrate,
+                    "landing": integrate,
+                    "stage": "switched",
+                },
+            )
+            (repo / "scratch.txt").write_text("dirty\n", encoding="utf-8")
+
+            routed = pipeline_state.route_state(repo)
+            status = pipeline_state.status_state(repo)
+
+            self.assertEqual(routed["route"]["action"], "resume-next-handoff")
+            self.assertEqual(routed["route"]["dirty"], ["scratch.txt"])
+            self.assertEqual(status["git"]["dirty"], ["scratch.txt"])
+            self.assertIsNotNone(status["journals"]["bind_next"])
+
     def test_promote_next_separates_landing_from_a_later_main_base(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             repo, landing = self._promotion_repo(tmp, drift=False)

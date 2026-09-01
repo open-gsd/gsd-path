@@ -975,9 +975,6 @@ def _bind_next_recovery(
     else:
         if head != base:
             raise PipelineStateError("bind-next target branch is not at journal base")
-    if _run_git(repo, "status", "--porcelain", "--untracked-files=all").stdout:
-        raise PipelineStateError("bind-next journal worktree is not clean")
-
     result = _route_result(
         state,
         "resume-next-handoff",
@@ -993,6 +990,7 @@ def _bind_next_recovery(
             "landing": landing,
             "allow_remote_absent": allow_remote_absent,
             "journal": str(path),
+            "dirty": _worktree_changes(repo),
         }
     )
     return result
