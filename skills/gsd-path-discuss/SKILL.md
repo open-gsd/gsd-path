@@ -9,8 +9,8 @@ Use this skill as an interruptible sidecar to the active GSD Path pipeline. Keep
 the conversation in the main user thread, ground claims in the repository and
 the current phase artifacts, and save the exchange before returning the answer.
 
-An instruction to route to another phase is a caller handoff, not permission to trigger an explicit-only skill. Return control to the active router or tell the
-user which phase owns the follow-up; do not invoke a sibling phase implicitly.
+Routing instructions are caller handoffs under the AGENTS.md handoff rule;
+tell the user which phase owns the follow-up and never invoke it yourself.
 
 ## Preconditions and ownership
 

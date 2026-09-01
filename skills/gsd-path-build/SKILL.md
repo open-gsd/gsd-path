@@ -8,11 +8,8 @@ description: Execute or resume an approved GSD Path plan with isolated task work
 Orchestrate coders, task landing, and reviewers from the main conversation.
 Never write product code in the orchestrator.
 
-Any instruction below to route, return, or invoke another GSD Path phase is a
-caller handoff, not permission to trigger an explicit-only skill. If an active
-router or orchestrator supplied this contract, return control to it. On a
-direct invocation, report the exact next skill and stop until the user
-explicitly invokes it.
+Routing instructions below are caller handoffs under the AGENTS.md handoff
+rule; never invoke an explicit-only sibling skill yourself.
 
 ## Preconditions and branch binding
 

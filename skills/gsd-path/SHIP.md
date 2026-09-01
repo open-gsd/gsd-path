@@ -8,11 +8,8 @@ description: Verify a completed GSD Path milestone, manage evidence-backed patch
 Dispatch independent reviewers. They inspect and report; they never fix
 product code.
 
-Any instruction below to route, return, or invoke another GSD Path phase is a
-caller handoff, not permission to trigger an explicit-only skill. If an active
-router or orchestrator supplied this contract, return control to it. On a
-direct invocation, report the exact next skill and stop until the user
-explicitly invokes it.
+Routing instructions below are caller handoffs under the AGENTS.md handoff
+rule; never invoke an explicit-only sibling skill yourself.
 
 Require `pipeline: gsd-path/v2` in `.project/STATE.md`; a missing or different
 marker returns to `$gsd-path` for ownership checking. Read the local
