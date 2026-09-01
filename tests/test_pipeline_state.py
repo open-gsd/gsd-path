@@ -1396,6 +1396,133 @@ class PipelineStateTests(unittest.TestCase):
             )
         return repo, expected_head
 
+    def test_deferred_approval_requires_no_head_new_github_or_patch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, _ = self._approval_repo(tmp, "plan")
+
+            with self.assertRaisesRegex(
+                pipeline_state.PipelineStateError,
+                "checkpoint deferral requires.*approve --kind plan --expected-head",
+            ):
+                pipeline_state.defer_approval(repo, "plan")
+            with self.assertRaisesRegex(
+                pipeline_state.PipelineStateError, "--patch applies only to --kind plan"
+            ):
+                pipeline_state.defer_approval(repo, "roadmap", patch=True)
+
+            (repo / ".project" / "REPOSITORY.md").write_text(
+                "Kind: new-github\nRemote: https://github.com/o/r\n",
+                encoding="utf-8",
+            )
+            result = pipeline_state.defer_approval(repo, "plan")
+
+            self.assertEqual(result["status"], "approved")
+            self.assertIsNone(result["commit"])
+            state = pipeline_state.load_state(repo)[0]
+            self.assertEqual((state.phase, state.status), ("plan", "done"))
+            self.assertIn(".project/STATE.md", run_git(repo, "status", "--porcelain").stdout)
+
+    def test_patch_plan_approval_defers_its_checkpoint(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, expected_head = self._approval_repo(tmp, "plan")
+
+            result = pipeline_state.defer_approval(repo, "plan", patch=True)
+
+            self.assertEqual(result["status"], "approved")
+            self.assertEqual(result["kind"], "plan")
+            self.assertIsNone(result["commit"])
+            self.assertEqual(run_git(repo, "rev-parse", "HEAD").stdout.strip(), expected_head)
+            state, text, _ = pipeline_state.load_state(repo)
+            self.assertEqual((state.phase, state.status), ("plan", "done"))
+            self.assertIn("patch plan approved", text)
+
+    def test_deferred_approvals_work_before_git_exists(self) -> None:
+        for kind, milestone in (("plan", "first"), ("roadmap", "null")):
+            with self.subTest(kind=kind), tempfile.TemporaryDirectory() as tmp:
+                repo = Path(tmp)
+                project = repo / ".project"
+                project.mkdir()
+                (project / "STATE.md").write_text(
+                    state_text(milestone=milestone, phase=kind, status="active"),
+                    encoding="utf-8",
+                )
+                (project / "ROADMAP.md").write_text(
+                    roadmap_text().replace("Status: shipped", "Status: pending", 1),
+                    encoding="utf-8",
+                )
+                command = [
+                    sys.executable,
+                    str(Path(pipeline_state.__file__).resolve()),
+                    "approve",
+                    "--repo",
+                    str(repo),
+                    "--kind",
+                    kind,
+                    "--defer-checkpoint",
+                ]
+                if kind == "roadmap":
+                    command.extend(["--milestone", "first"])
+
+                result = subprocess.run(command, capture_output=True, text=True, check=False)
+
+                self.assertEqual(result.returncode, 0, result.stderr)
+                payload = json.loads(result.stdout)
+                self.assertEqual(payload["status"], "approved")
+                self.assertTrue(payload["deferred"])
+                state = pipeline_state.load_state(repo)[0]
+                self.assertEqual((state.phase, state.status, state.milestone), (kind, "done", "first"))
+                if kind == "roadmap":
+                    roadmap = (project / "ROADMAP.md").read_text(encoding="utf-8")
+                    self.assertIn("### M001 — first\n\nGoal: first\nDepends on: []\nStatus: active", roadmap)
+
+    def test_approve_cli_requires_expected_head_unless_deferred(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, _ = self._approval_repo(tmp, "plan")
+            command = [
+                sys.executable,
+                str(Path(pipeline_state.__file__).resolve()),
+                "approve",
+                "--repo",
+                str(repo),
+                "--kind",
+                "plan",
+            ]
+
+            result = subprocess.run(command, capture_output=True, text=True, check=False)
+
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("approve requires --expected-head", result.stderr)
+
+    def test_post_abandon_selection_moves_roadmap_active_to_inspect(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            project = repo / ".project"
+            project.mkdir()
+            (project / "STATE.md").write_text(
+                state_text(milestone="null", phase="roadmap", status="active", branch="gsd-path/M001"),
+                encoding="utf-8",
+            )
+
+            result = pipeline_state.transition_state(
+                repo,
+                expected={
+                    "phase": "roadmap",
+                    "status": "active",
+                    "milestone": None,
+                    "branch": "gsd-path/M001",
+                    "archive": None,
+                },
+                changes={"phase": "inspect", "status": "active", "milestone": "second"},
+                event="roadmap approved after abandoned milestone: first",
+            )
+
+            self.assertEqual(result["status"], "transitioned")
+            state = pipeline_state.load_state(repo)[0]
+            self.assertEqual(
+                (state.phase, state.status, state.milestone, state.branch),
+                ("inspect", "active", "second", "gsd-path/M001"),
+            )
+
     def test_plan_approval_owns_state_change_and_checkpoint(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             repo, expected_head = self._approval_repo(tmp, "plan")

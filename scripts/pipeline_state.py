@@ -132,6 +132,7 @@ CROSS_PHASE_TRANSITIONS = {
     ("ship", "blocked", "plan", "active"),
     ("shipped", "done", "define", "active"),
     ("shipped", "done", "inspect", "active"),
+    ("roadmap", "active", "inspect", "active"),
 }
 
 
@@ -1529,8 +1530,18 @@ def _validate_transition(
         and after.milestone is not None
         and event == "program roadmap approved"
     )
+    post_abandon_selection = (
+        before_position == ("roadmap", "active")
+        and after_position == ("inspect", "active")
+        and before.milestone is None
+        and after.milestone is not None
+    )
     if milestone_changed and not (
-        define_approval or roadmap_selection or next_milestone or abandon
+        define_approval
+        or roadmap_selection
+        or next_milestone
+        or abandon
+        or post_abandon_selection
     ):
         raise PipelineStateError("illegal STATE.milestone transition")
     if (
@@ -2329,6 +2340,90 @@ def checkpoint_approval(
         }
         _write_json(journal_path, journal)
         return _resume_checkpoint_locked(resolved, project, journal_path, journal)
+
+
+def _checkpoint_deferral_error(repo: Path, kind: str, patch: bool) -> Optional[str]:
+    """Return why a deferred approval is illegal, or None when it is allowed."""
+    if patch:
+        return None if kind == "plan" else "--patch applies only to --kind plan"
+    if _run_git(repo, "rev-parse", "--verify", "HEAD", check=False).returncode != 0:
+        return None
+    binding = repo / ".project" / "REPOSITORY.md"
+    if binding.is_file() and not binding.is_symlink():
+        kinds = [
+            line.removeprefix("Kind:").strip()
+            for line in binding.read_text(encoding="utf-8").splitlines()
+            if line.startswith("Kind:")
+        ]
+        if kinds == ["new-github"]:
+            return None
+    return (
+        "checkpoint deferral requires no Git HEAD, a Kind: new-github "
+        "REPOSITORY.md, or --patch; run: pipeline_state.py approve "
+        f"--kind {kind} --expected-head <full HEAD>"
+    )
+
+
+def defer_approval(
+    repo: Path,
+    kind: str,
+    project_dir: str = ".project",
+    selected_milestone: Optional[str] = None,
+    patch: bool = False,
+) -> dict[str, object]:
+    """Approve plan or roadmap metadata without a checkpoint commit.
+
+    Legal only before Git exists, during a new-repository transaction, or for
+    a patch plan; the next build transition commit owns the artifacts.
+    """
+    resolved = _repo_root(repo)
+    if project_dir not in {".project", ".project/next"}:
+        raise PipelineStateError("approval project-dir must be .project or .project/next")
+    error = _checkpoint_deferral_error(resolved, kind, patch)
+    if error:
+        raise PipelineStateError(error)
+    project = _track_root(resolved, ".project")
+    with _state_lock(project):
+        state, state_before, state_path = load_state(resolved, project_dir)
+        changes, event, _, _ = _approval_details(kind, state, selected_milestone)
+        if patch:
+            event = "patch plan approved"
+        expected = {
+            "phase": state.phase,
+            "status": state.status,
+            "milestone": state.milestone,
+            "branch": state.branch,
+            "archive": state.archive,
+        }
+        _, after, state_after = _render_transition(
+            state,
+            state_before,
+            expected,
+            changes,
+            event,
+            project_dir,
+            approval_kind=kind,
+        )
+        if kind == "roadmap":
+            if project_dir != ".project":
+                raise PipelineStateError("roadmap approval is legal only on the active track")
+            assert selected_milestone is not None
+            roadmap_path = project / "ROADMAP.md"
+            roadmap_after = _activate_roadmap_milestone(
+                _read_real_file(roadmap_path, "ROADMAP.md"),
+                selected_milestone,
+            )
+            _atomic_write(roadmap_path, roadmap_after)
+        _atomic_write(state_path, state_after)
+    return {
+        "schema": CHECKPOINT_SCHEMA,
+        "status": "approved",
+        "kind": kind,
+        "project_dir": project_dir,
+        "commit": None,
+        "deferred": True,
+        "state": after.json(),
+    }
 
 
 def resume_checkpoint(repo: Path) -> dict[str, object]:
@@ -3578,9 +3673,11 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     approve = subparsers.add_parser("approve")
     approve.add_argument("--repo", required=True, type=Path)
     approve.add_argument("--kind", required=True, choices=CHECKPOINT_KINDS)
-    approve.add_argument("--expected-head", required=True)
+    approve.add_argument("--expected-head")
     approve.add_argument("--project-dir", default=".project")
     approve.add_argument("--milestone")
+    approve.add_argument("--defer-checkpoint", action="store_true")
+    approve.add_argument("--patch", action="store_true")
     resume = subparsers.add_parser("resume-checkpoint")
     resume.add_argument("--repo", required=True, type=Path)
     promote = subparsers.add_parser("promote-next")
@@ -3619,7 +3716,23 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 args.event,
                 args.project_dir,
             )
+        elif args.command == "approve" and (args.defer_checkpoint or args.patch):
+            if args.expected_head is not None:
+                raise PipelineStateError(
+                    "--expected-head is not accepted with --defer-checkpoint or --patch"
+                )
+            result = defer_approval(
+                args.repo,
+                args.kind,
+                args.project_dir,
+                args.milestone,
+                args.patch,
+            )
         elif args.command == "approve":
+            if args.expected_head is None:
+                raise PipelineStateError(
+                    "approve requires --expected-head unless --defer-checkpoint or --patch"
+                )
             result = checkpoint_approval(
                 args.repo,
                 args.kind,
