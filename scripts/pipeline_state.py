@@ -686,7 +686,8 @@ def _intent_lane(track: Path) -> Optional[str]:
     return match.group(1)
 
 
-def _active_roadmap_has_questions(project: Path) -> bool:
+def _active_roadmap_has_questions(project: Path, milestone: Optional[str] = None) -> bool:
+    """Report open questions for the active entry, or for ``milestone`` when given."""
     text = _read_real_file(project / "ROADMAP.md", "ROADMAP.md")
     lines = text.splitlines()
     active_section: Optional[list[str]] = None
@@ -707,11 +708,17 @@ def _active_roadmap_has_questions(project: Path) -> bool:
             len(lines),
         )
         section = lines[index:end]
+        if milestone is not None:
+            if heading.group(2) == milestone:
+                active_section = section
+            continue
         if any(re.fullmatch(r"Status:\s*active(?:\s+#.*)?", item) for item in section):
             if active_section is not None:
                 raise PipelineStateError("ROADMAP.md has more than one active milestone")
             active_section = section
     if active_section is None:
+        if milestone is not None:
+            raise PipelineStateError(f"ROADMAP.md is missing lookahead milestone: {milestone}")
         raise PipelineStateError("ROADMAP.md has no active milestone")
     try:
         start = active_section.index("Open questions") + 1
@@ -1162,16 +1169,20 @@ def route_state(repo: Path, project_dir: str = ".project") -> dict[str, object]:
                 reason="INTENT lane is quick",
             )
         if lane == "milestone":
-            questions = _active_roadmap_has_questions(project)
+            questions = _active_roadmap_has_questions(
+                project,
+                state.milestone if lookahead else None,
+            )
+            entry = "lookahead" if lookahead else "active"
             return _route_result(
                 state,
                 "run-phase",
                 phase="research" if questions else "plan",
                 mode="milestone",
                 reason=(
-                    "active roadmap milestone has open questions"
+                    f"{entry} roadmap milestone has open questions"
                     if questions
-                    else "active roadmap milestone has no open questions"
+                    else f"{entry} roadmap milestone has no open questions"
                 ),
             )
         if lane is None:

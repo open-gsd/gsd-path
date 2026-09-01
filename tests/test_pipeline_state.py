@@ -685,6 +685,44 @@ class PipelineStateTests(unittest.TestCase):
             self.assertEqual(result["route"]["action"], "wait")
             self.assertEqual(result["route"]["mode"], "lookahead-ready")
 
+    def test_route_reads_lookahead_milestone_open_questions_at_define_done(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            run_git(repo, "init", "-b", "main")
+            project = repo / ".project"
+            next_root = project / "next"
+            (next_root / "intent").mkdir(parents=True)
+            (project / "STATE.md").write_text(
+                state_text(milestone="first", phase="build", status="active", branch="gsd-path/M001"),
+                encoding="utf-8",
+            )
+            (next_root / "STATE.md").write_text(
+                state_text(milestone="second", phase="define", status="done"),
+                encoding="utf-8",
+            )
+            (next_root / "intent" / "INTENT.md").write_text(
+                "# Intent\n\nLane: milestone\n", encoding="utf-8"
+            )
+            roadmap = (
+                roadmap_text()
+                .replace("Status: shipped", "Status: active")
+                .replace(
+                    "Status: pending\nArchive: null\nIntegrated: null\n\nOpen questions\n- None\n",
+                    "Status: pending\nArchive: null\nIntegrated: null\n\nOpen questions\n"
+                    "- Which storage backend?\n",
+                )
+            )
+            (project / "ROADMAP.md").write_text(roadmap, encoding="utf-8")
+
+            result = pipeline_state.route_state(repo, ".project/next")
+
+            self.assertEqual(result["route"]["action"], "run-phase")
+            self.assertEqual(result["route"]["phase"], "research")
+            self.assertEqual(result["route"]["mode"], "milestone")
+            self.assertEqual(
+                result["route"]["reason"], "lookahead roadmap milestone has open questions"
+            )
+
     def test_route_derives_initial_branch_from_active_roadmap_entry(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             repo = Path(tmp)
