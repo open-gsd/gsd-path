@@ -1826,6 +1826,28 @@ detect_project.initialize(Path(sys.argv[1]), Path(sys.argv[2]))
             )
             self.assertFalse((project / detect_project.STATE_TEMP_NAME).exists())
 
+    def test_lock_exclusive_blocks_a_second_opener(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            target = Path(temporary) / "STATE.md"
+            target.write_text("", encoding="utf-8")
+            first = os.open(target, os.O_RDWR)
+            second = os.open(target, os.O_RDWR)
+            try:
+                detect_project.lock_exclusive(first)
+                if sys.platform == "win32":
+                    import msvcrt
+
+                    with self.assertRaises(OSError):
+                        msvcrt.locking(second, msvcrt.LK_NBLCK, 1)
+                else:
+                    import fcntl
+
+                    with self.assertRaises(OSError):
+                        fcntl.flock(second, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            finally:
+                os.close(second)
+                os.close(first)
+
     @unittest.skipUnless(
         ANCHORED_STATE_CREATE_AVAILABLE,
         "anchored state creation is unavailable",
