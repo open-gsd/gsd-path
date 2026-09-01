@@ -9,18 +9,12 @@ Dispatch one roadmapper, gate its roadmap, and obtain the single approval that
 authorizes milestone planning. Rolling-wave: the roadmap scopes every
 milestone; waves and tasks belong to `$gsd-path-plan`.
 
-Any instruction below to route, return, or invoke another GSD Path phase is a
-caller handoff, not permission to trigger an explicit-only skill. If an active
-router or orchestrator supplied this contract, return control to it. On a
-direct invocation, report the exact next skill and stop until the user
-explicitly invokes it.
+Routing instructions below are caller handoffs under the AGENTS.md handoff
+rule; never invoke an explicit-only sibling skill yourself.
 
-Before dispatch and again before approval, run the bundled
-`scripts/discussion_records.py pending --repo <absolute-root>`; when
-`.project/discuss/ANSWERS.md` is absent, continue. Resolve a reported
-required follow-up owned by roadmap in ROADMAP.md and record its disposition
-with the helper's `dispose` command; otherwise block with links to ANSWERS.md
-and the target artifact rather than approving stale scope.
+Before dispatch and again before approval, apply the AGENTS.md
+pending-answer rule with the bundled `scripts/discussion_records.py`; a
+follow-up owned by roadmap is resolved in ROADMAP.md, or the phase blocks.
 
 ## Preconditions
 

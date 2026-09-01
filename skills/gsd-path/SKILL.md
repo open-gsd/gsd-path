@@ -24,8 +24,7 @@ When the invocation argument is exactly `status`, report and stop:
 `$gsd-path status` (Codex) and `/gsd-path status` (other hosts) are the only
 router entry. The installed AGENTS.md re-entry contract may run the same
 project-local status helper after a generic prompt, but it does not invoke this
-router or advance a phase. A helper error stops here; offer
-`$gsd-path-forensics` when the pipeline looks stuck.
+router or advance a phase.
 
 ## Bundled phase execution
 
@@ -252,8 +251,8 @@ remembered or hand-parsed state.
 
 Every ordinary state change not already owned by the journaled approval,
 promotion, archive, or branch helpers uses `pipeline_state.py transition` with
-expected phase, status, milestone, and any
-safety-relevant branch/archive fields, the changed fields, and one `--event`.
+expected phase, status, branch, and archive, an expected value for every
+field it changes, the changed fields, and one `--event`.
 It compares the expected state, validates the result, appends the fixed-format
 Log line, and atomically replaces STATE.md. A mismatch blocks; never perform a
 read-edit-write substitute.

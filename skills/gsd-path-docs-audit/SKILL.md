@@ -9,18 +9,13 @@ Answer one question with evidence: **does the project do what its documents
 say it does?** Runs standalone at the safe checkpoints below, and as half of
 `$gsd-path-inspect`. Output: `.project/research/DOCS-AUDIT.md`.
 
-Any instruction below to route, return, or invoke another GSD Path phase is a
-caller handoff, not permission to trigger an explicit-only skill. If an active
-router or orchestrator supplied this contract, return control to it. On a
-direct invocation, report the exact next skill and stop until the user
-explicitly invokes it.
+Routing instructions below are caller handoffs under the AGENTS.md handoff
+rule; never invoke an explicit-only sibling skill yourself.
 
-Before audit work and again before completion, run the bundled
-`scripts/discussion_records.py pending --repo <absolute-root>`; when
-`.project/discuss/ANSWERS.md` is absent, continue. Resolve a reported
-required follow-up owned by docs audit in DOCS-AUDIT.md and record its
-disposition with the helper's `dispose` command; otherwise block with links
-to ANSWERS.md and the target artifact rather than publishing stale findings.
+Before audit work and again before completion, apply the AGENTS.md
+pending-answer rule with the bundled `scripts/discussion_records.py`; a
+follow-up owned by docs audit is resolved in DOCS-AUDIT.md, or the phase
+blocks.
 
 Require an existing `.project/STATE.md` that passes `python3 <absolute
 pipeline_state.py> validate --repo <absolute root>`; never

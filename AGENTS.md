@@ -45,14 +45,16 @@ full-repo suite on a tiny edit outrank the phase brief.
   required`, and no later `Disposition X###` receipt is pending. Before phase
   work and again before a phase gate, the router and current phase run the
   active skill's bundled `scripts/discussion_records.py pending --repo
-  <absolute-root>` helper; do not parse IDs, pair records, recover writes, or
+  <absolute-root>` helper; when `.project/discuss/` is absent it returns an
+  empty list, so continue. Do not parse IDs, pair records, recover writes, or
   route pending receipts through model reasoning. The named owner either
   updates the target artifact through a legal current-phase gate and uses the
   helper's `dispose` command to append an `applied` disposition, or appends
   `acknowledged-no-change` with evidence. If applying it would rewrite an
   approved earlier-phase contract or the owner cannot legally enter, block the
-  current phase and ask the user; never auto-advance or archive it. Only the
-  user may authorize `rejected-by-user`.
+  current phase with links to ANSWERS.md and the target artifact and ask the
+  user; never auto-advance or archive it. Only the user may authorize
+  `rejected-by-user`.
 - Write every output to the handoff path in WORKFLOW.md, using the absolute
   bundled template path supplied by the active phase skill. An output that
   needs verbal explanation is defective.
@@ -87,6 +89,11 @@ full-repo suite on a tiny edit outrank the phase brief.
   deterministic logical task name, and a bounded responsibility. Independent
   briefs may run in parallel up to available child capacity; a dependent
   brief runs as soon as its dependencies complete.
+- Any phase-contract instruction to route, return, or invoke another GSD Path
+  phase is a caller handoff, not permission to trigger an explicit-only
+  skill. If an active router or orchestrator supplied the contract, return
+  control to it. On a direct invocation, report the exact next skill and stop
+  until the user explicitly invokes it.
 
 ## Plain-prompt re-entry
 
@@ -229,6 +236,12 @@ full-repo suite on a tiny edit outrank the phase brief.
   `--detach`. Undo unpublished pipeline work with `scripts/pipeline_undo.py`;
   do not invent `git reset`. Diagnose a stuck pipeline with
   `scripts/pipeline_diagnose.py`.
+- A bundled helper that exits non-zero stops the current step. Print its
+  stderr verbatim, run `scripts/pipeline_diagnose.py diagnose --repo
+  <absolute-root>` (bundled with `$gsd-path-forensics`), and report both.
+  Do not rerun the same command unchanged unless the helper's own contract
+  names that exact rerun as its interruption recovery. Never repair state or
+  Git by hand instead.
 - The discussion sidecar may run during any non-shipped phase. It grounds
   answers in code and phase artifacts, may perform focused research when
   needed, and writes only its discussion artifacts; it never changes phase

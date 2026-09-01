@@ -8,11 +8,8 @@ description: Execute or resume an approved GSD Path plan with isolated task work
 Orchestrate coders, task landing, and reviewers from the main conversation.
 Never write product code in the orchestrator.
 
-Any instruction below to route, return, or invoke another GSD Path phase is a
-caller handoff, not permission to trigger an explicit-only skill. If an active
-router or orchestrator supplied this contract, return control to it. On a
-direct invocation, report the exact next skill and stop until the user
-explicitly invokes it.
+Routing instructions below are caller handoffs under the AGENTS.md handoff
+rule; never invoke an explicit-only sibling skill yourself.
 
 ## Preconditions and branch binding
 
@@ -341,8 +338,8 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
      `python3 <absolute review_panel.py> resolve --plan <absolute PLAN.md>
      --intent <absolute INTENT.md> --advertised <comma slugs>
      --parent-slug <current model slug when known>` and `--charter
-     <absolute .project/CHARTER.md>` when that file exists. `off` or
-     `off` continues with no current-cycle panel artifact. For `skipped`,
+     <absolute .project/CHARTER.md>` when that file exists. `status: off`
+     continues with no current-cycle panel artifact. For `skipped`,
      persist the helper's exact JSON stdout as
      `.project/review/wave-N.cycleC.panel.skipped.json` and continue without
      a panel; do not translate or summarize the receipt. Exit 2 / `error`

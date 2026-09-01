@@ -379,9 +379,11 @@ abandon live only in the canonical
 reads the canonical file; no build agent receives this section.
 
 Program lookahead starts at inspect under `.project/next/`, then runs define
-in milestone + brownfield mode. Later non-lookahead milestones follow the same
-inspect-first route; only the first milestone after initial roadmap approval
-starts at define.
+in milestone + brownfield mode. `roadmap/done` always routes to define in
+milestone mode; only the first roadmap approval produces that state. Later
+non-lookahead milestones enter inspect directly — through the router's
+next-milestone transition after ship, or the post-abandon re-slice transition
+— and never pass through `roadmap/done`.
 
 ## Phase 6 — Ship (`gsd-path-ship`)
 

@@ -8,18 +8,13 @@ description: Create and validate dependency-ordered GSD Path build waves and com
 Dispatch one planner, gate its artifacts, and obtain the single approval that
 authorizes the build.
 
-Any instruction below to route, return, or invoke another GSD Path phase is a
-caller handoff, not permission to trigger an explicit-only skill. If an active
-router or orchestrator supplied this contract, return control to it. On a
-direct invocation, report the exact next skill and stop until the user
-explicitly invokes it.
+Routing instructions below are caller handoffs under the AGENTS.md handoff
+rule; never invoke an explicit-only sibling skill yourself.
 
-Before planning and again before approval, run the bundled
-`scripts/discussion_records.py pending --repo <absolute-root>`; when
-`.project/discuss/ANSWERS.md` is absent, continue. Resolve a reported
-required follow-up owned by planning in PLAN/tasks and record its disposition
-with the helper's `dispose` command; otherwise block with links to ANSWERS.md
-and the target artifact rather than approving stale work.
+Before planning and again before approval, apply the AGENTS.md
+pending-answer rule with the bundled `scripts/discussion_records.py`; a
+follow-up owned by planning is resolved in PLAN.md or its tasks, or the
+phase blocks.
 
 ## Preconditions
 
@@ -202,8 +197,8 @@ as stated in Lookahead mode.
      in plan-panel mode, the plan-panel template, and the exact helper-returned
      model slug when the host advertises model selection. Never override the
      model on the planner. Each child stages its family file under a
-     disposable root; the parent validates and copies those files, then runs
-     remove any stale `<track>/review/PLAN-PANEL.skipped.json`, then run
+     disposable root; the parent validates and copies those files, removes
+     any stale `<track>/review/PLAN-PANEL.skipped.json`, then runs
      `python3 <absolute review_panel.py> merge --kind plan --inputs <family
      files> --output <absolute <track>/review/PLAN-PANEL.md> --mode
      <detected|named>`. Do not average findings or auto-replan.
