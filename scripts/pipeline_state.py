@@ -2624,11 +2624,13 @@ def _classify_plan_drift(
     repo: Path,
     state: PipelineState,
     revision: str,
+    landing: Optional[str] = None,
 ) -> dict[str, object]:
+    """Compare the approved plan at the landing's checkpoint with ``revision``."""
     if state.phase != "plan" or state.status != "done":
         return {"class": "not-applicable", "reason": "lookahead track is not plan/done"}
     assert state.milestone is not None
-    checkpoint = _approval_checkpoint(repo, state, revision)
+    checkpoint = _approval_checkpoint(repo, state, landing or revision)
     if checkpoint is None:
         return {
             "class": "unverifiable",
@@ -3095,7 +3097,7 @@ def _completed_promotion(
         )
 
     _promotion_tree_mapping(repo, base, head)
-    drift = _classify_plan_drift(repo, next_state, base)
+    drift = _classify_plan_drift(repo, next_state, base, landing)
     expected_roadmap = _render_roadmap(
         roadmap_text,
         active_state.milestone,
@@ -3271,7 +3273,7 @@ def _prepare_promotion(
             tracks[name] = _tree_digest(source)
     if not tracks:
         raise PipelineStateError("lookahead track has no promotable artifacts")
-    drift = _classify_plan_drift(repo, next_state, base)
+    drift = _classify_plan_drift(repo, next_state, base, landing)
     roadmap_path = project / "ROADMAP.md"
     roadmap_text = _read_real_file(roadmap_path, "ROADMAP.md")
     target_state = _promotion_state(

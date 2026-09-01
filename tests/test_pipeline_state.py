@@ -1796,6 +1796,9 @@ class PipelineStateTests(unittest.TestCase):
 
             self.assertEqual(result["base"], base)
             self.assertEqual(result["landing"], landing)
+            self.assertEqual(result["drift"]["class"], "clean")
+            state = pipeline_state.load_state(repo)[0]
+            self.assertEqual((state.phase, state.status), ("plan", "done"))
             self.assertEqual(
                 run_git(repo, "show", "-s", "--format=%P", "HEAD").stdout.strip(),
                 base,
