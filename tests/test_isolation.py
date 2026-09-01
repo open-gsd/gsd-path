@@ -579,6 +579,54 @@ class IsolationTests(unittest.TestCase):
             self.assertEqual(result["mode"], "parallel")
             self.assertEqual((repo / "src/app.py").read_text(), "print('done')\n")
 
+    def test_parallel_land_allows_only_discussion_dirt_in_the_primary(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            base = self.init_bound_repo(repo)
+            isolated = isolation.isolate_task(repo, base, "T001", 2)
+            source = Path(isolated["worktree"])
+            self.write(source, "src/app.py", "print('done')\n")
+            self.write(source, ".project/tasks/T001.md", TASK_FILE + "log\n")
+            self.write(repo, ".project/discuss/DIALOGUE.md", "## D001\nappended\n")
+            self.write(repo, ".project/discuss/ANSWERS.md", "## A001\nappended\n")
+            self.write(repo, "notes.txt", "unrelated\n")
+
+            with self.assertRaisesRegex(
+                isolation.IsolationError,
+                r"primary worktree is dirty; refusing to cherry-pick: notes\.txt;",
+            ):
+                isolation.land(
+                    repo,
+                    source,
+                    base,
+                    "T001",
+                    "add greeting",
+                    ".project/tasks/T001.md",
+                    ["src/app.py"],
+                )
+            (repo / "notes.txt").unlink()
+
+            result = isolation.land(
+                repo,
+                source,
+                base,
+                "T001",
+                "add greeting",
+                ".project/tasks/T001.md",
+                ["src/app.py"],
+            )
+
+            self.assertEqual(result["mode"], "parallel")
+            self.assertEqual((repo / "src/app.py").read_text(), "print('done')\n")
+            self.assertEqual(
+                (repo / ".project/discuss/DIALOGUE.md").read_text(), "## D001\nappended\n"
+            )
+            self.assertEqual(
+                sorted(isolation.uncommitted_paths(repo)),
+                [".project/discuss/ANSWERS.md", ".project/discuss/DIALOGUE.md"],
+            )
+
     def test_parallel_land_rejects_a_symlink_task_in_a_clean_commit(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary) / "repo"
@@ -1592,6 +1640,56 @@ class IsolationTests(unittest.TestCase):
             with self.assertRaisesRegex(isolation.IsolationError, "worktree is dirty"):
                 isolation.retire(repo, worktree, isolated["branch"], False)
             self.assertTrue(worktree.exists())
+
+    def test_retire_refuses_a_task_branch_with_unlanded_commits(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            base = self.init_bound_repo(repo)
+            isolated = isolation.isolate_task(repo, base, "T001", 2)
+            worktree = Path(isolated["worktree"])
+            self.write(worktree, "src/app.py", "print('unlanded')\n")
+            git(worktree, "add", "src/app.py")
+            git(worktree, "commit", "-q", "-m", "T001: add greeting")
+            unlanded = git(worktree, "rev-parse", "HEAD")
+
+            for force in (False, True):
+                with self.subTest(force=force), self.assertRaisesRegex(
+                    isolation.IsolationError,
+                    rf"not landed on gsd-path/M001: {unlanded}.*recover --repo",
+                ):
+                    isolation.retire(repo, worktree, isolated["task_branch"], force)
+                self.assertTrue(worktree.exists())
+                self.assertEqual(git(repo, "rev-parse", isolated["task_branch"]), unlanded)
+
+    def test_retire_removes_a_landed_task_worktree(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            base = self.init_bound_repo(repo)
+            isolated = isolation.isolate_task(repo, base, "T001", 2)
+            worktree = Path(isolated["worktree"])
+            self.write(worktree, "src/app.py", "print('done')\n")
+            self.write(worktree, ".project/tasks/T001.md", TASK_FILE + "log\n")
+            isolation.land(
+                repo,
+                worktree,
+                base,
+                "T001",
+                "add greeting",
+                ".project/tasks/T001.md",
+                ["src/app.py"],
+            )
+
+            result = isolation.retire(repo, worktree, isolated["task_branch"], False)
+
+            self.assertEqual(result["reason"], "removed")
+            self.assertFalse(worktree.exists())
+            missing = subprocess.run(
+                ("git", "-C", str(repo), "rev-parse", "--verify", "--quiet", isolated["task_branch"]),
+                check=False,
+            )
+            self.assertNotEqual(missing.returncode, 0)
 
     def test_retire_refuses_the_bound_branch(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
