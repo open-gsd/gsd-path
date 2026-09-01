@@ -3516,5 +3516,94 @@ class InstallerTests(unittest.TestCase):
         self.assertNotIn("Traceback", error)
 
 
+class InstallerParityTests(unittest.TestCase):
+    """Both installers must produce the same project tree and result lines."""
+
+    SCENARIOS = {
+        "claude": [["--claude", "--local", "--project", "."]],
+        "codex-hooks": [["--codex", "--local", "--project", ".", "--hooks"]],
+        "update": [
+            ["--claude", "--local", "--project", ".", "--hooks"],
+            ["--claude", "--update", "--local", "--project", ".", "--hooks"],
+        ],
+        "hooks-existing-settings": [["--claude", "--local", "--project", ".", "--hooks"]],
+        "existing-contract": [
+            ["--claude", "--local", "--project", "."],
+            ["--claude", "--local", "--project", "."],
+        ],
+    }
+    INSTALLERS = {
+        "node": ["node", str(PROJECT_ROOT / "scripts" / "install.mjs")],
+        "python": [sys.executable, str(PROJECT_ROOT / "scripts" / "install.py")],
+    }
+
+    def run_scenario(self, kind, name, steps):
+        project = self.root / name / kind
+        project.mkdir(parents=True)
+        subprocess.run(["git", "init", "-q"], cwd=project, check=True)
+        if name == "hooks-existing-settings":
+            (project / ".claude").mkdir()
+            (project / ".claude" / "settings.json").write_text(
+                '{"userSetting": true, "hooks": {"PreToolUse": [{"matcher": "Bash", '
+                '"hooks": [{"type": "command", "command": "echo hi"}]}]}}\n',
+                encoding="utf-8",
+            )
+        outputs = []
+        for step in steps:
+            result = subprocess.run(
+                self.INSTALLERS[kind] + step,
+                cwd=project,
+                text=True,
+                capture_output=True,
+                env={**os.environ, "NO_COLOR": "1"},
+            )
+            outputs.append((result.returncode, self.result_lines(result, project)))
+        return outputs, self.snapshot(project)
+
+    @staticmethod
+    def result_lines(result, project):
+        # Keep the per-target, project, and error lines; drop the Node banner
+        # and footer, decoration glyphs, and the temp directory path.
+        lines = []
+        for line in (result.stdout + result.stderr).splitlines():
+            line = line.strip().lstrip("✓✗ ")
+            if line.startswith("error: "):
+                line = line[len("error: ") :]
+            if ": " in line and not line.startswith(("✦", "project install", "project update")):
+                lines.append(line.replace(str(project), "<PROJECT>"))
+        return lines
+
+    @staticmethod
+    def snapshot(project):
+        tree = {}
+        for path in sorted(project.rglob("*")):
+            parts = path.relative_to(project).parts
+            if parts[0] == ".git" and parts[:2] != (".git", "hooks"):
+                continue
+            key = "/".join(parts)
+            if path.is_symlink():
+                tree[key] = ("symlink", os.readlink(path))
+            elif path.is_dir():
+                tree[key] = ("dir",)
+            else:
+                tree[key] = (
+                    oct(path.stat().st_mode & 0o777),
+                    path.read_bytes().replace(str(project).encode(), b"<PROJECT>"),
+                )
+        return tree
+
+    def test_node_and_python_installers_match(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            self.root = Path(temporary)
+            for name, steps in self.SCENARIOS.items():
+                with self.subTest(scenario=name):
+                    node_outputs, node_tree = self.run_scenario("node", name, steps)
+                    python_outputs, python_tree = self.run_scenario("python", name, steps)
+                    self.assertEqual(node_outputs, python_outputs)
+                    self.assertEqual(sorted(node_tree), sorted(python_tree))
+                    for key, entry in node_tree.items():
+                        self.assertEqual(entry, python_tree[key], key)
+
+
 if __name__ == "__main__":
     unittest.main()
