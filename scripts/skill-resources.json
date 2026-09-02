@@ -46,7 +46,6 @@
     "scripts/check_task_briefs.py",
     "scripts/review_panel.py",
     "scripts/check_update.py",
-    "scripts/check_trust_evidence.py",
     "scripts/guard_hook.py",
     "scripts/git_guard.py",
     "scripts/isolation.py",

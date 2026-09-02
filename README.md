@@ -12,7 +12,7 @@ abandoned on an explicit ruling, archiving its partial work for a re-slice.
 **Supported hosts:** Codex, Claude Code, Grok, OpenCode, GitHub Copilot CLI,
 Qwen Code, Antigravity CLI, Cursor, Zed, Kiro, and Kimi Code.
 Support means the installer and dispatch contract exist. See the
-[host trust matrix](docs/trust-validation/HOST-MATRIX.md) for live milestone
+[host trust matrix](https://github.com/open-gsd/gsd-path/blob/main/docs/trust-validation/HOST-MATRIX.md) for live milestone
 proof and each host's guard tier.
 
 ## Documentation
