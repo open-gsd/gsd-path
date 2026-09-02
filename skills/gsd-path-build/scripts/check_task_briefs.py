@@ -183,7 +183,7 @@ def _looks_like_path(token: str) -> bool:
         "/" in token
         and PATH_TOKEN_PATTERN.fullmatch(token) is not None
         and "://" not in token
-        and not token.startswith("-")
+        and not token.startswith(("-", "/"))  # /api/users is a route, not a repo path
         and "<" not in token
         and ">" not in token
     )

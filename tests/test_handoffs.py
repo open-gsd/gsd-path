@@ -268,6 +268,32 @@ Intent: `.project/intent/INTENT.md`
             ):
                 check_handoffs.validate_research(root)
 
+    def test_frontmatter_keeps_a_hash_inside_a_quoted_value(self) -> None:
+        values = check_handoffs._strict_frontmatter(
+            '---\ntitle: "Fix issue #12"  # comment\nfiles: [a.py, "b#.py"] # note\n'
+            "deps:\n  - 'T00#1' # first\n---\n",
+            "task",
+        )
+        self.assertEqual(values["title"], "Fix issue #12")
+        self.assertEqual(values["files"], ["a.py", "b#.py"])
+        self.assertEqual(values["deps"], ["T00#1"])
+
+    def test_placeholder_checks_accept_comparison_angle_brackets(self) -> None:
+        self.assertEqual(
+            check_handoffs._non_placeholder("p95 latency < 200ms and > 0", "x"),
+            "p95 latency < 200ms and > 0",
+        )
+        block = "- **Finding**: p95 < 200ms\n- **Fix direction**: <describe the fix>\n"
+        self.assertEqual(
+            check_handoffs._source_field(block, "Finding", "review"), "p95 < 200ms"
+        )
+        with self.assertRaises(check_handoffs.HandoffError) as failure:
+            check_handoffs._source_field(block, "Fix direction", "review")
+        self.assertIn("<describe the fix>", str(failure.exception))
+        with self.assertRaises(check_handoffs.HandoffError) as failure:
+            check_handoffs._non_placeholder("<fill in>", "label")
+        self.assertIn("label still contains the placeholder <fill in>", str(failure.exception))
+
     def test_research_handoff_rejects_placeholder_evidence(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -2053,7 +2079,7 @@ Waves checked: 1
             git(root, "commit", "-q", "-m", "later product")
 
             with self.assertRaisesRegex(
-                check_handoffs.HandoffError, "Reviewed HEAD must equal current HEAD"
+                check_handoffs.HandoffError, "is not the current HEAD"
             ):
                 check_handoffs.validate_final(root)
 

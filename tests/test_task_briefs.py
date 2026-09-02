@@ -202,6 +202,21 @@ class TaskBriefTests(unittest.TestCase):
             self.assertIn("T003", stderr)
             self.assertIn("src/missing.py", stderr)
 
+    def test_backticked_url_route_in_prose_is_not_a_path(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.init_repo(root)
+            self.write_happy_tasks(root)
+            self.write_task(
+                root, "T003", contract="- None",
+                context="The handler serves `/api/users` and `/api/users/{id}`.",
+            )
+            base = self.commit(root)
+
+            exit_code, _stdout, stderr = self.lint(root, base)
+
+            self.assertEqual(exit_code, 0, stderr)
+
     def test_unshared_interface_contract_fails(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
