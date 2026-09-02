@@ -62,8 +62,11 @@ gsd-path  (router: reads STATE.md, runs the next valid phase)
   phases. See the [canonical skill table](DOCS.md#skills-optional).
 
 All skills are **explicit-only** on most hosts — generic “continue the project”
-does not inject the pipeline. On OpenCode stable, Antigravity CLI, and Kiro,
-treat explicit invocation as an operating rule.
+does not inject the pipeline. In a project with an owned `.project/STATE.md`,
+such a prompt answers read-only with the current handoff and next skill, and a
+plain change request makes no changes (see `WORKFLOW.md`, Plain-prompt
+re-entry). On OpenCode stable, Antigravity CLI, and Kiro, treat explicit
+invocation as an operating rule.
 
 ### Invocation by host
 

@@ -142,8 +142,11 @@ advance past an unresolved required follow-up.
 - Roadmap and plan approvals are checkpoint commits, so planning work never
   sits uncommitted until build.
 
-Invoke the router explicitly. It does not run on generic “continue the project”
-prompts. Phase skills stop at their handoff; invoke the router again to continue.
+Invoke the router explicitly to start or advance a phase. Once a project has an
+owned `.project/STATE.md`, a plain prompt such as “continue the project” answers
+read-only with the current handoff and names the next skill; it never advances
+a phase or edits state. Phase skills stop at their handoff; invoke the router
+again to continue.
 The discussion sidecar is the exception: it can be invoked at any non-shipped
 phase and returns only a durable conversation record.
 

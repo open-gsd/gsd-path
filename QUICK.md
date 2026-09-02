@@ -92,7 +92,8 @@ In the **project directory**, type explicitly:
 | OpenCode v2 | `/gsd-path` |
 | OpenCode stable | *Load and use the gsd-path skill* |
 
-Not triggered by “continue the project.”
+“Continue the project” does not advance a phase. With an owned
+`.project/STATE.md` it reports the current handoff and next skill, read-only.
 
 **One phase only?** e.g. `/gsd-path-plan` — see skill table in [DOCS.md](DOCS.md#using).
 Need to talk through a question without advancing? Use `/gsd-path-discuss`;
@@ -121,7 +122,8 @@ Invoke the router again. Don’t hand-edit `.project/` mid-run.
 ## Later
 
 ```bash
-node scripts/install.mjs --update                         # refresh skills
+node scripts/install.mjs --update                           # refresh skills
+node scripts/install.mjs --update --project "$(pwd)"        # refresh .gsd-path/; keeps contracts
 node scripts/install.mjs --hooks-refresh --project "$(pwd)"  # guard scripts
 ```
 
@@ -144,6 +146,6 @@ Artifacts: [README.md](README.md#handoff-contract)
 | Issue | Fix |
 | --- | --- |
 | Skills missing | Restart agent session |
-| Router idle | Use `$gsd-path` or `/gsd-path` explicitly |
+| Router idle or plain prompt only reports status | Use `$gsd-path` or `/gsd-path` explicitly |
 | Install failed | Read error; try `--dry-run` |
 | Need more detail | [DOCS.md](DOCS.md) or [FULL.md](FULL.md) |
