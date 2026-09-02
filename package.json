@@ -23,6 +23,7 @@
     "scripts/check_docs_audit.py",
     "scripts/check_task_briefs.py",
     "scripts/review_panel.py",
+    "scripts/review_findings.py",
     "scripts/check_update.py",
     "scripts/guard_hook.py",
     "scripts/git_guard.py",
