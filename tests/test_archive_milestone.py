@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Optional
 from unittest import mock
 
-from scripts import archive_milestone, isolation, pipeline_git, review_panel
+from scripts import archive_milestone, integration, isolation, pipeline_git, review_panel
 
 if sys.platform != "win32":
     import fcntl
@@ -2995,7 +2995,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
             calls.append(arguments)
             return subprocess.CompletedProcess(arguments, 0, "{}", "")
 
-        with mock.patch.object(archive_milestone, "run_command", side_effect=run):
+        with mock.patch.object(integration, "run_command", side_effect=run):
             archive_milestone.require_github_authentication()
             self.assertEqual(
                 archive_milestone.github_api_json("repos/open-gsd/demo/pulls"),
@@ -3031,7 +3031,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
             },
         }
         with mock.patch.object(
-            archive_milestone,
+            integration,
             "github_api_json",
             return_value=[[pull]],
         ):
@@ -3195,12 +3195,12 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
 
             with (
                 mock.patch.object(
-                    archive_milestone,
+                    integration,
                     "github_repository",
                     return_value="open-gsd/demo",
                 ),
                 mock.patch.object(
-                    archive_milestone,
+                    integration,
                     "run_command",
                     side_effect=github_api,
                 ),
@@ -3251,12 +3251,12 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
 
             with (
                 mock.patch.object(
-                    archive_milestone,
+                    integration,
                     "github_repository",
                     return_value="Open-GSD/Demo",
                 ),
                 mock.patch.object(
-                    archive_milestone,
+                    integration,
                     "run_command",
                     side_effect=self.github_api([open_pull]),
                 ),
@@ -3355,12 +3355,12 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
 
             with (
                 mock.patch.object(
-                    archive_milestone,
+                    integration,
                     "github_repository",
                     return_value="open-gsd/demo",
                 ),
                 mock.patch.object(
-                    archive_milestone,
+                    integration,
                     "run_command",
                     side_effect=github_api,
                 ),
@@ -3423,12 +3423,12 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
 
             with (
                 mock.patch.object(
-                    archive_milestone,
+                    integration,
                     "github_repository",
                     return_value="open-gsd/demo",
                 ),
                 mock.patch.object(
-                    archive_milestone,
+                    integration,
                     "run_command",
                     side_effect=github_api,
                 ),
@@ -3520,12 +3520,12 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
 
             with (
                 mock.patch.object(
-                    archive_milestone,
+                    integration,
                     "github_repository",
                     return_value="open-gsd/demo",
                 ),
                 mock.patch.object(
-                    archive_milestone,
+                    integration,
                     "run_command",
                     side_effect=github_api,
                 ),
@@ -3609,12 +3609,12 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
 
             with (
                 mock.patch.object(
-                    archive_milestone,
+                    integration,
                     "github_repository",
                     return_value="open-gsd/demo",
                 ),
                 mock.patch.object(
-                    archive_milestone,
+                    integration,
                     "run_command",
                     side_effect=github_api,
                 ),
@@ -3671,12 +3671,12 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
 
             with (
                 mock.patch.object(
-                    archive_milestone,
+                    integration,
                     "github_repository",
                     return_value="open-gsd/demo",
                 ),
                 mock.patch.object(
-                    archive_milestone,
+                    integration,
                     "run_command",
                     side_effect=github_api,
                 ),
@@ -3747,12 +3747,12 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
 
             with (
                 mock.patch.object(
-                    archive_milestone,
+                    integration,
                     "github_repository",
                     return_value="open-gsd/demo",
                 ),
                 mock.patch.object(
-                    archive_milestone,
+                    integration,
                     "run_command",
                     side_effect=github_api,
                 ),
@@ -3796,12 +3796,12 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
 
             with (
                 mock.patch.object(
-                    archive_milestone,
+                    integration,
                     "github_repository",
                     return_value="open-gsd/demo",
                 ),
                 mock.patch.object(
-                    archive_milestone,
+                    integration,
                     "run_command",
                     side_effect=self.github_api([pull]),
                 ),
@@ -3820,12 +3820,12 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
             )
             with (
                 mock.patch.object(
-                    archive_milestone,
+                    integration,
                     "github_repository",
                     return_value="open-gsd/demo",
                 ),
                 mock.patch.object(
-                    archive_milestone,
+                    integration,
                     "run_command",
                     side_effect=self.github_api([pull]),
                 ),
@@ -3885,12 +3885,12 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
 
             with (
                 mock.patch.object(
-                    archive_milestone,
+                    integration,
                     "github_repository",
                     return_value="open-gsd/demo",
                 ),
                 mock.patch.object(
-                    archive_milestone,
+                    integration,
                     "run_command",
                     side_effect=self.github_api([open_pull]),
                 ),
@@ -3924,12 +3924,12 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
 
             with (
                 mock.patch.object(
-                    archive_milestone,
+                    integration,
                     "github_repository",
                     return_value="open-gsd/demo",
                 ),
                 mock.patch.object(
-                    archive_milestone,
+                    integration,
                     "run_command",
                     side_effect=self.github_api([pull]),
                 ),
@@ -3943,12 +3943,12 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
             )
             with (
                 mock.patch.object(
-                    archive_milestone,
+                    integration,
                     "github_repository",
                     return_value="open-gsd/demo",
                 ),
                 mock.patch.object(
-                    archive_milestone,
+                    integration,
                     "run_command",
                     side_effect=self.github_api([pull]),
                 ),
@@ -3981,12 +3981,12 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
 
             with (
                 mock.patch.object(
-                    archive_milestone,
+                    integration,
                     "github_repository",
                     return_value="open-gsd/demo",
                 ),
                 mock.patch.object(
-                    archive_milestone,
+                    integration,
                     "run_command",
                     side_effect=self.github_api([pull]),
                 ),
@@ -4002,12 +4002,12 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
             )
             with (
                 mock.patch.object(
-                    archive_milestone,
+                    integration,
                     "github_repository",
                     return_value="open-gsd/demo",
                 ),
                 mock.patch.object(
-                    archive_milestone,
+                    integration,
                     "run_command",
                     side_effect=self.github_api([pull]),
                 ),
@@ -4020,12 +4020,12 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
 
             with (
                 mock.patch.object(
-                    archive_milestone,
+                    integration,
                     "github_repository",
                     return_value="open-gsd/demo",
                 ),
                 mock.patch.object(
-                    archive_milestone,
+                    integration,
                     "run_command",
                     side_effect=self.github_api([pull]),
                 ),
@@ -4078,12 +4078,12 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
 
             with (
                 mock.patch.object(
-                    archive_milestone,
+                    integration,
                     "github_repository",
                     return_value="open-gsd/demo",
                 ),
                 mock.patch.object(
-                    archive_milestone,
+                    integration,
                     "run_command",
                     side_effect=github_api,
                 ),
@@ -4164,12 +4164,12 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
 
             with (
                 mock.patch.object(
-                    archive_milestone,
+                    integration,
                     "github_repository",
                     return_value="open-gsd/demo",
                 ),
                 mock.patch.object(
-                    archive_milestone,
+                    integration,
                     "run_command",
                     side_effect=github_api,
                 ),
@@ -4250,12 +4250,12 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
 
             with (
                 mock.patch.object(
-                    archive_milestone,
+                    integration,
                     "github_repository",
                     return_value="open-gsd/demo",
                 ),
                 mock.patch.object(
-                    archive_milestone,
+                    integration,
                     "run_command",
                     side_effect=github_api,
                 ),
@@ -4293,12 +4293,12 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
 
             with (
                 mock.patch.object(
-                    archive_milestone,
+                    integration,
                     "github_repository",
                     return_value="open-gsd/demo",
                 ),
                 mock.patch.object(
-                    archive_milestone,
+                    integration,
                     "run_command",
                     side_effect=self.github_api([pull], merge_actor="Bot"),
                 ),
@@ -4342,12 +4342,12 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
 
             with (
                 mock.patch.object(
-                    archive_milestone,
+                    integration,
                     "github_repository",
                     return_value="open-gsd/demo",
                 ),
                 mock.patch.object(
-                    archive_milestone,
+                    integration,
                     "run_command",
                     side_effect=github_api,
                 ),
@@ -4600,7 +4600,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
             self.assertEqual(cloned.returncode, 0, cloned.stderr)
             self.git(other, "config", "user.name", "Validation")
             self.git(other, "config", "user.email", "validation@example.invalid")
-            original_run_git = archive_milestone.run_git
+            original_run_git = integration.run_git
             advanced_main = None
 
             def race_main(project: Path, *arguments: str) -> subprocess.CompletedProcess:
@@ -4621,7 +4621,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                 return original_run_git(project, *arguments)
 
             with mock.patch.object(
-                archive_milestone, "run_git", side_effect=race_main
+                integration, "run_git", side_effect=race_main
             ):
                 with self.assertRaisesRegex(
                     archive_milestone.ArchiveError, "push integration merge"

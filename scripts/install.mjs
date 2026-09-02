@@ -22,6 +22,10 @@ export const PROJECT_RUNTIME_SCRIPTS = [
   "archive_milestone.py",
   "review_panel.py",
   "_common.py",
+  "state_checkpoint.py",
+  "state_promote.py",
+  "discussion_validate.py",
+  "integration.py",
 ];
 export const PROJECT_RUNTIME_MARKER = "gsd-path project runtime";
 export const PROJECT_STATUS_LAUNCHER = "status_runtime.py";

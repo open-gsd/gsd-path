@@ -9,7 +9,7 @@ from datetime import date
 from pathlib import Path
 from unittest import mock
 
-from scripts import pipeline_git, pipeline_state
+from scripts import pipeline_git, pipeline_state, state_checkpoint, state_promote
 
 
 def run_git(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -1580,7 +1580,7 @@ class PipelineStateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             repo, expected_head = self._approval_repo(tmp, "plan")
             with mock.patch.object(
-                pipeline_state,
+                state_checkpoint,
                 "isolation_checkpoint",
                 side_effect=pipeline_state.IsolationError("simulated interruption"),
             ):
@@ -1610,7 +1610,7 @@ class PipelineStateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             repo, expected_head = self._approval_repo(tmp, "plan")
             with mock.patch.object(
-                pipeline_state,
+                state_checkpoint,
                 "isolation_checkpoint",
                 side_effect=pipeline_state.IsolationError("simulated interruption"),
             ):
@@ -1635,7 +1635,7 @@ class PipelineStateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             repo, expected_head = self._approval_repo(tmp, "roadmap")
             with mock.patch.object(
-                pipeline_state,
+                state_checkpoint,
                 "_unlink_checkpoint_journal",
                 side_effect=pipeline_state.PipelineStateError("simulated cleanup crash"),
             ):
@@ -2301,7 +2301,7 @@ class PipelineStateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             repo, integrate = self._promotion_repo(tmp, drift=False)
             with mock.patch.object(
-                pipeline_state,
+                state_promote,
                 "_resume_metadata",
                 side_effect=pipeline_state.PipelineStateError("simulated interruption"),
             ):
@@ -2337,7 +2337,7 @@ class PipelineStateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             repo, integrate = self._promotion_repo(tmp, drift=False)
             with mock.patch.object(
-                pipeline_state,
+                state_promote,
                 "_commit_promotion",
                 side_effect=pipeline_state.PipelineStateError("simulated interruption"),
             ):
