@@ -139,7 +139,8 @@ EMPTY_DISCUSSION_FILES = {
 }
 DISCUSSION_TRANSACTION_NAME = ".discussion-archive-transaction.json"
 DIRECTORIES_TO_ARCHIVE = ("intent", "research", "plan", "tasks", "review")
-OPTIONAL_DIRECTORIES_TO_ARCHIVE = ("discuss",)
+# build/ holds the verify ledger; it archives with the milestone when present.
+OPTIONAL_DIRECTORIES_TO_ARCHIVE = ("discuss", "build")
 TRANSACTION_DIRECTORIES = (*DIRECTORIES_TO_ARCHIVE, *OPTIONAL_DIRECTORIES_TO_ARCHIVE)
 MANIFEST_FIELDS = (
     "Milestone:",
@@ -2103,7 +2104,10 @@ def require_complete_abandon_inputs(active_root: Path, archive: Path) -> None:
         source = active_root / name
         destination = archive / name
         if source.exists() and destination.exists():
-            require_append_only_discussion(source, destination)
+            if name == "discuss":
+                require_append_only_discussion(source, destination)
+                continue
+            raise ArchiveError(f"archive collision: both {source} and {destination} exist")
 
 
 def require_canonical_abandon_inputs(active_root: Path, archive: Path) -> None:

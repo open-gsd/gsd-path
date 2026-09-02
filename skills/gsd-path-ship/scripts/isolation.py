@@ -37,6 +37,10 @@ VERIFY_BRANCH_PREFIX = "gsd-path-verify/"
 DISCUSSION_PATHS = frozenset(
     {".project/discuss/DIALOGUE.md", ".project/discuss/ANSWERS.md"}
 )
+VERIFY_LEDGER_PATH = ".project/build/verify-ledger.jsonl"
+# Orchestrator bookkeeping that may stay uncommitted in the primary while a
+# parallel task lands; the next `.project` checkpoint commits it.
+BOOKKEEPING_PATHS = DISCUSSION_PATHS | {VERIFY_LEDGER_PATH}
 TASK_ID_RE = re.compile(r"^[A-Za-z][A-Za-z0-9._-]*$")
 NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 FIELD_PATTERN = re.compile(r"^(?P<key>[a-z_]+):\s*(?P<value>.*)$")
@@ -1156,7 +1160,7 @@ def land(
         )
     if require_attached(primary) != bound:
         raise IsolationError("primary left the bound branch")
-    dirty = sorted(uncommitted_paths(primary) - DISCUSSION_PATHS)
+    dirty = sorted(uncommitted_paths(primary) - BOOKKEEPING_PATHS)
     if dirty:
         raise IsolationError(
             "primary worktree is dirty; refusing to cherry-pick: "
@@ -1540,7 +1544,7 @@ def _landing_commit_proof_error(
         return str(error)
     if actual_delta != expected_delta:
         return "landing commit tree differs from the verified changes"
-    pending = uncommitted_paths(repo) - DISCUSSION_PATHS
+    pending = uncommitted_paths(repo) - BOOKKEEPING_PATHS
     if pending:
         return "landing left uncommitted paths: " + ", ".join(sorted(pending))
     return None
