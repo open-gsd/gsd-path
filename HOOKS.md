@@ -104,7 +104,12 @@ See [UPDATE.md](UPDATE.md).
 - non-read actions targeting archived paths or an existing ancestor of the
   archive tree
 - `git reset --hard`, destructive `git clean` modes, force pushes (including
-  `+` refspecs), and destructive branch or ref deletion
+  `+` refspecs), destructive branch or ref deletion, `git branch -m`,
+  `git worktree remove --force`, `git stash drop`/`clear`, and whole-tree
+  `git checkout -- .`/`git restore .`
+- shell writes (redirections, `tee`, `cp`, `mv`, `rm`, `sed -i`, ...) that
+  target a routing control (`.git`, `.project/STATE.md`, `.project/next`,
+  `.gsd-path`) while `.project/STATE.md` exists
 - shell commands that reference the archive unless the whole command is a
   recognized standalone read
 - destructive Git commands nested in supported shell and command wrappers

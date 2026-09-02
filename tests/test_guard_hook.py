@@ -1542,6 +1542,152 @@ class GuardHookTests(unittest.TestCase):
         with mock.patch.object(guard_hook, "collect", side_effect=RuntimeError("boom")):
             self.assert_denied({"tool_name": "Edit", "tool_input": {}})
 
+    def bash(self, command):
+        return {"tool_name": "Bash", "tool_input": {"command": command}}
+
+    def test_allows_shell_constructs_that_touch_no_protected_path(self):
+        for command in (
+            "ls src\nls tests",
+            "for f in src/*.py; do wc -l \"$f\"; done",
+            "while read line; do echo \"$line\"; done < names.txt",
+            "if [ -f setup.py ]; then python3 setup.py --version; fi",
+            "export NODE_ENV=test && npm test",
+            "set -euo pipefail; npm test",
+            "unset DEBUG; npm test",
+            "cat <<'EOF' > notes.txt\nrm -rf .project\nEOF",
+            "python3 - <<EOF\nprint(1)\nEOF",
+            'echo "$(date)"',
+            "echo `git rev-parse HEAD`",
+            "npm run $1",
+            "find src -name '*.py' | xargs grep -l TODO",
+            "find src -name '*.py' -exec grep -l TODO {} \\;",
+            "ls src \\\n  tests",
+            "command -v python3",
+            "eval echo hello",
+            "declare NAME=value",
+        ):
+            with self.subTest(command=command):
+                self.assert_allowed(self.bash(command))
+
+    def test_denials_name_the_shell_construct(self):
+        for command, construct in (
+            ("source ./env.sh", "source runs the script file ./env.sh"),
+            (". ./env.sh", ". runs the script file ./env.sh"),
+            ("find . -exec rm {} \\;", "find -exec runs rm"),
+            ("ls | xargs rm", "xargs runs rm"),
+            ("export HOME=/tmp; git status", "HOME changes where Git reads"),
+            ("git commit -m \"$(cat msg)\"", "git argument $(cat msg)"),
+            ("cd $(mktemp -d) && ls", "cd target $(mktemp -d)"),
+            ("echo x > \"$1\"", "write target $1"),
+            ("cat <<EOF\nno terminator", "here-document EOF is not terminated"),
+            ("echo 'unbalanced", "cannot be tokenized"),
+            ("bash script.sh", "bash reads commands from a file"),
+            ("echo $(ls", "command substitution $( is not closed"),
+        ):
+            with self.subTest(command=command):
+                status, _, error = run_guard(self.bash(command))
+                self.assertEqual(status, 2)
+                self.assertIn(construct, error)
+
+    def test_shell_constructs_still_cannot_reach_the_archive(self):
+        for command in (
+            "for f in .project/archive/001-mvp/*; do rm \"$f\"; done",
+            "export P=.project/archive; rm -rf \"$P/001-mvp\"",
+            "cat <<EOF > .project/archive/001-mvp/NOTE.md\nx\nEOF",
+            "eval rm .project/archive/001-mvp/NOTE.md",
+            "echo $(rm .project/archive/001-mvp/NOTE.md)",
+            "ls | xargs -I{} cat .project/archive/{}",
+        ):
+            with self.subTest(command=command):
+                self.assert_denied(self.bash(command))
+
+    def test_denies_newly_covered_destructive_git_commands(self):
+        for command, phrase in (
+            ("git worktree remove --force .worktrees/t1", "worktree remove --force"),
+            ("git worktree remove -f .worktrees/t1", "worktree remove --force"),
+            ("git stash drop", "stash drop"),
+            ("git stash clear", "stash clear"),
+            ("git checkout -- .", "checkout -- ."),
+            ("git checkout .", "checkout -- ."),
+            ("git restore .", "restore ."),
+            ("git restore --staged --worktree .", "restore ."),
+            ("git branch -m old new", "branch -m"),
+            ("git branch -M main", "branch -m"),
+            ("git branch --move old new", "branch -m"),
+        ):
+            with self.subTest(command=command):
+                status, _, error = run_guard(self.bash(command))
+                self.assertEqual(status, 2)
+                self.assertIn(phrase, error)
+        for command in (
+            "git worktree remove .worktrees/t1",
+            "git stash list",
+            "git stash push -m wip",
+            "git restore --staged .",
+            "git checkout -- app.py",
+            "git branch -d merged-branch",
+        ):
+            with self.subTest(command=command):
+                self.assert_allowed(self.bash(command))
+
+    def test_denies_shell_writes_to_protected_control_paths(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "repo"
+            (root / ".project" / "next").mkdir(parents=True)
+            (root / ".project" / "STATE.md").write_text("owned\n", encoding="utf-8")
+            (root / ".gsd-path").mkdir()
+            with (
+                mock.patch.object(guard_hook, "repository_root", return_value=root),
+                mock.patch.object(guard_hook, "repository_control_roots", return_value=[]),
+            ):
+                for command, path in (
+                    ("echo phase: build > .project/STATE.md", ".project/STATE.md"),
+                    ("echo x >> .project/next/STATE.md", ".project/next/STATE.md"),
+                    ("echo x | tee .project/next/STATE.md", ".project/next/STATE.md"),
+                    ("sed -i 's/plan/build/' .project/STATE.md", ".project/STATE.md"),
+                    ("perl -pi -e 's/a/b/' .project/STATE.md", ".project/STATE.md"),
+                    ("cp STATE.md .project/STATE.md", ".project/STATE.md"),
+                    ("rm -rf .project", ".project"),
+                    ("touch .gsd-path/guard_hook.py", ".gsd-path/guard_hook.py"),
+                    ("cd .project && rm STATE.md", "STATE.md"),
+                    ("bash -c 'echo x > .project/STATE.md'", ".project/STATE.md"),
+                    ("cat <<EOF > .project/STATE.md\nphase: build\nEOF", ".project/STATE.md"),
+                ):
+                    with self.subTest(command=command):
+                        status, _, error = run_guard(self.bash(command))
+                        self.assertEqual(status, 2)
+                        self.assertIn("shell command writes " + path, error)
+                for command in (
+                    "echo x > build.log",
+                    "echo x > .project/plan/PLAN.md",
+                    "cat .project/STATE.md",
+                    "echo x 2>&1",
+                    "echo x >&2",
+                    "sed -n 1p .project/STATE.md",
+                ):
+                    with self.subTest(command=command):
+                        self.assert_allowed(self.bash(command))
+
+    def test_shell_writes_are_ungated_without_pipeline_state(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "repo"
+            root.mkdir()
+            with mock.patch.object(guard_hook, "repository_root", return_value=root):
+                self.assert_allowed(self.bash("echo x > .project/STATE.md"))
+
+    def test_control_file_denial_names_the_path(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "repo"
+            (root / ".project").mkdir(parents=True)
+            (root / ".project" / "STATE.md").write_text("owned\n", encoding="utf-8")
+            with mock.patch.object(guard_hook, "repository_root", return_value=root):
+                status, _, error = run_guard(
+                    {"tool_name": "Write", "tool_input": {"file_path": ".project/STATE.md"}}
+                )
+                self.assertEqual(status, 2)
+                self.assertIn("pipeline_state.py", error)
+                self.assertIn(".project/STATE.md", error)
+
     def test_subprocess_contract_end_to_end(self):
         result = subprocess.run(
             [sys.executable, str(SCRIPT)],
