@@ -132,6 +132,7 @@ CROSS_PHASE_TRANSITIONS = {
     ("ship", "blocked", "plan", "active"),
     ("shipped", "done", "define", "active"),
     ("shipped", "done", "inspect", "active"),
+    ("roadmap", "active", "inspect", "active"),
 }
 
 
@@ -686,7 +687,8 @@ def _intent_lane(track: Path) -> Optional[str]:
     return match.group(1)
 
 
-def _active_roadmap_has_questions(project: Path) -> bool:
+def _active_roadmap_has_questions(project: Path, milestone: Optional[str] = None) -> bool:
+    """Report open questions for the active entry, or for ``milestone`` when given."""
     text = _read_real_file(project / "ROADMAP.md", "ROADMAP.md")
     lines = text.splitlines()
     active_section: Optional[list[str]] = None
@@ -707,11 +709,17 @@ def _active_roadmap_has_questions(project: Path) -> bool:
             len(lines),
         )
         section = lines[index:end]
+        if milestone is not None:
+            if heading.group(2) == milestone:
+                active_section = section
+            continue
         if any(re.fullmatch(r"Status:\s*active(?:\s+#.*)?", item) for item in section):
             if active_section is not None:
                 raise PipelineStateError("ROADMAP.md has more than one active milestone")
             active_section = section
     if active_section is None:
+        if milestone is not None:
+            raise PipelineStateError(f"ROADMAP.md is missing lookahead milestone: {milestone}")
         raise PipelineStateError("ROADMAP.md has no active milestone")
     try:
         start = active_section.index("Open questions") + 1
@@ -967,9 +975,6 @@ def _bind_next_recovery(
     else:
         if head != base:
             raise PipelineStateError("bind-next target branch is not at journal base")
-    if _run_git(repo, "status", "--porcelain", "--untracked-files=all").stdout:
-        raise PipelineStateError("bind-next journal worktree is not clean")
-
     result = _route_result(
         state,
         "resume-next-handoff",
@@ -985,6 +990,7 @@ def _bind_next_recovery(
             "landing": landing,
             "allow_remote_absent": allow_remote_absent,
             "journal": str(path),
+            "dirty": _worktree_changes(repo),
         }
     )
     return result
@@ -1162,16 +1168,20 @@ def route_state(repo: Path, project_dir: str = ".project") -> dict[str, object]:
                 reason="INTENT lane is quick",
             )
         if lane == "milestone":
-            questions = _active_roadmap_has_questions(project)
+            questions = _active_roadmap_has_questions(
+                project,
+                state.milestone if lookahead else None,
+            )
+            entry = "lookahead" if lookahead else "active"
             return _route_result(
                 state,
                 "run-phase",
                 phase="research" if questions else "plan",
                 mode="milestone",
                 reason=(
-                    "active roadmap milestone has open questions"
+                    f"{entry} roadmap milestone has open questions"
                     if questions
-                    else "active roadmap milestone has no open questions"
+                    else f"{entry} roadmap milestone has no open questions"
                 ),
             )
         if lane is None:
@@ -1518,8 +1528,18 @@ def _validate_transition(
         and after.milestone is not None
         and event == "program roadmap approved"
     )
+    post_abandon_selection = (
+        before_position == ("roadmap", "active")
+        and after_position == ("inspect", "active")
+        and before.milestone is None
+        and after.milestone is not None
+    )
     if milestone_changed and not (
-        define_approval or roadmap_selection or next_milestone or abandon
+        define_approval
+        or roadmap_selection
+        or next_milestone
+        or abandon
+        or post_abandon_selection
     ):
         raise PipelineStateError("illegal STATE.milestone transition")
     if (
@@ -1712,6 +1732,16 @@ def record_shipment(repo: Path, archive: str, event: str) -> dict[str, object]:
             target_roadmap: Optional[str] = _shipment_roadmap(roadmap_text, state, archive)
         else:
             roadmap_text = target_roadmap = None
+        journal: Optional[dict[str, object]] = None
+        event_date: Optional[str] = None
+        if journal_path.exists() or journal_path.is_symlink():
+            journal = _read_json(journal_path)
+            # Reuse the journaled event date so a next-day resume still matches.
+            recorded = re.match(
+                r"- (\S+) — ",
+                str(journal.get("state_after", "")).rstrip("\n").rsplit("\n", 1)[-1],
+            )
+            event_date = recorded.group(1) if recorded else None
         if (state.phase, state.status) == ("ship", "active"):
             _, after, target_state = _render_transition(
                 state,
@@ -1725,6 +1755,7 @@ def record_shipment(repo: Path, archive: str, event: str) -> dict[str, object]:
                 {"phase": "shipped", "status": "done"},
                 event,
                 ".project",
+                event_date,
             )
         elif (state.phase, state.status) == ("shipped", "done"):
             if " ".join(event.split()) not in {
@@ -1741,8 +1772,7 @@ def record_shipment(repo: Path, archive: str, event: str) -> dict[str, object]:
             "archive": archive,
             "event": " ".join(event.split()),
         }
-        if journal_path.exists() or journal_path.is_symlink():
-            journal = _read_json(journal_path)
+        if journal is not None:
             expected_keys = {
                 *request,
                 "roadmap_before",
@@ -2320,6 +2350,90 @@ def checkpoint_approval(
         return _resume_checkpoint_locked(resolved, project, journal_path, journal)
 
 
+def _checkpoint_deferral_error(repo: Path, kind: str, patch: bool) -> Optional[str]:
+    """Return why a deferred approval is illegal, or None when it is allowed."""
+    if patch:
+        return None if kind == "plan" else "--patch applies only to --kind plan"
+    if _run_git(repo, "rev-parse", "--verify", "HEAD", check=False).returncode != 0:
+        return None
+    binding = repo / ".project" / "REPOSITORY.md"
+    if binding.is_file() and not binding.is_symlink():
+        kinds = [
+            line.removeprefix("Kind:").strip()
+            for line in binding.read_text(encoding="utf-8").splitlines()
+            if line.startswith("Kind:")
+        ]
+        if kinds == ["new-github"]:
+            return None
+    return (
+        "checkpoint deferral requires no Git HEAD, a Kind: new-github "
+        "REPOSITORY.md, or --patch; run: pipeline_state.py approve "
+        f"--kind {kind} --expected-head <full HEAD>"
+    )
+
+
+def defer_approval(
+    repo: Path,
+    kind: str,
+    project_dir: str = ".project",
+    selected_milestone: Optional[str] = None,
+    patch: bool = False,
+) -> dict[str, object]:
+    """Approve plan or roadmap metadata without a checkpoint commit.
+
+    Legal only before Git exists, during a new-repository transaction, or for
+    a patch plan; the next build transition commit owns the artifacts.
+    """
+    resolved = _repo_root(repo)
+    if project_dir not in {".project", ".project/next"}:
+        raise PipelineStateError("approval project-dir must be .project or .project/next")
+    error = _checkpoint_deferral_error(resolved, kind, patch)
+    if error:
+        raise PipelineStateError(error)
+    project = _track_root(resolved, ".project")
+    with _state_lock(project):
+        state, state_before, state_path = load_state(resolved, project_dir)
+        changes, event, _, _ = _approval_details(kind, state, selected_milestone)
+        if patch:
+            event = "patch plan approved"
+        expected = {
+            "phase": state.phase,
+            "status": state.status,
+            "milestone": state.milestone,
+            "branch": state.branch,
+            "archive": state.archive,
+        }
+        _, after, state_after = _render_transition(
+            state,
+            state_before,
+            expected,
+            changes,
+            event,
+            project_dir,
+            approval_kind=kind,
+        )
+        if kind == "roadmap":
+            if project_dir != ".project":
+                raise PipelineStateError("roadmap approval is legal only on the active track")
+            assert selected_milestone is not None
+            roadmap_path = project / "ROADMAP.md"
+            roadmap_after = _activate_roadmap_milestone(
+                _read_real_file(roadmap_path, "ROADMAP.md"),
+                selected_milestone,
+            )
+            _atomic_write(roadmap_path, roadmap_after)
+        _atomic_write(state_path, state_after)
+    return {
+        "schema": CHECKPOINT_SCHEMA,
+        "status": "approved",
+        "kind": kind,
+        "project_dir": project_dir,
+        "commit": None,
+        "deferred": True,
+        "state": after.json(),
+    }
+
+
 def resume_checkpoint(repo: Path) -> dict[str, object]:
     """Resume the single journaled plan or roadmap approval transaction."""
     resolved = _repo_root(repo)
@@ -2613,11 +2727,13 @@ def _classify_plan_drift(
     repo: Path,
     state: PipelineState,
     revision: str,
+    landing: Optional[str] = None,
 ) -> dict[str, object]:
+    """Compare the approved plan at the landing's checkpoint with ``revision``."""
     if state.phase != "plan" or state.status != "done":
         return {"class": "not-applicable", "reason": "lookahead track is not plan/done"}
     assert state.milestone is not None
-    checkpoint = _approval_checkpoint(repo, state, revision)
+    checkpoint = _approval_checkpoint(repo, state, landing or revision)
     if checkpoint is None:
         return {
             "class": "unverifiable",
@@ -3084,7 +3200,7 @@ def _completed_promotion(
         )
 
     _promotion_tree_mapping(repo, base, head)
-    drift = _classify_plan_drift(repo, next_state, base)
+    drift = _classify_plan_drift(repo, next_state, base, landing)
     expected_roadmap = _render_roadmap(
         roadmap_text,
         active_state.milestone,
@@ -3260,7 +3376,7 @@ def _prepare_promotion(
             tracks[name] = _tree_digest(source)
     if not tracks:
         raise PipelineStateError("lookahead track has no promotable artifacts")
-    drift = _classify_plan_drift(repo, next_state, base)
+    drift = _classify_plan_drift(repo, next_state, base, landing)
     roadmap_path = project / "ROADMAP.md"
     roadmap_text = _read_real_file(roadmap_path, "ROADMAP.md")
     target_state = _promotion_state(
@@ -3565,9 +3681,11 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     approve = subparsers.add_parser("approve")
     approve.add_argument("--repo", required=True, type=Path)
     approve.add_argument("--kind", required=True, choices=CHECKPOINT_KINDS)
-    approve.add_argument("--expected-head", required=True)
+    approve.add_argument("--expected-head")
     approve.add_argument("--project-dir", default=".project")
     approve.add_argument("--milestone")
+    approve.add_argument("--defer-checkpoint", action="store_true")
+    approve.add_argument("--patch", action="store_true")
     resume = subparsers.add_parser("resume-checkpoint")
     resume.add_argument("--repo", required=True, type=Path)
     promote = subparsers.add_parser("promote-next")
@@ -3606,7 +3724,23 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 args.event,
                 args.project_dir,
             )
+        elif args.command == "approve" and (args.defer_checkpoint or args.patch):
+            if args.expected_head is not None:
+                raise PipelineStateError(
+                    "--expected-head is not accepted with --defer-checkpoint or --patch"
+                )
+            result = defer_approval(
+                args.repo,
+                args.kind,
+                args.project_dir,
+                args.milestone,
+                args.patch,
+            )
         elif args.command == "approve":
+            if args.expected_head is None:
+                raise PipelineStateError(
+                    "approve requires --expected-head unless --defer-checkpoint or --patch"
+                )
             result = checkpoint_approval(
                 args.repo,
                 args.kind,
