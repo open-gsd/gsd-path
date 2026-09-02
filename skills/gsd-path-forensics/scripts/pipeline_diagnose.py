@@ -168,6 +168,17 @@ def _needs_user(action: str) -> str:
     return f"NEEDS-USER: {action}"
 
 
+def _state_template() -> Path:
+    here = Path(__file__).resolve()
+    for candidate in (
+        here.parents[2] / "gsd-path" / "templates" / "state.md",  # skills/<skill>/scripts
+        here.parents[1] / "skills" / "gsd-path" / "templates" / "state.md",  # scripts/
+    ):
+        if candidate.is_file():
+            return candidate
+    return Path("<path-to-gsd-path-state-template>")
+
+
 def _command(module: object, *arguments: object) -> str:
     script = Path(str(getattr(module, "__file__"))).resolve()
     return shlex.join([sys.executable, str(script), *map(str, arguments)])
@@ -328,7 +339,28 @@ def diagnose(repo: Path) -> dict[str, object]:
         )
 
     status_probe = by_name["status"]
-    if not status_probe["ok"]:
+    no_project = (
+        classified["ok"]
+        and (classified["result"] or {}).get("verdict") in {"brownfield", "greenfield"}
+        and not (resolved / ".project" / "STATE.md").exists()
+    )
+    if no_project:
+        findings.append(
+            _finding(
+                "no-project",
+                "stuck",
+                "no owned pipeline: .project/STATE.md is missing",
+                _command(
+                    detect_project,
+                    "initialize",
+                    "--repo",
+                    resolved,
+                    "--template",
+                    _state_template(),
+                ),
+            )
+        )
+    elif not status_probe["ok"]:
         findings.append(
             _finding(
                 "status",
