@@ -53,6 +53,11 @@ PROJECT_RUNTIME_SCRIPTS = (
     "pipeline_git.py",
     "archive_milestone.py",
     "review_panel.py",
+    "_common.py",
+    "state_checkpoint.py",
+    "state_promote.py",
+    "discussion_validate.py",
+    "integration.py",
 )
 PROJECT_RUNTIME_MARKER = "gsd-path project runtime"
 PROJECT_STATUS_LAUNCHER = "status_runtime.py"
@@ -1015,11 +1020,33 @@ def _native_settings_mergers(
     mergers = {}
     if not hooks:
         return mergers
+    if "claude" in selected:
+        mergers[project / ".claude" / "settings.json"] = _merged_claude_settings
     if "codex" in selected:
         mergers[project / ".codex" / "hooks.json"] = _merged_codex_settings
     if "cursor" in selected:
         mergers[project / ".cursor" / "hooks.json"] = _merged_cursor_settings
     return mergers
+
+
+def _update_replacement(
+    project: Path, destination: Path, hooks_dir: Optional[Path]
+) -> Optional[Callable[[Path], bool]]:
+    """--update replaces managed runtime, guard, and git hook files in place
+    and keeps everything else (AGENTS.md, WORKFLOW.md, CLAUDE.md). Returns
+    the managed-file check for a replaceable destination, or None for a
+    kept one."""
+    parent = project / HOOKS_DIRECTORY
+    directory = destination.parent
+    if _same_path(directory, parent / "runtime"):
+        return _is_managed_project_runtime
+    if _same_path(destination, parent / PROJECT_STATUS_LAUNCHER):
+        return _is_managed_project_status_launcher
+    if any(_same_path(destination, parent / name) for name in GUARD_SCRIPTS):
+        return _is_managed_guard_script
+    if hooks_dir is not None and _same_path(directory, hooks_dir):
+        return _is_managed_git_hook
+    return None
 
 
 def _describe_project_path(project: Path, destination: Path) -> str:
@@ -1044,11 +1071,43 @@ def _project_files(
     )
 
 
+def _project_result(
+    project: Path,
+    selected: Sequence[str],
+    hooks: bool,
+    interpreter: str,
+    hooks_dir: Optional[Path],
+    update: bool,
+    dry_run: bool,
+) -> str:
+    if not update:
+        files = _project_files(project, selected, hooks, interpreter, hooks_dir)
+        verb = "would copy" if dry_run else "copied"
+        return f"project: {verb} {files} to {project}"
+    mergers = _native_settings_mergers(project, selected, hooks)
+    refreshed = []
+    kept = []
+    for destination, _, _, _ in _project_destinations(
+        project, selected, hooks, interpreter, hooks_dir
+    ):
+        replaceable = (
+            destination in mergers
+            or _update_replacement(project, destination, hooks_dir) is not None
+        )
+        bucket = kept if _lexists(destination) and not replaceable else refreshed
+        bucket.append(_describe_project_path(project, destination))
+    verb = "would refresh" if dry_run else "refreshed"
+    line = f"project: {verb} {', '.join(refreshed)} in {project}"
+    if kept:
+        line += f"; kept {', '.join(kept)}"
+    return line
+
+
 def _existing_contract_error(destination: Path) -> "InstallerError":
     return InstallerError(
         f"project contract already exists: {destination} — the installer never "
-        "overwrites project files; merge template changes manually "
-        "(see UPDATE.md)."
+        "overwrites project files. Run --update --project PATH to refresh managed "
+        "runtime files; merge template changes manually (see UPDATE.md)."
     )
 
 
@@ -1084,6 +1143,7 @@ def _validate_project(
     reserved_roots: Sequence[Tuple[str, Path]],
     interpreter: str,
     hooks_dir: Optional[Path],
+    update: bool = False,
 ) -> None:
     _validate_directory_destination(project, "project path")
     _validate_project_git_root(project)
@@ -1123,9 +1183,17 @@ def _validate_project(
     ):
         if _lexists(destination):
             merge = mergers.get(destination)
-            if merge is None or destination.is_symlink():
+            managed = (
+                _update_replacement(project, destination, hooks_dir) if update else None
+            )
+            if destination.is_symlink() or (merge is None and not update):
                 raise _existing_contract_error(destination)
-            merge(destination, interpreter)
+            if merge is not None:
+                merge(destination, interpreter)
+            elif managed is not None and not managed(destination):
+                raise InstallerError(
+                    f"not a managed GSD Path project file: {destination}"
+                )
         for label, root in reserved_roots:
             if _paths_overlap(destination, root):
                 raise InstallerError(
@@ -1141,6 +1209,7 @@ def _apply_project(
     transaction: ProjectTransaction,
     interpreter: str,
     hooks_dir: Optional[Path],
+    update: bool = False,
 ) -> None:
     _create_directory(project, transaction.created_directories)
     mergers = _native_settings_mergers(project, selected, hooks)
@@ -1149,12 +1218,27 @@ def _apply_project(
     ):
         _create_directory(destination.parent, transaction.created_directories)
         merge = mergers.get(destination)
-        if _lexists(destination) and merge is not None and not destination.is_symlink():
-            original = destination.read_bytes()
-            mode = destination.stat().st_mode & 0o777
-            _atomic_write(destination, merge(destination, interpreter), mode)
-            transaction.replaced.append((destination, original, mode))
-            continue
+        if _lexists(destination) and not destination.is_symlink():
+            replaceable = (
+                update
+                and _update_replacement(project, destination, hooks_dir) is not None
+            )
+            if merge is not None or replaceable:
+                original = destination.read_bytes()
+                mode = destination.stat().st_mode & 0o777
+                if merge is not None:
+                    replacement: Union[str, bytes] = merge(destination, interpreter)
+                elif source_name:
+                    replacement = (source_root / source_name).read_bytes()
+                else:
+                    replacement = content or ""
+                _atomic_write(
+                    destination, replacement, 0o755 if executable else mode
+                )
+                transaction.replaced.append((destination, original, mode))
+                continue
+            if update:
+                continue
         created = False
         try:
             if source_name:
@@ -2580,6 +2664,7 @@ def install(
                 [*mutation_roots, *planned_backups],
                 interpreter,
                 hooks_dir,
+                update,
             )
 
     results = []
@@ -2608,10 +2693,11 @@ def install(
                     _install_result(plan, dry_run=True, update=update) + suffix
                 )
             if project is not None:
-                files = _project_files(
-                    project, selected, hooks, interpreter, hooks_dir
+                results.append(
+                    _project_result(
+                        project, selected, hooks, interpreter, hooks_dir, update, True
+                    )
                 )
-                results.append(f"project: would copy {files} to {project}")
             _append_host_notes(results, selected)
             return results
 
@@ -2633,6 +2719,7 @@ def install(
                     [*mutation_roots, *planned_backups],
                     interpreter,
                     hooks_dir,
+                    update,
                 )
             if legacy_root is not None and legacy_root.is_dir():
                 legacy_transaction = TargetTransaction(legacy_root)
@@ -2656,6 +2743,9 @@ def install(
                         f"to {transaction.backup}"
                     )
             if project is not None:
+                result_line = _project_result(
+                    project, selected, hooks, interpreter, hooks_dir, update, False
+                )
                 _apply_project(
                     source_root,
                     project,
@@ -2664,11 +2754,9 @@ def install(
                     project_transaction,
                     interpreter,
                     hooks_dir,
+                    update,
                 )
-                files = _project_files(
-                    project, selected, hooks, interpreter, hooks_dir
-                )
-                results.append(f"project: copied {files} to {project}")
+                results.append(result_line)
         except (Exception, KeyboardInterrupt) as error:
             rollback_errors = []
             try:

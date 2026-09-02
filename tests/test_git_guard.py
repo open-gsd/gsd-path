@@ -375,8 +375,46 @@ class GitGuardEndToEndTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn("only touch .project/", result.stderr)
 
+    def test_hooks_allow_the_first_commit_on_an_unborn_head(self):
+        repo = Path(self.temporary.name) / "fresh"
+        repo.mkdir()
+        subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+        hooks = repo / ".git" / "hooks"
+        (hooks / "pre-commit").write_text(
+            f'#!/bin/sh\nexec "{sys.executable}" "{SCRIPT}" pre-commit\n',
+            encoding="utf-8",
+        )
+        (hooks / "pre-commit").chmod(0o755)
+        (repo / "README.md").write_text("first\n", encoding="utf-8")
+        subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
+
+        result = subprocess.run(
+            ["git", "-c", "user.email=test@example.com", "-c", "user.name=Test",
+             "commit", "-q", "-m", "chore: first commit"],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_hooks_allow_a_canonical_integration_merge_to_add_the_archive(self):
-        self.git("branch", "-m", "main")
+        self.git("config", "init.defaultBranch", "main")
+        self.assert_integration_merge_allowed("main")
+
+    def test_integration_merge_honors_a_configured_default_branch(self):
+        self.git("config", "init.defaultBranch", "trunk")
+        self.assert_integration_merge_allowed("trunk")
+
+    def test_integration_merge_honors_the_origin_default_branch(self):
+        self.git("config", "init.defaultBranch", "main")
+        self.git("branch", "-m", "develop")
+        self.git("update-ref", "refs/remotes/origin/develop", "HEAD")
+        self.git("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/develop")
+        self.assert_integration_merge_allowed("develop")
+
+    def assert_integration_merge_allowed(self, default):
+        self.git("branch", "-m", default)
         self.git("checkout", "-q", "-b", "gsd-path/M002")
         archive = self.repo / ".project/archive/002-next"
         archive.mkdir()
@@ -389,7 +427,7 @@ class GitGuardEndToEndTests(unittest.TestCase):
         )
         self.git("add", "-A")
         self.commit("ship: M002 — next")
-        self.git("checkout", "-q", "main")
+        self.git("checkout", "-q", default)
         self.git("checkout", "-q", "-b", "gsd-path-integrate/M002")
         self.install_hooks()
 
@@ -403,7 +441,7 @@ class GitGuardEndToEndTests(unittest.TestCase):
                 "merge",
                 "--no-ff",
                 "-m",
-                "integrate: M002 — merge gsd-path/M002 into main",
+                f"integrate: M002 — merge gsd-path/M002 into {default}",
                 "gsd-path/M002",
             ],
             cwd=self.repo,

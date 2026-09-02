@@ -14,6 +14,7 @@ import sys
 from pathlib import Path
 from typing import Optional, Sequence
 
+import _common
 import archive_milestone
 import detect_project
 
@@ -61,12 +62,7 @@ def require_file(path: Path, description: str) -> None:
         raise LookaheadError(f"{description} must be a real file: {path}")
 
 
-def atomic_write(path: Path, content: str) -> None:
-    archive_milestone.atomic_replace(
-        path,
-        path.parent / f".{path.name}.gsd-path-tmp",
-        content,
-    )
+atomic_write = _common.atomic_write
 
 
 def state_fields(content: str) -> dict[str, str]:

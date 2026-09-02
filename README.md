@@ -12,7 +12,7 @@ abandoned on an explicit ruling, archiving its partial work for a re-slice.
 **Supported hosts:** Codex, Claude Code, Grok, OpenCode, GitHub Copilot CLI,
 Qwen Code, Antigravity CLI, Cursor, Zed, Kiro, and Kimi Code.
 Support means the installer and dispatch contract exist. See the
-[host trust matrix](docs/trust-validation/HOST-MATRIX.md) for live milestone
+[host trust matrix](https://github.com/open-gsd/gsd-path/blob/main/docs/trust-validation/HOST-MATRIX.md) for live milestone
 proof and each host's guard tier.
 
 ## Documentation
@@ -37,6 +37,7 @@ cd your-repo && node scripts/install.mjs --all --project "$(pwd)"
 
 # Already installed
 node scripts/install.mjs --update
+cd your-repo && node scripts/install.mjs --update --project "$(pwd)"   # also refresh .gsd-path/
 ```
 
 Interactive: `npx gsd-path` with no flags opens the OpenGSD wizard (pick hosts, scope, contracts, hooks; dry-run first)
@@ -208,6 +209,7 @@ node scripts/install.mjs --claude --cursor
 node scripts/install.mjs --all --local
 node scripts/install.mjs --all --project /path/to/project
 node scripts/install.mjs --update
+node scripts/install.mjs --all --update --project /path/to/project   # refresh .gsd-path/; keeps contracts
 ```
 
 | Flag | User skills root | Invoke |

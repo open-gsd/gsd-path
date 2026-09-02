@@ -16,28 +16,31 @@ def _load_pipeline_modules():
     try:
         import archive_milestone
         import pipeline_state
-        return archive_milestone, pipeline_state
+        import _common
+        return _common, archive_milestone, pipeline_state
     except ModuleNotFoundError as error:
-        if error.name not in {"archive_milestone", "pipeline_state"}:
+        if error.name not in {"archive_milestone", "pipeline_state", "_common"}:
             raise
     try:
-        from scripts import archive_milestone, pipeline_state
-        return archive_milestone, pipeline_state
+        from scripts import archive_milestone, pipeline_state, _common
+        return _common, archive_milestone, pipeline_state
     except ModuleNotFoundError as error:
         if error.name not in {
             "scripts",
             "scripts.archive_milestone",
             "scripts.pipeline_state",
+            "scripts._common",
         }:
             raise
         shared_scripts = Path(__file__).resolve().parents[2] / "gsd-path" / "scripts"
         sys.path.insert(0, str(shared_scripts))
         import archive_milestone
         import pipeline_state
-        return archive_milestone, pipeline_state
+        import _common
+        return _common, archive_milestone, pipeline_state
 
 
-archive_milestone, pipeline_state = _load_pipeline_modules()
+_common, archive_milestone, pipeline_state = _load_pipeline_modules()
 
 
 class DiscussionError(RuntimeError):
@@ -49,9 +52,7 @@ FILES = ("DIALOGUE.md", "ANSWERS.md")
 PHASES = {"inspect", "define", "research", "decide", "roadmap", "plan", "build", "ship"}
 
 
-def atomic_write(path: Path, content: str) -> None:
-    temporary = path.parent / f".{path.name}.gsd-path-tmp"
-    archive_milestone.atomic_replace(path, temporary, content)
+atomic_write = _common.atomic_write
 
 
 def project_root(repo: Path) -> tuple[Path, Path, Path]:

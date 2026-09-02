@@ -67,7 +67,7 @@ Static dispatch contracts are **verified** (files exist, installer copies them).
 
 | Host | Dispatch file | Live claim | Evidence |
 |------|---------------|------------|----------|
-| Antigravity | `platforms/antigravity/dispatch.md` | `invoke_subagent` works at runtime | DOCS-AUDIT unverifiable |
+| Antigravity | `platforms/shared-agents/dispatch.md` (Antigravity installs the shared-agents profile) | `invoke_subagent` works at runtime | DOCS-AUDIT unverifiable |
 | Claude | `platforms/claude/dispatch.md` | `Agent` tool/schema | same |
 | Codex | `platforms/shared-agents/dispatch.md` (Codex installs the shared-agents profile) | collaboration worker | same; implicit test only when `codex` CLI present |
 | Copilot | `platforms/copilot/dispatch.md` | `task` tool | same |

@@ -4,10 +4,14 @@
 import argparse
 import json
 import re
-import subprocess
 import sys
 from pathlib import Path, PurePosixPath
 from typing import Dict, List, Optional, Sequence, Set, Tuple
+
+try:
+    import _common
+except ImportError:  # pragma: no cover - package import used by tests
+    from scripts import _common
 
 
 DEFAULT_TASKS_DIR = ".project/tasks"
@@ -34,9 +38,9 @@ REQUIRED_SECTIONS = (
     "Log",
 )
 PROSE_SECTIONS = ("Context", "Approach", "Interface contract")
-FIELD_PATTERN = re.compile(r"^(?P<key>[a-z_]+):\s*(?P<value>.*)$")
-INLINE_LIST_PATTERN = re.compile(r"^\[(?P<body>.*)\]$")
-LIST_ITEM_PATTERN = re.compile(r"^\s*-\s+(?P<value>.*)$")
+FIELD_PATTERN = _common.FIELD_PATTERN
+INLINE_LIST_PATTERN = _common.INLINE_LIST_PATTERN
+LIST_ITEM_PATTERN = _common.LIST_ITEM_PATTERN
 HEADING_PATTERN = re.compile(r"(?m)^## (?P<name>.+?)\s*$")
 COMMENT_PATTERN = re.compile(r"<!--.*?-->", re.DOTALL)
 BACKTICK_PATTERN = re.compile(r"`([^`\n]+)`")
@@ -48,13 +52,7 @@ class BriefError(RuntimeError):
     """Raised when task briefs fail the layer-prep lint or inputs are unusable."""
 
 
-def _run_git(repo: Path, *arguments: str) -> "subprocess.CompletedProcess[str]":
-    return subprocess.run(
-        ("git", "-C", str(repo), *arguments),
-        text=True,
-        capture_output=True,
-        check=False,
-    )
+_run_git = _common.run_git
 
 
 def _resolve_base(repo: Path, base: str) -> str:
@@ -68,54 +66,8 @@ def _base_exists(repo: Path, base: str, path: str) -> bool:
     return _run_git(repo, "cat-file", "-e", f"{base}:{path}").returncode == 0
 
 
-def _strip_yaml_comment(value: str) -> str:
-    quote = None
-    previous_significant = None
-    inline_list = value.lstrip().startswith("[")
-    index = 0
-    while index < len(value):
-        character = value[index]
-        if quote == '"':
-            if character == "\\" and index + 1 < len(value):
-                index += 2
-                continue
-            if character == quote:
-                quote = None
-        elif quote == "'":
-            if (
-                character == quote
-                and index + 1 < len(value)
-                and value[index + 1] == quote
-            ):
-                index += 2
-                continue
-            if character == quote:
-                quote = None
-        else:
-            if character in {"'", '"'} and (
-                previous_significant is None
-                or (inline_list and previous_significant in {"[", ","})
-            ):
-                quote = character
-            elif character == "#" and (
-                index == 0 or value[index - 1].isspace()
-            ):
-                return value[:index].rstrip()
-        if quote is None and not character.isspace():
-            previous_significant = character
-        index += 1
-    return value.strip()
-
-
-def _unquote(value: str) -> str:
-    cleaned = _strip_yaml_comment(value).strip()
-    if (
-        len(cleaned) >= 2
-        and cleaned[0] == cleaned[-1]
-        and cleaned[0] in {"'", '"'}
-    ):
-        return cleaned[1:-1]
-    return cleaned
+_strip_yaml_comment = _common.strip_yaml_comment
+_unquote = _common.unquote
 
 
 def _frontmatter(text: str) -> Tuple[Optional[Dict[str, object]], Optional[str]]:
@@ -183,7 +135,7 @@ def _looks_like_path(token: str) -> bool:
         "/" in token
         and PATH_TOKEN_PATTERN.fullmatch(token) is not None
         and "://" not in token
-        and not token.startswith("-")
+        and not token.startswith(("-", "/"))  # /api/users is a route, not a repo path
         and "<" not in token
         and ">" not in token
     )

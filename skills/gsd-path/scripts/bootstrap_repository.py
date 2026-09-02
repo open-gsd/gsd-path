@@ -12,6 +12,11 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Optional, Sequence
 
+try:
+    import _common
+except ImportError:  # pragma: no cover - package import used by tests
+    from scripts import _common
+
 
 class BootstrapError(RuntimeError):
     pass
@@ -61,14 +66,7 @@ def normalized_slug(value: str) -> str:
     return slug
 
 
-def run(*arguments: str, cwd: Optional[Path] = None) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        arguments,
-        cwd=cwd,
-        text=True,
-        capture_output=True,
-        check=False,
-    )
+run = _common.run_command
 
 
 def require_success(result: subprocess.CompletedProcess[str], action: str) -> str:

@@ -17,14 +17,17 @@ import re
 import subprocess
 import sys
 from pathlib import Path
-from typing import Iterable, Optional, Sequence
+from typing import Optional, Sequence
+
+try:
+    import _common
+except ImportError:  # pragma: no cover - package import used by tests
+    from scripts import _common
 
 
 ARCHIVE_NAME_RE = re.compile(r"^(\d{3,})-([a-z0-9][a-z0-9-]*)$")
-BOUND_BRANCH_RE = re.compile(r"^gsd-path/M(\d{3,})$")
+BOUND_BRANCH_RE = _common.BOUND_BRANCH_RE
 MILESTONE_ID_RE = re.compile(r"^M(\d{3,})$")
-ROADMAP_HEADING_RE = re.compile(r"^### (M\d{3,}) — .+$")
-ROADMAP_STATUS_RE = re.compile(r"^Status:\s*(\S+)", re.MULTILINE)
 
 LEGACY_SHIP_PREFIX = "ship: "
 LEGACY_INTEGRATE_PREFIX = "integrate: "
@@ -151,47 +154,10 @@ def task_commit_body(task_file: str, paths: Sequence[str], base: str) -> str:
     return "\n".join(lines) + "\n"
 
 
-def pipeline_commit_body(fields: Iterable[tuple[str, str]]) -> str:
-    lines = [f"{name}: {value}" for name, value in fields if value]
-    if not lines:
-        raise PipelineGitError("pipeline commit body has no fields")
-    return "\n".join(lines) + "\n"
-
-
 def default_branch_name(remote_default: str) -> str:
     if remote_default.startswith("origin/"):
         return remote_default.removeprefix("origin/")
     return remote_default
-
-
-def next_milestone_number(
-    archive_names: Sequence[str],
-    active_roadmap_id: Optional[str] = None,
-) -> int:
-    if active_roadmap_id:
-        return milestone_number(active_roadmap_id)
-    numbers = [milestone_number(name) for name in archive_names]
-    if not numbers:
-        return 1
-    return max(numbers) + 1
-
-
-def active_roadmap_milestone_id(roadmap_text: str) -> Optional[str]:
-    current_id = None
-    for line in roadmap_text.splitlines():
-        heading = ROADMAP_HEADING_RE.fullmatch(line.strip())
-        if heading:
-            current_id = heading.group(1)
-            milestone_number(current_id)
-            continue
-        if current_id is None:
-            continue
-        status = ROADMAP_STATUS_RE.match(line.strip())
-        if status:
-            if status.group(1) == "active":
-                return current_id
-            current_id = None
-    return None
 
 
 def _run_git(

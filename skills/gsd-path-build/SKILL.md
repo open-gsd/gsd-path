@@ -8,11 +8,8 @@ description: Execute or resume an approved GSD Path plan with isolated task work
 Orchestrate coders, task landing, and reviewers from the main conversation.
 Never write product code in the orchestrator.
 
-Any instruction below to route, return, or invoke another GSD Path phase is a
-caller handoff, not permission to trigger an explicit-only skill. If an active
-router or orchestrator supplied this contract, return control to it. On a
-direct invocation, report the exact next skill and stop until the user
-explicitly invokes it.
+Routing instructions below are caller handoffs under the AGENTS.md handoff
+rule; never invoke an explicit-only sibling skill yourself.
 
 ## Preconditions and branch binding
 
@@ -24,7 +21,11 @@ explicitly invokes it.
   rather than rewinding state. A concrete STATE.archive during `build/*`
   marks an interrupted milestone-abandon transaction: resume the Milestone
   abandon procedure below before any recovery or dispatch. `build/done` is never a normal execution state:
-  re-prove all wave gates at current HEAD, then finish the
+  re-prove all wave gates at current HEAD — each task's Verify counts as
+  proven when `python3 <absolute build_state.py> verify-lookup --repo
+  <absolute primary> --command <task Verify> --commit <HEAD>` returns
+  `reuse: true`; otherwise run it in an `isolate-verify` sidecar at HEAD and
+  record it — then finish the
   checkpointed transition to `ship/active`. Project Verify waits for ship.
 - Read the local [coder role](references/coder.md),
   [reviewer role](references/reviewer.md), [dispatch contract](references/dispatch.md),
@@ -33,11 +34,16 @@ explicitly invokes it.
   [wave-panel template](templates/wave-panel.md), and
   [skeptic template](templates/skeptic.md). Resolve them to absolute
   paths before briefing agents. Resolve `scripts/review_panel.py` when
-  PLAN.md Config names a review panel. Resolve `scripts/check_handoffs.py`
+  PLAN.md Config names a review panel. Resolve `scripts/review_findings.py`
+  for blocked-wave finding sets. Resolve `scripts/check_handoffs.py`
   for Intent coverage. Resolve `scripts/pipeline_state.py` for guarded state
   transitions. Resolve `scripts/isolation.py` for task isolation, recovery,
   verify sidecars, task landing, and bookkeeping checkpoints; do not invent
-  `git worktree add`, `--detach`, commit, or cherry-pick commands.
+  `git worktree add`, `--detach`, commit, or cherry-pick commands. Resolve
+  `scripts/build_state.py` for the ready set, task reconciliation, the
+  landed-task proof, and the verify ledger
+  (`.project/build/verify-ledger.jsonl`, one JSON line per run: command,
+  commit, result, timestamp); do not select or reconcile tasks in prose.
 - There is no board file. Task frontmatter is the only task-state record;
   when a report or question needs a wave summary, render it inline from the
   task files and wave reviews. Record escalations and plan defects in the
@@ -155,11 +161,30 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
    - `block`: set `build/blocked` with the returned reason and stop.
    - `none`: take no recovery action for that task.
 
-2. **Prepare the ready set.** Reconcile failed and blocked tasks, then select
-   pending tasks whose dependencies are `done`. Readiness is continuous, not
+2. **Prepare the ready set.** Run `python3 <absolute build_state.py> ready
+   --repo <absolute primary>`. It is read-only: it validates every task's
+   frontmatter against its dispatch metadata and the recovery report, then
+   returns `ready` — the current wave's `pending` tasks whose dependencies are
+   all `done`, each with `id`, `title`, `deps`, `files`, `task_file`, and
+   `verify_heavy` — after proving that ready and `in-progress` tasks have
+   disjoint `files`. Dispatch exactly the tasks it returns; do not select,
+   order, or overlap-check tasks in prose. Readiness is continuous, not
    layered: a task becomes selectable the moment its last dependency lands,
-   even while unrelated tasks still run. A `NEEDS-ORCHESTRATOR` block stays
-   unselectable until its `Orchestrator answer` is recorded in the task Log.
+   even while unrelated tasks still run, so rerun `ready` after each landing.
+   A `NEEDS-ORCHESTRATOR` block stays unselectable until its `Orchestrator
+   answer` is recorded in the task Log and the task is back to `pending`.
+   Its typed errors are the recovery rule:
+   - `task-recovery-required`: for each listed failed or blocked task run
+     `python3 <absolute build_state.py> reconcile --repo <absolute primary>
+     --task-id <id>` and act on its `classification`. `proven-landed`: the
+     task already landed at `landed_commit` and its frontmatter is stale —
+     reconcile the task file to that landed state and checkpoint it.
+     `resumable` or `reconcile`: apply the retry procedure below with the
+     returned `history.candidates` as the rejected evidence. `blocked`: set
+     `build/blocked` with the returned `reasons` and stop.
+   - `dependency-deadlock`: set `build/blocked` with its `tasks` list and stop.
+   - `ready-file-overlap` or `invalid-task-state`: a documented plan defect or
+     drifted bookkeeping; repair it before a new clean base.
    A documented plan
    defect may be repaired against INTENT.md and SYNTHESIS.md and logged before
    a new clean base. A user ruling that changes a success criterion,
@@ -220,8 +245,11 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
    file, task template, and the absolute INTENT.md path in that worktree.
    Add no hidden implementation context; repair a
    defective task contract before establishing the round base. Run ready work
-   up to capacity. Do not wait for the whole round before unlocking
-   dependents: each task landing in step 5 re-opens step 2, and a newly ready
+   up to capacity. Verify commands marked `Heavy: yes` (`verify_heavy` in the
+   ready set) run one at a time across every concurrent task, including the
+   step 5 rerun; light ones are unconstrained. Do not wait for the whole
+   round before unlocking dependents: each task landing in step 5 re-opens
+   step 2, and a newly ready
    task dispatches in a fresh round at the current clean HEAD while unrelated
    tasks still run. The wave advances to review only when every wave task is
    `done`.
@@ -237,7 +265,13 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
      blocks before any product commit.
    - Run the task's Verify command in that isolated worktree. This rerun is the
      authoritative task evidence; a command run in the primary or a sibling
-     worktree never counts. Append its exact result to the task Log.
+     worktree never counts. Append its exact result to the task Log. After
+     `land` returns, when `git rev-parse <landed commit>^` equals the
+     recorded `base` the landed tree is the verified tree: record the run
+     with `python3 <absolute build_state.py> verify-record --repo <absolute
+     primary> --command <task Verify> --commit <landed commit> --result
+     pass`. The ledger is `.project` bookkeeping; the next checkpoint
+     commits it.
    - Land with
      `python3 <absolute isolation.py> land --repo <absolute primary>
      --source <isolated worktree> --base <recorded base> --task-id <id>
@@ -329,8 +363,15 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
      findings feed the fix-task batching in step 7.
    - `verify-only`: spawn no reviewer. The orchestrator writes
      `.project/review/wave-N.cycleC.md` itself from evidence it already
-     holds — per task, the isolated Verify rerun and the declared-files diff
-     check — recording `Depth: verify-only`. It checks each acceptance
+     holds — per task, the Verify evidence and the declared-files diff
+     check — recording `Depth: verify-only`. Same command, same commit
+     reuses the recorded pass: the task's Verify evidence is the ledger
+     entry when `python3 <absolute build_state.py> verify-lookup --repo
+     <absolute primary> --command <task Verify> --commit <landed commit>`
+     returns `reuse: true`; otherwise run the command in an
+     `isolate-verify` sidecar at that commit, record it with
+     `verify-record`, and use that result. A re-review after a fix cycle
+     follows the same rule. It checks each acceptance
      criterion and each INTENT success criterion owned by the wave's tasks
      against that evidence and the diff; anything it cannot
      confirm from them is a finding, not a pass. Never spawn a review panel
@@ -341,8 +382,8 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
      `python3 <absolute review_panel.py> resolve --plan <absolute PLAN.md>
      --intent <absolute INTENT.md> --advertised <comma slugs>
      --parent-slug <current model slug when known>` and `--charter
-     <absolute .project/CHARTER.md>` when that file exists. `off` or
-     `off` continues with no current-cycle panel artifact. For `skipped`,
+     <absolute .project/CHARTER.md>` when that file exists. `status: off`
+     continues with no current-cycle panel artifact. For `skipped`,
      persist the helper's exact JSON stdout as
      `.project/review/wave-N.cycleC.panel.skipped.json` and continue without
      a panel; do not translate or summarize the receipt. Exit 2 / `error`
@@ -369,117 +410,100 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
      failure.
 
 7. **Fix or advance.** A valid canonical `pass` advances unless an
-   actionable review-panel finding is waiting for a user ruling. On `blocked`, read
-   `max_review_cycles` from PLAN.md (default 3).
-   When PLAN.md Config records `finding_skeptics: on` and the wave's Review
-   depth is `deep`, run the skeptic pass before batching fix tasks.
-   Only valid blocking findings from the deep lens files enter this pass.
-   At the collection boundary, separate criterion findings from structural
-   blockers. A missing or invalid lens, panel, or skeptic artifact, a helper
-   non-zero exit, or another non-criterion failure never enters skeptic
-   filtering or refutation accounting. Keep it blocking through the ordinary
-   blocked-wave handling — a fix task when applicable or `build/blocked`
-   escalation otherwise — exactly as when the skeptic pass is off.
-   Group blocking observations by failed criterion. Derive each group's
-   canonical criterion locator from identifiers already owned by the
-   contract: the lowercased task id plus its one-based acceptance-criterion
-   ordinal (`t001_ac2`), or the lowercased owned INTENT success-criterion id
-   (`sc3`). For another written task-contract criterion, use the lowercased
-   task id plus its canonical frontmatter field or template-section key
-   (`t001_files`, `t001_base`, or `t001_interface_contract`). Use that locator
-   unchanged for identity across cycles. Collapse only true duplicate
-   observations; preserve every distinct observation from either lens in the
-   group. Spawn one independent read-only skeptic per criterion group,
-   concurrently up to the advertised child capacity, with logical task name
-   `review_wave_<wave>_cycle_<cycle>_skeptic_<criterion_locator>`, the reviewer
-   role in skeptic mode, the skeptic template, and its own verify sidecar
-   from `isolate-verify`
-   (`--name wave-<N>-cycle-<C>-skeptic-<criterion_locator>`) at the recorded
-   review base. Brief each with the locator, the criterion verbatim, every
-   distinct observation in the group verbatim, the involved task files,
-   their recorded bases and proven landing commits, and the absolute
-   INTENT.md path. Each skeptic stages
-   `.project/review/wave-N.cycleC.skeptic-<criterion_locator>.md` in its sidecar;
-   validate each against the skeptic template, atomically copy it to the
-   primary canonical path, then retire that sidecar. A criterion group whose
-   valid skeptic file records `Verdict: refuted` only after every observation
-   is individually refuted; it joins the current cycle's refuted set, spawns
-   no fix task, and is not carried forward.
-   A criterion locator whose valid skeptic file recorded `Verdict: refuted`
-   in an earlier cycle never gets a second skeptic. If a later review re-raises
-   it with unchanged evidence, add it to the current cycle's refuted set; it
-   gets no fix task and is not carried forward. If the evidence is new, leave
-   it blocking and send it to fix-task batching without another skeptic. A
-   `stands` verdict leaves the criterion group blocking. A missing or invalid
-   skeptic file follows the structural-failure handling above. The all-refuted
-   branch requires a non-empty current-cycle refuted set and no other blocking
-   failure, and the current cycle must be below `max_review_cycles`. At the
-   cap, skip this branch and use the cycle-cap escalation below. When the
-   refuted set contains every blocking criterion group, stop and ask: present
-   **Outcome** with
-   the blocked verdict
-   and the refutation count, **Review** linking the lens and skeptic
-   files, and **Next** listing `Re-run the review cycle with the skeptic
-   files in the reviewer briefs (recommended — no finding survived
-   scrutiny)` first, then `Open fix tasks from the findings anyway (an
-   explicit ruling that overrides their refutations)`. A selected re-run
-   consumes a cycle. After the user selects either option, record exact full
-   HEAD, then use `pipeline_state.py transition` with the exact current phase,
-   status, branch, and archive as expected and unchanged phase/status as the
-   result.
-   Append `wave <N> cycle <C> all-refuted ruling: <selected option verbatim>`
-   to the STATE.md Log and require the returned position to remain
-   `build/active`. Checkpoint STATE.md and the collected skeptic artifacts
-   through the Bookkeeping checkpoint rule with subject `build: record wave
-   <N> cycle <C> skeptic ruling`, body `Why: persist the all-refuted user
-   ruling before acting`, and `Wave: <N>`. Do not start the selected review
-   cycle or create, batch, or dispatch fix tasks until the checkpoint returns
-   its commit. When the persisted ruling selects `Open fix tasks from the
-   findings anyway`, derive the exact override set from the current cycle's
-   lens finding groups. Pair each group with its governing valid refutation
-   artifact: the current cycle's skeptic file, or the earlier cycle's recorded
-   skeptic file for a same-evidence repeat. Re-admit every paired group with
-   its current preserved lens observations, using the earlier file when a
-   same-evidence group has no current-cycle skeptic file. Add that set to the
-   surviving findings for fix-task batching. No other ruling re-admits
-   refuted groups. Preserve
-   their skeptic verdicts and eligibility history. After a crash, resume the
-   recorded choice without asking again. A re-raised locator still gets no
-   second skeptic.
-   While cycles remain below the cap, batch the surviving
-   findings into complete fix tasks from the task template — one task per
-   disjoint file scope, not one per finding — each carrying its findings'
-   failed criteria and observed evidence verbatim. Identify every finding by
-   its failed criterion and carry still-open findings forward across cycles
-   instead of rediscovering them: a criterion that fails again after its fix
-   task ran is evidence the fix failed, never a new finding, and a re-review
-   never spawns a duplicate fix task for a finding already carried. Write
-   each fix task to `.project/tasks/` with `wave` set to the current wave or
-   a newly appended `## Wave N` heading in PLAN.md before dispatch. Run them
-   through the same isolated layer loop. At the cap, record all attempts in
-   the STATE.md log and ask the user — through an interactive user-input tool
-   when available — after linking the resolved absolute blocking wave review,
-   every deep lens file for the cycle, and every skeptic file collected for
-   the wave, plus the STATE.md attempt log. Ask whether to redirect the
-   approach, raise the cap, or send define to amend INTENT.md `## Corrections`
-   — never rewrite an AC from a Log waiver — or,
-   in program flow (ROADMAP.md exists), to abandon the
+   actionable review-panel finding is waiting for a user ruling. On
+   `blocked`, run `python3 <absolute review_findings.py> collect --repo
+   <absolute primary> --wave <N> --cycle <C>`, adding one `--helper-failure
+   "<helper and stderr>"` per bundled helper that exited non-zero in this
+   cycle. The helper alone reads PLAN.md Config (`max_review_cycles`,
+   `finding_skeptics`, `wave_budget`), the cycle's lens files, and every
+   skeptic file of the wave; it groups blocking findings by criterion
+   locator, collapses true duplicates, carries earlier refutations forward,
+   separates structural blockers, batches fix groups by disjoint file scope,
+   and reports `cap_reached`. Exit 2 blocks the wave. Never regroup,
+   re-derive a locator, or re-decide refutation in model reasoning; act on
+   the result in this order:
+   - `structural_blockers` non-empty: a missing or invalid lens, panel, or
+     skeptic artifact, a helper failure, or a finding that names no
+     contract criterion never enters skeptic filtering. Keep it blocking
+     through the ordinary blocked-wave handling — a fix task when applicable
+     or `build/blocked` escalation otherwise.
+   - `cap_reached` true: skip every branch below and use the cycle-cap
+     escalation at the end of this step.
+   - `skeptic_groups` non-empty: spawn one independent read-only skeptic
+     per listed locator, concurrently up to the advertised child capacity,
+     with logical task name
+     `review_wave_<wave>_cycle_<cycle>_skeptic_<criterion_locator>`, the
+     reviewer role in skeptic mode, the skeptic template, and its own verify
+     sidecar from `isolate-verify`
+     (`--name wave-<N>-cycle-<C>-skeptic-<criterion_locator>`) at the
+     recorded review base. Brief each with the group's `locator`,
+     `criterion` verbatim, every `observations` entry verbatim, the group's
+     `tasks` files, their recorded bases and proven landing commits, and the
+     absolute INTENT.md path. Each skeptic stages
+     `.project/review/wave-N.cycleC.skeptic-<criterion_locator>.md` in its
+     sidecar; validate each against the skeptic template, atomically copy it
+     to the primary canonical path, then retire that sidecar. Rerun the
+     helper; a locator refuted in an earlier cycle never gets a second
+     skeptic, and the helper already routes it.
+   - `all_refuted` true: stop and ask. Present **Outcome** with the blocked
+     verdict and the refutation count, **Review** linking the lens and
+     skeptic files, and **Next** listing `Re-run the review cycle with the
+     skeptic files in the reviewer briefs (recommended — no finding survived
+     scrutiny)` first, then `Open fix tasks from the findings anyway (an
+     explicit ruling that overrides their refutations)`. A selected re-run
+     consumes a cycle. After the user selects either option, record exact
+     full HEAD, then use `pipeline_state.py transition` with the exact
+     current phase, status, branch, and archive as expected and unchanged
+     phase/status as the result. Append `wave <N> cycle <C> all-refuted
+     ruling: <selected option verbatim>` to the STATE.md Log and require the
+     returned position to remain `build/active`. Checkpoint STATE.md and the
+     collected skeptic artifacts through the Bookkeeping checkpoint rule with
+     subject `build: record wave <N> cycle <C> skeptic ruling`, body `Why:
+     persist the all-refuted user ruling before acting`, and `Wave: <N>`. Do
+     not start the selected review cycle or create, batch, or dispatch fix
+     tasks until the checkpoint returns its commit. When the persisted ruling
+     selects `Open fix tasks from the findings anyway`, the override set is
+     every `refuted_groups` locator with its preserved `observations`; its
+     governing refutation is the group's `skeptic` entry (the current
+     cycle's file, or the earlier cycle's file for a same-evidence repeat).
+     Add that set to `fix_groups` for batching. No other ruling re-admits
+     refuted groups. Preserve their skeptic verdicts and eligibility
+     history. After a crash, resume the recorded choice without asking
+     again.
+   - Otherwise batch `fix_batches` into complete fix tasks from the task
+     template — one task per batch, never one per finding — each carrying
+     its groups' failed criteria and observed evidence verbatim. A group
+     with `repeat` true is evidence its earlier fix failed, never a new
+     finding; a re-review never spawns a duplicate fix task for a finding
+     already carried. Write each fix task to `.project/tasks/` with `wave`
+     set to the current wave or a newly appended `## Wave N` heading in
+     PLAN.md before dispatch. Run them through the same isolated layer loop.
+   At the cap, record all attempts in the STATE.md log and ask the user —
+   through an interactive user-input tool when available — after linking
+   the resolved absolute blocking wave review, every deep lens file for the
+   cycle, and every skeptic file collected for the wave, plus the STATE.md
+   attempt log. Ask whether to redirect the approach, raise the cap, or send
+   define to amend INTENT.md `## Corrections` — never rewrite an AC from a
+   Log waiver — or, in program flow (ROADMAP.md exists), to abandon the
    milestone under the Milestone abandon procedure — listing the
-   orchestrator's recommended option first marked
-   `(recommended)` with a one-line reason drawn from the review evidence.
-   Never choose silently. When the canonical verdict is `pass` and
-   `wave-N.cycleC.panel.md` reports `Actionable` greater than 0, do not
-   advance silently: present **Outcome** with the canonical pass plus the
-   actionable count, **Review** linking the panel file, and **Next** listing
-   `Open fix tasks from panel findings (recommended)` first, then `Advance
-   and keep panel findings as warnings`. Preference-only panel warnings do
-   not block advance. On pass, checkpoint the review artifact, the panel file
-   when present, STATE.md, and wave
+   orchestrator's recommended option first marked `(recommended)` with a
+   one-line reason drawn from the review evidence. Never choose silently.
+   When the canonical verdict is `pass` and `wave-N.cycleC.panel.md` reports
+   `Actionable` greater than 0, do not advance silently: present **Outcome**
+   with the canonical pass plus the actionable count, **Review** linking the
+   panel file, and **Next** listing `Open fix tasks from panel findings
+   (recommended)` first, then `Advance and keep panel findings as warnings`.
+   Preference-only panel warnings do not block advance. On pass, checkpoint
+   the review artifact, the panel file when present, STATE.md, and wave
    bookkeeping, then report `wave N/M done, C review cycle(s)`.
 
 ## Completion
 
-After every wave passes, record exact full HEAD and run
+After every wave passes, record exact full HEAD and prove every task landed
+with `python3 <absolute build_state.py> verify-landed --repo <absolute primary>
+--project-dir <absolute .project> --head <HEAD>`; it must return one
+`proven-landed` evidence entry per task, and any non-zero exit blocks
+completion. Then run
 `pipeline_state.py transition`, expecting `build/active` plus the exact branch
 and archive, to set `phase: ship`, `status: active` with event `build done;
 final review pending`. Checkpoint that transition through the rule above with

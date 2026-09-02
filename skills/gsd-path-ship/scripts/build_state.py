@@ -1,31 +1,39 @@
 #!/usr/bin/env python3
-"""Read-only build task readiness and landing reconciliation."""
+"""Build task readiness, landing reconciliation, and the verify ledger."""
 
 from __future__ import annotations
 
 import argparse
 import json
 import re
-import subprocess
 import sys
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from typing import Dict, List, Mapping, Optional, Sequence, Tuple
 
 try:
-    from check_task_briefs import _frontmatter
-    from isolation import IsolationError, recover as recover_isolation, verify_landed_task_files
+    from check_task_briefs import _frontmatter, _sections
+    from isolation import (
+        VERIFY_LEDGER_PATH,
+        IsolationError,
+        recover as recover_isolation,
+        verify_landed_task_files,
+    )
     from pipeline_git import task_commit_subject
     from pipeline_state import PipelineStateError, load_state
+    import _common
 except ImportError:  # pragma: no cover - package imports used by tests
-    from scripts.check_task_briefs import _frontmatter
+    from scripts.check_task_briefs import _frontmatter, _sections
     from scripts.isolation import (
+        VERIFY_LEDGER_PATH,
         IsolationError,
         recover as recover_isolation,
         verify_landed_task_files,
     )
     from scripts.pipeline_git import task_commit_subject
     from scripts.pipeline_state import PipelineStateError, load_state
+    from scripts import _common
 
 
 DEFAULT_PROJECT_DIR = ".project"
@@ -33,7 +41,9 @@ TASK_ID_RE = re.compile(r"^T\d{3}$")
 TASK_FILE_RE = re.compile(r"^(?P<id>T\d{3})-[a-z0-9][a-z0-9-]*\.md$")
 FULL_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 WAVE_HEADING_RE = re.compile(r"(?m)^## Wave (?P<wave>\d+)\b.*$")
+VERIFY_HEAVY_RE = re.compile(r"(?m)^Heavy:\s*(?P<value>yes|no)\s*(?:<!--.*-->)?\s*$")
 VALID_TASK_STATUSES = {"pending", "in-progress", "done", "failed", "blocked"}
+VERIFY_RESULTS = ("pass", "fail")
 
 
 class BuildStateError(RuntimeError):
@@ -60,6 +70,7 @@ class Task:
     worktree: Optional[str]
     task_branch: Optional[str]
     task_file: str
+    verify_heavy: bool
 
 
 @dataclass(frozen=True)
@@ -71,13 +82,7 @@ class Project:
     tasks_dir: Path
 
 
-def _run_git(repo: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        ("git", "-C", str(repo), *arguments),
-        text=True,
-        capture_output=True,
-        check=False,
-    )
+_run_git = _common.run_git
 
 
 def _git_output(repo: Path, *arguments: str) -> str:
@@ -122,11 +127,20 @@ def _read_file(path: Path, label: str) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def _parse_frontmatter(path: Path, label: str) -> Dict[str, object]:
-    fields, error = _frontmatter(_read_file(path, label))
+def _parse_frontmatter(text: str, label: str) -> Dict[str, object]:
+    fields, error = _frontmatter(text)
     if fields is None:
         raise BuildStateError("invalid-frontmatter", f"{label}: {error}")
     return fields
+
+
+def _verify_heavy(text: str, label: str) -> bool:
+    """Read the optional `Heavy: yes|no` line of the task's ## Verify section."""
+
+    matches = VERIFY_HEAVY_RE.findall(_sections(text).get("Verify", ""))
+    if len(matches) > 1:
+        raise BuildStateError("invalid-task-file", f"{label} repeats Verify Heavy")
+    return bool(matches) and matches[0] == "yes"
 
 
 def _required_string(fields: Mapping[str, object], field: str, label: str) -> str:
@@ -181,7 +195,8 @@ def _parse_plan(text: str) -> Tuple[int, ...]:
 
 def _parse_task(path: Path, relative_path: str, task_file: Optional[str] = None) -> Task:
     label = relative_path
-    fields = _parse_frontmatter(path, label)
+    text = _read_file(path, label)
+    fields = _parse_frontmatter(text, label)
     task_id = _required_string(fields, "id", label)
     title = _required_string(fields, "title", label)
     wave_text = _required_string(fields, "wave", label)
@@ -207,6 +222,7 @@ def _parse_task(path: Path, relative_path: str, task_file: Optional[str] = None)
         worktree=_nullable_string(fields, "worktree", label),
         task_branch=_nullable_string(fields, "task_branch", label),
         task_file=task_file or relative_path,
+        verify_heavy=_verify_heavy(text, label),
     )
 
 
@@ -531,6 +547,7 @@ def ready(repo: str, project_dir: str = DEFAULT_PROJECT_DIR) -> Dict[str, object
                 "deps": list(task.deps),
                 "files": list(task.files),
                 "task_file": task.task_file,
+                "verify_heavy": task.verify_heavy,
             }
             for task in selectable
         ],
@@ -697,6 +714,90 @@ def verify_landed_tasks(
     }
 
 
+def _ledger_path(repo: Path) -> Path:
+    path = repo.joinpath(*PurePosixPath(VERIFY_LEDGER_PATH).parts)
+    if path.is_symlink() or (path.exists() and not path.is_file()):
+        raise BuildStateError("invalid-ledger", f"verify ledger is not a regular file: {path}")
+    return path
+
+
+def _ledger_key(repo: Path, command: str, commit: str) -> Tuple[str, str]:
+    normalized = " ".join(command.split())
+    if not normalized:
+        raise BuildStateError("invalid-command", "--command must not be empty")
+    if not FULL_SHA_RE.fullmatch(commit) or not _commit_resolves(repo, commit):
+        raise BuildStateError("invalid-commit", "--commit must be a full, existing commit SHA")
+    return normalized, commit
+
+
+def _ledger_entries(path: Path) -> List[Dict[str, object]]:
+    if not path.exists():
+        return []
+    entries: List[Dict[str, object]] = []
+    for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+        if not line.strip():
+            continue
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError as error:
+            raise BuildStateError(
+                "invalid-ledger", f"{VERIFY_LEDGER_PATH} line {number} is not JSON: {error}"
+            ) from error
+        if (
+            not isinstance(entry, dict)
+            or not isinstance(entry.get("command"), str)
+            or not isinstance(entry.get("commit"), str)
+            or entry.get("result") not in VERIFY_RESULTS
+            or not isinstance(entry.get("recorded_at"), str)
+        ):
+            raise BuildStateError(
+                "invalid-ledger", f"{VERIFY_LEDGER_PATH} line {number} has invalid fields"
+            )
+        entries.append(entry)
+    return entries
+
+
+def verify_record(repo: str, command: str, commit: str, result: str) -> Dict[str, object]:
+    """Append one verify run (command, commit, result, timestamp) to the ledger."""
+
+    repository = _repo_root(repo)
+    if result not in VERIFY_RESULTS:
+        raise BuildStateError("invalid-result", "--result must be pass or fail")
+    normalized, commit = _ledger_key(repository, command, commit)
+    path = _ledger_path(repository)
+    _ledger_entries(path)
+    entry = {
+        "command": normalized,
+        "commit": commit,
+        "result": result,
+        "recorded_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(entry, sort_keys=True) + "\n")
+    return {"command": "verify-record", "ledger": VERIFY_LEDGER_PATH, "entry": entry}
+
+
+def verify_lookup(repo: str, command: str, commit: str) -> Dict[str, object]:
+    """Return the latest recorded run of this command at this commit, or a miss."""
+
+    repository = _repo_root(repo)
+    normalized, commit = _ledger_key(repository, command, commit)
+    matches = [
+        entry
+        for entry in _ledger_entries(_ledger_path(repository))
+        if entry["command"] == normalized and entry["commit"] == commit
+    ]
+    entry = matches[-1] if matches else None
+    return {
+        "command": "verify-lookup",
+        "ledger": VERIFY_LEDGER_PATH,
+        "hit": entry is not None,
+        "reuse": entry is not None and entry["result"] == "pass",
+        "entry": entry,
+    }
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     subcommands = parser.add_subparsers(dest="command", required=True)
@@ -716,6 +817,19 @@ def _parser() -> argparse.ArgumentParser:
     verify_parser.add_argument("--project-dir", required=True)
     verify_parser.add_argument("--head", required=True)
     verify_parser.add_argument("--canonical-project-dir", default=DEFAULT_PROJECT_DIR)
+    record_parser = subcommands.add_parser(
+        "verify-record", help="append one verify run to the ledger"
+    )
+    record_parser.add_argument("--repo", required=True)
+    record_parser.add_argument("--command", required=True, dest="verify_command")
+    record_parser.add_argument("--commit", required=True)
+    record_parser.add_argument("--result", required=True, choices=VERIFY_RESULTS)
+    lookup_parser = subcommands.add_parser(
+        "verify-lookup", help="find the recorded run of a command at a commit"
+    )
+    lookup_parser.add_argument("--repo", required=True)
+    lookup_parser.add_argument("--command", required=True, dest="verify_command")
+    lookup_parser.add_argument("--commit", required=True)
     return parser
 
 
@@ -726,6 +840,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             result = ready(arguments.repo, arguments.project_dir)
         elif arguments.command == "reconcile":
             result = reconcile(arguments.repo, arguments.task_id, arguments.project_dir)
+        elif arguments.command == "verify-record":
+            result = verify_record(
+                arguments.repo, arguments.verify_command, arguments.commit, arguments.result
+            )
+        elif arguments.command == "verify-lookup":
+            result = verify_lookup(arguments.repo, arguments.verify_command, arguments.commit)
         else:
             result = verify_landed_tasks(
                 arguments.repo,

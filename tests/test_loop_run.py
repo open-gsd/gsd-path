@@ -101,7 +101,7 @@ class LoopRunTests(unittest.TestCase):
             BASE_SPEC.replace("status: active", "status: busy"),
             BASE_SPEC.replace("trigger: manual", "trigger: manual\ntrigger: event"),
             BASE_SPEC.replace("verify: exit 0\n", ""),
-            BASE_SPEC + "period_budget: 4h\n",
+            BASE_SPEC.replace("trigger: manual", "trigger: manual\nperiod_budget: 4h"),
         ]
         for body in malformed:
             with self.subTest(body=body):
@@ -141,20 +141,42 @@ class LoopRunTests(unittest.TestCase):
             self.assertEqual(0, result.returncode, result.stderr)
             self.assertEqual("run", json.loads(result.stdout)["decision"])
 
-    def test_check_skip_when_exit_zero_skips(self) -> None:
+    def test_claim_skip_when_exit_zero_skips(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
             spec = write_spec(root, BASE_SPEC.replace("trigger: manual", "trigger: manual\nskip_when: exit 0"))
-            result = self.command(spec, "check")
+            result = self.command(spec, "claim")
             self.assertEqual(0, result.returncode, result.stderr)
             payload = json.loads(result.stdout)
             self.assertEqual("skip", payload["decision"])
             self.assertEqual("skip_when matched", payload["reason"])
 
-    def test_check_skip_when_nonzero_runs(self) -> None:
+    def test_claim_skip_when_nonzero_runs(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
             spec = write_spec(root, BASE_SPEC.replace("trigger: manual", "trigger: manual\nskip_when: exit 1"))
+            result = self.command(spec, "claim")
+            self.assertEqual(0, result.returncode, result.stderr)
+            self.assertEqual("run", json.loads(result.stdout)["decision"])
+
+    def test_check_does_not_run_skip_when(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            spec = write_spec(
+                root,
+                BASE_SPEC.replace("trigger: manual", "trigger: manual\nskip_when: touch marker"),
+            )
+            result = self.command(spec, "check")
+            self.assertEqual(0, result.returncode, result.stderr)
+            payload = json.loads(result.stdout)
+            self.assertEqual("run", payload["decision"])
+            self.assertEqual("not run by check; claim runs it", payload["skip_when"])
+            self.assertFalse((root / "marker").exists())
+
+    def test_field_lines_inside_prose_sections_are_ignored(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            spec = write_spec(root, BASE_SPEC + "\n## Notes\n\nstatus: paused\nlog: elsewhere.jsonl\n")
             result = self.command(spec, "check")
             self.assertEqual(0, result.returncode, result.stderr)
             self.assertEqual("run", json.loads(result.stdout)["decision"])

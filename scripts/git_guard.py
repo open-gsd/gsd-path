@@ -27,7 +27,7 @@ ARCHIVE_PREFIX = ".project/archive/"
 GUARD_MARKER = "gsd-path guard"
 INTEGRATE_SUBJECT = re.compile(
     r"^integrate: (?P<milestone>M\d{3,}) — merge "
-    r"(?P<branch>gsd-path/M\d{3,}) into main$"
+    r"(?P<branch>gsd-path/M\d{3,}) into (?P<target>\S+)$"
 )
 ABANDON_SUBJECT = re.compile(
     r"^build: abandon milestone (?P<slug>[a-z0-9][a-z0-9-]*)$"
@@ -111,6 +111,15 @@ def destination_path(entry):
 
 
 def committed_archive_roots():
+    head = subprocess.run(
+        ["git", "rev-parse", "--verify", "--quiet", "HEAD^{commit}"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if head.returncode == 1:
+        return set()  # unborn HEAD: the first commit has no committed tree
+    head.check_returncode()
     output = subprocess.run(
         ["git", "ls-tree", "-r", "--name-only", "HEAD", "--", ARCHIVE_PREFIX],
         capture_output=True,
@@ -337,9 +346,32 @@ def abandon_contract_violations(subject, body, abandon):
     return []
 
 
+def default_branch():
+    origin_head = subprocess.run(
+        ["git", "symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if origin_head.returncode == 0 and origin_head.stdout.strip().startswith("origin/"):
+        return origin_head.stdout.strip()[len("origin/") :]
+    configured = subprocess.run(
+        ["git", "config", "--get", "init.defaultBranch"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if configured.returncode == 0 and configured.stdout.strip():
+        return configured.stdout.strip()
+    return "main"
+
+
 def is_integration_merge(subject):
     match = INTEGRATE_SUBJECT.fullmatch(subject or "")
     if not match or match.group("branch") != f"gsd-path/{match.group('milestone')}":
+        return False
+    target = default_branch()
+    if match.group("target") != target:
         return False
     branch = subprocess.run(
         ["git", "branch", "--show-current"],
@@ -348,7 +380,7 @@ def is_integration_merge(subject):
         check=True,
     ).stdout.strip()
     milestone = match.group("milestone")
-    if branch not in {"main", f"gsd-path-integrate/{milestone}"}:
+    if branch not in {target, f"gsd-path-integrate/{milestone}"}:
         return False
     merge_head = subprocess.run(
         ["git", "rev-parse", "--verify", "--quiet", "MERGE_HEAD^{commit}"],
@@ -388,7 +420,10 @@ def violations(
     for code, old, new in entries:
         if code in "MDTR" and old.startswith(ARCHIVE_PREFIX):
             label = f"{code} {old}" + (f" -> {new}" if new else "")
-            found.append(f"{label}: committed archives are read-only")
+            found.append(
+                f"{label}: committed archives are read-only; "
+                f"unstage it with git restore --staged -- {new or old}"
+            )
     for entry in entries:
         destination = destination_path(entry)
         root = archive_root(destination or "")
@@ -397,25 +432,36 @@ def violations(
         code, old, new = entry
         label = f"{code} {old}" + (f" -> {new}" if new else "")
         if root in existing:
-            found.append(f"{label}: committed archives are read-only")
+            found.append(
+                f"{label}: committed archives are read-only; "
+                f"unstage it with git restore --staged -- {destination}"
+            )
         elif root != current_archive:
-            found.append(f"{label}: only the current STATE.archive may be created")
+            found.append(
+                f"{label}: only the current STATE.archive "
+                f"({current_archive or 'unset'}) may be created; "
+                f"unstage it with git restore --staged -- {destination}"
+            )
         elif (
             subject is not None
             and not is_ship_commit(subject)
             and not integration_merge
             and not abandon_commit
         ):
+            milestone, target = root[len(ARCHIVE_PREFIX):], default_branch()
             found.append(
-                f"{label}: a new archive requires a ship commit or "
-                "milestone-abandon commit"
+                f"{label}: a new archive requires a ship commit, a "
+                "milestone-abandon commit, or an integration merge with the "
+                f"subject 'integrate: {milestone} — merge "
+                f"gsd-path/{milestone} into {target}'"
             )
     if is_ship_commit(subject):
         for code, old, new in entries:
             for path in (old, new):
                 if path and not path.startswith(".project/"):
                     found.append(
-                        f"{code} {path}: a ship commit may only touch .project/"
+                        f"{code} {path}: a ship commit may only touch .project/; "
+                        f"unstage it with git restore --staged -- {path}"
                     )
     return found
 
@@ -455,7 +501,8 @@ def main(argv):
             current_archive = abandon[0]
     except Exception as error:
         print(
-            f"gsd-path guard: inspection failed; commit blocked ({error})",
+            f"gsd-path guard: inspection failed; commit blocked ({error}); "
+            "run git from inside the repository worktree, then retry the commit",
             file=sys.stderr,
         )
         return 1

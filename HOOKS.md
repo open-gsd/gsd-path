@@ -37,8 +37,8 @@ npx gsd-path --hooks-init --claude --project /path/to/repo
 ```
 
 `--hooks` requires `--project`. Valid existing native settings for explicitly
-selected Codex or Cursor hosts are merged, preserving unrelated settings and
-hooks. Other target files are refused if they already exist.
+selected Claude, Codex, or Cursor hosts are merged, preserving unrelated
+settings and hooks. Other target files are refused if they already exist.
 
 `--hooks-init` also requires `--project` plus at least one host flag or `--all`.
 It creates the managed guard scripts, merges selected native settings, and
@@ -104,7 +104,12 @@ See [UPDATE.md](UPDATE.md).
 - non-read actions targeting archived paths or an existing ancestor of the
   archive tree
 - `git reset --hard`, destructive `git clean` modes, force pushes (including
-  `+` refspecs), and destructive branch or ref deletion
+  `+` refspecs), destructive branch or ref deletion, `git branch -m`,
+  `git worktree remove --force`, `git stash drop`/`clear`, and whole-tree
+  `git checkout -- .`/`git restore .`
+- shell writes (redirections, `tee`, `cp`, `mv`, `rm`, `sed -i`, ...) that
+  target a routing control (`.git`, `.project/STATE.md`, `.project/next`,
+  `.gsd-path`) while `.project/STATE.md` exists
 - shell commands that reference the archive unless the whole command is a
   recognized standalone read
 - destructive Git commands nested in supported shell and command wrappers
@@ -124,8 +129,11 @@ Read tools (`Read`, `Grep`, `View`, …) may still open archive paths.
 ## Wire other hosts
 
 Claude, Codex, and Cursor wiring is installed automatically when that target is
-selected. Register `python3 .gsd-path/guard_hook.py` as a pre-tool-use hook on
-the remaining hosts:
+selected. The installer does **not** install a native guard for any other host,
+even where the host has a pre-tool-use API: those hosts are `git-only` in the
+manifest and stay `git-only` after manual wiring, because the installer neither
+writes nor verifies that wiring. To add it yourself, register
+`python3 .gsd-path/guard_hook.py` as a pre-tool-use hook:
 
 | Host | Where | Docs |
 | --- | --- | --- |

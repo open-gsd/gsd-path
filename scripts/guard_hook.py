@@ -16,6 +16,7 @@ Malformed input or an internal failure denies the tool call.
 
 import ast
 from fnmatch import fnmatchcase
+from functools import lru_cache
 import json
 import os
 import re
@@ -117,12 +118,18 @@ ARCHIVE_REASON = (
 )
 ARCHIVE_MARKER = ".project/archive"
 INVALID_INPUT_REASON = "GSD Path guard could not validate the tool request"
+CONTROL_PATHS = ".git, .project/STATE.md, .project/next, .gsd-path"
+PROTECTED_SHELL_WRITE_REASON = (
+    f"GSD Path routing controls ({CONTROL_PATHS}) change only through the "
+    "pipeline helpers; the shell command writes"
+)
 REENTRY_FAILURE_REASON = (
     "GSD Path status could not be verified; review .project/STATE.md and invoke "
     "gsd-path-forensics before changing product files"
 )
 CONTROL_FILE_REASON = (
-    "GSD Path routing controls cannot be changed by direct write, edit, or patch tools"
+    "GSD Path routing controls cannot be changed by direct write, edit, or patch "
+    "tools; use the pipeline helpers (pipeline_state.py) for"
 )
 STATUS_ACTIONS = frozenset(
     {
@@ -209,7 +216,16 @@ ARCHIVE_READ_GIT_COMMANDS = frozenset({"status", "diff", "log", "show", "ls-file
 GIT_READ_WRITE_OPTIONS = frozenset({"--output", "--ext-diff", "--textconv"})
 ARCHIVE_READ_EXECUTION_OPTIONS = {"rg": frozenset({"--pre"})}
 AMBIGUOUS_SHELL_SYNTAX = re.compile(r"[\r\n|;&<>`]|\$\(|@\(")
-SHELL_EXPANSION_SYNTAX = re.compile(r"`|\$\(|@\(")
+SUBSTITUTION_PLACEHOLDER = "COMMAND_SUBSTITUTION_"
+SUBSTITUTION_PLACEHOLDER_SYNTAX = re.compile(
+    r"\$\{" + SUBSTITUTION_PLACEHOLDER + r"(\d+)\}"
+)
+LINE_CONTINUATION = re.compile(r"(?<!\\)((?:\\\\)*)\\\r?\n")
+HEREDOC_PATTERN = re.compile(
+    r"<<(?P<dash>-?)\s*(?:'(?P<single>[^']+)'|\"(?P<double>[^\"]+)\""
+    r"|\\?(?P<bare>[A-Za-z_][A-Za-z0-9_]*))"
+)
+SHELL_WRITE_REDIRECTION_CHARS = frozenset("<>&|")
 SHELL_PARAMETER_SYNTAX = re.compile(
     r"\$(?:[A-Za-z_][A-Za-z0-9_]*|[0-9]+|[-*@#?$!]|\{[^}\r\n]+\})"
 )
@@ -227,8 +243,25 @@ GIT_REASONS = {
     "clean": "git clean -f deletes untracked evidence and retained task worktrees",
     "push": "force pushes rewrite build-branch history the pipeline resumes from",
     "branch": "git branch -D destroys task branches the recovery protocol inspects",
+    "branch-move": (
+        "git branch -m renames a branch the pipeline resumes by name "
+        "(STATE.branch); create a new branch instead"
+    ),
     "update-ref": "git update-ref deletion destroys refs the recovery protocol inspects",
+    "worktree": (
+        "git worktree remove --force discards uncommitted task work the recovery "
+        "protocol needs; commit or stash it, then remove without --force"
+    ),
+    "stash": (
+        "git stash drop and git stash clear destroy stashed work the recovery "
+        "protocol may need; apply or keep the stash"
+    ),
+    "checkout": (
+        "git checkout -- . and git restore . discard every uncommitted change; "
+        "name the files to restore instead"
+    ),
 }
+WHOLE_TREE_PATHSPECS = frozenset({".", "./", ":/"})
 GIT_GLOBAL_OPTIONS_WITH_VALUES = frozenset(
     {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--config-env"}
 )
@@ -240,28 +273,69 @@ POSIX_SHELL_WRAPPERS = frozenset({"bash", "dash", "fish", "ksh", "sh", "zsh"})
 POWERSHELL_WRAPPERS = frozenset(
     {"powershell", "powershell.exe", "pwsh", "pwsh.exe"}
 )
-COMMAND_WRAPPERS = frozenset({"command", "exec"})
-UNVALIDATED_EXECUTION_COMMANDS = frozenset(
+COMMAND_WRAPPERS = frozenset({"builtin", "call", "command", "exec"})
+SCRIPT_FILE_REASON = (
+    "{executable} runs the script file {argument}, which the guard cannot "
+    "inspect; run its commands directly"
+)
+ENV_BUILTIN_REASON = "{executable} cannot be validated; assign with NAME=VALUE instead"
+SHELL_FILE_REASON = (
+    "{executable} reads commands from a file or stdin the guard cannot inspect; "
+    "run the commands directly or use {executable} -c '<commands>'"
+)
+MISSING_COMMAND_STRING_REASON = "{executable} {option} lacks a command string"
+UNVALIDATED_EXECUTION_REASONS = {
+    ".": SCRIPT_FILE_REASON,
+    "source": SCRIPT_FILE_REASON,
+    "start": "start launches a detached process the guard cannot inspect; run the program directly",
+    "setenv": ENV_BUILTIN_REASON,
+    "unsetenv": ENV_BUILTIN_REASON,
+}
+VARIABLE_COMMANDS = frozenset(
+    {"declare", "export", "local", "readonly", "set", "typeset", "unset"}
+)
+XARGS_COMMANDS = frozenset({"xargs", "xargs.exe"})
+XARGS_OPTIONS_WITH_VALUES = frozenset(
     {
-        ".",
-        "builtin",
-        "call",
-        "declare",
-        "eval",
-        "export",
-        "local",
-        "readonly",
-        "set",
-        "setenv",
-        "source",
-        "start",
-        "typeset",
-        "unset",
-        "unsetenv",
-        "xargs",
-        "xargs.exe",
+        "-I",
+        "-J",
+        "-L",
+        "-n",
+        "-P",
+        "-R",
+        "-S",
+        "-s",
+        "-E",
+        "-d",
+        "-a",
+        "-l",
+        "--replace",
+        "--max-args",
+        "--max-lines",
+        "--max-procs",
+        "--max-chars",
+        "--delimiter",
+        "--eof",
+        "--arg-file",
+        "--process-slot-var",
     }
 )
+SHELL_WRITE_COMMANDS = frozenset(
+    {
+        "cp",
+        "install",
+        "ln",
+        "mkdir",
+        "mv",
+        "rm",
+        "rmdir",
+        "rsync",
+        "tee",
+        "touch",
+        "truncate",
+    }
+)
+IN_PLACE_EDITORS = frozenset({"perl", "sed"})
 FIND_EXECUTION_ACTIONS = frozenset({"-exec", "-execdir", "-ok", "-okdir"})
 SHELL_CONTROL_WORDS = frozenset(
     {
@@ -378,9 +452,6 @@ def normalize_posix(path):
             parts.append(part)
     if not parts:
         return "/"
-    if parts[0].endswith(":"):
-        # Windows drive prefix (e.g. C:)
-        return "/" + "/".join(parts)
     return "/" + "/".join(parts)
 
 
@@ -424,6 +495,7 @@ def is_direct_write_tool(tool, has_file_targets=False):
     )
 
 
+@lru_cache(maxsize=None)
 def repository_root():
     candidate = Path(__file__).resolve().parent.parent
     result = subprocess.run(
@@ -599,6 +671,7 @@ def target_paths(path, working_directories, repo):
     return Path(os.path.abspath(candidate)), candidate.resolve(strict=False)
 
 
+@lru_cache(maxsize=None)
 def repository_control_roots(repo):
     roots = [(repo / ".git").resolve(strict=False)]
     result = subprocess.run(
@@ -700,17 +773,28 @@ def target_kind(path, working_directories, repo, control_roots=None):
     return "external"
 
 
-def enforce_pipeline_reentry(paths, working_directories):
+def pipeline_target_kinds(targets):
+    """Classify (path, working_directories) pairs; None when no pipeline is owned."""
     repo = repository_root()
     state = repo / ".project" / "STATE.md"
     if not os.path.lexists(state):
-        return
+        return None
     control_roots = repository_control_roots(repo)
-    kinds = [
-        target_kind(path, working_directories, repo, control_roots) for path in paths
+    return repo, state, [
+        (path, target_kind(path, directories, repo, control_roots))
+        for path, directories in targets
     ]
-    if "protected" in kinds:
-        deny(CONTROL_FILE_REASON)
+
+
+def enforce_pipeline_reentry(paths, working_directories):
+    classified = pipeline_target_kinds((path, working_directories) for path in paths)
+    if classified is None:
+        return
+    repo, state, kinds = classified
+    for path, kind in kinds:
+        if kind == "protected":
+            deny(f"{CONTROL_FILE_REASON} {path}")
+    kinds = [kind for _, kind in kinds]
     if all(kind == "external" for kind in kinds):
         return
     try:
@@ -860,42 +944,108 @@ def directory_change_target(arguments):
             and argument.casefold() != "/d"
         ):
             operands.append(argument)
-    if not operands or operands[-1] == "-":
-        raise ValueError("directory change cannot be validated")
+    if not operands:
+        raise ValueError("cd without a literal directory cannot be tracked by the guard")
+    if operands[-1] == "-":
+        raise ValueError(
+            "cd - returns to a directory the guard cannot track; cd to a literal path"
+        )
     return operands[-1]
 
 
-def command_references_archive(tokens, working_directories):
+def segment_directories(tokens, working_directories):
+    """Yield each command segment with the working directories in effect for it."""
     current_directories = list(working_directories)
     for segment in command_segments(tokens):
-        if any(path_in_archive(token, current_directories) for token in segment):
-            return True
-        wrapped = wrapped_command_tokens(segment)
-        if wrapped is not None and command_references_archive(
-            wrapped, current_directories
-        ):
-            return True
+        yield segment, current_directories
         invocation = command_invocation(segment)
         if invocation is None:
             continue
         command, arguments = invocation
         if command == "popd":
-            raise ValueError("directory stack changes cannot be validated")
+            raise ValueError(
+                "popd returns to a directory the guard cannot track; cd to a literal path"
+            )
         if command not in DIRECTORY_CHANGE_COMMANDS:
             continue
         target = directory_change_target(arguments)
         if SHELL_PARAMETER_SYNTAX.search(target):
-            raise ValueError("directory change cannot be validated")
+            raise ValueError(
+                f"cd target {target} cannot be resolved by the guard; "
+                "run that command first and cd to the literal result"
+            )
         if is_absolute_path(target):
             current_directories = [target]
         else:
-            bases = current_directories or [""]
+            bases = current_directories or ["."]
             current_directories = [f"{base}/{target}" for base in bases]
+
+
+def command_references_archive(tokens, working_directories):
+    for segment, directories in segment_directories(tokens, working_directories):
+        if any(path_in_archive(token, directories) for token in segment):
+            return True
+        wrapped = wrapped_command_tokens(segment)
+        if wrapped is not None and command_references_archive(wrapped, directories):
+            return True
     return False
+
+
+def shell_write_targets(tokens, working_directories):
+    """Yield (target, directories) for every path a shell command may write."""
+    for segment, directories in segment_directories(tokens, working_directories):
+        for index, token in enumerate(segment[:-1]):
+            if ">" not in token or not set(token) <= SHELL_WRITE_REDIRECTION_CHARS:
+                continue
+            target = segment[index + 1]
+            if token.endswith("&") and (target.isdigit() or target == "-"):
+                continue
+            yield target, directories
+        wrapped = wrapped_command_tokens(segment)
+        if wrapped is not None:
+            yield from shell_write_targets(wrapped, directories)
+            continue
+        invocation = command_invocation(segment)
+        if invocation is None:
+            continue
+        command, arguments = invocation
+        in_place = command in IN_PLACE_EDITORS and (
+            has_short_option(arguments, "i")
+            or any(argument.startswith("--in-place") for argument in arguments)
+        )
+        if command in SHELL_WRITE_COMMANDS or in_place:
+            for argument in arguments:
+                if argument and not argument.startswith("-"):
+                    yield argument, directories
+
+
+def protected_shell_write_reason(tokens, working_directories):
+    assignments = shell_assignment_values(tokens)
+    targets = []
+    for target, directories in shell_write_targets(tokens, working_directories):
+        expanded = expand_environment_parameters(target, assignments)
+        if SHELL_PARAMETER_SYNTAX.search(expanded) or CMD_PARAMETER_SYNTAX.search(
+            expanded
+        ):
+            raise ValueError(
+                f"write target {target} cannot be resolved by the guard; "
+                "pass a literal path"
+            )
+        if expanded and expanded not in {"/dev/null", "NUL"}:
+            targets.append((expanded, directories))
+    classified = pipeline_target_kinds(targets) if targets else None
+    if classified is None:
+        return None
+    for target, kind in classified[2]:
+        if kind == "protected":
+            return f"{PROTECTED_SHELL_WRITE_REASON} {target}"
+    return None
 
 
 def environment_parameter_value(match, assignments):
     name = match.group(1) or match.group(2)
+    if name.startswith(SUBSTITUTION_PLACEHOLDER):
+        return match.group(0)  # command substitution output is never resolved
     return assignments.get(name, os.environ.get(name, ""))
 
 
@@ -912,8 +1062,11 @@ def expand_environment_parameters(command, assignments=None):
 def shell_assignment_values(tokens):
     values = {}
     for segment in command_segments(tokens):
+        variable_command = segment[0].casefold() in VARIABLE_COMMANDS
         for token in segment:
             if not SHELL_ASSIGNMENT_PATTERN.match(token):
+                if variable_command:
+                    continue
                 break
             name, value = token.split("=", 1)
             values[name] = expand_environment_parameters(value, values)
@@ -922,13 +1075,91 @@ def shell_assignment_values(tokens):
 
 def unresolved_archive_expansion(command, tokens, working_directories):
     expanded = expand_environment_parameters(command, shell_assignment_values(tokens))
-    if ARCHIVE_REFERENCE.search(expanded):
-        return True
-    if SHELL_PARAMETER_SYNTAX.search(expanded) or CMD_PARAMETER_SYNTAX.search(
-        expanded
-    ):
-        return True
-    return False
+    return ARCHIVE_REFERENCE.search(expanded) is not None
+
+
+def substitution_end(command, start):
+    depth, quote, index = 1, None, start
+    while index < len(command):
+        character = command[index]
+        if quote:
+            if character == "\\" and quote == '"':
+                index += 2
+                continue
+            if character == quote:
+                quote = None
+        elif character == "\\":
+            index += 2
+            continue
+        elif character in "'\"":
+            quote = character
+        elif character == "(":
+            depth += 1
+        elif character == ")":
+            depth -= 1
+            if depth == 0:
+                return index
+        index += 1
+    raise ValueError("command substitution $( is not closed")
+
+
+def split_command_substitutions(command):
+    """Replace every $(...) and `...` with a placeholder; return (outer, inner)."""
+    if "@(" in command:
+        raise ValueError(
+            "@( expansion cannot be validated; write the list as literal arguments"
+        )
+    if "$(" not in command and "`" not in command:
+        return command, []
+    outer, inner, index = [], [], 0
+    while index < len(command):
+        if command.startswith("$(", index):
+            end = substitution_end(command, index + 2)
+            inner.append(command[index + 2 : end])
+        elif command[index] == "`":
+            end = index + 1
+            while end < len(command) and command[end] != "`":
+                end += 2 if command[end] == "\\" else 1
+            if end >= len(command):
+                raise ValueError("backtick command substitution is not closed")
+            inner.append(command[index + 1 : end])
+        elif command[index] == "\\":
+            outer.append(command[index : index + 2])
+            index += 2
+            continue
+        else:
+            outer.append(command[index])
+            index += 1
+            continue
+        outer.append(f"${{{SUBSTITUTION_PLACEHOLDER}{len(inner) - 1}}}")
+        index = end + 1
+    return "".join(outer), inner
+
+
+def describe_substitutions(text, substitutions):
+    return SUBSTITUTION_PLACEHOLDER_SYNTAX.sub(
+        lambda match: f"$({substitutions[int(match.group(1))]})", text
+    )
+
+
+def strip_heredoc_bodies(command):
+    lines = command.split("\n")
+    kept, index = [], 0
+    while index < len(lines):
+        line = lines[index]
+        kept.append(line)
+        index += 1
+        for match in HEREDOC_PATTERN.finditer(line):
+            delimiter = (
+                match.group("single") or match.group("double") or match.group("bare")
+            )
+            strip = "\t\r" if match.group("dash") else "\r"
+            while index < len(lines) and lines[index].strip(strip) != delimiter:
+                index += 1
+            if index >= len(lines):
+                raise ValueError(f"here-document {delimiter} is not terminated")
+            index += 1
+    return "\n".join(kept)
 
 
 def patch_paths(payload):
@@ -962,34 +1193,85 @@ def decode_patch_path(raw_path, strip_prefix):
 
 
 def shell_tokens(command):
-    if "\n" in command or "\r" in command:
-        raise ValueError("shell command contains a line separator")
-    lexer = shlex.shlex(command, posix=True, punctuation_chars="|;&()<>")
+    command = strip_heredoc_bodies(LINE_CONTINUATION.sub(r"\1 ", command))
+    lexer = shlex.shlex(command, posix=True, punctuation_chars="|;&()<>\n\r")
+    lexer.whitespace = " \t"
     lexer.whitespace_split = True
     lexer.commenters = ""
-    tokens = list(lexer)
+    try:
+        tokens = list(lexer)
+    except ValueError as error:
+        raise ValueError(
+            f"shell command cannot be tokenized ({error}); balance the quotes "
+            "or write the content with an editor tool"
+        ) from None
     if not tokens:
         raise ValueError("shell command is empty")
     return tokens
 
 
 def command_segments(tokens):
+    """Yield simple commands with separators and leading control words removed."""
     segment = []
     for token in tokens:
-        if token and set(token) <= set("|;&()"):
+        if token and set(token) <= set("|;&()\n\r"):
             if segment:
                 yield segment
                 segment = []
-        else:
+        elif segment or token.casefold() not in SHELL_CONTROL_WORDS:
             segment.append(token)
     if segment:
         yield segment
 
 
 def validate_shell_assignment(assignment):
-    name = assignment.partition("=")[0].casefold()
-    if name in {"home", "xdg_config_home"} or name.startswith("git_"):
-        raise ValueError("Git configuration environment cannot be validated")
+    name = assignment.partition("=")[0]
+    folded = name.casefold()
+    if folded in {"home", "xdg_config_home"} or folded.startswith("git_"):
+        raise ValueError(
+            f"{name} changes where Git reads its configuration, which the guard "
+            "cannot validate; run git without it"
+        )
+
+
+def validate_variable_command(executable, arguments):
+    for argument in arguments:
+        if SHELL_ASSIGNMENT_PATTERN.match(argument):
+            validate_shell_assignment(argument)
+        elif executable == "set" or (executable == "unset" and argument.startswith("-")):
+            continue
+        elif argument.startswith(("-", "+")):
+            raise ValueError(
+                f"{executable} {argument}: variable options cannot be validated; "
+                "assign with NAME=VALUE instead"
+            )
+        else:
+            validate_shell_assignment(argument)
+
+
+def first_argument(arguments):
+    return arguments[0] if arguments else ""
+
+
+def xargs_command(arguments):
+    index = 0
+    while index < len(arguments):
+        argument = arguments[index]
+        if argument in XARGS_OPTIONS_WITH_VALUES:
+            index += 2
+        elif argument.startswith("-") and argument != "-":
+            index += 1
+        else:
+            break
+    return arguments[index:]
+
+
+def require_read_command(wrapper, wrapped):
+    if wrapped and not archive_command_is_read_only(" ".join(wrapped), wrapped, True):
+        raise ValueError(
+            f"{wrapper} runs {wrapped[0]} on operands the guard cannot check; "
+            f"only read commands may follow {wrapper}, or pass the paths as literals"
+        )
 
 
 def command_invocation(segment):
@@ -1017,31 +1299,45 @@ def command_invocation(segment):
                 continue
             if option in ENV_OPTIONS_WITH_VALUES:
                 if option in {"-C", "--chdir"}:
-                    raise ValueError("env working directory cannot be validated")
+                    raise ValueError(
+                        f"env {option} changes the working directory the guard "
+                        "tracks; use cd with a literal path instead"
+                    )
                 index += 1
                 if "=" not in token:
                     if index >= len(segment):
-                        raise ValueError("env option lacks a value")
+                        raise ValueError(f"env {option} lacks a value")
                     index += 1
                 continue
             if token.startswith("-"):
-                raise ValueError("env invocation cannot be validated")
+                raise ValueError(
+                    f"env {token} cannot be validated; use env NAME=VALUE <command>"
+                )
             break
     if index >= len(segment):
         return None
     executable = segment[index].replace("\\", "/").rsplit("/", 1)[-1].casefold()
+    arguments = segment[index + 1 :]
     if SHELL_PARAMETER_SYNTAX.search(executable):
-        raise ValueError("shell executable cannot be validated")
-    if executable in SHELL_CONTROL_WORDS:
-        raise ValueError("shell control syntax cannot be validated")
-    if executable in {"find", "find.exe"} and any(
-        argument.casefold() in FIND_EXECUTION_ACTIONS
-        for argument in segment[index + 1:]
-    ):
-        raise ValueError("find execution action cannot be validated")
-    if executable in UNVALIDATED_EXECUTION_COMMANDS:
-        raise ValueError("shell execution command cannot be validated")
-    return executable, segment[index + 1:]
+        raise ValueError(
+            f"executable {segment[index]} cannot be resolved by the guard; "
+            "name the program literally"
+        )
+    if executable in {"find", "find.exe"}:
+        for position, argument in enumerate(arguments):
+            if argument.casefold() in FIND_EXECUTION_ACTIONS:
+                require_read_command(f"find {argument}", arguments[position + 1 :])
+    if executable in XARGS_COMMANDS:
+        require_read_command("xargs", xargs_command(arguments))
+    if executable in VARIABLE_COMMANDS:
+        validate_variable_command(executable, arguments)
+    if executable in UNVALIDATED_EXECUTION_REASONS:
+        raise ValueError(
+            UNVALIDATED_EXECUTION_REASONS[executable].format(
+                executable=segment[index], argument=first_argument(arguments)
+            )
+        )
+    return executable, arguments
 
 
 def git_command(segment):
@@ -1051,8 +1347,12 @@ def git_command(segment):
     executable, arguments = invocation
     if executable not in {"git", "git.exe"}:
         return None
-    if any(SHELL_PARAMETER_SYNTAX.search(argument) for argument in arguments):
-        raise ValueError("git invocation cannot be validated")
+    for argument in arguments:
+        if SHELL_PARAMETER_SYNTAX.search(argument):
+            raise ValueError(
+                f"git argument {argument} cannot be resolved by the guard; pass a "
+                "literal value (for commit messages use -F <file>)"
+            )
     index = 0
     git_options = []
     while index < len(arguments) and arguments[index].startswith("-"):
@@ -1065,15 +1365,21 @@ def git_command(segment):
         index += 1
         if option in GIT_GLOBAL_OPTIONS_WITH_VALUES and value is None:
             if index >= len(arguments):
-                raise ValueError("git global option lacks a value")
+                raise ValueError(f"git option {option} lacks a value")
             value = arguments[index]
             index += 1
         if option in {"-c", "--config-env"}:
             config_key = str(value).split("=", 1)[0].casefold()
             if config_key.startswith("alias."):
-                raise ValueError("git alias configuration cannot be validated")
+                raise ValueError(
+                    f"git -c {config_key} defines an alias the guard cannot inspect; "
+                    "run the underlying git command directly"
+                )
             if config_key == "clean.requireforce":
-                raise ValueError("git clean safety configuration cannot be validated")
+                raise ValueError(
+                    "git -c clean.requireForce disables the git clean safety check; "
+                    "run git clean with explicit paths instead"
+                )
         if option in GIT_GLOBAL_OPTIONS_WITH_VALUES:
             git_options.extend((option, str(value)))
     if index >= len(arguments):
@@ -1086,11 +1392,18 @@ def wrapped_command_tokens(segment):
     if invocation is None:
         return None
     executable, arguments = invocation
+    if executable == "eval":
+        return shell_tokens(" ".join(arguments)) if arguments else None
     if executable in COMMAND_WRAPPERS:
+        if executable == "command" and arguments[:1] in (["-v"], ["-V"]):
+            return None
         if executable == "command" and arguments[:1] == ["-p"]:
             arguments = arguments[1:]
         if not arguments or arguments[0].startswith("-"):
-            raise ValueError("command wrapper cannot be validated")
+            raise ValueError(
+                f"{executable} {first_argument(arguments)}: only "
+                f"`{executable} <program> [arguments]` can be validated"
+            )
         return arguments
     if executable in POSIX_SHELL_WRAPPERS:
         for index, argument in enumerate(arguments):
@@ -1100,15 +1413,23 @@ def wrapped_command_tokens(segment):
                 and "c" in argument[1:]
             ):
                 if index + 1 >= len(arguments):
-                    raise ValueError("shell wrapper lacks command payload")
+                    raise ValueError(
+                        MISSING_COMMAND_STRING_REASON.format(
+                            executable=executable, option=argument
+                        )
+                    )
                 return shell_tokens(arguments[index + 1])
-        raise ValueError("shell wrapper cannot be validated")
+        raise ValueError(SHELL_FILE_REASON.format(executable=executable))
     if executable in POWERSHELL_WRAPPERS or executable in {"cmd", "cmd.exe"}:
         switches = {"-c", "-command", "/c", "/k"}
         for index, argument in enumerate(arguments):
             if argument.casefold() in switches:
                 if index + 1 >= len(arguments):
-                    raise ValueError("shell wrapper lacks command payload")
+                    raise ValueError(
+                        MISSING_COMMAND_STRING_REASON.format(
+                            executable=executable, option=argument
+                        )
+                    )
                 payload = arguments[index + 1:]
                 if executable in {"cmd", "cmd.exe"}:
                     payload = [
@@ -1118,7 +1439,7 @@ def wrapped_command_tokens(segment):
                 if len(payload) == 1:
                     return shell_tokens(payload[0])
                 return payload
-        raise ValueError("shell wrapper cannot be validated")
+        raise ValueError(SHELL_FILE_REASON.format(executable=executable))
     return None
 
 
@@ -1190,11 +1511,17 @@ def destructive_git_reason(tokens, resolved_aliases=frozenset()):
                 if argument.casefold().startswith("alias.")
             ]
             if any(index + 1 < len(arguments) for index in alias_indexes):
-                raise ValueError("git alias configuration cannot be validated")
+                raise ValueError(
+                    "git config alias.* defines an alias the guard cannot inspect; "
+                    "run the underlying git command directly"
+                )
         alias = git_alias(command, git_options)
         if alias is not None:
             if command in resolved_aliases:
-                raise ValueError("recursive git alias cannot be validated")
+                raise ValueError(
+                    f"git alias {command} refers to itself; run the underlying "
+                    "git command directly"
+                )
             reason = destructive_git_reason(
                 ["git", *git_options, *shell_tokens(alias), *arguments],
                 resolved_aliases | {command},
@@ -1237,9 +1564,30 @@ def destructive_git_reason(tokens, resolved_aliases=frozenset()):
             )
             if deletes and forces:
                 return GIT_REASONS[command]
+            if (
+                "--move" in arguments
+                or has_short_option(arguments, "m")
+                or has_short_option(arguments, "M")
+            ):
+                return GIT_REASONS["branch-move"]
         if command == "update-ref":
             if update_ref_deletes(arguments):
                 return GIT_REASONS[command]
+        if command == "worktree" and arguments[:1] == ["remove"]:
+            if "--force" in arguments or has_short_option(arguments[1:], "f"):
+                return GIT_REASONS[command]
+        if command == "stash" and arguments[:1] in (["drop"], ["clear"]):
+            return GIT_REASONS[command]
+        if command in {"checkout", "restore"} and any(
+            argument in WHOLE_TREE_PATHSPECS for argument in arguments
+        ):
+            touches_worktree = command == "checkout" or (
+                "--worktree" in arguments
+                or has_short_option(arguments, "W")
+                or not ("--staged" in arguments or has_short_option(arguments, "S"))
+            )
+            if touches_worktree:
+                return GIT_REASONS["checkout"]
     return None
 
 
@@ -1348,22 +1696,34 @@ def evaluate(event):
     if archive_working_directory and not commands and not read_tool:
         deny(ARCHIVE_REASON)
     for command, command_working_directories in commands:
-        if SHELL_EXPANSION_SYNTAX.search(command):
-            raise ValueError("dynamic shell execution cannot be validated")
-        tokens = shell_tokens(command)
-        archive_context = (
-            any(path_in_archive(path) for path in command_working_directories)
-            or bool(ARCHIVE_REFERENCE.search(command))
-            or command_references_archive(tokens, command_working_directories)
-            or unresolved_archive_expansion(
-                command, tokens, command_working_directories
-            )
-        )
-        if not archive_command_is_read_only(command, tokens, archive_context):
-            deny(ARCHIVE_REASON)
-        reason = destructive_git_reason(tokens)
+        reason = command_denial(command, command_working_directories)
         if reason is not None:
             deny(reason)
+
+
+def command_denial(command, working_directories):
+    """Return why a shell command is denied, or None when it may run."""
+    outer, substitutions = split_command_substitutions(command)
+    try:
+        for inner in substitutions:
+            reason = command_denial(inner, working_directories)
+            if reason is not None:
+                return reason
+        tokens = shell_tokens(outer)
+        archive_context = (
+            any(path_in_archive(path) for path in working_directories)
+            or bool(ARCHIVE_REFERENCE.search(outer))
+            or command_references_archive(tokens, working_directories)
+            or unresolved_archive_expansion(outer, tokens, working_directories)
+        )
+        if not archive_command_is_read_only(command, tokens, archive_context):
+            return ARCHIVE_REASON
+        reason = destructive_git_reason(tokens) or protected_shell_write_reason(
+            tokens, working_directories
+        )
+    except ValueError as error:
+        raise ValueError(describe_substitutions(str(error), substitutions)) from None
+    return reason and describe_substitutions(reason, substitutions)
 
 
 def main():
@@ -1374,6 +1734,8 @@ def main():
         evaluate(event)
     except SystemExit:
         raise
+    except ValueError as error:
+        deny(f"{INVALID_INPUT_REASON}: {error}")
     except Exception:
         deny(INVALID_INPUT_REASON)
 

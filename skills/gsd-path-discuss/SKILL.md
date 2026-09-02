@@ -1,6 +1,6 @@
 ---
 name: gsd-path-discuss
-description: Hold an explicit, evidence-grounded discussion about an active GSD Path milestone from any phase, preserve the verbatim dialogue and answer records under .project/discuss/, use local code and existing artifacts before focused research, challenge unsupported assumptions, and identify the phase owner for follow-up. Use only when the user explicitly invokes $gsd-path-discuss or /gsd-path-discuss to ask questions, explore a decision, request a progress explanation, or close a discussion without advancing the pipeline.
+description: Hold an explicit, evidence-grounded discussion about an active GSD Path milestone from any phase, preserve the verbatim dialogue and answer records under .project/discuss/, use local code and existing artifacts before focused research, challenge unsupported assumptions, and identify the phase owner for follow-up. Use only when the user explicitly invokes $gsd-path-discuss to ask questions, explore a decision, request a progress explanation, or close a discussion without advancing the pipeline.
 ---
 
 # GSD Path Discussion
@@ -9,8 +9,8 @@ Use this skill as an interruptible sidecar to the active GSD Path pipeline. Keep
 the conversation in the main user thread, ground claims in the repository and
 the current phase artifacts, and save the exchange before returning the answer.
 
-An instruction to route to another phase is a caller handoff, not permission to trigger an explicit-only skill. Return control to the active router or tell the
-user which phase owns the follow-up; do not invoke a sibling phase implicitly.
+Routing instructions are caller handoffs under the AGENTS.md handoff rule;
+tell the user which phase owns the follow-up and never invoke it yourself.
 
 ## Preconditions and ownership
 
@@ -139,9 +139,9 @@ words verbatim in both the dialogue and answer records and identify which
 formal artifact the owning phase must update. Such a record uses `Follow-up:
 required`; it remains pending until the owner appends a fixed-format
 `Disposition X###` receipt. The discussion sidecar never writes its own
-disposition. If the helper fails, report its exact error and do not claim the
-dialogue or answer was saved; the next `prepare` recovers an interrupted paired
-publication before accepting another turn.
+disposition. After a helper failure, do not claim the dialogue or answer was
+saved; the next `prepare` recovers an interrupted paired publication before
+accepting another turn.
 
 ## Output contract
 

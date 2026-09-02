@@ -23,22 +23,31 @@ from typing import Dict, Optional, Sequence, Set
 
 try:
     from pipeline_git import is_bound_branch, task_commit_body, task_commit_subject
+    import _common
 except ImportError:  # pragma: no cover - package import used by tests
     from scripts.pipeline_git import (
         is_bound_branch,
         task_commit_body,
         task_commit_subject,
     )
+    from scripts import _common
 
 
 TASK_BRANCH_PREFIX = "gsd-path-task/"
 TASK_AUTHORIZATION_PREFIX = "refs/gsd-path/task-authorizations/"
 VERIFY_BRANCH_PREFIX = "gsd-path-verify/"
+DISCUSSION_PATHS = frozenset(
+    {".project/discuss/DIALOGUE.md", ".project/discuss/ANSWERS.md"}
+)
+VERIFY_LEDGER_PATH = ".project/build/verify-ledger.jsonl"
+# Orchestrator bookkeeping that may stay uncommitted in the primary while a
+# parallel task lands; the next `.project` checkpoint commits it.
+BOOKKEEPING_PATHS = DISCUSSION_PATHS | {VERIFY_LEDGER_PATH}
 TASK_ID_RE = re.compile(r"^[A-Za-z][A-Za-z0-9._-]*$")
 NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
-FIELD_PATTERN = re.compile(r"^(?P<key>[a-z_]+):\s*(?P<value>.*)$")
-INLINE_LIST_PATTERN = re.compile(r"^\[(?P<body>.*)\]$")
-LIST_ITEM_PATTERN = re.compile(r"^\s*-\s+(?P<value>.*)$")
+FIELD_PATTERN = _common.FIELD_PATTERN
+INLINE_LIST_PATTERN = _common.INLINE_LIST_PATTERN
+LIST_ITEM_PATTERN = _common.LIST_ITEM_PATTERN
 COLLECT_JOURNAL_SCHEMA = "gsd-path/collect-artifact/v1"
 NULL_SHA = "0" * 40
 
@@ -47,16 +56,7 @@ class IsolationError(RuntimeError):
     """Raised when isolation, landing, or retirement cannot proceed."""
 
 
-def run_git(
-    repo: Path, *arguments: str, input: Optional[str] = None
-) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        ("git", "-C", str(repo), *arguments),
-        input=input,
-        text=True,
-        capture_output=True,
-        check=False,
-    )
+run_git = _common.run_git
 
 
 def git_output(repo: Path, *arguments: str) -> str:
@@ -677,54 +677,8 @@ def split_frontmatter(text: str) -> tuple[list[str], str]:
     raise IsolationError("task file frontmatter is not closed")
 
 
-def _strip_yaml_comment(value: str) -> str:
-    quote = None
-    previous_significant = None
-    inline_list = value.lstrip().startswith("[")
-    index = 0
-    while index < len(value):
-        character = value[index]
-        if quote == '"':
-            if character == "\\" and index + 1 < len(value):
-                index += 2
-                continue
-            if character == quote:
-                quote = None
-        elif quote == "'":
-            if (
-                character == quote
-                and index + 1 < len(value)
-                and value[index + 1] == quote
-            ):
-                index += 2
-                continue
-            if character == quote:
-                quote = None
-        else:
-            if character in {"'", '"'} and (
-                previous_significant is None
-                or (inline_list and previous_significant in {"[", ","})
-            ):
-                quote = character
-            elif character == "#" and (
-                index == 0 or value[index - 1].isspace()
-            ):
-                return value[:index].rstrip()
-        if quote is None and not character.isspace():
-            previous_significant = character
-        index += 1
-    return value.strip()
-
-
-def _unquote(value: str) -> str:
-    cleaned = _strip_yaml_comment(value).strip()
-    if (
-        len(cleaned) >= 2
-        and cleaned[0] == cleaned[-1]
-        and cleaned[0] in {"'", '"'}
-    ):
-        return cleaned[1:-1]
-    return cleaned
+_strip_yaml_comment = _common.strip_yaml_comment
+_unquote = _common.unquote
 
 
 def task_frontmatter(text: str) -> tuple[Optional[Dict[str, object]], Optional[str]]:
@@ -1153,9 +1107,13 @@ def land(
         )
     if require_attached(primary) != bound:
         raise IsolationError("primary left the bound branch")
-    status = git_output(primary, "status", "--porcelain", "--untracked-files=all")
-    if status:
-        raise IsolationError("primary worktree is dirty; refusing to cherry-pick")
+    dirty = sorted(uncommitted_paths(primary) - BOOKKEEPING_PATHS)
+    if dirty:
+        raise IsolationError(
+            "primary worktree is dirty; refusing to cherry-pick: "
+            + ", ".join(dirty)
+            + "; commit or remove those paths in the primary worktree first"
+        )
     source_dirty = bool(uncommitted_paths(source))
     if source_dirty:
         if current_sha(source) != resolved_base:
@@ -1533,7 +1491,7 @@ def _landing_commit_proof_error(
         return str(error)
     if actual_delta != expected_delta:
         return "landing commit tree differs from the verified changes"
-    pending = uncommitted_paths(repo)
+    pending = uncommitted_paths(repo) - BOOKKEEPING_PATHS
     if pending:
         return "landing left uncommitted paths: " + ", ".join(sorted(pending))
     return None
@@ -2470,6 +2428,45 @@ def checkpoint(
     }
 
 
+def _unlanded_task_commits(repo: Path, bound: str, branch: str) -> list[str]:
+    """Return branch commits whose patch is not on the bound branch."""
+    return [
+        line[2:]
+        for line in git_output(repo, "cherry", bound, branch).splitlines()
+        if line.startswith("+ ")
+    ]
+
+
+def _require_landed_task_branch(
+    primary: Path,
+    bound: str,
+    branch: str,
+    landed_commit: Optional[str],
+    task_file: Optional[str],
+) -> None:
+    """Refuse to delete a task branch while it still holds unlanded commits."""
+    unlanded = _unlanded_task_commits(primary, bound, branch)
+    if not unlanded:
+        return
+    if landed_commit:
+        landed = require_commit(primary, require_full_sha(landed_commit))
+        _require_first_parent_commit(primary, bound, landed)
+        base = _landing_base(primary, landed)
+        proof_error = _task_branch_proof_error(primary, branch, base, landed)
+    elif task_file:
+        proof_error = _failed_task_branch_proof_error(primary, branch, task_file)
+    else:
+        proof_error = (
+            "pass --landed-commit <landing commit> or --task-file <failed task file>"
+        )
+    if proof_error:
+        raise IsolationError(
+            f"refusing to retire {branch}: {len(unlanded)} commit(s) are not landed "
+            f"on {bound}: {', '.join(unlanded)}; {proof_error}; run: "
+            f"python3 {Path(__file__).resolve()} recover --repo {primary}"
+        )
+
+
 def retire(
     primary: Path,
     worktree: Optional[Path],
@@ -2578,6 +2575,10 @@ def retire(
         retire_branch = current
     else:
         raise IsolationError(f"refusing to retire unrecognized branch {current}")
+    if retire_branch.startswith(TASK_BRANCH_PREFIX):
+        _require_landed_task_branch(
+            primary, bound, retire_branch, landed_commit, task_file
+        )
     _delete_task_authorization(primary, retire_branch)
     if not force:
         dirty = git_output(

@@ -8,11 +8,8 @@ description: Verify a completed GSD Path milestone, manage evidence-backed patch
 Dispatch independent reviewers. They inspect and report; they never fix
 product code.
 
-Any instruction below to route, return, or invoke another GSD Path phase is a
-caller handoff, not permission to trigger an explicit-only skill. If an active
-router or orchestrator supplied this contract, return control to it. On a
-direct invocation, report the exact next skill and stop until the user
-explicitly invokes it.
+Routing instructions below are caller handoffs under the AGENTS.md handoff
+rule; never invoke an explicit-only sibling skill yourself.
 
 Require `pipeline: gsd-path/v2` in `.project/STATE.md`; a missing or different
 marker returns to `$gsd-path` for ownership checking. Read the local
@@ -20,6 +17,8 @@ marker returns to `$gsd-path` for ownership checking. Read the local
 [dispatch contract](references/dispatch.md), resolve them to absolute paths,
 and follow that runtime-specific dispatch contract. Resolve
 `scripts/isolation.py` for verify sidecars; do not invent detached checkouts.
+Resolve `scripts/build_state.py` for the landed-task proof and the verify
+ledger.
 
 This skill
 verifies first and never archives or ships before explicit final approval.
@@ -42,14 +41,22 @@ artifacts. Pass the record's exact stored owner to `dispose` so the disposition
 receipt preserves that durable owner name; use `gsd-path-ship` for new records.
 If it changes approved intent/plan or names another owner, keep
 `ship/blocked`, link ANSWERS.md and the target artifact, and ask the user
-before dispatch or ship. Then:
+before dispatch or ship. Every `ship/blocked` write and the step 7 log-only
+event use `pipeline_state.py transition` with expected `ship/active` and the
+exact current branch and archive values: blocking passes `--set-status
+blocked`; the log-only event passes `--set-status active` and the event text,
+so the position is unchanged. Then:
 
 1. Require STATE `ship/active` produced and committed by the build
    orchestrator, `.project/intent/INTENT.md`,
    `.project/plan/PLAN.md`, all task files, all passing wave reviews, the bound
    build branch, and no product or unrelated changes. On retry, existing
    uncommitted assigned final-review outputs may remain. Resolve and record the
-   exact full reviewed `HEAD` before dispatch. Reuse an output only when its
+   exact full reviewed `HEAD` before dispatch, then prove every task landed
+   at it with `python3 <absolute build_state.py> verify-landed --repo
+   <absolute primary> --project-dir <absolute .project> --head <HEAD>`; it
+   must return one `proven-landed` evidence entry per task, and any non-zero
+   exit blocks with its typed error. Reuse an output only when its
    `Reviewed HEAD` equals that SHA and the complete numbered gap-risk mapping
    still equals the freshly derived risk list. Regenerate the exact assigned
    output set when stale, removing only superseded `final-gap-N.md` files. A
@@ -67,11 +74,16 @@ before dispatch or ship. Then:
    [gap-review template](templates/gap-review.md), [patch-findings
    template](templates/patch-findings.md), and `scripts/check_handoffs.py`.
 3. Reuse a valid `final-gap-1.md` admitted by step 1 without rerunning its
-   command. Otherwise, before reviewer dispatch, create a fresh project-verify
+   command when `python3 <absolute build_state.py> verify-lookup --repo
+   <absolute primary> --command <project Verify> --commit <HEAD>` returns
+   `reuse: true`. Otherwise, before reviewer dispatch, create a fresh project-verify
    sidecar at the exact reviewed HEAD with
    `python3 <absolute isolation.py> isolate-verify --repo <absolute primary>
    --base <HEAD> --name project-verify`. Run PLAN.md's project Verify exactly
-   once in the returned worktree. Restore every command-created change, then
+   once in the returned worktree and record it with `python3 <absolute
+   build_state.py> verify-record --repo <absolute primary> --command
+   <project Verify> --commit <HEAD> --result <pass | fail>`; same command,
+   same commit reuses that record. Restore every command-created change, then
    write only `.project/review/final-gap-1.md` there from the gap-review template,
    using risk `project Verify` and the exact command output. Before dispatch,
    if the destination already contains an invalid or superseded output admitted

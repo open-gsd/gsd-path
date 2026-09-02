@@ -8,18 +8,13 @@ description: Create and validate dependency-ordered GSD Path build waves and com
 Dispatch one planner, gate its artifacts, and obtain the single approval that
 authorizes the build.
 
-Any instruction below to route, return, or invoke another GSD Path phase is a
-caller handoff, not permission to trigger an explicit-only skill. If an active
-router or orchestrator supplied this contract, return control to it. On a
-direct invocation, report the exact next skill and stop until the user
-explicitly invokes it.
+Routing instructions below are caller handoffs under the AGENTS.md handoff
+rule; never invoke an explicit-only sibling skill yourself.
 
-Before planning and again before approval, run the bundled
-`scripts/discussion_records.py pending --repo <absolute-root>`; when
-`.project/discuss/ANSWERS.md` is absent, continue. Resolve a reported
-required follow-up owned by planning in PLAN/tasks and record its disposition
-with the helper's `dispose` command; otherwise block with links to ANSWERS.md
-and the target artifact rather than approving stale work.
+Before planning and again before approval, apply the AGENTS.md
+pending-answer rule with the bundled `scripts/discussion_records.py`; a
+follow-up owned by planning is resolved in PLAN.md or its tasks, or the
+phase blocks.
 
 ## Preconditions
 
@@ -202,8 +197,8 @@ as stated in Lookahead mode.
      in plan-panel mode, the plan-panel template, and the exact helper-returned
      model slug when the host advertises model selection. Never override the
      model on the planner. Each child stages its family file under a
-     disposable root; the parent validates and copies those files, then runs
-     remove any stale `<track>/review/PLAN-PANEL.skipped.json`, then run
+     disposable root; the parent validates and copies those files, removes
+     any stale `<track>/review/PLAN-PANEL.skipped.json`, then runs
      `python3 <absolute review_panel.py> merge --kind plan --inputs <family
      files> --output <absolute <track>/review/PLAN-PANEL.md> --mode
      <detected|named>`. Do not average findings or auto-replan.
@@ -238,12 +233,14 @@ as stated in Lookahead mode.
    the matching journal owns recovery.
 
    Defer that checkpoint only when the directory is not yet a Git repository
-   or `.project/REPOSITORY.md` records `Kind: new-github`. In that case use
-   `pipeline_state.py transition` with the complete current state as expected,
-   `--set-status done`, and event `plan approved`; the build transition commit
-   owns the pending artifacts. Patch-mode approvals also use that guarded
-   transition without a plan checkpoint because build's patch re-entry commits
-   the artifacts with its `build/active` transition. Confirm approval,
+   or `.project/REPOSITORY.md` records `Kind: new-github`. In that case run
+   the same `approve` command with `--defer-checkpoint` instead of
+   `--expected-head`; the helper journals the `plan approved` transition and
+   the build transition commit owns the pending artifacts. Patch-mode
+   approvals run `approve --repo <absolute root> --kind plan --patch`
+   (event `patch plan approved`) without a plan checkpoint because build's
+   patch re-entry commits the artifacts with its `build/active` transition.
+   `pipeline_state.py transition` never approves a plan. Confirm approval,
    link PLAN.md again, and state that
    build starts next. Do not add another approval gate. When routed by an
    active `$gsd-path`, return control to that router so its bundled build
@@ -381,9 +378,10 @@ first.
    user, not into the wave.
 4. Show the patch wave outcome (finding → task mapping), link the resolved
    absolute PLAN.md and task set, and ask the same two-option approval question.
-   On approval, relink the approved plan, use `pipeline_state.py transition`
-   with the complete `plan/active` state as expected, `--set-status done`, and
-   event `patch plan approved`, then use the same provenance rule as normal
+   On approval, relink the approved plan, run `python3 <absolute
+   pipeline_state.py> approve --repo <absolute root> --kind plan --patch`
+   (it records `plan/done` with event `patch plan approved` and no
+   checkpoint), then use the same provenance rule as normal
    mode: an active router
    resumes its bundled build contract, while a direct invocation stops and
    tells the user to explicitly invoke `$gsd-path` or `$gsd-path-build`. The

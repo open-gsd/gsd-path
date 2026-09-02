@@ -212,6 +212,40 @@ class ReviewPanelMergeTests(unittest.TestCase):
         path.write_text(content, encoding="utf-8")
         return path
 
+    def test_agreeing_families_with_different_wording_are_not_a_conflict(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            finding = """### F1
+- Severity: high
+- Kind: criterion
+- Criterion: T001 acceptance 1
+- Evidence: src/app.py:12
+- Found: {found}
+- Fix direction: reject unauthenticated requests
+"""
+            claude = self.write(
+                root,
+                "claude.md",
+                family_artifact(
+                    "claude",
+                    "claude-opus-5-thinking-high",
+                    finding.format(found="missing auth check"),
+                ),
+            )
+            gpt = self.write(
+                root,
+                "gpt.md",
+                family_artifact(
+                    "gpt", "gpt-5.6-sol-medium", finding.format(found="no auth guard")
+                ),
+            )
+            output = root / "PLAN-PANEL.md"
+            result = review_panel.merge_artifacts(
+                "plan", (claude, gpt), output, (("Mode", "detected"),)
+            )
+            self.assertEqual(result["conflicts"], 0)
+            self.assertIn("## Conflicts\n\n- none", output.read_text(encoding="utf-8"))
+
     def test_merge_splits_actionable_and_conflicts(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

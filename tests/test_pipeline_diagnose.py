@@ -368,6 +368,21 @@ class PipelineDiagnoseTests(unittest.TestCase):
             orphan = next(item for item in result["findings"] if item["id"] == "orphan")
             self.assertTrue(orphan["retry"].startswith("NEEDS-USER:"))
 
+    def test_missing_project_names_the_initialize_command(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp) / "repo"
+            run_git(Path(tmp), "init", "-b", "main", str(repo))
+            (repo / "README.md").write_text("# app\n", encoding="utf-8")
+
+            result = pipeline_diagnose.diagnose(repo)
+            self.assertEqual(result["status"], "stuck")
+            finding = next(item for item in result["findings"] if item["id"] == "no-project")
+            self.assertIn("detect_project.py initialize", finding["retry"])
+            self.assertIn("--template", finding["retry"])
+            self.assertIn("state.md", finding["retry"])
+            self.assertNotIn("NEEDS-USER", finding["retry"])
+            self.assertFalse(any(item["id"] == "status" for item in result["findings"]))
+
     def test_leftover_worktrees_have_supported_recovery_commands(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

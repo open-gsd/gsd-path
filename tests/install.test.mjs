@@ -1018,6 +1018,108 @@ test("update refreshes only detected local installs", async () => {
   }
 });
 
+test("update keeps project contracts and refreshes the managed runtime", async () => {
+  const project = path.join(root, "update-project");
+  fs.mkdirSync(path.join(project, ".git"), { recursive: true });
+  const target = path.join(root, "claude", "skills");
+  await runInstall([installer.targetPlan("claude", target)], { project, hooks: true });
+  fs.writeFileSync(path.join(project, "AGENTS.md"), "edited contract\n");
+  fs.writeFileSync(path.join(project, ".claude", "CLAUDE.md"), "edited bridge\n");
+  const runtimeFile = path.join(
+    project,
+    installer.HOOKS_DIRECTORY,
+    "runtime",
+    installer.PROJECT_RUNTIME_SCRIPTS[0]
+  );
+  const guardFile = path.join(project, installer.HOOKS_DIRECTORY, installer.GUARD_SCRIPTS[0]);
+  fs.writeFileSync(runtimeFile, `# stale\n${installer.PROJECT_RUNTIME_MARKER}\n`);
+  fs.writeFileSync(guardFile, `# stale\n${installer.GUARD_MARKER}\n`);
+  const settingsPath = path.join(project, ".claude", "settings.json");
+  const settings = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
+  settings.userSetting = true;
+  fs.writeFileSync(settingsPath, JSON.stringify(settings) + "\n");
+
+  const dryRun = await runInstall([installer.targetPlan("claude", target)], {
+    project,
+    hooks: true,
+    update: true,
+    dryRun: true,
+  });
+  assert.match(dryRun.find((line) => line.startsWith("project:")), /would refresh .*; kept AGENTS\.md, WORKFLOW\.md, \.claude\/CLAUDE\.md/);
+  assert.equal(fs.readFileSync(runtimeFile, "utf8"), `# stale\n${installer.PROJECT_RUNTIME_MARKER}\n`);
+
+  const results = await runInstall([installer.targetPlan("claude", target)], {
+    project,
+    hooks: true,
+    update: true,
+  });
+  const projectLine = results.find((line) => line.startsWith("project:"));
+  assert.match(projectLine, /^project: refreshed /);
+  assert.match(projectLine, /kept AGENTS\.md, WORKFLOW\.md, \.claude\/CLAUDE\.md$/);
+  assert.equal(fs.readFileSync(path.join(project, "AGENTS.md"), "utf8"), "edited contract\n");
+  assert.equal(fs.readFileSync(path.join(project, ".claude", "CLAUDE.md"), "utf8"), "edited bridge\n");
+  assert.equal(
+    fs.readFileSync(runtimeFile, "utf8"),
+    fs.readFileSync(path.join(source, "scripts", installer.PROJECT_RUNTIME_SCRIPTS[0]), "utf8")
+  );
+  assert.equal(
+    fs.readFileSync(guardFile, "utf8"),
+    fs.readFileSync(path.join(source, "scripts", installer.GUARD_SCRIPTS[0]), "utf8")
+  );
+  const merged = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
+  assert.equal(merged.userSetting, true);
+  assert.equal(merged.hooks.PreToolUse.length, 1);
+  assert.equal(
+    fs.readFileSync(path.join(project, ".git", "hooks", "pre-commit"), "utf8"),
+    installer.preCommitHook("python3")
+  );
+});
+
+test("update refuses to replace an unmanaged project runtime file", async () => {
+  const project = path.join(root, "update-project");
+  fs.mkdirSync(path.join(project, ".git"), { recursive: true });
+  const target = path.join(root, "claude", "skills");
+  await runInstall([installer.targetPlan("claude", target)], { project });
+  const runtimeFile = path.join(
+    project,
+    installer.HOOKS_DIRECTORY,
+    "runtime",
+    installer.PROJECT_RUNTIME_SCRIPTS[0]
+  );
+  fs.writeFileSync(runtimeFile, "foreign\n");
+  await assert.rejects(
+    runInstall([installer.targetPlan("claude", target)], { project, update: true }),
+    /not a managed GSD Path project file/
+  );
+  assert.equal(fs.readFileSync(runtimeFile, "utf8"), "foreign\n");
+});
+
+test("update with a project passes through the CLI", async () => {
+  const project = path.join(root, "update-project");
+  fs.mkdirSync(path.join(project, ".git"), { recursive: true });
+  const previous = process.cwd();
+  process.chdir(project);
+  try {
+    assert.equal(
+      await installer.main(
+        ["--claude", "--local", "--project", project, "--source-root", source, "--no-color"],
+        env
+      ),
+      0
+    );
+    assert.equal(
+      await installer.main(
+        ["--claude", "--update", "--local", "--project", project, "--source-root", source, "--no-color"],
+        env
+      ),
+      0
+    );
+    assert.ok(fs.existsSync(path.join(project, "AGENTS.md")));
+  } finally {
+    process.chdir(previous);
+  }
+});
+
 test("update with nothing installed fails cleanly", async () => {
   const project = path.join(root, "empty-project");
   fs.mkdirSync(project);
@@ -2017,19 +2119,41 @@ test("git-only hooks require a Python interpreter", async () => {
   assert.ok(!fs.existsSync(path.join(project, "AGENTS.md")));
 });
 
+test("hooks install merges an existing Claude settings file", async () => {
+  const project = path.join(root, "project");
+  fs.mkdirSync(path.join(project, ".git"), { recursive: true });
+  fs.mkdirSync(path.join(project, ".claude"), { recursive: true });
+  const settingsPath = path.join(project, ".claude", "settings.json");
+  fs.writeFileSync(
+    settingsPath,
+    JSON.stringify({
+      userSetting: true,
+      hooks: { PreToolUse: [{ matcher: "Write", hooks: [{ type: "command", command: "custom" }] }] },
+    }) + "\n"
+  );
+  const target = path.join(root, "claude", "skills");
+  await runInstall([installer.targetPlan("claude", target)], { project, hooks: true });
+  const settings = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
+  assert.equal(settings.userSetting, true);
+  assert.equal(settings.hooks.PreToolUse.length, 2);
+  assert.equal(settings.hooks.PreToolUse[0].hooks[0].command, "custom");
+  assert.match(settings.hooks.PreToolUse[1].hooks[0].command, /guard_hook\.py/);
+  assert.ok(fs.existsSync(path.join(project, "AGENTS.md")));
+});
+
 test("hooks collision rolls back cleanly", async () => {
   const project = path.join(root, "project");
   fs.mkdirSync(path.join(project, ".git"), { recursive: true });
   fs.mkdirSync(path.join(project, ".claude"), { recursive: true });
-  fs.writeFileSync(path.join(project, ".claude", "settings.json"), "{}");
+  fs.writeFileSync(path.join(project, ".claude", "settings.json"), "not json");
   const target = path.join(root, "claude", "skills");
   await assert.rejects(
     runInstall([installer.targetPlan("claude", target)], { project, hooks: true }),
-    /already exists/
+    /settings/
   );
   assert.ok(!fs.existsSync(target));
   assert.ok(!fs.existsSync(path.join(project, "AGENTS.md")));
-  assert.equal(fs.readFileSync(path.join(project, ".claude", "settings.json"), "utf8"), "{}");
+  assert.equal(fs.readFileSync(path.join(project, ".claude", "settings.json"), "utf8"), "not json");
 });
 
 test("hooks dry run lists files without writing", async () => {

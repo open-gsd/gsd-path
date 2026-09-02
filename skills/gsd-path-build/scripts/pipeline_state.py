@@ -31,8 +31,9 @@ try:
         checkpoint as isolation_checkpoint,
         collect_artifact_recoveries,
     )
+    import _common
 except ModuleNotFoundError as error:  # pragma: no cover - package imports used by tests
-    if error.name != "isolation":
+    if error.name not in {"isolation", "_common"}:
         raise
     from scripts.isolation import (
         IsolationError,
@@ -40,6 +41,7 @@ except ModuleNotFoundError as error:  # pragma: no cover - package imports used 
         checkpoint as isolation_checkpoint,
         collect_artifact_recoveries,
     )
+    from scripts import _common
 
 try:  # pragma: no cover - exercised only on Windows
     import fcntl
@@ -47,7 +49,7 @@ except ImportError:  # pragma: no cover - exercised only on Windows
     fcntl = None  # type: ignore[assignment]
 
 
-PIPELINE_MARKER = "gsd-path/v2"
+PIPELINE_MARKER = _common.PIPELINE_MARKER
 PHASES = (
     "inspect",
     "define",
@@ -77,7 +79,7 @@ INTEGRATION_MODES = ("direct", "pull-request")
 INTEGRATION_SOURCES = ("default", "milestone")
 NULL = "null"
 SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
-BOUND_BRANCH_RE = re.compile(r"^gsd-path/M(\d{3,})$")
+BOUND_BRANCH_RE = _common.BOUND_BRANCH_RE
 ARCHIVE_RE = re.compile(r"^\.project/archive/(\d{3,})-([a-z0-9][a-z0-9-]*)/?$")
 FRONTMATTER_RE = re.compile(r"^([a-z_]+):\s*([^#]*?)(?:\s+#.*)?$")
 ROADMAP_HEADING_RE = re.compile(r"^### (M\d{3,}) — ([a-z0-9][a-z0-9-]*)\s*$")
@@ -132,6 +134,7 @@ CROSS_PHASE_TRANSITIONS = {
     ("ship", "blocked", "plan", "active"),
     ("shipped", "done", "define", "active"),
     ("shipped", "done", "inspect", "active"),
+    ("roadmap", "active", "inspect", "active"),
 }
 
 
@@ -162,6 +165,100 @@ class ApprovedTaskContract:
     text: str
     files: tuple[str, ...]
 
+
+# state_checkpoint and state_promote call back into this module through a
+# module reference and import the constants and classes above, so this import
+# must stay below those definitions.
+if __package__:  # imported as scripts.pipeline_state
+    from .state_checkpoint import (
+        _sha256,
+        _tree_digest,
+        _checkpoint_artifact_digest,
+        _roadmap_status,
+        _activate_roadmap_milestone,
+        _approval_details,
+        _checkpoint_request_fields,
+        _checkpoint_file,
+        _approval_journal,
+        _remove_checkpoint_temporary,
+        _converge_checkpoint_file,
+        _unlink_checkpoint_journal,
+        _resume_checkpoint_locked,
+        checkpoint_approval,
+        _checkpoint_deferral_error,
+        defer_approval,
+        resume_checkpoint,
+        _task_files,
+        _approval_checkpoint,
+        _validate_approval_track,
+        _safe_declared_paths,
+        _git_text_at,
+        _approved_task_contracts,
+        _task_contracts_at,
+        _classify_plan_drift,
+    )
+    from .state_promote import (
+        _render_roadmap,
+        _promotion_event,
+        _promotion_state,
+        _head_with_exact_message,
+        _tree_entries,
+        _promotion_tree_mapping,
+        _completed_promotion,
+        _prepare_promotion,
+        _require_journal_request,
+        _resume_track_moves,
+        _resume_metadata,
+        _resume_next_removal,
+        _commit_promotion,
+        promote_next,
+    )
+else:  # standalone script or sibling import
+    if __name__ == "__main__":
+        sys.modules.setdefault("pipeline_state", sys.modules[__name__])
+    from state_checkpoint import (
+        _sha256,
+        _tree_digest,
+        _checkpoint_artifact_digest,
+        _roadmap_status,
+        _activate_roadmap_milestone,
+        _approval_details,
+        _checkpoint_request_fields,
+        _checkpoint_file,
+        _approval_journal,
+        _remove_checkpoint_temporary,
+        _converge_checkpoint_file,
+        _unlink_checkpoint_journal,
+        _resume_checkpoint_locked,
+        checkpoint_approval,
+        _checkpoint_deferral_error,
+        defer_approval,
+        resume_checkpoint,
+        _task_files,
+        _approval_checkpoint,
+        _validate_approval_track,
+        _safe_declared_paths,
+        _git_text_at,
+        _approved_task_contracts,
+        _task_contracts_at,
+        _classify_plan_drift,
+    )
+    from state_promote import (
+        _render_roadmap,
+        _promotion_event,
+        _promotion_state,
+        _head_with_exact_message,
+        _tree_entries,
+        _promotion_tree_mapping,
+        _completed_promotion,
+        _prepare_promotion,
+        _require_journal_request,
+        _resume_track_moves,
+        _resume_metadata,
+        _resume_next_removal,
+        _commit_promotion,
+        promote_next,
+    )
 
 def _run_git(
     repo: Path,
@@ -686,7 +783,8 @@ def _intent_lane(track: Path) -> Optional[str]:
     return match.group(1)
 
 
-def _active_roadmap_has_questions(project: Path) -> bool:
+def _active_roadmap_has_questions(project: Path, milestone: Optional[str] = None) -> bool:
+    """Report open questions for the active entry, or for ``milestone`` when given."""
     text = _read_real_file(project / "ROADMAP.md", "ROADMAP.md")
     lines = text.splitlines()
     active_section: Optional[list[str]] = None
@@ -707,11 +805,17 @@ def _active_roadmap_has_questions(project: Path) -> bool:
             len(lines),
         )
         section = lines[index:end]
+        if milestone is not None:
+            if heading.group(2) == milestone:
+                active_section = section
+            continue
         if any(re.fullmatch(r"Status:\s*active(?:\s+#.*)?", item) for item in section):
             if active_section is not None:
                 raise PipelineStateError("ROADMAP.md has more than one active milestone")
             active_section = section
     if active_section is None:
+        if milestone is not None:
+            raise PipelineStateError(f"ROADMAP.md is missing lookahead milestone: {milestone}")
         raise PipelineStateError("ROADMAP.md has no active milestone")
     try:
         start = active_section.index("Open questions") + 1
@@ -967,9 +1071,6 @@ def _bind_next_recovery(
     else:
         if head != base:
             raise PipelineStateError("bind-next target branch is not at journal base")
-    if _run_git(repo, "status", "--porcelain", "--untracked-files=all").stdout:
-        raise PipelineStateError("bind-next journal worktree is not clean")
-
     result = _route_result(
         state,
         "resume-next-handoff",
@@ -985,6 +1086,7 @@ def _bind_next_recovery(
             "landing": landing,
             "allow_remote_absent": allow_remote_absent,
             "journal": str(path),
+            "dirty": _worktree_changes(repo),
         }
     )
     return result
@@ -1162,16 +1264,20 @@ def route_state(repo: Path, project_dir: str = ".project") -> dict[str, object]:
                 reason="INTENT lane is quick",
             )
         if lane == "milestone":
-            questions = _active_roadmap_has_questions(project)
+            questions = _active_roadmap_has_questions(
+                project,
+                state.milestone if lookahead else None,
+            )
+            entry = "lookahead" if lookahead else "active"
             return _route_result(
                 state,
                 "run-phase",
                 phase="research" if questions else "plan",
                 mode="milestone",
                 reason=(
-                    "active roadmap milestone has open questions"
+                    f"{entry} roadmap milestone has open questions"
                     if questions
-                    else "active roadmap milestone has no open questions"
+                    else f"{entry} roadmap milestone has no open questions"
                 ),
             )
         if lane is None:
@@ -1518,8 +1624,18 @@ def _validate_transition(
         and after.milestone is not None
         and event == "program roadmap approved"
     )
+    post_abandon_selection = (
+        before_position == ("roadmap", "active")
+        and after_position == ("inspect", "active")
+        and before.milestone is None
+        and after.milestone is not None
+    )
     if milestone_changed and not (
-        define_approval or roadmap_selection or next_milestone or abandon
+        define_approval
+        or roadmap_selection
+        or next_milestone
+        or abandon
+        or post_abandon_selection
     ):
         raise PipelineStateError("illegal STATE.milestone transition")
     if (
@@ -1712,6 +1828,16 @@ def record_shipment(repo: Path, archive: str, event: str) -> dict[str, object]:
             target_roadmap: Optional[str] = _shipment_roadmap(roadmap_text, state, archive)
         else:
             roadmap_text = target_roadmap = None
+        journal: Optional[dict[str, object]] = None
+        event_date: Optional[str] = None
+        if journal_path.exists() or journal_path.is_symlink():
+            journal = _read_json(journal_path)
+            # Reuse the journaled event date so a next-day resume still matches.
+            recorded = re.match(
+                r"- (\S+) — ",
+                str(journal.get("state_after", "")).rstrip("\n").rsplit("\n", 1)[-1],
+            )
+            event_date = recorded.group(1) if recorded else None
         if (state.phase, state.status) == ("ship", "active"):
             _, after, target_state = _render_transition(
                 state,
@@ -1725,6 +1851,7 @@ def record_shipment(repo: Path, archive: str, event: str) -> dict[str, object]:
                 {"phase": "shipped", "status": "done"},
                 event,
                 ".project",
+                event_date,
             )
         elif (state.phase, state.status) == ("shipped", "done"):
             if " ".join(event.split()) not in {
@@ -1741,8 +1868,7 @@ def record_shipment(repo: Path, archive: str, event: str) -> dict[str, object]:
             "archive": archive,
             "event": " ".join(event.split()),
         }
-        if journal_path.exists() or journal_path.is_symlink():
-            journal = _read_json(journal_path)
+        if journal is not None:
             expected_keys = {
                 *request,
                 "roadmap_before",
@@ -1853,858 +1979,6 @@ def _render_transition(
     return before, after, rendered
 
 
-def _sha256(content: str) -> str:
-    return hashlib.sha256(content.encode("utf-8")).hexdigest()
-
-
-def _tree_digest(path: Path, excluded: Sequence[str] = ()) -> str:
-    if path.is_symlink() or not path.is_dir():
-        raise PipelineStateError(f"promotion path must be a real directory: {path}")
-    digest = hashlib.sha256()
-    for child in sorted(path.rglob("*")):
-        if child.is_symlink():
-            raise PipelineStateError(f"promotion path contains a symlink: {child}")
-        relative = child.relative_to(path).as_posix()
-        if PurePosixPath(relative).parts[0] in excluded:
-            continue
-        if child.is_dir():
-            digest.update(f"d\0{relative}\0".encode())
-        elif child.is_file():
-            digest.update(f"f\0{relative}\0".encode())
-            digest.update(child.read_bytes())
-        else:
-            raise PipelineStateError(f"promotion path is not a file or directory: {child}")
-    return digest.hexdigest()
-
-
-def _checkpoint_artifact_digest(project: Path, mutable_paths: set[str]) -> str:
-    """Hash every approval artifact except the helper-owned metadata files."""
-    digest = hashlib.sha256()
-    for child in sorted(project.rglob("*")):
-        if child.is_symlink():
-            raise PipelineStateError(f"checkpoint path contains a symlink: {child}")
-        relative = child.relative_to(project).as_posix()
-        if relative in mutable_paths:
-            continue
-        if child.is_dir():
-            digest.update(f"d\0{relative}\0".encode())
-        elif child.is_file():
-            digest.update(f"f\0{relative}\0".encode())
-            digest.update(child.read_bytes())
-        else:
-            raise PipelineStateError(f"checkpoint path is not a file or directory: {child}")
-    return digest.hexdigest()
-
-
-def _roadmap_status(lines: list[str], start: int, end: int) -> str:
-    values = []
-    for line in lines[start:end]:
-        match = re.fullmatch(r"Status:\s*(\S+)\s*", line.rstrip("\r\n"))
-        if match:
-            values.append(match.group(1))
-    if len(values) != 1:
-        raise PipelineStateError("ROADMAP.md milestone must have one Status field")
-    return values[0]
-
-
-def _activate_roadmap_milestone(text: str, milestone: str) -> str:
-    sections = _roadmap_sections(text)
-    if milestone not in sections:
-        raise PipelineStateError(f"ROADMAP.md is missing selected milestone: {milestone}")
-    lines = text.splitlines(keepends=True)
-    active = [
-        slug
-        for slug, (_, start, end) in sections.items()
-        if _roadmap_status(lines, start, end) == "active"
-    ]
-    if active:
-        raise PipelineStateError(
-            "ROADMAP.md already has an active milestone: " + ", ".join(active)
-        )
-    _, start, end = sections[milestone]
-    _replace_roadmap_field(lines, start, end, "Status", {"pending"}, "active")
-    return "".join(lines)
-
-
-def _approval_details(
-    kind: str,
-    state: PipelineState,
-    selected_milestone: Optional[str],
-) -> tuple[dict[str, Optional[str]], str, str, str]:
-    if kind == "plan":
-        if selected_milestone is not None:
-            raise PipelineStateError("plan approval does not accept a selected milestone")
-        if (state.phase, state.status) != ("plan", "active"):
-            raise PipelineStateError("plan approval requires STATE plan/active")
-        return (
-            {"status": "done"},
-            "plan approved",
-            "plan: build plan approved",
-            "Why: approved plan checkpoint\n"
-            f"Milestone: {state.milestone or 'none'}",
-        )
-    if kind == "roadmap":
-        if (state.phase, state.status) != ("roadmap", "active"):
-            raise PipelineStateError("roadmap approval requires STATE roadmap/active")
-        if selected_milestone is None or not SLUG_RE.fullmatch(selected_milestone):
-            raise PipelineStateError("roadmap approval requires a selected milestone slug")
-        return (
-            {"status": "done", "milestone": selected_milestone},
-            "program roadmap approved",
-            "roadmap: program roadmap approved",
-            "Why: approved roadmap checkpoint",
-        )
-    raise PipelineStateError(f"unsupported approval kind: {kind}")
-
-
-def _checkpoint_request_fields(
-    kind: str,
-    project_dir: str,
-    selected_milestone: Optional[str],
-    expected_head: str,
-) -> dict[str, object]:
-    return {
-        "kind": kind,
-        "project_dir": project_dir,
-        "selected_milestone": selected_milestone,
-        "expected_head": expected_head,
-    }
-
-
-def _checkpoint_file(repo: Path, relative: str, label: str) -> Path:
-    path_value = PurePosixPath(relative)
-    if (
-        path_value.is_absolute()
-        or ".." in path_value.parts
-        or not path_value.parts
-        or path_value.parts[0] != ".project"
-    ):
-        raise PipelineStateError(f"checkpoint {label} path is invalid: {relative}")
-    path = repo.joinpath(*path_value.parts)
-    if path.is_symlink() or not path.is_file():
-        raise PipelineStateError(f"checkpoint {label} must be a real file: {path}")
-    return path
-
-
-def _approval_journal(repo: Path, journal: Mapping[str, object]) -> dict[str, object]:
-    expected_keys = {
-        "schema",
-        "repo",
-        "kind",
-        "project_dir",
-        "selected_milestone",
-        "expected_head",
-        "event",
-        "event_date",
-        "subject",
-        "body",
-        "artifact_digest",
-        "state_path",
-        "state_before",
-        "state_after",
-        "roadmap_path",
-        "roadmap_before",
-        "roadmap_after",
-    }
-    if set(journal) != expected_keys:
-        raise PipelineStateError("checkpoint journal has invalid fields")
-    if journal.get("schema") != CHECKPOINT_SCHEMA or journal.get("repo") != str(repo):
-        raise PipelineStateError("checkpoint journal does not belong to this worktree")
-    string_fields = (
-        "kind",
-        "project_dir",
-        "expected_head",
-        "event",
-        "event_date",
-        "subject",
-        "body",
-        "artifact_digest",
-        "state_path",
-        "state_before",
-        "state_after",
-    )
-    if any(not isinstance(journal.get(field), str) for field in string_fields):
-        raise PipelineStateError("checkpoint journal has invalid string fields")
-    if journal["kind"] not in CHECKPOINT_KINDS:
-        raise PipelineStateError("checkpoint journal has invalid approval kind")
-    if journal["project_dir"] not in {".project", ".project/next"}:
-        raise PipelineStateError("checkpoint journal has invalid project directory")
-    selected = journal["selected_milestone"]
-    if selected is not None and not isinstance(selected, str):
-        raise PipelineStateError("checkpoint journal has invalid selected milestone")
-    roadmap_values = (
-        journal["roadmap_path"],
-        journal["roadmap_before"],
-        journal["roadmap_after"],
-    )
-    if any(value is not None and not isinstance(value, str) for value in roadmap_values):
-        raise PipelineStateError("checkpoint journal has invalid roadmap fields")
-
-    expected_head = str(journal["expected_head"])
-    resolved_head = _run_git(
-        repo,
-        "rev-parse",
-        "--verify",
-        f"{expected_head}^{{commit}}",
-    ).stdout.strip()
-    if resolved_head != expected_head:
-        raise PipelineStateError("checkpoint journal expected-head is not an exact commit SHA")
-
-    project_dir = str(journal["project_dir"])
-    expected_state_path = f"{project_dir}/STATE.md"
-    if journal["state_path"] != expected_state_path:
-        raise PipelineStateError("checkpoint journal has an invalid STATE path")
-    before = _state_from_text(str(journal["state_before"]), "checkpoint before STATE.md")
-    changes, event, subject, body = _approval_details(
-        str(journal["kind"]),
-        before,
-        selected if isinstance(selected, str) else None,
-    )
-    expected = {
-        "phase": before.phase,
-        "status": before.status,
-        "milestone": before.milestone,
-        "branch": before.branch,
-        "archive": before.archive,
-    }
-    _, after, rendered = _render_transition(
-        before,
-        str(journal["state_before"]),
-        expected,
-        changes,
-        event,
-        project_dir,
-        str(journal["event_date"]),
-        str(journal["kind"]),
-    )
-    if (
-        journal["event"] != event
-        or journal["subject"] != subject
-        or journal["body"] != body
-        or journal["state_after"] != rendered
-    ):
-        raise PipelineStateError("checkpoint journal approval contract is invalid")
-    if str(journal["kind"]) == "roadmap":
-        if project_dir != ".project":
-            raise PipelineStateError("roadmap approval is legal only on the active track")
-        if journal["roadmap_path"] != ".project/ROADMAP.md":
-            raise PipelineStateError("checkpoint journal has an invalid ROADMAP path")
-        expected_roadmap = _activate_roadmap_milestone(
-            str(journal["roadmap_before"]),
-            str(selected),
-        )
-        if journal["roadmap_after"] != expected_roadmap:
-            raise PipelineStateError("checkpoint journal has an invalid ROADMAP result")
-    elif any(value is not None for value in roadmap_values):
-        raise PipelineStateError("plan checkpoint journal unexpectedly owns ROADMAP.md")
-    _validate_state_context(after, project_dir, "checkpoint after STATE.md")
-    return dict(journal)
-
-
-def _remove_checkpoint_temporary(path: Path) -> None:
-    temporary = path.parent / f".{path.name}.gsd-path-tmp"
-    if temporary.is_symlink():
-        raise PipelineStateError(f"checkpoint temporary path is a symlink: {temporary}")
-    if temporary.exists():
-        if not temporary.is_file():
-            raise PipelineStateError(f"checkpoint temporary path is invalid: {temporary}")
-        temporary.unlink()
-
-
-def _converge_checkpoint_file(path: Path, before: str, after: str, label: str) -> None:
-    _remove_checkpoint_temporary(path)
-    current = _read_real_file(path, label)
-    if current not in {before, after}:
-        raise PipelineStateError(f"{label} drifted during checkpoint recovery")
-    if current != after:
-        _atomic_write(path, after)
-
-
-def _unlink_checkpoint_journal(path: Path) -> None:
-    path.unlink()
-    descriptor = os.open(path.parent, os.O_RDONLY)
-    try:
-        os.fsync(descriptor)
-    finally:
-        os.close(descriptor)
-
-
-def _resume_checkpoint_locked(
-    repo: Path,
-    project: Path,
-    journal_path: Path,
-    journal: Mapping[str, object],
-) -> dict[str, object]:
-    transaction = _approval_journal(repo, journal)
-    state_path = _checkpoint_file(repo, str(transaction["state_path"]), "STATE.md")
-    mutable = {state_path.relative_to(project).as_posix()}
-    roadmap_path: Optional[Path] = None
-    if transaction["roadmap_path"] is not None:
-        roadmap_path = _checkpoint_file(
-            repo,
-            str(transaction["roadmap_path"]),
-            "ROADMAP.md",
-        )
-        mutable.add(roadmap_path.relative_to(project).as_posix())
-    _remove_checkpoint_temporary(state_path)
-    if roadmap_path is not None:
-        _remove_checkpoint_temporary(roadmap_path)
-    if _checkpoint_artifact_digest(project, mutable) != transaction["artifact_digest"]:
-        raise PipelineStateError("approval artifacts drifted after checkpoint preparation")
-    outside = [path for path in _worktree_changes(repo) if not path.startswith(".project/")]
-    if outside:
-        raise PipelineStateError(
-            "checkpoint found changes outside .project: " + ", ".join(outside)
-        )
-
-    head = _run_git(repo, "rev-parse", "HEAD").stdout.strip()
-    expected_head = str(transaction["expected_head"])
-    if head == expected_head:
-        _converge_checkpoint_file(
-            state_path,
-            str(transaction["state_before"]),
-            str(transaction["state_after"]),
-            "STATE.md",
-        )
-        if roadmap_path is not None:
-            _converge_checkpoint_file(
-                roadmap_path,
-                str(transaction["roadmap_before"]),
-                str(transaction["roadmap_after"]),
-                "ROADMAP.md",
-            )
-    else:
-        if _worktree_changes(repo):
-            raise PipelineStateError("completed checkpoint has worktree drift")
-        if _read_real_file(state_path, "STATE.md") != transaction["state_after"]:
-            raise PipelineStateError("completed checkpoint has the wrong STATE.md")
-        if roadmap_path is not None and (
-            _read_real_file(roadmap_path, "ROADMAP.md")
-            != transaction["roadmap_after"]
-        ):
-            raise PipelineStateError("completed checkpoint has the wrong ROADMAP.md")
-
-    try:
-        committed = isolation_checkpoint(
-            repo,
-            expected_head,
-            str(transaction["subject"]),
-            str(transaction["body"]),
-            [".project"],
-        )
-    except IsolationError as error:
-        raise PipelineStateError(f"approval checkpoint failed: {error}") from error
-    if committed.get("commit") != _run_git(repo, "rev-parse", "HEAD").stdout.strip():
-        raise PipelineStateError("approval checkpoint returned the wrong commit")
-    _unlink_checkpoint_journal(journal_path)
-    state = _state_from_text(str(transaction["state_after"]))
-    return {
-        "schema": CHECKPOINT_SCHEMA,
-        "status": "approved",
-        "kind": transaction["kind"],
-        "project_dir": transaction["project_dir"],
-        "commit": committed["commit"],
-        "paths": committed.get("paths"),
-        "state": state.json(),
-    }
-
-
-def checkpoint_approval(
-    repo: Path,
-    kind: str,
-    expected_head: str,
-    project_dir: str = ".project",
-    selected_milestone: Optional[str] = None,
-) -> dict[str, object]:
-    """Approve plan or roadmap metadata and commit it as one resumable transaction."""
-    resolved = _repo_root(repo)
-    if project_dir not in {".project", ".project/next"}:
-        raise PipelineStateError("approval project-dir must be .project or .project/next")
-    project = _track_root(resolved, ".project")
-    journal_path = _git_path(resolved, CHECKPOINT_JOURNAL_NAME)
-    request = _checkpoint_request_fields(
-        kind,
-        project_dir,
-        selected_milestone,
-        expected_head,
-    )
-    with _state_lock(project):
-        if journal_path.exists() or journal_path.is_symlink():
-            transaction = _approval_journal(resolved, _read_json(journal_path))
-            mismatches = {
-                key: {"expected": value, "actual": transaction.get(key)}
-                for key, value in request.items()
-                if transaction.get(key) != value
-            }
-            if mismatches:
-                raise PipelineStateError(
-                    "checkpoint journal does not match request: "
-                    + json.dumps(mismatches, sort_keys=True)
-                )
-            return _resume_checkpoint_locked(resolved, project, journal_path, transaction)
-
-        resolved_head = _run_git(
-            resolved,
-            "rev-parse",
-            "--verify",
-            f"{expected_head}^{{commit}}",
-        ).stdout.strip()
-        if resolved_head != expected_head:
-            raise PipelineStateError("expected-head must be an exact full commit SHA")
-        if _run_git(resolved, "rev-parse", "HEAD").stdout.strip() != expected_head:
-            raise PipelineStateError("approval must start at expected-head")
-        active_state, _, _ = load_state(resolved)
-        if active_state.branch is None or _current_branch(resolved) != active_state.branch:
-            raise PipelineStateError("approval requires the active bound branch")
-        outside = [path for path in _worktree_changes(resolved) if not path.startswith(".project/")]
-        if outside:
-            raise PipelineStateError(
-                "checkpoint found changes outside .project: " + ", ".join(outside)
-            )
-
-        state, state_before, state_path = load_state(resolved, project_dir)
-        changes, event, subject, body = _approval_details(kind, state, selected_milestone)
-        expected = {
-            "phase": state.phase,
-            "status": state.status,
-            "milestone": state.milestone,
-            "branch": state.branch,
-            "archive": state.archive,
-        }
-        event_date = date.today().isoformat()
-        _, _, state_after = _render_transition(
-            state,
-            state_before,
-            expected,
-            changes,
-            event,
-            project_dir,
-            event_date,
-            kind,
-        )
-        roadmap_path: Optional[Path] = None
-        roadmap_before: Optional[str] = None
-        roadmap_after: Optional[str] = None
-        if kind == "roadmap":
-            if project_dir != ".project":
-                raise PipelineStateError("roadmap approval is legal only on the active track")
-            assert selected_milestone is not None
-            roadmap_path = project / "ROADMAP.md"
-            roadmap_before = _read_real_file(roadmap_path, "ROADMAP.md")
-            roadmap_after = _activate_roadmap_milestone(
-                roadmap_before,
-                selected_milestone,
-            )
-
-        state_relative = state_path.relative_to(project).as_posix()
-        mutable = {state_relative}
-        if roadmap_path is not None:
-            mutable.add(roadmap_path.relative_to(project).as_posix())
-        journal: dict[str, object] = {
-            "schema": CHECKPOINT_SCHEMA,
-            "repo": str(resolved),
-            **request,
-            "event": event,
-            "event_date": event_date,
-            "subject": subject,
-            "body": body,
-            "artifact_digest": _checkpoint_artifact_digest(project, mutable),
-            "state_path": f".project/{state_relative}",
-            "state_before": state_before,
-            "state_after": state_after,
-            "roadmap_path": ".project/ROADMAP.md" if roadmap_path is not None else None,
-            "roadmap_before": roadmap_before,
-            "roadmap_after": roadmap_after,
-        }
-        _write_json(journal_path, journal)
-        return _resume_checkpoint_locked(resolved, project, journal_path, journal)
-
-
-def resume_checkpoint(repo: Path) -> dict[str, object]:
-    """Resume the single journaled plan or roadmap approval transaction."""
-    resolved = _repo_root(repo)
-    project = _track_root(resolved, ".project")
-    journal_path = _git_path(resolved, CHECKPOINT_JOURNAL_NAME)
-    with _state_lock(project):
-        if not journal_path.exists() and not journal_path.is_symlink():
-            raise PipelineStateError("no approval checkpoint journal exists")
-        return _resume_checkpoint_locked(
-            resolved,
-            project,
-            journal_path,
-            _read_json(journal_path),
-        )
-
-
-def _task_files(text: str, label: str) -> tuple[str, list[str]]:
-    lines = text.splitlines()
-    if not lines or lines[0] != "---":
-        raise PipelineStateError(f"{label} is missing YAML frontmatter")
-    task_id = ""
-    files: list[str] = []
-    closing: Optional[int] = None
-    for index, line in enumerate(lines[1:], start=1):
-        if line == "---":
-            closing = index
-            break
-        id_match = re.fullmatch(r"id:\s*([^#\s]+)(?:\s+#.*)?", line)
-        if id_match:
-            if task_id:
-                raise PipelineStateError(f"{label} repeats task id")
-            task_id = id_match.group(1).strip("\"'")
-        files_match = re.fullmatch(r"files:\s*(.*?)(?:\s+#.*)?", line)
-        if files_match is None:
-            continue
-        inline = re.fullmatch(r"\[(.*)\]", files_match.group(1).strip())
-        if inline:
-            files = [
-                value.strip().strip("\"'")
-                for value in inline.group(1).split(",")
-                if value.strip()
-            ]
-            continue
-        cursor = index + 1
-        while cursor < len(lines):
-            item = re.match(r"^\s+-\s+(.+?)(?:\s+#.*)?$", lines[cursor])
-            if item is None:
-                break
-            files.append(item.group(1).strip().strip("\"'"))
-            cursor += 1
-    if closing is None:
-        raise PipelineStateError(f"{label} frontmatter is not closed")
-    if not TASK_ID_RE.fullmatch(task_id):
-        raise PipelineStateError(f"{label} has invalid task id: {task_id}")
-    if not files:
-        raise PipelineStateError(f"{label} has no declared files")
-    return task_id, files
-
-
-def _approval_checkpoint(
-    repo: Path,
-    state: PipelineState,
-    revision: str = "HEAD",
-) -> Optional[str]:
-    parents = _run_git(repo, "show", "-s", "--format=%P", revision).stdout.split()
-    if len(parents) != 2:
-        return None
-    base, ship = parents
-    if _run_git(
-        repo,
-        "merge-base",
-        "--is-ancestor",
-        base,
-        ship,
-        check=False,
-    ).returncode != 0:
-        return None
-    commits = _run_git(
-        repo,
-        "rev-list",
-        "--first-parent",
-        ship,
-        f"^{base}",
-    ).stdout.splitlines()
-    candidates = []
-    for commit in commits:
-        raw = _run_git(repo, "cat-file", "commit", commit).stdout
-        if "\n\n" not in raw:
-            continue
-        message = raw.split("\n\n", 1)[1]
-        expected_message = _commit_message(
-            PLAN_APPROVAL_SUBJECT,
-            {
-                "Why": "approved plan checkpoint",
-                "Milestone": state.milestone or "none",
-            },
-        )
-        if message != expected_message:
-            continue
-        shown = _run_git(
-            repo,
-            "show",
-            f"{commit}:.project/next/STATE.md",
-            check=False,
-        )
-        if shown.returncode != 0:
-            continue
-        try:
-            candidate = _state_from_text(shown.stdout, "checkpoint next/STATE.md")
-        except PipelineStateError:
-            continue
-        if (
-            candidate.project == state.project
-            and candidate.milestone == state.milestone
-            and candidate.phase == "plan"
-            and candidate.status == "done"
-            and candidate.branch is None
-            and candidate.archive is None
-        ):
-            _validate_state_context(
-                candidate,
-                ".project/next",
-                "checkpoint next/STATE.md",
-            )
-            _validate_approval_track(repo, commit)
-            candidates.append(commit)
-    if len(candidates) > 1:
-        raise PipelineStateError(
-            "current milestone attempt has multiple matching plan approval checkpoints"
-        )
-    return candidates[0] if candidates else None
-
-
-def _validate_approval_track(repo: Path, checkpoint: str) -> None:
-    prefix = ".project/next"
-    entries = [
-        line
-        for line in _run_git(
-            repo,
-            "ls-tree",
-            "-r",
-            checkpoint,
-            "--",
-            prefix,
-        ).stdout.splitlines()
-        if line
-    ]
-    paths = []
-    for entry in entries:
-        metadata, path = entry.split("\t", 1)
-        mode, object_type, _ = metadata.split()
-        if object_type != "blob" or mode not in {"100644", "100755"}:
-            raise PipelineStateError(
-                f"approval checkpoint has unsafe lookahead artifact: {path}"
-            )
-        relative = PurePosixPath(path).relative_to(prefix)
-        if not relative.parts or (
-            relative.as_posix() != "STATE.md"
-            and relative.parts[0] not in PROMOTION_TRACKS
-        ):
-            raise PipelineStateError(
-                f"approval checkpoint has unowned lookahead artifact: {path}"
-            )
-        paths.append(path)
-    required = {
-        ".project/next/STATE.md",
-        ".project/next/plan/PLAN.md",
-    }
-    if not required.issubset(paths):
-        raise PipelineStateError("approval checkpoint has an incomplete lookahead track")
-    tasks = _approved_task_contracts(repo, checkpoint)
-    changed = {
-        value
-        for value in _run_git(
-            repo,
-            "diff-tree",
-            "--no-commit-id",
-            "--name-only",
-            "-r",
-            checkpoint,
-        ).stdout.splitlines()
-        if value
-    }
-    required_changes = required | {contract.path for contract in tasks.values()}
-    if not required_changes.issubset(changed):
-        raise PipelineStateError(
-            "plan approval commit did not checkpoint its complete plan and task set"
-        )
-
-
-def _safe_declared_paths(task_id: str, paths: Sequence[str]) -> tuple[str, ...]:
-    safe: list[str] = []
-    for value in paths:
-        relative = PurePosixPath(value)
-        if relative.is_absolute() or not relative.parts or ".." in relative.parts:
-            raise PipelineStateError(f"{task_id} declares unsafe path: {value}")
-        safe.append(relative.as_posix())
-    return tuple(safe)
-
-
-def _git_text_at(repo: Path, commit: str, path: str) -> Optional[str]:
-    shown = _run_git(repo, "show", f"{commit}:{path}", check=False)
-    return shown.stdout if shown.returncode == 0 else None
-
-
-def _approved_task_contracts(
-    repo: Path,
-    checkpoint: str,
-) -> dict[str, ApprovedTaskContract]:
-    prefix = PurePosixPath(".project/next/tasks")
-    paths = [
-        value
-        for value in _run_git(
-            repo,
-            "ls-tree",
-            "-r",
-            "--name-only",
-            "-z",
-            checkpoint,
-            "--",
-            prefix.as_posix(),
-        ).stdout.split("\0")
-        if value
-    ]
-    contracts: dict[str, ApprovedTaskContract] = {}
-    for value in paths:
-        relative = PurePosixPath(value)
-        match = TASK_FILE_RE.fullmatch(relative.name)
-        if relative.parent != prefix or match is None:
-            raise PipelineStateError(
-                f"approval checkpoint has noncanonical task artifact: {value}"
-            )
-        text = _git_text_at(repo, checkpoint, value)
-        if text is None:
-            raise PipelineStateError(f"approval checkpoint lost task artifact: {value}")
-        task_id, declared = _task_files(text, value)
-        if task_id != match.group(1):
-            raise PipelineStateError(f"approval checkpoint task id does not match {value}")
-        if task_id in contracts:
-            raise PipelineStateError(f"approval checkpoint repeats task id: {task_id}")
-        contracts[task_id] = ApprovedTaskContract(
-            value,
-            text,
-            _safe_declared_paths(task_id, declared),
-        )
-    if not contracts:
-        raise PipelineStateError("approval checkpoint has no task contracts")
-    return contracts
-
-
-def _task_contracts_at(
-    repo: Path,
-    revision: str,
-    prefix: str = ".project/next/tasks",
-) -> dict[str, tuple[str, str]]:
-    root = PurePosixPath(prefix)
-    paths = [
-        value
-        for value in _run_git(
-            repo,
-            "ls-tree",
-            "-r",
-            "--name-only",
-            "-z",
-            revision,
-            "--",
-            prefix,
-        ).stdout.split("\0")
-        if value
-    ]
-    contracts: dict[str, tuple[str, str]] = {}
-    for value in paths:
-        path = PurePosixPath(value)
-        match = TASK_FILE_RE.fullmatch(path.name)
-        if path.parent != root or match is None:
-            raise PipelineStateError(f"lookahead has noncanonical task artifact: {value}")
-        task_id = match.group(1)
-        if task_id in contracts:
-            raise PipelineStateError(f"lookahead tasks repeat id: {task_id}")
-        text = _git_text_at(repo, revision, value)
-        if text is None:
-            raise PipelineStateError(f"lookahead lost task artifact: {value}")
-        contracts[task_id] = (
-            value,
-            text,
-        )
-    return contracts
-
-
-def _classify_plan_drift(
-    repo: Path,
-    state: PipelineState,
-    revision: str,
-) -> dict[str, object]:
-    if state.phase != "plan" or state.status != "done":
-        return {"class": "not-applicable", "reason": "lookahead track is not plan/done"}
-    assert state.milestone is not None
-    checkpoint = _approval_checkpoint(repo, state, revision)
-    if checkpoint is None:
-        return {
-            "class": "unverifiable",
-            "checkpoint": None,
-            "task_ids": [],
-            "changed_paths": [],
-            "reason": "matching plan approval checkpoint was not found",
-        }
-    changed = [
-        item
-        for item in _run_git(
-            repo,
-            "diff",
-            "--name-only",
-            "-z",
-            checkpoint,
-            revision,
-        ).stdout.split("\0")
-        if item
-    ]
-    approved_plan_path = ".project/next/plan/PLAN.md"
-    approved_plan = _git_text_at(repo, checkpoint, approved_plan_path)
-    if approved_plan is None:
-        return {
-            "class": "unverifiable",
-            "checkpoint": checkpoint,
-            "task_ids": [],
-            "changed_paths": [],
-            "contract_paths": [],
-            "reason": "plan approval checkpoint has no PLAN.md",
-        }
-    approved = _approved_task_contracts(repo, checkpoint)
-    current = _task_contracts_at(repo, revision)
-
-    contract_paths: set[str] = set()
-    flagged_ids: set[str] = set()
-    current_plan = _git_text_at(repo, revision, approved_plan_path)
-    if current_plan != approved_plan:
-        contract_paths.add(approved_plan_path)
-    for task_id in set(approved) | set(current):
-        approved_contract = approved.get(task_id)
-        current_contract = current.get(task_id)
-        if (
-            approved_contract is None
-            or current_contract is None
-            or approved_contract.path != current_contract[0]
-            or approved_contract.text != current_contract[1]
-        ):
-            flagged_ids.add(task_id)
-            if approved_contract is not None:
-                contract_paths.add(approved_contract.path)
-            if current_contract is not None:
-                contract_paths.add(current_contract[0])
-
-    product_paths: set[str] = set()
-    for task_id, contract in approved.items():
-        matches = sorted(
-            changed_path
-            for changed_path in changed
-            if any(
-                changed_path == path
-                or changed_path.startswith(f"{path.rstrip('/')}/")
-                for path in contract.files
-            )
-        )
-        if matches:
-            flagged_ids.add(task_id)
-            product_paths.update(matches)
-
-    changed_paths = sorted(contract_paths | product_paths)
-    changed_contract = bool(contract_paths)
-    changed_product = bool(product_paths)
-    reasons = []
-    if changed_contract:
-        reasons.append("plan or task contracts changed after approval")
-    if changed_product:
-        reasons.append("approved declared task paths changed after approval")
-    return {
-        "class": "changed" if changed_paths else "clean",
-        "checkpoint": checkpoint,
-        "task_ids": sorted(flagged_ids),
-        "changed_paths": changed_paths,
-        "contract_paths": sorted(contract_paths),
-        "reason": "; ".join(reasons) if reasons else "approval contracts and declared paths are unchanged",
-    }
-
-
 def _roadmap_sections(text: str) -> dict[str, tuple[str, int, int]]:
     lines = text.splitlines(keepends=True)
     headings: list[tuple[str, str, int]] = []
@@ -2750,87 +2024,6 @@ def _replace_roadmap_field(
         raise PipelineStateError(f"ROADMAP.md milestone is missing {field}")
 
 
-def _render_roadmap(
-    text: str,
-    previous_milestone: str,
-    milestone: str,
-    branch: str,
-    integrate: str,
-) -> str:
-    sections = _roadmap_sections(text)
-    if previous_milestone not in sections:
-        raise PipelineStateError(f"ROADMAP.md is missing previous milestone: {previous_milestone}")
-    if milestone not in sections:
-        raise PipelineStateError(f"ROADMAP.md is missing promoted milestone: {milestone}")
-    branch_number = _bound_branch_number(branch)
-    if branch_number is None:
-        raise PipelineStateError(f"invalid promoted branch: {branch}")
-    promoted_id, new_start, new_end = sections[milestone]
-    if branch_number != int(promoted_id.removeprefix("M")):
-        raise PipelineStateError(f"branch {branch} does not match roadmap milestone {promoted_id}")
-    _, old_start, old_end = sections[previous_milestone]
-    lines = text.splitlines(keepends=True)
-    _replace_roadmap_field(lines, old_start, old_end, "Status", {"shipped"}, "shipped")
-    _replace_roadmap_field(lines, old_start, old_end, "Integrated", {NULL}, integrate)
-    _replace_roadmap_field(lines, new_start, new_end, "Status", {"pending"}, "active")
-    return "".join(lines)
-
-
-def _promotion_event(
-    drift: Mapping[str, object],
-    branch: str,
-    landing: str,
-    base: Optional[str] = None,
-) -> str:
-    prefix = f"lookahead promoted on {branch} from integrate {landing}"
-    if base is not None and base != landing:
-        prefix = f"{prefix} at main base {base}"
-    drift_class = drift["class"]
-    if drift_class == "changed":
-        task_ids = drift.get("task_ids")
-        if isinstance(task_ids, list) and task_ids:
-            return f"{prefix}; plan drift flagged tasks {', '.join(task_ids)}"
-        return f"{prefix}; plan contract changed after approval"
-    if drift_class == "unverifiable":
-        return f"{prefix}; plan drift unverifiable because approval checkpoint is missing"
-    return prefix
-
-
-def _promotion_state(
-    active_text: str,
-    next_state: PipelineState,
-    branch: str,
-    landing: str,
-    drift: Mapping[str, object],
-    event_date: Optional[str] = None,
-    base: Optional[str] = None,
-) -> str:
-    status = next_state.status
-    if next_state.phase == "plan" and next_state.status == "done" and drift["class"] != "clean":
-        status = "active"
-    rendered = _set_frontmatter(
-        active_text,
-        {
-            "milestone": next_state.milestone or NULL,
-            "phase": next_state.phase,
-            "status": status,
-            "branch": branch,
-            "archive": NULL,
-            "integration_default": next_state.integration_default,
-            "integration": next_state.integration,
-            "integration_source": next_state.integration_source,
-        },
-    )
-    rendered = _append_event(
-        rendered,
-        next_state.phase,
-        _promotion_event(drift, branch, landing, base),
-        event_date,
-    )
-    _state_from_text(rendered)
-    return rendered
-
-
 def _git_path(repo: Path, name: str) -> Path:
     value = _run_git(repo, "rev-parse", "--git-path", name).stdout.strip()
     path = Path(value)
@@ -2859,121 +2052,6 @@ def _write_json(path: Path, value: Mapping[str, object]) -> None:
 def _commit_message(subject: str, body_fields: Mapping[str, str]) -> str:
     body = "\n".join(f"{key}: {value}" for key, value in body_fields.items())
     return f"{subject}\n\n{body}\n"
-
-
-def _head_with_exact_message(
-    repo: Path,
-    subject: str,
-    body_fields: Mapping[str, str],
-) -> Optional[str]:
-    head = _run_git(repo, "rev-parse", "HEAD").stdout.strip()
-    raw = _run_git(repo, "cat-file", "commit", head).stdout
-    try:
-        message = raw.split("\n\n", 1)[1]
-    except IndexError as error:
-        raise PipelineStateError(f"commit {head} has no message body") from error
-    return head if message == _commit_message(subject, body_fields) else None
-
-
-def _tree_entries(
-    repo: Path,
-    revision: str,
-    prefix: str,
-) -> dict[str, tuple[str, str]]:
-    records = _run_git(
-        repo,
-        "ls-tree",
-        "-r",
-        "-z",
-        revision,
-        "--",
-        prefix,
-    ).stdout.split("\0")
-    entries: dict[str, tuple[str, str]] = {}
-    for record in records:
-        if not record:
-            continue
-        metadata, separator, path = record.partition("\t")
-        fields = metadata.split()
-        if not separator or len(fields) != 3:
-            raise PipelineStateError(f"could not parse Git tree entry: {record}")
-        mode, object_type, object_id = fields
-        if object_type != "blob" or mode not in {"100644", "100755"}:
-            raise PipelineStateError(f"promotion requires a regular tracked file: {path}")
-        entries[path] = (mode, object_id)
-    return entries
-
-
-def _promotion_tree_mapping(
-    repo: Path,
-    parent: str,
-    head: str,
-) -> set[str]:
-    next_prefix = ".project/next"
-    next_entries = _tree_entries(repo, parent, next_prefix)
-    state_path = f"{next_prefix}/STATE.md"
-    if state_path not in next_entries:
-        raise PipelineStateError("promotion parent has no lookahead STATE.md")
-
-    destinations: dict[str, tuple[str, str]] = {}
-    used_tracks: set[str] = set()
-    for source, entry in next_entries.items():
-        if source == state_path:
-            continue
-        parts = PurePosixPath(source).parts
-        if len(parts) < 4 or parts[:2] != (".project", "next"):
-            raise PipelineStateError(f"promotion parent has invalid lookahead path: {source}")
-        track = parts[2]
-        if track not in PROMOTION_TRACKS:
-            raise PipelineStateError(f"promotion parent has unowned lookahead path: {source}")
-        destination = PurePosixPath(".project", *parts[2:]).as_posix()
-        destinations[destination] = entry
-        used_tracks.add(track)
-    if not destinations:
-        raise PipelineStateError("promotion parent has no promotable artifacts")
-
-    if _tree_entries(repo, head, next_prefix):
-        raise PipelineStateError("completed promotion retained tracked lookahead artifacts")
-    for track in used_tracks:
-        prefix = f".project/{track}"
-        if _tree_entries(repo, parent, prefix):
-            raise PipelineStateError(f"promotion parent already had destination track: {track}")
-        actual = _tree_entries(repo, head, prefix)
-        expected = {
-            path: entry
-            for path, entry in destinations.items()
-            if path == prefix or path.startswith(f"{prefix}/")
-        }
-        if actual != expected:
-            raise PipelineStateError(f"completed promotion did not preserve track: {track}")
-
-    changed = {
-        path
-        for path in _run_git(
-            repo,
-            "diff",
-            "--name-only",
-            "--no-renames",
-            "-z",
-            parent,
-            head,
-        ).stdout.split("\0")
-        if path
-    }
-    expected_changes = {
-        ".project/STATE.md",
-        ".project/ROADMAP.md",
-        *next_entries,
-        *destinations,
-    }
-    if changed != expected_changes:
-        missing = sorted(expected_changes - changed)
-        extra = sorted(changed - expected_changes)
-        raise PipelineStateError(
-            "completed promotion has wrong path set: "
-            f"missing={missing}, extra={extra}"
-        )
-    return expected_changes
 
 
 def _validate_next_layout(next_root: Path, state: PipelineState) -> None:
@@ -3026,515 +2104,6 @@ def _worktree_changes(repo: Path) -> list[str]:
     )
 
 
-def _completed_promotion(
-    repo: Path,
-    project: Path,
-    milestone: str,
-    branch: str,
-    base: str,
-    landing: str,
-) -> Optional[dict[str, object]]:
-    next_root = project / "next"
-    if next_root.exists() or next_root.is_symlink():
-        return None
-    state, _, _ = load_state(repo)
-    if state.milestone != milestone or state.branch != branch or state.archive is not None:
-        return None
-    if _current_branch(repo) != branch:
-        raise PipelineStateError("completed promotion is not on its recorded branch")
-    if _worktree_changes(repo):
-        raise PipelineStateError("completed promotion worktree is not clean")
-
-    head = _run_git(repo, "rev-parse", "HEAD").stdout.strip()
-    parents = _run_git(repo, "show", "-s", "--format=%P", head).stdout.split()
-    if parents != [base]:
-        raise PipelineStateError(
-            "completed promotion must be current HEAD with base as its single parent"
-        )
-    subject = f"router: promote lookahead milestone {milestone}"
-    fields = {
-        "Why": "promote lookahead track",
-        "Milestone": milestone,
-        "Integrate": landing,
-    }
-    if base != landing:
-        fields["Base"] = base
-    if _head_with_exact_message(repo, subject, fields) != head:
-        raise PipelineStateError("completed promotion has the wrong commit message")
-
-    active_text = _git_text_at(repo, base, ".project/STATE.md")
-    next_text = _git_text_at(repo, base, ".project/next/STATE.md")
-    roadmap_text = _git_text_at(repo, base, ".project/ROADMAP.md")
-    if active_text is None or next_text is None or roadmap_text is None:
-        raise PipelineStateError("promotion parent is missing required metadata")
-    active_state = _state_from_text(active_text, "promotion parent STATE.md")
-    next_state = _state_from_text(next_text, "promotion parent next/STATE.md")
-    _validate_state_context(next_state, ".project/next", "promotion parent next/STATE.md")
-    if active_state.phase != "shipped" or active_state.status != "done":
-        raise PipelineStateError("promotion parent STATE is not shipped/done")
-    if active_state.milestone is None:
-        raise PipelineStateError("promotion parent STATE has no milestone")
-    if next_state.project != active_state.project:
-        raise PipelineStateError("promotion parent lookahead belongs to another project")
-    if next_state.milestone != milestone:
-        raise PipelineStateError("promotion parent lookahead milestone does not match request")
-    if next_state.phase not in {"define", "research", "decide", "plan"}:
-        raise PipelineStateError(
-            f"promotion parent lookahead cannot be in phase {next_state.phase}"
-        )
-
-    _promotion_tree_mapping(repo, base, head)
-    drift = _classify_plan_drift(repo, next_state, base)
-    expected_roadmap = _render_roadmap(
-        roadmap_text,
-        active_state.milestone,
-        milestone,
-        branch,
-        landing,
-    )
-    current_roadmap = _git_text_at(repo, head, ".project/ROADMAP.md")
-    if current_roadmap != expected_roadmap:
-        raise PipelineStateError("completed promotion has invalid ROADMAP.md")
-
-    current_state = _git_text_at(repo, head, ".project/STATE.md")
-    if current_state is None:
-        raise PipelineStateError("completed promotion has no STATE.md")
-    event = re.escape(_promotion_event(drift, branch, landing, base))
-    suffix = re.search(
-        rf"(?m)^- (\d{{4}}-\d{{2}}-\d{{2}}) — {re.escape(next_state.phase)} — {event}\n\Z",
-        current_state,
-    )
-    if suffix is None:
-        raise PipelineStateError("completed promotion has invalid STATE log event")
-    expected_state = _promotion_state(
-        active_text,
-        next_state,
-        branch,
-        landing,
-        drift,
-        suffix.group(1),
-        base,
-    )
-    if current_state != expected_state:
-        raise PipelineStateError("completed promotion has invalid STATE.md")
-    return {
-        "schema": PROMOTION_SCHEMA,
-        "status": "already-complete",
-        "milestone": milestone,
-        "branch": branch,
-        "integrate": landing,
-        "landing": landing,
-        "base": base,
-        "commit": head,
-        "drift": drift,
-    }
-
-
-def _prepare_promotion(
-    repo: Path,
-    project: Path,
-    milestone: str,
-    branch: str,
-    base: str,
-    landing: str,
-) -> dict[str, object]:
-    if _bound_branch_number(branch) is None:
-        raise PipelineStateError(f"invalid promoted branch: {branch}")
-    current = _current_branch(repo)
-    if current != branch:
-        raise PipelineStateError(
-            f"current branch {current or '<detached>'} != promoted branch {branch}"
-        )
-    resolved_base = _run_git(
-        repo,
-        "rev-parse",
-        "--verify",
-        f"{base}^{{commit}}",
-    ).stdout.strip()
-    if base != resolved_base:
-        raise PipelineStateError("base must be an exact full commit SHA")
-    resolved_landing = _run_git(
-        repo,
-        "rev-parse",
-        "--verify",
-        f"{landing}^{{commit}}",
-    ).stdout.strip()
-    if landing != resolved_landing:
-        raise PipelineStateError("landing must be an exact full commit SHA")
-    head = _run_git(repo, "rev-parse", "HEAD").stdout.strip()
-    if head != base:
-        raise PipelineStateError(f"promotion must start at base SHA: {head} != {base}")
-    remote = _run_git(repo, "rev-parse", "--verify", "origin/main^{commit}").stdout.strip()
-    if remote != base:
-        raise PipelineStateError(
-            f"base SHA is not current origin/main: {base} != {remote}"
-        )
-    if not _is_ancestor(repo, landing, base):
-        raise PipelineStateError("landing is not an ancestor of the current main base")
-    if _run_git(repo, "status", "--porcelain", "--untracked-files=all").stdout:
-        raise PipelineStateError("promotion must start from a clean worktree")
-
-    active_state, active_text, _ = load_state(repo)
-    if active_state.phase != "shipped" or active_state.status != "done":
-        raise PipelineStateError("promotion requires active STATE shipped/done")
-    if active_state.milestone is None:
-        raise PipelineStateError("active STATE does not name the shipped milestone")
-    archive_name = PurePosixPath(active_state.archive or "").name
-    tag_ref = f"refs/tags/milestone/{archive_name}"
-    published_tag_ref = f"refs/remotes/origin/tags/milestone/{archive_name}"
-    tag_type = _run_git(repo, "cat-file", "-t", tag_ref, check=False)
-    if tag_type.returncode != 0 or tag_type.stdout.strip() != "tag":
-        raise PipelineStateError("shipped milestone tag is missing or not annotated")
-    published_tag_type = _run_git(
-        repo,
-        "cat-file",
-        "-t",
-        published_tag_ref,
-        check=False,
-    )
-    if published_tag_type.returncode != 0 or published_tag_type.stdout.strip() != "tag":
-        raise PipelineStateError("published milestone tag is missing or not annotated")
-    tag_object = _run_git(repo, "rev-parse", "--verify", tag_ref).stdout.strip()
-    published_tag_object = _run_git(
-        repo,
-        "rev-parse",
-        "--verify",
-        published_tag_ref,
-    ).stdout.strip()
-    if tag_object != published_tag_object:
-        raise PipelineStateError("local milestone tag does not match published milestone tag")
-    tag_landing = _run_git(
-        repo,
-        "rev-parse",
-        "--verify",
-        f"{tag_ref}^{{commit}}",
-    ).stdout.strip()
-    if tag_landing != landing:
-        raise PipelineStateError("milestone tag does not point at landing")
-    published_tag_landing = _run_git(
-        repo,
-        "rev-parse",
-        "--verify",
-        f"{published_tag_ref}^{{commit}}",
-    ).stdout.strip()
-    if published_tag_landing != landing:
-        raise PipelineStateError("published milestone tag does not point at landing")
-    if active_state.integration == "pull-request":
-        remote_tag_ref = f"refs/tags/milestone/{archive_name}"
-        live_tag_object, live_tag_landing = _live_annotated_tag(
-            repo,
-            remote_tag_ref,
-        )
-        if live_tag_object != published_tag_object:
-            raise PipelineStateError(
-                "published milestone tag does not match the live origin tag"
-            )
-        if live_tag_landing != landing:
-            raise PipelineStateError(
-                "live origin milestone tag does not point at landing"
-            )
-    next_root = project / "next"
-    next_state, next_text, _ = load_state(repo, ".project/next")
-    if next_state.project != active_state.project:
-        raise PipelineStateError(
-            "lookahead STATE project does not match active STATE project"
-        )
-    if next_state.integration_default != active_state.integration_default:
-        raise PipelineStateError(
-            "lookahead integration_default does not match the active project"
-        )
-    if next_state.milestone != milestone:
-        raise PipelineStateError(
-            f"requested milestone {milestone} != next STATE milestone {next_state.milestone}"
-        )
-    if next_state.branch is not None or next_state.archive is not None:
-        raise PipelineStateError("lookahead STATE branch and archive must be null")
-
-    tracks: dict[str, str] = {}
-    for name in PROMOTION_TRACKS:
-        source = next_root / name
-        destination = project / name
-        if source.exists() or source.is_symlink():
-            if destination.exists() or destination.is_symlink():
-                raise PipelineStateError(f"promotion destination already exists: {destination}")
-            tracks[name] = _tree_digest(source)
-    if not tracks:
-        raise PipelineStateError("lookahead track has no promotable artifacts")
-    drift = _classify_plan_drift(repo, next_state, base)
-    roadmap_path = project / "ROADMAP.md"
-    roadmap_text = _read_real_file(roadmap_path, "ROADMAP.md")
-    target_state = _promotion_state(
-        active_text, next_state, branch, landing, drift, base=base
-    )
-    target_roadmap = _render_roadmap(
-        roadmap_text,
-        active_state.milestone,
-        milestone,
-        branch,
-        landing,
-    )
-    return {
-        "schema": PROMOTION_SCHEMA,
-        "repo": str(repo),
-        "milestone": milestone,
-        "previous_milestone": active_state.milestone,
-        "branch": branch,
-        "integrate": landing,
-        "landing": landing,
-        "base": base,
-        "tracks": tracks,
-        "residual_sha256": _tree_digest(next_root, tuple(tracks)),
-        "next_state_sha256": _sha256(next_text),
-        "active_state_sha256": _sha256(active_text),
-        "roadmap_sha256": _sha256(roadmap_text),
-        "target_state": target_state,
-        "target_roadmap": target_roadmap,
-        "drift": drift,
-        "stage": "prepared",
-    }
-
-
-def _require_journal_request(
-    journal: Mapping[str, object],
-    repo: Path,
-    milestone: str,
-    branch: str,
-    base: str,
-    landing: str,
-) -> None:
-    expected = {
-        "schema": PROMOTION_SCHEMA,
-        "repo": str(repo),
-        "milestone": milestone,
-        "branch": branch,
-        "integrate": landing,
-    }
-    mismatches = {
-        key: {"expected": value, "actual": journal.get(key)}
-        for key, value in expected.items()
-        if journal.get(key) != value
-    }
-    if mismatches:
-        raise PipelineStateError(
-            f"promotion journal does not match request: {json.dumps(mismatches, sort_keys=True)}"
-        )
-    journal_base = journal.get("base", journal.get("integrate"))
-    if journal_base != base:
-        raise PipelineStateError("promotion journal does not match the requested base")
-
-
-def _resume_track_moves(project: Path, journal: dict[str, object], path: Path) -> None:
-    tracks = journal.get("tracks")
-    if not isinstance(tracks, dict):
-        raise PipelineStateError("promotion journal has invalid tracks")
-    next_root = project / "next"
-    for name, expected_digest in tracks.items():
-        if name not in PROMOTION_TRACKS or not isinstance(expected_digest, str):
-            raise PipelineStateError("promotion journal has invalid track entry")
-        source = next_root / name
-        destination = project / name
-        source_exists = source.exists() or source.is_symlink()
-        destination_exists = destination.exists() or destination.is_symlink()
-        if source_exists and destination_exists:
-            raise PipelineStateError(f"promotion has both source and destination: {name}")
-        if not source_exists and not destination_exists:
-            raise PipelineStateError(f"promotion lost both source and destination: {name}")
-        candidate = source if source_exists else destination
-        if _tree_digest(candidate) != expected_digest:
-            raise PipelineStateError(f"promotion track drifted: {name}")
-        if source_exists:
-            source.rename(destination)
-            journal["stage"] = f"moved:{name}"
-            _write_json(path, journal)
-
-
-def _resume_metadata(project: Path, journal: dict[str, object], path: Path) -> None:
-    targets = (
-        (project / "STATE.md", "active_state_sha256", "target_state"),
-        (project / "ROADMAP.md", "roadmap_sha256", "target_roadmap"),
-    )
-    for target, original_key, target_key in targets:
-        current = _read_real_file(target, target.name)
-        expected_original = journal.get(original_key)
-        desired = journal.get(target_key)
-        if not isinstance(expected_original, str) or not isinstance(desired, str):
-            raise PipelineStateError("promotion journal has invalid metadata")
-        if current == desired:
-            continue
-        if _sha256(current) != expected_original:
-            raise PipelineStateError(f"promotion metadata drifted: {target}")
-        _atomic_write(target, desired)
-        journal["stage"] = f"updated:{target.name}"
-        _write_json(path, journal)
-
-
-def _resume_next_removal(
-    project: Path,
-    journal: dict[str, object],
-    journal_path: Path,
-    residual: Path,
-) -> None:
-    next_root = project / "next"
-    if next_root.exists() or next_root.is_symlink():
-        if residual.exists() or residual.is_symlink():
-            raise PipelineStateError("promotion has both next track and residual staging")
-        next_text = _read_real_file(next_root / "STATE.md", "next/STATE.md")
-        if _sha256(next_text) != journal.get("next_state_sha256"):
-            raise PipelineStateError("lookahead STATE drifted during promotion")
-        if _tree_digest(next_root) != journal.get("residual_sha256"):
-            raise PipelineStateError("lookahead residual drifted during promotion")
-        next_root.rename(residual)
-        journal["stage"] = "next-staged"
-        _write_json(journal_path, journal)
-    elif not residual.exists():
-        # Cleanup removes the residual only after recording the commit.
-        if journal.get("stage") == "committed" and isinstance(journal.get("commit"), str):
-            return
-        raise PipelineStateError("promotion lost next track and residual staging")
-    if residual.is_symlink() or not residual.is_dir():
-        raise PipelineStateError(f"promotion residual must be a real directory: {residual}")
-    if _tree_digest(residual) != journal.get("residual_sha256"):
-        raise PipelineStateError("staged lookahead residual drifted during promotion")
-
-
-def _commit_promotion(
-    repo: Path,
-    milestone: str,
-    landing: str,
-    base: str,
-    journal: dict[str, object],
-    journal_path: Path,
-    residual: Path,
-) -> str:
-    subject = f"router: promote lookahead milestone {milestone}"
-    fields = {
-        "Why": "promote lookahead track",
-        "Milestone": milestone,
-        "Integrate": landing,
-    }
-    if base != landing:
-        fields["Base"] = base
-    existing = _head_with_exact_message(repo, subject, fields)
-    residual_name = residual.relative_to(repo).as_posix()
-
-    def is_residual(path: str) -> bool:
-        return path == residual_name or path.startswith(f"{residual_name}/")
-
-    if existing is not None:
-        if _run_git(repo, "rev-parse", "HEAD").stdout.strip() != existing:
-            raise PipelineStateError("promotion commit exists but is not current HEAD")
-        if [path for path in _worktree_changes(repo) if not is_residual(path)]:
-            raise PipelineStateError("promotion commit exists with worktree drift")
-        return existing
-    outside = [
-        path
-        for path in _worktree_changes(repo)
-        if not path.startswith(".project/") and not is_residual(path)
-    ]
-    if outside:
-        raise PipelineStateError(f"promotion found changes outside .project: {outside}")
-    _run_git(repo, "add", "-A", "--", ".project")
-    staged = [
-        path
-        for path in _run_git(
-            repo,
-            "diff",
-            "--cached",
-            "--name-only",
-            "-z",
-        ).stdout.split("\0")
-        if path
-    ]
-    if not staged or any(not name.startswith(".project/") for name in staged):
-        raise PipelineStateError("promotion commit must contain only .project changes")
-    body = "\n".join(f"{key}: {value}" for key, value in fields.items())
-    _run_git(repo, "commit", "-m", subject, "-m", body)
-    commit = _run_git(repo, "rev-parse", "HEAD").stdout.strip()
-    journal["stage"] = "committed"
-    journal["commit"] = commit
-    _write_json(journal_path, journal)
-    return commit
-
-
-def promote_next(
-    repo: Path,
-    milestone: str,
-    branch: str,
-    base: str,
-    landing: Optional[str] = None,
-) -> dict[str, object]:
-    """Promote `.project/next` through a journaled, idempotent transaction."""
-    resolved = _repo_root(repo)
-    if not SLUG_RE.fullmatch(milestone):
-        raise PipelineStateError(f"invalid promoted milestone: {milestone}")
-    if _bound_branch_number(branch) is None:
-        raise PipelineStateError(f"invalid promoted branch: {branch}")
-    landing = landing or base
-    resolved_base = _run_git(
-        resolved,
-        "rev-parse",
-        "--verify",
-        f"{base}^{{commit}}",
-    ).stdout.strip()
-    if base != resolved_base:
-        raise PipelineStateError("base must be an exact full commit SHA")
-    project = _track_root(resolved, ".project")
-    journal_path = _git_path(resolved, "gsd-path-promote-next.json")
-    residual = resolved / PROMOTION_RESIDUAL
-    with _state_lock(project):
-        if not journal_path.exists():
-            completed = _completed_promotion(
-                resolved,
-                project,
-                milestone,
-                branch,
-                base,
-                landing,
-            )
-            if completed is not None:
-                return completed
-            if residual.exists() or residual.is_symlink():
-                raise PipelineStateError(f"orphaned promotion residual exists: {residual}")
-            journal = _prepare_promotion(
-                resolved,
-                project,
-                milestone,
-                branch,
-                base,
-                landing,
-            )
-            _write_json(journal_path, journal)
-        else:
-            journal = _read_json(journal_path)
-        _require_journal_request(journal, resolved, milestone, branch, base, landing)
-        _resume_track_moves(project, journal, journal_path)
-        _resume_metadata(project, journal, journal_path)
-        _resume_next_removal(project, journal, journal_path, residual)
-        commit = _commit_promotion(
-            resolved,
-            milestone,
-            landing,
-            base,
-            journal,
-            journal_path,
-            residual,
-        )
-        if residual.exists():
-            shutil.rmtree(residual)
-        journal_path.unlink()
-    return {
-        "schema": PROMOTION_SCHEMA,
-        "status": "promoted",
-        "milestone": milestone,
-        "branch": branch,
-        "integrate": landing,
-        "landing": landing,
-        "base": base,
-        "commit": commit,
-        "drift": journal["drift"],
-    }
-
-
 def _field_arguments(parser: argparse.ArgumentParser, prefix: str) -> None:
     for field in STATE_FIELDS:
         parser.add_argument(f"--{prefix}-{field}", dest=f"{prefix}_{field}")
@@ -3565,9 +2134,11 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     approve = subparsers.add_parser("approve")
     approve.add_argument("--repo", required=True, type=Path)
     approve.add_argument("--kind", required=True, choices=CHECKPOINT_KINDS)
-    approve.add_argument("--expected-head", required=True)
+    approve.add_argument("--expected-head")
     approve.add_argument("--project-dir", default=".project")
     approve.add_argument("--milestone")
+    approve.add_argument("--defer-checkpoint", action="store_true")
+    approve.add_argument("--patch", action="store_true")
     resume = subparsers.add_parser("resume-checkpoint")
     resume.add_argument("--repo", required=True, type=Path)
     promote = subparsers.add_parser("promote-next")
@@ -3606,7 +2177,23 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 args.event,
                 args.project_dir,
             )
+        elif args.command == "approve" and (args.defer_checkpoint or args.patch):
+            if args.expected_head is not None:
+                raise PipelineStateError(
+                    "--expected-head is not accepted with --defer-checkpoint or --patch"
+                )
+            result = defer_approval(
+                args.repo,
+                args.kind,
+                args.project_dir,
+                args.milestone,
+                args.patch,
+            )
         elif args.command == "approve":
+            if args.expected_head is None:
+                raise PipelineStateError(
+                    "approve requires --expected-head unless --defer-checkpoint or --patch"
+                )
             result = checkpoint_approval(
                 args.repo,
                 args.kind,
