@@ -611,6 +611,97 @@ archive: null
         self.assertEqual(payload["classification"], "blocked")
         self.assertIn("invalid base", payload["reasons"][0])
 
+    def test_ready_reports_the_verify_heavy_marker(self) -> None:
+        self.write_plan(
+            (
+                (
+                    ("T001", "Heavy", (), ("one.py",)),
+                    ("T002", "Light", (), ("two.py",)),
+                ),
+            )
+        )
+        heavy = task_text("T001", "Heavy", 1, (), ("one.py",))
+        heavy += "\n## Verify\n\n```bash\npytest one.py\n```\nHeavy: yes\n"
+        self.write_task("T001", heavy)
+        self.write_task("T002", task_text("T002", "Light", 1, (), ("two.py",)))
+        self.commit_all("plan")
+
+        result, payload = self.cli("ready")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            {task["id"]: task["verify_heavy"] for task in payload["ready"]},
+            {"T001": True, "T002": False},
+        )
+
+    def test_verify_ledger_records_and_looks_up_runs(self) -> None:
+        (self.repo / "seed.txt").write_text("seed\n", encoding="utf-8")
+        first = self.commit_all("seed")
+        (self.repo / "seed.txt").write_text("more\n", encoding="utf-8")
+        second = self.commit_all("more")
+        command = "python3  -m unittest   tests.test_one"
+
+        result, payload = self.cli("verify-lookup", "--command", command, "--commit", first)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((payload["hit"], payload["reuse"], payload["entry"]), (False, False, None))
+
+        result, payload = self.cli(
+            "verify-record", "--command", command, "--commit", first, "--result", "pass"
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(payload["ledger"], ".project/build/verify-ledger.jsonl")
+        self.assertEqual(payload["entry"]["command"], "python3 -m unittest tests.test_one")
+        ledger = self.repo / ".project" / "build" / "verify-ledger.jsonl"
+        self.assertEqual(len(ledger.read_text(encoding="utf-8").splitlines()), 1)
+
+        result, payload = self.cli(
+            "verify-lookup", "--command", "python3 -m unittest tests.test_one", "--commit", first
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(payload["hit"])
+        self.assertTrue(payload["reuse"])
+        self.assertEqual(payload["entry"]["commit"], first)
+        self.assertEqual(payload["entry"]["result"], "pass")
+        self.assertIn("recorded_at", payload["entry"])
+
+        result, payload = self.cli("verify-lookup", "--command", command, "--commit", second)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(payload["hit"])
+
+        result, payload = self.cli(
+            "verify-record", "--command", command, "--commit", first, "--result", "fail"
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        result, payload = self.cli("verify-lookup", "--command", command, "--commit", first)
+        self.assertTrue(payload["hit"])
+        self.assertFalse(payload["reuse"])
+        self.assertEqual(payload["entry"]["result"], "fail")
+
+    def test_verify_ledger_rejects_malformed_entries_and_short_commits(self) -> None:
+        (self.repo / "seed.txt").write_text("seed\n", encoding="utf-8")
+        commit = self.commit_all("seed")
+        ledger = self.repo / ".project" / "build" / "verify-ledger.jsonl"
+        ledger.parent.mkdir()
+        ledger.write_text('{"command": "x"}\n', encoding="utf-8")
+
+        result, payload = self.cli("verify-lookup", "--command", "x", "--commit", commit)
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(payload["error"]["code"], "invalid-ledger")
+
+        result, payload = self.cli(
+            "verify-record", "--command", "x", "--commit", commit, "--result", "pass"
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(payload["error"]["code"], "invalid-ledger")
+        self.assertEqual(ledger.read_text(encoding="utf-8"), '{"command": "x"}\n')
+
+        ledger.unlink()
+        result, payload = self.cli(
+            "verify-record", "--command", "x", "--commit", commit[:7], "--result", "pass"
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(payload["error"]["code"], "invalid-commit")
+
     def test_isolation_rejects_a_second_landing_for_done_task(self) -> None:
         _, task_file = self.prepare_in_progress_task()
         self.land_task(task_file, 1)

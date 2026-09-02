@@ -21,7 +21,11 @@ rule; never invoke an explicit-only sibling skill yourself.
   rather than rewinding state. A concrete STATE.archive during `build/*`
   marks an interrupted milestone-abandon transaction: resume the Milestone
   abandon procedure below before any recovery or dispatch. `build/done` is never a normal execution state:
-  re-prove all wave gates at current HEAD, then finish the
+  re-prove all wave gates at current HEAD — each task's Verify counts as
+  proven when `python3 <absolute build_state.py> verify-lookup --repo
+  <absolute primary> --command <task Verify> --commit <HEAD>` returns
+  `reuse: true`; otherwise run it in an `isolate-verify` sidecar at HEAD and
+  record it — then finish the
   checkpointed transition to `ship/active`. Project Verify waits for ship.
 - Read the local [coder role](references/coder.md),
   [reviewer role](references/reviewer.md), [dispatch contract](references/dispatch.md),
@@ -35,8 +39,10 @@ rule; never invoke an explicit-only sibling skill yourself.
   transitions. Resolve `scripts/isolation.py` for task isolation, recovery,
   verify sidecars, task landing, and bookkeeping checkpoints; do not invent
   `git worktree add`, `--detach`, commit, or cherry-pick commands. Resolve
-  `scripts/build_state.py` for the ready set, task reconciliation, and the
-  landed-task proof; do not select or reconcile tasks in prose.
+  `scripts/build_state.py` for the ready set, task reconciliation, the
+  landed-task proof, and the verify ledger
+  (`.project/build/verify-ledger.jsonl`, one JSON line per run: command,
+  commit, result, timestamp); do not select or reconcile tasks in prose.
 - There is no board file. Task frontmatter is the only task-state record;
   when a report or question needs a wave summary, render it inline from the
   task files and wave reviews. Record escalations and plan defects in the
@@ -158,8 +164,8 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
    --repo <absolute primary>`. It is read-only: it validates every task's
    frontmatter against its dispatch metadata and the recovery report, then
    returns `ready` — the current wave's `pending` tasks whose dependencies are
-   all `done`, each with `id`, `title`, `deps`, `files`, and `task_file` —
-   after proving that ready and `in-progress` tasks have
+   all `done`, each with `id`, `title`, `deps`, `files`, `task_file`, and
+   `verify_heavy` — after proving that ready and `in-progress` tasks have
    disjoint `files`. Dispatch exactly the tasks it returns; do not select,
    order, or overlap-check tasks in prose. Readiness is continuous, not
    layered: a task becomes selectable the moment its last dependency lands,
@@ -238,8 +244,11 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
    file, task template, and the absolute INTENT.md path in that worktree.
    Add no hidden implementation context; repair a
    defective task contract before establishing the round base. Run ready work
-   up to capacity. Do not wait for the whole round before unlocking
-   dependents: each task landing in step 5 re-opens step 2, and a newly ready
+   up to capacity. Verify commands marked `Heavy: yes` (`verify_heavy` in the
+   ready set) run one at a time across every concurrent task, including the
+   step 5 rerun; light ones are unconstrained. Do not wait for the whole
+   round before unlocking dependents: each task landing in step 5 re-opens
+   step 2, and a newly ready
    task dispatches in a fresh round at the current clean HEAD while unrelated
    tasks still run. The wave advances to review only when every wave task is
    `done`.
@@ -255,7 +264,13 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
      blocks before any product commit.
    - Run the task's Verify command in that isolated worktree. This rerun is the
      authoritative task evidence; a command run in the primary or a sibling
-     worktree never counts. Append its exact result to the task Log.
+     worktree never counts. Append its exact result to the task Log. After
+     `land` returns, when `git rev-parse <landed commit>^` equals the
+     recorded `base` the landed tree is the verified tree: record the run
+     with `python3 <absolute build_state.py> verify-record --repo <absolute
+     primary> --command <task Verify> --commit <landed commit> --result
+     pass`. The ledger is `.project` bookkeeping; the next checkpoint
+     commits it.
    - Land with
      `python3 <absolute isolation.py> land --repo <absolute primary>
      --source <isolated worktree> --base <recorded base> --task-id <id>
@@ -347,8 +362,15 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
      findings feed the fix-task batching in step 7.
    - `verify-only`: spawn no reviewer. The orchestrator writes
      `.project/review/wave-N.cycleC.md` itself from evidence it already
-     holds — per task, the isolated Verify rerun and the declared-files diff
-     check — recording `Depth: verify-only`. It checks each acceptance
+     holds — per task, the Verify evidence and the declared-files diff
+     check — recording `Depth: verify-only`. Same command, same commit
+     reuses the recorded pass: the task's Verify evidence is the ledger
+     entry when `python3 <absolute build_state.py> verify-lookup --repo
+     <absolute primary> --command <task Verify> --commit <landed commit>`
+     returns `reuse: true`; otherwise run the command in an
+     `isolate-verify` sidecar at that commit, record it with
+     `verify-record`, and use that result. A re-review after a fix cycle
+     follows the same rule. It checks each acceptance
      criterion and each INTENT success criterion owned by the wave's tasks
      against that evidence and the diff; anything it cannot
      confirm from them is a finding, not a pass. Never spawn a review panel

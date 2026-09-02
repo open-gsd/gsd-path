@@ -579,7 +579,7 @@ class IsolationTests(unittest.TestCase):
             self.assertEqual(result["mode"], "parallel")
             self.assertEqual((repo / "src/app.py").read_text(), "print('done')\n")
 
-    def test_parallel_land_allows_only_discussion_dirt_in_the_primary(self) -> None:
+    def test_parallel_land_allows_only_bookkeeping_dirt_in_the_primary(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary) / "repo"
             repo.mkdir()
@@ -590,6 +590,7 @@ class IsolationTests(unittest.TestCase):
             self.write(source, ".project/tasks/T001.md", TASK_FILE + "log\n")
             self.write(repo, ".project/discuss/DIALOGUE.md", "## D001\nappended\n")
             self.write(repo, ".project/discuss/ANSWERS.md", "## A001\nappended\n")
+            self.write(repo, isolation.VERIFY_LEDGER_PATH, "{}\n")
             self.write(repo, "notes.txt", "unrelated\n")
 
             with self.assertRaisesRegex(
@@ -624,7 +625,11 @@ class IsolationTests(unittest.TestCase):
             )
             self.assertEqual(
                 sorted(isolation.uncommitted_paths(repo)),
-                [".project/discuss/ANSWERS.md", ".project/discuss/DIALOGUE.md"],
+                [
+                    ".project/build/verify-ledger.jsonl",
+                    ".project/discuss/ANSWERS.md",
+                    ".project/discuss/DIALOGUE.md",
+                ],
             )
 
     def test_parallel_land_rejects_a_symlink_task_in_a_clean_commit(self) -> None:

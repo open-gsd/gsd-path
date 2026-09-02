@@ -53,6 +53,8 @@ files:              # every file this task may touch — dispatch checks overlap
 <one command that fails if this task wasn't done; names a path from files>
 ```
 
+Heavy: no   <!-- yes when this command must not run beside another heavy Verify -->
+
 ## Log
 
 <!-- Append-only: coder summary, blocks (`NEEDS-ORCHESTRATOR: <question> —

@@ -774,6 +774,36 @@ refuted
             )
             self.assertEqual(validate.returncode, 0, validate.stderr)
 
+    def test_prepare_archives_the_optional_verify_ledger(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            ledger = repo / ".project" / "build" / "verify-ledger.jsonl"
+            ledger.parent.mkdir()
+            ledger.write_text('{"command": "true", "commit": "x", "result": "pass", "recorded_at": "t"}\n')
+
+            archive = self.prepare_archive(repo)
+
+            self.assertFalse(ledger.parent.exists())
+            self.assertTrue((archive / "build" / "verify-ledger.jsonl").is_file())
+            self.write_manifest(archive)
+            preflight = self.preflight(repo)
+            self.assertEqual(preflight.returncode, 0, preflight.stderr)
+
+            self.mark_shipped(repo)
+            self.git(repo, "add", ".project")
+            ship = self.commit_ship(repo, archive)
+            self.assertEqual(ship.returncode, 0, ship.stderr)
+            validate = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "validate",
+                "--repo",
+                str(repo),
+                cwd=PROJECT_ROOT,
+            )
+            self.assertEqual(validate.returncode, 0, validate.stderr)
+
     def test_prepare_accepts_canonical_empty_discussion_records(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             repo = Path(temporary_directory)
