@@ -3422,7 +3422,11 @@ def create_integration_merge(
     if merge.returncode != 0:
         conflicted = optional_ref(worktree, "MERGE_HEAD") is not None
         detail = (merge.stderr or merge.stdout).strip()
+        conflicts = ""
         if conflicted:
+            conflicts = run_git(
+                worktree, "diff", "--name-only", "--diff-filter=U"
+            ).stdout.strip()
             require_git_success(
                 run_git(worktree, "merge", "--abort"),
                 "abort integration merge",
@@ -3431,7 +3435,10 @@ def create_integration_merge(
         delete_integration_branch(project, branch, remote_default_sha)
         if conflicted:
             raise ArchiveError(
-                "integration merge conflicted; Git aborted it without resolving files"
+                "integration merge conflicted; Git aborted it without resolving files: "
+                + ", ".join(conflicts.splitlines())
+                + f"; run: git -C {project} merge {default_name} on {bound_branch}, "
+                "resolve those paths, re-ship, then rerun integrate"
             )
         raise ArchiveError(f"create integration merge failed: {detail}")
 
@@ -4069,6 +4076,9 @@ def integrate(repo: Path, slug: str) -> dict:
                 f"integration branch {integration_branch} is checked out at unexpected path: "
                 f"{interrupted_worktree}"
             )
+        conflicts = run_git(
+            interrupted_worktree, "diff", "--name-only", "--diff-filter=U"
+        ).stdout.strip()
         require_git_success(
             run_git(interrupted_worktree, "merge", "--abort"),
             "abort interrupted integration merge",
@@ -4078,7 +4088,9 @@ def integrate(repo: Path, slug: str) -> dict:
         if interrupted_tip is not None:
             delete_integration_branch(project, integration_branch, interrupted_tip)
         raise ArchiveError(
-            "interrupted integration merge conflicted; Git aborted it without resolving files"
+            "interrupted integration merge conflicted; Git aborted it without resolving files: "
+            + ", ".join(conflicts.splitlines())
+            + "; resolve those paths on the bound branch, re-ship, then rerun integrate"
         )
     remove_registered_worktree(project, integration_branch, worktree)
     worktree_active = False

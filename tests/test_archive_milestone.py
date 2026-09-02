@@ -4652,6 +4652,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
 
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("conflict", result.stderr.casefold())
+            self.assertIn("without resolving files: .project/STATE.md;", result.stderr)
             self.assertEqual(self.git(remote, "rev-parse", "main").stdout.strip(), remote_main)
             self.assertEqual(self.git(repo, "rev-parse", "HEAD").stdout.strip(), ship_sha)
             self.assertEqual(self.git(repo, "status", "--porcelain").stdout, "")
