@@ -19,9 +19,14 @@ import sys
 from pathlib import Path
 from typing import Optional, Sequence
 
+try:
+    import _common
+except ImportError:  # pragma: no cover - package import used by tests
+    from scripts import _common
+
 
 ARCHIVE_NAME_RE = re.compile(r"^(\d{3,})-([a-z0-9][a-z0-9-]*)$")
-BOUND_BRANCH_RE = re.compile(r"^gsd-path/M(\d{3,})$")
+BOUND_BRANCH_RE = _common.BOUND_BRANCH_RE
 MILESTONE_ID_RE = re.compile(r"^M(\d{3,})$")
 
 LEGACY_SHIP_PREFIX = "ship: "

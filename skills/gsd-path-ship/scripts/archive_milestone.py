@@ -47,6 +47,7 @@ try:
         load_state,
         transition_state,
     )
+    import _common
 except ImportError:  # pragma: no cover - package import used by tests
     from scripts.isolation import (
         IsolationError,
@@ -73,6 +74,7 @@ except ImportError:  # pragma: no cover - package import used by tests
         load_state,
         transition_state,
     )
+    from scripts import _common
 
 if sys.platform == "win32":
     import msvcrt
@@ -222,7 +224,7 @@ class ArchiveError(RuntimeError):
     pass
 
 
-PIPELINE_MARKER = "gsd-path/v2"
+PIPELINE_MARKER = _common.PIPELINE_MARKER
 PR_CREDIT_LINE = (
     "PR prepared with [GSD Path](https://github.com/open-gsd/gsd-path)."
 )
@@ -268,27 +270,7 @@ def discussion_lock(active_root: Path) -> Iterator[None]:
         os.close(descriptor)
 
 
-def atomic_replace(path: Path, temporary_path: Path, content: str) -> None:
-    temporary_path.parent.mkdir(parents=True, exist_ok=True)
-    descriptor = None
-    try:
-        if temporary_path.exists() or temporary_path.is_symlink():
-            temporary_path.unlink()
-        descriptor = os.open(
-            temporary_path,
-            os.O_WRONLY | os.O_CREAT | os.O_EXCL,
-            0o666,
-        )
-        handle = os.fdopen(descriptor, "w", encoding="utf-8")
-        descriptor = None
-        with handle:
-            handle.write(content)
-        os.replace(temporary_path, path)
-    finally:
-        if descriptor is not None:
-            os.close(descriptor)
-        if temporary_path.exists() or temporary_path.is_symlink():
-            temporary_path.unlink()
+atomic_replace = _common.atomic_replace
 
 
 def atomic_write(path: Path, content: str) -> None:
@@ -2659,22 +2641,8 @@ def abandon_locked(
     return journal, carried_forward
 
 
-def run_git(repo: Path, *arguments: str) -> subprocess.CompletedProcess:
-    return subprocess.run(
-        ("git", "-C", str(repo), *arguments),
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-
-
-def run_command(*arguments: str) -> subprocess.CompletedProcess:
-    return subprocess.run(
-        arguments,
-        text=True,
-        capture_output=True,
-        check=False,
-    )
+run_git = _common.run_git
+run_command = _common.run_command
 
 
 def require_git_success(result: subprocess.CompletedProcess, action: str) -> str:

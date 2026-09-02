@@ -23,12 +23,14 @@ from typing import Dict, Optional, Sequence, Set
 
 try:
     from pipeline_git import is_bound_branch, task_commit_body, task_commit_subject
+    import _common
 except ImportError:  # pragma: no cover - package import used by tests
     from scripts.pipeline_git import (
         is_bound_branch,
         task_commit_body,
         task_commit_subject,
     )
+    from scripts import _common
 
 
 TASK_BRANCH_PREFIX = "gsd-path-task/"
@@ -43,9 +45,9 @@ VERIFY_LEDGER_PATH = ".project/build/verify-ledger.jsonl"
 BOOKKEEPING_PATHS = DISCUSSION_PATHS | {VERIFY_LEDGER_PATH}
 TASK_ID_RE = re.compile(r"^[A-Za-z][A-Za-z0-9._-]*$")
 NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
-FIELD_PATTERN = re.compile(r"^(?P<key>[a-z_]+):\s*(?P<value>.*)$")
-INLINE_LIST_PATTERN = re.compile(r"^\[(?P<body>.*)\]$")
-LIST_ITEM_PATTERN = re.compile(r"^\s*-\s+(?P<value>.*)$")
+FIELD_PATTERN = _common.FIELD_PATTERN
+INLINE_LIST_PATTERN = _common.INLINE_LIST_PATTERN
+LIST_ITEM_PATTERN = _common.LIST_ITEM_PATTERN
 COLLECT_JOURNAL_SCHEMA = "gsd-path/collect-artifact/v1"
 NULL_SHA = "0" * 40
 
@@ -54,16 +56,7 @@ class IsolationError(RuntimeError):
     """Raised when isolation, landing, or retirement cannot proceed."""
 
 
-def run_git(
-    repo: Path, *arguments: str, input: Optional[str] = None
-) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        ("git", "-C", str(repo), *arguments),
-        input=input,
-        text=True,
-        capture_output=True,
-        check=False,
-    )
+run_git = _common.run_git
 
 
 def git_output(repo: Path, *arguments: str) -> str:
@@ -684,54 +677,8 @@ def split_frontmatter(text: str) -> tuple[list[str], str]:
     raise IsolationError("task file frontmatter is not closed")
 
 
-def _strip_yaml_comment(value: str) -> str:
-    quote = None
-    previous_significant = None
-    inline_list = value.lstrip().startswith("[")
-    index = 0
-    while index < len(value):
-        character = value[index]
-        if quote == '"':
-            if character == "\\" and index + 1 < len(value):
-                index += 2
-                continue
-            if character == quote:
-                quote = None
-        elif quote == "'":
-            if (
-                character == quote
-                and index + 1 < len(value)
-                and value[index + 1] == quote
-            ):
-                index += 2
-                continue
-            if character == quote:
-                quote = None
-        else:
-            if character in {"'", '"'} and (
-                previous_significant is None
-                or (inline_list and previous_significant in {"[", ","})
-            ):
-                quote = character
-            elif character == "#" and (
-                index == 0 or value[index - 1].isspace()
-            ):
-                return value[:index].rstrip()
-        if quote is None and not character.isspace():
-            previous_significant = character
-        index += 1
-    return value.strip()
-
-
-def _unquote(value: str) -> str:
-    cleaned = _strip_yaml_comment(value).strip()
-    if (
-        len(cleaned) >= 2
-        and cleaned[0] == cleaned[-1]
-        and cleaned[0] in {"'", '"'}
-    ):
-        return cleaned[1:-1]
-    return cleaned
+_strip_yaml_comment = _common.strip_yaml_comment
+_unquote = _common.unquote
 
 
 def task_frontmatter(text: str) -> tuple[Optional[Dict[str, object]], Optional[str]]:

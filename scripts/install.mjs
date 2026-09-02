@@ -21,6 +21,7 @@ export const PROJECT_RUNTIME_SCRIPTS = [
   "pipeline_git.py",
   "archive_milestone.py",
   "review_panel.py",
+  "_common.py",
 ];
 export const PROJECT_RUNTIME_MARKER = "gsd-path project runtime";
 export const PROJECT_STATUS_LAUNCHER = "status_runtime.py";

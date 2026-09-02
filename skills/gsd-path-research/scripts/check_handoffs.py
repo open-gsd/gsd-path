@@ -12,8 +12,10 @@ from typing import Dict, List, Optional, Sequence, Set, Tuple
 
 try:
     from pipeline_state import PipelineStateError, load_state
+    import _common
 except ImportError:  # pragma: no cover - package imports used by tests
     from scripts.pipeline_state import PipelineStateError, load_state
+    from scripts import _common
 
 
 PIPELINE = "gsd-path/v2"
@@ -38,8 +40,8 @@ TASK_FILE_NAME = re.compile(r"^(?P<id>T\d{3})-[a-z0-9][a-z0-9-]*\.md$")
 OWNED_CRITERION_PATTERN = re.compile(r"^- (None|SC[1-9]\d*)$")
 VERIFY_BLOCK_PATTERN = re.compile(r"```bash[ \t]*\n(?P<block>.*?)```", re.DOTALL)
 FILES_FIELD_PATTERN = re.compile(r"^files:\s*(?P<value>[^#]*?)(?:\s+#.*)?$")
-INLINE_LIST_PATTERN = re.compile(r"^\[(?P<body>.*)\]$")
-LIST_ITEM_PATTERN = re.compile(r"^\s*-\s+(?P<value>.*)$")
+INLINE_LIST_PATTERN = _common.INLINE_LIST_PATTERN
+LIST_ITEM_PATTERN = _common.LIST_ITEM_PATTERN
 PLACEHOLDER_PATTERN = re.compile(r"<[a-zA-Z][^<>\n]*>")
 VERIFY_PATH_SPLIT = re.compile(r"[=,:]")
 WAVE_REVIEW_NAME = re.compile(
@@ -94,43 +96,7 @@ class HandoffError(RuntimeError):
     """Raised when a phase hand-off is absent, stale, or incomplete."""
 
 
-def _strip_yaml_comment(value: str) -> str:
-    quote = None
-    previous_significant = None
-    inline_list = value.lstrip().startswith("[")
-    index = 0
-    while index < len(value):
-        character = value[index]
-        if quote == '"':
-            if character == "\\" and index + 1 < len(value):
-                index += 2
-                continue
-            if character == quote:
-                quote = None
-        elif quote == "'":
-            if (
-                character == quote
-                and index + 1 < len(value)
-                and value[index + 1] == quote
-            ):
-                index += 2
-                continue
-            if character == quote:
-                quote = None
-        else:
-            if character in {"'", '"'} and (
-                previous_significant is None
-                or (inline_list and previous_significant in {"[", ","})
-            ):
-                quote = character
-            elif character == "#" and (
-                index == 0 or value[index - 1].isspace()
-            ):
-                return value[:index].rstrip()
-        if quote is None and not character.isspace():
-            previous_significant = character
-        index += 1
-    return value.strip()
+_strip_yaml_comment = _common.strip_yaml_comment
 
 
 def _strip_quotes(value: str) -> str:

@@ -652,6 +652,7 @@ class GuardHookTests(unittest.TestCase):
                 "pipeline_git.py",
                 "archive_milestone.py",
                 "review_panel.py",
+                "_common.py",
             ):
                 shutil.copy2(scripts / name, runtime / name)
             state = root / ".project" / "STATE.md"

@@ -31,8 +31,9 @@ try:
         checkpoint as isolation_checkpoint,
         collect_artifact_recoveries,
     )
+    import _common
 except ModuleNotFoundError as error:  # pragma: no cover - package imports used by tests
-    if error.name != "isolation":
+    if error.name not in {"isolation", "_common"}:
         raise
     from scripts.isolation import (
         IsolationError,
@@ -40,6 +41,7 @@ except ModuleNotFoundError as error:  # pragma: no cover - package imports used 
         checkpoint as isolation_checkpoint,
         collect_artifact_recoveries,
     )
+    from scripts import _common
 
 try:  # pragma: no cover - exercised only on Windows
     import fcntl
@@ -47,7 +49,7 @@ except ImportError:  # pragma: no cover - exercised only on Windows
     fcntl = None  # type: ignore[assignment]
 
 
-PIPELINE_MARKER = "gsd-path/v2"
+PIPELINE_MARKER = _common.PIPELINE_MARKER
 PHASES = (
     "inspect",
     "define",
@@ -77,7 +79,7 @@ INTEGRATION_MODES = ("direct", "pull-request")
 INTEGRATION_SOURCES = ("default", "milestone")
 NULL = "null"
 SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
-BOUND_BRANCH_RE = re.compile(r"^gsd-path/M(\d{3,})$")
+BOUND_BRANCH_RE = _common.BOUND_BRANCH_RE
 ARCHIVE_RE = re.compile(r"^\.project/archive/(\d{3,})-([a-z0-9][a-z0-9-]*)/?$")
 FRONTMATTER_RE = re.compile(r"^([a-z_]+):\s*([^#]*?)(?:\s+#.*)?$")
 ROADMAP_HEADING_RE = re.compile(r"^### (M\d{3,}) — ([a-z0-9][a-z0-9-]*)\s*$")

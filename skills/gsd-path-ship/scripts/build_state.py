@@ -6,7 +6,6 @@ from __future__ import annotations
 import argparse
 import json
 import re
-import subprocess
 import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -23,6 +22,7 @@ try:
     )
     from pipeline_git import task_commit_subject
     from pipeline_state import PipelineStateError, load_state
+    import _common
 except ImportError:  # pragma: no cover - package imports used by tests
     from scripts.check_task_briefs import _frontmatter, _sections
     from scripts.isolation import (
@@ -33,6 +33,7 @@ except ImportError:  # pragma: no cover - package imports used by tests
     )
     from scripts.pipeline_git import task_commit_subject
     from scripts.pipeline_state import PipelineStateError, load_state
+    from scripts import _common
 
 
 DEFAULT_PROJECT_DIR = ".project"
@@ -81,13 +82,7 @@ class Project:
     tasks_dir: Path
 
 
-def _run_git(repo: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        ("git", "-C", str(repo), *arguments),
-        text=True,
-        capture_output=True,
-        check=False,
-    )
+_run_git = _common.run_git
 
 
 def _git_output(repo: Path, *arguments: str) -> str:

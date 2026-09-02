@@ -14,6 +14,7 @@
     "scripts/sync_skill_resources.py",
     "scripts/wizard.mjs",
     "scripts/skill-resources.json",
+    "scripts/_common.py",
     "scripts/archive_milestone.py",
     "scripts/bootstrap_repository.py",
     "scripts/detect_project.py",
