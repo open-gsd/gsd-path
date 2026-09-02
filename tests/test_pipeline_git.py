@@ -91,12 +91,6 @@ class PipelineGitTests(unittest.TestCase):
             ):
                 pipeline_git.milestone_number(token)
 
-    def test_active_roadmap_rejects_m000(self) -> None:
-        roadmap = "### M000 — invalid\n\nStatus: active\n"
-
-        with self.assertRaisesRegex(pipeline_git.PipelineGitError, ">= 1"):
-            pipeline_git.active_roadmap_milestone_id(roadmap)
-
     def test_ship_and_integrate_subjects(self) -> None:
         self.assertEqual(
             pipeline_git.ship_subject("001-phase-0-1"),
@@ -143,23 +137,6 @@ class PipelineGitTests(unittest.TestCase):
             "- .project/tasks/T009.md\n"
             "- app/cron.ts\n",
         )
-
-    def test_next_milestone_number(self) -> None:
-        self.assertEqual(pipeline_git.next_milestone_number([]), 1)
-        self.assertEqual(pipeline_git.next_milestone_number(["001-demo"]), 2)
-        self.assertEqual(
-            pipeline_git.next_milestone_number(["001-demo"], active_roadmap_id="M003"),
-            3,
-        )
-
-    def test_active_roadmap_milestone_id(self) -> None:
-        roadmap = (
-            "### M001 — first\nStatus: shipped\n\n"
-            "### M002 — second\nStatus: active\n\n"
-            "### M003 — third\nStatus: pending\n"
-        )
-        self.assertEqual(pipeline_git.active_roadmap_milestone_id(roadmap), "M002")
-        self.assertIsNone(pipeline_git.active_roadmap_milestone_id("### M001 — only\n"))
 
     def test_bind_initial_uses_exact_remote_default_and_is_idempotent(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

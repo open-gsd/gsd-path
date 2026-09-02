@@ -34,6 +34,9 @@ except ImportError:  # pragma: no cover - package import used by tests
 TASK_BRANCH_PREFIX = "gsd-path-task/"
 TASK_AUTHORIZATION_PREFIX = "refs/gsd-path/task-authorizations/"
 VERIFY_BRANCH_PREFIX = "gsd-path-verify/"
+DISCUSSION_PATHS = frozenset(
+    {".project/discuss/DIALOGUE.md", ".project/discuss/ANSWERS.md"}
+)
 TASK_ID_RE = re.compile(r"^[A-Za-z][A-Za-z0-9._-]*$")
 NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 FIELD_PATTERN = re.compile(r"^(?P<key>[a-z_]+):\s*(?P<value>.*)$")
@@ -1153,9 +1156,13 @@ def land(
         )
     if require_attached(primary) != bound:
         raise IsolationError("primary left the bound branch")
-    status = git_output(primary, "status", "--porcelain", "--untracked-files=all")
-    if status:
-        raise IsolationError("primary worktree is dirty; refusing to cherry-pick")
+    dirty = sorted(uncommitted_paths(primary) - DISCUSSION_PATHS)
+    if dirty:
+        raise IsolationError(
+            "primary worktree is dirty; refusing to cherry-pick: "
+            + ", ".join(dirty)
+            + "; commit or remove those paths in the primary worktree first"
+        )
     source_dirty = bool(uncommitted_paths(source))
     if source_dirty:
         if current_sha(source) != resolved_base:
@@ -1533,7 +1540,7 @@ def _landing_commit_proof_error(
         return str(error)
     if actual_delta != expected_delta:
         return "landing commit tree differs from the verified changes"
-    pending = uncommitted_paths(repo)
+    pending = uncommitted_paths(repo) - DISCUSSION_PATHS
     if pending:
         return "landing left uncommitted paths: " + ", ".join(sorted(pending))
     return None
@@ -2470,6 +2477,45 @@ def checkpoint(
     }
 
 
+def _unlanded_task_commits(repo: Path, bound: str, branch: str) -> list[str]:
+    """Return branch commits whose patch is not on the bound branch."""
+    return [
+        line[2:]
+        for line in git_output(repo, "cherry", bound, branch).splitlines()
+        if line.startswith("+ ")
+    ]
+
+
+def _require_landed_task_branch(
+    primary: Path,
+    bound: str,
+    branch: str,
+    landed_commit: Optional[str],
+    task_file: Optional[str],
+) -> None:
+    """Refuse to delete a task branch while it still holds unlanded commits."""
+    unlanded = _unlanded_task_commits(primary, bound, branch)
+    if not unlanded:
+        return
+    if landed_commit:
+        landed = require_commit(primary, require_full_sha(landed_commit))
+        _require_first_parent_commit(primary, bound, landed)
+        base = _landing_base(primary, landed)
+        proof_error = _task_branch_proof_error(primary, branch, base, landed)
+    elif task_file:
+        proof_error = _failed_task_branch_proof_error(primary, branch, task_file)
+    else:
+        proof_error = (
+            "pass --landed-commit <landing commit> or --task-file <failed task file>"
+        )
+    if proof_error:
+        raise IsolationError(
+            f"refusing to retire {branch}: {len(unlanded)} commit(s) are not landed "
+            f"on {bound}: {', '.join(unlanded)}; {proof_error}; run: "
+            f"python3 {Path(__file__).resolve()} recover --repo {primary}"
+        )
+
+
 def retire(
     primary: Path,
     worktree: Optional[Path],
@@ -2578,6 +2624,10 @@ def retire(
         retire_branch = current
     else:
         raise IsolationError(f"refusing to retire unrecognized branch {current}")
+    if retire_branch.startswith(TASK_BRANCH_PREFIX):
+        _require_landed_task_branch(
+            primary, bound, retire_branch, landed_commit, task_file
+        )
     _delete_task_authorization(primary, retire_branch)
     if not force:
         dirty = git_output(

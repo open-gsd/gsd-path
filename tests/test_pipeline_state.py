@@ -5,6 +5,7 @@ import shutil
 import sys
 import tempfile
 import unittest
+from datetime import date
 from pathlib import Path
 from unittest import mock
 
@@ -685,6 +686,44 @@ class PipelineStateTests(unittest.TestCase):
             self.assertEqual(result["route"]["action"], "wait")
             self.assertEqual(result["route"]["mode"], "lookahead-ready")
 
+    def test_route_reads_lookahead_milestone_open_questions_at_define_done(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            run_git(repo, "init", "-b", "main")
+            project = repo / ".project"
+            next_root = project / "next"
+            (next_root / "intent").mkdir(parents=True)
+            (project / "STATE.md").write_text(
+                state_text(milestone="first", phase="build", status="active", branch="gsd-path/M001"),
+                encoding="utf-8",
+            )
+            (next_root / "STATE.md").write_text(
+                state_text(milestone="second", phase="define", status="done"),
+                encoding="utf-8",
+            )
+            (next_root / "intent" / "INTENT.md").write_text(
+                "# Intent\n\nLane: milestone\n", encoding="utf-8"
+            )
+            roadmap = (
+                roadmap_text()
+                .replace("Status: shipped", "Status: active")
+                .replace(
+                    "Status: pending\nArchive: null\nIntegrated: null\n\nOpen questions\n- None\n",
+                    "Status: pending\nArchive: null\nIntegrated: null\n\nOpen questions\n"
+                    "- Which storage backend?\n",
+                )
+            )
+            (project / "ROADMAP.md").write_text(roadmap, encoding="utf-8")
+
+            result = pipeline_state.route_state(repo, ".project/next")
+
+            self.assertEqual(result["route"]["action"], "run-phase")
+            self.assertEqual(result["route"]["phase"], "research")
+            self.assertEqual(result["route"]["mode"], "milestone")
+            self.assertEqual(
+                result["route"]["reason"], "lookahead roadmap milestone has open questions"
+            )
+
     def test_route_derives_initial_branch_from_active_roadmap_entry(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             repo = Path(tmp)
@@ -1358,6 +1397,133 @@ class PipelineStateTests(unittest.TestCase):
             )
         return repo, expected_head
 
+    def test_deferred_approval_requires_no_head_new_github_or_patch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, _ = self._approval_repo(tmp, "plan")
+
+            with self.assertRaisesRegex(
+                pipeline_state.PipelineStateError,
+                "checkpoint deferral requires.*approve --kind plan --expected-head",
+            ):
+                pipeline_state.defer_approval(repo, "plan")
+            with self.assertRaisesRegex(
+                pipeline_state.PipelineStateError, "--patch applies only to --kind plan"
+            ):
+                pipeline_state.defer_approval(repo, "roadmap", patch=True)
+
+            (repo / ".project" / "REPOSITORY.md").write_text(
+                "Kind: new-github\nRemote: https://github.com/o/r\n",
+                encoding="utf-8",
+            )
+            result = pipeline_state.defer_approval(repo, "plan")
+
+            self.assertEqual(result["status"], "approved")
+            self.assertIsNone(result["commit"])
+            state = pipeline_state.load_state(repo)[0]
+            self.assertEqual((state.phase, state.status), ("plan", "done"))
+            self.assertIn(".project/STATE.md", run_git(repo, "status", "--porcelain").stdout)
+
+    def test_patch_plan_approval_defers_its_checkpoint(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, expected_head = self._approval_repo(tmp, "plan")
+
+            result = pipeline_state.defer_approval(repo, "plan", patch=True)
+
+            self.assertEqual(result["status"], "approved")
+            self.assertEqual(result["kind"], "plan")
+            self.assertIsNone(result["commit"])
+            self.assertEqual(run_git(repo, "rev-parse", "HEAD").stdout.strip(), expected_head)
+            state, text, _ = pipeline_state.load_state(repo)
+            self.assertEqual((state.phase, state.status), ("plan", "done"))
+            self.assertIn("patch plan approved", text)
+
+    def test_deferred_approvals_work_before_git_exists(self) -> None:
+        for kind, milestone in (("plan", "first"), ("roadmap", "null")):
+            with self.subTest(kind=kind), tempfile.TemporaryDirectory() as tmp:
+                repo = Path(tmp)
+                project = repo / ".project"
+                project.mkdir()
+                (project / "STATE.md").write_text(
+                    state_text(milestone=milestone, phase=kind, status="active"),
+                    encoding="utf-8",
+                )
+                (project / "ROADMAP.md").write_text(
+                    roadmap_text().replace("Status: shipped", "Status: pending", 1),
+                    encoding="utf-8",
+                )
+                command = [
+                    sys.executable,
+                    str(Path(pipeline_state.__file__).resolve()),
+                    "approve",
+                    "--repo",
+                    str(repo),
+                    "--kind",
+                    kind,
+                    "--defer-checkpoint",
+                ]
+                if kind == "roadmap":
+                    command.extend(["--milestone", "first"])
+
+                result = subprocess.run(command, capture_output=True, text=True, check=False)
+
+                self.assertEqual(result.returncode, 0, result.stderr)
+                payload = json.loads(result.stdout)
+                self.assertEqual(payload["status"], "approved")
+                self.assertTrue(payload["deferred"])
+                state = pipeline_state.load_state(repo)[0]
+                self.assertEqual((state.phase, state.status, state.milestone), (kind, "done", "first"))
+                if kind == "roadmap":
+                    roadmap = (project / "ROADMAP.md").read_text(encoding="utf-8")
+                    self.assertIn("### M001 — first\n\nGoal: first\nDepends on: []\nStatus: active", roadmap)
+
+    def test_approve_cli_requires_expected_head_unless_deferred(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, _ = self._approval_repo(tmp, "plan")
+            command = [
+                sys.executable,
+                str(Path(pipeline_state.__file__).resolve()),
+                "approve",
+                "--repo",
+                str(repo),
+                "--kind",
+                "plan",
+            ]
+
+            result = subprocess.run(command, capture_output=True, text=True, check=False)
+
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("approve requires --expected-head", result.stderr)
+
+    def test_post_abandon_selection_moves_roadmap_active_to_inspect(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            project = repo / ".project"
+            project.mkdir()
+            (project / "STATE.md").write_text(
+                state_text(milestone="null", phase="roadmap", status="active", branch="gsd-path/M001"),
+                encoding="utf-8",
+            )
+
+            result = pipeline_state.transition_state(
+                repo,
+                expected={
+                    "phase": "roadmap",
+                    "status": "active",
+                    "milestone": None,
+                    "branch": "gsd-path/M001",
+                    "archive": None,
+                },
+                changes={"phase": "inspect", "status": "active", "milestone": "second"},
+                event="roadmap approved after abandoned milestone: first",
+            )
+
+            self.assertEqual(result["status"], "transitioned")
+            state = pipeline_state.load_state(repo)[0]
+            self.assertEqual(
+                (state.phase, state.status, state.milestone, state.branch),
+                ("inspect", "active", "second", "gsd-path/M001"),
+            )
+
     def test_plan_approval_owns_state_change_and_checkpoint(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             repo, expected_head = self._approval_repo(tmp, "plan")
@@ -1736,6 +1902,33 @@ class PipelineStateTests(unittest.TestCase):
             self.assertEqual(retry["status"], "already-complete")
             self.assertEqual(retry["commit"], result["commit"])
 
+    def test_route_and_status_report_a_journaled_handoff_on_a_dirty_worktree(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, integrate = self._promotion_repo(tmp, drift=False)
+            pipeline_git._write_bind_next_journal(
+                pipeline_git.bind_next_journal_path(repo, "gsd-path/M002"),
+                {
+                    "schema": pipeline_git.BIND_NEXT_JOURNAL_SCHEMA,
+                    "repo": str(repo.resolve()),
+                    "branch": "gsd-path/M002",
+                    "previous_branch": "gsd-path/M001",
+                    "ship": integrate,
+                    "remote_default": "origin/main",
+                    "base": integrate,
+                    "landing": integrate,
+                    "stage": "switched",
+                },
+            )
+            (repo / "scratch.txt").write_text("dirty\n", encoding="utf-8")
+
+            routed = pipeline_state.route_state(repo)
+            status = pipeline_state.status_state(repo)
+
+            self.assertEqual(routed["route"]["action"], "resume-next-handoff")
+            self.assertEqual(routed["route"]["dirty"], ["scratch.txt"])
+            self.assertEqual(status["git"]["dirty"], ["scratch.txt"])
+            self.assertIsNotNone(status["journals"]["bind_next"])
+
     def test_promote_next_separates_landing_from_a_later_main_base(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             repo, landing = self._promotion_repo(tmp, drift=False)
@@ -1758,6 +1951,9 @@ class PipelineStateTests(unittest.TestCase):
 
             self.assertEqual(result["base"], base)
             self.assertEqual(result["landing"], landing)
+            self.assertEqual(result["drift"]["class"], "clean")
+            state = pipeline_state.load_state(repo)[0]
+            self.assertEqual((state.phase, state.status), ("plan", "done"))
             self.assertEqual(
                 run_git(repo, "show", "-s", "--format=%P", "HEAD").stdout.strip(),
                 base,
@@ -2219,6 +2415,49 @@ class PipelineStateTests(unittest.TestCase):
             roadmap = (project / "ROADMAP.md").read_text()
             self.assertIn("Status: shipped", roadmap)
             self.assertIn("Archive: .project/archive/001-first", roadmap)
+
+    def test_record_shipment_resumes_on_a_later_day(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            run_git(repo, "init", "-b", "gsd-path/M001")
+            project = repo / ".project"
+            project.mkdir()
+            (project / "STATE.md").write_text(
+                state_text(
+                    milestone="first", phase="ship", status="active",
+                    branch="gsd-path/M001", archive=".project/archive/001-first",
+                ), encoding="utf-8",
+            )
+            original = pipeline_state._atomic_write
+
+            def interrupt(path: Path, content: str) -> None:
+                if path.name == "STATE.md":
+                    raise pipeline_state.PipelineStateError("simulated interruption")
+                original(path, content)
+
+            with mock.patch.object(pipeline_state, "_atomic_write", side_effect=interrupt):
+                with self.assertRaisesRegex(pipeline_state.PipelineStateError, "interruption"):
+                    pipeline_state.record_shipment(
+                        repo, ".project/archive/001-first",
+                        "archive preflight passed; shipment recorded",
+                    )
+            journal_path = pipeline_state._git_path(repo, pipeline_state.SHIPMENT_JOURNAL_NAME)
+            journal = json.loads(journal_path.read_text(encoding="utf-8"))
+            today = date.today().isoformat()
+            self.assertIn(today, journal["state_after"])
+            journal["state_after"] = journal["state_after"].replace(today, "2000-01-01")
+            journal_path.write_text(json.dumps(journal), encoding="utf-8")
+
+            result = pipeline_state.record_shipment(
+                repo, ".project/archive/001-first",
+                "archive preflight passed; shipment recorded",
+            )
+
+            self.assertEqual(result["status"], "recorded")
+            self.assertIn(
+                "- 2000-01-01 — shipped — archive preflight passed; shipment recorded",
+                (project / "STATE.md").read_text(encoding="utf-8"),
+            )
 
     def test_record_shipment_preserves_single_milestone_flow(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

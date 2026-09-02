@@ -2041,6 +2041,12 @@ def prepare_locked(project: Path, active_root: Path, slug: str) -> dict:
         require_uncommitted_archive(project, configured)
     if state_temporary.exists() or state_temporary.is_symlink():
         state_temporary.unlink()
+    if configured is None:
+        # Prove the inputs before STATE.archive is persisted or any directory exists.
+        target = resolved_archive_target(project, slug, parsed_state)
+        require_archive_milestone(target.name, parsed_state)
+        require_complete_transaction_inputs(active_root, target)
+        require_canonical_transaction_inputs(active_root, target)
 
     archive = persisted_archive(project, state_path, slug, parsed_state)
     require_archive_milestone(archive.name, parsed_state)
@@ -2674,13 +2680,6 @@ def require_git_success(result: subprocess.CompletedProcess, action: str) -> str
     return result.stdout.strip()
 
 
-def require_command_success(result: subprocess.CompletedProcess, action: str) -> str:
-    if result.returncode != 0:
-        detail = result.stderr.strip() or result.stdout.strip()
-        raise ArchiveError(f"{action} failed: {detail}")
-    return result.stdout.strip()
-
-
 def archive_is_committed(project: Path, configured: str) -> bool:
     return run_git(project, "cat-file", "-e", f"HEAD:{configured}").returncode == 0
 
@@ -2956,9 +2955,6 @@ def validate(repo: Path) -> dict:
         raise ArchiveError("ship transaction worktree is not clean")
 
     ship_commit = find_ship_commit(project, archive.name)
-    head = require_git_success(run_git(project, "rev-parse", "HEAD"), "resolve HEAD")
-    if head != ship_commit:
-        raise ArchiveError("bound worktree HEAD must equal the canonical ship commit")
 
     parents = require_git_success(
         run_git(project, "rev-list", "--parents", "-n", "1", ship_commit),
@@ -3072,9 +3068,16 @@ def validate(repo: Path) -> dict:
     manifest_path = f"{ship_commit}:{configured}/MANIFEST.md"
     require_git_success(run_git(project, "cat-file", "-e", manifest_path), "verify committed manifest")
 
-    project_drift = run_git(project, "diff", "--quiet", ship_commit, "HEAD", "--", ".project")
-    if project_drift.returncode != 0:
-        raise ArchiveError(".project changed in history after the ship commit")
+    project_drift = require_git_success(
+        run_git(project, "diff", "--name-only", ship_commit, "HEAD", "--", ".project"),
+        "inspect .project history after the ship commit",
+    )
+    if project_drift:
+        raise ArchiveError(
+            ".project changed in history after the ship commit: "
+            + ", ".join(project_drift.splitlines())
+            + f"; run: git -C {project} revert <commits after {ship_commit[:12]} that touch .project>"
+        )
 
     return {"archive": configured, "commit": ship_commit}
 
@@ -3412,7 +3415,11 @@ def create_integration_merge(
     if merge.returncode != 0:
         conflicted = optional_ref(worktree, "MERGE_HEAD") is not None
         detail = (merge.stderr or merge.stdout).strip()
+        conflicts = ""
         if conflicted:
+            conflicts = run_git(
+                worktree, "diff", "--name-only", "--diff-filter=U"
+            ).stdout.strip()
             require_git_success(
                 run_git(worktree, "merge", "--abort"),
                 "abort integration merge",
@@ -3421,7 +3428,10 @@ def create_integration_merge(
         delete_integration_branch(project, branch, remote_default_sha)
         if conflicted:
             raise ArchiveError(
-                "integration merge conflicted; Git aborted it without resolving files"
+                "integration merge conflicted; Git aborted it without resolving files: "
+                + ", ".join(conflicts.splitlines())
+                + f"; run: git -C {project} merge {default_name} on {bound_branch}, "
+                "resolve those paths, re-ship, then rerun integrate"
             )
         raise ArchiveError(f"create integration merge failed: {detail}")
 
@@ -3552,14 +3562,14 @@ def github_repository(project: Path) -> str:
 
 
 def require_github_authentication() -> None:
-    require_command_success(
+    require_git_success(
         run_command("gh", "auth", "status", "--hostname", GITHUB_HOST),
         "verify GitHub authentication",
     )
 
 
 def github_api_json(*arguments: str) -> object:
-    output = require_command_success(
+    output = require_git_success(
         run_command("gh", "api", "--hostname", GITHUB_HOST, *arguments),
         "call GitHub API",
     )
@@ -4059,6 +4069,9 @@ def integrate(repo: Path, slug: str) -> dict:
                 f"integration branch {integration_branch} is checked out at unexpected path: "
                 f"{interrupted_worktree}"
             )
+        conflicts = run_git(
+            interrupted_worktree, "diff", "--name-only", "--diff-filter=U"
+        ).stdout.strip()
         require_git_success(
             run_git(interrupted_worktree, "merge", "--abort"),
             "abort interrupted integration merge",
@@ -4068,7 +4081,9 @@ def integrate(repo: Path, slug: str) -> dict:
         if interrupted_tip is not None:
             delete_integration_branch(project, integration_branch, interrupted_tip)
         raise ArchiveError(
-            "interrupted integration merge conflicted; Git aborted it without resolving files"
+            "interrupted integration merge conflicted; Git aborted it without resolving files: "
+            + ", ".join(conflicts.splitlines())
+            + "; resolve those paths on the bound branch, re-ship, then rerun integrate"
         )
     remove_registered_worktree(project, integration_branch, worktree)
     worktree_active = False
