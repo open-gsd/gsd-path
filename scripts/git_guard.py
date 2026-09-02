@@ -448,11 +448,12 @@ def violations(
             and not integration_merge
             and not abandon_commit
         ):
+            milestone, target = root[len(ARCHIVE_PREFIX):], default_branch()
             found.append(
                 f"{label}: a new archive requires a ship commit, a "
                 "milestone-abandon commit, or an integration merge with the "
-                f"subject 'integrate: {root[len(ARCHIVE_PREFIX):]} — merge "
-                f"gsd-path/{root[len(ARCHIVE_PREFIX):]} into {default_branch()}'"
+                f"subject 'integrate: {milestone} — merge "
+                f"gsd-path/{milestone} into {target}'"
             )
     if is_ship_commit(subject):
         for code, old, new in entries:

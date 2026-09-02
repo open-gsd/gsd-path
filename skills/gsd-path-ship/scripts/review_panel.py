@@ -382,10 +382,9 @@ def detect_conflicts(findings: Sequence[dict]) -> list[dict]:
     conflicts = []
     for criterion, group in by_criterion.items():
         severities = {item["severity"] for item in group}
-        verdicts = {item["source"]: actionable(item) for item in group}
-        # A conflict is two families disagreeing on whether the criterion
-        # needs a fix; wording differences in Found are not conflicts.
-        if len(set(verdicts.values())) > 1:
+        # A conflict is families disagreeing on whether the criterion needs a
+        # fix; wording differences in Found are not conflicts.
+        if len({actionable(item) for item in group}) > 1:
             conflicts.append(
                 {
                     "criterion": group[0]["criterion"],

@@ -415,10 +415,14 @@ def remaining_period_budget(fields: dict, outcomes: list[dict], now: datetime) -
     return max(0, fields["period_budget"] - consumed)
 
 
-def precheck(fields: dict, run_skip_when: bool = True) -> Optional[dict]:
+def precheck(fields: dict) -> Optional[dict]:
     if fields["status"] != "active":
         return {"decision": "skip", "reason": f"status {fields['status']}"}
-    if "skip_when" in fields and run_skip_when:
+    return None
+
+
+def skip_when_matched(fields: dict) -> Optional[dict]:
+    if "skip_when" in fields:
         exit_code, _ = run_shell(fields["skip_when"], fields["wall_clock"])
         if exit_code == 0:
             return {"decision": "skip", "reason": "skip_when matched"}
@@ -481,7 +485,7 @@ def admission(fields: dict, records: list[dict], now: datetime) -> dict:
 
 
 def command_check(fields: dict) -> dict:
-    skipped = precheck(fields, run_skip_when=False)
+    skipped = precheck(fields)
     if skipped is not None:
         return skipped
     decision = admission(fields, load_log(fields), datetime.now(timezone.utc))
@@ -491,7 +495,7 @@ def command_check(fields: dict) -> dict:
 
 
 def command_claim(fields: dict) -> dict:
-    skipped = precheck(fields)
+    skipped = precheck(fields) or skip_when_matched(fields)
     if skipped is not None:
         return skipped
     with log_lock(fields):

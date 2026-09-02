@@ -133,8 +133,8 @@ def _strip_yaml_comment(value: str) -> str:
     return value.strip()
 
 
-def _unquote(value: str) -> str:
-    cleaned = _strip_yaml_comment(value).strip()
+def _strip_quotes(value: str) -> str:
+    cleaned = value.strip()
     if (
         len(cleaned) >= 2
         and cleaned[0] == cleaned[-1]
@@ -144,8 +144,13 @@ def _unquote(value: str) -> str:
     return cleaned
 
 
-def contains_placeholder(value: str) -> bool:
-    return PLACEHOLDER_PATTERN.search(value) is not None
+def _reject_placeholder(value: str, label: str) -> None:
+    placeholder = PLACEHOLDER_PATTERN.search(value)
+    if placeholder is not None:
+        raise HandoffError(
+            f"{label} still contains the placeholder {placeholder.group(0)}; "
+            "replace it with the real value"
+        )
 
 
 def _strict_frontmatter(text: str, label: str) -> Dict[str, object]:
@@ -171,14 +176,14 @@ def _strict_frontmatter(text: str, label: str) -> Dict[str, object]:
         inline = INLINE_LIST_PATTERN.fullmatch(raw)
         if inline is not None:
             values[key] = [
-                _unquote(item)
+                _strip_quotes(item)
                 for item in inline.group("body").split(",")
                 if item.strip()
             ]
             index += 1
             continue
         if raw:
-            values[key] = _unquote(raw)
+            values[key] = _strip_quotes(raw)
             index += 1
             continue
         items: List[str] = []
@@ -187,7 +192,7 @@ def _strict_frontmatter(text: str, label: str) -> Dict[str, object]:
             item = LIST_ITEM_PATTERN.fullmatch(lines[index])
             if item is None:
                 break
-            items.append(_unquote(item.group("value")))
+            items.append(_strip_quotes(_strip_yaml_comment(item.group("value"))))
             index += 1
         values[key] = items
     raise HandoffError(f"{label} frontmatter is not closed")
@@ -257,12 +262,7 @@ def _non_placeholder(value: str, label: str) -> str:
     cleaned = value.strip().strip("`")
     if not cleaned or cleaned.casefold() in {"none", "n/a", "null"}:
         raise HandoffError(f"{label} is empty")
-    placeholder = PLACEHOLDER_PATTERN.search(cleaned)
-    if placeholder is not None:
-        raise HandoffError(
-            f"{label} still contains the placeholder {placeholder.group(0)}; "
-            "replace it with the real value"
-        )
+    _reject_placeholder(cleaned, label)
     return cleaned
 
 
@@ -516,12 +516,7 @@ def _source_field(block: str, field: str, source: str) -> str:
     value = _raw_source_field(block, field, source).strip().strip("`")
     if not value:
         raise HandoffError(f"{source} has an empty {field}; fill it in")
-    placeholder = PLACEHOLDER_PATTERN.search(value)
-    if placeholder is not None:
-        raise HandoffError(
-            f"{source} {field} still contains the placeholder "
-            f"{placeholder.group(0)}; replace it with the real value"
-        )
+    _reject_placeholder(value, f"{source} {field}")
     return value
 
 

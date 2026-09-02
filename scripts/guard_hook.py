@@ -16,6 +16,7 @@ Malformed input or an internal failure denies the tool call.
 
 import ast
 from fnmatch import fnmatchcase
+from functools import lru_cache
 import json
 import os
 import re
@@ -117,9 +118,10 @@ ARCHIVE_REASON = (
 )
 ARCHIVE_MARKER = ".project/archive"
 INVALID_INPUT_REASON = "GSD Path guard could not validate the tool request"
+CONTROL_PATHS = ".git, .project/STATE.md, .project/next, .gsd-path"
 PROTECTED_SHELL_WRITE_REASON = (
-    "GSD Path routing controls (.git, .project/STATE.md, .project/next, .gsd-path) "
-    "change only through the pipeline helpers; the shell command writes"
+    f"GSD Path routing controls ({CONTROL_PATHS}) change only through the "
+    "pipeline helpers; the shell command writes"
 )
 REENTRY_FAILURE_REASON = (
     "GSD Path status could not be verified; review .project/STATE.md and invoke "
@@ -276,12 +278,18 @@ SCRIPT_FILE_REASON = (
     "{executable} runs the script file {argument}, which the guard cannot "
     "inspect; run its commands directly"
 )
+ENV_BUILTIN_REASON = "{executable} cannot be validated; assign with NAME=VALUE instead"
+SHELL_FILE_REASON = (
+    "{executable} reads commands from a file or stdin the guard cannot inspect; "
+    "run the commands directly or use {executable} -c '<commands>'"
+)
+MISSING_COMMAND_STRING_REASON = "{executable} {option} lacks a command string"
 UNVALIDATED_EXECUTION_REASONS = {
     ".": SCRIPT_FILE_REASON,
     "source": SCRIPT_FILE_REASON,
     "start": "start launches a detached process the guard cannot inspect; run the program directly",
-    "setenv": "{executable} cannot be validated; assign with NAME=VALUE instead",
-    "unsetenv": "{executable} cannot be validated; assign with NAME=VALUE instead",
+    "setenv": ENV_BUILTIN_REASON,
+    "unsetenv": ENV_BUILTIN_REASON,
 }
 VARIABLE_COMMANDS = frozenset(
     {"declare", "export", "local", "readonly", "set", "typeset", "unset"}
@@ -487,6 +495,7 @@ def is_direct_write_tool(tool, has_file_targets=False):
     )
 
 
+@lru_cache(maxsize=None)
 def repository_root():
     candidate = Path(__file__).resolve().parent.parent
     result = subprocess.run(
@@ -662,6 +671,7 @@ def target_paths(path, working_directories, repo):
     return Path(os.path.abspath(candidate)), candidate.resolve(strict=False)
 
 
+@lru_cache(maxsize=None)
 def repository_control_roots(repo):
     roots = [(repo / ".git").resolve(strict=False)]
     result = subprocess.run(
@@ -763,18 +773,28 @@ def target_kind(path, working_directories, repo, control_roots=None):
     return "external"
 
 
-def enforce_pipeline_reentry(paths, working_directories):
+def pipeline_target_kinds(targets):
+    """Classify (path, working_directories) pairs; None when no pipeline is owned."""
     repo = repository_root()
     state = repo / ".project" / "STATE.md"
     if not os.path.lexists(state):
-        return
+        return None
     control_roots = repository_control_roots(repo)
-    kinds = [
-        target_kind(path, working_directories, repo, control_roots) for path in paths
+    return repo, state, [
+        (path, target_kind(path, directories, repo, control_roots))
+        for path, directories in targets
     ]
-    for path, kind in zip(paths, kinds):
+
+
+def enforce_pipeline_reentry(paths, working_directories):
+    classified = pipeline_target_kinds((path, working_directories) for path in paths)
+    if classified is None:
+        return
+    repo, state, kinds = classified
+    for path, kind in kinds:
         if kind == "protected":
             deny(f"{CONTROL_FILE_REASON} {path}")
+    kinds = [kind for _, kind in kinds]
     if all(kind == "external" for kind in kinds):
         return
     try:
@@ -1011,16 +1031,13 @@ def protected_shell_write_reason(tokens, working_directories):
                 f"write target {target} cannot be resolved by the guard; "
                 "pass a literal path"
             )
-        if expanded:
+        if expanded and expanded not in {"/dev/null", "NUL"}:
             targets.append((expanded, directories))
-    if not targets:
+    classified = pipeline_target_kinds(targets) if targets else None
+    if classified is None:
         return None
-    repo = repository_root()
-    if not os.path.lexists(repo / ".project" / "STATE.md"):
-        return None
-    control_roots = repository_control_roots(repo)
-    for target, directories in targets:
-        if target_kind(target, directories, repo, control_roots) == "protected":
+    for target, kind in classified[2]:
+        if kind == "protected":
             return f"{PROTECTED_SHELL_WRITE_REASON} {target}"
     return None
 
@@ -1045,13 +1062,8 @@ def expand_environment_parameters(command, assignments=None):
 def shell_assignment_values(tokens):
     values = {}
     for segment in command_segments(tokens):
-        index = 0
-        while index < len(segment) and segment[index].casefold() in SHELL_CONTROL_WORDS:
-            index += 1
-        variable_command = (
-            index < len(segment) and segment[index].casefold() in VARIABLE_COMMANDS
-        )
-        for token in segment[index:]:
+        variable_command = segment[0].casefold() in VARIABLE_COMMANDS
+        for token in segment:
             if not SHELL_ASSIGNMENT_PATTERN.match(token):
                 if variable_command:
                     continue
@@ -1097,6 +1109,8 @@ def split_command_substitutions(command):
         raise ValueError(
             "@( expansion cannot be validated; write the list as literal arguments"
         )
+    if "$(" not in command and "`" not in command:
+        return command, []
     outer, inner, index = [], [], 0
     while index < len(command):
         if command.startswith("$(", index):
@@ -1197,13 +1211,14 @@ def shell_tokens(command):
 
 
 def command_segments(tokens):
+    """Yield simple commands with separators and leading control words removed."""
     segment = []
     for token in tokens:
         if token and set(token) <= set("|;&()\n\r"):
             if segment:
                 yield segment
                 segment = []
-        else:
+        elif segment or token.casefold() not in SHELL_CONTROL_WORDS:
             segment.append(token)
     if segment:
         yield segment
@@ -1211,9 +1226,8 @@ def command_segments(tokens):
 
 def validate_shell_assignment(assignment):
     name = assignment.partition("=")[0]
-    if name.casefold() in {"home", "xdg_config_home"} or name.casefold().startswith(
-        "git_"
-    ):
+    folded = name.casefold()
+    if folded in {"home", "xdg_config_home"} or folded.startswith("git_"):
         raise ValueError(
             f"{name} changes where Git reads its configuration, which the guard "
             "cannot validate; run git without it"
@@ -1233,6 +1247,10 @@ def validate_variable_command(executable, arguments):
             )
         else:
             validate_shell_assignment(argument)
+
+
+def first_argument(arguments):
+    return arguments[0] if arguments else ""
 
 
 def xargs_command(arguments):
@@ -1258,8 +1276,6 @@ def require_read_command(wrapper, wrapped):
 
 def command_invocation(segment):
     index = 0
-    while index < len(segment) and segment[index].casefold() in SHELL_CONTROL_WORDS:
-        index += 1
     while index < len(segment) and SHELL_ASSIGNMENT_PATTERN.match(segment[index]):
         validate_shell_assignment(segment[index])
         index += 1
@@ -1318,7 +1334,7 @@ def command_invocation(segment):
     if executable in UNVALIDATED_EXECUTION_REASONS:
         raise ValueError(
             UNVALIDATED_EXECUTION_REASONS[executable].format(
-                executable=segment[index], argument=" ".join(arguments[:1])
+                executable=segment[index], argument=first_argument(arguments)
             )
         )
     return executable, arguments
@@ -1385,7 +1401,7 @@ def wrapped_command_tokens(segment):
             arguments = arguments[1:]
         if not arguments or arguments[0].startswith("-"):
             raise ValueError(
-                f"{executable} {' '.join(arguments[:1])}: only "
+                f"{executable} {first_argument(arguments)}: only "
                 f"`{executable} <program> [arguments]` can be validated"
             )
         return arguments
@@ -1397,18 +1413,23 @@ def wrapped_command_tokens(segment):
                 and "c" in argument[1:]
             ):
                 if index + 1 >= len(arguments):
-                    raise ValueError(f"{executable} {argument} lacks a command string")
+                    raise ValueError(
+                        MISSING_COMMAND_STRING_REASON.format(
+                            executable=executable, option=argument
+                        )
+                    )
                 return shell_tokens(arguments[index + 1])
-        raise ValueError(
-            f"{executable} reads commands from a file or stdin the guard cannot "
-            f"inspect; run the commands directly or use {executable} -c '<commands>'"
-        )
+        raise ValueError(SHELL_FILE_REASON.format(executable=executable))
     if executable in POWERSHELL_WRAPPERS or executable in {"cmd", "cmd.exe"}:
         switches = {"-c", "-command", "/c", "/k"}
         for index, argument in enumerate(arguments):
             if argument.casefold() in switches:
                 if index + 1 >= len(arguments):
-                    raise ValueError(f"{executable} {argument} lacks a command string")
+                    raise ValueError(
+                        MISSING_COMMAND_STRING_REASON.format(
+                            executable=executable, option=argument
+                        )
+                    )
                 payload = arguments[index + 1:]
                 if executable in {"cmd", "cmd.exe"}:
                     payload = [
@@ -1418,10 +1439,7 @@ def wrapped_command_tokens(segment):
                 if len(payload) == 1:
                     return shell_tokens(payload[0])
                 return payload
-        raise ValueError(
-            f"{executable} reads commands from a file or stdin the guard cannot "
-            f"inspect; run the commands directly or use {executable} -c '<commands>'"
-        )
+        raise ValueError(SHELL_FILE_REASON.format(executable=executable))
     return None
 
 
@@ -1563,12 +1581,12 @@ def destructive_git_reason(tokens, resolved_aliases=frozenset()):
         if command in {"checkout", "restore"} and any(
             argument in WHOLE_TREE_PATHSPECS for argument in arguments
         ):
-            staged_only = (
-                command == "restore"
-                and ("--staged" in arguments or has_short_option(arguments, "S"))
-                and not ("--worktree" in arguments or has_short_option(arguments, "W"))
+            touches_worktree = command == "checkout" or (
+                "--worktree" in arguments
+                or has_short_option(arguments, "W")
+                or not ("--staged" in arguments or has_short_option(arguments, "S"))
             )
-            if not staged_only:
+            if touches_worktree:
                 return GIT_REASONS["checkout"]
     return None
 
