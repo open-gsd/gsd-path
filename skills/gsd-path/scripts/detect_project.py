@@ -39,8 +39,15 @@ from typing import Iterable, NamedTuple, Optional, Sequence
 
 try:
     import fcntl
-except ModuleNotFoundError:  # Windows does not provide POSIX file locks.
-    fcntl = None
+
+    def lock_exclusive(fd: int) -> None:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+
+except ImportError:  # Windows does not provide POSIX file locks.
+    import msvcrt
+
+    def lock_exclusive(fd: int) -> None:
+        msvcrt.locking(fd, msvcrt.LK_LOCK, 1)
 
 
 IGNORE_DIRS = {
@@ -209,7 +216,6 @@ ANCHORED_EVIDENCE_SUPPORTED = (
 LISTDIR_DIR_FD_SUPPORTED = os.listdir in getattr(os, "supports_fd", ())
 ANCHORED_STATE_CREATE_SUPPORTED = (
     ANCHORED_EVIDENCE_SUPPORTED
-    and fcntl is not None
     and LISTDIR_DIR_FD_SUPPORTED
     and os.mkdir in getattr(os, "supports_dir_fd", ())
     and os.unlink in getattr(os, "supports_dir_fd", ())
@@ -1309,7 +1315,7 @@ def write_state_anchored(
             )
         ):
             raise DetectError(".project changed after classification")
-        fcntl.flock(project_fd, fcntl.LOCK_EX)
+        lock_exclusive(project_fd)
         entries = set(os.listdir(project_fd))
         if entries not in (set(), {STATE_TEMP_NAME}):
             raise DetectError(".project changed after classification")
@@ -1321,7 +1327,7 @@ def write_state_anchored(
         )
         try:
             state_fd = os.open(STATE_TEMP_NAME, create, 0o644, dir_fd=project_fd)
-            fcntl.flock(state_fd, fcntl.LOCK_EX)
+            lock_exclusive(state_fd)
         except OSError as error:
             raise DetectError(f"cannot reserve temporary STATE.md: {error}") from error
         state_created = True

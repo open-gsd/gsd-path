@@ -227,12 +227,11 @@ class SyncSkillResourcesTests(unittest.TestCase):
             "opencode",
             "copilot",
             "qwen",
-            "antigravity",
             "cursor",
             "kiro",
             "shared-agents",
         )
-        for shared_profile_runtime in ("codex", "zed"):
+        for shared_profile_runtime in ("codex", "zed", "antigravity"):
             self.assertFalse(
                 (PROJECT_ROOT / "platforms" / shared_profile_runtime).exists(),
                 shared_profile_runtime,

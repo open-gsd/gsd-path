@@ -45,7 +45,7 @@ def base_task_names(names):
 
 
 def dispatch_adapters():
-    """Every platform dispatch adapter that exists (codex/zed were removed)."""
+    """Every platform dispatch adapter that exists (codex/zed/antigravity use the shared profile)."""
     return sorted((PROJECT_ROOT / "platforms").glob("*/dispatch.md"))
 
 
