@@ -189,9 +189,10 @@ precondition fails.
 
    Defer either checkpoint only when the directory is not yet a Git repository
    or `.project/REPOSITORY.md` records `Kind: new-github`. For a normal
-   approval, mark the selected entry active and use `pipeline_state.py
-   transition` with the complete current state as expected, `--set-status done
-   --set-milestone <selected slug>`, and event `program roadmap approved`; for
+   approval, run the same `approve` command with `--defer-checkpoint` instead
+   of `--expected-head`; it marks the selected entry active and records
+   `roadmap/done` with event `program roadmap approved`. `pipeline_state.py
+   transition` never approves a roadmap. For
    a milestone-boundary re-slice, use the retaining transition above; for a
    post-abandon re-slice, use its transition above. The build transition
    commit owns the pending artifacts. Confirm approval and link ROADMAP.md again. For

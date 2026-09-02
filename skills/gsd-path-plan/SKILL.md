@@ -233,12 +233,14 @@ as stated in Lookahead mode.
    the matching journal owns recovery.
 
    Defer that checkpoint only when the directory is not yet a Git repository
-   or `.project/REPOSITORY.md` records `Kind: new-github`. In that case use
-   `pipeline_state.py transition` with the complete current state as expected,
-   `--set-status done`, and event `plan approved`; the build transition commit
-   owns the pending artifacts. Patch-mode approvals also use that guarded
-   transition without a plan checkpoint because build's patch re-entry commits
-   the artifacts with its `build/active` transition. Confirm approval,
+   or `.project/REPOSITORY.md` records `Kind: new-github`. In that case run
+   the same `approve` command with `--defer-checkpoint` instead of
+   `--expected-head`; the helper journals the `plan approved` transition and
+   the build transition commit owns the pending artifacts. Patch-mode
+   approvals run `approve --repo <absolute root> --kind plan --patch`
+   (event `patch plan approved`) without a plan checkpoint because build's
+   patch re-entry commits the artifacts with its `build/active` transition.
+   `pipeline_state.py transition` never approves a plan. Confirm approval,
    link PLAN.md again, and state that
    build starts next. Do not add another approval gate. When routed by an
    active `$gsd-path`, return control to that router so its bundled build
@@ -376,9 +378,10 @@ first.
    user, not into the wave.
 4. Show the patch wave outcome (finding → task mapping), link the resolved
    absolute PLAN.md and task set, and ask the same two-option approval question.
-   On approval, relink the approved plan, use `pipeline_state.py transition`
-   with the complete `plan/active` state as expected, `--set-status done`, and
-   event `patch plan approved`, then use the same provenance rule as normal
+   On approval, relink the approved plan, run `python3 <absolute
+   pipeline_state.py> approve --repo <absolute root> --kind plan --patch`
+   (it records `plan/done` with event `patch plan approved` and no
+   checkpoint), then use the same provenance rule as normal
    mode: an active router
    resumes its bundled build contract, while a direct invocation stops and
    tells the user to explicitly invoke `$gsd-path` or `$gsd-path-build`. The
