@@ -3,8 +3,10 @@
 
 The loop skill (a model) reads the prose sections of a LOOP.md; this helper
 reads only its fixed machine fields — exact `key: value` lines, one per
-line, no nesting. `check` decides run/skip from status, cooldown,
-skip_when, and period budgets; `verify` re-runs the spec's verifier
+line, no nesting, read only from the header above the first `## `
+section. `check` decides run/skip from status, cooldown, and period
+budgets without running skip_when; `claim` runs skip_when before
+admitting a pass; `verify` re-runs the spec's verifier
 commands independently of any worker; `claim` atomically admits one pass and
 `finish` closes it append-only from helper-owned timing and verify events;
 `status` aggregates completed outcomes and exposes unfinished recovery.
@@ -66,6 +68,8 @@ def parse_spec(path: Path) -> dict:
         raise LoopError(f"spec must be a real file: {path}")
     fields: dict[str, object] = {"verify": []}
     for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        if line.startswith("## "):
+            break  # machine fields live in the header; prose sections follow
         match = FIELD_LINE.match(line)
         if not match or match.group("key") not in KNOWN_FIELDS:
             continue
@@ -411,10 +415,10 @@ def remaining_period_budget(fields: dict, outcomes: list[dict], now: datetime) -
     return max(0, fields["period_budget"] - consumed)
 
 
-def precheck(fields: dict) -> Optional[dict]:
+def precheck(fields: dict, run_skip_when: bool = True) -> Optional[dict]:
     if fields["status"] != "active":
         return {"decision": "skip", "reason": f"status {fields['status']}"}
-    if "skip_when" in fields:
+    if "skip_when" in fields and run_skip_when:
         exit_code, _ = run_shell(fields["skip_when"], fields["wall_clock"])
         if exit_code == 0:
             return {"decision": "skip", "reason": "skip_when matched"}
@@ -477,10 +481,13 @@ def admission(fields: dict, records: list[dict], now: datetime) -> dict:
 
 
 def command_check(fields: dict) -> dict:
-    skipped = precheck(fields)
+    skipped = precheck(fields, run_skip_when=False)
     if skipped is not None:
         return skipped
-    return admission(fields, load_log(fields), datetime.now(timezone.utc))
+    decision = admission(fields, load_log(fields), datetime.now(timezone.utc))
+    if "skip_when" in fields:
+        decision["skip_when"] = "not run by check; claim runs it"
+    return decision
 
 
 def command_claim(fields: dict) -> dict:
