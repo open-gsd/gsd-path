@@ -39,7 +39,8 @@ OWNED_CRITERION_PATTERN = re.compile(r"^- (None|SC[1-9]\d*)$")
 VERIFY_BLOCK_PATTERN = re.compile(r"```bash[ \t]*\n(?P<block>.*?)```", re.DOTALL)
 FILES_FIELD_PATTERN = re.compile(r"^files:\s*(?P<value>[^#]*?)(?:\s+#.*)?$")
 INLINE_LIST_PATTERN = re.compile(r"^\[(?P<body>.*)\]$")
-LIST_ITEM_PATTERN = re.compile(r"^\s*-\s+(?P<value>.*?)\s*(?:\s+#.*)?$")
+LIST_ITEM_PATTERN = re.compile(r"^\s*-\s+(?P<value>.*)$")
+PLACEHOLDER_PATTERN = re.compile(r"<[a-zA-Z][^<>\n]*>")
 VERIFY_PATH_SPLIT = re.compile(r"[=,:]")
 WAVE_REVIEW_NAME = re.compile(
     r"wave-(?P<wave>[1-9]\d*)\.cycle(?P<cycle>[1-9]\d*)"
@@ -93,6 +94,60 @@ class HandoffError(RuntimeError):
     """Raised when a phase hand-off is absent, stale, or incomplete."""
 
 
+def _strip_yaml_comment(value: str) -> str:
+    quote = None
+    previous_significant = None
+    inline_list = value.lstrip().startswith("[")
+    index = 0
+    while index < len(value):
+        character = value[index]
+        if quote == '"':
+            if character == "\\" and index + 1 < len(value):
+                index += 2
+                continue
+            if character == quote:
+                quote = None
+        elif quote == "'":
+            if (
+                character == quote
+                and index + 1 < len(value)
+                and value[index + 1] == quote
+            ):
+                index += 2
+                continue
+            if character == quote:
+                quote = None
+        else:
+            if character in {"'", '"'} and (
+                previous_significant is None
+                or (inline_list and previous_significant in {"[", ","})
+            ):
+                quote = character
+            elif character == "#" and (
+                index == 0 or value[index - 1].isspace()
+            ):
+                return value[:index].rstrip()
+        if quote is None and not character.isspace():
+            previous_significant = character
+        index += 1
+    return value.strip()
+
+
+def _unquote(value: str) -> str:
+    cleaned = _strip_yaml_comment(value).strip()
+    if (
+        len(cleaned) >= 2
+        and cleaned[0] == cleaned[-1]
+        and cleaned[0] in {"'", '"'}
+    ):
+        return cleaned[1:-1]
+    return cleaned
+
+
+def contains_placeholder(value: str) -> bool:
+    return PLACEHOLDER_PATTERN.search(value) is not None
+
+
 def _strict_frontmatter(text: str, label: str) -> Dict[str, object]:
     lines = text.splitlines()
     if not lines or lines[0] != "---":
@@ -106,24 +161,24 @@ def _strict_frontmatter(text: str, label: str) -> Dict[str, object]:
         if not line.strip() or line.lstrip().startswith("#"):
             index += 1
             continue
-        match = re.fullmatch(r"([a-z_]+):\s*([^#]*?)(?:\s+#.*)?", line)
+        match = re.fullmatch(r"([a-z_]+):\s*(.*)", line)
         if match is None:
             raise HandoffError(f"{label} has malformed frontmatter: {line}")
         key, raw = match.groups()
         if key in values:
             raise HandoffError(f"{label} repeats frontmatter field: {key}")
-        raw = raw.strip()
+        raw = _strip_yaml_comment(raw)
         inline = INLINE_LIST_PATTERN.fullmatch(raw)
         if inline is not None:
             values[key] = [
-                item.strip().strip("\"'")
+                _unquote(item)
                 for item in inline.group("body").split(",")
                 if item.strip()
             ]
             index += 1
             continue
         if raw:
-            values[key] = raw.strip("\"'")
+            values[key] = _unquote(raw)
             index += 1
             continue
         items: List[str] = []
@@ -132,7 +187,7 @@ def _strict_frontmatter(text: str, label: str) -> Dict[str, object]:
             item = LIST_ITEM_PATTERN.fullmatch(lines[index])
             if item is None:
                 break
-            items.append(item.group("value").strip().strip("\"'"))
+            items.append(_unquote(item.group("value")))
             index += 1
         values[key] = items
     raise HandoffError(f"{label} frontmatter is not closed")
@@ -202,8 +257,12 @@ def _non_placeholder(value: str, label: str) -> str:
     cleaned = value.strip().strip("`")
     if not cleaned or cleaned.casefold() in {"none", "n/a", "null"}:
         raise HandoffError(f"{label} is empty")
-    if "<" in cleaned or ">" in cleaned:
-        raise HandoffError(f"{label} is still a placeholder")
+    placeholder = PLACEHOLDER_PATTERN.search(cleaned)
+    if placeholder is not None:
+        raise HandoffError(
+            f"{label} still contains the placeholder {placeholder.group(0)}; "
+            "replace it with the real value"
+        )
     return cleaned
 
 
@@ -455,8 +514,14 @@ def _raw_source_field(block: str, field: str, source: str) -> str:
 
 def _source_field(block: str, field: str, source: str) -> str:
     value = _raw_source_field(block, field, source).strip().strip("`")
-    if not value or "<" in value or ">" in value:
-        raise HandoffError(f"{source} has an incomplete {field}")
+    if not value:
+        raise HandoffError(f"{source} has an empty {field}; fill it in")
+    placeholder = PLACEHOLDER_PATTERN.search(value)
+    if placeholder is not None:
+        raise HandoffError(
+            f"{source} {field} still contains the placeholder "
+            f"{placeholder.group(0)}; replace it with the real value"
+        )
     return value
 
 
@@ -494,7 +559,10 @@ def _source_repair_fields(source: str, text: str, locator: str) -> Tuple[str, st
 def _reviewed_head(text: str, source: str) -> str:
     value = _line_value(text, "Reviewed HEAD:")
     if not SHA_PATTERN.fullmatch(value):
-        raise HandoffError(f"{source} Reviewed HEAD is not a full commit SHA")
+        raise HandoffError(
+            f"{source} Reviewed HEAD must be the full 40-character commit SHA "
+            f"from git rev-parse HEAD, not {value or 'empty'}"
+        )
     return value
 
 
@@ -1510,7 +1578,10 @@ def validate_final(
         raise HandoffError("FINAL.md Reviewed HEAD cannot be checked because HEAD is missing")
     current_head = head_result.stdout.strip()
     if reviewed_head != current_head:
-        raise HandoffError("FINAL.md Reviewed HEAD must equal current HEAD")
+        raise HandoffError(
+            f"FINAL.md Reviewed HEAD {reviewed_head} is not the current HEAD "
+            f"{current_head}; re-run the final review on the current commit"
+        )
     overall = _line_value(text, "Overall verdict:")
     if overall not in {"pass", "blocked"}:
         raise HandoffError("FINAL.md Overall verdict is invalid")
