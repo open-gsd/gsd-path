@@ -124,8 +124,11 @@ Read tools (`Read`, `Grep`, `View`, …) may still open archive paths.
 ## Wire other hosts
 
 Claude, Codex, and Cursor wiring is installed automatically when that target is
-selected. Register `python3 .gsd-path/guard_hook.py` as a pre-tool-use hook on
-the remaining hosts:
+selected. The installer does **not** install a native guard for any other host,
+even where the host has a pre-tool-use API: those hosts are `git-only` in the
+manifest and stay `git-only` after manual wiring, because the installer neither
+writes nor verifies that wiring. To add it yourself, register
+`python3 .gsd-path/guard_hook.py` as a pre-tool-use hook:
 
 | Host | Where | Docs |
 | --- | --- | --- |
