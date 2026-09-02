@@ -17,6 +17,7 @@ marker returns to `$gsd-path` for ownership checking. Read the local
 [dispatch contract](references/dispatch.md), resolve them to absolute paths,
 and follow that runtime-specific dispatch contract. Resolve
 `scripts/isolation.py` for verify sidecars; do not invent detached checkouts.
+Resolve `scripts/build_state.py` for the landed-task proof.
 
 This skill
 verifies first and never archives or ships before explicit final approval.
@@ -50,7 +51,11 @@ so the position is unchanged. Then:
    `.project/plan/PLAN.md`, all task files, all passing wave reviews, the bound
    build branch, and no product or unrelated changes. On retry, existing
    uncommitted assigned final-review outputs may remain. Resolve and record the
-   exact full reviewed `HEAD` before dispatch. Reuse an output only when its
+   exact full reviewed `HEAD` before dispatch, then prove every task landed
+   at it with `python3 <absolute build_state.py> verify-landed --repo
+   <absolute primary> --project-dir <absolute .project> --head <HEAD>`; it
+   must return one `proven-landed` evidence entry per task, and any non-zero
+   exit blocks with its typed error. Reuse an output only when its
    `Reviewed HEAD` equals that SHA and the complete numbered gap-risk mapping
    still equals the freshly derived risk list. Regenerate the exact assigned
    output set when stale, removing only superseded `final-gap-N.md` files. A

@@ -34,7 +34,9 @@ rule; never invoke an explicit-only sibling skill yourself.
   for Intent coverage. Resolve `scripts/pipeline_state.py` for guarded state
   transitions. Resolve `scripts/isolation.py` for task isolation, recovery,
   verify sidecars, task landing, and bookkeeping checkpoints; do not invent
-  `git worktree add`, `--detach`, commit, or cherry-pick commands.
+  `git worktree add`, `--detach`, commit, or cherry-pick commands. Resolve
+  `scripts/build_state.py` for the ready set, task reconciliation, and the
+  landed-task proof; do not select or reconcile tasks in prose.
 - There is no board file. Task frontmatter is the only task-state record;
   when a report or question needs a wave summary, render it inline from the
   task files and wave reviews. Record escalations and plan defects in the
@@ -152,11 +154,30 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
    - `block`: set `build/blocked` with the returned reason and stop.
    - `none`: take no recovery action for that task.
 
-2. **Prepare the ready set.** Reconcile failed and blocked tasks, then select
-   pending tasks whose dependencies are `done`. Readiness is continuous, not
+2. **Prepare the ready set.** Run `python3 <absolute build_state.py> ready
+   --repo <absolute primary>`. It is read-only: it validates every task's
+   frontmatter against its dispatch metadata and the recovery report, then
+   returns `ready` — the current wave's `pending` tasks whose dependencies are
+   all `done`, each with `id`, `title`, `deps`, `files`, and `task_file` —
+   after proving that ready and `in-progress` tasks have
+   disjoint `files`. Dispatch exactly the tasks it returns; do not select,
+   order, or overlap-check tasks in prose. Readiness is continuous, not
    layered: a task becomes selectable the moment its last dependency lands,
-   even while unrelated tasks still run. A `NEEDS-ORCHESTRATOR` block stays
-   unselectable until its `Orchestrator answer` is recorded in the task Log.
+   even while unrelated tasks still run, so rerun `ready` after each landing.
+   A `NEEDS-ORCHESTRATOR` block stays unselectable until its `Orchestrator
+   answer` is recorded in the task Log and the task is back to `pending`.
+   Its typed errors are the recovery rule:
+   - `task-recovery-required`: for each listed failed or blocked task run
+     `python3 <absolute build_state.py> reconcile --repo <absolute primary>
+     --task-id <id>` and act on its `classification`. `proven-landed`: the
+     task already landed at `landed_commit` and its frontmatter is stale —
+     reconcile the task file to that landed state and checkpoint it.
+     `resumable` or `reconcile`: apply the retry procedure below with the
+     returned `history.candidates` as the rejected evidence. `blocked`: set
+     `build/blocked` with the returned `reasons` and stop.
+   - `dependency-deadlock`: set `build/blocked` with its `tasks` list and stop.
+   - `ready-file-overlap` or `invalid-task-state`: a documented plan defect or
+     drifted bookkeeping; repair it before a new clean base.
    A documented plan
    defect may be repaired against INTENT.md and SYNTHESIS.md and logged before
    a new clean base. A user ruling that changes a success criterion,
@@ -476,7 +497,11 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
 
 ## Completion
 
-After every wave passes, record exact full HEAD and run
+After every wave passes, record exact full HEAD and prove every task landed
+with `python3 <absolute build_state.py> verify-landed --repo <absolute primary>
+--project-dir <absolute .project> --head <HEAD>`; it must return one
+`proven-landed` evidence entry per task, and any non-zero exit blocks
+completion. Then run
 `pipeline_state.py transition`, expecting `build/active` plus the exact branch
 and archive, to set `phase: ship`, `status: active` with event `build done;
 final review pending`. Checkpoint that transition through the rule above with
