@@ -2680,13 +2680,6 @@ def require_git_success(result: subprocess.CompletedProcess, action: str) -> str
     return result.stdout.strip()
 
 
-def require_command_success(result: subprocess.CompletedProcess, action: str) -> str:
-    if result.returncode != 0:
-        detail = result.stderr.strip() or result.stdout.strip()
-        raise ArchiveError(f"{action} failed: {detail}")
-    return result.stdout.strip()
-
-
 def archive_is_committed(project: Path, configured: str) -> bool:
     return run_git(project, "cat-file", "-e", f"HEAD:{configured}").returncode == 0
 
@@ -3569,14 +3562,14 @@ def github_repository(project: Path) -> str:
 
 
 def require_github_authentication() -> None:
-    require_command_success(
+    require_git_success(
         run_command("gh", "auth", "status", "--hostname", GITHUB_HOST),
         "verify GitHub authentication",
     )
 
 
 def github_api_json(*arguments: str) -> object:
-    output = require_command_success(
+    output = require_git_success(
         run_command("gh", "api", "--hostname", GITHUB_HOST, *arguments),
         "call GitHub API",
     )
