@@ -401,12 +401,14 @@ def repo_root():
 
 def build_landing_violations(entries, subject, body):
     """Enforce landing-commit shape for changes outside .project/ during build."""
-    if subject is None:
-        return []
+    if subject is None or is_ship_commit(subject):
+        return []  # ship commits are held to .project/ by ship_contract_violations
     staged = sorted({path for _, old, new in entries for path in (old, new) if path})
     if all(path.startswith(".project/") for path in staged):
         return []
-    state = head_frontmatter()
+    # A commit that enters build must stay .project/-only, so the staged STATE
+    # counts as much as the committed one.
+    state = staged_frontmatter() if ".project/STATE.md" in staged else head_frontmatter()
     if state is None or state.get("phase") != "build":
         return []
     bound = state.get("branch", "")

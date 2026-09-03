@@ -621,6 +621,15 @@ class GitGuardEndToEndTests(unittest.TestCase):
         landing = self.run_guard("T001: Demo task", self.landing_body(head, "plan #1.py"))
         self.assertEqual(0, landing.returncode, landing.stderr)
 
+    def test_build_entry_commit_must_stay_project_only(self):
+        self.enter_build(phase="plan")
+        state = self.repo / ".project" / "STATE.md"
+        state.write_text(state.read_text().replace("phase: plan", "phase: build"), encoding="utf-8")
+        self.stage_product_change()
+        result = self.run_guard("build: start plus product")
+        self.assertEqual(1, result.returncode)
+        self.assertIn("isolation.py land", result.stderr)
+
     def test_landing_rule_applies_only_during_build(self):
         self.enter_build(phase="plan")
         self.stage_product_change()
