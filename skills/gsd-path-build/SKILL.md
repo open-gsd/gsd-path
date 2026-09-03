@@ -160,7 +160,21 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
      or redispatch; rerun `land` against the returned isolate and base.
    - `reconcile`: do not resume implementation. Preserve the returned isolate
      evidence and follow the failed/blocked reconciliation in step 2.
-   - `block`: set `build/blocked` with the returned reason and stop.
+   - `block` on a `done` task with reason `done but no landing commit proves
+     it` or `done task has invalid base`: the work was committed outside
+     `land`. Never repair history or task frontmatter by hand. Set
+     `build/blocked`, present **Outcome** naming every such task, and ask the
+     user for a ruling per task. On an explicit ruling, run that task's Verify
+     at HEAD, record it with `python3 <absolute build_state.py> verify-record
+     --repo <absolute primary> --command <task Verify> --commit <HEAD>
+     --result pass`, then run `python3 <absolute isolation.py> attest --repo
+     <absolute primary> --task-file <task file> --ruling <ruling verbatim>`
+     (add `--base <SHA>` only to repair an abbreviated or invalid recorded
+     base). The helper stamps the task and creates the attestation commit
+     itself; each one moves HEAD, so attest tasks one at a time and rerun
+     `recover` afterwards.
+   - `block` for any other reason: set `build/blocked` with the returned
+     reason and stop.
    - `none`: take no recovery action for that task.
 
 2. **Prepare the ready set.** Run `python3 <absolute build_state.py> ready
@@ -505,16 +519,9 @@ After every wave passes, record exact full HEAD and prove every task landed
 with `python3 <absolute build_state.py> verify-landed --repo <absolute primary>
 --project-dir <absolute .project> --head <HEAD>`; it must return one
 `proven-landed` or `attested` evidence entry per task, and any non-zero exit
-blocks completion. When a done task reports `done but no landing commit
-proves it`, the work was committed outside `land`; never repair history or
-task frontmatter by hand. Set `build/blocked`, present **Outcome** naming the
-tasks, and ask the user for a ruling per task. On an explicit ruling, run the
-task Verify at HEAD, record it with `python3 <absolute build_state.py>
-verify-record --repo <absolute primary> --command <task Verify> --commit
-<HEAD> --result pass`, then run `python3 <absolute isolation.py> attest --repo
-<absolute primary> --task-file <task file> --ruling <ruling verbatim>` (add
-`--base <SHA>` only when the recorded base is missing or abbreviated). The
-helper commits the attestation itself; rerun `verify-landed` afterwards. Then run
+blocks completion. A `done` task without landing proof follows the `block`
+handling in step 1 above (owner ruling, Verify, `verify-record`, `attest`).
+Then run
 `pipeline_state.py transition`, expecting `build/active` plus the exact branch
 and archive, to set `phase: ship`, `status: active` with event `build done;
 final review pending`. Checkpoint that transition through the rule above with
