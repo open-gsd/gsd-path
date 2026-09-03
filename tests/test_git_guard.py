@@ -565,6 +565,23 @@ class GitGuardEndToEndTests(unittest.TestCase):
         bookkeeping = self.run_guard("build: checkpoint bookkeeping")
         self.assertEqual(0, bookkeeping.returncode, bookkeeping.stderr)
 
+    def test_landing_accepts_a_commented_inline_files_list(self):
+        self.enter_build()
+        task = self.repo / ".project" / "tasks" / "T001-demo.md"
+        task.write_text(
+            task.read_text().replace("files:\n  - app.py", "files: ['plan #1.py'] # planning note"),
+            encoding="utf-8",
+        )
+        (self.repo / "plan #1.py").write_text("base\n", encoding="utf-8")
+        self.git("add", "-A", "--", ".project/tasks/T001-demo.md", "plan #1.py")
+        self.commit("build: declare a quoted path")
+        head = self.head()
+        (self.repo / "plan #1.py").write_text("done\n", encoding="utf-8")
+        task.write_text(task.read_text().replace("in-progress", "done"), encoding="utf-8")
+        self.git("add", "-A", "--", ".project/tasks/T001-demo.md", "plan #1.py")
+        landing = self.run_guard("T001: Demo task", self.landing_body(head, "plan #1.py"))
+        self.assertEqual(0, landing.returncode, landing.stderr)
+
     def test_landing_rule_applies_only_during_build(self):
         self.enter_build(phase="plan")
         self.stage_product_change()

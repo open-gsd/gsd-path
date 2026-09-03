@@ -26,6 +26,21 @@ import subprocess
 import sys
 from pathlib import Path
 
+# Installed layout keeps the pipeline runtime in .gsd-path/runtime/ beside this
+# guard; the repository checkout keeps it as sibling modules under scripts/.
+_HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(_HERE / "runtime" if (_HERE / "runtime" / "isolation.py").is_file() else _HERE))
+try:
+    from isolation import IsolationError, relative_posix, task_frontmatter
+    from pipeline_git import task_commit_subject
+except ImportError as error:  # pragma: no cover - broken install
+    print(
+        f"gsd-path guard: pipeline runtime is missing ({error}); commit blocked; "
+        "rerun the installer with --hooks-refresh",
+        file=sys.stderr,
+    )
+    raise SystemExit(1)
+
 ARCHIVE_PREFIX = ".project/archive/"
 GUARD_MARKER = "gsd-path guard"
 INTEGRATE_SUBJECT = re.compile(
@@ -44,7 +59,7 @@ ARCHIVE_NAME = re.compile(
 SLUG = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 BOUND_BRANCH = re.compile(r"^gsd-path/M(?P<number>\d{3,})$")
 TASK_BRANCH_PREFIX = "gsd-path-task/"
-TASK_SUBJECT = re.compile(r"^(?P<id>[A-Za-z][A-Za-z0-9._-]*): (?P<title>\S.*)$")
+TASK_SUBJECT = re.compile(r"^(?P<id>[A-Za-z][A-Za-z0-9._-]*): \S.*$")
 FULL_SHA = re.compile(r"^[0-9a-f]{40}$")
 LANDING_HINT = (
     "during build, changes outside .project/ land only through isolation.py "
@@ -174,32 +189,18 @@ def head_frontmatter():
 
 
 def task_contract(base, task_file):
-    """(id, title, declared files) from the task file at base, or None."""
+    """(expected subject, declared paths) from the task file at base, or None."""
     content = shown_file(f"{base}:{task_file}") if task_file.startswith(".project/tasks/") else None
     if content is None:
         return None
-    fields, files, in_files = {}, set(), False
-    for line in content.splitlines()[1:]:
-        if line == "---":
-            break
-        item = re.fullmatch(r"\s+-\s*(.+?)\s*", line) if in_files else None
-        if item is not None:
-            files.add(item.group(1).strip("\"'"))
-            continue
-        in_files = False
-        key, _, value = line.partition(":")
-        value = value.strip()
-        if key == "files":
-            # ponytail: the task template's two list forms only (block and inline)
-            in_files = True
-            files |= {
-                entry.strip().strip("\"'")
-                for entry in value.strip("[]").split(",")
-                if entry.strip()
-            }
-        else:
-            fields[key] = value.strip("\"'")
-    return fields.get("id", ""), fields.get("title", ""), files
+    fields, error = task_frontmatter(content)
+    if error or fields is None or not isinstance(fields.get("files"), list):
+        return None
+    try:
+        subject = task_commit_subject(str(fields.get("id", "")), str(fields.get("title", "")))
+        return subject, {relative_posix(str(item)) for item in fields["files"]}
+    except (ValueError, IsolationError):
+        return None
 
 
 def frontmatter_of(content, label):
@@ -412,8 +413,7 @@ def build_landing_violations(entries, subject, body):
     branch = current_branch()
     if branch != bound and not branch.startswith(TASK_BRANCH_PREFIX):
         return []
-    match = TASK_SUBJECT.fullmatch(subject)
-    if match is None:
+    if TASK_SUBJECT.fullmatch(subject) is None:
         return [f"{subject!r} is not a landing commit; {LANDING_HINT}"]
     fields, files = {}, []
     for line in body.splitlines():
@@ -431,9 +431,9 @@ def build_landing_violations(entries, subject, body):
     if contract is None:
         problems.append("Base: must be a full SHA HEAD descends from that holds the Task: file")
     else:
-        task_id, title, declared = contract
-        if (task_id, title) != (match.group("id"), match.group("title")):
-            problems.append(f"subject must be {task_id + ': ' + title!r}")
+        expected, declared = contract
+        if subject != expected:
+            problems.append(f"subject must be {expected!r}")
         if task_file not in staged:
             problems.append("the Task: file must be staged")
         stray = sorted(set(staged) - declared - {task_file})
