@@ -31,7 +31,7 @@ from pathlib import Path
 _HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(_HERE / "runtime" if (_HERE / "runtime" / "isolation.py").is_file() else _HERE))
 try:
-    from isolation import _landing_state
+    from isolation import _landing_state, task_frontmatter
     from pipeline_git import task_commit_body
 except ImportError as error:  # pragma: no cover - broken install
     print(
@@ -382,6 +382,12 @@ def head_descends_from(commit):
     )
 
 
+def task_landed_at_head(task_file):
+    content = shown_file(f"HEAD:{task_file}")
+    fields, _ = task_frontmatter(content) if content is not None else (None, None)
+    return bool(fields) and fields.get("status") == "done"
+
+
 def repo_root():
     return Path(
         subprocess.run(
@@ -422,6 +428,8 @@ def build_landing_violations(entries, subject, body):
         problems.append("Base: must be a full SHA that HEAD descends from")
     elif task_file not in staged or not task_file.startswith(".project/tasks/"):
         problems.append("the Task: file must be a staged .project/tasks/ file")
+    elif task_landed_at_head(task_file):
+        problems.append("the Task: file is already done at HEAD; a task lands exactly once")
     else:
         # The same proof isolation.py land and recover apply: subject from the
         # base task, allow-list from its files:, and the landed-state transition.

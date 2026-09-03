@@ -585,6 +585,25 @@ class GitGuardEndToEndTests(unittest.TestCase):
         bookkeeping = self.run_guard("build: checkpoint bookkeeping")
         self.assertEqual(0, bookkeeping.returncode, bookkeeping.stderr)
 
+    def test_a_task_lands_exactly_once(self):
+        head = self.enter_build()
+        self.stage_product_change()
+        self.stamp_task(head)
+        self.git("add", "-A", "--", "app.py", ".project/tasks/T001-demo.md")
+        body = self.landing_body(head, "app.py")
+        self.git(
+            "-c", "user.email=test@example.com", "-c", "user.name=Test",
+            "commit", "-q", "-m", "T001: Demo task", "-m", body,
+        )
+
+        (self.repo / "app.py").write_text("print('again')\n", encoding="utf-8")
+        task = self.repo / ".project" / "tasks" / "T001-demo.md"
+        task.write_text(task.read_text() + "more\n", encoding="utf-8")
+        self.git("add", "-A", "--", "app.py", ".project/tasks/T001-demo.md")
+        again = self.run_guard("T001: Demo task", body)
+        self.assertEqual(1, again.returncode)
+        self.assertIn("already done at HEAD", again.stderr)
+
     def test_landing_accepts_a_commented_inline_files_list(self):
         self.enter_build()
         task = self.repo / ".project" / "tasks" / "T001-demo.md"
