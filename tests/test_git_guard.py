@@ -630,6 +630,16 @@ class GitGuardEndToEndTests(unittest.TestCase):
         self.assertEqual(1, result.returncode)
         self.assertIn("isolation.py land", result.stderr)
 
+    def test_guard_install_artifacts_commit_as_bookkeeping(self):
+        self.enter_build()
+        (self.repo / ".gsd-path").mkdir()
+        (self.repo / ".gsd-path" / "git_guard.py").write_text("# guard\n", encoding="utf-8")
+        (self.repo / ".codex").mkdir()
+        (self.repo / ".codex" / "hooks.json").write_text("{}\n", encoding="utf-8")
+        self.git("add", "-A", "--", ".gsd-path", ".codex")
+        result = self.run_guard("router: install guard hooks")
+        self.assertEqual(0, result.returncode, result.stderr)
+
     def test_landing_rule_applies_only_during_build(self):
         self.enter_build(phase="plan")
         self.stage_product_change()

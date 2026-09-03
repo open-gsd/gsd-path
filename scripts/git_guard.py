@@ -60,6 +60,14 @@ ARCHIVE_NAME = re.compile(
 SLUG = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 BOUND_BRANCH = re.compile(r"^gsd-path/M(?P<number>\d{3,})$")
 TASK_BRANCH_PREFIX = "gsd-path-task/"
+# Bookkeeping paths: pipeline records plus the guard's own install artifacts.
+BOOKKEEPING_PREFIXES = (
+    ".project/",
+    ".gsd-path/",
+    ".claude/settings.json",
+    ".codex/hooks.json",
+    ".cursor/hooks.json",
+)
 TASK_SUBJECT = re.compile(r"^(?P<id>[A-Za-z][A-Za-z0-9._-]*): \S.*$")
 FULL_SHA = re.compile(r"^[0-9a-f]{40}$")
 LANDING_HINT = (
@@ -405,7 +413,7 @@ def build_landing_violations(entries, subject, body):
     if subject is None or is_ship_commit(subject):
         return []  # ship commits are held to .project/ by ship_contract_violations
     staged = sorted({path for _, old, new in entries for path in (old, new) if path})
-    if all(path.startswith(".project/") for path in staged):
+    if all(path.startswith(BOOKKEEPING_PREFIXES) for path in staged):
         return []
     # A commit that enters build must stay .project/-only, so the staged STATE
     # counts as much as the committed one.

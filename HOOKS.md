@@ -125,7 +125,8 @@ Read tools (`Read`, `Grep`, `View`, …) may still open archive paths.
 - modifies, deletes, or renames away tracked archive paths
 - `ship:` commits (case-insensitive) staging paths outside `.project/`
 - while the committed `STATE.md` is in `build` on its bound branch or a
-  `gsd-path-task/` branch: commits staging paths outside `.project/` unless
+  `gsd-path-task/` branch: commits staging paths outside `.project/` (or the
+  guard's own `.gsd-path/` and native hook settings) unless
   they are landing commits as `isolation.py land` writes them — subject
   `<task id>: <task title>` matching the task file at `Base:`, a full base SHA
   HEAD descends from, the staged task file, only that task's declared `files:`,
