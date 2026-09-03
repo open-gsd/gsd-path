@@ -72,7 +72,9 @@ unless a `NEEDS-USER` decision remains.
 Every user-facing checkpoint follows one handoff shape: **Outcome** states what
 was produced or learned, **Review** links the primary canonical artifact by its
 resolved absolute path, and **Next** asks the single required question or names
-the next action. Supporting artifacts are summarized or linked only when they
+the next action. Text the user is expected to send back verbatim goes in its
+own fenced code block, never a blockquote, so it pastes cleanly. Supporting
+artifacts are summarized or linked only when they
 help the decision. Write the artifact before asking, never present a bare
 approval question, and after the answer relink the updated artifact before the
 router continues or a direct invocation names its exact next skill.

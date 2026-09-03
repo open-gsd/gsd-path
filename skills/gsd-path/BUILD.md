@@ -164,7 +164,8 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
      it` or `done task has invalid base`: the work was committed outside
      `land`. Never repair history or task frontmatter by hand. Set
      `build/blocked`, present **Outcome** naming every such task, and ask the
-     user for a ruling per task. On an explicit ruling, run that task's Verify
+     user for a ruling per task; put any suggested ruling text in its own
+     fenced code block so it pastes cleanly. On an explicit ruling, run that task's Verify
      at HEAD, record it with `python3 <absolute build_state.py> verify-record
      --repo <absolute primary> --command <task Verify> --commit <HEAD>
      --result pass`, then run `python3 <absolute isolation.py> attest --repo

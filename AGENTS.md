@@ -299,7 +299,10 @@ full-repo suite on a tiny edit outrank the phase brief.
   phase-completion handoff, present three things in order: **Outcome** — what
   was produced or learned; **Review** — a Markdown link to the primary
   canonical artifact using its resolved absolute path; **Next** — the one
-  question or action now required. If the host cannot render local links, print
+  question or action now required. Any text the user is expected to send back
+  verbatim — a ruling, an approval command, a reply — goes in its own fenced
+  code block, never a blockquote or inline prose, so it pastes cleanly. If the
+  host cannot render local links, print
   the resolved absolute path immediately after the link. On an output failure,
   link the malformed artifact when it exists; otherwise link STATE.md or the
   canonical log that proves the failure and say the expected artifact is

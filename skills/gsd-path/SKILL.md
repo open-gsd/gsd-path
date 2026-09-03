@@ -7,6 +7,9 @@ description: Inspect .project/STATE.md, report GSD Path progress, and run the ne
 
 Determine the current pipeline phase, report it briefly, and run the next valid
 phase. Disk is the only phase memory.
+Any text the user is expected to send back verbatim (a ruling, an approval
+command, a reply) goes in its own fenced code block, never a blockquote or
+inline prose, so it pastes cleanly.
 
 ## Status-only mode
 
