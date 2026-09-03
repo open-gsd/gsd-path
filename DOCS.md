@@ -119,7 +119,9 @@ Work **in the project directory**. Invoke **explicitly**:
 | OpenCode stable | Ask to *load and use the gsd-path skill* |
 
 The router reads `.project/STATE.md`, reports phase, runs the next valid step.
-It does **not** run on “continue the project” or similar vague chat.
+Vague chat such as “continue the project” does **not** run it. In a project
+with an owned `.project/STATE.md`, such a prompt answers read-only with the
+current handoff and the next skill to invoke; it never advances a phase.
 
 ### Skills (optional)
 
@@ -276,6 +278,8 @@ Full guide: **[UPDATE.md](UPDATE.md)**. Router may print a one-line npm update n
 
 **Does it run automatically when I ask the agent to build something?**
 No. Invoke `$gsd-path` or `/gsd-path` explicitly. Skills are explicit-only on most hosts.
+In a project with an owned `.project/STATE.md`, a plain prompt reports the
+current phase and next skill read-only instead of building.
 
 **I installed but nothing shows up in the agent.**
 Restart the host session. Confirm with `ls ~/.claude/skills/gsd-path` (or your host root).
