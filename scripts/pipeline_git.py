@@ -144,6 +144,28 @@ def task_commit_subject(task_id: str, title: str) -> str:
     return f"{task_id}: {cleaned}"
 
 
+def attest_commit_subject(task_id: str, title: str) -> str:
+    cleaned = title.strip()
+    if not cleaned:
+        raise PipelineGitError("title is empty")
+    return f"attest: {task_id} — {cleaned}"
+
+
+def attest_commit_body(
+    task_file: str,
+    base: str,
+    head: str,
+    paths: Sequence[str],
+    verify_command: str,
+    ruling: str,
+) -> str:
+    lines = [f"Task: {task_file}", f"Base: {base}", f"Head: {head}", "Files:"]
+    lines.extend(f"- {path}" for path in sorted(paths))
+    lines.append(f"Verify: {' '.join(verify_command.split())}")
+    lines.append(f"Ruling: {' '.join(ruling.split())}")
+    return "\n".join(lines) + "\n"
+
+
 def task_commit_body(task_file: str, paths: Sequence[str], base: str) -> str:
     ordered = sorted(paths)
     lines = [f"Task: {task_file}", f"Base: {base}", "Files:"]

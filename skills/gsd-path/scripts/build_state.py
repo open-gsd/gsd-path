@@ -40,10 +40,12 @@ DEFAULT_PROJECT_DIR = ".project"
 TASK_ID_RE = re.compile(r"^T\d{3}$")
 TASK_FILE_RE = re.compile(r"^(?P<id>T\d{3})-[a-z0-9][a-z0-9-]*\.md$")
 FULL_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+# recover verdicts that count as landed, mapped to their evidence classification.
+LANDED_VERDICTS = {"recovered": "proven-landed", "attested": "attested"}
 WAVE_HEADING_RE = re.compile(r"(?m)^## Wave (?P<wave>\d+)\b.*$")
 VERIFY_HEAVY_RE = re.compile(r"(?m)^Heavy:\s*(?P<value>yes|no)\s*(?:<!--.*-->)?\s*$")
 VALID_TASK_STATUSES = {"pending", "in-progress", "done", "failed", "blocked"}
-VERIFY_RESULTS = ("pass", "fail")
+VERIFY_RESULTS = _common.VERIFY_RESULTS
 
 
 class BuildStateError(RuntimeError):
@@ -454,7 +456,7 @@ def _validate_ready_metadata(project: Project) -> None:
             if task.worktree is not None or task.task_branch is not None:
                 _invalid_state(task, "done task retains active isolation metadata")
             report = recovery[task.task_id]
-            if report.get("verdict") != "recovered":
+            if report.get("verdict") not in LANDED_VERDICTS:
                 reason = report.get("reason", "landing commit is not proven")
                 _invalid_state(task, str(reason))
 
@@ -595,14 +597,14 @@ def _reconcile_task(project: Project, task: Task) -> Dict[str, object]:
             {
                 "commit": commit,
                 "base": report.get("base"),
-                "valid": verdict == "recovered",
+                "valid": verdict in LANDED_VERDICTS,
             }
         )
-    if verdict == "recovered":
+    if verdict in LANDED_VERDICTS:
         return _reconcile_result(
             project,
             task,
-            "proven-landed",
+            LANDED_VERDICTS[verdict],
             candidates,
             (),
             landed_commit=commit if isinstance(commit, str) else None,
@@ -676,13 +678,13 @@ def verify_landed_tasks(
     evidence = []
     for task in tasks:
         report = reports.get(task.task_id)
-        if report is None or report.get("verdict") != "recovered":
+        if report is None or report.get("verdict") not in LANDED_VERDICTS:
             _invalid_state(task, "task landing is not canonical")
         commit = report.get("commit")
         evidence.append(
             {
                 "command": "reconcile",
-                "classification": "proven-landed",
+                "classification": LANDED_VERDICTS[str(report["verdict"])],
                 "task": {
                     "id": task.task_id,
                     "status": task.status,
@@ -731,30 +733,10 @@ def _ledger_key(repo: Path, command: str, commit: str) -> Tuple[str, str]:
 
 
 def _ledger_entries(path: Path) -> List[Dict[str, object]]:
-    if not path.exists():
-        return []
-    entries: List[Dict[str, object]] = []
-    for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
-        if not line.strip():
-            continue
-        try:
-            entry = json.loads(line)
-        except json.JSONDecodeError as error:
-            raise BuildStateError(
-                "invalid-ledger", f"{VERIFY_LEDGER_PATH} line {number} is not JSON: {error}"
-            ) from error
-        if (
-            not isinstance(entry, dict)
-            or not isinstance(entry.get("command"), str)
-            or not isinstance(entry.get("commit"), str)
-            or entry.get("result") not in VERIFY_RESULTS
-            or not isinstance(entry.get("recorded_at"), str)
-        ):
-            raise BuildStateError(
-                "invalid-ledger", f"{VERIFY_LEDGER_PATH} line {number} has invalid fields"
-            )
-        entries.append(entry)
-    return entries
+    try:
+        return _common.verify_ledger_entries(path)
+    except ValueError as error:
+        raise BuildStateError("invalid-ledger", str(error)) from error
 
 
 def verify_record(repo: str, command: str, commit: str, result: str) -> Dict[str, object]:

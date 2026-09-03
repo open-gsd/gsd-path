@@ -143,6 +143,8 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
    `reconcile`. Act only on its verdicts;
    do not re-derive them in prose, rerun Verify on a proven commit, use an
    unanchored log grep, infer a SHA from `done`, or reset unknown work.
+   - `attested`: an owner ruling stands in for the landing commit (see the
+     block escalation below); treat it as landed and never redispatch.
    - `recovered`: the task is landed (`land` already stamped `status: done`
      and `base`). Retire a still-present task worktree with `isolation.py
      retire` only when the report shows it present, clean, and on the task
@@ -502,8 +504,17 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
 After every wave passes, record exact full HEAD and prove every task landed
 with `python3 <absolute build_state.py> verify-landed --repo <absolute primary>
 --project-dir <absolute .project> --head <HEAD>`; it must return one
-`proven-landed` evidence entry per task, and any non-zero exit blocks
-completion. Then run
+`proven-landed` or `attested` evidence entry per task, and any non-zero exit
+blocks completion. When a done task reports `done but no landing commit
+proves it`, the work was committed outside `land`; never repair history or
+task frontmatter by hand. Set `build/blocked`, present **Outcome** naming the
+tasks, and ask the user for a ruling per task. On an explicit ruling, run the
+task Verify at HEAD, record it with `python3 <absolute build_state.py>
+verify-record --repo <absolute primary> --command <task Verify> --commit
+<HEAD> --result pass`, then run `python3 <absolute isolation.py> attest --repo
+<absolute primary> --task-file <task file> --ruling <ruling verbatim>` (add
+`--base <SHA>` only when the recorded base is missing or abbreviated). The
+helper commits the attestation itself; rerun `verify-landed` afterwards. Then run
 `pipeline_state.py transition`, expecting `build/active` plus the exact branch
 and archive, to set `phase: ship`, `status: active` with event `build done;
 final review pending`. Checkpoint that transition through the rule above with

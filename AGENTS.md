@@ -159,7 +159,12 @@ full-repo suite on a tiny edit outrank the phase brief.
   branches only, never a detached HEAD — lands task work serially, and
   records each clean base in task frontmatter; `land` stamps the landed
   state into the task's own commit, so a task has exactly one commit. It
-  writes no product code.
+  writes no product code. When a done task's work already sits on the bound
+  branch without a landing commit, only an explicit owner ruling through
+  `isolation.py attest` may stand in for it: one `.project/`-only commit that
+  names the base, the attested HEAD, the declared files that changed, the
+  task Verify recorded as passing at that HEAD, and the ruling verbatim.
+  `recover` reports it as `attested`, never as a proven landing.
 - All pipeline work for a milestone lives on `gsd-path/M00N` (M001, M002,
   …) bound in STATE.branch. The next milestone binds a new unused
   `gsd-path/M00N` at the remote default after the previous ship integrates.

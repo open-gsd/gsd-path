@@ -55,7 +55,7 @@ so the position is unchanged. Then:
    exact full reviewed `HEAD` before dispatch, then prove every task landed
    at it with `python3 <absolute build_state.py> verify-landed --repo
    <absolute primary> --project-dir <absolute .project> --head <HEAD>`; it
-   must return one `proven-landed` evidence entry per task, and any non-zero
+   must return one `proven-landed` or `attested` evidence entry per task, and any non-zero
    exit blocks with its typed error. Reuse an output only when its
    `Reviewed HEAD` equals that SHA and the complete numbered gap-risk mapping
    still equals the freshly derived risk list. Regenerate the exact assigned

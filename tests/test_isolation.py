@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Optional
 from unittest import mock
 
-from scripts import isolation, pipeline_git
+from scripts import build_state, isolation, pipeline_git
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -1952,8 +1952,10 @@ class RecoverTests(unittest.TestCase):
     TASK = (
         "---\nid: T001\ntitle: add greeting\nwave: {wave}\ndeps: []\nstatus: {status}\n"
         "agent: {agent}\nbase: {base}\nworktree: {worktree}\ntask_branch: {task_branch}\n"
-        "files:\n{files}\n---\n\n# T001\n\n## Log\n{log}"
+        "files:\n{files}\n---\n\n# T001\n\n## Verify\n\n```bash\n"
+        "python3 -c 'print(1)'\n```\n\n## Log\n{log}"
     )
+    VERIFY = "python3 -c 'print(1)'"
 
     def setUp(self) -> None:
         self.tmp = tempfile.TemporaryDirectory()
@@ -2076,6 +2078,177 @@ class RecoverTests(unittest.TestCase):
             body,
         )
         return git(self.repo, "rev-parse", "HEAD")
+
+    def commit_outside_land(self, base: str) -> str:
+        """Hand-mark T001 done and commit its work without isolation.py land."""
+        self.write_task("done", base, agent="coder", log="- done\n")
+        (self.repo / "src/app.py").write_text("print('hello')\n")
+        git(self.repo, "add", ".")
+        git(self.repo, "commit", "-q", "-m", "feat: direct commit outside land")
+        return git(self.repo, "rev-parse", "HEAD")
+
+    def record_verify_pass(self, head: str) -> None:
+        build_state.verify_record(str(self.repo), self.VERIFY, head, "pass")
+
+    def test_attest_stands_in_for_a_missing_landing_commit(self) -> None:
+        head = self.commit_outside_land(self.base[:9])  # abbreviated recorded base
+        self.assertEqual(self.recover()["verdict"], "block")
+        self.record_verify_pass(head)
+
+        attested = isolation.attest(
+            self.repo, ".project/tasks/T001.md", "owner ruling:  landed by hand "
+        )
+
+        self.assertEqual(attested["verdict"], "attested")
+        self.assertEqual(attested["base"], self.base)
+        self.assertEqual(attested["files"], ["src/app.py"])
+        commit = attested["commit"]
+        self.assertEqual(git(self.repo, "rev-parse", "HEAD"), commit)
+        self.assertEqual(git(self.repo, "status", "--porcelain"), "")
+        changed = set(git(self.repo, "diff-tree", "--no-commit-id", "--name-only", "-r", commit).splitlines())
+        self.assertEqual(changed, {".project/tasks/T001.md", isolation.VERIFY_LEDGER_PATH})
+        self.assertEqual(git(self.repo, "log", "-1", "--format=%s", commit), "attest: T001 — add greeting")
+        body = git(self.repo, "log", "-1", "--format=%b", commit)
+        self.assertIn(f"Base: {self.base}", body)
+        self.assertIn(f"Head: {head}", body)
+        self.assertIn("Ruling: owner ruling: landed by hand", body)
+        task = (self.repo / ".project/tasks/T001.md").read_text()
+        self.assertIn(f"base: {self.base}", task)
+        self.assertTrue(task.endswith("- attested: owner ruling: landed by hand\n"))
+
+        report = self.recover()
+        self.assertEqual(report["verdict"], "attested")
+        self.assertEqual(report["commit"], commit)
+        proven = isolation.verify_landed_task_files(
+            self.repo, [self.repo / ".project/tasks/T001.md"], ".project/tasks", commit
+        )
+        self.assertEqual(proven["tasks"][0]["verdict"], "attested")
+        with self.assertRaisesRegex(isolation.IsolationError, "already attested"):
+            isolation.attest(self.repo, ".project/tasks/T001.md", "again")
+
+    def test_attest_requires_verify_evidence_and_a_real_change(self) -> None:
+        head = self.commit_outside_land(self.base)
+        with self.assertRaisesRegex(isolation.IsolationError, "verify ledger has no passing run"):
+            isolation.attest(self.repo, ".project/tasks/T001.md", "ruling")
+        with self.assertRaisesRegex(isolation.IsolationError, "ruling must not be empty"):
+            isolation.attest(self.repo, ".project/tasks/T001.md", "   ")
+        self.assertEqual(git(self.repo, "rev-parse", "HEAD"), head)
+
+        # A task dispatched at an in-progress base and marked done without any
+        # product change has nothing to attest.
+        self.write_task("in-progress", "null", agent="coder")
+        git(self.repo, "add", ".")
+        git(self.repo, "commit", "-q", "-m", "build: dispatch again")
+        base = git(self.repo, "rev-parse", "HEAD")
+        self.write_task("done", base, agent="coder", log="- done\n")
+        git(self.repo, "add", ".")
+        git(self.repo, "commit", "-q", "-m", "docs: mark done without work")
+        self.record_verify_pass(git(self.repo, "rev-parse", "HEAD"))
+        with self.assertRaisesRegex(isolation.IsolationError, "no declared file changed"):
+            isolation.attest(self.repo, ".project/tasks/T001.md", "ruling")
+
+    def test_attest_refuses_a_proven_landing_and_a_tampered_attestation(self) -> None:
+        commit = self.land()
+        self.record_verify_pass(commit)
+        with self.assertRaisesRegex(isolation.IsolationError, "already recovered"):
+            isolation.attest(self.repo, ".project/tasks/T001.md", "ruling")
+
+    def test_attest_refuses_a_task_whose_contract_changed_since_base(self) -> None:
+        self.write_task("done", self.base, agent="coder", files=("src/app.py", "src/extra.py"), log="- done\n")
+        (self.repo / "src/app.py").write_text("print('hello')\n")
+        (self.repo / "src/extra.py").write_text("print('extra')\n")
+        git(self.repo, "add", ".")
+        git(self.repo, "commit", "-q", "-m", "feat: widened the contract by hand")
+        self.record_verify_pass(git(self.repo, "rev-parse", "HEAD"))
+        with self.assertRaisesRegex(isolation.IsolationError, "changes the task contract"):
+            isolation.attest(self.repo, ".project/tasks/T001.md", "ruling")
+
+    def test_recover_rejects_an_attestation_without_verify_evidence(self) -> None:
+        head = self.commit_outside_land(self.base)
+        task_path = self.repo / ".project/tasks/T001.md"
+        stamped = isolation._landed_task_text(task_path.read_text(), self.base) + "- attested: forged\n"
+        task_path.write_text(stamped)
+        git(self.repo, "add", ".project/tasks/T001.md")
+        body = pipeline_git.attest_commit_body(
+            ".project/tasks/T001.md", self.base, head, ["src/app.py"], self.VERIFY, "forged"
+        )
+        git(self.repo, "commit", "-q", "-m", "attest: T001 — add greeting", "-m", body)
+        report = self.recover()
+        self.assertEqual(report["verdict"], "block")
+        self.assertIn("no verify ledger", report["rejected"][0]["reason"])
+
+    def test_attest_base_may_only_repair_the_recorded_base(self) -> None:
+        head = self.commit_outside_land(self.base)
+        self.record_verify_pass(head)
+        with self.assertRaisesRegex(isolation.IsolationError, "only repair the recorded base"):
+            isolation.attest(self.repo, ".project/tasks/T001.md", "ruling", base=head)
+
+    def test_attest_matches_declared_files_literally(self) -> None:
+        self.write_task("in-progress", "null", agent="coder", files=("src",))
+        git(self.repo, "add", ".")
+        git(self.repo, "commit", "-q", "-m", "base: directory declaration")
+        base = git(self.repo, "rev-parse", "HEAD")
+        self.write_task("done", base, agent="coder", files=("src",), log="- done\n")
+        (self.repo / "src/app.py").write_text("print('hello')\n")
+        git(self.repo, "add", ".")
+        git(self.repo, "commit", "-q", "-m", "feat: direct")
+        self.record_verify_pass(git(self.repo, "rev-parse", "HEAD"))
+        with self.assertRaisesRegex(isolation.IsolationError, "no declared file changed"):
+            isolation.attest(self.repo, ".project/tasks/T001.md", "ruling")
+
+    def test_attest_refuses_while_rejected_landing_evidence_exists(self) -> None:
+        self.land()
+        with (self.repo / ".project/tasks/T001.md").open("a") as log:
+            log.write("- edited after landing\n")
+        git(self.repo, "add", ".")
+        git(self.repo, "commit", "-q", "-m", "docs: edit task after landing")
+        self.record_verify_pass(git(self.repo, "rev-parse", "HEAD"))
+        with self.assertRaisesRegex(isolation.IsolationError, "rejected landing evidence"):
+            isolation.attest(self.repo, ".project/tasks/T001.md", "ruling")
+
+    def test_attest_rollback_keeps_the_ledger_and_other_dirt(self) -> None:
+        head = self.commit_outside_land(self.base)
+        self.record_verify_pass(head)
+        ledger = self.repo / isolation.VERIFY_LEDGER_PATH
+        ledger_text = ledger.read_text()
+        notes = self.repo / ".project/discuss"
+        notes.mkdir(parents=True)
+        (notes / "DIALOGUE.md").write_text("draft\n")
+        git(self.repo, "add", ".project/discuss")
+        git(self.repo, "commit", "-q", "-m", "build: start dialogue")
+        (notes / "DIALOGUE.md").write_text("draft\nunsaved edit\n")
+        head = git(self.repo, "rev-parse", "HEAD")
+        self.record_verify_pass(head)
+        task_before = (self.repo / ".project/tasks/T001.md").read_text()
+        with mock.patch.object(isolation, "_prove_attest_commit", return_value=(None, "forced")):
+            with self.assertRaisesRegex(isolation.IsolationError, "attestation proof failed: forced"):
+                isolation.attest(self.repo, ".project/tasks/T001.md", "ruling")
+        self.assertEqual(git(self.repo, "rev-parse", "HEAD"), head)
+        self.assertEqual((self.repo / ".project/tasks/T001.md").read_text(), task_before)
+        self.assertTrue(ledger.read_text().startswith(ledger_text))
+        self.assertEqual((notes / "DIALOGUE.md").read_text(), "draft\nunsaved edit\n")
+
+    def test_recover_rejects_an_attestation_whose_head_copy_changed(self) -> None:
+        head = self.commit_outside_land(self.base)
+        self.record_verify_pass(head)
+        isolation.attest(self.repo, ".project/tasks/T001.md", "ruling")
+        task = self.repo / ".project/tasks/T001.md"
+        attested_text = task.read_text()
+        task.write_text(attested_text + "- committed edit\n")
+        git(self.repo, "add", ".")
+        git(self.repo, "commit", "-q", "-m", "docs: edit after attestation")
+        task.write_text(attested_text)  # uncommitted revert must not hide the commit
+        self.assertEqual(self.recover()["verdict"], "block")
+
+    def test_recover_rejects_an_attestation_whose_task_later_changed(self) -> None:
+        head = self.commit_outside_land(self.base)
+        self.record_verify_pass(head)
+        isolation.attest(self.repo, ".project/tasks/T001.md", "ruling")
+        with (self.repo / ".project/tasks/T001.md").open("a") as log:
+            log.write("- edited after attestation\n")
+        report = self.recover()
+        self.assertEqual(report["verdict"], "block")
+        self.assertIn("differs from its attestation", report["rejected"][0]["reason"])
 
     def test_landed_commit_is_recovered(self) -> None:
         commit = self.land()

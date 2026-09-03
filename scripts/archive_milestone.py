@@ -794,9 +794,16 @@ def completed_task_files(
     project: Path, tasks: Path, reviewed_head: str
 ) -> Sequence[Path]:
     """Return task artifacts only when each records landed completion evidence."""
+    return landed_task_evidence(project, tasks, reviewed_head)[0]
+
+
+def landed_task_evidence(
+    project: Path, tasks: Path, reviewed_head: str
+) -> tuple[Sequence[Path], int]:
+    """(task artifacts, attested count) once every task proves landed or attested."""
     candidates = canonical_task_files(tasks)
     try:
-        verify_landed_task_files(
+        proven = verify_landed_task_files(
             project,
             candidates,
             ".project/tasks",
@@ -804,7 +811,8 @@ def completed_task_files(
         )
     except (IsolationError, ValueError) as error:
         raise ArchiveError(f"task landing proof failed: {error}") from error
-    return candidates
+    attested = sum(1 for task in proven["tasks"] if task.get("verdict") == "attested")
+    return candidates, attested
 
 
 def validate_panel_skip_receipt(path: Path, expected_mode: str) -> None:
