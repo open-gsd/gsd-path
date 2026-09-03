@@ -1872,7 +1872,9 @@ def _recover_task(
         return result("block", reason="multiple proven landing commits: " + ", ".join(sha for sha, _ in proven))
     attested = []
     for sha, body in history.get(attest_commit_subject(task_id, title), []):
-        base, why = _prove_attest_commit(primary, sha, body, task_file, task_text)
+        base, why = _prove_attest_commit(
+            primary, sha, body, task_file, task_text, compare_head=canonical_task_file is None
+        )
         if why is None:
             attested.append((sha, base))
         else:
@@ -2397,7 +2399,12 @@ def _task_contract_error(base_text: str, text: str, label: str) -> Optional[str]
         head, body = split_frontmatter(text)
     except IsolationError as error:
         return str(error)
-    if _immutable_frontmatter(base_head) != _immutable_frontmatter(head) or not body.startswith(base_body):
+    base_fields, _ = task_frontmatter(base_text)
+    if base_fields is not None and base_fields.get("status") == "done":
+        return "base task is already done"
+    if _immutable_frontmatter(base_head) != _immutable_frontmatter(head) or not (
+        _normalize_newlines(body).startswith(_normalize_newlines(base_body))
+    ):
         return f"{label} changes the task contract recorded at its base"
     return None
 
@@ -2416,19 +2423,18 @@ def _attest_body_fields(body: str) -> tuple[Dict[str, str], list[str]]:
 
 
 def _attested_changes(repo: Path, base: str, head: str, declared: Set[str]) -> list[str]:
-    if not declared:
-        return []
-    return sorted(
-        path
-        for path in git_output(
-            repo, "diff", "--name-only", base, head, "--", *sorted(declared)
-        ).splitlines()
-        if path
-    )
+    """Declared paths that changed between base and head, matched literally like land."""
+    changed = set(git_output(repo, "diff", "--name-only", base, head).splitlines())
+    return sorted(changed & declared)
 
 
 def _prove_attest_commit(
-    repo: Path, sha: str, body: str, task_file: str, task_text: str
+    repo: Path,
+    sha: str,
+    body: str,
+    task_file: str,
+    task_text: str,
+    compare_head: bool = True,
 ) -> tuple[Optional[str], Optional[str]]:
     """Return (base, None) when `sha` attests this task, else (None, reason)."""
     fields, files = _attest_body_fields(body)
@@ -2503,9 +2509,10 @@ def _prove_attest_commit(
     try:
         current_oid = _clean_blob_oid(repo, task_file, task_text, write=False)
         after_oid = _regular_blob_oid(repo, sha, task_file)
+        head_oid = _regular_blob_oid(repo, "HEAD", task_file) if compare_head else after_oid
     except IsolationError as error:
         return None, str(error)
-    if current_oid != after_oid:
+    if current_oid != after_oid or head_oid != after_oid:
         return None, "current done task differs from its attestation"
     return base, None
 
@@ -2560,9 +2567,17 @@ def attest(
         ("done but no landing commit proves it", "done task has invalid base")
     ):
         raise IsolationError(f"task recovery is not a missing landing: {reason or mine['verdict']}")
+    if mine.get("rejected"):
+        raise IsolationError(
+            "task has rejected landing evidence on the branch; resolve it before attesting: "
+            + "; ".join(str(item.get("reason", "")) for item in mine["rejected"])
+        )
     if mine.get("worktree") is not None or mine.get("task_branch") is not None:
         raise IsolationError("task retains isolation; retire it before attesting")
-    resolved_base = require_commit(primary, base or str(fields.get("base", "")))
+    recorded = str(fields.get("base", ""))
+    resolved_base = require_commit(primary, base or recorded)
+    if base and recorded not in {"", "null"} and not resolved_base.startswith(recorded):
+        raise IsolationError("--base may only repair the recorded base, not replace it")
     if run_git(primary, "merge-base", "--is-ancestor", resolved_base, head).returncode != 0:
         raise IsolationError("base is not an ancestor of HEAD")
     _regular_blob_oid(primary, resolved_base, task_file)
@@ -2612,7 +2627,14 @@ def attest(
         raise
     _, proof_error = _prove_attest_commit(primary, commit, commit_body.strip(), task_file, stamped)
     if proof_error:
-        _restore_rejected_commit(primary, commit, head, index_tree)
+        # Move HEAD back and restore the index and task file; leave every other
+        # worktree path (ledger, discussion records) exactly as it was.
+        if current_sha(primary) != commit:
+            raise IsolationError("HEAD moved after the rejected attestation commit")
+        moved = run_git(primary, "update-ref", "HEAD", head, commit)
+        if moved.returncode != 0:
+            raise IsolationError((moved.stderr or moved.stdout).strip() or "could not restore HEAD")
+        _restore_landing_state(primary, task_path, task_bytes, task_mode, index_tree)
         raise IsolationError(f"attestation proof failed: {proof_error}")
     return {
         "bound_branch": bound,
