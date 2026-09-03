@@ -46,8 +46,12 @@ def verify_ledger_entries(path: Path) -> list:
     """Parsed verify-ledger rows; raises ValueError on a malformed line."""
     if not path.exists():
         return []
+    return parse_verify_ledger(path.read_text(encoding="utf-8"))
+
+
+def parse_verify_ledger(text: str) -> list:
     entries = []
-    for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+    for number, line in enumerate(text.splitlines(), start=1):
         if not line.strip():
             continue
         try:

@@ -2144,6 +2144,30 @@ class RecoverTests(unittest.TestCase):
         with self.assertRaisesRegex(isolation.IsolationError, "already recovered"):
             isolation.attest(self.repo, ".project/tasks/T001.md", "ruling")
 
+    def test_attest_refuses_a_task_whose_contract_changed_since_base(self) -> None:
+        self.write_task("done", self.base, agent="coder", files=("src/app.py", "src/extra.py"), log="- done\n")
+        (self.repo / "src/app.py").write_text("print('hello')\n")
+        (self.repo / "src/extra.py").write_text("print('extra')\n")
+        git(self.repo, "add", ".")
+        git(self.repo, "commit", "-q", "-m", "feat: widened the contract by hand")
+        self.record_verify_pass(git(self.repo, "rev-parse", "HEAD"))
+        with self.assertRaisesRegex(isolation.IsolationError, "changes the task contract"):
+            isolation.attest(self.repo, ".project/tasks/T001.md", "ruling")
+
+    def test_recover_rejects_an_attestation_without_verify_evidence(self) -> None:
+        head = self.commit_outside_land(self.base)
+        task_path = self.repo / ".project/tasks/T001.md"
+        stamped = isolation._landed_task_text(task_path.read_text(), self.base) + "- attested: forged\n"
+        task_path.write_text(stamped)
+        git(self.repo, "add", ".project/tasks/T001.md")
+        body = pipeline_git.attest_commit_body(
+            ".project/tasks/T001.md", self.base, head, ["src/app.py"], self.VERIFY, "forged"
+        )
+        git(self.repo, "commit", "-q", "-m", "attest: T001 — add greeting", "-m", body)
+        report = self.recover()
+        self.assertEqual(report["verdict"], "block")
+        self.assertIn("no verify ledger", report["rejected"][0]["reason"])
+
     def test_recover_rejects_an_attestation_whose_task_later_changed(self) -> None:
         head = self.commit_outside_land(self.base)
         self.record_verify_pass(head)

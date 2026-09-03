@@ -2374,17 +2374,32 @@ def _validate_checkpoint_message(subject: str, body: str) -> None:
 task_verify_command = _common.task_verify_command
 
 
+def _ledger_pass(entries: Sequence[Dict[str, object]], command: str, commit: str) -> bool:
+    matches = [e for e in entries if e["command"] == command and e["commit"] == commit]
+    return bool(matches) and matches[-1]["result"] == "pass"
+
+
 def _verify_ledger_pass(repo: Path, command: str, commit: str) -> bool:
-    """True when the verify ledger's latest run of command at commit passed."""
+    """True when the worktree verify ledger's latest run of command at commit passed."""
     path = repo.joinpath(*PurePosixPath(VERIFY_LEDGER_PATH).parts)
     if path.is_symlink():
         raise IsolationError(f"{VERIFY_LEDGER_PATH} must be a regular file")
     try:
-        entries = _common.verify_ledger_entries(path)
+        return _ledger_pass(_common.verify_ledger_entries(path), command, commit)
     except ValueError as error:
         raise IsolationError(str(error)) from error
-    matches = [e for e in entries if e["command"] == command and e["commit"] == commit]
-    return bool(matches) and matches[-1]["result"] == "pass"
+
+
+def _task_contract_error(base_text: str, text: str, label: str) -> Optional[str]:
+    """Only landing metadata and an appended log may differ from the base task."""
+    try:
+        base_head, base_body = split_frontmatter(base_text)
+        head, body = split_frontmatter(text)
+    except IsolationError as error:
+        return str(error)
+    if _immutable_frontmatter(base_head) != _immutable_frontmatter(head) or not body.startswith(base_body):
+        return f"{label} changes the task contract recorded at its base"
+    return None
 
 
 def _attest_body_fields(body: str) -> tuple[Dict[str, str], list[str]]:
@@ -2453,6 +2468,25 @@ def _prove_attest_commit(
     agent = after_fields.get("agent")
     if not isinstance(agent, str) or agent in {"", "null"}:
         return None, "attested task frontmatter has no assigned agent"
+    try:
+        contract_error = _task_contract_error(
+            git_text(repo, "show", f"{base}:{task_file}"), after_text, "attestation"
+        )
+    except IsolationError as error:
+        return None, str(error)
+    if contract_error:
+        return None, contract_error
+    verify = task_verify_command(after_text)
+    if not verify or fields.get("Verify") != verify:
+        return None, "body Verify: differs from the task's ## Verify command"
+    ledger = run_git(repo, "show", f"{sha}:{VERIFY_LEDGER_PATH}")
+    if ledger.returncode != 0:
+        return None, "attestation commit carries no verify ledger"
+    try:
+        if not _ledger_pass(_common.parse_verify_ledger(ledger.stdout), verify, head):
+            return None, "verify ledger in the attestation has no passing run at Head:"
+    except ValueError as error:
+        return None, str(error)
     declared, declared_error = _declared_task_paths(after_fields)
     if declared_error or declared is None:
         return None, declared_error or "attested task files are unreadable"
@@ -2521,12 +2555,22 @@ def attest(
         raise IsolationError(f"task recovery did not report {task_id}: {report.get('reason', '')}")
     if mine["verdict"] in LANDED_VERDICTS:
         raise IsolationError(f"task is already {mine['verdict']} at {mine['commit']}")
+    reason = str(mine.get("reason", ""))
+    if mine["verdict"] != "block" or not reason.startswith(
+        ("done but no landing commit proves it", "done task has invalid base")
+    ):
+        raise IsolationError(f"task recovery is not a missing landing: {reason or mine['verdict']}")
     if mine.get("worktree") is not None or mine.get("task_branch") is not None:
         raise IsolationError("task retains isolation; retire it before attesting")
     resolved_base = require_commit(primary, base or str(fields.get("base", "")))
     if run_git(primary, "merge-base", "--is-ancestor", resolved_base, head).returncode != 0:
         raise IsolationError("base is not an ancestor of HEAD")
     _regular_blob_oid(primary, resolved_base, task_file)
+    contract_error = _task_contract_error(
+        git_text(primary, "show", f"{resolved_base}:{task_file}"), task_text, "task"
+    )
+    if contract_error:
+        raise IsolationError(contract_error + "; only landing metadata and an appended log may change")
     declared, declared_error = _declared_task_paths(fields)
     if declared_error or declared is None:
         raise IsolationError(declared_error or "task files are unreadable")
