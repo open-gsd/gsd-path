@@ -94,6 +94,10 @@ WAVE_SKEPTIC_PATTERN = re.compile(
     r"^wave-([1-9]\d*)\.cycle([1-9]\d*)\.skeptic-"
     r"([a-z0-9]+(?:_[a-z0-9]+)*)\.md$"
 )
+# A review file claims to be wave-cycle evidence when its name starts with a
+# wave number followed by "cycle" (a missing dot is a typo, not a note). Other
+# wave-* names are free-form review notes like any non-canonical review file.
+WAVE_CYCLE_CLAIM_PATTERN = re.compile(r"^wave-\d+\.?cycle")
 FINAL_CRITERION_PATTERN = re.compile(r"^### SC([1-9]\d*) — (.+)$")
 INTENT_CRITERION_PATTERN = re.compile(r"^([1-9]\d*)\.\s+(\S.*)$")
 HTML_COMMENT_PATTERN = re.compile(r"<!--.*?-->", re.DOTALL)
@@ -889,7 +893,9 @@ class SkepticArtifact(NamedTuple):
 def canonical_wave_files(reviews: Path) -> Sequence[WaveArtifact]:
     if reviews.is_symlink() or not reviews.is_dir():
         return ()
-    candidates = sorted(path for path in reviews.iterdir() if path.name.startswith("wave-"))
+    candidates = sorted(
+        path for path in reviews.iterdir() if WAVE_CYCLE_CLAIM_PATTERN.match(path.name)
+    )
     matches = [(path, WAVE_FILE_PATTERN.fullmatch(path.name)) for path in candidates]
     if any(
         (
