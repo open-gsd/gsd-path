@@ -579,6 +579,42 @@ archive: null
             ".project/tasks/T001-task.md",
         )
 
+    def attest_task_outside_land(self) -> tuple[str, str]:
+        base, task_file = self.prepare_in_progress_task()
+        (self.repo / "app.py").write_text("value = 1\n", encoding="utf-8")
+        self.write_task(
+            "T001",
+            task_text(
+                "T001", "Implement feature", 1, (), ("app.py",),
+                status="done", agent="builder", base=base, log=("created", "done by hand"),
+            )
+            + "\n## Verify\n\n```bash\npython3 -c 'print(1)'\n```\n",
+        )
+        head = self.commit_all("feat: direct commit outside land")
+        isolation_error = isolation.IsolationError
+        with self.assertRaises(isolation_error):
+            isolation.attest(self.repo, task_file, "ruling")  # no verify evidence yet
+        result, _ = self.cli("verify-record", "--command", "python3 -c 'print(1)'", "--commit", head, "--result", "pass")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        attested = isolation.attest(self.repo, task_file, "owner ruling")
+        return attested["commit"], task_file
+
+    def test_reconcile_and_verify_landed_report_attested_tasks(self) -> None:
+        commit, task_file = self.attest_task_outside_land()
+
+        result, payload = self.cli("reconcile", "--task-id", "T001")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(payload["classification"], "attested")
+        self.assertEqual(payload["landed_commit"], commit)
+
+        result, payload = self.cli("verify-landed", "--project-dir", ".project", "--head", commit)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(payload["tasks"][0]["classification"], "attested")
+        self.assertEqual(payload["tasks"][0]["landed_commit"], commit)
+
+        result, payload = self.cli("ready")
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_reconcile_marks_unlanded_owned_work_resumable(self) -> None:
         self.prepare_in_progress_task()
 

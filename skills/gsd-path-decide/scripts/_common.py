@@ -9,6 +9,7 @@ consuming module keep working.
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import subprocess
@@ -21,6 +22,48 @@ BOUND_BRANCH_RE = re.compile(r"^gsd-path/M(\d{3,})$")
 FIELD_PATTERN = re.compile(r"^(?P<key>[a-z_]+):\s*(?P<value>.*)$")
 INLINE_LIST_PATTERN = re.compile(r"^\[(?P<body>.*)\]$")
 LIST_ITEM_PATTERN = re.compile(r"^\s*-\s+(?P<value>.*)$")
+VERIFY_LEDGER_PATH = ".project/build/verify-ledger.jsonl"
+VERIFY_RESULTS = ("pass", "fail")
+VERIFY_BLOCK_PATTERN = re.compile(r"```bash[ \t]*\n(?P<block>.*?)```", re.DOTALL)
+
+
+def section_body(text: str, heading: str) -> Optional[str]:
+    """The text under `## <heading>` up to the next `## `, or None when absent."""
+    match = re.search(
+        rf"(?ms)^## {re.escape(heading)}\s*\n(?P<body>.*?)(?=^## |\Z)", text
+    )
+    return match.group("body") if match else None
+
+
+def task_verify_command(task_text: str) -> str:
+    """The task's ## Verify bash command, whitespace-normalized, or ''."""
+    body = section_body(task_text, "Verify")
+    block = VERIFY_BLOCK_PATTERN.search(body) if body is not None else None
+    return " ".join(block.group("block").split()) if block else ""
+
+
+def verify_ledger_entries(path: Path) -> list:
+    """Parsed verify-ledger rows; raises ValueError on a malformed line."""
+    if not path.exists():
+        return []
+    entries = []
+    for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+        if not line.strip():
+            continue
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError as error:
+            raise ValueError(f"{VERIFY_LEDGER_PATH} line {number} is not JSON: {error}") from error
+        if (
+            not isinstance(entry, dict)
+            or not isinstance(entry.get("command"), str)
+            or not isinstance(entry.get("commit"), str)
+            or entry.get("result") not in VERIFY_RESULTS
+            or not isinstance(entry.get("recorded_at"), str)
+        ):
+            raise ValueError(f"{VERIFY_LEDGER_PATH} line {number} has invalid fields")
+        entries.append(entry)
+    return entries
 
 
 def run_command(

@@ -38,7 +38,7 @@ COVERAGE_ROW_PATTERN = re.compile(
 TASK_ID_PATTERN = re.compile(r"(?m)^id:\s*(T\d{3})\s*(?:#.*)?$")
 TASK_FILE_NAME = re.compile(r"^(?P<id>T\d{3})-[a-z0-9][a-z0-9-]*\.md$")
 OWNED_CRITERION_PATTERN = re.compile(r"^- (None|SC[1-9]\d*)$")
-VERIFY_BLOCK_PATTERN = re.compile(r"```bash[ \t]*\n(?P<block>.*?)```", re.DOTALL)
+VERIFY_BLOCK_PATTERN = _common.VERIFY_BLOCK_PATTERN
 FILES_FIELD_PATTERN = re.compile(r"^files:\s*(?P<value>[^#]*?)(?:\s+#.*)?$")
 INLINE_LIST_PATTERN = _common.INLINE_LIST_PATTERN
 LIST_ITEM_PATTERN = _common.LIST_ITEM_PATTERN
@@ -216,12 +216,10 @@ def _line_value(text: str, label: str) -> str:
 
 
 def _section(text: str, heading: str) -> str:
-    match = re.search(
-        rf"(?ms)^## {re.escape(heading)}\s*\n(?P<body>.*?)(?=^## |\Z)", text
-    )
-    if not match:
+    body = _common.section_body(text, heading)
+    if body is None:
         raise HandoffError(f"missing ## {heading} section")
-    return match.group("body")
+    return body
 
 
 def _non_placeholder(value: str, label: str) -> str:

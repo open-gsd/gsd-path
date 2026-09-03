@@ -1023,7 +1023,7 @@ def render_manifest(repo: Path) -> dict:
 
     reviewed_head, criteria = parse_final_review(archive)
     validate_gap_reviews(archive, reviewed_head)
-    tasks = archive_milestone.completed_task_files(project, archive / "tasks", reviewed_head)
+    tasks, attested = archive_milestone.landed_task_evidence(project, archive / "tasks", reviewed_head)
     cycles = review_cycle_counts(archive)
     carried_forward = archive_milestone.pending_ruling_count(archive / "research" / "DOCS-AUDIT.md")
     carry_text = (
@@ -1040,6 +1040,7 @@ def render_manifest(repo: Path) -> dict:
     count_text = (
         f"{len(cycles)}  Tasks: {len(tasks)} done / {len(tasks)} total  "
         f"Review cycles used: {cycle_text}"
+        + (f"  Attested: {attested}" if attested else "")
     )
     content = f"""# Archive — {archive.name}
 
@@ -1099,22 +1100,25 @@ def validate_manifest(project: Path, archive: Path, state: PipelineState) -> tup
 
     reviewed_head, final_criteria = parse_final_review(archive)
     validate_gap_reviews(archive, reviewed_head)
-    task_files = archive_milestone.completed_task_files(project, archive / "tasks", reviewed_head)
+    task_files, attested = archive_milestone.landed_task_evidence(project, archive / "tasks", reviewed_head)
     cycle_counts = review_cycle_counts(archive)
     wave_count = len(cycle_counts)
     counts = re.fullmatch(
-        r"(\d+)\s+Tasks:\s+(\d+) done / (\d+) total\s+Review cycles used:\s+([1-9]\d*(?:/[1-9]\d*)*)",
+        r"(\d+)\s+Tasks:\s+(\d+) done / (\d+) total\s+Review cycles used:\s+([1-9]\d*(?:/[1-9]\d*)*)"
+        r"(?:\s+Attested:\s+([1-9]\d*))?",
         fields["Waves:"],
     )
     if not counts:
         raise ArchiveError("manifest Waves field has an invalid format")
     recorded_waves, done_tasks, total_tasks = (int(counts.group(index)) for index in (1, 2, 3))
     cycles = [int(value) for value in counts.group(4).split("/")]
+    recorded_attested = int(counts.group(5) or 0)
     if (
         recorded_waves != wave_count
         or done_tasks != len(task_files)
         or total_tasks != len(task_files)
         or cycles != list(cycle_counts)
+        or recorded_attested != attested
     ):
         raise ArchiveError("manifest wave, task, or review-cycle counts do not match the archive")
 

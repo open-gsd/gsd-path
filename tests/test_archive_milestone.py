@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Optional
 from unittest import mock
 
-from scripts import archive_milestone, integration, isolation, pipeline_git, review_panel
+from scripts import archive_milestone, build_state, integration, isolation, pipeline_git, review_panel
 
 if sys.platform != "win32":
     import fcntl
@@ -34,7 +34,7 @@ class ArchiveMilestoneTests(unittest.TestCase):
     def git(self, repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
         return self.run_command("git", *args, cwd=repo)
 
-    def make_repo(self, root: Path, branch: str = "gsd-path/M001") -> None:
+    def make_repo(self, root: Path, branch: str = "gsd-path/M001", landing: str = "land") -> None:
         self.git(root, "init", "-q", "-b", branch)
         self.git(root, "config", "user.name", "Validation")
         self.git(root, "config", "user.email", "validation@example.invalid")
@@ -118,6 +118,12 @@ files: [src/demo.py]
 
 - SC1
 
+## Verify
+
+```bash
+python3 -c 'print(1)'
+```
+
 ## Log
 
 - created
@@ -168,16 +174,24 @@ Tasks reviewed: 1
         task_file = ".project/tasks/T001-demo.md"
         changed_paths = [task_file, "src/demo.py"]
         self.git(root, "add", *changed_paths)
-        landed = self.git(
-            root,
-            "commit",
-            "-q",
-            "-m",
-            pipeline_git.task_commit_subject("T001", "demo"),
-            "-m",
-            pipeline_git.task_commit_body(task_file, changed_paths, base),
-        )
-        self.assertEqual(landed.returncode, 0, landed.stderr)
+        if landing == "attest":
+            # Work committed outside isolation.py land, then attested by ruling.
+            direct = self.git(root, "commit", "-q", "-m", "feat: direct commit outside land")
+            self.assertEqual(direct.returncode, 0, direct.stderr)
+            head = self.git(root, "rev-parse", "HEAD").stdout.strip()
+            build_state.verify_record(str(root), "python3 -c 'print(1)'", head, "pass")
+            isolation.attest(root, task_file, "owner ruling: hand-landed during evaluation")
+        else:
+            landed = self.git(
+                root,
+                "commit",
+                "-q",
+                "-m",
+                pipeline_git.task_commit_subject("T001", "demo"),
+                "-m",
+                pipeline_git.task_commit_body(task_file, changed_paths, base),
+            )
+            self.assertEqual(landed.returncode, 0, landed.stderr)
         reviewed_head = self.git(root, "rev-parse", "HEAD").stdout.strip()
         (project / "review" / "FINAL.md").write_text(
             f"""# Final Review — demo
@@ -631,6 +645,27 @@ refuted
             self.assertFalse((archive / ".MANIFEST.md.gsd-path-tmp").exists())
             checked = self.preflight(repo)
             self.assertEqual(checked.returncode, 0, checked.stderr)
+
+    def test_render_manifest_counts_attested_tasks(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo, landing="attest")
+            archive = self.prepare_archive(repo)
+
+            rendered = self.render_manifest(repo)
+
+            self.assertEqual(rendered.returncode, 0, rendered.stderr)
+            content = (archive / "MANIFEST.md").read_text()
+            self.assertIn(
+                "Waves: 1  Tasks: 1 done / 1 total  Review cycles used: 1  Attested: 1", content
+            )
+            checked = self.preflight(repo)
+            self.assertEqual(checked.returncode, 0, checked.stderr)
+
+            (archive / "MANIFEST.md").write_text(content.replace("  Attested: 1", ""))
+            checked = self.preflight(repo)
+            self.assertNotEqual(checked.returncode, 0)
+            self.assertIn("counts do not match", checked.stderr)
 
     def test_render_manifest_rejects_a_task_not_recorded_done(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

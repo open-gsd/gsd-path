@@ -22,10 +22,18 @@ from pathlib import Path, PurePosixPath
 from typing import Dict, Optional, Sequence, Set
 
 try:
-    from pipeline_git import is_bound_branch, task_commit_body, task_commit_subject
+    from pipeline_git import (
+        attest_commit_body,
+        attest_commit_subject,
+        is_bound_branch,
+        task_commit_body,
+        task_commit_subject,
+    )
     import _common
 except ImportError:  # pragma: no cover - package import used by tests
     from scripts.pipeline_git import (
+        attest_commit_body,
+        attest_commit_subject,
         is_bound_branch,
         task_commit_body,
         task_commit_subject,
@@ -39,7 +47,9 @@ VERIFY_BRANCH_PREFIX = "gsd-path-verify/"
 DISCUSSION_PATHS = frozenset(
     {".project/discuss/DIALOGUE.md", ".project/discuss/ANSWERS.md"}
 )
-VERIFY_LEDGER_PATH = ".project/build/verify-ledger.jsonl"
+VERIFY_LEDGER_PATH = _common.VERIFY_LEDGER_PATH
+# recover verdicts that count as a landed task
+LANDED_VERDICTS = frozenset({"recovered", "attested"})
 # Orchestrator bookkeeping that may stay uncommitted in the primary while a
 # parallel task lands; the next `.project` checkpoint commits it.
 BOOKKEEPING_PATHS = DISCUSSION_PATHS | {VERIFY_LEDGER_PATH}
@@ -1239,6 +1249,10 @@ def _single_parent(repo: Path, sha: str) -> tuple[Optional[str], Optional[str]]:
     return parents[0], None
 
 
+def _immutable_frontmatter(lines: Sequence[str]) -> list[str]:
+    return [line for line in lines if _frontmatter_key(line) not in LANDING_MUTABLE_FIELDS]
+
+
 def _landing_transition_error(
     before_head: Sequence[str],
     after_head: Sequence[str],
@@ -1251,13 +1265,7 @@ def _landing_transition_error(
             return f"base task frontmatter must contain one {key} field"
         if sum(_frontmatter_key(line) == key for line in after_head) != 1:
             return f"landed task frontmatter must contain one {key} field"
-    immutable_before = [
-        line for line in before_head if _frontmatter_key(line) not in LANDING_MUTABLE_FIELDS
-    ]
-    immutable_after = [
-        line for line in after_head if _frontmatter_key(line) not in LANDING_MUTABLE_FIELDS
-    ]
-    if immutable_after != immutable_before:
+    if _immutable_frontmatter(after_head) != _immutable_frontmatter(before_head):
         return "task frontmatter changes fields outside landing metadata"
     if before_fields.get("status") == "done":
         return "base task is already done"
@@ -1559,17 +1567,7 @@ def _retained_task_contract_error(
         isolate_head, isolate_body = split_frontmatter(isolate_text)
     except IsolationError as error:
         return str(error)
-    current_contract = [
-        line
-        for line in current_head
-        if _frontmatter_key(line) not in LANDING_MUTABLE_FIELDS
-    ]
-    isolate_contract = [
-        line
-        for line in isolate_head
-        if _frontmatter_key(line) not in LANDING_MUTABLE_FIELDS
-    ]
-    if isolate_contract != current_contract:
+    if _immutable_frontmatter(isolate_head) != _immutable_frontmatter(current_head):
         return "retained task contract differs from the current task"
     if not _normalize_newlines(isolate_body).startswith(
         _normalize_newlines(current_body)
@@ -1870,9 +1868,24 @@ def _recover_task(
         else:
             rejected.append({"commit": sha, "reason": why})
     report["rejected"] = rejected
-
     if len(proven) > 1:
         return result("block", reason="multiple proven landing commits: " + ", ".join(sha for sha, _ in proven))
+    attested = []
+    for sha, body in history.get(attest_commit_subject(task_id, title), []):
+        base, why = _prove_attest_commit(primary, sha, body, task_file, task_text)
+        if why is None:
+            attested.append((sha, base))
+        else:
+            rejected.append({"commit": sha, "reason": why})
+    if proven and attested:
+        return result("block", reason="task has both a landing commit and an attestation")
+    if len(attested) > 1:
+        return result("block", reason="multiple attestations: " + ", ".join(sha for sha, _ in attested))
+    if attested:
+        commit, base = attested[0]
+        if worktree is not None and not bool(worktree["clean"]):
+            return result("block", reason="attested task retains a dirty worktree", commit=commit, base=base)
+        return result("attested", commit=commit, base=base)
     if proven:
         commit, base = proven[0]
         if branch_exists:
@@ -2063,7 +2076,7 @@ def verify_landed_task_files(
                 canonical,
             )
         )
-    blocked = [task for task in tasks if task["verdict"] != "recovered"]
+    blocked = [task for task in tasks if task["verdict"] not in LANDED_VERDICTS]
     if blocked:
         def failure_reason(task: Dict[str, object]) -> str:
             rejected = task.get("rejected")
@@ -2356,6 +2369,216 @@ def _validate_checkpoint_message(subject: str, body: str) -> None:
             seen.add(match.group(1))
         return
     raise IsolationError("unsupported pipeline checkpoint subject")
+
+
+task_verify_command = _common.task_verify_command
+
+
+def _verify_ledger_pass(repo: Path, command: str, commit: str) -> bool:
+    """True when the verify ledger's latest run of command at commit passed."""
+    path = repo.joinpath(*PurePosixPath(VERIFY_LEDGER_PATH).parts)
+    if path.is_symlink():
+        raise IsolationError(f"{VERIFY_LEDGER_PATH} must be a regular file")
+    try:
+        entries = _common.verify_ledger_entries(path)
+    except ValueError as error:
+        raise IsolationError(str(error)) from error
+    matches = [e for e in entries if e["command"] == command and e["commit"] == commit]
+    return bool(matches) and matches[-1]["result"] == "pass"
+
+
+def _attest_body_fields(body: str) -> tuple[Dict[str, str], list[str]]:
+    fields: Dict[str, str] = {}
+    files: list[str] = []
+    for line in body.splitlines():
+        if line.startswith("- "):
+            files.append(line[2:].strip())
+        else:
+            key, separator, value = line.partition(":")
+            if separator and key in {"Task", "Base", "Head", "Verify", "Ruling"}:
+                fields[key] = value.strip()
+    return fields, files
+
+
+def _attested_changes(repo: Path, base: str, head: str, declared: Set[str]) -> list[str]:
+    if not declared:
+        return []
+    return sorted(
+        path
+        for path in git_output(
+            repo, "diff", "--name-only", base, head, "--", *sorted(declared)
+        ).splitlines()
+        if path
+    )
+
+
+def _prove_attest_commit(
+    repo: Path, sha: str, body: str, task_file: str, task_text: str
+) -> tuple[Optional[str], Optional[str]]:
+    """Return (base, None) when `sha` attests this task, else (None, reason)."""
+    fields, files = _attest_body_fields(body)
+    base, head = fields.get("Base", ""), fields.get("Head", "")
+    if fields.get("Task") != task_file:
+        return None, "body Task: differs from the task file"
+    if not fields.get("Ruling"):
+        return None, "attestation has no Ruling:"
+    try:
+        base = require_commit(repo, require_full_sha(base))
+        head = require_commit(repo, require_full_sha(head))
+    except IsolationError as error:
+        return None, f"attestation Base:/Head: are invalid: {error}"
+    parent, parent_error = _single_parent(repo, sha)
+    if parent_error or parent != head:
+        return None, parent_error or "attestation parent differs from its Head:"
+    if run_git(repo, "merge-base", "--is-ancestor", base, head).returncode != 0:
+        return None, "attestation Head: does not descend from its Base:"
+    changed = set(git_output(repo, "diff-tree", "--no-commit-id", "--name-only", "-r", sha).splitlines())
+    if task_file not in changed or not changed <= {task_file, VERIFY_LEDGER_PATH}:
+        return None, "attestation commit must change only the task file and the verify ledger"
+    try:
+        before_text = git_text(repo, "show", f"{head}:{task_file}")
+        after_text = git_text(repo, "show", f"{sha}:{task_file}")
+        before_head, before_body = split_frontmatter(before_text)
+        after_head, after_body = split_frontmatter(after_text)
+    except IsolationError as error:
+        return None, str(error)
+    after_fields, after_error = task_frontmatter(after_text)
+    if after_error or after_fields is None:
+        return None, after_error or "attested task frontmatter is unreadable"
+    if _immutable_frontmatter(before_head) != _immutable_frontmatter(after_head) or not after_body.startswith(before_body):
+        return None, "attestation changes the task outside landing metadata and an appended log"
+    for key, value in {**LANDED_FIELDS, "base": base}.items():
+        if after_fields.get(key) != value:
+            return None, f"attested task frontmatter has invalid {key}"
+    agent = after_fields.get("agent")
+    if not isinstance(agent, str) or agent in {"", "null"}:
+        return None, "attested task frontmatter has no assigned agent"
+    declared, declared_error = _declared_task_paths(after_fields)
+    if declared_error or declared is None:
+        return None, declared_error or "attested task files are unreadable"
+    expected_files = _attested_changes(repo, base, head, declared)
+    if not expected_files:
+        return None, "no declared file changed between Base: and Head:"
+    if files != expected_files:
+        return None, "body Files: does not match the declared changes between Base: and Head:"
+    expected_body = attest_commit_body(
+        task_file, base, head, expected_files, fields.get("Verify", ""), fields["Ruling"]
+    )
+    if body.strip() != expected_body.strip():
+        return None, "attestation body is not canonical"
+    try:
+        current_oid = _clean_blob_oid(repo, task_file, task_text, write=False)
+        after_oid = _regular_blob_oid(repo, sha, task_file)
+    except IsolationError as error:
+        return None, str(error)
+    if current_oid != after_oid:
+        return None, "current done task differs from its attestation"
+    return base, None
+
+
+def attest(
+    primary: Path, task_file: str, ruling: str, base: Optional[str] = None
+) -> Dict[str, object]:
+    """Record an owner ruling that a done task's work is already on the branch.
+
+    The attestation is one .project/-only commit that stamps the task's landed
+    state (and carries an uncommitted verify-ledger line) and names the base,
+    the attested HEAD, the declared files that changed between them, the task
+    Verify recorded as passing at that HEAD, and the ruling verbatim. `recover`
+    reports it as `attested`, never `recovered`.
+    """
+    primary = require_directory(primary, "primary worktree")
+    if worktree_root(primary) != primary:
+        raise IsolationError(f"primary is not its Git root: {primary}")
+    bound = require_bound(primary)
+    task_file = relative_posix(task_file)
+    if not task_file.startswith(".project/tasks/"):
+        raise IsolationError("task file must live under .project/tasks/")
+    ruling_text = " ".join(ruling.split())
+    if not ruling_text:
+        raise IsolationError("--ruling must not be empty")
+    pending = uncommitted_paths(primary)
+    dirty = sorted(pending - BOOKKEEPING_PATHS)
+    if dirty:
+        raise IsolationError("primary worktree is dirty: " + ", ".join(dirty))
+    head = current_sha(primary)
+    task_path = primary / task_file
+    task_text, task_mode = _read_task_text(task_path)
+    fields, error = task_frontmatter(task_text)
+    if error or fields is None:
+        raise IsolationError(error or "unreadable task frontmatter")
+    task_id, title = str(fields.get("id", "")), str(fields.get("title", ""))
+    validate_task_id(task_id)
+    if fields.get("status") != "done":
+        raise IsolationError("only a done task can be attested")
+    try:
+        subject = attest_commit_subject(task_id, title)
+    except ValueError as exc:
+        raise IsolationError(str(exc)) from exc
+    report = recover(primary, Path(task_file).parent)
+    mine = next((task for task in report["tasks"] if task.get("task_id") == task_id), None)
+    if mine is None:
+        raise IsolationError(f"task recovery did not report {task_id}: {report.get('reason', '')}")
+    if mine["verdict"] in LANDED_VERDICTS:
+        raise IsolationError(f"task is already {mine['verdict']} at {mine['commit']}")
+    if mine.get("worktree") is not None or mine.get("task_branch") is not None:
+        raise IsolationError("task retains isolation; retire it before attesting")
+    resolved_base = require_commit(primary, base or str(fields.get("base", "")))
+    if run_git(primary, "merge-base", "--is-ancestor", resolved_base, head).returncode != 0:
+        raise IsolationError("base is not an ancestor of HEAD")
+    _regular_blob_oid(primary, resolved_base, task_file)
+    declared, declared_error = _declared_task_paths(fields)
+    if declared_error or declared is None:
+        raise IsolationError(declared_error or "task files are unreadable")
+    changed = _attested_changes(primary, resolved_base, head, declared)
+    if not changed:
+        raise IsolationError("no declared file changed between the base and HEAD; nothing to attest")
+    verify = task_verify_command(task_text)
+    if not verify:
+        raise IsolationError("task has no ## Verify bash command")
+    if not _verify_ledger_pass(primary, verify, head):
+        raise IsolationError(
+            f"verify ledger has no passing run of the task Verify at {head}; "
+            "run it and record it with build_state.py verify-record first"
+        )
+    frontmatter, body = split_frontmatter(task_text)
+    frontmatter = [
+        f"base: {resolved_base}" if _frontmatter_key(line) == "base" else line
+        for line in frontmatter
+    ]
+    normalized = "---\n" + "\n".join(frontmatter) + "\n---\n" + body
+    stamped = _landed_task_text(normalized, resolved_base)
+    if not stamped.endswith("\n"):
+        stamped += "\n"
+    stamped += f"- attested: {ruling_text}\n"
+    task_bytes = task_text.encode("utf-8")
+    index_tree = git_output(primary, "write-tree")
+    commit_body = attest_commit_body(task_file, resolved_base, head, changed, verify, ruling_text)
+    try:
+        _replace_regular_file(task_path, stamped.encode("utf-8"), task_mode)
+        # The ledger line proving Verify at HEAD travels inside the attestation.
+        commit = _commit_pending(
+            primary, {task_file, *(pending & {VERIFY_LEDGER_PATH})}, subject, commit_body
+        )
+    except BaseException as error:
+        try:
+            _restore_landing_state(primary, task_path, task_bytes, task_mode, index_tree)
+        except IsolationError as restore_error:
+            raise IsolationError(f"{error}; {restore_error}") from error
+        raise
+    _, proof_error = _prove_attest_commit(primary, commit, commit_body.strip(), task_file, stamped)
+    if proof_error:
+        _restore_rejected_commit(primary, commit, head, index_tree)
+        raise IsolationError(f"attestation proof failed: {proof_error}")
+    return {
+        "bound_branch": bound,
+        "commit": commit,
+        "base": resolved_base,
+        "head": head,
+        "files": changed,
+        "subject": subject,
+        "verdict": "attested",
+    }
 
 
 def checkpoint(
@@ -2658,6 +2881,14 @@ def parser() -> argparse.ArgumentParser:
     land_parser.add_argument("--task-file", required=True)
     land_parser.add_argument("--allow-path", action="append", default=[], dest="allow_paths")
 
+    attest_parser = subparsers.add_parser(
+        "attest", help="record an owner ruling that a done task's work is already on the branch"
+    )
+    attest_parser.add_argument("--repo", type=Path, required=True)
+    attest_parser.add_argument("--task-file", required=True)
+    attest_parser.add_argument("--ruling", required=True)
+    attest_parser.add_argument("--base", help="full or abbreviated base SHA; defaults to the task's recorded base")
+
     recover_parser = subparsers.add_parser(
         "recover", help="prove landed task commits from git; read-only"
     )
@@ -2735,6 +2966,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 arguments.title,
                 arguments.task_file,
                 arguments.allow_paths,
+            )
+        elif arguments.command == "attest":
+            result = attest(
+                arguments.repo, arguments.task_file, arguments.ruling, arguments.base
             )
         elif arguments.command == "recover":
             result = recover(arguments.repo, arguments.tasks_dir)
