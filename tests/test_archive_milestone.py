@@ -2026,6 +2026,20 @@ refuted
                 self.assertNotEqual(prepare.returncode, 0)
                 self.assertIn("canonical", prepare.stderr)
 
+    def test_prepare_ignores_wave_review_notes_without_a_cycle(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            notes = ("wave-1.t001-checkpoint.md", "wave-1.lifecycle-notes.md")
+            for name in notes:
+                (repo / ".project" / "review" / name).write_text("# Note\n\nVerdict: PASS\n")
+
+            archive = self.prepare_archive(repo)
+
+            for name in notes:
+                self.assertTrue((archive / "review" / name).is_file())
+            self.assertTrue((archive / "review" / "wave-1.cycle1.md").is_file())
+
     def test_archive_accepts_deep_review_lens_files(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             repo = Path(temporary_directory)
