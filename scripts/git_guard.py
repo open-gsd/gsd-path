@@ -30,6 +30,7 @@ from pathlib import Path
 # guard; the repository checkout keeps it as sibling modules under scripts/.
 _HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(_HERE / "runtime" if (_HERE / "runtime" / "isolation.py").is_file() else _HERE))
+sys.dont_write_bytecode = True  # a hook must not leave __pycache__ in the worktree
 try:
     from isolation import _landing_state, task_frontmatter
     from pipeline_git import task_commit_body
