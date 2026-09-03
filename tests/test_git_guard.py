@@ -1,3 +1,4 @@
+import re
 import subprocess
 import sys
 import tempfile
@@ -8,6 +9,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import git_guard
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "git_guard.py"
+TASK_FILE = (
+    "---\nid: T001\ntitle: Demo task\nwave: 1\ndeps: []\nstatus: in-progress\n"
+    "agent: coder\nbase: null\nworktree: active\ntask_branch: active\n"
+    "files:\n  - app.py\n---\ntask T001\n"
+)
 
 
 class ViolationRuleTests(unittest.TestCase):
@@ -151,6 +157,15 @@ class GitGuardEndToEndTests(unittest.TestCase):
             "commit", "-q", "-m", subject,
         )
 
+    def head(self):
+        return subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=self.repo,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+
     def run_guard(self, subject, body=""):
         message = self.repo / "COMMIT_MSG"
         rendered = subject + "\n"
@@ -201,13 +216,7 @@ class GitGuardEndToEndTests(unittest.TestCase):
             encoding="utf-8",
         )
         self.git("add", "-A")
-        reviewed_head = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            cwd=self.repo,
-            text=True,
-            capture_output=True,
-            check=True,
-        ).stdout.strip()
+        reviewed_head = self.head()
         body = (
             "Archive: .project/archive/002-next\n"
             f"Reviewed-HEAD: {reviewed_head}"
@@ -241,13 +250,7 @@ class GitGuardEndToEndTests(unittest.TestCase):
             encoding="utf-8",
         )
         self.git("add", "-A")
-        reviewed_head = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            cwd=self.repo,
-            text=True,
-            capture_output=True,
-            check=True,
-        ).stdout.strip()
+        reviewed_head = self.head()
         body = (
             "Archive: .project/archive/002-next\n"
             f"Reviewed-HEAD: {reviewed_head}"
@@ -281,13 +284,7 @@ class GitGuardEndToEndTests(unittest.TestCase):
             encoding="utf-8",
         )
         self.git("add", "-A")
-        reviewed_head = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            cwd=self.repo,
-            text=True,
-            capture_output=True,
-            check=True,
-        ).stdout.strip()
+        reviewed_head = self.head()
         body = (
             "Archive: .project/archive/002-next\n"
             f"Reviewed-HEAD: {reviewed_head}"
@@ -344,7 +341,9 @@ class GitGuardEndToEndTests(unittest.TestCase):
         commit_msg.chmod(0o755)
 
     def test_commit_after_ship_commit_is_not_blocked_at_pre_commit(self):
-        (self.repo / ".project" / "STATE.md").write_text("state\n", encoding="utf-8")
+        (self.repo / ".project" / "STATE.md").write_text(
+            "---\npipeline: gsd-path/v2\narchive: null\nnote: stale\n---\n", encoding="utf-8"
+        )
         self.git("add", "-A")
         self.commit("ship: stale previous message")
         self.install_hooks()
@@ -506,6 +505,153 @@ class GitGuardEndToEndTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertTrue(archive.is_dir())
+
+    def enter_build(self, phase="build", status="active"):
+        self.git("branch", "-m", "gsd-path/M002")
+        (self.repo / ".project" / "STATE.md").write_text(
+            f"---\npipeline: gsd-path/v2\nproject: demo\nmilestone: next\n"
+            f"phase: {phase}\nstatus: {status}\nbranch: gsd-path/M002\narchive: null\n---\n",
+            encoding="utf-8",
+        )
+        tasks = self.repo / ".project" / "tasks"
+        tasks.mkdir()
+        (tasks / "T001-demo.md").write_text(TASK_FILE, encoding="utf-8")
+        self.git("add", "-A")
+        self.commit("build: enter build")
+        return self.head()
+
+    def stage_product_change(self):
+        (self.repo / "app.py").write_text("print('landed')\n", encoding="utf-8")
+        self.git("add", "-A")
+
+    def stamp_task(self, base):
+        """Rewrite the task file the way isolation.py land stamps a landed task."""
+        task = self.repo / ".project" / "tasks" / "T001-demo.md"
+        text = task.read_text()
+        for field, value in (
+            ("status", "done"), ("base", base), ("worktree", "null"), ("task_branch", "null")
+        ):
+            text = re.sub(rf"^{field}: .*$", f"{field}: {value}", text, count=1, flags=re.M)
+        task.write_text(text + "landed\n", encoding="utf-8")
+
+    def landing_body(self, base, *paths):
+        return f"Task: .project/tasks/T001-demo.md\nBase: {base}\nFiles:\n" + "\n".join(
+            f"- {path}" for path in sorted((".project/tasks/T001-demo.md", *paths))
+        )
+
+    def test_build_blocks_direct_and_forged_product_commits(self):
+        head = self.enter_build(status="blocked")
+        self.stage_product_change()
+        result = self.run_guard("feat(app): change app directly")
+        self.assertEqual(1, result.returncode)
+        self.assertIn("isolation.py land", result.stderr)
+
+        forged = self.run_guard("T001: Demo task")
+        self.assertEqual(1, forged.returncode)
+        self.assertIn("Base: must be", forged.stderr)
+
+        task = self.repo / ".project" / "tasks" / "T001-demo.md"
+        task.write_text(task.read_text().replace("in-progress", "done"), encoding="utf-8")
+        self.git("add", "-A", "--", ".project/tasks/T001-demo.md")
+        unstamped = self.run_guard("T001: Demo task", self.landing_body(head, "app.py"))
+        self.assertEqual(1, unstamped.returncode)
+        self.assertIn("landed task frontmatter has invalid", unstamped.stderr)
+
+        self.stamp_task(head)
+        (self.repo / "extra.py").write_text("print('stray')\n", encoding="utf-8")
+        self.git("add", "-A", "--", "extra.py", ".project/tasks/T001-demo.md")
+        stray = self.run_guard("T001: Demo task", self.landing_body(head, "app.py", "extra.py"))
+        self.assertEqual(1, stray.returncode)
+        self.assertIn("undeclared paths: extra.py", stray.stderr)
+
+        retitled = self.run_guard("T001: Other title", self.landing_body(head, "app.py", "extra.py"))
+        self.assertIn("expected 'T001: Demo task'", retitled.stderr)
+
+    def test_build_active_allows_landing_and_bookkeeping_commits(self):
+        head = self.enter_build()
+        self.stage_product_change()
+        self.stamp_task(head)
+        self.git("add", "-A")
+        landing = self.run_guard("T001: Demo task", self.landing_body(head, "app.py"))
+        self.assertEqual(0, landing.returncode, landing.stderr)
+
+        self.git("restore", "--staged", ".")
+        self.git("checkout", "--", ".")
+        (self.repo / ".project" / "STATE.md").write_text(
+            (self.repo / ".project" / "STATE.md").read_text() + "log line\n",
+            encoding="utf-8",
+        )
+        self.git("add", ".project/STATE.md")
+        bookkeeping = self.run_guard("build: checkpoint bookkeeping")
+        self.assertEqual(0, bookkeeping.returncode, bookkeeping.stderr)
+
+    def test_a_task_lands_exactly_once(self):
+        head = self.enter_build()
+        self.stage_product_change()
+        self.stamp_task(head)
+        self.git("add", "-A", "--", "app.py", ".project/tasks/T001-demo.md")
+        body = self.landing_body(head, "app.py")
+        self.git(
+            "-c", "user.email=test@example.com", "-c", "user.name=Test",
+            "commit", "-q", "-m", "T001: Demo task", "-m", body,
+        )
+
+        (self.repo / "app.py").write_text("print('again')\n", encoding="utf-8")
+        task = self.repo / ".project" / "tasks" / "T001-demo.md"
+        task.write_text(task.read_text() + "more\n", encoding="utf-8")
+        self.git("add", "-A", "--", "app.py", ".project/tasks/T001-demo.md")
+        again = self.run_guard("T001: Demo task", body)
+        self.assertEqual(1, again.returncode)
+        self.assertIn("already done at HEAD", again.stderr)
+
+    def test_landing_accepts_a_commented_inline_files_list(self):
+        self.enter_build()
+        task = self.repo / ".project" / "tasks" / "T001-demo.md"
+        task.write_text(
+            task.read_text().replace("files:\n  - app.py", "files: ['plan #1.py'] # planning note"),
+            encoding="utf-8",
+        )
+        (self.repo / "plan #1.py").write_text("base\n", encoding="utf-8")
+        self.git("add", "-A", "--", ".project/tasks/T001-demo.md", "plan #1.py")
+        self.commit("build: declare a quoted path")
+        head = self.head()
+        (self.repo / "plan #1.py").write_text("done\n", encoding="utf-8")
+        self.stamp_task(head)
+        self.git("add", "-A", "--", ".project/tasks/T001-demo.md", "plan #1.py")
+        landing = self.run_guard("T001: Demo task", self.landing_body(head, "plan #1.py"))
+        self.assertEqual(0, landing.returncode, landing.stderr)
+
+    def test_build_entry_commit_must_stay_project_only(self):
+        self.enter_build(phase="plan")
+        state = self.repo / ".project" / "STATE.md"
+        state.write_text(state.read_text().replace("phase: plan", "phase: build"), encoding="utf-8")
+        self.stage_product_change()
+        result = self.run_guard("build: start plus product")
+        self.assertEqual(1, result.returncode)
+        self.assertIn("isolation.py land", result.stderr)
+
+    def test_guard_install_artifacts_commit_as_bookkeeping(self):
+        self.enter_build()
+        (self.repo / ".gsd-path").mkdir()
+        (self.repo / ".gsd-path" / "git_guard.py").write_text("# guard\n", encoding="utf-8")
+        (self.repo / ".codex").mkdir()
+        (self.repo / ".codex" / "hooks.json").write_text("{}\n", encoding="utf-8")
+        self.git("add", "-A", "--", ".gsd-path", ".codex")
+        result = self.run_guard("router: install guard hooks")
+        self.assertEqual(0, result.returncode, result.stderr)
+
+    def test_landing_rule_applies_only_during_build(self):
+        self.enter_build(phase="plan")
+        self.stage_product_change()
+        result = self.run_guard("feat(app): direct commit outside build")
+        self.assertEqual(0, result.returncode, result.stderr)
+
+    def test_landing_rule_applies_only_on_pipeline_branches(self):
+        self.enter_build()
+        self.git("checkout", "-q", "-b", "feature/x")
+        self.stage_product_change()
+        result = self.run_guard("feat(app): direct commit off the bound branch")
+        self.assertEqual(0, result.returncode, result.stderr)
 
     def test_fails_closed_outside_git(self):
         with tempfile.TemporaryDirectory() as empty:

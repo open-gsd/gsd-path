@@ -6,6 +6,9 @@ tree, and blocks a ship commit (subject `ship: ...`) that stages paths outside
 .project/. A new archive may be populated only when STATE.md names it as the
 current ship transaction; commit-msg then also requires a ship subject.
 
+During build on the bound branch, changes outside .project/ commit only as
+task landing commits (the shape `isolation.py land` writes); see HOOKS.md.
+
 Installed as .git/hooks/commit-msg:
 
     exec python3 "$(git rev-parse --show-toplevel)/.gsd-path/git_guard.py" commit-msg "$1"
@@ -22,6 +25,22 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+
+# Installed layout keeps the pipeline runtime in .gsd-path/runtime/ beside this
+# guard; the repository checkout keeps it as sibling modules under scripts/.
+_HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(_HERE / "runtime" if (_HERE / "runtime" / "isolation.py").is_file() else _HERE))
+sys.dont_write_bytecode = True  # a hook must not leave __pycache__ in the worktree
+try:
+    from isolation import _landing_state, task_frontmatter
+    from pipeline_git import task_commit_body
+except ImportError as error:  # pragma: no cover - broken install
+    print(
+        f"gsd-path guard: pipeline runtime is missing ({error}); commit blocked; "
+        "rerun the installer with --hooks-refresh",
+        file=sys.stderr,
+    )
+    raise SystemExit(1)
 
 ARCHIVE_PREFIX = ".project/archive/"
 GUARD_MARKER = "gsd-path guard"
@@ -40,6 +59,21 @@ ARCHIVE_NAME = re.compile(
 )
 SLUG = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 BOUND_BRANCH = re.compile(r"^gsd-path/M(?P<number>\d{3,})$")
+TASK_BRANCH_PREFIX = "gsd-path-task/"
+# Bookkeeping paths: pipeline records plus the guard's own install artifacts.
+BOOKKEEPING_PREFIXES = (
+    ".project/",
+    ".gsd-path/",
+    ".claude/settings.json",
+    ".codex/hooks.json",
+    ".cursor/hooks.json",
+)
+TASK_SUBJECT = re.compile(r"^(?P<id>[A-Za-z][A-Za-z0-9._-]*): \S.*$")
+FULL_SHA = re.compile(r"^[0-9a-f]{40}$")
+LANDING_HINT = (
+    "during build, changes outside .project/ land only through isolation.py "
+    "land; bookkeeping commits may touch only .project/"
+)
 LEGACY_STATE_FIELDS = {
     "pipeline",
     "project",
@@ -143,10 +177,30 @@ def staged_file(path):
 
 
 def staged_frontmatter():
-    content = staged_file(".project/STATE.md")
+    return frontmatter_of(staged_file(".project/STATE.md"), "staged STATE.md")
+
+
+def shown_file(revspec):
+    """`git show <revspec>` text, or None when the object does not exist."""
+    shown = subprocess.run(
+        ["git", "show", revspec],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return shown.stdout if shown.returncode == 0 else None
+
+
+def head_frontmatter():
+    """The committed STATE.md frontmatter; None only when HEAD has no STATE.md."""
+    content = shown_file("HEAD:.project/STATE.md")
+    return None if content is None else frontmatter_of(content, "committed STATE.md")
+
+
+def frontmatter_of(content, label):
     lines = content.splitlines()
     if not lines or lines[0] != "---":
-        raise ValueError("staged STATE.md is missing YAML frontmatter")
+        raise ValueError(f"{label} is missing YAML frontmatter")
     values = {}
     closed = False
     for line in lines[1:]:
@@ -157,13 +211,13 @@ def staged_frontmatter():
             continue
         match = re.fullmatch(r"([a-z_]+):\s*([^#]*?)(?:\s+#.*)?", line)
         if match is None:
-            raise ValueError(f"staged STATE.md has malformed frontmatter: {line}")
+            raise ValueError(f"{label} has malformed frontmatter: {line}")
         key, value = match.groups()
         if key in values:
-            raise ValueError(f"staged STATE.md repeats field: {key}")
+            raise ValueError(f"{label} repeats field: {key}")
         values[key] = value.strip().strip("\"'")
     if not closed:
-        raise ValueError("staged STATE.md frontmatter is not closed")
+        raise ValueError(f"{label} frontmatter is not closed")
     return values
 
 
@@ -217,13 +271,7 @@ def ship_contract_violations(entries, subject, body, new_archives, state):
     expected_subject = f"ship: M{int(match.group('number')):03d} — {match.group('slug')}"
     if subject != expected_subject:
         found.append(f"ship commit subject must be {expected_subject!r}")
-    current_branch = subprocess.run(
-        ["git", "branch", "--show-current"],
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout.strip()
-    if current_branch != state["branch"]:
+    if current_branch() != state["branch"]:
         found.append("ship commit must run on staged STATE.branch")
     reviewed_head = subprocess.run(
         ["git", "rev-parse", "--verify", "HEAD"],
@@ -305,16 +353,10 @@ def staged_abandon_target(new_archives, state):
     heading = sections[0]
     slug = heading.group("slug")
     branch = f"gsd-path/{heading.group('milestone')}"
-    current_branch = subprocess.run(
-        ["git", "branch", "--show-current"],
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout.strip()
     if (
         slug != archive_match.group("slug")
         or state.get("branch") != branch
-        or current_branch != branch
+        or current_branch() != branch
     ):
         return None
     reasons = [
@@ -326,6 +368,96 @@ def staged_abandon_target(new_archives, state):
         return None
     reason = " ".join(reasons[0].split())
     return target, slug, reason
+
+
+def current_branch():
+    return subprocess.run(
+        ["git", "branch", "--show-current"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+
+
+def head_descends_from(commit):
+    return (
+        subprocess.run(
+            ["git", "merge-base", "--is-ancestor", commit, "HEAD"],
+            capture_output=True,
+            text=True,
+            check=False,
+        ).returncode
+        == 0
+    )
+
+
+def task_landed_at_head(task_file):
+    content = shown_file(f"HEAD:{task_file}")
+    fields, _ = task_frontmatter(content) if content is not None else (None, None)
+    return bool(fields) and fields.get("status") == "done"
+
+
+def repo_root():
+    return Path(
+        subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+    )
+
+
+def build_landing_violations(entries, subject, body):
+    """Enforce landing-commit shape for changes outside .project/ during build."""
+    if subject is None or is_ship_commit(subject):
+        return []  # ship commits are held to .project/ by ship_contract_violations
+    staged = sorted({path for _, old, new in entries for path in (old, new) if path})
+    if all(path.startswith(BOOKKEEPING_PREFIXES) for path in staged):
+        return []
+    # A commit that enters build must stay .project/-only, so the staged STATE
+    # counts as much as the committed one.
+    state = staged_frontmatter() if ".project/STATE.md" in staged else head_frontmatter()
+    if state is None or state.get("phase") != "build":
+        return []
+    bound = state.get("branch", "")
+    if BOUND_BRANCH.fullmatch(bound) is None:
+        return []
+    branch = current_branch()
+    if branch != bound and not branch.startswith(TASK_BRANCH_PREFIX):
+        return []
+    if TASK_SUBJECT.fullmatch(subject) is None:
+        return [f"{subject!r} is not a landing commit; {LANDING_HINT}"]
+    fields = {
+        line[:4]: line[6:].strip()
+        for line in body.splitlines()
+        if line.startswith(("Task: ", "Base: "))
+    }
+    task_file, base = fields.get("Task", ""), fields.get("Base", "")
+    problems = []
+    if FULL_SHA.fullmatch(base) is None or not head_descends_from(base):
+        problems.append("Base: must be a full SHA that HEAD descends from")
+    elif task_file not in staged or not task_file.startswith(".project/tasks/"):
+        problems.append("the Task: file must be a staged .project/tasks/ file")
+    elif task_landed_at_head(task_file):
+        problems.append("the Task: file is already done at HEAD; a task lands exactly once")
+    else:
+        # The same proof isolation.py land and recover apply: subject from the
+        # base task, allow-list from its files:, and the landed-state transition.
+        contract_paths, error = _landing_state(
+            repo_root(), base, task_file, staged_file(task_file), subject, None
+        )
+        if error:
+            problems.append(error)
+        if contract_paths is not None:
+            stray = sorted(set(staged) - contract_paths)
+            if stray:
+                problems.append("undeclared paths: " + ", ".join(stray))
+        if body != task_commit_body(task_file, staged, base).strip():
+            problems.append("body must be exactly the Task:/Base:/Files: block for the staged paths")
+    if problems:
+        return [f"{subject!r} is not a valid landing commit ({'; '.join(problems)}); {LANDING_HINT}"]
+    return []
 
 
 def is_ship_commit(subject):
@@ -373,12 +505,7 @@ def is_integration_merge(subject):
     target = default_branch()
     if match.group("target") != target:
         return False
-    branch = subprocess.run(
-        ["git", "branch", "--show-current"],
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout.strip()
+    branch = current_branch()
     milestone = match.group("milestone")
     if branch not in {target, f"gsd-path-integrate/{milestone}"}:
         return False
@@ -499,6 +626,7 @@ def main(argv):
         )
         if abandon is not None:
             current_archive = abandon[0]
+        landing = build_landing_violations(entries, subject, body)
     except Exception as error:
         print(
             f"gsd-path guard: inspection failed; commit blocked ({error}); "
@@ -518,6 +646,7 @@ def main(argv):
     )
     found.extend(ship_contract_violations(entries, subject, body, new_archives, state))
     found.extend(abandon_contract_violations(subject, body, abandon))
+    found.extend(landing)
     if found:
         print("gsd-path guard blocked the commit:", file=sys.stderr)
         for violation in found:
