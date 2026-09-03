@@ -31,8 +31,8 @@ from pathlib import Path
 _HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(_HERE / "runtime" if (_HERE / "runtime" / "isolation.py").is_file() else _HERE))
 try:
-    from isolation import IsolationError, relative_posix, task_frontmatter
-    from pipeline_git import task_commit_subject
+    from isolation import _landing_state
+    from pipeline_git import task_commit_body
 except ImportError as error:  # pragma: no cover - broken install
     print(
         f"gsd-path guard: pipeline runtime is missing ({error}); commit blocked; "
@@ -186,21 +186,6 @@ def head_frontmatter():
     """The committed STATE.md frontmatter; None only when HEAD has no STATE.md."""
     content = shown_file("HEAD:.project/STATE.md")
     return None if content is None else frontmatter_of(content, "committed STATE.md")
-
-
-def task_contract(base, task_file):
-    """(expected subject, declared paths) from the task file at base, or None."""
-    content = shown_file(f"{base}:{task_file}") if task_file.startswith(".project/tasks/") else None
-    if content is None:
-        return None
-    fields, error = task_frontmatter(content)
-    if error or fields is None or not isinstance(fields.get("files"), list):
-        return None
-    try:
-        subject = task_commit_subject(str(fields.get("id", "")), str(fields.get("title", "")))
-        return subject, {relative_posix(str(item)) for item in fields["files"]}
-    except (ValueError, IsolationError):
-        return None
 
 
 def frontmatter_of(content, label):
@@ -397,6 +382,17 @@ def head_descends_from(commit):
     )
 
 
+def repo_root():
+    return Path(
+        subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+    )
+
+
 def build_landing_violations(entries, subject, body):
     """Enforce landing-commit shape for changes outside .project/ during build."""
     if subject is None:
@@ -415,32 +411,31 @@ def build_landing_violations(entries, subject, body):
         return []
     if TASK_SUBJECT.fullmatch(subject) is None:
         return [f"{subject!r} is not a landing commit; {LANDING_HINT}"]
-    fields, files = {}, []
-    for line in body.splitlines():
-        if line.startswith("- "):
-            files.append(line[2:].strip())
-        elif line.startswith(("Task: ", "Base: ")):
-            fields[line[:4]] = line[6:].strip()
+    fields = {
+        line[:4]: line[6:].strip()
+        for line in body.splitlines()
+        if line.startswith(("Task: ", "Base: "))
+    }
     task_file, base = fields.get("Task", ""), fields.get("Base", "")
     problems = []
-    contract = (
-        task_contract(base, task_file)
-        if FULL_SHA.fullmatch(base) and head_descends_from(base)
-        else None
-    )
-    if contract is None:
-        problems.append("Base: must be a full SHA HEAD descends from that holds the Task: file")
+    if FULL_SHA.fullmatch(base) is None or not head_descends_from(base):
+        problems.append("Base: must be a full SHA that HEAD descends from")
+    elif task_file not in staged or not task_file.startswith(".project/tasks/"):
+        problems.append("the Task: file must be a staged .project/tasks/ file")
     else:
-        expected, declared = contract
-        if subject != expected:
-            problems.append(f"subject must be {expected!r}")
-        if task_file not in staged:
-            problems.append("the Task: file must be staged")
-        stray = sorted(set(staged) - declared - {task_file})
-        if stray:
-            problems.append("undeclared paths: " + ", ".join(stray))
-    if files != staged:
-        problems.append("Files: must list exactly the staged paths")
+        # The same proof isolation.py land and recover apply: subject from the
+        # base task, allow-list from its files:, and the landed-state transition.
+        contract_paths, error = _landing_state(
+            repo_root(), base, task_file, staged_file(task_file), subject, None
+        )
+        if error:
+            problems.append(error)
+        if contract_paths is not None:
+            stray = sorted(set(staged) - contract_paths)
+            if stray:
+                problems.append("undeclared paths: " + ", ".join(stray))
+        if body != task_commit_body(task_file, staged, base).strip():
+            problems.append("body must be exactly the Task:/Base:/Files: block for the staged paths")
     if problems:
         return [f"{subject!r} is not a valid landing commit ({'; '.join(problems)}); {LANDING_HINT}"]
     return []

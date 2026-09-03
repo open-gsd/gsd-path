@@ -1,3 +1,4 @@
+import re
 import subprocess
 import sys
 import tempfile
@@ -8,6 +9,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import git_guard
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "git_guard.py"
+TASK_FILE = (
+    "---\nid: T001\ntitle: Demo task\nwave: 1\ndeps: []\nstatus: in-progress\n"
+    "agent: coder\nbase: null\nworktree: active\ntask_branch: active\n"
+    "files:\n  - app.py\n---\ntask T001\n"
+)
 
 
 class ViolationRuleTests(unittest.TestCase):
@@ -509,10 +515,7 @@ class GitGuardEndToEndTests(unittest.TestCase):
         )
         tasks = self.repo / ".project" / "tasks"
         tasks.mkdir()
-        (tasks / "T001-demo.md").write_text(
-            "---\nid: T001\ntitle: Demo task\nstatus: in-progress\nfiles:\n  - app.py\n---\n",
-            encoding="utf-8",
-        )
+        (tasks / "T001-demo.md").write_text(TASK_FILE, encoding="utf-8")
         self.git("add", "-A")
         self.commit("build: enter build")
         return self.head()
@@ -520,6 +523,16 @@ class GitGuardEndToEndTests(unittest.TestCase):
     def stage_product_change(self):
         (self.repo / "app.py").write_text("print('landed')\n", encoding="utf-8")
         self.git("add", "-A")
+
+    def stamp_task(self, base):
+        """Rewrite the task file the way isolation.py land stamps a landed task."""
+        task = self.repo / ".project" / "tasks" / "T001-demo.md"
+        text = task.read_text()
+        for field, value in (
+            ("status", "done"), ("base", base), ("worktree", "null"), ("task_branch", "null")
+        ):
+            text = re.sub(rf"^{field}: .*$", f"{field}: {value}", text, count=1, flags=re.M)
+        task.write_text(text + "landed\n", encoding="utf-8")
 
     def landing_body(self, base, *paths):
         return f"Task: .project/tasks/T001-demo.md\nBase: {base}\nFiles:\n" + "\n".join(
@@ -537,6 +550,14 @@ class GitGuardEndToEndTests(unittest.TestCase):
         self.assertEqual(1, forged.returncode)
         self.assertIn("Base: must be", forged.stderr)
 
+        task = self.repo / ".project" / "tasks" / "T001-demo.md"
+        task.write_text(task.read_text().replace("in-progress", "done"), encoding="utf-8")
+        self.git("add", "-A", "--", ".project/tasks/T001-demo.md")
+        unstamped = self.run_guard("T001: Demo task", self.landing_body(head, "app.py"))
+        self.assertEqual(1, unstamped.returncode)
+        self.assertIn("landed task frontmatter has invalid", unstamped.stderr)
+
+        self.stamp_task(head)
         (self.repo / "extra.py").write_text("print('stray')\n", encoding="utf-8")
         self.git("add", "-A", "--", "extra.py", ".project/tasks/T001-demo.md")
         stray = self.run_guard("T001: Demo task", self.landing_body(head, "app.py", "extra.py"))
@@ -544,13 +565,12 @@ class GitGuardEndToEndTests(unittest.TestCase):
         self.assertIn("undeclared paths: extra.py", stray.stderr)
 
         retitled = self.run_guard("T001: Other title", self.landing_body(head, "app.py", "extra.py"))
-        self.assertIn("subject must be 'T001: Demo task'", retitled.stderr)
+        self.assertIn("expected 'T001: Demo task'", retitled.stderr)
 
     def test_build_active_allows_landing_and_bookkeeping_commits(self):
         head = self.enter_build()
         self.stage_product_change()
-        task = self.repo / ".project" / "tasks" / "T001-demo.md"
-        task.write_text(task.read_text().replace("in-progress", "done"), encoding="utf-8")
+        self.stamp_task(head)
         self.git("add", "-A")
         landing = self.run_guard("T001: Demo task", self.landing_body(head, "app.py"))
         self.assertEqual(0, landing.returncode, landing.stderr)
@@ -577,7 +597,7 @@ class GitGuardEndToEndTests(unittest.TestCase):
         self.commit("build: declare a quoted path")
         head = self.head()
         (self.repo / "plan #1.py").write_text("done\n", encoding="utf-8")
-        task.write_text(task.read_text().replace("in-progress", "done"), encoding="utf-8")
+        self.stamp_task(head)
         self.git("add", "-A", "--", ".project/tasks/T001-demo.md", "plan #1.py")
         landing = self.run_guard("T001: Demo task", self.landing_body(head, "plan #1.py"))
         self.assertEqual(0, landing.returncode, landing.stderr)
