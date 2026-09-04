@@ -160,6 +160,12 @@ class CheckDocsAuditTests(unittest.TestCase):
             (carried, prior_audit, ["--prior-audit", "--changed", "app.py"], "changed since the prior audit: app.py"),
             (carried, prior_audit, ["--prior-audit", "--changed", "README.md"], "changed since the prior audit: README.md"),
             (
+                carried.replace("`app.py:3` → `3`", "src/parsers/"),
+                prior_audit.replace("`app.py:3` → `3`", "src/parsers/"),
+                ["--prior-audit", "--changed", "src/parsers/core.py"],
+                "changed since the prior audit: src/parsers/core.py",
+            ),
+            (
                 carried.replace("| feature | verified |", "| command | verified |"),
                 prior_audit.replace("| feature | verified |", "| command | verified |"),
                 ["--prior-audit", "--changed"],

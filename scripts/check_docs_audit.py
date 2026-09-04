@@ -192,6 +192,14 @@ def _doc_claims(sections: Dict[str, str]) -> Dict[str, List[Dict[str, str]]]:
     return docs
 
 
+def _evidence_names_path(evidence: str, path: str) -> bool:
+    parts = path.split("/")
+    return path in evidence or any(
+        "/".join(parts[:end]) + "/" in evidence
+        for end in range(1, len(parts))
+    )
+
+
 def _check_carried(
     docs: Dict[str, List[Dict[str, str]]],
     prior_sections: Optional[Dict[str, str]],
@@ -221,7 +229,12 @@ def _check_carried(
         if prior.get((path, claim["claim"], claim["type"])) != evidence:
             raise AuditError(f"{label}: does not repeat a prior verified row")
         # Evidence is free text, so a substring match errs toward re-verifying.
-        moved = sorted(p for p in changed if p == path or p in evidence)
+        moved = sorted(
+            changed_path
+            for changed_path in changed
+            if changed_path == path
+            or _evidence_names_path(evidence, changed_path)
+        )
         if moved:
             raise AuditError(f"{label}: doc or evidence changed since the prior audit: {', '.join(moved)}")
 

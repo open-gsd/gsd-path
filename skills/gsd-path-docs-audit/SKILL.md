@@ -36,11 +36,11 @@ would dirty execution, invalidate review, or mutate shipped history.
    (add `--alignment` in alignment mode) in a temporary file. Before any
    rewrite, preserve an existing canonical audit in a separate temporary file
    and record its SHA-256. When that audit records an `Audited HEAD` that Git
-   resolves as an ancestor of HEAD, also freeze the changed set — `git diff
-   --name-only --no-renames <prior HEAD>` plus
-   `git ls-files --others --exclude-standard`, one path per line — in a
-   temporary file; otherwise there is no changed set and the auditor
-   re-verifies every claim. The frozen inventory and
+   resolves as an ancestor of HEAD, also freeze the changed set — `git -c
+   core.quotePath=false diff --name-only --no-renames <prior HEAD>` plus
+   `git -c core.quotePath=false ls-files --others --exclude-standard`, one
+   path per line — in a temporary file; otherwise there is no changed set and
+   the auditor re-verifies every claim. The frozen inventory and
    changed set travel inside the dispatch brief and
    the gate below; never persist them as `.project/` sidecar files — the
    audit's own path records are the durable copy. If a previous run left an
@@ -51,8 +51,8 @@ would dirty execution, invalidate review, or mutate shipped history.
    [runtime dispatch contract](references/dispatch.md): local role
    [docs-auditor](references/docs-auditor.md), template
    [docs-audit](templates/docs-audit.md), absolute repo root, exact frozen
-   inventory, current HEAD (or `none`), the changed set when one exists,
-   alignment flag, prior audit as carry-forward input, and output
+   inventory, the changed set when one exists, alignment flag, prior audit as
+   carry-forward input, and output
    `.project/research/DOCS-AUDIT.md`. When Git has a resolvable HEAD and no
    non-`.project` worktree changes, the orchestrator creates a verify sidecar
    with `python3 <absolute isolation.py> isolate-verify --repo <absolute
@@ -67,7 +67,9 @@ would dirty execution, invalidate review, or mutate shipped history.
    branch, source, and destination to match; then non-force retire that exact
    worktree and branch with `isolation.py retire`. A corrected redispatch is
    gated before collection and uses the same expected prior hash. Otherwise no
-   project command may run.
+   project command may run. The dispatch brief carries current HEAD as the
+   audit baseline only when that verify sidecar was created at HEAD; otherwise
+   it carries `none`. The auditor writes that baseline as `Audited HEAD`.
 2. Gate the artifact with the bundled helper: write the frozen inventory to
    a temporary file (one path per line) and run
    `python3 <absolute check_docs_audit.py> --repo <docs sidecar> --inventory
