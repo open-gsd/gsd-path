@@ -218,9 +218,9 @@ explicit ruling, archiving partial work and re-slicing the roadmap.
 Build mechanics: task briefs are linted against the base tree before
 dispatch and coders preflight them on arrival; dispatch streams (a
 dependent starts when its deps land); wave review depth is `full`,
-`verify-only`, or `deep` (contract + adversarial reviewers, both must
-pass); coder contract questions route through `NEEDS-ORCHESTRATOR` instead
-of guesses.
+`verify-only`, or `deep` (writer and evidence rules live in the canonical
+[build contract](skills/gsd-path-build/SKILL.md)); coder contract questions
+route through `NEEDS-ORCHESTRATOR` instead of guesses.
 
 **Quick lane:** ≤2 tasks, one wave, no open questions — may skip research/decide
 ([FULL.md](FULL.md)).

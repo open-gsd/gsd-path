@@ -131,10 +131,10 @@ advance past an unresolved required follow-up.
 - Dispatch streams: a dependent task starts the moment its dependencies
   land, never idling behind unrelated in-flight tasks. Task landing
   stays serial and every Verify reruns in the isolated worktree.
-- Wave review depth is `full`, `verify-only`, or `deep` — two independent
-  fresh-context reviewers (contract + adversarial lenses) that must both
-  pass — and findings carry forward by criterion across fix cycles. Optional
-  skeptic triage for blocked `deep` reviews is defined in
+- Wave review depth is `full`, `verify-only`, or `deep`; findings carry
+  forward by criterion across fix cycles. Each depth's writer and evidence
+  rules live in the canonical [build contract](skills/gsd-path-build/SKILL.md).
+  Optional skeptic triage for blocked `deep` reviews is defined in
   [WORKFLOW.md](WORKFLOW.md#phase-4--plan-gsd-path-plan).
 - A coder with an ambiguous contract asks `NEEDS-ORCHESTRATOR` instead of
   guessing; on hosts with a blocking ask/reply channel the worker stays

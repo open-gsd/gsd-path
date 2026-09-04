@@ -128,7 +128,9 @@ ship-owned. One checkpoint per repair, ruling, or transition: the edits and
 the STATE.md log line that records them land together. Never add a second
 STATE.md-only "finalize" checkpoint for work already checkpointed. The helper
 refuses a `build:` checkpoint that deletes or renames a `.project/tasks/`
-brief; build adds fix tasks and repairs briefs, it never replans.
+brief unless the canonical `build: abandon milestone <slug>` checkpoint moves
+that same brief into `.project/archive/`; build adds fix tasks and repairs
+briefs, it never replans.
 
 ## Wave loop
 
