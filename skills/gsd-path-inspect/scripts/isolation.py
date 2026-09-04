@@ -2709,15 +2709,22 @@ def checkpoint(
     )
     if unexpected:
         raise IsolationError("unexpected paths: " + ", ".join(unexpected))
-    if subject.strip().startswith("build:"):
+    normalized_subject = subject.strip()
+    if normalized_subject.startswith("build:"):
         # Build owns fix-task additions and brief repairs, never the task
         # inventory: a deleted or renamed brief is a replan. Abandon moves
         # briefs into .project/archive/ inside the same checkpoint.
-        archived = {
-            path.rsplit("/", 1)[1]
-            for path in pending
-            if path.startswith(".project/archive/") and "/tasks/" in path
-        }
+        abandon = re.fullmatch(
+            r"build: abandon milestone [a-z0-9][a-z0-9-]*", normalized_subject
+        )
+        archived = set()
+        if abandon:
+            for path in pending:
+                match = re.fullmatch(
+                    r"\.project/archive/[^/]+/tasks/([^/]+\.md)", path
+                )
+                if match and (repo / path).exists():
+                    archived.add(match.group(1))
         removed = sorted(
             path
             for path in pending
@@ -2733,10 +2740,10 @@ def checkpoint(
                 + ", ".join(removed)
             )
     return {
-        "commit": _commit_pending(repo, pending, subject.strip(), body),
+        "commit": _commit_pending(repo, pending, normalized_subject, body),
         "paths": sorted(pending),
         "status": "committed",
-        "subject": subject.strip(),
+        "subject": normalized_subject,
     }
 
 

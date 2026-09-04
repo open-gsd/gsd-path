@@ -388,11 +388,13 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
      then retires those sidecars. The wave passes only when both lenses
      return `pass`; any `blocked` lens blocks the wave, and both files'
      findings feed the fix-task batching in step 7.
-   - A review file is written only by the reviewer dispatched for that cycle
-     at that cycle's recorded base. Never backfill, split, rename, or
-     reconstruct a review file for a cycle that already ran, and never write
-     a placeholder verdict for a task that did not exist at that cycle. A
-     missing or non-canonical earlier artifact is reported to the user; the
+   - A review file is written only during that cycle, at that cycle's recorded
+     base, by the writer the selected depth names: a dispatched reviewer at
+     `full` or `deep`, or the orchestrator at `verify-only`. Never backfill,
+     split, rename, or reconstruct a review file for a cycle that already ran,
+     and never write a placeholder verdict for a task that did not exist at
+     that cycle. A missing or non-canonical earlier artifact is reported to
+     the user; the
      only repair is a new review cycle at the current HEAD, which counts
      toward the cap.
    - `verify-only`: spawn no reviewer. The orchestrator writes

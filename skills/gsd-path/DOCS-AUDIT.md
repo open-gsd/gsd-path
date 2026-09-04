@@ -37,9 +37,10 @@ would dirty execution, invalidate review, or mutate shipped history.
    rewrite, preserve an existing canonical audit in a separate temporary file
    and record its SHA-256. When that audit records an `Audited HEAD` that Git
    resolves as an ancestor of HEAD, also freeze the changed set — `git diff
-   --name-only <prior HEAD>` plus `git ls-files --others --exclude-standard`,
-   one path per line — in a temporary file; otherwise there is no changed
-   set and the auditor re-verifies every claim. The frozen inventory and
+   --name-only --no-renames <prior HEAD>` plus
+   `git ls-files --others --exclude-standard`, one path per line — in a
+   temporary file; otherwise there is no changed set and the auditor
+   re-verifies every claim. The frozen inventory and
    changed set travel inside the dispatch brief and
    the gate below; never persist them as `.project/` sidecar files — the
    audit's own path records are the durable copy. If a previous run left an

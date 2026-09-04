@@ -1603,9 +1603,21 @@ class IsolationTests(unittest.TestCase):
                 )
             self.assertEqual(git(repo, "rev-parse", "HEAD"), base)
 
-            # Abandon moves the brief into the archive inside one checkpoint.
             (repo / ".project/tasks/T001-split.md").unlink()
             self.write(repo, ".project/archive/001-demo/tasks/T001.md", TASK_FILE)
+            with self.assertRaisesRegex(
+                isolation.IsolationError,
+                "never delete or rename task briefs: .project/tasks/T001.md",
+            ):
+                isolation.checkpoint(
+                    repo,
+                    base,
+                    "build: repair T001 contract",
+                    "Why: unrelated archive entry",
+                    [".project"],
+                )
+            self.assertEqual(git(repo, "rev-parse", "HEAD"), base)
+
             result = isolation.checkpoint(
                 repo,
                 base,
