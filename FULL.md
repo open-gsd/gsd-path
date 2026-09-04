@@ -297,12 +297,12 @@ from `files` unless it is that allowed Project-verify copy.
 Build reviews each completed wave against task criteria and the INTENT success
 criteria that wave owns. Each wave carries a review depth — `full`,
 `verify-only` for low-risk waves, or sparingly `deep`
-for irreversible or security-critical waves, where two independent reviewers
-(contract and adversarial lenses) must both pass. Review findings are keyed by
-their failed criterion and carried forward across cycles, so a criterion
-failing again after its fix task means the fix failed, never a duplicate fix
-task. Keep waves narrow enough for one reviewer context (≲12 tasks); split
-wider work into more waves at plan time.
+for irreversible or security-critical waves. The canonical
+[build contract](skills/gsd-path-build/SKILL.md) defines each depth's writer
+and evidence rules. Review findings are keyed by their failed criterion and
+carried forward across cycles, so a criterion failing again after its fix task
+means the fix failed, never a duplicate fix task. Keep waves narrow enough for
+one reviewer context (≲12 tasks); split wider work into more waves at plan time.
 
 ### Ship
 

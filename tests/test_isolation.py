@@ -1584,6 +1584,69 @@ class IsolationTests(unittest.TestCase):
             self.assertEqual(git(repo, "rev-parse", "HEAD"), base)
             self.assertTrue((repo / "notes.txt").exists())
 
+    def test_build_checkpoint_rejects_task_brief_deletion_or_rename(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            base = self.init_bound_repo(repo)
+            task = repo / ".project/tasks/T001.md"
+            task.unlink()
+            self.write(repo, ".project/tasks/T001.md/part.md", TASK_FILE)
+
+            with self.assertRaisesRegex(
+                isolation.IsolationError,
+                "never delete or rename task briefs: .project/tasks/T001.md",
+            ):
+                isolation.checkpoint(
+                    repo,
+                    base,
+                    "build: split T001 into parts",
+                    "Why: replace brief with directory",
+                    [".project"],
+                )
+            self.assertEqual(git(repo, "rev-parse", "HEAD"), base)
+
+            (task / "part.md").unlink()
+            task.rmdir()
+            self.write(repo, ".project/tasks/T001.md", TASK_FILE)
+            task.rename(repo / ".project/tasks/T001-split.md")
+
+            with self.assertRaisesRegex(
+                isolation.IsolationError, "never delete or rename task briefs: .project/tasks/T001.md"
+            ):
+                isolation.checkpoint(
+                    repo,
+                    base,
+                    "build: split T001 contracts",
+                    "Why: replan disguised as a plan defect",
+                    [".project"],
+                )
+            self.assertEqual(git(repo, "rev-parse", "HEAD"), base)
+
+            (repo / ".project/tasks/T001-split.md").unlink()
+            self.write(repo, ".project/archive/001-demo/tasks/T001.md", TASK_FILE)
+            with self.assertRaisesRegex(
+                isolation.IsolationError,
+                "never delete or rename task briefs: .project/tasks/T001.md",
+            ):
+                isolation.checkpoint(
+                    repo,
+                    base,
+                    "build: repair T001 contract",
+                    "Why: unrelated archive entry",
+                    [".project"],
+                )
+            self.assertEqual(git(repo, "rev-parse", "HEAD"), base)
+
+            result = isolation.checkpoint(
+                repo,
+                base,
+                "build: abandon milestone demo",
+                "Why: user ruling",
+                [".project"],
+            )
+            self.assertEqual(result["status"], "committed")
+
     def test_checkpoint_rejects_a_non_bound_primary_branch(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary) / "repo"
