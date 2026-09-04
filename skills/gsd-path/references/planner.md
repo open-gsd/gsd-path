@@ -78,7 +78,10 @@ plan order above, which still keeps plan-invalidating risk in wave 1.
   for any tasks that exchange a symbol, signature, schema, endpoint, file
   format, or path, the exact shapes both sides code against — identical text
   in every involved task. This contract is the only cross-task communication;
-  coders may not negotiate or deviate, so settle the seam here.
+  coders may not negotiate or deviate, so settle the seam here. List only
+  the shapes this task defines or consumes through its `files`; a task that
+  exchanges nothing writes `None`, and one shared block pasted into every
+  task is a plan defect.
 - Write observable acceptance criteria and one Verify command that fails when
   this task's work is skipped. That command must name a path from `files`,
   and must not be PLAN.md's project Verify unless an SC this task owns names

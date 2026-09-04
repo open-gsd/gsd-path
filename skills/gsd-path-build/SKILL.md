@@ -124,7 +124,11 @@ Add only the documented optional `Wave:`, `Tasks:`, and `Base:` body lines.
 A typed error blocks and leaves no claimed checkpoint. The returned full
 commit becomes the next clean base. This is the only build bookkeeping commit
 path; product landing remains `isolation.py land`, and the ship commit remains
-ship-owned.
+ship-owned. One checkpoint per repair, ruling, or transition: the edits and
+the STATE.md log line that records them land together. Never add a second
+STATE.md-only "finalize" checkpoint for work already checkpointed. The helper
+refuses a `build:` checkpoint that deletes or renames a `.project/tasks/`
+brief; build adds fix tasks and repairs briefs, it never replans.
 
 ## Wave loop
 
@@ -204,7 +208,13 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
      drifted bookkeeping; repair it before a new clean base.
    A documented plan
    defect may be repaired against INTENT.md and SYNTHESIS.md and logged before
-   a new clean base. A user ruling that changes a success criterion,
+   a new clean base. A repair edits only the fields the lint or ruling named
+   in the tasks it named — `files`, Verify, Interface contract text, Intent
+   coverage rows, an ambiguous AC. It never adds, removes, splits, merges, or
+   renames tasks, moves a task between waves, or rewrites another task's
+   acceptance criteria; a defect that needs any of those sets `build/blocked`
+   with the lint output and returns to plan, which owns the task inventory.
+   A user ruling that changes a success criterion,
    constraint, or veto is not a plan defect: set `build/blocked`, do not
    rewrite the AC, and send `$gsd-path-define` to append INTENT.md
    `## Corrections` before plan re-gates. A task Log is not that record. One failed implementation gets one logged redispatch when
@@ -378,6 +388,13 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
      then retires those sidecars. The wave passes only when both lenses
      return `pass`; any `blocked` lens blocks the wave, and both files'
      findings feed the fix-task batching in step 7.
+   - A review file is written only by the reviewer dispatched for that cycle
+     at that cycle's recorded base. Never backfill, split, rename, or
+     reconstruct a review file for a cycle that already ran, and never write
+     a placeholder verdict for a task that did not exist at that cycle. A
+     missing or non-canonical earlier artifact is reported to the user; the
+     only repair is a new review cycle at the current HEAD, which counts
+     toward the cap.
    - `verify-only`: spawn no reviewer. The orchestrator writes
      `.project/review/wave-N.cycleC.md` itself from evidence it already
      holds — per task, the Verify evidence and the declared-files diff

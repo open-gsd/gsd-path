@@ -32,7 +32,8 @@ files:              # every file this task may touch — dispatch checks overlap
      schemas, or formats this task exchanges with other tasks. Required when
      another task consumes this task's output or this task consumes a
      sibling's; write the identical contract in every involved task. Otherwise
-     write `None`. Binding like the acceptance criteria: needing to deviate
+     write `None`. Only shapes this task's `files` define or consume — never
+     the whole plan's contracts. Binding like the acceptance criteria: needing to deviate
      is a plan defect — block, never negotiate or improvise. -->
 - None
 

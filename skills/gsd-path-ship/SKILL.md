@@ -238,7 +238,10 @@ The persisted `STATE.archive` field is the transaction identity.
    before this command, recheck for an active
    `discuss/` copy created after prepare; if present, rerun `prepare`, regenerate
    MANIFEST.md by rerunning `render-manifest`, and only then preflight. Do not
-   commit when it fails. The archive helper independently binds every FINAL.md
+   commit when it fails. A failure over a missing or non-canonical review
+   artifact is never repaired by writing, splitting, or renaming a review
+   file after the fact; report it and let the user rule — a new review cycle
+   at the current HEAD is the only artifact-producing remedy. The archive helper independently binds every FINAL.md
    `SCn` heading id and normalized text to the archived INTENT.md; a renamed or
    easier criterion blocks even if the earlier handoff gate was bypassed.
 5. Only after preflight passes, record shipment through the journaled helper;

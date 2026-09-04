@@ -1584,6 +1584,37 @@ class IsolationTests(unittest.TestCase):
             self.assertEqual(git(repo, "rev-parse", "HEAD"), base)
             self.assertTrue((repo / "notes.txt").exists())
 
+    def test_build_checkpoint_rejects_task_brief_deletion_or_rename(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            base = self.init_bound_repo(repo)
+            (repo / ".project/tasks/T001.md").rename(repo / ".project/tasks/T001-split.md")
+
+            with self.assertRaisesRegex(
+                isolation.IsolationError, "never delete or rename task briefs: .project/tasks/T001.md"
+            ):
+                isolation.checkpoint(
+                    repo,
+                    base,
+                    "build: split T001 contracts",
+                    "Why: replan disguised as a plan defect",
+                    [".project"],
+                )
+            self.assertEqual(git(repo, "rev-parse", "HEAD"), base)
+
+            # Abandon moves the brief into the archive inside one checkpoint.
+            (repo / ".project/tasks/T001-split.md").unlink()
+            self.write(repo, ".project/archive/001-demo/tasks/T001.md", TASK_FILE)
+            result = isolation.checkpoint(
+                repo,
+                base,
+                "build: abandon milestone demo",
+                "Why: user ruling",
+                [".project"],
+            )
+            self.assertEqual(result["status"], "committed")
+
     def test_checkpoint_rejects_a_non_bound_primary_branch(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary) / "repo"

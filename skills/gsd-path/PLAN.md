@@ -120,7 +120,9 @@ as stated in Lookahead mode.
    - Require an Interface contract section in every task: `None` for
      independent tasks; when tasks exchange a symbol, schema, endpoint, file
      format, or path, exact shared shapes with identical text in every
-     involved task.
+     involved task. Every contract line names a shape that task defines or
+     consumes through its own `files`; one block copied into tasks that
+     neither define nor consume its shapes is a gate failure, not sharing.
    - Require deliverable-sized tasks naming real paths that match the existing
      codebase: each task is the largest coherent vertical slice — feature plus
      its tests and wiring — one agent run can complete. Reject a plan that
@@ -365,7 +367,13 @@ first.
    paths and selected rows, the existing PLAN.md and task files, and the instruction to
    append wave W+1 (highest existing wave + 1) without modifying completed
    waves or existing tasks. One task per accepted finding, carrying the
-   finding's evidence verbatim in its Context; `fix-doc` findings are tasks
+   finding's evidence verbatim in its Context. A finding from a failing
+   project Verify, or one that repeats an earlier patch finding's pattern,
+   gets a task whose `files` cover every site in the codebase that matches
+   the same pattern — the planner searches for them — and whose Verify
+   proves the pattern is absent codebase-wide, not only at the reported
+   path; a gate that fails on the first error must not cost one patch wave
+   per file. `fix-doc` findings are tasks
    too — their Verify re-runs the audit's claim check so the corrected doc
    is proven, not assumed. A patch task that repairs an SC finding lists that
    SCn in its Intent coverage and adds a coverage row; other patch tasks
