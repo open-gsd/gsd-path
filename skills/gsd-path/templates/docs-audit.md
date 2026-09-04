@@ -5,6 +5,7 @@
 
 Repo root: <absolute path>
 Audited: <date>
+Audited HEAD: <40-hex commit the claims were checked at, or none>
 Alignment mode: <yes | no — yes when .project/ artifacts were also audited>
 
 ## Summary
@@ -27,7 +28,8 @@ Worst drift: <one sentence — the most misleading claim found>
 
 <!-- One section per doc that has at least one testable claim. Docs without
      testable claims go in the Descriptive docs list below, never in their
-     own section. -->
+     own section. Evidence prefixed `unchanged: ` marks a row carried from
+     the prior audit under the role's delta rule. -->
 
 ## Descriptive docs
 

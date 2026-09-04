@@ -53,7 +53,9 @@ same milestone; a later milestone's `inspect/active` is a new scan.
    inventory. If STATE.md is now missing, restart Preconditions and route from
    the new `initialize` result; never continue from an ignored result. Record
    the SHA-256 of each existing assigned destination and preserve the existing
-   DOCS-AUDIT.md in a temporary prior-audit file. Preserve an existing
+   DOCS-AUDIT.md in a temporary prior-audit file; when it records an
+   `Audited HEAD` Git resolves as an ancestor of HEAD, freeze the changed set
+   as `$gsd-path-docs-audit` step 1 describes. Preserve an existing
    router-bound branch and milestone.
 2. Dispatch two independent agents in parallel, following the local
    [runtime dispatch contract](references/dispatch.md) and its deterministic
@@ -69,7 +71,8 @@ same milestone; a later milestone's `inspect/active` is a new scan.
      `.project/research/DOCS-AUDIT.md` (same next/ prefix in Lookahead mode),
      task name `inspect_docs`.
    Give each the absolute repo root and exclusion rule. Give the auditor the
-   exact frozen inventory and `alignment mode: false`; it audits only that
+   exact frozen inventory, the current HEAD (or `none`), the changed set when
+   one exists, and `alignment mode: false`; it audits only that
    list and never rediscovers paths. The frozen inventory travels inside the
    dispatch brief; never persist it as a `.project/` sidecar file. Pass an existing DOCS-AUDIT.md separately
    as carry-forward input so its `## User rulings` and `planned` values remain
@@ -89,7 +92,8 @@ same milestone; a later milestone's `inspect/active` is a new scan.
    <track-relative DOCS-AUDIT.md> --inventory <frozen inventory file>`, where
    the audit path is `.project/research/DOCS-AUDIT.md` normally and
    `.project/next/research/DOCS-AUDIT.md` in Lookahead mode; add
-   `--prior-audit <temporary prior-audit file>` when one was preserved
+   `--prior-audit <temporary prior-audit file>` when one was preserved and
+   `--changed <temporary changed-set file>` when one was frozen
    (disjoint `## Doc:` sections and `## Descriptive docs` equal to the frozen
    inventory, every claim a valid verdict with evidence, Summary counts and
    remediation queue consistent). After each artifact passes, collect it with

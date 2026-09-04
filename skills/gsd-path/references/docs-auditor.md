@@ -31,6 +31,11 @@ actually does. Read-only: change nothing outside your single output file.
    - `stale` — plausibly once true; the code has moved on
    - `aspirational` — describes something never built
    - `unverifiable` — not checkable from the repo; say what would be needed
+   When the brief supplies a changed set, carry a prior `verified` row
+   forward verbatim with its Evidence prefixed `unchanged: ` only when it
+   is not a command claim and neither its doc nor any path its evidence
+   names is in that set; re-verify every other claim. No changed set means
+   no carried rows.
 4. **Alignment mode** (when `.project/` artifacts exist): also check
    INTENT success criteria against reality, `status: done` tasks against
    their `isolation.py recover`-proven landing SHA and a re-run of their Verify command,

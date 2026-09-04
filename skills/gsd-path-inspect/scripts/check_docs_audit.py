@@ -11,6 +11,13 @@ remediation queue with one classified row per non-verified claim.
 with `--prior-audit FILE`; every prior row, including its Planned value, must
 remain an exact ordered prefix.
 
+A re-audit may carry a prior `verified` row forward verbatim with its Evidence
+prefixed `unchanged: `. Pass the paths that differ from the prior audit's
+`Audited HEAD` with `--changed FILE` (one path per line); a carried row must
+repeat a prior verified non-command row whose doc and evidence paths are all
+outside that set. Without both `--prior-audit` and `--changed`, carried rows
+are rejected.
+
 The frozen inventory travels in the dispatch brief; pass it with
 `--inventory FILE` (one POSIX path per line, `-` for stdin). Without it the
 gate derives the inventory from tracked Markdown files, excluding `.git`,
@@ -35,7 +42,9 @@ CLASSES = ("fix-doc", "fix-code", "NEEDS-USER")
 RULINGS = ("fix-code", "fix-doc", "accept-drift")
 SUMMARY_ROWS = VERDICTS + ("descriptive docs (no testable claims)",)
 
-HEADER_PATTERN = re.compile(r"^(Repo root|Audited|Alignment mode): (.+)$", re.M)
+HEADER_PATTERN = re.compile(r"^(Repo root|Audited|Audited HEAD|Alignment mode): (.+)$", re.M)
+HEAD_PATTERN = re.compile(r"[0-9a-f]{40}|none")
+CARRIED = "unchanged: "  # Evidence prefix of a row carried forward from the prior audit
 SECTION_PATTERN = re.compile(r"^## (.+?)\s*$", re.M)
 PLACEHOLDER_PATTERN = re.compile(r"^<[^>]*>$")  # a cell left as the template placeholder
 
@@ -158,11 +167,71 @@ def _user_rulings(body: str, label: str) -> List[List[str]]:
     return rows
 
 
+def _doc_claims(sections: Dict[str, str]) -> Dict[str, List[Dict[str, str]]]:
+    docs: Dict[str, List[Dict[str, str]]] = {}
+    for title, body in sections.items():
+        if not title.startswith("Doc: "):
+            continue
+        path = title[len("Doc: ") :].strip().strip("`")
+        _not_placeholder(path, "Doc section path")
+        if path in docs:
+            raise AuditError(f"duplicate normalized Doc section: {path}")
+        claims = []
+        claim_rows = _table_rows(body, 4, f"Doc: {path}")
+        if not claim_rows:
+            raise AuditError(f"Doc: {path}: requires at least one claim row")
+        for claim, kind, verdict, evidence in claim_rows:
+            if kind not in TYPES:
+                raise AuditError(f"Doc: {path}: invalid claim type: {kind}")
+            if verdict not in VERDICTS:
+                raise AuditError(f"Doc: {path}: invalid verdict: {verdict}")
+            _not_placeholder(claim, f"Doc: {path}: claim")
+            _not_placeholder(evidence, f"Doc: {path}: evidence for {claim}")
+            claims.append({"claim": claim, "type": kind, "verdict": verdict, "evidence": evidence})
+        docs[path] = claims
+    return docs
+
+
+def _check_carried(
+    docs: Dict[str, List[Dict[str, str]]],
+    prior_sections: Optional[Dict[str, str]],
+    changed: Optional[Sequence[str]],
+) -> None:
+    carried = [
+        (path, claim)
+        for path, claims in docs.items()
+        for claim in claims
+        if claim["evidence"].startswith(CARRIED)
+    ]
+    if not carried:
+        return
+    if changed is None:
+        raise AuditError("carried (unchanged:) rows require --prior-audit and --changed")
+    prior = {
+        (path, claim["claim"], claim["type"]): claim["evidence"].removeprefix(CARRIED)
+        for path, claims in _doc_claims(prior_sections or {}).items()
+        for claim in claims
+        if claim["verdict"] == "verified"
+    }
+    for path, claim in carried:
+        label = f"Doc: {path}: carried row {claim['claim']}"
+        evidence = claim["evidence"].removeprefix(CARRIED)
+        if claim["verdict"] != "verified" or claim["type"] == "command":
+            raise AuditError(f"{label}: only verified non-command claims carry forward")
+        if prior.get((path, claim["claim"], claim["type"])) != evidence:
+            raise AuditError(f"{label}: does not repeat a prior verified row")
+        # Evidence is free text, so a substring match errs toward re-verifying.
+        moved = sorted(p for p in changed if p == path or p in evidence)
+        if moved:
+            raise AuditError(f"{label}: doc or evidence changed since the prior audit: {', '.join(moved)}")
+
+
 def validate(
     repo: Path,
     audit_relative: str,
     inventory: Optional[Sequence[str]],
     prior_text: Optional[str] = None,
+    changed: Optional[Sequence[str]] = None,
 ) -> Dict[str, object]:
     audit = repo / audit_relative
     if not audit.is_file() or audit.is_symlink():
@@ -171,11 +240,10 @@ def validate(
 
     header_rows = HEADER_PATTERN.findall(text)
     header = {}
-    for key in ("Repo root", "Audited", "Alignment mode"):
+    for key in ("Repo root", "Audited", "Audited HEAD", "Alignment mode"):
         values = [value for found_key, value in header_rows if found_key == key]
         if len(values) != 1:
             raise AuditError(f"header must contain exactly one {key} line")
-        _not_placeholder(values[0], key)
         header[key] = values[0]
     declared_root = Path(header["Repo root"])
     if not declared_root.is_absolute() or declared_root.resolve() != repo.resolve():
@@ -184,6 +252,8 @@ def validate(
         date.fromisoformat(header["Audited"])
     except ValueError as error:
         raise AuditError("Audited must be an ISO date") from error
+    if not HEAD_PATTERN.fullmatch(header["Audited HEAD"]):
+        raise AuditError("Audited HEAD must be a 40-hex commit or none")
     alignment_value = header["Alignment mode"].split("—")[0].strip().lower()
     if alignment_value not in ("yes", "no"):
         raise AuditError(f"Alignment mode must be yes or no, found: {header['Alignment mode']}")
@@ -205,29 +275,11 @@ def validate(
     if missing:
         raise AuditError(f"Summary: missing rows: {', '.join(missing)}")
 
-    docs: Dict[str, List[Dict[str, str]]] = {}
+    docs = _doc_claims(sections)
     tallies = {verdict: 0 for verdict in VERDICTS}
-    for title, body in sections.items():
-        if not title.startswith("Doc: "):
-            continue
-        path = title[len("Doc: ") :].strip().strip("`")
-        _not_placeholder(path, "Doc section path")
-        if path in docs:
-            raise AuditError(f"duplicate normalized Doc section: {path}")
-        claims = []
-        claim_rows = _table_rows(body, 4, f"Doc: {path}")
-        if not claim_rows:
-            raise AuditError(f"Doc: {path}: requires at least one claim row")
-        for claim, kind, verdict, evidence in claim_rows:
-            if kind not in TYPES:
-                raise AuditError(f"Doc: {path}: invalid claim type: {kind}")
-            if verdict not in VERDICTS:
-                raise AuditError(f"Doc: {path}: invalid verdict: {verdict}")
-            _not_placeholder(claim, f"Doc: {path}: claim")
-            _not_placeholder(evidence, f"Doc: {path}: evidence for {claim}")
-            tallies[verdict] += 1
-            claims.append({"claim": claim, "type": kind, "verdict": verdict, "evidence": evidence})
-        docs[path] = claims
+    for claims in docs.values():
+        for claim in claims:
+            tallies[claim["verdict"]] += 1
 
     descriptive = []
     for line in sections["Descriptive docs"].splitlines():
@@ -265,8 +317,8 @@ def validate(
         )
 
     rulings = _user_rulings(sections["User rulings"], "User rulings")
-    if prior_text is not None:
-        prior_sections = _sections(prior_text)
+    prior_sections = _sections(prior_text) if prior_text is not None else None
+    if prior_sections is not None:
         if "User rulings" not in prior_sections:
             raise AuditError("prior audit is missing section: ## User rulings")
         prior_rulings = _user_rulings(
@@ -276,6 +328,7 @@ def validate(
             raise AuditError(
                 "User rulings must preserve every prior row and Planned value in order"
             )
+    _check_carried(docs, prior_sections, changed)
 
     queue_body = sections["Remediation queue"]
     non_verified = sum(tallies[verdict] for verdict in VERDICTS if verdict != "verified")
@@ -328,6 +381,10 @@ def parser() -> argparse.ArgumentParser:
         help="pre-rewrite audit whose User rulings must carry forward",
     )
     argument_parser.add_argument(
+        "--changed",
+        help="file with one path changed since the prior audit's Audited HEAD per line; permits unchanged: rows",
+    )
+    argument_parser.add_argument(
         "--emit-inventory",
         action="store_true",
         help="print the frozen tracked and untracked Markdown inventory, one path per line",
@@ -340,10 +397,19 @@ def parser() -> argparse.ArgumentParser:
     return argument_parser
 
 
+def _path_lines(name: str) -> List[str]:
+    source = sys.stdin if name == "-" else open(name, encoding="utf-8")
+    with source:
+        return [line.strip() for line in source if line.strip()]
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     arguments = parser().parse_args(argv)
+    if arguments.changed is not None and arguments.prior_audit is None:
+        print("docs audit validation failed: --changed requires --prior-audit", file=sys.stderr)
+        return 1
     if arguments.emit_inventory:
-        if arguments.inventory is not None or arguments.prior_audit is not None:
+        if arguments.inventory is not None or arguments.prior_audit is not None or arguments.changed is not None:
             print(
                 "docs audit validation failed: --emit-inventory cannot use validation inputs",
                 file=sys.stderr,
@@ -358,11 +424,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             return 1
         print("\n".join(inventory))
         return 0
-    inventory = None
-    if arguments.inventory is not None:
-        source = sys.stdin if arguments.inventory == "-" else open(arguments.inventory, encoding="utf-8")
-        with source:
-            inventory = [line.strip() for line in source if line.strip()]
+    inventory = _path_lines(arguments.inventory) if arguments.inventory is not None else None
     prior_text = None
     if arguments.prior_audit is not None:
         if arguments.prior_audit.is_symlink() or not arguments.prior_audit.is_file():
@@ -372,9 +434,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             )
             return 1
         prior_text = arguments.prior_audit.read_text(encoding="utf-8")
+    changed = _path_lines(arguments.changed) if arguments.changed is not None else None
     try:
         result = validate(
-            arguments.repo.resolve(), arguments.audit, inventory, prior_text
+            arguments.repo.resolve(), arguments.audit, inventory, prior_text, changed
         )
     except AuditError as error:
         print(f"docs audit validation failed: {error}", file=sys.stderr)

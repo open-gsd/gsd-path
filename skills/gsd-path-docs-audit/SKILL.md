@@ -35,8 +35,13 @@ would dirty execution, invalidate review, or mutate shipped history.
    <absolute check_docs_audit.py> --repo <absolute root> --emit-inventory`
    (add `--alignment` in alignment mode) in a temporary file. Before any
    rewrite, preserve an existing canonical audit in a separate temporary file
-   and record its SHA-256. The frozen inventory travels inside the dispatch brief and
-   the gate below; never persist it as a `.project/` sidecar file — the
+   and record its SHA-256. When that audit records an `Audited HEAD` that Git
+   resolves as an ancestor of HEAD, also freeze the changed set — `git diff
+   --name-only <prior HEAD>` plus `git ls-files --others --exclude-standard`,
+   one path per line — in a temporary file; otherwise there is no changed
+   set and the auditor re-verifies every claim. The frozen inventory and
+   changed set travel inside the dispatch brief and
+   the gate below; never persist them as `.project/` sidecar files — the
    audit's own path records are the durable copy. If a previous run left an
    inventory sidecar under `.project/research/`, the orchestrator deletes it
    when transferring the new audit — a leftover sidecar blocks the archive
@@ -45,7 +50,8 @@ would dirty execution, invalidate review, or mutate shipped history.
    [runtime dispatch contract](references/dispatch.md): local role
    [docs-auditor](references/docs-auditor.md), template
    [docs-audit](templates/docs-audit.md), absolute repo root, exact frozen
-   inventory, alignment flag, prior audit as carry-forward input, and output
+   inventory, current HEAD (or `none`), the changed set when one exists,
+   alignment flag, prior audit as carry-forward input, and output
    `.project/research/DOCS-AUDIT.md`. When Git has a resolvable HEAD and no
    non-`.project` worktree changes, the orchestrator creates a verify sidecar
    with `python3 <absolute isolation.py> isolate-verify --repo <absolute
@@ -64,14 +70,16 @@ would dirty execution, invalidate review, or mutate shipped history.
 2. Gate the artifact with the bundled helper: write the frozen inventory to
    a temporary file (one path per line) and run
    `python3 <absolute check_docs_audit.py> --repo <docs sidecar> --inventory
-   <file> [--prior-audit <temporary prior-audit file>]`.
+   <file> [--prior-audit <temporary prior-audit file>] [--changed <temporary
+   changed-set file>]`.
    It enforces the contract — every doc with at least one testable claim has
    a claims table, every claim a valid type and verdict with evidence, every
    claimless doc appears once in the `## Descriptive docs` list, the section
    paths and that list are disjoint and together equal the frozen inventory
    exactly, the Summary counts match the rows, the remediation queue
-   classifies every non-verified claim, and every prior User-ruling row and
-   Planned value survives in order. A non-zero exit names the failed
+   classifies every non-verified claim, every prior User-ruling row and
+   Planned value survives in order, and every `unchanged:` row satisfies
+   the Delta rule below. A non-zero exit names the failed
    rule. Redispatch one complete corrected brief under logical task name
    `docs_audit`, following the runtime dispatch contract. If it still fails,
    present **Outcome** with the failed gate, **Review** linking DOCS-AUDIT.md or
@@ -122,6 +130,14 @@ a doc with no testable claims gets one line in `## Descriptive docs`, not its
 own section and not skipped. Rewriting DOCS-AUDIT.md preserves any
 existing `## User rulings` rows: rulings and `planned` markers carry forward
 verbatim, so a re-audit never wipes the alignment queue.
+
+**Delta.** A re-audit re-verifies only what could have moved: every doc in
+the changed set, every claim whose evidence names a changed path, every
+command claim, and every prior non-verified claim. Any other prior
+`verified` row is carried verbatim with its Evidence prefixed `unchanged: `,
+and the gate rejects a carried row that fails any of those conditions. No
+recorded `Audited HEAD`, or one that is not an ancestor of HEAD, means no
+changed set and a full re-audit.
 
 **Extract claims.** A claim is any statement reality can contradict:
 

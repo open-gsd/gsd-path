@@ -10,6 +10,7 @@ AUDIT = """# Docs Audit
 
 Repo root: /repo
 Audited: 2026-08-21
+Audited HEAD: none
 Alignment mode: no
 
 ## Summary
@@ -73,8 +74,8 @@ class CheckDocsAuditTests(unittest.TestCase):
     def tearDown(self):
         self.temporary.cleanup()
 
-    def write(self, text):
-        path = self.repo / check_docs_audit.DEFAULT_AUDIT
+    def write(self, text, path=check_docs_audit.DEFAULT_AUDIT):
+        path = self.repo / path
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(
             text.replace("Repo root: /repo", f"Repo root: {self.repo.resolve()}"),
@@ -115,12 +116,9 @@ class CheckDocsAuditTests(unittest.TestCase):
 
     def test_prior_user_rulings_and_planned_values_are_preserved(self):
         prior = self.repo / "prior-audit.txt"
-        prior.write_text(
-            with_rulings(
-                AUDIT.format(verified=1),
-                '| 1 | fix-code | "implement the flag" | no |',
-            ).replace("Repo root: /repo", f"Repo root: {self.repo.resolve()}"),
-            encoding="utf-8",
+        self.write(
+            with_rulings(AUDIT.format(verified=1), '| 1 | fix-code | "implement the flag" | no |'),
+            "prior-audit.txt",
         )
 
         code, _, error = self.run_gate("--prior-audit", str(prior))
@@ -147,6 +145,43 @@ class CheckDocsAuditTests(unittest.TestCase):
         code, output, error = self.run_gate("--prior-audit", str(prior))
         self.assertEqual(0, code, error)
         self.assertEqual(2, json.loads(output)["rulings"])
+
+    def test_carried_rows_repeat_prior_verified_rows_outside_the_changed_set(self):
+        fresh = '| "Run `app 3` prints `3`" | command | verified | `app 3` → `3` |'
+        prior_row = '| "Run `app 3` prints `3`" | feature | verified | `app.py:3` → `3` |'
+        carried_row = prior_row.replace("| verified | ", "| verified | unchanged: ")
+        prior_audit = AUDIT.format(verified=1).replace(fresh, prior_row)
+        carried = AUDIT.format(verified=1).replace(fresh, carried_row)
+        cases = (
+            (carried, prior_audit, ["--changed"], "--changed requires --prior-audit"),
+            (carried, prior_audit, ["--prior-audit"], "require --prior-audit and --changed"),
+            (carried, AUDIT.format(verified=1), ["--prior-audit", "--changed"], "does not repeat a prior verified row"),
+            (carried, prior_audit, ["--prior-audit", "--changed"], None),
+            (carried, prior_audit, ["--prior-audit", "--changed", "app.py"], "changed since the prior audit: app.py"),
+            (carried, prior_audit, ["--prior-audit", "--changed", "README.md"], "changed since the prior audit: README.md"),
+            (
+                carried.replace("| feature | verified |", "| command | verified |"),
+                prior_audit.replace("| feature | verified |", "| command | verified |"),
+                ["--prior-audit", "--changed"],
+                "only verified non-command claims carry forward",
+            ),
+        )
+        for audit, prior, flags, expected in cases:
+            with self.subTest(flags=flags, expected=expected):
+                self.write(audit)
+                self.write(prior, "prior-audit.txt")
+                (self.repo / "changed.txt").write_text("\n".join(flags[2:]) + "\n", encoding="utf-8")
+                args = []
+                if "--prior-audit" in flags:
+                    args += ["--prior-audit", str(self.repo / "prior-audit.txt")]
+                if "--changed" in flags:
+                    args += ["--changed", str(self.repo / "changed.txt")]
+                code, _, error = self.run_gate(*args)
+                if expected is None:
+                    self.assertEqual(0, code, error)
+                else:
+                    self.assertEqual(1, code)
+                    self.assertIn(expected, error)
 
     def test_derived_inventory_excludes_vendored_archive_skills_and_project_unless_alignment(self):
         inventory = check_docs_audit.derive_inventory(self.repo, check_docs_audit.DEFAULT_AUDIT, alignment=False)
@@ -181,6 +216,7 @@ class CheckDocsAuditTests(unittest.TestCase):
         cases = (
             (valid.replace("Audited: 2026-08-21", "Audited: yesterday"), "ISO date"),
             (valid.replace("Repo root: /repo", "Repo root: /wrong"), "does not match"),
+            (valid.replace("Audited HEAD: none", "Audited HEAD: abc123"), "40-hex commit or none"),
             (
                 valid.replace(
                     "Repo root: /repo", "Repo root: /repo\nRepo root: /repo"
