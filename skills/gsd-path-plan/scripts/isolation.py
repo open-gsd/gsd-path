@@ -2723,7 +2723,7 @@ def checkpoint(
                 match = re.fullmatch(
                     r"\.project/archive/[^/]+/tasks/([^/]+\.md)", path
                 )
-                if match and (repo / path).exists():
+                if match and (repo / path).is_file():
                     archived.add(match.group(1))
         removed = sorted(
             path
@@ -2731,7 +2731,7 @@ def checkpoint(
             if path.startswith(".project/tasks/")
             and path.endswith(".md")
             and "/" not in path[len(".project/tasks/") :]
-            and not (repo / path).exists()
+            and not (repo / path).is_file()
             and path.rsplit("/", 1)[1] not in archived
         )
         if removed:

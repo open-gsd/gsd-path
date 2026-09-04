@@ -28,8 +28,9 @@ Worst drift: <one sentence — the most misleading claim found>
 
 <!-- One section per doc that has at least one testable claim. Docs without
      testable claims go in the Descriptive docs list below, never in their
-     own section. Evidence prefixed `unchanged: ` marks a row carried from
-     the prior audit under the role's delta rule. -->
+     own section. Evidence with exactly one `unchanged: ` prefix marks a row
+     carried from the prior audit under the role's delta rule. Copy an
+     already-carried row verbatim without adding another prefix. -->
 
 ## Descriptive docs
 

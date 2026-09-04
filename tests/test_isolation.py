@@ -1589,7 +1589,27 @@ class IsolationTests(unittest.TestCase):
             repo = Path(temporary) / "repo"
             repo.mkdir()
             base = self.init_bound_repo(repo)
-            (repo / ".project/tasks/T001.md").rename(repo / ".project/tasks/T001-split.md")
+            task = repo / ".project/tasks/T001.md"
+            task.unlink()
+            self.write(repo, ".project/tasks/T001.md/part.md", TASK_FILE)
+
+            with self.assertRaisesRegex(
+                isolation.IsolationError,
+                "never delete or rename task briefs: .project/tasks/T001.md",
+            ):
+                isolation.checkpoint(
+                    repo,
+                    base,
+                    "build: split T001 into parts",
+                    "Why: replace brief with directory",
+                    [".project"],
+                )
+            self.assertEqual(git(repo, "rev-parse", "HEAD"), base)
+
+            (task / "part.md").unlink()
+            task.rmdir()
+            self.write(repo, ".project/tasks/T001.md", TASK_FILE)
+            task.rename(repo / ".project/tasks/T001-split.md")
 
             with self.assertRaisesRegex(
                 isolation.IsolationError, "never delete or rename task briefs: .project/tasks/T001.md"

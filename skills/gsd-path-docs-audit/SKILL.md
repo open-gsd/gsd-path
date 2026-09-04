@@ -137,9 +137,10 @@ verbatim, so a re-audit never wipes the alignment queue.
 **Delta.** A re-audit re-verifies only what could have moved: every doc in
 the changed set, every claim whose evidence names a changed path, every
 command claim, and every prior non-verified claim. Any other prior
-`verified` row is carried verbatim with its Evidence prefixed `unchanged: `,
-and the gate rejects a carried row that fails any of those conditions. No
-recorded `Audited HEAD`, or one that is not an ancestor of HEAD, means no
+`verified` row is carried with exactly one `unchanged: ` prefix on its
+Evidence. An already-carried row is copied verbatim without adding another
+prefix. The gate rejects a carried row that fails any of those conditions.
+No recorded `Audited HEAD`, or one that is not an ancestor of HEAD, means no
 changed set and a full re-audit.
 
 **Extract claims.** A claim is any statement reality can contradict:

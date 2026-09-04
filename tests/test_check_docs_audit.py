@@ -157,6 +157,7 @@ class CheckDocsAuditTests(unittest.TestCase):
             (carried, prior_audit, ["--prior-audit"], "require --prior-audit and --changed"),
             (carried, AUDIT.format(verified=1), ["--prior-audit", "--changed"], "does not repeat a prior verified row"),
             (carried, prior_audit, ["--prior-audit", "--changed"], None),
+            (carried, carried, ["--prior-audit", "--changed"], None),
             (carried, prior_audit, ["--prior-audit", "--changed", "app.py"], "changed since the prior audit: app.py"),
             (carried, prior_audit, ["--prior-audit", "--changed", "README.md"], "changed since the prior audit: README.md"),
             (
