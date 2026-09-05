@@ -1,0 +1,14 @@
+{
+  "path_parent_output": 19949,
+  "path_children_output": 14049,
+  "path_total_output": 33998,
+  "direct_total_output": 3509,
+  "path_roles": {
+    "/root/build_t001": 3502,
+    "/root/inspect_docs": 2749,
+    "/root/review_wave_1_cycle_1": 4501,
+    "/root/inspect_codebase": 3297
+  },
+  "pipeline_outcome": "blocked before wave collection; not shipped or integrated",
+  "candidate": "76051f9ce85d55728311141fe4a7d0c0ed356b80"
+}

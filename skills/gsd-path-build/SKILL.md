@@ -368,9 +368,13 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
      name `review_wave_<wave>_cycle_<cycle>`. Supply every task path, its
      recorded base and proven landing commit, the reviewer role, and
      wave-review template, and the absolute INTENT.md path.
-     Create and supply one verify sidecar with
-     `python3 <absolute isolation.py> isolate-verify --repo <absolute primary>
-     --base <recorded review base> --name wave-<N>-cycle-<C>`. Brief the
+     Record current clean primary HEAD as the review collection base. Create
+     a fresh review sidecar there; the serial task verification sidecar belongs
+     to the earlier task base and cannot be collected after landing.
+     Use `python3 <absolute isolation.py> isolate-verify --repo <absolute primary>
+     --base <recorded review base> --name wave-<N>-cycle-<C>`. Each task's
+     recorded base and landing commit still define its isolated review diff.
+     Keep primary HEAD fixed until collection completes. Brief the
      recorded isolated Verify output per task (the Log entry the
      orchestrator appended at landing). The reviewer must not re-run that
      command or PLAN.md's project Verify. The reviewer
