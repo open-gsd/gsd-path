@@ -149,6 +149,56 @@ class TaskBriefTests(unittest.TestCase):
             self.assertEqual(summary["tasks"], 2)
             self.assertGreater(summary["checked"], 0)
 
+    def test_uncommitted_supplied_contracts_are_valid_prose_inputs(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.init_repo(root)
+            base = self.commit(root)
+            self.write(root, ".project/intent/INTENT.md", "# Approved intent\n")
+            self.write(root, ".project/research/SYNTHESIS.md", "# Settled synthesis\n")
+            self.write_task(
+                root, "T001", contract="- None",
+                context="Follow supplied `.project/intent/INTENT.md` and `.project/research/SYNTHESIS.md`.",
+            )
+            code, output, error = self.lint(root, base)
+            self.assertEqual(code, 0, error)
+            self.assertEqual(json.loads(output)["tasks"], 1)
+            (root / ".project/intent/INTENT.md").unlink()
+            code, _, error = self.lint(root, base)
+            self.assertEqual(code, 1)
+            self.assertIn("missing at the layer base: .project/intent/INTENT.md", error)
+
+    def test_uncommitted_product_and_verify_inputs_still_require_the_base(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.init_repo(root)
+            base = self.commit(root)
+            self.write(root, "src/extra.py", "pass\n")
+            self.write(root, ".project/intent/INTENT.md", "# Intent\n")
+            self.write_task(root, "T001", contract="- None", context="Read `src/extra.py`.", verify="python3 .project/intent/INTENT.md")
+            code, _, error = self.lint(root, base)
+            self.assertEqual(code, 1)
+            self.assertIn("Context names a path missing at the layer base: src/extra.py", error)
+            self.assertIn("Verify names a path missing at the layer base: .project/intent/INTENT.md", error)
+
+    def test_lookahead_prose_uses_its_own_uncommitted_contracts(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.init_repo(root)
+            base = self.commit(root)
+            self.write(root, ".project/next/intent/INTENT.md", "# Next intent\n")
+            self.write_task(root, "T001", contract="- None", context="Read `.project/next/intent/INTENT.md`.")
+            (root / ".project/tasks").rename(root / ".project/next/tasks")
+            args = ["--repo", str(root), "--base", base, "--tasks-dir", ".project/next/tasks"]
+            code, _, error = self.run_main(args)
+            self.assertEqual(code, 0, error)
+            self.write(root, ".project/intent/INTENT.md", "# Active intent\n")
+            task = root / ".project/next/tasks/T001-demo.md"
+            task.write_text(task.read_text().replace(".project/next/intent", ".project/intent"))
+            code, _, error = self.run_main(args)
+            self.assertEqual(code, 1)
+            self.assertIn("missing at the layer base: .project/intent/INTENT.md", error)
+
     def test_legacy_commit_frontmatter_field_fails(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

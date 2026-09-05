@@ -67,6 +67,20 @@ def _base_exists(repo: Path, base: str, path: str) -> bool:
     return _run_git(repo, "cat-file", "-e", f"{base}:{path}").returncode == 0
 
 
+def _supplied_contract(repo: Path, task: Path, token: str) -> bool:
+    """Plan approval checkpoints these supplied inputs after the brief gate."""
+    track = task.parent.parent.relative_to(repo).as_posix()
+    if track not in {".project", ".project/next"}:
+        return False
+    if token not in {
+        f"{track}/intent/INTENT.md",
+        f"{track}/research/SYNTHESIS.md",
+    }:
+        return False
+    path = repo / token
+    return path.is_file() and path.resolve() == repo.resolve() / token
+
+
 _strip_yaml_comment = _common.strip_yaml_comment
 _unquote = _common.unquote
 
@@ -228,7 +242,11 @@ def _lint_task(repo: Path, base: str, path: Path) -> Tuple[str, List[str], Optio
             continue
         for token in _prose_tokens(body):
             checked += 1
-            if token not in declared and not _base_exists(repo, base, token):
+            if (
+                token not in declared
+                and not _supplied_contract(repo, path, token)
+                and not _base_exists(repo, base, token)
+            ):
                 problems.append(f"## {name} names a path missing at the layer base: {token}")
 
     verify_body = sections.get("Verify")
