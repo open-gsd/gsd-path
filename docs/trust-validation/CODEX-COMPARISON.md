@@ -10,14 +10,18 @@ one product commit, then installs the candidate only in the Path arm.
 
 ```bash
 python3 tests/evaluate_codex.py prepare --directory /absolute/evaluation --candidate /absolute/gsd-path
-python3 tests/evaluate_codex.py run --arm /absolute/evaluation/direct --model MODEL --reasoning EFFORT
-python3 tests/evaluate_codex.py run --arm /absolute/evaluation/path --model MODEL --reasoning EFFORT
+python3 tests/evaluate_codex.py run --arm /absolute/evaluation/direct --model MODEL --reasoning EFFORT --sandbox SANDBOX
+python3 tests/evaluate_codex.py run --arm /absolute/evaluation/path --model MODEL --reasoning EFFORT --sandbox SANDBOX
 python3 tests/evaluate_codex.py report --directory /absolute/evaluation
 ```
 
-Use the same installed Codex version, model and reasoning effort for both arms.
+Use the same installed Codex version, model, reasoning effort and sandbox for both arms.
 The runner refuses mismatched settings. Model execution is explicit and uses
 the configured account. Ordinary CI never starts a paid model run.
+Select permissions appropriate to the approved fixture environment. On the
+tested CLI, `workspace-write` protects Git metadata and cannot complete the
+required commits and branch transitions. Record that as a setup failure;
+never combine timings from different sandbox settings into one comparison.
 
 Path uses the standard lane, full review, no optional panel, and direct
 integration to its local remote. It stops at owner approval gates. Review the

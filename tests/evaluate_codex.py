@@ -103,8 +103,8 @@ def activity(arm: Path, category: str, arguments: list) -> int:
     return result.returncode
 
 
-def run(arm: Path, model: str, reasoning: str, resume: str = None, prompt_file: Path = None) -> dict:
-    settings = {"model": model, "reasoning": reasoning,
+def run(arm: Path, model: str, reasoning: str, sandbox: str, resume: str = None, prompt_file: Path = None) -> dict:
+    settings = {"model": model, "reasoning": reasoning, "sandbox": sandbox,
                 "cli": command(["codex", "--version"], arm)}
     for existing in arm.parent.glob("*/settings.json"):
         if json.loads(existing.read_text()) != settings:
@@ -117,7 +117,7 @@ def run(arm: Path, model: str, reasoning: str, resume: str = None, prompt_file: 
         arguments += ["resume", resume]
     arguments += ["--ignore-user-config", "--model", model, "-c", f'model_reasoning_effort="{reasoning}"', "--json"]
     if not resume:
-        arguments += ["--sandbox", "workspace-write", "--add-dir", str(arm)]
+        arguments += ["--sandbox", sandbox, "--add-dir", str(arm)]
     arguments += ["-"]
     prompt = (prompt_file or arm / "prompt.txt").read_text()
     (run_dir / "prompt.txt").write_text(prompt)
@@ -220,6 +220,7 @@ def main() -> int:
     execute.add_argument("--arm", type=Path, required=True)
     execute.add_argument("--model", required=True)
     execute.add_argument("--reasoning", required=True)
+    execute.add_argument("--sandbox", choices=("read-only", "workspace-write", "danger-full-access"), required=True)
     execute.add_argument("--resume")
     execute.add_argument("--prompt-file", type=Path)
     measure = actions.add_parser("activity")
@@ -233,7 +234,7 @@ def main() -> int:
     if args.action == "prepare":
         result = prepare(args.directory.resolve(), args.candidate.resolve())
     elif args.action == "run":
-        result = run(args.arm.resolve(), args.model, args.reasoning, args.resume, args.prompt_file)
+        result = run(args.arm.resolve(), args.model, args.reasoning, args.sandbox, args.resume, args.prompt_file)
     elif args.action == "activity":
         arguments = args.command[1:] if args.command[:1] == ["--"] else args.command
         if not arguments:

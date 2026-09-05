@@ -1,4 +1,5 @@
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -20,6 +21,35 @@ print(json.dumps({'widgets': a.count}) if a.json else f'{a.count} widgets')
 
 
 class EvaluationTests(unittest.TestCase):
+    def test_runner_uses_and_pins_explicit_sandbox(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            arm = root / "direct"
+            repo = arm / "repo"
+            repo.mkdir(parents=True)
+            evaluation.command(["git", "init", "-q"], repo)
+            evaluation.command(["git", "config", "user.name", "Test"], repo)
+            evaluation.command(["git", "config", "user.email", "test@example.invalid"], repo)
+            evaluation.command(["git", "commit", "--allow-empty", "-qm", "fixture"], repo)
+            (arm / "prompt.txt").write_text("fixture prompt")
+            binary = root / "bin"
+            binary.mkdir()
+            host = binary / "codex"
+            host.write_text(f"#!{sys.executable}\nimport sys,json\n"
+                            "if '--version' in sys.argv: print('fixture-cli')\n"
+                            "else: print(json.dumps({'type':'turn.completed','usage':{'output_tokens':1},'argv':sys.argv,'prompt':sys.stdin.read()}))\n")
+            host.chmod(0o755)
+            arguments = [sys.executable, str(evaluation.ROOT / "tests/evaluate_codex.py"), "run", "--arm", str(arm),
+                         "--model", "fixture", "--reasoning", "high", "--sandbox", "danger-full-access"]
+            result = subprocess.run(arguments, capture_output=True, text=True, env={**os.environ, "PATH": str(binary) + os.pathsep + os.environ["PATH"]})
+            self.assertEqual(result.returncode, 0, result.stderr)
+            recorded = json.loads(result.stdout)
+            self.assertEqual(recorded["sandbox"], "danger-full-access")
+            events = next(arm.glob("run-*/events.jsonl"))
+            event = json.loads(json.loads(events.read_text())["raw"])
+            self.assertEqual(event["argv"][event["argv"].index("--sandbox") + 1], "danger-full-access")
+            self.assertEqual(event["prompt"], "fixture prompt")
+
     def test_oracle_rejects_old_constant_and_wrong_json_outputs(self):
         with tempfile.TemporaryDirectory() as directory:
             repo = Path(directory)
