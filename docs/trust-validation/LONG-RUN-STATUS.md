@@ -162,3 +162,31 @@ which added checks were necessary before making an efficiency claim.
 
 This goal turn is progress: source fixes, passing shared checks, an executed
 standalone audit, and a captured real lookahead track. Full goal remains active.
+
+## Resume checkpoint (2026-09-05 21:07 UTC)
+
+The owner requested resume. The goal service reports paused; its status is
+user-controlled. Work resumed under the existing request without replacing the
+goal or imposing a budget. Source HEAD is 07d6ba7 and the worktree was clean.
+
+Prior program and greenfield handles ended at real review gates. M002 lookahead
+INTENT and greenfield SYNTHESIS were read and approved by the evaluator; native
+planning now uses handles 16798 and 58248 respectively, in their existing threads.
+Quick PLAN required duplicate walkthrough executions despite the bundled rule
+to reuse exact recorded task evidence. A legal pre-approval correction is running
+at handle 49230; all surface criteria and observable proof remain required.
+These handles are live only until terminal receipts prove otherwise.
+
+The full suite remains incomplete. External target approval is still pending.
+
+Quick's corrected plan passed its canonical gate and was read/approved. Native
+build handle is 14904 in the same quick thread; it must stop after full-wave
+final scope before prepare-final. Discussion initialization handle is 31403 in
+its separate fixture; discover its native thread from thread.started.
+
+Guard prerequisite: installed Codex 0.153.4 reports hooks stable/enabled. Current
+official hooks docs require trust of exact non-managed definitions and trusted
+project config. The CLI supports one-off externally-vetted hook trust, but this
+host has other user hook sources. No broad trust override was applied. Native
+guard proof remains pending; helper tests alone do not close it. Source:
+https://learn.chatgpt.com/docs/hooks (checked 2026-09-05).
