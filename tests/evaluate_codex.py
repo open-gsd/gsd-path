@@ -112,12 +112,10 @@ def run(arm: Path, model: str, reasoning: str, sandbox: str, resume: str = None,
     write_json(arm / "settings.json", settings)
     run_dir = arm / ("run-" + dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%S%fZ"))
     run_dir.mkdir()
-    arguments = ["codex", "exec"]
+    arguments = ["codex", "exec", "--sandbox", sandbox, "--add-dir", str(arm)]
     if resume:
         arguments += ["resume", resume]
     arguments += ["--ignore-user-config", "--model", model, "-c", f'model_reasoning_effort="{reasoning}"', "--json"]
-    if not resume:
-        arguments += ["--sandbox", sandbox, "--add-dir", str(arm)]
     arguments += ["-"]
     prompt = (prompt_file or arm / "prompt.txt").read_text()
     (run_dir / "prompt.txt").write_text(prompt)

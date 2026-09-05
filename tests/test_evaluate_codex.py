@@ -49,6 +49,14 @@ class EvaluationTests(unittest.TestCase):
             event = json.loads(json.loads(events.read_text())["raw"])
             self.assertEqual(event["argv"][event["argv"].index("--sandbox") + 1], "danger-full-access")
             self.assertEqual(event["prompt"], "fixture prompt")
+            resumed = subprocess.run(arguments + ["--resume", "fixture-thread"], capture_output=True,
+                                     text=True, env={**os.environ, "PATH": str(binary) + os.pathsep + os.environ["PATH"]})
+            self.assertEqual(resumed.returncode, 0, resumed.stderr)
+            events = sorted(arm.glob("run-*/events.jsonl"))[-1]
+            argv = json.loads(json.loads(events.read_text())["raw"])["argv"]
+            self.assertEqual(argv[argv.index("--sandbox") + 1], "danger-full-access")
+            self.assertLess(argv.index("--sandbox"), argv.index("resume"))
+            self.assertLess(argv.index("--add-dir"), argv.index("resume"))
 
     def test_oracle_rejects_old_constant_and_wrong_json_outputs(self):
         with tempfile.TemporaryDirectory() as directory:
