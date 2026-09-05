@@ -5,6 +5,16 @@ Objective (owner): run the entire long run. fix as needed.
 The objective remains unfinished while required native features are unproven. Do not replace live evidence with helper tests.
 No testing time or token limit was set by the owner.
 
+## Active continuation — 2026-09-05 23:48 UTC
+
+Previous goal turn: progress (three-milestone integration/oracle and completed evidence audit). No blocked audit conclusion: a separate reviewed fault case can still make useful progress toward native skeptic/patch proof.
+
+- Controlled-fault case root `/Users/jeremymcspadden/orca/evaluations/gsd-path-review-fault-8ecdb9b-20260905`, pinned candidate 8ecdb9b8d74c86e0042c5ca876a3b57284451736. Existing prepare helper installed a fresh reviews fixture; no completed run or archive changed.
+- Reviewed procedure: `FAULT-PROCEDURE.md` in that root; precision-loss mutation is conditional on inspecting actual finished coder code. No fault injected yet. Existing tests may catch it first; do not weaken them or relabel that as skeptic proof.
+- Native thread `01a073f8-3e3c-74c0-a1df-cdd90d45be51`, handle 19914, initial router running. Stop at ordinary first owner artifact, then evaluator approvals through plan. Later mandatory stop after coder completion, BEFORE authoritative Verify/landing/review and with no child live, for external fault inspection/seed.
+- Let native reviews and canonical finding grouping determine the real outcome. A standing criterion finding may exercise skeptic and complete fix-task/re-review paths. Do not prescribe reviewer verdicts. Stop after repaired review proof; another ship run is unnecessary for these features.
+- Guard continuation ruling, loop owner values, independent panel model, and exact GitHub target approval remain unresolved. This continuation does not grant any of those permissions.
+
 ## Current position — 2026-09-05 23:40 UTC
 
 - **Program complete; full feature evaluation incomplete.** All owned native test threads are terminal. No native run should be resumed from an old handle without new authorized work.
