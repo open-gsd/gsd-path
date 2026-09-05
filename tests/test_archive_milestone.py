@@ -2605,6 +2605,27 @@ Waves checked: 1
             self.assertNotEqual(preflight.returncode, 0)
             self.assertIn("evidence", preflight.stderr.lower())
 
+    def test_archive_accepts_embedded_surface_evidence_but_not_placeholders(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            intent = repo / ".project/intent/INTENT.md"
+            intent.write_text(intent.read_text().replace("# Intent", "# Intent\n\nSurfaces: Demo CLI"))
+            archive = self.prepare_archive(repo)
+            final = archive / "review/FINAL.md"
+            original = final.read_text()
+            observed = next(line for line in original.splitlines() if line.startswith("- **Observed**:"))
+            evidence = original.replace(observed, '- **Observed**: stderr contained "injected <stage> failure"; all recorded cases passed.\n- **Surface**: Demo CLI')
+            final.write_text(evidence)
+            rendered = self.run_command(sys.executable, str(ARCHIVE_SCRIPT), "render-manifest", "--repo", str(repo), cwd=repo)
+            self.assertEqual(rendered.returncode, 0, rendered.stderr)
+            for value in ("<record observation>", "`<record observation>`", "'null'"):
+                with self.subTest(value=value):
+                    final.write_text(evidence.replace('stderr contained "injected <stage> failure"; all recorded cases passed.', value))
+                    rejected = self.run_command(sys.executable, str(ARCHIVE_SCRIPT), "render-manifest", "--repo", str(repo), cwd=repo)
+                    self.assertNotEqual(rejected.returncode, 0)
+                    self.assertIn("surface Observed", rejected.stderr)
+
     def test_preflight_rejects_a_gap_heading_risk_mismatch(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             repo = Path(temporary_directory)

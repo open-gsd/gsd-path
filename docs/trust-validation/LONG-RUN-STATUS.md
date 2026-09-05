@@ -318,3 +318,13 @@ No replay has been created yet.
 Greenfield final-ready was read and captured at d453198b0abfe1f72afb81daa637dc1e8d9d0889;
 shipping runs at handle 3871. Program M001 final preparation runs at 97783.
 Recovery planning runs at 49023. Quick is integrated and its product oracle passed.
+
+## Resumed native closeout and archive evidence — 2026-09-05
+
+- Candidate 3d9b1d0 shared check passed: 1,022 Python tests, two platform skips, Node and resource sync pass. Receipt: `/Users/jeremymcspadden/orca/evaluations/gsd-path-repair-replays-20260905/automated.json`.
+- Quick native lean-verification now recorded pass in remaining-run reviews.jsonl. Same-HEAD prepare-final repeated with identical two-entry ledger and zero new project executions; full-wave review supplied FINAL without another reviewer. Quick and greenfield external counter oracles passed after local canonical integration.
+- Repaired discussion native run blocks future-owner A001 with advance false; read-only forensics preserved artifact, runtime and HEAD hashes. Positive legal disposition remains open.
+- Repaired reviews zero-dispatch research passed, then native actor advanced despite failed synthesis formatting and blocked plan. Original and replay failures retained. No planner/review yet.
+- Recovery checkpoint 4ad8b0fb406de3bab2d4addbee65d69e2cb35316 preview safely refused: parent has no STATE, so checkpoint ownership is unproven. Preserve refusal and exercise the scenario's permitted task-undo path; no forced reset or hand repair. Forensics and preview preserved all 292 file hashes.
+- Program M001 archive manifest rejected embedded `<stage>` within actual quoted SC4 surface evidence, although the final gate explicitly allows embedded angle brackets. Fixed archive Check/Observed parsing to reuse that exact surface-value contract only for a named intent surface; entirely placeholder or absence values still fail. Review and archive contents remain untouched. Test RED: real render-manifest rejected embedded evidence. GREEN: 240 archive/handoff tests pass. Sabotage: disable shared surface validation, new test fails; restore passes. Receipt: repair-replays/archive-surface-sabotage.json. Simplify review retained the existing surface validator rather than adding a competing parser.
+- Abandon roadmap revised before approval to keep evaluator abandonment/reslice obligations separate from product criteria. Canonical gate passed; approved revised roadmap; M001 intent drafting next. No abandonment or ship yet.

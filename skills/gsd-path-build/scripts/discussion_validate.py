@@ -502,6 +502,11 @@ def archived_intent_criteria(archive: Path) -> dict[int, str]:
 
 
 def parse_final_review(archive: Path) -> tuple:
+    try:
+        import check_handoffs
+    except ImportError:  # pragma: no cover - package import used by tests
+        from scripts import check_handoffs
+
     final = archive / "review" / "FINAL.md"
     if not archive_milestone.is_real_file(final):
         raise ArchiveError("final review must be a real FINAL.md file")
@@ -529,6 +534,14 @@ def parse_final_review(archive: Path) -> tuple:
     if not headings or [number for _, number, _ in headings] != list(range(1, len(headings) + 1)):
         raise ArchiveError("FINAL.md success criteria must be ordered and contiguous")
     intent_criteria = archived_intent_criteria(archive)
+    intent_text = (archive / "intent" / "INTENT.md").read_text(encoding="utf-8")
+    try:
+        surfaces = (
+            check_handoffs._surfaces(intent_text, "INTENT.md")
+            if re.search(r"(?m)^Surfaces:", intent_text) else []
+        )
+    except check_handoffs.HandoffError as error:
+        raise ArchiveError(str(error)) from error
     if len(headings) != len(intent_criteria):
         raise ArchiveError("FINAL.md success criteria do not exactly cover INTENT.md")
     for _, number, criterion in headings:
@@ -551,10 +564,25 @@ def parse_final_review(archive: Path) -> tuple:
             if key in values:
                 raise ArchiveError(f"FINAL.md repeats {key} for {criterion}")
             values[key] = value.strip().strip("`")
-        if tuple(values) != expected_fields or any(
-            not value or archive_milestone.contains_placeholder(value) for value in values.values()
-        ):
+        surface_values = [
+            line.removeprefix("- **Surface**:").strip().strip("`")
+            for line in lines[section_start:section_end]
+            if line.startswith("- **Surface**:")
+        ]
+        surface_evidence = len(surface_values) == 1 and any(
+            " ".join(surface_values[0].split()).casefold() == " ".join(surface.split()).casefold()
+            for surface in surfaces
+        )
+        if tuple(values) != expected_fields:
             raise ArchiveError(f"FINAL.md criterion is incomplete: {criterion}")
+        for field, value in values.items():
+            if surface_evidence and field in {"Check", "Observed"}:
+                try:
+                    check_handoffs._surface_value(value, f"FINAL.md surface {field}")
+                except check_handoffs.HandoffError as error:
+                    raise ArchiveError(str(error)) from error
+            elif not value or archive_milestone.contains_placeholder(value):
+                raise ArchiveError(f"FINAL.md criterion is incomplete: {criterion}")
         if values["Verdict"] != "met":
             raise ArchiveError(f"FINAL.md criterion lacks passing evidence: {criterion}")
         evidence = next(
