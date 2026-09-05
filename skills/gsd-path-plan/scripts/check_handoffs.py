@@ -939,7 +939,7 @@ def _plan_waves(plan: str) -> Tuple[Dict[int, str], List[int]]:
     return depths, waves
 
 
-def _require_task_structure(task_id: str, text: str) -> None:
+def _require_task_structure(task_id: str, text: str, *, initial: bool) -> None:
     expected = {
         "status": "pending",
         "agent": "null",
@@ -948,7 +948,8 @@ def _require_task_structure(task_id: str, text: str) -> None:
         "task_branch": "null",
     }
     for field, value in expected.items():
-        if _task_scalar(text, task_id, field) != value:
+        actual = _task_scalar(text, task_id, field)
+        if initial and actual != value:
             raise HandoffError(f"{task_id} {field} must initially be {value}")
     for heading in ("Context", "Approach", "Interface contract", "Log"):
         body = _strip_comments(_section(text, heading)).strip()
@@ -958,7 +959,7 @@ def _require_task_structure(task_id: str, text: str) -> None:
 
 
 def _validate_task_graph(
-    wave_depths: Dict[int, str], tasks: Dict[str, str]
+    wave_depths: Dict[int, str], tasks: Dict[str, str], *, initial: bool
 ) -> None:
     task_ids = list(tasks)
     expected = [f"T{number:03d}" for number in range(1, len(task_ids) + 1)]
@@ -969,7 +970,7 @@ def _validate_task_graph(
     task_waves: Dict[str, int] = {}
     task_files: Dict[str, List[str]] = {}
     for task_id, text in tasks.items():
-        _require_task_structure(task_id, text)
+        _require_task_structure(task_id, text, initial=initial)
         wave = _task_wave(text, task_id)
         deps = _task_deps(text, task_id)
         files = _frontmatter_files(text)
@@ -1274,7 +1275,9 @@ def validate_plan(
     rows = _coverage_rows(plan)
     tasks = _task_texts(root, project_dir)
     wave_depths, waves = _plan_waves(plan)
-    _validate_task_graph(wave_depths, tasks)
+    # Build readiness owns task lifecycle validation; coverage must survive landings.
+    state = _require_pipeline(root, project_dir)
+    _validate_task_graph(wave_depths, tasks, initial=state["phase"] == "plan")
     assigned: Dict[str, Set[str]] = {task_id: set() for task_id in tasks}
     covered = set()
     for criterion, task_id, acceptance in rows:
@@ -1298,7 +1301,7 @@ def validate_plan(
         if owned != assigned[task_id]:
             raise HandoffError(f"{task_id} Intent coverage does not match PLAN.md")
     surfaces = _surfaces(intent, "INTENT.md")
-    milestone = _require_pipeline(root, project_dir).get("milestone", "null")
+    milestone = state.get("milestone", "null")
     if milestone != "null":
         declared = _roadmap_surfaces(root, milestone)
         if declared is not None and _surface_keys(declared) != _surface_keys(surfaces):

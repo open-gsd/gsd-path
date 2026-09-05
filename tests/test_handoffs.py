@@ -766,6 +766,24 @@ The task implements the demo.
             project_dir=project_dir,
         )
 
+    def test_build_plan_gate_preserves_progress_and_checks_contracts(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_plan_handoff(root)
+            task = root / ".project/tasks/T001-demo.md"
+            progressed = task.read_text().replace("status: pending", "status: done").replace(
+                "base: null", "base: " + "a" * 40
+            ).replace("agent: null", "agent: /root/build_t001")
+            task.write_text(progressed)
+            with self.assertRaisesRegex(check_handoffs.HandoffError, "initially"):
+                check_handoffs.validate_plan(root)
+            self.write_state(root, "build", "active")
+            self.assertEqual(check_handoffs.validate_plan(root)["tasks"], 2)
+            self.assertEqual(task.read_text(), progressed)
+            task.write_text(progressed.replace("- SC1", "- SC2"))
+            with self.assertRaisesRegex(check_handoffs.HandoffError, "Intent coverage"):
+                check_handoffs.validate_plan(root)
+
     def test_plan_coverage_maps_each_success_criterion(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
