@@ -91,3 +91,34 @@ revision has been exercised everywhere without supporting evidence.
 Docs-audit inspect/done was captured at 2026-09-05T20:32:37Z. Its standalone
 invocation is live at handle 62621. Existing five drift rows have an explicit
 evaluator accept-drift ruling for this fixture; no code/docs change is authorized.
+
+## Instruction and prompt corrections
+
+The repaired greenfield classifier returned greenfield with no signals. Its
+next invocation exposed two distinct defects: the evaluator's shared footer
+imposed lookahead on a single-milestone scenario, and router instructions omitted
+the exact initial-binding event required by pipeline_state.py. Both failures
+are retained in the greenfield repair run's first trace.
+
+The footer now applies lookahead only to scenarios declaring that feature.
+A real prepared-prompt regression failed before the change, passes afterward,
+and failed when the condition was deliberately removed. Eleven focused evaluator
+and state tests pass; sync passes. The router now supplies the canonical event
+and the correct sibling forensics helper path. A resume instruction completed
+that same prescribed recovery in the existing greenfield fixture, without
+hand-editing state or repeating branch creation. Native handle: 25525; thread
+01a07348-c6e5-7b32-90d8-b6786eda982d.
+
+Docs-audit native verdict is PASS in the original fixed run's reviews.jsonl.
+The standalone-audited capture, canonical audit, and actual traces are hashed.
+The initial missing-state refusal, legal setup, delta audit, explicit evaluator
+rulings, collection, retirement, and unchanged product/docs/state are observed.
+
+Program roadmap approved at 5df1689693de05896fe73b5907cd5509b809e060. M001 intent
+was reviewed and approved; planning runs at handle 79888 in the original thread.
+Preserve the planned lookahead stop at build entry.
+
+Observed spin question for final analysis: the unchanged docs-audit inputs went
+from four to fourteen verified rows during standalone re-audit, with the same
+five stale rows. Keep this observation separate from functional pass; determine
+which added checks were necessary before making an efficiency claim.

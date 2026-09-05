@@ -158,6 +158,10 @@ project's `integration_default` and uses it for `integration`.
 
 ## Transaction recovery first
 
+For a helper failure, use the diagnostic in the sibling bundle:
+`../gsd-path-forensics/scripts/pipeline_diagnose.py diagnose --repo <absolute-root>`.
+Resolve that path relative to this skill's directory.
+
 Run `pipeline_state.py route` before any phase contract. A
 `resume-undo` result means a helper-owned undo transaction was interrupted;
 invoke `$gsd-path-undo` and apply the returned exact kind and expected HEAD.
@@ -251,7 +255,9 @@ means initialization is complete and phase work must wait for the initial
 router binding: resolve the exact fetched `origin/main` SHA, call `bind-initial` as
 above with `route.branch`, then persist its returned branch with
 `pipeline_state.py transition` using the route result's `state` phase and status plus its
-null branch and archive as expected fields. Rerun `route`; never route from a
+null branch and archive as expected fields. Set `--set-branch` to the helper's
+returned branch and use the exact required event:
+`--event "router bound initial milestone"`. Rerun `route`; never route from a
 remembered or hand-parsed state.
 
 Every ordinary state change not already owned by the journaled approval,

@@ -114,14 +114,15 @@ Do not read evaluator tests or other scenario workspaces.
 Scenario steps:
 '''
         prompt += '\n'.join(f'{i}. {step}' for i, step in enumerate(spec['steps'], 1))
-        prompt += f'''\n\nAt each named checkpoint, stop and identify the canonical artifacts so the
-external evaluator can run capture. It must observe lookahead before the active
-milestone ships and promotion before build starts. A missed checkpoint remains
-unverifiable; do not reconstruct or backdate state. Do not introduce a fake delay
-to manufacture overlap. Approval of a future plan may not invalidate an in-flight
-task or review base; surface a scheduling conflict if the current contracts lack
-a safe path. This test requires honest failure evidence, not a successful story.
-Use {plugin / 'tests/evaluate_codex.py'} activity --arm {arm} --category
+        prompt += "\n\nAt each named checkpoint, stop and identify the canonical artifacts for capture.\n"
+        if 'lookahead' in spec['features']:
+            prompt += '''It must observe lookahead before the active milestone ships and promotion before
+build starts. A missed checkpoint remains unverifiable; do not reconstruct or
+backdate state. Do not introduce a fake delay to manufacture overlap. Approval
+of a future plan may not invalidate an in-flight task or review base; surface a
+scheduling conflict if the current contracts lack a safe path.
+'''
+        prompt += f'''Use python3 {plugin / 'tests/evaluate_codex.py'} activity --arm {arm} --category
 <implementation|verification|review> -- <command> for measured shell work. That
 wrapper starts in the primary repo: select a sidecar cwd explicitly when needed.
 '''

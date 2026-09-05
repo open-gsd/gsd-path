@@ -122,6 +122,7 @@
     "fixture": "stale-docs",
     "request": "Invoke $gsd-path-docs-audit in standalone mode. Audit the tracked documentation and real counter behavior in the owned disposable sidecar. README claims --json already exists, while count.py only supports text. Report the observed drift without fixing code or choosing an owner ruling.",
     "steps": [
+      "First record the standalone refusal when pipeline state is missing. The evaluator then explicitly initializes through $gsd-path, completes inspection and stops at inspect/done before explicitly invoking the standalone audit. This setup must use canonical helpers and real children; preserve the initial negative receipt.",
       "Require command-backed stale evidence and a canonical audit that passes its structural gate.",
       "Confirm product and documentation bytes remain unchanged. Do not equate a structurally valid audit with all claims being true."
     ]
