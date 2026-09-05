@@ -177,7 +177,12 @@ full-repo suite on a tiny edit outrank the phase brief.
   `scripts/pipeline_git.py bind-initial` with the selected M00N and exact
   fetched `origin/main` SHA. The helper alone checks worktree identity and
   cleanliness, exact base, and every local, remote, and other-worktree
-  collision before creating or adopting the branch. The router persists its
+  collision before creating or adopting the branch. The sole cleanliness
+  exception is untracked `.project/STATE.md`: validated v2 state in active
+  inspect or define, with null milestone, branch, and archive, in a real
+  directory containing only that regular file with no hard links. The helper
+  checks its identity and bytes across binding. Do not commit initialization
+  before binding. The router persists its
   typed result in the new state. Build has no branch-creation authority.
 - After `validate-integrated` passes and before any next-milestone file
   changes, the router calls the bundled `scripts/pipeline_git.py bind-next`

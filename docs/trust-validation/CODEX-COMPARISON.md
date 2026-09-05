@@ -29,6 +29,12 @@ actual artifact before supplying a continuation file and the recorded thread
 ID with `run --resume THREAD --prompt-file /absolute/approval.txt`. Do not
 manufacture approvals, native child records, or milestone receipts.
 
+Pin skill selection as well as installation. Before a live run, add the absolute
+`path/repo/.agents/skills/gsd-path/SKILL.md` path to its prompt and require the
+local bundle for every phase and child. A globally installed skill can otherwise
+win selection even when the candidate was installed locally. Preserve the prompt
+with the raw run evidence; installation alone does not prove bundle use.
+
 Both arms receive the same product requirements and the owner's token budgets.
 The independent acceptance checks live outside their repositories. Agents may
 write their own tests but must not read the other arm or the evaluator's tests.
@@ -71,3 +77,19 @@ and measurement checks were each observed failing under a deliberate broken
 implementation and passing after restoration. Ledger and audit regressions
 also reproduced the original faults before their fixes. The source of proof
 is executable test behavior, not the presence of contract text.
+
+## Initial binding follow-up
+
+`bind-initial` now admits only the exact untracked, validated initial state,
+with no other reported changes or extra `.project` entries. It rejects staged
+state, invalid or advanced state, symlinks, and hard links, and checks file
+identity and bytes across binding. Existing base, branch, and worktree checks
+remain in force. This proves validated content, not which process created it;
+the rechecks do not make Git and state writes one atomic transaction.
+
+The regression reproduced the former cleanliness error. The real initialize →
+bind → interrupted resume → state transition now passes without a commit.
+The full-cycle fixture now initializes after its published baseline rather than
+committing state before binding. All 20 focused binding and full-cycle tests
+passed. Bypassing state validation made nine rejection cases fail; restoring
+validation passed. Simplification review retained one shared admission helper.

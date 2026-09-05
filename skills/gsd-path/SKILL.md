@@ -117,7 +117,9 @@ selects a milestone branch.
    STATE.md was written. Otherwise follow the JSON `verdict` / `route` exactly.
    `initialize` classifies and, for brownfield or greenfield, writes STATE.md
    through an anchored no-follow create — never create STATE.md yourself after
-   classify:
+   classify. Leave that initial state untracked for `bind-initial`; its validated
+   initial-state exception requires the index and every other path to stay clean.
+   Do not insert a commit between initialization and binding:
    - `owned` — STATE.md exists; continue at step 1.
    - `orphan` (`route: recover-orphan`) — block without mutation. List the
      returned `orphan_paths` and ask for an explicit recovery, migration, or
