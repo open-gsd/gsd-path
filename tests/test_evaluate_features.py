@@ -17,11 +17,14 @@ class FeatureEvaluationTests(unittest.TestCase):
             candidate = root / "candidate"
             command(["git", "clone", "--quiet", "--no-hardlinks", str(ROOT), str(candidate)], root)
             destination = root / "evaluation"
-            result = evaluation.prepare(destination, candidate, ["program", "greenfield"])
+            result = evaluation.prepare(destination, candidate, ["program", "greenfield", "abandon"])
             program_prompt = (destination / 'program/prompt.txt').read_text()
             greenfield_prompt = (destination / 'greenfield/prompt.txt').read_text()
             self.assertIn('It must observe lookahead', program_prompt)
             self.assertNotIn('It must observe lookahead', greenfield_prompt)
+            abandon_prompt = (destination / 'abandon/prompt.txt').read_text()
+            self.assertIn('two-milestone', abandon_prompt)
+            self.assertNotIn('three-milestone', abandon_prompt)
             repo = destination / "program/repo"
             self.assertEqual(result["candidate"], command(["git", "rev-parse", "HEAD"], candidate))
             self.assertTrue((repo / ".agents/skills/gsd-path/SKILL.md").is_file())

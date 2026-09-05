@@ -278,3 +278,15 @@ Other native threads in remaining-run:
   Its scenario accidentally requested three milestones while defining only two.
   Evaluator clarified two milestones and no concurrent/crash guarantee; source
   catalog wording still needs correction. No charter approval yet.
+
+Quick integrated at ship 811737a524510a22e329cbee449891d4f253e077, local merge
+13410421561a20163914fdf44881cdf2c981c8fa and milestone/001-widget-counter.
+Both same-head-reuse and integrated captures exist. External counter oracle
+passed all six independent checks; source hashes match the reviewed product.
+Native guards still remain outside this completed product/lean proof.
+
+Abandon catalog corrected from accidental three milestones to its two specified
+capabilities. The generated-prompt regression failed before correction, passed
+afterward, failed when the typo was restored, then passed after restoration.
+Receipt: remaining-run/abandon/scope-sabotage.json. Existing prepared fixture
+received the same explicit evaluator correction; pinned sources were untouched.
