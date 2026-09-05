@@ -17,6 +17,8 @@ from scripts import (
     pipeline_undo,
 )
 
+from tests.test_pipeline_undo import write_plan_tasks
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
@@ -184,6 +186,7 @@ class PipelineDiagnoseTests(unittest.TestCase):
                 "# Plan — first\n",
                 encoding="utf-8",
             )
+            write_plan_tasks(repo)
             pipeline_state.checkpoint_approval(repo, "plan", parent)
             approved = run_git(repo, "rev-parse", "HEAD").stdout.strip()
             with mock.patch.object(

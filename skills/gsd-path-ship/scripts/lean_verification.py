@@ -8,15 +8,15 @@ import subprocess
 import sys
 from pathlib import Path
 
-try:
+if __package__:
+    from scripts import _common
+    from scripts import check_handoffs as contracts
+    from scripts import build_state, isolation
+else:
     import _common
     import check_handoffs as contracts
     import build_state
     import isolation
-except ImportError:  # package imports in tests
-    from scripts import _common
-    from scripts import check_handoffs as contracts
-    from scripts import build_state, isolation
 
 
 def _git(repo, *arguments):

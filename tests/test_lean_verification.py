@@ -13,6 +13,20 @@ from tests.test_handoffs import git, git_output
 
 
 class LeanVerificationTests(unittest.TestCase):
+    def test_package_behavior_is_stable_with_cli_helpers_on_sys_path(self):
+        root = Path(__file__).resolve().parents[1]
+        program = """import sys, unittest
+sys.path.insert(0, 'scripts')
+suite = unittest.defaultTestLoader.loadTestsFromNames([
+    'tests.test_lean_verification.LeanVerificationTests.test_uncommitted_contract_is_not_verified_at_committed_head',
+    'tests.test_lean_verification.LeanVerificationTests.test_interrupted_collection_reuses_failed_execution_and_retires_sidecar',
+])
+raise SystemExit(not unittest.TextTestRunner().run(suite).wasSuccessful())
+"""
+        result = subprocess.run([sys.executable, '-B', '-c', program], cwd=root,
+                                capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def test_ship_bundle_returns_final_gate_without_review_dispatch(self):
         script = Path(__file__).resolve().parents[1] / "skills/gsd-path-ship/scripts/lean_verification.py"
         with tempfile.TemporaryDirectory() as tmp:
