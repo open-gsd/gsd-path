@@ -238,3 +238,43 @@ Greenfield build handle: 45113 (same thread). Discussion approved intent and
 explicit negative-JSON question/follow-up run at 80131, thread
 01a07366-a372-73b3-96fb-77e66a94dd76. The loop schema's owner values were asked
 asynchronously; no reply yet. Remaining external target approval also pending.
+
+## Lookahead approval and discussion routing (21:26 UTC)
+
+Program m2-lookahead-approved captured at 393c5e24a7243ceb9b2bca58f44a53dada4c9673:
+active storage build/active and next reports plan/done with null branch. M001
+build now runs at handle 76690. Both promotions remain untested.
+
+Quick full-wave review passed with 26 real CLI states and no reviewer reruns.
+Capture full-wave-reviewed exists. The evaluator first froze HEAD too early;
+the actor correctly required the canonical build-completion checkpoint before
+prepare-final. That evaluator scheduling error is retained. Final-ready captured
+at 91ebf49c011712d49073d3d4d060489b5c6a03ce: review reused, no final reviewer,
+project Verify ran once and passed. Same-HEAD probe handle: 93520.
+
+Discussion A001 was final/pending for gsd-path-plan while define/done. The native
+router incorrectly admitted research/active; pending-admission-allowed capture
+preserves that failure. A separate actual gate-plan invocation then refused
+with only the pending guard in its receipt. Diagnostics say stuck on A001. No
+disposition or plan mutation has occurred. Do not label the entire feature pass.
+
+Source routing now blocks ordinary work when its pending owner cannot enter.
+Ordinary transitions refuse crossing that boundary or completing a phase with
+pending answers. Legal admission of the named owner remains possible; journal
+recovery routes remain intact. The real discussion publication/route/transition
+regression failed on both missing guards before the fix. All 85 state/discussion
+tests pass; named-owner admission passes. Restoring the old implementation
+fails the regression and restoration passes. Receipt: remaining-run/discussion/
+pending-routing-sabotage.json. Simplification kept one shared predicate and
+existing routing/transition validation; generated copies and diff checks pass.
+Native repair validation at the fixed revision remains required.
+
+Other native threads in remaining-run:
+- reviews: 01a07370-81a6-7553-a033-9ba03913d46e; initial handle 1634 terminal
+  at intent draft. Only GPT family advertised; panel is unavailable. An early
+  resolve call without real PLAN failed; preserve it and resolve legally at plan.
+- recovery: 01a07370-898d-7c00-abcc-4ad6145f1e76, handle 55252.
+- abandon: 01a07370-9193-7cf1-b954-57cd3741e8d6; corrected charter handle 70942.
+  Its scenario accidentally requested three milestones while defining only two.
+  Evaluator clarified two milestones and no concurrent/crash guarantee; source
+  catalog wording still needs correction. No charter approval yet.

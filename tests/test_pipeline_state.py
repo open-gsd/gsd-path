@@ -359,6 +359,52 @@ class PipelineStateTests(unittest.TestCase):
                 all(value is None for value in status["journals"].values())
             )
 
+    def test_pending_future_owner_blocks_routing_and_transition(self) -> None:
+        from tests.test_discussion_records import DiscussionRecordTests
+
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            fixture = DiscussionRecordTests()
+            fixture.make_repo(repo)
+            run_git(repo, "checkout", "-b", "gsd-path/M001")
+            state = repo / ".project/STATE.md"
+            state.write_text(state_text(phase="define", status="done", branch="gsd-path/M001"))
+            intent = repo / ".project/intent/INTENT.md"
+            intent.parent.mkdir()
+            intent.write_text("# Intent\n\nLane: standard\n")
+            prepared = fixture.command(repo, "prepare")
+            self.assertEqual(prepared.returncode, 0, prepared.stderr)
+            appended = fixture.command(repo, "append", fixture.turn_payload(repo, "turn.json"))
+            self.assertEqual(appended.returncode, 0, appended.stderr)
+            before = state.read_bytes()
+
+            with self.subTest(operation="route"):
+                result = pipeline_state.route_state(repo)
+                self.assertEqual(result["route"]["action"], "block")
+                self.assertIn("A001", result["route"]["reason"])
+                self.assertIn("gsd-path-plan", result["route"]["reason"])
+            with self.subTest(operation="transition"):
+                with self.assertRaisesRegex(pipeline_state.PipelineStateError, "pending discussion"):
+                    pipeline_state.transition_state(
+                        repo,
+                        {"phase": "define", "status": "done", "branch": "gsd-path/M001", "archive": None},
+                        {"phase": "research", "status": "active"},
+                        "research started",
+                    )
+                self.assertEqual(state.read_bytes(), before)
+
+            state.write_text(state_text(phase="decide", status="done", branch="gsd-path/M001"))
+            result = pipeline_state.route_state(repo)
+            self.assertEqual(result["route"]["action"], "run-phase")
+            self.assertEqual(result["route"]["phase"], "plan")
+            entered = pipeline_state.transition_state(
+                repo,
+                {"phase": "decide", "status": "done", "branch": "gsd-path/M001", "archive": None},
+                {"phase": "plan", "status": "active"},
+                "planning started",
+            )
+            self.assertEqual(entered["state"]["phase"], "plan")
+
     def test_status_reports_route_without_mutating(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             repo = Path(tmp)

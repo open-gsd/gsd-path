@@ -1092,7 +1092,28 @@ def _bind_next_recovery(
     return result
 
 
+def _pending_discussion_block(repo: Path, phase: Optional[str]) -> Optional[str]:
+    pending, error = _pending_answers(repo)
+    if error:
+        return f"pending discussion cannot be validated: {error}"
+    if not pending or (phase and all(record["owner"] == f"gsd-path-{phase}" for record in pending)):
+        return None
+    owners = ", ".join(f"{record['answer']} ({record['owner']})" for record in pending)
+    return f"pending discussion requires its owner disposition: {owners}; see {repo / '.project/discuss/ANSWERS.md'}"
+
+
 def route_state(repo: Path, project_dir: str = ".project") -> dict[str, object]:
+    """Route ordinary phase work only when its pending discussion owner can enter."""
+    result = _route_state(repo, project_dir)
+    route = result["route"]
+    if route["action"] == "run-phase" and result["state"]["archive"] is None:
+        reason = _pending_discussion_block(_repo_root(repo), route.get("phase"))
+        if reason:
+            result["route"] = {"action": "block", "reason": reason}
+    return result
+
+
+def _route_state(repo: Path, project_dir: str = ".project") -> dict[str, object]:
     """Return the next deterministic pipeline action for one state track."""
     resolved = _repo_root(repo)
     state, _, _ = load_state(resolved, project_dir)
@@ -1715,6 +1736,12 @@ def transition_state(
             event,
             project_dir,
         )
+        if after.status != "blocked":
+            reason = _pending_discussion_block(
+                resolved, after.phase if after.status == "active" else None
+            )
+            if reason:
+                raise PipelineStateError(reason)
         if state.phase == "research" and (
             (after.phase == "research" and after.status == "done")
             or after.phase == "decide"
