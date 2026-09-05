@@ -1,0 +1,155 @@
+{
+  "program": {
+    "features": [
+      "inspect",
+      "define",
+      "research",
+      "decide",
+      "roadmap",
+      "plan",
+      "build",
+      "lookahead",
+      "ship"
+    ],
+    "fixture": "program",
+    "request": "Build a three-milestone standard-lane program for a durable ledger CLI. M001 storage owns ledger.py and its tests: ledger.py STORE add NAME INTEGER persists unique nonempty names; list prints a JSON array sorted by name; remove NAME deletes an existing record. The store is a JSON array of objects with exactly name and integer amount. Missing store lists as []; invalid input or duplicate names must fail with useful stderr without changing existing data. M002 reports owns the existing reports.py stub, new total.py and export.py modules, and their tests: reports.py STORE total prints the integer sum and a newline; reports.py STORE csv writes CSV with header name,amount and rows sorted by name, correctly quoting names. Plan total and export as independent deliverables, with the CLI integration depending on both. M003 filtering changes reports.py and its tests: total and csv accept --prefix TEXT, selecting names by case-sensitive prefix; empty matches yield 0 or just the CSV header. Preserve M001/M002 behavior. Use only the Python standard library and useful real-CLI tests. No artificial sleeps or filler work to make the run longer.",
+    "steps": [
+      "Create and approve CHARTER and ROADMAP through the program flow. Record actual research questions; do not fabricate open questions merely to dispatch researchers.",
+      "While M001 remains build/active, explicitly request M002 lookahead planning. Approve its plan before M001 ships. Capture m2-lookahead-approved. Its owned reports.py path is unchanged by M001, allowing clean promotion.",
+      "Keep active build and lookahead artifacts separate. At a safe checkpoint, capture both states. Never move primary HEAD while an active task or review requires it fixed. If the contracts cannot schedule this safely, record a blocked lookahead result rather than hand-editing state.",
+      "Ship and validate M001. Capture m1-integrated before next binding. Promote M002 with the canonical helper; capture m2-promoted immediately, with its actual promotion receipt. A clean result retains plan/done.",
+      "Before M002 changes reports.py, explicitly plan and approve M003 under lookahead while M002 is build/active. Capture m3-lookahead-approved. Then build M002's real reporting work, including independent tasks and dependency ordering.",
+      "Ship and validate M002; capture m2-integrated. Promote M003 and capture m3-promoted immediately with the actual receipt. The changed reports.py must produce changed drift and plan/active; use the legal replan/approval gate.",
+      "Build and ship M003; capture m3-integrated. Run the external program acceptance oracle. Compare actual review dispatches, command executions, artifact work, and task timestamps. Planning during build is not evidence of concurrent agents unless their intervals overlap."
+    ]
+  },
+  "quick": {
+    "features": [
+      "define",
+      "plan",
+      "build",
+      "lean-verification",
+      "ship",
+      "guards"
+    ],
+    "fixture": "counter",
+    "request": "Use quick lane, one full wave, no panel. Extend count.py: default prints 0 widgets, signed integer input prints that count, --json before or after the optional count prints exactly an object with integer widgets, default zero. Invalid input must fail with useful stderr. No new dependencies; add real-CLI tests.",
+    "steps": [
+      "Prove explicit final scope and required walkthroughs in the full-wave review.",
+      "Observe prepare-final reusing that review without review_final dispatch. Capture final-ready.",
+      "Before shipping, repeat prepare-final at the same HEAD and confirm receipt reuse without another execution or ledger entry.",
+      "Archive and integrate through canonical gates; capture integrated. Run the external counter oracle.",
+      "In an evaluator-owned disposable guard fixture, demonstrate a forbidden operation refused by the actual host guard before execution and an allowed read succeeding. Keep the hook event and unchanged target hash. Do not attempt destructive operations in the product repository. Hosts without runtime enforcement must remain unverifiable for native guards."
+    ]
+  },
+  "greenfield": {
+    "features": [
+      "define",
+      "research",
+      "decide",
+      "plan",
+      "build",
+      "ship"
+    ],
+    "fixture": "empty",
+    "request": "Use standard lane in this new local Git repository. Build count.py with default/signed integer text output and --json before or after the count, exactly integer widgets; reject invalid input. No dependencies. During definition, assess argparse versus manual parsing from official Python documentation as the named open research question, then record the decision before planning. Text output is the integer followed by a space and widgets, for example 0 widgets.",
+    "steps": [
+      "Observe greenfield classification and definition without a fabricated brownfield inspection.",
+      "Exercise actual research and synthesis gates with citations and owner approval.",
+      "Build, review, archive and integrate; capture integrated. Run the external counter oracle."
+    ]
+  },
+  "reviews": {
+    "features": [
+      "review",
+      "panels",
+      "skeptics",
+      "patch"
+    ],
+    "fixture": "counter",
+    "request": "Build the counter text/JSON contract using standard lane and a deep review wave for this explicit evaluation. Enable finding skeptics and resolve the optional review panel through the installed helper. If the host lacks independent panel models, report the missing prerequisite instead of substituting same-family agreement. Counter contract: count.py defaults to 0 widgets; a signed integer prints that count followed by widgets. --json before or after the optional count prints exactly an object with integer widgets, default zero. Invalid input fails with useful stderr. No dependencies.",
+    "steps": [
+      "Record the selected panel configuration and actual native reviewer identities.",
+      "Capture both deep lens outputs and the canonical verdict. A panel must remain advisory.",
+      "Exercise a real blocked finding, skeptic disposition, and approved patch task through a separately documented fault case. If no finding occurs naturally, mark skeptic/patch paths unexercised; never invent one or edit a reviewer result.",
+      "Keep preference-only findings from silently becoming implementation work. Capture reviewed and integrated states with canonical artifacts."
+    ]
+  },
+  "discussion": {
+    "features": [
+      "discuss"
+    ],
+    "fixture": "counter",
+    "request": "Start the standard-lane counter text/JSON project and stop after an approved intent and before build, so the owner can invoke the discussion sidecar. Counter contract: count.py defaults to 0 widgets; a signed integer prints that count followed by widgets. --json before or after the optional count prints exactly an object with integer widgets, default zero. Invalid input fails with useful stderr. No dependencies.",
+    "steps": [
+      "Owner invokes $gsd-path-discuss with a question about whether JSON accepts negative counts; require an append-only answer grounded in intent.",
+      "Exercise a final answer requiring owner disposition, then observe the next phase gate refusing a pending receipt.",
+      "Apply a legal disposition with the canonical helper; capture discussion-disposed. Confirm the discussion did not write product code or advance phase state."
+    ]
+  },
+  "recovery": {
+    "features": [
+      "undo",
+      "forensics",
+      "loop"
+    ],
+    "fixture": "counter",
+    "request": "Prepare the standard-lane counter project through an unpublished approval checkpoint, then stop for controlled recovery tests. Preserve all product and pipeline evidence. Counter contract: count.py defaults to 0 widgets; a signed integer prints that count followed by widgets. --json before or after the optional count prints exactly an object with integer widgets, default zero. Invalid input fails with useful stderr. No dependencies.",
+    "steps": [
+      "Owner invokes $gsd-path-forensics and records a read-only diagnostic with unchanged Git and artifact hashes.",
+      "Use $gsd-path-undo preview and its explicit reviewed target before applying an unpublished checkpoint/task undo; repeat only when the helper contract owns interruption recovery.",
+      "Invoke $gsd-path-loop with an explicit LOOP.md outcome and an owner-defined stop rule. Prove it neither advances a phase gate nor commits/pushes itself.",
+      "Use the deterministic fault tests for approval, collection, archive and promotion interruptions. A native interruption claim requires captured real failure and resume receipts, not a unit-test receipt relabeled as native."
+    ]
+  },
+  "abandon": {
+    "features": [
+      "abandon",
+      "roadmap"
+    ],
+    "fixture": "program",
+    "request": "Build a three-milestone standard-lane program for a durable ledger CLI. M001 storage owns ledger.py and its tests: ledger.py STORE add NAME INTEGER persists unique nonempty names; list prints a JSON array sorted by name; remove NAME deletes an existing record. The store is a JSON array of objects with exactly name and integer amount. Missing store lists as []; invalid input or duplicate names must fail with useful stderr without changing existing data. M002 reports owns the existing reports.py stub, new total.py and export.py modules, and their tests: reports.py STORE total prints the integer sum and a newline; reports.py STORE csv writes CSV with header name,amount and rows sorted by name, correctly quoting names. Plan total and export as independent deliverables, with the CLI integration depending on both. Stop storage after an unpublished canonical task landing for an explicit owner abandonment ruling; do not ship.",
+    "steps": [
+      "Owner explicitly abandons the active milestone with a reason. Execute the journaled abandon helper; preserve product history and an immutable partial archive.",
+      "Re-slice pending roadmap entries through the roadmap contract, including a keep/discard ruling if a lookahead track exists.",
+      "Capture abandoned and resliced states; do not treat an abandoned milestone as shipped."
+    ]
+  },
+  "docs-audit": {
+    "features": [
+      "docs-audit"
+    ],
+    "fixture": "stale-docs",
+    "request": "Invoke $gsd-path-docs-audit in standalone mode. Audit the tracked documentation and real counter behavior in the owned disposable sidecar. README claims --json already exists, while count.py only supports text. Report the observed drift without fixing code or choosing an owner ruling.",
+    "steps": [
+      "Require command-backed stale evidence and a canonical audit that passes its structural gate.",
+      "Confirm product and documentation bytes remain unchanged. Do not equate a structurally valid audit with all claims being true."
+    ]
+  },
+  "pull-request": {
+    "features": [
+      "pr-integration"
+    ],
+    "fixture": "counter",
+    "external": "An explicitly approved disposable GitHub repository and user-performed merge commit are required; a local bare origin cannot prove GitHub PR integration.",
+    "request": "After the exact external repository is approved, run the counter milestone in pull-request integration mode. Record PR creation/reuse, required checks, owner merge commit, tag and canonical integration validation. Never auto-merge. Counter contract: count.py defaults to 0 widgets; a signed integer prints that count followed by widgets. --json before or after the optional count prints exactly an object with integer widgets, default zero. Invalid input fails with useful stderr. No dependencies.",
+    "steps": [
+      "Prepare the external target through a reviewed owner action.",
+      "Prove repeat ship calls reuse the same PR and wait for a user merge.",
+      "Reject squash/rebase or wrong-parent integration through deterministic tests; prove the accepted merge live."
+    ]
+  },
+  "bootstrap": {
+    "features": [
+      "bootstrap"
+    ],
+    "fixture": "empty",
+    "external": "Explicit approval of exact owner/name, visibility, default checkout and linked worktree paths is required before remote creation.",
+    "request": "Exercise the new-GitHub bootstrap preview, approval, journaled creation and resumable verification with an approved disposable target. Do not create a repository from this scenario description alone.",
+    "steps": [
+      "Keep the read-only preview as the review surface before any external mutation.",
+      "Prove a matching journal resumes and an unjournaled collision refuses adoption.",
+      "Verify the default checkout stays clean and the pipeline runs from its linked milestone worktree."
+    ]
+  }
+}

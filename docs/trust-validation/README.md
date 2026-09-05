@@ -10,6 +10,7 @@ receipt passes the shared evidence validator.
 
 | File | Purpose |
 |------|---------|
+| [FEATURE-EVALUATION.md](FEATURE-EVALUATION.md) | Longer Codex scenarios, lookahead checkpoints, product oracles and separate native evidence |
 | [HOST-MATRIX.md](HOST-MATRIX.md) | Current all-host posture and evidence status |
 | [LIVE-EVIDENCE-TEMPLATE.md](LIVE-EVIDENCE-TEMPLATE.md) | Required full milestone receipt contract |
 | [automated-test-inventory.md](automated-test-inventory.md) | Test suites and CI gap |
