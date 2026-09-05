@@ -1,0 +1,196 @@
+{
+  "candidate": "50718f8100c04c1ff06e644930e0743d4a3950de",
+  "run_root": "/Users/jeremymcspadden/orca/evaluations/gsd-path-e2e-50718f8",
+  "verdict": "blocked",
+  "blocker": "SHIP.md requires absolute project-dir; build_state.py requires repo-relative project-dir",
+  "product_oracle": {
+    "command": "python3 -B tests/widget_acceptance.py /Users/jeremymcspadden/orca/evaluations/gsd-path-e2e-50718f8/path/repo",
+    "exit_code": 0,
+    "checks_passed": 6,
+    "verdict": "pass"
+  },
+  "final_review": "absent",
+  "integration": "not-run",
+  "head": "a927cba5994b5550ef02347468c6dd0459f2ecfb",
+  "branch": "gsd-path/M001",
+  "status": "M .project/EXECUTION.md\n M .project/STATE.md\n M .project/build/verify-ledger.jsonl\n?? .project/review/final-gap-1.md",
+  "installed_bundle_diff": "",
+  "worktrees": "worktree /Users/jeremymcspadden/orca/evaluations/gsd-path-e2e-50718f8/path/repo\nHEAD a927cba5994b5550ef02347468c6dd0459f2ecfb\nbranch refs/heads/gsd-path/M001",
+  "agent_elapsed_seconds": 1075.9175587099999,
+  "native_usage": {
+    "threads": [
+      "01a07163-750c-7e20-a515-07cdb33435b4"
+    ],
+    "completed_parent_usage": [
+      {
+        "input_tokens": 1232860,
+        "cached_input_tokens": 1179904,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 5574,
+        "reasoning_output_tokens": 277
+      },
+      {
+        "input_tokens": 490261,
+        "cached_input_tokens": 459392,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 3475,
+        "reasoning_output_tokens": 301
+      },
+      {
+        "input_tokens": 4448338,
+        "cached_input_tokens": 4400640,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 7122,
+        "reasoning_output_tokens": 839
+      }
+    ],
+    "children": [
+      {
+        "id": "01a0716f-b1ef-7740-8d8b-f93d59157f8f",
+        "role": "/root/build_t001",
+        "file": "/Users/jeremymcspadden/Library/Application Support/orca/codex-accounts/86df0dc7-3078-4314-8766-60e244dd9765/home/sessions/2026/09/05/rollout-2026-09-05T06-59-00-01a0716f-b1ef-7740-8d8b-f93d59157f8f.jsonl",
+        "usage": {
+          "input_tokens": 473513,
+          "cached_input_tokens": 440960,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 4226,
+          "reasoning_output_tokens": 267,
+          "total_tokens": 477739
+        },
+        "complete": "2026-09-05T12:01:54.073Z"
+      },
+      {
+        "id": "01a07165-2918-7123-9d7e-b7120a9172a4",
+        "role": "/root/inspect_codebase",
+        "file": "/Users/jeremymcspadden/Library/Application Support/orca/codex-accounts/86df0dc7-3078-4314-8766-60e244dd9765/home/sessions/2026/09/05/rollout-2026-09-05T06-47-30-01a07165-2918-7123-9d7e-b7120a9172a4.jsonl",
+        "usage": {
+          "input_tokens": 217802,
+          "cached_input_tokens": 170240,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 3327,
+          "reasoning_output_tokens": 168,
+          "total_tokens": 221129
+        },
+        "complete": "2026-09-05T11:49:48.064Z"
+      },
+      {
+        "id": "01a07173-501e-7e71-b9c5-39fe0f196f66",
+        "role": "/root/review_wave_1_cycle_1",
+        "file": "/Users/jeremymcspadden/Library/Application Support/orca/codex-accounts/86df0dc7-3078-4314-8766-60e244dd9765/home/sessions/2026/09/05/rollout-2026-09-05T07-02-57-01a07173-501e-7e71-b9c5-39fe0f196f66.jsonl",
+        "usage": {
+          "input_tokens": 251425,
+          "cached_input_tokens": 223104,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 3022,
+          "reasoning_output_tokens": 234,
+          "total_tokens": 254447
+        },
+        "complete": "2026-09-05T12:05:05.433Z"
+      },
+      {
+        "id": "01a07165-7ce7-78e0-8e29-b4410eb01140",
+        "role": "/root/inspect_docs",
+        "file": "/Users/jeremymcspadden/Library/Application Support/orca/codex-accounts/86df0dc7-3078-4314-8766-60e244dd9765/home/sessions/2026/09/05/rollout-2026-09-05T06-47-51-01a07165-7ce7-78e0-8e29-b4410eb01140.jsonl",
+        "usage": {
+          "input_tokens": 418279,
+          "cached_input_tokens": 394496,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 2743,
+          "reasoning_output_tokens": 170,
+          "total_tokens": 421022
+        },
+        "complete": "2026-09-05T11:49:59.594Z"
+      }
+    ],
+    "observed_output_tokens": 29489
+  },
+  "runs": [
+    {
+      "model": "gpt-6-astra",
+      "reasoning": "high",
+      "sandbox": "danger-full-access",
+      "cli": "codex-cli 0.153.4",
+      "command": [
+        "codex",
+        "exec",
+        "--sandbox",
+        "danger-full-access",
+        "--add-dir",
+        "/Users/jeremymcspadden/orca/evaluations/gsd-path-e2e-50718f8/path",
+        "--ignore-user-config",
+        "--model",
+        "gpt-6-astra",
+        "-c",
+        "model_reasoning_effort=\"high\"",
+        "--json",
+        "-"
+      ],
+      "exit_code": 0,
+      "started_at": "2026-09-05T11:45:38.474684+00:00",
+      "elapsed_seconds": 353.922469417,
+      "head": "607cdb15cd5e24b00318a60fa5ff2899c04d35b9"
+    },
+    {
+      "model": "gpt-6-astra",
+      "reasoning": "high",
+      "sandbox": "danger-full-access",
+      "cli": "codex-cli 0.153.4",
+      "command": [
+        "codex",
+        "exec",
+        "--sandbox",
+        "danger-full-access",
+        "--add-dir",
+        "/Users/jeremymcspadden/orca/evaluations/gsd-path-e2e-50718f8/path",
+        "resume",
+        "01a07163-750c-7e20-a515-07cdb33435b4",
+        "--ignore-user-config",
+        "--model",
+        "gpt-6-astra",
+        "-c",
+        "model_reasoning_effort=\"high\"",
+        "--json",
+        "-"
+      ],
+      "exit_code": 0,
+      "started_at": "2026-09-05T11:54:11.713534+00:00",
+      "elapsed_seconds": 165.189526209,
+      "head": "607cdb15cd5e24b00318a60fa5ff2899c04d35b9"
+    },
+    {
+      "model": "gpt-6-astra",
+      "reasoning": "high",
+      "sandbox": "danger-full-access",
+      "cli": "codex-cli 0.153.4",
+      "command": [
+        "codex",
+        "exec",
+        "--sandbox",
+        "danger-full-access",
+        "--add-dir",
+        "/Users/jeremymcspadden/orca/evaluations/gsd-path-e2e-50718f8/path",
+        "resume",
+        "01a07163-750c-7e20-a515-07cdb33435b4",
+        "--ignore-user-config",
+        "--model",
+        "gpt-6-astra",
+        "-c",
+        "model_reasoning_effort=\"high\"",
+        "--json",
+        "-"
+      ],
+      "exit_code": 0,
+      "started_at": "2026-09-05T11:57:41.982456+00:00",
+      "elapsed_seconds": 556.805563084,
+      "head": "a927cba5994b5550ef02347468c6dd0459f2ecfb"
+    }
+  ],
+  "limitations": [
+    "No new direct baseline arm was run.",
+    "No all-host release qualification is claimed.",
+    "Token counters are observed; hard in-flight caps are unsupported.",
+    "Reasoning output is already included in output tokens.",
+    "This records the native trial before any source repair."
+  ],
+  "installed_fixture_base": "607cdb15cd5e24b00318a60fa5ff2899c04d35b9"
+}

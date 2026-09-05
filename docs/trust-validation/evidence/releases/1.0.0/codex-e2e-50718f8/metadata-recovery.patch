@@ -1,0 +1,11 @@
+--- FINAL.md (original)
++++ FINAL.md (proposed)
+@@ -96 +95,0 @@
+-Reviewed HEAD: a927cba5994b5550ef02347468c6dd0459f2ecfb
+--- STATE.md (original)
++++ STATE.md (proposed)
+@@ -36,4 +35,0 @@
+-- 2026-09-05 — ship — NEEDS-USER: SHIP.md absolute project-dir conflicts with verify-landed repo-relative requirement; see EXECUTION.md; final review not dispatched
+-- 2026-09-05 — ship — owner ruling: use repo-relative project-dir; resume final review and reuse recorded project Verify; testing token limits removed; see EXECUTION.md
+-- 2026-09-05 — ship — final gate passed; shipping approval pending
+-- 2026-09-05 — ship — NEEDS-USER: archive render-manifest rejects parent-created EXECUTION.md; diagnose stuck; preserve transaction and evidence; no ship commit or integration

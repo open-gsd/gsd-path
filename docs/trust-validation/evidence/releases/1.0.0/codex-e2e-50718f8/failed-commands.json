@@ -1,0 +1,47 @@
+[
+  {
+    "run": "run-20260905T114538474309Z",
+    "id": "item_10",
+    "type": "command_execution",
+    "command": "/bin/zsh -lc \"python3 /Users/jeremymcspadden/orca/evaluations/gsd-path-e2e-50718f8/plugin/tests/evaluate_codex.py activity --arm /Users/jeremymcspadden/orca/evaluations/gsd-path-e2e-50718f8/path --category implementation -- python3 /Users/jeremymcspadden/orca/evaluations/gsd-path-e2e-50718f8/path/repo/.agents/skills/gsd-path/scripts/pipeline_state.py transition --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-e2e-50718f8/path/repo --expect-phase inspect --expect-status active --expect-branch null --expect-archive null --set-branch gsd-path/M001 --event 'router bound gsd-path/M001 at fetched origin/main 607cdb15cd5e24b00318a60fa5ff2899c04d35b9'\"",
+    "aggregated_output": "error: initial branch binding requires event: router bound initial milestone\n",
+    "exit_code": 1,
+    "status": "failed"
+  },
+  {
+    "run": "run-20260905T115741982160Z",
+    "id": "item_54",
+    "type": "command_execution",
+    "command": "/bin/zsh -lc \"python3 /Users/jeremymcspadden/orca/evaluations/gsd-path-e2e-50718f8/plugin/tests/evaluate_codex.py activity --arm /Users/jeremymcspadden/orca/evaluations/gsd-path-e2e-50718f8/path --category review -- sh -c 'python3 .agents/skills/gsd-path/scripts/pipeline_state.py route --repo \\\"\"'$PWD\"; python3 .agents/skills/gsd-path/scripts/build_state.py verify-landed --repo \"$PWD\" --head a927cba5994b5550ef02347468c6dd0459f2ecfb'\"'\"",
+    "aggregated_output": "{\"route\": {\"action\": \"run-phase\", \"mode\": \"final\", \"phase\": \"ship\", \"reason\": \"state is ship/active\"}, \"schema\": \"gsd-path/route/v1\", \"state\": {\"archive\": null, \"branch\": \"gsd-path/M001\", \"integration\": \"direct\", \"integration_default\": \"direct\", \"integration_source\": \"default\", \"milestone\": \"widget-counter\", \"phase\": \"ship\", \"pipeline\": \"gsd-path/v2\", \"project\": \"repo\", \"status\": \"active\"}}\nusage: build_state.py verify-landed [-h] --repo REPO --project-dir PROJECT_DIR\n                                    --head HEAD\n                                    [--canonical-project-dir CANONICAL_PROJECT_DIR]\nbuild_state.py verify-landed: error: the following arguments are required: --project-dir\n",
+    "exit_code": 2,
+    "status": "failed"
+  },
+  {
+    "run": "run-20260905T115741982160Z",
+    "id": "item_64",
+    "type": "command_execution",
+    "command": "/bin/zsh -lc 'python3 /Users/jeremymcspadden/orca/evaluations/gsd-path-e2e-50718f8/plugin/tests/evaluate_codex.py activity --arm /Users/jeremymcspadden/orca/evaluations/gsd-path-e2e-50718f8/path --category verification -- python3 /Users/jeremymcspadden/orca/evaluations/gsd-path-e2e-50718f8/path/repo/.agents/skills/gsd-path/scripts/build_state.py verify-landed --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-e2e-50718f8/path/repo --project-dir /Users/jeremymcspadden/orca/evaluations/gsd-path-e2e-50718f8/path/repo/.project --head a927cba5994b5550ef02347468c6dd0459f2ecfb'",
+    "aggregated_output": "{\n  \"command\": \"verify-landed\",\n  \"error\": {\n    \"code\": \"invalid-project-dir\",\n    \"details\": {},\n    \"message\": \"--project-dir must be a repo-relative path\"\n  }\n}\n",
+    "exit_code": 1,
+    "status": "failed"
+  },
+  {
+    "run": "run-20260905T121502979704Z",
+    "id": "item_14",
+    "type": "command_execution",
+    "command": "/bin/zsh -lc 'python3 /Users/jeremymcspadden/orca/evaluations/gsd-path-e2e-50718f8/plugin/tests/evaluate_codex.py activity --arm /Users/jeremymcspadden/orca/evaluations/gsd-path-e2e-50718f8/path --category implementation -- python3 /Users/jeremymcspadden/orca/evaluations/gsd-path-e2e-50718f8/path/repo/.agents/skills/gsd-path/scripts/archive_milestone.py render-manifest --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-e2e-50718f8/path/repo'",
+    "aggregated_output": "unexpected active .project paths remain: EXECUTION.md\n",
+    "exit_code": 1,
+    "status": "failed"
+  },
+  {
+    "run": "run-20260905T123427907353Z",
+    "id": "item_2",
+    "type": "command_execution",
+    "command": "/bin/zsh -lc \"python3 /Users/jeremymcspadden/orca/evaluations/gsd-path-e2e-50718f8/plugin/tests/evaluate_codex.py activity --arm /Users/jeremymcspadden/orca/evaluations/gsd-path-e2e-50718f8/path --category review -- sh -c 'git status --short --branch; git rev-parse HEAD; git remote -v; python3 .agents/skills/gsd-path/scripts/pipeline_state.py validate --repo \\\"\"'$PWD\"; python3 .agents/skills/gsd-path/scripts/pipeline_undo.py --help'\"'\"",
+    "aggregated_output": "## gsd-path/M001\n M .project/EXECUTION.md\n M .project/STATE.md\n D .project/build/evidence.json\n D .project/build/verify-ledger.jsonl\n D .project/intent/INTENT.md\n D .project/plan/PLAN.gate.json\n D .project/plan/PLAN.md\n D .project/research/DOCS-AUDIT.md\n D .project/research/SYNTHESIS.md\n D .project/research/evidence-codebase.md\n D .project/review/wave-1.cycle1.md\n D .project/tasks/T001-widget-counter.md\n?? .project/LESSONS.md\n?? .project/archive/\na927cba5994b5550ef02347468c6dd0459f2ecfb\norigin\t/Users/jeremymcspadden/orca/evaluations/gsd-path-e2e-50718f8/path/origin.git (fetch)\norigin\t/Users/jeremymcspadden/orca/evaluations/gsd-path-e2e-50718f8/path/origin.git (push)\n{\"path\": \"/Users/jeremymcspadden/orca/evaluations/gsd-path-e2e-50718f8/path/repo/.project/STATE.md\", \"schema\": \"gsd-path/state/v1\", \"state\": {\"archive\": \".project/archive/001-widget-counter\", \"branch\": \"gsd-path/M001\", \"integration\": \"direct\", \"integration_default\": \"direct\", \"integration_source\": \"default\", \"milestone\": \"widget-counter\", \"phase\": \"ship\", \"pipeline\": \"gsd-path/v2\", \"project\": \"repo\", \"status\": \"active\"}, \"status\": \"valid\"}\n/Applications/Xcode.app/Contents/Developer/usr/bin/python3: can't open file '/Users/jeremymcspadden/orca/evaluations/gsd-path-e2e-50718f8/path/repo/.agents/skills/gsd-path/scripts/pipeline_undo.py': [Errno 2] No such file or directory\n",
+    "exit_code": 2,
+    "status": "failed"
+  }
+]
