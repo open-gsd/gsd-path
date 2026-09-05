@@ -57,6 +57,7 @@ def prepare(directory: Path, candidate: Path) -> dict:
     command(["git", "commit", "-qm", "fixture: widget counter"], seed)
     fixture = command(["git", "rev-parse", "HEAD"], seed)
     for mode in ("path", "direct"):
+        setup_started = time.monotonic()
         arm = directory / mode
         arm.mkdir()
         remote = arm / "origin.git"
@@ -66,8 +67,11 @@ def prepare(directory: Path, candidate: Path) -> dict:
         command(["git", "config", "user.name", "Evaluation"], repo)
         command(["git", "config", "user.email", "evaluation@example.invalid"], repo)
         if mode == "path":
-            command(["node", str(plugin / "scripts/install.mjs"), "--codex", "--local",
-                     "--project", str(repo), "--hooks", "--no-color"], repo)
+            install_command = ["node", str(plugin / "scripts/install.mjs"), "--codex", "--local",
+                               "--project", str(repo), "--hooks", "--no-color"]
+            install_output = command(install_command, repo)
+            write_json(arm / "install.json", {"command": install_command, "output": install_output,
+                       "exit_code": 0, "candidate": revision, "install_root": str(repo)})
             command(["git", "add", "."], repo)
             command(["git", "commit", "-qm", "fixture: install candidate"], repo)
             command(["git", "push", "origin", "main"], repo)
@@ -78,9 +82,10 @@ def prepare(directory: Path, candidate: Path) -> dict:
             prompt += "\nImplement directly with normal Codex tools; do not initialize GSD Path. Commit the finished product and tests.\n"
         prompt += ("\nFor measured shell work, invoke the evaluator's activity wrapper with the actual category "
                    "implementation, verification, or review. It records the real command and duration. "
-                   f"Command: python3 {ROOT / 'tests/evaluate_codex.py'} activity --arm {arm} "
+                   f"Command: python3 {plugin / 'tests/evaluate_codex.py'} activity --arm {arm} "
                    "--category CATEGORY -- COMMAND ARGS. Unwrapped work remains unclassified; do not estimate durations.\n")
         (arm / "prompt.txt").write_text(prompt)
+        write_json(arm / "setup.json", {"elapsed_seconds": time.monotonic() - setup_started})
     manifest = {"candidate": revision, "fixture": fixture, "created_at": dt.datetime.now(dt.timezone.utc).isoformat()}
     write_json(directory / "manifest.json", manifest)
     return manifest
@@ -155,6 +160,7 @@ def report(directory: Path, receipt: Path = None) -> dict:
         repo = arm / "repo"
         product = evaluate(repo)
         result["arms"][mode] = {
+            "setup": json.loads((arm / "setup.json").read_text()) if (arm / "setup.json").exists() else None,
             "product": product, "head": command(["git", "rev-parse", "HEAD"], repo),
             "dirty": bool(command(["git", "status", "--porcelain"], repo)),
             "elapsed_seconds": sum(run["elapsed_seconds"] for run in runs) if runs else None,
@@ -183,6 +189,14 @@ def report(directory: Path, receipt: Path = None) -> dict:
         else:
             result["arms"]["path"]["pipeline"] = "pass"
         result["arms"]["path"]["receipt"] = str(receipt.resolve())
+    arms = result["arms"].values()
+    if any(arm["product"]["verdict"] == "fail" or arm["pipeline"] == "fail"
+           or any(run["exit_code"] != 0 for run in arm["runs"]) for arm in arms):
+        result["exit_code"] = 1
+    elif result["arms"]["path"]["pipeline"] != "pass" or any(not arm["runs"] for arm in arms):
+        result["exit_code"] = 3
+    else:
+        result["exit_code"] = 0
     write_json(directory / "comparison.json", result)
     lines = ["# Codex delivery comparison", "", "Observed fixture results only; no optimality claim.", "",
              "| Arm | Product | Agent elapsed seconds | Measurement | Pipeline |",

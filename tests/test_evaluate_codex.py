@@ -58,6 +58,13 @@ class EvaluationTests(unittest.TestCase):
             self.assertEqual(path["pipeline"], "unverifiable")
             self.assertEqual(path["measurement"], "unavailable")
             self.assertTrue((root / "comparison.md").is_file())
+            reported = subprocess.run([sys.executable, str(evaluation.ROOT / "tests/evaluate_codex.py"),
+                                       "report", "--directory", str(root)], capture_output=True)
+            self.assertEqual(reported.returncode, 3)
+            (root / "direct/repo/count.py").write_text("print('wrong')\n")
+            reported = subprocess.run([sys.executable, str(evaluation.ROOT / "tests/evaluate_codex.py"),
+                                       "report", "--directory", str(root)], capture_output=True)
+            self.assertEqual(reported.returncode, 1)
 
     def test_prepare_isolates_arms_at_same_product_base_and_refuses_reuse(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -71,6 +78,10 @@ class EvaluationTests(unittest.TestCase):
                 self.assertEqual((repo / "count.py").read_text(), FIXTURE_SCRIPT)
                 evaluation.command(["git", "merge-base", "--is-ancestor", manifest["fixture"], "HEAD"], repo)
             self.assertTrue((destination / "path/repo/.agents/skills/gsd-path/SKILL.md").is_file())
+            installation = json.loads((destination / "path/install.json").read_text())
+            self.assertEqual(installation["exit_code"], 0)
+            self.assertIn("installed", installation["output"])
+            self.assertEqual(installation["candidate"], manifest["candidate"])
             self.assertFalse((destination / "direct/repo/.agents").exists())
             with self.assertRaisesRegex(ValueError, "already exists"):
                 evaluation.prepare(destination, candidate)
