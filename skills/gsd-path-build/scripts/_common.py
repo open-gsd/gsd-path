@@ -24,6 +24,7 @@ INLINE_LIST_PATTERN = re.compile(r"^\[(?P<body>.*)\]$")
 LIST_ITEM_PATTERN = re.compile(r"^\s*-\s+(?P<value>.*)$")
 VERIFY_LEDGER_PATH = ".project/build/verify-ledger.jsonl"
 VERIFY_RESULTS = ("pass", "fail")
+VERIFY_LEDGER_SCHEMA = "gsd-path/verify-ledger/v2"
 VERIFY_BLOCK_PATTERN = re.compile(r"```bash[ \t]*\n(?P<block>.*?)```", re.DOTALL)
 
 
@@ -36,10 +37,18 @@ def section_body(text: str, heading: str) -> Optional[str]:
 
 
 def task_verify_command(task_text: str) -> str:
-    """The task's ## Verify bash command, whitespace-normalized, or ''."""
+    """The Verify shell text, excluding the closing fence's separator newline."""
     body = section_body(task_text, "Verify")
     block = VERIFY_BLOCK_PATTERN.search(body) if body is not None else None
-    return " ".join(block.group("block").split()) if block else ""
+    return block.group("block").removesuffix("\n") if block else ""
+
+
+def latest_verify_entry(entries: list, command: str, commit: str) -> Optional[dict]:
+    for entry in reversed(entries):
+        if (entry.get("schema") == VERIFY_LEDGER_SCHEMA
+                and entry["command"] == command and entry["commit"] == commit):
+            return entry
+    return None
 
 
 def verify_ledger_entries(path: Path) -> list:

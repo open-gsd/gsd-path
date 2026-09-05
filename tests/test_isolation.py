@@ -2153,6 +2153,70 @@ class RecoverTests(unittest.TestCase):
     def record_verify_pass(self, head: str) -> None:
         build_state.verify_record(str(self.repo), self.VERIFY, head, "pass")
 
+    def test_historical_verify_recovers_landing_after_head_advances(self) -> None:
+        landed = self.land()
+        (self.repo / "note.txt").write_text("later task\n")
+        git(self.repo, "add", "note.txt")
+        git(self.repo, "commit", "-q", "-m", "later task")
+        head = git(self.repo, "rev-parse", "HEAD")
+        result = subprocess.run(
+            [sys.executable, str(PROJECT_ROOT / "scripts/isolation.py"), "isolate-verify",
+             "--repo", str(self.repo), "--base", landed, "--name", "historical",
+             "--historical-task", "T001"], capture_output=True, text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        sidecar = json.loads(result.stdout)
+        root = Path(sidecar["worktree"])
+        self.assertEqual(git(root, "rev-parse", "HEAD"), landed)
+        self.assertEqual(git(self.repo, "rev-parse", "HEAD"), head)
+        self.assertFalse((root / "note.txt").exists())
+        self.assertEqual(subprocess.run([sys.executable, "src/app.py"], cwd=root, capture_output=True, text=True).stdout, "hello\n")
+        for invalid_commit, task in [(head, "T001"), (landed, "T002"), (self.base, "T001")]:
+            with self.assertRaises(isolation.IsolationError):
+                isolation.isolate_verify(self.repo, invalid_commit, "invalid", historical_task=task)
+        isolation.retire(self.repo, root, sidecar["branch"], False)
+        self.assertFalse(root.exists())
+        self.assertEqual(git(self.repo, "rev-parse", "HEAD"), head)
+
+    def test_legacy_attestation_remains_recoverable(self) -> None:
+        head = self.commit_outside_land(self.base)
+        self.record_verify_pass(head)
+        isolation.attest(self.repo, ".project/tasks/T001.md", "old ruling")
+        ledger = self.repo / isolation.VERIFY_LEDGER_PATH
+        entry = json.loads(ledger.read_text())
+        entry.pop("schema")
+        ledger.write_text(json.dumps(entry) + "\n")
+        body = pipeline_git.attest_commit_body(".project/tasks/T001.md", self.base, head,
+                                               ["src/app.py"], self.VERIFY, "old ruling", legacy=True)
+        git(self.repo, "add", str(ledger))
+        git(self.repo, "commit", "--amend", "-q", "-m", "attest: T001 — add greeting", "-m", body)
+        self.assertEqual(self.recover()["verdict"], "attested")
+
+    def test_attest_preserves_multiline_verify(self) -> None:
+        original = self.VERIFY
+        self.VERIFY = "test 'a  b' = 'a  b'\nprintf '%s\\n' done"
+        self.TASK = self.TASK.replace(original, self.VERIFY)
+        self.write_task("pending", "null")
+        git(self.repo, "add", ".")
+        git(self.repo, "commit", "-q", "-m", "multiline contract")
+        self.base = git(self.repo, "rev-parse", "HEAD")
+        head = self.commit_outside_land(self.base)
+        self.record_verify_pass(head)
+        result = isolation.attest(self.repo, ".project/tasks/T001.md", "owner ruling")
+        self.assertEqual(self.recover()["verdict"], "attested")
+        fields, _ = isolation._attest_body_fields(git(self.repo, "log", "-1", "--format=%b", result["commit"]))
+        self.assertEqual(json.loads(fields["Verify-JSON"]), self.VERIFY)
+
+    def test_attest_refuses_legacy_ledger_for_new_attestation(self) -> None:
+        head = self.commit_outside_land(self.base)
+        self.record_verify_pass(head)
+        ledger = self.repo / isolation.VERIFY_LEDGER_PATH
+        entry = json.loads(ledger.read_text())
+        entry.pop("schema", None)
+        ledger.write_text(json.dumps(entry) + "\n")
+        with self.assertRaisesRegex(isolation.IsolationError, "no passing run"):
+            isolation.attest(self.repo, ".project/tasks/T001.md", "owner ruling")
+
     def test_attest_stands_in_for_a_missing_landing_commit(self) -> None:
         head = self.commit_outside_land(self.base[:9])  # abbreviated recorded base
         self.assertEqual(self.recover()["verdict"], "block")

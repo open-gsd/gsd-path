@@ -724,12 +724,11 @@ def _ledger_path(repo: Path) -> Path:
 
 
 def _ledger_key(repo: Path, command: str, commit: str) -> Tuple[str, str]:
-    normalized = " ".join(command.split())
-    if not normalized:
+    if not command.strip():
         raise BuildStateError("invalid-command", "--command must not be empty")
     if not FULL_SHA_RE.fullmatch(commit) or not _commit_resolves(repo, commit):
         raise BuildStateError("invalid-commit", "--commit must be a full, existing commit SHA")
-    return normalized, commit
+    return command, commit
 
 
 def _ledger_entries(path: Path) -> List[Dict[str, object]]:
@@ -749,6 +748,7 @@ def verify_record(repo: str, command: str, commit: str, result: str) -> Dict[str
     path = _ledger_path(repository)
     _ledger_entries(path)
     entry = {
+        "schema": _common.VERIFY_LEDGER_SCHEMA,
         "command": normalized,
         "commit": commit,
         "result": result,
@@ -765,12 +765,7 @@ def verify_lookup(repo: str, command: str, commit: str) -> Dict[str, object]:
 
     repository = _repo_root(repo)
     normalized, commit = _ledger_key(repository, command, commit)
-    matches = [
-        entry
-        for entry in _ledger_entries(_ledger_path(repository))
-        if entry["command"] == normalized and entry["commit"] == commit
-    ]
-    entry = matches[-1] if matches else None
+    entry = _common.latest_verify_entry(_ledger_entries(_ledger_path(repository)), normalized, commit)
     return {
         "command": "verify-lookup",
         "ledger": VERIFY_LEDGER_PATH,

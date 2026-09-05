@@ -158,10 +158,16 @@ def attest_commit_body(
     paths: Sequence[str],
     verify_command: str,
     ruling: str,
+    *,
+    legacy: bool = False,
 ) -> str:
     lines = [f"Task: {task_file}", f"Base: {base}", f"Head: {head}", "Files:"]
     lines.extend(f"- {path}" for path in sorted(paths))
-    lines.append(f"Verify: {' '.join(verify_command.split())}")
+    if legacy:
+        lines.append(f"Verify: {' '.join(verify_command.split())}")
+    else:
+        lines.append("Attestation: gsd-path/attestation/v2")
+        lines.append(f"Verify-JSON: {json.dumps(verify_command)}")
     lines.append(f"Ruling: {' '.join(ruling.split())}")
     return "\n".join(lines) + "\n"
 

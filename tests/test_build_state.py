@@ -686,12 +686,12 @@ archive: null
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(payload["ledger"], ".project/build/verify-ledger.jsonl")
-        self.assertEqual(payload["entry"]["command"], "python3 -m unittest tests.test_one")
+        self.assertEqual(payload["entry"]["command"], command)
         ledger = self.repo / ".project" / "build" / "verify-ledger.jsonl"
         self.assertEqual(len(ledger.read_text(encoding="utf-8").splitlines()), 1)
 
         result, payload = self.cli(
-            "verify-lookup", "--command", "python3 -m unittest tests.test_one", "--commit", first
+            "verify-lookup", "--command", command, "--commit", first
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertTrue(payload["hit"])
@@ -712,6 +712,23 @@ archive: null
         self.assertTrue(payload["hit"])
         self.assertFalse(payload["reuse"])
         self.assertEqual(payload["entry"]["result"], "fail")
+
+    def test_verify_ledger_preserves_shell_semantics_and_ignores_legacy(self) -> None:
+        commit = self.commit_all("seed")
+        passed = "test 'a b' = 'a b'"
+        failed = "test 'a  b' = 'a b'"
+        self.assertEqual(subprocess.run(["bash", "-c", passed]).returncode, 0)
+        self.assertNotEqual(subprocess.run(["bash", "-c", failed]).returncode, 0)
+        self.cli("verify-record", "--command", passed, "--commit", commit, "--result", "pass")
+        _, result = self.cli("verify-lookup", "--command", failed, "--commit", commit)
+        self.assertFalse(result["reuse"])
+        multiline = "cat <<'END'\na  b\nEND\n"
+        _, recorded = self.cli("verify-record", "--command", multiline, "--commit", commit, "--result", "pass")
+        self.assertEqual(recorded["entry"]["command"], multiline)
+        ledger = self.repo / ".project/build/verify-ledger.jsonl"
+        ledger.write_text(json.dumps({"command": passed, "commit": commit, "result": "pass", "recorded_at": "legacy"}) + "\n")
+        _, result = self.cli("verify-lookup", "--command", passed, "--commit", commit)
+        self.assertFalse(result["reuse"])
 
     def test_verify_ledger_rejects_malformed_entries_and_short_commits(self) -> None:
         (self.repo / "seed.txt").write_text("seed\n", encoding="utf-8")

@@ -541,13 +541,19 @@ def isolate_task(
     }
 
 
-def isolate_verify(primary: Path, base: str, name: str) -> Dict[str, object]:
+def isolate_verify(primary: Path, base: str, name: str, historical_task: Optional[str] = None) -> Dict[str, object]:
     primary = require_directory(primary, "primary worktree")
     if worktree_root(primary) != primary:
         raise IsolationError(f"primary is not its Git root: {primary}")
     bound = require_bound(primary)
     resolved_base = require_commit(primary, require_full_sha(base))
-    if current_sha(primary) != resolved_base:
+    if historical_task is not None:
+        reports = recover(primary, Path(".project/tasks"))["tasks"]
+        matches = [report for report in reports if report.get("task_id") == historical_task]
+        if (len(matches) != 1 or matches[0].get("verdict") != "recovered"
+                or matches[0].get("commit") != resolved_base):
+            raise IsolationError("historical verification requires this task's recovery-proven landing")
+    elif current_sha(primary) != resolved_base:
         raise IsolationError("verify isolation requires primary HEAD to equal the recorded base")
     product_dirt = sorted(
         path for path in uncommitted_paths(primary) if not path.startswith(".project/")
@@ -2377,8 +2383,8 @@ task_verify_command = _common.task_verify_command
 
 
 def _ledger_pass(entries: Sequence[Dict[str, object]], command: str, commit: str) -> bool:
-    matches = [e for e in entries if e["command"] == command and e["commit"] == commit]
-    return bool(matches) and matches[-1]["result"] == "pass"
+    entry = _common.latest_verify_entry(entries, command, commit)
+    return entry is not None and entry["result"] == "pass"
 
 
 def _verify_ledger_pass(repo: Path, command: str, commit: str) -> bool:
@@ -2417,7 +2423,7 @@ def _attest_body_fields(body: str) -> tuple[Dict[str, str], list[str]]:
             files.append(line[2:].strip())
         else:
             key, separator, value = line.partition(":")
-            if separator and key in {"Task", "Base", "Head", "Verify", "Ruling"}:
+            if separator and key in {"Task", "Base", "Head", "Verify", "Ruling", "Attestation", "Verify-JSON"}:
                 fields[key] = value.strip()
     return fields, files
 
@@ -2483,13 +2489,30 @@ def _prove_attest_commit(
     if contract_error:
         return None, contract_error
     verify = task_verify_command(after_text)
-    if not verify or fields.get("Verify") != verify:
+    legacy = "Attestation" not in fields
+    if legacy:
+        verify = " ".join(verify.split())
+        recorded_verify = fields.get("Verify")
+    else:
+        if fields["Attestation"] != "gsd-path/attestation/v2":
+            return None, "unknown attestation version"
+        try:
+            recorded_verify = json.loads(fields.get("Verify-JSON", ""))
+        except json.JSONDecodeError:
+            return None, "attestation Verify-JSON is invalid"
+    if not verify.strip() or recorded_verify != verify:
         return None, "body Verify: differs from the task's ## Verify command"
     ledger = run_git(repo, "show", f"{sha}:{VERIFY_LEDGER_PATH}")
     if ledger.returncode != 0:
         return None, "attestation commit carries no verify ledger"
     try:
-        if not _ledger_pass(_common.parse_verify_ledger(ledger.stdout), verify, head):
+        entries = _common.parse_verify_ledger(ledger.stdout)
+        if legacy:
+            matches = [e for e in entries if e.get("schema") is None and e["command"] == verify and e["commit"] == head]
+            passed = bool(matches) and matches[-1]["result"] == "pass"
+        else:
+            passed = _ledger_pass(entries, verify, head)
+        if not passed:
             return None, "verify ledger in the attestation has no passing run at Head:"
     except ValueError as error:
         return None, str(error)
@@ -2502,7 +2525,7 @@ def _prove_attest_commit(
     if files != expected_files:
         return None, "body Files: does not match the declared changes between Base: and Head:"
     expected_body = attest_commit_body(
-        task_file, base, head, expected_files, fields.get("Verify", ""), fields["Ruling"]
+        task_file, base, head, expected_files, verify, fields["Ruling"], legacy=legacy
     )
     if body.strip() != expected_body.strip():
         return None, "attestation body is not canonical"
@@ -2967,6 +2990,7 @@ def parser() -> argparse.ArgumentParser:
     isolate_verify_parser.add_argument("--repo", type=Path, required=True)
     isolate_verify_parser.add_argument("--base", required=True)
     isolate_verify_parser.add_argument("--name", required=True)
+    isolate_verify_parser.add_argument("--historical-task")
 
     land_parser = subparsers.add_parser("land", help="commit a task onto the bound branch")
     land_parser.add_argument("--repo", type=Path, required=True)
@@ -3052,7 +3076,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 arguments.task_branch,
             )
         elif arguments.command == "isolate-verify":
-            result = isolate_verify(arguments.repo, arguments.base, arguments.name)
+            result = isolate_verify(arguments.repo, arguments.base, arguments.name, arguments.historical_task)
         elif arguments.command == "land":
             result = land(
                 arguments.repo,

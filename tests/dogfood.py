@@ -29,6 +29,9 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+from scripts import check_docs_audit
+
 INSTALLER = ROOT / "scripts" / "install.mjs"
 RESOURCE_MANIFEST = json.loads(
     (ROOT / "scripts" / "skill-resources.json").read_text(encoding="utf-8")
@@ -133,9 +136,19 @@ def check_audit(repo):
     if not audit.is_file():
         return [("DOCS-AUDIT.md exists", False, str(audit))]
     code, out = run([sys.executable, str(ROOT / "scripts" / "check_docs_audit.py"), "--repo", str(repo)], repo)
+    correct = False
+    detail = "README's --json feature must be aspirational with count.py evidence"
+    if code == 0:
+        docs = check_docs_audit._doc_claims(check_docs_audit._sections(audit.read_text(encoding="utf-8")))
+        claims = [claim for claim in docs.get("README.md", []) if "--json" in claim["claim"]]
+        correct = bool(claims) and all(
+            claim["verdict"] == "aspirational" and re.search(r"\bcount\.py\b", claim["evidence"])
+            for claim in claims
+        )
     return [
         ("DOCS-AUDIT.md exists", True, str(audit)),
         ("DOCS-AUDIT.md passes check_docs_audit.py", code == 0, out.strip()[-300:]),
+        ("planted --json claim is correctly classified", correct, detail),
     ]
 
 

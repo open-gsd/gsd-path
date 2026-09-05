@@ -407,7 +407,7 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
      entry when `python3 <absolute build_state.py> verify-lookup --repo
      <absolute primary> --command <task Verify> --commit <landed commit>`
      returns `reuse: true`; otherwise run the command in an
-     `isolate-verify` sidecar at that commit, record it with
+     `isolate-verify --historical-task <task id>` sidecar at that commit, record it with
      `verify-record`, and use that result. A re-review after a fix cycle
      follows the same rule. It checks each acceptance
      criterion and each INTENT success criterion owned by the wave's tasks
