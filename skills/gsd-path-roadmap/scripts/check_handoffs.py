@@ -953,8 +953,9 @@ def _require_task_structure(task_id: str, text: str) -> None:
             raise HandoffError(f"{task_id} {field} must initially be {value}")
     for heading in ("Context", "Approach", "Interface contract", "Log"):
         body = _strip_comments(_section(text, heading)).strip()
-        if not body or "<" in body or ">" in body:
+        if not body:
             raise HandoffError(f"{task_id} {heading} is empty or still a placeholder")
+        _reject_placeholder(body, f"{task_id} {heading}")
 
 
 def _validate_task_graph(

@@ -758,6 +758,21 @@ The task implements the demo.
 
             self.assertEqual(result["surfaces"], {surface: "T001"})
 
+    def test_plan_accepts_typed_interface_and_rejects_unfilled_body(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_plan_handoff(root)
+            task = root / ".project/tasks/T001-demo.md"
+            text = task.read_text().replace(
+                "## Interface contract\n\n- None",
+                "## Interface contract\n\n- `total_amount(records) -> int`: return the sum.",
+            )
+            task.write_text(text)
+            self.assertEqual(check_handoffs.validate_plan(root)["tasks"], 2)
+            task.write_text(text.replace("return the sum.", "<fill in>"))
+            with self.assertRaisesRegex(check_handoffs.HandoffError, "placeholder"):
+                check_handoffs.validate_plan(root)
+
     def test_plan_coverage_rejects_an_omitted_criterion(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

@@ -247,7 +247,7 @@ def _lint_task(repo: Path, base: str, path: Path) -> Tuple[str, List[str], Optio
     if contract_body is not None:
         normalized = " ".join(_clean(contract_body).split())
         if normalized and normalized not in {"None", "- None"}:
-            contract = normalized
+            contract = _clean(contract_body)
 
     return task_id, problems, contract, checked
 
@@ -263,7 +263,7 @@ def validate_task_briefs(
         raise BriefError(f"tasks directory not found: {tasks_dir}")
 
     problems: List[str] = []
-    contracts: Dict[str, str] = {}
+    contracts: Dict[str, Set[str]] = {}
     checked = 0
     task_files = sorted(tasks_path.glob("*.md"))
     if not task_files:
@@ -274,13 +274,17 @@ def validate_task_briefs(
         )
         problems.extend(f"{task_id}: {problem}" for problem in task_problems)
         if contract is not None:
-            contracts[task_id] = contract
+            for entry in re.split(r"(?m)^-[ \t]+", contract):
+                shape = " ".join(entry.split())
+                if shape:
+                    contracts.setdefault(shape, set()).add(task_id)
         checked += task_checked
 
-    for task_id, contract in contracts.items():
-        if sum(1 for other in contracts.values() if other == contract) < 2:
+    for shape, task_ids in contracts.items():
+        if len(task_ids) == 1:
+            task_id = next(iter(task_ids))
             problems.append(
-                f"{task_id}: interface contract is not shared by any other task"
+                f"{task_id}: interface contract is not shared by any other task: {shape}"
             )
 
     if problems:

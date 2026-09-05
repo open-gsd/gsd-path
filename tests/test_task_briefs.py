@@ -234,6 +234,36 @@ class TaskBriefTests(unittest.TestCase):
 
             self.assertEqual(exit_code, 0, stderr)
 
+    def test_consumer_can_share_distinct_contracts_with_two_providers(self) -> None:
+        total = "- `total_amount(records) -> int`: return the integer sum."
+        export = "- `write_csv(records, stream) -> None`: write CSV rows."
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.init_repo(root)
+            base = self.commit(root)
+            for task_id, file, contract in (
+                ("T001", "total.py", total),
+                ("T002", "export.py", export),
+                ("T003", "reports.py", total + "\n\n" + export),
+            ):
+                self.write_task(
+                    root, task_id, files=(file,), contract=contract,
+                    context="Deliver the owned reporting capability.",
+                    approach="Keep the exact shared shapes.",
+                    verify="python3 " + file,
+                )
+
+            status, _output, error = self.lint(root, base)
+            self.assertEqual(status, 0, error)
+
+            consumer = root / ".project/tasks/T003-demo.md"
+            consumer.write_text(consumer.read_text().replace("write CSV rows", "write JSON rows"))
+            status, _output, error = self.lint(root, base)
+            self.assertEqual(status, 1)
+            self.assertIn("T002: interface contract is not shared", error)
+            self.assertIn("T003: interface contract is not shared", error)
+            self.assertNotIn("T001:", error)
+
     def test_unshared_interface_contract_fails(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

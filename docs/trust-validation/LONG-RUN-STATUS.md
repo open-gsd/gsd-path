@@ -211,3 +211,30 @@ gate passed. Program lookahead gate detected a PLAN-GATE.json receipt placed
 inside a restricted track path; the native actor is preserving it outside the
 track through the allowed correction path. These are retained instruction/spin
 observations, not unverified source fixes.
+
+## Interface gate fixes from real lookahead planning
+
+Native M002 planning failed because task-body validation treated the greater-than
+character in a Python return annotation as an unfilled placeholder. The plan
+gate now uses its existing placeholder recognizer; typed signatures pass while
+unfilled template text still fails.
+
+The brief gate compared entire interface sections. Two distinct providers plus
+a consumer listing both therefore failed, despite following the task template.
+It now matches each top-level contract entry across distinct tasks, preserving
+whitespace normalization and rejecting any unshared/mismatched entry. The real
+plan-gate and brief CLI regressions both failed before the changes. The combined
+116 handoff/brief tests pass; reintroducing each prior implementation fails its
+regression, restoration passes, and generated-resource sync passes. Receipt:
+fixed-run/interface-sabotage.json. Simplification kept existing validators and
+one map from contract shapes to task IDs; no new contract format or helper layer.
+
+The pinned native program instead reached its gate with a real uniform stream
+writer interface. That concrete plan was read and evaluator-approved; handle
+5159 must stop at next plan/done for m2-lookahead-approved capture. Keep its
+actual revision and workaround distinct from the source fixes above.
+
+Greenfield build handle: 45113 (same thread). Discussion approved intent and
+explicit negative-JSON question/follow-up run at 80131, thread
+01a07366-a372-73b3-96fb-77e66a94dd76. The loop schema's owner values were asked
+asynchronously; no reply yet. Remaining external target approval also pending.
