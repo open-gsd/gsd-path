@@ -52,7 +52,7 @@
       "ship"
     ],
     "fixture": "empty",
-    "request": "Use standard lane in this new local Git repository. Build count.py with default/signed integer text output and --json before or after the count, exactly integer widgets; reject invalid input. No dependencies. During definition, assess argparse versus manual parsing from official Python documentation as the named open research question, then record the decision before planning. Text output is the integer followed by a space and widgets, for example 0 widgets.",
+    "request": "Use standard lane in this new local Git repository. Build count.py with default/signed integer text output and --json before or after the count, exactly one JSON object with the sole key widgets and an integer value equal to the count, for example {\"widgets\": 0} by default; reject invalid input. No dependencies. During definition, assess argparse versus manual parsing from official Python documentation as the named open research question, then record the decision before planning. Text output is the integer followed by a space and widgets, for example 0 widgets.",
     "steps": [
       "Observe greenfield classification and definition without a fabricated brownfield inspection.",
       "Exercise actual research and synthesis gates with citations and owner approval.",

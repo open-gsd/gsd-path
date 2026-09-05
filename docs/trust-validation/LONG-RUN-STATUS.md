@@ -122,3 +122,43 @@ Observed spin question for final analysis: the unchanged docs-audit inputs went
 from four to fourteen verified rows during standalone re-audit, with the same
 five stale rows. Keep this observation separate from functional pass; determine
 which added checks were necessary before making an efficiency claim.
+
+## Live checkpoints and next actions (2026-09-05 20:58 UTC)
+
+- Source changes through cb5c7a5 are committed; the greenfield fixture request
+  additionally spells out the exact JSON key after a native draft guessed
+  count/unit. The corrected draft was read and approved; its product oracle
+  remains pending. This was an evaluator input clarification, not a product fix.
+- Program: M001 plan was reviewed and approved. Handle 98771 is the subsequent
+  lookahead invocation; revalidate it. Thread remains
+  01a07338-3976-7953-852b-f19477071e7b. The external capture
+  m2-lookahead-started at 20:58:35Z proves M001 storage build/active on
+  gsd-path/M001 while next reports is inspect/done with branch null. HEAD:
+  0fdb3fd0741a841b05a42321e9e59f066c8777b0. No concurrent coding is claimed.
+  Next: review/approve M002 lookahead intent and plan through the actor, capture
+  m2-lookahead-approved, then let M001 code/review/ship and capture integration
+  before binding/promoting. Keep both promotion receipts from actual helper calls.
+- Greenfield repaired run: /Users/jeremymcspadden/orca/evaluations/gsd-path-greenfield-repair-20260905,
+  candidate b0b8a78f529a2b3700e63d9288262a9edd413a8f. Thread
+  01a07348-c6e5-7b32-90d8-b6786eda982d; last launched handle 28944 is research
+  after corrected intent approval. Revalidate before treating it as running.
+- Remaining scenarios: /Users/jeremymcspadden/orca/evaluations/gsd-path-remaining-20260905,
+  candidate cb5c7a50be56e44dd35038e179ecff7a82a04863. Quick thread
+  01a07353-6f11-78e0-9ce9-f1774e5d18be; last launched handle 34689 is planning
+  after intent approval. Other prepared scenarios have not started.
+- Quick must capture full-wave/final-ready and explicitly probe same-HEAD
+  prepare-final reuse before integration, then run the external counter oracle.
+- Docs-audit is completed and recorded pass in the original fixed run. Do not
+  rerun its closed functional claim. It found four upstream-layout path drifts
+  plus the intentional README mismatch; evaluator accept-drift applies only
+  to this fixture and does not turn stale claims into verified claims.
+- External private repository exact-target approval is still pending in the
+  async question. No external repository, branch or PR has been created.
+- Scenario evidence spans recorded candidates. A final aggregate must identify
+  revisions and changed scopes rather than claim all features ran on one SHA.
+- Program PLAN contains a documented workaround for the surface parser stripping
+  a trailing inline backtick. Product criteria remain intact; retain this
+  formatting observation for the final efficiency/contract review.
+
+This goal turn is progress: source fixes, passing shared checks, an executed
+standalone audit, and a captured real lookahead track. Full goal remains active.
