@@ -422,9 +422,6 @@ def validate_research_artifacts(
                 raise HandoffError(f"skipped {dimension} must not name an output")
             skipped.append(dimension)
 
-    if not set(STANDARD_DIMENSIONS) & set(dispatched):
-        raise HandoffError("RESEARCH.md must dispatch at least one standard dimension")
-
     assignments = _research_assignments(_section(handoff, "Question assignments"))
     questions = _research_questions(intent)
     assigned_questions = [question for question, _dimension in assignments]
@@ -441,6 +438,8 @@ def validate_research_artifacts(
             for question, assigned_dimension in assignments
             if assigned_dimension == dimension
         ]
+        if not dimension_questions:
+            raise HandoffError(f"dispatched {dimension} has no assigned research question")
         _validate_evidence(
             root,
             evidence_outputs[dimension],

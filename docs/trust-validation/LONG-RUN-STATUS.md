@@ -290,3 +290,31 @@ capabilities. The generated-prompt regression failed before correction, passed
 afterward, failed when the typo was restored, then passed after restoration.
 Receipt: remaining-run/abandon/scope-sabotage.json. Existing prepared fixture
 received the same explicit evaluator correction; pinned sources were untouched.
+
+## Settled-research gate correction
+
+Reviews and abandon both stopped at a real helper contradiction: every standard
+dimension was settled, yet the validator required a standard researcher. Source
+now permits all four dimensions to be skipped when no research question remains,
+and rejects a dispatched dimension with no assigned question. It retains full
+question coverage and evidence validation. Simplification removes the mandatory
+dispatch rule and reuses existing assignment data; no new research mode exists.
+
+Real handoff regressions reproduce both old effects. The all-settled test failed
+on the old minimum-dispatch rule and now passes; the pointless standard dispatch
+was accepted by old code and is now rejected. Restoring each old behavior makes
+its regression fail; restoration passes. Receipts: remaining-run/
+research-skip-sabotage.json and research-dispatch-sabotage.json. Early fixture
+format mistakes were corrected and are not counted as regression evidence.
+The affected handoff suite was run after final corrections.
+
+Next for blocked pre-build fixtures: preserve the original failed copies and
+create separately recorded repair replays from their exact Git revision and
+.project bytes, with the fixed bundle installed before restoring that snapshot.
+This avoids repeating closed inspection work and does not hot-update live runs.
+Their metadata must identify the inherited revision and new runtime revision.
+No replay has been created yet.
+
+Greenfield final-ready was read and captured at d453198b0abfe1f72afb81daa637dc1e8d9d0889;
+shipping runs at handle 3871. Program M001 final preparation runs at 97783.
+Recovery planning runs at 49023. Quick is integrated and its product oracle passed.

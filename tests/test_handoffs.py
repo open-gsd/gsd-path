@@ -256,6 +256,27 @@ Intent: `.project/intent/INTENT.md`
             self.assertEqual(result["dispatched"], ["domain"])
             self.assertEqual(result["skipped"], ["pitfalls", "similar", "stack"])
 
+    def test_research_can_skip_every_settled_dimension(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_state(root, "research", "active")
+            self.write_intent(root, "- None\n")
+            self.write(
+                root, ".project/research/RESEARCH.md",
+                "# Research\n\nPhase: research\nStatus: complete\nIntent: .project/intent/INTENT.md\n\n"
+                "## Dispatch\n" + "".join(
+                    f"- `{dimension}` — skipped → none — approved intent has no open question\n"
+                    for dimension in check_handoffs.STANDARD_DIMENSIONS
+                ) + "\n## Question assignments\n- none\n",
+            )
+            result = check_handoffs.validate_research(root)
+            self.assertEqual(result["dispatched"], [])
+            self.assertEqual(result["questions"], 0)
+            self.assertEqual(set(result["skipped"]), set(check_handoffs.STANDARD_DIMENSIONS))
+            self.write_intent(root, "- [RESEARCH] Which domain applies?\n")
+            with self.assertRaisesRegex(check_handoffs.HandoffError, "question assignments"):
+                check_handoffs.validate_research(root)
+
     def test_research_transition_validates_evidence_before_writing_state(self):
         source = Path(__file__).resolve().parents[1]
         helpers = [source / "scripts/pipeline_state.py", *sorted(source.glob("skills/*/scripts/pipeline_state.py"))]
@@ -375,14 +396,28 @@ Intent: `.project/intent/INTENT.md`
             with self.assertRaises(check_handoffs.HandoffError):
                 check_handoffs.validate_research(root)
 
-    def test_research_handoff_requires_a_standard_dimension(self) -> None:
+    def test_research_rejects_a_settled_standard_dispatch(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_state(root, "research", "active")
+            self.write_intent(root, "- none\n")
+            self.write_research_handoff(root)
+            handoff = root / ".project/research/RESEARCH.md"
+            handoff.write_text(handoff.read_text().replace(
+                "- `[RESEARCH] Which domain applies?` → `domain`", "- none"
+            ))
+            self.write_evidence(root, "domain", questions=())
+            with self.assertRaisesRegex(check_handoffs.HandoffError, "no assigned research question"):
+                check_handoffs.validate_research(root)
+
+    def test_research_handoff_rejects_dispatch_without_a_question(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             self.write_state(root, "research", "active")
             self.write_intent(root, "")
             self.write_custom_only_research_handoff(root)
 
-            with self.assertRaises(check_handoffs.HandoffError):
+            with self.assertRaisesRegex(check_handoffs.HandoffError, "no assigned research question"):
                 check_handoffs.validate_research(root)
 
     def write_review_sources(self, root: Path, project_dir: str = ".project") -> None:
