@@ -41,6 +41,8 @@ The quick run dispatched two inspectors, one coder and one wave reviewer; no fin
 
 [Quick measurements](/Users/jeremymcspadden/orca/evaluations/gsd-path-remaining-20260905/quick/native-work-footprint.json) · [Greenfield measurements](/Users/jeremymcspadden/orca/evaluations/gsd-path-greenfield-repair-20260905/greenfield/native-work-footprint.json)
 
+M002 reporting produced 66 product lines and 256 test lines. Recorded coder intervals total 5.3 minutes after removing provider overlap; its wave and final reviewer intervals total 5.5 minutes. These exclude orchestrator, approval, source-repair and ship time. The project Verify ran once and passed 15 tests in 4.855 seconds. This separates review work from test execution without inventing a target ratio. [M002 measurements](/Users/jeremymcspadden/orca/evaluations/gsd-path-longrun-fixed-20260905/program/m2-work-footprint.json)
+
 ## Source fixes and proof
 
 Fixes cover managed-runtime greenfield detection, legal settled-research skips, premature decision/state advancement, pending discussion routing, surface/interface parsing, archive compatibility, supplied planning inputs and repeated build plan gates. Initial failed native runs remain preserved. Focused regressions were observed RED, GREEN and sensitive to sabotage; details and exact source commits are in [execution status](LONG-RUN-STATUS.md).
