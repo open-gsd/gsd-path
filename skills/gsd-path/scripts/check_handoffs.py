@@ -363,6 +363,13 @@ def validate_research(
     """Validate the research-to-synthesis hand-off and return its summary."""
 
     _require_state(root, "research", "active", project_dir)
+    return validate_research_artifacts(root, project_dir)
+
+
+def validate_research_artifacts(
+    root: Path, project_dir: str = DEFAULT_PROJECT_DIR
+) -> Dict[str, object]:
+    """Check research contents independently of the caller's state edge."""
     intent_path = f"{project_dir}/intent/INTENT.md"
     if not (root / intent_path).is_file():
         # CHARTER.md is program-level: it stays at the real .project/ top level.

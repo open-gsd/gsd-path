@@ -1715,6 +1715,18 @@ def transition_state(
             event,
             project_dir,
         )
+        if state.phase == "research" and (
+            (after.phase == "research" and after.status == "done")
+            or after.phase == "decide"
+        ):
+            try:
+                import check_handoffs
+            except ImportError:  # pragma: no cover - package imports used by tests
+                from scripts import check_handoffs
+            try:
+                check_handoffs.validate_research_artifacts(resolved, project_dir)
+            except check_handoffs.HandoffError as error:
+                raise PipelineStateError(f"research handoff failed: {error}") from error
         _atomic_write(path, rendered)
     return {
         "schema": STATE_SCHEMA,

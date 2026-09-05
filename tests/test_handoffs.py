@@ -1,4 +1,5 @@
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -254,6 +255,36 @@ Intent: `.project/intent/INTENT.md`
             self.assertEqual(result["phase"], "research")
             self.assertEqual(result["dispatched"], ["domain"])
             self.assertEqual(result["skipped"], ["pitfalls", "similar", "stack"])
+
+    def test_research_transition_validates_evidence_before_writing_state(self):
+        source = Path(__file__).resolve().parents[1]
+        helpers = [source / "scripts/pipeline_state.py", *sorted(source.glob("skills/*/scripts/pipeline_state.py"))]
+        for helper in helpers:
+            for track in (".project", ".project/next"):
+                for status in ("active", "done"):
+                    with self.subTest(helper=helper, track=track, status=status), tempfile.TemporaryDirectory() as directory:
+                        root = Path(directory)
+                        self.write_state(root, "research", status, track)
+                        self.write_intent(root, "- [RESEARCH] Which domain applies?\n", track)
+                        self.write_research_handoff(root, track)
+                        state = root / track / "STATE.md"
+                        evidence = root / track / "research/evidence-domain.md"
+                        valid = evidence.read_text()
+                        evidence.write_text(valid.replace("Questions assigned: Which domain applies?", "Questions assigned: wrong"))
+                        original = state.read_bytes()
+                        command = [sys.executable, "-B", str(helper), "transition", "--repo", str(root),
+                                   "--project-dir", track, "--expect-phase", "research", "--expect-status", status,
+                                   "--expect-branch", "null" if track.endswith("next") else "gsd-path/M001",
+                                   "--expect-archive", "null", "--set-phase", "research" if status == "active" else "decide",
+                                   "--set-status", "done" if status == "active" else "active", "--event", "research gate"]
+                        failed = subprocess.run(command, capture_output=True, text=True)
+                        self.assertNotEqual(failed.returncode, 0, failed.stdout)
+                        self.assertIn("Questions assigned", failed.stderr)
+                        self.assertEqual(state.read_bytes(), original)
+                        evidence.write_text(valid)
+                        passed = subprocess.run(command, capture_output=True, text=True)
+                        self.assertEqual(passed.returncode, 0, passed.stderr)
+                        self.assertNotEqual(state.read_bytes(), original)
 
     def test_research_handoff_rejects_done_state_before_the_gate(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
