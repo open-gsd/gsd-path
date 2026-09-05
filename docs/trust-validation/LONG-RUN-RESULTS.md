@@ -15,7 +15,7 @@ It has not yet proved every feature or overall workflow efficiency.
 | Discuss | Pass: append-only required answer, legal owner disposition, unchanged product/state; repaired future-owner route blocks | [Positive receipt](/Users/jeremymcspadden/orca/evaluations/gsd-path-discussion-positive-20260905/reviews.jsonl) |
 | Docs audit | Pass: native stale claim reproduced without code/docs edits | [Audit receipt](/Users/jeremymcspadden/orca/evaluations/gsd-path-longrun-fixed-20260905/reviews.jsonl) |
 | Undo, forensics | Pass: exact unpublished task undo and read-only diagnosis; no native interruption claim | [Recovery receipts](/Users/jeremymcspadden/orca/evaluations/gsd-path-remaining-20260905/reviews.jsonl) |
-| Lookahead | Partial: both plans approved during build, clean M002 promotion captured; changed M003 promotion still pending | [Actual captures](/Users/jeremymcspadden/orca/evaluations/gsd-path-longrun-fixed-20260905/program/captures.jsonl) |
+| Lookahead | Pass: clean M002 promotion retained approval; changed M003 promotion reopened plan/active and identified T001 | [Six actual checkpoints](/Users/jeremymcspadden/orca/evaluations/gsd-path-longrun-fixed-20260905/program/lookahead-proof.json) |
 | Install | Global Codex and Claude updated, 14 skills each; doctor healthy. Native model proof is not required for installation | [Installer receipt](/Users/jeremymcspadden/orca/evaluations/gsd-path-global-update-5ed6518/doctor.json) |
 
 ## Open results
