@@ -172,3 +172,18 @@ product hash comparison, and subtest failure collection made each corresponding
 focused test fail with exit 1. All mutations were restored. The program oracle
 test also executes a real CLI with its prefix filter disabled and rejects it.
 These results validate the harness, not the native skill features.
+
+## First prepared run
+
+Candidate `cb45afc401b706457f9e91e313b986659c9a42dd` was prepared at
+`/Users/jeremymcspadden/orca/evaluations/gsd-path-features-cb45afc`.
+Its `REPORT.md`, `automated.json`, `harness-verification.json` and `FINDINGS.md`
+retain the actual results. All ten scenario fixtures were installed successfully.
+
+The shared run executed 1,014 Python test methods: 1,002 passed, 10 failed or
+errored, and two were skipped. All 133 Node tests and the resource sync check
+passed. Failures cover installer output parity, missing task fixtures during
+undo/diagnostic approval, and lean-verification import interference. The two
+lean tests pass in a fresh focused invocation; their aggregate failures remain
+in the original receipt. No native scenario has run, and the overall report
+is incomplete. These findings require triage before claiming full evaluation.
