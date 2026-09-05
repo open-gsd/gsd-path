@@ -2,21 +2,20 @@
 
 Objective (owner): run the entire long run. fix as needed.
 
-The goal remains active until every scenario has real evidence or an exact
-external prerequisite is resolved. Do not replace live evidence with helper tests.
+The objective remains unfinished while required native features are unproven. Do not replace live evidence with helper tests.
 No testing time or token limit was set by the owner.
 
-## Current position — 2026-09-05 23:14 UTC
+## Current position — 2026-09-05 23:40 UTC
 
-- Source branch `jeremymcs/astra-eval`, source fix HEAD `5ed6518b7f843fb8e4519a3a28ceba4cc17c5f6b`; root has no pipeline state.
-- Latest shared gate at da9522c: 1,025 Python pass, two skips, Node 133 pass, sync 199. Subsequent build-progress fix: 101 focused tests pass, RED/GREEN/sabotage recorded. Full tests were not repeated for that small gate change.
-- Global Codex and Claude installs refreshed from 5ed6518: 14 skills each, doctor healthy, prior copies backed up. Receipt directory `/Users/jeremymcspadden/orca/evaluations/gsd-path-global-update-5ed6518`. Running fixtures retain pinned local runtimes.
-- Completed native cases: quick and greenfield integrated with external counter oracles; docs audit; read-only forensics; task undo; legal discussion disposition and repaired future-owner blocking; abandonment and pending roadmap reslice.
-- Main program: M001 integrated; M002 clean lookahead promotion captured; M003 lookahead approved before M002 coding. M002 providers overlapped for 65.330746 seconds and landed. M002 full-wave/final passed and integrated: ship 923393ccfd480144307954909b0df3a2a0c4eb1b, integration 8b02ac866df76d4c9fd887deb397daf0b7979ab0. m2-integrated captured; M003 changed promotion captured at 27b0bf0e6faa29666dde5254bb3698d2cab89ee3. reports.py and tests/test_reports.py changed; T001 affected; plan/active. Both lookahead outcomes now native pass. Legal M003 replan running.
-- Program root `/Users/jeremymcspadden/orca/evaluations/gsd-path-longrun-fixed-20260905`; thread `01a07338-3976-7953-852b-f19477071e7b`, handle 1247. Original candidate 041e7ca, archive/integration/bind/promotion override 2b24d62, repeated build plan gate backport c42988c. Exact paths and patch provenance are in the arm. This is not one-SHA end-to-end proof.
-- Deep review: both native lenses and final reviewer passed using recorded task evidence. One project Verify passed. Local integration validated at `/Users/jeremymcspadden/orca/evaluations/gsd-path-review-replay-58dc14d`, reviews thread `01a073a3-f84a-7271-932d-6beafbc32961`, terminal ship 761bac5875c6aff5d81eb8f873d6ba4005c5a44f, integration 626cf0dcf5f4a8999bc154143aa9b59920adbdfe.
-- Native guard failed three real edit attempts. Investigation stopped at the supplied three-round fuse, with owner continuation requested. Cross-model panels unavailable; skeptic/patch paths have no natural finding and remain unexercised. Loop requires unresolved owner values. Exact GitHub target approval remains pending.
-- Revalidate handles before treating them as live. Prior failed runs and repair receipts remain intact; the chronology below preserves their original state descriptions.
+- **Program complete; full feature evaluation incomplete.** All owned native test threads are terminal. No native run should be resumed from an old handle without new authorized work.
+- Main program completed all three milestones and both lookahead outcomes. Final ship `3bfb2bb9dafa71d34417f1fcd6da5c7afe86b9fe`, integration `39d5545b1dbb8627d9cf8b8c904d0ad69f2ef94a`, tag `milestone/003-filtering`. Captured m3-integrated; external program oracle passed all 20 checks. Main native thread: `01a07338-3976-7953-852b-f19477071e7b` (terminal).
+- [Results summary](LONG-RUN-RESULTS.md) is the current review surface. Consolidated checked receipts: `/Users/jeremymcspadden/orca/evaluations/gsd-path-full-evaluation-summary-20260905.json`. Sixteen native feature groups pass; guards failed; panels/skeptics/patch unverifiable; loop/bootstrap/PR integration pending; install native not required. No stale latest selected evidence hashes.
+- Completed additional cases: quick and greenfield integrated with external counter oracles; deep lenses and final review integrated; docs audit; read-only forensics; task undo; positive discussion disposition plus repaired future-owner blocking; abandonment and pending roadmap reslice.
+- Latest shared gate at da9522c: 1,025 Python pass, two platform skips, Node 133 pass, sync 199. Subsequent source fix 5ed6518 passed 101 focused tests and RED/GREEN/sabotage; actual M002 resumed past landed providers without resetting their state.
+- Global Codex and Claude installs refreshed from 5ed6518: 14 skills each, doctor healthy, previous copies backed up. Receipt `/Users/jeremymcspadden/orca/evaluations/gsd-path-global-update-5ed6518`. Evaluation fixtures retained pinned local runtimes.
+- Provenance: program original candidate 041e7ca, archive/integration/bind/promotion repair 2b24d62, repeated build-plan gate backport c42988c (source fix 5ed6518). Several separate scenario pins and repairs were used. This is not one-revision or cross-host release certification.
+- Remaining efficiency finding: M003 added five product lines and 68 test lines; coder interval 96.759 seconds, wave/final reviewer intervals 285.622 seconds, excluding orchestration/shipping. Evidence reuse works; standard-lane verification/artifact work is still heavy for small patches. Do not claim fully optimized verification or token savings.
+- Native guard investigation remains stopped at the supplied three-round fuse; continuation question unanswered. Loop owner values and exact GitHub target approval also remain unanswered. Do not infer approval from elapsed time or earlier generic authorizations.
 
 ## Run decisions
 
@@ -31,9 +30,11 @@ No testing time or token limit was set by the owner.
 
 ## Remaining work
 
-- Complete legal M003 replan/approval, build and ship. Run the external program oracle once after final integration.
-- Resolve owner prerequisites for loop, native guard continuation and exact external GitHub targets. Keep unsupported panel and unexercised skeptic/patch claims explicit.
-- Consolidate all 24 feature groups and actual code/test/artifact footprint and native spins. Do not mark incomplete or unverifiable native paths as passed.
+- Owner ruling to continue native guard diagnosis beyond the supplied three-round fuse, or keep that failed test result.
+- Owner values for loop `max_iterations` and `wall_clock`; overall evaluation remains unlimited.
+- Exact GitHub target approval for bootstrap/PR tests, then owner-performed merge commit. No external repository or PR created.
+- An independent advertised model family is absent; panel remains unverifiable. No natural review blocker occurred; skeptic/patch paths remain unexercised without a reviewed controlled fault case.
+- Standard-lane review overhead remains a measured finding; do not turn an observed ratio into an invented threshold or claim this optimization goal is solved.
 
 ## Pending exact external approval
 
@@ -351,4 +352,13 @@ Repeated native planners were sent back because task prose named supplied INTENT
 
 M003 actual promotion JSON reports changed drift for reports.py and tests/test_reports.py, T001 affected, plan/active, promotion 27b0bf0e6faa29666dde5254bb3698d2cab89ee3. Captured before planner dispatch. Native lookahead pass receipt now links `program/lookahead-proof.json`, the immutable snapshot of all six required checkpoints, plus both actual promotion JSON files and runtime provenance. M002 clean promotion retained plan/done. Neither claim implies concurrent planner/coder activity.
 
-M003 replan uses original installed planning helpers and unchanged promoted intent; native thread remains 01a07338-3976-7953-852b-f19477071e7b, handle 1247. Stop at concrete gated PLAN/task before evaluator approval. Afterward: build/full-wave, final preparation/approval, canonical ship using external 2b24d62 archive helpers, final integration capture, external program oracle. No testing budget. Owner questions remain pending; do not investigate guards beyond its fuse without a reply.
+M003 replan uses original installed planning helpers and unchanged promoted intent; native thread remains 01a07338-3976-7953-852b-f19477071e7b, handle 62734. Stop at concrete gated PLAN/task before evaluator approval. Afterward: build/full-wave, final preparation/approval, canonical ship using external 2b24d62 archive helpers, final integration capture, external program oracle. No testing budget. Owner questions remain pending; do not investigate guards beyond its fuse without a reply.
+
+
+## 2026-09-05 23:40 UTC — local run closeout
+
+M003 native task, full-wave, final preparation, 18-test project Verify and ship/integration passed. Final review reused closed evidence and added only four missing empty-ledger prefix commands; all passed. Independent program oracle then passed 20 checks. Latest program feature receipts now cover all program feature groups. Main fixture clean at ship; no further binding performed.
+
+Operator receipt attempts for ship in the reviews-only catalog and cross-root discussion evidence were refused by the harness as scoped; no invalid receipt was written. The consolidated summary retains the separate negative discussion proof with explicit candidate/path provenance. These operator metadata errors are not plugin behavior failures.
+
+Source work is local; no source push/PR. Goal not marked complete. All completed native cases are closed; resume only the specific unresolved authorized path, without rerunning completed gates.

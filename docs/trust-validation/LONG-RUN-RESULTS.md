@@ -1,14 +1,15 @@
-# Long-run findings — in progress
+# Long-run findings — program complete, feature evaluation incomplete
 
-The native run has found and repaired real sources of wasted verification work.
-It has not yet proved every feature or overall workflow efficiency.
+The three-milestone native program is integrated, both lookahead promotion outcomes are proven, and the external program oracle passed all 20 checks. Quick and greenfield counter oracles also passed. The run repaired real sources of wasted work, but it has not proved every feature or overall workflow efficiency.
+
+Across the 24 feature groups: 16 native passes, one failed guard test, three unexercised/unavailable paths, three pending owner prerequisites, and installation with no native model requirement. [Consolidated evidence and checked hashes](/Users/jeremymcspadden/orca/evaluations/gsd-path-full-evaluation-summary-20260905.json).
 
 ## Verified behavior
 
 | Feature groups | Native result | Evidence |
 |---|---|---|
 | Inspect | Pass: actual mapper and docs auditor in isolated sidecars | [Program inspection](/Users/jeremymcspadden/orca/evaluations/gsd-path-longrun-fixed-20260905/program/repo/.project/archive/001-storage/research/evidence-codebase.md) |
-| Define, research, decide, plan, build, ship | Pass in the greenfield case, including actual research, integration and an external counter oracle | [Greenfield receipts](/Users/jeremymcspadden/orca/evaluations/gsd-path-greenfield-repair-20260905/reviews.jsonl) |
+| Define, research, decide, plan, build, ship | Pass in greenfield and the full three-milestone program; actual independent/dependent native dispatch, integration and external oracles | [Greenfield receipts](/Users/jeremymcspadden/orca/evaluations/gsd-path-greenfield-repair-20260905/reviews.jsonl) |
 | Roadmap, abandon | Pass: partial archive, retained product history and pending-roadmap reslice | [Preservation proof](/Users/jeremymcspadden/orca/evaluations/gsd-path-repair-replays-20260905/abandon/evidence/m002-reslice-approval-v8aadxrg/preservation.json) |
 | Review | Pass: two native deep lenses and final review, then local integration | [Review receipts](/Users/jeremymcspadden/orca/evaluations/gsd-path-review-replay-58dc14d/reviews.jsonl) |
 | Lean verification | Pass: quick final reuses the full-wave review; unchanged-HEAD repeat adds no execution or ledger entry | [Reuse proof](/Users/jeremymcspadden/orca/evaluations/gsd-path-remaining-20260905/quick/agent-evidence/same-head-reuse.json) |
@@ -43,8 +44,16 @@ The quick run dispatched two inspectors, one coder and one wave reviewer; no fin
 
 M002 reporting produced 66 product lines and 256 test lines. Recorded coder intervals total 5.3 minutes after removing provider overlap; its wave and final reviewer intervals total 5.5 minutes. These exclude orchestrator, approval, source-repair and ship time. The project Verify ran once and passed 15 tests in 4.855 seconds. This separates review work from test execution without inventing a target ratio. [M002 measurements](/Users/jeremymcspadden/orca/evaluations/gsd-path-longrun-fixed-20260905/program/m2-work-footprint.json)
 
+M003 exposes the remaining overhead clearly: **five added product lines and 68 added test lines**, about **1.6 minutes of coder time versus 4.8 minutes of wave/final reviewer time**, before orchestration or shipment. Final review added four necessary empty-ledger checks and reused the other evidence. Reuse is functioning, but standard-lane review and artifact work remain heavy for a small patch. The run does not support calling verification fully optimized. [M003 measurements](/Users/jeremymcspadden/orca/evaluations/gsd-path-longrun-fixed-20260905/program/m3-work-footprint.json)
+
 ## Source fixes and proof
 
 Fixes cover managed-runtime greenfield detection, legal settled-research skips, premature decision/state advancement, pending discussion routing, surface/interface parsing, archive compatibility, supplied planning inputs and repeated build plan gates. Initial failed native runs remain preserved. Focused regressions were observed RED, GREEN and sensitive to sabotage; details and exact source commits are in [execution status](LONG-RUN-STATUS.md).
 
 The latest shared check at da9522c passed 1,025 Python tests with two platform skips, all 133 Node tests and resource sync. The later 5ed6518 build-progress gate fix passed 101 focused tests. Running fixtures use several pinned revisions and explicit repair overrides: this is not one-revision end-to-end certification.
+
+
+The latest code change is `scripts/check_handoffs.py` and its generated copies, with regression coverage in `tests/test_handoffs.py`. RED: `python3 -B -m unittest tests.test_handoffs.HandoffValidationTests.test_build_plan_gate_preserves_progress_and_checks_contracts` failed with `T001 status must initially be pending`. GREEN: `python3 -B -m unittest tests.test_handoffs tests.test_workflow_run` passed 101 tests. Sabotage restored unconditional initial-state checks; the same regression failed, then passed after restoration. [Exact regression/sabotage receipt](/Users/jeremymcspadden/orca/evaluations/gsd-path-longrun-fixed-20260905/program/build-progress-sabotage.json). Native M002 then passed the repaired gate with both providers still done and dispatched its dependent task.
+
+
+Program closeout: M003 ship `3bfb2bb9dafa71d34417f1fcd6da5c7afe86b9fe`, integration `39d5545b1dbb8627d9cf8b8c904d0ad69f2ef94a`, tag `milestone/003-filtering`. [Final integration receipt](/Users/jeremymcspadden/orca/evaluations/gsd-path-longrun-fixed-20260905/program/m3-validate-integrated-raw.json) · [20-check external oracle](/Users/jeremymcspadden/orca/evaluations/gsd-path-longrun-fixed-20260905/program/product.json). No test actor remains running.
