@@ -743,6 +743,21 @@ The task implements the demo.
             self.assertEqual(result["rows"], 2)
             self.assertEqual(result["tasks"], 2)
 
+    def test_plan_preserves_inline_code_in_surface_names(self) -> None:
+        surface = "CLI — `reports.py STORE total`; `reports.py STORE csv`"
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_plan_handoff(root)
+            self.write_intent_criteria(root, surfaces=surface)
+            self.write_plan_coverage(
+                root,
+                surface_contract=SURFACE_CONTRACT.replace("Demo web app", surface),
+            )
+
+            result = check_handoffs.validate_plan(root)
+
+            self.assertEqual(result["surfaces"], {surface: "T001"})
+
     def test_plan_coverage_rejects_an_omitted_criterion(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

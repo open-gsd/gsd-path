@@ -574,7 +574,7 @@ def _surfaces(text: str, label: str) -> List[str]:
     value = _unquoted(matches[0])
     if value.casefold() == "none":
         return []
-    value = _non_placeholder(value, f"{label} Surfaces")
+    _non_placeholder(value, f"{label} Surfaces")
     named: List[str] = []
     seen = set()
     for item in value.split(","):
@@ -583,7 +583,7 @@ def _surfaces(text: str, label: str) -> List[str]:
         surface = _unquoted(item)
         if surface.casefold() == "none":
             raise HandoffError(f"{label} Surfaces includes reserved value {surface}")
-        surface = _non_placeholder(surface, f"{label} Surfaces")
+        _non_placeholder(surface, f"{label} Surfaces")
         key = surface.casefold()
         if key in seen:
             raise HandoffError(f"{label} Surfaces repeats {surface}")

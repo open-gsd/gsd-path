@@ -190,3 +190,24 @@ project config. The CLI supports one-off externally-vetted hook trust, but this
 host has other user hook sources. No broad trust override was applied. Native
 guard proof remains pending; helper tests alone do not close it. Source:
 https://learn.chatgpt.com/docs/hooks (checked 2026-09-05).
+
+## Surface-name regression fixed
+
+Two native program plans required malformed Markdown because the surface parser
+stripped the closing backtick from a name containing inline CLI commands. The
+canonical parser now validates names without replacing them with the generic
+placeholder check's stripped return value. Simplification kept this to two
+assignment removals; no general field parser changed. Generated copies synced.
+
+The public plan-gate regression in tests/test_handoffs.py failed on the original
+code with a missing-surface error, then passed. All 92 handoff tests passed.
+Reintroducing the old assignments failed the same regression; restoration passed.
+Receipt: fixed-run/surface-parser-sabotage.json. Resource sync and diff check pass.
+Active pinned fixtures retain their actual workaround and candidate SHA.
+
+The greenfield plan's brief lint also rejected uncommitted planning-artifact
+paths; its native planner revised the unapproved brief after diagnosis and its
+gate passed. Program lookahead gate detected a PLAN-GATE.json receipt placed
+inside a restricted track path; the native actor is preserving it outside the
+track through the allowed correction path. These are retained instruction/spin
+observations, not unverified source fixes.
