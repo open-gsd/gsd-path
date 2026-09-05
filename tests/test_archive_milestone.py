@@ -2610,12 +2610,12 @@ Waves checked: 1
             repo = Path(temporary_directory)
             self.make_repo(repo)
             intent = repo / ".project/intent/INTENT.md"
-            intent.write_text(intent.read_text().replace("# Intent", "# Intent\n\nSurfaces: Demo CLI"))
+            intent.write_text(intent.read_text().replace("# Intent", "# Intent\n\nSurfaces: Demo CLI — `run.py`"))
             archive = self.prepare_archive(repo)
             final = archive / "review/FINAL.md"
             original = final.read_text()
             observed = next(line for line in original.splitlines() if line.startswith("- **Observed**:"))
-            evidence = original.replace(observed, '- **Observed**: stderr contained "injected <stage> failure"; all recorded cases passed.\n- **Surface**: Demo CLI')
+            evidence = original.replace(observed, '- **Observed**: stderr contained "injected <stage> failure"; all recorded cases passed.\n- **Surface**: Demo CLI — `run.py')
             final.write_text(evidence)
             rendered = self.run_command(sys.executable, str(ARCHIVE_SCRIPT), "render-manifest", "--repo", str(repo), cwd=repo)
             self.assertEqual(rendered.returncode, 0, rendered.stderr)

@@ -570,7 +570,9 @@ def parse_final_review(archive: Path) -> tuple:
             if line.startswith("- **Surface**:")
         ]
         surface_evidence = len(surface_values) == 1 and any(
-            " ".join(surface_values[0].split()).casefold() == " ".join(surface.split()).casefold()
+            # Older final gates stripped terminal Markdown code delimiters.
+            " ".join(surface_values[0].split()).casefold()
+            == " ".join(surface.split()).strip("`").casefold()
             for surface in surfaces
         )
         if tuple(values) != expected_fields:
