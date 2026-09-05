@@ -6,27 +6,17 @@ The goal remains active until every scenario has real evidence or an exact
 external prerequisite is resolved. Do not replace live evidence with helper tests.
 No testing time or token limit was set by the owner.
 
-## Current position
+## Current position — 2026-09-05 22:53 UTC
 
-- Source branch: jeremymcs/astra-eval; no merged PR found for this branch.
-- First candidate: cb45afc401b706457f9e91e313b986659c9a42dd.
-- First evidence: /Users/jeremymcspadden/orca/evaluations/gsd-path-features-cb45afc.
-- First shared run: 1,014 Python methods; 1,002 pass, 10 fail/error, 2 platform
-  skips. Node 133 pass; resource sync passes.
-- Fixed: Node installer missing check_task_briefs.py; invalid undo/diagnostic
-  plan fixtures; lean helper package import identity under polluted sys.path.
-  Focused gate: 45 tests pass. Three fault reintroductions each fail; restored
-  package/undo checks and sync pass. Receipt: first evidence/fix-sabotage.json.
-- Current candidate: 041e7caa07114925b8a164f781beb464648781a7.
-- Current run: /Users/jeremymcspadden/orca/evaluations/gsd-path-longrun-fixed-20260905.
-- Shared check completed: 1,013 Python pass, two platform skips, no failures;
-  Node 133 pass and resource sync pass. See current run/automated.json.
-- Program initial invocation completed (376.323402292 seconds). Its inspection
-  passed with native mapper/auditor children; charter reviewed and evaluator
-  approval sent via approve-charter.txt. Research/roadmap live handle: 49281.
-- Program native thread: 01a07338-3976-7953-852b-f19477071e7b.
-- These handles must be revalidated before treating them as running. Keep prior
-  receipts unchanged. Docs-audit was also launched in its separate fixture.
+- Source branch `jeremymcs/astra-eval`, source fix HEAD `5ed6518b7f843fb8e4519a3a28ceba4cc17c5f6b`; root has no pipeline state.
+- Latest shared gate at da9522c: 1,025 Python pass, two skips, Node 133 pass, sync 199. Subsequent build-progress fix: 101 focused tests pass, RED/GREEN/sabotage recorded. Full tests were not repeated for that small gate change.
+- Global Codex and Claude installs refreshed from 5ed6518: 14 skills each, doctor healthy, prior copies backed up. Receipt directory `/Users/jeremymcspadden/orca/evaluations/gsd-path-global-update-5ed6518`. Running fixtures retain pinned local runtimes.
+- Completed native cases: quick and greenfield integrated with external counter oracles; docs audit; read-only forensics; task undo; legal discussion disposition and repaired future-owner blocking; abandonment and pending roadmap reslice.
+- Main program: M001 integrated; M002 clean lookahead promotion captured; M003 lookahead approved before M002 coding. M002 providers overlapped for 65.330746 seconds and landed. T003 now running after a repaired repeated plan gate; full-wave review next.
+- Program root `/Users/jeremymcspadden/orca/evaluations/gsd-path-longrun-fixed-20260905`; thread `01a07338-3976-7953-852b-f19477071e7b`, handle 65810. Original candidate 041e7ca, archive/integration/bind/promotion override 2b24d62, repeated build plan gate backport c42988c. Exact paths and patch provenance are in the arm. This is not one-SHA end-to-end proof.
+- Deep review: both native lenses and final reviewer passed using recorded task evidence. One project Verify passed. Local archive/integration now running at `/Users/jeremymcspadden/orca/evaluations/gsd-path-review-replay-58dc14d`, reviews thread `01a073a3-f84a-7271-932d-6beafbc32961`, handle 12532.
+- Native guard failed three real edit attempts. Investigation stopped at the supplied three-round fuse, with owner continuation requested. Cross-model panels unavailable; skeptic/patch paths have no natural finding and remain unexercised. Loop requires unresolved owner values. Exact GitHub target approval remains pending.
+- Revalidate handles before treating them as live. Prior failed runs and repair receipts remain intact; the chronology below preserves their original state descriptions.
 
 ## Run decisions
 
@@ -41,14 +31,10 @@ No testing time or token limit was set by the owner.
 
 ## Remaining work
 
-- Verify and commit the fixes; prepare the new pinned run and record its path.
-- Run shared checks and all ten native scenarios from FEATURE-EVALUATION.md.
-- Exercise both lookahead promotion outcomes, real dependency dispatch, review
-  branches, sidecars, recovery, abandonment, external integration and guards.
-- Review per-feature receipts, product oracles and implementation/review spins.
-- Final audit must account for all 24 feature groups, platform skips, missing
-  native prerequisites and recorded failures. Do not mark the goal complete
-  while a required feature remains untested or unverifiable.
+- Complete M002 full-wave/final/ship, capture integration, then capture actual changed M003 promotion before legal replan/approval, build and ship. Run the external program oracle once after final integration.
+- Finish deep-review scenario integration and refresh evidence links to canonical archive paths.
+- Resolve owner prerequisites for loop, native guard continuation and exact external GitHub targets. Keep unsupported panel and unexercised skeptic/patch claims explicit.
+- Consolidate all 24 feature groups and actual code/test/artifact footprint and native spins. Do not mark incomplete or unverifiable native paths as passed.
 
 ## Pending exact external approval
 
