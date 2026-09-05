@@ -1,0 +1,15 @@
+Implement the widget-counter CLI in count.py. Without arguments print
+0 widgets. An integer argument prints that count followed by ' widgets'.
+Add --json, accepted before or after the count, producing exactly a JSON object
+with integer field widgets. The default count is zero; negative integers are
+valid. Invalid input must exit nonzero with a useful stderr error.
+Preserve plain text output. Add your own useful tests. No new dependencies.
+Do not read another comparison arm or the evaluator's acceptance tests.
+Record failures honestly. Per-task token budget 4000; session budget 30000,
+as required by the owner. Do not invent additional time or retry limits.
+
+Implement directly with normal Codex tools; do not initialize GSD Path. Commit the finished product and tests.
+
+For measured shell work, invoke the evaluator's activity wrapper with the actual category implementation, verification, or review. It records the real command and duration. Command: python3 /Users/jeremymcspadden/orca/evaluations/gsd-path-astra-a84bb28/plugin/tests/evaluate_codex.py activity --arm /Users/jeremymcspadden/orca/evaluations/gsd-path-astra-a84bb28/direct --category CATEGORY -- COMMAND ARGS. Unwrapped work remains unclassified; do not estimate durations.
+
+The required test-writer and Simplify skills are at /Users/jeremymcspadden/.codex/skills/test-writer/SKILL.md and /Users/jeremymcspadden/.codex/skills/code-simplifier/SKILL.md. Read those exact files when needed. The activity wrapper sets cwd to the arm repository; for isolated worktree checks, select the assigned sidecar explicitly within the wrapped command.

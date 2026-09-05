@@ -1,0 +1,336 @@
+[
+  {
+    "id": "01a06f81-c3b7-7d52-ab36-bf32aa65609f",
+    "role": "/root/decide",
+    "source": {
+      "subagent": {
+        "thread_spawn": {
+          "parent_thread_id": "01a06f75-c56d-7db1-9a01-197e53ba0988",
+          "depth": 1,
+          "agent_path": "/root/decide",
+          "agent_nickname": "Mill",
+          "agent_role": null
+        }
+      }
+    },
+    "session_file": "/Users/jeremymcspadden/Library/Application Support/orca/codex-accounts/86df0dc7-3078-4314-8766-60e244dd9765/home/sessions/2026/09/04/rollout-2026-09-04T21-59-30-01a06f81-c3b7-7d52-ab36-bf32aa65609f.jsonl",
+    "last_usage": {
+      "input_tokens": 254360,
+      "cached_input_tokens": 215936,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 2044,
+      "reasoning_output_tokens": 124,
+      "total_tokens": 256404
+    },
+    "task_started": [
+      "2026-09-05T02:59:30.425Z"
+    ],
+    "last_task_complete": "2026-09-05T03:00:47.095Z",
+    "usage": {
+      "input_tokens": 254360,
+      "cached_input_tokens": 215936,
+      "output_tokens": 2044,
+      "reasoning_output_tokens": 124
+    },
+    "usage_source": "last cumulative native child session counter"
+  },
+  {
+    "id": "01a06f77-3ff0-7c22-a95b-c9761a00c5ab",
+    "role": "/root/inspect_docs",
+    "source": {
+      "subagent": {
+        "thread_spawn": {
+          "parent_thread_id": "01a06f75-c56d-7db1-9a01-197e53ba0988",
+          "depth": 1,
+          "agent_path": "/root/inspect_docs",
+          "agent_nickname": "Confucius",
+          "agent_role": null
+        }
+      }
+    },
+    "session_file": "/Users/jeremymcspadden/Library/Application Support/orca/codex-accounts/86df0dc7-3078-4314-8766-60e244dd9765/home/sessions/2026/09/04/rollout-2026-09-04T21-48-01-01a06f77-3ff0-7c22-a95b-c9761a00c5ab.jsonl",
+    "last_usage": {
+      "input_tokens": 687672,
+      "cached_input_tokens": 658048,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 5088,
+      "reasoning_output_tokens": 315,
+      "total_tokens": 692760
+    },
+    "task_started": [
+      "2026-09-05T02:48:01.382Z"
+    ],
+    "last_task_complete": "2026-09-05T02:51:47.760Z",
+    "usage": {
+      "input_tokens": 687672,
+      "cached_input_tokens": 658048,
+      "output_tokens": 5088,
+      "reasoning_output_tokens": 315
+    },
+    "usage_source": "last cumulative native child session counter"
+  },
+  {
+    "id": "01a06f8a-6658-7123-9aef-95b7c97cb168",
+    "role": "/root/build_t001",
+    "source": {
+      "subagent": {
+        "thread_spawn": {
+          "parent_thread_id": "01a06f75-c56d-7db1-9a01-197e53ba0988",
+          "depth": 1,
+          "agent_path": "/root/build_t001",
+          "agent_nickname": "Cicero",
+          "agent_role": null
+        }
+      }
+    },
+    "session_file": "/Users/jeremymcspadden/Library/Application Support/orca/codex-accounts/86df0dc7-3078-4314-8766-60e244dd9765/home/sessions/2026/09/04/rollout-2026-09-04T22-08-56-01a06f8a-6658-7123-9aef-95b7c97cb168.jsonl",
+    "last_usage": {
+      "input_tokens": 412479,
+      "cached_input_tokens": 385280,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 3222,
+      "reasoning_output_tokens": 276,
+      "total_tokens": 415701
+    },
+    "task_started": [
+      "2026-09-05T03:08:56.389Z"
+    ],
+    "last_task_complete": "2026-09-05T03:11:02.564Z",
+    "usage": {
+      "input_tokens": 412479,
+      "cached_input_tokens": 385280,
+      "output_tokens": 3222,
+      "reasoning_output_tokens": 276
+    },
+    "usage_source": "last cumulative native child session counter"
+  },
+  {
+    "id": "01a06f75-c56e-7db0-b4c7-79f64df79c99",
+    "role": "direct",
+    "source": "exec",
+    "session_file": "/Users/jeremymcspadden/Library/Application Support/orca/codex-accounts/86df0dc7-3078-4314-8766-60e244dd9765/home/sessions/2026/09/04/rollout-2026-09-04T21-46-24-01a06f75-c56e-7db0-b4c7-79f64df79c99.jsonl",
+    "last_usage": {
+      "input_tokens": 279018,
+      "cached_input_tokens": 253824,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 3000,
+      "reasoning_output_tokens": 289,
+      "total_tokens": 282018
+    },
+    "task_started": [
+      "2026-09-05T02:46:24.510Z"
+    ],
+    "last_task_complete": "2026-09-05T02:48:21.084Z",
+    "usage": {
+      "input_tokens": 279018,
+      "cached_input_tokens": 253824,
+      "output_tokens": 3000,
+      "reasoning_output_tokens": 289
+    },
+    "usage_source": "sum of completed CLI run usage; last session counter is not the full resumed run"
+  },
+  {
+    "id": "01a06f91-4e59-7b53-819d-ab2f711f4332",
+    "role": "/root/review_final",
+    "source": {
+      "subagent": {
+        "thread_spawn": {
+          "parent_thread_id": "01a06f75-c56d-7db1-9a01-197e53ba0988",
+          "depth": 1,
+          "agent_path": "/root/review_final",
+          "agent_nickname": "Descartes",
+          "agent_role": null
+        }
+      }
+    },
+    "session_file": "/Users/jeremymcspadden/Library/Application Support/orca/codex-accounts/86df0dc7-3078-4314-8766-60e244dd9765/home/sessions/2026/09/04/rollout-2026-09-04T22-16-28-01a06f91-4e59-7b53-819d-ab2f711f4332.jsonl",
+    "last_usage": {
+      "input_tokens": 414752,
+      "cached_input_tokens": 384896,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 3384,
+      "reasoning_output_tokens": 81,
+      "total_tokens": 418136
+    },
+    "task_started": [
+      "2026-09-05T03:16:29.024Z"
+    ],
+    "last_task_complete": "2026-09-05T03:18:32.703Z",
+    "usage": {
+      "input_tokens": 414752,
+      "cached_input_tokens": 384896,
+      "output_tokens": 3384,
+      "reasoning_output_tokens": 81
+    },
+    "usage_source": "last cumulative native child session counter"
+  },
+  {
+    "id": "01a06f8d-829f-7582-9770-8d516f5ba9e6",
+    "role": "/root/review_wave_1_cycle_1",
+    "source": {
+      "subagent": {
+        "thread_spawn": {
+          "parent_thread_id": "01a06f75-c56d-7db1-9a01-197e53ba0988",
+          "depth": 1,
+          "agent_path": "/root/review_wave_1_cycle_1",
+          "agent_nickname": "Bernoulli",
+          "agent_role": null
+        }
+      }
+    },
+    "session_file": "/Users/jeremymcspadden/Library/Application Support/orca/codex-accounts/86df0dc7-3078-4314-8766-60e244dd9765/home/sessions/2026/09/04/rollout-2026-09-04T22-12-20-01a06f8d-829f-7582-9770-8d516f5ba9e6.jsonl",
+    "last_usage": {
+      "input_tokens": 308898,
+      "cached_input_tokens": 279936,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 3352,
+      "reasoning_output_tokens": 99,
+      "total_tokens": 312250
+    },
+    "task_started": [
+      "2026-09-05T03:12:20.234Z"
+    ],
+    "last_task_complete": "2026-09-05T03:14:15.813Z",
+    "usage": {
+      "input_tokens": 308898,
+      "cached_input_tokens": 279936,
+      "output_tokens": 3352,
+      "reasoning_output_tokens": 99
+    },
+    "usage_source": "last cumulative native child session counter"
+  },
+  {
+    "id": "01a06f7e-cb2d-7d83-8805-5b1618824ad6",
+    "role": "/root/research_pitfalls",
+    "source": {
+      "subagent": {
+        "thread_spawn": {
+          "parent_thread_id": "01a06f75-c56d-7db1-9a01-197e53ba0988",
+          "depth": 1,
+          "agent_path": "/root/research_pitfalls",
+          "agent_nickname": "Fermat",
+          "agent_role": null
+        }
+      }
+    },
+    "session_file": "/Users/jeremymcspadden/Library/Application Support/orca/codex-accounts/86df0dc7-3078-4314-8766-60e244dd9765/home/sessions/2026/09/04/rollout-2026-09-04T21-56-15-01a06f7e-cb2d-7d83-8805-5b1618824ad6.jsonl",
+    "last_usage": {
+      "input_tokens": 632331,
+      "cached_input_tokens": 587776,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 3260,
+      "reasoning_output_tokens": 254,
+      "total_tokens": 635591
+    },
+    "task_started": [
+      "2026-09-05T02:56:15.774Z",
+      "2026-09-05T02:58:37.225Z"
+    ],
+    "last_task_complete": "2026-09-05T02:59:02.916Z",
+    "usage": {
+      "input_tokens": 632331,
+      "cached_input_tokens": 587776,
+      "output_tokens": 3260,
+      "reasoning_output_tokens": 254
+    },
+    "usage_source": "last cumulative native child session counter"
+  },
+  {
+    "id": "01a06f75-c56d-7db1-9a01-197e53ba0988",
+    "role": "path-orchestrator",
+    "source": "exec",
+    "session_file": "/Users/jeremymcspadden/Library/Application Support/orca/codex-accounts/86df0dc7-3078-4314-8766-60e244dd9765/home/sessions/2026/09/04/rollout-2026-09-04T21-46-24-01a06f75-c56d-7db1-9a01-197e53ba0988.jsonl",
+    "last_usage": {
+      "input_tokens": 7972892,
+      "cached_input_tokens": 7914368,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 14760,
+      "reasoning_output_tokens": 3630,
+      "total_tokens": 7987652
+    },
+    "task_started": [
+      "2026-09-05T02:46:24.515Z",
+      "2026-09-05T02:53:59.749Z",
+      "2026-09-05T03:04:38.083Z",
+      "2026-09-05T03:07:36.017Z"
+    ],
+    "last_task_complete": "2026-09-05T03:20:56.584Z",
+    "usage": {
+      "input_tokens": 15187466,
+      "cached_input_tokens": 14991360,
+      "output_tokens": 34147,
+      "reasoning_output_tokens": 6575
+    },
+    "usage_source": "sum of completed CLI run usage; last session counter is not the full resumed run"
+  },
+  {
+    "id": "01a06f83-7b50-7d70-8f57-f48b7fbfb51c",
+    "role": "/root/plan",
+    "source": {
+      "subagent": {
+        "thread_spawn": {
+          "parent_thread_id": "01a06f75-c56d-7db1-9a01-197e53ba0988",
+          "depth": 1,
+          "agent_path": "/root/plan",
+          "agent_nickname": "Mendel",
+          "agent_role": null
+        }
+      }
+    },
+    "session_file": "/Users/jeremymcspadden/Library/Application Support/orca/codex-accounts/86df0dc7-3078-4314-8766-60e244dd9765/home/sessions/2026/09/04/rollout-2026-09-04T22-01-22-01a06f83-7b50-7d70-8f57-f48b7fbfb51c.jsonl",
+    "last_usage": {
+      "input_tokens": 345592,
+      "cached_input_tokens": 308480,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 3080,
+      "reasoning_output_tokens": 58,
+      "total_tokens": 348672
+    },
+    "task_started": [
+      "2026-09-05T03:01:22.984Z"
+    ],
+    "last_task_complete": "2026-09-05T03:03:20.942Z",
+    "usage": {
+      "input_tokens": 345592,
+      "cached_input_tokens": 308480,
+      "output_tokens": 3080,
+      "reasoning_output_tokens": 58
+    },
+    "usage_source": "last cumulative native child session counter"
+  },
+  {
+    "id": "01a06f76-ff4d-7c83-968c-5c1118ffca7b",
+    "role": "/root/inspect_codebase",
+    "source": {
+      "subagent": {
+        "thread_spawn": {
+          "parent_thread_id": "01a06f75-c56d-7db1-9a01-197e53ba0988",
+          "depth": 1,
+          "agent_path": "/root/inspect_codebase",
+          "agent_nickname": "Lorentz",
+          "agent_role": null
+        }
+      }
+    },
+    "session_file": "/Users/jeremymcspadden/Library/Application Support/orca/codex-accounts/86df0dc7-3078-4314-8766-60e244dd9765/home/sessions/2026/09/04/rollout-2026-09-04T21-47-44-01a06f76-ff4d-7c83-968c-5c1118ffca7b.jsonl",
+    "last_usage": {
+      "input_tokens": 326063,
+      "cached_input_tokens": 290560,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 3717,
+      "reasoning_output_tokens": 125,
+      "total_tokens": 329780
+    },
+    "task_started": [
+      "2026-09-05T02:47:44.823Z"
+    ],
+    "last_task_complete": "2026-09-05T02:49:58.812Z",
+    "usage": {
+      "input_tokens": 326063,
+      "cached_input_tokens": 290560,
+      "output_tokens": 3717,
+      "reasoning_output_tokens": 125
+    },
+    "usage_source": "last cumulative native child session counter"
+  }
+]

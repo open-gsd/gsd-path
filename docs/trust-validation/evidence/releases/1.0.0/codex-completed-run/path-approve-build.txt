@@ -1,0 +1,5 @@
+$gsd-path
+
+Parent evaluator approval under the user-authorized fixture run: I read .project/plan/PLAN.md and .project/tasks/T001-cli-json.md. Approve the plan and start build. The task owns count.py and tests/test_count.py, covers SC1–SC5, and separates focused task Verify from project Verify at ship. Record evaluator provenance, not a new human approval. Continue the router through build, required review, and direct integration to the existing local origin when its gates pass. Stop only for a new required owner decision or a blocking failure needing a ruling.
+
+Keep every phase/helper/child pinned to /Users/jeremymcspadden/orca/evaluations/gsd-path-astra-a84bb28/path/repo/.agents/skills/gsd-path*. Preserve requirements, budgets, measured activity instructions, and the ban on inspecting evaluator tests or the direct arm. Do not alter installed plugin source. Preserve actual Verify output, native child records, landing, final review, archive and integration evidence for the evaluation.

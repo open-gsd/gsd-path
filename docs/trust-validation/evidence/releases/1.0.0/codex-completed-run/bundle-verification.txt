@@ -1,0 +1,12 @@
+The bundle contains these 8 refs:
+ab349821e7df6ab859879084c5bc4a51a0c03a81 refs/heads/gsd-path/M001
+f1d2b5b4ecb8fd6d2047c9f53157d6494eaffda4 refs/heads/main
+3ad456b25a3fc8a36c4a17c09843a2bb951b2654 refs/remotes/origin/HEAD
+ab349821e7df6ab859879084c5bc4a51a0c03a81 refs/remotes/origin/gsd-path/M001
+3ad456b25a3fc8a36c4a17c09843a2bb951b2654 refs/remotes/origin/main
+97ef0500d95179d4313c231318e0fd01d9bc50bb refs/remotes/origin/tags/milestone/001-widget-counter-cli
+97ef0500d95179d4313c231318e0fd01d9bc50bb refs/tags/milestone/001-widget-counter-cli
+ab349821e7df6ab859879084c5bc4a51a0c03a81 HEAD
+The bundle records a complete history.
+The bundle uses this hash algorithm: sha1
+/Users/jeremymcspadden/orca/evaluations/gsd-path-astra-a84bb28/fixture.bundle is okay

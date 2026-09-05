@@ -1,0 +1,5 @@
+$gsd-path
+
+Parent evaluator approval under the user-authorized fixture run: I read .project/intent/INTENT.md. Approve the intent, including rejection of extra counts and unknown options. It matches the requested CLI contract. Record this as evaluator approval, not a new human receipt. Continue the active router to the next reviewable approval gate.
+
+Keep the candidate pinned to /Users/jeremymcspadden/orca/evaluations/gsd-path-astra-a84bb28/path/repo/.agents/skills/gsd-path* for all phases, helpers, and children. Preserve the original requirements, budgets, and measured activity instructions. Do not read the evaluator acceptance tests or the direct arm.

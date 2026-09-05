@@ -1,0 +1,5 @@
+$gsd-path
+
+Evaluator ruling under the user-authorized fixture run: I read .project/build/PREFLIGHT.md. Approve the root-level test_count.py path correction and its exact proposed task Verify (python3 -B test_count.py -v) and Project verify (python3 -B -m unittest discover -s . -p 'test_count.py' -v). Update the pending task and plan consistently, retain SC1–SC5 and every constraint, re-gate and checkpoint through canonical helpers before dispatch. Record this ruling as evaluator provenance, not a new human receipt. Continue build through review and direct integration when gates pass.
+
+Keep the fixture local .agents/skills/gsd-path* candidate pinned. Do not change installed plugin source or inspect evaluator acceptance tests or the direct arm. Preserve original budgets and measurement instructions, and all preflight failure evidence.
