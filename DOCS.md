@@ -334,3 +334,5 @@ initializer. After a milestone ships, the next one inspects again.
 | Phase blocked | [FULL.md](FULL.md) troubleshooting |
 | Archive commit blocked | [HOOKS.md](HOOKS.md) |
 | Installer flags | `node scripts/install.mjs --help` |
+
+[Workflow runner and observed token budgets](RUNTIME.md) documents canonical gate receipts, serial verification preparation, and host budget limits.

@@ -168,7 +168,7 @@ class TaskBriefTests(unittest.TestCase):
             self.assertEqual(exit_code, 1)
             self.assertIn("T001: forbidden frontmatter field: commit", stderr)
 
-    def test_declared_file_with_missing_parent_directory_fails(self) -> None:
+    def test_declared_file_with_new_parent_directory_passes(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             self.init_repo(root)
@@ -181,9 +181,26 @@ class TaskBriefTests(unittest.TestCase):
 
             exit_code, _stdout, stderr = self.lint(root, base)
 
-            self.assertEqual(exit_code, 1)
-            self.assertIn("T003", stderr)
-            self.assertIn("newpkg", stderr)
+            self.assertEqual(exit_code, 0, stderr)
+            self.assertFalse((root / "newpkg").exists())
+
+    def test_new_path_rejects_non_directory_ancestors(self) -> None:
+        for kind in ("file", "symlink", "git"):
+            with self.subTest(kind=kind), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                self.init_repo(root)
+                parent = root / "obstacle"
+                if kind == "file":
+                    parent.write_text("not a directory")
+                elif kind == "symlink":
+                    parent.symlink_to("src", target_is_directory=True)
+                base = self.commit(root)
+                path = ".git/new/file.py" if kind == "git" else "obstacle/file.py"
+                self.write_task(root, "T001", files=(path,), contract="- None",
+                                context="Create the owned file.", verify="python3 " + path)
+                result, _, error = self.lint(root, base)
+                self.assertEqual(result, 1)
+                self.assertIn(path, error)
 
     def test_hallucinated_prose_path_in_context_fails(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -410,10 +427,9 @@ class TaskBriefTests(unittest.TestCase):
             root = Path(directory)
             self.init_repo(root)
             self.write_happy_tasks(root)
-            # Quoting a missing path must still be caught: quotes are
-            # stripped before the layer-base existence check.
+            # Quoting must not disguise an unsafe path.
             self.write_task(
-                root, "T003", files=('"newpkg/mod.py"',), contract="- None",
+                root, "T003", files=('"../outside.py"',), contract="- None",
                 context="The task adds a module.",
             )
             base = self.commit(root)
@@ -421,7 +437,7 @@ class TaskBriefTests(unittest.TestCase):
             exit_code, _stdout, stderr = self.lint(root, base)
 
             self.assertEqual(exit_code, 1)
-            self.assertIn("newpkg/mod.py has no parent directory newpkg", stderr)
+            self.assertIn("must not contain", stderr)
 
     def test_frontmatter_preserves_hashes_inside_quoted_values(self) -> None:
         fields, error = check_task_briefs._frontmatter(

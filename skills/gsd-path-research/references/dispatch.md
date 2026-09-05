@@ -112,3 +112,20 @@ For every branch:
 - If the tool schema is ambiguous or the required full-capability child is
   unavailable, stop and report the missing capability. Do not guess the host
   or silently collapse an independence boundary into the main context.
+
+## Configured output budgets
+
+When the owner supplies token budgets, use the router bundle's
+`scripts/token_budget.py` with the owner's exact task and session values and
+quoted authority. Keep one ledger outside the worktree under the Git common
+directory for the full logical session; resumptions reuse it. Record completed
+parent CLI run events and each native child's session events with stable logical
+task names before the next dispatch. The helper reads host counters and refuses
+incomplete or ambiguous usage; never estimate tokens or reset the ledger.
+Run `admit` for the next task and stop dispatch on a blocked result. Preserve
+its output in the dispatch evidence. This gates observed usage only: concurrent
+or in-flight work can overrun before the host reports usage. Codex CLI has no
+advertised hard output cap; report that limitation once. If the owner requires
+hard generation enforcement, use `admit --require-hard-cap`; unsupported means
+blocked, not budget compliance. Other hosts require a verified native counter
+and cap adapter before any enforcement claim.

@@ -209,6 +209,22 @@ class InstallerTests(unittest.TestCase):
         with mock.patch.object(install.subprocess, "run", side_effect=probe):
             self.assertIsNone(install._detect_python_interpreter())
 
+    def test_packaged_approval_validates_new_paths(self):
+        from tests.test_pipeline_state import PipelineStateTests
+        fixture = PipelineStateTests()
+        repo, head = fixture._approval_repo(str(self.root), "plan")
+        runtime = self.root / "runtime"
+        runtime.mkdir()
+        for name in install.PROJECT_RUNTIME_SCRIPTS:
+            shutil.copy2(PROJECT_ROOT / "scripts" / name, runtime / name)
+        result = subprocess.run(
+            [sys.executable, "-B", str(runtime / "pipeline_state.py"), "approve",
+             "--repo", str(repo), "--kind", "plan", "--expected-head", head],
+            cwd=repo, capture_output=True, text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout)["status"], "approved")
+
     def test_project_runtime_dependency_set_imports(self):
         project = self.root / "runtime-project"
         runtime = project / install.HOOKS_DIRECTORY / "runtime"

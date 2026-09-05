@@ -249,10 +249,12 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
    before creating any worktree; a lint or coverage failure is a documented plan
    defect — repair it against INTENT.md and SYNTHESIS.md, then re-establish
    the base. Then isolate each ready task with
-   `python3 <absolute isolation.py> isolate-task --repo <absolute primary>
-   --base <recorded base> --task-id <id> --round-size <N>` where N is the
+   `python3 <absolute workflow_run.py> prepare-task --repo <absolute primary>
+   --expected-head <recorded base> --task-id <id> --round-size <N>` where N is the
    number of tasks in this dispatch round. Serial (`N=1`) returns the primary
    worktree and `task_branch: null` — the coder works on the bound branch.
+   The runner also creates a named verification sidecar at this clean base
+   before dispatch. Retain both helper results in the dispatch evidence.
    Parallel (`N>=2`) creates a named `gsd-path-task/<id>` branch and linked
    worktree at that base; never a detached HEAD. Record dispatch through
    `python3 <absolute isolation.py> activate-task --repo <returned worktree>
@@ -292,6 +294,12 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
      declared `files` plus append-only Log changes in that task file. Include
      additions, deletions, renames, and binary changes; an unexpected path
      blocks before any product commit.
+   - For serial work, reproduce the validated complete task patch, including
+     untracked additions, in the pre-created verification sidecar. Keep the
+     primary patch intact. Check its product diff against the primary task
+     diff before verifying; retire the sidecar through `isolation.py retire`
+     after preserving its evidence and removing only those reproduced changes.
+     Parallel work uses the task's existing isolated worktree.
    - Run the task's Verify command in that isolated worktree. This rerun is the
      authoritative task evidence; a command run in the primary or a sibling
      worktree never counts. Append its exact result to the task Log. After
@@ -538,8 +546,9 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
 ## Completion
 
 After every wave passes, record exact full HEAD and prove every task landed
-with `python3 <absolute build_state.py> verify-landed --repo <absolute primary>
---project-dir <absolute .project> --head <HEAD>`; it must return one
+with `python3 <absolute workflow_run.py> build-evidence --repo <absolute primary>
+--expected-head <HEAD>`; retain its JSON receipt. The wrapped `verify-landed`
+result must return one
 `proven-landed` or `attested` evidence entry per task, and any non-zero exit
 blocks completion. A `done` task without landing proof follows the `block`
 handling in step 1 above (owner ruling, Verify, `verify-record`, `attest`).

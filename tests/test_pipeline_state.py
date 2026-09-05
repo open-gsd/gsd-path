@@ -10,6 +10,7 @@ from pathlib import Path
 from unittest import mock
 
 from scripts import pipeline_git, pipeline_state, state_checkpoint, state_promote
+from tests.test_task_briefs import TASK_TEMPLATE
 
 
 def run_git(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -81,22 +82,10 @@ def roadmap_text() -> str:
 
 
 def task_text() -> str:
-    return (
-        "---\n"
-        "id: T002\n"
-        "title: Change app\n"
-        "wave: 1\n"
-        "deps: []\n"
-        "status: pending\n"
-        "agent: null\n"
-        "commit: null\n"
-        "base: null\n"
-        "worktree: null\n"
-        "task_branch: null\n"
-        "files:\n"
-        "  - app.py\n"
-        "---\n\n"
-        "# T002 — Change app\n"
+    return TASK_TEMPLATE.format(
+        task_id="T002", files_block="  - app.py", context="Change the app.",
+        approach="Implement the approved behavior.", contract="- None",
+        verify="python3 app.py",
     )
 
 
@@ -1385,6 +1374,14 @@ class PipelineStateTests(unittest.TestCase):
         run_git(repo, "commit", "-m", "fixture: approval base")
         expected_head = run_git(repo, "rev-parse", "HEAD").stdout.strip()
         if kind == "plan":
+            (project / "tasks").mkdir()
+            (project / "tasks" / "T001-new.md").write_text(
+                TASK_TEMPLATE.format(
+                    task_id="T001", files_block="  - newpkg/app.py",
+                    context="Create the requested module.", approach="Implement the module.",
+                    contract="- None", verify="python3 newpkg/app.py",
+                ), encoding="utf-8",
+            )
             (project / "plan").mkdir()
             (project / "plan" / "PLAN.md").write_text(
                 "# Plan — first\n",
@@ -1523,6 +1520,23 @@ class PipelineStateTests(unittest.TestCase):
                 (state.phase, state.status, state.milestone, state.branch),
                 ("inspect", "active", "second", "gsd-path/M001"),
             )
+
+    def test_plan_approval_rejects_invalid_brief_before_state_or_commit(self) -> None:
+        for patch in (False, True):
+            with self.subTest(patch=patch), tempfile.TemporaryDirectory() as tmp:
+                repo, head = self._approval_repo(tmp, "plan")
+                task = repo / ".project/tasks/T001-new.md"
+                task.write_text(task.read_text().replace("newpkg/app.py", "../outside.py"))
+                state = repo / ".project/STATE.md"
+                before = state.read_bytes()
+                with self.assertRaisesRegex(pipeline_state.PipelineStateError, "task brief.*validation|must not contain"):
+                    if patch:
+                        pipeline_state.defer_approval(repo, "plan", patch=True)
+                    else:
+                        pipeline_state.checkpoint_approval(repo, "plan", head)
+                self.assertEqual(before, state.read_bytes())
+                self.assertEqual(head, run_git(repo, "rev-parse", "HEAD").stdout.strip())
+                self.assertFalse(pipeline_state._git_path(repo, pipeline_state.CHECKPOINT_JOURNAL_NAME).exists())
 
     def test_plan_approval_owns_state_change_and_checkpoint(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

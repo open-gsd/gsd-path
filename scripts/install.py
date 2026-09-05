@@ -48,6 +48,7 @@ GUARD_MARKER = "gsd-path guard"
 PROJECT_RUNTIME_SCRIPTS = (
     "pipeline_state.py",
     "check_handoffs.py",
+    "check_task_briefs.py",
     "isolation.py",
     "discussion_records.py",
     "pipeline_git.py",

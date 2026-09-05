@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# gsd-path project runtime
 """Lint build task briefs against the layer base before dispatch."""
 
 import argparse
@@ -206,13 +207,20 @@ def _lint_task(repo: Path, base: str, path: Path) -> Tuple[str, List[str], Optio
                 continue
             normalized = str(candidate)
             declared.add(normalized)
-            parent = str(candidate.parent)
             checked += 1
-            if parent != "." and not _base_exists(repo, base, parent):
-                problems.append(
-                    f"files entry {normalized} has no parent directory {parent} "
-                    "at the layer base"
-                )
+            if ".git" in candidate.parts:
+                problems.append(f"files entry must not enter .git: {normalized}")
+                continue
+            for parent in candidate.parents:
+                if str(parent) == ".":
+                    break
+                kind = _run_git(repo, "cat-file", "-t", f"{base}:{parent}")
+                if kind.returncode == 0 and kind.stdout.strip() != "tree":
+                    problems.append(
+                        f"files entry {normalized} has non-directory ancestor "
+                        f"{parent} at the layer base"
+                    )
+                    break
 
     for name in PROSE_SECTIONS:
         body = sections.get(name)
