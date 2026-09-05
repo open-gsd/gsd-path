@@ -1,5 +1,46 @@
 # Code versus verification and recovery cost
 
+## Owner objective
+
+Owner correction, verbatim:
+
+> im not focused so much on token reduction - as i am on spins. the actual code being generated is too small when compared to the verification work + files. If we get that fixed, the token count would naturalyl follow with less usage
+
+The primary target is less orchestration, repeated verification, and artifact
+handling per completed requested outcome. Token usage is a secondary measurement.
+Do not increase code volume, enlarge scope, or add work to improve a ratio.
+
+The latest fixture already used one task for the whole CLI deliverable. At the
+ship commit it has 12 lines in count.py, 64 lines in test_count.py, and 16 tracked
+pipeline artifact files under .project (including recovery artifacts, excluding
+installed plugin bundles and external evaluator reports). These counts describe
+the observed workload; they are not targets or acceptance thresholds.
+
+### Direction for the next implementation
+
+- Move the remaining deterministic verification and closeout sequencing into
+  the runtime. workflow_run.py currently covers plan gates, preparation, and
+  landing evidence; the ship skill still asks the model to coordinate helper
+  calls, sidecars, collection, evidence records, and archive steps individually.
+- Keep one authoritative record for a verification result and reference it from
+  later gates. Generate metadata and required report formatting from checked
+  data so agents supply judgment rather than duplicate evidence or invent paths.
+- Review the quick lane's required artifact set with its consumers. Consolidate
+  redundant records through an explicit contract change; do not silently delete
+  required artifacts or replace proof with shorter prose.
+- Reject invalid paths and metadata before they enter an archive transaction.
+  Normal interruption recovery must not require another implementation/review
+  cycle to repair paperwork.
+- Keep task verification, wave review, and final review requirements until their
+  governing contracts change. Show a reduction in repeated dispatches, repeated
+  checks, evidence rewriting, and recovery cycles while proving the same outcome.
+
+This records the corrected objective and the observed implementation seam. It
+does not claim these next source changes have been implemented. Existing passing
+product checks do not prove that workflow overhead is fixed.
+
+## Measurement correction
+
 The user corrected the evaluation focus: total tokens did not explain the time
 spent spinning through verification compared with writing code. The stage-level
 comparison supports that concern. This is an observed comparison of two completed
