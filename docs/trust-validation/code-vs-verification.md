@@ -1,4 +1,4 @@
-# Code versus verification and recovery cost
+# Code versus verification and recovery work
 
 ## Owner objective
 
@@ -6,101 +6,93 @@ Owner correction, verbatim:
 
 > im not focused so much on token reduction - as i am on spins. the actual code being generated is too small when compared to the verification work + files. If we get that fixed, the token count would naturalyl follow with less usage
 
-The primary target is less orchestration, repeated verification, and artifact
-handling per completed requested outcome. Token usage is a secondary measurement.
-Do not increase code volume, enlarge scope, or add work to improve a ratio.
+The target is less orchestration, repeated verification, and report writing per
+completed outcome. Product scope and line counts must not grow to improve a ratio.
+No numeric code-to-verification target or new limit is inferred.
 
-The latest fixture already used one task for the whole CLI deliverable. At the
-ship commit it has 12 lines in count.py, 64 lines in test_count.py, and 16 tracked
-pipeline artifact files under .project (including recovery artifacts, excluding
-installed plugin bundles and external evaluator reports). These counts describe
-the observed workload; they are not targets or acceptance thresholds.
+## Implemented and exercised
 
-### Direction for the next implementation
+Candidate `62f5e0f26ba2ab600494785b54d56fa92c06a5a5` reuses a complete quick-lane
+full-wave review for final scope when Git proves unchanged product and contracts.
+The reviewer records required walkthroughs once. The runtime generates FINAL.md
+from that evidence instead of dispatching another model to review and rewrite it.
+Multiple waves, other review depths, missing evidence, or changed inputs retain
+fresh final review.
 
-- Move the remaining deterministic verification and closeout sequencing into
-  the runtime. workflow_run.py currently covers plan gates, preparation, and
-  landing evidence; the ship skill still asks the model to coordinate helper
-  calls, sidecars, collection, evidence records, and archive steps individually.
-- Keep one authoritative record for a verification result and reference it from
-  later gates. Generate metadata and required report formatting from checked
-  data so agents supply judgment rather than duplicate evidence or invent paths.
-- Review the quick lane's required artifact set with its consumers. Consolidate
-  redundant records through an explicit contract change; do not silently delete
-  required artifacts or replace proof with shorter prose.
-- Reject invalid paths and metadata before they enter an archive transaction.
-  Normal interruption recovery must not require another implementation/review
-  cycle to repair paperwork.
-- Keep task verification, wave review, and final review requirements until their
-  governing contracts change. Show a reduction in repeated dispatches, repeated
-  checks, evidence rewriting, and recovery cycles while proving the same outcome.
+The ship runtime owns project Verify isolation, execution, output recording,
+collection, and cleanup. Exact stdout/stderr live once in the existing ledger;
+the project gap references that receipt. A retry rebuilds the view and retires an
+interrupted sidecar without rerunning the command. Dirty inputs are rejected.
+Legacy entries without exact output require reconciliation, not a blind rerun.
+Duplicate Reviewed HEAD metadata is rejected before archive entry.
 
-This records the corrected objective and the observed implementation seam. It
-does not claim these next source changes have been implemented. Existing passing
-product checks do not prove that workflow overhead is fixed.
+The fresh native quick-lane E2E completed with one coder, one full-wave reviewer,
+no separate final reviewer, one project Verify execution, no post-coding metadata
+repair, and no archive recovery. Canonical archive/integration validation passed;
+the local integration is `459e4cb6b6ec72d3bd8dfa0918d87935b8ce6034`, tagged
+`milestone/001-widget-counter`. All six external CLI checks passed. The primary
+is clean, all sidecars are retired, and the pinned installed plugin is unchanged.
 
-## Measurement correction
+## Observed comparison
 
-The user corrected the evaluation focus: total tokens did not explain the time
-spent spinning through verification compared with writing code. The stage-level
-comparison supports that concern. This is an observed comparison of two completed
-runs, not a controlled experiment: the earlier run used standard lane, the latest
-used quick lane and needed additional authorized recovery.
+| Measure | Previous quick run, 50718f8 | Lean quick run, 62f5e0f |
+|---|---:|---:|
+| Coder time, including its tests | 2.89 min | 2.09 min |
+| Reviewer time | 6.73 min | 2.62 min |
+| Active workflow after coder handoff | 25.62 min | 7.43 min |
+| Total native CLI execution | 38.47 min | 25.51 min |
+| Full-wave reviewer invocations | 1 | 1 |
+| Separate final-review invocations | 2 | 0 |
+| Project Verify executions | 2 | 1 |
+| Tracked pipeline artifact files | 16 | 15 |
+| Product / product-test lines | 12 / 64 | 12 / 66 |
+| Coder output tokens | 4,226 | 2,860 |
+| Reviewer output tokens | 9,787 | 4,232 |
+| Parent output tokens | 34,553 | 25,355 |
+| Total output tokens | 54,636 | 38,848 |
 
-## Observed change
+Reviewer time fell 61.1%; active work after coding fell 71.0%. In the new run,
+reviewer time is 1.26 times coder time; all post-coding work is 3.56 times coder
+time, down from 8.86. These are observations, not acceptance targets. The product
+remained 12 lines; the change did not inflate code volume to improve the ratio.
 
-| Measure | Earlier completed run | Latest completed run | Change |
-|---|---:|---:|---:|
-| Coder task time, including its own tests | 2.10 min | 2.89 min | +37.4% |
-| Active workflow time after coder handoff | 9.91 min | 25.62 min | +158.5% |
-| Reviewer task time | 3.99 min | 6.73 min | +68.7% |
-| Total native CLI execution time | 32.94 min | 38.47 min | +16.8% |
-| Coder output tokens, including tests | 3,222 | 4,226 | +31.2% |
-| Wave and final reviewer output tokens | 6,736 | 9,787 | +45.3% |
-| Parent orchestration output tokens | 34,147 | 34,553 | +1.2% |
-| Recorded total output tokens | 61,294 | 54,636 | -10.9% |
-
-Reviewer time is part of the workflow after handoff; do not add these rows.
-After-handoff workflow includes isolated verification, review, orchestration,
-recovery, archive, and integration. It excludes time waiting between native CLI
-invocations, including owner approvals. It is not a measurement of tests alone.
-Parent costs mix phases and must not all be labeled verification.
-
-In the latest run, active work after coding took 8.86 times the coder task time.
-In the earlier run it took 4.71 times. The implementation was already correct;
-shipping instruction, bookkeeping, and metadata recovery failures prolonged the
-workflow. A bookkeeping correction changed the reviewed commit and required a
-second project verification and final review. The reviewer evidence records two
-final-review invocations in the latest run versus one in the earlier run.
-
-The previous total-token answer was incomplete: fewer total tokens did not mean
-less verification overhead or faster delivery. This run does not demonstrate an
-improvement in the user's code-versus-verification efficiency concern.
+The main reduction is model work: three review invocations became one, and the
+final and project-gap views required no model authoring. Required views still
+exist on disk; this did not eliminate the pipeline's artifact structure. The new
+run also retained plan gate and transition receipts. File count alone does not
+measure avoided review and report-writing work.
 
 ## Method and limits
 
-Native `task_started` and `task_complete` timestamps define coder and reviewer
-intervals. Each task turn's final cumulative output counter supplies its tokens;
-a reused reviewer thread is counted once per invocation. After-handoff time is
-the intersection of completed parent CLI run intervals with time after the coder
-finished. This excludes between-run pauses and avoids summing overlapping parent
-and child time. Total CLI time is the sum of the measured run durations.
+Both quick runs use the same widget-counter requirements, Codex CLI 0.153.4,
+gpt-6-astra/high, full review, no panel, and direct integration to a local origin.
+The old run needed explicit recovery and a second final review/project Verify
+following a bookkeeping correction. The new run did not. This is one observed
+comparison, not a controlled timing estimate or a claim that every run saves 71%.
 
-Coder time includes implementation, tests, and task logging. It does not isolate
-pure code generation. Review time includes the reviewer's reads, judgment,
-walkthroughs, and writing. A precise token split for the parent's individual
-verification and recovery steps was not captured. Caller-declared shell activity
-categories measure subprocess duration and omit model and coordination time, so
-those totals cannot stand in for workflow cost.
+The new run still had pre-coding overhead: an interrupted global-skill selection
+(53.85 seconds, included in total execution), two rejected transition event
+arguments followed by diagnostics, a documentation-audit check with the wrong
+repository root, and an owner ruling on unrelated installed documentation links. These remain visible in the evidence. This change targets
+verification after coding; it does not remove inspection and planning overhead.
 
-The useful measures for future controlled comparisons are coder time/tokens,
-authoritative verification execution, review time/tokens, recovery time/tokens,
-and time from coder handoff to validated integration. Fixed acceptance criteria
-and separately reported recoveries are needed to attribute savings to changes.
-No new limits or acceptance thresholds are proposed.
+Native task_started/task_complete timestamps define coder and reviewer intervals.
+Each turn's final output counter supplies tokens, including already-counted
+reasoning without adding it again. Active work after handoff intersects completed
+parent CLI intervals with time after the coder finished; it excludes between-run
+approval pauses. Reviewer time overlaps parent time and must not be added to it.
+Coder time includes tests and logging. Neither interval isolates pure code
+sampling or pure command execution. External evaluator checks are separate from
+the native delivery cost.
+
+The earlier completed standard-lane run took 2.10 minutes of coder time, 3.99
+minutes of reviewer time, 9.91 active minutes after handoff, and 32.94 total CLI
+minutes. Different lanes and recoveries limit causal comparisons with that run.
 
 ## Evidence
 
-- [Per-turn timestamps, counters, and calculations](evidence/releases/1.0.0/codex-e2e-50718f8/code-vs-verification.json)
-- [Earlier completed run](evidence/releases/1.0.0/codex-completed-run.md)
-- [Latest completed run and recovery](e2e-50718f8.md)
+- [New run: timestamps, counters, runtime reuse, product checks, and integration receipt](evidence/releases/1.0.0/lean-verification-e2e.json)
+- [Behavioral sabotage results](evidence/releases/1.0.0/lean-verification-sabotage.json)
+- [Implementation and regression proof](runtime-followup.md)
+- [Previous quick run and recovery](e2e-50718f8.md)
+- [Earlier per-turn comparison](evidence/releases/1.0.0/codex-e2e-50718f8/code-vs-verification.json)

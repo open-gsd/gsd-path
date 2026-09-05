@@ -1,0 +1,261 @@
+{
+  "candidate": "62f5e0f26ba2ab600494785b54d56fa92c06a5a5",
+  "parent_thread": "01a0729e-8e86-7f52-91e5-70716ca22574",
+  "external_root": "/Users/jeremymcspadden/orca/evaluations/gsd-path-lean-62f5e0f",
+  "product": {
+    "verdict": "pass",
+    "checks": [
+      {
+        "arguments": [],
+        "pass": true,
+        "exit_code": 0,
+        "stdout": "0 widgets\n",
+        "stderr": ""
+      },
+      {
+        "arguments": [
+          "3"
+        ],
+        "pass": true,
+        "exit_code": 0,
+        "stdout": "3 widgets\n",
+        "stderr": ""
+      },
+      {
+        "arguments": [
+          "--json"
+        ],
+        "pass": true,
+        "exit_code": 0,
+        "stdout": "{\"widgets\": 0}\n",
+        "stderr": ""
+      },
+      {
+        "arguments": [
+          "3",
+          "--json"
+        ],
+        "pass": true,
+        "exit_code": 0,
+        "stdout": "{\"widgets\": 3}\n",
+        "stderr": ""
+      },
+      {
+        "arguments": [
+          "--json",
+          "-2"
+        ],
+        "pass": true,
+        "exit_code": 0,
+        "stdout": "{\"widgets\": -2}\n",
+        "stderr": ""
+      },
+      {
+        "arguments": [
+          "invalid"
+        ],
+        "pass": true,
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "usage: count.py [-h] [--json] [count]\ncount.py: error: argument count: invalid int value: 'invalid'\n"
+      }
+    ]
+  },
+  "integration": {
+    "archive": ".project/archive/001-widget-counter",
+    "base": "459e4cb6b6ec72d3bd8dfa0918d87935b8ce6034",
+    "commit": "5f0d07feb0d585c7f390124a430a42299fc9ecdb",
+    "integrate": "459e4cb6b6ec72d3bd8dfa0918d87935b8ce6034",
+    "landing": "459e4cb6b6ec72d3bd8dfa0918d87935b8ce6034",
+    "mode": "direct",
+    "tag": "milestone/001-widget-counter"
+  },
+  "integration_command": {
+    "command": "/bin/zsh -lc 'python3 /Users/jeremymcspadden/orca/evaluations/gsd-path-lean-62f5e0f/plugin/tests/evaluate_codex.py activity --arm /Users/jeremymcspadden/orca/evaluations/gsd-path-lean-62f5e0f/path --category review -- python3 /Users/jeremymcspadden/orca/evaluations/gsd-path-lean-62f5e0f/path/repo/.agents/skills/gsd-path/scripts/archive_milestone.py validate-integrated --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-lean-62f5e0f/path/repo --slug widget-counter'",
+    "exit_code": 0,
+    "run": "run-20260905T180022103538Z"
+  },
+  "final_reuse": {
+    "path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-lean-62f5e0f/path/repo/.project/review/FINAL.md",
+    "reused": true,
+    "reviewed_head": "1f59d06efa2840fc1b1435285c81c83e53611be9",
+    "source": ".project/review/wave-1.cycle1.md",
+    "source_commit": "195be1e42abcfb7058ca287ce49fe9d42b7a383a"
+  },
+  "project_verify_reused_on_first_call": false,
+  "prepare_receipt": "/Users/jeremymcspadden/orca/evaluations/gsd-path-lean-62f5e0f/prepare-final.json",
+  "metrics": {
+    "coder_seconds": 125.131,
+    "review_seconds": 157.057,
+    "active_seconds_after_coder_handoff": 445.965952,
+    "total_cli_seconds": 1530.824514917,
+    "coder_output_tokens": 2860,
+    "review_output_tokens": 4232,
+    "parent_output_tokens": 25355,
+    "all_output_tokens": 38848,
+    "wave_review_invocations": 1,
+    "final_review_invocations": 0,
+    "project_verify_executions": 1,
+    "pipeline_artifact_files": 15,
+    "product_lines": 12,
+    "product_test_lines": 66
+  },
+  "change_from_previous_quick_run_percent": {
+    "coder_seconds": -27.829301772963746,
+    "review_seconds": -61.08202270300005,
+    "active_seconds_after_coder_handoff": -70.98343826041639,
+    "total_cli_seconds": -33.677092607335155
+  },
+  "native_turns": [
+    {
+      "role": "/root",
+      "turn_id": "01a0729e-8f23-7b01-b0fe-d33d6e0ae599",
+      "start": "2026-09-05T17:29:49.212Z",
+      "output_tokens": 565,
+      "complete": false,
+      "end": "2026-09-05T17:30:41.983Z",
+      "seconds": 52.771
+    },
+    {
+      "role": "/root",
+      "turn_id": "01a0729f-b8ed-7da1-8ac0-9df773818904",
+      "start": "2026-09-05T17:31:05.327Z",
+      "output_tokens": 5468,
+      "complete": true,
+      "end": "2026-09-05T17:37:33.618Z",
+      "seconds": 388.291
+    },
+    {
+      "role": "/root",
+      "turn_id": "01a072a7-2b6c-7c71-b14d-c00e4af8a00c",
+      "start": "2026-09-05T17:39:13.392Z",
+      "output_tokens": 4079,
+      "complete": true,
+      "end": "2026-09-05T17:42:18.635Z",
+      "seconds": 185.243
+    },
+    {
+      "role": "/root",
+      "turn_id": "01a072aa-cb68-7533-ac36-3b6a6c8dd208",
+      "start": "2026-09-05T17:43:10.954Z",
+      "output_tokens": 4975,
+      "complete": true,
+      "end": "2026-09-05T17:47:10.519Z",
+      "seconds": 239.565
+    },
+    {
+      "role": "/root",
+      "turn_id": "01a072b0-aba0-7fc2-ab75-9c4004c726e3",
+      "start": "2026-09-05T17:49:36.035Z",
+      "output_tokens": 9086,
+      "complete": true,
+      "end": "2026-09-05T17:59:25.863Z",
+      "seconds": 589.828
+    },
+    {
+      "role": "/root",
+      "turn_id": "01a072ba-87e1-7680-afd7-eb83142311e4",
+      "start": "2026-09-05T18:00:22.242Z",
+      "output_tokens": 1182,
+      "complete": true,
+      "end": "2026-09-05T18:01:31.820Z",
+      "seconds": 69.578
+    },
+    {
+      "role": "/root/inspect_codebase",
+      "turn_id": "01a072a1-2836-7742-b20a-311a33fd114a",
+      "start": "2026-09-05T17:32:39.368Z",
+      "output_tokens": 2488,
+      "complete": true,
+      "end": "2026-09-05T17:34:44.555Z",
+      "seconds": 125.187
+    },
+    {
+      "role": "/root/inspect_docs",
+      "turn_id": "01a072a1-7f1b-7313-a7bf-4846b0fa667a",
+      "start": "2026-09-05T17:33:01.615Z",
+      "output_tokens": 3913,
+      "complete": true,
+      "end": "2026-09-05T17:36:04.037Z",
+      "seconds": 182.422
+    },
+    {
+      "role": "/root/build_t001",
+      "turn_id": "01a072b2-09e2-71f0-ba2b-0fc70a389036",
+      "start": "2026-09-05T17:51:05.717Z",
+      "output_tokens": 2860,
+      "complete": true,
+      "end": "2026-09-05T17:53:10.848Z",
+      "seconds": 125.131
+    },
+    {
+      "role": "/root/review_wave_1_cycle_1",
+      "turn_id": "01a072b5-a9eb-7691-b78a-33b960582523",
+      "start": "2026-09-05T17:55:03.295Z",
+      "output_tokens": 4232,
+      "complete": true,
+      "end": "2026-09-05T17:57:40.352Z",
+      "seconds": 157.057
+    }
+  ],
+  "cli_runs": [
+    {
+      "started_at": "2026-09-05T17:29:48.383730+00:00",
+      "elapsed_seconds": 53.854441417,
+      "exit_code": 1
+    },
+    {
+      "started_at": "2026-09-05T17:31:05.179032+00:00",
+      "elapsed_seconds": 389.0996935,
+      "exit_code": 0
+    },
+    {
+      "started_at": "2026-09-05T17:39:13.256254+00:00",
+      "elapsed_seconds": 185.968379583,
+      "exit_code": 0
+    },
+    {
+      "started_at": "2026-09-05T17:43:10.223281+00:00",
+      "elapsed_seconds": 240.993171792,
+      "exit_code": 0
+    },
+    {
+      "started_at": "2026-09-05T17:49:35.905123+00:00",
+      "elapsed_seconds": 590.588152875,
+      "exit_code": 0
+    },
+    {
+      "started_at": "2026-09-05T18:00:22.103809+00:00",
+      "elapsed_seconds": 70.32067574999999,
+      "exit_code": 0
+    }
+  ],
+  "pipeline_artifacts": [
+    ".project/STATE.md",
+    ".project/archive/001-widget-counter/MANIFEST.md",
+    ".project/archive/001-widget-counter/build/evidence.json",
+    ".project/archive/001-widget-counter/build/verify-ledger.jsonl",
+    ".project/archive/001-widget-counter/intent/INTENT.md",
+    ".project/archive/001-widget-counter/plan/GATE.json",
+    ".project/archive/001-widget-counter/plan/PLAN.md",
+    ".project/archive/001-widget-counter/plan/TRANSITION.json",
+    ".project/archive/001-widget-counter/research/DOCS-AUDIT.md",
+    ".project/archive/001-widget-counter/research/SYNTHESIS.md",
+    ".project/archive/001-widget-counter/research/evidence-codebase.md",
+    ".project/archive/001-widget-counter/review/FINAL.md",
+    ".project/archive/001-widget-counter/review/final-gap-1.md",
+    ".project/archive/001-widget-counter/review/wave-1.cycle1.md",
+    ".project/archive/001-widget-counter/tasks/T001-widget-counter.md"
+  ],
+  "primary_status": "",
+  "worktrees": "worktree /Users/jeremymcspadden/orca/evaluations/gsd-path-lean-62f5e0f/path/repo\nHEAD 5f0d07feb0d585c7f390124a430a42299fc9ecdb\nbranch refs/heads/gsd-path/M001",
+  "plugin_diff": "",
+  "setup_detours": [
+    "Initial global-skill selection was interrupted after 53.85 seconds and corrected to the pinned local installation.",
+    "Initial binding event and quick-lane planning event each needed the canonical diagnostic and a corrected argument.",
+    "Documentation-audit validation first used the wrong repository root; the native run corrected that pre-coding check.",
+    "Unrelated installed documentation-link drift received an explicit evaluator ruling."
+  ],
+  "post_coding_recovery": "No extra final-review dispatch, metadata repair, project-verification rerun, or archive recovery.",
+  "method": "Child task_started/task_complete intervals; final per-turn output counters. Parent active time after coder handoff intersects completed CLI intervals and excludes between-run approvals. Reviewer time overlaps parent time; never add them. Coder includes tests. Total CLI includes the interrupted setup invocation. Same fixture and host settings as previous quick run; one observation with different recoveries, not a controlled latency claim."
+}

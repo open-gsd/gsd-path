@@ -50,8 +50,48 @@ see [mutation results](evidence/releases/1.0.0/lean-verification-sabotage.json).
 The earlier duplicate-header sabotage also failed for both FINAL and gap files.
 Simplifier review reused existing dirty-path, atomic-write, and isolation helpers;
 no new numeric code-to-verification target or model routing was introduced.
-Fresh native E2E is pending. Legacy receipts missing exact command output block
-for reconciliation rather than silently rerunning verification.
+Fresh native E2E completed against `62f5e0f26ba2ab600494785b54d56fa92c06a5a5`
+at `/Users/jeremymcspadden/orca/evaluations/gsd-path-lean-62f5e0f`.
+Parent thread: `01a0729e-8e86-7f52-91e5-70716ca22574`. It used one full-wave
+reviewer, zero separate final reviewers, and one project Verify execution. The
+runtime generated FINAL.md and the gap view. Canonical archive and local
+integration passed at `459e4cb6b6ec72d3bd8dfa0918d87935b8ce6034`; all six external
+CLI checks passed. No post-coding metadata repair or archive recovery occurred.
+The initial global-skill selection, two pre-coding event-argument corrections,
+and a documentation-audit repository-root correction remain reported; no testing token/time limit was applied. Legacy receipts missing
+exact command output still require reconciliation rather than a blind rerun.
+
+[Measured outcome and limits](code-vs-verification.md): reviewer time 6.73 → 2.62
+minutes; active post-coder work 25.62 → 7.43 minutes; artifacts 16 → 15, with the
+product remaining 12 lines. This is one fixture comparison with different recovery
+histories, not a universal timing guarantee.
+
+Verification map for this change:
+
+| Source | Executable proof |
+|---|---|
+| lean_verification.py | test_lean_verification: complete/surface reuse, changed-input rejection, exact-output persistence, retry reconstruction, and real bundled CLI |
+| isolation.py | owned-sidecar cleanup, interrupted cleanup, primary and changed-HEAD refusal |
+| build_state.py | real ledger persistence/reuse in lean tests plus existing build-state suite |
+| check_handoffs.py | repeated-header regression for FINAL and gap, stale HEAD and surface checks, existing handoff suite |
+| workflow_run.py | fail-stop landing regression and successful native prepare-final invocation |
+| Resource manifest and generated bundles | actual ship-bundle CLI, sync suite, and all 133 Node installation/package checks |
+
+RED: the new lean tests failed before their behaviors were implemented, including
+uncommitted-contract acceptance and a leftover sidecar after interrupted collection.
+`test_ship_bundle_returns_final_gate_without_review_dispatch` failed before the
+helper was bundled. `test_ship_preparation_stops_at_unproven_landing` failed while
+the CLI lacked prepare-final. `test_final_rejects_repeated_review_metadata_before_archiving`
+failed for both FINAL and final-gap before the guard.
+
+GREEN: `python3 -B -m unittest tests.test_lean_verification tests.test_workflow_run
+tests.test_handoffs tests.test_build_state tests.test_sync_skill_resources` passed
+136 tests. After simplification/restoration, the 14 lean/runtime tests passed again.
+`npm test` passed 133 checks. Six targeted `python3 -B -m unittest <test>` sabotage
+runs are recorded in the linked mutation JSON; each exited nonzero for its broken
+behavior, and every mutation was restored. No full Python repository suite was
+run. The native E2E supplies the successful packaged workflow and archive proof.
+
 
 ## Contract
 
