@@ -1,0 +1,32 @@
+{
+  "sha256": "4c052dcf69e4de9e291a70a03e6e7eaa6c5da6a0ddfe7994e228f95a3d5599cf",
+  "original_review": "/Users/jeremymcspadden/orca/evaluations/gsd-path-quick-76051f9/path/repo.gsd-path/verify/task-t001-final/.project/review/wave-1.cycle1.md",
+  "original_review_preserved": true,
+  "prepared": {
+    "base": "de16e99cb0ca4ab7107b88db8025f569a601442b",
+    "bound_branch": "gsd-path/M001",
+    "branch": "gsd-path-verify/wave-1-collection-recovery",
+    "detached": false,
+    "kind": "verify",
+    "mode": "sidecar",
+    "worktree": "/Users/jeremymcspadden/orca/evaluations/gsd-path-quick-76051f9/path/repo.gsd-path/verify/wave-1-collection-recovery"
+  },
+  "collected": {
+    "base": "de16e99cb0ca4ab7107b88db8025f569a601442b",
+    "branch": "gsd-path-verify/wave-1-collection-recovery",
+    "bytes": 4955,
+    "destination": ".project/review/wave-1.cycle1.md",
+    "previous_sha256": null,
+    "replaced": false,
+    "sha256": "4c052dcf69e4de9e291a70a03e6e7eaa6c5da6a0ddfe7994e228f95a3d5599cf",
+    "source": ".project/review/wave-1.cycle1.md"
+  },
+  "retired": {
+    "bound_branch": "gsd-path/M001",
+    "branch": "gsd-path-verify/wave-1-collection-recovery",
+    "reason": "removed",
+    "retired": true,
+    "worktree": "/Users/jeremymcspadden/orca/evaluations/gsd-path-quick-76051f9/path/repo.gsd-path/verify/wave-1-collection-recovery"
+  },
+  "provenance": "Evaluator transports unchanged previously passing native review; no new model run or review verdict."
+}

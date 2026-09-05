@@ -1,0 +1,58 @@
+{
+  "wave": {
+    "cycle": 1,
+    "owned": [
+      "SC1",
+      "SC2",
+      "SC3",
+      "SC4",
+      "SC5"
+    ],
+    "phase": "wave",
+    "review": ".project/review/wave-1.cycle1.md",
+    "verdict": "pass",
+    "wave": 1
+  },
+  "landing": {
+    "canonical_project_dir": ".project",
+    "command": "verify-landed",
+    "head": "de16e99cb0ca4ab7107b88db8025f569a601442b",
+    "project_dir": ".project",
+    "tasks": [
+      {
+        "classification": "proven-landed",
+        "command": "reconcile",
+        "history": {
+          "branch": "gsd-path/M001",
+          "candidates": [
+            {
+              "base": "9461b801f65a89f8e8dd6f67a75082f9813b83b8",
+              "commit": "de16e99cb0ca4ab7107b88db8025f569a601442b",
+              "valid": true
+            }
+          ],
+          "head": "de16e99cb0ca4ab7107b88db8025f569a601442b",
+          "subject": "T001: Implement widget counts with JSON and validated arguments"
+        },
+        "landed_commit": "de16e99cb0ca4ab7107b88db8025f569a601442b",
+        "reasons": [],
+        "task": {
+          "base": "9461b801f65a89f8e8dd6f67a75082f9813b83b8",
+          "id": "T001",
+          "status": "done",
+          "task_file": ".project/tasks/T001-widget-counter.md"
+        }
+      }
+    ]
+  },
+  "checkpoint": {
+    "commit": "09d6e0b5398d967a70fa745c44f61222c6afab86",
+    "paths": [
+      ".project/STATE.md",
+      ".project/build/verify-ledger.jsonl",
+      ".project/review/wave-1.cycle1.md"
+    ],
+    "status": "committed",
+    "subject": "build: complete milestone"
+  }
+}

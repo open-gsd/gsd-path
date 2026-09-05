@@ -1,0 +1,20 @@
+{
+  "command": [
+    "python3",
+    "-B",
+    "-m",
+    "unittest",
+    "discover",
+    "-s",
+    ".",
+    "-p",
+    "test_count.py",
+    "-v"
+  ],
+  "cwd": "/Users/jeremymcspadden/orca/evaluations/gsd-path-quick-76051f9/path/repo.gsd-path/verify/project-verify",
+  "head": "09d6e0b5398d967a70fa745c44f61222c6afab86",
+  "exit_code": 0,
+  "stdout": "",
+  "stderr": "test_invalid_arguments (test_count.CountCliTests) ... ok\ntest_json (test_count.CountCliTests) ... ok\ntest_plain_text (test_count.CountCliTests) ... ok\n\n----------------------------------------------------------------------\nRan 3 tests in 0.409s\n\nOK\n",
+  "source": "parent evaluator canonical recovery; not native CLI run time"
+}

@@ -1,0 +1,84 @@
+{
+  "cli": "codex-cli 0.153.4",
+  "turn_start_fields": [
+    "additionalContext",
+    "approvalPolicy",
+    "approvalsReviewer",
+    "clientUserMessageId",
+    "collaborationMode",
+    "cwd",
+    "cyberAccessProgram",
+    "effort",
+    "environments",
+    "input",
+    "model",
+    "multiAgentMode",
+    "outputSchema",
+    "permissions",
+    "personality",
+    "responsesapiClientMetadata",
+    "runtimeWorkspaceRoots",
+    "sandboxPolicy",
+    "serviceTier",
+    "serviceTierForTurn",
+    "summary",
+    "threadId",
+    "toolOutput",
+    "turnTrigger"
+  ],
+  "goal_set_schema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "definitions": {
+      "ThreadGoalStatus": {
+        "enum": [
+          "active",
+          "paused",
+          "blocked",
+          "usageLimited",
+          "budgetLimited",
+          "complete"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "objective": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "status": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/ThreadGoalStatus"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "threadId": {
+        "type": "string"
+      },
+      "tokenBudget": {
+        "format": "int64",
+        "type": [
+          "integer",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "threadId"
+    ],
+    "title": "ThreadGoalSetParams",
+    "type": "object"
+  },
+  "conclusion": "Native goal budget is available. No hard per-response output-cap field appears in TurnStartParams. API max_output_tokens is a separate supported interface; OPENAI_API_KEY is unavailable in this environment. No API calls or new model runs were made.",
+  "sources": [
+    "https://learn.chatgpt.com/docs/app-server",
+    "https://learn.chatgpt.com/docs/config-file/config-reference",
+    "https://developers.openai.com/api/reference/cli/resources/responses/methods/create"
+  ]
+}
