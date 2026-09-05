@@ -13,6 +13,27 @@ from scripts import pipeline_git, pipeline_state, state_checkpoint, state_promot
 from tests.test_task_briefs import TASK_TEMPLATE
 
 
+SETTLED_SYNTHESIS = """# Synthesis
+
+## Settled
+- Python only, per INTENT constraints.
+
+## Decisions
+- None
+
+## For the planner
+- **Wave-1 blockers**: No open decisions.
+- **Walking skeleton**: Counter CLI with JSON.
+- **Pitfalls → tasks**: Reject invalid CLI arguments.
+
+## User rulings
+- None
+
+## Still unknown
+- None
+"""
+
+
 def run_git(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         ["git", "-C", str(repo), *args],
@@ -394,6 +415,9 @@ class PipelineStateTests(unittest.TestCase):
                 self.assertEqual(state.read_bytes(), before)
 
             state.write_text(state_text(phase="decide", status="done", branch="gsd-path/M001"))
+            synthesis = repo / ".project/research/SYNTHESIS.md"
+            synthesis.parent.mkdir(exist_ok=True)
+            synthesis.write_text(SETTLED_SYNTHESIS)
             result = pipeline_state.route_state(repo)
             self.assertEqual(result["route"]["action"], "run-phase")
             self.assertEqual(result["route"]["phase"], "plan")
@@ -776,6 +800,32 @@ class PipelineStateTests(unittest.TestCase):
 
             self.assertEqual(result["route"]["action"], "bind-initial")
             self.assertEqual(result["route"]["branch"], "gsd-path/M002")
+
+    def test_decide_transition_refuses_invalid_synthesis_before_writing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            project = repo / ".project"
+            (project / "research").mkdir(parents=True)
+            state = project / "STATE.md"
+            state.write_text(state_text(phase="decide", status="active", branch="gsd-path/M001"))
+            synthesis = project / "research/SYNTHESIS.md"
+            valid = SETTLED_SYNTHESIS
+            expected = {"phase": "decide", "status": "active", "branch": "gsd-path/M001", "archive": None}
+            for phase, status, changes, event in (
+                ("decide", "active", {"status": "done"}, "synthesis validated"),
+                ("decide", "done", {"phase": "plan", "status": "active"}, "planning started"),
+            ):
+                with self.subTest(status=status):
+                    state.write_text(state_text(phase=phase, status=status, branch="gsd-path/M001"))
+                    before = state.read_bytes()
+                    synthesis.write_text(valid.replace("## Decisions\n- None", "## Decisions\nNone. All choices are settled."))
+                    expected["status"] = status
+                    with self.assertRaisesRegex(pipeline_state.PipelineStateError, "decide handoff failed"):
+                        pipeline_state.transition_state(repo, expected, changes, event)
+                    self.assertEqual(state.read_bytes(), before)
+                    synthesis.write_text(valid)
+                    result = pipeline_state.transition_state(repo, expected, changes, event)
+                    self.assertEqual(result["state"]["status"], changes["status"])
 
     def test_transition_compares_expected_state_before_atomic_write(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

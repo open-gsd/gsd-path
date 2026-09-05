@@ -1039,6 +1039,13 @@ def validate_decide(
     """Validate the structural synthesis contract without judging decisions."""
 
     _require_state(root, "decide", "active", project_dir)
+    return validate_decide_artifacts(root, project_dir)
+
+
+def validate_decide_artifacts(
+    root: Path, project_dir: str = DEFAULT_PROJECT_DIR
+) -> Dict[str, object]:
+    """Check synthesis contents independently of the caller's state edge."""
     program_scope = (
         project_dir == DEFAULT_PROJECT_DIR
         and (root / project_dir / "CHARTER.md").is_file()
