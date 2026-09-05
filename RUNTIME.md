@@ -68,3 +68,15 @@ Sources checked for this host: local `codex exec --help`,
 [official configuration reference](https://developers.openai.com/codex/config-reference).
 The Responses API's generation limits are a different interface; they do not
 establish a Codex CLI capability.
+
+## Lean final verification
+
+The ship bundle's `workflow_run.py prepare-final --repo <root> --expected-head
+<full SHA>` sequences landing proof, isolated project Verify, evidence collection,
+and final reuse. A command/commit receipt stores exact stdout/stderr once; retry
+rebuilds its gap view and cleans up an interrupted sidecar without another run.
+Legacy receipts without output require reconciliation if no valid proof can be
+recovered. A full quick-lane wave explicitly covering final scope supplies FINAL.md
+when every criterion and surface walkthrough is proven and Git shows unchanged
+product and contracts. Other scopes retain final review. The output names whether
+review is needed; models do not route reuse by comparing prose or file sizes.

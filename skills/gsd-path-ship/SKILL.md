@@ -5,7 +5,7 @@ description: Verify a completed GSD Path milestone, manage evidence-backed patch
 
 # GSD Path Ship Phase
 
-Dispatch independent reviewers. They inspect and report; they never fix
+Reuse proven review scope; dispatch reviewers for remaining claims. They never fix
 product code.
 
 Routing instructions below are caller handoffs under the AGENTS.md handoff
@@ -53,10 +53,9 @@ so the position is unchanged. Then:
    build branch, and no product or unrelated changes. On retry, existing
    uncommitted assigned final-review outputs may remain. Resolve and record the
    exact full reviewed `HEAD` before dispatch, then prove every task landed
-   at it with `python3 <absolute build_state.py> verify-landed --repo
-   <absolute primary> --project-dir <absolute .project> --head <HEAD>`; it
-   must return one `proven-landed` or `attested` evidence entry per task, and any non-zero
-   exit blocks with its typed error. Reuse an output only when its
+   through the runtime in step 3. Its landing check must return one
+   `proven-landed` or `attested` entry per task. Keep bookkeeping in STATE.md
+   and assigned artifacts; never create extra `.project/` execution reports. Reuse an output only when its
    `Reviewed HEAD` equals that SHA and the complete numbered gap-risk mapping
    still equals the freshly derived risk list. Regenerate the exact assigned
    output set when stale, removing only superseded `final-gap-N.md` files. A
@@ -73,43 +72,29 @@ so the position is unchanged. Then:
    [final-review template](templates/final-review.md),
    [gap-review template](templates/gap-review.md), [patch-findings
    template](templates/patch-findings.md), and `scripts/check_handoffs.py`.
-3. Reuse a valid `final-gap-1.md` admitted by step 1 without rerunning its
-   command when `python3 <absolute build_state.py> verify-lookup --repo
-   <absolute primary> --command <project Verify> --commit <HEAD>` returns
-   `reuse: true`. Otherwise, before reviewer dispatch, create a fresh project-verify
-   sidecar at the exact reviewed HEAD with
-   `python3 <absolute isolation.py> isolate-verify --repo <absolute primary>
-   --base <HEAD> --name project-verify`. Run PLAN.md's project Verify exactly
-   once in the returned worktree and record it with `python3 <absolute
-   build_state.py> verify-record --repo <absolute primary> --command
-   <project Verify> --commit <HEAD> --result <pass | fail>`; same command,
-   same commit reuses that record. Restore every command-created change, then
-   write only `.project/review/final-gap-1.md` there from the gap-review template,
-   using risk `project Verify` and the exact command output. Before dispatch,
-   if the destination already contains an invalid or superseded output admitted
-   by step 1, record that file's exact SHA-256. Collect a new destination with:
+3. Run `python3 <absolute workflow_run.py> prepare-final --repo
+   <absolute primary> --expected-head <HEAD>` from this skill's bundled scripts.
+   This owns pending-discussion and landing checks, project Verify isolation,
+   execution, output recording, collection, cleanup, and final-review reuse.
+   Keep its JSON receipt; do not reconstruct those operations in shell calls.
+   Exact stdout/stderr live once in `.project/build/verify-ledger.jsonl`;
+   `final-gap-1.md` is the generated view referencing that entry. Re-entry at
+   the same command and commit reuses the execution, including a failed one,
+   and finishes interrupted collection without running the command again.
+   Missing legacy output requires evidence reconciliation, not a blind rerun.
+   Any non-zero result stops this step; preserve its stderr and diagnose through
+   the bundled forensics contract. Do not launch reviewers while project Verify
+   is failing. Record the command failure in STATE.md and link its gap evidence.
 
-   ```bash
-   python3 <absolute isolation.py> collect-artifact \
-     --repo <absolute primary> \
-     --source <returned worktree> \
-     --base <HEAD> \
-     --branch <returned branch> \
-     --source-path .project/review/final-gap-1.md \
-     --destination-path .project/review/final-gap-1.md
-   ```
+   Read the final step's `result.final`. `reused: true` means FINAL.md already
+   proves final scope: do not dispatch `review_final` or rewrite it. For a
+   quick lane with one full wave, reuse requires a committed review explicitly
+   covering final scope, every success criterion and required walkthrough,
+   and unchanged product and approved contracts. The helper generates FINAL.md
+   as a view of that proof. Multiple waves, deep/verify-only reviews, missing
+   evidence, or changed inputs require fresh final review. Existing valid final
+   evidence at the current HEAD is also reused on retry.
 
-   When replacing the recorded existing destination, append
-   `--expected-destination <recorded SHA-256>` to that command. Omit the option
-   only when the destination did not exist. A replacement without this
-   compare-and-swap proof blocks.
-
-   Require the returned base, branch, source, and destination to match, then
-   retire that clean sidecar with `python3 <absolute isolation.py> retire
-   --repo <absolute primary> --worktree <returned worktree> --branch <returned
-   branch>`. Keep the exact command output for the final-review brief. A
-   non-zero project Verify determines `ship/blocked`, but still collect the
-   complete final evidence set before the final handoff gate.
 4. For each numbered risk other than project Verify without a reusable output,
    dispatch one reviewer through the shared capacity-aware contract at the
    exact reviewed HEAD. Use logical task name `review_gap_<number>` and assign only
@@ -119,17 +104,20 @@ so the position is unchanged. Then:
    returned path.
    Review commands and staged outputs run only there, never in the primary
    worktree. For every returned artifact, substitute its returned worktree,
-   branch, and assigned `.project/review/...` path into the exact
-   `collect-artifact` command above. Require its returned fields to match, then
-   run the exact non-force `retire` command above. The helper must observe only
+   branch, and assigned `.project/review/...` path into `python3 <absolute isolation.py> collect-artifact --repo <primary>
+   --source <worktree> --base <HEAD> --branch <branch> --source-path <assigned path>
+   --destination-path <assigned path>`. If replacing an admitted stale output,
+   include `--expected-destination <its recorded SHA-256>`. Require returned
+   fields to match, then run `python3 <absolute isolation.py> retire --repo
+   <primary> --worktree <worktree> --branch <branch>`. The helper must observe only
    the assigned artifact in each sidecar. Model-written copies into the
    primary do not count as collection.
    After every gap artifact is present, reuse a valid FINAL.md admitted by
-   step 1 or create a fresh sidecar with `isolate-verify --name review-final`
+   step 3 or create a fresh sidecar with `isolate-verify --name review-final`
    and dispatch the integration reviewer under logical task name
    `review_final`, assigning only
    `.project/review/FINAL.md`. Its complete brief includes the exact recorded
-   project Verify output, every collected gap verdict so Overall verdict is
+   project Verify ledger entry, every collected gap verdict so Overall verdict is
    consistent with them, and PLAN.md's `## Surface contract` when INTENT.md
    names surfaces — that reviewer performs each Walkthrough and records the
    surface and what it showed on every criterion the contract lists. Collect FINAL.md and retire its sidecar through the

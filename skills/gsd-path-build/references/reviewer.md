@@ -56,6 +56,17 @@ For cycle greater than 1, read the previous review, re-check every failure,
 and regression-check affected passes. State when the same criterion fails for
 a different reason. Use only the wave-review template.
 
+## Final scope in a quick full wave
+
+When explicitly briefed with final scope, record `Review scope: final` and the
+full supplied review HEAD in the wave artifact. Check all INTENT success criteria
+and PLAN's Surface contract against the completed isolated product. Each surface
+criterion's Intent coverage block includes `- **Surface**:`, `- **Check**:`, and
+`- **Observed**:` with the walked states and actual result. Reuse recorded task
+output if it proves that exact walkthrough; run only a missing check. Final-scope
+coverage shares this wave artifact; do not write a second report. Shipping's
+runtime checks freshness and derives the final view from these records.
+
 ## Deep review lenses
 
 A `deep` wave spawns two independent reviewers in parallel, each with a fresh

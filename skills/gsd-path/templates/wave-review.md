@@ -6,6 +6,13 @@
      own lines: Cycle holds only the number
      (C > 1 means re-review after fixes; see previous cycle file). -->
 
+<!-- For quick single-full-wave final scope, include these two metadata lines
+     with actual values, otherwise omit them:
+Reviewed HEAD: <full review commit SHA>
+Review scope: final
+     In each surface SC block also include Surface, Check, and Observed fields
+     using the final-review format. Record the actual walkthrough evidence once. -->
+
 Wave verdict: <pass | blocked — blocked if any task fails>
 Cycle: <C>
 Depth: <full | deep | verify-only — verify-only is orchestrator-written from

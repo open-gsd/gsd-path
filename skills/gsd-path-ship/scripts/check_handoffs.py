@@ -523,6 +523,8 @@ def _source_repair_fields(source: str, text: str, locator: str) -> Tuple[str, st
 
 
 def _reviewed_head(text: str, source: str) -> str:
+    if len(re.findall(r"(?m)^Reviewed HEAD:", text)) > 1:
+        raise HandoffError(f"{source} repeats Reviewed HEAD")
     value = _line_value(text, "Reviewed HEAD:")
     if not SHA_PATTERN.fullmatch(value):
         raise HandoffError(
@@ -1348,6 +1350,14 @@ def validate_wave(
     """Validate one canonical wave review and its owned INTENT verdicts."""
 
     _require_state(root, "build", "active", project_dir)
+    return validate_wave_evidence(root, project_dir, review)
+
+
+def validate_wave_evidence(
+    root: Path, project_dir: str = DEFAULT_PROJECT_DIR, review: str = ""
+) -> Dict[str, object]:
+    """Check a wave artifact independently of the caller's current phase."""
+
     if not review:
         raise HandoffError("wave validation requires --review")
     review_path = PurePosixPath(review)
@@ -1517,7 +1527,7 @@ def validate_wave(
 
 
 def validate_final(
-    root: Path, project_dir: str = DEFAULT_PROJECT_DIR
+    root: Path, project_dir: str = DEFAULT_PROJECT_DIR, *, final_text: Optional[str] = None
 ) -> Dict[str, object]:
     """Require FINAL.md to give an evidenced verdict for every INTENT SC."""
 
@@ -1532,7 +1542,7 @@ def validate_final(
             for criterion in owned:
                 surface_of[criterion] = surface
     relative = f"{project_dir}/review/FINAL.md"
-    text = _read(root, relative)
+    text = _read(root, relative) if final_text is None else final_text
     reviewed_head = _reviewed_head(text, relative)
     head_result = subprocess.run(
         ("git", "-C", str(root), "rev-parse", "--verify", "HEAD"),

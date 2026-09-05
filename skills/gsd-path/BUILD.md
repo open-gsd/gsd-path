@@ -368,6 +368,13 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
      name `review_wave_<wave>_cycle_<cycle>`. Supply every task path, its
      recorded base and proven landing commit, the reviewer role, and
      wave-review template, and the absolute INTENT.md path.
+     When INTENT selects quick lane and PLAN has one full wave, also assign
+     final scope: supply PLAN.md's Surface contract and the recorded review HEAD.
+     The same reviewer checks all success criteria and any remaining walkthrough
+     in this pass, records `Review scope: final` and `Reviewed HEAD`, and adds
+     Surface/Check/Observed fields to each surface criterion. Reuse recorded
+     command evidence when it already proves the named walkthrough; execute
+     only missing checks. Ship can then derive FINAL.md without another reviewer.
      Record current clean primary HEAD as the review collection base. Create
      a fresh review sidecar there; the serial task verification sidecar belongs
      to the earlier task base and cannot be collected after landing.

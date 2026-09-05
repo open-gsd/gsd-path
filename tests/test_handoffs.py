@@ -2099,6 +2099,22 @@ Waves checked: 1
             ):
                 check_handoffs.validate_final(root)
 
+    def test_final_rejects_repeated_review_metadata_before_archiving(self) -> None:
+        for name in ("FINAL.md", "final-gap-1.md"):
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                self.write_state(root, "ship", "active")
+                self.write_intent_criteria(root)
+                self.write_final_review(root)
+                artifact = root / ".project/review" / name
+                text = artifact.read_text()
+                header = next(line for line in text.splitlines()
+                              if line.startswith("Reviewed HEAD:"))
+                artifact.write_text(text + "\n## Recorded output\n\n" + header + "\n")
+                with self.assertRaisesRegex(check_handoffs.HandoffError,
+                                            "repeats Reviewed HEAD"):
+                    check_handoffs.validate_final(root)
+
     def test_final_rejects_a_stale_reviewed_head(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

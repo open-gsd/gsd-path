@@ -738,7 +738,8 @@ def _ledger_entries(path: Path) -> List[Dict[str, object]]:
         raise BuildStateError("invalid-ledger", str(error)) from error
 
 
-def verify_record(repo: str, command: str, commit: str, result: str) -> Dict[str, object]:
+def verify_record(repo: str, command: str, commit: str, result: str,
+                  execution: Optional[Dict[str, object]] = None) -> Dict[str, object]:
     """Append one verify run (command, commit, result, timestamp) to the ledger."""
 
     repository = _repo_root(repo)
@@ -754,9 +755,16 @@ def verify_record(repo: str, command: str, commit: str, result: str) -> Dict[str
         "result": result,
         "recorded_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
     }
+    if execution is not None:
+        if (not isinstance(execution.get("stdout"), str)
+                or not isinstance(execution.get("stderr"), str)
+                or type(execution.get("exit_code")) is not int
+                or (execution["exit_code"] == 0) != (result == "pass")):
+            raise BuildStateError("invalid-execution", "verification output and result disagree")
+        entry["execution"] = execution
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(entry, sort_keys=True) + "\n")
+    previous = path.read_text(encoding="utf-8") if path.exists() else ""
+    _common.atomic_write(path, previous + json.dumps(entry, sort_keys=True) + "\n")
     return {"command": "verify-record", "ledger": VERIFY_LEDGER_PATH, "entry": entry}
 
 

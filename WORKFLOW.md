@@ -395,13 +395,18 @@ next-milestone transition after ship, or the post-abandon re-slice transition
 `.project/review/FINAL.md`, one distinct `.project/review/final-gap-N.md` per
 cross-wave risk, and (when blocked) `.project/review/PATCH-FINDINGS.md`.
 
-Run an integration reviewer and independent gap reviewers through the shared
-capacity-aware dispatch contract. The integration reviewer marks each success
+Run `workflow_run.py prepare-final` to collect project Verify and reuse valid
+final evidence. A quick lane's single full wave may cover final scope, including
+surface walkthroughs, in its existing review. The runtime proves freshness and
+generates FINAL.md from that record. Dispatch an integration reviewer only when
+that proof is incomplete or stale; dispatch gap reviewers only for uncovered
+cross-wave risks through the shared capacity-aware contract. The integration reviewer marks each success
 criterion `met`, `not-met`, or `unverifiable` with checked evidence. Each gap
 reviewer records `pass` or `blocked` for its assigned end-to-end or cross-wave
 risk. List only genuine
-risks that could plausibly fail; never pad the list. The orchestrator
-runs PLAN.md's project Verify once and writes its gap artifact; other gap
+risks that could plausibly fail; never pad the list. The runtime
+runs PLAN.md's project Verify once, stores exact stdout/stderr in the existing
+command/commit ledger, and generates its gap view; other gap
 reviewers do not re-run it. The orchestrator
 creates one disposable worktree at exact reviewed HEAD
 per reviewer; project commands never run in the primary worktree. Every final
@@ -420,9 +425,9 @@ return through the build/review loop. Passing the final gate leaves STATE.md at
 only after the archive and manifest validate.
 
 A missing or malformed reviewer output gets one corrective follow-up, then a
-`NEEDS-USER` block rather than a fabricated patch. The orchestrator's project
-Verify and its mandatory gap review must agree; repeat both once on conflict,
-then surface the conflicting evidence. Only valid evidenced FINAL/gap findings
+`NEEDS-USER` block rather than a fabricated patch. Project Verify's gap view is generated from its recorded execution. Rebuild a
+missing view from that receipt; never rerun a command to repair a report. A failed
+execution stops further reviewer dispatch until its evidence is resolved. Only valid evidenced FINAL/gap findings
 enter PATCH-FINDINGS.md and patch planning, and the build orchestrator commits
 that finding set with the approved patch artifacts before executing the new
 wave.

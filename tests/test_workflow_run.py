@@ -12,6 +12,16 @@ SCRIPT = Path(__file__).resolve().parents[1] / "scripts/workflow_run.py"
 
 
 class WorkflowRunTests(unittest.TestCase):
+    def test_ship_preparation_stops_at_unproven_landing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            head = self.fixture(root)
+            result = self.run_cli(root, "prepare-final", "--expected-head", head)
+            self.assertNotEqual(result.returncode, 0)
+            receipt = json.loads(result.stdout)
+            self.assertEqual(receipt["steps"][-1]["script"], "build_state.py")
+            self.assertFalse((root / ".project/build/verify-ledger.jsonl").exists())
+
     def fixture(self, root):
         run_git(root, "init", "-b", "gsd-path/M001")
         run_git(root, "config", "user.name", "Test")

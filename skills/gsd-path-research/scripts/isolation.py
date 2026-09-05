@@ -577,6 +577,26 @@ def isolate_verify(primary: Path, base: str, name: str, historical_task: Optiona
     }
 
 
+def clean_verify(primary: Path, worktree: Path, base: str, branch: str) -> Dict[str, object]:
+    """Discard command-created files only in the named verification sidecar."""
+    primary = require_directory(primary, "primary worktree")
+    worktree = require_directory(worktree, "verification worktree")
+    if worktree == primary or not branch.startswith(VERIFY_BRANCH_PREFIX):
+        raise IsolationError("verification cleanup requires a sidecar branch")
+    if worktree != _sidecar_path_for_branch(primary, branch):
+        raise IsolationError("verification cleanup path differs from its branch")
+    if worktree_root(worktree) != worktree or common_git_dir(worktree) != common_git_dir(primary):
+        raise IsolationError("verification cleanup requires the primary repository's sidecar")
+    if require_attached(worktree) != branch:
+        raise IsolationError("verification cleanup branch changed")
+    expected = require_commit(primary, require_full_sha(base))
+    if current_sha(primary) != expected or current_sha(worktree) != expected:
+        raise IsolationError("verification cleanup HEAD changed")
+    git_output(worktree, "restore", "--source=HEAD", "--staged", "--worktree", "--", ".")
+    removed = git_output(worktree, "clean", "-fdx", "--", ".")
+    return {"worktree": str(worktree), "branch": branch, "base": expected, "removed": removed}
+
+
 def _split_paths(block: str) -> Set[str]:
     return {line.strip() for line in block.splitlines() if line.strip()}
 

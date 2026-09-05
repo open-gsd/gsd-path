@@ -46,6 +46,14 @@ def run_workflow(repo: Path, action: str, project_dir: str, expected_head: str =
                      "--base", expected_head, "--name", f"task-{task_id.lower()}-verify")
         elif action == "build-evidence":
             step("build_state.py", "verify-landed", *common, "--head", expected_head)
+        elif action == "prepare-final":
+            if project_dir != ".project":
+                raise StepFailed("final review requires the active milestone")
+            pending = step("discussion_records.py", "pending", "--repo", str(repo))
+            if pending["pending"]:
+                raise StepFailed("pending discussion requires its owner disposition")
+            step("build_state.py", "verify-landed", *common, "--head", expected_head)
+            step("lean_verification.py", "--repo", str(repo), "--expected-head", expected_head)
         else:
             pending = step("discussion_records.py", "pending", "--repo", str(repo))
             if pending["pending"]:
@@ -72,14 +80,14 @@ def run_workflow(repo: Path, action: str, project_dir: str, expected_head: str =
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("route", "gate-plan", "approve-plan", "build-evidence", "prepare-task"))
+    parser.add_argument("action", choices=("route", "gate-plan", "approve-plan", "build-evidence", "prepare-task", "prepare-final"))
     parser.add_argument("--repo", type=Path, required=True)
     parser.add_argument("--project-dir", choices=(".project", ".project/next"), default=".project")
     parser.add_argument("--expected-head")
     parser.add_argument("--task-id")
     parser.add_argument("--round-size", type=int)
     arguments = parser.parse_args(argv)
-    if arguments.action in {"approve-plan", "build-evidence", "prepare-task"} and not arguments.expected_head:
+    if arguments.action in {"approve-plan", "build-evidence", "prepare-task", "prepare-final"} and not arguments.expected_head:
         parser.error(f"{arguments.action} requires --expected-head")
     if arguments.action == "prepare-task" and (not arguments.task_id or arguments.round_size is None):
         parser.error("prepare-task requires --task-id and --round-size")

@@ -39,6 +39,7 @@
     "scripts/build_state.py",
     "scripts/loop_run.py",
     "scripts/workflow_run.py",
+    "scripts/lean_verification.py",
     "scripts/token_budget.py",
     "scripts/pipeline_undo.py",
     "scripts/pipeline_diagnose.py",

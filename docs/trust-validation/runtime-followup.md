@@ -1,5 +1,58 @@
 # Runtime follow-up from the Codex comparison
 
+## Active goal: lean verification
+
+Owner request: "it should be lean verification - not redudant or double work.
+code output should equal ratio of work verification phases - impplement this
+under /goal". This supersedes the earlier requirement to keep duplicate review
+dispatches when an existing full review already proves the same outcome. No
+numeric ratio or new limit is inferred. Product scope stays outcome-driven.
+
+Implementation contract:
+
+- Runtime-owned project verification creates its sidecar, executes the command,
+  records output, collects the gap artifact, and retires the sidecar. A valid
+  command/commit receipt is reused on re-entry rather than rerun.
+- Quick lane with one complete wave may reuse its independent full review for
+  final review only with explicit final scope, all intent coverage and surface
+  walkthroughs, and Git proof that product and approved contracts have not
+  changed. New code, changed intent/plan/task contracts, incomplete evidence,
+  deep/verify-only review, or multiple waves require fresh final review.
+- The runtime generates the final view from existing evidence. Agents do not
+  rewrite proofs or introduce execution logs outside canonical artifact paths.
+- Final metadata must pass the same uniqueness rules before archival; malformed
+  evidence cannot pass final review and then strand archive recovery.
+- Update canonical phase/role contracts, synchronize distributions, and validate
+  the packaged command. Test reuse and invalidation through executable behavior.
+- Run a fresh native quick E2E and record coding versus review dispatches,
+  verification executions, artifact work, recovery spins, and delivered behavior.
+  Token usage is secondary. Completion requires evidence, not changed files.
+
+Progress: duplicate Reviewed HEAD rejection is implemented in the handoff gate.
+Its regression failed for FINAL.md and final-gap-1.md before implementation;
+three focused tests passed afterward; removing the guard made the regression
+fail again, and the source was restored. Simplifier review retained the small
+shared reviewed-head guard and existing fixture helpers.
+
+Implemented: isolated project execution and output persistence, receipt reuse and
+interrupted-sidecar cleanup, deterministic final views from complete quick full
+waves, dirty-input and changed-contract rejection, and the packaged ship runner.
+Canonical phase/role instructions now assign final scope to that wave reviewer
+and prohibit a second review or duplicate output narrative when proof is reused.
+
+Proof so far: 136 focused Python tests passed across lean verification, workflow
+runner, handoffs, build state, and resource sync. All 133 Node packaging/install
+checks passed. The new tests first failed on missing reuse, missing runtime
+sequencing, duplicated output, dirty input, and interrupted cleanup. The packaged
+CLI failed before bundling and now returns `final-gate` on both first execution
+and receipt reuse. Six sabotage mutations fail their matching behavioral tests;
+see [mutation results](evidence/releases/1.0.0/lean-verification-sabotage.json).
+The earlier duplicate-header sabotage also failed for both FINAL and gap files.
+Simplifier review reused existing dirty-path, atomic-write, and isolation helpers;
+no new numeric code-to-verification target or model routing was introduced.
+Fresh native E2E is pending. Legacy receipts missing exact command output block
+for reconciliation rather than silently rerunning verification.
+
 ## Contract
 
 Benchmark the existing quick lane against direct implementation; remove the
