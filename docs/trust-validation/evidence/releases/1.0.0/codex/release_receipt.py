@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Assemble a gsd-path live-evidence release receipt for the codex host from a real run.
+"""Assemble a gsd-path live-evidence release receipt from a real Codex or Claude run.
+
+Select --host codex (the default) or --host claude before the phase name.
+Claude manifest requires --native-guard-evidence pointing to a passing probe JSON.
+For receipt, --transcript is a Codex session JSONL file or a Claude run root
+containing quick/run-*/events.jsonl.
 
 Two phases, both driven by the evaluator against the fixture repository:
 
@@ -10,7 +15,7 @@ Two phases, both driven by the evaluator against the fixture repository:
                <host>.md under the repo's evidence directory, then validates them with
                scripts/check_trust_evidence._validate_receipt.
 
-Every value comes from the fixture repository, the harness records, or the Codex
+Every value comes from the fixture repository, the harness records, or the host
 session transcript; nothing is invented.
 """
 import argparse, datetime as dt, json, os, re, shutil, subprocess, sys, tempfile
@@ -52,8 +57,9 @@ def git_hook_check(repo, archive_rel, committed_repo=None, committed_archive=Non
     """Prove the installed pre-commit hook: a committed archive is read-only, other commits pass.
 
     Before ship the fixture has no committed archive yet, so the check may run in a clone of
-    another repository whose archive is committed (committed_repo); the guard bytes of both
-    repositories are hashed and must be identical.
+    another repository whose archive is committed (committed_repo). Both git_guard.py
+    and pre-commit hook hashes must match. The fixture's pre-commit hook and commit-msg
+    hook, when present, must be executable; the clone preserves source hook permissions.
     """
     source = Path(committed_repo or repo).resolve(); archive = committed_archive or archive_rel
     out = {"checked_repository": str(source), "checked_archive": archive, "steps": []}
