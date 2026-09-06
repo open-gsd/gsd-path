@@ -775,8 +775,12 @@ The task implements the demo.
                 "base: null", "base: " + "a" * 40
             ).replace("agent: null", "agent: /root/build_t001")
             task.write_text(progressed)
+            # Patch mode: a landed task keeps its metadata while planning reopens.
+            self.assertEqual(check_handoffs.validate_plan(root)["tasks"], 2)
+            task.write_text(progressed.replace("status: done", "status: pending"))
             with self.assertRaisesRegex(check_handoffs.HandoffError, "initially"):
                 check_handoffs.validate_plan(root)
+            task.write_text(progressed)
             self.write_state(root, "build", "active")
             self.assertEqual(check_handoffs.validate_plan(root)["tasks"], 2)
             self.assertEqual(task.read_text(), progressed)
