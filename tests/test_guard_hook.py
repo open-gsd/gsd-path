@@ -1315,6 +1315,39 @@ class GuardHookTests(unittest.TestCase):
                                 "cwd": str(repository),
                             })
 
+    def test_tracks_unresolved_directory_changes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            repository = Path(temporary).resolve() / "repo"
+            (repository / ".project" / "archive" / "001-mvp").mkdir(parents=True)
+            denied = (
+                "cd ..; cd rep*; rm -rf .project",
+                "cd ..; pushd rep*; mv scratch elsewhere",
+                "cd ..; Set-Location rep*; Remove-Item -Recurse .project",
+                "cd ..; chdir rep*; rm scratch",
+                "cd ..; sl rep*; rm scratch",
+                "cd rep*; cd child; rm scratch",
+                "cd rep*; command rm scratch",
+                "cd rep*; sh -c 'rm scratch'",
+                "cd $TARGET; rm scratch",
+                "cd ~/repo; rm scratch",
+                "cd .{project,unused}; rm scratch",
+            )
+            allowed = (
+                "cd ..; cd repo; python3 -m unittest",
+                "cd ..; cd rep*; python3 -m unittest",
+                "cd $TARGET; echo ready",
+                "cd rep*; sh -c 'echo ready'",
+                f"cd rep*; cd {shlex.quote(str(repository))}; rm scratch",
+            )
+            for commands, assertion in ((denied, self.assert_denied), (allowed, self.assert_allowed)):
+                for command in commands:
+                    with self.subTest(command=command):
+                        assertion({
+                            "tool_name": "Bash",
+                            "tool_input": {"command": command},
+                            "cwd": str(repository),
+                        })
+
     def test_denies_deleting_archive_ancestor_on_windows(self):
         previous = Path.cwd()
         with tempfile.TemporaryDirectory() as temporary:
@@ -1697,6 +1730,7 @@ class GuardHookTests(unittest.TestCase):
             "command -v python3",
             "eval echo hello",
             "declare NAME=value",
+            "cd $(mktemp -d) && ls",
         ):
             with self.subTest(command=command):
                 self.assert_allowed(self.bash(command))
@@ -1709,7 +1743,6 @@ class GuardHookTests(unittest.TestCase):
             ("ls | xargs rm", "xargs runs rm"),
             ("export HOME=/tmp; git status", "HOME changes where Git reads"),
             ("git commit -m \"$(cat msg)\"", "git argument $(cat msg)"),
-            ("cd $(mktemp -d) && ls", "cd target $(mktemp -d)"),
             ("echo x > \"$1\"", "write target $1"),
             ("cat <<EOF\nno terminator", "here-document EOF is not terminated"),
             ("echo 'unbalanced", "cannot be tokenized"),
