@@ -29,7 +29,8 @@ The release gate remains blocked on host receipts, as designed.
 ## Code output versus verification phases
 
 The replay script re-executes every verification claim against the shipped
-commits in fresh detached worktrees and compares bytes. It is tracked beside
+commits in fresh temporary clones. Walkthrough output is compared exactly;
+ledger output uses the normalization described below. It is tracked beside
 its result as
 [replay_verification.py](evidence/releases/1.0.0/codex-quick-4295d75/replay_verification.py).
 
@@ -38,9 +39,17 @@ its result as
   review verified the code that shipped.
 - The wave review records 16 CLI walkthrough commands as JSON lines with exit,
   stdout and stderr. All 16 reproduce exactly at the reviewed commit.
-- The verify ledger records the task Verify at the landing commit `775dcb3`
-  and the project Verify at `7d4f9bc` with exact output. Both reproduce; the
-  only difference is the unittest wall-time line, which the script normalizes.
+- The task Verify at landing commit `775dcb3` reproduces the exit code,
+  stdout, and stderr in [task-verify.json](evidence/releases/1.0.0/codex-quick-4295d75/task-verify.json);
+  the receipt's product and test file hashes match that commit. Task bookkeeping
+  under `.project/` is excluded from hash matching. The task ledger itself records
+  only pass/fail. The project Verify at `7d4f9bc` reproduces the exit code,
+  stdout, and stderr in its ledger `execution` field. Both output comparisons
+  strip surrounding whitespace and normalize unittest wall time.
+  Replay discovers `task-verify*.json` beside the script, or accepts an explicit
+  receipt as its third argument after the repository and oracle import root.
+  Missing milestone directories fail replay; an absent `count.py` records a
+  skipped optional oracle.
 - The independent oracle, which the agents never read, passes at the shipped
   HEAD.
 

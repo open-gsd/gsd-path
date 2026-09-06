@@ -12,7 +12,10 @@
           "commit": "775dcb3b538a9cd8cb2de51507cde1d5f1295786",
           "recorded": "pass",
           "replay_exit": 0,
-          "exit_agrees": true
+          "exit_agrees": true,
+          "output_source": "task-verify.json",
+          "stdout_agrees": true,
+          "stderr_agrees": true
         },
         {
           "command": "python3 -B -m unittest discover -s . -p 'test_*.py' -v",
@@ -20,6 +23,7 @@
           "recorded": "pass",
           "replay_exit": 0,
           "exit_agrees": true,
+          "output_source": "ledger.execution",
           "stdout_agrees": true,
           "stderr_agrees": true
         }

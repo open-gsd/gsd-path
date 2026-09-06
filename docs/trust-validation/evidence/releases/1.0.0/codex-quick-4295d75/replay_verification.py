@@ -6,12 +6,12 @@ For every archived milestone in <repo>/.project/archive/*:
      (everything outside .project/) must be byte-identical between Reviewed HEAD
      and HEAD. Otherwise the review verified different code than what shipped.
   2. Every verify-ledger entry is re-executed at its recorded commit in a fresh
-     temporary worktree. Exit code must agree with the recorded result; when the
-     ledger recorded exact stdout/stderr, those must match too.
+     temporary clone. Exit code must agree with the recorded result; when the
+     ledger or a retained task receipt recorded stdout/stderr, those must match too.
   3. The independent widget oracle runs against HEAD (counter fixtures only).
 Prints JSON; exit 1 on any mismatch.
 """
-import json, re, subprocess, sys, tempfile
+import hashlib, json, re, subprocess, sys, tempfile
 from pathlib import Path
 
 sys.path.insert(0, sys.argv[2] if len(sys.argv) > 2 else ".")
@@ -23,21 +23,35 @@ def git(repo, *a):
 
 
 def run_at(repo, commit, command):
-    """Run a shell command in a fresh detached worktree at commit; remove it afterwards."""
-    with tempfile.TemporaryDirectory() as tmp:
+    """Run a command in a temporary clone without modifying the source repository."""
+    with tempfile.TemporaryDirectory(dir=Path(__file__).resolve().parent) as tmp:
         wt = Path(tmp) / "wt"
-        git(repo, "worktree", "add", "-q", "--detach", str(wt), commit)
-        try:
-            return subprocess.run(command, shell=True, cwd=wt, capture_output=True, text=True)
-        finally:
-            git(repo, "worktree", "remove", "--force", str(wt))
+        git(repo, "clone", "-q", "--no-hardlinks", "--no-checkout", str(repo), str(wt)).check_returncode()
+        git(wt, "checkout", "-q", "--detach", commit).check_returncode()
+        return subprocess.run(command, shell=True, cwd=wt, capture_output=True, text=True)
 
 
-def replay(repo):
+def receipt_matches(repo, commit, receipt):
+    for path, expected in receipt.get("sha256", {}).items():
+        if Path(path).parts[0] == ".project":
+            continue
+        content = subprocess.run(["git", "show", f"{commit}:{path}"], cwd=repo, capture_output=True)
+        if content.returncode or hashlib.sha256(content.stdout).hexdigest() != expected:
+            return False
+    return receipt.get("commit", commit) == commit
+
+
+def replay(repo, receipt_paths=None):
     repo = Path(repo).resolve()
     head = git(repo, "rev-parse", "HEAD").stdout.strip()
     out = {"repo": str(repo), "head": head, "milestones": [], "oracle": None, "mismatches": []}
-    for archive in sorted((repo / ".project/archive").glob("*")):
+    if receipt_paths is None:
+        receipt_paths = sorted(Path(__file__).resolve().parent.glob("task-verify*.json"))
+    receipts = [(Path(path), json.loads(Path(path).read_text())) for path in receipt_paths]
+    archives = sorted(path for path in (repo / ".project/archive").glob("*") if path.is_dir())
+    if not archives:
+        out["mismatches"].append("no milestone directories found under .project/archive")
+    for archive in archives:
         final = (archive / "review/FINAL.md").read_text()
         reviewed = re.search(r"^Reviewed HEAD:\s*([0-9a-f]{40})", final, re.M).group(1)
         verdict = re.search(r"^Overall verdict:\s*(\S+)", final, re.M).group(1)
@@ -69,13 +83,28 @@ def replay(repo):
             entry = {"command": e["command"], "commit": e["commit"], "recorded": e["result"],
                      "replay_exit": r.returncode, "exit_agrees": (r.returncode == 0) == expect_pass}
             ex = e.get("execution")
-            if ex:
+            if ex is None:
+                candidates = [(path, receipt) for path, receipt in receipts
+                              if receipt.get("command") == e["command"]]
+                matches = [(path, receipt) for path, receipt in candidates
+                           if receipt_matches(repo, e["commit"], receipt)]
+                if len(matches) == 1:
+                    path, ex = matches[0]
+                    entry["output_source"] = path.name
+                elif candidates:
+                    out["mismatches"].append(f"{archive.name}: no unique task receipt matches {e['command']!r} at {e['commit'][:7]}")
+            else:
+                entry["output_source"] = "ledger.execution"
+            if ex is not None:
+                entry["exit_agrees"] = entry["exit_agrees"] and r.returncode == ex["exit_code"]
                 # unittest prints wall time ("Ran 4 tests in 0.502s"); timing is not a verification claim.
                 untimed = lambda s: re.sub(r" in \d+\.\d+s", " in <t>s", s.strip())
                 entry["stdout_agrees"] = untimed(ex.get("stdout", "")) == untimed(r.stdout)
                 entry["stderr_agrees"] = untimed(ex.get("stderr", "")) == untimed(r.stderr)
                 if not entry["stderr_agrees"]:
                     entry["stderr_replay"] = r.stderr
+            else:
+                entry["output_comparison"] = "skipped: no matching execution receipt"
             if not all(v for k, v in entry.items() if k.endswith("_agrees")):
                 out["mismatches"].append(f"{archive.name}: ledger replay differs for {e['command']!r} at {e['commit'][:7]}")
             m["ledger"].append(entry)
@@ -84,11 +113,13 @@ def replay(repo):
         out["oracle"] = evaluate(repo)
         if out["oracle"]["verdict"] != "pass":
             out["mismatches"].append("independent widget oracle failed at HEAD")
+    else:
+        out["oracle"] = {"verdict": "skipped", "reason": "count.py is absent"}
     out["verdict"] = "pass" if not out["mismatches"] else "fail"
     return out
 
 
 if __name__ == "__main__":
-    result = replay(sys.argv[1])
+    result = replay(sys.argv[1], [sys.argv[3]] if len(sys.argv) > 3 else None)
     print(json.dumps(result, indent=2))
     sys.exit(0 if result["verdict"] == "pass" else 1)
