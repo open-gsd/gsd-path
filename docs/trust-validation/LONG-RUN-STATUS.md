@@ -5,6 +5,29 @@ Objective (owner): run the entire long run. fix as needed.
 The objective remains unfinished while required native features are unproven. Do not replace live evidence with helper tests.
 No testing time or token limit was set by the owner.
 
+## Quoted-criterion gate fix; final preparation resumed — 2026-09-06 03:04 UTC
+
+- T001 landed `69bca49b1d7ac350b9e1547d48d57e233ba6fc22` at base `e44bd137128beb82c6808d1334e085cdaa40b6dd`. Six authoritative isolated tests pass; actual CLI walkthrough is recorded. Full native wave reviewer passed SC1–SC5 at `6f8558b6854ddefa01bd053cc0feda5fe30e903f` with reconstructed task patch and recorded Verify, no command rerun.
+- The gate rejected `<integer>` inside the exact approved AC2 quotation as placeholder evidence. Native handle 40332 terminal at `eccd2b0a87d125aa3f56dc81a6d96128c4fee99a`, build/blocked; all children finished. Report, product, task, ledger and prior failure protected by `pull-request/quoted-criterion-protected.json`.
+- Source fix `3f414a7`: only an exact normalized full acceptance-criterion prefix is excluded before checking the remaining evidence for placeholders. Existing numbered-item and placeholder validators reused; no general angle-bracket exemption. New public wave regression RED on pass/fail task verdicts, GREEN, removal sensitivity fails, restoration passes. Blank/none/placeholder evidence and mismatched quoted criterion remain rejected. 118 focused handoff/workflow/finding tests pass; sync 199, zero warnings. Receipt `pull-request/quoted-criterion-regression.json`. Simplify kept the 9-line change inside the existing validation path.
+- Same native thread resumes at handle 26408 with `bootstrap/pr-criterion-gate-repair.txt`. Shared helper override `/Users/jeremymcspadden/orca/evaluations/gsd-path-quoted-criterion-3f414a7/scripts`; pinned instructions unchanged. Revalidate original unchanged report, no new reviewer/cycle or product Verify. Then distinct compile-only project Verify and eligible final reuse; stop final-ready before ship.
+- Global Codex/Claude updated with 3f414a7, 14 skills each; doctor healthy. Receipt root `gsd-path-global-update-3f414a7`. Fixture external pinned instructions stay unchanged.
+
+## PR fixture setup corrected; coder running — 2026-09-06 02:54 UTC
+
+- Native handle 91477 stopped at an entry precondition: optional evaluator-requested local install left 278 managed files outside `.project/`, which the metadata-only checkpoint correctly refused. No source defect established.
+- Evaluator preserved only its known untracked setup paths and two installer-created hooks outside the product worktree. No contents deleted or edited, no ignore rule/setup commit, no pipeline-rule waiver. All setup hashes, `.project/` bytes, HEAD, refs and empty index preserved; only expected pipeline artifacts remain. Receipt `external-root/pull-request/setup-preservation-result.json` and exact preview beside it. Native execution still uses unchanged pinned external bundles. This reversible correction was within existing test authorization, not a fabricated owner ruling.
+- Same native thread resumed at handle 40332 with `bootstrap/pr-setup-preserved.txt`. Canonical deferred checkpoint passed, base `e44bd137128beb82c6808d1334e085cdaa40b6dd`; task Verify sidecar created. An absolute activation argument was rejected, diagnosed, then corrected to the required relative task path in the same native invocation. An unsupported help call was also preserved/diagnosed. These are evaluator/model invocation overhead, not new product work.
+- Actual coder is implementing T001. Stop after authoritative isolated Verify, canonical landing, full-wave review and eligible final preparation, before ship. Revalidate current native events/handle. No PR or product success claim yet.
+
+## PR test plan approved; native build running — 2026-09-06 02:44 UTC
+
+- Same external thread `01a0748d-fc65-7900-926f-e1acb58147d8` now at handle 91477, prompt `bootstrap/pr-plan-approved.txt`. The actual product root is the approved linked worktree, not the bootstrap invocation fixture. Pinned local install succeeded; canonical integration default is pull-request. Setup evidence in external-root/pull-request.
+- Evaluator reviewed and approved canonical INTENT and PLAN/task with hash receipts `pull-request/intent-approval.json` and `plan-approval.json`. These are evaluator decisions within authorized full testing, not fabricated human messages. One T001 owns count.py, tests/test_count.py, README.md; quick lane, full wave, panels/skeptics off, recorded task CLI walkthrough, compile-only project Verify, eligible final reuse.
+- Native planner actual dispatch `/root/plan`; plan gate passed. A prior model-supplied transition event was rejected (`planning started` required); stderr and diagnosis preserved. Corrected invocation passed without state repair. No source fix was necessary.
+- Current stop: after native coder/isolated Verify/landing/full wave review and canonical final preparation, before ship, with all children terminal. Evaluator will inspect final evidence next, then authorize already-approved test PR creation. The user still performs the merge commit. No PR yet.
+- Guard and bootstrap remain closed native passes. LOOP numeric fields and independent panel availability remain open; no repeated settled tests.
+
 ## Guard and bootstrap passed; PR milestone running — 2026-09-06 02:35 UTC
 
 - Native guard handle 74177 terminal: allowed read, actual PreToolUse denial of apply_patch, unchanged sentinel hash. The sole changed command option was removing `--ignore-user-config`. Missing STATE had already been ruled out with direct denial. New pass receipt appended; all three old failures retained. No plugin behavior fix required. This configured-host proof does not apply to other evaluation invocations that still deliberately ignore user configuration.
