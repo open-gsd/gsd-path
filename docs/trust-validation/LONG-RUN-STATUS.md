@@ -5,6 +5,15 @@ Objective (owner): run the entire long run. fix as needed.
 The objective remains unfinished while required native features are unproven. Do not replace live evidence with helper tests.
 No testing time or token limit was set by the owner.
 
+## Archive notation repair; shipping resumed — 2026-09-06 03:22 UTC
+
+- Original wave report passed unchanged with 3f414a7. Final-ready at `d19f166691fcba67ee181a0d6d3808579e1485ec`: all SC1–SC5 met, six task tests and full-wave review reused, compile-only project Verify executed once/pass. Evaluator ship approval recorded in external-root/pull-request/ship-approval.json.
+- Native handle 88061 stopped after preparing `.project/archive/001-widget-counter`: a separate archive review predicate rejected `<integer>`. Original report/product unchanged; no ship commit/PR yet. `SHIP-ARCHIVE-BLOCKER.md` and diagnosis preserved. Further static scope review plus public reproduction found manifest criterion rows had the same false rejection.
+- Source `e0e1ece` shares exact criterion/observation separation between live and archive review gates. Manifest criterion rows may retain notation only when they exactly match validated FINAL/INTENT; other row cells and all other lines still reject placeholders. Legacy task artifacts without AC sections remain supported. Shared-rule RED/GREEN/sensitivity/restoration and 249 affected tests pass (409.275s); the final manifest follow-up has observed RED, eight focused tests pass, sabotage fail/restoration pass. Sync 199, zero warnings. Receipt `pull-request/archive-criterion-regression.json`. Simplify kept one shared extraction rule, canonical task reads and existing exact manifest comparison.
+- Global Codex/Claude updated to e0e1ece, 14 skills each, doctor healthy; receipt root `gsd-path-global-update-e0e1ece`.
+- Current native handle 45888, same external thread, prompt `bootstrap/pr-archive-gate-repair.txt`; helper directory `/Users/jeremymcspadden/orca/evaluations/gsd-path-archive-criterion-e0e1ece/scripts`. Resume the persisted archive, preserve all old content/product hashes, finish ship and native PR creation/reuse, then stop for the user merge commit. Do not rerun closed product checks or reviewers. Revalidate liveness before resume.
+- No-mistakes read-only preflight reported uninitialized. Its second delivery pipeline was not initialized because Path owns this native integration test. Actual PR/check state must be reported; an empty CI list is not a green-CI claim. LOOP fields and independent panel remain unresolved.
+
 ## Quoted-criterion gate fix; final preparation resumed — 2026-09-06 03:04 UTC
 
 - T001 landed `69bca49b1d7ac350b9e1547d48d57e233ba6fc22` at base `e44bd137128beb82c6808d1334e085cdaa40b6dd`. Six authoritative isolated tests pass; actual CLI walkthrough is recorded. Full native wave reviewer passed SC1–SC5 at `6f8558b6854ddefa01bd053cc0feda5fe30e903f` with reconstructed task patch and recorded Verify, no command rerun.
