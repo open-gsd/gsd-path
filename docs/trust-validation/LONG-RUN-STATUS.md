@@ -5,6 +5,13 @@ Objective (owner): run the entire long run. fix as needed.
 The objective remains unfinished while required native features are unproven. Do not replace live evidence with helper tests.
 No testing time or token limit was set by the owner.
 
+## Review-cycle recovery — 2026-09-06 00:41 UTC
+
+- Corrected external wave gates accepted both unchanged cycle-1 reports. Canonical finding grouping then rejected shortened AC2/AC3 labels (four structural blockers), while identifying legitimate SC2/SC3 groups. This is report format drift, not another parser defect. Handle 61161 terminal at `6ccbc7b0239fdf80c4a9a3f16d476a5ddb173cc8`.
+- Source instructions clarified in `833cb0d`: quote complete task acceptance/interface criterion before the evidence em dash, not an AC id or paraphrase. Canonical reviewer reference/template synced, 199 resources, no warnings. No further source code change.
+- Attempted bounded original-author formatting correction stopped: pinned BUILD.md requires a new review cycle for non-canonical earlier artifacts. No reports edited or actors dispatched in that attempt; handle 51141 terminal. Seven originals/receipts preserved with verified hashes under `reviews/review-format-originals/wave-1-cycle1/manifest.json`.
+- Evaluator reviewed that concrete rule and authorized legal cycle 2 at current HEAD under existing max_review_cycles=3; cap not increased. Native handle 75473, same thread. Prompt `reviews/evaluator-cycle2.txt` requires settled command reuse, exact criterion syntax, actual native skeptics, and stop before repair implementation at complete fix-task review surface. Revalidate before resuming. This required format-only recovery cycle is measured workflow overhead, not new product work.
+
 ## Wrapped-criterion repair — 2026-09-06 00:34 UTC
 
 - The altered task passed authoritative Verify (six tests, one interpreter-dependent skip), then landed as `5bef9657402966e64cc4592a9e0f76d4aea1ea6d`. Both actual native deep lenses reproduced wrong signed integer values; neither was given the evaluator oracle or a prescribed finding. Original reports retained.
