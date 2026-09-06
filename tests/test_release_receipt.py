@@ -1,5 +1,6 @@
 import hashlib
 import importlib.util
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -48,7 +49,7 @@ class ReleaseReceiptHookTests(unittest.TestCase):
         for relative in (self.guard, self.hook):
             target = self.fixture / relative
             target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes((self.reference / relative).read_bytes())
+            shutil.copy2(self.reference / relative, target)
 
     def check_hooks(self, fixture, reference=None):
         result = release_receipt.git_hook_check(fixture, self.archive, reference)
@@ -65,10 +66,46 @@ class ReleaseReceiptHookTests(unittest.TestCase):
         result = self.check_hooks(self.fixture, self.reference)
         self.assertEqual("pass", result["git_hooks"])
         self.assertEqual([], result["hash_mismatches"])
+        self.assertEqual({"pre-commit": True}, result["fixture_hook_executable"])
 
     def test_same_repository_passes(self):
         result = self.check_hooks(self.reference)
         self.assertEqual("pass", result["git_hooks"])
+
+    def test_nonexecutable_fixture_pre_commit_fails(self):
+        (self.fixture / self.hook).chmod(0o644)
+        result = self.check_hooks(self.fixture, self.reference)
+        self.assertEqual("fail", result["git_hooks"])
+        self.assertEqual([], result["hash_mismatches"])
+        self.assertEqual({"pre-commit": False}, result["fixture_hook_executable"])
+
+    def test_optional_fixture_commit_msg_requires_executability(self):
+        hook = self.fixture / ".git/hooks/commit-msg"
+        hook.write_text("#!/bin/sh\nexit 0\n")
+        for mode, executable, verdict in ((0o644, False, "fail"), (0o755, True, "pass")):
+            with self.subTest(mode=mode):
+                hook.chmod(mode)
+                result = self.check_hooks(self.fixture, self.reference)
+                self.assertEqual(verdict, result["git_hooks"])
+                self.assertEqual({"pre-commit": True, "commit-msg": executable},
+                                 result["fixture_hook_executable"])
+
+    def test_nonexecutable_reference_pre_commit_stays_inert(self):
+        (self.reference / self.hook).chmod(0o644)
+        result = release_receipt.git_hook_check(self.fixture, self.archive, self.reference)
+        self.assertEqual("fail", result["git_hooks"])
+        self.assertFalse(result["steps"][0]["blocked"])
+        self.assertEqual(0, result["steps"][0]["exit_code"])
+        self.assertEqual(0, result["steps"][1]["exit_code"])
+
+    def test_nonexecutable_commit_msg_stays_inert(self):
+        hook = self.reference / ".git/hooks/commit-msg"
+        hook.write_text("#!/bin/sh\nexit 1\n")
+        hook.chmod(0o644)
+        result = self.check_hooks(self.reference)
+        self.assertEqual("fail", result["git_hooks"])
+        self.assertEqual({"pre-commit": True, "commit-msg": False},
+                         result["fixture_hook_executable"])
 
     def test_mismatched_files_fail(self):
         replacements = {self.guard: "raise SystemExit(0)\n", self.hook: "#!/bin/sh\nexit 0\n"}

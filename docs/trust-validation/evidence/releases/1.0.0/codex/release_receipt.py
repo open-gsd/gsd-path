@@ -13,7 +13,7 @@ Two phases, both driven by the evaluator against the fixture repository:
 Every value comes from the fixture repository, the harness records, or the Codex
 session transcript; nothing is invented.
 """
-import argparse, datetime as dt, json, re, shutil, subprocess, sys, tempfile
+import argparse, datetime as dt, json, os, re, shutil, subprocess, sys, tempfile
 from pathlib import Path
 
 HOST = "codex"
@@ -63,6 +63,11 @@ def git_hook_check(repo, archive_rel, committed_repo=None, committed_archive=Non
                                      "checked_repository": sha256(source / ".git/hooks/pre-commit")}
     out["hash_mismatches"] = [key for key in ("guard_sha256", "pre_commit_hook_sha256")
                               if out[key]["fixture"] != out[key]["checked_repository"]]
+    out["fixture_hook_executable"] = {
+        hook: os.access(Path(repo) / ".git/hooks" / hook, os.X_OK)
+        for hook in ("pre-commit", "commit-msg")
+        if hook == "pre-commit" or (Path(repo) / ".git/hooks" / hook).exists()
+    }
     with tempfile.TemporaryDirectory(prefix="gsd-path-hook-check-") as tmp:
         clone = Path(tmp) / "clone"
         git(source, "clone", "-q", "--no-hardlinks", str(source), str(clone))
@@ -71,8 +76,7 @@ def git_hook_check(repo, archive_rel, committed_repo=None, committed_archive=Non
         for hook in ("pre-commit", "commit-msg"):
             src = source / ".git/hooks" / hook
             if src.exists():
-                shutil.copy(src, clone / ".git/hooks" / hook)
-                (clone / ".git/hooks" / hook).chmod(0o755)
+                shutil.copy2(src, clone / ".git/hooks" / hook)
         git(clone, "config", "user.name", "Guard Check"); git(clone, "config", "user.email", "guard@example.invalid")
         if not git(clone, "ls-files", archive):
             raise SystemExit(f"{source} has no committed archive at {archive}")
@@ -89,7 +93,9 @@ def git_hook_check(repo, archive_rel, committed_repo=None, committed_archive=Non
         git(clone, "add", "notes.txt")
         r = subprocess.run(["git", "commit", "-qm", "test: outside archive"], cwd=clone, capture_output=True, text=True)
         out["steps"].append({"step": "commit outside archive", "exit_code": r.returncode, "stderr": r.stderr.strip()[-400:]})
-        out["git_hooks"] = "pass" if not out["hash_mismatches"] and blocked and r.returncode == 0 else "fail"
+        out["git_hooks"] = "pass" if (not out["hash_mismatches"]
+                                     and all(out["fixture_hook_executable"].values())
+                                     and blocked and r.returncode == 0) else "fail"
     return out
 
 
