@@ -11,7 +11,7 @@ Previous goal turn: progress (three-milestone integration/oracle and completed e
 
 - Controlled-fault case root `/Users/jeremymcspadden/orca/evaluations/gsd-path-review-fault-8ecdb9b-20260905`, pinned candidate 8ecdb9b8d74c86e0042c5ca876a3b57284451736. Existing prepare helper installed a fresh reviews fixture; no completed run or archive changed.
 - Reviewed procedure: `FAULT-PROCEDURE.md` in that root; precision-loss mutation is conditional on inspecting actual finished coder code. No fault injected yet. Existing tests may catch it first; do not weaken them or relabel that as skeptic proof.
-- Native thread `01a073f8-3e3c-74c0-a1df-cdd90d45be51`, handle 19914, initial router running. Stop at ordinary first owner artifact, then evaluator approvals through plan. Later mandatory stop after coder completion, BEFORE authoritative Verify/landing/review and with no child live, for external fault inspection/seed.
+- Native thread `01a073f8-3e3c-74c0-a1df-cdd90d45be51`, handle 52531, intent approved and settled research/synthesis routing running. Inspection capture retained. Audit dispositions apply existing owner policy; a wrong --repo audit revalidation failed, then original sidecar root + absolute collected audit + frozen inventory passed without provenance edits. Stop at next synthesis/plan owner gate. Later mandatory stop after coder completion, BEFORE authoritative Verify/landing/review and with no child live, for external fault inspection/seed.
 - Let native reviews and canonical finding grouping determine the real outcome. A standing criterion finding may exercise skeptic and complete fix-task/re-review paths. Do not prescribe reviewer verdicts. Stop after repaired review proof; another ship run is unnecessary for these features.
 - Guard continuation ruling, loop owner values, independent panel model, and exact GitHub target approval remain unresolved. This continuation does not grant any of those permissions.
 
@@ -372,3 +372,6 @@ M003 native task, full-wave, final preparation, 18-test project Verify and ship/
 Operator receipt attempts for ship in the reviews-only catalog and cross-root discussion evidence were refused by the harness as scoped; no invalid receipt was written. The consolidated summary retains the separate negative discussion proof with explicit candidate/path provenance. These operator metadata errors are not plugin behavior failures.
 
 Source work is local; no source push/PR. Goal not marked complete. All completed native cases are closed; resume only the specific unresolved authorized path, without rerunning completed gates.
+
+
+Fault-case procedure clarification before any injection: preserve the original exact integer validation, then round the parsed value through float and back to int. The measured external candidate 9007199254740993 becomes 9007199254740992 under that fault. This is a probe value, not an input bound. Existing decimal/malformed-input rejection must remain intact. No product fault or test edit has occurred. INTENT Corrections explicitly scope the no-fault instruction to definition and preserve the later evaluator staging boundary without waiving any product criterion.
