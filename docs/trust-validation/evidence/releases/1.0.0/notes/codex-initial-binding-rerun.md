@@ -72,9 +72,9 @@ This rerun provides no proof that Path is optimized for this small CLI task.
 
 ## Evidence
 
-- [Machine comparison](codex-initial-binding-rerun.json)
-- [Native dispatch and effective sandbox records](codex-initial-binding-native.json)
+- [Machine comparison](../codex-initial-binding-rerun.json)
+- [Native dispatch and effective sandbox records](../codex-initial-binding-native.json)
 - [Raw run directory](/Users/jeremymcspadden/orca/evaluations/gsd-path-astra-d1faa12)
 - [Blocked state and failure log](/Users/jeremymcspadden/orca/evaluations/gsd-path-astra-d1faa12/path/repo/.project/STATE.md)
 - [Research evidence](/Users/jeremymcspadden/orca/evaluations/gsd-path-astra-d1faa12/path/repo/.project/research/evidence-pitfalls.md)
-- [Original Git research](../../../research-initial-binding-git.md)
+- [Original Git research](../../../../research-initial-binding-git.md)

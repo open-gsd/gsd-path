@@ -1,0 +1,33 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "codex",
+  "run_id": "01a0783b-f94a-7770-9e90-d88b6908ffe4",
+  "result": "pass",
+  "step": "child-spawn",
+  "command": "collaboration.spawn_agent",
+  "child_api": "collaboration.spawn_agent",
+  "child_id": "build_t001",
+  "child_status": "completed",
+  "output": {
+    "child_id": "build_t001",
+    "status": "completed",
+    "spawn_call": {
+      "call_id": "call_dD1VvUhvZxUFnmHSk7s9MCnl",
+      "name": "spawn_agent",
+      "namespace": "collaboration",
+      "arguments": {
+        "task_name": "build_t001",
+        "fork_turns": "none"
+      }
+    },
+    "spawn_output": "{\"task_name\":\"/root/build_t001\"}",
+    "list_agents_states": [
+      {
+        "agent_name": "/root/build_t001",
+        "agent_status": {
+          "completed": "T001: ready.\nVerify: `python3 -B tests/test_count.py` passed \u2014 3 tests, 22 CLI cases.\nChanged: `count.py`, `tests/test_count.py`, `.project/tasks/T001-widget-counter-cli.md` (Log only).\nReady for orchestrator isolated verification and landing."
+        }
+      }
+    ]
+  }
+}

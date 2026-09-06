@@ -67,7 +67,7 @@ the baseline run budget-compliant or prove in-flight enforcement.
   native run; the recovery fuse ended this benchmark.
 
 No installed plugin source or archived artifact was repaired. The new source
-fixes and their [verification record](../../../runtime-followup.md) are separate
+fixes and their [verification record](../../../../runtime-followup.md) are separate
 from this unchanged candidate's measurement.
 
 ## Evidence and limits
@@ -82,12 +82,12 @@ The generic comparison exited 3 because formal pipeline trust was unproven. In
 this run the milestone is also independently known to be blocked, unlike the
 completed standard comparison. No release-host receipt is claimed.
 
-- [Machine comparison](codex-quick-run/comparison.json)
-- [Metrics and roles](codex-quick-run/metrics.json)
-- [Native session metadata and counters](codex-quick-run/native-sessions.json)
-- [Final state and failure history](codex-quick-run/STATE.md)
-- [Task and verification log](codex-quick-run/T001.md)
-- [Passing but uncollected wave review](codex-quick-run/wave-review.md)
-- [Observed budget ledger](codex-quick-run/observed-budget.json) and [executed budget receipts](codex-quick-run/budget-receipts.json)
-- [Git evidence](codex-quick-run/git-evidence.json), [verified bundle](codex-quick-run/fixture.bundle), and [bundle verification](codex-quick-run/bundle-verification.txt)
+- [Machine comparison](../codex-quick-run/comparison.json)
+- [Metrics and roles](../codex-quick-run/metrics.json)
+- [Native session metadata and counters](../codex-quick-run/native-sessions.json)
+- [Final state and failure history](../codex-quick-run/STATE.md)
+- [Task and verification log](../codex-quick-run/T001.md)
+- [Passing but uncollected wave review](../codex-quick-run/wave-review.md)
+- [Observed budget ledger](../codex-quick-run/observed-budget.json) and [executed budget receipts](../codex-quick-run/budget-receipts.json)
+- [Git evidence](../codex-quick-run/git-evidence.json), [verified bundle](../codex-quick-run/fixture.bundle), and [bundle verification](../codex-quick-run/bundle-verification.txt)
 - [Preserved raw fixture](/Users/jeremymcspadden/orca/evaluations/gsd-path-quick-76051f9)
