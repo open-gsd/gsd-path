@@ -1171,6 +1171,34 @@ class GuardHookTests(unittest.TestCase):
                     {"tool_name": "Bash", "tool_input": {"command": command}}
                 )
 
+    def test_allows_ordinary_commands_from_repository_root_containing_archive(self):
+        # Seen live 2026-09-06: once .project/archive/ existed, the guard treated the
+        # repository root as archive context and denied echo, unittest and the
+        # archive helper itself. Containing an archive is not being inside one.
+        previous = Path.cwd()
+        with tempfile.TemporaryDirectory() as temporary:
+            repository = Path(temporary).resolve()
+            (repository / ".project" / "archive" / "001-mvp").mkdir(parents=True)
+            try:
+                os.chdir(repository)
+                for command in ("echo guard-probe", "python3 -m unittest", "python3 .gsd-path/archive_milestone.py render-manifest --repo " + str(repository)):
+                    with self.subTest(command=command):
+                        self.assert_allowed(
+                            {
+                                "tool_name": "Bash",
+                                "tool_input": {"command": command},
+                                "cwd": str(repository),
+                            }
+                        )
+                self.assert_denied(
+                    {
+                        "tool_name": "Bash",
+                        "tool_input": {"command": "rm -rf .project", "cwd": str(repository)},
+                    }
+                )
+            finally:
+                os.chdir(previous)
+
     def test_denies_deleting_archive_ancestor(self):
         previous = Path.cwd()
         with tempfile.TemporaryDirectory() as temporary:

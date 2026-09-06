@@ -897,7 +897,8 @@ def contains_existing_archive(path, working_directories):
     return False
 
 
-def path_in_archive(path, working_directories=()):
+def path_in_archive(path, working_directories=(), ancestors=True):
+    """True when path is inside an existing archive, or (ancestors=True) contains one."""
     for value in path_values(path):
         if in_archive(value) or expansion_can_match_archive(value):
             return True
@@ -916,10 +917,32 @@ def path_in_archive(path, working_directories=()):
                 resolved = Path(combined).resolve(strict=False)
             except (OSError, RuntimeError):
                 continue
-            if in_archive(resolved.as_posix()) or contains_existing_archive(
-                resolved, working_directories
+            if in_archive(resolved.as_posix()) or (
+                ancestors and contains_existing_archive(resolved, working_directories)
             ):
                 return True
+    return False
+
+
+def working_directory_in_archive(path):
+    """A working directory is archive context only when it is inside an archive.
+
+    The repository root merely contains .project/archive/ once a milestone has
+    shipped; treating it as archive context would deny every shell command in
+    the project. Ancestor containment stays with path_in_archive for operands,
+    so deleting the archive's parent is still refused.
+    """
+    for value in path_values(path):
+        if in_archive(value) or expansion_can_match_archive(value):
+            return True
+        if os.name != "nt" and re.match(r"^[A-Za-z]:[/\\]", value):
+            continue
+        try:
+            resolved = Path(value).resolve(strict=False)
+        except (OSError, RuntimeError):
+            continue
+        if in_archive(resolved.as_posix()):
+            return True
     return False
 
 
@@ -981,9 +1004,17 @@ def segment_directories(tokens, working_directories):
             current_directories = [f"{base}/{target}" for base in bases]
 
 
+# Commands that can destroy an archive through one of its ancestors. Only
+# for these does an operand that merely contains .project/archive/ count as
+# an archive reference; `python3 helper.py --repo <root>` must not.
+ARCHIVE_ANCESTOR_COMMANDS = frozenset({"rm", "rmdir", "mv", "unlink", "shred", "trash", "rsync"})
+
+
 def command_references_archive(tokens, working_directories):
     for segment, directories in segment_directories(tokens, working_directories):
-        if any(path_in_archive(token, directories) for token in segment):
+        invocation = command_invocation(segment)
+        ancestors = invocation is not None and invocation[0] in ARCHIVE_ANCESTOR_COMMANDS
+        if any(path_in_archive(token, directories, ancestors) for token in segment):
             return True
         wrapped = wrapped_command_tokens(segment)
         if wrapped is not None and command_references_archive(wrapped, directories):
@@ -1691,7 +1722,7 @@ def evaluate(event):
             for path_working_directories, targets in grouped_paths.items():
                 enforce_pipeline_reentry(targets, path_working_directories)
     archive_working_directory = any(
-        path_in_archive(path) for path in working_directories
+        working_directory_in_archive(path) for path in working_directories
     )
     if archive_working_directory and not commands and not read_tool:
         deny(ARCHIVE_REASON)
@@ -1711,7 +1742,7 @@ def command_denial(command, working_directories):
                 return reason
         tokens = shell_tokens(outer)
         archive_context = (
-            any(path_in_archive(path) for path in working_directories)
+            any(working_directory_in_archive(path) for path in working_directories)
             or bool(ARCHIVE_REFERENCE.search(outer))
             or command_references_archive(tokens, working_directories)
             or unresolved_archive_expansion(outer, tokens, working_directories)
