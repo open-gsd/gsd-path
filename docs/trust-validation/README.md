@@ -11,7 +11,7 @@ receipt passes the shared evidence validator.
 | File | Purpose |
 |------|---------|
 | [FEATURE-EVALUATION.md](FEATURE-EVALUATION.md) | Longer Codex scenarios, lookahead checkpoints, product oracles and separate native evidence |
-| [full-run-4295d75.md](full-run-4295d75.md) | 2026-09-06 full quick-lane run at main HEAD; verification claims replayed byte-for-byte against shipped code; native guard recipe |
+| [full-run-4295d75.md](full-run-4295d75.md) | Quick-lane evaluation at candidate 4295d75, replay evidence, and native guard recipe |
 | [HOST-MATRIX.md](HOST-MATRIX.md) | Current all-host posture and evidence status |
 | [LIVE-EVIDENCE-TEMPLATE.md](LIVE-EVIDENCE-TEMPLATE.md) | Required full milestone receipt contract |
 | [automated-test-inventory.md](automated-test-inventory.md) | Test suites and CI gap |

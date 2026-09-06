@@ -28,8 +28,8 @@ The release gate remains blocked on host receipts, as designed.
 
 ## Code output versus verification phases
 
-The replay script re-executes every verification claim against the shipped
-commits in fresh temporary clones. Walkthrough output is compared exactly;
+The replay script re-executes recorded walkthrough and ledger commands at their
+recorded commits in fresh temporary clones. Walkthrough output is compared exactly;
 ledger output uses the normalization described below. It is tracked beside
 its result as
 [replay_verification.py](evidence/releases/1.0.0/codex-quick-4295d75/replay_verification.py).
