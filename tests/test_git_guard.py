@@ -508,17 +508,29 @@ class GitGuardEndToEndTests(unittest.TestCase):
 
     def enter_build(self, phase="build", status="active"):
         self.git("branch", "-m", "gsd-path/M002")
-        (self.repo / ".project" / "STATE.md").write_text(
-            f"---\npipeline: gsd-path/v2\nproject: demo\nmilestone: next\n"
-            f"phase: {phase}\nstatus: {status}\nbranch: gsd-path/M002\narchive: null\n---\n",
-            encoding="utf-8",
-        )
         tasks = self.repo / ".project" / "tasks"
         tasks.mkdir()
         (tasks / "T001-demo.md").write_text(TASK_FILE, encoding="utf-8")
+        return self.write_state(phase, status, subject="build: enter build")
+
+    def write_state(self, phase, status, archive="null", subject=None):
+        (self.repo / ".project" / "STATE.md").write_text(
+            "---\npipeline: gsd-path/v2\nproject: demo\nmilestone: next\n"
+            f"phase: {phase}\nstatus: {status}\nbranch: gsd-path/M002\narchive: {archive}\n---\n",
+            encoding="utf-8",
+        )
         self.git("add", "-A")
-        self.commit("build: enter build")
+        self.commit(subject or f"router: enter {phase}/{status}")
         return self.head()
+
+    def run_pre_push(self, *lines):
+        return subprocess.run(
+            [sys.executable, str(SCRIPT), "pre-push", "origin", "https://example.invalid/r.git"],
+            cwd=self.repo,
+            capture_output=True,
+            text=True,
+            input="".join(line + "\n" for line in lines),
+        )
 
     def stage_product_change(self):
         (self.repo / "app.py").write_text("print('landed')\n", encoding="utf-8")
@@ -640,18 +652,87 @@ class GitGuardEndToEndTests(unittest.TestCase):
         result = self.run_guard("router: install guard hooks")
         self.assertEqual(0, result.returncode, result.stderr)
 
-    def test_landing_rule_applies_only_during_build(self):
-        self.enter_build(phase="plan")
+    def test_product_commits_outside_build_are_refused_on_unshipped_lineage(self):
+        self.enter_build(phase="define")
+        for phase, status in (("plan", "active"), ("ship", "blocked")):
+            with self.subTest(phase=phase, status=status):
+                self.write_state(phase, status)
+                self.stage_product_change()
+                result = self.run_guard("fix(app): owner-requested hotfix outside build")
+                self.assertEqual(1, result.returncode, result.stderr)
+                self.assertIn(f"STATE is {phase}", result.stderr)
+                self.git("reset", "-q", "--hard", "HEAD")
+        self.git("checkout", "-q", "-b", "hotfix/m002")  # cut from the bound branch
         self.stage_product_change()
-        result = self.run_guard("feat(app): direct commit outside build")
+        result = self.run_guard("fix(app): hotfix branch off unshipped lineage")
+        self.assertEqual(1, result.returncode, result.stderr)
+        self.assertIn("STATE is ship", result.stderr)
+
+    def test_pre_commit_refuses_product_files_outside_build_without_a_message(self):
+        self.enter_build(phase="ship", status="blocked")
+        self.stage_product_change()
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT), "pre-commit"],
+            cwd=self.repo,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(1, result.returncode, result.stderr)
+        self.assertIn("STATE is ship", result.stderr)
+
+    def test_bookkeeping_commits_pass_outside_build(self):
+        self.enter_build(phase="ship", status="blocked")
+        (self.repo / ".project" / "note.md").write_text("ok\n", encoding="utf-8")
+        self.git("add", "-A")
+        result = self.run_guard("router: record final gap")
         self.assertEqual(0, result.returncode, result.stderr)
 
-    def test_landing_rule_applies_only_on_pipeline_branches(self):
+    def test_shipped_lineage_is_ordinary_work(self):
+        self.enter_build(phase="shipped", status="done")
+        self.git("checkout", "-q", "-b", "feature/x")  # like a branch cut from main
+        self.stage_product_change()
+        result = self.run_guard("feat(app): ordinary work after integration")
+        self.assertEqual(0, result.returncode, result.stderr)
+
+    def test_landing_rule_covers_branches_cut_from_the_bound_branch(self):
         self.enter_build()
         self.git("checkout", "-q", "-b", "feature/x")
         self.stage_product_change()
         result = self.run_guard("feat(app): direct commit off the bound branch")
-        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(1, result.returncode, result.stderr)
+        self.assertIn("not a landing commit", result.stderr)
+
+    def test_pre_push_publishes_milestone_work_only_as_its_ship_commit(self):
+        unfinished = self.enter_build(phase="ship", status="blocked")
+        ship = self.write_state(
+            "shipped", "done", archive=".project/archive/002-next", subject="ship: M002 — next"
+        )
+        zero = git_guard.NULL_SHA
+        bound = "refs/heads/gsd-path/M002"
+        other = "refs/heads/hotfix/m002"
+        cases = (
+            (f"{bound} {unfinished} {bound} {zero}", "moves gsd-path/M002"),
+            (f"HEAD {unfinished} {bound} {zero}", "moves gsd-path/M002"),
+            (f"{bound} {ship} {bound} {zero}", None),
+            (f"{bound} {ship} {bound} {unfinished}", None),
+            (f"(delete) {zero} {bound} {unfinished}", "moves gsd-path/M002"),
+            (f"(delete) {zero} {bound} {ship}", None),
+            (f"(delete) {zero} {bound} {zero}", None),
+            (f"{other} {unfinished} {other} {zero}", "carries unshipped gsd-path/M002 work (ship/blocked)"),
+            (f"HEAD {unfinished} {other} {zero}", "carries unshipped"),
+            (f"{other} {ship} {other} {zero}", None),
+            (f"refs/tags/v1 {ship} refs/tags/v1 {zero}", None),
+        )
+        for line, expected in cases:
+            with self.subTest(line=line):
+                result = self.run_pre_push(line)
+                self.assertEqual(0 if expected is None else 1, result.returncode, result.stderr)
+                if expected:
+                    self.assertIn(expected, result.stderr)
+        self.assertEqual(0, self.run_pre_push().returncode)
+        malformed = self.run_pre_push("refs/heads/x deadbeef")
+        self.assertEqual(1, malformed.returncode)
+        self.assertIn("inspection failed", malformed.stderr)
 
     def test_fails_closed_outside_git(self):
         with tempfile.TemporaryDirectory() as empty:

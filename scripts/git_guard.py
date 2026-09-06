@@ -23,6 +23,7 @@ an unreadable index cannot prove archive immutability.
 
 import re
 import subprocess
+from functools import lru_cache
 import sys
 from pathlib import Path
 
@@ -32,8 +33,8 @@ _HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(_HERE / "runtime" if (_HERE / "runtime" / "isolation.py").is_file() else _HERE))
 sys.dont_write_bytecode = True  # a hook must not leave __pycache__ in the worktree
 try:
-    from isolation import _landing_state, task_frontmatter
-    from pipeline_git import task_commit_body
+    from isolation import NULL_SHA, _landing_state, task_frontmatter
+    from pipeline_git import is_ship_subject, task_commit_body
 except ImportError as error:  # pragma: no cover - broken install
     print(
         f"gsd-path guard: pipeline runtime is missing ({error}); commit blocked; "
@@ -73,6 +74,15 @@ FULL_SHA = re.compile(r"^[0-9a-f]{40}$")
 LANDING_HINT = (
     "during build, changes outside .project/ land only through isolation.py "
     "land; bookkeeping commits may touch only .project/"
+)
+PRODUCT_HINT = (
+    "on unshipped pipeline lineage (HEAD descends from the bound gsd-path/M### "
+    f"branch) {LANDING_HINT}; findings during ship reopen through the patch plan"
+)
+PUBLICATION_HINT = (
+    "unshipped milestone work reaches a remote only as its ship commit "
+    "(STATE shipped/done) through archive_milestone.py integrate; findings during "
+    "ship reopen through the patch plan (see SHIP.md)"
 )
 LEGACY_STATE_FIELDS = {
     "pipeline",
@@ -191,10 +201,24 @@ def shown_file(revspec):
     return shown.stdout if shown.returncode == 0 else None
 
 
+def state_at(revision):
+    """The STATE.md frontmatter at a revision; None when it has no STATE.md."""
+    content = shown_file(f"{revision}:.project/STATE.md")
+    return None if content is None else frontmatter_of(content, f"{revision} STATE.md")
+
+
 def head_frontmatter():
-    """The committed STATE.md frontmatter; None only when HEAD has no STATE.md."""
-    content = shown_file("HEAD:.project/STATE.md")
-    return None if content is None else frontmatter_of(content, "committed STATE.md")
+    return state_at("HEAD")
+
+
+def shipped(state):
+    return (state.get("phase"), state.get("status")) == ("shipped", "done")
+
+
+def unshipped_bound_branch(state):
+    """The bound branch a STATE still owes a ship commit to, or None."""
+    bound = state.get("branch", "")
+    return bound if BOUND_BRANCH.fullmatch(bound) and not shipped(state) else None
 
 
 def frontmatter_of(content, label):
@@ -370,6 +394,7 @@ def staged_abandon_target(new_archives, state):
     return target, slug, reason
 
 
+@lru_cache(maxsize=None)
 def current_branch():
     return subprocess.run(
         ["git", "branch", "--show-current"],
@@ -408,9 +433,9 @@ def repo_root():
     )
 
 
-def build_landing_violations(entries, subject, body):
-    """Enforce landing-commit shape for changes outside .project/ during build."""
-    if subject is None or is_ship_commit(subject):
+def product_commit_violations(entries, subject, body):
+    """Hold product changes on unshipped pipeline lineage to build landing commits."""
+    if is_ship_commit(subject):
         return []  # ship commits are held to .project/ by ship_contract_violations
     staged = sorted({path for _, old, new in entries for path in (old, new) if path})
     if all(path.startswith(BOOKKEEPING_PREFIXES) for path in staged):
@@ -418,14 +443,16 @@ def build_landing_violations(entries, subject, body):
     # A commit that enters build must stay .project/-only, so the staged STATE
     # counts as much as the committed one.
     state = staged_frontmatter() if ".project/STATE.md" in staged else head_frontmatter()
-    if state is None or state.get("phase") != "build":
+    if state is None:
         return []
-    bound = state.get("branch", "")
-    if BOUND_BRANCH.fullmatch(bound) is None:
+    phase = state.get("phase")
+    if subject is None and phase == "build":
+        return []  # pre-commit has no message; commit-msg checks the landing shape
+    bound = unshipped_bound_branch(state)
+    if bound is None or not head_descends_from(f"refs/heads/{bound}"):
         return []
-    branch = current_branch()
-    if branch != bound and not branch.startswith(TASK_BRANCH_PREFIX):
-        return []
+    if phase != "build":
+        return [f"product files are staged while STATE is {phase}; {PRODUCT_HINT}"]
     if TASK_SUBJECT.fullmatch(subject) is None:
         return [f"{subject!r} is not a landing commit; {LANDING_HINT}"]
     fields = {
@@ -458,6 +485,59 @@ def build_landing_violations(entries, subject, body):
     if problems:
         return [f"{subject!r} is not a valid landing commit ({'; '.join(problems)}); {LANDING_HINT}"]
     return []
+
+
+@lru_cache(maxsize=None)
+def ship_commit_at(sha):
+    """True when the commit is the strict ship commit its own STATE.md names."""
+    shown = subprocess.run(
+        ["git", "show", "--no-patch", "--format=%s", sha],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    state = state_at(sha) if shown.returncode == 0 else None
+    if state is None:
+        return False
+    archive = state.get("archive") or ""
+    return strict_ship_state(state, archive) and is_ship_subject(
+        shown.stdout.strip(), archive.rsplit("/", 1)[-1]
+    )
+
+
+def pre_push_violations(lines):
+    """Refuse ref updates that publish unshipped milestone work.
+
+    A bound-named ref moves only to, or away from, its strict ship commit. Any
+    other ref may not carry a commit whose STATE.md still owes a ship commit.
+    """
+    found = []
+    for line in lines:
+        parts = line.split()
+        if len(parts) != 4:
+            raise ValueError(f"unexpected pre-push line: {line!r}")
+        local_ref, local_sha, remote_ref, remote_sha = parts
+        names = [ref.removeprefix("refs/heads/") for ref in (local_ref, remote_ref)]
+        bound = next((name for name in names if BOUND_BRANCH.fullmatch(name)), None)
+        if bound is not None:
+            # A deletion is judged by the commit it removes; an absent ref proves nothing.
+            sha = remote_sha if local_sha == NULL_SHA else local_sha
+            if sha != NULL_SHA and not ship_commit_at(sha):
+                found.append(
+                    f"{remote_ref} <- {sha[:12]} moves {bound} off its ship commit; "
+                    f"{PUBLICATION_HINT}"
+                )
+            continue
+        if local_sha == NULL_SHA:
+            continue
+        state = state_at(local_sha)
+        owed = unshipped_bound_branch(state) if state is not None else None
+        if owed is not None:
+            found.append(
+                f"{remote_ref} <- {local_sha[:12]} carries unshipped {owed} work "
+                f"({state.get('phase')}/{state.get('status')}); {PUBLICATION_HINT}"
+            )
+    return found
 
 
 def is_ship_commit(subject):
@@ -606,7 +686,23 @@ def commit_message(argv):
     return message_of(argv[1])
 
 
+def report(found, action):
+    if not found:
+        return 0
+    print(f"gsd-path guard blocked the {action}:", file=sys.stderr)
+    for violation in found:
+        print(f"  {violation}", file=sys.stderr)
+    return 1
+
+
 def main(argv):
+    if len(argv) > 1 and argv[1] == "pre-push":
+        try:
+            found = pre_push_violations(sys.stdin.read().splitlines())
+        except Exception as error:
+            print(f"gsd-path guard: inspection failed; push blocked ({error})", file=sys.stderr)
+            return 1
+        return report(found, "push")
     try:
         entries = staged_entries()
         subject, body = commit_message(argv)
@@ -626,7 +722,7 @@ def main(argv):
         )
         if abandon is not None:
             current_archive = abandon[0]
-        landing = build_landing_violations(entries, subject, body)
+        landing = product_commit_violations(entries, subject, body)
     except Exception as error:
         print(
             f"gsd-path guard: inspection failed; commit blocked ({error}); "
@@ -647,12 +743,7 @@ def main(argv):
     found.extend(ship_contract_violations(entries, subject, body, new_archives, state))
     found.extend(abandon_contract_violations(subject, body, abandon))
     found.extend(landing)
-    if found:
-        print("gsd-path guard blocked the commit:", file=sys.stderr)
-        for violation in found:
-            print(f"  {violation}", file=sys.stderr)
-        return 1
-    return 0
+    return report(found, "commit")
 
 
 if __name__ == "__main__":

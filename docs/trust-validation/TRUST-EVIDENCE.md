@@ -30,7 +30,7 @@ node /Users/jeremymcspadden/github/open-gsd/gsd-path/scripts/install.mjs \
 
 ## 2. Claude guards (deny / allow)
 
-**Files present:** `.gsd-path/guard_hook.py`, `.gsd-path/git_guard.py`, `.claude/settings.json`, `.git/hooks/pre-commit`, `.git/hooks/commit-msg`
+**Files present:** `.gsd-path/guard_hook.py`, `.gsd-path/git_guard.py`, `.claude/settings.json`, `.git/hooks/pre-commit`, `.git/hooks/commit-msg`, `.git/hooks/pre-push`
 
 ### Deny — `guard_hook.py` (stdin)
 
