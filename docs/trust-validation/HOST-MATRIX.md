@@ -20,3 +20,16 @@ full-milestone receipt for every host below.
 
 Historical smoke evidence remains under `evidence/`; release receipts belong
 under `evidence/releases/<version>/` and are never inferred from smoke runs.
+
+## Release procedure (from the 2026-09-06 Codex receipt run)
+
+`npm run verify:release` accepts only host receipts as `.md` files at the root
+of `evidence/releases/<version>/`; other notes live under `notes/`. Every
+receipt must name one frozen candidate, and only evidence files plus this
+matrix and TRUST-EVIDENCE.md may change after that candidate. So the order
+is: merge every code and documentation change first, freeze the candidate,
+run all eleven host receipts against it, then publish. The Codex receipt
+above proves the protocol and the assembly tool
+(`evidence/releases/1.0.0/codex/release_receipt.py`); it is bound to its own
+candidate and must be regenerated for the final release candidate.
+

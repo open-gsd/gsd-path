@@ -161,7 +161,7 @@ admission cannot prevent an in-flight overrun or prove unreported usage. A stric
 request returns blocked. The new runner has executable regression and package
 coverage; its end-to-end time and token savings have not been measured yet.
 
-The [unchanged-candidate quick comparison](evidence/releases/1.0.0/codex-quick-run.md)
+The [unchanged-candidate quick comparison](evidence/releases/1.0.0/notes/codex-quick-run.md)
 ended build/blocked after passing product checks and an uncollected passing wave
 review. Its recovery failures are benchmark evidence, not successful behavior of
 the updated runner. Build instructions also clarify that wave collection uses a
