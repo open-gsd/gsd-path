@@ -61,7 +61,8 @@ def git_hook_check(repo, archive_rel, committed_repo=None, committed_archive=Non
                            "checked_repository": sha256(source / ".gsd-path/git_guard.py")}
     out["pre_commit_hook_sha256"] = {"fixture": sha256(Path(repo) / ".git/hooks/pre-commit"),
                                      "checked_repository": sha256(source / ".git/hooks/pre-commit")}
-    same_guard = out["guard_sha256"]["fixture"] == out["guard_sha256"]["checked_repository"]
+    out["hash_mismatches"] = [key for key in ("guard_sha256", "pre_commit_hook_sha256")
+                              if out[key]["fixture"] != out[key]["checked_repository"]]
     with tempfile.TemporaryDirectory(prefix="gsd-path-hook-check-") as tmp:
         clone = Path(tmp) / "clone"
         git(source, "clone", "-q", "--no-hardlinks", str(source), str(clone))
@@ -88,7 +89,7 @@ def git_hook_check(repo, archive_rel, committed_repo=None, committed_archive=Non
         git(clone, "add", "notes.txt")
         r = subprocess.run(["git", "commit", "-qm", "test: outside archive"], cwd=clone, capture_output=True, text=True)
         out["steps"].append({"step": "commit outside archive", "exit_code": r.returncode, "stderr": r.stderr.strip()[-400:]})
-        out["git_hooks"] = "pass" if same_guard and blocked and r.returncode == 0 else "fail"
+        out["git_hooks"] = "pass" if not out["hash_mismatches"] and blocked and r.returncode == 0 else "fail"
     return out
 
 
