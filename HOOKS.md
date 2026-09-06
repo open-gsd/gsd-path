@@ -101,8 +101,9 @@ See [UPDATE.md](UPDATE.md).
 
 **`guard_hook.py`** (pre-tool-use):
 
-- non-read actions targeting archived paths or an existing ancestor of the
-  archive tree
+- non-read tool actions targeting archived paths or an existing ancestor of
+  the archive tree; shell operands count an ancestor only for deletion or move
+  commands
 - `git reset --hard`, destructive `git clean` modes, force pushes (including
   `+` refspecs), destructive branch or ref deletion, `git branch -m`,
   `git worktree remove --force`, `git stash drop`/`clear`, and whole-tree
@@ -112,6 +113,13 @@ See [UPDATE.md](UPDATE.md).
   `.gsd-path`) while `.project/STATE.md` exists
 - shell commands that reference the archive unless the whole command is a
   recognized standalone read
+- deletion or move commands outside a single simple segment, including command
+  chains, pipes, newlines, grouping, directory changes, and command substitution
+- deletion or move commands with any argument outside the literal-path character
+  set: ASCII letters, digits, `.`, `_`, `-`, and `/` (plus a drive prefix and
+  backslashes on Windows). One matching pair of surrounding quotes is allowed;
+  spaces, parameters, wildcards, braces, and tilde paths are denied even when
+  quoted. This also applies to `find -delete` and supported destructive aliases
 - destructive Git commands nested in supported shell and command wrappers
 - archive glob/brace expansions and execution-capable read options such as
   `rg --pre`
@@ -119,6 +127,13 @@ See [UPDATE.md](UPDATE.md).
   deterministic route is outside build
 
 Read tools (`Read`, `Grep`, `View`, …) may still open archive paths.
+
+A working directory is archive context only when it is inside an archive.
+Merely containing `.project/archive/` does not put the repository root in
+archive context: `echo guard-probe`, `python3 -m unittest`, and the archive
+helper with `--repo <root>` remain allowed by the archive guard. Deleting an
+archive ancestor, such as `rm -rf .project`, remains blocked. A simple command
+such as `rm -rf scratch` passes the archive check; other guard rules still apply.
 
 **`git_guard.py`** (pre-commit + commit-msg):
 

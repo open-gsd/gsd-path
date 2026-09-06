@@ -320,16 +320,31 @@ XARGS_OPTIONS_WITH_VALUES = frozenset(
         "--process-slot-var",
     }
 )
-SHELL_WRITE_COMMANDS = frozenset(
+DESTRUCTIVE_SHELL_COMMANDS = frozenset(
+    {
+        "del",
+        "erase",
+        "mi",
+        "move",
+        "move-item",
+        "mv",
+        "rd",
+        "remove-item",
+        "ri",
+        "rm",
+        "rmdir",
+        "rsync",
+        "shred",
+        "trash",
+        "unlink",
+    }
+)
+SHELL_WRITE_COMMANDS = DESTRUCTIVE_SHELL_COMMANDS | frozenset(
     {
         "cp",
         "install",
         "ln",
         "mkdir",
-        "mv",
-        "rm",
-        "rmdir",
-        "rsync",
         "tee",
         "touch",
         "truncate",
@@ -897,7 +912,8 @@ def contains_existing_archive(path, working_directories):
     return False
 
 
-def path_in_archive(path, working_directories=()):
+def path_in_archive(path, working_directories=(), ancestors=True):
+    """True when path is inside an existing archive, or (ancestors=True) contains one."""
     for value in path_values(path):
         if in_archive(value) or expansion_can_match_archive(value):
             return True
@@ -916,10 +932,32 @@ def path_in_archive(path, working_directories=()):
                 resolved = Path(combined).resolve(strict=False)
             except (OSError, RuntimeError):
                 continue
-            if in_archive(resolved.as_posix()) or contains_existing_archive(
-                resolved, working_directories
+            if in_archive(resolved.as_posix()) or (
+                ancestors and contains_existing_archive(resolved, working_directories)
             ):
                 return True
+    return False
+
+
+def working_directory_in_archive(path):
+    """A working directory is archive context only when it is inside an archive.
+
+    The repository root merely contains .project/archive/ once a milestone has
+    shipped; treating it as archive context would deny every shell command in
+    the project. Ancestor containment stays with path_in_archive for operands,
+    so deleting the archive's parent is still refused.
+    """
+    for value in path_values(path):
+        if in_archive(value) or expansion_can_match_archive(value):
+            return True
+        if os.name != "nt" and re.match(r"^[A-Za-z]:[/\\]", value):
+            continue
+        try:
+            resolved = Path(value).resolve(strict=False)
+        except (OSError, RuntimeError):
+            continue
+        if in_archive(resolved.as_posix()):
+            return True
     return False
 
 
@@ -981,11 +1019,44 @@ def segment_directories(tokens, working_directories):
             current_directories = [f"{base}/{target}" for base in bases]
 
 
+def command_can_destroy_files(invocation):
+    if invocation is None:
+        return False
+    executable, arguments = invocation
+    executable = executable.removesuffix(".exe")
+    return executable in DESTRUCTIVE_SHELL_COMMANDS or (
+        executable == "find" and "-delete" in arguments
+    )
+
+
+def literal_path(operand):
+    if len(operand) >= 2 and operand[0] in "\"'" and operand[-1] == operand[0]:
+        operand = operand[1:-1]
+    pattern = r"[A-Za-z0-9._/-]+"
+    if os.name == "nt":
+        pattern = r"(?:[A-Za-z]:(?=[/\\]))?[A-Za-z0-9._/\\-]+"
+    return operand if re.fullmatch(pattern, operand) is not None else None
+
+
+def literal_destructive_operand(operand):
+    literal = literal_path(operand)
+    if literal is None:
+        raise ValueError(
+            f"destructive operand {operand} cannot be validated; pass a literal path"
+        )
+    return literal
+
+
 def command_references_archive(tokens, working_directories):
     for segment, directories in segment_directories(tokens, working_directories):
-        if any(path_in_archive(token, directories) for token in segment):
+        invocation = command_invocation(segment)
+        ancestors = command_can_destroy_files(invocation)
+        operands = segment
+        if ancestors:
+            operands = [literal_destructive_operand(operand) for operand in invocation[1]]
+        if any(path_in_archive(operand, directories, ancestors) for operand in operands):
             return True
-        wrapped = wrapped_command_tokens(segment)
+        wrapped = wrapped_command_tokens(segment, expand_parameters=False)
         if wrapped is not None and command_references_archive(wrapped, directories):
             return True
     return False
@@ -1013,7 +1084,7 @@ def shell_write_targets(tokens, working_directories):
             has_short_option(arguments, "i")
             or any(argument.startswith("--in-place") for argument in arguments)
         )
-        if command in SHELL_WRITE_COMMANDS or in_place:
+        if command.removesuffix(".exe") in SHELL_WRITE_COMMANDS or in_place:
             for argument in arguments:
                 if argument and not argument.startswith("-"):
                     yield argument, directories
@@ -1387,7 +1458,7 @@ def git_command(segment):
     return arguments[index].casefold(), arguments[index + 1:], git_options
 
 
-def wrapped_command_tokens(segment):
+def wrapped_command_tokens(segment, expand_parameters=True):
     invocation = command_invocation(segment)
     if invocation is None:
         return None
@@ -1431,7 +1502,7 @@ def wrapped_command_tokens(segment):
                         )
                     )
                 payload = arguments[index + 1:]
-                if executable in {"cmd", "cmd.exe"}:
+                if executable in {"cmd", "cmd.exe"} and expand_parameters:
                     payload = [
                         expand_environment_parameters(argument)
                         for argument in payload
@@ -1691,7 +1762,7 @@ def evaluate(event):
             for path_working_directories, targets in grouped_paths.items():
                 enforce_pipeline_reentry(targets, path_working_directories)
     archive_working_directory = any(
-        path_in_archive(path) for path in working_directories
+        working_directory_in_archive(path) for path in working_directories
     )
     if archive_working_directory and not commands and not read_tool:
         deny(ARCHIVE_REASON)
@@ -1701,17 +1772,40 @@ def evaluate(event):
             deny(reason)
 
 
-def command_denial(command, working_directories):
+def destructive_shell_invocations(tokens):
+    for segment in command_segments(tokens):
+        invocation = command_invocation(segment)
+        if command_can_destroy_files(invocation):
+            yield invocation
+        wrapped = wrapped_command_tokens(segment, expand_parameters=False)
+        if wrapped is not None:
+            yield from destructive_shell_invocations(wrapped)
+
+
+def command_denial(command, working_directories, allow_destructive=True):
     """Return why a shell command is denied, or None when it may run."""
     outer, substitutions = split_command_substitutions(command)
     try:
+        tokens = shell_tokens(outer)
+        destructive = list(destructive_shell_invocations(tokens))
+        if destructive and (
+            not allow_destructive
+            or substitutions
+            or any(char in command for char in ";&|()\n\r`")
+            or len(list(command_segments(tokens))) != 1
+            or any(
+                literal_path(operand) is None
+                for _, operands in destructive
+                for operand in operands
+            )
+        ):
+            return ARCHIVE_REASON
         for inner in substitutions:
-            reason = command_denial(inner, working_directories)
+            reason = command_denial(inner, working_directories, allow_destructive=False)
             if reason is not None:
                 return reason
-        tokens = shell_tokens(outer)
         archive_context = (
-            any(path_in_archive(path) for path in working_directories)
+            any(working_directory_in_archive(path) for path in working_directories)
             or bool(ARCHIVE_REFERENCE.search(outer))
             or command_references_archive(tokens, working_directories)
             or unresolved_archive_expansion(outer, tokens, working_directories)

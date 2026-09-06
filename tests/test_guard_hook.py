@@ -1171,6 +1171,34 @@ class GuardHookTests(unittest.TestCase):
                     {"tool_name": "Bash", "tool_input": {"command": command}}
                 )
 
+    def test_allows_ordinary_commands_from_repository_root_containing_archive(self):
+        # Seen live 2026-09-06: once .project/archive/ existed, the guard treated the
+        # repository root as archive context and denied echo, unittest and the
+        # archive helper itself. Containing an archive is not being inside one.
+        previous = Path.cwd()
+        with tempfile.TemporaryDirectory() as temporary:
+            repository = Path(temporary).resolve()
+            (repository / ".project" / "archive" / "001-mvp").mkdir(parents=True)
+            try:
+                os.chdir(repository)
+                for command in ("echo guard-probe", "python3 -m unittest", "python3 .gsd-path/archive_milestone.py render-manifest --repo " + str(repository)):
+                    with self.subTest(command=command):
+                        self.assert_allowed(
+                            {
+                                "tool_name": "Bash",
+                                "tool_input": {"command": command},
+                                "cwd": str(repository),
+                            }
+                        )
+                self.assert_denied(
+                    {
+                        "tool_name": "Bash",
+                        "tool_input": {"command": "rm -rf .project", "cwd": str(repository)},
+                    }
+                )
+            finally:
+                os.chdir(previous)
+
     def test_denies_deleting_archive_ancestor(self):
         previous = Path.cwd()
         with tempfile.TemporaryDirectory() as temporary:
@@ -1187,7 +1215,160 @@ class GuardHookTests(unittest.TestCase):
             finally:
                 os.chdir(previous)
 
-    @unittest.skipUnless(os.name == "nt", "requires native Windows paths")
+    def test_denies_destructive_commands_on_archive_ancestors(self):
+        commands = (
+            "rm -rf .project", "rmdir .project", "unlink .project",
+            "shred .project", "trash .project", "mv .project elsewhere",
+            "rsync --delete elsewhere/ .project/",
+            "Remove-Item -Recurse .project", "ri -Recurse .project",
+            "del .project", "erase .project", "rd /s .project",
+            "Move-Item .project elsewhere", "mi .project elsewhere",
+            "move .project elsewhere", "rm.exe -rf .project",
+            "find .project -delete", "find.exe .project -delete",
+            "find .project -exec rm -rf {} +",
+            r"find .project -execdir unlink {} \;",
+            r"find .project -ok rmdir {} \;",
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            repository = Path(temporary).resolve()
+            (repository / ".project" / "archive" / "001-mvp").mkdir(parents=True)
+            for command in commands:
+                with self.subTest(command=command):
+                    self.assert_denied(
+                        {
+                            "tool_name": "Bash",
+                            "tool_input": {"command": command},
+                            "cwd": str(repository),
+                        }
+                    )
+            self.assert_allowed(
+                {
+                    "tool_name": "Bash",
+                    "tool_input": {"command": "find .project -type f -print"},
+                    "cwd": str(repository),
+                }
+            )
+
+    def test_denies_expansion_in_destructive_operands(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            repository = Path(temporary).resolve()
+            (repository / ".project" / "archive" / "001-mvp").mkdir(parents=True)
+            (repository / "scratch").mkdir()
+            (repository / "scratch" / "disposable.txt").touch()
+            root = shlex.quote(str(repository))
+            denied = (
+                f'ROOT={root}; rm -rf "$ROOT"',
+                f'ROOT={root}; ROOT=scratch rm -rf "$ROOT"',
+                f"TARGET='scratch {repository}'; rm -rf $TARGET",
+                'TARGET=scratch; rm -rf "$TARGET"',
+                'rm -f scratch/*.txt',
+                'rm -rf .project',
+                'rm -rf "scratch"*',
+                'rm -rf `echo scratch`',
+                f'ROOT={root}; rm -rf "$ROOT"; ROOT=scratch',
+                f'ROOT={root}; CHILD=$ROOT; rm -rf "$CHILD"',
+                f'ROOT={root}; command rm -rf "$ROOT"',
+                'rm -rf .proj*',
+                'rm -rf .projec[t]',
+                'TARGET=.proj*; rm -rf "$TARGET"',
+                'Move-Item .proj* elsewhere',
+                'find .proj* -delete',
+                'rm -rf "$GUARD_UNKNOWN_TARGET"',
+                'TARGET=$GUARD_UNKNOWN_TARGET; rm -rf "$TARGET"',
+                'rm -rf "$(echo scratch)"',
+                'rm -rf no-matches-*',
+                'rm -rf **/.project',
+                'rm -rf .{project,unused}',
+                'rm -rf ~/x',
+                'rm -rf ~root/x',
+                'rm -rf "scratch folder"',
+                'rm -rf "scratch;other"',
+                'rm -rf ""',
+                "Remove-Item -Recurse -Force '.proj*'",
+                "Remove-Item -LiteralPath 'scratch/*'",
+                "Move-Item 'scratch/?' elsewhere",
+                'rm -f "scratch/*.txt"',
+                "rm -f 'scratch/file?[x]'",
+                'command rm -f "scratch/*.txt"',
+                "sh -c 'rm -f \"scratch/*.txt\"'",
+                r'rm -f scratch/\*.txt',
+            )
+            allowed = (
+                'echo .proj*',
+                f'ROOT={root}; echo "$ROOT"',
+                'echo "$GUARD_UNKNOWN_TARGET"',
+                'python3 -m unittest tests.test_guard*',
+                f'ROOT={root}; python3 .gsd-path/archive_milestone.py render-manifest --repo "$ROOT"',
+                'rm -rf scratch',
+                'rm -rf ./scratch/old-file.txt',
+                "rm -rf './scratch/old-file.txt'",
+                'rm -rf scratch_123',
+                'rm -rf "scratch"',
+            )
+            with mock.patch.dict(os.environ, {}, clear=True):
+                for commands, assertion in ((denied, self.assert_denied), (allowed, self.assert_allowed)):
+                    for command in commands:
+                        with self.subTest(command=command):
+                            assertion({
+                                "tool_name": "Bash",
+                                "tool_input": {"command": command},
+                                "cwd": str(repository),
+                            })
+
+    def test_destructive_commands_require_a_single_simple_segment(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            repository = Path(temporary).resolve() / "repo"
+            (repository / ".project" / "archive" / "001-mvp").mkdir(parents=True)
+            (repository / "scratch").mkdir()
+            denied = (
+                "(cd scratch); rm -rf .project",
+                "cd missing; rm -rf .project",
+                "echo ready; rm scratch",
+                "true && rm scratch",
+                "false || rm scratch",
+                "echo ready | rm scratch",
+                "echo ready\nrm scratch",
+                "(rm scratch)",
+                "echo $(rm scratch)",
+                "sh -c 'cd scratch; rm old-file.txt'",
+                f"cd rep*; cd {shlex.quote(str(repository))}; rm scratch",
+                "cd ..; cd rep*; rm -rf .project",
+                "cd ..; pushd rep*; mv scratch elsewhere",
+                "cd ..; Set-Location rep*; Remove-Item -Recurse .project",
+                "cd ..; chdir rep*; rm scratch",
+                "cd ..; sl rep*; rm scratch",
+                "cd rep*; cd child; rm scratch",
+                "cd rep*; command rm scratch",
+                "cd rep*; sh -c 'rm scratch'",
+                "cd $TARGET; rm scratch",
+                "cd ~/repo; rm scratch",
+                "cd .{project,unused}; rm scratch",
+            )
+            allowed = (
+                "cd ..; cd repo; python3 -m unittest",
+                "cd ..; cd rep*; python3 -m unittest",
+                "cd rep*; sh -c 'echo ready'",
+                "rm scratch",
+                "command rm scratch",
+            )
+            for command in denied:
+                with self.subTest(archive_reason=command):
+                    self.assertEqual(
+                        guard_hook.command_denial(command, [str(repository)]),
+                        guard_hook.ARCHIVE_REASON,
+                    )
+            for commands, assertion in ((denied, self.assert_denied), (allowed, self.assert_allowed)):
+                for command in commands:
+                    with self.subTest(command=command):
+                        assertion({
+                            "tool_name": "Bash",
+                            "tool_input": {"command": command},
+                            "cwd": str(repository),
+                        })
+
+    def test_denies_protected_write_after_parameter_directory_change(self):
+        self.assert_denied(self.bash("TARGET=.project; cd $TARGET; printf broken > STATE.md"))
+
     def test_denies_deleting_archive_ancestor_on_windows(self):
         previous = Path.cwd()
         with tempfile.TemporaryDirectory() as temporary:
@@ -1576,13 +1757,13 @@ class GuardHookTests(unittest.TestCase):
 
     def test_denials_name_the_shell_construct(self):
         for command, construct in (
+            ("cd $(mktemp -d) && ls", "cd target $(mktemp -d)"),
             ("source ./env.sh", "source runs the script file ./env.sh"),
             (". ./env.sh", ". runs the script file ./env.sh"),
             ("find . -exec rm {} \\;", "find -exec runs rm"),
             ("ls | xargs rm", "xargs runs rm"),
             ("export HOME=/tmp; git status", "HOME changes where Git reads"),
             ("git commit -m \"$(cat msg)\"", "git argument $(cat msg)"),
-            ("cd $(mktemp -d) && ls", "cd target $(mktemp -d)"),
             ("echo x > \"$1\"", "write target $1"),
             ("cat <<EOF\nno terminator", "here-document EOF is not terminated"),
             ("echo 'unbalanced", "cannot be tokenized"),
@@ -1654,7 +1835,6 @@ class GuardHookTests(unittest.TestCase):
                     ("cp STATE.md .project/STATE.md", ".project/STATE.md"),
                     ("rm -rf .project", ".project"),
                     ("touch .gsd-path/guard_hook.py", ".gsd-path/guard_hook.py"),
-                    ("cd .project && rm STATE.md", "STATE.md"),
                     ("bash -c 'echo x > .project/STATE.md'", ".project/STATE.md"),
                     ("cat <<EOF > .project/STATE.md\nphase: build\nEOF", ".project/STATE.md"),
                 ):
@@ -1662,6 +1842,9 @@ class GuardHookTests(unittest.TestCase):
                         status, _, error = run_guard(self.bash(command))
                         self.assertEqual(status, 2)
                         self.assertIn("shell command writes " + path, error)
+                status, _, error = run_guard(self.bash("cd .project && rm STATE.md"))
+                self.assertEqual(status, 2)
+                self.assertIn(guard_hook.ARCHIVE_REASON, error)
                 for command in (
                     "echo x > build.log",
                     "echo x > .project/plan/PLAN.md",
