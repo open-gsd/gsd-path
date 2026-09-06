@@ -1731,6 +1731,38 @@ Tasks reviewed: 2
                 ):
                     validate()
 
+    def test_wave_checks_evidence_after_exact_quoted_task_criterion(self) -> None:
+        for verdict, marker in (("pass", "✅"), ("fail", "❌")):
+            with self.subTest(verdict=verdict), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                self.write_plan_handoff(root)
+                relative = self.write_wave_review(root)
+                criterion = "AC1 — `hello.py <integer>` prints the signed integer."
+                self.write_coverage_task(
+                    root, "T001", "- SC1",
+                    acceptance="1. AC1 — `hello.py <integer>` prints\n   the signed integer.",
+                )
+                review = root / relative
+                original = review.read_text().replace(
+                    "## T001 — Demo task T001: pass", f"## T001 — Demo task T001: {verdict}"
+                )
+                if verdict == "fail":
+                    original = original.replace("Wave verdict: pass", "Wave verdict: blocked")
+                old = "- ✅ The demo command prints hello. — ran hello.py"
+                review.write_text(original.replace(old, f"- {marker} {criterion} — ran hello.py 7; stdout 7"))
+                result = check_handoffs.validate_wave(root, review=relative)
+                self.assertEqual(result["verdict"], "pass" if verdict == "pass" else "blocked")
+                for evidence in ("<observed result>", "none", ""):
+                    with self.subTest(evidence=evidence):
+                        review.write_text(original.replace(old, f"- {marker} {criterion} — {evidence}"))
+                        with self.assertRaises(check_handoffs.HandoffError):
+                            check_handoffs.validate_wave(root, review=relative)
+                review.write_text(original.replace(
+                    old, f"- {marker} AC1 — `other.py <integer>` prints the signed integer. — ran hello.py 7"
+                ))
+                with self.assertRaisesRegex(check_handoffs.HandoffError, "placeholder"):
+                    check_handoffs.validate_wave(root, review=relative)
+
     def test_wave_rejects_placeholder_task_evidence(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

@@ -1463,7 +1463,16 @@ def validate_wave_evidence(
         ]
         if not evidence:
             raise HandoffError(f"{name} task {task_id} lacks {verdict} evidence")
+        task_criteria = _numbered_items(
+            _section(tasks[task_id], "Acceptance criteria"), continuations=True
+        ).values()
         for item in evidence:
+            item = _normalize_ws(item)
+            for criterion in task_criteria:
+                prefix = _normalize_ws(criterion) + " — "
+                if item.startswith(prefix):
+                    item = item[len(prefix) :]
+                    break
             _non_placeholder(item, f"{name} task {task_id} {verdict} evidence")
         task_verdicts.append(verdict)
 
