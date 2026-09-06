@@ -175,27 +175,69 @@ def transcript_child(transcript, child_id):
             "list_agents_states": statuses}
 
 
-def claude_child(run_root, child_id):
-    """Bind the Agent tool_use whose description is the logical task name to its completed tool_result,
-    from the recorded `claude -p` stream-json events under <run_root>/quick/run-*/events.jsonl."""
-    use = result = None; run_name = None
+def claude_child(run_root, child_id, landed_tool_use_id=None):
+    """Bind each Agent attempt to completion evidence from the recorded stream.
+
+    A caller with proven landing evidence can select its tool-use ID explicitly.
+    Otherwise the last completed attempt supplies the receipt.
+    """
+    attempts = {}
+    completion_events = []
     for events in sorted(Path(run_root).glob("quick/run-*/events.jsonl")):
         for line in events.read_text().splitlines():
             try: ev = json.loads(json.loads(line)["raw"])
             except (ValueError, KeyError): continue
-            if ev.get("type") == "assistant":
+            if ev.get("type") in ("assistant", "user"):
                 for c in ev["message"].get("content", []):
+                    if not isinstance(c, dict):
+                        continue
                     if c.get("type") == "tool_use" and c.get("name") == "Agent" and c["input"].get("description") == child_id:
                         inp = {k: v for k, v in c["input"].items() if k != "prompt"}
-                        use = {"id": c["id"], "name": c["name"], "input": inp, "prompt_sha256": __import__("hashlib").sha256(c["input"].get("prompt", "").encode()).hexdigest()}
-                        run_name = events.parent.name
-            elif ev.get("type") == "user" and use and result is None:
-                for c in ev["message"].get("content", []):
-                    if isinstance(c, dict) and c.get("type") == "tool_result" and c.get("tool_use_id") == use["id"]:
-                        result = {"tool_use_id": c["tool_use_id"], "is_error": bool(c.get("is_error")), "content": str(c.get("content"))[:4000]}
-    if use is None or result is None or result["is_error"]:
-        raise SystemExit(f"no completed Agent tool_result for description {child_id}")
-    return {"child_id": child_id, "status": "completed", "run": run_name, "tool_use": use, "tool_result": result}
+                        attempts.setdefault(c["id"], {
+                            "child_id": child_id, "status": "completed", "run": events.parent.name,
+                            "tool_use": {"id": c["id"], "name": c["name"], "input": inp,
+                                         "prompt_sha256": __import__("hashlib").sha256(c["input"].get("prompt", "").encode()).hexdigest()},
+                            "task_id": None, "task_started": None, "task_notification": None,
+                            "tool_result": None,
+                        })
+                    elif c.get("type") == "tool_result" and c.get("tool_use_id") in attempts:
+                        attempt = attempts[c["tool_use_id"]]
+                        attempt["tool_result"] = {"tool_use_id": c["tool_use_id"],
+                                                  "is_error": bool(c.get("is_error")), "content": c.get("content")}
+                        completion_events.append((c["tool_use_id"], "tool_result"))
+            elif ev.get("type") == "system" and ev.get("tool_use_id") in attempts:
+                attempt = attempts[ev["tool_use_id"]]
+                if ev.get("subtype") == "task_started":
+                    attempt["task_started"] = {k: v for k, v in ev.items() if k != "prompt"}
+                    attempt["task_id"] = ev.get("task_id")
+                elif ev.get("subtype") == "task_notification":
+                    if attempt["task_id"] is not None and attempt["task_id"] != ev.get("task_id"):
+                        continue
+                    attempt["task_id"] = ev.get("task_id")
+                    attempt["task_notification"] = {k: ev.get(k) for k in ("tool_use_id", "task_id", "status", "summary")}
+                    completion_events.append((ev["tool_use_id"], "task_notification"))
+    eligible = []
+    for tool_use_id, event_type in completion_events:
+        attempt = attempts[tool_use_id]
+        result = attempt["tool_result"]
+        started = attempt["task_started"] or {}
+        background = (attempt["tool_use"]["input"].get("run_in_background")
+                      or started.get("is_backgrounded")
+                      or (result and "agent launched" in str(result["content"]).lower()))
+        notification = attempt["task_notification"] or {}
+        if background:
+            done = event_type == "task_notification" and notification.get("status") == "completed"
+        else:
+            done = event_type == "tool_result" and result is not None and not result["is_error"]
+        if done:
+            eligible.append(tool_use_id)
+    if not eligible:
+        raise SystemExit(f"no completed Agent attempt for description {child_id}; background launches require a matching completed task_notification")
+    if landed_tool_use_id is not None:
+        if landed_tool_use_id not in eligible:
+            raise SystemExit(f"landed Agent attempt {landed_tool_use_id} has no completion evidence for {child_id}")
+        return attempts[landed_tool_use_id]
+    return attempts[eligible[-1]]
 
 
 def phase_receipt(a):
