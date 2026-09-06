@@ -6,8 +6,8 @@ full-milestone receipt for every host below.
 
 | Host | Install | Native guard installed | Full live milestone | Current posture |
 |---|---|---|---|---|
-| Codex | automated | project hook requires `/hooks` trust; Git hooks guaranteed | present: [codex.md](evidence/releases/1.0.0/codex.md), candidate 1e3a552, 2026-09-06 | receipt passes the validator; release still blocked by the other hosts |
-| Claude Code | automated | fail-closed project hook + Git hooks | blocked at 1e3a552: [notes/claude-blocked-1e3a552](evidence/releases/1.0.0/notes/claude-blocked-1e3a552/) reached final-ready and archive prepare, then the native guard denied the ship helper (defect fixed in a separate PR); native guard probe passed | release blocked; rerun on the fixed candidate |
+| Codex | automated | project hook requires `/hooks` trust; Git hooks guaranteed | regenerating at candidate 3c32f3d: run paused at the ship step by the Codex usage limit (resumes after 21:27 CDT); the tracked codex.md is bound to the earlier candidate 1e3a552 | release blocked until the 3c32f3d receipt lands |
+| Claude Code | automated | fail-closed project hook + Git hooks | present: [claude.md](evidence/releases/1.0.0/claude.md), candidate 3c32f3d, 2026-09-06; native guard probe passed against the fixed guard | receipt passes the validator; release still blocked by the other hosts |
 | Grok | automated | not installed; Git hooks | missing | release blocked |
 | OpenCode | automated | not installed; Git hooks | missing | release blocked |
 | GitHub Copilot CLI | automated | not installed; Git hooks | missing | release blocked |
