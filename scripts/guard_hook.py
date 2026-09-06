@@ -320,16 +320,31 @@ XARGS_OPTIONS_WITH_VALUES = frozenset(
         "--process-slot-var",
     }
 )
-SHELL_WRITE_COMMANDS = frozenset(
+DESTRUCTIVE_SHELL_COMMANDS = frozenset(
+    {
+        "del",
+        "erase",
+        "mi",
+        "move",
+        "move-item",
+        "mv",
+        "rd",
+        "remove-item",
+        "ri",
+        "rm",
+        "rmdir",
+        "rsync",
+        "shred",
+        "trash",
+        "unlink",
+    }
+)
+SHELL_WRITE_COMMANDS = DESTRUCTIVE_SHELL_COMMANDS | frozenset(
     {
         "cp",
         "install",
         "ln",
         "mkdir",
-        "mv",
-        "rm",
-        "rmdir",
-        "rsync",
         "tee",
         "touch",
         "truncate",
@@ -1004,16 +1019,20 @@ def segment_directories(tokens, working_directories):
             current_directories = [f"{base}/{target}" for base in bases]
 
 
-# Commands that can destroy an archive through one of its ancestors. Only
-# for these does an operand that merely contains .project/archive/ count as
-# an archive reference; `python3 helper.py --repo <root>` must not.
-ARCHIVE_ANCESTOR_COMMANDS = frozenset({"rm", "rmdir", "mv", "unlink", "shred", "trash", "rsync"})
+def command_can_destroy_files(invocation):
+    if invocation is None:
+        return False
+    executable, arguments = invocation
+    executable = executable.removesuffix(".exe")
+    return executable in DESTRUCTIVE_SHELL_COMMANDS or (
+        executable == "find" and "-delete" in arguments
+    )
 
 
 def command_references_archive(tokens, working_directories):
     for segment, directories in segment_directories(tokens, working_directories):
         invocation = command_invocation(segment)
-        ancestors = invocation is not None and invocation[0] in ARCHIVE_ANCESTOR_COMMANDS
+        ancestors = command_can_destroy_files(invocation)
         if any(path_in_archive(token, directories, ancestors) for token in segment):
             return True
         wrapped = wrapped_command_tokens(segment)
@@ -1044,7 +1063,7 @@ def shell_write_targets(tokens, working_directories):
             has_short_option(arguments, "i")
             or any(argument.startswith("--in-place") for argument in arguments)
         )
-        if command in SHELL_WRITE_COMMANDS or in_place:
+        if command.removesuffix(".exe") in SHELL_WRITE_COMMANDS or in_place:
             for argument in arguments:
                 if argument and not argument.startswith("-"):
                     yield argument, directories

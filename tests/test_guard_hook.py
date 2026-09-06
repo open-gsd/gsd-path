@@ -1215,7 +1215,40 @@ class GuardHookTests(unittest.TestCase):
             finally:
                 os.chdir(previous)
 
-    @unittest.skipUnless(os.name == "nt", "requires native Windows paths")
+    def test_denies_destructive_commands_on_archive_ancestors(self):
+        commands = (
+            "rm -rf .project", "rmdir .project", "unlink .project",
+            "shred .project", "trash .project", "mv .project elsewhere",
+            "rsync --delete elsewhere/ .project/",
+            "Remove-Item -Recurse .project", "ri -Recurse .project",
+            "del .project", "erase .project", "rd /s .project",
+            "Move-Item .project elsewhere", "mi .project elsewhere",
+            "move .project elsewhere", "rm.exe -rf .project",
+            "find .project -delete", "find.exe .project -delete",
+            "find .project -exec rm -rf {} +",
+            r"find .project -execdir unlink {} \;",
+            r"find .project -ok rmdir {} \;",
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            repository = Path(temporary).resolve()
+            (repository / ".project" / "archive" / "001-mvp").mkdir(parents=True)
+            for command in commands:
+                with self.subTest(command=command):
+                    self.assert_denied(
+                        {
+                            "tool_name": "Bash",
+                            "tool_input": {"command": command},
+                            "cwd": str(repository),
+                        }
+                    )
+            self.assert_allowed(
+                {
+                    "tool_name": "Bash",
+                    "tool_input": {"command": "find .project -type f -print"},
+                    "cwd": str(repository),
+                }
+            )
+
     def test_denies_deleting_archive_ancestor_on_windows(self):
         previous = Path.cwd()
         with tempfile.TemporaryDirectory() as temporary:
