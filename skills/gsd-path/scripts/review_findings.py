@@ -560,13 +560,108 @@ def emit(payload: dict) -> int:
     return 0
 
 
+def repair_evidence(repo: Path, project_dir: str, wave: int, cycle: int, task_id: str) -> dict:
+    """Bind a carried finding batch to a proven, independently verified repair."""
+    try:
+        from . import _common, build_state, isolation
+    except ImportError:  # installed standalone helper
+        import _common
+        import build_state
+        import isolation
+
+    try:
+        repo = isolation.require_directory(repo, "repository")
+        project = repo / isolation.relative_posix(project_dir)
+        if not re.fullmatch(r"T\d{3}", task_id or ""):
+            raise ReviewFindingsError("--task must name a repair task id")
+        paths = list((project / "tasks").glob(f"{task_id}-*.md"))
+        if len(paths) != 1:
+            raise ReviewFindingsError("repair task must resolve to exactly one task file")
+        repair_path = paths[0]
+        text = _read(repair_path, "repair task")
+        fields, error = isolation.task_frontmatter(text)
+        if error or fields is None or fields.get("status") != "done":
+            raise ReviewFindingsError(error or "repair task must be done")
+        head = isolation.current_sha(repo)
+        proof = isolation.verify_landed_task_files(
+            repo, [repair_path], f"{project_dir}/tasks", head
+        )["tasks"][0]
+        if proof["verdict"] != "recovered":
+            raise ReviewFindingsError("repair requires a proven landing")
+        base, commit = proof["base"], proof["commit"]
+        findings = _section(text, "Review findings") or ""
+        headings = list(re.finditer(r"(?m)^### ([a-z0-9_]+)\s*$", findings))
+        locators = [heading.group(1) for heading in headings]
+        if not locators or len(set(locators)) != len(locators):
+            raise ReviewFindingsError("repair needs unique carried finding locators")
+        source = compute(repo, project_dir, wave, cycle)
+        if source["structural_blockers"]:
+            raise ReviewFindingsError("source findings have structural blockers")
+        batches = [batch for batch in source["fix_batches"]
+                   if set(batch["locators"]) == set(locators)]
+        if len(batches) != 1:
+            raise ReviewFindingsError("repair must carry one eligible source finding batch")
+        groups = [group for group in source["groups"] if group["locator"] in locators]
+        for index, heading in enumerate(headings):
+            end = headings[index + 1].start() if index + 1 < len(headings) else len(findings)
+            block = _normalize(findings[heading.end():end])
+            group = next(group for group in groups if group["locator"] == heading.group(1))
+            if ("Criterion: " + group["criterion"] not in block
+                    or any(item["text"] not in block for item in group["observations"])):
+                raise ReviewFindingsError("repair does not carry the exact criterion and observations")
+        frontmatter = text.split("---", 2)[1]
+        files = _frontmatter_list(frontmatter, "files")
+        originals = sorted({task for group in groups for task in group["tasks"]})
+        if (task_id in originals or not set(originals) <= set(_frontmatter_list(frontmatter, "deps"))
+                or set(files) != set(batches[0]["files"])):
+            raise ReviewFindingsError("repair dependencies/files do not match its source batch")
+        sources = load_wave_tasks(project, wave)
+        original_paths = [Path(sources[task]["path"]) for task in originals]
+        original_proofs = isolation.verify_landed_task_files(
+            repo, original_paths, f"{project_dir}/tasks", head
+        )["tasks"]
+        for original in original_proofs:
+            original_id = original["task_id"]
+            if (original["verdict"] != "recovered"
+                    or isolation.run_git(repo, "merge-base", "--is-ancestor", original["commit"], base).returncode
+                    or isolation.run_git(repo, "diff", "--quiet", original["commit"], base,
+                                         "--", *sources[original_id]["files"]).returncode):
+                raise ReviewFindingsError("repair base contains unlinked changes to original product")
+        source_paths = list(review_paths(project, wave, cycle, source["depth"]).values())
+        source_paths.extend(Path(group["skeptic"]["path"]) for group in groups if group["skeptic"])
+        for path in set(source_paths):
+            relative = path.relative_to(repo).as_posix()
+            at_base = isolation.run_git(repo, "show", f"{base}:{relative}")
+            if at_base.returncode or at_base.stdout != _read(path, "source review"):
+                raise ReviewFindingsError("source review must be unchanged and precede the repair")
+        verification = build_state.verify_lookup(str(repo), _common.task_verify_command(text), commit)
+        if not verification["reuse"]:
+            raise ReviewFindingsError("repair has no reusable passing Verify at its landing")
+        if isolation.run_git(repo, "diff", "--quiet", commit, "--", *files).returncode:
+            raise ReviewFindingsError("product changed after the repair landing")
+        return {
+            "status": "ok", "command": "repair-evidence", "head": head,
+            "source": {"wave": wave, "cycle": cycle}, "groups": groups,
+            "originals": [{"task": item["task_id"], "base": item["base"],
+                           "commit": item["commit"], "files": sources[item["task_id"]]["files"]}
+                          for item in original_proofs],
+            "repair": {"task": task_id, "task_file": repair_path.relative_to(repo).as_posix(),
+                       "base": base, "commit": commit, "files": files},
+            "verification": verification,
+            "verdict": "evidence-ready; reviewer judges the original unchanged criteria",
+        }
+    except (isolation.IsolationError, build_state.BuildStateError, ValueError) as error:
+        raise ReviewFindingsError(str(error)) from error
+
+
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(description=__doc__)
-    result.add_argument("command", choices=("collect",))
+    result.add_argument("command", choices=("collect", "repair-evidence"))
     result.add_argument("--repo", type=Path, required=True, help="absolute repository root")
     result.add_argument("--project-dir", default=DEFAULT_PROJECT_DIR)
     result.add_argument("--wave", type=int, required=True)
     result.add_argument("--cycle", type=int, required=True)
+    result.add_argument("--task", help="landed repair task for repair-evidence")
     result.add_argument(
         "--helper-failure",
         action="append",
@@ -581,6 +676,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     try:
         if arguments.wave < 1 or arguments.cycle < 1:
             raise ReviewFindingsError("--wave and --cycle must be positive integers")
+        if arguments.command == "repair-evidence":
+            return emit(repair_evidence(arguments.repo, arguments.project_dir,
+                                        arguments.wave, arguments.cycle, arguments.task))
         return emit(
             compute(
                 arguments.repo,

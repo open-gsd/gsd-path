@@ -534,7 +534,21 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
      finding; a re-review never spawns a duplicate fix task for a finding
      already carried. Write each fix task to `.project/tasks/` with `wave`
      set to the current wave or a newly appended `## Wave N` heading in
-     PLAN.md before dispatch. Run them through the same isolated layer loop.
+     PLAN.md before dispatch. Its dependencies include every source task in
+     the batch; its files match the batch. In `## Review findings`, use one
+     `### <locator>` block per group, `Criterion: <verbatim criterion>`, and
+     every observation verbatim. Run the repair through the same isolated
+     layer loop, even when its appended wave repairs an earlier blocked wave.
+     After landing, call `review_findings.py repair-evidence --repo <primary>
+     --wave <source wave> --cycle <source cycle> --task <repair id>` and save
+     its JSON as the repair evidence for the next review. The helper validates
+     the carried batch, original and repair landings, isolated product scope,
+     unchanged source reports and reusable Verify. On success, brief the next
+     original-wave review with this receipt and the reviewer role's
+     **Re-review after a proven repair** contract. Reuse command evidence;
+     the new review judges the repaired product against the original criteria.
+     Preserve prior verdicts and source tasks. On helper rejection, resolve
+     the evidence blocker rather than redispatching an already proven fix.
    At the cap, record all attempts in the STATE.md log and ask the user —
    through an interactive user-input tool when available — after linking
    the resolved absolute blocking wave review, every deep lens file for the

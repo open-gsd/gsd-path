@@ -56,6 +56,12 @@ files:              # every file this task may touch — dispatch checks overlap
 
 Heavy: no   <!-- yes when this command must not run beside another heavy Verify -->
 
+<!-- Fix tasks only: add ## Review findings before Log, with one
+     ### <canonical locator> block per group in the helper's batch.
+     Each block contains Criterion: <verbatim criterion> and all supplied
+     observations verbatim. Set deps to include the source tasks and files
+     to the batch's files. Ordinary tasks omit this section. -->
+
 ## Log
 
 <!-- Append-only: coder summary, blocks (`NEEDS-ORCHESTRATOR: <question> —

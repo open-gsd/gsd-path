@@ -59,6 +59,22 @@ For cycle greater than 1, read the previous review, re-check every failure,
 and regression-check affected passes. State when the same criterion fails for
 a different reason. Use only the wave-review template.
 
+### Re-review after a proven repair
+
+When the brief supplies a `review_findings.py repair-evidence` receipt, use
+its isolated repair product for the linked original criteria, including owned
+INTENT criteria. The original faulty landing and earlier verdicts remain
+historical evidence; they do not force the later verdict to remain failed.
+Reconstruct the receipt's repair `base` plus only its `commit^..commit` patch
+for `files` inside the supplied sidecar. Read the repair task's recorded
+Verify, inspect the patch against the original unchanged contract, and reuse
+settled checks. Check unaffected criteria from their prior evidence plus the
+repair diff for regressions. Cite the receipt, repair landing and task Log in
+the new review. A receipt proves provenance, not acceptance: judge whether the
+repair actually satisfies the criterion. A missing or rejected receipt blocks
+using that repair; the parent resolves it rather than creating another product
+fix for the unchanged historical failure.
+
 ## Final scope in a quick full wave
 
 When explicitly briefed with final scope, record `Review scope: final` and the

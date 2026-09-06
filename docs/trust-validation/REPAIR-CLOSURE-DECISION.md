@@ -28,10 +28,23 @@ Implementation after approval:
 3. Add executable regressions proving legitimate repaired closure and rejection of invalid repair evidence. Observe failure before the fix, success afterward, and sensitivity to removing the checks. Sync generated resources.
 4. Continue this preserved native case only under the owner's explicit replacement of the exhausted cycle cap. Do not manufacture a new numeric cap. Stop when repaired closure is proven, or when another required owner decision blocks progress.
 
-This is a proposed rule change, not an implemented acceptance override. It does not authorize editing old reviews, waiving product criteria, another product change, GitHub actions, or changing the other pending guard/loop/panel decisions.
+The owner approved this rule change and the scoped continuation below; implementation still requires native closure proof. It does not authorize editing old reviews, waiving product criteria, another product change, GitHub actions, or changing the other pending guard/loop/panel decisions.
 
 Alternative: keep this native patch-path result blocked and end this case with the product repair verified but workflow closure unproven.
 
 ## Why a decision is required
 
 The supplied AGENTS.md requires stopping at the review-cycle cap and surfacing conflicting sources. The pinned build contract requires escalation at the cap. The current plan defines max_review_cycles as 3; the helper reports it exhausted. General full-run authorization did not change that exact policy.
+
+
+## Owner approval
+
+Owner message, verbatim:
+
+```text
+approve yoir lean
+```
+
+Accepted as approval of the pending proposed repair-closure rule and continuation beyond this case's exhausted cap. The replacement stop rule is the proposed one: stop when repaired closure is proven, or when another required owner decision blocks progress. No numeric cap is invented or silently edited, and prior cycle counts remain historical facts. Other guard, loop, panel and external GitHub decisions are unchanged.
+
+Implemented scope: `review_findings.py repair-evidence` validates one carried finding batch against canonical original/repair landings, exact carried criteria and observations, source-task dependencies, declared files, unchanged prior reports, product ancestry and a reusable passing Verify. It emits read-only evidence for the new review. Canonical build/reviewer instructions explicitly permit that isolated repair evidence to satisfy the original unchanged criteria. Existing task data is sufficient; no old task, report or verdict needs editing.
