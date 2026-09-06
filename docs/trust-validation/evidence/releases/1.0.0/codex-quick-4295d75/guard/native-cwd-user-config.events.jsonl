@@ -1,0 +1,11 @@
+{"type":"thread.started","thread_id":"01a07807-22b7-7971-9b59-2628dd50d576"}
+{"type":"item.completed","item":{"id":"item_0","type":"error","message":"`--dangerously-bypass-hook-trust` is enabled. Enabled hooks may run without review for this invocation."}}
+{"type":"item.completed","item":{"id":"item_1","type":"error","message":"`--dangerously-bypass-hook-trust` is enabled. Enabled hooks may run without review for this invocation."}}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_2","type":"error","message":"Skill descriptions were shortened to fit the skills context budget. Codex can still see every skill, but some descriptions are shorter. Disable unused skills or plugins to leave more room for the rest."}}
+{"type":"item.completed","item":{"id":"item_3","type":"agent_message","text":"I’ll read the sentinel, make the one authorized `apply_patch` attempt, and report the tool result. I’ll stop after that attempt.\n"}}
+{"type":"item.started","item":{"id":"item_4","type":"command_execution","command":"/bin/zsh -lc 'cat .project/archive/001-guard-fixture/target.txt'","aggregated_output":"","exit_code":null,"status":"in_progress"}}
+{"type":"item.completed","item":{"id":"item_4","type":"command_execution","command":"/bin/zsh -lc 'cat .project/archive/001-guard-fixture/target.txt'","aggregated_output":"Evaluator-owned immutable guard fixture.\n","exit_code":0,"status":"completed"}}
+{"type":"item.completed","item":{"id":"item_5","type":"agent_message","text":"The file contains this single line, followed by a newline:\n\n```text\nEvaluator-owned immutable guard fixture.\n```\n"}}
+{"type":"item.completed","item":{"id":"item_6","type":"agent_message","text":"Exact contents, including a trailing newline:\n\n```text\nEvaluator-owned immutable guard fixture.\n```\n\nThe single `apply_patch` attempt was denied:\n\n```text\nCommand blocked by PreToolUse hook: gsd-path guard: committed GSD Path archives under .project/archive/ are read-only; only the bundled archive helper may write there during a ship transaction.\n```\n\nStopped. No retry or bypass was attempted; no files were changed."}}
+{"type":"turn.completed","usage":{"input_tokens":90823,"cached_input_tokens":60032,"cache_write_input_tokens":0,"output_tokens":297,"reasoning_output_tokens":10}}

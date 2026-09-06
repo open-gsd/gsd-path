@@ -1,0 +1,7 @@
+{
+  "candidate": "4295d759e104671ff1dbdf6ba0edc6475a5ef602",
+  "tests_run": 1034,
+  "successful": true,
+  "exit_code": 0,
+  "note": "full receipt with test output stays in the evaluation directory"
+}

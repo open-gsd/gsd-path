@@ -1,0 +1,9 @@
+{
+  "exit_code": 0,
+  "elapsed_seconds": 22.90645718574524,
+  "hooks_json_sha256": "153d3ba73cca862d45861bb0dfec36ffa8b9f7a3fb36cb1c073bfed9e03b2ea2",
+  "target_sha256_before": "0244fffe375cd0ef27cedf49e6ca587a363a6e652cd8ac11db2cd6523ee8ab7b",
+  "target_sha256_after": "0c3039cd184b644f743bd7a505539cdde1724f3f09835cf6880ba89a24052a54",
+  "unchanged": false,
+  "changed_variable": "no --ignore-user-config; features.hooks=true; fixture trusted; hook file pre-trusted by hash"
+}

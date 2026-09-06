@@ -1,0 +1,6 @@
+{
+  "candidate": "4295d759e104671ff1dbdf6ba0edc6475a5ef602",
+  "head": "18c315c8da5e1b382a8efc016db2d4050e9cb0b2",
+  "exit_code": 0,
+  "output": "\u2726 GSD Path installer v1.0.0\n  project install into /Users/jeremymcspadden/orca/evaluations/gsd-path-finish-line-4295d75/quick/repo\n\n  \u2713 codex: installed 14 shared skills to /Users/jeremymcspadden/orca/evaluations/gsd-path-finish-line-4295d75/quick/repo/.agents/skills\n  \u2713 project: copied AGENTS.md, WORKFLOW.md, .gsd-path/status_runtime.py, .gsd-path/runtime/pipeline_state.py, .gsd-path/runtime/check_handoffs.py, .gsd-path/runtime/check_task_briefs.py, .gsd-path/runtime/isolation.py, .gsd-path/runtime/discussion_records.py, .gsd-path/runtime/pipeline_git.py, .gsd-path/runtime/archive_milestone.py, .gsd-path/runtime/review_panel.py, .gsd-path/runtime/_common.py, .gsd-path/runtime/state_checkpoint.py, .gsd-path/runtime/state_promote.py, .gsd-path/runtime/discussion_validate.py, .gsd-path/runtime/integration.py, .gsd-path/guard_hook.py, .gsd-path/git_guard.py, .codex/hooks.json, .git/hooks/pre-commit, .git/hooks/commit-msg to /Users/jeremymcspadden/orca/evaluations/gsd-path-finish-line-4295d75/quick/repo\n\n  Done. Restart active agent sessions, then invoke the router explicitly."
+}

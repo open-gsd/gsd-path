@@ -1,0 +1,178 @@
+{
+  "repo": "/Users/jeremymcspadden/orca/evaluations/gsd-path-finish-line-4295d75/quick/repo",
+  "head": "65ea78b5d5a5b9e86e58807d65d5de345e87c516",
+  "milestones": [
+    {
+      "archive": "001-widget-counter-cli",
+      "reviewed_head": "7d4f9bca1fc71da6a8ed5076b5b1bfdb17ee0031",
+      "final_verdict": "pass",
+      "ledger": [
+        {
+          "command": "python3 -B test_count.py",
+          "commit": "775dcb3b538a9cd8cb2de51507cde1d5f1295786",
+          "recorded": "pass",
+          "replay_exit": 0,
+          "exit_agrees": true,
+          "output_source": "task-verify.json",
+          "stdout_agrees": true,
+          "stderr_agrees": true
+        },
+        {
+          "command": "python3 -B -m unittest discover -s . -p 'test_*.py' -v",
+          "commit": "7d4f9bca1fc71da6a8ed5076b5b1bfdb17ee0031",
+          "recorded": "pass",
+          "replay_exit": 0,
+          "exit_agrees": true,
+          "output_source": "ledger.execution",
+          "stdout_agrees": true,
+          "stderr_agrees": true
+        }
+      ],
+      "reviewed_is_ancestor": true,
+      "product_drift_since_review": [],
+      "walkthroughs": [
+        {
+          "review": "wave-1.cycle1.md",
+          "command": "python3 -B count.py",
+          "agrees": true
+        },
+        {
+          "review": "wave-1.cycle1.md",
+          "command": "python3 -B count.py 0",
+          "agrees": true
+        },
+        {
+          "review": "wave-1.cycle1.md",
+          "command": "python3 -B count.py 5",
+          "agrees": true
+        },
+        {
+          "review": "wave-1.cycle1.md",
+          "command": "python3 -B count.py +5",
+          "agrees": true
+        },
+        {
+          "review": "wave-1.cycle1.md",
+          "command": "python3 -B count.py -3",
+          "agrees": true
+        },
+        {
+          "review": "wave-1.cycle1.md",
+          "command": "python3 -B count.py --json",
+          "agrees": true
+        },
+        {
+          "review": "wave-1.cycle1.md",
+          "command": "python3 -B count.py --json -3",
+          "agrees": true
+        },
+        {
+          "review": "wave-1.cycle1.md",
+          "command": "python3 -B count.py -3 --json",
+          "agrees": true
+        },
+        {
+          "review": "wave-1.cycle1.md",
+          "command": "python3 -B count.py --json +5",
+          "agrees": true
+        },
+        {
+          "review": "wave-1.cycle1.md",
+          "command": "python3 -B count.py +5 --json",
+          "agrees": true
+        },
+        {
+          "review": "wave-1.cycle1.md",
+          "command": "python3 -B count.py abc",
+          "agrees": true
+        },
+        {
+          "review": "wave-1.cycle1.md",
+          "command": "python3 -B count.py 1.5",
+          "agrees": true
+        },
+        {
+          "review": "wave-1.cycle1.md",
+          "command": "python3 -B count.py --unknown",
+          "agrees": true
+        },
+        {
+          "review": "wave-1.cycle1.md",
+          "command": "python3 -B count.py 1 2",
+          "agrees": true
+        },
+        {
+          "review": "wave-1.cycle1.md",
+          "command": "python3 -B count.py --json abc",
+          "agrees": true
+        },
+        {
+          "review": "wave-1.cycle1.md",
+          "command": "python3 -B count.py abc --json",
+          "agrees": true
+        }
+      ]
+    }
+  ],
+  "oracle": {
+    "verdict": "pass",
+    "checks": [
+      {
+        "arguments": [],
+        "pass": true,
+        "exit_code": 0,
+        "stdout": "0 widgets\n",
+        "stderr": ""
+      },
+      {
+        "arguments": [
+          "3"
+        ],
+        "pass": true,
+        "exit_code": 0,
+        "stdout": "3 widgets\n",
+        "stderr": ""
+      },
+      {
+        "arguments": [
+          "--json"
+        ],
+        "pass": true,
+        "exit_code": 0,
+        "stdout": "{\"widgets\": 0}\n",
+        "stderr": ""
+      },
+      {
+        "arguments": [
+          "3",
+          "--json"
+        ],
+        "pass": true,
+        "exit_code": 0,
+        "stdout": "{\"widgets\": 3}\n",
+        "stderr": ""
+      },
+      {
+        "arguments": [
+          "--json",
+          "-2"
+        ],
+        "pass": true,
+        "exit_code": 0,
+        "stdout": "{\"widgets\": -2}\n",
+        "stderr": ""
+      },
+      {
+        "arguments": [
+          "invalid"
+        ],
+        "pass": true,
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "usage: count.py [-h] [--json] [count]\ncount.py: error: argument count: invalid int value: 'invalid'\n"
+      }
+    ]
+  },
+  "mismatches": [],
+  "verdict": "pass"
+}

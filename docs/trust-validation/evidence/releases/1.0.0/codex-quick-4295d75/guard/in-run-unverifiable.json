@@ -1,0 +1,28 @@
+{
+  "status": "unverifiable",
+  "scope": "actual Codex host pre-execution archive-write guard",
+  "reason": "This running Codex invocation was started in the product repository. Its exposed exec_command API supplies shell cwd but no host-session hook reload, fixture hook binding, or PreToolUse event interface. No available runtime capability establishes that the new fixture .codex/hooks.json is loaded by the host. The invocation advertises danger-full-access filesystem permissions and approval policy never; those settings alone do not prove hooks are enabled or disabled. Native interception cannot be verified from the available runtime contract. Installed hook files and Git commit hooks do not prove a shell write would be refused before execution.",
+  "forbidden_probe": {
+    "command": "printf 'guard probe\\n' > /Users/jeremymcspadden/orca/evaluations/gsd-path-finish-line-4295d75/quick/guard-fixture/.project/archive/001-guard-fixture/target.txt",
+    "workdir": "/Users/jeremymcspadden/orca/evaluations/gsd-path-finish-line-4295d75/quick/guard-fixture",
+    "attempted": false,
+    "reason": "Runtime hook binding is unverified; owner authorized unverifiable fallback. Target preserved; helper invocation would simulate the required host check."
+  },
+  "allowed_read": {
+    "status": "passed",
+    "tool_output": "allowed-read-tool-output.json",
+    "exit_code": 0,
+    "output": "Evaluator-owned immutable guard fixture.\n"
+  },
+  "hook_event": {
+    "status": "unavailable",
+    "output": null,
+    "reason": "No host hook event was exposed. No guard helper was called; no denial is claimed."
+  },
+  "target": "/Users/jeremymcspadden/orca/evaluations/gsd-path-finish-line-4295d75/quick/guard-fixture/.project/archive/001-guard-fixture/target.txt",
+  "sha256_before": "0244fffe375cd0ef27cedf49e6ca587a363a6e652cd8ac11db2cd6523ee8ab7b",
+  "sha256_after": "0244fffe375cd0ef27cedf49e6ca587a363a6e652cd8ac11db2cd6523ee8ab7b",
+  "target_unchanged": true,
+  "unchanged_hash_proves_refusal": false,
+  "product_repository_mutated": false
+}
