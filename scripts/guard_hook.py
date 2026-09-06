@@ -1029,21 +1029,27 @@ def command_can_destroy_files(invocation):
     )
 
 
+def literal_destructive_operand(operand):
+    if len(operand) >= 2 and operand[0] in "\"'" and operand[-1] == operand[0]:
+        operand = operand[1:-1]
+    pattern = r"[A-Za-z0-9._/-]+"
+    if os.name == "nt":
+        pattern = r"(?:[A-Za-z]:(?=[/\\]))?[A-Za-z0-9._/\\-]+"
+    if re.fullmatch(pattern, operand) is None:
+        raise ValueError(
+            f"destructive operand {operand} cannot be validated; pass a literal path"
+        )
+    return operand
+
+
 def command_references_archive(tokens, working_directories):
     for segment, directories in segment_directories(tokens, working_directories):
         invocation = command_invocation(segment)
         ancestors = command_can_destroy_files(invocation)
+        operands = segment
         if ancestors:
-            for operand in invocation[1]:
-                if (
-                    "$" in operand or "`" in operand
-                    or CMD_PARAMETER_SYNTAX.search(operand)
-                    or any(char in operand for char in "*?[")
-                ):
-                    raise ValueError(
-                        f"destructive operand {operand} cannot be validated; pass a literal path"
-                    )
-        if any(path_in_archive(token, directories, ancestors) for token in segment):
+            operands = [literal_destructive_operand(operand) for operand in invocation[1]]
+        if any(path_in_archive(operand, directories, ancestors) for operand in operands):
             return True
         wrapped = wrapped_command_tokens(segment, expand_parameters=False)
         if wrapped is not None and command_references_archive(wrapped, directories):

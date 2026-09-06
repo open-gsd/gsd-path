@@ -1278,6 +1278,12 @@ class GuardHookTests(unittest.TestCase):
                 'rm -rf "$(echo scratch)"',
                 'rm -rf no-matches-*',
                 'rm -rf **/.project',
+                'rm -rf .{project,unused}',
+                'rm -rf ~/x',
+                'rm -rf ~root/x',
+                'rm -rf "scratch folder"',
+                'rm -rf "scratch;other"',
+                'rm -rf ""',
                 "Remove-Item -Recurse -Force '.proj*'",
                 "Remove-Item -LiteralPath 'scratch/*'",
                 "Move-Item 'scratch/?' elsewhere",
@@ -1294,6 +1300,9 @@ class GuardHookTests(unittest.TestCase):
                 'python3 -m unittest tests.test_guard*',
                 f'ROOT={root}; python3 .gsd-path/archive_milestone.py render-manifest --repo "$ROOT"',
                 'rm -rf scratch',
+                'rm -rf ./scratch/old-file.txt',
+                "rm -rf './scratch/old-file.txt'",
+                'rm -rf scratch_123',
                 'rm -rf "scratch"',
             )
             with mock.patch.dict(os.environ, {}, clear=True):
