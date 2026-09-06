@@ -82,8 +82,9 @@ settled brownfield input.
    `dispatched` or `skipped` with a reason, and assign every research question
    to at least one dispatched dimension. No question may remain unassigned.
 2. Decide which standard dimensions have work: dispatch a dimension only when
-   it has at least one assigned question, an unsettled choice (for example, no
-   stack decision yet), or an intent risk to investigate. Skip a dimension
+   it has at least one assigned `RESEARCH` question from INTENT.md or
+   CHARTER.md. Unsettled choices and risks need that source question before
+   dispatch. Skip a dimension
    with nothing to answer — never spawn a researcher to fill a file — and
    record every skipped dimension with its reason in `RESEARCH.md`. The
    standard dimensions:

@@ -238,15 +238,9 @@ fifth standard input downstream — researchers read it so recommendations
 fit the code that exists (the stack researcher weighs migration cost, the
 pitfalls researcher checks which traps are already sprung).
 
-Dispatch a researcher only for a dimension with something to answer — an
-assigned `RESEARCH` question, an unsettled choice, or an intent risk. Skip the
-rest and record each skip with its reason in the STATE.md log; never spawn a
-researcher to fill a file. Run dispatched researchers with separate briefs and
-output paths, batching when runtime capacity is lower than the dispatched
-count. An optional fifth dimension may supplement at least one dispatched
-standard dimension but never replaces the standard set. RESEARCH.md records
-every standard dimension exactly once as dispatched or skipped, every question
-assignment, and the exact evidence path. Every finding needs a checked source,
+Follow the [research phase contract](skills/gsd-path-research/SKILL.md) for
+dispatch eligibility, skipped dimensions, question assignments, and evidence
+paths. Every finding needs a checked source,
 confidence, and a tie-back to INTENT.md.
 
 **Gate:** RESEARCH.md records every standard dimension exactly once, every

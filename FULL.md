@@ -283,10 +283,9 @@ recorded base with `check_task_briefs.py` and re-checks Intent coverage with
 `check_handoffs.py plan`; a failure is a plan defect repaired
 before the layer proceeds. Recovery, isolation, landing, and retirement go
 `isolation.py` — never a detached HEAD. Each coder reads INTENT.md and
-preflights its brief first — every named
-path exists at the base or is declared, owned success criteria exist in
-INTENT.md, and the interface contract matches its
-siblings verbatim — blocking immediately on a mismatch. Each
+preflights its brief using the [build contract](skills/gsd-path-build/SKILL.md),
+including its path, intent-coverage, and shared-interface checks, and blocks
+on a mismatch. Each
 task gets one atomic commit; task frontmatter records its base and landed state,
 and `isolation.py recover` proves the exact SHA from Git.
 The orchestrator's isolated task Verify rerun is that task's evidence; wave

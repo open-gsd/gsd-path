@@ -27,7 +27,6 @@ Across the 24 feature groups: 20 native passes, no failed feature paths remainin
 | Guards | Pass after owner-approved continuation: removing `--ignore-user-config` restored native hook loading. Actual read succeeded, patch was denied, sentinel hash unchanged. The three prior failures are preserved. |
 | Panels | No independent advertised model family. Same-family lenses do not prove cross-model panel behavior. |
 | Skeptics | Pass for standing findings: four native skeptics upheld actual reproduced failures and canonical grouping created one repair batch. The refutation branch remains unexercised. |
-
 | Loop | Owner-set max_iterations and wall_clock remain unanswered. Overall testing is unlimited; template examples are not owner values. |
 | Bootstrap, PR integration | Bootstrap passed. [PR #1](https://github.com/jeremymcs/gsd-path-longrun-20260905/pull/1) is open; two native calls reused the same PR/ship and waited for merge. Both registered Socket checks passed; no required checks or repository Actions CI. Owner merge commit and canonical integration/tag validation remain pending. |
 
@@ -55,7 +54,8 @@ Fixes cover managed-runtime greenfield detection, legal settled-research skips, 
 The latest shared check at da9522c passed 1,025 Python tests with two platform skips, all 133 Node tests and resource sync. The later 5ed6518 build-progress gate fix passed 101 focused tests. Running fixtures use several pinned revisions and explicit repair overrides: this is not one-revision end-to-end certification.
 
 
-The latest code change is `scripts/check_handoffs.py` and its generated copies, with regression coverage in `tests/test_handoffs.py`. RED: `python3 -B -m unittest tests.test_handoffs.HandoffValidationTests.test_build_plan_gate_preserves_progress_and_checks_contracts` failed with `T001 status must initially be pending`. GREEN: `python3 -B -m unittest tests.test_handoffs tests.test_workflow_run` passed 101 tests. Sabotage restored unconditional initial-state checks; the same regression failed, then passed after restoration. [Exact regression/sabotage receipt](/Users/jeremymcspadden/orca/evaluations/gsd-path-longrun-fixed-20260905/program/build-progress-sabotage.json). Native M002 then passed the repaired gate with both providers still done and dispatched its dependent task.
+The build-progress gate regression and its native follow-through are recorded
+in [execution status](LONG-RUN-STATUS.md#2026-09-05-2250-utc--resumed-native-checkpoints).
 
 
 Program closeout: M003 ship `3bfb2bb9dafa71d34417f1fcd6da5c7afe86b9fe`, integration `39d5545b1dbb8627d9cf8b8c904d0ad69f2ef94a`, tag `milestone/003-filtering`. [Final integration receipt](/Users/jeremymcspadden/orca/evaluations/gsd-path-longrun-fixed-20260905/program/m3-validate-integrated-raw.json) · [20-check external oracle](/Users/jeremymcspadden/orca/evaluations/gsd-path-longrun-fixed-20260905/program/product.json). That program thread is terminal. The controlled-fault case is terminal: skeptic standing findings and the linked repair closure now pass after the owner-approved source repair. The original cap-blocked result remains historical evidence. [Procedure](/Users/jeremymcspadden/orca/evaluations/gsd-path-review-fault-8ecdb9b-20260905/FAULT-PROCEDURE.md).
