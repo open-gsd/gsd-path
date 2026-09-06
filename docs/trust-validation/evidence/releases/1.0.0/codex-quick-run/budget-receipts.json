@@ -1,0 +1,205 @@
+[
+  {
+    "command": [
+      "/Applications/Xcode.app/Contents/Developer/usr/bin/python3",
+      "-B",
+      "/Users/jeremymcspadden/orca/workspaces/gsd-path/astra-eval/scripts/token_budget.py",
+      "configure",
+      "--task-limit",
+      "4000",
+      "--session-limit",
+      "30000",
+      "--authority",
+      "Owner policy supplied to this evaluation",
+      "--ledger",
+      "/Users/jeremymcspadden/orca/evaluations/gsd-path-quick-76051f9/observed-budget.json"
+    ],
+    "exit_code": 0,
+    "stdout": "{\"hard_cap_supported\": false, \"status\": \"configured\"}\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/Applications/Xcode.app/Contents/Developer/usr/bin/python3",
+      "-B",
+      "/Users/jeremymcspadden/orca/workspaces/gsd-path/astra-eval/scripts/token_budget.py",
+      "record",
+      "--task",
+      "orchestrator",
+      "--events",
+      "/Users/jeremymcspadden/orca/evaluations/gsd-path-quick-76051f9/path/run-20260905T035419294880Z/events.jsonl",
+      "--ledger",
+      "/Users/jeremymcspadden/orca/evaluations/gsd-path-quick-76051f9/observed-budget.json"
+    ],
+    "exit_code": 0,
+    "stdout": "{\"hard_cap_supported\": false, \"output_tokens\": 4528, \"status\": \"recorded\", \"task\": \"orchestrator\"}\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/Applications/Xcode.app/Contents/Developer/usr/bin/python3",
+      "-B",
+      "/Users/jeremymcspadden/orca/workspaces/gsd-path/astra-eval/scripts/token_budget.py",
+      "record",
+      "--task",
+      "orchestrator",
+      "--events",
+      "/Users/jeremymcspadden/orca/evaluations/gsd-path-quick-76051f9/path/run-20260905T035926299445Z/events.jsonl",
+      "--ledger",
+      "/Users/jeremymcspadden/orca/evaluations/gsd-path-quick-76051f9/observed-budget.json"
+    ],
+    "exit_code": 0,
+    "stdout": "{\"hard_cap_supported\": false, \"output_tokens\": 3887, \"status\": \"recorded\", \"task\": \"orchestrator\"}\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/Applications/Xcode.app/Contents/Developer/usr/bin/python3",
+      "-B",
+      "/Users/jeremymcspadden/orca/workspaces/gsd-path/astra-eval/scripts/token_budget.py",
+      "record",
+      "--task",
+      "orchestrator",
+      "--events",
+      "/Users/jeremymcspadden/orca/evaluations/gsd-path-quick-76051f9/path/run-20260905T040237339308Z/events.jsonl",
+      "--ledger",
+      "/Users/jeremymcspadden/orca/evaluations/gsd-path-quick-76051f9/observed-budget.json"
+    ],
+    "exit_code": 0,
+    "stdout": "{\"hard_cap_supported\": false, \"output_tokens\": 3489, \"status\": \"recorded\", \"task\": \"orchestrator\"}\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/Applications/Xcode.app/Contents/Developer/usr/bin/python3",
+      "-B",
+      "/Users/jeremymcspadden/orca/workspaces/gsd-path/astra-eval/scripts/token_budget.py",
+      "record",
+      "--task",
+      "orchestrator",
+      "--events",
+      "/Users/jeremymcspadden/orca/evaluations/gsd-path-quick-76051f9/path/run-20260905T040837002519Z/events.jsonl",
+      "--ledger",
+      "/Users/jeremymcspadden/orca/evaluations/gsd-path-quick-76051f9/observed-budget.json"
+    ],
+    "exit_code": 0,
+    "stdout": "{\"hard_cap_supported\": false, \"output_tokens\": 3602, \"status\": \"recorded\", \"task\": \"orchestrator\"}\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/Applications/Xcode.app/Contents/Developer/usr/bin/python3",
+      "-B",
+      "/Users/jeremymcspadden/orca/workspaces/gsd-path/astra-eval/scripts/token_budget.py",
+      "record",
+      "--task",
+      "orchestrator",
+      "--events",
+      "/Users/jeremymcspadden/orca/evaluations/gsd-path-quick-76051f9/path/run-20260905T041407538088Z/events.jsonl",
+      "--ledger",
+      "/Users/jeremymcspadden/orca/evaluations/gsd-path-quick-76051f9/observed-budget.json"
+    ],
+    "exit_code": 0,
+    "stdout": "{\"hard_cap_supported\": false, \"output_tokens\": 4443, \"status\": \"recorded\", \"task\": \"orchestrator\"}\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/Applications/Xcode.app/Contents/Developer/usr/bin/python3",
+      "-B",
+      "/Users/jeremymcspadden/orca/workspaces/gsd-path/astra-eval/scripts/token_budget.py",
+      "record",
+      "--task",
+      "build_t001",
+      "--events",
+      "/Users/jeremymcspadden/Library/Application Support/orca/codex-accounts/86df0dc7-3078-4314-8766-60e244dd9765/home/sessions/2026/09/04/rollout-2026-09-04T23-03-45-01a06fbc-955e-7761-a061-a445f825c50b.jsonl",
+      "--ledger",
+      "/Users/jeremymcspadden/orca/evaluations/gsd-path-quick-76051f9/observed-budget.json"
+    ],
+    "exit_code": 0,
+    "stdout": "{\"hard_cap_supported\": false, \"output_tokens\": 3502, \"status\": \"recorded\", \"task\": \"build_t001\"}\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/Applications/Xcode.app/Contents/Developer/usr/bin/python3",
+      "-B",
+      "/Users/jeremymcspadden/orca/workspaces/gsd-path/astra-eval/scripts/token_budget.py",
+      "record",
+      "--task",
+      "inspect_docs",
+      "--events",
+      "/Users/jeremymcspadden/Library/Application Support/orca/codex-accounts/86df0dc7-3078-4314-8766-60e244dd9765/home/sessions/2026/09/04/rollout-2026-09-04T22-55-32-01a06fb5-11d5-7480-97ac-00dd32fbc01e.jsonl",
+      "--ledger",
+      "/Users/jeremymcspadden/orca/evaluations/gsd-path-quick-76051f9/observed-budget.json"
+    ],
+    "exit_code": 0,
+    "stdout": "{\"hard_cap_supported\": false, \"output_tokens\": 2749, \"status\": \"recorded\", \"task\": \"inspect_docs\"}\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/Applications/Xcode.app/Contents/Developer/usr/bin/python3",
+      "-B",
+      "/Users/jeremymcspadden/orca/workspaces/gsd-path/astra-eval/scripts/token_budget.py",
+      "record",
+      "--task",
+      "review_wave_1_cycle_1",
+      "--events",
+      "/Users/jeremymcspadden/Library/Application Support/orca/codex-accounts/86df0dc7-3078-4314-8766-60e244dd9765/home/sessions/2026/09/04/rollout-2026-09-04T23-16-12-01a06fc7-fd71-75a2-ab9d-84e6f675d7dd.jsonl",
+      "--ledger",
+      "/Users/jeremymcspadden/orca/evaluations/gsd-path-quick-76051f9/observed-budget.json"
+    ],
+    "exit_code": 0,
+    "stdout": "{\"hard_cap_supported\": false, \"output_tokens\": 4501, \"status\": \"recorded\", \"task\": \"review_wave_1_cycle_1\"}\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/Applications/Xcode.app/Contents/Developer/usr/bin/python3",
+      "-B",
+      "/Users/jeremymcspadden/orca/workspaces/gsd-path/astra-eval/scripts/token_budget.py",
+      "record",
+      "--task",
+      "inspect_codebase",
+      "--events",
+      "/Users/jeremymcspadden/Library/Application Support/orca/codex-accounts/86df0dc7-3078-4314-8766-60e244dd9765/home/sessions/2026/09/04/rollout-2026-09-04T22-55-18-01a06fb4-da14-7d73-aaca-8de015083294.jsonl",
+      "--ledger",
+      "/Users/jeremymcspadden/orca/evaluations/gsd-path-quick-76051f9/observed-budget.json"
+    ],
+    "exit_code": 0,
+    "stdout": "{\"hard_cap_supported\": false, \"output_tokens\": 3297, \"status\": \"recorded\", \"task\": \"inspect_codebase\"}\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/Applications/Xcode.app/Contents/Developer/usr/bin/python3",
+      "-B",
+      "/Users/jeremymcspadden/orca/workspaces/gsd-path/astra-eval/scripts/token_budget.py",
+      "admit",
+      "--task",
+      "next_task",
+      "--ledger",
+      "/Users/jeremymcspadden/orca/evaluations/gsd-path-quick-76051f9/observed-budget.json"
+    ],
+    "exit_code": 1,
+    "stdout": "{\"decision\": \"blocked\", \"enforcement\": \"observed-admission-only\", \"hard_cap_supported\": false, \"reason\": \"observed output budget exhausted\", \"session_output_tokens\": 33998, \"session_remaining\": 0, \"task_output_tokens\": 0, \"task_remaining\": 4000}\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/Applications/Xcode.app/Contents/Developer/usr/bin/python3",
+      "-B",
+      "/Users/jeremymcspadden/orca/workspaces/gsd-path/astra-eval/scripts/token_budget.py",
+      "admit",
+      "--task",
+      "next_task",
+      "--require-hard-cap",
+      "--ledger",
+      "/Users/jeremymcspadden/orca/evaluations/gsd-path-quick-76051f9/observed-budget.json"
+    ],
+    "exit_code": 1,
+    "stdout": "{\"decision\": \"blocked\", \"enforcement\": \"observed-admission-only\", \"hard_cap_supported\": false, \"reason\": \"hard generation cap unsupported by Codex CLI\", \"session_output_tokens\": 33998, \"session_remaining\": 0, \"task_output_tokens\": 0, \"task_remaining\": 4000}\n",
+    "stderr": ""
+  }
+]

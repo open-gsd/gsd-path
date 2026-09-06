@@ -485,23 +485,23 @@ def archived_intent_criteria(archive: Path) -> dict[int, str]:
     if not archive_milestone.is_real_file(intent):
         raise ArchiveError("archived intent must be a real INTENT.md file")
     text = HTML_COMMENT_PATTERN.sub("", intent.read_text(encoding="utf-8"))
-    lines = text.splitlines()
-    section = section_lines(lines, "## Success criteria", "INTENT.md")
-    criteria = {}
-    for line in section:
-        match = INTENT_CRITERION_PATTERN.fullmatch(line.strip())
-        if match is None:
-            continue
-        number = int(match.group(1))
-        if number in criteria:
-            raise ArchiveError(f"INTENT.md repeats success criterion SC{number}")
-        criteria[number] = " ".join(match.group(2).split())
-    if not criteria or sorted(criteria) != list(range(1, max(criteria) + 1)):
-        raise ArchiveError("INTENT.md success criteria must be contiguous from SC1")
-    return criteria
+    try:
+        import check_handoffs
+    except ImportError:
+        from scripts import check_handoffs
+    try:
+        criteria = check_handoffs._success_criteria(text)
+    except check_handoffs.HandoffError as error:
+        raise ArchiveError(str(error)) from error
+    return {int(key[2:]): " ".join(value.split()) for key, value in criteria.items()}
 
 
 def parse_final_review(archive: Path) -> tuple:
+    try:
+        import check_handoffs
+    except ImportError:  # pragma: no cover - package import used by tests
+        from scripts import check_handoffs
+
     final = archive / "review" / "FINAL.md"
     if not archive_milestone.is_real_file(final):
         raise ArchiveError("final review must be a real FINAL.md file")
@@ -529,6 +529,14 @@ def parse_final_review(archive: Path) -> tuple:
     if not headings or [number for _, number, _ in headings] != list(range(1, len(headings) + 1)):
         raise ArchiveError("FINAL.md success criteria must be ordered and contiguous")
     intent_criteria = archived_intent_criteria(archive)
+    intent_text = (archive / "intent" / "INTENT.md").read_text(encoding="utf-8")
+    try:
+        surfaces = (
+            check_handoffs._surfaces(intent_text, "INTENT.md")
+            if re.search(r"(?m)^Surfaces:", intent_text) else []
+        )
+    except check_handoffs.HandoffError as error:
+        raise ArchiveError(str(error)) from error
     if len(headings) != len(intent_criteria):
         raise ArchiveError("FINAL.md success criteria do not exactly cover INTENT.md")
     for _, number, criterion in headings:
@@ -551,10 +559,27 @@ def parse_final_review(archive: Path) -> tuple:
             if key in values:
                 raise ArchiveError(f"FINAL.md repeats {key} for {criterion}")
             values[key] = value.strip().strip("`")
-        if tuple(values) != expected_fields or any(
-            not value or archive_milestone.contains_placeholder(value) for value in values.values()
-        ):
+        surface_values = [
+            line.removeprefix("- **Surface**:").strip().strip("`")
+            for line in lines[section_start:section_end]
+            if line.startswith("- **Surface**:")
+        ]
+        surface_evidence = len(surface_values) == 1 and any(
+            # Older final gates stripped terminal Markdown code delimiters.
+            " ".join(surface_values[0].split()).casefold()
+            == " ".join(surface.split()).strip("`").casefold()
+            for surface in surfaces
+        )
+        if tuple(values) != expected_fields:
             raise ArchiveError(f"FINAL.md criterion is incomplete: {criterion}")
+        for field, value in values.items():
+            if surface_evidence and field in {"Check", "Observed"}:
+                try:
+                    check_handoffs._surface_value(value, f"FINAL.md surface {field}")
+                except check_handoffs.HandoffError as error:
+                    raise ArchiveError(str(error)) from error
+            elif not value or archive_milestone.contains_placeholder(value):
+                raise ArchiveError(f"FINAL.md criterion is incomplete: {criterion}")
         if values["Verdict"] != "met":
             raise ArchiveError(f"FINAL.md criterion lacks passing evidence: {criterion}")
         evidence = next(
@@ -624,14 +649,20 @@ def validate_gap_reviews(archive: Path, reviewed_head: str) -> None:
             raise ArchiveError(f"{path.name} pass must use Fix direction: none")
 
 
-def meaningful_review_evidence(lines: Sequence[str], marker: str) -> bool:
+def meaningful_review_evidence(lines: Sequence[str], marker: str, task_text: str = "") -> bool:
+    try:
+        from check_handoffs import task_review_observation
+    except ImportError:  # pragma: no cover - package import used by tests
+        from scripts.check_handoffs import task_review_observation
+
     prefix = f"- {marker} "
     evidence = []
     for line in lines:
         stripped = line.strip()
         if not stripped.startswith(prefix):
             continue
-        evidence.append(stripped.removeprefix(prefix).strip().strip("`"))
+        item = task_review_observation(stripped.removeprefix(prefix), task_text)
+        evidence.append(item.strip().strip("`"))
     return bool(evidence) and all(
         item
         and item.casefold() not in {"none", "n/a", "null"}
@@ -733,6 +764,7 @@ def validate_wave_review(
     expected_criteria: Sequence[tuple[str, str]],
     expected_depth: str,
     expected_lens: Optional[str] = None,
+    task_texts: Optional[dict[str, str]] = None,
 ) -> Sequence[str]:
     lines = path.read_text(encoding="utf-8").splitlines()
     depth = completed_field(lines, "Depth:", path.name)
@@ -783,7 +815,7 @@ def validate_wave_review(
         )
         task_lines = lines[heading_index + 1 : next_section]
         marker = "✅" if verdict == "pass" else "❌"
-        if not meaningful_review_evidence(task_lines, marker):
+        if not meaningful_review_evidence(task_lines, marker, (task_texts or {}).get(_task_id, "")):
             raise ArchiveError(
                 f"{path.name} task {task_ids[position]} lacks non-placeholder evidence"
             )
@@ -889,6 +921,10 @@ def review_cycle_counts(archive: Path) -> Sequence[int]:
     plan_text = plan.read_text(encoding="utf-8")
     wave_numbers, wave_depths = plan_wave_depths(plan_text)
     wave_tasks = archived_wave_tasks(archive, wave_numbers)
+    task_texts = {
+        path.name.split("-", 1)[0]: path.read_text(encoding="utf-8")
+        for path in archive_milestone.canonical_task_files(archive / "tasks")
+    }
     wave_criteria = plan_wave_criteria(archive, plan_text, wave_tasks)
 
     artifacts = {}
@@ -967,6 +1003,7 @@ def review_cycle_counts(archive: Path) -> Sequence[int]:
                         wave_criteria[wave],
                         depth,
                         lens,
+                        task_texts,
                     )
                 )
 
@@ -1074,9 +1111,6 @@ def validate_manifest(project: Path, archive: Path, state: PipelineState) -> tup
     if manifest.is_symlink() or not manifest.is_file():
         raise ArchiveError("archive MANIFEST.md must be a real file")
     content = manifest.read_text(encoding="utf-8")
-    placeholder_content = content.replace("<!--", "").replace("-->", "")
-    if archive_milestone.contains_placeholder(placeholder_content):
-        raise ArchiveError("manifest contains an unfinished template placeholder")
     lines = content.splitlines()
 
     if lines.count(f"# Archive — {archive.name}") != 1:
@@ -1131,7 +1165,8 @@ def validate_manifest(project: Path, archive: Path, state: PipelineState) -> tup
 
     criteria_start = lines.index("## Success criteria at ship") + 1
     criteria_rows = []
-    for line in lines[criteria_start:]:
+    criteria_line_indexes = set()
+    for index, line in enumerate(lines[criteria_start:], criteria_start):
         if line.startswith("## "):
             break
         if not line.startswith("|"):
@@ -1140,18 +1175,27 @@ def validate_manifest(project: Path, archive: Path, state: PipelineState) -> tup
         if cells and (cells[0] == "Criterion" or set(cells[0]) <= {"-", ":"}):
             continue
         criteria_rows.append(cells)
+        criteria_line_indexes.add(index)
     if not criteria_rows or any(
         len(row) != 3
         or not row[0]
         or row[1] != "met"
         or not row[2]
         or row[2] == "none"
-        or any(archive_milestone.contains_placeholder(cell) for cell in row)
+        or any(archive_milestone.contains_placeholder(cell) for cell in row[1:])
         for row in criteria_rows
     ):
         raise ArchiveError("manifest success-criteria rows are incomplete")
     if [tuple(row) for row in criteria_rows] != list(final_criteria):
         raise ArchiveError("manifest success criteria do not match FINAL.md evidence in order")
+
+    # Exact validated criterion rows may quote CLI notation such as <integer>.
+    # Their other cells were checked above; every remaining line stays guarded.
+    placeholder_content = "\n".join(
+        line for index, line in enumerate(lines) if index not in criteria_line_indexes
+    ).replace("<!--", "").replace("-->", "")
+    if archive_milestone.contains_placeholder(placeholder_content):
+        raise ArchiveError("manifest contains an unfinished template placeholder")
 
     contents_start = lines.index("## Contents") + 1
     listed = []

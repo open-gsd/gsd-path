@@ -1,0 +1,37 @@
+[
+  {
+    "role": "direct",
+    "timestamp": "2026-09-05T02:46:26.238Z",
+    "sandbox_policy": {
+      "type": "danger-full-access"
+    }
+  },
+  {
+    "role": "path-orchestrator",
+    "timestamp": "2026-09-05T02:46:26.366Z",
+    "sandbox_policy": {
+      "type": "danger-full-access"
+    }
+  },
+  {
+    "role": "path-orchestrator",
+    "timestamp": "2026-09-05T02:54:01.669Z",
+    "sandbox_policy": {
+      "type": "danger-full-access"
+    }
+  },
+  {
+    "role": "path-orchestrator",
+    "timestamp": "2026-09-05T03:04:39.856Z",
+    "sandbox_policy": {
+      "type": "danger-full-access"
+    }
+  },
+  {
+    "role": "path-orchestrator",
+    "timestamp": "2026-09-05T03:07:37.934Z",
+    "sandbox_policy": {
+      "type": "danger-full-access"
+    }
+  }
+]

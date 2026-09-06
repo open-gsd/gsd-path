@@ -351,9 +351,9 @@ def is_fixed_managed_pipeline_artifact(relative: str) -> bool:
     ):
         return True
     if (
-        len(parts) == 2
+        (len(parts) == 2 or (len(parts) == 3 and parts[1] == "runtime"))
         and parts[0] == ".gsd-path"
-        and PurePosixPath(parts[1]).suffix.casefold() == ".py"
+        and PurePosixPath(parts[-1]).suffix.casefold() == ".py"
     ):
         return True
     return False

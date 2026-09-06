@@ -249,10 +249,12 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
    before creating any worktree; a lint or coverage failure is a documented plan
    defect — repair it against INTENT.md and SYNTHESIS.md, then re-establish
    the base. Then isolate each ready task with
-   `python3 <absolute isolation.py> isolate-task --repo <absolute primary>
-   --base <recorded base> --task-id <id> --round-size <N>` where N is the
+   `python3 <absolute workflow_run.py> prepare-task --repo <absolute primary>
+   --expected-head <recorded base> --task-id <id> --round-size <N>` where N is the
    number of tasks in this dispatch round. Serial (`N=1`) returns the primary
    worktree and `task_branch: null` — the coder works on the bound branch.
+   The runner also creates a named verification sidecar at this clean base
+   before dispatch. Retain both helper results in the dispatch evidence.
    Parallel (`N>=2`) creates a named `gsd-path-task/<id>` branch and linked
    worktree at that base; never a detached HEAD. Record dispatch through
    `python3 <absolute isolation.py> activate-task --repo <returned worktree>
@@ -292,6 +294,12 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
      declared `files` plus append-only Log changes in that task file. Include
      additions, deletions, renames, and binary changes; an unexpected path
      blocks before any product commit.
+   - For serial work, reproduce the validated complete task patch, including
+     untracked additions, in the pre-created verification sidecar. Keep the
+     primary patch intact. Check its product diff against the primary task
+     diff before verifying; retire the sidecar through `isolation.py retire`
+     after preserving its evidence and removing only those reproduced changes.
+     Parallel work uses the task's existing isolated worktree.
    - Run the task's Verify command in that isolated worktree. This rerun is the
      authoritative task evidence; a command run in the primary or a sibling
      worktree never counts. Append its exact result to the task Log. After
@@ -360,9 +368,20 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
      name `review_wave_<wave>_cycle_<cycle>`. Supply every task path, its
      recorded base and proven landing commit, the reviewer role, and
      wave-review template, and the absolute INTENT.md path.
-     Create and supply one verify sidecar with
-     `python3 <absolute isolation.py> isolate-verify --repo <absolute primary>
-     --base <recorded review base> --name wave-<N>-cycle-<C>`. Brief the
+     When INTENT selects quick lane and PLAN has one full wave, also assign
+     final scope: supply PLAN.md's Surface contract and the recorded review HEAD.
+     The same reviewer checks all success criteria and any remaining walkthrough
+     in this pass, records `Review scope: final` and `Reviewed HEAD`, and adds
+     Surface/Check/Observed fields to each surface criterion. Reuse recorded
+     command evidence when it already proves the named walkthrough; execute
+     only missing checks. Ship can then derive FINAL.md without another reviewer.
+     Record current clean primary HEAD as the review collection base. Create
+     a fresh review sidecar there; the serial task verification sidecar belongs
+     to the earlier task base and cannot be collected after landing.
+     Use `python3 <absolute isolation.py> isolate-verify --repo <absolute primary>
+     --base <recorded review base> --name wave-<N>-cycle-<C>`. Each task's
+     recorded base and landing commit still define its isolated review diff.
+     Keep primary HEAD fixed until collection completes. Brief the
      recorded isolated Verify output per task (the Log entry the
      orchestrator appended at landing). The reviewer must not re-run that
      command or PLAN.md's project Verify. The reviewer
@@ -407,7 +426,7 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
      entry when `python3 <absolute build_state.py> verify-lookup --repo
      <absolute primary> --command <task Verify> --commit <landed commit>`
      returns `reuse: true`; otherwise run the command in an
-     `isolate-verify` sidecar at that commit, record it with
+     `isolate-verify --historical-task <task id>` sidecar at that commit, record it with
      `verify-record`, and use that result. A re-review after a fix cycle
      follows the same rule. It checks each acceptance
      criterion and each INTENT success criterion owned by the wave's tasks
@@ -515,7 +534,21 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
      finding; a re-review never spawns a duplicate fix task for a finding
      already carried. Write each fix task to `.project/tasks/` with `wave`
      set to the current wave or a newly appended `## Wave N` heading in
-     PLAN.md before dispatch. Run them through the same isolated layer loop.
+     PLAN.md before dispatch. Its dependencies include every source task in
+     the batch; its files match the batch. In `## Review findings`, use one
+     `### <locator>` block per group, `Criterion: <verbatim criterion>`, and
+     every observation verbatim. Run the repair through the same isolated
+     layer loop, even when its appended wave repairs an earlier blocked wave.
+     After landing, call `review_findings.py repair-evidence --repo <primary>
+     --wave <source wave> --cycle <source cycle> --task <repair id>` and save
+     its JSON as the repair evidence for the next review. The helper validates
+     the carried batch, original and repair landings, isolated product scope,
+     unchanged source reports and reusable Verify. On success, brief the next
+     original-wave review with this receipt and the reviewer role's
+     **Re-review after a proven repair** contract. Reuse command evidence;
+     the new review judges the repaired product against the original criteria.
+     Preserve prior verdicts and source tasks. On helper rejection, resolve
+     the evidence blocker rather than redispatching an already proven fix.
    At the cap, record all attempts in the STATE.md log and ask the user —
    through an interactive user-input tool when available — after linking
    the resolved absolute blocking wave review, every deep lens file for the
@@ -538,8 +571,9 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
 ## Completion
 
 After every wave passes, record exact full HEAD and prove every task landed
-with `python3 <absolute build_state.py> verify-landed --repo <absolute primary>
---project-dir <absolute .project> --head <HEAD>`; it must return one
+with `python3 <absolute workflow_run.py> build-evidence --repo <absolute primary>
+--expected-head <HEAD>`; retain its JSON receipt. The wrapped `verify-landed`
+result must return one
 `proven-landed` or `attested` evidence entry per task, and any non-zero exit
 blocks completion. A `done` task without landing proof follows the `block`
 handling in step 1 above (owner ruling, Verify, `verify-record`, `attest`).

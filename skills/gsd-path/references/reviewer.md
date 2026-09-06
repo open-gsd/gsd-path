@@ -35,8 +35,11 @@ tasks in this wave as the rubric. For each task:
    when the recorded output plus the isolated diff cannot check the
    criterion. Never use the primary worktree or branch tip as task
    evidence. Do not create or remove Git worktrees yourself.
-4. Mark `pass` or `fail`. Give the criterion, observed result, `file:line`,
-   and concrete fix direction for each failure.
+4. Mark `pass` or `fail`. Before the evidence separator (` — `), copy the
+   complete task acceptance or interface criterion verbatim, joining wrapped
+   lines with spaces. Do not substitute an AC id or summary: finding grouping
+   binds this text to the task. Give the observed result, `file:line`, and
+   concrete fix direction for each failure.
 
 Then check each INTENT.md success criterion owned by a task in this wave
 against that same isolated product. Copy the criterion verbatim from
@@ -55,6 +58,33 @@ success criterion for the wave passes.
 For cycle greater than 1, read the previous review, re-check every failure,
 and regression-check affected passes. State when the same criterion fails for
 a different reason. Use only the wave-review template.
+
+### Re-review after a proven repair
+
+When the brief supplies a `review_findings.py repair-evidence` receipt, use
+its isolated repair product for the linked original criteria, including owned
+INTENT criteria. The original faulty landing and earlier verdicts remain
+historical evidence; they do not force the later verdict to remain failed.
+Reconstruct the receipt's repair `base` plus only its `commit^..commit` patch
+for `files` inside the supplied sidecar. Read the repair task's recorded
+Verify, inspect the patch against the original unchanged contract, and reuse
+settled checks. Check unaffected criteria from their prior evidence plus the
+repair diff for regressions. Cite the receipt, repair landing and task Log in
+the new review. A receipt proves provenance, not acceptance: judge whether the
+repair actually satisfies the criterion. A missing or rejected receipt blocks
+using that repair; the parent resolves it rather than creating another product
+fix for the unchanged historical failure.
+
+## Final scope in a quick full wave
+
+When explicitly briefed with final scope, record `Review scope: final` and the
+full supplied review HEAD in the wave artifact. Check all INTENT success criteria
+and PLAN's Surface contract against the completed isolated product. Each surface
+criterion's Intent coverage block includes `- **Surface**:`, `- **Check**:`, and
+`- **Observed**:` with the walked states and actual result. Reuse recorded task
+output if it proves that exact walkthrough; run only a missing check. Final-scope
+coverage shares this wave artifact; do not write a second report. Shipping's
+runtime checks freshness and derives the final view from these records.
 
 ## Deep review lenses
 

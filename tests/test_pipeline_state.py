@@ -10,6 +10,28 @@ from pathlib import Path
 from unittest import mock
 
 from scripts import pipeline_git, pipeline_state, state_checkpoint, state_promote
+from tests.test_task_briefs import TASK_TEMPLATE
+
+
+SETTLED_SYNTHESIS = """# Synthesis
+
+## Settled
+- Python only, per INTENT constraints.
+
+## Decisions
+- None
+
+## For the planner
+- **Wave-1 blockers**: No open decisions.
+- **Walking skeleton**: Counter CLI with JSON.
+- **Pitfalls → tasks**: Reject invalid CLI arguments.
+
+## User rulings
+- None
+
+## Still unknown
+- None
+"""
 
 
 def run_git(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -81,22 +103,10 @@ def roadmap_text() -> str:
 
 
 def task_text() -> str:
-    return (
-        "---\n"
-        "id: T002\n"
-        "title: Change app\n"
-        "wave: 1\n"
-        "deps: []\n"
-        "status: pending\n"
-        "agent: null\n"
-        "commit: null\n"
-        "base: null\n"
-        "worktree: null\n"
-        "task_branch: null\n"
-        "files:\n"
-        "  - app.py\n"
-        "---\n\n"
-        "# T002 — Change app\n"
+    return TASK_TEMPLATE.format(
+        task_id="T002", files_block="  - app.py", context="Change the app.",
+        approach="Implement the approved behavior.", contract="- None",
+        verify="python3 app.py",
     )
 
 
@@ -369,6 +379,55 @@ class PipelineStateTests(unittest.TestCase):
             self.assertTrue(
                 all(value is None for value in status["journals"].values())
             )
+
+    def test_pending_future_owner_blocks_routing_and_transition(self) -> None:
+        from tests.test_discussion_records import DiscussionRecordTests
+
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            fixture = DiscussionRecordTests()
+            fixture.make_repo(repo)
+            run_git(repo, "checkout", "-b", "gsd-path/M001")
+            state = repo / ".project/STATE.md"
+            state.write_text(state_text(phase="define", status="done", branch="gsd-path/M001"))
+            intent = repo / ".project/intent/INTENT.md"
+            intent.parent.mkdir()
+            intent.write_text("# Intent\n\nLane: standard\n")
+            prepared = fixture.command(repo, "prepare")
+            self.assertEqual(prepared.returncode, 0, prepared.stderr)
+            appended = fixture.command(repo, "append", fixture.turn_payload(repo, "turn.json"))
+            self.assertEqual(appended.returncode, 0, appended.stderr)
+            before = state.read_bytes()
+
+            with self.subTest(operation="route"):
+                result = pipeline_state.route_state(repo)
+                self.assertEqual(result["route"]["action"], "block")
+                self.assertIn("A001", result["route"]["reason"])
+                self.assertIn("gsd-path-plan", result["route"]["reason"])
+            with self.subTest(operation="transition"):
+                with self.assertRaisesRegex(pipeline_state.PipelineStateError, "pending discussion"):
+                    pipeline_state.transition_state(
+                        repo,
+                        {"phase": "define", "status": "done", "branch": "gsd-path/M001", "archive": None},
+                        {"phase": "research", "status": "active"},
+                        "research started",
+                    )
+                self.assertEqual(state.read_bytes(), before)
+
+            state.write_text(state_text(phase="decide", status="done", branch="gsd-path/M001"))
+            synthesis = repo / ".project/research/SYNTHESIS.md"
+            synthesis.parent.mkdir(exist_ok=True)
+            synthesis.write_text(SETTLED_SYNTHESIS)
+            result = pipeline_state.route_state(repo)
+            self.assertEqual(result["route"]["action"], "run-phase")
+            self.assertEqual(result["route"]["phase"], "plan")
+            entered = pipeline_state.transition_state(
+                repo,
+                {"phase": "decide", "status": "done", "branch": "gsd-path/M001", "archive": None},
+                {"phase": "plan", "status": "active"},
+                "planning started",
+            )
+            self.assertEqual(entered["state"]["phase"], "plan")
 
     def test_status_reports_route_without_mutating(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -741,6 +800,32 @@ class PipelineStateTests(unittest.TestCase):
 
             self.assertEqual(result["route"]["action"], "bind-initial")
             self.assertEqual(result["route"]["branch"], "gsd-path/M002")
+
+    def test_decide_transition_refuses_invalid_synthesis_before_writing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            project = repo / ".project"
+            (project / "research").mkdir(parents=True)
+            state = project / "STATE.md"
+            state.write_text(state_text(phase="decide", status="active", branch="gsd-path/M001"))
+            synthesis = project / "research/SYNTHESIS.md"
+            valid = SETTLED_SYNTHESIS
+            expected = {"phase": "decide", "status": "active", "branch": "gsd-path/M001", "archive": None}
+            for phase, status, changes, event in (
+                ("decide", "active", {"status": "done"}, "synthesis validated"),
+                ("decide", "done", {"phase": "plan", "status": "active"}, "planning started"),
+            ):
+                with self.subTest(status=status):
+                    state.write_text(state_text(phase=phase, status=status, branch="gsd-path/M001"))
+                    before = state.read_bytes()
+                    synthesis.write_text(valid.replace("## Decisions\n- None", "## Decisions\nNone. All choices are settled."))
+                    expected["status"] = status
+                    with self.assertRaisesRegex(pipeline_state.PipelineStateError, "decide handoff failed"):
+                        pipeline_state.transition_state(repo, expected, changes, event)
+                    self.assertEqual(state.read_bytes(), before)
+                    synthesis.write_text(valid)
+                    result = pipeline_state.transition_state(repo, expected, changes, event)
+                    self.assertEqual(result["state"]["status"], changes["status"])
 
     def test_transition_compares_expected_state_before_atomic_write(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1385,6 +1470,14 @@ class PipelineStateTests(unittest.TestCase):
         run_git(repo, "commit", "-m", "fixture: approval base")
         expected_head = run_git(repo, "rev-parse", "HEAD").stdout.strip()
         if kind == "plan":
+            (project / "tasks").mkdir()
+            (project / "tasks" / "T001-new.md").write_text(
+                TASK_TEMPLATE.format(
+                    task_id="T001", files_block="  - newpkg/app.py",
+                    context="Create the requested module.", approach="Implement the module.",
+                    contract="- None", verify="python3 newpkg/app.py",
+                ), encoding="utf-8",
+            )
             (project / "plan").mkdir()
             (project / "plan" / "PLAN.md").write_text(
                 "# Plan — first\n",
@@ -1523,6 +1616,23 @@ class PipelineStateTests(unittest.TestCase):
                 (state.phase, state.status, state.milestone, state.branch),
                 ("inspect", "active", "second", "gsd-path/M001"),
             )
+
+    def test_plan_approval_rejects_invalid_brief_before_state_or_commit(self) -> None:
+        for patch in (False, True):
+            with self.subTest(patch=patch), tempfile.TemporaryDirectory() as tmp:
+                repo, head = self._approval_repo(tmp, "plan")
+                task = repo / ".project/tasks/T001-new.md"
+                task.write_text(task.read_text().replace("newpkg/app.py", "../outside.py"))
+                state = repo / ".project/STATE.md"
+                before = state.read_bytes()
+                with self.assertRaisesRegex(pipeline_state.PipelineStateError, "task brief.*validation|must not contain"):
+                    if patch:
+                        pipeline_state.defer_approval(repo, "plan", patch=True)
+                    else:
+                        pipeline_state.checkpoint_approval(repo, "plan", head)
+                self.assertEqual(before, state.read_bytes())
+                self.assertEqual(head, run_git(repo, "rev-parse", "HEAD").stdout.strip())
+                self.assertFalse(pipeline_state._git_path(repo, pipeline_state.CHECKPOINT_JOURNAL_NAME).exists())
 
     def test_plan_approval_owns_state_change_and_checkpoint(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

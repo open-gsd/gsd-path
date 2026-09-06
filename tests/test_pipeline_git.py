@@ -1,4 +1,5 @@
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -6,7 +7,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from scripts import pipeline_git, pipeline_state
+from scripts import detect_project, pipeline_git, pipeline_state
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -77,6 +78,83 @@ def make_integrated_milestone(tmp: str) -> tuple[Path, Path, str, str]:
 
 
 class PipelineGitTests(unittest.TestCase):
+    def test_initialize_bind_and_transition_without_a_commit(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            _, repo, base = make_remote_repo(tmp)
+            initialized = detect_project.initialize(repo, ROOT / "skills/gsd-path/templates/state.md")
+            self.assertTrue(initialized["wrote_state"])
+            path = repo / ".project/STATE.md"
+            original = path.read_bytes()
+            command = [sys.executable, str(PIPELINE_GIT), "bind-initial", "--repo", str(repo),
+                       "--branch", "gsd-path/M001", "--remote-default", "origin/main", "--base", base]
+            result = subprocess.run(command, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(path.read_bytes(), original)
+            self.assertEqual(run_git(repo, "rev-parse", "HEAD").stdout.strip(), base)
+            # Recover the interruption after switch, before STATE.branch is persisted.
+            resumed = subprocess.run(command, capture_output=True, text=True)
+            self.assertEqual(resumed.returncode, 0, resumed.stderr)
+            self.assertEqual(json.loads(resumed.stdout)["status"], "already-bound")
+            state = pipeline_state.validate_state(repo)["state"]
+            result = pipeline_state.transition_state(repo,
+                {key: state[key] for key in ("phase", "status", "branch", "archive")},
+                {"branch": "gsd-path/M001"}, "router bound initial milestone")
+            self.assertEqual(result["state"]["branch"], "gsd-path/M001")
+
+    def test_initial_state_exception_rejects_other_dirt_and_invalid_state(self) -> None:
+        for change in ("product", "extra", "ignored-extra", "staged", "invalid", "noninitial",
+                       "symlink", "hardlink", "directory-link"):
+            with self.subTest(change=change), tempfile.TemporaryDirectory() as tmp:
+                _, repo, base = make_remote_repo(tmp)
+                detect_project.initialize(repo, ROOT / "skills/gsd-path/templates/state.md")
+                path = repo / ".project/STATE.md"
+                if change == "product":
+                    (repo / "product.txt").write_text("dirty")
+                elif change == "extra":
+                    (repo / ".project/another\nfile").write_text("extra")
+                elif change == "ignored-extra":
+                    (repo / ".git/info/exclude").write_text(".project/ignored\n")
+                    (repo / ".project/ignored").write_text("extra")
+                elif change == "staged":
+                    run_git(repo, "add", ".project/STATE.md")
+                elif change == "invalid":
+                    path.write_text("not owned state")
+                elif change == "noninitial":
+                    path.write_text(path.read_text().replace("status: active", "status: done"))
+                elif change == "directory-link":
+                    target = Path(tmp) / "project-copy"
+                    path.parent.rename(target)
+                    path.parent.symlink_to(target, target_is_directory=True)
+                else:
+                    target = Path(tmp) / "state-copy"
+                    path.rename(target)
+                    if change == "symlink":
+                        path.symlink_to(target)
+                    else:
+                        os.link(target, path)
+                with self.assertRaises(pipeline_git.PipelineGitError):
+                    pipeline_git.bind_initial_milestone_branch(repo, "gsd-path/M001", "origin/main", base)
+                self.assertEqual(run_git(repo, "branch", "--show-current").stdout.strip(), "main")
+
+    def test_binding_reports_state_replacement_during_switch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            _, repo, base = make_remote_repo(tmp)
+            detect_project.initialize(repo, ROOT / "skills/gsd-path/templates/state.md")
+            path = repo / ".project/STATE.md"
+            original = pipeline_git._run_git
+
+            def replace_state(repo, *args, **kwargs):
+                result = original(repo, *args, **kwargs)
+                if args[0] == "switch":
+                    path.rename(Path(tmp) / "original-state")
+                    path.write_bytes((Path(tmp) / "original-state").read_bytes())
+                return result
+
+            with mock.patch.object(pipeline_git, "_run_git", side_effect=replace_state):
+                with self.assertRaisesRegex(pipeline_git.PipelineGitError, "changed during"):
+                    pipeline_git.bind_initial_milestone_branch(repo, "gsd-path/M001", "origin/main", base)
+            self.assertEqual(run_git(repo, "branch", "--show-current").stdout.strip(), "gsd-path/M001")
+
     def test_bound_branch_name_uses_m00n(self) -> None:
         self.assertEqual(pipeline_git.bound_branch_name(1), "gsd-path/M001")
         self.assertEqual(pipeline_git.bound_branch_name(12), "gsd-path/M012")

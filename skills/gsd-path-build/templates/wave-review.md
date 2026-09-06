@@ -6,6 +6,13 @@
      own lines: Cycle holds only the number
      (C > 1 means re-review after fixes; see previous cycle file). -->
 
+<!-- For quick single-full-wave final scope, include these two metadata lines
+     with actual values, otherwise omit them:
+Reviewed HEAD: <full review commit SHA>
+Review scope: final
+     In each surface SC block also include Surface, Check, and Observed fields
+     using the final-review format. Record the actual walkthrough evidence once. -->
+
 Wave verdict: <pass | blocked — blocked if any task fails>
 Cycle: <C>
 Depth: <full | deep | verify-only — verify-only is orchestrator-written from
@@ -16,7 +23,9 @@ Tasks reviewed: <count>
 
 ## T001 — <title>: <pass | fail>
 
-<!-- Per criterion: -->
+<!-- Per task criterion: copy the full acceptance/interface criterion verbatim
+     before the em dash; join wrapped lines with spaces. An AC id or summary
+     alone cannot be matched by review_findings.py. -->
 - ✅ <criterion> — <evidence: verify output / file:line checked>
 - ❌ <criterion> — found: <what exists instead, file:line>
   fix: <concrete direction a coder can execute without re-investigating>

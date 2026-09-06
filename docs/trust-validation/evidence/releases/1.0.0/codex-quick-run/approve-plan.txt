@@ -1,0 +1,3 @@
+$gsd-path approve plan
+
+Parent evaluator approval under the user-authorized comparison: I reviewed PLAN.md and T001-widget-counter.md. The one-task scope, root test_count.py path, all five criteria, isolated task Verify, full wave review, and ship-only Project verify match the supplied contract. Approve and continue build and ship through direct integration to this fixture's local origin. This is evaluator approval, not a new human receipt. Use ONLY fixture-local .agents/skills/gsd-path* bundles. Preserve recorded failures. Do not edit installed plugin source. Explicitly chdir inside wrapped sidecar commands.

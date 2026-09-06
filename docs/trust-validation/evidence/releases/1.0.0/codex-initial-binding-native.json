@@ -1,0 +1,64 @@
+{
+  "source": "/Users/jeremymcspadden/Library/Application Support/orca/codex-accounts/86df0dc7-3078-4314-8766-60e244dd9765/home/sessions/2026/09/04/rollout-2026-09-04T21-21-45-01a06f5f-355d-7ba0-9087-00934e36529f.jsonl",
+  "records": [
+    {
+      "timestamp": "2026-09-05T02:23:04.279Z",
+      "call_id": "call_wVXav9GYwuQKN6EkbTeQl6R1",
+      "type": "spawn_agent",
+      "task_name": "inspect_codebase",
+      "fork_turns": "none"
+    },
+    {
+      "timestamp": "2026-09-05T02:23:04.380Z",
+      "call_id": "call_wVXav9GYwuQKN6EkbTeQl6R1",
+      "type": "function_call_output",
+      "output": "{\"task_name\":\"/root/inspect_codebase\"}"
+    },
+    {
+      "timestamp": "2026-09-05T02:23:21.752Z",
+      "call_id": "call_H3vWEVgUAu6Bu1eDVYX1KXFN",
+      "type": "spawn_agent",
+      "task_name": "inspect_docs",
+      "fork_turns": "none"
+    },
+    {
+      "timestamp": "2026-09-05T02:23:21.832Z",
+      "call_id": "call_H3vWEVgUAu6Bu1eDVYX1KXFN",
+      "type": "function_call_output",
+      "output": "{\"task_name\":\"/root/inspect_docs\"}"
+    },
+    {
+      "timestamp": "2026-09-05T02:32:54.549Z",
+      "call_id": "call_vqH1El07fQaFB0jI4kn9bMlG",
+      "type": "spawn_agent",
+      "task_name": "research_pitfalls",
+      "fork_turns": "none"
+    },
+    {
+      "timestamp": "2026-09-05T02:32:54.644Z",
+      "call_id": "call_vqH1El07fQaFB0jI4kn9bMlG",
+      "type": "function_call_output",
+      "output": "{\"task_name\":\"/root/research_pitfalls\"}"
+    }
+  ],
+  "sandboxes": [
+    {
+      "timestamp": "2026-09-05T02:21:47.387Z",
+      "sandbox_policy": {
+        "type": "danger-full-access"
+      }
+    },
+    {
+      "timestamp": "2026-09-05T02:28:22.493Z",
+      "sandbox_policy": {
+        "type": "read-only"
+      }
+    },
+    {
+      "timestamp": "2026-09-05T02:31:44.651Z",
+      "sandbox_policy": {
+        "type": "danger-full-access"
+      }
+    }
+  ]
+}

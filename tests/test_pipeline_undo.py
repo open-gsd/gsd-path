@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest import mock
 
 from scripts import archive_milestone, isolation, pipeline_state, pipeline_undo
+from tests.test_task_briefs import TASK_TEMPLATE
 
 
 def run_git(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -70,6 +71,15 @@ def task_text() -> str:
     )
 
 
+def write_plan_tasks(repo: Path) -> None:
+    tasks = repo / '.project/tasks'
+    tasks.mkdir()
+    (tasks / 'T001-change-app.md').write_text(TASK_TEMPLATE.format(
+        task_id='T001', files_block='  - app.py', context='Create the demo app.',
+        approach='Implement the demo behavior.', contract='- None', verify='python3 app.py'),
+        encoding='utf-8')
+
+
 def discussion_text(follow_up: str = "required") -> tuple[str, str]:
     next_owner = "ship" if follow_up == "required" else "none"
     target = ".project/plan/PLAN.md" if follow_up == "required" else "none"
@@ -107,6 +117,7 @@ class PipelineUndoTests(unittest.TestCase):
             expected_head = run_git(repo, "rev-parse", "HEAD").stdout.strip()
             (project / "plan").mkdir()
             (project / "plan" / "PLAN.md").write_text("# Plan — first\n", encoding="utf-8")
+            write_plan_tasks(repo)
             pipeline_state.checkpoint_approval(repo, "plan", expected_head)
             approved = run_git(repo, "rev-parse", "HEAD").stdout.strip()
             self.assertNotEqual(approved, expected_head)
@@ -141,6 +152,7 @@ class PipelineUndoTests(unittest.TestCase):
             (discussion / "ANSWERS.md").write_text(answers, encoding="utf-8")
             (project / "plan").mkdir()
             (project / "plan" / "PLAN.md").write_text("# Plan — first\n", encoding="utf-8")
+            write_plan_tasks(repo)
             pipeline_state.checkpoint_approval(repo, "plan", parent)
             approved = run_git(repo, "rev-parse", "HEAD").stdout.strip()
 
@@ -163,6 +175,7 @@ class PipelineUndoTests(unittest.TestCase):
             expected_head = run_git(repo, "rev-parse", "HEAD").stdout.strip()
             (project / "plan").mkdir()
             (project / "plan" / "PLAN.md").write_text("# Plan — first\n", encoding="utf-8")
+            write_plan_tasks(repo)
             pipeline_state.checkpoint_approval(repo, "plan", expected_head)
             origin = root / "origin.git"
             subprocess.run(
@@ -190,6 +203,7 @@ class PipelineUndoTests(unittest.TestCase):
             parent = run_git(repo, "rev-parse", "HEAD").stdout.strip()
             (project / "plan").mkdir()
             (project / "plan" / "PLAN.md").write_text("# Plan — first\n", encoding="utf-8")
+            write_plan_tasks(repo)
             pipeline_state.checkpoint_approval(repo, "plan", parent)
             approved = run_git(repo, "rev-parse", "HEAD").stdout.strip()
 
@@ -221,6 +235,7 @@ class PipelineUndoTests(unittest.TestCase):
             parent = run_git(repo, "rev-parse", "HEAD").stdout.strip()
             (project / "plan").mkdir()
             (project / "plan" / "PLAN.md").write_text("# Plan — first\n", encoding="utf-8")
+            write_plan_tasks(repo)
             pipeline_state.checkpoint_approval(repo, "plan", parent)
             approved = run_git(repo, "rev-parse", "HEAD").stdout.strip()
             with mock.patch.object(
@@ -254,6 +269,7 @@ class PipelineUndoTests(unittest.TestCase):
             parent = run_git(repo, "rev-parse", "HEAD").stdout.strip()
             (project / "plan").mkdir()
             (project / "plan" / "PLAN.md").write_text("# Plan — first\n", encoding="utf-8")
+            write_plan_tasks(repo)
             pipeline_state.checkpoint_approval(repo, "plan", parent)
             approved = run_git(repo, "rev-parse", "HEAD").stdout.strip()
             with mock.patch.object(

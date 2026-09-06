@@ -1,0 +1,3 @@
+$gsd-path approve intent
+
+Parent evaluator approval under the user-authorized comparison: I reviewed the fixture INTENT.md. It matches the supplied widget-counter scope, quick lane, full review, no panel, and direct integration. Continue to plan approval using ONLY fixture-local .agents/skills/gsd-path* bundles. This is an evaluator approval, not a new human receipt. Preserve recorded failures. The supplied activity wrapper changes cwd to the arm repo; explicitly chdir inside commands for sidecars. Continue using the existing model and permissions.

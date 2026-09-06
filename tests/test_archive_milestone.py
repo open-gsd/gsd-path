@@ -34,7 +34,7 @@ class ArchiveMilestoneTests(unittest.TestCase):
     def git(self, repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
         return self.run_command("git", *args, cwd=repo)
 
-    def make_repo(self, root: Path, branch: str = "gsd-path/M001", landing: str = "land") -> None:
+    def make_repo(self, root: Path, branch: str = "gsd-path/M001", landing: str = "land", acceptance: str = "") -> None:
         self.git(root, "init", "-q", "-b", branch)
         self.git(root, "config", "user.name", "Validation")
         self.git(root, "config", "user.email", "validation@example.invalid")
@@ -130,6 +130,10 @@ python3 -c 'print(1)'
 """,
             encoding="utf-8",
         )
+        if acceptance:
+            task.write_text(task.read_text().replace(
+                "## Intent coverage", f"## Acceptance criteria\n\n{acceptance}\n\n## Intent coverage"
+            ))
         (project / "review" / "FINAL.md").write_text("Overall verdict: pass\n")
         (project / "review" / "wave-1.cycle1.md").write_text(
             """# Review — wave 1, cycle 1
@@ -622,6 +626,18 @@ refuted
             self.assertIn("archive milestone number must be >= 1", prepare.stderr)
             self.assertEqual(self.snapshot_worktree(repo), before)
 
+    def test_archive_preserves_wrapped_criterion_bytes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            self.make_repo(repo)
+            intent = repo / ".project/intent/INTENT.md"
+            intent.write_text(intent.read_text().replace("1. demo works", "1. demo\n   works"))
+            before = intent.read_bytes()
+            archive = self.prepare_archive(repo)
+            rendered = self.render_manifest(repo)
+            self.assertEqual(rendered.returncode, 0, rendered.stderr)
+            self.assertEqual((archive / "intent/INTENT.md").read_bytes(), before)
+
     def test_render_manifest_replaces_stale_content_with_derived_values(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             repo = Path(temporary_directory)
@@ -645,6 +661,37 @@ refuted
             self.assertFalse((archive / ".MANIFEST.md.gsd-path-tmp").exists())
             checked = self.preflight(repo)
             self.assertEqual(checked.returncode, 0, checked.stderr)
+
+    def test_render_manifest_checks_evidence_after_quoted_task_criterion(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo, acceptance="1. AC1 — `demo.py <integer>` prints\n   the signed integer.")
+            criterion = "AC1 — `demo.py <integer>` prints the signed integer."
+            intent_criterion = "`demo.py <integer>` prints the signed integer."
+            for relative in ("intent/INTENT.md", "review/FINAL.md", "review/wave-1.cycle1.md"):
+                path = repo / ".project" / relative
+                path.write_text(path.read_text().replace("demo works", intent_criterion))
+            wave = repo / ".project/review/wave-1.cycle1.md"
+            original = wave.read_text()
+            old = f"- ✅ {intent_criterion} — focused Verify passed"
+            wave.write_text(original.replace(old, f"- ✅ {criterion} — ran demo.py 7; stdout 7"))
+            archive = self.prepare_archive(repo)
+            result = self.render_manifest(repo)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            result = self.preflight(repo)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            manifest = archive / "MANIFEST.md"
+            content = manifest.read_text()
+            manifest.write_text(content.replace("<integer>", "<other>"))
+            self.assertNotEqual(self.preflight(repo).returncode, 0)
+            manifest.write_text(content)
+            wave = archive / "review/wave-1.cycle1.md"
+            for evidence in ("<observed result>", "none", ""):
+                with self.subTest(evidence=evidence):
+                    wave.write_text(original.replace(old, f"- ✅ {criterion} — {evidence}"))
+                    result = self.render_manifest(repo)
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn("non-placeholder evidence", result.stderr)
 
     def test_render_manifest_counts_attested_tasks(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -2604,6 +2651,27 @@ Waves checked: 1
 
             self.assertNotEqual(preflight.returncode, 0)
             self.assertIn("evidence", preflight.stderr.lower())
+
+    def test_archive_accepts_embedded_surface_evidence_but_not_placeholders(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            intent = repo / ".project/intent/INTENT.md"
+            intent.write_text(intent.read_text().replace("# Intent", "# Intent\n\nSurfaces: Demo CLI — `run.py`"))
+            archive = self.prepare_archive(repo)
+            final = archive / "review/FINAL.md"
+            original = final.read_text()
+            observed = next(line for line in original.splitlines() if line.startswith("- **Observed**:"))
+            evidence = original.replace(observed, '- **Observed**: stderr contained "injected <stage> failure"; all recorded cases passed.\n- **Surface**: Demo CLI — `run.py')
+            final.write_text(evidence)
+            rendered = self.run_command(sys.executable, str(ARCHIVE_SCRIPT), "render-manifest", "--repo", str(repo), cwd=repo)
+            self.assertEqual(rendered.returncode, 0, rendered.stderr)
+            for value in ("<record observation>", "`<record observation>`", "'null'"):
+                with self.subTest(value=value):
+                    final.write_text(evidence.replace('stderr contained "injected <stage> failure"; all recorded cases passed.', value))
+                    rejected = self.run_command(sys.executable, str(ARCHIVE_SCRIPT), "render-manifest", "--repo", str(repo), cwd=repo)
+                    self.assertNotEqual(rejected.returncode, 0)
+                    self.assertIn("surface Observed", rejected.stderr)
 
     def test_preflight_rejects_a_gap_heading_risk_mismatch(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

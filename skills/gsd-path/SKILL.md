@@ -117,7 +117,9 @@ selects a milestone branch.
    STATE.md was written. Otherwise follow the JSON `verdict` / `route` exactly.
    `initialize` classifies and, for brownfield or greenfield, writes STATE.md
    through an anchored no-follow create — never create STATE.md yourself after
-   classify:
+   classify. Leave that initial state untracked for `bind-initial`; its validated
+   initial-state exception requires the index and every other path to stay clean.
+   Do not insert a commit between initialization and binding:
    - `owned` — STATE.md exists; continue at step 1.
    - `orphan` (`route: recover-orphan`) — block without mutation. List the
      returned `orphan_paths` and ask for an explicit recovery, migration, or
@@ -155,6 +157,10 @@ Both settings lock when build starts. A lookahead STATE inherits the active
 project's `integration_default` and uses it for `integration`.
 
 ## Transaction recovery first
+
+For a helper failure, use the diagnostic in the sibling bundle:
+`../gsd-path-forensics/scripts/pipeline_diagnose.py diagnose --repo <absolute-root>`.
+Resolve that path relative to this skill's directory.
 
 Run `pipeline_state.py route` before any phase contract. A
 `resume-undo` result means a helper-owned undo transaction was interrupted;
@@ -249,7 +255,9 @@ means initialization is complete and phase work must wait for the initial
 router binding: resolve the exact fetched `origin/main` SHA, call `bind-initial` as
 above with `route.branch`, then persist its returned branch with
 `pipeline_state.py transition` using the route result's `state` phase and status plus its
-null branch and archive as expected fields. Rerun `route`; never route from a
+null branch and archive as expected fields. Set `--set-branch` to the helper's
+returned branch and use the exact required event:
+`--event "router bound initial milestone"`. Rerun `route`; never route from a
 remembered or hand-parsed state.
 
 Every ordinary state change not already owned by the journaled approval,

@@ -1,0 +1,172 @@
+[
+  {
+    "id": "01a06fb3-f5db-73a2-b9c4-413d0b29d107",
+    "role": "parent",
+    "source": "exec",
+    "session_file": "/Users/jeremymcspadden/Library/Application Support/orca/codex-accounts/86df0dc7-3078-4314-8766-60e244dd9765/home/sessions/2026/09/04/rollout-2026-09-04T22-54-20-01a06fb3-f5db-73a2-b9c4-413d0b29d107.jsonl",
+    "last_usage": {
+      "input_tokens": 2085923,
+      "cached_input_tokens": 2074624,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 4443,
+      "reasoning_output_tokens": 515,
+      "total_tokens": 2090366
+    },
+    "last_task_complete": "2026-09-05T04:19:08.538Z",
+    "task_started": [
+      "2026-09-05T03:54:20.161Z",
+      "2026-09-05T03:59:27.021Z",
+      "2026-09-05T04:02:37.915Z",
+      "2026-09-05T04:08:37.553Z",
+      "2026-09-05T04:14:08.209Z"
+    ],
+    "sandboxes": [
+      "danger-full-access"
+    ]
+  },
+  {
+    "id": "01a06fbc-955e-7761-a061-a445f825c50b",
+    "role": "/root/build_t001",
+    "source": {
+      "subagent": {
+        "thread_spawn": {
+          "parent_thread_id": "01a06fb3-f5db-73a2-b9c4-413d0b29d107",
+          "depth": 1,
+          "agent_path": "/root/build_t001",
+          "agent_nickname": "Zeno",
+          "agent_role": null
+        }
+      }
+    },
+    "session_file": "/Users/jeremymcspadden/Library/Application Support/orca/codex-accounts/86df0dc7-3078-4314-8766-60e244dd9765/home/sessions/2026/09/04/rollout-2026-09-04T23-03-45-01a06fbc-955e-7761-a061-a445f825c50b.jsonl",
+    "last_usage": {
+      "input_tokens": 374425,
+      "cached_input_tokens": 345472,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 3502,
+      "reasoning_output_tokens": 239,
+      "total_tokens": 377927
+    },
+    "last_task_complete": "2026-09-05T04:05:50.200Z",
+    "task_started": [
+      "2026-09-05T04:03:45.229Z"
+    ],
+    "sandboxes": [
+      "danger-full-access"
+    ]
+  },
+  {
+    "id": "01a06fb3-f5d3-75c0-8712-45a9230d5d03",
+    "role": "parent",
+    "source": "exec",
+    "session_file": "/Users/jeremymcspadden/Library/Application Support/orca/codex-accounts/86df0dc7-3078-4314-8766-60e244dd9765/home/sessions/2026/09/04/rollout-2026-09-04T22-54-20-01a06fb3-f5d3-75c0-8712-45a9230d5d03.jsonl",
+    "last_usage": {
+      "input_tokens": 248034,
+      "cached_input_tokens": 228736,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 3509,
+      "reasoning_output_tokens": 300,
+      "total_tokens": 251543
+    },
+    "last_task_complete": "2026-09-05T03:56:26.285Z",
+    "task_started": [
+      "2026-09-05T03:54:20.152Z"
+    ],
+    "sandboxes": [
+      "danger-full-access"
+    ]
+  },
+  {
+    "id": "01a06fb5-11d5-7480-97ac-00dd32fbc01e",
+    "role": "/root/inspect_docs",
+    "source": {
+      "subagent": {
+        "thread_spawn": {
+          "parent_thread_id": "01a06fb3-f5db-73a2-b9c4-413d0b29d107",
+          "depth": 1,
+          "agent_path": "/root/inspect_docs",
+          "agent_nickname": "Singer",
+          "agent_role": null
+        }
+      }
+    },
+    "session_file": "/Users/jeremymcspadden/Library/Application Support/orca/codex-accounts/86df0dc7-3078-4314-8766-60e244dd9765/home/sessions/2026/09/04/rollout-2026-09-04T22-55-32-01a06fb5-11d5-7480-97ac-00dd32fbc01e.jsonl",
+    "last_usage": {
+      "input_tokens": 330183,
+      "cached_input_tokens": 307840,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 2749,
+      "reasoning_output_tokens": 169,
+      "total_tokens": 332932
+    },
+    "last_task_complete": "2026-09-05T03:57:13.887Z",
+    "task_started": [
+      "2026-09-05T03:55:32.785Z"
+    ],
+    "sandboxes": [
+      "danger-full-access"
+    ]
+  },
+  {
+    "id": "01a06fc7-fd71-75a2-ab9d-84e6f675d7dd",
+    "role": "/root/review_wave_1_cycle_1",
+    "source": {
+      "subagent": {
+        "thread_spawn": {
+          "parent_thread_id": "01a06fb3-f5db-73a2-b9c4-413d0b29d107",
+          "depth": 1,
+          "agent_path": "/root/review_wave_1_cycle_1",
+          "agent_nickname": "Darwin",
+          "agent_role": null
+        }
+      }
+    },
+    "session_file": "/Users/jeremymcspadden/Library/Application Support/orca/codex-accounts/86df0dc7-3078-4314-8766-60e244dd9765/home/sessions/2026/09/04/rollout-2026-09-04T23-16-12-01a06fc7-fd71-75a2-ab9d-84e6f675d7dd.jsonl",
+    "last_usage": {
+      "input_tokens": 298733,
+      "cached_input_tokens": 275456,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 4501,
+      "reasoning_output_tokens": 180,
+      "total_tokens": 303234
+    },
+    "last_task_complete": "2026-09-05T04:18:42.064Z",
+    "task_started": [
+      "2026-09-05T04:16:12.795Z"
+    ],
+    "sandboxes": [
+      "danger-full-access"
+    ]
+  },
+  {
+    "id": "01a06fb4-da14-7d73-aaca-8de015083294",
+    "role": "/root/inspect_codebase",
+    "source": {
+      "subagent": {
+        "thread_spawn": {
+          "parent_thread_id": "01a06fb3-f5db-73a2-b9c4-413d0b29d107",
+          "depth": 1,
+          "agent_path": "/root/inspect_codebase",
+          "agent_nickname": "Erdos",
+          "agent_role": null
+        }
+      }
+    },
+    "session_file": "/Users/jeremymcspadden/Library/Application Support/orca/codex-accounts/86df0dc7-3078-4314-8766-60e244dd9765/home/sessions/2026/09/04/rollout-2026-09-04T22-55-18-01a06fb4-da14-7d73-aaca-8de015083294.jsonl",
+    "last_usage": {
+      "input_tokens": 294563,
+      "cached_input_tokens": 257280,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 3297,
+      "reasoning_output_tokens": 133,
+      "total_tokens": 297860
+    },
+    "last_task_complete": "2026-09-05T03:57:14.004Z",
+    "task_started": [
+      "2026-09-05T03:55:18.512Z"
+    ],
+    "sandboxes": [
+      "danger-full-access"
+    ]
+  }
+]

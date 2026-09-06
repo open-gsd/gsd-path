@@ -724,12 +724,11 @@ def _ledger_path(repo: Path) -> Path:
 
 
 def _ledger_key(repo: Path, command: str, commit: str) -> Tuple[str, str]:
-    normalized = " ".join(command.split())
-    if not normalized:
+    if not command.strip():
         raise BuildStateError("invalid-command", "--command must not be empty")
     if not FULL_SHA_RE.fullmatch(commit) or not _commit_resolves(repo, commit):
         raise BuildStateError("invalid-commit", "--commit must be a full, existing commit SHA")
-    return normalized, commit
+    return command, commit
 
 
 def _ledger_entries(path: Path) -> List[Dict[str, object]]:
@@ -739,7 +738,8 @@ def _ledger_entries(path: Path) -> List[Dict[str, object]]:
         raise BuildStateError("invalid-ledger", str(error)) from error
 
 
-def verify_record(repo: str, command: str, commit: str, result: str) -> Dict[str, object]:
+def verify_record(repo: str, command: str, commit: str, result: str,
+                  execution: Optional[Dict[str, object]] = None) -> Dict[str, object]:
     """Append one verify run (command, commit, result, timestamp) to the ledger."""
 
     repository = _repo_root(repo)
@@ -749,14 +749,22 @@ def verify_record(repo: str, command: str, commit: str, result: str) -> Dict[str
     path = _ledger_path(repository)
     _ledger_entries(path)
     entry = {
+        "schema": _common.VERIFY_LEDGER_SCHEMA,
         "command": normalized,
         "commit": commit,
         "result": result,
         "recorded_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
     }
+    if execution is not None:
+        if (not isinstance(execution.get("stdout"), str)
+                or not isinstance(execution.get("stderr"), str)
+                or type(execution.get("exit_code")) is not int
+                or (execution["exit_code"] == 0) != (result == "pass")):
+            raise BuildStateError("invalid-execution", "verification output and result disagree")
+        entry["execution"] = execution
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(entry, sort_keys=True) + "\n")
+    previous = path.read_text(encoding="utf-8") if path.exists() else ""
+    _common.atomic_write(path, previous + json.dumps(entry, sort_keys=True) + "\n")
     return {"command": "verify-record", "ledger": VERIFY_LEDGER_PATH, "entry": entry}
 
 
@@ -765,12 +773,7 @@ def verify_lookup(repo: str, command: str, commit: str) -> Dict[str, object]:
 
     repository = _repo_root(repo)
     normalized, commit = _ledger_key(repository, command, commit)
-    matches = [
-        entry
-        for entry in _ledger_entries(_ledger_path(repository))
-        if entry["command"] == normalized and entry["commit"] == commit
-    ]
-    entry = matches[-1] if matches else None
+    entry = _common.latest_verify_entry(_ledger_entries(_ledger_path(repository)), normalized, commit)
     return {
         "command": "verify-lookup",
         "ledger": VERIFY_LEDGER_PATH,

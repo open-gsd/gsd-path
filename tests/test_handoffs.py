@@ -1,4 +1,5 @@
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -255,6 +256,57 @@ Intent: `.project/intent/INTENT.md`
             self.assertEqual(result["dispatched"], ["domain"])
             self.assertEqual(result["skipped"], ["pitfalls", "similar", "stack"])
 
+    def test_research_can_skip_every_settled_dimension(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_state(root, "research", "active")
+            self.write_intent(root, "- None\n")
+            self.write(
+                root, ".project/research/RESEARCH.md",
+                "# Research\n\nPhase: research\nStatus: complete\nIntent: .project/intent/INTENT.md\n\n"
+                "## Dispatch\n" + "".join(
+                    f"- `{dimension}` — skipped → none — approved intent has no open question\n"
+                    for dimension in check_handoffs.STANDARD_DIMENSIONS
+                ) + "\n## Question assignments\n- none\n",
+            )
+            result = check_handoffs.validate_research(root)
+            self.assertEqual(result["dispatched"], [])
+            self.assertEqual(result["questions"], 0)
+            self.assertEqual(set(result["skipped"]), set(check_handoffs.STANDARD_DIMENSIONS))
+            self.write_intent(root, "- [RESEARCH] Which domain applies?\n")
+            with self.assertRaisesRegex(check_handoffs.HandoffError, "question assignments"):
+                check_handoffs.validate_research(root)
+
+    def test_research_transition_validates_evidence_before_writing_state(self):
+        source = Path(__file__).resolve().parents[1]
+        helpers = [source / "scripts/pipeline_state.py", *sorted(source.glob("skills/*/scripts/pipeline_state.py"))]
+        for helper in helpers:
+            for track in (".project", ".project/next"):
+                for status in ("active", "done"):
+                    with self.subTest(helper=helper, track=track, status=status), tempfile.TemporaryDirectory() as directory:
+                        root = Path(directory)
+                        self.write_state(root, "research", status, track)
+                        self.write_intent(root, "- [RESEARCH] Which domain applies?\n", track)
+                        self.write_research_handoff(root, track)
+                        state = root / track / "STATE.md"
+                        evidence = root / track / "research/evidence-domain.md"
+                        valid = evidence.read_text()
+                        evidence.write_text(valid.replace("Questions assigned: Which domain applies?", "Questions assigned: wrong"))
+                        original = state.read_bytes()
+                        command = [sys.executable, "-B", str(helper), "transition", "--repo", str(root),
+                                   "--project-dir", track, "--expect-phase", "research", "--expect-status", status,
+                                   "--expect-branch", "null" if track.endswith("next") else "gsd-path/M001",
+                                   "--expect-archive", "null", "--set-phase", "research" if status == "active" else "decide",
+                                   "--set-status", "done" if status == "active" else "active", "--event", "research gate"]
+                        failed = subprocess.run(command, capture_output=True, text=True)
+                        self.assertNotEqual(failed.returncode, 0, failed.stdout)
+                        self.assertIn("Questions assigned", failed.stderr)
+                        self.assertEqual(state.read_bytes(), original)
+                        evidence.write_text(valid)
+                        passed = subprocess.run(command, capture_output=True, text=True)
+                        self.assertEqual(passed.returncode, 0, passed.stderr)
+                        self.assertNotEqual(state.read_bytes(), original)
+
     def test_research_handoff_rejects_done_state_before_the_gate(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -344,14 +396,28 @@ Intent: `.project/intent/INTENT.md`
             with self.assertRaises(check_handoffs.HandoffError):
                 check_handoffs.validate_research(root)
 
-    def test_research_handoff_requires_a_standard_dimension(self) -> None:
+    def test_research_rejects_a_settled_standard_dispatch(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_state(root, "research", "active")
+            self.write_intent(root, "- none\n")
+            self.write_research_handoff(root)
+            handoff = root / ".project/research/RESEARCH.md"
+            handoff.write_text(handoff.read_text().replace(
+                "- `[RESEARCH] Which domain applies?` → `domain`", "- none"
+            ))
+            self.write_evidence(root, "domain", questions=())
+            with self.assertRaisesRegex(check_handoffs.HandoffError, "no assigned research question"):
+                check_handoffs.validate_research(root)
+
+    def test_research_handoff_rejects_dispatch_without_a_question(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             self.write_state(root, "research", "active")
             self.write_intent(root, "")
             self.write_custom_only_research_handoff(root)
 
-            with self.assertRaises(check_handoffs.HandoffError):
+            with self.assertRaisesRegex(check_handoffs.HandoffError, "no assigned research question"):
                 check_handoffs.validate_research(root)
 
     def write_review_sources(self, root: Path, project_dir: str = ".project") -> None:
@@ -700,6 +766,24 @@ The task implements the demo.
             project_dir=project_dir,
         )
 
+    def test_build_plan_gate_preserves_progress_and_checks_contracts(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_plan_handoff(root)
+            task = root / ".project/tasks/T001-demo.md"
+            progressed = task.read_text().replace("status: pending", "status: done").replace(
+                "base: null", "base: " + "a" * 40
+            ).replace("agent: null", "agent: /root/build_t001")
+            task.write_text(progressed)
+            with self.assertRaisesRegex(check_handoffs.HandoffError, "initially"):
+                check_handoffs.validate_plan(root)
+            self.write_state(root, "build", "active")
+            self.assertEqual(check_handoffs.validate_plan(root)["tasks"], 2)
+            self.assertEqual(task.read_text(), progressed)
+            task.write_text(progressed.replace("- SC1", "- SC2"))
+            with self.assertRaisesRegex(check_handoffs.HandoffError, "Intent coverage"):
+                check_handoffs.validate_plan(root)
+
     def test_plan_coverage_maps_each_success_criterion(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -711,6 +795,36 @@ The task implements the demo.
             self.assertEqual(result["criteria"], ["SC1", "SC2"])
             self.assertEqual(result["rows"], 2)
             self.assertEqual(result["tasks"], 2)
+
+    def test_plan_preserves_inline_code_in_surface_names(self) -> None:
+        surface = "CLI — `reports.py STORE total`; `reports.py STORE csv`"
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_plan_handoff(root)
+            self.write_intent_criteria(root, surfaces=surface)
+            self.write_plan_coverage(
+                root,
+                surface_contract=SURFACE_CONTRACT.replace("Demo web app", surface),
+            )
+
+            result = check_handoffs.validate_plan(root)
+
+            self.assertEqual(result["surfaces"], {surface: "T001"})
+
+    def test_plan_accepts_typed_interface_and_rejects_unfilled_body(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_plan_handoff(root)
+            task = root / ".project/tasks/T001-demo.md"
+            text = task.read_text().replace(
+                "## Interface contract\n\n- None",
+                "## Interface contract\n\n- `total_amount(records) -> int`: return the sum.",
+            )
+            task.write_text(text)
+            self.assertEqual(check_handoffs.validate_plan(root)["tasks"], 2)
+            task.write_text(text.replace("return the sum.", "<fill in>"))
+            with self.assertRaisesRegex(check_handoffs.HandoffError, "placeholder"):
+                check_handoffs.validate_plan(root)
 
     def test_plan_coverage_rejects_an_omitted_criterion(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -1586,6 +1700,69 @@ Tasks reviewed: 2
             self.assertEqual(result["owned"], ["SC1", "SC2"])
             self.assertEqual(result["verdict"], "pass")
 
+    def test_reviews_bind_the_full_wrapped_intent_criterion(self) -> None:
+        for phase in ("wave", "final"):
+            with self.subTest(phase=phase), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                self.write_plan_handoff(root)
+                if phase == "wave":
+                    relative = self.write_wave_review(root)
+                    validate = lambda: check_handoffs.validate_wave(root, review=relative)
+                else:
+                    self.write_state(root, "ship", "active")
+                    self.write_final_review(root)
+                    relative = ".project/review/FINAL.md"
+                    validate = lambda: check_handoffs.validate_final(root)
+                intent = root / ".project/intent/INTENT.md"
+                intent.write_text(intent.read_text().replace(
+                    "1. The demo command prints hello.",
+                    "1. The demo command prints\n   hello.\n   It preserves signed integers.",
+                ))
+                review = root / relative
+                original = review.read_text()
+                review.write_text(original.replace(
+                    "### SC1 — The demo command prints hello.",
+                    "### SC1 — The demo command prints hello. It preserves signed integers.",
+                ))
+                self.assertEqual(validate()["verdict"], "pass")
+                review.write_text(original)
+                with self.assertRaisesRegex(
+                    check_handoffs.HandoffError, "SC1 heading text differs from INTENT.md"
+                ):
+                    validate()
+
+    def test_wave_checks_evidence_after_exact_quoted_task_criterion(self) -> None:
+        for verdict, marker in (("pass", "✅"), ("fail", "❌")):
+            with self.subTest(verdict=verdict), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                self.write_plan_handoff(root)
+                relative = self.write_wave_review(root)
+                criterion = "AC1 — `hello.py <integer>` prints the signed integer."
+                self.write_coverage_task(
+                    root, "T001", "- SC1",
+                    acceptance="1. AC1 — `hello.py <integer>` prints\n   the signed integer.",
+                )
+                review = root / relative
+                original = review.read_text().replace(
+                    "## T001 — Demo task T001: pass", f"## T001 — Demo task T001: {verdict}"
+                )
+                if verdict == "fail":
+                    original = original.replace("Wave verdict: pass", "Wave verdict: blocked")
+                old = "- ✅ The demo command prints hello. — ran hello.py"
+                review.write_text(original.replace(old, f"- {marker} {criterion} — ran hello.py 7; stdout 7"))
+                result = check_handoffs.validate_wave(root, review=relative)
+                self.assertEqual(result["verdict"], "pass" if verdict == "pass" else "blocked")
+                for evidence in ("<observed result>", "none", ""):
+                    with self.subTest(evidence=evidence):
+                        review.write_text(original.replace(old, f"- {marker} {criterion} — {evidence}"))
+                        with self.assertRaises(check_handoffs.HandoffError):
+                            check_handoffs.validate_wave(root, review=relative)
+                review.write_text(original.replace(
+                    old, f"- {marker} AC1 — `other.py <integer>` prints the signed integer. — ran hello.py 7"
+                ))
+                with self.assertRaisesRegex(check_handoffs.HandoffError, "placeholder"):
+                    check_handoffs.validate_wave(root, review=relative)
+
     def test_wave_rejects_placeholder_task_evidence(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -1827,6 +2004,18 @@ Waves checked: 1
                 check_handoffs.validate_final(root)
             self.assertIn("SC1 Surface must name Demo web app", str(failure.exception))
 
+    def test_final_preserves_embedded_surface_delimiters(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_state(root, "ship", "active")
+            self.write_intent_criteria(root, surfaces="CLI `count.py`")
+            self.write_plan_coverage(root, surface_contract=SURFACE_CONTRACT.replace("Demo web app", "CLI `count.py`"))
+            self.write_final_review(root, surface="CLI `count.py`")
+
+            result = check_handoffs.validate_final(root)
+
+            self.assertEqual(result["verdict"], "pass")
+
     def test_final_accepts_a_walked_surface_criterion(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -2067,6 +2256,22 @@ Waves checked: 1
                 check_handoffs.HandoffError, "FINAL.md SC1 repeats Finding"
             ):
                 check_handoffs.validate_final(root)
+
+    def test_final_rejects_repeated_review_metadata_before_archiving(self) -> None:
+        for name in ("FINAL.md", "final-gap-1.md"):
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                self.write_state(root, "ship", "active")
+                self.write_intent_criteria(root)
+                self.write_final_review(root)
+                artifact = root / ".project/review" / name
+                text = artifact.read_text()
+                header = next(line for line in text.splitlines()
+                              if line.startswith("Reviewed HEAD:"))
+                artifact.write_text(text + "\n## Recorded output\n\n" + header + "\n")
+                with self.assertRaisesRegex(check_handoffs.HandoffError,
+                                            "repeats Reviewed HEAD"):
+                    check_handoffs.validate_final(root)
 
     def test_final_rejects_a_stale_reviewed_head(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

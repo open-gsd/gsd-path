@@ -1,0 +1,102 @@
+[
+  {
+    "file": "scripts/workflow_run.py",
+    "mutation": [
+      [
+        "        if completed.returncode:\n            raise StepFailed(script)",
+        "        if False:\n            raise StepFailed(script)"
+      ],
+      [
+        "            raise StepFailed(f\"{script} did not return JSON\") from error",
+        "            receipt[\"result\"] = {}"
+      ]
+    ],
+    "command": [
+      "/Applications/Xcode.app/Contents/Developer/usr/bin/python3",
+      "-B",
+      "-m",
+      "unittest",
+      "tests.test_workflow_run.WorkflowRunTests.test_failed_gate_stops_before_approval_and_preserves_evidence"
+    ],
+    "exit_code": 1,
+    "stdout": "",
+    "stderr": "F\n======================================================================\nFAIL: test_failed_gate_stops_before_approval_and_preserves_evidence (tests.test_workflow_run.WorkflowRunTests)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/Users/jeremymcspadden/orca/workspaces/gsd-path/astra-eval/tests/test_workflow_run.py\", line 48, in test_failed_gate_stops_before_approval_and_preserves_evidence\n    self.assertNotEqual(result.returncode, 0)\nAssertionError: 0 == 0\n\n----------------------------------------------------------------------\nRan 1 test in 0.523s\n\nFAILED (failures=1)\n"
+  },
+  {
+    "file": "scripts/workflow_run.py",
+    "mutation": [
+      [
+        "if task[\"mode\"] == \"serial\":",
+        "if False:"
+      ]
+    ],
+    "command": [
+      "/Applications/Xcode.app/Contents/Developer/usr/bin/python3",
+      "-B",
+      "-m",
+      "unittest",
+      "tests.test_workflow_run.WorkflowRunTests.test_serial_prepare_creates_verification_before_product_changes"
+    ],
+    "exit_code": 1,
+    "stdout": "",
+    "stderr": "E\n======================================================================\nERROR: test_serial_prepare_creates_verification_before_product_changes (tests.test_workflow_run.WorkflowRunTests)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/Users/jeremymcspadden/orca/workspaces/gsd-path/astra-eval/tests/test_workflow_run.py\", line 66, in test_serial_prepare_creates_verification_before_product_changes\n    task, verification = [step[\"result\"] for step in steps]\nValueError: not enough values to unpack (expected 2, got 1)\n\n----------------------------------------------------------------------\nRan 1 test in 0.177s\n\nFAILED (errors=1)\n"
+  },
+  {
+    "file": "scripts/token_budget.py",
+    "mutation": [
+      [
+        "blocked = not task_remaining or not session_remaining",
+        "blocked = False"
+      ]
+    ],
+    "command": [
+      "/Applications/Xcode.app/Contents/Developer/usr/bin/python3",
+      "-B",
+      "-m",
+      "unittest",
+      "tests.test_token_budget.TokenBudgetTests.test_usage_survives_resume_and_duplicate_observation",
+      "tests.test_token_budget.TokenBudgetTests.test_session_exhaustion_blocks_a_new_task"
+    ],
+    "exit_code": 1,
+    "stdout": "",
+    "stderr": "FF\n======================================================================\nFAIL: test_usage_survives_resume_and_duplicate_observation (tests.test_token_budget.TokenBudgetTests)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/Users/jeremymcspadden/orca/workspaces/gsd-path/astra-eval/tests/test_token_budget.py\", line 31, in test_usage_survives_resume_and_duplicate_observation\n    self.assertNotEqual(admission.returncode, 0)\nAssertionError: 0 == 0\n\n======================================================================\nFAIL: test_session_exhaustion_blocks_a_new_task (tests.test_token_budget.TokenBudgetTests)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/Users/jeremymcspadden/orca/workspaces/gsd-path/astra-eval/tests/test_token_budget.py\", line 56, in test_session_exhaustion_blocks_a_new_task\n    self.assertNotEqual(result.returncode, 0)\nAssertionError: 0 == 0\n\n----------------------------------------------------------------------\nRan 2 tests in 0.261s\n\nFAILED (failures=2)\n"
+  },
+  {
+    "file": "scripts/token_budget.py",
+    "mutation": [
+      [
+        "if args.require_hard_cap:",
+        "if False:"
+      ]
+    ],
+    "command": [
+      "/Applications/Xcode.app/Contents/Developer/usr/bin/python3",
+      "-B",
+      "-m",
+      "unittest",
+      "tests.test_token_budget.TokenBudgetTests.test_strict_cap_is_not_claimed_for_codex_cli"
+    ],
+    "exit_code": 1,
+    "stdout": "",
+    "stderr": "F\n======================================================================\nFAIL: test_strict_cap_is_not_claimed_for_codex_cli (tests.test_token_budget.TokenBudgetTests)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/Users/jeremymcspadden/orca/workspaces/gsd-path/astra-eval/tests/test_token_budget.py\", line 44, in test_strict_cap_is_not_claimed_for_codex_cli\n    self.assertNotEqual(result.returncode, 0)\nAssertionError: 0 == 0\n\n----------------------------------------------------------------------\nRan 1 test in 0.059s\n\nFAILED (failures=1)\n"
+  },
+  {
+    "file": "scripts/token_budget.py",
+    "mutation": [
+      [
+        "if not usages and child and starts == 1 and complete and child_usage is not None:",
+        "if False:"
+      ]
+    ],
+    "command": [
+      "/Applications/Xcode.app/Contents/Developer/usr/bin/python3",
+      "-B",
+      "-m",
+      "unittest",
+      "tests.test_token_budget.TokenBudgetTests.test_native_child_and_evaluator_wrapped_events"
+    ],
+    "exit_code": 1,
+    "stdout": "",
+    "stderr": "E\n======================================================================\nERROR: test_native_child_and_evaluator_wrapped_events (tests.test_token_budget.TokenBudgetTests)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/Users/jeremymcspadden/orca/workspaces/gsd-path/astra-eval/tests/test_token_budget.py\", line 84, in test_native_child_and_evaluator_wrapped_events\n    self.assertEqual(token_budget.output_usage(child), 3000)\n  File \"/Users/jeremymcspadden/orca/workspaces/gsd-path/astra-eval/scripts/token_budget.py\", line 59, in output_usage\n    raise ValueError(\"complete supported output usage is unavailable; budget is unproven\")\nValueError: complete supported output usage is unavailable; budget is unproven\n\n----------------------------------------------------------------------\nRan 1 test in 0.007s\n\nFAILED (errors=1)\n"
+  }
+]

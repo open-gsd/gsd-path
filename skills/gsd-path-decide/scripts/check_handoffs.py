@@ -363,6 +363,13 @@ def validate_research(
     """Validate the research-to-synthesis hand-off and return its summary."""
 
     _require_state(root, "research", "active", project_dir)
+    return validate_research_artifacts(root, project_dir)
+
+
+def validate_research_artifacts(
+    root: Path, project_dir: str = DEFAULT_PROJECT_DIR
+) -> Dict[str, object]:
+    """Check research contents independently of the caller's state edge."""
     intent_path = f"{project_dir}/intent/INTENT.md"
     if not (root / intent_path).is_file():
         # CHARTER.md is program-level: it stays at the real .project/ top level.
@@ -415,9 +422,6 @@ def validate_research(
                 raise HandoffError(f"skipped {dimension} must not name an output")
             skipped.append(dimension)
 
-    if not set(STANDARD_DIMENSIONS) & set(dispatched):
-        raise HandoffError("RESEARCH.md must dispatch at least one standard dimension")
-
     assignments = _research_assignments(_section(handoff, "Question assignments"))
     questions = _research_questions(intent)
     assigned_questions = [question for question, _dimension in assignments]
@@ -434,6 +438,8 @@ def validate_research(
             for question, assigned_dimension in assignments
             if assigned_dimension == dimension
         ]
+        if not dimension_questions:
+            raise HandoffError(f"dispatched {dimension} has no assigned research question")
         _validate_evidence(
             root,
             evidence_outputs[dimension],
@@ -516,6 +522,8 @@ def _source_repair_fields(source: str, text: str, locator: str) -> Tuple[str, st
 
 
 def _reviewed_head(text: str, source: str) -> str:
+    if len(re.findall(r"(?m)^Reviewed HEAD:", text)) > 1:
+        raise HandoffError(f"{source} repeats Reviewed HEAD")
     value = _line_value(text, "Reviewed HEAD:")
     if not SHA_PATTERN.fullmatch(value):
         raise HandoffError(
@@ -529,21 +537,27 @@ def _strip_comments(text: str) -> str:
     return COMMENT_PATTERN.sub("", text)
 
 
-def _numbered_items(section: str) -> Dict[int, str]:
+def _numbered_items(section: str, *, continuations: bool = False) -> Dict[int, str]:
     items: Dict[int, str] = {}
+    current = None
     for line in _strip_comments(section).splitlines():
         match = NUMBERED_ITEM_PATTERN.fullmatch(line.strip())
         if not match:
+            if continuations and current is not None and line[:1].isspace() and line.strip():
+                items[current] += " " + line.strip()
+            elif line.strip():
+                current = None
             continue
         number = int(match.group(1))
         if number in items:
             raise HandoffError(f"repeated numbered item {number}")
         items[number] = match.group(2).strip()
+        current = number
     return items
 
 
 def _success_criteria(intent: str) -> Dict[str, str]:
-    items = _numbered_items(_section(intent, "Success criteria"))
+    items = _numbered_items(_section(intent, "Success criteria"), continuations=True)
     if not items:
         raise HandoffError("INTENT.md has no success criteria")
     expected = list(range(1, max(items) + 1))
@@ -565,7 +579,7 @@ def _surfaces(text: str, label: str) -> List[str]:
     value = _unquoted(matches[0])
     if value.casefold() == "none":
         return []
-    value = _non_placeholder(value, f"{label} Surfaces")
+    _non_placeholder(value, f"{label} Surfaces")
     named: List[str] = []
     seen = set()
     for item in value.split(","):
@@ -574,7 +588,7 @@ def _surfaces(text: str, label: str) -> List[str]:
         surface = _unquoted(item)
         if surface.casefold() == "none":
             raise HandoffError(f"{label} Surfaces includes reserved value {surface}")
-        surface = _non_placeholder(surface, f"{label} Surfaces")
+        _non_placeholder(surface, f"{label} Surfaces")
         key = surface.casefold()
         if key in seen:
             raise HandoffError(f"{label} Surfaces repeats {surface}")
@@ -782,6 +796,18 @@ def _normalize_ws(value: str) -> str:
     return " ".join(value.split())
 
 
+def task_review_observation(item: str, task_text: str) -> str:
+    """Separate an exact quoted acceptance criterion from its observed evidence."""
+    item = _normalize_ws(item)
+    section = _common.section_body(task_text, "Acceptance criteria")
+    if section is not None:
+        for criterion in _numbered_items(section, continuations=True).values():
+            prefix = _normalize_ws(criterion) + " — "
+            if item.startswith(prefix):
+                return item[len(prefix) :]
+    return item
+
+
 def _verify_command(task_text: str) -> str:
     body = _section(task_text, "Verify")
     block = VERIFY_BLOCK_PATTERN.search(body)
@@ -931,7 +957,7 @@ def _plan_waves(plan: str) -> Tuple[Dict[int, str], List[int]]:
     return depths, waves
 
 
-def _require_task_structure(task_id: str, text: str) -> None:
+def _require_task_structure(task_id: str, text: str, *, initial: bool) -> None:
     expected = {
         "status": "pending",
         "agent": "null",
@@ -940,16 +966,18 @@ def _require_task_structure(task_id: str, text: str) -> None:
         "task_branch": "null",
     }
     for field, value in expected.items():
-        if _task_scalar(text, task_id, field) != value:
+        actual = _task_scalar(text, task_id, field)
+        if initial and actual != value:
             raise HandoffError(f"{task_id} {field} must initially be {value}")
     for heading in ("Context", "Approach", "Interface contract", "Log"):
         body = _strip_comments(_section(text, heading)).strip()
-        if not body or "<" in body or ">" in body:
+        if not body:
             raise HandoffError(f"{task_id} {heading} is empty or still a placeholder")
+        _reject_placeholder(body, f"{task_id} {heading}")
 
 
 def _validate_task_graph(
-    wave_depths: Dict[int, str], tasks: Dict[str, str]
+    wave_depths: Dict[int, str], tasks: Dict[str, str], *, initial: bool
 ) -> None:
     task_ids = list(tasks)
     expected = [f"T{number:03d}" for number in range(1, len(task_ids) + 1)]
@@ -960,7 +988,7 @@ def _validate_task_graph(
     task_waves: Dict[str, int] = {}
     task_files: Dict[str, List[str]] = {}
     for task_id, text in tasks.items():
-        _require_task_structure(task_id, text)
+        _require_task_structure(task_id, text, initial=initial)
         wave = _task_wave(text, task_id)
         deps = _task_deps(text, task_id)
         files = _frontmatter_files(text)
@@ -1030,6 +1058,13 @@ def validate_decide(
     """Validate the structural synthesis contract without judging decisions."""
 
     _require_state(root, "decide", "active", project_dir)
+    return validate_decide_artifacts(root, project_dir)
+
+
+def validate_decide_artifacts(
+    root: Path, project_dir: str = DEFAULT_PROJECT_DIR
+) -> Dict[str, object]:
+    """Check synthesis contents independently of the caller's state edge."""
     program_scope = (
         project_dir == DEFAULT_PROJECT_DIR
         and (root / project_dir / "CHARTER.md").is_file()
@@ -1258,7 +1293,9 @@ def validate_plan(
     rows = _coverage_rows(plan)
     tasks = _task_texts(root, project_dir)
     wave_depths, waves = _plan_waves(plan)
-    _validate_task_graph(wave_depths, tasks)
+    # Build readiness owns task lifecycle validation; coverage must survive landings.
+    state = _require_pipeline(root, project_dir)
+    _validate_task_graph(wave_depths, tasks, initial=state["phase"] == "plan")
     assigned: Dict[str, Set[str]] = {task_id: set() for task_id in tasks}
     covered = set()
     for criterion, task_id, acceptance in rows:
@@ -1282,7 +1319,7 @@ def validate_plan(
         if owned != assigned[task_id]:
             raise HandoffError(f"{task_id} Intent coverage does not match PLAN.md")
     surfaces = _surfaces(intent, "INTENT.md")
-    milestone = _require_pipeline(root, project_dir).get("milestone", "null")
+    milestone = state.get("milestone", "null")
     if milestone != "null":
         declared = _roadmap_surfaces(root, milestone)
         if declared is not None and _surface_keys(declared) != _surface_keys(surfaces):
@@ -1341,6 +1378,14 @@ def validate_wave(
     """Validate one canonical wave review and its owned INTENT verdicts."""
 
     _require_state(root, "build", "active", project_dir)
+    return validate_wave_evidence(root, project_dir, review)
+
+
+def validate_wave_evidence(
+    root: Path, project_dir: str = DEFAULT_PROJECT_DIR, review: str = ""
+) -> Dict[str, object]:
+    """Check a wave artifact independently of the caller's current phase."""
+
     if not review:
         raise HandoffError("wave validation requires --review")
     review_path = PurePosixPath(review)
@@ -1431,6 +1476,7 @@ def validate_wave(
         if not evidence:
             raise HandoffError(f"{name} task {task_id} lacks {verdict} evidence")
         for item in evidence:
+            item = task_review_observation(item, tasks[task_id])
             _non_placeholder(item, f"{name} task {task_id} {verdict} evidence")
         task_verdicts.append(verdict)
 
@@ -1510,7 +1556,7 @@ def validate_wave(
 
 
 def validate_final(
-    root: Path, project_dir: str = DEFAULT_PROJECT_DIR
+    root: Path, project_dir: str = DEFAULT_PROJECT_DIR, *, final_text: Optional[str] = None
 ) -> Dict[str, object]:
     """Require FINAL.md to give an evidenced verdict for every INTENT SC."""
 
@@ -1525,7 +1571,7 @@ def validate_final(
             for criterion in owned:
                 surface_of[criterion] = surface
     relative = f"{project_dir}/review/FINAL.md"
-    text = _read(root, relative)
+    text = _read(root, relative) if final_text is None else final_text
     reviewed_head = _reviewed_head(text, relative)
     head_result = subprocess.run(
         ("git", "-C", str(root), "rev-parse", "--verify", "HEAD"),
@@ -1575,7 +1621,7 @@ def validate_final(
         finding = _source_field(block, "Finding", label)
         fix_direction = _source_field(block, "Fix direction", label)
         if surface is not None:
-            named = _source_field(block, "Surface", label)
+            named = _unquoted(_raw_source_field(block, "Surface", label))
             if _normalize_ws(named).casefold() != _normalize_ws(surface).casefold():
                 raise HandoffError(f"FINAL.md {sc_id} Surface must name {surface}")
             if check.casefold() == "none":

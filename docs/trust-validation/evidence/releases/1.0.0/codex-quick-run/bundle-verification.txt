@@ -1,0 +1,11 @@
+The bundle contains these 7 refs:
+9461b801f65a89f8e8dd6f67a75082f9813b83b8 refs/heads/gsd-path-verify/task-t001-final
+de16e99cb0ca4ab7107b88db8025f569a601442b refs/heads/gsd-path/M001
+15535ee3a9464247cdf759a229df57fc0adfc516 refs/heads/main
+15535ee3a9464247cdf759a229df57fc0adfc516 refs/remotes/origin/HEAD
+15535ee3a9464247cdf759a229df57fc0adfc516 refs/remotes/origin/main
+de16e99cb0ca4ab7107b88db8025f569a601442b HEAD
+9461b801f65a89f8e8dd6f67a75082f9813b83b8 worktrees/task-t001-final/HEAD
+The bundle records a complete history.
+The bundle uses this hash algorithm: sha1
+/Users/jeremymcspadden/orca/workspaces/gsd-path/astra-eval/docs/trust-validation/evidence/releases/1.0.0/codex-quick-run/fixture.bundle is okay

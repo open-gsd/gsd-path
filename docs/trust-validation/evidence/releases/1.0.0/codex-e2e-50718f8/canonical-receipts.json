@@ -1,0 +1,101 @@
+[
+  {
+    "run": "run-20260905T120957012685Z",
+    "id": "item_26",
+    "type": "command_execution",
+    "command": "/bin/zsh -lc 'python3 /Users/jeremymcspadden/orca/evaluations/gsd-path-e2e-50718f8/plugin/tests/evaluate_codex.py activity --arm /Users/jeremymcspadden/orca/evaluations/gsd-path-e2e-50718f8/path --category verification -- python3 /Users/jeremymcspadden/orca/evaluations/gsd-path-e2e-50718f8/path/repo/.agents/skills/gsd-path/scripts/check_handoffs.py final --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-e2e-50718f8/path/repo'",
+    "aggregated_output": "{\"criteria\": [\"SC1\", \"SC2\", \"SC3\", \"SC4\", \"SC5\", \"SC6\"], \"gaps\": [1], \"phase\": \"ship\", \"reviewed_head\": \"a927cba5994b5550ef02347468c6dd0459f2ecfb\", \"verdict\": \"pass\"}\n",
+    "exit_code": 0,
+    "status": "completed"
+  },
+  {
+    "run": "run-20260905T120957012685Z",
+    "id": "item_29",
+    "type": "command_execution",
+    "command": "/bin/zsh -lc \"python3 /Users/jeremymcspadden/orca/evaluations/gsd-path-e2e-50718f8/plugin/tests/evaluate_codex.py activity --arm /Users/jeremymcspadden/orca/evaluations/gsd-path-e2e-50718f8/path --category implementation -- python3 -c 'from pathlib import Path\nwith Path(\\\".project/EXECUTION.md\\\").open(\\\"a\\\") as f:\n f.write(\\\"\\\"\\\"\n\\\\n## Final review gate\n\nNative review_final returned pass with SC1\u2013SC6 met after a direct CLI walkthrough at a927cba5994b5550ef02347468c6dd0459f2ecfb. Task and Project Verify were not rerun.\nCanonical collect-artifact transferred .project/review/FINAL.md (SHA-256 0eabee365d59579523eabd1093c7b35c4181240738693ed59559a076c3e743c7); canonical retire removed the review sidecar.\nCanonical check_handoffs.py final returned verdict pass, criteria SC1\u2013SC6, gaps [1], and the exact reviewed HEAD. Pending discussion helper returned an empty list.\nSTATE remains ship/active with final gate passed; shipping approval pending. Nothing has been archived, merged or published. This invocation and review_final completed usage are not yet supplied by the native host/evaluator; no estimate is recorded.\n\\\"\\\"\\\")\n'\"",
+    "aggregated_output": "",
+    "exit_code": 0,
+    "status": "completed"
+  },
+  {
+    "run": "run-20260905T123427907353Z",
+    "id": "item_9",
+    "type": "command_execution",
+    "command": "/bin/zsh -lc \"python3 /Users/jeremymcspadden/orca/evaluations/gsd-path-e2e-50718f8/plugin/tests/evaluate_codex.py activity --arm /Users/jeremymcspadden/orca/evaluations/gsd-path-e2e-50718f8/path --category review -- sh -c 'rg -n \\\"archive ownership|Reviewed HEAD|archive-uncommitted|uncommitted-archive|def .*archive|final\\\" .agents/skills/gsd-path-undo/scripts/pipeline_undo.py; rg -n \\\"Reviewed HEAD\\\" .project/archive/001-widget-counter/review/FINAL.md; python3 .agents/skills/gsd-path-undo/scripts/pipeline_undo.py apply --help'\"",
+    "aggregated_output": "89:KINDS = (\"checkpoint\", \"task\", \"uncommitted-archive\", \"lookahead\")\n99:def _normalize_archive(value: str) -> str:\n103:def _archive_in_head(repo: Path, archive: str) -> bool:\n247:def _discussion_extension(repo: Path, archive: str) -> Optional[dict[str, bytes]]:\n281:        finally:\n362:def _archive_metadata_error(\n402:        final_review = archive_path / \"review\" / \"FINAL.md\"\n403:        gap_reviews = sorted((archive_path / \"review\").glob(\"final-gap-*.md\"))\n404:        if final_review.exists() or gap_reviews:\n405:            reviewed_head, _ = archive_milestone.parse_final_review(archive_path)\n408:                return \"archive undo final review does not match current HEAD\"\n419:        return f\"archive undo cannot prove archive ownership: {error}\"\n673:    finally:\n728:                \"kind\": \"uncommitted-archive\",\n981:    elif kind == \"uncommitted-archive\":\n3:Reviewed HEAD: a927cba5994b5550ef02347468c6dd0459f2ecfb\n96:Reviewed HEAD: a927cba5994b5550ef02347468c6dd0459f2ecfb\nusage: pipeline_undo.py apply [-h] --repo REPO --kind\n                              {checkpoint,task,uncommitted-archive,lookahead}\n                              --expected-head EXPECTED_HEAD\n\noptional arguments:\n  -h, --help            show this help message and exit\n  --repo REPO\n  --kind {checkpoint,task,uncommitted-archive,lookahead}\n  --expected-head EXPECTED_HEAD\n",
+    "exit_code": 0,
+    "status": "completed"
+  },
+  {
+    "run": "run-20260905T123427907353Z",
+    "id": "item_12",
+    "type": "command_execution",
+    "command": "/bin/zsh -lc \"python3 /Users/jeremymcspadden/orca/evaluations/gsd-path-e2e-50718f8/plugin/tests/evaluate_codex.py activity --arm /Users/jeremymcspadden/orca/evaluations/gsd-path-e2e-50718f8/path --category implementation -- python3 -c 'from pathlib import Path\nwith Path(\\\"/Users/jeremymcspadden/orca/evaluations/gsd-path-e2e-50718f8/archive-recovery/RECOVERY-RUN.md\\\").open(\\\"a\\\") as f:\n f.write(\\\"\\\"\\\"\n\\\\n## New undo blocker\n\nCanonical pipeline_undo.py preview returned status preview, apply null, target.kind null, and blocked reason:\narchive undo cannot prove archive ownership: FINAL.md requires one completed Reviewed HEAD: field\n\nChecked archived review/FINAL.md: identical Reviewed HEAD fields at lines 3 and 96, both a927cba5994b5550ef02347468c6dd0459f2ecfb. The second occurs in the Recorded project Verify section. Earlier check_handoffs.py final accepted this artifact, while archive parsing rejects it.\nNo undo apply, bookkeeping correction commit, archive edit, installed-source edit, product check, or publication occurred.\nCanonical diagnose repeated this blocked undo reason. The already-approved restorations are complete; snapshots and original hashes are unchanged.\nA new owner exception is needed to correct the malformed uncommitted archive review metadata, or a canonical recovery that can handle it. This is outside the authorized EXECUTION.md/LESSONS.md restoration. Preserve the original malformed artifact in prepared-project.tar.gz.\n\\\"\\\"\\\")\n'\"",
+    "aggregated_output": "",
+    "exit_code": 0,
+    "status": "completed"
+  },
+  {
+    "run": "run-20260905T131730994645Z",
+    "id": "item_6",
+    "type": "command_execution",
+    "command": "/bin/zsh -lc 'python3 /Users/jeremymcspadden/orca/evaluations/gsd-path-e2e-50718f8/plugin/tests/evaluate_codex.py activity --arm /Users/jeremymcspadden/orca/evaluations/gsd-path-e2e-50718f8/path --category implementation -- python3 /Users/jeremymcspadden/orca/evaluations/gsd-path-e2e-50718f8/path/repo/.agents/skills/gsd-path-undo/scripts/pipeline_undo.py apply --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-e2e-50718f8/path/repo --kind uncommitted-archive --expected-head a927cba5994b5550ef02347468c6dd0459f2ecfb'",
+    "aggregated_output": "{\"head_after\": \"a927cba5994b5550ef02347468c6dd0459f2ecfb\", \"head_before\": \"a927cba5994b5550ef02347468c6dd0459f2ecfb\", \"kind\": \"uncommitted-archive\", \"remaining\": {\"blocked\": [\"HEAD is not an undoable pipeline commit: build: complete milestone\"], \"effects\": [], \"head\": null, \"kind\": null, \"parent\": null, \"subject\": null}, \"schema\": \"gsd-path/undo/v1\", \"state\": {\"archive\": null, \"branch\": \"gsd-path/M001\", \"integration\": \"direct\", \"integration_default\": \"direct\", \"integration_source\": \"default\", \"milestone\": \"widget-counter\", \"phase\": \"ship\", \"pipeline\": \"gsd-path/v2\", \"project\": \"repo\", \"status\": \"active\"}, \"status\": \"applied\"}\n",
+    "exit_code": 0,
+    "status": "completed"
+  },
+  {
+    "run": "run-20260905T131730994645Z",
+    "id": "item_31",
+    "type": "command_execution",
+    "command": "/bin/zsh -lc 'python3 /Users/jeremymcspadden/orca/evaluations/gsd-path-e2e-50718f8/plugin/tests/evaluate_codex.py activity --arm /Users/jeremymcspadden/orca/evaluations/gsd-path-e2e-50718f8/path --category verification -- python3 /Users/jeremymcspadden/orca/evaluations/gsd-path-e2e-50718f8/path/repo/.agents/skills/gsd-path/scripts/check_handoffs.py final --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-e2e-50718f8/path/repo'",
+    "aggregated_output": "{\"criteria\": [\"SC1\", \"SC2\", \"SC3\", \"SC4\", \"SC5\", \"SC6\"], \"gaps\": [1], \"phase\": \"ship\", \"reviewed_head\": \"a60a3ec88fb0ec8dacf75526a47120392a448295\", \"verdict\": \"pass\"}\n",
+    "exit_code": 0,
+    "status": "completed"
+  },
+  {
+    "run": "run-20260905T131730994645Z",
+    "id": "item_37",
+    "type": "command_execution",
+    "command": "/bin/zsh -lc 'python3 /Users/jeremymcspadden/orca/evaluations/gsd-path-e2e-50718f8/plugin/tests/evaluate_codex.py activity --arm /Users/jeremymcspadden/orca/evaluations/gsd-path-e2e-50718f8/path --category verification -- python3 /Users/jeremymcspadden/orca/evaluations/gsd-path-e2e-50718f8/path/repo/.agents/skills/gsd-path/scripts/archive_milestone.py preflight --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-e2e-50718f8/path/repo'",
+    "aggregated_output": "{\"archive\": \".project/archive/001-widget-counter\", \"carried_forward\": 0}\n",
+    "exit_code": 0,
+    "status": "completed"
+  },
+  {
+    "run": "run-20260905T131730994645Z",
+    "id": "item_43",
+    "type": "command_execution",
+    "command": "/bin/zsh -lc 'python3 /Users/jeremymcspadden/orca/evaluations/gsd-path-e2e-50718f8/plugin/tests/evaluate_codex.py activity --arm /Users/jeremymcspadden/orca/evaluations/gsd-path-e2e-50718f8/path --category verification -- python3 /Users/jeremymcspadden/orca/evaluations/gsd-path-e2e-50718f8/path/repo/.agents/skills/gsd-path/scripts/archive_milestone.py validate --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-e2e-50718f8/path/repo'",
+    "aggregated_output": "{\"archive\": \".project/archive/001-widget-counter\", \"commit\": \"c3195a67d43eb08e0c359975c83ec20a3bc23cf4\"}\n",
+    "exit_code": 0,
+    "status": "completed"
+  },
+  {
+    "run": "run-20260905T131730994645Z",
+    "id": "item_45",
+    "type": "command_execution",
+    "command": "/bin/zsh -lc 'python3 /Users/jeremymcspadden/orca/evaluations/gsd-path-e2e-50718f8/plugin/tests/evaluate_codex.py activity --arm /Users/jeremymcspadden/orca/evaluations/gsd-path-e2e-50718f8/path --category implementation -- python3 /Users/jeremymcspadden/orca/evaluations/gsd-path-e2e-50718f8/path/repo/.agents/skills/gsd-path/scripts/archive_milestone.py integrate --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-e2e-50718f8/path/repo --slug widget-counter'",
+    "aggregated_output": "{\"archive\": \".project/archive/001-widget-counter\", \"base\": \"c8065c3e69c244454198f1226b668f8ded9c4e46\", \"commit\": \"c3195a67d43eb08e0c359975c83ec20a3bc23cf4\", \"integrate\": \"c8065c3e69c244454198f1226b668f8ded9c4e46\", \"landing\": \"c8065c3e69c244454198f1226b668f8ded9c4e46\", \"mode\": \"direct\", \"tag\": \"milestone/001-widget-counter\"}\n",
+    "exit_code": 0,
+    "status": "completed"
+  },
+  {
+    "run": "run-20260905T131730994645Z",
+    "id": "item_46",
+    "type": "command_execution",
+    "command": "/bin/zsh -lc 'python3 /Users/jeremymcspadden/orca/evaluations/gsd-path-e2e-50718f8/plugin/tests/evaluate_codex.py activity --arm /Users/jeremymcspadden/orca/evaluations/gsd-path-e2e-50718f8/path --category verification -- python3 /Users/jeremymcspadden/orca/evaluations/gsd-path-e2e-50718f8/path/repo/.agents/skills/gsd-path/scripts/archive_milestone.py validate-integrated --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-e2e-50718f8/path/repo --slug widget-counter'",
+    "aggregated_output": "{\"archive\": \".project/archive/001-widget-counter\", \"base\": \"c8065c3e69c244454198f1226b668f8ded9c4e46\", \"commit\": \"c3195a67d43eb08e0c359975c83ec20a3bc23cf4\", \"integrate\": \"c8065c3e69c244454198f1226b668f8ded9c4e46\", \"landing\": \"c8065c3e69c244454198f1226b668f8ded9c4e46\", \"mode\": \"direct\", \"tag\": \"milestone/001-widget-counter\"}\n",
+    "exit_code": 0,
+    "status": "completed"
+  },
+  {
+    "run": "run-20260905T131730994645Z",
+    "id": "item_50",
+    "type": "command_execution",
+    "command": "/bin/zsh -lc \"python3 /Users/jeremymcspadden/orca/evaluations/gsd-path-e2e-50718f8/plugin/tests/evaluate_codex.py activity --arm /Users/jeremymcspadden/orca/evaluations/gsd-path-e2e-50718f8/path --category implementation -- python3 -c 'from pathlib import Path\nwith Path(\\\"/Users/jeremymcspadden/orca/evaluations/gsd-path-e2e-50718f8/archive-recovery/RECOVERY-RUN.md\\\").open(\\\"a\\\") as f:\n f.write(\\\"\\\"\\\"\n\\\\n## Completed recovery and shipment\n\nFresh native review_final passed all SC1\u2013SC6 at a60a3ec88fb0ec8dacf75526a47120392a448295 with one Reviewed HEAD field. Canonical collection and retirement passed; check_handoffs.py final passed; no pending discussion.\nCanonical prepare, render-manifest, and preflight passed for .project/archive/001-widget-counter.\nrecord-shipment returned shipped/done. The exact .project-only ship commit is c3195a67d43eb08e0c359975c83ec20a3bc23cf4; archive validate passed.\nCanonical direct integrate and validate-integrated passed. Landing: c8065c3e69c244454198f1226b668f8ded9c4e46. Annotated tag: milestone/001-widget-counter, tag object 236dd4cf86dafec1770af3a13273ad4a10eb0f17, peeled target the landing merge.\nOnly approved local origin /Users/jeremymcspadden/orca/evaluations/gsd-path-e2e-50718f8/path/origin.git was used. Live fully qualified remote refs confirmed main at landing, gsd-path/M001 at ship commit, and matching annotated tag.\nGit short-ref inspection emitted warning: refname origin/main is ambiguous. Follow-up fully qualified refs/remotes/origin/main and exact ls-remote refs proved the result without that ambiguity. No ref repair was attempted.\nFinal git status --porcelain was empty. Worktree list contained only the primary on gsd-path/M001 at the ship commit. Installed .agents and .gsd-path content matched fixture commit 607cdb15cd5e24b00318a60fa5ff2899c04d35b9 with no untracked changes there. No next milestone was started.\nOriginal external snapshots, hashes, owner rulings, old reviews, failures and usage remain preserved. Last evaluator-supplied completed output before this invocation: 43572. Current invocation and resumed child usage are not exposed here and are not estimated.\n\\\"\\\"\\\")\n'\"",
+    "aggregated_output": "",
+    "exit_code": 0,
+    "status": "completed"
+  }
+]

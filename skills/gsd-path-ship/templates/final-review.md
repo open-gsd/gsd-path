@@ -1,6 +1,6 @@
 # Final Review — <project name>
 
-<!-- Written by the final integration reviewer. Each INTENT.md success
+<!-- Authorship and evidence reuse follow the ship phase contract. Each INTENT.md success
      criterion appears exactly once and carries checked evidence. A criterion
      listed in PLAN.md's Surface contract also names its Surface, and its
      Check is the walkthrough performed — never internal test output. Embedded

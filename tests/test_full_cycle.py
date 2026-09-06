@@ -351,23 +351,37 @@ class FullCycleTests(unittest.TestCase):
             git(repo, "config", "user.email", "cycle@example.invalid")
             git(repo, "config", "user.name", "Cycle")
 
-            # --- router init (greenfield → define) + guard hooks on a bound branch
+            # --- existing repository + installed guard hooks, before router init
             self.write("src/app.py", "def render(name):\n    return name\n")
             self.write("tests/test_app.py", "import sys, pathlib\nsys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))\nfrom src.app import render\nassert render('x') == 'Hello, x'\n")
             self.write("src/__init__.py", "")
-            self.state("define", "active")
-            self.commit("router: initialize project")
+            self.commit("fixture: existing product")
             self.install_hooks()
             baseline = self.commit("router: install guard hooks")
             self.assertEqual(git(repo, "remote", "add", "origin", str(origin)).returncode, 0)
             published = git(repo, "push", "-q", "-u", "origin", "main")
             self.assertEqual(published.returncode, 0, published.stderr)
             self.assertEqual(git(repo, "remote", "set-head", "origin", "--auto").returncode, 0)
+            initialized = self.gate(
+                "detect_project.py", "initialize", "--repo", str(repo),
+                "--template", str(ROOT / "skills/gsd-path/templates/state.md"),
+            )
+            self.assertTrue(initialized["wrote_state"])
             bound = self.gate(
                 "pipeline_git.py", "bind-initial", "--repo", str(repo), "--branch", BRANCH,
                 "--remote-default", "origin/main", "--base", baseline,
             )
             self.assertEqual(bound["status"], "bound")
+            self.assertEqual(git(repo, "rev-parse", "HEAD").stdout.strip(), baseline)
+            state = self.gate("pipeline_state.py", "validate", "--repo", str(repo))["state"]
+            self.gate(
+                "pipeline_state.py", "transition", "--repo", str(repo),
+                "--expect-phase", state["phase"], "--expect-status", "active",
+                "--expect-branch", "null", "--expect-archive", "null",
+                "--set-branch", BRANCH, "--event", "router bound initial milestone",
+            )
+            # Seed this test's approved definition after proving the real bootstrap.
+            self.state("define", "active")
             self.assertEqual(self.gate("discussion_records.py", "pending", "--repo", str(repo))["pending"], [])
 
             # --- define

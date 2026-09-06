@@ -1,0 +1,87 @@
+{
+  "earlier": {
+    "turns": [
+      {
+        "role": "/root/build_t001",
+        "turn_id": "01a06f8a-66b1-79a2-a9ee-ed6fbada977f",
+        "start": "2026-09-05T03:08:56.389Z",
+        "output_tokens": 3222,
+        "end": "2026-09-05T03:11:02.564Z",
+        "seconds": 126.175
+      },
+      {
+        "role": "/root/review_final",
+        "turn_id": "01a06f91-4ecb-7c73-aa89-6ec9a7d7c86e",
+        "start": "2026-09-05T03:16:29.024Z",
+        "output_tokens": 3384,
+        "end": "2026-09-05T03:18:32.703Z",
+        "seconds": 123.679
+      },
+      {
+        "role": "/root/review_wave_1_cycle_1",
+        "turn_id": "01a06f8d-82ee-7d01-acde-08cf2738371f",
+        "start": "2026-09-05T03:12:20.234Z",
+        "output_tokens": 3352,
+        "end": "2026-09-05T03:14:15.813Z",
+        "seconds": 115.579
+      }
+    ],
+    "coder_tokens": 3222,
+    "coder_seconds": 126.175,
+    "review_tokens": 6736,
+    "review_seconds": 239.25799999999998,
+    "active_seconds_after_coder_handoff": 594.591034,
+    "total_cli_seconds": 1976.4605749579998
+  },
+  "latest": {
+    "turns": [
+      {
+        "role": "/root/build_t001",
+        "turn_id": "01a0716f-b240-7b92-a1f7-5726abc577e2",
+        "start": "2026-09-05T11:59:00.691Z",
+        "output_tokens": 4226,
+        "end": "2026-09-05T12:01:54.073Z",
+        "seconds": 173.382
+      },
+      {
+        "role": "/root/review_wave_1_cycle_1",
+        "turn_id": "01a07173-505a-7801-8316-bbca7229a8ee",
+        "start": "2026-09-05T12:02:57.772Z",
+        "output_tokens": 3022,
+        "end": "2026-09-05T12:05:05.433Z",
+        "seconds": 127.661
+      },
+      {
+        "role": "/root/review_final",
+        "turn_id": "01a0717b-02d1-7f52-9690-5c27e7764fad",
+        "start": "2026-09-05T12:11:22.215Z",
+        "output_tokens": 3612,
+        "end": "2026-09-05T12:13:44.218Z",
+        "seconds": 142.003
+      },
+      {
+        "role": "/root/review_final",
+        "turn_id": "01a071ba-6b89-7a50-b158-89370901d1e5",
+        "start": "2026-09-05T13:20:37.771Z",
+        "output_tokens": 3153,
+        "end": "2026-09-05T13:22:51.666Z",
+        "seconds": 133.895
+      }
+    ],
+    "coder_tokens": 4226,
+    "coder_seconds": 173.382,
+    "review_tokens": 9787,
+    "review_seconds": 403.55899999999997,
+    "active_seconds_after_coder_handoff": 1536.935892,
+    "total_cli_seconds": 2308.138432252
+  },
+  "changes_percent": {
+    "coder_tokens": 31.160769708255742,
+    "coder_seconds": 37.41390925302159,
+    "review_tokens": 45.2939429928741,
+    "review_seconds": 68.67105802104841,
+    "active_seconds_after_coder_handoff": 158.48622063143992,
+    "total_cli_seconds": 16.78140517935949
+  },
+  "method": "Child task_started/task_complete intervals and final per-turn output counters; after-handoff time intersects completed parent CLI intervals with time after coder completion, excluding between-run pauses. Parent orchestration overlaps child intervals and is not added to them. Coder includes its own tests. Review excludes parent verification/recovery work."
+}

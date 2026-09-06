@@ -195,6 +195,26 @@ class DetectProjectTests(unittest.TestCase):
             self.assertEqual(payload["verdict"], "greenfield")
             self.assertEqual(payload["signals"], [])
 
+    def test_real_local_install_preserves_greenfield_and_real_source_signals(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            self.git(repo, 'init', '-q', '-b', 'main')
+            result = subprocess.run(
+                ['node', str(ROOT / 'scripts/install.mjs'), '--codex', '--local',
+                 '--project', str(repo), '--hooks', '--no-color'],
+                cwd=repo, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.git(repo, 'add', '.')
+            payload = self.classify(repo)
+            self.assertEqual(payload['verdict'], 'greenfield', payload['signals'])
+            self.assertEqual(payload['route'], 'define')
+            source = repo / 'src/runtime/main.py'
+            source.parent.mkdir(parents=True)
+            source.write_text("print('product')\n")
+            payload = self.classify(repo)
+            self.assertEqual(payload['verdict'], 'brownfield')
+            self.assertEqual(payload['signals'], [{'kind': 'source', 'path': 'src/runtime/main.py'}])
+
     def test_additional_readme_headings_are_body(self) -> None:
         examples = (
             "# Demo\n#existing-project\n",

@@ -1,0 +1,16 @@
+{
+  "head": "c3195a67d43eb08e0c359975c83ec20a3bc23cf4",
+  "origin_main": "c8065c3e69c244454198f1226b668f8ded9c4e46",
+  "integration_parents": [
+    "607cdb15cd5e24b00318a60fa5ff2899c04d35b9",
+    "c3195a67d43eb08e0c359975c83ec20a3bc23cf4"
+  ],
+  "annotated_tag": "object c8065c3e69c244454198f1226b668f8ded9c4e46\ntype commit\ntag milestone/001-widget-counter\ntagger Evaluation <evaluation@example.invalid> 1788614654 -0500\n\nmilestone 001-widget-counter",
+  "clean": true,
+  "installed_bundles_unchanged": true,
+  "delivered_product_blobs_match_verified_landing": true,
+  "worktrees": "worktree /Users/jeremymcspadden/orca/evaluations/gsd-path-e2e-50718f8/path/repo\nHEAD c3195a67d43eb08e0c359975c83ec20a3bc23cf4\nbranch refs/heads/gsd-path/M001",
+  "origin": "/Users/jeremymcspadden/orca/evaluations/gsd-path-e2e-50718f8/path/origin.git",
+  "remote_default_matches_tracking_ref": true,
+  "verified_main_ref": "refs/remotes/origin/main"
+}

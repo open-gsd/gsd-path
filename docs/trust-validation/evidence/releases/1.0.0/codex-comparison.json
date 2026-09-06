@@ -1,0 +1,648 @@
+{
+  "manifest": {
+    "candidate": "c9e92cc5922555d52df0e35b3f66f825b46690b4",
+    "fixture": "7d0dc33ed8daa369f9ad67c99549075f5935bdee",
+    "created_at": "2026-09-05T01:51:59.871679+00:00"
+  },
+  "arms": {
+    "path": {
+      "setup": {
+        "elapsed_seconds": 0.950153875
+      },
+      "product": {
+        "verdict": "fail",
+        "checks": [
+          {
+            "arguments": [],
+            "pass": true,
+            "exit_code": 0,
+            "stdout": "0 widgets\n",
+            "stderr": ""
+          },
+          {
+            "arguments": [
+              "3"
+            ],
+            "pass": true,
+            "exit_code": 0,
+            "stdout": "3 widgets\n",
+            "stderr": ""
+          },
+          {
+            "arguments": [
+              "--json"
+            ],
+            "pass": false,
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": "Traceback (most recent call last):\n  File \"/Users/jeremymcspadden/orca/evaluations/gsd-path-astra-c9e92cc/path/repo/count.py\", line 2, in <module>\n    n = int(sys.argv[1]) if len(sys.argv) > 1 else 0\nValueError: invalid literal for int() with base 10: '--json'\n"
+          },
+          {
+            "arguments": [
+              "3",
+              "--json"
+            ],
+            "pass": false,
+            "exit_code": 0,
+            "stdout": "3 widgets\n",
+            "stderr": ""
+          },
+          {
+            "arguments": [
+              "--json",
+              "-2"
+            ],
+            "pass": false,
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": "Traceback (most recent call last):\n  File \"/Users/jeremymcspadden/orca/evaluations/gsd-path-astra-c9e92cc/path/repo/count.py\", line 2, in <module>\n    n = int(sys.argv[1]) if len(sys.argv) > 1 else 0\nValueError: invalid literal for int() with base 10: '--json'\n"
+          },
+          {
+            "arguments": [
+              "invalid"
+            ],
+            "pass": true,
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": "Traceback (most recent call last):\n  File \"/Users/jeremymcspadden/orca/evaluations/gsd-path-astra-c9e92cc/path/repo/count.py\", line 2, in <module>\n    n = int(sys.argv[1]) if len(sys.argv) > 1 else 0\nValueError: invalid literal for int() with base 10: 'invalid'\n"
+          }
+        ]
+      },
+      "head": "2caddecdee123a54a3df0aa2f7328067654ca649",
+      "dirty": true,
+      "elapsed_seconds": 76.86109991699999,
+      "delivery_elapsed_seconds": 76.86109991699999,
+      "activities": [
+        {
+          "category": "implementation",
+          "command": [
+            "python3",
+            "/Users/jeremymcspadden/.agents/skills/gsd-path/scripts/detect_project.py",
+            "initialize",
+            "--repo",
+            "/Users/jeremymcspadden/orca/evaluations/gsd-path-astra-c9e92cc/path/repo",
+            "--template",
+            "/Users/jeremymcspadden/.agents/skills/gsd-path/templates/state.md"
+          ],
+          "started_at": "2026-09-05T01:55:43.464406+00:00",
+          "duration_seconds": 0.052374542,
+          "exit_code": 0,
+          "category_source": "caller-declared",
+          "duration_source": "subprocess-clock"
+        },
+        {
+          "category": "implementation",
+          "command": [
+            "git",
+            "fetch",
+            "origin"
+          ],
+          "started_at": "2026-09-05T01:55:52.399095+00:00",
+          "duration_seconds": 0.023585750000000003,
+          "exit_code": 0,
+          "category_source": "caller-declared",
+          "duration_source": "subprocess-clock"
+        },
+        {
+          "category": "implementation",
+          "command": [
+            "python3",
+            "/Users/jeremymcspadden/.agents/skills/gsd-path/scripts/pipeline_git.py",
+            "bind-initial",
+            "--repo",
+            "/Users/jeremymcspadden/orca/evaluations/gsd-path-astra-c9e92cc/path/repo",
+            "--branch",
+            "gsd-path/M001",
+            "--remote-default",
+            "origin/main",
+            "--base",
+            "2caddecdee123a54a3df0aa2f7328067654ca649"
+          ],
+          "started_at": "2026-09-05T01:56:02.881441+00:00",
+          "duration_seconds": 0.08104641700000001,
+          "exit_code": 1,
+          "category_source": "caller-declared",
+          "duration_source": "subprocess-clock"
+        },
+        {
+          "category": "implementation",
+          "command": [
+            "python3",
+            "/Users/jeremymcspadden/.agents/skills/gsd-path/scripts/pipeline_state.py",
+            "transition",
+            "--repo",
+            "/Users/jeremymcspadden/orca/evaluations/gsd-path-astra-c9e92cc/path/repo",
+            "--expect-phase",
+            "inspect",
+            "--expect-status",
+            "active",
+            "--expect-branch",
+            "null",
+            "--expect-archive",
+            "null",
+            "--set-branch",
+            "gsd-path/M001",
+            "--event",
+            "Bound gsd-path/M001 at fetched origin/main 2caddecdee123a54a3df0aa2f7328067654ca649"
+          ],
+          "started_at": "2026-09-05T01:56:03.016437+00:00",
+          "duration_seconds": 0.05157408399999999,
+          "exit_code": 1,
+          "category_source": "caller-declared",
+          "duration_source": "subprocess-clock"
+        },
+        {
+          "category": "review",
+          "command": [
+            "python3",
+            "/Users/jeremymcspadden/.agents/skills/gsd-path/scripts/check_docs_audit.py",
+            "--repo",
+            "/Users/jeremymcspadden/orca/evaluations/gsd-path-astra-c9e92cc/path/repo",
+            "--emit-inventory"
+          ],
+          "started_at": "2026-09-05T01:56:03.309139+00:00",
+          "duration_seconds": 0.043287333000000004,
+          "exit_code": 0,
+          "category_source": "caller-declared",
+          "duration_source": "subprocess-clock"
+        },
+        {
+          "category": "review",
+          "command": [
+            "python3",
+            "/Users/jeremymcspadden/.agents/skills/gsd-path-forensics/scripts/pipeline_diagnose.py",
+            "diagnose",
+            "--repo",
+            "/Users/jeremymcspadden/orca/evaluations/gsd-path-astra-c9e92cc/path/repo"
+          ],
+          "started_at": "2026-09-05T01:56:10.457023+00:00",
+          "duration_seconds": 0.505009625,
+          "exit_code": 0,
+          "category_source": "caller-declared",
+          "duration_source": "subprocess-clock"
+        }
+      ],
+      "usage": [
+        {
+          "input_tokens": 345181,
+          "cached_input_tokens": 308864,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 1646,
+          "reasoning_output_tokens": 281
+        }
+      ],
+      "activity_seconds": {
+        "implementation": 0.20858079300000001,
+        "verification": null,
+        "review": 0.548296958
+      },
+      "failed_commands": 2,
+      "pipeline": "unverifiable",
+      "measurement": "partial",
+      "runs": [
+        {
+          "model": "gpt-6-astra",
+          "reasoning": "high",
+          "sandbox": "danger-full-access",
+          "cli": "codex-cli 0.153.4",
+          "command": [
+            "codex",
+            "exec",
+            "--ignore-user-config",
+            "--model",
+            "gpt-6-astra",
+            "-c",
+            "model_reasoning_effort=\"high\"",
+            "--json",
+            "--sandbox",
+            "danger-full-access",
+            "--add-dir",
+            "/Users/jeremymcspadden/orca/evaluations/gsd-path-astra-c9e92cc/path",
+            "-"
+          ],
+          "exit_code": 0,
+          "started_at": "2026-09-05T01:55:11.222190+00:00",
+          "elapsed_seconds": 76.86109991699999,
+          "head": "2caddecdee123a54a3df0aa2f7328067654ca649"
+        }
+      ]
+    },
+    "direct": {
+      "setup": {
+        "elapsed_seconds": 0.056963291000000194
+      },
+      "product": {
+        "verdict": "pass",
+        "checks": [
+          {
+            "arguments": [],
+            "pass": true,
+            "exit_code": 0,
+            "stdout": "0 widgets\n",
+            "stderr": ""
+          },
+          {
+            "arguments": [
+              "3"
+            ],
+            "pass": true,
+            "exit_code": 0,
+            "stdout": "3 widgets\n",
+            "stderr": ""
+          },
+          {
+            "arguments": [
+              "--json"
+            ],
+            "pass": true,
+            "exit_code": 0,
+            "stdout": "{\"widgets\": 0}\n",
+            "stderr": ""
+          },
+          {
+            "arguments": [
+              "3",
+              "--json"
+            ],
+            "pass": true,
+            "exit_code": 0,
+            "stdout": "{\"widgets\": 3}\n",
+            "stderr": ""
+          },
+          {
+            "arguments": [
+              "--json",
+              "-2"
+            ],
+            "pass": true,
+            "exit_code": 0,
+            "stdout": "{\"widgets\": -2}\n",
+            "stderr": ""
+          },
+          {
+            "arguments": [
+              "invalid"
+            ],
+            "pass": true,
+            "exit_code": 2,
+            "stdout": "",
+            "stderr": "usage: count.py [-h] [--json] [count]\ncount.py: error: argument count: invalid int value: 'invalid'\n"
+          }
+        ]
+      },
+      "head": "b8d024b905082fbe394b8bf09e7b74a98a0372d6",
+      "dirty": false,
+      "elapsed_seconds": 119.09546666600001,
+      "delivery_elapsed_seconds": 119.09546666600001,
+      "activities": [
+        {
+          "category": "review",
+          "command": [
+            "git",
+            "status",
+            "--short",
+            "--branch"
+          ],
+          "started_at": "2026-09-05T01:52:41.256534+00:00",
+          "duration_seconds": 0.010298540999999994,
+          "exit_code": 0,
+          "category_source": "caller-declared",
+          "duration_source": "subprocess-clock"
+        },
+        {
+          "category": "review",
+          "command": [
+            "cat",
+            "/Users/jeremymcspadden/.codex/skills/test-writer/SKILL.md",
+            "/Users/jeremymcspadden/.codex/skills/code-simplifier/SKILL.md",
+            "/Users/jeremymcspadden/.agents/skills/memtrace-first/SKILL.md"
+          ],
+          "started_at": "2026-09-05T01:52:41.348463+00:00",
+          "duration_seconds": 0.008734750000000003,
+          "exit_code": 0,
+          "category_source": "caller-declared",
+          "duration_source": "subprocess-clock"
+        },
+        {
+          "category": "review",
+          "command": [
+            "cat",
+            "/Users/jeremymcspadden/.codex/skills/code-simplifier/SKILL.md"
+          ],
+          "started_at": "2026-09-05T01:52:53.398993+00:00",
+          "duration_seconds": 0.0027130839999999976,
+          "exit_code": 0,
+          "category_source": "caller-declared",
+          "duration_source": "subprocess-clock"
+        },
+        {
+          "category": "review",
+          "command": [
+            "git",
+            "ls-files"
+          ],
+          "started_at": "2026-09-05T01:52:53.479895+00:00",
+          "duration_seconds": 0.007883833,
+          "exit_code": 0,
+          "category_source": "caller-declared",
+          "duration_source": "subprocess-clock"
+        },
+        {
+          "category": "review",
+          "command": [
+            "git",
+            "log",
+            "-1",
+            "--oneline"
+          ],
+          "started_at": "2026-09-05T01:52:53.564970+00:00",
+          "duration_seconds": 0.008207375,
+          "exit_code": 0,
+          "category_source": "caller-declared",
+          "duration_source": "subprocess-clock"
+        },
+        {
+          "category": "review",
+          "command": [
+            "python3",
+            "-c",
+            "from pathlib import Path; names = [\"AGENTS.md\", \"CONTRIBUTING.md\", \"MEMTRACE.md\", \"README.md\", \"count.py\"]; [(print(\"--- \" + n), print(Path(n).read_text())) for n in names if Path(n).is_file()]"
+          ],
+          "started_at": "2026-09-05T01:53:05.403134+00:00",
+          "duration_seconds": 0.020286541999999998,
+          "exit_code": 0,
+          "category_source": "caller-declared",
+          "duration_source": "subprocess-clock"
+        },
+        {
+          "category": "review",
+          "command": [
+            "git",
+            "fetch",
+            "origin"
+          ],
+          "started_at": "2026-09-05T01:53:05.499728+00:00",
+          "duration_seconds": 0.024974333,
+          "exit_code": 0,
+          "category_source": "caller-declared",
+          "duration_source": "subprocess-clock"
+        },
+        {
+          "category": "review",
+          "command": [
+            "git",
+            "status",
+            "--short",
+            "--branch"
+          ],
+          "started_at": "2026-09-05T01:53:05.601398+00:00",
+          "duration_seconds": 0.011862958999999996,
+          "exit_code": 0,
+          "category_source": "caller-declared",
+          "duration_source": "subprocess-clock"
+        },
+        {
+          "category": "implementation",
+          "command": [
+            "git",
+            "switch",
+            "-c",
+            "implement-widget-counter"
+          ],
+          "started_at": "2026-09-05T01:53:05.692049+00:00",
+          "duration_seconds": 0.015960833,
+          "exit_code": 0,
+          "category_source": "caller-declared",
+          "duration_source": "subprocess-clock"
+        },
+        {
+          "category": "implementation",
+          "command": [
+            "python3",
+            "-c",
+            "from pathlib import Path; Path('test_count.py').write_text(\"import json\\nfrom pathlib import Path\\nimport subprocess\\nimport sys\\nimport unittest\\n\\n\\nSCRIPT = Path(__file__).resolve().with_name(\\\"count.py\\\")\\n\\n\\nclass WidgetCounterTests(unittest.TestCase):\\n    def run_cli(self, *args):\\n        return subprocess.run(\\n            [sys.executable, str(SCRIPT), *args],\\n            capture_output=True,\\n            text=True,\\n        )\\n\\n    def test_plain_text(self):\\n        for args, count in [((), 0), ((\\\"0\\\",), 0), ((\\\"3\\\",), 3), ((\\\"-7\\\",), -7)]:\\n            with self.subTest(args=args):\\n                result = self.run_cli(*args)\\n                self.assertEqual(result.returncode, 0, result.stderr)\\n                self.assertEqual(result.stdout, f\\\"{count} widgets\\\\n\\\")\\n                self.assertEqual(result.stderr, \\\"\\\")\\n\\n    def test_json(self):\\n        cases = [\\n            ((\\\"--json\\\",), 0),\\n            ((\\\"--json\\\", \\\"0\\\"), 0),\\n            ((\\\"--json\\\", \\\"3\\\"), 3),\\n            ((\\\"3\\\", \\\"--json\\\"), 3),\\n            ((\\\"--json\\\", \\\"-7\\\"), -7),\\n            ((\\\"-7\\\", \\\"--json\\\"), -7),\\n        ]\\n        for args, count in cases:\\n            with self.subTest(args=args):\\n                result = self.run_cli(*args)\\n                self.assertEqual(result.returncode, 0, result.stderr)\\n                value = json.loads(result.stdout)\\n                self.assertEqual(value, {\\\"widgets\\\": count})\\n                self.assertIs(type(value[\\\"widgets\\\"]), int)\\n                self.assertEqual(result.stderr, \\\"\\\")\\n\\n    def test_invalid_input(self):\\n        cases = [\\n            ((\\\"abc\\\",), \\\"abc\\\"),\\n            ((\\\"1.5\\\",), \\\"1.5\\\"),\\n            ((\\\"--json\\\", \\\"abc\\\"), \\\"abc\\\"),\\n            ((\\\"abc\\\", \\\"--json\\\"), \\\"abc\\\"),\\n            ((\\\"1\\\", \\\"2\\\"), \\\"2\\\"),\\n            ((\\\"--json\\\", \\\"1\\\", \\\"2\\\"), \\\"2\\\"),\\n            ((\\\"--unknown\\\",), \\\"--unknown\\\"),\\n        ]\\n        for args, invalid in cases:\\n            with self.subTest(args=args):\\n                result = self.run_cli(*args)\\n                self.assertNotEqual(result.returncode, 0)\\n                self.assertEqual(result.stdout, \\\"\\\")\\n                self.assertIn(\\\"error\\\", result.stderr.lower())\\n                self.assertIn(invalid, result.stderr)\\n                self.assertNotIn(\\\"Traceback\\\", result.stderr)\\n\\n\\nif __name__ == \\\"__main__\\\":\\n    unittest.main()\\n\")"
+          ],
+          "started_at": "2026-09-05T01:53:33.024917+00:00",
+          "duration_seconds": 0.021925374999999997,
+          "exit_code": 0,
+          "category_source": "caller-declared",
+          "duration_source": "subprocess-clock"
+        },
+        {
+          "category": "review",
+          "command": [
+            "git",
+            "diff",
+            "--no-index",
+            "--",
+            "/dev/null",
+            "test_count.py"
+          ],
+          "started_at": "2026-09-05T01:53:33.139643+00:00",
+          "duration_seconds": 0.024952167000000004,
+          "exit_code": 1,
+          "category_source": "caller-declared",
+          "duration_source": "subprocess-clock"
+        },
+        {
+          "category": "verification",
+          "command": [
+            "python3",
+            "-m",
+            "unittest",
+            "-v",
+            "test_count.py"
+          ],
+          "started_at": "2026-09-05T01:53:33.241076+00:00",
+          "duration_seconds": 0.23645287499999998,
+          "exit_code": 1,
+          "category_source": "caller-declared",
+          "duration_source": "subprocess-clock"
+        },
+        {
+          "category": "implementation",
+          "command": [
+            "python3",
+            "-c",
+            "from pathlib import Path; Path('count.py').write_text(\"import argparse\\nimport json\\n\\n\\nparser = argparse.ArgumentParser(description=\\\"Count widgets.\\\", allow_abbrev=False)\\nparser.add_argument(\\\"count\\\", nargs=\\\"?\\\", type=int, default=0)\\nparser.add_argument(\\\"--json\\\", action=\\\"store_true\\\", help=\\\"Print a JSON object.\\\")\\nargs = parser.parse_args()\\n\\nif args.json:\\n    print(json.dumps({\\\"widgets\\\": args.count}))\\nelse:\\n    print(f\\\"{args.count} widgets\\\")\\n\")"
+          ],
+          "started_at": "2026-09-05T01:53:41.611900+00:00",
+          "duration_seconds": 0.020343458000000002,
+          "exit_code": 0,
+          "category_source": "caller-declared",
+          "duration_source": "subprocess-clock"
+        },
+        {
+          "category": "review",
+          "command": [
+            "git",
+            "diff",
+            "--",
+            "count.py"
+          ],
+          "started_at": "2026-09-05T01:53:41.711384+00:00",
+          "duration_seconds": 0.014955417000000002,
+          "exit_code": 0,
+          "category_source": "caller-declared",
+          "duration_source": "subprocess-clock"
+        },
+        {
+          "category": "verification",
+          "command": [
+            "python3",
+            "-m",
+            "unittest",
+            "-v",
+            "test_count.py"
+          ],
+          "started_at": "2026-09-05T01:53:41.803496+00:00",
+          "duration_seconds": 0.36244604199999997,
+          "exit_code": 0,
+          "category_source": "caller-declared",
+          "duration_source": "subprocess-clock"
+        },
+        {
+          "category": "verification",
+          "command": [
+            "python3",
+            "-c",
+            "from pathlib import Path\nimport subprocess\nimport sys\n\npath = Path(\"count.py\")\noriginal = path.read_bytes()\ntry:\n    path.write_text('print(\"broken\")\\n')\n    result = subprocess.run(\n        [sys.executable, \"-m\", \"unittest\", \"-v\", \"test_count.py\"],\n        capture_output=True, text=True,\n    )\n    print(result.stderr)\n    print(f\"Sabotage test exit: {result.returncode}\")\n    if result.returncode == 0:\n        raise SystemExit(\"ERROR: tests accepted the broken CLI\")\nfinally:\n    path.write_bytes(original)\n"
+          ],
+          "started_at": "2026-09-05T01:54:01.589966+00:00",
+          "duration_seconds": 0.249179958,
+          "exit_code": 0,
+          "category_source": "caller-declared",
+          "duration_source": "subprocess-clock"
+        },
+        {
+          "category": "review",
+          "command": [
+            "git",
+            "diff",
+            "--check"
+          ],
+          "started_at": "2026-09-05T01:54:01.897828+00:00",
+          "duration_seconds": 0.009243708,
+          "exit_code": 0,
+          "category_source": "caller-declared",
+          "duration_source": "subprocess-clock"
+        },
+        {
+          "category": "verification",
+          "command": [
+            "python3",
+            "-m",
+            "unittest",
+            "-v",
+            "test_count.py"
+          ],
+          "started_at": "2026-09-05T01:54:01.986884+00:00",
+          "duration_seconds": 0.358722875,
+          "exit_code": 0,
+          "category_source": "caller-declared",
+          "duration_source": "subprocess-clock"
+        },
+        {
+          "category": "review",
+          "command": [
+            "git",
+            "status",
+            "--short"
+          ],
+          "started_at": "2026-09-05T01:54:02.403247+00:00",
+          "duration_seconds": 0.009417374999999999,
+          "exit_code": 0,
+          "category_source": "caller-declared",
+          "duration_source": "subprocess-clock"
+        },
+        {
+          "category": "implementation",
+          "command": [
+            "git",
+            "add",
+            "count.py",
+            "test_count.py"
+          ],
+          "started_at": "2026-09-05T01:54:08.639809+00:00",
+          "duration_seconds": 0.010067334000000004,
+          "exit_code": 0,
+          "category_source": "caller-declared",
+          "duration_source": "subprocess-clock"
+        },
+        {
+          "category": "implementation",
+          "command": [
+            "git",
+            "commit",
+            "-m",
+            "Add JSON output and argument validation to widget counter"
+          ],
+          "started_at": "2026-09-05T01:54:08.725237+00:00",
+          "duration_seconds": 0.015678708,
+          "exit_code": 0,
+          "category_source": "caller-declared",
+          "duration_source": "subprocess-clock"
+        },
+        {
+          "category": "review",
+          "command": [
+            "git",
+            "status",
+            "--short",
+            "--branch"
+          ],
+          "started_at": "2026-09-05T01:54:08.818157+00:00",
+          "duration_seconds": 0.008765916000000002,
+          "exit_code": 0,
+          "category_source": "caller-declared",
+          "duration_source": "subprocess-clock"
+        }
+      ],
+      "usage": [
+        {
+          "input_tokens": 241826,
+          "cached_input_tokens": 218112,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 2738,
+          "reasoning_output_tokens": 353
+        }
+      ],
+      "activity_seconds": {
+        "implementation": 0.083975708,
+        "verification": 1.20680175,
+        "review": 0.162296
+      },
+      "failed_commands": 2,
+      "pipeline": "not-applicable",
+      "measurement": "partial",
+      "runs": [
+        {
+          "model": "gpt-6-astra",
+          "reasoning": "high",
+          "sandbox": "danger-full-access",
+          "cli": "codex-cli 0.153.4",
+          "command": [
+            "codex",
+            "exec",
+            "--ignore-user-config",
+            "--model",
+            "gpt-6-astra",
+            "-c",
+            "model_reasoning_effort=\"high\"",
+            "--json",
+            "--sandbox",
+            "danger-full-access",
+            "--add-dir",
+            "/Users/jeremymcspadden/orca/evaluations/gsd-path-astra-c9e92cc/direct",
+            "-"
+          ],
+          "exit_code": 0,
+          "started_at": "2026-09-05T01:52:26.614268+00:00",
+          "elapsed_seconds": 119.09546666600001,
+          "head": "b8d024b905082fbe394b8bf09e7b74a98a0372d6"
+        }
+      ]
+    }
+  },
+  "exit_code": 1
+}

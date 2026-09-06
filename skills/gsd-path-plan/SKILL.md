@@ -145,18 +145,17 @@ as stated in Lookahead mode.
    - Prove every intent constraint and synthesis decision is covered, that no
      scope-out veto appears in a task, and that `Project verify` is a real,
      non-placeholder command in PLAN.md.
-   - Run `python3 <absolute check_handoffs.py> plan --repo <absolute repo
-     root>` and `--project-dir .project/next` when the router supplied the
-     lookahead track. A non-zero exit is a gate failure: every INTENT.md
-     success criterion must appear in PLAN.md Intent coverage mapped to a
-     real task AC, and each task's Intent coverage section must match that
-     table. A task Verify that copies Project verify fails unless an owned
-     SC names that command. Any other task Verify must name a path from
-     that task's `files`.
-   - Run `python3 <absolute review_panel.py> validate-plan --plan <absolute
-     PLAN.md> --intent <absolute INTENT.md>` and `--charter <absolute
-     .project/CHARTER.md>` when that file exists. A non-zero exit is a gate
-     failure. Quick mode requires `review_panel: off`.
+   - For a Git-backed plan, run `python3 <absolute workflow_run.py>
+     gate-plan --repo <absolute repo root>` and `--project-dir .project/next`
+     for lookahead. Retain its JSON receipt with the plan gate evidence. It
+     runs pending discussion, intent coverage, task brief paths, and review
+     configuration gates in order; a failure stops the sequence. New declared
+     directories are allowed; existing ancestors must be directories at HEAD.
+     A task Verify must name an owned file unless its owned SC explicitly
+     names Project verify. Quick mode requires the review panel off.
+     Before Git exists, run the bundled `check_handoffs.py plan` and
+     `review_panel.py validate-plan` gates directly; build owns the deferred
+     base-dependent brief check. Approval still uses the journaled helper below.
 4. Redispatch one complete corrected brief under logical task name `plan`,
    following the runtime dispatch contract and including all gate failures.
    Allow one revision round. If it still fails, use `pipeline_state.py

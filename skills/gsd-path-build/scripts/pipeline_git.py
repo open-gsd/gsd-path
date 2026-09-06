@@ -14,6 +14,7 @@ import argparse
 import json
 import os
 import re
+import stat
 import subprocess
 import sys
 from pathlib import Path
@@ -158,10 +159,16 @@ def attest_commit_body(
     paths: Sequence[str],
     verify_command: str,
     ruling: str,
+    *,
+    legacy: bool = False,
 ) -> str:
     lines = [f"Task: {task_file}", f"Base: {base}", f"Head: {head}", "Files:"]
     lines.extend(f"- {path}" for path in sorted(paths))
-    lines.append(f"Verify: {' '.join(verify_command.split())}")
+    if legacy:
+        lines.append(f"Verify: {' '.join(verify_command.split())}")
+    else:
+        lines.append("Attestation: gsd-path/attestation/v2")
+        lines.append(f"Verify-JSON: {json.dumps(verify_command)}")
     lines.append(f"Ruling: {' '.join(ruling.split())}")
     return "\n".join(lines) + "\n"
 
@@ -456,6 +463,39 @@ def _write_bind_next_journal(path: Path, value: dict[str, object]) -> None:
             temporary.unlink()
 
 
+def _initial_binding_snapshot(repo: Path) -> Optional[tuple]:
+    """Admit only clean work or the validated, untracked initializer state."""
+    dirty = _run_git(repo, "status", "--porcelain=v1", "-z", "--untracked-files=all").stdout
+    if not dirty:
+        return None
+    if dirty != "?? .project/STATE.md\0":
+        raise PipelineGitError("primary worktree is not clean")
+    try:
+        import pipeline_state
+    except ImportError:  # pragma: no cover - package import used by tests
+        from scripts import pipeline_state
+
+    project = repo / ".project"
+    path = project / "STATE.md"
+    try:
+        directory = project.lstat()
+        state_file = path.lstat()
+        if (not stat.S_ISDIR(directory.st_mode)
+                or not stat.S_ISREG(state_file.st_mode)
+                or state_file.st_nlink != 1
+                or set(project.iterdir()) != {path}):
+            raise PipelineGitError("initial state must be the sole regular, unlinked .project file")
+        state = pipeline_state.validate_state(repo)["state"]
+        if (state["phase"] not in {"inspect", "define"}
+                or state["status"] != "active"
+                or any(state[key] is not None for key in ("branch", "milestone", "archive"))):
+            raise PipelineGitError("untracked state is not an unbound initial state")
+        return (directory.st_dev, directory.st_ino, state_file.st_dev,
+                state_file.st_ino, path.read_bytes())
+    except (OSError, pipeline_state.PipelineStateError) as error:
+        raise PipelineGitError(f"invalid initial state: {error}") from error
+
+
 def bind_initial_milestone_branch(
     repo: Path,
     branch: str,
@@ -492,8 +532,7 @@ def bind_initial_milestone_branch(
         raise PipelineGitError(
             f"fetched {remote_default} is stale relative to origin"
         )
-    if _run_git(resolved, "status", "--porcelain", "--untracked-files=all").stdout:
-        raise PipelineGitError("primary worktree is not clean")
+    initial_state = _initial_binding_snapshot(resolved)
 
     current = _symbolic_branch(resolved)
     head = _run_git(resolved, "rev-parse", "HEAD").stdout.strip()
@@ -520,8 +559,13 @@ def bind_initial_milestone_branch(
         local_ref = f"refs/heads/{branch}"
         if _ref_exists(resolved, local_ref):
             raise PipelineGitError(f"bound branch already exists: {local_ref}")
+        if _initial_binding_snapshot(resolved) != initial_state:
+            raise PipelineGitError("initial state changed before branch binding")
         _run_git(resolved, "switch", "--no-track", "-c", branch, base_sha)
         status = "bound"
+
+    if _initial_binding_snapshot(resolved) != initial_state:
+        raise PipelineGitError("initial state changed during branch binding")
 
     return {
         "schema": "gsd-path/bind-initial/v1",
