@@ -104,10 +104,10 @@ and Git evidence above; this run does not qualify every supported release host.
 
 ## Inspectable evidence
 
-- [Machine comparison](codex-completed-run/comparison.json)
-- [Native sessions and usage](codex-completed-run/native-sessions.json)
-- [Pipeline commands, outputs, and Git checks](codex-completed-run/pipeline-evidence.json)
-- [Effective permissions](codex-completed-run/effective-permissions.json)
-- [Reproducible Git bundle](codex-completed-run/fixture.bundle)
-- [Bundle verification](codex-completed-run/bundle-verification.txt)
+- [Machine comparison](../codex-completed-run/comparison.json)
+- [Native sessions and usage](../codex-completed-run/native-sessions.json)
+- [Pipeline commands, outputs, and Git checks](../codex-completed-run/pipeline-evidence.json)
+- [Effective permissions](../codex-completed-run/effective-permissions.json)
+- [Reproducible Git bundle](../codex-completed-run/fixture.bundle)
+- [Bundle verification](../codex-completed-run/bundle-verification.txt)
 - [Raw run directory](/Users/jeremymcspadden/orca/evaluations/gsd-path-astra-a84bb28)
