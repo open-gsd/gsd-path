@@ -209,7 +209,9 @@ def _line_value(text: str, label: str) -> str:
     match = re.search(rf"(?m)^{re.escape(label)}\s*(.+)$", text)
     if not match:
         raise HandoffError(f"missing {label.strip()}")
-    value = match.group(1).strip().strip("`")
+    # Bundled templates keep an inline HTML comment after some values
+    # (`Lane: quick   <!-- ... -->`); the comment is not part of the value.
+    value = re.sub(r"\s*<!--.*?-->\s*$", "", match.group(1)).strip().strip("`")
     if not value or value.startswith("<") or value.endswith(">"):
         raise HandoffError(f"{label.strip()} is empty or still a placeholder")
     return value
