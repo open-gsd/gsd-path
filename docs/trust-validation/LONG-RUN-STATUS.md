@@ -5,6 +5,14 @@ Objective (owner): run the entire long run. fix as needed.
 The objective remains unfinished while required native features are unproven. Do not replace live evidence with helper tests.
 No testing time or token limit was set by the owner.
 
+## Resume checkpoint — 2026-09-06 00:21 UTC
+
+- Controlled-fault plan gate passed; evaluator approved. Native plan approval commit `725fabeada1ed6a10ff8a87844117513fff2c488`. Native coder `/root/build_t001` completed and exited at base `d33f49747e086cb363d0d6cd49c999ea8e733064`; parent handle 48820 terminal. Completion receipt confirms no live task/reviewer children and no authoritative Verify, landing or review.
+- Actual one-expression evaluator mutation in disposable `reviews/repo/count.py`: `int(argument)` becomes `int(float(int(argument)))`. Preserved lexical integer validation; tests/task records and every other tracked/untracked file unchanged. This is an evaluator defect, not a coder defect. Complete original patch, before/after bytes and hashes saved under `reviews/fault-evidence/`.
+- External real CLI probe `9007199254740993` passed before mutation and returned incorrect `9007199254740992` after it. `fault-evidence/injection.json` records executable proof and the focused Simplify review. No source behavior change or test weakening.
+- Native thread `01a073f8-3e3c-74c0-a1df-cdd90d45be51` resumed through normal authoritative Verify/deep review at handle 96140. Stop at concrete standing finding/fix-task checkpoint before repair, or passed wave review if no finding stands. Preserve early test catch/miss as actual outcome; no prescribed reviewer verdict. Revalidate handle before resuming.
+- Guard fuse, loop fields, independent panel availability and exact GitHub target approval remain unresolved. Resume did not authorize those separate choices.
+
 ## Active continuation — 2026-09-05 23:48 UTC
 
 Previous goal turn: progress (three-milestone integration/oracle and completed evidence audit). No blocked audit conclusion: a separate reviewed fault case can still make useful progress toward native skeptic/patch proof.
