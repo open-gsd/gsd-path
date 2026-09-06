@@ -537,21 +537,27 @@ def _strip_comments(text: str) -> str:
     return COMMENT_PATTERN.sub("", text)
 
 
-def _numbered_items(section: str) -> Dict[int, str]:
+def _numbered_items(section: str, *, continuations: bool = False) -> Dict[int, str]:
     items: Dict[int, str] = {}
+    current = None
     for line in _strip_comments(section).splitlines():
         match = NUMBERED_ITEM_PATTERN.fullmatch(line.strip())
         if not match:
+            if continuations and current is not None and line[:1].isspace() and line.strip():
+                items[current] += " " + line.strip()
+            elif line.strip():
+                current = None
             continue
         number = int(match.group(1))
         if number in items:
             raise HandoffError(f"repeated numbered item {number}")
         items[number] = match.group(2).strip()
+        current = number
     return items
 
 
 def _success_criteria(intent: str) -> Dict[str, str]:
-    items = _numbered_items(_section(intent, "Success criteria"))
+    items = _numbered_items(_section(intent, "Success criteria"), continuations=True)
     if not items:
         raise HandoffError("INTENT.md has no success criteria")
     expected = list(range(1, max(items) + 1))

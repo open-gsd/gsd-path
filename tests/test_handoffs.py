@@ -1700,6 +1700,37 @@ Tasks reviewed: 2
             self.assertEqual(result["owned"], ["SC1", "SC2"])
             self.assertEqual(result["verdict"], "pass")
 
+    def test_reviews_bind_the_full_wrapped_intent_criterion(self) -> None:
+        for phase in ("wave", "final"):
+            with self.subTest(phase=phase), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                self.write_plan_handoff(root)
+                if phase == "wave":
+                    relative = self.write_wave_review(root)
+                    validate = lambda: check_handoffs.validate_wave(root, review=relative)
+                else:
+                    self.write_state(root, "ship", "active")
+                    self.write_final_review(root)
+                    relative = ".project/review/FINAL.md"
+                    validate = lambda: check_handoffs.validate_final(root)
+                intent = root / ".project/intent/INTENT.md"
+                intent.write_text(intent.read_text().replace(
+                    "1. The demo command prints hello.",
+                    "1. The demo command prints\n   hello.\n   It preserves signed integers.",
+                ))
+                review = root / relative
+                original = review.read_text()
+                review.write_text(original.replace(
+                    "### SC1 — The demo command prints hello.",
+                    "### SC1 — The demo command prints hello. It preserves signed integers.",
+                ))
+                self.assertEqual(validate()["verdict"], "pass")
+                review.write_text(original)
+                with self.assertRaisesRegex(
+                    check_handoffs.HandoffError, "SC1 heading text differs from INTENT.md"
+                ):
+                    validate()
+
     def test_wave_rejects_placeholder_task_evidence(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
