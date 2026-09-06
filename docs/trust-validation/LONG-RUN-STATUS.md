@@ -5,6 +5,14 @@ Objective (owner): run the entire long run. fix as needed.
 The objective remains unfinished while required native features are unproven. Do not replace live evidence with helper tests.
 No testing time or token limit was set by the owner.
 
+## Wrapped-criterion repair — 2026-09-06 00:34 UTC
+
+- The altered task passed authoritative Verify (six tests, one interpreter-dependent skip), then landed as `5bef9657402966e64cc4592a9e0f76d4aea1ea6d`. Both actual native deep lenses reproduced wrong signed integer values; neither was given the evaluator oracle or a prescribed finding. Original reports retained.
+- Native wave gate rejected the reports because `_success_criteria` read only the first physical line of wrapped INTENT criteria. Diagnostic returned ok; parent handle 96140 terminal at `88fd3a8308613c025684df4dad049ee3183655e5`. This is a source parser bug, not an invalid product finding or permission to truncate approved criteria.
+- Source fix `2a3848ea352f00e3e77072ed093f55e721a2a63b`: indented success-criterion continuations are included in exact heading matching; unrelated numbered-list callers retain previous behavior. New real wave/final gate regression observed RED, GREEN, sabotage RED, restored GREEN; omitted continuation still rejected. Focused `tests.test_handoffs tests.test_review_findings`: 112 passed. Sync: 199, no warnings. Receipt `reviews/wrapped-criterion-regression.json`.
+- Native thread resumed at handle 61161 with only affected gate/finding helpers and their import dependencies overridden by external `/Users/jeremymcspadden/orca/evaluations/gsd-path-criterion-repair-2a3848e/scripts`. Fixture installed runtime and reviewer artifacts unchanged. Stop at actual standing finding/full fix-task checkpoint before implementation. Source/runtime provenance `reviews/criterion-repair-runtime.json`.
+- Global Codex and Claude installs updated from 2a3848e; 14 skills each and doctor healthy. Receipt root `/Users/jeremymcspadden/orca/evaluations/gsd-path-global-update-2a3848e`; previous copies backed up. The evaluation fixture remains pinned except the declared external helper override.
+
 ## Resume checkpoint — 2026-09-06 00:21 UTC
 
 - Controlled-fault plan gate passed; evaluator approved. Native plan approval commit `725fabeada1ed6a10ff8a87844117513fff2c488`. Native coder `/root/build_t001` completed and exited at base `d33f49747e086cb363d0d6cd49c999ea8e733064`; parent handle 48820 terminal. Completion receipt confirms no live task/reviewer children and no authoritative Verify, landing or review.
