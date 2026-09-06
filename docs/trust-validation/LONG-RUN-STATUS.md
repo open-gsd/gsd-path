@@ -5,6 +5,18 @@ Objective (owner): run the entire long run. fix as needed.
 The objective remains unfinished while required native features are unproven. Do not replace live evidence with helper tests.
 No testing time or token limit was set by the owner.
 
+## Current terminal checkpoint — 2026-09-06 01:16 UTC
+
+- Resume made progress: source parser repair, exact-criterion instructions, native skeptic proof, verified product repair, and a concrete reproduced repair-closure conflict. Goal remains incomplete; this is the first stopped checkpoint for this new conflict, not three consecutive blocked goal turns. Do not mark goal complete or resume past the cap without an owner ruling.
+- Controlled fault thread `01a073f8-3e3c-74c0-a1df-cdd90d45be51` is terminal. Handle 43995 completed; repo clean at `8b3c1926dd0abd9a53cc2d50bda0444ace621172`, build/blocked. No children running; all sidecars retired. Capture repaired-cap-blocked saved. Every earlier handle in this file is historical.
+- T002 approved, dispatched and landed `29ff777b5da05b8310c510d38d514a5e4f824492` at base `7d8b33bf81e973ac96c8aaaa07325c702c95090d`. New regression RED and sensitivity each failed 12 actual CLI subcases; GREEN/restoration passed. Authoritative Verify once: eight tests, one unchanged skip, 0.469s. External original precision probe passes at `efbc006a061643f097b89284b789c82c51571863`. Receipt `reviews/fault-evidence/repaired-oracle.json`.
+- Wave-1 cycle 3 contract blocked / adversarial pass; both confirm every reported product defect repaired. Disagreement is whether the appended-wave repair may satisfy the original criterion under the immutable task isolation rubric. Canonical grouping blocked/cap_reached, no structural-format errors. No wave-2 review or ship. Do not invent another product fix or rewrite prior verdicts.
+- Native skeptics pass (standing findings only; refutation unexercised); native patch closure fail. Consolidated selected hashes checked: 17 pass, 2 fail (guards/patch), 1 unverifiable (panel), 3 pending (loop/bootstrap/PR), install native not required. Pre-fault consolidated summary retained separately.
+- Review surface and proposed next work: `docs/trust-validation/REPAIR-CLOSURE-DECISION.md`. Owner must resolve the evidence-scope conflict and explicitly authorize continuation past the existing exhausted cap. Recommended: explicit linked/proven repair evidence may close earlier criteria in a new record, with original history intact and deterministic checks; no arbitrary combined branch tip. No new numeric cap proposed.
+- Final global update includes behavior 2a3848e and reviewer instructions 833cb0d; 14 skills each, doctor healthy; evidence `/Users/jeremymcspadden/orca/evaluations/gsd-path-global-update-833cb0d`.
+- Case footprint: 9 native invocations, parent elapsed total 4222.507s; 6 lens reports, 4 skeptic reports, 1 fix task. T002 diff: product +1/-1, tests +25/-0, task record +455/-3. Raw and limitations in `reviews/controlled-fault-footprint.json`. Still heavy verification/artifact effort; no optimality or token saving claim.
+- Older pending prerequisites remain unchanged: guard continuation beyond supplied fuse, owner loop fields, exact GitHub target approval and independent panel family. Generic resume did not resolve them.
+
 ## Review-cycle recovery — 2026-09-06 00:41 UTC
 
 - Corrected external wave gates accepted both unchanged cycle-1 reports. Canonical finding grouping then rejected shortened AC2/AC3 labels (four structural blockers), while identifying legitimate SC2/SC3 groups. This is report format drift, not another parser defect. Handle 61161 terminal at `6ccbc7b0239fdf80c4a9a3f16d476a5ddb173cc8`.

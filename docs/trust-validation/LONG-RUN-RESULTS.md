@@ -2,7 +2,7 @@
 
 The three-milestone native program is integrated, both lookahead promotion outcomes are proven, and the external program oracle passed all 20 checks. Quick and greenfield counter oracles also passed. The run repaired real sources of wasted work, but it has not proved every feature or overall workflow efficiency.
 
-Across the 24 feature groups: 16 native passes, one failed guard test, three unexercised/unavailable paths, three pending owner prerequisites, and installation with no native model requirement. [Consolidated evidence and checked hashes](/Users/jeremymcspadden/orca/evaluations/gsd-path-full-evaluation-summary-20260905.json).
+Across the 24 feature groups: 17 native passes, two failed paths (guards and repair closure), one unavailable panel path, three pending owner prerequisites, and installation with no native model requirement. [Consolidated evidence and checked hashes](/Users/jeremymcspadden/orca/evaluations/gsd-path-full-evaluation-summary-20260905.json).
 
 ## Verified behavior
 
@@ -25,7 +25,8 @@ Across the 24 feature groups: 16 native passes, one failed guard test, three une
 |---|---|
 | Guards | Failed three real disposable-file edits, including explicit trust and hook enablement. Cause unresolved; owner continuation requested after the supplied three-round fuse. |
 | Panels | No independent advertised model family. Same-family lenses do not prove cross-model panel behavior. |
-| Skeptics, patch | No natural blocked finding. These paths remain unexercised; no reviewer finding was fabricated. |
+| Skeptics | Pass for standing findings: four native skeptics upheld actual reproduced failures and canonical grouping created one repair batch. The refutation branch remains unexercised. |
+| Patch | Product repair, tests and landing pass; native closure fails because reviewers disagree whether an appended repair can satisfy the earlier wave. Existing three-cycle cap reached. [Decision needed](REPAIR-CLOSURE-DECISION.md). |
 | Loop | Owner-set max_iterations and wall_clock remain unanswered. Overall testing is unlimited; template examples are not owner values. |
 | Bootstrap, PR integration | Exact private GitHub target approval remains pending; accepted PR integration also requires the owner to merge with a merge commit. No external repository or PR created. |
 
@@ -56,4 +57,15 @@ The latest shared check at da9522c passed 1,025 Python tests with two platform s
 The latest code change is `scripts/check_handoffs.py` and its generated copies, with regression coverage in `tests/test_handoffs.py`. RED: `python3 -B -m unittest tests.test_handoffs.HandoffValidationTests.test_build_plan_gate_preserves_progress_and_checks_contracts` failed with `T001 status must initially be pending`. GREEN: `python3 -B -m unittest tests.test_handoffs tests.test_workflow_run` passed 101 tests. Sabotage restored unconditional initial-state checks; the same regression failed, then passed after restoration. [Exact regression/sabotage receipt](/Users/jeremymcspadden/orca/evaluations/gsd-path-longrun-fixed-20260905/program/build-progress-sabotage.json). Native M002 then passed the repaired gate with both providers still done and dispatched its dependent task.
 
 
-Program closeout: M003 ship `3bfb2bb9dafa71d34417f1fcd6da5c7afe86b9fe`, integration `39d5545b1dbb8627d9cf8b8c904d0ad69f2ef94a`, tag `milestone/003-filtering`. [Final integration receipt](/Users/jeremymcspadden/orca/evaluations/gsd-path-longrun-fixed-20260905/program/m3-validate-integrated-raw.json) · [20-check external oracle](/Users/jeremymcspadden/orca/evaluations/gsd-path-longrun-fixed-20260905/program/product.json). That program thread is terminal. A separate reviewed controlled-fault case is now running to attempt native skeptic/patch coverage; no outcome is claimed yet. [Procedure](/Users/jeremymcspadden/orca/evaluations/gsd-path-review-fault-8ecdb9b-20260905/FAULT-PROCEDURE.md).
+Program closeout: M003 ship `3bfb2bb9dafa71d34417f1fcd6da5c7afe86b9fe`, integration `39d5545b1dbb8627d9cf8b8c904d0ad69f2ef94a`, tag `milestone/003-filtering`. [Final integration receipt](/Users/jeremymcspadden/orca/evaluations/gsd-path-longrun-fixed-20260905/program/m3-validate-integrated-raw.json) · [20-check external oracle](/Users/jeremymcspadden/orca/evaluations/gsd-path-longrun-fixed-20260905/program/product.json). That program thread is terminal. The separate controlled-fault case is terminal: skeptic standing-finding path passes; product repair passes but workflow closure is blocked at the existing review cap. [Procedure](/Users/jeremymcspadden/orca/evaluations/gsd-path-review-fault-8ecdb9b-20260905/FAULT-PROCEDURE.md).
+
+
+## Controlled-fault result — 2026-09-06
+
+The native deep reviewers detected the injected integer defect even though authoritative tests passed. Four actual skeptics upheld the findings. Canonical grouping produced one fix task; its coder added unconditional CLI regressions, demonstrated RED/GREEN/sensitivity/restoration, and preserved existing tests. Repair landing `29ff777b5da05b8310c510d38d514a5e4f824492` passed authoritative Verify (eight tests, one unchanged interpreter-dependent skip) and the external precision oracle. [Repair evidence](/Users/jeremymcspadden/orca/evaluations/gsd-path-review-fault-8ecdb9b-20260905/reviews/T002-repair-capture.md).
+
+Both cycle-3 reviewers confirm the repair; one returns blocked against the immutable original task and the other accepts the proven repair. Grouping reports cap_reached and no structural-format errors. No new product defect is open. [Concrete contract decision and proposed fix](REPAIR-CLOSURE-DECISION.md).
+
+This continuation fixed the source parser that truncated wrapped success criteria (`2a3848e`): wave/final regression RED, GREEN, sabotage RED, restored GREEN; 112 focused handoff/finding tests pass; resource sync 199 with no warnings. Reviewer instructions now require the complete task criterion before the evidence separator (`833cb0d`). Global Codex and Claude copies include both changes; doctor healthy. [Regression receipt](/Users/jeremymcspadden/orca/evaluations/gsd-path-review-fault-8ecdb9b-20260905/reviews/wrapped-criterion-regression.json) · [Global doctor](/Users/jeremymcspadden/orca/evaluations/gsd-path-global-update-833cb0d/doctor.json).
+
+Observed overhead: three review cycles produced six lens reports and four skeptic reports for one conversion defect. The repair added/replaced one product line, added 25 test lines and added 455 task-record lines (three removed). The whole case used nine native invocations totaling 70.4 minutes of parent run time, including setup and recovery; this is not repair-only time or total model computation. A format-only recovery required another review cycle; linked task/intent criteria created four skeptic jobs; ambiguous repair acceptance prevented closure after the product was fixed. These are concrete causes of extra spins, not a claimed target ratio. [Measured footprint](/Users/jeremymcspadden/orca/evaluations/gsd-path-review-fault-8ecdb9b-20260905/reviews/controlled-fault-footprint.json).
