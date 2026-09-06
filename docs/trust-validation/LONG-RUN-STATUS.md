@@ -5,6 +5,14 @@ Objective (owner): run the entire long run. fix as needed.
 The objective remains unfinished while required native features are unproven. Do not replace live evidence with helper tests.
 No testing time or token limit was set by the owner.
 
+## Approved repair-closure continuation — 2026-09-06
+
+- Owner response verbatim: `approve yoir lean`. This approves the pending REPAIR-CLOSURE-DECISION.md proposal and continuation beyond this case's exhausted cap until closure is proven or another required owner decision blocks progress. No new numeric cap; old counts/verdicts remain historical. Other guard/loop/panel/GitHub decisions remain unresolved.
+- Implemented source `00ff7737eddc06d6a569b821d0f7d44a6f94e96a`: read-only `review_findings.py repair-evidence --repo ... --wave <source wave> --cycle <source cycle> --task <repair id>` binds a complete carried batch to canonical original/repair landings, source dependencies/files, exact criteria/observations, unchanged pre-repair reports/product scope and reusable passing Verify. Canonical build/reviewer contracts permit the isolated repair evidence to satisfy original unchanged criteria. No old task/review edits or new persisted repair state.
+- New real-Git CLI tests observed RED before implementation, GREEN after; removing the Verify-evidence guard made the negative test fail, restoration passed. All 18 focused `tests.test_review_findings tests.test_review_repairs` pass; sync 199, no warnings. Receipt `reviews/repair-closure-regression.json`. The helper also successfully resolved actual preserved T002 without changing prior artifacts.
+- Global Codex/Claude updated from 00ff773; doctor healthy; receipt `/Users/jeremymcspadden/orca/evaluations/gsd-path-global-update-00ff773`.
+- Native thread `01a073f8-3e3c-74c0-a1df-cdd90d45be51` resumed at handle 30164. Prompt `reviews/evaluator-approved-repair-closure.txt`. New affected runtime/role override `/Users/jeremymcspadden/orca/evaluations/gsd-path-repair-closure-00ff773`, provenance `reviews/repair-closure-runtime.json`. Ordinary state/isolation helpers stay pinned. Run legal cycle 4 using proven T002 evidence, preserve old blocked cycles/cap metadata and reuse product checks. Stop after actual repair closure before ship. Revalidate the handle; earlier terminal checkpoints below are historical.
+
 ## Current terminal checkpoint — 2026-09-06 01:16 UTC
 
 - Resume made progress: source parser repair, exact-criterion instructions, native skeptic proof, verified product repair, and a concrete reproduced repair-closure conflict. Goal remains incomplete; this is the first stopped checkpoint for this new conflict, not three consecutive blocked goal turns. Do not mark goal complete or resume past the cap without an owner ruling.
