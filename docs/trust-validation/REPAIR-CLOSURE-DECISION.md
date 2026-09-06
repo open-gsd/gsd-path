@@ -1,6 +1,6 @@
 # Repair closure decision
 
-Outcome: the controlled defect is fixed, but the native workflow cannot consistently accept the repair. No additional product defect is open.
+Outcome: implemented and natively verified. Both cycle-4 reviewers accepted the proven repair under the approved rule; canonical grouping reports no findings or blockers. Recorded Verify was reused and 25 prior artifacts were preserved. [Native proof](/Users/jeremymcspadden/orca/evaluations/gsd-path-review-fault-8ecdb9b-20260905/reviews/repair-closure-capture.md). The evidence below preserves the original conflict and decision.
 
 ## Checked evidence
 
@@ -28,7 +28,7 @@ Implementation after approval:
 3. Add executable regressions proving legitimate repaired closure and rejection of invalid repair evidence. Observe failure before the fix, success afterward, and sensitivity to removing the checks. Sync generated resources.
 4. Continue this preserved native case only under the owner's explicit replacement of the exhausted cycle cap. Do not manufacture a new numeric cap. Stop when repaired closure is proven, or when another required owner decision blocks progress.
 
-The owner approved this rule change and the scoped continuation below; implementation still requires native closure proof. It does not authorize editing old reviews, waiving product criteria, another product change, GitHub actions, or changing the other pending guard/loop/panel decisions.
+The owner approved this rule change and the scoped continuation below; native closure proof is now recorded below. It does not authorize editing old reviews, waiving product criteria, another product change, GitHub actions, or changing the other pending guard/loop/panel decisions.
 
 Alternative: keep this native patch-path result blocked and end this case with the product repair verified but workflow closure unproven.
 
@@ -48,3 +48,10 @@ approve yoir lean
 Accepted as approval of the pending proposed repair-closure rule and continuation beyond this case's exhausted cap. The replacement stop rule is the proposed one: stop when repaired closure is proven, or when another required owner decision blocks progress. No numeric cap is invented or silently edited, and prior cycle counts remain historical facts. Other guard, loop, panel and external GitHub decisions are unchanged.
 
 Implemented scope: `review_findings.py repair-evidence` validates one carried finding batch against canonical original/repair landings, exact carried criteria and observations, source-task dependencies, declared files, unchanged prior reports, product ancestry and a reusable passing Verify. It emits read-only evidence for the new review. Canonical build/reviewer instructions explicitly permit that isolated repair evidence to satisfy the original unchanged criteria. Existing task data is sufficient; no old task, report or verdict needs editing.
+
+
+## Verified implementation
+
+Source commit `00ff7737eddc06d6a569b821d0f7d44a6f94e96a`. Regression command `python3 -B -m unittest tests.test_review_repairs.RepairEvidenceTests.test_proven_repair_resolves_to_its_isolated_product_without_reverification` failed before implementation and passed after it. The missing-evidence test failed when the Verify guard was disabled, then passed after restoration. `python3 -B -m unittest tests.test_review_findings tests.test_review_repairs` passed 18 tests. Sync passed for 199 resources. Global Codex and Claude installs include this fix; doctor passed.
+
+Native checkpoint `4364694ac76148c48f6c66fee4a44377256e3378`: both cycle-4 lenses pass, no finding groups/blockers/pending skeptics. No settled product command rerun, new product edit or prior report edit. This closes the approved linked repair case; it does not claim a separate wave-2 verdict or full milestone shipment. Broader evaluation prerequisites remain separate.

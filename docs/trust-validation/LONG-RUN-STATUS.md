@@ -5,6 +5,15 @@ Objective (owner): run the entire long run. fix as needed.
 The objective remains unfinished while required native features are unproven. Do not replace live evidence with helper tests.
 No testing time or token limit was set by the owner.
 
+## Current completed repair checkpoint — 2026-09-06 02:13 UTC
+
+- Owner-approved lean repair closure implemented and natively proven. Source 00ff773; 18 focused tests pass with RED/GREEN/sabotage/restoration; sync 199; global Codex/Claude doctor healthy. Latest primary source docs checkpoint follows this entry.
+- Native thread `01a073f8-3e3c-74c0-a1df-cdd90d45be51` terminal, handle 30164 completed. Both cycle-4 lenses pass; canonical grouping no findings/blockers/pending skeptics. Owner ruling checkpoint fd331c1; final clean checkpoint `4364694ac76148c48f6c66fee4a44377256e3378`. All sidecars retired, no children running. Captured repair-closure-proven.
+- Reused authoritative Verify and precision/range checks, no product edits or new product command executions. All 25 protected prior artifacts unchanged. Canonical summary `reviews/repair-closure-capture.md`, exact receipt `reviews/T002-repair-evidence.json`, preservation `reviews/repair-closure-preservation.json`, findings `reviews/wave-1-cycle-4-findings.json`.
+- Native patch result now pass for linked repair closure; old failed receipt remains in reviews.jsonl. Consolidated counts: 18 pass, guards fail, independent panel unverifiable, loop/bootstrap/PR pending, install native not required. Not full milestone shipment or one-revision certification. Wave-2 standalone verdict and another ship were not part of this scoped stop rule.
+- The previous repair-rule/cap approval blocker is resolved. Do not ask for it again or restart this completed case. Broader goal remains incomplete only for the separately pending guard continuation, owner loop fields, independent model availability and exact GitHub target/merge actions. No new approval for those was inferred from `approve yoir lean`.
+- This turn made progress. Preserve the full broader objective; do not mark it complete based on this repair case. The prior blocked goal service status is not a reason to replay closed work.
+
 ## Approved repair-closure continuation — 2026-09-06
 
 - Owner response verbatim: `approve yoir lean`. This approves the pending REPAIR-CLOSURE-DECISION.md proposal and continuation beyond this case's exhausted cap until closure is proven or another required owner decision blocks progress. No new numeric cap; old counts/verdicts remain historical. Other guard/loop/panel/GitHub decisions remain unresolved.
