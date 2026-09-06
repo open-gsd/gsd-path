@@ -796,6 +796,18 @@ def _normalize_ws(value: str) -> str:
     return " ".join(value.split())
 
 
+def task_review_observation(item: str, task_text: str) -> str:
+    """Separate an exact quoted acceptance criterion from its observed evidence."""
+    item = _normalize_ws(item)
+    section = _common.section_body(task_text, "Acceptance criteria")
+    if section is not None:
+        for criterion in _numbered_items(section, continuations=True).values():
+            prefix = _normalize_ws(criterion) + " — "
+            if item.startswith(prefix):
+                return item[len(prefix) :]
+    return item
+
+
 def _verify_command(task_text: str) -> str:
     body = _section(task_text, "Verify")
     block = VERIFY_BLOCK_PATTERN.search(body)
@@ -1463,16 +1475,8 @@ def validate_wave_evidence(
         ]
         if not evidence:
             raise HandoffError(f"{name} task {task_id} lacks {verdict} evidence")
-        task_criteria = _numbered_items(
-            _section(tasks[task_id], "Acceptance criteria"), continuations=True
-        ).values()
         for item in evidence:
-            item = _normalize_ws(item)
-            for criterion in task_criteria:
-                prefix = _normalize_ws(criterion) + " — "
-                if item.startswith(prefix):
-                    item = item[len(prefix) :]
-                    break
+            item = task_review_observation(item, tasks[task_id])
             _non_placeholder(item, f"{name} task {task_id} {verdict} evidence")
         task_verdicts.append(verdict)
 
