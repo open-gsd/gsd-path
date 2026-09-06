@@ -32,4 +32,3 @@ run all eleven host receipts against it, then publish. The Codex receipt
 above proves the protocol and the assembly tool
 (`evidence/releases/1.0.0/codex/release_receipt.py`); it is bound to its own
 candidate and must be regenerated for the final release candidate.
-
