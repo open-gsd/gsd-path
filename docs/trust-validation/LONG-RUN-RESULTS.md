@@ -18,7 +18,7 @@ Across the 24 feature groups: 20 native passes, no failed feature paths remainin
 | Docs audit | Pass: native stale claim reproduced without code/docs edits | [Audit receipt](/Users/jeremymcspadden/orca/evaluations/gsd-path-longrun-fixed-20260905/reviews.jsonl) |
 | Undo, forensics | Pass: exact unpublished task undo and read-only diagnosis; no native interruption claim | [Recovery receipts](/Users/jeremymcspadden/orca/evaluations/gsd-path-remaining-20260905/reviews.jsonl) |
 | Lookahead | Pass: clean M002 promotion retained approval; changed M003 promotion reopened plan/active and identified T001 | [Six actual checkpoints](/Users/jeremymcspadden/orca/evaluations/gsd-path-longrun-fixed-20260905/program/lookahead-proof.json) |
-| Install | Global Codex and Claude updated, 14 skills each; doctor healthy. Native model proof is not required for installation | [Installer receipt](/Users/jeremymcspadden/orca/evaluations/gsd-path-global-update-5ed6518/doctor.json) |
+| Install | Global Codex and Claude updated, 14 skills each; doctor healthy. Native model proof is not required for installation | [Installer receipt](/Users/jeremymcspadden/orca/evaluations/gsd-path-global-update-e0e1ece/doctor.json) |
 
 ## Open results
 
@@ -29,7 +29,7 @@ Across the 24 feature groups: 20 native passes, no failed feature paths remainin
 | Skeptics | Pass for standing findings: four native skeptics upheld actual reproduced failures and canonical grouping created one repair batch. The refutation branch remains unexercised. |
 
 | Loop | Owner-set max_iterations and wall_clock remain unanswered. Overall testing is unlimited; template examples are not owner values. |
-| Bootstrap, PR integration | Exact private target approved and canonical bootstrap created `jeremymcs/gsd-path-longrun-20260905`; follow-up preview reports complete. PR workflow continues; accepted integration still requires the owner merge commit. |
+| Bootstrap, PR integration | Bootstrap passed. [PR #1](https://github.com/jeremymcs/gsd-path-longrun-20260905/pull/1) is open; two native calls reused the same PR/ship and waited for merge. Both registered Socket checks passed; no required checks or repository Actions CI. Owner merge commit and canonical integration/tag validation remain pending. |
 
 ## Work footprint
 
@@ -91,4 +91,11 @@ The installed guard denied a direct archive-patch event without STATE, ruling ou
 The PR fixture exposed a validator false rejection: the reviewer quoted approved CLI syntax `count.py <integer>` and supplied concrete observed output, but the gate treated the quoted criterion as an unfinished evidence placeholder. Source `3f414a7` excludes only an exact full task-criterion prefix before applying the existing evidence checks. The focused public regression failed before the fix, passed afterward, failed when the fix was removed, and passed after restoration; 118 related tests pass. Global Codex/Claude installs include the fix and report healthy. Native revalidation passed; final preparation reused that same review and the six passing task tests. The distinct compile check passed once. [Regression receipt](/Users/jeremymcspadden/orca/evaluations/gsd-path-external-d8145ab-20260905/pull-request/quoted-criterion-regression.json).
 
 
-The same run then exposed duplicate rejection in archive review and manifest validation. Source `e0e1ece` shares exact criterion extraction and binds any manifest notation exception to the validated FINAL/INTENT row. Unknown criteria, missing observations and other placeholders still fail. The shared-rule change passed 249 affected tests; eight focused checks and a separate sensitivity/restoration covered the final manifest follow-up. Native archive/PR continuation is running with the unchanged review and prior product evidence. [Archive regression receipt](/Users/jeremymcspadden/orca/evaluations/gsd-path-external-d8145ab-20260905/pull-request/archive-criterion-regression.json).
+The same run then exposed duplicate rejection in archive review and manifest validation. Source `e0e1ece` shares exact criterion extraction and binds any manifest notation exception to the validated FINAL/INTENT row. Unknown criteria, missing observations and other placeholders still fail. The shared-rule change passed 249 affected tests; eight focused checks and a separate sensitivity/restoration covered the final manifest follow-up. Native archive/ship passed with protected contents unchanged. PR creation/reuse passed and stopped at the required owner merge; no product checks or reviewers were repeated. [Archive regression receipt](/Users/jeremymcspadden/orca/evaluations/gsd-path-external-d8145ab-20260905/pull-request/archive-criterion-regression.json).
+
+
+## External PR checkpoint
+
+Ship `45af2f03cb5a3f5972622565ff44712ddfc7367b` is published on the exact approved private repository. Native create and repeat calls returned the same PR and `awaiting-merge`; both registered Socket checks passed. No repository Actions CI exists, and no required checks were reported. Merge ancestry and the milestone tag are not proven until the owner merges with a merge commit and the canonical validator runs. [PR receipt](/Users/jeremymcspadden/orca/evaluations/gsd-path-external-d8145ab-20260905/pull-request/PR-PENDING-RECEIPT.json).
+
+The case used nine native invocations totaling 28.7 minutes of parent elapsed time; source repair testing and evaluator work are outside that total. The delivered CLI adds 27 product lines and 102 test lines; the pipeline records 12 files/562 lines. This remains substantial workflow overhead. The concrete reuse proof is narrower: the six-test Verify and single full wave review were reused throughout validator repair and final/ship preparation. [Measured footprint and limits](/Users/jeremymcspadden/orca/evaluations/gsd-path-external-d8145ab-20260905/pull-request/external-footprint.json).

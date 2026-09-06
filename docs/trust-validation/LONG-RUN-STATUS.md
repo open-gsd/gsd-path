@@ -5,6 +5,14 @@ Objective (owner): run the entire long run. fix as needed.
 The objective remains unfinished while required native features are unproven. Do not replace live evidence with helper tests.
 No testing time or token limit was set by the owner.
 
+## PR awaiting owner merge; all native processes terminal — 2026-09-06 03:32 UTC
+
+- Native handle 45888 terminal, same thread `01a0748d-fc65-7900-926f-e1acb58147d8`. Ship `45af2f03cb5a3f5972622565ff44712ddfc7367b`; actual private PR https://github.com/jeremymcs/gsd-path-longrun-20260905/pull/1 is open/mergeable. Two canonical native calls returned the same PR/ship SHA and `awaiting-merge`. No tag/merge/integration proof yet. Two registered Socket checks passed; no required checks or repository GitHub Actions workflows were reported. Default checkout remains clean on main. Protected archive/product hashes unchanged; manifest added and postcommit archive validation passed.
+- Primary receipt `gsd-path-external-d8145ab-20260905/pull-request/PR-PENDING-RECEIPT.json`; raw native-pr-create.stdout and native-pr-reuse.stdout beside it. User was asked to perform GitHub **Create a merge commit** and reply merged. Do not auto-merge or ask again for repository creation/ship approval.
+- After the user merge, resume native router with the e0e1ece external helper directory to validate parentage, origin/main ancestry and canonical milestone tag. Keep all old archived contents/receipts immutable. The actual product root is the approved linked worktree; the native harness still runs from external-root/bootstrap/repo with the explicit actual-root instruction.
+- PR case footprint: 9 native invocations, 1719.745 seconds parent elapsed (28.7 minutes); product count.py +27 lines, tests +102, README +20/-1; 12 pipeline files/562 lines. Source-fix testing and evaluator time are outside that parent sum. No before/after efficiency or token-saving claim. Receipt `pull-request/external-footprint.json`.
+- Consolidated counts remain 20 native pass, 1 independent-panel unavailable, loop and PR integration pending, installation native not required. Overall evaluation remains incomplete. Loop `max_iterations` and `wall_clock` still lack owner values; no independent advertised panel family exists. This turn made substantial progress; do not mark the goal complete or reactivate finished cases. No live native process remains.
+
 ## Archive notation repair; shipping resumed — 2026-09-06 03:22 UTC
 
 - Original wave report passed unchanged with 3f414a7. Final-ready at `d19f166691fcba67ee181a0d6d3808579e1485ec`: all SC1–SC5 met, six task tests and full-wave review reused, compile-only project Verify executed once/pass. Evaluator ship approval recorded in external-root/pull-request/ship-approval.json.
