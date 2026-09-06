@@ -53,6 +53,10 @@ files:              # every file this task may touch — dispatch checks overlap
 ```bash
 <one command that fails if this task wasn't done; names a path from files>
 ```
+<!-- Runs in a fresh sidecar worktree at the landed commit with nothing
+     installed. Provision dependencies inside the command when the project
+     needs them, e.g. `pnpm install --frozen-lockfile && pnpm vitest run
+     src/x.test.ts`. -->
 
 Heavy: no   <!-- yes when this command must not run beside another heavy Verify -->
 

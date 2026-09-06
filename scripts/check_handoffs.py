@@ -988,7 +988,9 @@ def _validate_task_graph(
     task_waves: Dict[str, int] = {}
     task_files: Dict[str, List[str]] = {}
     for task_id, text in tasks.items():
-        _require_task_structure(task_id, text, initial=initial)
+        # Patch mode reopens planning beside landed tasks; only new tasks start clean.
+        landed = _task_scalar(text, task_id, "status") == "done"
+        _require_task_structure(task_id, text, initial=initial and not landed)
         wave = _task_wave(text, task_id)
         deps = _task_deps(text, task_id)
         files = _frontmatter_files(text)

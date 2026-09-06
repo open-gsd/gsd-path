@@ -98,7 +98,9 @@ as stated in Lookahead mode.
    - Require task frontmatter fields `id`, `title`, `wave`, `deps`, `status`,
      `agent`, `base`, `worktree`, `task_branch`, and `files`; require
      initial `status: pending`, `agent: null`, `base: null`,
-     `worktree: null`, and `task_branch: null` values.
+     `worktree: null`, and `task_branch: null` values on every new task.
+     In patch mode, tasks already `done` keep their landed metadata; only
+     the appended patch tasks must start clean.
    - Require every dependency id to exist, forbid later-wave dependencies,
      detect cycles, and forbid file overlap between planned tasks in the same
      wave. Same-wave dependency chains are allowed only when their files do
@@ -144,7 +146,11 @@ as stated in Lookahead mode.
      it, never in a later polish wave.
    - Prove every intent constraint and synthesis decision is covered, that no
      scope-out veto appears in a task, and that `Project verify` is a real,
-     non-placeholder command in PLAN.md.
+     non-placeholder command in PLAN.md. Every Verify — task and project —
+     runs in a fresh sidecar worktree with nothing installed, so a command
+     that needs dependencies must install them first
+     (`pnpm install --frozen-lockfile && ...`); a bare `pnpm typecheck` fails
+     there.
    - For a Git-backed plan, run `python3 <absolute workflow_run.py>
      gate-plan --repo <absolute repo root>` and `--project-dir .project/next`
      for lookahead. Retain its JSON receipt with the plan gate evidence. It
