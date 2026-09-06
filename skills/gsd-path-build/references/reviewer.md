@@ -35,8 +35,11 @@ tasks in this wave as the rubric. For each task:
    when the recorded output plus the isolated diff cannot check the
    criterion. Never use the primary worktree or branch tip as task
    evidence. Do not create or remove Git worktrees yourself.
-4. Mark `pass` or `fail`. Give the criterion, observed result, `file:line`,
-   and concrete fix direction for each failure.
+4. Mark `pass` or `fail`. Before the evidence separator (` — `), copy the
+   complete task acceptance or interface criterion verbatim, joining wrapped
+   lines with spaces. Do not substitute an AC id or summary: finding grouping
+   binds this text to the task. Give the observed result, `file:line`, and
+   concrete fix direction for each failure.
 
 Then check each INTENT.md success criterion owned by a task in this wave
 against that same isolated product. Copy the criterion verbatim from

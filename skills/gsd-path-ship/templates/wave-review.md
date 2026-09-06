@@ -23,7 +23,9 @@ Tasks reviewed: <count>
 
 ## T001 — <title>: <pass | fail>
 
-<!-- Per criterion: -->
+<!-- Per task criterion: copy the full acceptance/interface criterion verbatim
+     before the em dash; join wrapped lines with spaces. An AC id or summary
+     alone cannot be matched by review_findings.py. -->
 - ✅ <criterion> — <evidence: verify output / file:line checked>
 - ❌ <criterion> — found: <what exists instead, file:line>
   fix: <concrete direction a coder can execute without re-investigating>
