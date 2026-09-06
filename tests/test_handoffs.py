@@ -2004,6 +2004,18 @@ Waves checked: 1
                 check_handoffs.validate_final(root)
             self.assertIn("SC1 Surface must name Demo web app", str(failure.exception))
 
+    def test_final_preserves_embedded_surface_delimiters(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_state(root, "ship", "active")
+            self.write_intent_criteria(root, surfaces="CLI `count.py`")
+            self.write_plan_coverage(root, surface_contract=SURFACE_CONTRACT.replace("Demo web app", "CLI `count.py`"))
+            self.write_final_review(root, surface="CLI `count.py`")
+
+            result = check_handoffs.validate_final(root)
+
+            self.assertEqual(result["verdict"], "pass")
+
     def test_final_accepts_a_walked_surface_criterion(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

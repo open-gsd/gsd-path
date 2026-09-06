@@ -69,6 +69,14 @@ except (ValueError, IndexError) as error:
             repo = Path(tmp)
             for name in ('ledger.py', 'reports.py'): (repo / name).write_text(source)
             self.assertEqual(evaluation.evaluate_program(repo)['verdict'], 'pass')
+            unsorted = source.replace("        rows.sort(key=lambda r:r['name'])", "").replace("sorted(rows,key=lambda r:r['name'])", "rows")
+            for name in ('ledger.py', 'reports.py'): (repo / name).write_text(unsorted)
+            result = evaluation.evaluate_program(repo)
+            self.assertEqual(result['verdict'], 'fail')
+            for action in ('list', 'csv'):
+                self.assertTrue(any(not check['pass'] and check.get('command', [None, None])[1] == action
+                                    for check in result['checks']))
+            for name in ('ledger.py', 'reports.py'): (repo / name).write_text(source)
             (repo / 'reports.py').write_text(source.replace("r['name'].startswith(args[1])", 'True'))
             self.assertEqual(evaluation.evaluate_program(repo)['verdict'], 'fail')
 
@@ -124,12 +132,27 @@ except (ValueError, IndexError) as error:
             repo = root / 'quick/repo'
             repo.mkdir(parents=True)
             script = repo / 'count.py'
-            script.write_text(GOOD_COUNTER)
+            (repo / 'counter').mkdir()
+            implementation = repo / 'counter/main.py'
+            implementation.write_text(GOOD_COUNTER)
+            script.write_text('from counter import main')
             with contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(evaluation.main(['accept', '--directory', str(root), '--scenario', 'quick']), 0)
             self.assertEqual(evaluation.report(root)['scenarios']['quick']['product'], 'pass')
-            script.write_text("print('broken')")
+            receipt = root / 'quick/product.json'
+            before = receipt.read_bytes()
+            for path in (script, implementation, repo / 'counter/settings.json'):
+                with self.subTest(path=path.relative_to(repo)):
+                    original = path.read_bytes() if path.exists() else None
+                    path.write_text("changed")
+                    self.assertEqual(evaluation.report(root)['scenarios']['quick']['product'], 'stale')
+                    if original is None:
+                        path.unlink()
+                    else:
+                        path.write_bytes(original)
+            implementation.rename(repo / 'counter/renamed.py')
             self.assertEqual(evaluation.report(root)['scenarios']['quick']['product'], 'stale')
+            self.assertEqual(receipt.read_bytes(), before)
 
     def test_check_reuses_a_pinned_receipt_without_executing_tests_again(self):
         with tempfile.TemporaryDirectory() as tmp:

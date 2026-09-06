@@ -1621,7 +1621,7 @@ def validate_final(
         finding = _source_field(block, "Finding", label)
         fix_direction = _source_field(block, "Fix direction", label)
         if surface is not None:
-            named = _source_field(block, "Surface", label)
+            named = _unquoted(_raw_source_field(block, "Surface", label))
             if _normalize_ws(named).casefold() != _normalize_ws(surface).casefold():
                 raise HandoffError(f"FINAL.md {sc_id} Surface must name {surface}")
             if check.casefold() == "none":

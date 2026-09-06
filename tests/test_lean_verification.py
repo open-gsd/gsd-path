@@ -91,6 +91,35 @@ raise SystemExit(not unittest.TextTestRunner().run(suite).wasSuccessful())
             self.assertEqual(ledger.read_bytes(), before)
             self.assertEqual(git_output(root, "worktree", "list", "--porcelain").count("worktree "), 1)
 
+    def test_prepared_collection_recovers_before_retirement(self):
+        for stage in ("prepared", "collected"):
+            with self.subTest(stage=stage):
+                with tempfile.TemporaryDirectory() as tmp:
+                    root = Path(tmp)
+                    head, _ = self.fixture(root)
+                    write = isolation._write_collect_journal
+                    def interrupt(path, payload):
+                        write(path, payload)
+                        if payload["stage"] == stage:
+                            raise OSError("interrupted after prepare")
+                    with patch.object(isolation, "_write_collect_journal", side_effect=interrupt):
+                        with self.assertRaisesRegex(OSError, "interrupted after prepare"):
+                            lean_verification.verify_project(root, head)
+                    self.assertEqual(len(isolation.collect_artifact_recoveries(root)), 1)
+                    ledger = root / ".project/build/verify-ledger.jsonl"
+                    before = ledger.read_bytes()
+                    run = subprocess.run
+                    def no_replay(command, *args, **kwargs):
+                        if command[:2] == ["bash", "-c"]:
+                            self.fail("project command replayed")
+                        return run(command, *args, **kwargs)
+                    with patch.object(subprocess, "run", side_effect=no_replay):
+                        result = lean_verification.verify_project(root, head)
+                    self.assertTrue(result["reused"])
+                    self.assertEqual(isolation.collect_artifact_recoveries(root), [])
+                    self.assertEqual(ledger.read_bytes(), before)
+                    self.assertFalse(Path(result["execution"]["worktree"]).exists())
+
     def test_project_verification_executes_once_and_rebuilds_evidence_from_receipt(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "repo"

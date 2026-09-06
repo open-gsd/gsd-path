@@ -184,6 +184,16 @@ def verify_project(repo, expected_head):
     if entry and execution is None:
         raise contracts.HandoffError("recorded verification lacks output; preserve and reconcile its evidence")
     if execution is not None:
+        for journal in isolation.collect_artifact_recoveries(repo):
+            if (journal["source_worktree"] == execution["worktree"]
+                    and journal["branch"] == execution["branch"]
+                    and journal["base"] == expected_head
+                    and journal["source"] == relative
+                    and journal["destination"] == relative):
+                isolation.collect_artifact(
+                    repo, Path(execution["worktree"]), expected_head, execution["branch"],
+                    relative, relative, journal["expected_destination"],
+                )
         _retire_execution(repo, expected_head, execution)
         view = _gap_view(command, expected_head, execution, waves)
         if not destination.exists() or destination.read_text() != view:

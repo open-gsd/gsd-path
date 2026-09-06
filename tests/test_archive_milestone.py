@@ -626,6 +626,18 @@ refuted
             self.assertIn("archive milestone number must be >= 1", prepare.stderr)
             self.assertEqual(self.snapshot_worktree(repo), before)
 
+    def test_archive_preserves_wrapped_criterion_bytes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            self.make_repo(repo)
+            intent = repo / ".project/intent/INTENT.md"
+            intent.write_text(intent.read_text().replace("1. demo works", "1. demo\n   works"))
+            before = intent.read_bytes()
+            archive = self.prepare_archive(repo)
+            rendered = self.render_manifest(repo)
+            self.assertEqual(rendered.returncode, 0, rendered.stderr)
+            self.assertEqual((archive / "intent/INTENT.md").read_bytes(), before)
+
     def test_render_manifest_replaces_stale_content_with_derived_values(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             repo = Path(temporary_directory)

@@ -135,8 +135,17 @@ wrapper starts in the primary repo: select a sidecar cwd explicitly when needed.
 
 
 def product_sources(repo):
-    return {path.name: hashlib.sha256(path.read_bytes()).hexdigest()
-            for path in sorted(Path(repo).glob('*.py'))}
+    repo = Path(repo)
+    sources = {}
+    for path in sorted(repo.rglob('*')):
+        relative = path.relative_to(repo)
+        if (relative.parts[0] in {'.git', '.project', '.gsd-path'}
+                or relative.parts[:2] == ('.agents', 'skills')
+                or '__pycache__' in relative.parts):
+            continue
+        if path.is_file():
+            sources[relative.as_posix()] = hashlib.sha256(path.read_bytes()).hexdigest()
+    return sources
 
 
 def evaluate_program(repo):
@@ -159,7 +168,7 @@ def evaluate_program(repo):
             checks.append({'command': [script, *args], 'pass': passed, 'exit_code': p.returncode,
                            'stdout': p.stdout, 'stderr': p.stderr})
         call('ledger.py', ['list'], [], 'json')
-        for name, amount in [('apple', '7'), ('apricot', '-2'), ('b,"x', '4')]:
+        for name, amount in [('b,"x', '4'), ('apricot', '-2'), ('apple', '7')]:
             call('ledger.py', ['add', name, amount])
         rows = [{'name': 'apple', 'amount': 7}, {'name': 'apricot', 'amount': -2}, {'name': 'b,"x', 'amount': 4}]
         call('ledger.py', ['list'], rows, 'json')

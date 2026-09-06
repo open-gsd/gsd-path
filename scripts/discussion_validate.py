@@ -485,20 +485,15 @@ def archived_intent_criteria(archive: Path) -> dict[int, str]:
     if not archive_milestone.is_real_file(intent):
         raise ArchiveError("archived intent must be a real INTENT.md file")
     text = HTML_COMMENT_PATTERN.sub("", intent.read_text(encoding="utf-8"))
-    lines = text.splitlines()
-    section = section_lines(lines, "## Success criteria", "INTENT.md")
-    criteria = {}
-    for line in section:
-        match = INTENT_CRITERION_PATTERN.fullmatch(line.strip())
-        if match is None:
-            continue
-        number = int(match.group(1))
-        if number in criteria:
-            raise ArchiveError(f"INTENT.md repeats success criterion SC{number}")
-        criteria[number] = " ".join(match.group(2).split())
-    if not criteria or sorted(criteria) != list(range(1, max(criteria) + 1)):
-        raise ArchiveError("INTENT.md success criteria must be contiguous from SC1")
-    return criteria
+    try:
+        import check_handoffs
+    except ImportError:
+        from scripts import check_handoffs
+    try:
+        criteria = check_handoffs._success_criteria(text)
+    except check_handoffs.HandoffError as error:
+        raise ArchiveError(str(error)) from error
+    return {int(key[2:]): " ".join(value.split()) for key, value in criteria.items()}
 
 
 def parse_final_review(archive: Path) -> tuple:
