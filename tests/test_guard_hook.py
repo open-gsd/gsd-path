@@ -1249,6 +1249,48 @@ class GuardHookTests(unittest.TestCase):
                 }
             )
 
+    def test_resolves_destructive_archive_ancestor_operands(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            repository = Path(temporary).resolve()
+            (repository / ".project" / "archive" / "001-mvp").mkdir(parents=True)
+            (repository / "scratch").mkdir()
+            (repository / "scratch" / "disposable.txt").touch()
+            root = shlex.quote(str(repository))
+            denied = (
+                f'ROOT={root}; rm -rf "$ROOT"',
+                f'ROOT={root}; rm -rf "$ROOT"; ROOT=scratch',
+                f'ROOT={root}; CHILD=$ROOT; rm -rf "$CHILD"',
+                f'ROOT={root}; command rm -rf "$ROOT"',
+                'rm -rf .proj*',
+                'rm -rf .projec[t]',
+                'TARGET=.proj*; rm -rf "$TARGET"',
+                'Move-Item .proj* elsewhere',
+                'find .proj* -delete',
+                'rm -rf "$GUARD_UNKNOWN_TARGET"',
+                'TARGET=$GUARD_UNKNOWN_TARGET; rm -rf "$TARGET"',
+                'rm -rf "$(echo scratch)"',
+                'rm -rf no-matches-*',
+                'rm -rf **/.project',
+            )
+            allowed = (
+                'echo .proj*',
+                f'ROOT={root}; echo "$ROOT"',
+                'echo "$GUARD_UNKNOWN_TARGET"',
+                'python3 -m unittest tests.test_guard*',
+                f'ROOT={root}; python3 .gsd-path/archive_milestone.py render-manifest --repo "$ROOT"',
+                'TARGET=scratch; rm -rf "$TARGET"',
+                'rm -f scratch/*.txt',
+            )
+            with mock.patch.dict(os.environ, {}, clear=True):
+                for commands, assertion in ((denied, self.assert_denied), (allowed, self.assert_allowed)):
+                    for command in commands:
+                        with self.subTest(command=command):
+                            assertion({
+                                "tool_name": "Bash",
+                                "tool_input": {"command": command},
+                                "cwd": str(repository),
+                            })
+
     def test_denies_deleting_archive_ancestor_on_windows(self):
         previous = Path.cwd()
         with tempfile.TemporaryDirectory() as temporary:

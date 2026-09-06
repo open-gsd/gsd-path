@@ -17,6 +17,7 @@ Malformed input or an internal failure denies the tool call.
 import ast
 from fnmatch import fnmatchcase
 from functools import lru_cache
+import glob
 import json
 import os
 import re
@@ -1029,14 +1030,43 @@ def command_can_destroy_files(invocation):
     )
 
 
-def command_references_archive(tokens, working_directories):
+def destructive_operand_paths(token, directories, assignments):
+    expanded = expand_environment_parameters(token, assignments, preserve_unknown=True)
+    if SHELL_PARAMETER_SYNTAX.search(expanded) or CMD_PARAMETER_SYNTAX.search(expanded):
+        raise ValueError(f"destructive operand {token} cannot be resolved; pass a literal path")
+    for value in path_values(expanded):
+        if any(marker in value for marker in ("{", "}", "**", "$(", "`")):
+            raise ValueError(f"destructive operand {token} cannot be resolved; pass a literal path")
+        if not glob.has_magic(value):
+            yield value
+            continue
+        bases = [""] if is_absolute_path(value) else list(directories) or [str(Path.cwd())]
+        for base in bases:
+            pattern = f"{glob.escape(str(Path(base).resolve()))}/{value}" if base else value
+            matches = glob.glob(pattern)
+            if not matches or any(glob.has_magic(match) for match in matches):
+                raise ValueError(f"destructive operand {token} cannot be resolved; pass a literal path")
+            yield from matches
+
+
+def command_references_archive(tokens, working_directories, assignments=None):
+    assignments = dict(assignments or {})
     for segment, directories in segment_directories(tokens, working_directories):
+        assignments = shell_assignment_values(segment, assignments, preserve_unknown=True)
         invocation = command_invocation(segment)
         ancestors = command_can_destroy_files(invocation)
-        if any(path_in_archive(token, directories, ancestors) for token in segment):
+        if ancestors:
+            operands = (
+                path
+                for token in invocation[1]
+                for path in destructive_operand_paths(token, directories, assignments)
+            )
+        else:
+            operands = segment
+        if any(path_in_archive(path, directories, ancestors) for path in operands):
             return True
         wrapped = wrapped_command_tokens(segment)
-        if wrapped is not None and command_references_archive(wrapped, directories):
+        if wrapped is not None and command_references_archive(wrapped, directories, assignments):
             return True
     return False
 
@@ -1092,25 +1122,26 @@ def protected_shell_write_reason(tokens, working_directories):
     return None
 
 
-def environment_parameter_value(match, assignments):
+def environment_parameter_value(match, assignments, preserve_unknown=False):
     name = match.group(1) or match.group(2)
     if name.startswith(SUBSTITUTION_PLACEHOLDER):
         return match.group(0)  # command substitution output is never resolved
-    return assignments.get(name, os.environ.get(name, ""))
+    fallback = match.group(0) if preserve_unknown else ""
+    return assignments.get(name, os.environ.get(name, fallback))
 
 
-def expand_environment_parameters(command, assignments=None):
+def expand_environment_parameters(command, assignments=None, preserve_unknown=False):
     values = assignments or {}
 
     def substitute(match):
-        return environment_parameter_value(match, values)
+        return environment_parameter_value(match, values, preserve_unknown)
 
     expanded = NAMED_SHELL_PARAMETER_SYNTAX.sub(substitute, command)
     return CMD_PARAMETER_SYNTAX.sub(substitute, expanded)
 
 
-def shell_assignment_values(tokens):
-    values = {}
+def shell_assignment_values(tokens, initial_values=None, preserve_unknown=False):
+    values = dict(initial_values or {})
     for segment in command_segments(tokens):
         variable_command = segment[0].casefold() in VARIABLE_COMMANDS
         for token in segment:
@@ -1119,7 +1150,7 @@ def shell_assignment_values(tokens):
                     continue
                 break
             name, value = token.split("=", 1)
-            values[name] = expand_environment_parameters(value, values)
+            values[name] = expand_environment_parameters(value, values, preserve_unknown)
     return values
 
 
