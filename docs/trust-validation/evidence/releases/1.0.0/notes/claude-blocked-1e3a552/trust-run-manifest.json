@@ -1,0 +1,26 @@
+{
+  "schema": "gsd-path/live-run-manifest/v1",
+  "host": "claude",
+  "run_id": "57e5833a-30c9-4401-a1d2-2f077ec82376",
+  "host_version": "claude 2.1.263 (Claude Code)",
+  "candidate": "1e3a55212ee6fecedb7e751f444af1941cc72775",
+  "package_version": "1.0.0",
+  "child_api": "Agent",
+  "child_id": "build_T001",
+  "guard_tier": "native-fail-closed",
+  "fixture_base_commit": "fa82850bfeb4d3b2178665e3171a871047f3b4a0",
+  "landing_commit": "bc5916227618ec5ffede7b7171f695d3e6d4d055",
+  "task_branch": "gsd-path-verify/task-t001-verify",
+  "bound_branch": "gsd-path/M001",
+  "default_branch": "main",
+  "pre_integration_default_commit": "99a0132b7b8eae69fa6bf4985845b79b2b7cae65",
+  "milestone_tag": "milestone/001-count-cli",
+  "artifacts": {
+    "state": ".project/STATE.md",
+    "verify": ".project/archive/001-count-cli/build/verify-ledger.jsonl",
+    "wave_review": ".project/archive/001-count-cli/review/wave-1.cycle1.md",
+    "final_review": ".project/archive/001-count-cli/review/FINAL.md",
+    "archive": ".project/archive/001-count-cli",
+    "guards": ".project/archive/001-count-cli/guards.json"
+  }
+}

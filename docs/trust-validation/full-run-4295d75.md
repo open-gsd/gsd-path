@@ -129,12 +129,11 @@ Git hooks are unaffected by this and always apply.
 
 ## What still blocks release
 
-- No host has a release receipt in the
-  [LIVE-EVIDENCE-TEMPLATE](LIVE-EVIDENCE-TEMPLATE.md) format. That receipt needs
-  a run manifest committed inside the fixture at the integration commit and a
-  structured child-spawn binding, which the quick scenario does not produce.
-  Today's run cannot be converted after the fact. A dedicated Codex
-  release-evidence run is the next step, then the other ten hosts.
+- See [HOST-MATRIX.md](HOST-MATRIX.md) for current release receipt status and
+  next steps. This run lacks the committed run manifest and structured
+  child-spawn binding required by the
+  [receipt contract](LIVE-EVIDENCE-TEMPLATE.md), so it cannot be converted
+  into a release receipt after the fact.
 - The 2026-09-05 long-run items stay open: private PR #1 awaiting an owner
   merge commit, LOOP.md numeric fields, and an independent model family for
   the review panel.
