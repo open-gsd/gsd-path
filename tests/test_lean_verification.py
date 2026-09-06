@@ -35,8 +35,9 @@ raise SystemExit(not unittest.TextTestRunner().run(suite).wasSuccessful())
             command = [sys.executable, "-B", str(script), "--repo", str(root), "--expected-head", head]
             for reused in (False, True):
                 result = subprocess.run(command, capture_output=True, text=True)
-                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                 receipt = json.loads(result.stdout)
+                self.assertIn("Ran 1 test", receipt["verification"]["execution"]["stderr"])
                 self.assertEqual(receipt["next"], "final-gate", receipt)
                 self.assertEqual(receipt["verification"]["reused"], reused)
                 self.assertTrue(receipt["final"]["reused"])
@@ -179,6 +180,15 @@ Walkthrough:
         intent = root / ".project/intent/INTENT.md"
         intent.write_text(intent.read_text().replace("# Intent — demo", "# Intent — demo\n\nLane: quick"))
         (root / "hello.py").write_text("print('hello')\n")
+        (root / "test_hello.py").write_text(
+            "import subprocess\n"
+            "import sys\n"
+            "import unittest\n\n"
+            "class HelloTests(unittest.TestCase):\n"
+            "    def test_output(self):\n"
+            "        output = subprocess.check_output([sys.executable, 'hello.py'], text=True)\n"
+            "        self.assertEqual(output, 'hello\\n')\n"
+        )
         git(root, "init", "-q", "-b", "gsd-path/M001")
         git(root, "config", "user.email", "test@example.test")
         git(root, "config", "user.name", "Test")
