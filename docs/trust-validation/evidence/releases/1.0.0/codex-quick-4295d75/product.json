@@ -1,0 +1,67 @@
+{
+  "verdict": "pass",
+  "checks": [
+    {
+      "arguments": [],
+      "pass": true,
+      "exit_code": 0,
+      "stdout": "0 widgets\n",
+      "stderr": ""
+    },
+    {
+      "arguments": [
+        "3"
+      ],
+      "pass": true,
+      "exit_code": 0,
+      "stdout": "3 widgets\n",
+      "stderr": ""
+    },
+    {
+      "arguments": [
+        "--json"
+      ],
+      "pass": true,
+      "exit_code": 0,
+      "stdout": "{\"widgets\": 0}\n",
+      "stderr": ""
+    },
+    {
+      "arguments": [
+        "3",
+        "--json"
+      ],
+      "pass": true,
+      "exit_code": 0,
+      "stdout": "{\"widgets\": 3}\n",
+      "stderr": ""
+    },
+    {
+      "arguments": [
+        "--json",
+        "-2"
+      ],
+      "pass": true,
+      "exit_code": 0,
+      "stdout": "{\"widgets\": -2}\n",
+      "stderr": ""
+    },
+    {
+      "arguments": [
+        "invalid"
+      ],
+      "pass": true,
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "usage: count.py [-h] [--json] [count]\ncount.py: error: argument count: invalid int value: 'invalid'\n"
+    }
+  ],
+  "sources": {
+    ".codex/hooks.json": "153d3ba73cca862d45861bb0dfec36ffa8b9f7a3fb36cb1c073bfed9e03b2ea2",
+    "AGENTS.md": "2580990b30132feddb91067fdf957f253bd77711ba3ebe7727a0aad3965e8665",
+    "README.md": "c606e275f340181c26e04a59e1d48212f02ac12124da5f8e5094e78a98a4beb7",
+    "WORKFLOW.md": "a15aca7690ba2516885240c936682b3a0fee604eebb04ae5f5853819e79f5454",
+    "count.py": "6119d42b8df2f5d3bae35b92f8772fcd20aff8535b0997f0be98d27fdac8d6f1",
+    "test_count.py": "5dfb291ab1404759c185bc3924ecfa05940ecd35ab6d7f192b3b639c7fa82c1c"
+  }
+}

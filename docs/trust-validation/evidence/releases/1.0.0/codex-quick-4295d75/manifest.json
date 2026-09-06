@@ -1,0 +1,9 @@
+{
+  "schema": "gsd-path/feature-evaluation/v1",
+  "candidate": "4295d759e104671ff1dbdf6ba0edc6475a5ef602",
+  "created_at": "2026-09-06T18:07:22.189449+00:00",
+  "scenarios": [
+    "quick"
+  ],
+  "host": "codex"
+}
