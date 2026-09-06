@@ -1315,11 +1315,23 @@ class GuardHookTests(unittest.TestCase):
                                 "cwd": str(repository),
                             })
 
-    def test_tracks_unresolved_directory_changes(self):
+    def test_destructive_commands_require_a_single_simple_segment(self):
         with tempfile.TemporaryDirectory() as temporary:
             repository = Path(temporary).resolve() / "repo"
             (repository / ".project" / "archive" / "001-mvp").mkdir(parents=True)
+            (repository / "scratch").mkdir()
             denied = (
+                "(cd scratch); rm -rf .project",
+                "cd missing; rm -rf .project",
+                "echo ready; rm scratch",
+                "true && rm scratch",
+                "false || rm scratch",
+                "echo ready | rm scratch",
+                "echo ready\nrm scratch",
+                "(rm scratch)",
+                "echo $(rm scratch)",
+                "sh -c 'cd scratch; rm old-file.txt'",
+                f"cd rep*; cd {shlex.quote(str(repository))}; rm scratch",
                 "cd ..; cd rep*; rm -rf .project",
                 "cd ..; pushd rep*; mv scratch elsewhere",
                 "cd ..; Set-Location rep*; Remove-Item -Recurse .project",
@@ -1335,10 +1347,16 @@ class GuardHookTests(unittest.TestCase):
             allowed = (
                 "cd ..; cd repo; python3 -m unittest",
                 "cd ..; cd rep*; python3 -m unittest",
-                "cd $TARGET; echo ready",
                 "cd rep*; sh -c 'echo ready'",
-                f"cd rep*; cd {shlex.quote(str(repository))}; rm scratch",
+                "rm scratch",
+                "command rm scratch",
             )
+            for command in denied:
+                with self.subTest(archive_reason=command):
+                    self.assertEqual(
+                        guard_hook.command_denial(command, [str(repository)]),
+                        guard_hook.ARCHIVE_REASON,
+                    )
             for commands, assertion in ((denied, self.assert_denied), (allowed, self.assert_allowed)):
                 for command in commands:
                     with self.subTest(command=command):
@@ -1347,6 +1365,9 @@ class GuardHookTests(unittest.TestCase):
                             "tool_input": {"command": command},
                             "cwd": str(repository),
                         })
+
+    def test_denies_protected_write_after_parameter_directory_change(self):
+        self.assert_denied(self.bash("TARGET=.project; cd $TARGET; printf broken > STATE.md"))
 
     def test_denies_deleting_archive_ancestor_on_windows(self):
         previous = Path.cwd()
@@ -1730,13 +1751,13 @@ class GuardHookTests(unittest.TestCase):
             "command -v python3",
             "eval echo hello",
             "declare NAME=value",
-            "cd $(mktemp -d) && ls",
         ):
             with self.subTest(command=command):
                 self.assert_allowed(self.bash(command))
 
     def test_denials_name_the_shell_construct(self):
         for command, construct in (
+            ("cd $(mktemp -d) && ls", "cd target $(mktemp -d)"),
             ("source ./env.sh", "source runs the script file ./env.sh"),
             (". ./env.sh", ". runs the script file ./env.sh"),
             ("find . -exec rm {} \\;", "find -exec runs rm"),
@@ -1814,7 +1835,6 @@ class GuardHookTests(unittest.TestCase):
                     ("cp STATE.md .project/STATE.md", ".project/STATE.md"),
                     ("rm -rf .project", ".project"),
                     ("touch .gsd-path/guard_hook.py", ".gsd-path/guard_hook.py"),
-                    ("cd .project && rm STATE.md", "STATE.md"),
                     ("bash -c 'echo x > .project/STATE.md'", ".project/STATE.md"),
                     ("cat <<EOF > .project/STATE.md\nphase: build\nEOF", ".project/STATE.md"),
                 ):
@@ -1822,6 +1842,9 @@ class GuardHookTests(unittest.TestCase):
                         status, _, error = run_guard(self.bash(command))
                         self.assertEqual(status, 2)
                         self.assertIn("shell command writes " + path, error)
+                status, _, error = run_guard(self.bash("cd .project && rm STATE.md"))
+                self.assertEqual(status, 2)
+                self.assertIn(guard_hook.ARCHIVE_REASON, error)
                 for command in (
                     "echo x > build.log",
                     "echo x > .project/plan/PLAN.md",

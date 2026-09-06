@@ -993,7 +993,7 @@ def directory_change_target(arguments):
 
 def segment_directories(tokens, working_directories):
     """Yield each command segment with the working directories in effect for it."""
-    current_directories = None if working_directories is None else list(working_directories)
+    current_directories = list(working_directories)
     for segment in command_segments(tokens):
         yield segment, current_directories
         invocation = command_invocation(segment)
@@ -1006,12 +1006,15 @@ def segment_directories(tokens, working_directories):
             )
         if command not in DIRECTORY_CHANGE_COMMANDS:
             continue
-        target = literal_path(directory_change_target(arguments))
-        if target is None:
-            current_directories = None
-        elif is_absolute_path(target):
+        target = directory_change_target(arguments)
+        if SHELL_PARAMETER_SYNTAX.search(target):
+            raise ValueError(
+                f"cd target {target} cannot be resolved by the guard; "
+                "run that command first and cd to the literal result"
+            )
+        if is_absolute_path(target):
             current_directories = [target]
-        elif current_directories is not None:
+        else:
             bases = current_directories or ["."]
             current_directories = [f"{base}/{target}" for base in bases]
 
@@ -1050,10 +1053,8 @@ def command_references_archive(tokens, working_directories):
         ancestors = command_can_destroy_files(invocation)
         operands = segment
         if ancestors:
-            if directories is None:
-                raise ValueError("destructive command has an unresolved working directory")
             operands = [literal_destructive_operand(operand) for operand in invocation[1]]
-        if any(path_in_archive(operand, directories or (), ancestors) for operand in operands):
+        if any(path_in_archive(operand, directories, ancestors) for operand in operands):
             return True
         wrapped = wrapped_command_tokens(segment, expand_parameters=False)
         if wrapped is not None and command_references_archive(wrapped, directories):
@@ -1070,7 +1071,7 @@ def shell_write_targets(tokens, working_directories):
             target = segment[index + 1]
             if token.endswith("&") and (target.isdigit() or target == "-"):
                 continue
-            yield target, directories or ()
+            yield target, directories
         wrapped = wrapped_command_tokens(segment)
         if wrapped is not None:
             yield from shell_write_targets(wrapped, directories)
@@ -1086,7 +1087,7 @@ def shell_write_targets(tokens, working_directories):
         if command.removesuffix(".exe") in SHELL_WRITE_COMMANDS or in_place:
             for argument in arguments:
                 if argument and not argument.startswith("-"):
-                    yield argument, directories or ()
+                    yield argument, directories
 
 
 def protected_shell_write_reason(tokens, working_directories):
@@ -1771,15 +1772,38 @@ def evaluate(event):
             deny(reason)
 
 
-def command_denial(command, working_directories):
+def destructive_shell_invocations(tokens):
+    for segment in command_segments(tokens):
+        invocation = command_invocation(segment)
+        if command_can_destroy_files(invocation):
+            yield invocation
+        wrapped = wrapped_command_tokens(segment, expand_parameters=False)
+        if wrapped is not None:
+            yield from destructive_shell_invocations(wrapped)
+
+
+def command_denial(command, working_directories, allow_destructive=True):
     """Return why a shell command is denied, or None when it may run."""
     outer, substitutions = split_command_substitutions(command)
     try:
+        tokens = shell_tokens(outer)
+        destructive = list(destructive_shell_invocations(tokens))
+        if destructive and (
+            not allow_destructive
+            or substitutions
+            or any(char in command for char in ";&|()\n\r`")
+            or len(list(command_segments(tokens))) != 1
+            or any(
+                literal_path(operand) is None
+                for _, operands in destructive
+                for operand in operands
+            )
+        ):
+            return ARCHIVE_REASON
         for inner in substitutions:
-            reason = command_denial(inner, working_directories)
+            reason = command_denial(inner, working_directories, allow_destructive=False)
             if reason is not None:
                 return reason
-        tokens = shell_tokens(outer)
         archive_context = (
             any(working_directory_in_archive(path) for path in working_directories)
             or bool(ARCHIVE_REFERENCE.search(outer))
