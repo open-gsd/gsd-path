@@ -17,7 +17,6 @@ Malformed input or an internal failure denies the tool call.
 import ast
 from fnmatch import fnmatchcase
 from functools import lru_cache
-import glob
 import json
 import os
 import re
@@ -1030,43 +1029,24 @@ def command_can_destroy_files(invocation):
     )
 
 
-def destructive_operand_paths(token, directories, assignments):
-    expanded = expand_environment_parameters(token, assignments, preserve_unknown=True)
-    if SHELL_PARAMETER_SYNTAX.search(expanded) or CMD_PARAMETER_SYNTAX.search(expanded):
-        raise ValueError(f"destructive operand {token} cannot be resolved; pass a literal path")
-    for value in path_values(expanded):
-        if any(marker in value for marker in ("{", "}", "**", "$(", "`")):
-            raise ValueError(f"destructive operand {token} cannot be resolved; pass a literal path")
-        if not glob.has_magic(value):
-            yield value
-            continue
-        bases = [""] if is_absolute_path(value) else list(directories) or [str(Path.cwd())]
-        for base in bases:
-            pattern = f"{glob.escape(str(Path(base).resolve()))}/{value}" if base else value
-            matches = glob.glob(pattern)
-            if not matches or any(glob.has_magic(match) for match in matches):
-                raise ValueError(f"destructive operand {token} cannot be resolved; pass a literal path")
-            yield from matches
-
-
-def command_references_archive(tokens, working_directories, assignments=None):
-    assignments = dict(assignments or {})
+def command_references_archive(tokens, working_directories):
     for segment, directories in segment_directories(tokens, working_directories):
-        assignments = shell_assignment_values(segment, assignments, preserve_unknown=True)
         invocation = command_invocation(segment)
         ancestors = command_can_destroy_files(invocation)
         if ancestors:
-            operands = (
-                path
-                for token in invocation[1]
-                for path in destructive_operand_paths(token, directories, assignments)
-            )
-        else:
-            operands = segment
-        if any(path_in_archive(path, directories, ancestors) for path in operands):
+            for operand in invocation[1]:
+                if (
+                    "$" in operand or "`" in operand
+                    or CMD_PARAMETER_SYNTAX.search(operand)
+                    or getattr(operand, "unquoted_glob", any(char in operand for char in "*?["))
+                ):
+                    raise ValueError(
+                        f"destructive operand {operand} cannot be validated; pass a literal path"
+                    )
+        if any(path_in_archive(token, directories, ancestors) for token in segment):
             return True
-        wrapped = wrapped_command_tokens(segment)
-        if wrapped is not None and command_references_archive(wrapped, directories, assignments):
+        wrapped = wrapped_command_tokens(segment, expand_parameters=False)
+        if wrapped is not None and command_references_archive(wrapped, directories):
             return True
     return False
 
@@ -1122,26 +1102,25 @@ def protected_shell_write_reason(tokens, working_directories):
     return None
 
 
-def environment_parameter_value(match, assignments, preserve_unknown=False):
+def environment_parameter_value(match, assignments):
     name = match.group(1) or match.group(2)
     if name.startswith(SUBSTITUTION_PLACEHOLDER):
         return match.group(0)  # command substitution output is never resolved
-    fallback = match.group(0) if preserve_unknown else ""
-    return assignments.get(name, os.environ.get(name, fallback))
+    return assignments.get(name, os.environ.get(name, ""))
 
 
-def expand_environment_parameters(command, assignments=None, preserve_unknown=False):
+def expand_environment_parameters(command, assignments=None):
     values = assignments or {}
 
     def substitute(match):
-        return environment_parameter_value(match, values, preserve_unknown)
+        return environment_parameter_value(match, values)
 
     expanded = NAMED_SHELL_PARAMETER_SYNTAX.sub(substitute, command)
     return CMD_PARAMETER_SYNTAX.sub(substitute, expanded)
 
 
-def shell_assignment_values(tokens, initial_values=None, preserve_unknown=False):
-    values = dict(initial_values or {})
+def shell_assignment_values(tokens):
+    values = {}
     for segment in command_segments(tokens):
         variable_command = segment[0].casefold() in VARIABLE_COMMANDS
         for token in segment:
@@ -1150,7 +1129,7 @@ def shell_assignment_values(tokens, initial_values=None, preserve_unknown=False)
                     continue
                 break
             name, value = token.split("=", 1)
-            values[name] = expand_environment_parameters(value, values, preserve_unknown)
+            values[name] = expand_environment_parameters(value, values)
     return values
 
 
@@ -1273,8 +1252,40 @@ def decode_patch_path(raw_path, strip_prefix):
     return path
 
 
+class ShellToken(str):
+    def __new__(cls, value, unquoted_glob):
+        token = super().__new__(cls, value)
+        token.unquoted_glob = unquoted_glob
+        return token
+
+
+def mask_literal_globs(command):
+    prefix = "GSD_LITERAL_GLOB_"
+    while prefix in command:
+        prefix += "_"
+    markers = {char: f"{prefix}{index}_" for index, char in enumerate("*?[")}
+    masked = []
+    quote = None
+    escaped = False
+    for char in command:
+        if escaped:
+            masked.append(markers.get(char, char))
+            escaped = False
+            continue
+        if char == "\\" and quote != "'":
+            escaped = True
+        elif char in "\"'":
+            if quote is None:
+                quote = char
+            elif quote == char:
+                quote = None
+        masked.append(markers.get(char, char) if quote else char)
+    return "".join(masked), markers
+
+
 def shell_tokens(command):
     command = strip_heredoc_bodies(LINE_CONTINUATION.sub(r"\1 ", command))
+    command, markers = mask_literal_globs(command)
     lexer = shlex.shlex(command, posix=True, punctuation_chars="|;&()<>\n\r")
     lexer.whitespace = " \t"
     lexer.whitespace_split = True
@@ -1288,7 +1299,13 @@ def shell_tokens(command):
         ) from None
     if not tokens:
         raise ValueError("shell command is empty")
-    return tokens
+    result = []
+    for token in tokens:
+        unquoted_glob = any(char in token for char in "*?[")
+        for char, marker in markers.items():
+            token = token.replace(marker, char)
+        result.append(ShellToken(token, unquoted_glob))
+    return result
 
 
 def command_segments(tokens):
@@ -1468,7 +1485,7 @@ def git_command(segment):
     return arguments[index].casefold(), arguments[index + 1:], git_options
 
 
-def wrapped_command_tokens(segment):
+def wrapped_command_tokens(segment, expand_parameters=True):
     invocation = command_invocation(segment)
     if invocation is None:
         return None
@@ -1512,7 +1529,7 @@ def wrapped_command_tokens(segment):
                         )
                     )
                 payload = arguments[index + 1:]
-                if executable in {"cmd", "cmd.exe"}:
+                if executable in {"cmd", "cmd.exe"} and expand_parameters:
                     payload = [
                         expand_environment_parameters(argument)
                         for argument in payload

@@ -1249,7 +1249,7 @@ class GuardHookTests(unittest.TestCase):
                 }
             )
 
-    def test_resolves_destructive_archive_ancestor_operands(self):
+    def test_denies_expansion_in_destructive_operands(self):
         with tempfile.TemporaryDirectory() as temporary:
             repository = Path(temporary).resolve()
             (repository / ".project" / "archive" / "001-mvp").mkdir(parents=True)
@@ -1258,6 +1258,13 @@ class GuardHookTests(unittest.TestCase):
             root = shlex.quote(str(repository))
             denied = (
                 f'ROOT={root}; rm -rf "$ROOT"',
+                f'ROOT={root}; ROOT=scratch rm -rf "$ROOT"',
+                f"TARGET='scratch {repository}'; rm -rf $TARGET",
+                'TARGET=scratch; rm -rf "$TARGET"',
+                'rm -f scratch/*.txt',
+                'rm -rf .project',
+                'rm -rf "scratch"*',
+                'rm -rf `echo scratch`',
                 f'ROOT={root}; rm -rf "$ROOT"; ROOT=scratch',
                 f'ROOT={root}; CHILD=$ROOT; rm -rf "$CHILD"',
                 f'ROOT={root}; command rm -rf "$ROOT"',
@@ -1278,8 +1285,13 @@ class GuardHookTests(unittest.TestCase):
                 'echo "$GUARD_UNKNOWN_TARGET"',
                 'python3 -m unittest tests.test_guard*',
                 f'ROOT={root}; python3 .gsd-path/archive_milestone.py render-manifest --repo "$ROOT"',
-                'TARGET=scratch; rm -rf "$TARGET"',
-                'rm -f scratch/*.txt',
+                'rm -rf scratch',
+                'rm -rf "scratch"',
+                'rm -f "scratch/*.txt"',
+                "rm -f 'scratch/file?[x]'",
+                'command rm -f "scratch/*.txt"',
+                "sh -c 'rm -f \"scratch/*.txt\"'",
+                r'rm -f scratch/\*.txt',
             )
             with mock.patch.dict(os.environ, {}, clear=True):
                 for commands, assertion in ((denied, self.assert_denied), (allowed, self.assert_allowed)):
