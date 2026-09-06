@@ -1278,6 +1278,14 @@ class GuardHookTests(unittest.TestCase):
                 'rm -rf "$(echo scratch)"',
                 'rm -rf no-matches-*',
                 'rm -rf **/.project',
+                "Remove-Item -Recurse -Force '.proj*'",
+                "Remove-Item -LiteralPath 'scratch/*'",
+                "Move-Item 'scratch/?' elsewhere",
+                'rm -f "scratch/*.txt"',
+                "rm -f 'scratch/file?[x]'",
+                'command rm -f "scratch/*.txt"',
+                "sh -c 'rm -f \"scratch/*.txt\"'",
+                r'rm -f scratch/\*.txt',
             )
             allowed = (
                 'echo .proj*',
@@ -1287,11 +1295,6 @@ class GuardHookTests(unittest.TestCase):
                 f'ROOT={root}; python3 .gsd-path/archive_milestone.py render-manifest --repo "$ROOT"',
                 'rm -rf scratch',
                 'rm -rf "scratch"',
-                'rm -f "scratch/*.txt"',
-                "rm -f 'scratch/file?[x]'",
-                'command rm -f "scratch/*.txt"',
-                "sh -c 'rm -f \"scratch/*.txt\"'",
-                r'rm -f scratch/\*.txt',
             )
             with mock.patch.dict(os.environ, {}, clear=True):
                 for commands, assertion in ((denied, self.assert_denied), (allowed, self.assert_allowed)):

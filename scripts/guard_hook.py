@@ -1038,7 +1038,7 @@ def command_references_archive(tokens, working_directories):
                 if (
                     "$" in operand or "`" in operand
                     or CMD_PARAMETER_SYNTAX.search(operand)
-                    or getattr(operand, "unquoted_glob", any(char in operand for char in "*?["))
+                    or any(char in operand for char in "*?[")
                 ):
                     raise ValueError(
                         f"destructive operand {operand} cannot be validated; pass a literal path"
@@ -1252,40 +1252,8 @@ def decode_patch_path(raw_path, strip_prefix):
     return path
 
 
-class ShellToken(str):
-    def __new__(cls, value, unquoted_glob):
-        token = super().__new__(cls, value)
-        token.unquoted_glob = unquoted_glob
-        return token
-
-
-def mask_literal_globs(command):
-    prefix = "GSD_LITERAL_GLOB_"
-    while prefix in command:
-        prefix += "_"
-    markers = {char: f"{prefix}{index}_" for index, char in enumerate("*?[")}
-    masked = []
-    quote = None
-    escaped = False
-    for char in command:
-        if escaped:
-            masked.append(markers.get(char, char))
-            escaped = False
-            continue
-        if char == "\\" and quote != "'":
-            escaped = True
-        elif char in "\"'":
-            if quote is None:
-                quote = char
-            elif quote == char:
-                quote = None
-        masked.append(markers.get(char, char) if quote else char)
-    return "".join(masked), markers
-
-
 def shell_tokens(command):
     command = strip_heredoc_bodies(LINE_CONTINUATION.sub(r"\1 ", command))
-    command, markers = mask_literal_globs(command)
     lexer = shlex.shlex(command, posix=True, punctuation_chars="|;&()<>\n\r")
     lexer.whitespace = " \t"
     lexer.whitespace_split = True
@@ -1299,13 +1267,7 @@ def shell_tokens(command):
         ) from None
     if not tokens:
         raise ValueError("shell command is empty")
-    result = []
-    for token in tokens:
-        unquoted_glob = any(char in token for char in "*?[")
-        for char, marker in markers.items():
-            token = token.replace(marker, char)
-        result.append(ShellToken(token, unquoted_glob))
-    return result
+    return tokens
 
 
 def command_segments(tokens):
