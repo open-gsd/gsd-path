@@ -2,10 +2,13 @@
 
 <!-- Written by the planner role. Executed wave-by-wave by $gsd-path-build. -->
 
-Project verify: `<command that builds + tests the whole project>`
-<!-- Run once at ship. A task Verify must not copy this command unless an
-     owned INTENT success criterion names it. Otherwise the task Verify
-     names a path from that task's files. -->
+Project verify: `<command that installs dependencies, builds + tests the whole project>`
+<!-- Run once at ship, in a fresh sidecar worktree checked out at the
+     reviewed commit: no node_modules, virtualenv, build output, or untracked
+     env files exist there. The command must provision what it needs first,
+     e.g. `pnpm install --frozen-lockfile && pnpm test`. A task Verify must
+     not copy this command unless an owned INTENT success criterion names it.
+     Otherwise the task Verify names a path from that task's files. -->
 
 ## Config
 
