@@ -163,7 +163,7 @@ raise SystemExit(not unittest.TextTestRunner().run(suite).wasSuccessful())
             self.assertEqual(json.loads(before)["execution"]["exit_code"], 0)
             self.assertIn("verified in", json.loads(before)["execution"]["stdout"])
 
-    def fixture(self, root, surface=False):
+    def fixture(self, root, surface=False, lane_line="Lane: quick"):
         helper = test_handoffs.HandoffValidationTests()
         helper.write_plan_handoff(root)
         if surface:
@@ -178,7 +178,7 @@ Walkthrough:
 1. Run python3 hello.py and observe hello.
 """)
         intent = root / ".project/intent/INTENT.md"
-        intent.write_text(intent.read_text().replace("# Intent — demo", "# Intent — demo\n\nLane: quick"))
+        intent.write_text(intent.read_text().replace("# Intent — demo", f"# Intent — demo\n\n{lane_line}"))
         (root / "hello.py").write_text("print('hello')\n")
         (root / "test_hello.py").write_text(
             "import subprocess\n"
@@ -212,6 +212,25 @@ Walkthrough:
         helper.write_final_review(root)
         (root / ".project/review/FINAL.md").unlink()
         return git_output(root, "rev-parse", "HEAD"), wave
+
+    def test_template_style_lane_comment_still_reuses_the_wave(self):
+        lane_lines = (
+            "Lane: quick   <!-- one deliverable-sized task in one wave -->",
+            """Lane: quick   <!-- standard | quick | milestone — quick: at most two
+                      deliverable-sized tasks in one wave, no RESEARCH or
+                      NEEDS-USER items, no cross-wave risk; set by define at
+                      approval. Quick skips research and decide. Milestone:
+                      derived from an approved ROADMAP.md entry in a program;
+                      research/decide run only when the entry has open
+                      questions. -->""",
+        )
+        for lane_line in lane_lines:
+            with self.subTest(lane_line=lane_line), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                head, _ = self.fixture(root, lane_line=lane_line)
+                result = lean_verification.reuse_final(root, head)
+                self.assertTrue(result["reused"], result)
+                self.assertEqual(check_handoffs.validate_final(root)["verdict"], "pass")
 
     def test_complete_full_wave_becomes_final_without_a_second_review(self):
         with tempfile.TemporaryDirectory() as tmp:
