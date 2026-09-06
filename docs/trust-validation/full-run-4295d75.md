@@ -57,6 +57,32 @@ Product size: `count.py` is 12 lines, `test_count.py` is 59 lines. The
 milestone archive holds 13 pipeline files. The coder wrote one landing commit;
 the reviewer wrote one review; project Verify ran once.
 
+## Reproduce
+
+The tracked [fixture.bundle](evidence/releases/1.0.0/codex-quick-4295d75/fixture.bundle)
+contains the evaluation repository's complete Git history, created with
+`git bundle create <evidence-dir>/fixture.bundle --all`. Bundle verification
+passed. A fresh clone at ship commit
+`65ea78b5d5a5b9e86e58807d65d5de345e87c516` replayed all 16 walkthroughs,
+both ledger entries (including task receipt output), and all 6 oracle checks
+with verdict `pass` and no mismatches.
+
+Run from this repository's root; the temporary clone stays inside the evidence
+directory and is removed on exit:
+
+```sh
+(
+  set -e
+  evidence="$PWD/docs/trust-validation/evidence/releases/1.0.0/codex-quick-4295d75"
+  git bundle verify "$evidence/fixture.bundle"
+  replay_tmp=$(mktemp -d "$evidence/fixture-replay.XXXXXX")
+  trap 'rm -rf "$replay_tmp"' EXIT
+  git clone --branch gsd-path/M001 "$evidence/fixture.bundle" "$replay_tmp/repo"
+  test "$(git -C "$replay_tmp/repo" rev-parse HEAD)" = 65ea78b5d5a5b9e86e58807d65d5de345e87c516
+  python3 -B "$evidence/replay_verification.py" "$replay_tmp/repo" "$PWD" "$evidence/task-verify.json"
+)
+```
+
 ## Native run footprint
 
 Five harness invocations on one Codex thread, model gpt-6-astra, reasoning
