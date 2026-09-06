@@ -6,7 +6,7 @@ full-milestone receipt for every host below.
 
 | Host | Install | Native guard installed | Full live milestone | Current posture |
 |---|---|---|---|---|
-| Codex | automated | project hook requires `/hooks` trust; Git hooks guaranteed | missing | release blocked |
+| Codex | automated | project hook requires `/hooks` trust; Git hooks guaranteed | present: [codex.md](evidence/releases/1.0.0/codex.md), candidate 1e3a552, 2026-09-06 | receipt passes the validator; release still blocked by the other hosts |
 | Claude Code | automated | fail-closed project hook + Git hooks | missing | release blocked |
 | Grok | automated | not installed; Git hooks | missing | release blocked |
 | OpenCode | automated | not installed; Git hooks | missing | release blocked |

@@ -1,0 +1,11 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "codex",
+  "run_id": "01a0783b-f94a-7770-9e90-d88b6908ffe4",
+  "result": "pass",
+  "step": "reviews",
+  "command": "collaboration.spawn_agent task_name=review_wave_1_cycle_1 in sidecar /Users/jeremymcspadden/orca/evaluations/gsd-path-release-codex-1e3a552/quick/repo.gsd-path/verify/wave-1-cycle-1; python3 -B .agents/skills/gsd-path/scripts/check_handoffs.py wave --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-codex-1e3a552/quick/repo --review .project/review/wave-1.cycle1.md; python3 -B .agents/skills/gsd-path/scripts/workflow_run.py prepare-final --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-codex-1e3a552/quick/repo --expected-head 3b7302ea06888cbcb2ded14ae51997cb01e9c83b (final.reused: true)",
+  "output": "# Review \u2014 wave 1, cycle 1\n\nReviewed HEAD: dde8709df13686c2b177a5fda690ed99aaffe6d7\nReview scope: final\nWave verdict: pass\nCycle: 1\n# Final Review \u2014 reused full wave\n\nReviewed HEAD: 3b7302ea06888cbcb2ded14ae51997cb01e9c83b\nOverall verdict: pass\nSource review: .project/review/wave-1.cycle1.md\nSource commit: dde8709df13686c2b177a5fda690ed99aaffe6d7",
+  "wave_review_artifact": ".project/archive/001-widget-counter/review/wave-1.cycle1.md",
+  "final_review_artifact": ".project/archive/001-widget-counter/review/FINAL.md"
+}

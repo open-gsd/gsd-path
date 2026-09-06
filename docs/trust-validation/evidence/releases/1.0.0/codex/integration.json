@@ -1,0 +1,17 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "codex",
+  "run_id": "01a0783b-f94a-7770-9e90-d88b6908ffe4",
+  "result": "pass",
+  "step": "integration",
+  "command": "python3 -B .agents/skills/gsd-path/scripts/archive_milestone.py integrate --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-codex-1e3a552/quick/repo --slug widget-counter; validate-integrated --slug widget-counter",
+  "output": "{\"archive\": \".project/archive/001-widget-counter\", \"base\": \"4844f69b634c137fd7e040561b92ef497646910b\", \"commit\": \"800dd24c1ecc4e064d7503d50edb8766eb8b2e9c\", \"integrate\": \"4844f69b634c137fd7e040561b92ef497646910b\", \"landing\": \"4844f69b634c137fd7e040561b92ef497646910b\", \"mode\": \"direct\", \"tag\": \"milestone/001-widget-counter\"}",
+  "fixture_bundle": "codex/fixture.bundle",
+  "run_manifest": ".project/archive/001-widget-counter/trust-run-manifest.json",
+  "ship_commit": "800dd24c1ecc4e064d7503d50edb8766eb8b2e9c",
+  "bound_branch": "gsd-path/M001",
+  "default_branch": "main",
+  "pre_integration_default_commit": "5f399714f1fa8b184b0bd5a08f79b4bfe9ce85f2",
+  "integration_commit": "4844f69b634c137fd7e040561b92ef497646910b",
+  "milestone_tag": "milestone/001-widget-counter"
+}

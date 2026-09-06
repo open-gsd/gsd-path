@@ -1,0 +1,13 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "codex",
+  "run_id": "01a0783b-f94a-7770-9e90-d88b6908ffe4",
+  "result": "pass",
+  "step": "guards",
+  "command": "release_receipt.py manifest (git hook check in disposable clone)",
+  "output": "{\n  \"checked_repository\": \"/Users/jeremymcspadden/orca/evaluations/gsd-path-finish-line-4295d75/quick/repo\",\n  \"checked_archive\": \".project/archive/001-widget-counter-cli\",\n  \"steps\": [\n    {\n      \"step\": \"stage and commit a modification to committed .project/archive/001-widget-counter-cli/MANIFEST.md\",\n      \"exit_code\": 1,\n      \"stderr\": \"gsd-path guard blocked the commit:\\n  M .project/archive/001-widget-counter-cli/MANIFEST.md: committed archives are read-only; unstage it with git restore --staged -- .project/archive/001-widget-counter-cli/MANIFEST.md\",\n      \"blocked\": true\n    },\n    {\n      \"step\": \"commit outside archive\",\n      \"exit_code\": 0,\n      \"stderr\": \"\"\n    }\n  ],\n  \"guard_sha256\": {\n    \"fixture\": \"2c0b67825b77de22e5c1fe293f18b14bd397e73a6ce9cc1a304481a4a96bc6bd\",\n    \"checked_repository\": \"2c0b67825b77de22e5c1fe293f18b14bd397e73a6ce9cc1a304481a4a96bc6bd\"\n  },\n  \"pre_commit_hook_sha256\": {\n    \"fixture\": \"8ca6f829bef985637ceda19544f359d96e8ddb5dbf482b182895be7b926b79af\",\n    \"checked_repository\": \"8ca6f829bef985637ceda19544f359d96e8ddb5dbf482b182895be7b926b79af\"\n  },\n  \"checked_commit\": \"65ea78b5d5a5b9e86e58807d65d5de345e87c516\",\n  \"git_hooks\": \"pass\"\n}",
+  "guard_artifact": ".project/archive/001-widget-counter/guards.json",
+  "declared_tier": "git-only",
+  "native_guard": "not-applicable",
+  "git_hooks": "pass"
+}

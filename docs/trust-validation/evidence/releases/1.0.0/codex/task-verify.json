@@ -1,0 +1,11 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "codex",
+  "run_id": "01a0783b-f94a-7770-9e90-d88b6908ffe4",
+  "result": "pass",
+  "step": "task-verify",
+  "command": "python3 -B tests/test_count.py",
+  "output": "{\"command\": \"python3 -B tests/test_count.py\", \"commit\": \"22c6dd741cd8f3c87f1bc71bf19caf40ee845d09\", \"recorded_at\": \"2026-09-06T19:53:08+00:00\", \"result\": \"pass\", \"schema\": \"gsd-path/verify-ledger/v2\"}\n{\"command\": \"python3 -B -m unittest discover -s tests -p 'test_*.py' -v\", \"commit\": \"3b7302ea06888cbcb2ded14ae51997cb01e9c83b\", \"execution\": {\"branch\": \"gsd-path-verify/project-verify\", \"exit_code\": 0, \"stderr\": \"test_invalid_arguments (test_count.CountCliTests) ... ok\\ntest_json_output (test_count.CountCliTests) ... ok\\ntest_text_output (test_count.CountCliTests) ... ok\\n\\n----------------------------------------------------------------------\\nRan 3 tests in 0.317s\\n\\nOK\\n\", \"stdout\": \"\", \"worktree\": \"/Users/jeremymcspadden/orca/evaluations/gsd-path-release-codex-1e3a552/quick/repo.gsd-path/verify/project-verify\"}, \"recorded_at\": \"2026-09-06T19:58:05+00:00\", \"result\": \"pass\", \"schema\": \"gsd-path/verify-ledger/v2\"}\n",
+  "verify_artifact": ".project/archive/001-widget-counter/build/verify-ledger.jsonl",
+  "verify_exit_code": 0
+}
