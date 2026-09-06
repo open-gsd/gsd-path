@@ -2,7 +2,7 @@
 
 The three-milestone native program is integrated, both lookahead promotion outcomes are proven, and the external program oracle passed all 20 checks. Quick and greenfield counter oracles also passed. The run repaired real sources of wasted work, but it has not proved every feature or overall workflow efficiency.
 
-Across the 24 feature groups: 18 native passes, one failed guard path, one unavailable panel path, three pending owner prerequisites, and installation with no native model requirement. [Consolidated evidence and checked hashes](/Users/jeremymcspadden/orca/evaluations/gsd-path-full-evaluation-summary-20260905.json).
+Across the 24 feature groups: 20 native passes, no failed feature paths remaining, one unavailable panel path, two unfinished loop/PR cases, and installation with no native model requirement. [Consolidated evidence and checked hashes](/Users/jeremymcspadden/orca/evaluations/gsd-path-full-evaluation-summary-20260905.json).
 
 ## Verified behavior
 
@@ -24,12 +24,12 @@ Across the 24 feature groups: 18 native passes, one failed guard path, one unava
 
 | Feature | Actual limit on the claim |
 |---|---|
-| Guards | Failed three real disposable-file edits, including explicit trust and hook enablement. Cause unresolved; owner continuation requested after the supplied three-round fuse. |
+| Guards | Pass after owner-approved continuation: removing `--ignore-user-config` restored native hook loading. Actual read succeeded, patch was denied, sentinel hash unchanged. The three prior failures are preserved. |
 | Panels | No independent advertised model family. Same-family lenses do not prove cross-model panel behavior. |
 | Skeptics | Pass for standing findings: four native skeptics upheld actual reproduced failures and canonical grouping created one repair batch. The refutation branch remains unexercised. |
 
 | Loop | Owner-set max_iterations and wall_clock remain unanswered. Overall testing is unlimited; template examples are not owner values. |
-| Bootstrap, PR integration | Exact private GitHub target approval remains pending; accepted PR integration also requires the owner to merge with a merge commit. No external repository or PR created. |
+| Bootstrap, PR integration | Exact private target approved and canonical bootstrap created `jeremymcs/gsd-path-longrun-20260905`; follow-up preview reports complete. PR workflow continues; accepted integration still requires the owner merge commit. |
 
 ## Work footprint
 
@@ -78,4 +78,9 @@ Observed overhead: three review cycles produced six lens reports and four skepti
 
 Eighteen focused tests passed after observed RED, GREEN and missing-evidence sabotage/restoration. Resource sync and both global install doctors pass. Native cycle 4 passed both deep lenses; canonical grouping has no findings or blockers. Recorded Verify and precision checks were reused; all 25 protected prior artifacts remained unchanged. Clean checkpoint `4364694ac76148c48f6c66fee4a44377256e3378`. [Exact proof and provenance](/Users/jeremymcspadden/orca/evaluations/gsd-path-review-fault-8ecdb9b-20260905/reviews/repair-closure-capture.md).
 
-This removes a reproduced source of repeated review work. It does not establish an optimal verification ratio or remove the previously measured four-skeptic and large-log overhead. The full feature evaluation remains incomplete for guards, loop, independent panels and external GitHub cases.
+This removes a reproduced source of repeated review work. It does not establish an optimal verification ratio or remove the previously measured four-skeptic and large-log overhead. The full feature evaluation remains incomplete for loop, independent panels and external GitHub cases.
+
+
+## Native guard configuration correction — 2026-09-06
+
+The installed guard denied a direct archive-patch event without STATE, ruling out that missing-fixture precondition. The next actual Codex invocation removed only `--ignore-user-config` from the previous explicit-hook/trust command. The allowed read completed; Codex logged `Command blocked by PreToolUse hook`; the sentinel hash stayed `0ab817d484d6f1d1d8ed880d289c2e9387a6ba870fe51666fa2323b2c7ab9175`. No plugin code change or trust bypass was needed. This proves the configured Codex 0.153.4 archive guard path, not every specialized host tool path. [Native evidence](/Users/jeremymcspadden/orca/evaluations/gsd-path-remaining-20260905/quick/guard-native-user-config/run.json) · [Host denial](/Users/jeremymcspadden/orca/evaluations/gsd-path-remaining-20260905/quick/guard-native-user-config/stderr.txt).

@@ -5,6 +5,21 @@ Objective (owner): run the entire long run. fix as needed.
 The objective remains unfinished while required native features are unproven. Do not replace live evidence with helper tests.
 No testing time or token limit was set by the owner.
 
+## Guard and bootstrap passed; PR milestone running — 2026-09-06 02:35 UTC
+
+- Native guard handle 74177 terminal: allowed read, actual PreToolUse denial of apply_patch, unchanged sentinel hash. The sole changed command option was removing `--ignore-user-config`. Missing STATE had already been ruled out with direct denial. New pass receipt appended; all three old failures retained. No plugin behavior fix required. This configured-host proof does not apply to other evaluation invocations that still deliberately ignore user configuration.
+- Bootstrap handle 60392 terminal: actual private repo `https://github.com/jeremymcs/gsd-path-longrun-20260905` created through canonical transaction, base `04c115a28ed2f46c2a8260ce6f42ec70ec3b6f39`. Read-only repeat preview returns complete. Default checkout clean on main; linked branch gsd-path/M001, valid define/active. No residual journal, no STATE in default or invocation checkout. Native fresh creation/complete adoption passed; no claim of actual interrupted recovery. Receipt `gsd-path-external-d8145ab-20260905/bootstrap/external-evidence/RECEIPT.md`.
+- Same native thread `01a0748d-fc65-7900-926f-e1acb58147d8` continues at handle 85768 using prompt `bootstrap/pr-definition.txt`: actual project is approved linked worktree; install pinned runtime if required, configure pull-request default through canonical helper, draft counter INTENT then stop for evaluator review. No PR yet. Revalidate handle before resume.
+- Consolidated counts: 20 native pass, 1 unavailable independent panel, loop and PR integration pending, installation native not required. LOOP per-pass numeric values still await owner. Overall evaluation remains unlimited and incomplete.
+
+## Approved external and guard continuation — 2026-09-06 02:34 UTC
+
+- Owner reply verbatim: `approve`. This resolves the pending guard continuation beyond its old three-round fuse and approves the exact private GitHub target `jeremymcs/gsd-path-longrun-20260905`, default checkout `/Users/jeremymcspadden/orca/evaluations/gsd-path-longrun-20260905`, linked worktree `/Users/jeremymcspadden/orca/evaluations/gsd-path-longrun-20260905-gsd-path`, branch `gsd-path/M001`. Do not request these approvals again. The PR merge remains user-performed with a merge commit.
+- LOOP.md numeric values were never proposed or supplied, so generic approval cannot populate them. The question for `max_iterations` and `wall_clock` remains pending; other work continues.
+- New pinned external evaluation root `/Users/jeremymcspadden/orca/evaluations/gsd-path-external-d8145ab-20260905`, candidate `d8145abd6f777445d56800b29e4dfe1a9efa67cd`. Native bootstrap thread `01a0748d-fc65-7900-926f-e1acb58147d8`, handle 60392, started with recorded exact approval. Stop after canonical bootstrap and read-only complete preview, before definition. Revalidate liveness before resume.
+- Guard missing-STATE hypothesis disproven: installed guard denies the archive patch with exit 2 despite absent STATE. Receipt `gsd-path-remaining-20260905/quick/guard-direct-continuation.json`. The three old native failures remain immutable. New native probe changes only removal of `--ignore-user-config`; explicit hooks enablement and exact trust flags unchanged. Receipt directory `quick/guard-native-user-config`, handle 74177. Native result pending.
+- No source behavior change or repeated product verification. The completed repair-closure case stays closed. Goal active; independent authorized work is available.
+
 ## Current completed repair checkpoint — 2026-09-06 02:13 UTC
 
 - Owner-approved lean repair closure implemented and natively proven. Source 00ff773; 18 focused tests pass with RED/GREEN/sabotage/restoration; sync 199; global Codex/Claude doctor healthy. Latest primary source docs checkpoint follows this entry.
