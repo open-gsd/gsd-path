@@ -84,6 +84,7 @@ them.
   code.
 
 Return the task id, `ready` or `blocked`, Verify result, and every changed
-path. `ready` means the orchestrator may independently verify and commit; it
-does not mean the task is done. Keep prose to four lines; the path list may be
-longer.
+path, and end the final message with exactly one line `RESULT: <task id>
+ready` or `RESULT: <task id> blocked`. `ready` means the orchestrator may
+independently verify and commit; it does not mean the task is done. Keep prose
+to four lines; the path list may be longer.

@@ -34,7 +34,16 @@ def output_usage(path: Path) -> int:
     child = False
     starts = 0
     complete = False
-    for line in path.read_text(encoding="utf-8").splitlines():
+    text = path.read_text(encoding="utf-8")
+    try:
+        document = json.loads(text)
+    except ValueError:
+        document = None
+    if isinstance(document, dict) and isinstance(document.get("usage"), dict):
+        # Claude Code `-p --output-format json`: one document with the run's usage.
+        usages.append(document["usage"].get("output_tokens"))
+        text = ""
+    for line in text.splitlines():
         event = json.loads(line)
         if "raw" in event:
             event = json.loads(event["raw"])

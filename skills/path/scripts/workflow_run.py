@@ -37,6 +37,12 @@ def run_workflow(repo: Path, action: str, project_dir: str, expected_head: str =
     try:
         if action == "route":
             step("pipeline_state.py", "route", *common)
+        elif action == "lint-round":
+            head = subprocess.run(["git", "rev-parse", "--verify", "HEAD"],
+                                  cwd=repo, capture_output=True, text=True, check=True).stdout.strip()
+            step("check_task_briefs.py", "--repo", str(repo), "--base", head,
+                 "--tasks-dir", f"{project_dir}/tasks")
+            step("check_handoffs.py", "plan", *common)
         elif action == "prepare-task":
             task = step("isolation.py", "isolate-task", "--repo", str(repo),
                         "--base", expected_head, "--task-id", task_id,
@@ -80,7 +86,7 @@ def run_workflow(repo: Path, action: str, project_dir: str, expected_head: str =
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("route", "gate-plan", "approve-plan", "build-evidence", "prepare-task", "prepare-final"))
+    parser.add_argument("action", choices=("route", "gate-plan", "approve-plan", "build-evidence", "lint-round", "prepare-task", "prepare-final"))
     parser.add_argument("--repo", type=Path, required=True)
     parser.add_argument("--project-dir", choices=(".project", ".project/next"), default=".project")
     parser.add_argument("--expected-head")

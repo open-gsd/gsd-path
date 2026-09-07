@@ -137,6 +137,34 @@ briefs, it never replans.
 For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
 `wave` equals N):
 
+**Dispatch driver.** Steps 1–5 below are deterministic, and the bundled
+`scripts/dispatch_driver.py` runs them: recover, settle exited coders, the
+bookkeeping checkpoint, `ready`, brief lint, `prepare-task`, `activate-task`,
+one child per ready task, then Verify in the isolate, Log append, `land`,
+`verify-record`, and `retire` in task-id order. Prefer it whenever the owner
+supplies a child command (a headless CLI that reads the brief on stdin, for
+example `claude -p --output-format json ...` or `codex exec --json ...`; the
+owner's flags own the child's permissions):
+
+```text
+python3 <absolute dispatch_driver.py> round --repo <absolute primary> --wave <N> \
+  --child-command '<owner command>' [--wait <owner seconds>] \
+  [--child-timeout <owner seconds>]
+```
+
+Act only on its receipt: `done` means every wave task landed — go to step 6;
+`in-flight` means call `round` again; `question` means answer from the
+approved artifacts or the user, record it with `answer --task-id <id>
+--answer '<answer> — <citation>'`, and call `round` again, which redispatches
+the retained isolate; `blocked` names the task, reason, and output and leaves
+the isolate in place — apply the recovery, retry, or plan-defect procedure in
+steps 1–2 by hand, then call `round` again. The driver counts dispatches per
+task per milestone and stops at `--max-attempts` (default 2: the first
+dispatch plus this contract's one logged redispatch); owner token limits, when
+supplied, gate every dispatch through the milestone's budget ledger. Do not repeat a step the receipt
+already proves. Without a child command, dispatch through the runtime
+dispatch contract and perform steps 1–5 by hand.
+
 1. **Recover before dispatch.** Run `python3 <absolute isolation.py> recover
    --repo <absolute primary>`. It is read-only and proves every `done` task's
    landing commit from its exact stamped base (first-parent scan for
@@ -348,7 +376,9 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
      redispatch never consumes the failed-implementation redispatch. When the
      runtime's structured layer exposes a blocking ask/reply channel, relay
      the answer through it with the worker held alive per the runtime
-     dispatch contract instead of redispatching. When
+     dispatch contract instead of redispatching. A dispatch-driver question
+     keeps the isolate active: record the answer with `dispatch_driver.py
+     answer`, and the next `round` redispatches that same isolate. When
      the artifacts admit more than one reading, ask the user through an
      interactive user-input tool when available, record the ruling verbatim
      as the answer, and repair the task contract as a documented plan defect

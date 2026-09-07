@@ -27,7 +27,9 @@ is the single-milestone flow below.
 ## Agent and concurrency contract
 
 Use the host-specific child-agent tool defined by the runtime dispatch contract
-bundled in the `gsd-path` skill. Spawn independent work up to the available
+bundled in the `gsd-path` skill, or the build contract's
+[dispatch driver](RUNTIME.md#dispatch-driver) when the owner supplies a child
+command. Spawn independent work up to the available
 child capacity and batch any remainder. Every spawned agent has isolated
 context, so its brief must include the absolute role path, exact input paths,
 one distinct output path, relevant constraints, the output contract, and the
