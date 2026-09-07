@@ -54,10 +54,10 @@ so the position is unchanged. Then:
    uncommitted assigned final-review outputs may remain. Resolve and record the
    exact full reviewed `HEAD` before dispatch, then prove every task landed
    through the runtime in step 3. Its landing check must return one
-   `proven-landed` or `attested` entry per task; a task adopted after a rebase
-   through `isolation.py adopt-rebase` reports `attested` with `provenance:
-   owner-authorized-rebase` and needs its committed receipt
-   `.project/build/rebase-adoption.json`. Keep bookkeeping in STATE.md
+   `proven-landed` or `attested` entry per task. For rebase recovery, see
+   [Build step 1](../gsd-path-build/SKILL.md). Its receipt
+   `.project/build/rebase-adoption.json` may remain uncommitted only after
+   the runtime's `build_state.verify_landed_tasks` check passes. Keep bookkeeping in STATE.md
    and assigned artifacts; never create extra `.project/` execution reports. Reuse an output only when its
    `Reviewed HEAD` equals that SHA and the complete numbered gap-risk mapping
    still equals the freshly derived risk list. Regenerate the exact assigned
@@ -284,7 +284,9 @@ The persisted `STATE.archive` field is the transaction identity.
      absence is created with an absent-ref lease, the exact ship commit is an
      idempotent success, an owner-adopted rebased milestone (archived
      `build/rebase-adoption.json`) may advance the ref from the adopted head
-     to the ship commit under a lease, and every other value blocks. If origin/main advances
+     to its immediate, canonical `.project/`-only ship child under an exact-SHA
+     lease after the helper proves the clean ship state, receipt, and archived
+     tasks. Every other value blocks. If origin/main advances
      after the local merge but rejects the push, a retry may discard and
      rebuild only the unpublished canonical merge and tag under the helper's
      existing recovery checks.
