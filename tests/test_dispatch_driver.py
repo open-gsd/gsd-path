@@ -304,6 +304,7 @@ class DispatchDriverTests(unittest.TestCase):
     def test_orphaned_active_task_blocks_bookkeeping_and_completion(self) -> None:
         root = self.root
         head = self.fixture(root, deps_t002="[T001]")
+        task = root / ".project/tasks/T001-demo.md"
         self.assertEqual(self.round(root, "--wait", "60", mode="question")["status"], "question")
         record = root / ".git/gsd-path/dispatch/gsd-path-M001/T001/attempt-1/state.json"
         state = json.loads(record.read_text())
@@ -459,6 +460,7 @@ class DispatchDriverTests(unittest.TestCase):
     def test_second_question_after_an_answer_is_still_a_question(self) -> None:
         root = self.root
         self.fixture(root, deps_t002="[T001]")
+        task = root / ".project/tasks/T001-demo.md"
         self.assertEqual(self.round(root, "--wait", "60", mode="question")["status"], "question")
         self.driver(root, "answer", "--task-id", "T001", "--answer", "hello")
         # The fake coder asks again only while no answer is recorded, so pre-seed a second question.
@@ -471,6 +473,7 @@ class DispatchDriverTests(unittest.TestCase):
     def test_finish_recovers_a_retired_parallel_landing_without_repeating_verify(self) -> None:
         root = self.root
         self.fixture(root)
+        task = root / ".project/tasks/T001-demo.md"
         receipt = self.round(root, "--wait", "60")
         self.assertEqual(receipt["status"], "done", receipt)
         landing = next(item for item in receipt["landed"] if item["task"] == "T001")
