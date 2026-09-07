@@ -1,0 +1,17 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "claude",
+  "run_id": "14b85f2e-d8ca-4bc4-b449-f3d0c74008d6",
+  "result": "pass",
+  "step": "task-landing",
+  "command": "python3 -B .claude/skills/gsd-path/scripts/isolation.py land --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-claude-3c32f3d/quick/repo --source /Users/jeremymcspadden/orca/evaluations/gsd-path-release-claude-3c32f3d/quick/repo --base d551781 --task-id T001 (serial isolation; landing 1f62cb0830fff10e9fff9f9357ef90e363b0e2de)",
+  "output": "commit 1f62cb0830fff10e9fff9f9357ef90e363b0e2de\nAuthor:     Feature Evaluation <evaluation@example.invalid>\nAuthorDate: Sun Sep 6 16:59:43 2026 -0500\nCommit:     Feature Evaluation <evaluation@example.invalid>\nCommitDate: Sun Sep 6 16:59:43 2026 -0500\n\n    T001: Extend count.py CLI with --json output, input validation, and real-CLI tests\n    \n    Task: .project/tasks/T001-count-cli-json.md\n    Base: d551781fc4064baf835065f42f3e3a9052c1f52a\n    Files:\n    - .project/tasks/T001-count-cli-json.md\n    - count.py\n    - test_count.py\n\n .project/tasks/T001-count-cli-json.md |  8 +--\n count.py                              | 37 ++++++++++++--\n test_count.py                         | 94 +++++++++++++++++++++++++++++++++++\n 3 files changed, 133 insertions(+), 6 deletions(-)",
+  "fixture_bundle": "claude/fixture.bundle",
+  "run_manifest": ".project/archive/001-count-cli-json/trust-run-manifest.json",
+  "fixture_base_commit": "d551781fc4064baf835065f42f3e3a9052c1f52a",
+  "task_branch": "gsd-path-verify/task-t001-verify",
+  "task_worktree": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-claude-3c32f3d/quick/repo.gsd-path/verify/task-t001-verify",
+  "landing_commit": "1f62cb0830fff10e9fff9f9357ef90e363b0e2de",
+  "isolation_mode": "serial",
+  "isolation_note": "A one-task wave uses the helper's serial mode: the coder worked on the bound branch in the primary worktree at the recorded base, and the named branch and worktree are the isolated Task Verify sidecar created for this task and retired after landing."
+}

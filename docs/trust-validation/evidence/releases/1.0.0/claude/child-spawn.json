@@ -1,0 +1,56 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "claude",
+  "run_id": "14b85f2e-d8ca-4bc4-b449-f3d0c74008d6",
+  "result": "pass",
+  "step": "child-spawn",
+  "command": "Agent",
+  "child_api": "Agent",
+  "child_id": "build_T001",
+  "child_status": "completed",
+  "output": {
+    "child_id": "build_T001",
+    "status": "completed",
+    "run": "run-20260906T215635730250Z",
+    "tool_use": {
+      "id": "toolu_01LLqJPrcuaRZG1wenBc6xiq",
+      "name": "Agent",
+      "input": {
+        "description": "build_T001",
+        "subagent_type": "general-purpose",
+        "run_in_background": true
+      },
+      "prompt_sha256": "42e5e711219b55a9b88d1c3ae53ea2f45fbf8ed3c51cef24193288af89a83bd2"
+    },
+    "task_id": "af0f3e3af5ce2db7c",
+    "task_started": {
+      "type": "system",
+      "subtype": "task_started",
+      "task_id": "af0f3e3af5ce2db7c",
+      "tool_use_id": "toolu_01LLqJPrcuaRZG1wenBc6xiq",
+      "description": "build_T001",
+      "subagent_type": "general-purpose",
+      "is_backgrounded": true,
+      "spawn_depth": 1,
+      "task_type": "local_agent",
+      "uuid": "3d637f8c-187b-43e1-bbf3-75f57331a7ce",
+      "session_id": "14b85f2e-d8ca-4bc4-b449-f3d0c74008d6"
+    },
+    "task_notification": {
+      "tool_use_id": "toolu_01LLqJPrcuaRZG1wenBc6xiq",
+      "task_id": "af0f3e3af5ce2db7c",
+      "status": "completed",
+      "summary": "T001 \u2014 `ready`. Verify `python3 -B -m unittest -v test_count.py` (run through the measured wrapper, category `verification`): PASS, `Ran 11 tests in 0.195s` / `OK`, exit 0. Preflight matched the brief: HEAD equals base `d551781f`, SC1\u2013SC5 exist in INTENT.md, no sibling tasks. Implementation is `argparse`-based (optional `count` positional, `--json` flag in either position); invalid input exits 2 via argparse's usage error, which names the offending value and the usage line with no traceback. No `__pycache__` or other file was created; git was not touched.\n\nChanged paths:\n- /Users/jeremymcspadden/orca/evaluations/gsd-path-release-claude-3c32f3d/quick/repo/count.py (modified)\n- /Users/jeremymcspadden/orca/evaluations/gsd-path-release-claude-3c32f3d/quick/repo/test_count.py (created)\n- /Users/jeremymcspadden/orca/evaluations/gsd-path-release-claude-3c32f3d/quick/repo/.project/tasks/T001-count-cli-json.md (Log entry appended only)"
+    },
+    "tool_result": {
+      "tool_use_id": "toolu_01LLqJPrcuaRZG1wenBc6xiq",
+      "is_error": false,
+      "content": [
+        {
+          "type": "text",
+          "text": "Async agent launched successfully. (This tool result is internal metadata \u2014 never quote or paste any part of it, including the agentId below, into a user-facing reply.)\nagentId: af0f3e3af5ce2db7c (internal ID - do not mention to user. Use SendMessage with to: 'af0f3e3af5ce2db7c', summary: '<5-10 word recap>' to continue this agent.)\nThe agent is working in the background. You will be notified automatically when it completes. You know nothing about its results until that notification arrives \u2014 do not report, assume, or predict them; continue other work or respond to the user in the meantime.\nDo not duplicate this agent's work \u2014 avoid working with the same files or topics it is using.\noutput_file: /private/tmp/claude-501/-Users-jeremymcspadden-orca-evaluations-gsd-path-release-claude-3c32f3d-quick-repo/14b85f2e-d8ca-4bc4-b449-f3d0c74008d6/tasks/af0f3e3af5ce2db7c.output\nDo NOT Read or tail this file via the shell tool \u2014 it is the full subagent JSONL transcript and reading it will overflow your context. If the user asks for progress, say the agent is still running; you'll get a completion notification."
+        }
+      ]
+    }
+  }
+}

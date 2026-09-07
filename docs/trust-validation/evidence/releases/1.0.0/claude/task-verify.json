@@ -1,0 +1,11 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "claude",
+  "run_id": "14b85f2e-d8ca-4bc4-b449-f3d0c74008d6",
+  "result": "pass",
+  "step": "task-verify",
+  "command": "python3 -B -m unittest -v test_count.py",
+  "output": "{\"command\": \"python3 -B -m unittest -v test_count.py\", \"commit\": \"1f62cb0830fff10e9fff9f9357ef90e363b0e2de\", \"recorded_at\": \"2026-09-06T21:59:52+00:00\", \"result\": \"pass\", \"schema\": \"gsd-path/verify-ledger/v2\"}\n{\"command\": \"python3 -B count.py --json && python3 -B -m unittest -v test_count.py\", \"commit\": \"dfc13e23eccc77d5e13cd20be668eb195de290fc\", \"execution\": {\"branch\": \"gsd-path-verify/project-verify\", \"exit_code\": 0, \"stderr\": \"test_more_than_one_count (test_count.InvalidInputTests) ... ok\\ntest_non_integer_decimal (test_count.InvalidInputTests) ... ok\\ntest_non_integer_word (test_count.InvalidInputTests) ... ok\\ntest_unknown_option (test_count.InvalidInputTests) ... ok\\ntest_json_flag_after_count (test_count.JsonOutputTests) ... ok\\ntest_json_flag_alone_defaults_to_zero (test_count.JsonOutputTests) ... ok\\ntest_json_flag_before_count (test_count.JsonOutputTests) ... ok\\ntest_negative_count (test_count.TextOutputTests) ... ok\\ntest_no_arguments_prints_zero_widgets (test_count.TextOutputTests) ... ok\\ntest_plus_signed_count (test_count.TextOutputTests) ... ok\\ntest_positive_count (test_count.TextOutputTests) ... ok\\n\\n----------------------------------------------------------------------\\nRan 11 tests in 0.198s\\n\\nOK\\n\", \"stdout\": \"{\\\"widgets\\\": 0}\\n\", \"worktree\": \"/Users/jeremymcspadden/orca/evaluations/gsd-path-release-claude-3c32f3d/quick/repo.gsd-path/verify/project-verify\"}, \"recorded_at\": \"2026-09-06T22:04:01+00:00\", \"result\": \"pass\", \"schema\": \"gsd-path/verify-ledger/v2\"}\n",
+  "verify_artifact": ".project/archive/001-count-cli-json/build/verify-ledger.jsonl",
+  "verify_exit_code": 0
+}

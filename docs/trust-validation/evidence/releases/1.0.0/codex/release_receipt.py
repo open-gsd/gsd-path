@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Assemble a gsd-path live-evidence release receipt for the codex host from a real run.
+"""Assemble a gsd-path live-evidence release receipt from a real Codex or Claude run.
+
+Select --host codex (the default) or --host claude before the phase name.
+Claude manifest requires --native-guard-evidence pointing to a passing probe JSON.
+For receipt, --transcript is a Codex session JSONL file or a Claude run root
+containing quick/run-*/events.jsonl.
 
 Two phases, both driven by the evaluator against the fixture repository:
 
@@ -10,15 +15,15 @@ Two phases, both driven by the evaluator against the fixture repository:
                <host>.md under the repo's evidence directory, then validates them with
                scripts/check_trust_evidence._validate_receipt.
 
-Every value comes from the fixture repository, the harness records, or the Codex
+Every value comes from the fixture repository, the harness records, or the host
 session transcript; nothing is invented.
 """
 import argparse, datetime as dt, json, os, re, shutil, subprocess, sys, tempfile
 from pathlib import Path
 
-HOST = "codex"
-CHILD_API = "collaboration.spawn_agent"
-GUARD_TIER = "git-only"
+HOSTS = {"codex": {"child_api": "collaboration.spawn_agent", "guard_tier": "git-only", "skill_root": ".agents/skills"},
+         "claude": {"child_api": "Agent", "guard_tier": "native-fail-closed", "skill_root": ".claude/skills"}}
+HOST = CHILD_API = GUARD_TIER = None  # bound from --host in main()
 STEP = "gsd-path/live-step-evidence/v1"
 
 
@@ -77,7 +82,7 @@ def git_hook_check(repo, archive_rel, committed_repo=None, committed_archive=Non
         for hook in ("pre-commit", "commit-msg"):
             src = source / ".git/hooks" / hook
             if src.exists():
-                shutil.copy2(src, clone / ".git/hooks" / hook)
+                shutil.copy2(src, clone / ".git/hooks" / hook)  # keep the source mode: an inert hook must stay inert
         git(clone, "config", "user.name", "Guard Check"); git(clone, "config", "user.email", "guard@example.invalid")
         if not git(clone, "ls-files", archive):
             raise SystemExit(f"{source} has no committed archive at {archive}")
@@ -111,9 +116,18 @@ def phase_manifest(a):
     if len(landing.split()) != 1:
         raise SystemExit(f"expected one landing commit for {task['file'].name}, found {landing!r}")
     hooks = git_hook_check(repo, archive, a.committed_archive_repo, a.committed_archive)
+    if GUARD_TIER == "git-only":
+        native, native_evidence = "not-applicable", {"note": f"{HOST} is declared git-only; native enforcement is not required for this tier"}
+    else:
+        if not a.native_guard_evidence:
+            raise SystemExit(f"{HOST} is {GUARD_TIER}: --native-guard-evidence <probe json> is required")
+        native_evidence = json.loads(Path(a.native_guard_evidence).read_text())
+        native = native_evidence.get("native_guard")
+        if native != "pass":
+            raise SystemExit("native guard probe did not pass")
     guards = {"schema": "gsd-path/live-guard-evidence/v1", "host": HOST, "run_id": a.run_id,
-              "declared_tier": GUARD_TIER, "native_guard": "not-applicable", "git_hooks": hooks["git_hooks"],
-              "native_guard_note": "codex is declared git-only; native PreToolUse enforcement is not required for this tier",
+              "declared_tier": GUARD_TIER, "native_guard": native, "git_hooks": hooks["git_hooks"],
+              "native_guard_evidence": native_evidence,
               "git_hook_check": hooks, "checked_at": dt.datetime.now(dt.timezone.utc).isoformat()}
     manifest = {"schema": "gsd-path/live-run-manifest/v1", "host": HOST, "run_id": a.run_id,
                 "host_version": a.host_version, "candidate": a.candidate, "package_version": a.package_version,
@@ -137,6 +151,8 @@ def phase_manifest(a):
 
 
 def transcript_child(transcript, child_id):
+    if HOST == "claude":
+        return claude_child(transcript, child_id)
     recs = [json.loads(l) for l in Path(transcript).read_text().splitlines() if l.strip()]
     spawn = spawn_out = None; call_id = None; statuses = []
     for r in recs:
@@ -165,6 +181,71 @@ def transcript_child(transcript, child_id):
             "list_agents_states": statuses}
 
 
+def claude_child(run_root, child_id, landed_tool_use_id=None):
+    """Bind each Agent attempt to completion evidence from the recorded stream.
+
+    A caller with proven landing evidence can select its tool-use ID explicitly.
+    Otherwise the last completed attempt supplies the receipt.
+    """
+    attempts = {}
+    completion_events = []
+    for events in sorted(Path(run_root).glob("quick/run-*/events.jsonl")):
+        for line in events.read_text().splitlines():
+            try: ev = json.loads(json.loads(line)["raw"])
+            except (ValueError, KeyError): continue
+            if ev.get("type") in ("assistant", "user"):
+                for c in ev["message"].get("content", []):
+                    if not isinstance(c, dict):
+                        continue
+                    if c.get("type") == "tool_use" and c.get("name") == "Agent" and c["input"].get("description") == child_id:
+                        inp = {k: v for k, v in c["input"].items() if k != "prompt"}
+                        attempts.setdefault(c["id"], {
+                            "child_id": child_id, "status": "completed", "run": events.parent.name,
+                            "tool_use": {"id": c["id"], "name": c["name"], "input": inp,
+                                         "prompt_sha256": __import__("hashlib").sha256(c["input"].get("prompt", "").encode()).hexdigest()},
+                            "task_id": None, "task_started": None, "task_notification": None,
+                            "tool_result": None,
+                        })
+                    elif c.get("type") == "tool_result" and c.get("tool_use_id") in attempts:
+                        attempt = attempts[c["tool_use_id"]]
+                        attempt["tool_result"] = {"tool_use_id": c["tool_use_id"],
+                                                  "is_error": bool(c.get("is_error")), "content": c.get("content")}
+                        completion_events.append((c["tool_use_id"], "tool_result"))
+            elif ev.get("type") == "system" and ev.get("tool_use_id") in attempts:
+                attempt = attempts[ev["tool_use_id"]]
+                if ev.get("subtype") == "task_started":
+                    attempt["task_started"] = {k: v for k, v in ev.items() if k != "prompt"}
+                    attempt["task_id"] = ev.get("task_id")
+                elif ev.get("subtype") == "task_notification":
+                    if attempt["task_id"] is not None and attempt["task_id"] != ev.get("task_id"):
+                        continue
+                    attempt["task_id"] = ev.get("task_id")
+                    attempt["task_notification"] = {k: ev.get(k) for k in ("tool_use_id", "task_id", "status", "summary")}
+                    completion_events.append((ev["tool_use_id"], "task_notification"))
+    eligible = []
+    for tool_use_id, event_type in completion_events:
+        attempt = attempts[tool_use_id]
+        result = attempt["tool_result"]
+        started = attempt["task_started"] or {}
+        background = (attempt["tool_use"]["input"].get("run_in_background")
+                      or started.get("is_backgrounded")
+                      or (result and "agent launched" in str(result["content"]).lower()))
+        notification = attempt["task_notification"] or {}
+        if background:
+            done = event_type == "task_notification" and notification.get("status") == "completed"
+        else:
+            done = event_type == "tool_result" and result is not None and not result["is_error"]
+        if done:
+            eligible.append(tool_use_id)
+    if not eligible:
+        raise SystemExit(f"no completed Agent attempt for description {child_id}; background launches require a matching completed task_notification")
+    if landed_tool_use_id is not None:
+        if landed_tool_use_id not in eligible:
+            raise SystemExit(f"landed Agent attempt {landed_tool_use_id} has no completion evidence for {child_id}")
+        return attempts[landed_tool_use_id]
+    return attempts[eligible[-1]]
+
+
 def phase_receipt(a):
     repo = Path(a.fixture).resolve(); root = Path(a.repo).resolve()
     archive = state_field(repo, "archive"); manifest = json.loads((repo / archive / "trust-run-manifest.json").read_text())
@@ -183,7 +264,7 @@ def phase_receipt(a):
     base = {"schema": STEP, "host": HOST, "run_id": run_id, "result": "pass"}
     steps = {
         "install": {**base, "step": "install", "command": a.install_command, "output": install["output"],
-                    "host_version": manifest["host_version"], "install_root": ".agents/skills",
+                    "host_version": manifest["host_version"], "install_root": HOSTS[HOST]["skill_root"],
                     "candidate": manifest["candidate"], "package_version": version, "exit_code": 0},
         "router": {**base, "step": "router", "command": a.router_command,
                    "output": (repo / ".project/STATE.md").read_text(), "state_artifact": ".project/STATE.md",
@@ -217,7 +298,7 @@ def phase_receipt(a):
         "guards": {**base, "step": "guards", "command": "release_receipt.py manifest (git hook check in disposable clone)",
                    "output": json.dumps(guards_in_archive["git_hook_check"], indent=2),
                    "guard_artifact": manifest["artifacts"]["guards"], "declared_tier": GUARD_TIER,
-                   "native_guard": "not-applicable", "git_hooks": guards_in_archive["git_hooks"]},
+                   "native_guard": guards_in_archive["native_guard"], "git_hooks": guards_in_archive["git_hooks"]},
     }
     for name, body in steps.items():
         (steps_dir / f"{name}.json").write_text(json.dumps(body, indent=2) + "\n")
@@ -238,7 +319,7 @@ def phase_receipt(a):
         f"Full quick-lane milestone run by the pinned candidate on a fresh fixture; evaluator-driven owner gates. Run directory: `{a.run_dir}`.",
         "", "## Environment", "", f"- Host and CLI version: {manifest['host_version']}", f"- Operator: {a.operator}",
         f"- Date: {dt.date.today().isoformat()}", f"- Fixture repository: {repo}",
-        f"- Child-agent API used: {CHILD_API} (task_name {child_id}, fork_turns none)", "", "## Evidence", "",
+        f"- Child-agent API used: {CHILD_API} ({'task_name' if HOST == 'codex' else 'description'} {child_id})", "", "## Evidence", "",
         *[f"- {label}: {HOST}/{name}.json" for label, name in labels], "",
         f"Fixture Git bundle: {HOST}/fixture.bundle (all refs, including origin/main and the annotated milestone tag).", ""]))
     sys.path.insert(0, str(root))
@@ -250,19 +331,22 @@ def phase_receipt(a):
 
 
 def main():
+    global HOST, CHILD_API, GUARD_TIER
     p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument("--host", choices=tuple(HOSTS), default="codex")
     sub = p.add_subparsers(dest="phase", required=True)
     m = sub.add_parser("manifest")
     for k in ("fixture", "repo", "run_id", "candidate", "host_version", "task_branch"):
         m.add_argument(f"--{k.replace('_', '-')}", required=True)
     m.add_argument("--package-version", default="1.0.0")
-    m.add_argument("--committed-archive-repo"); m.add_argument("--committed-archive")
+    m.add_argument("--committed-archive-repo"); m.add_argument("--committed-archive"); m.add_argument("--native-guard-evidence")
     r = sub.add_parser("receipt")
     for k in ("fixture", "repo", "transcript", "install_json", "install_command", "router_command", "landing_command",
               "task_worktree", "review_command", "archive_command", "archive_output", "integrate_command",
               "integrate_output", "integration_worktree", "run_dir", "operator", "isolation_mode"):
         r.add_argument(f"--{k.replace('_', '-')}", required=True)
     a = p.parse_args()
+    HOST, CHILD_API, GUARD_TIER = a.host, HOSTS[a.host]["child_api"], HOSTS[a.host]["guard_tier"]
     return phase_manifest(a) if a.phase == "manifest" else phase_receipt(a)
 
 
