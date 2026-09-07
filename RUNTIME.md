@@ -45,10 +45,13 @@ becomes `gsd-path-M001`). `answer` and `status`
 read the newest attempt records. Records are keyed by the bound branch, so a
 new milestone starts with no attempts and the previous milestone's records
 remain as evidence.
+Review attempts use `gsd-path/dispatch/<milestone slug>/reviews/<logical name>/attempt-N/`;
+`status` and `answer` cover task attempts only.
 
 | Command | Result |
 | --- | --- |
 | `round --repo <root> --wave <N> --child-command '<cmd>' [--wait <s>] [--child-timeout <s>] [--capacity <N>] [--max-attempts <N>] [--task-limit <N> --session-limit <N> --budget-authority '<policy>']` | Recover, settle exited children, `ready`, checkpoint bookkeeping, lint, isolate, dispatch; Verify, land, record, retire each result in task-id order. Receipt status `done`, `in-flight`, `question`, or `blocked`. |
+| `review --repo <root> --wave <N> --cycle <C> --child-command '<cmd>' [--wait <s>] [--child-timeout <s>] [--repair-evidence <receipt>]` | Step 6 at `full` or `deep` depth: clean review base, one verify sidecar and reviewer child per lens, validate in the sidecar, collect, retire; after every lens settles, checkpoint a `pass` when no panel is configured, or return the `review_findings.py collect` grouping on `blocked`. `verify-only` returns `not-applicable`; `panel_required` reports the PLAN panel setting. |
 | `finish --repo <root> --task-id <id>` | Recover first; return a proven landing without repeating Verify, or verify, land, record, and retire one returned task. Without a dispatch record, derive the isolate from task frontmatter. |
 | `answer --repo <root> --task-id <id> --answer '<text>'` | Append `Orchestrator answer:` to the isolate's task Log; the next `round` redispatches that isolate. |
 | `status --repo <root>` | Every task's newest dispatch record. |
@@ -57,13 +60,15 @@ The child command is owner-supplied shell words. The driver runs it with the
 isolated worktree as its working directory and the self-contained brief on
 stdin; the owner's flags decide the child's permissions and model. Verified
 templates: `claude -p --output-format json <owner permission flags>` and
-`codex exec --json <owner sandbox flags>`. A child ends its final message with
+`codex exec --json <owner sandbox flags>`. A coder child ends its final message with
 `RESULT: <task id> ready|blocked`; no line means blocked. A Log delta whose
 first entry after the last recorded `Orchestrator answer:` leads with
 `NEEDS-ORCHESTRATOR:` is a question only when the child exits successfully;
 a timeout or nonzero exit is a failure even if the child wrote a question.
+Reviewer children instead return the `Wave verdict:` line in their validated
+review artifact; they do not need a `RESULT:` line.
 `--wave` is required and pins the parent-selected wave, including on resumed
-calls. An unfinished earlier wave blocks dispatch before the bookkeeping
+calls. In `round`, an unfinished earlier wave blocks dispatch before the bookkeeping
 checkpoint. Child completion is recorded in `exit.json`; the parent alone
 writes `state.json`.
 `--wait`, `--child-timeout`, and `--capacity` (concurrent children) have
@@ -88,7 +93,7 @@ Verify task is in flight at a time, and a round stops at a wave boundary.
 Without `--wait`, the call returns after processing currently available work;
 children continue running. `--capacity`, when supplied, must be positive.
 
-`round`, `finish`, and `answer` hold a repository-scoped advisory lock for the
+`round`, `review`, `finish`, and `answer` hold a repository-scoped advisory lock for the
 whole call, including `--wait`. A concurrent invocation returns `blocked`
 with `another dispatch_driver invocation holds the lock`; wait for the
 active call to return before retrying. Bookkeeping also blocks if an
@@ -98,10 +103,21 @@ Verify output is saved in `verify.json`. A `verify-record` ledger entry is
 written only when the landing commit's parent equals the recorded task base;
 a later parallel landing can therefore have no ledger entry.
 
-The driver reports and never repairs: a failed child, a failed Verify, a
+For task attempts, the driver reports and never repairs: a failed child, a failed Verify, a
 recovery or reconciliation verdict, or a `ready` error returns `blocked` with
 the evidence, and the isolate stays in place for the build contract's
 documented procedure.
+
+Resume an `in-flight` review with the same wave and cycle. Missing lens records
+are dispatched only while the primary is clean and HEAD still matches the
+recorded base. For cycle 2 or later, every previous-cycle lens artifact must
+exist before dispatch. Invalid review files remain in their sidecars for
+inspection. Collection progress is saved before cleanup; a cleanup failure
+returns `blocked` with helper findings, and a later call retries cleanup.
+Reusing a collected verdict requires the canonical artifact to match its saved
+validation hash. Review inputs must still match the recorded base: only this
+cycle's review artifacts may differ, and HEAD may advance only by the cycle's
+own review checkpoint. Other changes block reuse and require a new cycle.
 
 ## Token accounting
 

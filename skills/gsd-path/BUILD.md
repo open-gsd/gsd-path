@@ -152,7 +152,18 @@ python3 <absolute dispatch_driver.py> round --repo <absolute primary> --wave <N>
   [--child-timeout <owner seconds>]
 ```
 
-Act only on its receipt: `done` means every wave task landed — go to step 6;
+Act only on its receipt: `done` means every wave task landed — run
+`review --wave <N> --cycle <C> --child-command '<owner command>' [--wait
+<owner seconds>]` for step 6 at `full` or `deep` depth: it records the clean
+review base, creates one verify sidecar per lens, briefs one reviewer child
+per lens with every task's base and landing commit, validates each file in
+its sidecar, copies it to the canonical path, retires the sidecar, and only
+after every lens settles concludes: a passing cycle with no panel is
+checkpointed; with a panel configured (`panel_required: true`) the panel and
+the single on-pass checkpoint stay with step 7; `blocked` returns the
+`review_findings.py collect` grouping for step 7. The driver never writes a
+`verify-only` file (`status: not-applicable`), runs a panel or skeptic, or
+creates fix tasks; those stay with this contract;
 `in-flight` means call `round` again; `question` means answer from the
 approved artifacts or the user, record it with `answer --task-id <id>
 --answer '<answer> — <citation>'`, and call `round` again, which redispatches
@@ -402,7 +413,10 @@ dispatch contract and perform steps 1–5 by hand.
 
 6. **Review the wave.** The build orchestrator owns wave reviews; ship never
    runs them. Only after every wave task is done, read the wave's
-   `Review depth` from PLAN.md (default `full`).
+   `Review depth` from PLAN.md (default `full`). At `full` or `deep` the
+   dispatch driver's `review` action performs the sidecar, brief, validate,
+   collect, and retire work of this step; perform it by hand only without a
+   child command.
    - `full`: spawn one independent reviewer using deterministic logical task
      name `review_wave_<wave>_cycle_<cycle>`. Supply every task path, its
      recorded base and proven landing commit, the reviewer role, and
