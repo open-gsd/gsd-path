@@ -85,12 +85,7 @@ node scripts/install.mjs --claude --project "$(pwd)" --hooks
 
 In the **project directory**, type explicitly:
 
-| Host | Invocation |
-| --- | --- |
-| Codex | `$gsd-path` |
-| Claude, Cursor, Zed, Grok, Copilot, Qwen, Kiro, Kimi, Antigravity | `/gsd-path` |
-| OpenCode v2 | `/gsd-path` |
-| OpenCode stable | *Load and use the gsd-path skill* |
+Use the [router and phase invocation table](README.md#install-summary) for your host.
 
 “Continue the project” does not advance a phase. With an owned
 `.project/STATE.md` it reports the current handoff and next skill, read-only.

@@ -1,5 +1,6 @@
 import json
 import os
+import py_compile
 import re
 import shutil
 import subprocess
@@ -8,11 +9,42 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from scripts.check_task_briefs import _frontmatter
+from scripts.sync_skill_resources import SKILL_NAMES, rewrite_router_alias_skill
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 class SyncSkillResourcesTests(unittest.TestCase):
+    def test_router_alias_ignores_python_cache(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory) / "bundle"
+            shutil.copytree(
+                PROJECT_ROOT, root,
+                ignore=shutil.ignore_patterns(".git", "__pycache__"),
+            )
+            runtime = root / "skills" / "gsd-path" / "scripts" / "pipeline_state.py"
+            py_compile.compile(
+                str(runtime), cfile=str(runtime.parent / "__pycache__" / "pipeline_state.pyc"),
+                doraise=True,
+            )
+            self.assertTrue((runtime.parent / "__pycache__").is_dir())
+            commands = [
+                [sys.executable, str(root / "scripts" / "sync_skill_resources.py"), "--check"],
+                ["node", "--input-type=module", "-e",
+                 "import { mismatches } from './scripts/install.mjs'; "
+                 "const problems = mismatches(process.cwd()); "
+                 "console.log(JSON.stringify(problems)); process.exit(problems.length ? 1 : 0);"],
+            ]
+            for command in commands:
+                with self.subTest(command=command[0]):
+                    result = subprocess.run(command, cwd=root, text=True, capture_output=True)
+                    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            result = self.run_sync(root)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertFalse((root / "skills" / "path" / "scripts" / "__pycache__").exists())
+
     def run_sync(self, root: Path, *args: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             [sys.executable, str(root / "scripts" / "sync_skill_resources.py"), "--root", str(root), *args],
@@ -170,9 +202,29 @@ class SyncSkillResourcesTests(unittest.TestCase):
             self.assertIn("stale generated resource", stale.stderr)
             self.assertNotIn("wrong-direction edit", stale.stderr)
 
+    def test_router_alias_skill_rewrites_only_the_catalog_name(self) -> None:
+        rewritten = rewrite_router_alias_skill(
+            "---\nname: gsd-path\n"
+            "description: Use only when the user explicitly invokes $gsd-path.\n---\n"
+            "Call $gsd-path-plan next.\n",
+            "path",
+            "gsd-path",
+        )
+        self.assertEqual(
+            rewritten,
+            "---\nname: path\n"
+            "description: Use only when the user explicitly invokes $path or $gsd-path.\n---\n"
+            "Call $gsd-path-plan next.\n",
+        )
+
     def test_distribution_layout_is_self_contained(self) -> None:
-        skill_directories = sorted((PROJECT_ROOT / "skills").glob("gsd-path*"))
-        self.assertEqual(len(skill_directories), 14)
+        skill_directories = sorted(
+            path for path in (PROJECT_ROOT / "skills").iterdir() if path.is_dir()
+        )
+        self.assertEqual(
+            {path.name for path in skill_directories},
+            set(SKILL_NAMES),
+        )
 
         link_pattern = re.compile(r"\[[^]]+\]\(([^)#]+)(?:#[^)]*)?\)")
         for skill_directory in skill_directories:
@@ -188,14 +240,16 @@ class SyncSkillResourcesTests(unittest.TestCase):
                 )
 
         state_template = (PROJECT_ROOT / "skills" / "gsd-path" / "templates" / "state.md").read_text()
-        self.assertIn("pipeline: gsd-path/v2", state_template)
-        self.assertIn("milestone: null", state_template)
-        self.assertIn("branch: null", state_template)
-        self.assertIn("archive: null", state_template)
+        state_fields, error = _frontmatter(state_template)
+        self.assertIsNone(error)
+        self.assertEqual(state_fields["pipeline"], "gsd-path/v2")
+        for key in ("milestone", "branch", "archive"):
+            self.assertEqual(state_fields[key], "null")
         task_template = (PROJECT_ROOT / "skills" / "gsd-path" / "templates" / "task.md").read_text()
-        self.assertIn("base: null", task_template)
-        self.assertIn("worktree: null", task_template)
-        self.assertIn("task_branch: null", task_template)
+        task_fields, error = _frontmatter(task_template)
+        self.assertIsNone(error)
+        for key in ("base", "worktree", "task_branch"):
+            self.assertEqual(task_fields[key], "null")
         final_review = (
             PROJECT_ROOT / "skills" / "gsd-path" / "templates" / "final-review.md"
         ).read_text()

@@ -70,13 +70,7 @@ invocation as an operating rule.
 
 ### Invocation by host
 
-| Host | Router | Example phase |
-| --- | --- | --- |
-| Codex | `$gsd-path` | `$gsd-path-plan` |
-| Claude Code, Grok, Copilot, Qwen, Cursor, Zed, Kiro, Kimi | `/gsd-path` | `/gsd-path-plan` |
-| OpenCode v2 | `/gsd-path` | `/gsd-path-plan` |
-| OpenCode stable | Ask to load `gsd-path` | Same |
-| Antigravity CLI | `/gsd-path` | `/gsd-path-plan` |
+Use the [router and phase invocation table](README.md#install-summary) for your host.
 
 ---
 
@@ -174,7 +168,7 @@ also print a one-line update notice (24h cache, fail-silent).
 ### Safety
 
 - Validates synchronized package before writing
-- Backs up existing `gsd-path*` entries
+- Uses the [managed-skill backup and collision rules](UPDATE.md#what-auto-updates)
 - Rolls back **all** selected targets if any one fails
 - Codex, Antigravity, and Zed share one local physical root — installed once
   with a shared host-aware bundle

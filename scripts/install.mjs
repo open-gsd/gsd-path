@@ -305,7 +305,7 @@ const MANIFEST = JSON.parse(
 );
 
 function sharedInvocations(text) {
-  const pattern = /(`?)(\$gsd-path(?:-[a-z0-9]+)*)( status)?\1(?: \(Codex\) (?:and|or) (`?)\/(gsd-path(?:-[a-z0-9]+)*)( status)?\4 \((?:other hosts|Antigravity\/Zed)\))?/g;
+  const pattern = /(`?)(\$gsd-path(?:-[a-z0-9]+)*|\$path)( status)?\1(?: \(Codex\) (?:and|or) (`?)\/(gsd-path(?:-[a-z0-9]+)*|path)( status)?\4 \((?:other hosts|Antigravity\/Zed)\))?/g;
   return text.replace(pattern, (_match, quote, token, arguments_, pairedQuote, pairedSkill, pairedArguments) => {
     const skill = token.slice(1);
     const argumentsText = arguments_ || "";
@@ -335,6 +335,7 @@ export const TARGETS = targetsForManifest(MANIFEST);
 export const LOCAL_ROOTS = localRootsForManifest(MANIFEST);
 export const SKILL_NAMES = skillNamesForManifest(MANIFEST);
 export const SKILL_ALIASES = { ...MANIFEST.skill_aliases };
+export const ROUTER_ALIASES = { ...MANIFEST.router_aliases };
 const PHASE_RESOURCES = MANIFEST.phase_resources;
 const SCRIPT_TARGETS = MANIFEST.script_targets;
 const PHASE_CONTRACT_TARGETS = MANIFEST.phase_contract_targets;
@@ -450,9 +451,86 @@ function isManagedName(name) {
   return (
     normalized === "ogsd" ||
     normalized === "gsd-path" ||
+    Object.hasOwn(ROUTER_ALIASES, normalized) ||
     normalized.startsWith("ogsd-") ||
     normalized.startsWith("gsd-path-")
   );
+}
+
+function isOwnedRouterAlias(skillDir) {
+  if (!isFile(path.join(skillDir, "scripts", "pipeline_state.py"))) return false;
+  const versionFile = path.join(skillDir, "VERSION");
+  if (!isFile(versionFile)) return false;
+  try {
+    return /^[0-9]+(?:\.[0-9]+)+$/.test(fs.readFileSync(versionFile, "utf8").trim());
+  } catch {
+    return false;
+  }
+}
+
+function isManagedInstallEntry(root, name) {
+  if (!isManagedName(name)) return false;
+  if (!Object.hasOwn(ROUTER_ALIASES, name.toLowerCase())) return true;
+  return isOwnedRouterAlias(path.join(root, name));
+}
+
+function rejectRouterAliasCollisions(root) {
+  if (!isDirectory(root)) return;
+  for (const alias of Object.keys(ROUTER_ALIASES)) {
+    const candidate = path.join(root, alias);
+    if (!lexists(candidate)) continue;
+    if (isOwnedRouterAlias(candidate)) continue;
+    throw new InstallerError(
+      `refusing to replace unrelated skill ${candidate}; rename it or move it aside before installing GSD Path`
+    );
+  }
+}
+
+function stampInstalledVersions(stagedRoot, version) {
+  if (!version) return;
+  const names = new Set(["gsd-path", ...Object.keys(ROUTER_ALIASES)]);
+  for (const name of names) {
+    fs.writeFileSync(path.join(stagedRoot, name, "VERSION"), `${version}\n`);
+  }
+}
+
+function rewriteRouterAliasSkill(text, alias, canonical) {
+  if (!text.startsWith("---\n")) {
+    throw new InstallerError("SKILL.md is missing YAML frontmatter");
+  }
+  const end = text.indexOf("\n---\n", 4);
+  if (end === -1) {
+    throw new InstallerError("SKILL.md has unterminated YAML frontmatter");
+  }
+  const header = text.slice(4, end);
+  const rest = text.slice(end);
+  const expected = `name: ${canonical}`;
+  const replacement = `name: ${alias}`;
+  const lines = header.split("\n");
+  if (!lines.includes(expected)) {
+    throw new InstallerError(`router alias ${alias} is missing ${expected}`);
+  }
+  const rewritten = lines.map((line) => (line === expected ? replacement : line));
+  if (rewritten.filter((line) => line === replacement).length !== 1) {
+    throw new InstallerError(`router alias ${alias} name rewrite was not unique`);
+  }
+  const invoke = `invokes $${canonical}.`;
+  const invokeWithAlias = `invokes $${alias} or $${canonical}.`;
+  let headerText = rewritten.join("\n");
+  if (!headerText.includes(invoke)) {
+    throw new InstallerError(`router alias ${alias} is missing ${invoke}`);
+  }
+  headerText = headerText.replace(invoke, invokeWithAlias);
+  return `---\n${headerText}${rest}`;
+}
+
+function materializedResourceBytes(source, destination) {
+  const data = fs.readFileSync(source);
+  if (path.basename(destination) !== "SKILL.md") return data;
+  const alias = path.basename(path.dirname(destination));
+  const canonical = ROUTER_ALIASES[alias];
+  if (!canonical) return data;
+  return Buffer.from(rewriteRouterAliasSkill(data.toString("utf8"), alias, canonical));
 }
 
 function resolveNonStrict(value) {
@@ -542,7 +620,11 @@ export function mismatches(root) {
   const pairs = [];
   const expectedSkills = [
     "gsd-path",
-    ...[...Object.keys(PHASE_RESOURCES), ...Object.keys(SKILL_ALIASES)].sort(),
+    ...[
+      ...Object.keys(PHASE_RESOURCES),
+      ...Object.keys(SKILL_ALIASES),
+      ...Object.keys(ROUTER_ALIASES),
+    ].sort(),
   ];
   if (JSON.stringify(SKILL_NAMES) !== JSON.stringify(expectedSkills)) {
     problems.push("manifest skills must be root gsd-path plus every canonical skill and alias");
@@ -553,6 +635,17 @@ export function mismatches(root) {
     }
     if (!Object.hasOwn(PHASE_RESOURCES, canonicalSkill)) {
       problems.push(`skill alias target is not canonical: ${legacy} -> ${canonicalSkill}`);
+    }
+  }
+  for (const [alias, canonicalSkill] of Object.entries(ROUTER_ALIASES)) {
+    if (Object.hasOwn(PHASE_RESOURCES, alias)) {
+      problems.push("router aliases cannot also own phase resources");
+    }
+    if (Object.hasOwn(SKILL_ALIASES, alias)) {
+      problems.push("router aliases cannot also be skill aliases");
+    }
+    if (canonicalSkill !== "gsd-path") {
+      problems.push(`router alias target is not the router: ${alias} -> ${canonicalSkill}`);
     }
   }
   for (const [source, destination] of SHARED_DISPATCH_TARGETS) {
@@ -586,13 +679,29 @@ export function mismatches(root) {
       }
     }
   }
+  for (const [alias, canonicalSkill] of Object.entries(ROUTER_ALIASES)) {
+    const canonicalDirectory = path.join(root, "skills", canonicalSkill);
+    const aliasDirectory = path.join(root, "skills", alias);
+    walk(canonicalDirectory, (candidate, entry) => {
+      if (!entry.isFile() || path.basename(candidate) === ".DS_Store") return;
+      const relative = path.relative(canonicalDirectory, candidate);
+      if (relative.split(path.sep).includes("__pycache__")) return;
+      pairs.push([candidate, path.join(aliasDirectory, relative)]);
+    });
+  }
   for (const [source, destination] of pairs) {
     if (!isFile(source)) {
       problems.push(`missing canonical resource: ${path.relative(root, source)}`);
     } else if (!isFile(destination)) {
       problems.push(`missing generated resource: ${path.relative(root, destination)}`);
-    } else if (!fs.readFileSync(source).equals(fs.readFileSync(destination))) {
-      problems.push(`stale generated resource: ${path.relative(root, destination)}`);
+    } else {
+      try {
+        if (!materializedResourceBytes(source, destination).equals(fs.readFileSync(destination))) {
+          problems.push(`stale generated resource: ${path.relative(root, destination)}`);
+        }
+      } catch (error) {
+        problems.push(messageOf(error));
+      }
     }
   }
   walk(root, (candidate, entry) => {
@@ -615,7 +724,11 @@ function validateSource(sourceRoot, profiles) {
   }
   const found = fs
     .readdirSync(skillsRoot)
-    .filter((name) => isManagedName(name) && name.startsWith("gsd-path"));
+    .filter(
+      (name) =>
+        isManagedName(name) &&
+        (name.startsWith("gsd-path") || Object.hasOwn(ROUTER_ALIASES, name))
+    );
   const expected = new Set(SKILL_NAMES);
   if (found.length !== expected.size || !found.every((name) => expected.has(name))) {
     throw new InstallerError(
@@ -723,10 +836,7 @@ export function stageTarget(sourceRoot, target, stagedRoot) {
     fs.cpSync(path.join(skillsRoot, name), path.join(stagedRoot, name), { recursive: true });
   }
 
-  const version = readPackageVersion(path.join(sourceRoot, "package.json"));
-  if (version) {
-    fs.writeFileSync(path.join(stagedRoot, "gsd-path", "VERSION"), `${version}\n`);
-  }
+  stampInstalledVersions(stagedRoot, readPackageVersion(path.join(sourceRoot, "package.json")));
 
   const adapter = fs.readFileSync(path.join(sourceRoot, "platforms", target, "dispatch.md"), "utf8");
   for (const name of SKILL_NAMES) {
@@ -748,6 +858,7 @@ export function stageTarget(sourceRoot, target, stagedRoot) {
       }
     }
     const invocation = target === "opencode" ? "gsd-path" : "/gsd-path";
+    const pathInvocation = target === "opencode" ? "path" : "/path";
     for (const name of SKILL_NAMES) {
       const entrypoint = path.join(stagedRoot, name, "SKILL.md");
       fs.writeFileSync(entrypoint, augmentFrontmatter(fs.readFileSync(entrypoint, "utf8"), target));
@@ -758,7 +869,7 @@ export function stageTarget(sourceRoot, target, stagedRoot) {
         markdown,
         target === SHARED_AGENT_PROFILE
           ? sharedInvocations(content)
-          : content.replaceAll("$gsd-path", invocation)
+          : content.replaceAll("$gsd-path", invocation).replaceAll("$path", pathInvocation)
       );
     }
   }
@@ -968,7 +1079,7 @@ function backupPath(root, reserved = []) {
 function backupExisting(transaction, extras = []) {
   const existing = fs
     .readdirSync(transaction.root)
-    .filter((name) => isManagedName(name))
+    .filter((name) => isManagedInstallEntry(transaction.root, name))
     .sort()
     .map((name) => [path.join(transaction.root, name), name]);
   for (const [candidate, backupName] of extras) {
@@ -987,6 +1098,7 @@ function backupExisting(transaction, extras = []) {
 
 async function applyTarget(plan, stagedRoot, transaction) {
   createDirectory(plan.root, transaction.createdDirectories);
+  rejectRouterAliasCollisions(plan.root);
   const extras = [];
   let cursorAgent = null;
   if (plan.profile === "cursor") {
@@ -1876,7 +1988,10 @@ function validatedProjectState(sourceRoot, project) {
 }
 
 function hasManagedInstall(root) {
-  return isDirectory(root) && fs.readdirSync(root).some((name) => isManagedName(name));
+  return (
+    isDirectory(root) &&
+    fs.readdirSync(root).some((name) => isManagedInstallEntry(root, name))
+  );
 }
 
 function validateProjectRuntimeStatus(sourceRoot, project) {
@@ -2521,7 +2636,7 @@ function installResult(plan, dryRun = false, update = false) {
 function managedEntryCount(plan) {
   let count = 0;
   if (isDirectory(plan.root)) {
-    count = fs.readdirSync(plan.root).filter((name) => isManagedName(name)).length;
+    count = fs.readdirSync(plan.root).filter((name) => isManagedInstallEntry(plan.root, name)).length;
   }
   if (
     plan.profile === "cursor" &&
@@ -2705,6 +2820,7 @@ export async function install(sourceRoot, plans, options = {}) {
         }
       }
       for (const plan of deployments) {
+        rejectRouterAliasCollisions(plan.root);
         const count = managedEntryCount(plan);
         const suffix = count ? `; would back up ${count} entries` : "";
         results.push(installResult(plan, true, update) + suffix);

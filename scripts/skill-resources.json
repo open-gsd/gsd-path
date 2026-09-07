@@ -26,9 +26,13 @@
     "gsd-path-research",
     "gsd-path-roadmap",
     "gsd-path-ship",
-    "gsd-path-undo"
+    "gsd-path-undo",
+    "path"
   ],
   "skill_aliases": {},
+  "router_aliases": {
+    "path": "gsd-path"
+  },
   "package_files": [
     "plugin.json",
     "scripts/install.mjs",

@@ -33,7 +33,7 @@ proof and each host's guard tier.
 # New user
 node scripts/install.mjs --all --dry-run && node scripts/install.mjs --all
 cd your-repo && node scripts/install.mjs --all --project "$(pwd)"
-# In agent: $gsd-path (Codex) or /gsd-path (most hosts)
+# In agent: invoke the router (see Install summary below)
 
 # Already installed
 node scripts/install.mjs --update
@@ -52,6 +52,7 @@ sidecar to discuss, diagnose, or undo without advancing.
 
 | Skill | Role |
 | --- | --- |
+| `path` | Router short name — same as `gsd-path` (`/path`, `$path`) |
 | `gsd-path` | Router — detects state, runs next phase (`status` reports without advancing) |
 | `gsd-path-inspect` | Phase 0 — brownfield codebase map + doc audit |
 | `gsd-path-define` | Phase 1 — intent definition |
@@ -67,7 +68,7 @@ sidecar to discuss, diagnose, or undo without advancing.
 | `gsd-path-forensics` | Read-only stuck-pipeline diagnosis |
 | `gsd-path-undo` | Helper-owned undo of unpublished pipeline work |
 
-Codex: `$gsd-path`, `$gsd-path-plan`, … · Other hosts: `/gsd-path`, `/gsd-path-plan`, …
+See [invocation by host](#install-summary). Phase names keep the `gsd-path-` prefix.
 
 ## The flow
 
@@ -217,16 +218,20 @@ node scripts/install.mjs --all --update --project /path/to/project   # refresh .
 
 | Flag | User skills root | Invoke |
 | --- | --- | --- |
-| `--codex`, `--zed` | `~/.agents/skills` | `$gsd-path` / `/gsd-path` |
-| `--claude` | `~/.claude/skills` | `/gsd-path` |
-| `--cursor` | `~/.cursor/skills` (+ subagent) | `/gsd-path` |
-| `--grok` | `~/.grok/skills` | `/gsd-path` |
-| `--opencode` | OpenCode config `skills/` | `/gsd-path` (OpenCode v2 host) |
-| `--copilot` | `~/.copilot/skills` | `/gsd-path` |
-| `--qwen` | `~/.qwen/skills` | `/gsd-path` |
-| `--antigravity` | Antigravity skills dir | `/gsd-path` |
-| `--kiro` | `~/.kiro/skills` | `/gsd-path` |
-| `--kimi` | `~/.kimi-code/skills` | `/gsd-path` |
+| `--codex`, `--zed` | `~/.agents/skills` | Codex: `$path` or `$gsd-path`; Zed: `/path` or `/gsd-path` |
+| `--claude` | `~/.claude/skills` | `/path` or `/gsd-path` |
+| `--cursor` | `~/.cursor/skills` (+ subagent) | `/path` or `/gsd-path` |
+| `--grok` | `~/.grok/skills` | `/path` or `/gsd-path` |
+| `--opencode` | OpenCode config `skills/` | `/path` or `/gsd-path` (OpenCode v2 host) |
+| `--copilot` | `~/.copilot/skills` | `/path` or `/gsd-path` |
+| `--qwen` | `~/.qwen/skills` | `/path` or `/gsd-path` |
+| `--antigravity` | Antigravity skills dir | `/path` or `/gsd-path` |
+| `--kiro` | `~/.kiro/skills` | `/path` or `/gsd-path` |
+| `--kimi` | `~/.kimi-code/skills` | `/path` or `/gsd-path` |
+
+OpenCode stable: ask to load and use the `gsd-path` skill.
+`gsd-path` remains the canonical router name; `path` is its short menu alias.
+For a single phase, use `$gsd-path-plan` in Codex or `/gsd-path-plan` on slash hosts.
 
 `scripts/install.py` — Python install, including `--local` and `--update`.
 The Node CLI remains the interactive and npm entry point. See [FULL.md](FULL.md) and
@@ -255,7 +260,7 @@ the authoritative host API table and delegation rules.
 | `FULL.md` | Full guide |
 | `UPDATE.md` | Updating |
 | `HOOKS.md` | Guard hooks |
-| `skills/` | Canonical `gsd-path*` skills |
+| `skills/` | Canonical skills and generated aliases declared in [the resource manifest](scripts/skill-resources.json) |
 | `platforms/` | Host dispatch adapters |
 | `scripts/install.mjs` | Installer (npm `gsd-path` bin) |
 | `scripts/install.py` | Python installer |

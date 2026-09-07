@@ -382,7 +382,7 @@ STATE.md.
 | Path | Purpose |
 |------|---------|
 | `plugin.json` | Agent Plugins manifest (`agent-plugins.org` 1.0.0 schema) |
-| `skills/` | Canonical `gsd-path*` skills |
+| `skills/` | Skills and aliases declared in `scripts/skill-resources.json` |
 | `skills/gsd-path/templates/` | Required artifact formats |
 | `skills/gsd-path/references/` | Agent role and dispatch contracts |
 | `WORKFLOW.md` | Phase-by-phase SOP |
