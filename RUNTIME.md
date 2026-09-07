@@ -37,7 +37,9 @@ existing responsibilities.
 deterministic loop so the orchestrating model only supplies judgment. `round`
 and `finish` run recovery against Git and the task files before processing
 dispatch records under the Git common directory
-(`gsd-path/dispatch/<bound branch>/<task>/attempt-N/`). `answer` and `status`
+(`gsd-path/dispatch/<milestone slug>/<task>/attempt-N/`). The milestone slug
+replaces `/` in the bound branch with `-` (for example, `gsd-path/M001`
+becomes `gsd-path-M001`). `answer` and `status`
 read the newest attempt records. Records are keyed by the bound branch, so a
 new milestone starts with no attempts and the previous milestone's records
 remain as evidence.
@@ -56,7 +58,8 @@ templates: `claude -p --output-format json <owner permission flags>` and
 `codex exec --json <owner sandbox flags>`. A child ends its final message with
 `RESULT: <task id> ready|blocked`; no line means blocked. A Log delta whose
 first entry after the last recorded `Orchestrator answer:` leads with
-`NEEDS-ORCHESTRATOR:` is a question.
+`NEEDS-ORCHESTRATOR:` is a question only when the child exits successfully;
+a timeout or nonzero exit is a failure even if the child wrote a question.
 `--wave` is required and pins the parent-selected wave, including on resumed
 calls. An unfinished earlier wave blocks dispatch before the bookkeeping
 checkpoint. Child completion is recorded in `exit.json`; the parent alone
@@ -69,9 +72,10 @@ task, and a person rules.
 
 Token budgets are opt-in. Passing `--task-limit`, `--session-limit`, and
 `--budget-authority` together configures this milestone's ledger at
-`gsd-path/budget/<bound branch>.json` under the Git common directory, records
+`gsd-path/budget/<milestone slug>.json` under the Git common directory, records
 each child's usage from its captured stdout when it exits, and runs `admit`
-before every dispatch; a blocked admission stops the round. The ledger's
+before preparing or activating a fresh task and before each question
+redispatch; a blocked admission stops the round. The ledger's
 policy is fixed once configured. Later rounds and `finish` enforce that policy
 even when budget flags are omitted; only explicit flags configure it. Each
 attempt records its own usage, including question redispatches. A new milestone
@@ -99,8 +103,10 @@ documented procedure.
 
 ## Token accounting
 
-`token_budget.py` is in the router bundle. Limits have no defaults. Configure one
-ledger for the logical session, outside the worktree, using the owner's exact
+`token_budget.py` is in the router and build bundles. Limits have no defaults.
+The dispatch driver owns its ledger as described [above](#dispatch-driver).
+For manual accounting, configure one ledger for the logical session, outside
+the worktree, using the owner's exact
 limits and their authority. For example, use a path under the Git common directory
 returned by Git; do not assume `.git` is a directory in a linked worktree.
 
@@ -114,7 +120,8 @@ The metric is the host's `output_tokens`, including its reported reasoning outpu
 reasoning is not added again. Input and cached input are not included. Resumptions
 reuse the ledger and task identity. Each CLI invocation uses its immutable event
 file. Re-observing that file is idempotent; new invocations accumulate. Native
-single-invocation child sessions are supported. Resumed native child logs with
+single-invocation child sessions and Claude `--output-format json` usage
+receipts are supported. Resumed native child logs with
 ambiguous cumulative counters fail closed; use separate CLI run receipts instead.
 Record every completed parent invocation and child, not only coder work.
 
