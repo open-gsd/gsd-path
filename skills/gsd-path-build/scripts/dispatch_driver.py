@@ -1036,7 +1036,12 @@ class Panel:
             output = project / "review" / f"wave-{self.wave}.cycle{self.cycle}.panel.md"
             skipped = project / "review" / f"wave-{self.wave}.cycle{self.cycle}.panel.skipped.json"
             states = self.states()
-            if not states:
+            roster_path = self.root / f"wave-{self.wave}-cycle-{self.cycle}" / "roster.json"
+            if roster_path.is_file():
+                roster = load_state(roster_path)
+            else:
+                if states:
+                    raise DriverStop("panel records exist without a persisted roster")
                 arguments = ["resolve", "--plan", str(project / "plan/PLAN.md"),
                              "--intent", str(project / "intent/INTENT.md"),
                              "--advertised", self.options.advertised]
@@ -1054,23 +1059,32 @@ class Panel:
                         raise DriverStop("panel skipped receipt already exists", path=str(skipped))
                     _common.atomic_write(skipped, str(resolved.pop("_stdout")))
                     self.receipt["skipped_receipt"] = str(skipped)
-                    self.receipt["checkpoint"] = checkpoint_project(
-                        self.primary, self.receipt, f"build: record wave {self.wave} cycle {self.cycle} review",
-                        f"Why: persist the wave review and the skipped panel receipt\nWave: {self.wave}")
+                    self.checkpoint(paths, "persist the wave review and the skipped panel receipt")
                     self.receipt["status"] = "skipped"
                     return self.receipt
                 if skipped.exists():
                     raise DriverStop("a skipped-panel receipt exists for this cycle", path=str(skipped))
-                self.receipt["mode"] = resolved["mode"]
+                roster = {"families": [item["family"] for item in resolved["selected"]],
+                          "slugs": {item["family"]: item["slug"] for item in resolved["selected"]},
+                          "mode": resolved["mode"], "base": isolation.current_sha(self.primary)}
+                save_state(roster_path, roster)
+            self.receipt["mode"] = roster["mode"]
+            if set(states) - set(roster["families"]) or any(
+                    state["base"] != roster["base"] for state in states.values()):
+                raise DriverStop("panel records disagree with the persisted roster")
+            missing = [family for family in roster["families"] if family not in states]
+            if missing:
+                base = roster["base"]
+                if isolation.current_sha(self.primary) != base:
+                    raise DriverStop("cannot resume missing panel families: HEAD moved from the recorded base")
                 tasks = wave_tasks(self.primary, self.project_dir, self.wave, self.receipt)
-                base = isolation.current_sha(self.primary)
-                for selected in resolved["selected"]:
-                    family, slug = selected["family"], selected["slug"]
+                for family in missing:
+                    slug = roster["slugs"][family]
                     sidecar = isolation.isolate_verify(self.primary, base,
                                                        f"wave-{self.wave}-cycle-{self.cycle}-panel-{family}")
                     self.receipt["steps"].append({"script": "isolation.py isolate-verify", "result": sidecar})
                     state = {"task_id": self.family_name(family), "family": family, "slug": slug,
-                             "wave": self.wave, "cycle": self.cycle, "base": base, "mode": resolved["mode"],
+                             "wave": self.wave, "cycle": self.cycle, "base": base, "mode": roster["mode"],
                              "worktree": str(sidecar["worktree"]), "branch": str(sidecar["branch"]),
                              "relative": self.relative(family)}
                     spawn(self.root, state, self.options, lambda fresh: self.brief(fresh, tasks, depth, review),
@@ -1079,6 +1093,9 @@ class Panel:
             while True:
                 self.receipt["in_flight"], self.receipt["blocked"], self.receipt["families"] = [], [], {}
                 for family, state in states.items():
+                    if state.get("outcome") == "collected" and (
+                            state.get("cleanup_pending") or not state.get("cleanup_complete")):
+                        self.collect(state)
                     if state.get("outcome") is None:
                         if state.get("finished_at") is not None:
                             self.collect(state)
@@ -1086,7 +1103,15 @@ class Panel:
                             self.receipt["in_flight"].append(summary(state))
                             continue
                         else:
-                            update_state(state, outcome="blocked", reason="child wrapper exited without recording a result")
+                            state = self.states()[family]
+                            states[family] = state
+                            if state.get("finished_at") is not None:
+                                self.collect(state)
+                            else:
+                                update_state(state, outcome="blocked", reason="child wrapper exited without recording a result")
+                    if state.get("cleanup_pending"):
+                        self.receipt["blocked"].append({**summary(state), "reason": state.get("cleanup_error"),
+                                                        "helper": "isolation.py retire"})
                     if state.get("outcome") == "collected":
                         self.receipt["families"][family] = {"slug": state.get("slug"), "path": state.get("relative")}
                     elif state.get("outcome") == "blocked":
@@ -1101,39 +1126,58 @@ class Panel:
             if self.receipt["blocked"]:
                 self.receipt["status"] = "blocked"
                 return self.receipt
-            mode = next(iter(states.values())).get("mode")
+            if set(states) != set(roster["families"]) or not all(
+                    state.get("outcome") == "collected" for state in states.values()):
+                raise DriverStop("the complete panel roster must be collected before merge")
+            mode = roster["mode"]
             inputs = ",".join(str(self.primary / entry["path"]) for entry in self.receipt["families"].values())
             merged = helper_json(self.receipt, "review_panel.py", "merge", "--kind", "wave", "--wave", str(self.wave),
                                  "--cycle", str(self.cycle), "--inputs", inputs, "--output", str(output),
                                  "--mode", str(mode), cwd=self.primary)
             self.receipt["merge"] = merged
             self.receipt["panel"] = output.relative_to(self.primary).as_posix()
-            self.receipt["checkpoint"] = checkpoint_project(
-                self.primary, self.receipt, f"build: record wave {self.wave} cycle {self.cycle} review",
-                f"Why: persist the wave review and its review panel\nWave: {self.wave}")
+            self.checkpoint(paths, "persist the wave review and its review panel")
             self.receipt["status"] = "pass"
             return self.receipt
         except STOP_ERRORS as error:
             return stop(self.receipt, error)
 
+    def checkpoint(self, paths: Dict[str, Path], reason: str) -> None:
+        verdicts = [contracts.validate_wave_evidence(
+            self.primary, self.project_dir, path.relative_to(self.primary).as_posix())["verdict"]
+            for path in paths.values()]
+        self.receipt["review_verdict"] = "pass" if all(verdict == "pass" for verdict in verdicts) else "blocked"
+        self.receipt["checkpoint"] = None
+        if self.receipt["review_verdict"] == "pass":
+            self.receipt["checkpoint"] = checkpoint_project(
+                self.primary, self.receipt, f"build: record wave {self.wave} cycle {self.cycle} review",
+                f"Why: {reason}\nWave: {self.wave}")
+
     def collect(self, state: Dict[str, object]) -> None:
         sidecar, relative = Path(str(state["worktree"])), str(state["relative"])
-        if state.get("timed_out") or state.get("exit_code") != 0:
-            update_state(state, outcome="blocked", reason=f"panel child exited {state.get('exit_code')}")
-            return
-        if not (sidecar / relative).is_file():
-            update_state(state, outcome="blocked", reason="panel child wrote no file")
-            return
-        try:
-            collected = isolation.collect_artifact(self.primary, sidecar, str(state["base"]), str(state["branch"]),
-                                                   relative, relative, None)
+        if state.get("outcome") != "collected":
+            if state.get("timed_out") or state.get("exit_code") != 0:
+                update_state(state, outcome="blocked", reason=f"panel child exited {state.get('exit_code')}")
+                return
+            if not (sidecar / relative).is_file():
+                update_state(state, outcome="blocked", reason="panel child wrote no file")
+                return
+            try:
+                collected = isolation.collect_artifact(self.primary, sidecar, str(state["base"]), str(state["branch"]),
+                                                       relative, relative, None)
+            except isolation.IsolationError as error:
+                update_state(state, outcome="blocked", reason=str(error), helper="isolation.py")
+                return
             self.receipt["steps"].append({"script": "isolation.py collect-artifact", "result": collected})
             update_state(state, outcome="collected")
-            isolation.clean_verify(self.primary, sidecar, str(state["base"]), str(state["branch"]))
+        try:
+            if sidecar.exists():
+                isolation.clean_verify(self.primary, sidecar, str(state["base"]), str(state["branch"]))
             isolation.retire(self.primary, sidecar, str(state["branch"]), False)
         except isolation.IsolationError as error:
-            if state.get("outcome") != "collected":
-                update_state(state, outcome="blocked", reason=str(error), helper="isolation.py")
+            update_state(state, cleanup_pending=True, cleanup_error=str(error))
+            return
+        update_state(state, cleanup_complete=True, cleanup_pending=False, cleanup_error=None)
 
 
 def next_task_id(tasks_dir: Path) -> str:
@@ -1149,8 +1193,22 @@ def next_task_id(tasks_dir: Path) -> str:
 def fix_tasks(primary: Path, options: argparse.Namespace) -> Dict[str, object]:
     """Step 7: one fix task per findings batch, carrying failed criteria and observations verbatim."""
     receipt: Dict[str, object] = {"status": None, "wave": options.wave, "cycle": options.cycle,
-                                  "created": [], "blocked": [], "steps": []}
+                                  "created": [], "carried": [], "blocked": [], "steps": []}
     try:
+        project = primary / options.project_dir
+        tasks_dir = project / "tasks"
+        repairs = []
+        for path in sorted(tasks_dir.glob("*-fix-wave-*-cycle-*.md")):
+            text = path.read_text(encoding="utf-8")
+            fields, _ = isolation.task_frontmatter(text)
+            repairs.append({"task": fields["id"], "path": path.relative_to(primary).as_posix(),
+                            "locators": re.findall(r"(?m)^### (.+)$", _common.section_body(text, "Review findings") or "")})
+        suffix = f"-fix-wave-{options.wave}-cycle-{options.cycle}.md"
+        existing = [item for item in repairs if item["path"].endswith(suffix)]
+        if existing:
+            receipt.update(status="exists", existing=existing)
+            return receipt
+        carried = {locator for item in repairs for locator in item["locators"]}
         findings = review_findings.compute(primary, options.project_dir, options.wave, options.cycle)
         receipt["findings"] = findings
         escalation = [key for key in ("structural_blockers", "skeptic_groups", "cap_reached", "all_refuted")
@@ -1161,8 +1219,6 @@ def fix_tasks(primary: Path, options: argparse.Namespace) -> Dict[str, object]:
         if not findings.get("fix_batches"):
             receipt.update(status="none", reason="no fix batches")
             return receipt
-        project = primary / options.project_dir
-        tasks_dir = project / "tasks"
         texts = contracts._task_texts(primary, options.project_dir)
         groups = {group["locator"]: group for group in findings["groups"]}
         today = now()[:10]
@@ -1173,13 +1229,16 @@ def fix_tasks(primary: Path, options: argparse.Namespace) -> Dict[str, object]:
         fix_wave = max(waves) + 1
         rows = []
         for batch in findings["fix_batches"]:
+            if all(locator in carried for locator in batch["locators"]):
+                receipt["carried"].append(batch)
+                continue
             batch_groups = [groups[locator] for locator in batch["locators"]]
             sources = sorted({task for group in batch_groups for task in group["tasks"]})
             for source in sources:
                 if source not in texts:
                     raise DriverStop(f"fix batch names unknown task {source}")
             task_id = next_task_id(tasks_dir)
-            verify = " && ".join(dict.fromkeys(_common.task_verify_command(texts[source]) for source in sources))
+            verify = "set -e\n" + "\n".join(dict.fromkeys(_common.task_verify_command(texts[source]) for source in sources))
             heavy = any(re.search(r"(?m)^Heavy:\s*yes", texts[source]) for source in sources)
             criteria = "\n".join(f"{index}. {criterion}" for index, criterion in
                                  enumerate(dict.fromkeys(group["criterion"] for group in batch_groups), 1))
@@ -1250,6 +1309,9 @@ Heavy: {'yes' if heavy else 'no'}
             receipt["created"].append({"task": task_id, "path": path.relative_to(primary).as_posix(),
                                        "wave": fix_wave, "deps": sources, "files": batch["files"],
                                        "locators": batch["locators"]})
+        if not rows:
+            receipt.update(status="none", reason="all fix batches already carried")
+            return receipt
         block = (f"## Wave {fix_wave} — fix wave {options.wave} cycle {options.cycle} review findings\n\n"
                  f"Goal: Repair the blocking findings of the wave {options.wave} cycle {options.cycle} review "
                  "without changing source task contracts.\n"

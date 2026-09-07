@@ -309,7 +309,6 @@ class DispatchDriverTests(unittest.TestCase):
         state = json.loads(record.read_text())
         state["outcome"] = "redispatched"
         record.write_text(json.dumps(state))
-        task = root / ".project/tasks/T001-demo.md"
         before = task.read_bytes()
         receipt = self.round(root)
         self.assertEqual(receipt["status"], "blocked", receipt)
@@ -463,7 +462,6 @@ class DispatchDriverTests(unittest.TestCase):
         self.assertEqual(self.round(root, "--wait", "60", mode="question")["status"], "question")
         self.driver(root, "answer", "--task-id", "T001", "--answer", "hello")
         # The fake coder asks again only while no answer is recorded, so pre-seed a second question.
-        task = root / ".project/tasks/T001-demo.md"
         receipt = self.round(root, "--wait", "60", mode="question2")
         self.assertEqual(receipt["status"], "question", receipt)
         self.assertIn("which file?", receipt["questions"][0]["question"])
@@ -482,7 +480,6 @@ class DispatchDriverTests(unittest.TestCase):
         self.assertFalse(Path(state["worktree"]).exists())
         state["outcome"] = None
         record.write_text(json.dumps(state))
-        task = root / ".project/tasks/T001-demo.md"
         before = task.read_bytes()
         head = self.head(root)
         receipt = self.driver(root, "finish", "--task-id", "T001")
@@ -980,10 +977,18 @@ class DispatchDriverTests(unittest.TestCase):
         self.assertIn("— found: wrong output, src/app.py:1", text)
         self.assertEqual(text.count("1. The demo command prints hello."), 1)
         self.assertNotIn("2. The demo command prints hello.", text)
-        self.assertIn("python3 src/app.py", text)
+        self.assertEqual(dispatch_driver._common.task_verify_command(text), "set -e\npython3 src/app.py")
         self.assertEqual(receipt["plan_wave"], 2)
         self.assertIn("## Wave 2 — fix wave 1 cycle 1 review findings", (root / ".project/plan/PLAN.md").read_text())
         self.assertEqual(self.subjects(root)[0], "build: record wave 1 cycle 1 review and fix tasks")
+        head = self.head(root)
+        plan = (root / ".project/plan/PLAN.md").read_bytes()
+        repeated = self.driver(root, "fix-tasks", "--wave", "1", "--cycle", "1")
+        self.assertEqual(repeated["status"], "exists", repeated)
+        self.assertEqual(repeated["existing"][0]["task"], "T003")
+        self.assertEqual(repeated["existing"][0]["locators"], receipt["created"][0]["locators"])
+        self.assertEqual(self.head(root), head)
+        self.assertEqual((root / ".project/plan/PLAN.md").read_bytes(), plan)
         self.assertEqual(self.round(root, "--wait", "60")["status"], "done")  # wave 1 has nothing left
         again = self.round(root, "--wait", "60", wave=2)
         self.assertEqual(again["status"], "done", again)
@@ -997,6 +1002,87 @@ class DispatchDriverTests(unittest.TestCase):
         receipt = self.driver(root, "fix-tasks", "--wave", "1", "--cycle", "1")
         self.assertEqual(receipt["status"], "escalate", receipt)
         self.assertEqual(receipt["escalation"], ["structural_blockers"])
+
+    def panel_options(self) -> argparse.Namespace:
+        return argparse.Namespace(project_dir=".project", wave=1, cycle=1, wait=60,
+                                  advertised="gpt-6-astra,claude-opus", parent_slug="gemini-pro",
+                                  child_command=f"{sys.executable} {self.root / 'fake_panelist.py'} {{model}}",
+                                  role_brief=PROJECT_ROOT / "skills/gsd-path-build/references/reviewer.md",
+                                  template=PROJECT_ROOT / "skills/gsd-path-build/templates/wave-panel.md",
+                                  child_timeout=None)
+
+    def test_panel_resumes_missing_family_and_pending_cleanup(self) -> None:
+        root = self.root
+        self.fixture(root)
+        self.set_panel(root, "gpt,claude")
+        self.assertEqual(self.round(root, "--wait", "60")["status"], "done")
+        self.assertEqual(self.review(root, "--wait", "60")["status"], "pass")
+        options = self.panel_options()
+        with mock.patch.object(dispatch_driver.isolation, "retire",
+                               side_effect=dispatch_driver.isolation.IsolationError("cleanup failed")):
+            panel = dispatch_driver.Panel(root, options)
+            receipt = panel.run()
+        self.assertEqual(receipt["status"], "blocked", receipt)
+        self.assertEqual({item["helper"] for item in receipt["blocked"]}, {"isolation.py retire"})
+        self.assertNotIn("merge", receipt)
+        roster = dispatch_driver.load_state(panel.root / "wave-1-cycle-1/roster.json")
+        self.assertEqual(set(roster["families"]), {"gpt", "claude"})
+        state = panel.states()["gpt"]
+        dispatch_driver.isolation.retire(root, Path(state["worktree"]), state["branch"], False)
+        shutil.rmtree(panel.root / state["task_id"])
+        (root / state["relative"]).unlink()
+        receipt = self.panel(root, "--wait", "60", advertised="claude-opus")
+        self.assertEqual(receipt["status"], "pass", receipt)
+        self.assertEqual(set(receipt["families"]), {"gpt", "claude"})
+        self.assertFalse(any(item.get("cleanup_pending") for item in panel.states().values()))
+        self.assertEqual(self.branches(root), ["gsd-path/M001"])
+
+    def test_blocked_review_panel_does_not_checkpoint(self) -> None:
+        for mode, advertised in (("gpt", "gpt-6-astra,claude-opus"), ("detected", "claude-opus")):
+            with self.subTest(mode=mode):
+                root = self.root / mode
+                root.mkdir()
+                self.fixture(root)
+                self.set_panel(root, mode)
+                self.assertEqual(self.round(root, "--wait", "60")["status"], "done")
+                self.assertEqual(self.review(root, "--wait", "60", verdict="blocked")["status"], "blocked")
+                head = self.head(root)
+                receipt = self.panel(root, "--wait", "60", advertised=advertised)
+                self.assertEqual(receipt["review_verdict"], "blocked", receipt)
+                self.assertIsNone(receipt["checkpoint"])
+                self.assertEqual(self.head(root), head)
+
+    def test_fix_tasks_preserves_verify_lines_and_skips_carried_batches(self) -> None:
+        root = self.root
+        self.fixture(root)
+        task = next((root / ".project/tasks").glob("T001-*.md"))
+        task.write_text(task.read_text().replace("python3 src/app.py", "python3 src/app.py # check A"))
+        run_git(root, "commit", "-qam", "fixture: trailing verify comment")
+        self.assertEqual(self.round(root, "--wait", "60")["status"], "done")
+        self.assertEqual(self.review(root, "--wait", "60", verdict="blocked")["status"], "blocked")
+        findings = dispatch_driver.review_findings.compute(root, ".project", 1, 1)
+        for group in findings["groups"]:
+            group["tasks"] = ["T001", "T002"]
+        findings["fix_batches"][0]["files"] = ["src/app.py", "tests/test_app.py"]
+        options = argparse.Namespace(project_dir=".project", wave=1, cycle=1)
+        with mock.patch.object(dispatch_driver.review_findings, "compute", return_value=findings):
+            receipt = dispatch_driver.fix_tasks(root, options)
+        self.assertEqual(receipt["status"], "created", receipt)
+        command = dispatch_driver._common.task_verify_command((root / receipt["created"][0]["path"]).read_text())
+        texts = dispatch_driver.contracts._task_texts(root, ".project")
+        self.assertEqual(command.splitlines(), ["set -e", *[
+            dispatch_driver._common.task_verify_command(texts[source]) for source in ("T001", "T002")]])
+        (root / "tests/test_app.py").write_text("raise SystemExit(7)\n")
+        result = subprocess.run(["bash", "-c", command], cwd=root, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 7, result)
+        options.cycle = 2
+        plan = (root / ".project/plan/PLAN.md").read_bytes()
+        with mock.patch.object(dispatch_driver.review_findings, "compute", return_value=findings):
+            carried = dispatch_driver.fix_tasks(root, options)
+        self.assertEqual(carried["status"], "none", carried)
+        self.assertEqual(carried["carried"], findings["fix_batches"])
+        self.assertEqual(carried["created"], [])
+        self.assertEqual((root / ".project/plan/PLAN.md").read_bytes(), plan)
 
     def test_panel_named_family_runs_merges_and_checkpoints_with_the_review(self) -> None:
         root = self.root
