@@ -1193,7 +1193,7 @@ def next_task_id(tasks_dir: Path) -> str:
 def fix_tasks(primary: Path, options: argparse.Namespace) -> Dict[str, object]:
     """Step 7: one fix task per findings batch, carrying failed criteria and observations verbatim."""
     receipt: Dict[str, object] = {"status": None, "wave": options.wave, "cycle": options.cycle,
-                                  "created": [], "carried": [], "blocked": [], "steps": []}
+                                  "created": [], "existing": [], "carried": [], "blocked": [], "steps": []}
     try:
         project = primary / options.project_dir
         tasks_dir = project / "tasks"
@@ -1202,13 +1202,10 @@ def fix_tasks(primary: Path, options: argparse.Namespace) -> Dict[str, object]:
             text = path.read_text(encoding="utf-8")
             fields, _ = isolation.task_frontmatter(text)
             repairs.append({"task": fields["id"], "path": path.relative_to(primary).as_posix(),
-                            "locators": re.findall(r"(?m)^### (.+)$", _common.section_body(text, "Review findings") or "")})
+                            "wave": int(fields["wave"]), "locators": re.findall(r"(?m)^### (.+)$", _common.section_body(text, "Review findings") or "")})
         suffix = f"-fix-wave-{options.wave}-cycle-{options.cycle}.md"
         existing = [item for item in repairs if item["path"].endswith(suffix)]
-        if existing:
-            receipt.update(status="exists", existing=existing)
-            return receipt
-        carried = {locator for item in repairs for locator in item["locators"]}
+        carried = {locator for item in repairs if item not in existing for locator in item["locators"]}
         findings = review_findings.compute(primary, options.project_dir, options.wave, options.cycle)
         receipt["findings"] = findings
         escalation = [key for key in ("structural_blockers", "skeptic_groups", "cap_reached", "all_refuted")
@@ -1226,9 +1223,23 @@ def fix_tasks(primary: Path, options: argparse.Namespace) -> Dict[str, object]:
         plan_path = project / "plan/PLAN.md"
         plan_text = plan_path.read_text(encoding="utf-8")
         depths, waves = contracts._plan_waves(plan_text)
-        fix_wave = max(waves) + 1
-        rows = []
+        repair_waves = {item["wave"] for item in existing}
+        if len(repair_waves) > 1:
+            raise DriverStop("repair tasks for this cycle disagree on their wave")
+        repair_heading = re.search(
+            rf"(?m)^## Wave (\d+) — fix wave {options.wave} cycle {options.cycle} review findings$", plan_text)
+        if repair_waves:
+            fix_wave = next(iter(repair_waves))
+        elif repair_heading:
+            fix_wave = int(repair_heading.group(1))
+        else:
+            fix_wave = max(waves) + 1
+        if repair_heading and int(repair_heading.group(1)) != fix_wave:
+            raise DriverStop("repair tasks disagree with the PLAN repair wave")
+        receipt["existing"] = existing
         for batch in findings["fix_batches"]:
+            if any(set(batch["locators"]) <= set(item["locators"]) for item in existing):
+                continue
             if all(locator in carried for locator in batch["locators"]):
                 receipt["carried"].append(batch)
                 continue
@@ -1247,7 +1258,6 @@ def fix_tasks(primary: Path, options: argparse.Namespace) -> Dict[str, object]:
                 + "\n".join(f"- {item['text']}" for item in group["observations"]) for group in batch_groups)
             files = "\n".join(f"  - {path}" for path in batch["files"])
             title = f"Fix wave {options.wave} cycle {options.cycle} review findings in {', '.join(sources)}"
-            rows.append(f"| {task_id} | {title} | {', '.join(sources)} | {', '.join(batch['files'])} |")
             text = f"""---
 id: {task_id}
 title: {title}
@@ -1309,6 +1319,11 @@ Heavy: {'yes' if heavy else 'no'}
             receipt["created"].append({"task": task_id, "path": path.relative_to(primary).as_posix(),
                                        "wave": fix_wave, "deps": sources, "files": batch["files"],
                                        "locators": batch["locators"]})
+        rows = []
+        for item in [*existing, *receipt["created"]]:
+            fields, _ = isolation.task_frontmatter((primary / item["path"]).read_text(encoding="utf-8"))
+            rows.append(f"| {item['task']} | {fields['title']} | {', '.join(fields['deps'])} | "
+                        f"{', '.join(fields['files'])} |")
         if not rows:
             receipt.update(status="none", reason="all fix batches already carried")
             return receipt
@@ -1317,9 +1332,23 @@ Heavy: {'yes' if heavy else 'no'}
                  "without changing source task contracts.\n"
                  f"Review depth: {depths[options.wave]}\n\n| Task | Title | Deps | Files |\n|------|-------|------|-------|\n"
                  + "\n".join(rows) + "\n\n")
-        marker = "## Intent coverage"
-        index = plan_text.index(marker) if marker in plan_text else len(plan_text)
-        _common.atomic_write(plan_path, plan_text[:index] + block + plan_text[index:])
+        if repair_heading:
+            start = repair_heading.start()
+            following = re.search(r"(?m)^## ", plan_text[repair_heading.end():])
+            end = repair_heading.end() + following.start() if following else len(plan_text)
+            current = plan_text[start:end]
+            present = set(re.findall(r"(?m)^\|\s*(T\d+)\s*\|", current))
+            missing_rows = [row for row in rows if row.split("|")[1].strip() not in present]
+            updated = plan_text
+            if missing_rows:
+                updated = plan_text[:end].rstrip() + "\n" + "\n".join(missing_rows) + "\n\n" + plan_text[end:]
+        else:
+            marker = "## Intent coverage"
+            index = plan_text.index(marker) if marker in plan_text else len(plan_text)
+            updated = plan_text[:index] + block + plan_text[index:]
+        plan_changed = updated != plan_text
+        if plan_changed:
+            _common.atomic_write(plan_path, updated)
         receipt["plan_wave"] = fix_wave
         lint = subprocess.run([sys.executable, "-B", str(Path(__file__).resolve().parent / "check_task_briefs.py"),
                                "--repo", str(primary), "--base", isolation.current_sha(primary),
@@ -1329,11 +1358,12 @@ Heavy: {'yes' if heavy else 'no'}
         if lint.returncode:
             raise DriverStop("fix task briefs failed lint", stderr=lint.stderr.strip())
         # The blocked review and its fix tasks land in one bookkeeping checkpoint, as step 7 requires.
+        dirty = any(path.startswith(".project/") for path in isolation.uncommitted_paths(primary))
         receipt["checkpoint"] = checkpoint_project(
             primary, receipt, f"build: record wave {options.wave} cycle {options.cycle} review and fix tasks",
             f"Why: persist the blocked review verdict with the fix tasks it batched\nWave: {options.wave}\n"
-            f"Tasks: {', '.join(item['task'] for item in receipt['created'])}")
-        receipt["status"] = "created"
+            f"Tasks: {', '.join(item['task'] for item in [*existing, *receipt['created']])}")
+        receipt["status"] = "created" if receipt["created"] or plan_changed or dirty else "exists"
         return receipt
     except STOP_ERRORS as error:
         return stop(receipt, error)

@@ -989,11 +989,59 @@ class DispatchDriverTests(unittest.TestCase):
         self.assertEqual(repeated["existing"][0]["locators"], receipt["created"][0]["locators"])
         self.assertEqual(self.head(root), head)
         self.assertEqual((root / ".project/plan/PLAN.md").read_bytes(), plan)
+        plan_path = root / ".project/plan/PLAN.md"
+        original = plan.decode()
+        start = original.index("## Wave 2")
+        end = original.index("## Intent coverage", start)
+        for damaged in (original[:start] + original[end:],
+                        "\n".join(line for line in original.split("\n") if not line.startswith("| T003 |"))):
+            plan_path.write_text(damaged)
+            repair = root / receipt["created"][0]["path"]
+            repair.write_text(repair.read_text() + "- 2026-09-07 — repair inventory interrupted\n")
+            repaired = self.driver(root, "fix-tasks", "--wave", "1", "--cycle", "1")
+            self.assertEqual(repaired["status"], "created", repaired)
+            self.assertEqual(repaired["created"], [])
+            self.assertEqual([item["task"] for item in repaired["existing"]], ["T003"])
+            self.assertEqual(plan_path.read_text(), original)
+            self.assertEqual([step["exit_code"] for step in repaired["steps"]
+                              if step["script"] == "check_task_briefs.py"], [0])
+            self.assertIsNotNone(repaired["checkpoint"])
+            self.assertEqual(run_git(root, "status", "--porcelain").stdout, "")
         self.assertEqual(self.round(root, "--wait", "60")["status"], "done")  # wave 1 has nothing left
         again = self.round(root, "--wait", "60", wave=2)
         self.assertEqual(again["status"], "done", again)
         self.assertEqual([item["task"] for item in again["landed"]], ["T003"])
         self.assertIn("status: done", (root / receipt["created"][0]["path"]).read_text())
+
+    def test_fix_tasks_resumes_after_only_first_batch_was_written(self) -> None:
+        root = self.root
+        self.fixture(root)
+        reviewer = root / "fake_reviewer.py"
+        reviewer.write_text(reviewer.read_text().replace(' and task == tasks[0]', ''))
+        run_git(root, "commit", "-qam", "fixture: block both tasks")
+        self.assertEqual(self.round(root, "--wait", "60")["status"], "done")
+        self.assertEqual(self.review(root, "--wait", "60", verdict="blocked")["status"], "blocked")
+        write = dispatch_driver._common.atomic_write
+
+        def interrupt(path, text):
+            if path.name == "T004-fix-wave-1-cycle-1.md":
+                raise dispatch_driver.DriverStop("interrupted second batch")
+            return write(path, text)
+
+        options = argparse.Namespace(project_dir=".project", wave=1, cycle=1)
+        with mock.patch.object(dispatch_driver._common, "atomic_write", side_effect=interrupt):
+            stopped = dispatch_driver.fix_tasks(root, options)
+        self.assertEqual(stopped["status"], "blocked", stopped)
+        first = root / ".project/tasks/T003-fix-wave-1-cycle-1.md"
+        first_bytes = first.read_bytes()
+        receipt = self.driver(root, "fix-tasks", "--wave", "1", "--cycle", "1")
+        self.assertEqual(receipt["status"], "created", receipt)
+        self.assertEqual([item["task"] for item in receipt["created"]], ["T004"])
+        self.assertEqual([item["task"] for item in receipt["existing"]], ["T003"])
+        self.assertEqual(first.read_bytes(), first_bytes)
+        self.assertIsNotNone(receipt["checkpoint"])
+        self.assertEqual(run_git(root, "status", "--porcelain").stdout, "")
+        self.assertEqual(self.round(root, "--wait", "60", wave=2)["status"], "done")
 
     def test_fix_tasks_escalates_structural_blockers(self) -> None:
         root = self.root
