@@ -831,6 +831,23 @@ class Review:
             return
         update_state(state, cleanup_complete=True, cleanup_pending=False, cleanup_error=None)
 
+    def input_failure(self, base: str) -> Optional[Dict[str, str]]:
+        paths = review_findings.review_paths(self.primary / self.project_dir, self.wave,
+                                            self.cycle, self.receipt["depth"])
+        allowed = {path.relative_to(self.primary).as_posix() for path in paths.values()}
+        head = isolation.current_sha(self.primary)
+        committed = set(filter(None, isolation.git_text(
+            self.primary, "diff", "--no-renames", "--name-only", "-z", base, head, "--").split("\0")))
+        changed = committed | isolation.uncommitted_paths(self.primary)
+        checkpoint = f"build: record wave {self.wave} cycle {self.cycle} review"
+        history_matches = head == base or (
+            isolation.git_output(self.primary, "show", "-s", "--format=%P", head) == base
+            and isolation.git_output(self.primary, "show", "-s", "--format=%s", head) == checkpoint)
+        if changed - allowed or not history_matches:
+            return {"reason": "inputs changed after the review base; run a new cycle",
+                    "helper": "dispatch_driver.py review"}
+        return None
+
     def settle(self, states: Dict[str, Dict[str, object]]) -> None:
         """Advance every lens and render the receipt from the records; settle is their only writer."""
         self.receipt["in_flight"], self.receipt["blocked"], self.receipt["lenses"] = [], [], {}
@@ -848,6 +865,10 @@ class Review:
                     update_state(state, outcome="blocked", reason="child wrapper exited without recording a result")
             self.receipt["base"] = state.get("base")
             if state.get("outcome") == "collected":
+                failure = self.input_failure(str(state["base"]))
+                if failure:
+                    self.receipt["blocked"].append({**summary(state), **failure})
+                    continue
                 canonical = self.primary / str(state["relative"])
                 if (not canonical.is_file()
                         or hashlib.sha256(canonical.read_bytes()).hexdigest() != state.get("validated_sha256")):
@@ -866,7 +887,9 @@ class Review:
 
     def conclude(self) -> None:
         lenses: Dict[str, Dict[str, object]] = self.receipt["lenses"]
-        if not self.receipt["blocked"] and all(entry.get("verdict") == "pass" for entry in lenses.values()):
+        passing = not self.receipt["blocked"] and all(entry.get("verdict") == "pass" for entry in lenses.values())
+        failure = self.input_failure(str(self.receipt["base"])) if passing else None
+        if passing and failure is None:
             if not self.receipt["panel_required"]:  # with a panel, the parent's single checkpoint follows it
                 self.receipt["checkpoint"] = checkpoint_project(
                     self.primary, self.receipt, f"build: record wave {self.wave} cycle {self.cycle} review",
@@ -875,6 +898,9 @@ class Review:
             return
         helper_failures = [f"{item['helper']}: {item['reason']}" for item in self.receipt["blocked"]
                            if item.get("helper")]
+        if failure:
+            self.receipt.update(failure)
+            helper_failures.append(f"{failure['helper']}: {failure['reason']}")
         try:
             self.receipt["findings"] = review_findings.compute(self.primary, self.project_dir, self.wave,
                                                                self.cycle, helper_failures)

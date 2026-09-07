@@ -758,6 +758,64 @@ class DispatchDriverTests(unittest.TestCase):
         self.assertEqual(receipt["status"], "blocked", receipt)
         self.assertEqual(receipt["blocked"][0]["reason"], "reviewer wrote no review file")
 
+    def test_review_rejects_changed_inputs_after_pass(self) -> None:
+        root = self.root
+        self.fixture(root)
+        self.assertEqual(self.round(root, "--wait", "60")["status"], "done")
+        self.assertEqual(self.review(root, "--wait", "60")["status"], "pass")
+        intent = root / ".project/intent/INTENT.md"
+        intent.write_text(intent.read_text() + "Additional acceptance criterion.\n")
+        for committed in (False, True):
+            with self.subTest(committed=committed):
+                if committed:
+                    run_git(root, "commit", "-qam", "intent: add criterion")
+                head = self.head(root)
+                receipt = self.review(root, "--wait", "60")
+                self.assertEqual(receipt["status"], "blocked", receipt)
+                self.assertEqual(receipt["blocked"][0]["reason"],
+                                 "inputs changed after the review base; run a new cycle")
+                self.assertEqual(receipt["blocked"][0]["helper"], "dispatch_driver.py review")
+                self.assertTrue(any(item["kind"] == "helper-failure" for
+                                    item in receipt["findings"]["structural_blockers"]))
+                self.assertFalse(receipt.get("checkpoint"))
+                self.assertEqual(self.head(root), head)
+
+    def test_review_rechecks_inputs_before_checkpoint(self) -> None:
+        root = self.root.resolve()
+        self.fixture(root)
+        self.assertEqual(self.round(root, "--wait", "60")["status"], "done")
+        self.assertEqual(self.review(root, "--wait", "60")["status"], "pass")
+        head = self.head(root)
+        options = argparse.Namespace(project_dir=".project", wave=1, cycle=1, wait=None)
+        review = dispatch_driver.Review(root, options)
+        conclude = review.conclude
+
+        def change_inputs_and_conclude():
+            intent = root / ".project/intent/INTENT.md"
+            intent.write_text(intent.read_text() + "Additional acceptance criterion.\n")
+            conclude()
+
+        with mock.patch.object(review, "conclude", side_effect=change_inputs_and_conclude):
+            receipt = review.run()
+        self.assertEqual(receipt["status"], "blocked", receipt)
+        self.assertEqual(receipt["reason"], "inputs changed after the review base; run a new cycle")
+        self.assertTrue(any(item["kind"] == "helper-failure" for
+                            item in receipt["findings"]["structural_blockers"]))
+        self.assertEqual(self.head(root), head)
+
+    def test_review_rejects_unrelated_commit_after_pass(self) -> None:
+        root = self.root
+        self.fixture(root)
+        self.assertEqual(self.round(root, "--wait", "60")["status"], "done")
+        self.assertEqual(self.review(root, "--wait", "60")["status"], "pass")
+        run_git(root, "commit", "--allow-empty", "-m", "unrelated checkpoint")
+        head = self.head(root)
+        receipt = self.review(root, "--wait", "60")
+        self.assertEqual(receipt["status"], "blocked", receipt)
+        self.assertEqual(receipt["blocked"][0]["reason"],
+                         "inputs changed after the review base; run a new cycle")
+        self.assertEqual(self.head(root), head)
+
     def test_review_rejects_changed_or_missing_collected_artifact(self) -> None:
         root = self.root
         self.fixture(root)
