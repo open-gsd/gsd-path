@@ -439,7 +439,7 @@ class Round:
         stderr = (attempt_dir / "stderr").read_text(encoding="utf-8", errors="replace")
         try:
             delta = log_delta(self.primary, state)
-        except isolation.IsolationError as error:
+        except (isolation.IsolationError, FileNotFoundError) as error:
             self.fail(state, str(error), stdout_tail=tail(message), stderr_tail=tail(stderr))
             return False
         entries = [line for line in delta.splitlines() if line.strip()]
@@ -670,9 +670,16 @@ def main(argv=None) -> int:
             result = Round(primary, arguments).run()
         elif arguments.action == "finish":
             current = Round(primary, arguments)
+            current.recover()
             records = [state for state in latest_states(current.root)
                        if state["task_id"] == arguments.task_id]
-            if records:
+            if arguments.task_id in current.proven:
+                commit = current.proven[arguments.task_id]
+                if records and records[0].get("outcome") is None:
+                    update_state(records[0], outcome="landed", commit=commit)
+                current.receipt["landed"].append(
+                    {"task": arguments.task_id, "commit": commit, "recovered": True})
+            elif records:
                 record = records[0]
                 if record.get("outcome") is not None:
                     raise DriverStop(f"task {arguments.task_id} dispatch record is {record['outcome']}; "

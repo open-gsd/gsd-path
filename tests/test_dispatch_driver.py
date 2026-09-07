@@ -374,6 +374,44 @@ class DispatchDriverTests(unittest.TestCase):
         self.assertEqual(self.driver(root, "status")["dispatches"][0]["attempt"], 2)
         self.assertIn("Orchestrator answer: hello", task.read_text())
 
+    def test_finish_recovers_a_retired_parallel_landing_without_repeating_verify(self) -> None:
+        root = self.root
+        self.fixture(root)
+        receipt = self.round(root, "--wait", "60")
+        self.assertEqual(receipt["status"], "done", receipt)
+        landing = next(item for item in receipt["landed"] if item["task"] == "T001")
+        self.assertEqual(landing["mode"], "parallel")
+        record = root / ".git/gsd-path/dispatch/T001/attempt-1/state.json"
+        state = json.loads(record.read_text())
+        self.assertFalse(Path(state["worktree"]).exists())
+        state["outcome"] = None
+        record.write_text(json.dumps(state))
+        task = root / ".project/tasks/T001-demo.md"
+        before = task.read_bytes()
+        head = self.head(root)
+        receipt = self.driver(root, "finish", "--task-id", "T001")
+        self.assertEqual(receipt["status"], "landed", receipt)
+        self.assertEqual(receipt["landed"],
+                         [{"task": "T001", "commit": landing["commit"], "recovered": True}])
+        persisted = json.loads(record.read_text())
+        self.assertEqual(persisted["outcome"], "landed")
+        self.assertEqual(persisted["commit"], landing["commit"])
+        self.assertEqual(task.read_bytes(), before)
+        self.assertEqual(self.head(root), head)
+
+    def test_classify_blocks_when_the_isolate_task_file_is_missing(self) -> None:
+        root = self.root
+        self.fixture(root, deps_t002="[T001]")
+        self.assertEqual(self.round(root, "--wait", "60", mode="question")["status"], "question")
+        current = dispatch_driver.Round(root, argparse.Namespace(project_dir=".project", wave=1))
+        state = dispatch_driver.latest_states(current.root)[0]
+        task = Path(state["worktree"]) / state["task_file"]
+        task.unlink()
+        self.assertFalse(current.classify(state))
+        self.assertEqual(current.receipt["blocked"][0]["task_id"], "T001")
+        self.assertIn(str(task), current.receipt["blocked"][0]["reason"])
+        self.assertEqual(dispatch_driver.latest_states(current.root)[0]["outcome"], "blocked")
+
     def test_finish_refuses_a_running_child_and_a_recovered_landing_is_recorded(self) -> None:
         root = self.root
         self.fixture(root, deps_t002="[T001]")
