@@ -954,6 +954,28 @@ class DispatchDriverTests(unittest.TestCase):
         receipt = self.review(root, "--wait", "60")
         self.assertEqual(receipt["status"], "pass", receipt)
 
+    def test_advance_rereads_a_result_recorded_after_the_child_died(self) -> None:
+        path = self.root / "state.json"
+        state = {"task_id": "x", "pid": 999999, "finished_at": None, "outcome": None, "_path": str(path)}
+        dispatch_driver.save_state(path, {"task_id": "x", "pid": 999999})
+        dispatch_driver.save_state(path.with_name("exit.json"), {"finished_at": "now", "exit_code": 0})
+        collected = []
+        with mock.patch.object(dispatch_driver, "process_alive", return_value=True):
+            self.assertFalse(dispatch_driver.advance(state, collected.append))
+        with mock.patch.object(dispatch_driver, "process_alive", return_value=False):
+            self.assertTrue(dispatch_driver.advance(state, collected.append))
+        self.assertEqual(collected, [state])
+        self.assertEqual(state["exit_code"], 0)
+
+    def test_advance_blocks_an_orphaned_child(self) -> None:
+        path = self.root / "state.json"
+        state = {"task_id": "x", "pid": 999999, "finished_at": None, "outcome": None, "_path": str(path)}
+        dispatch_driver.save_state(path, {"task_id": "x", "pid": 999999})
+        with mock.patch.object(dispatch_driver, "process_alive", return_value=False):
+            self.assertTrue(dispatch_driver.advance(state, self.fail))
+        self.assertEqual(state["outcome"], "blocked")
+        self.assertEqual(dispatch_driver.load_state(path)["reason"], dispatch_driver.ORPHANED)
+
     def test_review_invalid_artifact_blocks_before_collection_and_keeps_the_sidecar(self) -> None:
         root = self.root
         self.fixture(root)
