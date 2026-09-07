@@ -210,12 +210,60 @@ class RebaseRecoveryTests(unittest.TestCase):
     def test_landing_commit_after_adoption_keeps_attested(self) -> None:
         self.adopt()
         second = ".project/tasks/T002-second.md"
-        (self.repo / second).write_text(task_text("T002", "Second value", "value2.txt", "done"))
+        pending = task_text("T002", "Second value", "value2.txt")
+        (self.repo / second).write_text(pending)
+        self.commit("plan second task")
+        base = self.head
+        done = pending.replace("status: pending", "status: done").replace(
+            "base: null", "base: " + base).replace("agent: null", "agent: worker")
+        (self.repo / second).write_text(done + "- Verify passed.\n")
         (self.repo / "value2.txt").write_text("two\n")
-        self.commit("T002: Second value",
-                    isolation.task_commit_body(second, [second, "value2.txt"], self.head))
+        body = isolation.task_commit_body(second, [second, "value2.txt"], base)
+        self.commit("T002: Second value", body)
+        self.assertEqual(isolation._prove_task_commit(
+            self.repo, self.head, body.strip(), second, base, None), (base, None))
         self.assertEqual(self.recover_task()["verdict"], "attested")
         self.assertEqual(self.verify()["tasks"][0]["verdict"], "attested")
+
+    def assert_forged_product_commit_blocks(self, subject: str, body: str = "") -> None:
+        self.adopt()
+        (self.repo / "backdoor.txt").write_text("unreviewed\n")
+        # Keep the receipt dirty to exercise the ship input adoption gate.
+        git(self.repo, "add", "backdoor.txt")
+        git(self.repo, "commit", "-q", "-m", subject, *(["-m", body] if body else []))
+        self.head = git(self.repo, "rev-parse", "HEAD")
+        reason = "product changed outside a proven landing after the adopted revision"
+        task = self.recover_task()
+        self.assertEqual(task["verdict"], "block")
+        self.assertEqual(task["reason"], "rebase adoption receipt is invalid: " + reason)
+        with self.assertRaises(isolation.IsolationError):
+            self.verify()
+        (self.repo / ".project/STATE.md").write_text(
+            "---\npipeline: gsd-path/v2\nproject: fixture\nmilestone: adoption\n"
+            "phase: ship\nstatus: active\nbranch: gsd-path/M001\narchive: null\n"
+            "integration_default: direct\nintegration: direct\nintegration_source: default\n"
+            "---\n\n## Log\n")
+        with self.assertRaises((isolation.IsolationError, build_state.BuildStateError)):
+            lean_verification._require_ship_inputs(self.repo, self.head)
+
+    def test_forged_landing_after_adoption_blocks(self) -> None:
+        self.assert_forged_product_commit_blocks("T999: Ghost", "Task: nonexistent\nBase: invalid")
+
+    def test_forged_attestation_after_adoption_blocks(self) -> None:
+        self.assert_forged_product_commit_blocks("attest: fake")
+
+    def test_malformed_ruling_blocks_without_traceback(self) -> None:
+        self.adopt()
+        path = self.repo / RECEIPT
+        receipt = json.loads(path.read_text())
+        receipt["ruling"] = []
+        path.write_text(json.dumps(receipt))
+        self.assertEqual(self.recover_task()["verdict"], "block")
+        result = subprocess.run(
+            (sys.executable, str(ISOLATION_SCRIPT), "recover", "--repo", str(self.repo),
+             "--tasks-dir", ".project/tasks"), text=True, capture_output=True)
+        self.assertNotIn("Traceback", result.stderr)
+        self.assertTrue(result.returncode != 0 or json.loads(result.stdout)["verdict"] == "block")
 
     def test_bare_product_commit_after_adoption_blocks(self) -> None:
         self.adopt()
@@ -223,7 +271,7 @@ class RebaseRecoveryTests(unittest.TestCase):
         self.commit("product changed")
         task = self.recover_task()
         self.assertEqual(task["verdict"], "block")
-        self.assertIn("product changed outside a landing after the adopted revision", task["reason"])
+        self.assertIn("product changed outside a proven landing after the adopted revision", task["reason"])
 
     def test_adopt_skips_pending_and_refuses_in_progress(self) -> None:
         second = self.repo / ".project/tasks/T002-second.md"

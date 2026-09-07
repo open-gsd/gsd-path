@@ -2579,8 +2579,6 @@ def _prove_attest_commit(
 REBASE_ADOPTION_SCHEMA = "gsd-path/rebase-adoption/v1"
 REBASE_ADOPTION_RECEIPT = "build/rebase-adoption.json"
 REBASE_ADOPTION_PATH = ".project/" + REBASE_ADOPTION_RECEIPT
-# Mirrors git_guard.TASK_SUBJECT; isolation must not import the guard.
-LANDING_SUBJECT = re.compile(r"^[A-Za-z][A-Za-z0-9._-]*: \S.*$")
 
 
 def _one_landing(history: Dict[str, list[tuple[str, str]]], subject: str) -> str:
@@ -2671,26 +2669,32 @@ def adopt_rebase(primary: Path, original_head: str, head: str, ruling: str) -> D
             "ruling": ruling.strip(), "tasks": tasks}
 
 
-def _landing_shaped(subject: str, body: str) -> bool:
-    if subject.startswith("attest: "):
-        return True
-    fields = {line.partition(": ")[0] for line in body.splitlines()}
-    return bool(LANDING_SUBJECT.fullmatch(subject)) and {"Task", "Base"} <= fields
-
-
 @functools.lru_cache(maxsize=None)
 def _require_landings_after(repo: Path, adopted: str, head: str) -> None:
-    """After adoption only landing or attest commits may change product paths."""
+    """After adoption every product change must be a strictly proven landing."""
     if run_git(repo, "merge-base", "--is-ancestor", adopted, head).returncode:
         raise IsolationError("adopted revision is not an ancestor")
+    inventory = set(git_output(
+        repo, "ls-tree", "-r", "--name-only", head, "--", ".project/tasks"
+    ).splitlines())
     log = git_output(repo, "log", "--first-parent", "--format=%x1e%H%x00%s%x00%b", f"{adopted}..{head}")
     for record in filter(None, log.split("\x1e")):
         sha, subject, body = record.split("\x00", 2)
-        if _landing_shaped(subject, body):
-            continue
         changed = git_output(repo, "diff", "--name-only", sha + "^", sha).splitlines()
-        if any(not path.startswith(".project/") for path in changed):
-            raise IsolationError("product changed outside a landing after the adopted revision")
+        # Real attestations, like other bookkeeping, cannot change product paths.
+        if all(path.startswith(".project/") for path in changed):
+            continue
+        task_files = [line[6:].strip() for line in body.splitlines()
+                      if line.startswith("Task: ")]
+        if len(task_files) == 1 and task_files[0] in inventory:
+            try:
+                base = _landing_base(repo, sha)
+                _, error = _prove_task_commit(repo, sha, body.strip(), task_files[0], base, None)
+                if error is None:
+                    continue
+            except IsolationError:
+                pass
+        raise IsolationError("product changed outside a proven landing after the adopted revision")
 
 
 def _receipt_path(project_root: Path) -> Path:
@@ -2719,8 +2723,18 @@ def _validated_receipt(repo: Path, raw: bytes) -> Dict[str, object]:
     """Parse and recompute a receipt once per process; git objects are immutable."""
     try:
         receipt = json.loads(raw)
-        if receipt["schema"] != REBASE_ADOPTION_SCHEMA:
+        if not isinstance(receipt, dict) or receipt.get("schema") != REBASE_ADOPTION_SCHEMA:
             raise IsolationError("unknown schema")
+        for field in ("original_head", "head"):
+            if not isinstance(receipt.get(field), str):
+                raise IsolationError(f"{field} must be a full lowercase SHA")
+            require_full_sha(receipt[field])
+        if not isinstance(receipt.get("ruling"), str) or not receipt["ruling"].strip():
+            raise IsolationError("ruling must be a non-empty string")
+        if not isinstance(receipt.get("tasks"), list) or any(
+            not isinstance(row, dict) for row in receipt["tasks"]
+        ):
+            raise IsolationError("tasks must be a list of objects")
         expected = adopt_rebase(repo, receipt["original_head"], receipt["head"], receipt["ruling"])
     except (KeyError, TypeError, ValueError) as error:
         raise IsolationError(str(error)) from error
