@@ -48,7 +48,7 @@ Native configs for unselected hosts are ignored.
 | File | Purpose |
 | --- | --- |
 | `.gsd-path/guard_hook.py` | Pre-tool-use guard (stdin JSON → exit 2 + denial JSON) |
-| `.gsd-path/git_guard.py` | Staged-path + ship-subject validator |
+| `.gsd-path/git_guard.py` | Commit and publication validator |
 | `.gsd-path/runtime/` | Canonical read-only state validation and routing used for plain-prompt re-entry |
 | `.git/hooks/pre-commit` | Runs `git_guard.py` before commit |
 | `.git/hooks/commit-msg` | Runs `git_guard.py` with commit message |
@@ -127,6 +127,15 @@ See [UPDATE.md](UPDATE.md).
 - direct write, edit, and patch tool calls that target product files while the
   deterministic route is outside build
 
+Read tools (`Read`, `Grep`, `View`, …) may still open archive paths.
+
+A working directory is archive context only when it is inside an archive.
+Merely containing `.project/archive/` does not put the repository root in
+archive context: `echo guard-probe`, `python3 -m unittest`, and the archive
+helper with `--repo <root>` remain allowed by the archive guard. Deleting an
+archive ancestor, such as `rm -rf .project`, remains blocked. A simple command
+such as `rm -rf scratch` passes the archive check; other guard rules still apply.
+
 **`git_guard.py`** (pre-commit + commit-msg + pre-push):
 
 - modifies, deletes, or renames away tracked archive paths
@@ -144,11 +153,20 @@ See [UPDATE.md](UPDATE.md).
 - pushes (to any remote) that move a `gsd-path/M###` ref anywhere but its
   strict ship commit, or delete it while it holds anything else; and pushes of
   any other ref whose commit carries a `STATE.md` that still owes a ship commit
-  (names a bound branch, not `shipped/done`). Only `archive_milestone.py
-  integrate` publishes milestone work, so no-mistakes, `gh pr create`, and
-  plain `git push` — under any branch name — stop at the same hook. A branch
-  cut from `main` between milestones carries `shipped/done` and passes
+  (names a bound branch, not `shipped/done`). The ship state's `branch` must
+  match every bound name in the local and remote refs. Malformed pre-push
+  records and failed object inspection block the push; a present commit
+  without `STATE.md` passes on an ordinary ref. An absent bound ref passes
+  deletion. The authorized publisher is `archive_milestone.py integrate`;
+  the hook checks ref updates, not which client initiated them
 - **allows** adding files to archive (ship transaction)
+
+These local hooks cover pushes made by plain Git and clients that invoke
+Git with hooks enabled. Creating a PR from an already published ref does not
+run the pre-push hook. A branch cut from `main` carrying `shipped/done` passes;
+if `main` instead carries an unshipped bound state, pushes of branches carrying
+that state remain blocked until the milestone records are repaired through the
+pipeline.
 
 ## GitHub-side gate
 

@@ -1,24 +1,9 @@
 #!/usr/bin/env python3
-"""Git commit-msg and pre-commit guard for GSD Path projects.
+"""Git pre-commit, commit-msg, and pre-push guard for GSD Path projects.
 
-Blocks a commit that changes any path under a committed .project/archive/
-tree, and blocks a ship commit (subject `ship: ...`) that stages paths outside
-.project/. A new archive may be populated only when STATE.md names it as the
-current ship transaction; commit-msg then also requires a ship subject.
-
-During build on the bound branch, changes outside .project/ commit only as
-task landing commits (the shape `isolation.py land` writes); see HOOKS.md.
-
-Installed as .git/hooks/commit-msg:
-
-    exec python3 "$(git rev-parse --show-toplevel)/.gsd-path/git_guard.py" commit-msg "$1"
-
-Installed as .git/hooks/pre-commit:
-
-    exec python3 "$(git rev-parse --show-toplevel)/.gsd-path/git_guard.py" pre-commit
-
-Inspection failures and violations both exit 1. The guard fails closed because
-an unreadable index cannot prove archive immutability.
+See HOOKS.md for guard rules and scripts/install.py / scripts/install.mjs for
+hook wiring. Inspection failures and violations both exit 1: unreadable Git
+state cannot prove archive immutability or safe publication.
 """
 
 import re
