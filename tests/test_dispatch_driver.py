@@ -249,6 +249,21 @@ class DispatchDriverTests(unittest.TestCase):
         self.assertIn("no RESULT line", receipt["blocked"][0]["reason"])
         self.assertEqual(self.head(root), head)
 
+    def test_later_wave_blocks_while_an_earlier_wave_is_unfinished(self) -> None:
+        root = self.root
+        head = self.fixture(root, wave_t002=2)
+        note = root / ".project/review-note.md"
+        note.write_text("Pending bookkeeping\n")
+        receipt = self.round(root, wave=2)
+        self.assertEqual(receipt["status"], "blocked", receipt)
+        self.assertEqual(receipt["blocked"][0]["reason"],
+                         "wave 1 is still unfinished; run round --wave 1 first")
+        self.assertEqual(receipt["landed"], [])
+        self.assertEqual(receipt["dispatched"], [])
+        self.assertEqual(self.head(root), head)
+        self.assertEqual(run_git(root, "status", "--porcelain").stdout,
+                         "?? .project/review-note.md\n")
+
     def test_round_stops_at_the_wave_boundary(self) -> None:
         root = self.root
         self.fixture(root, wave_t002=2)

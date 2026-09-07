@@ -494,11 +494,13 @@ class Round:
         in_flight = self.in_flight_states()
         if any(state["mode"] == "serial" for state in in_flight):
             return False
-        self.checkpoint_bookkeeping()
         ready = build_state.ready(str(self.primary), self.project_dir)
         self.receipt["steps"].append({"script": "build_state.py ready", "result": ready})
         wave = ready["current_wave"]
-        if wave is None or wave != self.receipt["wave"]:
+        if wave is not None and wave < self.receipt["wave"]:
+            raise DriverStop(f"wave {wave} is still unfinished; run round --wave {wave} first")
+        self.checkpoint_bookkeeping()
+        if wave is None or wave > self.receipt["wave"]:
             return not in_flight
         active_ids = {state["task_id"] for state in in_flight}
         # ponytail: the one-heavy-Verify-at-a-time rule lives here; move it into
@@ -517,7 +519,7 @@ class Round:
             selected.append(task)
         if not selected:
             return False
-        head = ready["head"]
+        head = isolation.current_sha(self.primary)
         self.runner("lint-round", head)
         round_size = len(selected) + len(in_flight)
         for task in selected:
