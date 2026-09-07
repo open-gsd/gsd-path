@@ -40,7 +40,7 @@ may be repeated after a crash or a tool timeout.
 
 | Command | Result |
 | --- | --- |
-| `round --repo <root> --child-command '<cmd>' [--wait <s>] [--child-timeout <s>]` | Recover, settle exited children, checkpoint bookkeeping, `ready`, lint, isolate, dispatch; Verify, land, record, retire each result in task-id order. Receipt status `done`, `in-flight`, `question`, or `blocked`. |
+| `round --repo <root> --wave <N> --child-command '<cmd>' [--wait <s>] [--child-timeout <s>]` | Recover, settle exited children, checkpoint bookkeeping, `ready`, lint, isolate, dispatch; Verify, land, record, retire each result in task-id order. Receipt status `done`, `in-flight`, `question`, or `blocked`. |
 | `finish --repo <root> --task-id <id>` | Verify, land, record, and retire one exited task on its own. |
 | `answer --repo <root> --task-id <id> --answer '<text>'` | Append `Orchestrator answer:` to the isolate's task Log; the next `round` redispatches that isolate. |
 | `status --repo <root>` | Every task's newest dispatch record. |
@@ -53,6 +53,8 @@ templates: `claude -p --output-format json <owner permission flags>` and
 `RESULT: <task id> ready|blocked`; no line means blocked. A Log delta whose
 first entry after the last recorded `Orchestrator answer:` leads with
 `NEEDS-ORCHESTRATOR:` is a question.
+`--wave` is required and pins the parent-selected wave, including on resumed calls. Child completion
+is recorded in `exit.json`; the parent alone writes `state.json`.
 `--wait`, `--child-timeout`, and `--capacity` (concurrent children) have
 no defaults. At most one `Heavy: yes`
 Verify task is in flight at a time, and a round stops at a wave boundary.

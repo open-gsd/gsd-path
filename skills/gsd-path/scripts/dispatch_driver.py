@@ -94,7 +94,11 @@ def latest_states(root: Path) -> List[Dict[str, object]]:
             attempts = sorted(task_dir.glob("attempt-*/state.json"),
                               key=lambda path: attempt_number(path.parent))
             if attempts:
-                states.append(dict(load_state(attempts[-1]), _path=str(attempts[-1])))
+                state = dict(load_state(attempts[-1]), _path=str(attempts[-1]))
+                exit_path = attempts[-1].with_name("exit.json")
+                if exit_path.is_file():
+                    state.update(load_state(exit_path))
+                states.append(state)
     return states
 
 
@@ -131,7 +135,7 @@ def final_message(stdout: str) -> str:
 
 
 def child_main(state_path: Path) -> int:
-    """Run the owner's child command under the isolate; record its exit in the state file."""
+    """Run the owner's child command under the isolate; record its exit in a separate receipt."""
     state = load_state(state_path)
     attempt_dir = state_path.parent
     with open(attempt_dir / "brief.md", "rb") as brief, \
@@ -145,8 +149,8 @@ def child_main(state_path: Path) -> int:
             os.killpg(process.pid, signal.SIGKILL)
             process.wait()
             exit_code, timed_out = None, True
-    save_state(state_path, dict(load_state(state_path), finished_at=now(),
-                                exit_code=exit_code, timed_out=timed_out))
+    save_state(attempt_dir / "exit.json",
+               dict(finished_at=now(), exit_code=exit_code, timed_out=timed_out))
     return 0
 
 
@@ -329,8 +333,8 @@ class Round:
         self.root = records_root(primary)
         self.proven: Dict[str, str] = {}  # task id -> landing commit proven by recover
         self.receipt: Dict[str, object] = {
-            "status": None, "wave": None, "landed": [], "dispatched": [], "in_flight": [],
-            "questions": [], "blocked": [], "steps": [],
+            "status": None, "wave": getattr(options, "wave", None), "landed": [],
+            "dispatched": [], "in_flight": [], "questions": [], "blocked": [], "steps": [],
         }
 
     # recovery -------------------------------------------------------------
@@ -368,11 +372,13 @@ class Round:
         """Classify every exited child. Returns True when a landing or redispatch changed the round."""
         changed = False
         for state in latest_states(self.root):
+            if state.get("wave") != self.receipt["wave"]:
+                continue
             outcome = state.get("outcome")
             if outcome == "question":
                 if state.get("answered"):
-                    update_state(state, outcome="redispatched")
                     self.launch(dict(state, answered=True))
+                    update_state(state, outcome="redispatched")
                     changed = True
                 else:
                     self.receipt["questions"].append({**self.summary(state),
@@ -449,6 +455,9 @@ class Round:
         return True
 
     def launch(self, state: Dict[str, object]) -> None:
+        if state.get("wave") != self.receipt["wave"]:
+            raise DriverStop("task is outside the requested wave", task=state["task_id"],
+                             wave=state.get("wave"), requested_wave=self.receipt["wave"])
         fresh = spawn(self.root, state, self.options)
         self.receipt["dispatched"].append(self.summary(fresh))
         self.receipt["in_flight"].append(self.summary(fresh))
@@ -456,9 +465,19 @@ class Round:
     # dispatch -------------------------------------------------------------
 
     def in_flight_states(self) -> List[Dict[str, object]]:
-        return [state for state in latest_states(self.root) if state.get("outcome") is None]
+        return [state for state in latest_states(self.root)
+                if state.get("outcome") is None and state.get("wave") == self.receipt["wave"]]
 
     def checkpoint_bookkeeping(self) -> None:
+        open_ids = {state["task_id"] for state in latest_states(self.root)
+                    if state.get("outcome") in (None, "question", "blocked")}
+        orphaned = []
+        for task_path in sorted((self.primary / ".project/tasks").glob("*.md")):
+            fields, _ = isolation.task_frontmatter(task_path.read_text(encoding="utf-8"))
+            if fields and fields.get("status") == "in-progress" and fields.get("id") not in open_ids:
+                orphaned.append(str(fields.get("id")))
+        if orphaned:
+            raise DriverStop("in-progress tasks have no open dispatch record", tasks=orphaned)
         dirty = sorted(path for path in isolation.uncommitted_paths(self.primary)
                        if path.startswith(".project/"))
         if not dirty:
@@ -479,8 +498,6 @@ class Round:
         ready = build_state.ready(str(self.primary), self.project_dir)
         self.receipt["steps"].append({"script": "build_state.py ready", "result": ready})
         wave = ready["current_wave"]
-        if self.receipt["wave"] is None:
-            self.receipt["wave"] = wave
         if wave is None or wave != self.receipt["wave"]:
             return not in_flight
         active_ids = {state["task_id"] for state in in_flight}
@@ -492,6 +509,8 @@ class Round:
         for task in ready["ready"]:
             if capacity is not None and len(in_flight) + len(selected) >= capacity:
                 break
+            if task["wave"] != self.receipt["wave"]:
+                continue
             if task["id"] in active_ids or (task["verify_heavy"] and heavy_busy):
                 continue
             heavy_busy = heavy_busy or task["verify_heavy"]
@@ -528,9 +547,6 @@ class Round:
         deadline = time.monotonic() + self.options.wait if self.options.wait else None
         try:
             self.recover()
-            waves = [state["wave"] for state in latest_states(self.root)
-                     if state.get("outcome") in (None, "question")]
-            self.receipt["wave"] = min(waves) if waves else None
             changed = True
             while True:
                 self.receipt["in_flight"] = []
@@ -592,6 +608,7 @@ def main(argv=None) -> int:
     round_parser.add_argument("--child-command", required=True,
                               help="owner-supplied command that reads the brief on stdin")
     round_parser.add_argument("--wait", type=float, help="seconds to keep polling before returning")
+    round_parser.add_argument("--wave", type=int, required=True, help="wave selected by the parent")
     round_parser.add_argument("--child-timeout", type=float, help="per-child wall clock in seconds")
     round_parser.add_argument("--capacity", type=positive_int, help="owner's concurrent-child limit")
     round_parser.add_argument("--role-brief", type=Path, default=default_resource("references/coder.md"))

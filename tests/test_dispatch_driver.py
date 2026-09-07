@@ -1,3 +1,4 @@
+import argparse
 import json
 import os
 import subprocess
@@ -6,7 +7,9 @@ import tempfile
 import textwrap
 import unittest
 from pathlib import Path
+from unittest import mock
 
+from scripts import dispatch_driver
 from tests import test_handoffs
 from tests.test_pipeline_state import run_git
 
@@ -91,9 +94,9 @@ class DispatchDriverTests(unittest.TestCase):
         self.assertTrue(completed.stdout.strip(), completed.stderr)
         return json.loads(completed.stdout)
 
-    def round(self, root: Path, *extra: str, mode: str = "ready") -> dict:
+    def round(self, root: Path, *extra: str, mode: str = "ready", wave: int = 1) -> dict:
         return self.driver(
-            root, "round", "--child-command", f"{sys.executable} {root / 'fake_coder.py'}",
+            root, "round", "--wave", str(wave), "--child-command", f"{sys.executable} {root / 'fake_coder.py'}",
             "--role-brief", str(ROLE_BRIEF), "--task-template", str(TASK_TEMPLATE), *extra, mode=mode,
         )
 
@@ -166,6 +169,62 @@ class DispatchDriverTests(unittest.TestCase):
         dispatches = self.driver(root, "status")["dispatches"]
         self.assertEqual(dispatches[0]["attempt"], 2)
 
+    def test_interrupted_redispatch_preserves_the_answer_for_retry(self) -> None:
+        root = self.root
+        head = self.fixture(root, deps_t002="[T001]")
+        self.assertEqual(self.round(root, "--wait", "60", mode="question")["status"], "question")
+        self.driver(root, "answer", "--task-id", "T001", "--answer", "hello")
+        current = dispatch_driver.Round(root, argparse.Namespace(project_dir=".project", wave=1, wait=None))
+        with mock.patch.object(dispatch_driver, "spawn", side_effect=dispatch_driver.DriverStop("interrupted")):
+            receipt = current.run()
+        self.assertEqual(receipt["status"], "blocked", receipt)
+        state = self.driver(root, "status")["dispatches"][0]
+        self.assertEqual(state["outcome"], "question")
+        self.assertTrue(state["answered"])
+        self.assertEqual(self.head(root), head)
+        receipt = self.round(root, "--wait", "60")
+        self.assertEqual(receipt["status"], "done", receipt)
+        self.assertEqual([item["task"] for item in receipt["landed"]], ["T001", "T002"])
+
+    def test_orphaned_active_task_blocks_bookkeeping_and_completion(self) -> None:
+        root = self.root
+        head = self.fixture(root, deps_t002="[T001]")
+        self.assertEqual(self.round(root, "--wait", "60", mode="question")["status"], "question")
+        record = root / ".git/gsd-path/dispatch/T001/attempt-1/state.json"
+        state = json.loads(record.read_text())
+        state["outcome"] = "redispatched"
+        record.write_text(json.dumps(state))
+        task = root / ".project/tasks/T001-demo.md"
+        before = task.read_bytes()
+        receipt = self.round(root)
+        self.assertEqual(receipt["status"], "blocked", receipt)
+        self.assertEqual(receipt["blocked"][0]["tasks"], ["T001"])
+        self.assertEqual(self.head(root), head)
+        self.assertEqual(task.read_bytes(), before)
+
+    def test_child_exit_receipt_preserves_parent_state_and_is_loaded_by_status(self) -> None:
+        root = self.root
+        self.fixture(root)
+        attempt = root / ".git/gsd-path/dispatch/T001/attempt-1"
+        attempt.mkdir(parents=True)
+        record = attempt / "state.json"
+        state = {"task_id": "T001", "worktree": str(root), "pid": 123,
+                 "command": [sys.executable, "-c", "raise SystemExit(7)"]}
+        record.write_text(json.dumps(state))
+        before = record.read_bytes()
+        (attempt / "brief.md").write_text("brief")
+        subprocess.run([sys.executable, "-B", str(SCRIPT), "_child", "--state", str(record)],
+                       check=True, capture_output=True)
+        self.assertEqual(record.read_bytes(), before)
+        completion = json.loads((attempt / "exit.json").read_text())
+        self.assertEqual(completion["exit_code"], 7)
+        self.assertFalse(completion["timed_out"])
+        self.assertTrue(completion["finished_at"])
+        loaded = self.driver(root, "status")["dispatches"][0]
+        self.assertEqual(loaded["pid"], 123)
+        self.assertEqual(loaded["exit_code"], 7)
+        self.assertEqual(loaded["finished_at"], completion["finished_at"])
+
     def test_failed_verify_lands_nothing_and_reports_the_output(self) -> None:
         root = self.root
         head = self.fixture(root, deps_t002="[T001]")
@@ -198,7 +257,11 @@ class DispatchDriverTests(unittest.TestCase):
         self.assertEqual(receipt["wave"], 1)
         self.assertEqual([item["task"] for item in receipt["landed"]], ["T001"])
         self.assertIn("status: pending", (root / ".project/tasks/T002-demo.md").read_text())
-        receipt = self.round(root, "--wait", "60")
+        repeated = self.round(root, "--wait", "60")
+        self.assertEqual(repeated["status"], "done", repeated)
+        self.assertEqual(repeated["wave"], 1)
+        self.assertEqual(repeated["dispatched"], [])
+        receipt = self.round(root, "--wait", "60", wave=2)
         self.assertEqual(receipt["wave"], 2)
         self.assertEqual([item["task"] for item in receipt["landed"]], ["T002"])
 

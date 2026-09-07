@@ -147,7 +147,7 @@ example `claude -p --output-format json ...` or `codex exec --json ...`; the
 owner's flags own the child's permissions):
 
 ```text
-python3 <absolute dispatch_driver.py> round --repo <absolute primary> \
+python3 <absolute dispatch_driver.py> round --repo <absolute primary> --wave <N> \
   --child-command '<owner command>' [--wait <owner seconds>] \
   [--child-timeout <owner seconds>]
 ```
