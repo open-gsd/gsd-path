@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import errno
+import hashlib
 import json
 import os
 import re
@@ -755,7 +756,7 @@ class Review:
             raise DriverStop(f"wave {self.wave} has no tasks")
         return tasks
 
-    def dispatch(self, lenses: Dict[str, str], depth: str) -> None:
+    def dispatch(self, lenses: Dict[str, str], depth: str, base: Optional[str] = None) -> None:
         dirty = sorted(isolation.uncommitted_paths(self.primary))
         if dirty:  # the review base must include every bookkeeping change
             raise DriverStop("review collection base requires a clean primary", paths=dirty)
@@ -769,13 +770,16 @@ class Review:
         final_scope = depth == "full" and lane == "quick" and contracts._plan_waves(plan_text)[1] == [1]
         earlier = (review_findings.review_paths(self.primary / self.project_dir, self.wave, self.cycle - 1, depth)
                    if self.cycle > 1 else {})
-        base = isolation.current_sha(self.primary)
+        for previous in earlier.values():
+            if not previous.is_file():
+                raise DriverStop(f"previous cycle review is missing: {previous}")
+        base = base or isolation.current_sha(self.primary)
         self.receipt["base"] = base
         for key, relative in lenses.items():
             name = f"wave-{self.wave}-cycle-{self.cycle}" + ("" if key == "canonical" else f"-{key}")
             sidecar = isolation.isolate_verify(self.primary, base, name)
             self.receipt["steps"].append({"script": "isolation.py isolate-verify", "result": sidecar})
-            previous = earlier.get(key) if earlier.get(key, Path()).is_file() else None
+            previous = earlier.get(key)
             state = {"task_id": self.lens_name(key), "lens": None if key == "canonical" else key,
                      "wave": self.wave, "cycle": self.cycle, "base": base,
                      "worktree": str(sidecar["worktree"]), "branch": str(sidecar["branch"]), "relative": relative}
@@ -792,29 +796,46 @@ class Review:
             update_state(state, outcome="blocked", reason=f"reviewer child exited {state.get('exit_code')}",
                          stderr_tail=tail(stderr))
             return
-        if not (sidecar / relative).is_file():
-            update_state(state, outcome="blocked", reason="reviewer wrote no review file", stderr_tail=tail(stderr))
-            return
+        staged = sidecar / relative
+        canonical = self.primary / relative
+        if state.get("outcome") != "collected":
+            if not staged.is_file():
+                if (state.get("validated") and canonical.is_file()
+                        and hashlib.sha256(canonical.read_bytes()).hexdigest() == state.get("validated_sha256")):
+                    update_state(state, outcome="collected")
+                else:
+                    update_state(state, outcome="blocked", reason="reviewer wrote no review file", stderr_tail=tail(stderr))
+                    return
+            else:
+                try:
+                    validated = contracts.validate_wave_evidence(sidecar, self.project_dir, relative)
+                except contracts.HandoffError as error:
+                    update_state(state, outcome="blocked", reason=str(error), helper="check_handoffs.py wave")
+                    return
+                update_state(state, verdict=validated["verdict"], owned=validated.get("owned"), validated=True,
+                             validated_sha256=hashlib.sha256(staged.read_bytes()).hexdigest())
+                try:
+                    collected = isolation.collect_artifact(self.primary, sidecar, str(state["base"]),
+                                                           str(state["branch"]), relative, relative, None)
+                except isolation.IsolationError as error:
+                    update_state(state, outcome="blocked", reason=str(error), helper="isolation.py")
+                    return
+                update_state(state, outcome="collected")
+                self.receipt["steps"].append({"script": "isolation.py collect-artifact", "result": collected})
         try:
-            validated = contracts.validate_wave_evidence(sidecar, self.project_dir, relative)
-        except contracts.HandoffError as error:  # the sidecar stays for inspection
-            update_state(state, outcome="blocked", reason=str(error), helper="check_handoffs.py wave")
-            return
-        try:
-            collected = isolation.collect_artifact(self.primary, sidecar, str(state["base"]),
-                                                   str(state["branch"]), relative, relative, None)
-            self.receipt["steps"].append({"script": "isolation.py collect-artifact", "result": collected})
-            isolation.clean_verify(self.primary, sidecar, str(state["base"]), str(state["branch"]))
+            if sidecar.exists():
+                isolation.clean_verify(self.primary, sidecar, str(state["base"]), str(state["branch"]))
             isolation.retire(self.primary, sidecar, str(state["branch"]), False)
         except isolation.IsolationError as error:
-            update_state(state, outcome="blocked", reason=str(error), helper="isolation.py")
-            return
-        update_state(state, outcome="collected", verdict=validated["verdict"], owned=validated.get("owned"))
+            raise DriverStop(str(error), helper="isolation.py") from error
+        update_state(state, cleanup_complete=True)
 
     def settle(self, states: Dict[str, Dict[str, object]]) -> None:
         """Advance every lens and render the receipt from the records; settle is their only writer."""
         self.receipt["in_flight"], self.receipt["blocked"], self.receipt["lenses"] = [], [], {}
         for key, state in states.items():
+            if state.get("outcome") == "collected" and not state.get("cleanup_complete"):
+                self.collect(state)
             if state.get("outcome") is None:
                 if state.get("finished_at") is not None:
                     self.collect(state)
@@ -865,12 +886,22 @@ class Review:
             lenses = {key: path.relative_to(self.primary).as_posix() for key, path in
                       review_findings.review_paths(project, self.wave, self.cycle, depth).items()}
             states = self.current_states(list(lenses))
-            if not states:
-                self.dispatch(lenses, depth)
+            missing = {key: relative for key, relative in lenses.items() if key not in states}
+            if missing:
+                base = None
+                if states:
+                    bases = {state["base"] for state in states.values()}
+                    head = isolation.current_sha(self.primary)
+                    if bases != {head}:
+                        raise DriverStop(f"missing review lenses {', '.join(missing)}: HEAD moved to {head}; "
+                                         f"recorded bases: {', '.join(sorted(bases))}")
+                    base = head
+                self.dispatch(missing, depth, base)
                 states = self.current_states(list(lenses))
             while True:
                 self.settle(states)
-                if all(state.get("outcome") in ("collected", "blocked") for state in states.values()):
+                if set(states) == set(lenses) and all(
+                        state.get("outcome") in ("collected", "blocked") for state in states.values()):
                     self.conclude()
                     return self.receipt
                 if deadline is None or time.monotonic() >= deadline:

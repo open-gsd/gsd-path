@@ -2,6 +2,7 @@ import argparse
 import io
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -702,6 +703,69 @@ class DispatchDriverTests(unittest.TestCase):
         self.assertEqual(sorted(receipt["lenses"]), ["adversarial", "contract"])
         for lens in ("contract", "adversarial"):
             self.assertIn(f"Lens: {lens}", (root / f".project/review/wave-1.cycle1.{lens}.md").read_text())
+        self.assertEqual(self.branches(root), ["gsd-path/M001"])
+
+    def test_review_resumes_only_missing_deep_lens(self) -> None:
+        root = self.root
+        self.fixture(root)
+        plan = root / ".project/plan/PLAN.md"
+        plan.write_text(plan.read_text().replace("Review depth: full", "Review depth: deep", 1))
+        run_git(root, "commit", "-qam", "plan: deep review")
+        self.assertEqual(self.round(root, "--wait", "60")["status"], "done")
+        options = argparse.Namespace(project_dir=".project", wave=1, cycle=1, wait=None,
+                                     repair_evidence=None,
+                                     role_brief=PROJECT_ROOT / "skills/gsd-path-build/references/reviewer.md",
+                                     template=PROJECT_ROOT / "skills/gsd-path-build/templates/wave-review.md",
+                                     child_command=f"{sys.executable} {root / 'fake_reviewer.py'}",
+                                     child_timeout=None)
+        review = dispatch_driver.Review(root, options)
+        with mock.patch.object(review, "settle"):
+            self.assertEqual(review.run()["status"], "in-flight")
+        states = review.current_states(["contract", "adversarial"])
+        for state in states.values():
+            while not Path(state["_path"]).with_name("exit.json").is_file():
+                time.sleep(dispatch_driver.POLL_SECONDS)
+        adversarial = states["adversarial"]
+        sidecar = Path(adversarial["worktree"])
+        dispatch_driver.isolation.clean_verify(root, sidecar, adversarial["base"], adversarial["branch"])
+        dispatch_driver.isolation.retire(root, sidecar, adversarial["branch"], False)
+        shutil.rmtree(Path(adversarial["_path"]).parent.parent)
+        contract_path = Path(states["contract"]["_path"])
+        contract_pid = states["contract"]["pid"]
+        receipt = self.review(root, "--wait", "60")
+        self.assertEqual(receipt["status"], "pass", receipt)
+        self.assertEqual(sorted(receipt["lenses"]), ["adversarial", "contract"])
+        self.assertEqual(json.loads(contract_path.read_text())["pid"], contract_pid)
+        self.assertEqual(len(list(contract_path.parent.parent.glob("attempt-*"))), 1)
+        self.assertEqual(self.branches(root), ["gsd-path/M001"])
+
+    def test_review_recovers_validated_collection_after_interruption(self) -> None:
+        root = self.root
+        self.fixture(root)
+        self.assertEqual(self.round(root, "--wait", "60")["status"], "done")
+        self.assertEqual(self.review(root, "--wait", "60")["status"], "pass")
+        states = dispatch_driver.latest_states(dispatch_driver.records_root(root) / "reviews")
+        state = states[0]
+        dispatch_driver.update_state(state, outcome=None, cleanup_complete=False)
+        receipt = self.review(root, "--wait", "60")
+        self.assertEqual(receipt["status"], "pass", receipt)
+        self.assertFalse(receipt["blocked"])
+        self.assertIsNone(receipt["checkpoint"])
+        canonical = root / state["relative"]
+        canonical.write_text(canonical.read_text() + "changed after validation\n")
+        dispatch_driver.update_state(state, outcome=None, cleanup_complete=False)
+        receipt = self.review(root, "--wait", "60")
+        self.assertEqual(receipt["status"], "blocked", receipt)
+        self.assertEqual(receipt["blocked"][0]["reason"], "reviewer wrote no review file")
+
+    def test_review_requires_previous_cycle_evidence(self) -> None:
+        root = self.root
+        self.fixture(root)
+        self.assertEqual(self.round(root, "--wait", "60")["status"], "done")
+        receipt = self.review(root, "--wait", "60", cycle=2)
+        self.assertEqual(receipt["status"], "blocked", receipt)
+        self.assertEqual(receipt["blocked"][0]["reason"],
+                         f"previous cycle review is missing: {root.resolve() / '.project/review/wave-1.cycle1.md'}")
         self.assertEqual(self.branches(root), ["gsd-path/M001"])
 
     def test_review_refuses_verify_only_and_unlanded_waves(self) -> None:
