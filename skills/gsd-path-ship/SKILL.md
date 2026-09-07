@@ -55,7 +55,7 @@ so the position is unchanged. Then:
    exact full reviewed `HEAD` before dispatch, then prove every task landed
    through the runtime in step 3. Its landing check must return one
    `proven-landed` or `attested` entry per task. For rebase recovery, see
-   [Build step 1](../gsd-path-build/SKILL.md). Its receipt
+   `$gsd-path-build` step 1. Its receipt
    `.project/build/rebase-adoption.json` may remain uncommitted only after
    the runtime's `build_state.verify_landed_tasks` check passes. Keep bookkeeping in STATE.md
    and assigned artifacts; never create extra `.project/` execution reports. Reuse an output only when its
