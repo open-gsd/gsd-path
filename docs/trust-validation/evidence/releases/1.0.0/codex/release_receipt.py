@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Assemble a gsd-path live-evidence release receipt from a real host run.
 
-Select --host <manifest host> (default codex) before the phase name; host facts and
-child binding come from tests/hosts/<host>.py. A native-tier host's manifest requires
+Select --host <manifest host> (default codex) before the phase name; host facts come
+from tests/hosts/<host>.py in --repo. Codex and Claude retain their stricter inline
+child binders; other hosts use SPEC.bind_child. A native-tier host's manifest requires
 --native-guard-evidence pointing to a passing probe JSON. For receipt, --transcript is
 a Codex session JSONL file or, for every other host, the tests/evaluate_host.py run
 root containing quick/run-*/events.jsonl.
