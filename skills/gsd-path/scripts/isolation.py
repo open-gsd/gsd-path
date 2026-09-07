@@ -2611,13 +2611,20 @@ def _committed_task_paths(repo: Path, revision: str) -> list[str]:
     return git_text(repo, "ls-tree", "-r", "--name-only", revision, "--", ".project/tasks").splitlines()
 
 
-def _ordered_edits(repo: Path, sha: str) -> list[str]:
+def _ordered_edits(repo: Path, sha: str) -> list[bytes]:
     """Every changed byte, path, mode and binary payload of `sha`; hunk
     coordinates and content-addressed index headers excluded."""
-    patch = git_text(repo, "diff", "--binary", "--full-index", "--no-renames",
-                     "--unified=0", sha + "^", sha)
-    return [line for line in patch.splitlines(keepends=True)
-            if not line.startswith(("index ", "@@ "))]
+    result = subprocess.run(
+        ("git", "-C", str(repo), "diff", "--binary", "--full-index", "--no-renames",
+         "--unified=0", sha + "^", sha),
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout).decode("utf-8", errors="replace").strip()
+        raise IsolationError(detail or "git command failed")
+    return [line for line in result.stdout.splitlines(keepends=True)
+            if not line.startswith((b"index ", b"@@ "))]
 
 
 def _task_contract_section(text: str) -> str:
@@ -2728,6 +2735,13 @@ def _check_landings_after(repo: Path, adopted: str, head: str) -> None:
     if run_git(repo, "merge-base", "--is-ancestor", adopted, head).returncode:
         raise IsolationError("adopted revision is not an ancestor")
     inventory = set(_committed_task_paths(repo, head))
+    archived_paths = git_text(
+        repo, "ls-tree", "-r", "--name-only", head, "--", ".project/archive"
+    ).splitlines()
+    for path in archived_paths:
+        match = re.fullmatch(r"\.project/archive/[^/]+/tasks/([^/]+\.md)", path)
+        if match:
+            inventory.add(".project/tasks/" + match.group(1))
     for sha, _, body in _first_parent_records(repo, f"{adopted}..{head}"):
         changed = git_output(repo, "diff", "--name-only", sha + "^", sha).splitlines()
         # Bookkeeping, including real attestations, cannot change product paths.

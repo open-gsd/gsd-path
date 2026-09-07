@@ -129,6 +129,16 @@ class RebaseRecoveryTests(unittest.TestCase):
         self.commit("change contract")
         self.adopt(False)
 
+    def test_changed_rebased_line_ending_rejected(self) -> None:
+        git(self.repo, "config", "core.autocrlf", "false")
+        (self.repo / "value.txt").write_bytes(b"two\r\n")
+        git(self.repo, "add", "value.txt")
+        git(self.repo, "commit", "-q", "--amend", "--no-edit")
+        self.head = git(self.repo, "rev-parse", "HEAD")
+        result = self.adopt(False)
+        self.assertIn("rebased landing changes different bytes, paths or modes", result.stderr)
+        self.assertFalse((self.repo / RECEIPT).exists())
+
     def test_tampered_receipt_rejected(self) -> None:
         self.adopt()
         path = self.repo / RECEIPT
@@ -217,6 +227,19 @@ class RebaseRecoveryTests(unittest.TestCase):
             self.repo, self.head, body.strip(), second, base, None), (base, None))
         self.assertEqual(self.recover_task()["verdict"], "attested")
         self.assertEqual(self.verify()["tasks"][0]["verdict"], "attested")
+
+        destination = self.repo / ARCHIVE
+        destination.mkdir(parents=True)
+        for folder in ("tasks", "plan", "build"):
+            shutil.move(str(self.repo / ".project" / folder), str(destination / folder))
+        self.commit(pipeline_git.ship_subject("001-adoption"),
+                    pipeline_git.ship_commit_body(ARCHIVE, self.head))
+        archived = destination / "tasks" / Path(self.path).name
+        report = isolation.verify_landed_task_files(
+            self.repo, [archived], ".project/tasks", self.head
+        )
+        self.assertEqual(report["tasks"][0]["verdict"], "attested")
+        self.assertEqual(report["tasks"][0]["provenance"], "owner-authorized-rebase")
 
     def assert_forged_product_commit_blocks(self, subject: str, body: str = "") -> None:
         self.adopt()
