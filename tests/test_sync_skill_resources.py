@@ -8,6 +8,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from scripts.sync_skill_resources import SKILL_NAMES, rewrite_router_alias_skill
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
@@ -170,9 +172,29 @@ class SyncSkillResourcesTests(unittest.TestCase):
             self.assertIn("stale generated resource", stale.stderr)
             self.assertNotIn("wrong-direction edit", stale.stderr)
 
+    def test_router_alias_skill_rewrites_only_the_catalog_name(self) -> None:
+        rewritten = rewrite_router_alias_skill(
+            "---\nname: gsd-path\n"
+            "description: Use only when the user explicitly invokes $gsd-path.\n---\n"
+            "Call $gsd-path-plan next.\n",
+            "path",
+            "gsd-path",
+        )
+        self.assertEqual(
+            rewritten,
+            "---\nname: path\n"
+            "description: Use only when the user explicitly invokes $path or $gsd-path.\n---\n"
+            "Call $gsd-path-plan next.\n",
+        )
+
     def test_distribution_layout_is_self_contained(self) -> None:
-        skill_directories = sorted((PROJECT_ROOT / "skills").glob("gsd-path*"))
-        self.assertEqual(len(skill_directories), 14)
+        skill_directories = sorted(
+            path for path in (PROJECT_ROOT / "skills").iterdir() if path.is_dir()
+        )
+        self.assertEqual(
+            {path.name for path in skill_directories},
+            set(SKILL_NAMES),
+        )
 
         link_pattern = re.compile(r"\[[^]]+\]\(([^)#]+)(?:#[^)]*)?\)")
         for skill_directory in skill_directories:

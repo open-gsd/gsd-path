@@ -406,8 +406,66 @@ class InstallerTests(unittest.TestCase):
         self.assertTrue(discussion.is_file())
         self.assertIn("/gsd-path-discuss", discussion.read_text(encoding="utf-8"))
 
+    def test_staging_stamps_router_alias_version(self):
+        staged = self.root / "staged-version"
+        staged.mkdir()
+        install.stage_target(self.source, "claude", staged)
+        self.assertEqual(
+            "9.9.9\n",
+            (staged / "gsd-path" / "VERSION").read_text(encoding="utf-8"),
+        )
+        self.assertEqual(
+            "9.9.9\n",
+            (staged / "path" / "VERSION").read_text(encoding="utf-8"),
+        )
+
+    def test_install_refuses_to_replace_an_unrelated_path_skill(self):
+        target = self.root / "foreign-path" / "skills"
+        foreign = target / "path"
+        foreign.mkdir(parents=True)
+        (foreign / "SKILL.md").write_text(
+            "---\nname: path\n---\nforeign\n", encoding="utf-8"
+        )
+        with self.assertRaises(install.InstallerError) as raised:
+            install.install(self.source, [install.TargetPlan("grok", target)])
+        self.assertIn("unrelated skill", str(raised.exception))
+        self.assertEqual(
+            "---\nname: path\n---\nforeign\n",
+            (foreign / "SKILL.md").read_text(encoding="utf-8"),
+        )
+
+    def test_install_replaces_an_owned_path_router_alias(self):
+        target = self.root / "owned-path" / "skills"
+        owned = target / "path" / "scripts"
+        owned.mkdir(parents=True)
+        (owned / "pipeline_state.py").write_text("# previous alias\n", encoding="utf-8")
+        results = install.install(self.source, [install.TargetPlan("grok", target)])
+        self.assertTrue(any("backed up" in line for line in results))
+        skill = (target / "path" / "SKILL.md").read_text(encoding="utf-8")
+        self.assertRegex(skill, r"(?m)^name: path$")
+        backup = (
+            target.parent
+            / "disabled-gsd-skills"
+            / "path"
+            / "scripts"
+            / "pipeline_state.py"
+        )
+        self.assertEqual("# previous alias\n", backup.read_text(encoding="utf-8"))
+
+    def test_path_is_a_short_slash_name_for_the_router(self):
+        self.assertEqual({"path": "gsd-path"}, install.ROUTER_ALIASES)
+        staged = self.root / "staged-router-alias"
+        staged.mkdir()
+        install.stage_target(PROJECT_ROOT, "grok", staged)
+        skill = (staged / "path" / "SKILL.md").read_text(encoding="utf-8")
+        self.assertRegex(skill, r"(?m)^name: path$")
+        self.assertNotRegex(skill, r"(?m)^name: gsd-path$")
+        self.assertIn("invokes /path or /gsd-path", skill)
+        self.assertIn("/gsd-path-undo", skill)
+
     def test_v2_canonical_skills_are_installed_without_aliases(self):
         self.assertEqual({}, install.SKILL_ALIASES)
+        self.assertEqual({"path": "gsd-path"}, install.ROUTER_ALIASES)
 
         target = self.root / "terminology" / "skills"
         status, _, error = self.run_main(

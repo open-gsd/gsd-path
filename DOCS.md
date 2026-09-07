@@ -113,9 +113,9 @@ Work **in the project directory**. Invoke **explicitly**:
 
 | Host | Router |
 | --- | --- |
-| Codex | `$gsd-path` |
-| Claude, Cursor, Zed, Grok, Copilot, Qwen, Kiro, Kimi, Antigravity | `/gsd-path` |
-| OpenCode v2 | `/gsd-path` |
+| Codex | `$path` or `$gsd-path` |
+| Claude, Cursor, Zed, Grok, Copilot, Qwen, Kiro, Kimi, Antigravity | `/path` or `/gsd-path` |
+| OpenCode v2 | `/path` or `/gsd-path` |
 | OpenCode stable | Ask to *load and use the gsd-path skill* |
 
 The router reads `.project/STATE.md`, reports phase, runs the next valid step.
@@ -129,6 +129,7 @@ Run one phase only; stops at handoff:
 
 | Skill | Invoke (slash hosts) | Purpose |
 | --- | --- | --- |
+| `path` | `/path` | Router short name (same skill as `/gsd-path`) |
 | `gsd-path` | `/gsd-path` | Router — default (`/gsd-path status` reports without advancing) |
 | `gsd-path-discuss` | `/gsd-path-discuss` | Any-phase discussion and durable answers |
 | `gsd-path-inspect` | `/gsd-path-inspect` | Brownfield scan only |

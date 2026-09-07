@@ -177,8 +177,55 @@ test("discussion skill is installed and invocable", async () => {
   assert.match(fs.readFileSync(discussion, "utf8"), /\/gsd-path-discuss/);
 });
 
+test("install refuses to replace an unrelated path skill", async () => {
+  const target = path.join(root, "foreign-path", "skills");
+  const foreign = path.join(target, "path");
+  fs.mkdirSync(foreign, { recursive: true });
+  fs.writeFileSync(path.join(foreign, "SKILL.md"), "---\nname: path\n---\nforeign\n");
+
+  await assert.rejects(
+    () => runInstall([installer.targetPlan("grok", target)]),
+    /unrelated skill/
+  );
+  assert.equal(fs.readFileSync(path.join(foreign, "SKILL.md"), "utf8"), "---\nname: path\n---\nforeign\n");
+});
+
+test("install replaces an owned path router alias", async () => {
+  const target = path.join(root, "owned-path", "skills");
+  const owned = path.join(target, "path");
+  fs.mkdirSync(path.join(owned, "scripts"), { recursive: true });
+  fs.writeFileSync(path.join(owned, "scripts", "pipeline_state.py"), "# previous alias\n");
+
+  const results = await runInstall([installer.targetPlan("grok", target)]);
+  assert.match(results.join("\n"), /backed up/);
+  assert.match(
+    fs.readFileSync(path.join(target, "path", "SKILL.md"), "utf8"),
+    /^name: path$/m
+  );
+  assert.equal(
+    fs.readFileSync(
+      path.join(path.dirname(target), "disabled-gsd-skills", "path", "scripts", "pipeline_state.py"),
+      "utf8"
+    ),
+    "# previous alias\n"
+  );
+});
+
+test("path is a short slash name for the router", () => {
+  assert.deepEqual(installer.ROUTER_ALIASES, { path: "gsd-path" });
+  const staged = path.join(root, "staged-router-alias");
+  fs.mkdirSync(staged);
+  installer.stageTarget(REPO_ROOT, "grok", staged);
+  const skill = fs.readFileSync(path.join(staged, "path", "SKILL.md"), "utf8");
+  assert.match(skill, /^name: path$/m);
+  assert.doesNotMatch(skill, /^name: gsd-path$/m);
+  assert.match(skill, /invokes \/path or \/gsd-path/);
+  assert.match(skill, /\/gsd-path-undo/);
+});
+
 test("v2 canonical skills are installed without aliases", async () => {
   assert.deepEqual(installer.SKILL_ALIASES, {});
+  assert.deepEqual(installer.ROUTER_ALIASES, { path: "gsd-path" });
 
   const target = path.join(root, "terminology", "skills");
   await runInstall([installer.targetPlan("claude", target)]);
@@ -965,12 +1012,14 @@ test("staging stamps the installed VERSION from package.json", () => {
   fs.mkdirSync(staged);
   installer.stageTarget(source, "claude", staged);
   assert.equal(fs.readFileSync(path.join(staged, "gsd-path", "VERSION"), "utf8"), "9.9.9\n");
+  assert.equal(fs.readFileSync(path.join(staged, "path", "VERSION"), "utf8"), "9.9.9\n");
 
   fs.rmSync(path.join(source, "package.json"));
   const unstamped = path.join(root, "staged-unstamped");
   fs.mkdirSync(unstamped);
   installer.stageTarget(source, "claude", unstamped);
   assert.ok(!fs.existsSync(path.join(unstamped, "gsd-path", "VERSION")));
+  assert.ok(!fs.existsSync(path.join(unstamped, "path", "VERSION")));
 });
 
 test("detectInstalls finds only roots with managed entries", () => {
@@ -978,7 +1027,8 @@ test("detectInstalls finds only roots with managed entries", () => {
   const grokRoot = path.join(root, "detect", "grok");
   const kiroRoot = path.join(root, "detect", "kiro");
   fs.mkdirSync(path.join(claudeRoot, "gsd-path"), { recursive: true });
-  fs.mkdirSync(grokRoot, { recursive: true });
+  fs.mkdirSync(path.join(grokRoot, "path"), { recursive: true });
+  fs.writeFileSync(path.join(grokRoot, "path", "SKILL.md"), "---\nname: path\n---\nforeign\n");
   fs.mkdirSync(path.join(kiroRoot, "unrelated-skill"), { recursive: true });
   const roots = { claude: claudeRoot, grok: grokRoot, kiro: kiroRoot, qwen: path.join(root, "missing") };
   const plans = installer.detectInstalls(Object.keys(roots), (target) => roots[target]);

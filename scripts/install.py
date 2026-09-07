@@ -41,6 +41,7 @@ TARGETS = targets_for_manifest(sync_skill_resources.RESOURCE_MANIFEST)
 LOCAL_ROOTS = local_roots_for_manifest(sync_skill_resources.RESOURCE_MANIFEST)
 SKILL_NAMES = skill_names_for_manifest(sync_skill_resources.RESOURCE_MANIFEST)
 SKILL_ALIASES = dict(sync_skill_resources.RESOURCE_MANIFEST["skill_aliases"])
+ROUTER_ALIASES = dict(sync_skill_resources.RESOURCE_MANIFEST["router_aliases"])
 CLAUDE_BRIDGE = "@../AGENTS.md\n@../WORKFLOW.md\n"
 HOOKS_DIRECTORY = ".gsd-path"
 GUARD_SCRIPTS = ("guard_hook.py", "git_guard.py")
@@ -395,10 +396,10 @@ def _shared_invocations(text: str) -> str:
         )
 
     return re.sub(
-        r"(?P<quote>`?)(?P<skill>\$gsd-path(?:-[a-z0-9]+)*)"
+        r"(?P<quote>`?)(?P<skill>\$(?:gsd-path(?:-[a-z0-9]+)*|path))"
         r"(?P<arguments> status)?(?P=quote)"
         r"(?: \(Codex\) (?:and|or) (?P<paired_quote>`?)/"
-        r"(?P<paired_skill>gsd-path(?:-[a-z0-9]+)*)"
+        r"(?P<paired_skill>gsd-path(?:-[a-z0-9]+)*|path)"
         r"(?P<paired_arguments> status)?(?P=paired_quote)"
         r" \((?:other hosts|Antigravity/Zed)\))?",
         replace,
@@ -496,9 +497,45 @@ def legacy_codex_root(environ: Optional[Mapping[str, str]] = None) -> Path:
 
 def _is_managed_name(name: str) -> bool:
     normalized = name.casefold()
-    return normalized in ("ogsd", "gsd-path") or normalized.startswith(
-        ("ogsd-", "gsd-path-")
+    return (
+        normalized in ("ogsd", "gsd-path")
+        or normalized in ROUTER_ALIASES
+        or normalized.startswith(("ogsd-", "gsd-path-"))
     )
+
+
+def _is_owned_router_alias(skill_dir: Path) -> bool:
+    return (skill_dir / "scripts" / "pipeline_state.py").is_file()
+
+
+def _is_managed_install_entry(root: Path, name: str) -> bool:
+    if not _is_managed_name(name):
+        return False
+    if name.casefold() not in ROUTER_ALIASES:
+        return True
+    return _is_owned_router_alias(root / name)
+
+
+def _reject_router_alias_collisions(root: Path) -> None:
+    if not root.is_dir():
+        return
+    for alias in ROUTER_ALIASES:
+        candidate = root / alias
+        if not _lexists(candidate):
+            continue
+        if _is_owned_router_alias(candidate):
+            continue
+        raise InstallerError(
+            f"refusing to replace unrelated skill {candidate}; "
+            "rename it or move it aside before installing GSD Path"
+        )
+
+
+def _stamp_installed_versions(staged_root: Path, version: Optional[str]) -> None:
+    if not version:
+        return
+    for name in {"gsd-path", *ROUTER_ALIASES}:
+        (staged_root / name / "VERSION").write_text(f"{version}\n", encoding="utf-8")
 
 
 def _lexists(path: Path) -> bool:
@@ -539,7 +576,8 @@ def validate_source(source_root: Path, profiles: Sequence[str]) -> Tuple[str, ..
     found = {
         entry.name
         for entry in skills_root.iterdir()
-        if _is_managed_name(entry.name) and entry.name.startswith("gsd-path")
+        if _is_managed_name(entry.name)
+        and (entry.name.startswith("gsd-path") or entry.name in ROUTER_ALIASES)
     }
     if found != set(SKILL_NAMES):
         raise InstallerError(
@@ -627,10 +665,7 @@ def stage_target(source_root: Path, target: str, staged_root: Path) -> None:
             version = json.loads(manifest.read_text(encoding="utf-8")).get("version")
         except (json.JSONDecodeError, AttributeError):
             version = None
-        if version:
-            (staged_root / "gsd-path" / "VERSION").write_text(
-                f"{version}\n", encoding="utf-8"
-            )
+        _stamp_installed_versions(staged_root, version)
 
     adapter = (source_root / "platforms" / target / "dispatch.md").read_text(
         encoding="utf-8"
@@ -650,6 +685,7 @@ def stage_target(source_root: Path, target: str, staged_root: Path) -> None:
                 if metadata.is_dir():
                     shutil.rmtree(metadata)
         invocation = "gsd-path" if target == "opencode" else "/gsd-path"
+        path_invocation = "path" if target == "opencode" else "/path"
         for name in SKILL_NAMES:
             entrypoint = staged_root / name / "SKILL.md"
             entrypoint.write_text(
@@ -661,7 +697,7 @@ def stage_target(source_root: Path, target: str, staged_root: Path) -> None:
             transformed = (
                 _shared_invocations(content)
                 if target == SHARED_AGENT_PROFILE
-                else content.replace("$gsd-path", invocation)
+                else content.replace("$gsd-path", invocation).replace("$path", path_invocation)
             )
             markdown.write_text(transformed, encoding="utf-8")
 
@@ -875,7 +911,7 @@ def _backup_existing(
         (
             (entry, entry.name)
             for entry in transaction.root.iterdir()
-            if _is_managed_name(entry.name)
+            if _is_managed_install_entry(transaction.root, entry.name)
         ),
         key=lambda item: item[0].name,
     )
@@ -912,6 +948,7 @@ def _apply_target(
         cursor_agent = plan.root.parent / "agents" / CURSOR_AGENT_FILENAME
         _create_directory(cursor_agent.parent, transaction.created_directories)
         extras.append((cursor_agent, CURSOR_AGENT_BACKUP_NAME))
+    _reject_router_alias_collisions(plan.root)
     _backup_existing(transaction, extras)
     for name in SKILL_NAMES:
         destination = plan.root / name
@@ -1953,7 +1990,9 @@ def _managed_entry_count(plan: DeploymentPlan) -> int:
     count = 0
     if plan.root.is_dir():
         count = sum(
-            1 for entry in plan.root.iterdir() if _is_managed_name(entry.name)
+            1
+            for entry in plan.root.iterdir()
+            if _is_managed_install_entry(plan.root, entry.name)
         )
     if plan.profile == "cursor" and _lexists(
         plan.root.parent / "agents" / CURSOR_AGENT_FILENAME
@@ -1963,7 +2002,9 @@ def _managed_entry_count(plan: DeploymentPlan) -> int:
 
 
 def _has_managed_install(root: Path) -> bool:
-    return root.is_dir() and any(_is_managed_name(entry.name) for entry in root.iterdir())
+    return root.is_dir() and any(
+        _is_managed_install_entry(root, entry.name) for entry in root.iterdir()
+    )
 
 
 STATE_SCHEMA = "gsd-path/state/v1"
@@ -2696,6 +2737,7 @@ def install(
                         f"codex-legacy: would back up {legacy_count} entries from {legacy_root}"
                     )
             for plan in deployments:
+                _reject_router_alias_collisions(plan.root)
                 count = _managed_entry_count(plan)
                 suffix = f"; would back up {count} entries" if count else ""
                 results.append(

@@ -87,9 +87,9 @@ In the **project directory**, type explicitly:
 
 | Host | Invocation |
 | --- | --- |
-| Codex | `$gsd-path` |
-| Claude, Cursor, Zed, Grok, Copilot, Qwen, Kiro, Kimi, Antigravity | `/gsd-path` |
-| OpenCode v2 | `/gsd-path` |
+| Codex | `$path` or `$gsd-path` |
+| Claude, Cursor, Zed, Grok, Copilot, Qwen, Kiro, Kimi, Antigravity | `/path` or `/gsd-path` |
+| OpenCode v2 | `/path` or `/gsd-path` |
 | OpenCode stable | *Load and use the gsd-path skill* |
 
 “Continue the project” does not advance a phase. With an owned

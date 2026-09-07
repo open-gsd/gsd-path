@@ -33,7 +33,7 @@ proof and each host's guard tier.
 # New user
 node scripts/install.mjs --all --dry-run && node scripts/install.mjs --all
 cd your-repo && node scripts/install.mjs --all --project "$(pwd)"
-# In agent: $gsd-path (Codex) or /gsd-path (most hosts)
+# In agent: $path / $gsd-path (Codex) or /path / /gsd-path (most hosts)
 
 # Already installed
 node scripts/install.mjs --update
@@ -52,6 +52,7 @@ sidecar to discuss, diagnose, or undo without advancing.
 
 | Skill | Role |
 | --- | --- |
+| `path` | Router short name — same as `gsd-path` (`/path`, `$path`) |
 | `gsd-path` | Router — detects state, runs next phase (`status` reports without advancing) |
 | `gsd-path-inspect` | Phase 0 — brownfield codebase map + doc audit |
 | `gsd-path-define` | Phase 1 — intent definition |
@@ -67,7 +68,7 @@ sidecar to discuss, diagnose, or undo without advancing.
 | `gsd-path-forensics` | Read-only stuck-pipeline diagnosis |
 | `gsd-path-undo` | Helper-owned undo of unpublished pipeline work |
 
-Codex: `$gsd-path`, `$gsd-path-plan`, … · Other hosts: `/gsd-path`, `/gsd-path-plan`, …
+Codex: `$path` / `$gsd-path`, `$gsd-path-plan`, … · Other hosts: `/path` / `/gsd-path`, `/gsd-path-plan`, …
 
 ## The flow
 

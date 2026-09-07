@@ -72,9 +72,9 @@ invocation as an operating rule.
 
 | Host | Router | Example phase |
 | --- | --- | --- |
-| Codex | `$gsd-path` | `$gsd-path-plan` |
-| Claude Code, Grok, Copilot, Qwen, Cursor, Zed, Kiro, Kimi | `/gsd-path` | `/gsd-path-plan` |
-| OpenCode v2 | `/gsd-path` | `/gsd-path-plan` |
+| Codex | `$path` or `$gsd-path` | `$gsd-path-plan` |
+| Claude Code, Grok, Copilot, Qwen, Cursor, Zed, Kiro, Kimi | `/path` or `/gsd-path` | `/gsd-path-plan` |
+| OpenCode v2 | `/path` or `/gsd-path` | `/gsd-path-plan` |
 | OpenCode stable | Ask to load `gsd-path` | Same |
 | Antigravity CLI | `/gsd-path` | `/gsd-path-plan` |
 
