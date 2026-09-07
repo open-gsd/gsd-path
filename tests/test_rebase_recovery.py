@@ -16,7 +16,7 @@ GUARD_SCRIPT = PROJECT_ROOT / "scripts" / "git_guard.py"
 BOUND = "gsd-path/M001"
 BOUND_REF = "refs/heads/" + BOUND
 ARCHIVE = ".project/archive/001-adoption"
-RECEIPT = ".project/build/rebase-adoption.json"
+RECEIPT = isolation.REBASE_ADOPTION_PATH
 RULING = "Adopt this rebase; preserve original evidence."
 
 
@@ -77,8 +77,8 @@ class RebaseRecoveryTests(unittest.TestCase):
         git(self.repo, "branch", "-M", BOUND)
         self.head = git(self.repo, "rev-parse", "HEAD")
 
-    def commit(self, subject: str, body: str = "") -> None:
-        git(self.repo, "add", ".")
+    def commit(self, subject: str, body: str = "", paths: str = ".") -> None:
+        git(self.repo, "add", paths)
         git(self.repo, "commit", "-q", "-m", subject, *(["-m", body] if body else []))
         self.head = git(self.repo, "rev-parse", "HEAD")
 
@@ -154,13 +154,6 @@ class RebaseRecoveryTests(unittest.TestCase):
         with self.assertRaises(isolation.IsolationError):
             self.verify()
 
-    def test_product_change_after_adoption_rejected(self) -> None:
-        self.adopt()
-        (self.repo / "value.txt").write_text("three\n")
-        self.commit("product changed")
-        with self.assertRaises(isolation.IsolationError):
-            self.verify()
-
     def test_owner_adoption_preserves_both_log_versions(self) -> None:
         task = self.repo / self.path
         task.write_text(task.read_text().replace(
@@ -229,9 +222,7 @@ class RebaseRecoveryTests(unittest.TestCase):
         self.adopt()
         (self.repo / "backdoor.txt").write_text("unreviewed\n")
         # Keep the receipt dirty to exercise the ship input adoption gate.
-        git(self.repo, "add", "backdoor.txt")
-        git(self.repo, "commit", "-q", "-m", subject, *(["-m", body] if body else []))
-        self.head = git(self.repo, "rev-parse", "HEAD")
+        self.commit(subject, body, "backdoor.txt")
         reason = "product changed outside a proven landing after the adopted revision"
         task = self.recover_task()
         self.assertEqual(task["verdict"], "block")
@@ -272,6 +263,8 @@ class RebaseRecoveryTests(unittest.TestCase):
         task = self.recover_task()
         self.assertEqual(task["verdict"], "block")
         self.assertIn("product changed outside a proven landing after the adopted revision", task["reason"])
+        with self.assertRaises(isolation.IsolationError):
+            self.verify()
 
     def test_adopt_skips_pending_and_refuses_in_progress(self) -> None:
         second = self.repo / ".project/tasks/T002-second.md"
