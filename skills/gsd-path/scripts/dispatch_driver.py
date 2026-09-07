@@ -26,14 +26,18 @@ import tempfile
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import BinaryIO, Dict, List, Optional
+from typing import BinaryIO, Callable, Dict, List, Optional
 
 try:
-    from scripts import _common, build_state, isolation, workflow_run
+    from scripts import _common, build_state, isolation, review_findings, review_panel, workflow_run
+    from scripts import check_handoffs as contracts
 except ImportError:  # bundled copy inside a skill's scripts directory
     import _common
     import build_state
+    import check_handoffs as contracts
     import isolation
+    import review_findings
+    import review_panel
     import workflow_run
 
 if os.name == "nt":
@@ -56,7 +60,8 @@ class DriverStop(RuntimeError):
         self.details = details
 
 
-STOP_ERRORS = (DriverStop, isolation.IsolationError, build_state.BuildStateError)
+STOP_ERRORS = (DriverStop, isolation.IsolationError, build_state.BuildStateError,
+               contracts.HandoffError, review_findings.ReviewFindingsError)
 
 
 def now() -> str:
@@ -222,7 +227,9 @@ def brief_text(state: Dict[str, object], role_brief: Path, task_template: Path) 
     return "\n".join(lines) + "\n"
 
 
-def spawn(root: Path, state: Dict[str, object], options: argparse.Namespace) -> Dict[str, object]:
+def spawn(root: Path, state: Dict[str, object], options: argparse.Namespace,
+          brief: Callable[[Dict[str, object]], str]) -> Dict[str, object]:
+    """Create the next attempt record, write the brief the callback builds, and start the wrapper."""
     task_dir = root / str(state["task_id"])
     attempt = max((attempt_number(path) for path in task_dir.glob("attempt-*")), default=0) + 1
     attempt_dir = task_dir / f"attempt-{attempt}"
@@ -235,8 +242,7 @@ def spawn(root: Path, state: Dict[str, object], options: argparse.Namespace) -> 
                   "child_timeout": options.child_timeout, "outcome": None,
                   "dispatched_at": now(), "origin": "question" if state.get("answered") else "dispatch"})
     state_path = attempt_dir / "state.json"
-    (attempt_dir / "brief.md").write_text(
-        brief_text(state, options.role_brief, options.task_template), encoding="utf-8")
+    (attempt_dir / "brief.md").write_text(brief(state), encoding="utf-8")
     save_state(state_path, state)
     wrapper = subprocess.Popen(
         [sys.executable, "-B", str(Path(__file__).resolve()), "_child", "--state", str(state_path)],
@@ -362,6 +368,39 @@ def finish_task(primary: Path, state: Dict[str, object]) -> Dict[str, object]:
             "ledger": ledger}
 
 
+# --- shared by round and review --------------------------------------------
+
+
+def summary(state: Dict[str, object]) -> Dict[str, object]:
+    return {key: state.get(key) for key in
+            ("task_id", "attempt", "mode", "worktree", "wave", "cycle", "verify_heavy", "dispatched_at")}
+
+
+def recover_report(primary: Path, project_dir: str, receipt: Dict[str, object]) -> Dict[str, object]:
+    report = isolation.recover(primary, Path(project_dir) / "tasks")
+    receipt["steps"].append({"script": "isolation.py recover", "result": report})
+    if report["verdict"] == "block":
+        raise DriverStop("recovery blocked", recover=report)
+    return report
+
+
+def checkpoint_project(primary: Path, receipt: Dict[str, object], subject: str, body: str) -> Optional[str]:
+    """Commit .project bookkeeping through the canonical checkpoint; None when nothing is dirty."""
+    if not any(path.startswith(".project/") for path in isolation.uncommitted_paths(primary)):
+        return None
+    result = isolation.checkpoint(primary, isolation.current_sha(primary), subject, body, [".project"])
+    receipt["steps"].append({"script": "isolation.py checkpoint", "result": result})
+    return str(result.get("commit"))
+
+
+def stop(receipt: Dict[str, object], error: BaseException) -> Dict[str, object]:
+    receipt["status"] = "blocked"
+    receipt["blocked"].append({"reason": str(error), "code": getattr(error, "code", None),
+                               **getattr(error, "details", {})})
+    receipt["next"] = "$gsd-path-forensics"
+    return receipt
+
+
 # --- the round -------------------------------------------------------------
 
 
@@ -408,10 +447,7 @@ class Round:
     # recovery -------------------------------------------------------------
 
     def recover(self) -> None:
-        report = isolation.recover(self.primary, Path(self.project_dir) / "tasks")
-        self.receipt["steps"].append({"script": "isolation.py recover", "result": report})
-        if report["verdict"] == "block":
-            raise DriverStop("recovery blocked", recover=report)
+        report = recover_report(self.primary, self.project_dir, self.receipt)
         for task in report["tasks"]:
             worktree = task.get("worktree")
             verdict = task["verdict"]
@@ -470,9 +506,7 @@ class Round:
                     changed = self.classify(state) or changed
         return changed
 
-    def summary(self, state: Dict[str, object]) -> Dict[str, object]:
-        return {key: state.get(key) for key in
-                ("task_id", "attempt", "mode", "worktree", "wave", "verify_heavy", "dispatched_at")}
+    summary = staticmethod(summary)
 
     def fail(self, state: Dict[str, object], reason: str, **details: object) -> None:
         update_state(state, outcome="blocked", reason=reason)
@@ -529,7 +563,8 @@ class Round:
         if state.get("wave") != self.receipt["wave"]:
             raise DriverStop("task is outside the requested wave", task=state["task_id"],
                              wave=state.get("wave"), requested_wave=self.receipt["wave"])
-        fresh = spawn(self.root, state, self.options)
+        fresh = spawn(self.root, state, self.options,
+                      lambda fresh: brief_text(fresh, self.options.role_brief, self.options.task_template))
         self.receipt["dispatched"].append(self.summary(fresh))
         self.receipt["in_flight"].append(self.summary(fresh))
 
@@ -549,16 +584,9 @@ class Round:
                 orphaned.append(str(fields.get("id")))
         if orphaned:
             raise DriverStop("in-progress tasks have no open dispatch record", tasks=orphaned)
-        dirty = sorted(path for path in isolation.uncommitted_paths(self.primary)
-                       if path.startswith(".project/"))
-        if not dirty:
-            return
-        head = isolation.current_sha(self.primary)
-        result = isolation.checkpoint(
-            self.primary, head, "build: record dispatch bookkeeping",
-            "Why: commit the verify ledger and task state before the next dispatch round\n"
-            f"Base: {head}", [".project"])
-        self.receipt["steps"].append({"script": "isolation.py checkpoint", "result": result})
+        checkpoint_project(self.primary, self.receipt, "build: record dispatch bookkeeping",
+                           "Why: commit the verify ledger and task state before the next dispatch round\n"
+                           f"Base: {isolation.current_sha(self.primary)}")
 
     def dispatch_ready(self) -> bool:
         """Dispatch every selectable task. Returns True when the wave is complete."""
@@ -645,11 +673,213 @@ class Round:
                     return self.receipt
                 time.sleep(POLL_SECONDS)
         except STOP_ERRORS as error:
-            self.receipt["status"] = "blocked"
-            self.receipt["blocked"].append({"reason": str(error), "code": getattr(error, "code", None),
-                                            **getattr(error, "details", {})})
-            self.receipt["next"] = "$gsd-path-forensics"
-            return self.receipt
+            return stop(self.receipt, error)
+
+
+# --- the wave review -------------------------------------------------------
+
+
+def review_brief(state: Dict[str, object], options: argparse.Namespace, primary: Path,
+                 tasks: List[Dict[str, object]], final_scope: bool, previous: Optional[Path]) -> str:
+    wave, cycle, lens = state["wave"], state["cycle"], state.get("lens")
+    agents = primary / "AGENTS.md"
+    lines = [
+        f"You are the reviewer for GSD Path wave {wave}, cycle {cycle}; logical task name "
+        f"{state['task_id']}. Mode: wave" + (f"; lens: {lens}." if lens else "."),
+        f"Read the reviewer role brief first and follow it exactly: {options.role_brief}",
+        f"Template (use only this): {options.template}",
+        f"AGENTS.md: {agents if agents.exists() else 'absent'}",
+        f"Repository root, read-only: {primary}",
+        f"Your verify sidecar root, the only place you may write or apply patches: {state['worktree']} "
+        f"on branch {state['branch']} at the recorded review base {state['base']}.",
+        f"Write exactly this output file: {Path(str(state['worktree'])) / str(state['relative'])}",
+        f"Canonical path after the orchestrator collects it: {state['relative']}",
+        f"INTENT.md: {primary / '.project/intent/INTENT.md'}",
+        f"PLAN.md: {primary / '.project/plan/PLAN.md'}",
+        "Tasks in this wave, each with its recorded base and proven landing commit; the "
+        "orchestrator's recorded isolated Verify result is the `orchestrator Verify` entry in each Log:",
+    ]
+    for task in tasks:
+        lines.append(f"- {task['task_id']}: {primary / str(task['task'])} — base {task['base']}, "
+                     f"landing commit {task['commit']}")
+    if previous is not None:
+        lines.append(f"Previous cycle review to re-check: {previous}")
+    if options.repair_evidence:
+        lines.append(f"Repair evidence receipt (re-review after a proven repair): {options.repair_evidence}")
+    if final_scope:
+        lines.append(f"Final scope applies: record `Review scope: final` and `Reviewed HEAD: {state['base']}`, "
+                     "check every INTENT success criterion and PLAN.md's Surface contract, and add "
+                     "Surface, Check, and Observed fields to each surface criterion block.")
+    lines += [
+        "Do not re-run task Verify or PLAN.md's project Verify. Never edit the primary worktree. "
+        "Never delegate to another agent. Never stage or commit.",
+        "Terminal result: the `Wave verdict:` line of the file you wrote is your result; the "
+        "orchestrator validates the file and reads it from there. Name that verdict in your final message.",
+    ]
+    return "\n".join(lines) + "\n"
+
+
+class Review:
+    """Step 6 of the build contract at `full` or `deep` depth: one reviewer per lens in its own
+    verify sidecar, validated, collected, retired; findings grouped on blocked."""
+
+    def __init__(self, primary: Path, options: argparse.Namespace) -> None:
+        self.primary = primary
+        self.options = options
+        self.project_dir = options.project_dir
+        self.wave, self.cycle = options.wave, options.cycle
+        self.root = records_root(primary) / "reviews"
+        self.receipt: Dict[str, object] = {"status": None, "wave": self.wave, "cycle": self.cycle,
+                                           "lenses": {}, "in_flight": [], "blocked": [], "steps": []}
+
+    def lens_name(self, key: str) -> str:
+        return f"review_wave_{self.wave}_cycle_{self.cycle}" + ("" if key == "canonical" else f"_{key}")
+
+    def current_states(self, keys: List[str]) -> Dict[str, Dict[str, object]]:
+        names = {self.lens_name(key): key for key in keys}
+        return {names[str(state["task_id"])]: state for state in latest_states(self.root)
+                if str(state["task_id"]) in names}
+
+    def wave_tasks(self) -> List[Dict[str, object]]:
+        tasks = []
+        for task in recover_report(self.primary, self.project_dir, self.receipt)["tasks"]:
+            fields, _ = isolation.task_frontmatter((self.primary / str(task["task"])).read_text(encoding="utf-8"))
+            if fields is None or contracts._task_wave((self.primary / str(task["task"])).read_text(encoding="utf-8"),
+                                                     str(task.get("task_id"))) != self.wave:
+                continue
+            if task["verdict"] not in ("recovered", "attested"):
+                raise DriverStop(f"task {task.get('task_id')} has no proven landing: {task['verdict']}",
+                                 recover=task)
+            tasks.append(task)
+        if not tasks:
+            raise DriverStop(f"wave {self.wave} has no tasks")
+        return tasks
+
+    def dispatch(self, lenses: Dict[str, str], depth: str) -> None:
+        dirty = sorted(isolation.uncommitted_paths(self.primary))
+        if dirty:  # the review base must include every bookkeeping change
+            raise DriverStop("review collection base requires a clean primary", paths=dirty)
+        tasks = self.wave_tasks()
+        plan_text = (self.primary / self.project_dir / "plan/PLAN.md").read_text(encoding="utf-8")
+        intent = (self.primary / self.project_dir / "intent/INTENT.md").read_text(encoding="utf-8")
+        try:
+            lane = contracts._line_value(intent, "Lane:")
+        except contracts.HandoffError:
+            lane = None  # an INTENT without a lane line is never quick
+        final_scope = depth == "full" and lane == "quick" and contracts._plan_waves(plan_text)[1] == [1]
+        earlier = (review_findings.review_paths(self.primary / self.project_dir, self.wave, self.cycle - 1, depth)
+                   if self.cycle > 1 else {})
+        base = isolation.current_sha(self.primary)
+        self.receipt["base"] = base
+        for key, relative in lenses.items():
+            name = f"wave-{self.wave}-cycle-{self.cycle}" + ("" if key == "canonical" else f"-{key}")
+            sidecar = isolation.isolate_verify(self.primary, base, name)
+            self.receipt["steps"].append({"script": "isolation.py isolate-verify", "result": sidecar})
+            previous = earlier.get(key) if earlier.get(key, Path()).is_file() else None
+            state = {"task_id": self.lens_name(key), "lens": None if key == "canonical" else key,
+                     "wave": self.wave, "cycle": self.cycle, "base": base,
+                     "worktree": str(sidecar["worktree"]), "branch": str(sidecar["branch"]), "relative": relative}
+            spawn(self.root, state, self.options,
+                  lambda fresh, previous=previous: review_brief(fresh, self.options, self.primary, tasks,
+                                                                 final_scope, previous))
+
+    def collect(self, state: Dict[str, object]) -> None:
+        """Validate in the sidecar, then copy to the canonical path, then retire: the contract's order."""
+        sidecar = Path(str(state["worktree"]))
+        relative = str(state["relative"])
+        stderr = (Path(str(state["_path"])).parent / "stderr").read_text(encoding="utf-8", errors="replace")
+        if state.get("timed_out") or state.get("exit_code") != 0:
+            update_state(state, outcome="blocked", reason=f"reviewer child exited {state.get('exit_code')}",
+                         stderr_tail=tail(stderr))
+            return
+        if not (sidecar / relative).is_file():
+            update_state(state, outcome="blocked", reason="reviewer wrote no review file", stderr_tail=tail(stderr))
+            return
+        try:
+            validated = contracts.validate_wave_evidence(sidecar, self.project_dir, relative)
+        except contracts.HandoffError as error:  # the sidecar stays for inspection
+            update_state(state, outcome="blocked", reason=str(error), helper="check_handoffs.py wave")
+            return
+        try:
+            collected = isolation.collect_artifact(self.primary, sidecar, str(state["base"]),
+                                                   str(state["branch"]), relative, relative, None)
+            self.receipt["steps"].append({"script": "isolation.py collect-artifact", "result": collected})
+            isolation.clean_verify(self.primary, sidecar, str(state["base"]), str(state["branch"]))
+            isolation.retire(self.primary, sidecar, str(state["branch"]), False)
+        except isolation.IsolationError as error:
+            update_state(state, outcome="blocked", reason=str(error), helper="isolation.py")
+            return
+        update_state(state, outcome="collected", verdict=validated["verdict"], owned=validated.get("owned"))
+
+    def settle(self, states: Dict[str, Dict[str, object]]) -> None:
+        """Advance every lens and render the receipt from the records; settle is their only writer."""
+        self.receipt["in_flight"], self.receipt["blocked"], self.receipt["lenses"] = [], [], {}
+        for key, state in states.items():
+            if state.get("outcome") is None:
+                if state.get("finished_at") is not None:
+                    self.collect(state)
+                elif state.get("pid") and process_alive(int(state["pid"])):
+                    self.receipt["in_flight"].append(summary(state))
+                    continue
+                else:
+                    update_state(state, outcome="blocked", reason="child wrapper exited without recording a result")
+            self.receipt["base"] = state.get("base")
+            if state.get("outcome") == "collected":
+                self.receipt["lenses"][key] = {"verdict": state.get("verdict"), "owned": state.get("owned"),
+                                               "path": state.get("relative")}
+            elif state.get("outcome") == "blocked":
+                self.receipt["blocked"].append({**summary(state), "reason": state.get("reason"),
+                                                "helper": state.get("helper"), "stderr_tail": state.get("stderr_tail")})
+
+    def conclude(self) -> None:
+        lenses: Dict[str, Dict[str, object]] = self.receipt["lenses"]
+        if not self.receipt["blocked"] and all(entry.get("verdict") == "pass" for entry in lenses.values()):
+            if not self.receipt["panel_required"]:  # with a panel, the parent's single checkpoint follows it
+                self.receipt["checkpoint"] = checkpoint_project(
+                    self.primary, self.receipt, f"build: record wave {self.wave} cycle {self.cycle} review",
+                    f"Why: persist the passing wave review verdict\nWave: {self.wave}")
+            self.receipt["status"] = "pass"
+            return
+        helper_failures = [f"{item['helper']}: {item['reason']}" for item in self.receipt["blocked"]
+                           if item.get("helper")]
+        try:
+            self.receipt["findings"] = review_findings.compute(self.primary, self.project_dir, self.wave,
+                                                               self.cycle, helper_failures)
+        except review_findings.ReviewFindingsError as error:
+            self.receipt["findings"] = {"status": "error", "error": str(error)}
+        self.receipt["status"] = "blocked"
+
+    def run(self) -> Dict[str, object]:
+        deadline = time.monotonic() + self.options.wait if self.options.wait else None
+        try:
+            project = self.primary / self.project_dir
+            plan_text = (project / "plan/PLAN.md").read_text(encoding="utf-8")
+            depth = review_findings.wave_depth(plan_text, self.wave)
+            self.receipt["depth"] = depth
+            if depth == "verify-only":
+                # ponytail: verify-only files are orchestrator-written judgment; the parent owns them.
+                self.receipt.update(status="not-applicable",
+                                    reason="verify-only reviews are orchestrator-written; the driver does not run them")
+                return self.receipt
+            self.receipt["panel_required"] = review_panel.plan_review_panel_enabled(plan_text)
+            lenses = {key: path.relative_to(self.primary).as_posix() for key, path in
+                      review_findings.review_paths(project, self.wave, self.cycle, depth).items()}
+            states = self.current_states(list(lenses))
+            if not states:
+                self.dispatch(lenses, depth)
+                states = self.current_states(list(lenses))
+            while True:
+                self.settle(states)
+                if all(state.get("outcome") in ("collected", "blocked") for state in states.values()):
+                    self.conclude()
+                    return self.receipt
+                if deadline is None or time.monotonic() >= deadline:
+                    self.receipt["status"] = "in-flight"
+                    return self.receipt
+                time.sleep(POLL_SECONDS)
+                states = self.current_states(list(lenses))
+        except STOP_ERRORS as error:
+            return stop(self.receipt, error)
 
 
 # --- other actions ---------------------------------------------------------
@@ -665,6 +895,14 @@ def answer(primary: Path, task_id: str, text: str) -> Dict[str, object]:
     update_state(state, answered=True, answer=text)
     return {"status": "answered", "task": task_id, "task_file": str(task_path),
             "next": "run `round` to redispatch the retained isolate"}
+
+
+def require_files(parser: argparse.ArgumentParser, arguments: argparse.Namespace, *names: str) -> None:
+    for name in names:
+        value = getattr(arguments, name)
+        if value is None or not Path(value).is_file():
+            parser.error(f"--{name.replace('_', '-')} must name an existing file")
+        setattr(arguments, name, Path(value).resolve())
 
 
 def positive_int(value: str) -> int:
@@ -700,6 +938,19 @@ def main(argv=None) -> int:
     round_parser.add_argument("--budget-authority", help="quoted owner policy for the limits")
     round_parser.add_argument("--role-brief", type=Path, default=default_resource("references/coder.md"))
     round_parser.add_argument("--task-template", type=Path, default=default_resource("templates/task.md"))
+    review_parser = commands.add_parser("review", help="run one wave review cycle at full or deep depth")
+    review_parser.add_argument("--repo", type=Path, required=True)
+    review_parser.add_argument("--project-dir", default=".project")
+    review_parser.add_argument("--wave", type=int, required=True)
+    review_parser.add_argument("--cycle", type=positive_int, required=True)
+    review_parser.add_argument("--child-command", required=True,
+                               help="owner-supplied command that reads the brief on stdin")
+    review_parser.add_argument("--wait", type=float, help="seconds to keep polling before returning")
+    review_parser.add_argument("--child-timeout", type=float, help="per-child wall clock in seconds")
+    review_parser.add_argument("--repair-evidence", type=Path,
+                               help="review_findings.py repair-evidence receipt for a re-review")
+    review_parser.add_argument("--role-brief", type=Path, default=default_resource("references/reviewer.md"))
+    review_parser.add_argument("--template", type=Path, default=default_resource("templates/wave-review.md"))
     finish_parser = commands.add_parser(
         "finish", help="verify, land, record, and retire one in-progress task whose coder has returned")
     finish_parser.add_argument("--repo", type=Path, required=True)
@@ -720,17 +971,17 @@ def main(argv=None) -> int:
     primary = arguments.repo.resolve()
     lock = None
     try:
-        if arguments.action in ("round", "finish", "answer"):
+        if arguments.action in ("round", "review", "finish", "answer"):
             lock = acquire_lock(primary)
-        if arguments.action == "round":
+        if arguments.action == "review":
+            require_files(parser, arguments, "role_brief", "template",
+                          *(["repair_evidence"] if arguments.repair_evidence is not None else []))
+            result = Review(primary, arguments).run()
+        elif arguments.action == "round":
             budget_values = (arguments.task_limit, arguments.session_limit, arguments.budget_authority)
             if any(value is not None for value in budget_values) and None in budget_values:
                 parser.error("--task-limit, --session-limit, and --budget-authority go together")
-            for name in ("role_brief", "task_template"):
-                value = getattr(arguments, name)
-                if value is None or not Path(value).is_file():
-                    parser.error(f"--{name.replace('_', '-')} must name an existing file")
-                setattr(arguments, name, Path(value).resolve())
+            require_files(parser, arguments, "role_brief", "task_template")
             result = Round(primary, arguments).run()
         elif arguments.action == "finish":
             current = Round(primary, arguments)

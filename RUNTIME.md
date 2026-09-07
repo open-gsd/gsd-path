@@ -49,6 +49,7 @@ remain as evidence.
 | Command | Result |
 | --- | --- |
 | `round --repo <root> --wave <N> --child-command '<cmd>' [--wait <s>] [--child-timeout <s>] [--capacity <N>] [--max-attempts <N>] [--task-limit <N> --session-limit <N> --budget-authority '<policy>']` | Recover, settle exited children, `ready`, checkpoint bookkeeping, lint, isolate, dispatch; Verify, land, record, retire each result in task-id order. Receipt status `done`, `in-flight`, `question`, or `blocked`. |
+| `review --repo <root> --wave <N> --cycle <C> --child-command '<cmd>' [--wait <s>] [--child-timeout <s>] [--repair-evidence <receipt>]` | Step 6 at `full` or `deep` depth: clean review base, one verify sidecar and reviewer child per lens, validate in the sidecar, collect, retire; after every lens settles, checkpoint a `pass` when no panel is configured, or return the `review_findings.py collect` grouping on `blocked`. `verify-only` returns `not-applicable`; `panel_required` reports the PLAN panel setting. |
 | `finish --repo <root> --task-id <id>` | Recover first; return a proven landing without repeating Verify, or verify, land, record, and retire one returned task. Without a dispatch record, derive the isolate from task frontmatter. |
 | `answer --repo <root> --task-id <id> --answer '<text>'` | Append `Orchestrator answer:` to the isolate's task Log; the next `round` redispatches that isolate. |
 | `status --repo <root>` | Every task's newest dispatch record. |

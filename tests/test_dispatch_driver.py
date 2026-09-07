@@ -63,6 +63,43 @@ FAKE_CODER = textwrap.dedent(
     """
 )
 
+# A stand-in reviewer: reads the brief, stages a wave review naming only the wave's tasks.
+FAKE_REVIEWER = textwrap.dedent(
+    """
+    import os, re, sys
+    from pathlib import Path
+    brief = sys.stdin.read()
+    staged = Path(re.search(r"^Write exactly this output file: (.+)$", brief, re.M).group(1))
+    name = re.search(r"logical task name (\\S+)\\.", brief).group(1)
+    wave, cycle = re.search(r"wave (\\d+), cycle (\\d+)", brief).groups()
+    lens = re.search(r"; lens: (\\w+)\\.", brief)
+    tasks = re.findall(r"^- (T\\d+): ", brief, re.M)
+    verdict = os.environ.get("FAKE_REVIEW", "pass")
+    criteria = {"T001": ("The demo command prints hello.", "SC1"),
+                "T002": ("The demo test suite is green.", "SC2")}
+    lines = [f"# Review — wave {wave}, cycle {cycle}", "", f"Wave verdict: {verdict}", f"Cycle: {cycle}",
+             "Depth: " + ("deep" if lens else "full")]
+    if lens:
+        lines.append(f"Lens: {lens.group(1)}")
+    lines.append(f"Tasks reviewed: {len(tasks)}")
+    for task in tasks:
+        criterion, _ = criteria[task]
+        failed = verdict == "blocked" and task == tasks[0]
+        lines += ["", f"## {task} — Demo task {task}: " + ("fail" if failed else "pass"), ""]
+        lines.append(f"- ❌ {criterion} — found: wrong output, src/app.py:1\\n  fix: print hello"
+                     if failed else f"- ✅ {criterion} — recorded Verify pass")
+    lines += ["", "## Intent coverage", ""]
+    for task in tasks:
+        criterion, sc = criteria[task]
+        failed = verdict == "blocked" and task == tasks[0]
+        lines += [f"### {sc} — {criterion}: " + ("fail" if failed else "pass"),
+                  ("- ❌ " if failed else "- ✅ ") + criterion + (" — found: wrong output, src/app.py:1\\n  fix: print hello" if failed else " — recorded Verify")]
+    staged.parent.mkdir(parents=True, exist_ok=True)
+    staged.write_text("\\n".join(lines) + "\\n")
+    print(f"RESULT: {name} {verdict}")
+    """
+)
+
 
 class DispatchDriverTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -94,6 +131,7 @@ class DispatchDriverTests(unittest.TestCase):
             plan.write_text(text)
         handoffs.write_state(root, "build", "active")
         (root / "fake_coder.py").write_text(FAKE_CODER)
+        (root / "fake_reviewer.py").write_text(FAKE_REVIEWER)
         run_git(root, "add", ".")
         run_git(root, "commit", "-m", "fixture")
         return self.head(root)
@@ -112,6 +150,17 @@ class DispatchDriverTests(unittest.TestCase):
             root, "round", "--wave", str(wave), "--child-command", f"{sys.executable} {root / 'fake_coder.py'}",
             "--role-brief", str(ROLE_BRIEF), "--task-template", str(TASK_TEMPLATE), *extra, mode=mode,
         )
+
+    def review(self, root: Path, *extra: str, verdict: str = "pass", wave: int = 1, cycle: int = 1) -> dict:
+        env = dict(os.environ, FAKE_REVIEW=verdict)
+        completed = subprocess.run(
+            [sys.executable, "-B", str(SCRIPT), "review", "--wave", str(wave), "--cycle", str(cycle),
+             "--child-command", f"{sys.executable} {root / 'fake_reviewer.py'}",
+             "--role-brief", str(PROJECT_ROOT / "skills/gsd-path-build/references/reviewer.md"),
+             "--template", str(PROJECT_ROOT / "skills/gsd-path-build/templates/wave-review.md"),
+             *extra, "--repo", str(root)], capture_output=True, text=True, env=env)
+        self.assertTrue(completed.stdout.strip(), completed.stderr)
+        return json.loads(completed.stdout)
 
     def subjects(self, root: Path) -> list:
         return run_git(root, "log", "--format=%s").stdout.strip().splitlines()
@@ -605,6 +654,92 @@ class DispatchDriverTests(unittest.TestCase):
         proof = json.loads(evidence.read_text())
         self.assertEqual(proof, receipt["steps"][0]["result"])
         self.assertEqual(sorted(entry["task"]["id"] for entry in proof["tasks"]), ["T001", "T002"])
+
+    def test_review_full_collects_validates_and_checkpoints_a_pass(self) -> None:
+        root = self.root
+        self.fixture(root)
+        self.assertEqual(self.round(root, "--wait", "60")["status"], "done")
+        head = self.head(root)
+        receipt = self.review(root, "--wait", "60")
+        self.assertEqual(receipt["status"], "pass", receipt)
+        self.assertEqual(receipt["depth"], "full")
+        self.assertEqual(receipt["base"], head)
+        self.assertEqual(receipt["lenses"]["canonical"]["verdict"], "pass")
+        self.assertFalse(receipt["panel_required"])
+        review = root / ".project/review/wave-1.cycle1.md"
+        self.assertIn("Wave verdict: pass", review.read_text())
+        self.assertEqual(self.subjects(root)[0], "build: record wave 1 cycle 1 review")
+        self.assertEqual(run_git(root, "status", "--porcelain").stdout, "")
+        self.assertEqual(self.branches(root), ["gsd-path/M001"])
+        again = self.review(root, "--wait", "60")
+        self.assertEqual(again["status"], "pass", again)
+        self.assertIsNone(again["checkpoint"])
+
+    def test_review_blocked_groups_findings_and_leaves_the_file_for_the_fix_checkpoint(self) -> None:
+        root = self.root
+        self.fixture(root)
+        self.assertEqual(self.round(root, "--wait", "60")["status"], "done")
+        head = self.head(root)
+        receipt = self.review(root, "--wait", "60", verdict="blocked")
+        self.assertEqual(receipt["status"], "blocked", receipt)
+        self.assertEqual(receipt["lenses"]["canonical"]["verdict"], "blocked")
+        findings = receipt["findings"]
+        self.assertEqual(findings.get("status", "ok"), "ok", findings)
+        self.assertTrue(findings["fix_batches"], findings)
+        self.assertEqual(self.head(root), head)
+        self.assertIn(".project/review/wave-1.cycle1.md", run_git(root, "status", "--porcelain", "-uall").stdout)
+        self.assertEqual(self.branches(root), ["gsd-path/M001"])
+
+    def test_review_deep_runs_both_lenses(self) -> None:
+        root = self.root
+        self.fixture(root)
+        plan = root / ".project/plan/PLAN.md"
+        plan.write_text(plan.read_text().replace("Review depth: full", "Review depth: deep", 1))
+        run_git(root, "commit", "-qam", "plan: deep review")
+        self.assertEqual(self.round(root, "--wait", "60")["status"], "done")
+        receipt = self.review(root, "--wait", "60")
+        self.assertEqual(receipt["status"], "pass", receipt)
+        self.assertEqual(sorted(receipt["lenses"]), ["adversarial", "contract"])
+        for lens in ("contract", "adversarial"):
+            self.assertIn(f"Lens: {lens}", (root / f".project/review/wave-1.cycle1.{lens}.md").read_text())
+        self.assertEqual(self.branches(root), ["gsd-path/M001"])
+
+    def test_review_refuses_verify_only_and_unlanded_waves(self) -> None:
+        root = self.root
+        self.fixture(root, wave_t002=2)
+        plan = root / ".project/plan/PLAN.md"
+        text = plan.read_text()
+        head_block = text.index("## Wave 2")
+        plan.write_text(text[:head_block] + text[head_block:].replace("Review depth: full", "Review depth: verify-only", 1))
+        run_git(root, "commit", "-qam", "plan: verify-only wave 2")
+        receipt = self.review(root, wave=2)
+        self.assertEqual(receipt["status"], "not-applicable")
+        self.assertIn("verify-only", receipt["reason"])
+        receipt = self.review(root, wave=1)
+        self.assertEqual(receipt["status"], "blocked")
+        self.assertIn("no proven landing", receipt["blocked"][0]["reason"])
+
+    def test_review_without_wait_returns_in_flight_then_settles(self) -> None:
+        root = self.root
+        self.fixture(root)
+        self.assertEqual(self.round(root, "--wait", "60")["status"], "done")
+        receipt = self.review(root)
+        self.assertIn(receipt["status"], ("in-flight", "pass"), receipt)
+        if receipt["status"] == "in-flight":
+            self.assertEqual([item["task_id"] for item in receipt["in_flight"]], ["review_wave_1_cycle_1"])
+        receipt = self.review(root, "--wait", "60")
+        self.assertEqual(receipt["status"], "pass", receipt)
+
+    def test_review_invalid_artifact_blocks_before_collection_and_keeps_the_sidecar(self) -> None:
+        root = self.root
+        self.fixture(root)
+        self.assertEqual(self.round(root, "--wait", "60")["status"], "done")
+        receipt = self.review(root, "--wait", "60", verdict="garbage")
+        self.assertEqual(receipt["status"], "blocked", receipt)
+        self.assertEqual(receipt["blocked"][0]["helper"], "check_handoffs.py wave")
+        self.assertFalse((root / ".project/review/wave-1.cycle1.md").exists())
+        self.assertIn("gsd-path-verify/wave-1-cycle-1", self.branches(root))
+        self.assertTrue(receipt["findings"]["structural_blockers"], receipt["findings"])
 
 
 if __name__ == "__main__":
