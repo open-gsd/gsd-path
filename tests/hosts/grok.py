@@ -83,8 +83,10 @@ def session_dir(cwd, session_id):
 
 
 def _transcript_evidence(cwd, session_id, subagent_id):
+    if not session_id:
+        return None
     parent = session_dir(cwd, session_id)
-    if not session_id or not parent.is_dir():
+    if not parent.is_dir():
         return None
     evidence = {"session_dir": str(parent), "child_session_dir": None, "reported_completions": []}
     child = parent.parent / subagent_id
@@ -140,8 +142,9 @@ def bind_child(run_root, child_id):
         raise LookupError(f"spawn_subagent {child_id!r} never reported completed in {run_root}; the orchestrator must wait for the child (get_command_or_subagent_output) after it returns")
     a = completed[-1]
     cwd = a["spawn_input"].get("cwd") or run_root / "quick" / "repo"
+    session_store = _transcript_evidence(cwd, session, a.get("subagent_id", ""))
     return {"child_id": child_id, "status": "completed", "child_api": "spawn_subagent", "session_id": session,
-            "transcript": _transcript_evidence(cwd, session, a.get("subagent_id", "")), **a}
+            "transcript": session_store, "session_store": session_store, **a}
 
 
 SPEC = HostSpec(

@@ -1,6 +1,7 @@
 import json
 import os
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -28,14 +29,16 @@ class HostRegistryTests(unittest.TestCase):
     def test_modules_declare_live_verification_honestly(self):
         """Set GSD_LIVE_HOSTS to require live-verified host CLIs on PATH."""
         import shutil
-        binaries = {"claude": "claude", "codex": "codex", "grok": "grok", "opencode": "opencode", "copilot": "copilot",
-                    "qwen": "qwen", "antigravity": "antigravity", "cursor": "cursor", "zed": "zed", "kiro": "kiro", "kimi": "kimi"}
         for host in known_hosts():
             with self.subTest(host=host):
                 spec = load(host)
                 self.assertIsInstance(spec.verified_live, bool)
                 if "GSD_LIVE_HOSTS" in os.environ and spec.verified_live:
-                    self.assertIsNotNone(shutil.which(binaries[host]), f"{host} claims live verification without a CLI on PATH")
+                    with tempfile.TemporaryDirectory() as tmp:
+                        prompt = Path(tmp) / "prompt.txt"
+                        prompt.write_text("probe")
+                        binary = Path(spec.command(prompt)[0]).name
+                    self.assertIsNotNone(shutil.which(binary), f"{host} claims live verification without a CLI on PATH")
 
     def test_default_verification_does_not_require_host_clis(self):
         with mock.patch.dict(os.environ, {}, clear=True), mock.patch("shutil.which", return_value=None):
@@ -46,8 +49,20 @@ class HostRegistryTests(unittest.TestCase):
             with self.assertRaisesRegex(AssertionError, "claims live verification"):
                 HostRegistryTests("test_modules_declare_live_verification_honestly").test_modules_declare_live_verification_honestly()
 
+    def test_live_verification_accepts_kiro_cli_without_ide(self):
+        with mock.patch.dict(os.environ, {"GSD_LIVE_HOSTS": "1"}), \
+                mock.patch(__name__ + ".known_hosts", return_value=["kiro"]), \
+                mock.patch("shutil.which", side_effect=lambda name: "/bin/kiro-cli" if name == "kiro-cli" else None):
+            HostRegistryTests("test_modules_declare_live_verification_honestly").test_modules_declare_live_verification_honestly()
+
+    def test_live_verification_rejects_kiro_ide_without_cli(self):
+        with mock.patch.dict(os.environ, {"GSD_LIVE_HOSTS": "1"}), \
+                mock.patch(__name__ + ".known_hosts", return_value=["kiro"]), \
+                mock.patch("shutil.which", side_effect=lambda name: "/bin/kiro" if name == "kiro" else None):
+            with self.assertRaisesRegex(AssertionError, "claims live verification"):
+                HostRegistryTests("test_modules_declare_live_verification_honestly").test_modules_declare_live_verification_honestly()
+
     def test_bind_child_reports_missing_evidence_as_lookup_error(self):
-        import tempfile
         for host in known_hosts():
             with self.subTest(host=host), tempfile.TemporaryDirectory() as tmp:
                 (Path(tmp) / "quick").mkdir()

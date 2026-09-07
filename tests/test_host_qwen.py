@@ -119,6 +119,23 @@ class QwenHostTests(unittest.TestCase):
         self.assertEqual(bound["task_id"], "task-1")
         self.assertEqual(bound["list_agents_states"], rows[:1])
 
+    def test_failed_retry_cannot_replace_completed_attempt(self):
+        rows = [{"task_id": "task-1", "description": "build_T001", "status": "completed"}]
+        self.record([_launch("first", "build_T001"), _result("first", "task_id=task-1"),
+                     _launch("retry", "build_T001"), _result("retry", "launch failed", is_error=True),
+                     *_list_agents("list", rows)])
+        bound = qwen.bind_child(self.run_root, "build_T001")
+        self.assertEqual(bound["tool_use"]["id"], "first")
+        self.assertEqual(bound["task_id"], "task-1")
+        self.assertFalse(bound["tool_result"]["is_error"])
+
+    def test_failed_launch_with_task_id_cannot_bind_completed_listing(self):
+        rows = [{"task_id": "task-1", "status": "completed"}]
+        self.record([_launch("failed", "build_T001"), _result("failed", "task_id=task-1", is_error=True),
+                     *_list_agents("list", rows)])
+        with self.assertRaises(LookupError):
+            qwen.bind_child(self.run_root, "build_T001")
+
     def test_earlier_listing_cannot_complete_later_launch(self):
         rows = [{"description": "build_T001", "status": "completed"}]
         self.record(_list_agents("list", rows), run="run-1")

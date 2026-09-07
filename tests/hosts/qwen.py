@@ -114,8 +114,10 @@ def bind_child(run_root, child_id):
                         list_results.append({"attempts": pending_lists[c["tool_use_id"]], "rows": _agent_rows(_json_in(c.get("content")))})
     completed = []
     for call_id, a in attempts.items():
+        if a.get("tool_result", {}).get("is_error"):
+            continue
         if a["tool_use"]["input"].get("run_in_background") is False:
-            if a.get("tool_result") and not a["tool_result"]["is_error"]:
+            if a.get("tool_result"):
                 completed.append(a)
             continue
         match_by = "task_id" if a.get("task_id") else "description"
