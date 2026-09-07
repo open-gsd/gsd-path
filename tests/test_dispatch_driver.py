@@ -132,6 +132,8 @@ class DispatchDriverTests(unittest.TestCase):
 
     def fixture(self, root: Path, deps_t002: str = "[]", wave_t002: int = 1) -> str:
         run_git(root, "init", "-b", "gsd-path/M001")
+        # Finish automatic housekeeping before TemporaryDirectory removes Git objects.
+        run_git(root, "config", "gc.autoDetach", "false")
         run_git(root, "config", "user.name", "Test")
         run_git(root, "config", "user.email", "test@example.test")
         handoffs = test_handoffs.HandoffValidationTests()
