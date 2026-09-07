@@ -1055,10 +1055,20 @@ class Panel:
                     self.receipt["status"] = "off"
                     return self.receipt
                 if resolved["status"] == "skipped":
-                    if skipped.exists():
-                        raise DriverStop("panel skipped receipt already exists", path=str(skipped))
-                    _common.atomic_write(skipped, str(resolved.pop("_stdout")))
+                    if skipped.exists():  # an interrupted checkpoint left a valid receipt: reuse it
+                        try:
+                            saved = json.loads(skipped.read_text(encoding="utf-8"))
+                        except (OSError, json.JSONDecodeError):
+                            saved = {}
+                        if saved.get("status") != "skipped":
+                            raise DriverStop("panel skipped receipt exists but is not a skipped receipt",
+                                             path=str(skipped))
+                    else:
+                        _common.atomic_write(skipped, str(resolved.pop("_stdout")))
                     self.receipt["skipped_receipt"] = str(skipped)
+                    failure = self.input_failure(isolation.current_sha(self.primary), paths)
+                    if failure:
+                        raise DriverStop(failure)
                     self.checkpoint(paths, "persist the wave review and the skipped panel receipt")
                     self.receipt["status"] = "skipped"
                     return self.receipt
@@ -1136,11 +1146,28 @@ class Panel:
                                  "--mode", str(mode), cwd=self.primary)
             self.receipt["merge"] = merged
             self.receipt["panel"] = output.relative_to(self.primary).as_posix()
+            failure = self.input_failure(str(roster["base"]), paths)
+            if failure:
+                raise DriverStop(failure)
             self.checkpoint(paths, "persist the wave review and its review panel")
             self.receipt["status"] = "pass"
             return self.receipt
         except STOP_ERRORS as error:
             return stop(self.receipt, error)
+
+    def input_failure(self, base: str, paths: Dict[str, Path]) -> Optional[str]:
+        """Only this cycle's review and panel artifacts may differ from the recorded base."""
+        review_dir = self.primary / self.project_dir / "review"
+        allowed = {path.relative_to(self.primary).as_posix() for path in paths.values()}
+        allowed |= {(review_dir / name).relative_to(self.primary).as_posix() for name in (
+            f"wave-{self.wave}.cycle{self.cycle}.panel.md", f"wave-{self.wave}.cycle{self.cycle}.panel.skipped.json")}
+        allowed |= {relative for relative in (state.get("relative") for state in self.states().values()) if relative}
+        head = isolation.current_sha(self.primary)
+        committed = set(filter(None, isolation.git_text(
+            self.primary, "diff", "--no-renames", "--name-only", "-z", base, head, "--").split("\0")))
+        if head != base or (committed | isolation.uncommitted_paths(self.primary)) - allowed:
+            return "inputs changed after the review base; run a new cycle"
+        return None
 
     def checkpoint(self, paths: Dict[str, Path], reason: str) -> None:
         verdicts = [contracts.validate_wave_evidence(
@@ -1249,7 +1276,8 @@ def fix_tasks(primary: Path, options: argparse.Namespace) -> Dict[str, object]:
                 if source not in texts:
                     raise DriverStop(f"fix batch names unknown task {source}")
             task_id = next_task_id(tasks_dir)
-            verify = "set -e\n" + "\n".join(dict.fromkeys(_common.task_verify_command(texts[source]) for source in sources))
+            verify = "set -e\n" + "\n".join(  # each source Verify in its own subshell
+                f"(\n{command}\n)" for command in dict.fromkeys(_common.task_verify_command(texts[source]) for source in sources))
             heavy = any(re.search(r"(?m)^Heavy:\s*yes", texts[source]) for source in sources)
             criteria = "\n".join(f"{index}. {criterion}" for index, criterion in
                                  enumerate(dict.fromkeys(group["criterion"] for group in batch_groups), 1))
