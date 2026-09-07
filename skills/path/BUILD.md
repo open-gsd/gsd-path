@@ -180,6 +180,15 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
      base). The helper stamps the task and creates the attestation commit
      itself; each one moves HEAD, so attest tasks one at a time and rerun
      `recover` afterwards.
+     - Rewritten lineage: when every `done` task is rejected with `commit does
+       not descend from its Base:` after a rebase or replay, the owner may run
+       `python3 <absolute isolation.py> adopt-rebase --repo <absolute primary>
+       --original-head <preserved original tip> --head <HEAD> --ruling
+       "<ruling verbatim>"`, commit the receipt
+       `.project/build/rebase-adoption.json` as `.project/` bookkeeping, and
+       rerun `recover`. The original lineage must stay reachable: keep a local
+       branch on the old tip until the milestone ships. Adopted tasks report
+       `attested` with `provenance: owner-authorized-rebase`.
    - `block` for any other reason: set `build/blocked` with the returned
      reason and stop.
    - `none`: take no recovery action for that task.
