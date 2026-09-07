@@ -86,7 +86,7 @@ def budget_ledger(primary: Path) -> Path:
 def attempts_used(root: Path, task_id: str) -> int:
     """Dispatches of this task in this milestone, excluding question redispatches."""
     return sum(1 for path in (root / task_id).glob("attempt-*/state.json")
-               if not load_state(path).get("answered"))
+               if load_state(path).get("origin") == "dispatch")
 
 
 def acquire_lock(primary: Path) -> BinaryIO:
@@ -227,12 +227,13 @@ def spawn(root: Path, state: Dict[str, object], options: argparse.Namespace) -> 
     attempt = max((attempt_number(path) for path in task_dir.glob("attempt-*")), default=0) + 1
     attempt_dir = task_dir / f"attempt-{attempt}"
     attempt_dir.mkdir(parents=True)
-    stale = ("pid", "finished_at", "exit_code", "timed_out", "reason", "question", "commit", "answer")
+    stale = ("pid", "finished_at", "exit_code", "timed_out", "reason", "question", "commit", "answer",
+             "usage_recorded")
     state = {key: value for key, value in state.items()
              if not key.startswith("_") and key not in stale}
     state.update({"attempt": attempt, "command": shlex.split(options.child_command),
                   "child_timeout": options.child_timeout, "outcome": None,
-                  "dispatched_at": now()})
+                  "dispatched_at": now(), "origin": "question" if state.get("answered") else "dispatch"})
     state_path = attempt_dir / "state.json"
     (attempt_dir / "brief.md").write_text(
         brief_text(state, options.role_brief, options.task_template), encoding="utf-8")
@@ -371,7 +372,8 @@ class Round:
         self.project_dir = options.project_dir
         self.root = records_root(primary)
         self.proven: Dict[str, str] = {}  # task id -> landing commit proven by recover
-        self.budgeted = getattr(options, "task_limit", None) is not None
+        self.budgeted = (getattr(options, "task_limit", None) is not None
+                         or budget_ledger(primary).is_file())
         self.receipt: Dict[str, object] = {
             "status": None, "wave": getattr(options, "wave", None), "landed": [],
             "dispatched": [], "in_flight": [], "questions": [], "blocked": [], "steps": [],
@@ -394,10 +396,10 @@ class Round:
         return result
 
     def configure_budget(self) -> None:
-        if self.budgeted:
-            self.budget("configure", "--task-limit", str(self.options.task_limit),
-                        "--session-limit", str(self.options.session_limit),
-                        "--authority", self.options.budget_authority)
+        if getattr(self.options, "task_limit", None) is not None:
+            self.budget("configure", "--task-limit", str(getattr(self.options, "task_limit", None)),
+                        "--session-limit", str(getattr(self.options, "session_limit", None)),
+                        "--authority", getattr(self.options, "budget_authority", None))
 
     # recovery -------------------------------------------------------------
 
@@ -522,6 +524,8 @@ class Round:
         if state.get("wave") != self.receipt["wave"]:
             raise DriverStop("task is outside the requested wave", task=state["task_id"],
                              wave=state.get("wave"), requested_wave=self.receipt["wave"])
+        if self.budgeted:
+            self.budget("admit", "--task", str(state["task_id"]))
         fresh = spawn(self.root, state, self.options)
         self.receipt["dispatched"].append(self.summary(fresh))
         self.receipt["in_flight"].append(self.summary(fresh))
@@ -588,8 +592,6 @@ class Round:
             if used >= self.options.max_attempts:
                 raise DriverStop(f"task {task['id']} reached the attempt limit ({self.options.max_attempts}) "
                                  "for this milestone; a person must rule", task=task["id"], attempts=used)
-            if self.budgeted:
-                self.budget("admit", "--task", task["id"])
         head = isolation.current_sha(self.primary)
         self.runner("lint-round", head)
         round_size = len(selected) + len(in_flight)

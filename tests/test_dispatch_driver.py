@@ -6,6 +6,7 @@ import subprocess
 import sys
 import tempfile
 import textwrap
+import time
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
@@ -35,9 +36,13 @@ FAKE_CODER = textwrap.dedent(
     mode = os.environ.get("FAKE_MODE", "ready")
     if mode == "slow":
         time.sleep(3)
-    if mode == "question" and "Orchestrator answer:" not in text:
+    if mode in ("question", "questionjson") and "Orchestrator answer:" not in text:
         task_path.write_text(text + "- 2026-09-07 — NEEDS-ORCHESTRATOR: which greeting? — readings: hi, hello\\n")
-        print(f"RESULT: {task_id} blocked")
+        if mode == "questionjson":
+            import json
+            print(json.dumps({"result": f"RESULT: {task_id} blocked", "usage": {"output_tokens": 3}}))
+        else:
+            print(f"RESULT: {task_id} blocked")
         sys.exit(0)
     if mode == "question2" and "which file?" not in text:
         task_path.write_text(text + "- 2026-09-07 — NEEDS-ORCHESTRATOR: which file? — readings: a, b\\n")
@@ -492,6 +497,78 @@ class DispatchDriverTests(unittest.TestCase):
         self.assertIn("token budget record", receipt["blocked"][0]["reason"])
         self.assertEqual(receipt["landed"], [])
         self.assertEqual(self.driver(root, "status")["dispatches"][0]["outcome"], None)
+
+
+    def test_answered_question_requires_budget_admission_without_flags(self) -> None:
+        root = self.root
+        self.fixture(root, deps_t002="[T001]")
+        budget = ("--task-limit", "3", "--session-limit", "3", "--budget-authority", "test policy")
+        receipt = self.round(root, "--wait", "60", *budget, mode="questionjson")
+        self.assertEqual(receipt["status"], "question", receipt)
+        self.driver(root, "answer", "--task-id", "T001", "--answer", "hello")
+        receipt = self.round(root, "--wait", "60", mode="claudejson")
+        self.assertEqual(receipt["status"], "blocked", receipt)
+        self.assertIn("token budget admit", receipt["blocked"][0]["reason"])
+        self.assertEqual(receipt["dispatched"], [])
+        state = dispatch_driver.latest_states(dispatch_driver.records_root(root))[0]
+        self.assertEqual(state["attempt"], 1)
+        self.assertEqual(state["outcome"], "question")
+        self.assertTrue(state["answered"])
+
+    def test_question_redispatch_must_prove_its_own_usage(self) -> None:
+        root = self.root
+        self.fixture(root, deps_t002="[T001]")
+        budget = ("--task-limit", "50", "--session-limit", "50", "--budget-authority", "test policy")
+        receipt = self.round(root, "--wait", "60", *budget, mode="questionjson")
+        self.assertEqual(receipt["status"], "question", receipt)
+        self.driver(root, "answer", "--task-id", "T001", "--answer", "hello")
+        receipt = self.round(root, "--wait", "60", *budget)
+        self.assertEqual(receipt["status"], "blocked", receipt)
+        self.assertIn("token budget record", receipt["blocked"][0]["reason"])
+        self.assertEqual(receipt["landed"], [])
+        state = dispatch_driver.latest_states(dispatch_driver.records_root(root))[0]
+        self.assertEqual(state["attempt"], 2)
+        self.assertFalse(state.get("usage_recorded"))
+
+    def test_finish_records_usage_from_persisted_policy(self) -> None:
+        root = self.root
+        self.fixture(root, deps_t002="[T001]")
+        budget = ("--task-limit", "50", "--session-limit", "50", "--budget-authority", "test policy")
+        receipt = self.round(root, *budget, mode="claudejson")
+        self.assertEqual(receipt["status"], "in-flight", receipt)
+        deadline = time.monotonic() + 60
+        while not dispatch_driver.latest_states(dispatch_driver.records_root(root))[0].get("finished_at"):
+            self.assertLess(time.monotonic(), deadline, "child did not finish")
+            time.sleep(0.1)
+        receipt = self.driver(root, "finish", "--task-id", "T001")
+        self.assertEqual(receipt["status"], "landed", receipt)
+        ledger = json.loads(dispatch_driver.budget_ledger(root).read_text())
+        self.assertEqual(list(ledger["observations"].values()),
+                         [{"task": "T001", "output_tokens": 3}])
+
+    def test_answer_does_not_erase_original_dispatch_from_attempt_limit(self) -> None:
+        root = self.root
+        self.fixture(root, deps_t002="[T001]")
+        receipt = self.round(root, "--wait", "60", mode="question")
+        self.assertEqual(receipt["status"], "question", receipt)
+        self.driver(root, "answer", "--task-id", "T001", "--answer", "hello")
+        receipt = self.round(root, "--wait", "60", mode="badverify")
+        self.assertEqual(receipt["status"], "blocked", receipt)
+        records = dispatch_driver.records_root(root)
+        origins = [json.loads(path.read_text())["origin"]
+                   for path in sorted((records / "T001").glob("attempt-*/state.json"))]
+        self.assertEqual(origins, ["dispatch", "question"])
+        self.assertEqual(dispatch_driver.attempts_used(records, "T001"), 1)
+        self.reset_after_failed_serial_attempt(root)
+        receipt = self.round(root, "--wait", "60", mode="badverify")
+        self.assertEqual(receipt["status"], "blocked", receipt)
+        self.assertEqual(receipt["dispatched"][0]["attempt"], 3)
+        self.reset_after_failed_serial_attempt(root)
+        receipt = self.round(root, "--wait", "60")
+        self.assertEqual(receipt["status"], "blocked", receipt)
+        self.assertIn("reached the attempt limit (2)", receipt["blocked"][0]["reason"])
+        self.assertEqual(receipt["dispatched"], [])
+
 
 if __name__ == "__main__":
     unittest.main()

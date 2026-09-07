@@ -72,7 +72,10 @@ Token budgets are opt-in. Passing `--task-limit`, `--session-limit`, and
 `gsd-path/budget/<bound branch>.json` under the Git common directory, records
 each child's usage from its captured stdout when it exits, and runs `admit`
 before every dispatch; a blocked admission stops the round. The ledger's
-policy is fixed once configured, and a new milestone gets a new ledger. Usage
+policy is fixed once configured. Later rounds and `finish` enforce that policy
+even when budget flags are omitted; only explicit flags configure it. Each
+attempt records its own usage, including question redispatches. A new milestone
+gets a new ledger. Usage
 is read from Codex `--json` events or Claude `--output-format json`; output
 that proves no usage stops the round rather than estimating. At most one `Heavy: yes`
 Verify task is in flight at a time, and a round stops at a wave boundary.
