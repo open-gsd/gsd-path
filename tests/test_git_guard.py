@@ -715,6 +715,10 @@ class GitGuardEndToEndTests(unittest.TestCase):
             (f"HEAD {unfinished} {bound} {zero}", "moves gsd-path/M002"),
             (f"{bound} {ship} {bound} {zero}", None),
             (f"{bound} {ship} {bound} {unfinished}", None),
+            (f"{bound} {ship} refs/heads/gsd-path/M003 {zero}", "moves gsd-path/M003"),
+            (f"refs/heads/gsd-path/M003 {ship} {bound} {zero}", "moves gsd-path/M003"),
+            (f"HEAD {ship} refs/heads/gsd-path/M003 {zero}", "moves gsd-path/M003"),
+            (f"(delete) {zero} refs/heads/gsd-path/M003 {ship}", "moves gsd-path/M003"),
             (f"(delete) {zero} {bound} {unfinished}", "moves gsd-path/M002"),
             (f"(delete) {zero} {bound} {ship}", None),
             (f"(delete) {zero} {bound} {zero}", None),
@@ -733,6 +737,27 @@ class GitGuardEndToEndTests(unittest.TestCase):
         malformed = self.run_pre_push("refs/heads/x deadbeef")
         self.assertEqual(1, malformed.returncode)
         self.assertIn("inspection failed", malformed.stderr)
+
+    def test_pre_push_rejects_malformed_shas_and_missing_objects(self):
+        ref = "refs/heads/x"
+        for local_sha, remote_sha in (
+            ("not-a-sha", "not-a-sha"),
+            ("not-a-sha", git_guard.NULL_SHA),
+            (self.head(), "not-a-sha"),
+            ("f" * 40, git_guard.NULL_SHA),
+        ):
+            with self.subTest(local_sha=local_sha, remote_sha=remote_sha):
+                result = self.run_pre_push(f"{ref} {local_sha} {ref} {remote_sha}")
+                self.assertEqual(1, result.returncode, result.stderr)
+                self.assertIn("inspection failed; push blocked", result.stderr)
+
+    def test_pre_push_allows_present_commit_without_state(self):
+        self.git("rm", ".project/STATE.md")
+        self.commit("chore: remove pipeline state")
+        result = self.run_pre_push(
+            f"refs/heads/x {self.head()} refs/heads/x {git_guard.NULL_SHA}"
+        )
+        self.assertEqual(0, result.returncode, result.stderr)
 
     def test_fails_closed_outside_git(self):
         with tempfile.TemporaryDirectory() as empty:

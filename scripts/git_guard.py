@@ -203,12 +203,19 @@ def shown_file(revspec):
 
 def state_at(revision):
     """The STATE.md frontmatter at a revision; None when it has no STATE.md."""
+    subprocess.run(
+        ["git", "cat-file", "-e", revision],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
     content = shown_file(f"{revision}:.project/STATE.md")
     return None if content is None else frontmatter_of(content, f"{revision} STATE.md")
 
 
 def head_frontmatter():
-    return state_at("HEAD")
+    content = shown_file("HEAD:.project/STATE.md")
+    return None if content is None else frontmatter_of(content, "HEAD STATE.md")
 
 
 def shipped(state):
@@ -488,17 +495,17 @@ def product_commit_violations(entries, subject, body):
 
 
 @lru_cache(maxsize=None)
-def ship_commit_at(sha):
+def ship_commit_at(sha, bound):
     """True when the commit is the strict ship commit its own STATE.md names."""
+    state = state_at(sha)
+    if state is None or state.get("branch") != bound:
+        return False
     shown = subprocess.run(
         ["git", "show", "--no-patch", "--format=%s", sha],
         capture_output=True,
         text=True,
-        check=False,
+        check=True,
     )
-    state = state_at(sha) if shown.returncode == 0 else None
-    if state is None:
-        return False
     archive = state.get("archive") or ""
     return strict_ship_state(state, archive) and is_ship_subject(
         shown.stdout.strip(), archive.rsplit("/", 1)[-1]
@@ -517,16 +524,19 @@ def pre_push_violations(lines):
         if len(parts) != 4:
             raise ValueError(f"unexpected pre-push line: {line!r}")
         local_ref, local_sha, remote_ref, remote_sha = parts
+        if any(re.fullmatch(r"[0-9a-fA-F]{40}", sha) is None for sha in (local_sha, remote_sha)):
+            raise ValueError(f"unexpected pre-push SHA: {line!r}")
         names = [ref.removeprefix("refs/heads/") for ref in (local_ref, remote_ref)]
-        bound = next((name for name in names if BOUND_BRANCH.fullmatch(name)), None)
-        if bound is not None:
+        bounds = {name for name in names if BOUND_BRANCH.fullmatch(name)}
+        if bounds:
             # A deletion is judged by the commit it removes; an absent ref proves nothing.
             sha = remote_sha if local_sha == NULL_SHA else local_sha
-            if sha != NULL_SHA and not ship_commit_at(sha):
-                found.append(
-                    f"{remote_ref} <- {sha[:12]} moves {bound} off its ship commit; "
-                    f"{PUBLICATION_HINT}"
-                )
+            for bound in sorted(bounds):
+                if sha != NULL_SHA and not ship_commit_at(sha, bound):
+                    found.append(
+                        f"{remote_ref} <- {sha[:12]} moves {bound} off its ship commit; "
+                        f"{PUBLICATION_HINT}"
+                    )
             continue
         if local_sha == NULL_SHA:
             continue
