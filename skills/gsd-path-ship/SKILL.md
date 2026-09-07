@@ -282,7 +282,9 @@ The persisted `STATE.archive` field is the transaction identity.
      main then the bound branch then the tag, and removes its worktree and
      branch. Before publishing the bound branch it reads the live origin ref:
      absence is created with an absent-ref lease, the exact ship commit is an
-     idempotent success, and every other value blocks. If origin/main advances
+     idempotent success, an owner-adopted rebased milestone (archived
+     `build/rebase-adoption.json`) may advance the ref from the adopted head
+     to the ship commit under a lease, and every other value blocks. If origin/main advances
      after the local merge but rejects the push, a retry may discard and
      rebuild only the unpublished canonical merge and tag under the helper's
      existing recovery checks.

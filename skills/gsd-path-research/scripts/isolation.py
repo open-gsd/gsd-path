@@ -27,6 +27,8 @@ try:
         attest_commit_body,
         attest_commit_subject,
         is_bound_branch,
+        ship_commit_body,
+        ship_subject,
         task_commit_body,
         task_commit_subject,
     )
@@ -36,6 +38,8 @@ except ImportError:  # pragma: no cover - package import used by tests
         attest_commit_body,
         attest_commit_subject,
         is_bound_branch,
+        ship_commit_body,
+        ship_subject,
         task_commit_body,
         task_commit_subject,
     )
@@ -1933,7 +1937,7 @@ def _recover_task(
     if not retained and len(candidates) == 1:
         try:
             rebased_base = _prove_rebase_adoption(
-                primary, task_file, head, candidates[0][0], task_text
+                primary, path.parent.parent, task_file, head, candidates[0][0], task_text
             )
         except IsolationError as error:
             return result("block", reason=f"rebase adoption receipt is invalid: {error}")
@@ -2573,7 +2577,8 @@ def _prove_attest_commit(
 
 
 REBASE_ADOPTION_SCHEMA = "gsd-path/rebase-adoption/v1"
-REBASE_ADOPTION_PATH = ".project/build/rebase-adoption.json"
+REBASE_ADOPTION_RECEIPT = "build/rebase-adoption.json"
+REBASE_ADOPTION_PATH = ".project/" + REBASE_ADOPTION_RECEIPT
 # Mirrors git_guard.TASK_SUBJECT; isolation must not import the guard.
 LANDING_SUBJECT = re.compile(r"^[A-Za-z][A-Za-z0-9._-]*: \S.*$")
 
@@ -2688,11 +2693,25 @@ def _require_landings_after(repo: Path, adopted: str, head: str) -> None:
             raise IsolationError("product changed outside a landing after the adopted revision")
 
 
-def _receipt_path(repo: Path) -> Path:
-    path = repo / REBASE_ADOPTION_PATH
+def _receipt_path(project_root: Path) -> Path:
+    """The adoption receipt beside a live (.project/) or archived project root."""
+    path = project_root / REBASE_ADOPTION_RECEIPT
     if path.resolve() != path.absolute():
         raise IsolationError("unsafe rebase adoption receipt path")
     return path
+
+
+def _receipt_bytes(project_root: Path) -> Optional[bytes]:
+    """The receipt's bytes, or None when the project root has no receipt."""
+    path = _receipt_path(project_root)
+    if not os.path.lexists(path):
+        return None
+    if not path.is_file():
+        raise IsolationError("rebase adoption receipt is not a regular file")
+    try:
+        return path.read_bytes()
+    except OSError as error:
+        raise IsolationError(str(error)) from error
 
 
 @functools.lru_cache(maxsize=None)
@@ -2711,16 +2730,17 @@ def _validated_receipt(repo: Path, raw: bytes) -> Dict[str, object]:
 
 
 def _prove_rebase_adoption(
-    repo: Path, task_file: str, head: str, landing: str, current_text: str
+    repo: Path, project_root: Path, task_file: str, head: str, landing: str, current_text: str
 ) -> Optional[str]:
-    """Return the original base the receipt binds to `landing`; None without a receipt."""
-    receipt_path = _receipt_path(repo)
-    if not os.path.lexists(receipt_path):
+    """Return the original base the receipt binds to `landing`; None without a receipt.
+
+    `project_root` is the task artifact's own root: `.project` for live tasks,
+    `.project/archive/<n>` for archived ones.
+    """
+    raw = _receipt_bytes(project_root)
+    if raw is None:
         return None
-    try:
-        receipt = _validated_receipt(repo, receipt_path.read_bytes())
-    except OSError as error:
-        raise IsolationError(str(error)) from error
+    receipt = _validated_receipt(repo, raw)
     if receipt["head"] != head:
         _require_landings_after(repo, receipt["head"], head)
     rows = [row for row in receipt["tasks"] if row["path"] == task_file]
@@ -2742,7 +2762,7 @@ def record_rebase_adoption(
     if current_sha(primary) != head:
         raise IsolationError("HEAD differs from approved adopted revision")
     receipt = adopt_rebase(primary, original_head, head, ruling)
-    target = _receipt_path(primary)
+    target = _receipt_path(primary / ".project")
     try:
         if target.exists() and json.loads(target.read_bytes()) != receipt:
             raise IsolationError("another adoption receipt already exists")
@@ -2751,6 +2771,48 @@ def record_rebase_adoption(
     _common.atomic_write(target, json.dumps(receipt, indent=2) + "\n")
     return {"bound_branch": bound, "head": head, "path": str(target),
             "tasks": len(receipt["tasks"]), "verdict": "adopted"}
+
+
+def publication_base(repo: Path, branch: str, ship_commit: str) -> Optional[str]:
+    """The adopted head a shipped, owner-adopted milestone may advance from.
+
+    Returns None when the milestone is not an adopted one; raises when the
+    archived receipt, ship commit, or archived tasks fail proof.
+    """
+    try:
+        from pipeline_state import load_state
+    except ImportError:  # pragma: no cover - package import used by tests
+        from scripts.pipeline_state import load_state
+    repo = require_directory(repo, "repository")
+    state, state_text, _ = load_state(repo)
+    if (state.phase, state.status, state.integration, state.branch) != (
+        "shipped", "done", "direct", branch
+    ) or state.archive is None:
+        return None
+    raw = _receipt_bytes(repo / state.archive)
+    if raw is None:
+        return None
+    if current_sha(repo) != ship_commit or uncommitted_paths(repo):
+        raise IsolationError("publication requires the clean ship commit")
+    if git_text(repo, "show", f"{ship_commit}:.project/STATE.md") != state_text:
+        raise IsolationError("ship state differs from committed state")
+    receipt = _validated_receipt(repo, raw)
+    parent, error = _single_parent(repo, ship_commit)
+    if error or parent != receipt["head"]:
+        raise IsolationError("ship parent is not the adopted revision")
+    changed = git_output(repo, "diff", "--name-only", parent, ship_commit).splitlines()
+    if any(not name.startswith(".project/") for name in changed):
+        raise IsolationError("ship commit changes product files")
+    expected = (ship_subject(Path(state.archive).name) + "\n\n"
+                + ship_commit_body(state.archive, parent)).strip()
+    if git_text(repo, "show", "-s", "--format=%B", ship_commit).strip() != expected:
+        raise IsolationError("ship commit message is not canonical")
+    for row in receipt["tasks"]:
+        name = Path(str(row["path"])).name
+        task = _real_file(repo, f"{state.archive}/tasks/{name}", "archived task")
+        if _read_task_text(task)[0] != row["adopted_task"]:
+            raise IsolationError("archived task differs from adopted record")
+    return parent
 
 
 def attest(

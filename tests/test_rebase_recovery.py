@@ -1,15 +1,21 @@
 import json
+import shlex
+import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
 
-from scripts import build_state, isolation, lean_verification
+from scripts import build_state, integration, isolation, lean_verification, pipeline_git
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 ISOLATION_SCRIPT = PROJECT_ROOT / "scripts" / "isolation.py"
+GUARD_SCRIPT = PROJECT_ROOT / "scripts" / "git_guard.py"
+BOUND = "gsd-path/M001"
+BOUND_REF = "refs/heads/" + BOUND
+ARCHIVE = ".project/archive/001-adoption"
 RECEIPT = ".project/build/rebase-adoption.json"
 RULING = "Adopt this rebase; preserve original evidence."
 
@@ -37,7 +43,7 @@ class RebaseRecoveryTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.repo = Path(self.temp.name)
-        git(self.repo, "init", "-b", "gsd-path/M001")
+        git(self.repo, "init", "-b", BOUND)
         git(self.repo, "config", "user.name", "Test")
         git(self.repo, "config", "user.email", "test@example.test")
         git(self.repo, "config", "core.hooksPath", str(self.repo / "no-hooks"))
@@ -59,15 +65,16 @@ class RebaseRecoveryTests(unittest.TestCase):
         self.commit("T001: Change value", body)
         self.original = git(self.repo, "rev-parse", "HEAD")
         git(self.repo, "branch", "keep/original")
-        git(self.repo, "checkout", "-B", "gsd-path/M001", self.base)
+        git(self.repo, "checkout", "-B", BOUND, self.base)
         (self.repo / "unrelated.txt").write_text("upstream\n")
         self.commit("upstream")
         # Rebase the plan as well so the original Base is absent from ancestry.
         git(self.repo, "checkout", "--orphan", "rebased")
         git(self.repo, "add", ".")
         git(self.repo, "commit", "-q", "-m", "plan")
+        self.mapped_base = git(self.repo, "rev-parse", "HEAD")
         git(self.repo, "cherry-pick", self.original)
-        git(self.repo, "branch", "-M", "gsd-path/M001")
+        git(self.repo, "branch", "-M", BOUND)
         self.head = git(self.repo, "rev-parse", "HEAD")
 
     def commit(self, subject: str, body: str = "") -> None:
@@ -238,6 +245,93 @@ class RebaseRecoveryTests(unittest.TestCase):
             isolation.adopt_rebase(self.repo, self.original, self.head, "  ")
         with self.assertRaises(isolation.IsolationError):
             isolation.adopt_rebase(self.repo, self.original[:7], self.head, RULING)
+
+    def prepare_local_publication(self) -> None:
+        """Adopt, publish the adopted head to a bare origin, then archive and ship."""
+        self.adopt()
+        remote = tempfile.TemporaryDirectory()
+        self.addCleanup(remote.cleanup)
+        self.remote = str(Path(remote.name) / "origin.git")
+        git(self.repo, "init", "--bare", self.remote)
+        git(self.repo, "remote", "add", "origin", self.remote)
+        git(self.repo, "push", "-q", "origin", self.head + ":" + BOUND_REF)
+        destination = self.repo / ARCHIVE
+        destination.mkdir(parents=True)
+        for folder in ("tasks", "plan", "build"):
+            shutil.move(str(self.repo / ".project" / folder), str(destination / folder))
+        (self.repo / ".project/STATE.md").write_text(
+            "---\npipeline: gsd-path/v2\nproject: fixture\nmilestone: adoption\n"
+            "phase: shipped\nstatus: done\nbranch: gsd-path/M001\narchive: " + ARCHIVE + "\n"
+            "integration_default: direct\nintegration: direct\nintegration_source: default\n"
+            "---\n\n## Log\n")
+        self.adopted = self.head
+        self.commit(pipeline_git.ship_subject("001-adoption"),
+                    pipeline_git.ship_commit_body(ARCHIVE, self.adopted))
+        self.ship = self.head
+
+    def remote_ref(self) -> str:
+        return integration.live_remote_ref(self.repo, BOUND_REF)
+
+    def test_archived_task_proves_against_archived_receipt(self) -> None:
+        self.prepare_local_publication()
+        archived = self.repo / ARCHIVE / "tasks" / Path(self.path).name
+        report = isolation.verify_landed_task_files(
+            self.repo, [archived], ".project/tasks", self.ship
+        )
+        self.assertEqual(report["tasks"][0]["verdict"], "attested")
+        self.assertEqual(report["tasks"][0]["provenance"], "owner-authorized-rebase")
+
+    def test_publish_adopted_branch_fast_forward_and_retry(self) -> None:
+        self.prepare_local_publication()
+        self.assertEqual(self.remote_ref(), self.adopted)
+        integration.publish_bound_branch(self.repo, BOUND, self.ship)
+        self.assertEqual(self.remote_ref(), self.ship)
+        integration.publish_bound_branch(self.repo, BOUND, self.ship)
+        self.assertEqual(self.remote_ref(), self.ship)
+        self.assertEqual(git(self.repo, "rev-parse", "keep/original"), self.original)
+
+    def test_publish_rejects_remote_other_than_adopted_head(self) -> None:
+        self.prepare_local_publication()
+        git(self.repo, "--git-dir", self.remote, "update-ref", BOUND_REF, self.mapped_base)
+        with self.assertRaisesRegex(integration.ArchiveError, "moved or collides"):
+            integration.publish_bound_branch(self.repo, BOUND, self.ship)
+        self.assertEqual(self.remote_ref(), self.mapped_base)
+
+    def test_publish_rejects_product_in_ship_commit(self) -> None:
+        self.prepare_local_publication()
+        (self.repo / "value.txt").write_text("unreviewed\n")
+        git(self.repo, "add", ".")
+        git(self.repo, "commit", "-q", "--amend", "--no-edit")
+        self.ship = git(self.repo, "rev-parse", "HEAD")
+        with self.assertRaisesRegex(integration.ArchiveError, "rebase publication proof failed"):
+            integration.publish_bound_branch(self.repo, BOUND, self.ship)
+        self.assertEqual(self.remote_ref(), self.adopted)
+
+    def test_publish_lease_rejects_remote_race(self) -> None:
+        self.prepare_local_publication()
+        hooks = self.repo / ".git/hooks"
+        git(self.repo, "config", "core.hooksPath", str(hooks))
+        hook = hooks / "pre-push"
+        # Move the remote after inspection but before the ref update.
+        hook.write_text("#!/bin/sh\ngit --git-dir=" + shlex.quote(self.remote)
+                        + " update-ref " + BOUND_REF + " " + self.mapped_base + "\n")
+        hook.chmod(0o755)
+        with self.assertRaises(integration.ArchiveError):
+            integration.publish_bound_branch(self.repo, BOUND, self.ship)
+        self.assertEqual(self.remote_ref(), self.mapped_base)
+
+    def guard_pre_push(self, local_sha: str, remote_sha: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            (sys.executable, str(GUARD_SCRIPT), "pre-push", "origin", self.remote),
+            cwd=self.repo, text=True, capture_output=True, check=False,
+            input=f"{BOUND_REF} {local_sha} {BOUND_REF} {remote_sha}\n",
+        )
+
+    def test_guard_pre_push_allows_adopted_head_to_ship_commit(self) -> None:
+        self.prepare_local_publication()
+        allowed = self.guard_pre_push(self.ship, self.adopted)
+        self.assertEqual(allowed.returncode, 0, allowed.stdout + allowed.stderr)
+        self.assertNotEqual(self.guard_pre_push(self.adopted, self.ship).returncode, 0)
 
     def test_empty_subject_in_history_is_tolerated(self) -> None:
         git(self.repo, "commit", "-q", "--allow-empty", "--allow-empty-message", "-m", "")
