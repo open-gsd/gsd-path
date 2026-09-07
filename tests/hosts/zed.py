@@ -154,6 +154,7 @@ def bind_child(run_root, child_id):
 SPEC = HostSpec(
     name="zed", install_flag="--zed", skill_root=".agents/skills", invocation="/gsd-path",
     child_api="spawn_agent", guard_tier="git-only", command=command, parse_events=parse_events,
+    child_name_key="label",
     bind_child=bind_child, verified_live=False,
     notes=(
         "Documentation-derived; Zed is not installed on the authoring machine and nothing here was run. "
