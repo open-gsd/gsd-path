@@ -111,12 +111,7 @@ Help: `node scripts/install.mjs --help`
 
 Work **in the project directory**. Invoke **explicitly**:
 
-| Host | Router |
-| --- | --- |
-| Codex | `$path` or `$gsd-path` |
-| Claude, Cursor, Zed, Grok, Copilot, Qwen, Kiro, Kimi, Antigravity | `/path` or `/gsd-path` |
-| OpenCode v2 | `/path` or `/gsd-path` |
-| OpenCode stable | Ask to *load and use the gsd-path skill* |
+Use the [router and phase invocation table](README.md#install-summary) for your host.
 
 The router reads `.project/STATE.md`, reports phase, runs the next valid step.
 Vague chat such as “continue the project” does **not** run it. In a project

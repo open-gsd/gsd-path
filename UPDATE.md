@@ -46,8 +46,12 @@ AGENTS.md or WORKFLOW.md template changed upstream
 | `AGENTS.md`, `WORKFLOW.md` | **No** | Manual merge |
 | `.project/*` (active milestone) | **No** | Pipeline state |
 
-Existing `gsd-path*` skills move to `disabled-gsd-skills` beside each root before replace.
-Unrelated skills are never touched. Failed multi-host updates roll back all selected targets.
+Existing managed skills, including the owned `path` alias, move to
+`disabled-gsd-skills` beside each root before replacement. The alias is owned
+only when `scripts/pipeline_state.py` is a regular file and `VERSION` contains
+a dotted numeric version. An unrelated `path` skill blocks installation; rename
+it or move it aside first. Unrelated skills are never touched. Failed multi-host
+updates roll back all selected targets.
 An initial `--hooks` install merges valid native settings for explicitly selected Claude,
 Codex, or Cursor hosts; other existing project contract and guard files are refused.
 `--update --project PATH` keeps `AGENTS.md`, `WORKFLOW.md`, and `.claude/CLAUDE.md`
