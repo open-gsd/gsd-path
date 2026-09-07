@@ -611,8 +611,10 @@ dispatch contract and perform steps 1–5 by hand.
 
 After every wave passes, record exact full HEAD and prove every task landed
 with `python3 <absolute workflow_run.py> build-evidence --repo <absolute primary>
---expected-head <HEAD>`; retain its JSON receipt. The wrapped `verify-landed`
-result must return one
+--expected-head <HEAD>`. The runner writes the wrapped `verify-landed` result
+to `.project/build/evidence.json`; that path is the only landing-proof
+location the ship runtime recognizes, so never save the receipt under another
+name. The result must return one
 `proven-landed` or `attested` evidence entry per task, and any non-zero exit
 blocks completion. A `done` task without landing proof follows the `block`
 handling in step 1 above (owner ruling, Verify, `verify-record`, `attest`).

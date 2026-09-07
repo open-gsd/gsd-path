@@ -18,7 +18,7 @@ All commands require `--repo <absolute repository root>`.
 | `approve-plan` | Owner approval and `--expected-head <reviewed full SHA>` | Plan gates followed by the existing journaled approval checkpoint. |
 | `lint-round` | Git HEAD; optional `--project-dir .project/next` | Task brief checks against HEAD, then plan handoff checks. |
 | `prepare-task` | `--expected-head <clean base> --task-id <id> --round-size <ready task count>` | Canonical task isolation; serial work also gets a verification sidecar before the primary becomes dirty. |
-| `build-evidence` | `--expected-head <full SHA>` | Canonical landing proof with the correct repo-relative project directory. |
+| `build-evidence` | `--expected-head <full SHA>` | Canonical landing proof with the correct repo-relative project directory, written to `.project/build/evidence.json`. |
 
 Plan approval recovery remains `pipeline_state.py resume-checkpoint`. Pre-Git
 approvals and patch approvals retain their existing canonical flows. The runner
