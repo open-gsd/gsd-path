@@ -827,14 +827,16 @@ class Review:
                 isolation.clean_verify(self.primary, sidecar, str(state["base"]), str(state["branch"]))
             isolation.retire(self.primary, sidecar, str(state["branch"]), False)
         except isolation.IsolationError as error:
-            raise DriverStop(str(error), helper="isolation.py") from error
-        update_state(state, cleanup_complete=True)
+            update_state(state, cleanup_pending=True, cleanup_error=str(error))
+            return
+        update_state(state, cleanup_complete=True, cleanup_pending=False, cleanup_error=None)
 
     def settle(self, states: Dict[str, Dict[str, object]]) -> None:
         """Advance every lens and render the receipt from the records; settle is their only writer."""
         self.receipt["in_flight"], self.receipt["blocked"], self.receipt["lenses"] = [], [], {}
         for key, state in states.items():
-            if state.get("outcome") == "collected" and not state.get("cleanup_complete"):
+            if state.get("outcome") == "collected" and (
+                    state.get("cleanup_pending") or not state.get("cleanup_complete")):
                 self.collect(state)
             if state.get("outcome") is None:
                 if state.get("finished_at") is not None:
@@ -846,6 +848,16 @@ class Review:
                     update_state(state, outcome="blocked", reason="child wrapper exited without recording a result")
             self.receipt["base"] = state.get("base")
             if state.get("outcome") == "collected":
+                canonical = self.primary / str(state["relative"])
+                if (not canonical.is_file()
+                        or hashlib.sha256(canonical.read_bytes()).hexdigest() != state.get("validated_sha256")):
+                    self.receipt["blocked"].append({**summary(state),
+                        "reason": "canonical review artifact changed after collection",
+                        "helper": "isolation.py collect-artifact"})
+                    continue
+                if state.get("cleanup_pending"):
+                    self.receipt["blocked"].append({**summary(state), "reason": state.get("cleanup_error"),
+                                                    "helper": "isolation.py retire"})
                 self.receipt["lenses"][key] = {"verdict": state.get("verdict"), "owned": state.get("owned"),
                                                "path": state.get("relative")}
             elif state.get("outcome") == "blocked":

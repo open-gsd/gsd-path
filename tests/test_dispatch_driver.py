@@ -758,6 +758,73 @@ class DispatchDriverTests(unittest.TestCase):
         self.assertEqual(receipt["status"], "blocked", receipt)
         self.assertEqual(receipt["blocked"][0]["reason"], "reviewer wrote no review file")
 
+    def test_review_rejects_changed_or_missing_collected_artifact(self) -> None:
+        root = self.root
+        self.fixture(root)
+        self.assertEqual(self.round(root, "--wait", "60")["status"], "done")
+        self.assertEqual(self.review(root, "--wait", "60")["status"], "pass")
+        head = self.head(root)
+        canonical = root / ".project/review/wave-1.cycle1.md"
+        for mutation in ("edit", "delete"):
+            with self.subTest(mutation=mutation):
+                if mutation == "edit":
+                    canonical.write_text(canonical.read_text() + "Changed after collection.\n")
+                else:
+                    canonical.unlink()
+                receipt = self.review(root, "--wait", "60")
+                self.assertEqual(receipt["status"], "blocked", receipt)
+                self.assertEqual(receipt["blocked"][0]["reason"],
+                                 "canonical review artifact changed after collection")
+                self.assertEqual(receipt["blocked"][0]["helper"], "isolation.py collect-artifact")
+                self.assertTrue(any(item["kind"] == "helper-failure"
+                                    for item in receipt["findings"]["structural_blockers"]))
+                self.assertFalse(receipt.get("checkpoint"))
+                self.assertEqual(self.head(root), head)
+
+    def test_review_cleanup_failures_report_findings_and_resume(self) -> None:
+        for helper in ("clean_verify", "retire"):
+            with self.subTest(helper=helper):
+                root = (self.root / helper).resolve()
+                root.mkdir()
+                self.fixture(root)
+                plan = root / ".project/plan/PLAN.md"
+                plan.write_text(plan.read_text().replace("Review depth: full", "Review depth: deep", 1))
+                run_git(root, "commit", "-qam", "plan: deep review")
+                self.assertEqual(self.round(root, "--wait", "60")["status"], "done")
+                head = self.head(root)
+                options = argparse.Namespace(project_dir=".project", wave=1, cycle=1, wait=60,
+                                             repair_evidence=None,
+                                             role_brief=PROJECT_ROOT / "skills/gsd-path-build/references/reviewer.md",
+                                             template=PROJECT_ROOT / "skills/gsd-path-build/templates/wave-review.md",
+                                             child_command=f"{sys.executable} {root / 'fake_reviewer.py'}",
+                                             child_timeout=None)
+                with mock.patch.object(dispatch_driver.isolation, helper,
+                                       side_effect=dispatch_driver.isolation.IsolationError("cleanup failed")):
+                    receipt = dispatch_driver.Review(root, options).run()
+                self.assertEqual(receipt["status"], "blocked", receipt)
+                self.assertEqual(sorted(receipt["lenses"]), ["adversarial", "contract"])
+                self.assertEqual(len(receipt["blocked"]), 2)
+                self.assertTrue(all(item["helper"] == "isolation.py retire" for item in receipt["blocked"]))
+                self.assertTrue(any(item["kind"] == "helper-failure" and
+                                    item["detail"] == "isolation.py retire: cleanup failed"
+                                    for item in receipt["findings"]["structural_blockers"]))
+                self.assertEqual(self.head(root), head)
+                records = dispatch_driver.records_root(root) / "reviews"
+                for state in dispatch_driver.latest_states(records):
+                    self.assertEqual(state["outcome"], "collected")
+                    self.assertTrue(state["cleanup_pending"])
+                    self.assertEqual(state["cleanup_error"], "cleanup failed")
+                    self.assertTrue(Path(state["worktree"]).is_dir())
+                receipt = self.review(root, "--wait", "60")
+                self.assertEqual(receipt["status"], "pass", receipt)
+                self.assertFalse(receipt["blocked"])
+                for state in dispatch_driver.latest_states(records):
+                    self.assertTrue(state["cleanup_complete"])
+                    self.assertFalse(state["cleanup_pending"])
+                    self.assertIsNone(state["cleanup_error"])
+                    self.assertFalse(Path(state["worktree"]).exists())
+                self.assertEqual(self.branches(root), ["gsd-path/M001"])
+
     def test_review_requires_previous_cycle_evidence(self) -> None:
         root = self.root
         self.fixture(root)
