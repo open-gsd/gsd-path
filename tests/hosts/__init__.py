@@ -1,13 +1,15 @@
 """Per-host headless runners for live release evidence.
 
 Each host module exposes ``SPEC``, a :class:`HostSpec`. ``tests/evaluate_host.py``
-drives any host through the same prepare / run / bind-child steps that produced the
-Codex and Claude Code release receipts on 2026-09-06.
+provides shared prepare / run / bind-child steps for release evidence. See its
+module docstring for usage and each host module for capabilities and limitations.
 
 Contract for a host module (``tests/hosts/<host>.py``):
 
 - ``SPEC.name`` matches the key in ``scripts/skill-resources.json`` ``hosts``.
-- ``SPEC.command(prompt_path, resume)`` returns the headless argv. The prompt is piped
+- ``SPEC.command(prompt_path, resume)`` returns the headless argv, or raises
+  ``NotImplementedError`` with the documented alternative when none is available.
+  The prompt is piped
   on stdin unless ``SPEC.prompt_on_stdin`` is False, in which case the module must
   place the prompt text into argv itself.
 - ``SPEC.parse_events(lines)`` reads the recorded stdout lines and returns

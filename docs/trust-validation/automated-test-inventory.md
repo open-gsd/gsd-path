@@ -21,6 +21,11 @@ This runs the Node tests, all Python unittest modules, and the generated-resourc
 sync check. Node requires **≥18.17**. The Python suite has no third-party runtime
 dependency.
 
+The offline host runner checks are in `tests/test_host_*.py`; their registry
+contract is documented in [tests/hosts/__init__.py](../../tests/hosts/__init__.py).
+For the separate opt-in release-evidence driver, see the usage and limitations in
+[tests/evaluate_host.py](../../tests/evaluate_host.py).
+
 ## Suite inventory
 
 | File | Runner | Primary subject |
@@ -80,7 +85,7 @@ the interactive wizard and npm entry point.
 - Full milestone run on any AI host (router → ship) — only the disk contract is automated (`test_full_cycle.py`)
 - Live router execution of the deterministic recovery decisions
 - Live orchestrator child-agent scheduling and parallel dispatch
-- Per-host runtime dispatch (Cursor Task, Claude subagents, etc.) beyond install artifacts
+- Live per-host runtime dispatch beyond recorded samples in the offline host tests
 - Native guard wiring outside Claude, Codex, and Cursor
 - Full live release receipts for every advertised host
 - Networked `check_update` fetch (mocked in tests only)

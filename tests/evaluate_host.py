@@ -1,13 +1,18 @@
 #!/usr/bin/env python3
-"""Drive any supported host headlessly through the quick scenario for release evidence.
+"""Drive a host with a headless command through the quick scenario for release evidence.
 
     python3 -B tests/evaluate_host.py prepare --host claude --directory /abs/new --candidate .
     python3 -B tests/evaluate_host.py run --host claude --directory /abs/new [--resume ID --prompt-file F]
     python3 -B tests/evaluate_host.py child --host claude --directory /abs/new --child-id build_T001
 
-Live execution is explicit and opt-in; the ordinary test suite never invokes a host.
+Host capabilities and limitations are recorded in tests/hosts/<host>.py SPEC and
+its module docstring. In particular, Zed's command raises NotImplementedError and
+names its developer-only alternative. Documentation-derived runners remain unverified.
+
+Live execution is explicit and opt-in; tests/test_host_*.py never invokes a host.
 The evaluator answers owner gates by resuming with --prompt-file. Nothing here grades
-the run.
+the run or assembles the complete release receipt: the evaluator supplies guard
+evidence and the archive JSON files requested by RELEASE_ADDENDUM.
 """
 
 import argparse
