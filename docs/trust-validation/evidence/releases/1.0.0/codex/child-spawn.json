@@ -1,7 +1,7 @@
 {
   "schema": "gsd-path/live-step-evidence/v1",
   "host": "codex",
-  "run_id": "01a0783b-f94a-7770-9e90-d88b6908ffe4",
+  "run_id": "01a078a8-ba6e-76b1-9839-e966690c6688",
   "result": "pass",
   "step": "child-spawn",
   "command": "collaboration.spawn_agent",
@@ -12,7 +12,7 @@
     "child_id": "build_t001",
     "status": "completed",
     "spawn_call": {
-      "call_id": "call_dD1VvUhvZxUFnmHSk7s9MCnl",
+      "call_id": "call_Wyj7mpbrg6qU1o4wOQKUnZ0q",
       "name": "spawn_agent",
       "namespace": "collaboration",
       "arguments": {
@@ -25,7 +25,7 @@
       {
         "agent_name": "/root/build_t001",
         "agent_status": {
-          "completed": "T001: ready.\nVerify: `python3 -B tests/test_count.py` passed \u2014 3 tests, 22 CLI cases.\nChanged: `count.py`, `tests/test_count.py`, `.project/tasks/T001-widget-counter-cli.md` (Log only).\nReady for orchestrator isolated verification and landing."
+          "completed": "T001: ready.\nVerify: `python3 -B tests/test_count_cli.py` passed; 5 tests, 22 CLI calls. Original script failed these tests.\nChanged: `count.py`, `tests/test_count_cli.py`, `.project/tasks/T001-widget-counter-cli.md` (Log only).\n`git diff --check` passed; no Git mutations."
         }
       }
     ]
