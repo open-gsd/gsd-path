@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-"""Assemble a gsd-path live-evidence release receipt from a real Codex or Claude run.
+"""Assemble a gsd-path live-evidence release receipt from a real host run.
 
-Select --host codex (the default) or --host claude before the phase name.
-Claude manifest requires --native-guard-evidence pointing to a passing probe JSON.
-For receipt, --transcript is a Codex session JSONL file or a Claude run root
-containing quick/run-*/events.jsonl.
+Select --host <manifest host> (default codex) before the phase name; host facts come
+from tests/hosts/<host>.py in --repo. Codex and Claude retain their stricter inline
+child binders; other hosts use SPEC.bind_child. A native-tier host's manifest requires
+--native-guard-evidence pointing to a passing probe JSON. For receipt, --transcript is
+a Codex session JSONL file or, for every other host, the tests/evaluate_host.py run
+root containing quick/run-*/events.jsonl.
 
 Two phases, both driven by the evaluator against the fixture repository:
 
@@ -21,9 +23,7 @@ session transcript; nothing is invented.
 import argparse, datetime as dt, json, os, re, shutil, subprocess, sys, tempfile
 from pathlib import Path
 
-HOSTS = {"codex": {"child_api": "collaboration.spawn_agent", "guard_tier": "git-only", "skill_root": ".agents/skills"},
-         "claude": {"child_api": "Agent", "guard_tier": "native-fail-closed", "skill_root": ".claude/skills"}}
-HOST = CHILD_API = GUARD_TIER = None  # bound from --host in main()
+HOST = SPEC = CHILD_API = GUARD_TIER = None  # bound from --host in main(); SPEC is the tests/hosts HostSpec
 STEP = "gsd-path/live-step-evidence/v1"
 
 
@@ -153,6 +153,11 @@ def phase_manifest(a):
 def transcript_child(transcript, child_id):
     if HOST == "claude":
         return claude_child(transcript, child_id)
+    if HOST != "codex":  # tests/hosts/<host>.bind_child reads the evaluate_host.py run root
+        try:
+            return SPEC.bind_child(Path(transcript), child_id)
+        except LookupError as e:
+            raise SystemExit(str(e))
     recs = [json.loads(l) for l in Path(transcript).read_text().splitlines() if l.strip()]
     spawn = spawn_out = None; call_id = None; statuses = []
     for r in recs:
@@ -264,7 +269,7 @@ def phase_receipt(a):
     base = {"schema": STEP, "host": HOST, "run_id": run_id, "result": "pass"}
     steps = {
         "install": {**base, "step": "install", "command": a.install_command, "output": install["output"],
-                    "host_version": manifest["host_version"], "install_root": HOSTS[HOST]["skill_root"],
+                    "host_version": manifest["host_version"], "install_root": SPEC.skill_root,
                     "candidate": manifest["candidate"], "package_version": version, "exit_code": 0},
         "router": {**base, "step": "router", "command": a.router_command,
                    "output": (repo / ".project/STATE.md").read_text(), "state_artifact": ".project/STATE.md",
@@ -319,7 +324,7 @@ def phase_receipt(a):
         f"Full quick-lane milestone run by the pinned candidate on a fresh fixture; evaluator-driven owner gates. Run directory: `{a.run_dir}`.",
         "", "## Environment", "", f"- Host and CLI version: {manifest['host_version']}", f"- Operator: {a.operator}",
         f"- Date: {dt.date.today().isoformat()}", f"- Fixture repository: {repo}",
-        f"- Child-agent API used: {CHILD_API} ({'task_name' if HOST == 'codex' else 'description'} {child_id})", "", "## Evidence", "",
+        f"- Child-agent API used: {CHILD_API} ({SPEC.child_name_key} {child_id})", "", "## Evidence", "",
         *[f"- {label}: {HOST}/{name}.json" for label, name in labels], "",
         f"Fixture Git bundle: {HOST}/fixture.bundle (all refs, including origin/main and the annotated milestone tag).", ""]))
     sys.path.insert(0, str(root))
@@ -331,9 +336,9 @@ def phase_receipt(a):
 
 
 def main():
-    global HOST, CHILD_API, GUARD_TIER
+    global HOST, SPEC, CHILD_API, GUARD_TIER
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--host", choices=tuple(HOSTS), default="codex")
+    p.add_argument("--host", default="codex", help="a host from scripts/skill-resources.json in --repo")
     sub = p.add_subparsers(dest="phase", required=True)
     m = sub.add_parser("manifest")
     for k in ("fixture", "repo", "run_id", "candidate", "host_version", "task_branch"):
@@ -346,7 +351,12 @@ def main():
               "integrate_output", "integration_worktree", "run_dir", "operator", "isolation_mode"):
         r.add_argument(f"--{k.replace('_', '-')}", required=True)
     a = p.parse_args()
-    HOST, CHILD_API, GUARD_TIER = a.host, HOSTS[a.host]["child_api"], HOSTS[a.host]["guard_tier"]
+    sys.path.insert(0, str(Path(a.repo).resolve()))
+    from tests.hosts import known_hosts, load  # noqa: E402  (the candidate's own host modules)
+    if a.host not in known_hosts():
+        p.error(f"--host must be one of {', '.join(known_hosts())}")
+    HOST, SPEC = a.host, load(a.host)
+    CHILD_API, GUARD_TIER = SPEC.child_api, SPEC.guard_tier
     return phase_manifest(a) if a.phase == "manifest" else phase_receipt(a)
 
 

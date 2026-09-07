@@ -1,7 +1,7 @@
-"""GitHub Copilot CLI headless runner (documentation-derived; NOT verified live).
+"""GitHub Copilot CLI headless runner (verified live 2026-09-07, copilot 1.0.83).
 
-The CLI is not installed on the authoring machine, so every shape below comes from
-the official docs, the CLI changelog, and issue-tracker samples:
+The shapes below come from the official docs, the CLI changelog, and issue-tracker
+samples, and a live one-child probe confirmed them (see ``SPEC.notes``):
 
 - Programmatic reference (``-p PROMPT``, ``--allow-all``/``--yolo``, ``--no-ask-user``,
   ``--allow-all-tools``, ``--model``, ``COPILOT_HOME``):
@@ -42,7 +42,7 @@ from pathlib import Path
 
 from tests.hosts import HostSpec
 
-TASK_NAME_KEYS = ("description", "name")  # which one carries the logical task name is unconfirmed
+TASK_NAME_KEYS = ("description", "name")  # live: the task call sets both to the task name
 SUBAGENT_FIELDS = ("agentName", "model", "durationMs", "totalTokens", "totalToolCalls", "error")
 
 
@@ -129,7 +129,7 @@ def bind_child(run_root, child_id):
             args = data.get("arguments") if isinstance(data.get("arguments"), dict) else {}
             key = next((k for k in TASK_NAME_KEYS if args.get(k) == child_id), None)
             if key:
-                attempts[call_id] = {"source": source, "matched_argument": key, "agent_id": ev.get("agentId"), "tool_call": {
+                attempts[call_id] = {"source": source, "matched_argument": key, "agent_id": None, "tool_call": {
                     "toolCallId": call_id, "arguments": {k: v for k, v in args.items() if k != "prompt"},
                     "prompt_sha256": hashlib.sha256(str(args.get("prompt", "")).encode()).hexdigest()}}
         elif call_id in attempts:
@@ -139,6 +139,7 @@ def bind_child(run_root, child_id):
                 a["tool_result"] = {"success": bool(data.get("success")), "content": str(result.get("content", data.get("error")))[:4000]}
             elif kind in ("subagent.started", "subagent.completed", "subagent.failed"):
                 a[kind.split(".")[1]] = {k: data[k] for k in SUBAGENT_FIELDS if k in data}
+                a["agent_id"] = ev.get("agentId")  # live: the child id rides on the subagent.* envelope
     if not attempts:
         raise LookupError(f"no task tool call whose {'/'.join(TASK_NAME_KEYS)} is {child_id!r} in {run_root} streams or session-state transcripts")
     completed = [a for a in attempts.values() if "failed" not in a and (a.get("tool_result", {}).get("success") or "completed" in a)]
@@ -150,18 +151,15 @@ def bind_child(run_root, child_id):
 SPEC = HostSpec(
     name="copilot", install_flag="--copilot", skill_root=".github/skills", invocation="/gsd-path",
     child_api="task", guard_tier="git-only", command=command, parse_events=parse_events,
-    bind_child=bind_child, prompt_on_stdin=False, verified_live=False,
+    bind_child=bind_child, prompt_on_stdin=False, verified_live=True,
     notes=(
-        "Documentation-derived; the CLI was not installed on the authoring machine. Confirm on a machine with copilot: "
-        "(1) the exact line shape of `--output-format json` stdout: whether lines are SDK-style {type,data} envelopes, "
-        "which key (if any) carries the session id (parse_events accepts session_id/sessionId at top level or under data), "
-        "and which key on the terminal `result` event carries the final text (only its `usage` is documented, in issue #4107); "
-        "(2) that `-p` combined with `--resume=<id>` resumes a prior prompt-mode session headlessly; "
-        "(3) the `task` tool argument that carries the logical task name (`description` per platforms/copilot/dispatch.md, "
-        "or `name`; only `agent_type`/`model`/`prompt` are seen in samples) and that completion appears as "
-        "tool.execution_complete success=true and/or subagent.completed with the launching toolCallId in "
-        "$COPILOT_HOME/session-state/<session-id>/events.jsonl; "
-        "(4) whether `--allow-all` covers writes into linked worktrees outside the cwd or `--add-dir` is required; "
-        "(5) whether the prompt should be piped on stdin (changelog 1.0.78) instead of `-p <text>` argv, given argv length limits."
+        "Verified live (GitHub Copilot CLI 1.0.83, 2026-09-07): `copilot -p <text> --allow-all --no-ask-user "
+        "--output-format json` prints {type,data,id,timestamp,parentId} envelopes (subagent.* events carry agentId "
+        "on the envelope); the terminal `result` line carries sessionId and usage, and the final text is the last "
+        "assistant.message content; `--resume=<sessionId>` resumes headlessly; a `task` call with name and "
+        "description build_probe (mode sync) completed through subagent.completed and tool.execution_complete "
+        "success=true, and list_agents reported it Idle afterwards. Not verified: the installed /gsd-path skill "
+        "running end to end, whether --allow-all covers writes into linked worktrees outside the cwd (--add-dir), "
+        "and argv length limits for a multi-kilobyte prompt."
     ),
 )

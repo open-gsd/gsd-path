@@ -124,6 +124,7 @@ def bind_child(run_root, child_id):
 SPEC = HostSpec(
     name="codex", install_flag="--codex", skill_root=".agents/skills", invocation="$gsd-path",
     child_api="collaboration.spawn_agent", guard_tier="git-only", command=command, parse_events=parse_events,
+    child_name_key="task_name",
     bind_child=bind_child, verified_live=True,
     notes="--ignore-user-config keeps operator MCP servers and hooks out of the run; it also means no project hook loads (git-only tier, so not required).",
 )

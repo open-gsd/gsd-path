@@ -1,4 +1,4 @@
-"""Cursor Agent CLI headless runner (NOT verified live; see SPEC.notes).
+"""Cursor Agent CLI headless runner (verified live 2026-09-07, cursor-agent 2026.08.11, Composer 2.5).
 
 `cursor-agent -p --output-format stream-json --force --trust "<prompt>"` prints one JSON
 object per line (documented at cursor.com/docs/cli/reference/output-format). The prompt is
@@ -48,13 +48,17 @@ def parse_events(lines):
 def _tool_call(ev):
     """Return (tool_key, payload) for a ``tool_call`` event, else (None, None).
 
-    The documented shape is ``{"tool_call": {"<name>ToolCall": {"args": ..., "result": ...}}}``.
+    The documented shape is ``{"tool_call": {"<name>ToolCall": {"args": ..., "result": ...}}}``; the live
+    body adds ``toolCallId``, ``startedAtMs`` and ``completedAtMs`` beside the ``<name>ToolCall`` key.
     """
     body = ev.get("tool_call")
-    if ev.get("type") != "tool_call" or not isinstance(body, dict) or len(body) != 1:
+    if ev.get("type") != "tool_call" or not isinstance(body, dict):
         return None, None
-    (key, payload), = body.items()
-    return key, payload if isinstance(payload, dict) else {}
+    keys = [k for k in body if k.endswith("ToolCall")]
+    if len(keys) != 1:
+        return None, None
+    payload = body[keys[0]]
+    return keys[0], payload if isinstance(payload, dict) else {}
 
 
 def _is_child(key, payload, child_id):
@@ -96,24 +100,19 @@ def bind_child(run_root, child_id):
 
 
 SPEC = HostSpec(
-    name="cursor", install_flag="--cursor", skill_root=".cursor/skills", invocation="/gsd-path",  # skill slash form; unverified live (auth required)
+    name="cursor", install_flag="--cursor", skill_root=".cursor/skills", invocation="/gsd-path",
     child_api=CHILD_TOOL, guard_tier="native-fail-closed", command=command, parse_events=parse_events,
-    bind_child=bind_child, prompt_on_stdin=False, verified_live=False,
+    bind_child=bind_child, prompt_on_stdin=False, verified_live=True,
     notes=(
-        "Not run live. cursor-agent 2026.08.11-e8db854 is installed and `cursor-agent status` reports "
-        "'Logged in (unable to fetch user details)', but every headless call (`-p`, stdin or positional prompt) "
-        "exits 1 with 'Authentication required. Please run agent login first, or set CURSOR_API_KEY'. "
-        "Re-authentication is an interactive account action, so the stream shapes here come from the official "
-        "output-format docs, and the Task call key (`taskToolCall`) plus its `description` argument are inferred "
-        "from the documented `<name>ToolCall` pattern and the dispatch contract; confirm both against a live run. "
-        "Documented events: system/init, user, assistant, tool_call started|completed, result (session_id on each). "
-        "Resume: `--resume <chatId>` where chatId is the stream's session_id (help text; docs do not describe it). "
-        "The docs do not show Task/subagent calls in stream-json; a background subagent (`is_background: true`) "
-        "would not produce a completed event in the parent stream, which is why the installed agent stays foreground."
+        "Verified live (2026-09-07): `-p --output-format stream-json --force --trust <prompt>` streams system/init, "
+        "user, thinking, assistant, tool_call started|completed and result (session_id on each); a foreground Task "
+        "child with description build_probe completed as `taskToolCall.result.success`; `--resume <session_id>` "
+        "resumed the same session. Cursor exposes no tool that lists child agents. Not verified: the installed "
+        "/gsd-path skill end to end and the native guard probe (see extra)."
     ),
     extra={
         "native_guard_probe": (
-            "UNVERIFIED (no live run). Installer writes .cursor/hooks.json {version:1, hooks:{preToolUse:[{command, "
+            "UNVERIFIED (guard not exercised in the 2026-09-07 live run). Installer writes .cursor/hooks.json {version:1, hooks:{preToolUse:[{command, "
             "matcher:'.*', failClosed:true}]}}. Per the hooks docs, guard_hook.py denies with "
             "{permission:'deny', user_message, agent_message}; with failClosed the edit is also blocked on hook "
             "crash/timeout/invalid JSON. Expected headless evidence: a tool_call completed event for the edit tool "

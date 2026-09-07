@@ -1,33 +1,25 @@
-"""Antigravity CLI (``agy``) headless runner, documentation-derived (NOT verified live).
+"""Antigravity CLI (``agy``) headless runner (verified live 2026-09-07, agy 1.1.27).
 
-Sources read on 2026-09-06:
+Live observations (probe: one ``invoke_subagent`` child with Role ``build_probe``):
 
-- https://antigravity.google/docs/cli/headless/ -- ``-p``/``--print``/``--prompt`` runs one
-  prompt and exits; the prompt is an argv value (stdin is only read with
-  ``--input-format stream-json``); ``--output-format stream-json`` emits one JSON object per
-  line: ``{"event":"init","conversation_id":...,"init":{...}}``, then
-  ``{"event":"step_update","step_update":{"conversation_id","step_index","state":
-  "ACTIVE|DONE","step_type":"user_input|agent_response|tool|checkpoint","tool_name",
-  "text_delta","duration_seconds","usage","tool_info":{"name","parameters","output",...},
-  "subagent_info"}}``, then ``{"event":"result","conversation_id","status":"SUCCESS|ERROR|
-  CANCELED|INTERRUPTED|INVALID|WAITING|RUNNING","response","usage":{"input_tokens",
-  "output_tokens","thinking_tokens","cache_read_tokens","total_tokens"}}``;
-  ``--dangerously-skip-permissions`` auto-approves tool calls.
-- https://antigravity.google/docs/cli/commands/resume and
-  https://antigravity.google/docs/cli/conversations/ -- ``--conversation <id>`` resumes a
-  conversation by id; ``-c``/``--continue`` resumes the most recent one for the workspace.
-- https://antigravity.google/docs/cli/subagents/ and https://antigravity.google/docs/subagents
-  -- the parent calls ``invoke_subagent`` to spawn a concurrent child session; the docs name
-  subagent states (``Running``/``Idle``/``Killed`` on one page, ``running``/``done``/
-  ``killed``/``error`` on the other) and ``send_message`` by conversation id, and say
-  transcripts stay readable as JSONL logs, but publish neither the tool schema nor how a
-  child's completion is delivered to the parent.
-- https://github.com/google-antigravity/antigravity-cli/issues/7 (open) reports that plain
-  ``--print`` text output never surfaces the conversation id; the structured formats above
-  document one.
+- The spawn's ACTIVE step is ``step_type: tool`` with ``tool_info.parameters.Subagents[]``
+  (``Prompt``/``Role``/``TypeName``); its DONE step is ``step_type: subagent`` and carries
+  ``subagent_info.subagents[]`` with ``role``, ``conversation_id`` and a ``log_uri``
+  (``file://.../.gemini/antigravity-cli/brain/<child>/.system_generated/logs/transcript.jsonl``).
+- Completion reaches the parent as a ``system_message`` step without content; the proof used
+  here is the ``manage_subagents`` (``Action: list``) tool output, a text line followed by a
+  JSON list whose entries carry ``conversationId`` and ``state`` (``idle`` once finished),
+  and the child's own transcript whose last record is ``source: MODEL``,
+  ``type: PLANNER_RESPONSE``, ``status: DONE``.
+- ``result`` nests ``conversation_id``, ``response`` and ``usage`` under ``result``.
 
-The ``invoke_subagent`` argument names used here (``TypeName``, ``Workspace``, ``Role``) come
-from ``platforms/shared-agents/dispatch.md``, not from the public docs.
+
+Resume: ``--conversation <id>`` replayed the probe conversation headlessly with the same
+conversation_id and answered from its history.
+
+Documentation sources (2026-09-06): https://antigravity.google/docs/cli/headless/,
+.../cli/commands/resume, .../cli/conversations/, .../cli/subagents/ (subagent state names
+differ between pages), and google-antigravity/antigravity-cli issue #7.
 """
 
 import json
@@ -36,7 +28,6 @@ from pathlib import Path
 from tests.hosts import HostSpec
 
 DONE_STATES = {"done", "idle", "completed"}
-ID_KEYS = ("conversation_id", "subagent_id", "agent_id", "id")
 
 
 def command(prompt_path, resume=None):
@@ -57,15 +48,6 @@ def _events(lines):
             yield ev
 
 
-def parse_events(lines):
-    session = final = usage = None
-    for ev in _events(lines):
-        session = ev.get("conversation_id") or ev.get("step_update", {}).get("conversation_id") or session
-        if ev.get("event") == "result":
-            final, usage = ev.get("response"), ev.get("usage")
-    return {"session_id": session, "final_message": final, "usage": usage}
-
-
 def _as_dict(value):
     if isinstance(value, str):
         try:
@@ -75,74 +57,85 @@ def _as_dict(value):
     return value if isinstance(value, dict) else {}
 
 
-def _first(mapping, keys):
-    return next((mapping[k] for k in keys if mapping.get(k)), None)
+def parse_events(lines):
+    session = final = usage = None
+    for ev in _events(lines):
+        res = _as_dict(ev.get("result"))
+        session = ev.get("conversation_id") or res.get("conversation_id") or _as_dict(ev.get("step_update")).get("conversation_id") or session
+        if ev.get("event") == "result":
+            final, usage = res.get("response"), res.get("usage")
+    return {"session_id": session, "final_message": final, "usage": usage}
+
+
+def _listing(output):
+    """``manage_subagents`` output: a text line, then a JSON list of ``{role, conversationId, state, ...}``."""
+    text = str(output or "")
+    start = text.find("[")
+    try:
+        items = json.loads(text[start:]) if start >= 0 else []
+    except ValueError:
+        items = []
+    return [i for i in items if isinstance(i, dict)]
+
+
+def _transcript_done(log_uri):
+    """The child's JSONL transcript ending in a DONE MODEL PLANNER_RESPONSE; None otherwise."""
+    uri = str(log_uri or "")
+    path = Path(uri[len("file://"):] if uri.startswith("file://") else uri)
+    if not path.is_file():
+        return None
+    steps = list(_events(path.read_text().splitlines()))
+    last = steps[-1] if steps else {}
+    if last.get("source") != "MODEL" or last.get("type") != "PLANNER_RESPONSE" or last.get("status") != "DONE":
+        return None
+    return {"path": str(path), "steps": len(steps), "last_type": last.get("type"), "final_content": str(last.get("content", ""))[:4000]}
 
 
 def bind_child(run_root, child_id):
-    """Bind the ``invoke_subagent`` step whose ``Role`` is the logical task name to a completion.
+    """Bind the ``invoke_subagent`` child whose ``role`` is the logical task name to its completion.
 
-    Spawn evidence: a DONE ``tool`` step whose ``tool_info.name`` is ``invoke_subagent`` and
-    whose ``parameters.Role`` equals ``child_id``; the child id is taken from the tool output.
-    Completion evidence: a later ``subagent_info`` for that child id whose status/state is in
-    ``DONE_STATES``. The docs do not say how completion reaches the parent, so anything
-    less raises ``LookupError`` instead of assuming the child finished.
+    Spawn evidence: a DONE step with ``tool_name`` ``invoke_subagent`` whose ``subagent_info.subagents``
+    entry has ``role == child_id`` and a ``conversation_id``. Completion evidence: a later DONE
+    ``manage_subagents`` listing that shows that conversation in a ``DONE_STATES`` state, or the child's
+    transcript (``log_uri``) ending in a DONE MODEL PLANNER_RESPONSE. Anything less raises ``LookupError``.
     """
-    spawns, completions = {}, {}
+    spawns, listings = {}, {}
     for events in sorted(Path(run_root).glob("quick/run-*/events.jsonl")):
         for line in events.read_text().splitlines():
             try:
                 ev = json.loads(json.loads(line)["raw"])
             except (ValueError, KeyError, TypeError):
                 continue
-            step = ev.get("step_update") if isinstance(ev, dict) else None
-            if not isinstance(step, dict):
+            step = _as_dict(ev.get("step_update")) if isinstance(ev, dict) else {}
+            if step.get("state") != "DONE":
                 continue
-            info = _as_dict(step.get("tool_info"))
-            if step.get("step_type") == "tool" and step.get("state") == "DONE" and info.get("name") == "invoke_subagent":
-                params = _as_dict(info.get("parameters"))
-                if params.get("Role") == child_id:
-                    output = info.get("output")
-                    decoded = output
-                    if isinstance(output, str):
-                        try:
-                            decoded = json.loads(output)
-                        except ValueError:
-                            pass
-                    cid = _first(decoded, ID_KEYS) if isinstance(decoded, dict) else decoded
-                    if not isinstance(cid, str) or not cid.strip():
-                        continue
-                    spawns[cid] = {"run": events.parent.name, "step_index": step.get("step_index"),
-                                   "parameters": {k: v for k, v in params.items() if k not in ("prompt", "message")},
-                                   "output": str(output)[:4000]}
-            sub = _as_dict(step.get("subagent_info"))
-            cid = _first(sub, ID_KEYS)
-            state = str(sub.get("status") or sub.get("state") or "").lower()
-            if isinstance(cid, str) and cid.strip() and cid in spawns and state in DONE_STATES:
-                completions[cid] = {"run": events.parent.name, "step_index": step.get("step_index"), "subagent_info": sub}
+            if step.get("tool_name") == "invoke_subagent":
+                for sub in _as_dict(step.get("subagent_info")).get("subagents") or []:
+                    if isinstance(sub, dict) and sub.get("role") == child_id and isinstance(sub.get("conversation_id"), str) and sub["conversation_id"].strip():
+                        spawns[sub["conversation_id"]] = {"run": events.parent.name, "step_index": step.get("step_index"),
+                                                          "subagent": {k: v for k, v in sub.items() if k != "initial_prompt"}}
+            elif step.get("tool_name") == "manage_subagents":
+                for item in _listing(_as_dict(step.get("tool_info")).get("output")):
+                    cid = item.get("conversationId")
+                    if cid in spawns and str(item.get("state", "")).lower() in DONE_STATES:
+                        listings[cid] = {"run": events.parent.name, "step_index": step.get("step_index"), "entry": item}
     if not spawns:
-        raise LookupError(f"no DONE invoke_subagent step with Role {child_id!r} in {run_root}")
-    if not completions:
-        raise LookupError(f"invoke_subagent for {child_id!r} spawned {sorted(map(str, spawns))} but no subagent_info reports a "
-                          f"{sorted(DONE_STATES)} state; completion delivery is undocumented, confirm it on a live CLI")
-    cid = list(completions)[-1]
-    return {"child_id": child_id, "status": "completed", "child_api": "invoke_subagent", "child_conversation_id": cid,
-            "spawn": spawns[cid], "completion": completions[cid]}
+        raise LookupError(f"no DONE invoke_subagent step with role {child_id!r} in {run_root}")
+    for cid in reversed(list(spawns)):
+        transcript = _transcript_done(spawns[cid]["subagent"].get("log_uri"))
+        if transcript or cid in listings:
+            return {"child_id": child_id, "status": "completed", "child_api": "invoke_subagent", "child_conversation_id": cid,
+                    "spawn": spawns[cid], "listing": listings.get(cid), "transcript": transcript}
+    raise LookupError(f"invoke_subagent for {child_id!r} spawned {sorted(spawns)} but no manage_subagents listing shows a "
+                      f"{sorted(DONE_STATES)} state and no child transcript ends in a DONE MODEL PLANNER_RESPONSE; wait for the child before finishing")
 
 
 SPEC = HostSpec(
     name="antigravity", install_flag="--antigravity", skill_root=".agents/skills", invocation="/gsd-path",
     child_api="invoke_subagent", guard_tier="git-only", command=command, parse_events=parse_events,
-    bind_child=bind_child, prompt_on_stdin=False, verified_live=False,
-    notes=(
-        "Documentation-derived; never run against a live agy. Confirm on a machine with the CLI: "
-        "(1) `agy -p` accepts a multi-kilobyte prompt in argv and the stream-json event/field names above; "
-        "(2) `--conversation <id>` resumes headlessly and keeps the same conversation_id; "
-        "(3) the invoke_subagent step_update shape: tool_info.parameters keys (TypeName/Workspace/Role) and "
-        "which field of tool_info.output carries the child conversation id; "
-        "(4) how a child's completion reaches the parent stream (subagent_info status values; the docs "
-        "disagree between Idle and done) and whether an /agents-style listing tool exists to call after the "
-        "coder reports; (5) the on-disk JSONL transcript path (the docs mention JSONL logs, not a path) if "
-        "stream evidence proves insufficient; (6) that --dangerously-skip-permissions covers subagent spawns."
-    ),
+    child_name_key="role",
+    bind_child=bind_child, prompt_on_stdin=False, verified_live=True,
+    notes="Verified live (agy 1.1.27, 2026-09-07); see the module docstring. Not verified: the installed /gsd-path "
+          "skill end to end, a multi-kilobyte prompt in argv, and whether --dangerously-skip-permissions covers every "
+          "tool a milestone run needs.",
 )

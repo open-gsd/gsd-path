@@ -135,6 +135,7 @@ def bind_child(run_root, child_id):
 SPEC = HostSpec(
     name="kiro", install_flag="--kiro", skill_root=".kiro/skills", invocation="/gsd-path",
     child_api="invoke_sub_agent", guard_tier="git-only", command=command, parse_events=parse_events,
+    child_name_key="task",
     bind_child=bind_child, verified_live=True,
     notes="/usr/local/bin/kiro is the Kiro IDE launcher; the agent is ~/.local/bin/kiro-cli. stream-json needs "
           "--agent-engine v2. The v2 stream names the child tool 'subagent' (AgentCrew), not 'invoke_sub_agent'; "

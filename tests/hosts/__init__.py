@@ -21,6 +21,8 @@ Contract for a host module (``tests/hosts/<host>.py``):
   read what the host actually recorded (stream events, session transcripts).
 - ``SPEC.verified_live`` states whether the module was checked against a real CLI on
   this machine; modules written from documentation alone must say False.
+- ``SPEC.child_name_key`` names the child-API argument ``bind_child`` matches against the
+  logical task name (default ``description``); the release receipt quotes it.
 """
 
 from dataclasses import dataclass, field
@@ -44,6 +46,7 @@ class HostSpec:
     bind_child: Callable[[Path, str], Dict]
     prompt_on_stdin: bool = True
     verified_live: bool = False
+    child_name_key: str = "description"  # the child-API argument that carries the logical task name
     notes: str = ""
     extra: Dict = field(default_factory=dict)
 

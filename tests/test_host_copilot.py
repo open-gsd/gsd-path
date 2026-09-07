@@ -1,9 +1,9 @@
-"""Tests for the documentation-derived GitHub Copilot CLI host module.
+"""Tests for the GitHub Copilot CLI host module.
 
-UNVERIFIED AGAINST A LIVE CLI: every sample below is assembled from the documented
-event shapes cited in ``tests/hosts/copilot.py`` (SDK streaming-events envelope, the
-``task``/``subagent.*`` samples in copilot-cli issue #4462, the stdout ``result``/``usage``
-event in issue #4107). A live run may change any of them; ``SPEC.notes`` lists what to confirm.
+The samples follow the SDK streaming-events envelope that a live ``copilot`` 1.0.83
+run (2026-09-07) confirmed: ``{type, data, id, timestamp, parentId}`` lines, ``task``
+and ``subagent.*`` events keyed by ``toolCallId`` (``agentId`` on the envelope), and a
+terminal ``result`` line carrying ``sessionId`` and ``usage``.
 """
 
 import json
@@ -117,6 +117,7 @@ class BindChildTests(unittest.TestCase):
                                subagent("completed", durationMs=9000, totalToolCalls=7), task_complete()])
         bound = copilot.bind_child(self.run_root, "build_T001")
         self.assertEqual((bound["child_id"], bound["status"], bound["child_api"]), ("build_T001", "completed", "task"))
+        self.assertEqual(bound["agent_id"], "general-purpose-0")
         self.assertEqual(bound["source"], f"session-state/{SESSION}")
         self.assertEqual(bound["matched_argument"], "description")
         self.assertEqual(bound["tool_call"]["toolCallId"], CALL)
@@ -166,12 +167,12 @@ class BindChildTests(unittest.TestCase):
 
 
 class SpecTests(unittest.TestCase):
-    def test_spec_matches_manifest_and_declares_unverified(self):
+    def test_spec_matches_manifest_and_declares_verified(self):
         spec = copilot.SPEC
         self.assertEqual((spec.name, spec.install_flag, spec.skill_root), ("copilot", "--copilot", ".github/skills"))
         self.assertEqual((spec.child_api, spec.guard_tier), ("task", "git-only"))
-        self.assertFalse(spec.verified_live)
-        self.assertIn("not installed", spec.notes)
+        self.assertTrue(spec.verified_live)
+        self.assertIn("Verified live", spec.notes)
 
 
 if __name__ == "__main__":
