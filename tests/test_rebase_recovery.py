@@ -148,6 +148,38 @@ class RebaseRecoveryTests(unittest.TestCase):
         with self.assertRaises(isolation.IsolationError):
             self.verify()
 
+    def test_changed_rebased_bare_cr_payload_rejected(self) -> None:
+        git(self.repo, "config", "core.autocrlf", "false")
+        git(self.repo, "checkout", "keep/original")
+        (self.repo / "value.txt").write_bytes(b"two\rindex old\n")
+        git(self.repo, "add", "value.txt")
+        git(self.repo, "commit", "-q", "--amend", "--no-edit")
+        self.original = git(self.repo, "rev-parse", "HEAD")
+        git(self.repo, "checkout", BOUND)
+        (self.repo / "value.txt").write_bytes(b"two\rindex new\n")
+        git(self.repo, "add", "value.txt")
+        git(self.repo, "commit", "-q", "--amend", "--no-edit")
+        self.head = git(self.repo, "rev-parse", "HEAD")
+        result = self.adopt(False)
+        self.assertIn("rebased landing changes different bytes, paths or modes", result.stderr)
+        self.assertFalse((self.repo / RECEIPT).exists())
+
+    def test_receipt_symlink_loop_blocks_without_traceback(self) -> None:
+        self.adopt()
+        path = self.repo / RECEIPT
+        path.unlink()
+        path.symlink_to(path.name)
+        task = self.recover_task()
+        self.assertEqual(task["verdict"], "block")
+        self.assertTrue(task["reason"].startswith("rebase adoption receipt is invalid: "))
+        result = subprocess.run(
+            (sys.executable, str(ISOLATION_SCRIPT), "recover", "--repo", str(self.repo),
+             "--tasks-dir", ".project/tasks"), text=True, capture_output=True)
+        self.assertNotIn("Traceback", result.stderr)
+        report = json.loads(result.stdout)
+        self.assertEqual(report["verdict"], "block")
+        self.assertEqual(report["tasks"][0]["verdict"], "block")
+
     def test_changed_current_task_rejected(self) -> None:
         self.adopt()
         task = self.repo / self.path

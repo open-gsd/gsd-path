@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import io
 import json
 import os
 import re
@@ -2623,7 +2624,7 @@ def _ordered_edits(repo: Path, sha: str) -> list[bytes]:
     if result.returncode != 0:
         detail = (result.stderr or result.stdout).decode("utf-8", errors="replace").strip()
         raise IsolationError(detail or "git command failed")
-    return [line for line in result.stdout.splitlines(keepends=True)
+    return [line for line in io.BytesIO(result.stdout)
             if not line.startswith((b"index ", b"@@ "))]
 
 
@@ -2759,7 +2760,11 @@ def _check_landings_after(repo: Path, adopted: str, head: str) -> None:
 def _receipt_path(project_root: Path) -> Path:
     """The adoption receipt beside a live (.project/) or archived project root."""
     path = project_root / REBASE_ADOPTION_RECEIPT
-    if path.resolve() != path.absolute():
+    try:
+        resolved = path.resolve()
+    except (RuntimeError, OSError) as error:
+        raise IsolationError(f"unsafe rebase adoption receipt path: {error}") from error
+    if resolved != path.absolute():
         raise IsolationError("unsafe rebase adoption receipt path")
     return path
 
