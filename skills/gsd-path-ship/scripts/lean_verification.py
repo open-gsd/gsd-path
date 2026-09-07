@@ -155,6 +155,10 @@ def _require_ship_inputs(repo, expected_head):
     dirty = isolation.uncommitted_paths(repo)
     outputs = {".project/STATE.md", ".project/build/verify-ledger.jsonl",
                ".project/build/evidence.json"}
+    adoption_path = isolation.REBASE_ADOPTION_PATH
+    if adoption_path in dirty:
+        build_state.verify_landed_tasks(str(repo), ".project", expected_head)
+        outputs.add(adoption_path)
     if any(path not in outputs and not path.startswith(".project/review/") for path in dirty):
         raise contracts.HandoffError("verification inputs have uncommitted changes")
 

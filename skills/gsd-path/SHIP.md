@@ -54,7 +54,10 @@ so the position is unchanged. Then:
    uncommitted assigned final-review outputs may remain. Resolve and record the
    exact full reviewed `HEAD` before dispatch, then prove every task landed
    through the runtime in step 3. Its landing check must return one
-   `proven-landed` or `attested` entry per task. Keep bookkeeping in STATE.md
+   `proven-landed` or `attested` entry per task; a task adopted after a rebase
+   through `isolation.py adopt-rebase` reports `attested` with `provenance:
+   owner-authorized-rebase` and needs its committed receipt
+   `.project/build/rebase-adoption.json`. Keep bookkeeping in STATE.md
    and assigned artifacts; never create extra `.project/` execution reports. Reuse an output only when its
    `Reviewed HEAD` equals that SHA and the complete numbered gap-risk mapping
    still equals the freshly derived risk list. Regenerate the exact assigned
