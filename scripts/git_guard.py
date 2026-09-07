@@ -18,7 +18,7 @@ _HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(_HERE / "runtime" if (_HERE / "runtime" / "isolation.py").is_file() else _HERE))
 sys.dont_write_bytecode = True  # a hook must not leave __pycache__ in the worktree
 try:
-    from isolation import NULL_SHA, _landing_state, task_frontmatter
+    from isolation import BOOKKEEPING_PREFIXES, NULL_SHA, _landing_state, task_frontmatter
     from pipeline_git import is_ship_subject, task_commit_body
 except ImportError as error:  # pragma: no cover - broken install
     print(
@@ -46,14 +46,6 @@ ARCHIVE_NAME = re.compile(
 SLUG = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 BOUND_BRANCH = re.compile(r"^gsd-path/M(?P<number>\d{3,})$")
 TASK_BRANCH_PREFIX = "gsd-path-task/"
-# Bookkeeping paths: pipeline records plus the guard's own install artifacts.
-BOOKKEEPING_PREFIXES = (
-    ".project/",
-    ".gsd-path/",
-    ".claude/settings.json",
-    ".codex/hooks.json",
-    ".cursor/hooks.json",
-)
 TASK_SUBJECT = re.compile(r"^(?P<id>[A-Za-z][A-Za-z0-9._-]*): \S.*$")
 FULL_SHA = re.compile(r"^[0-9a-f]{40}$")
 LANDING_HINT = (

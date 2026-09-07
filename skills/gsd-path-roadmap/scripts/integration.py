@@ -19,6 +19,7 @@ try:
         ship_subject,
     )
     from pipeline_state import PipelineState
+    from isolation import publication_base
     import _common
 except ImportError:  # pragma: no cover - package import used by tests
     from scripts.pipeline_git import (
@@ -32,6 +33,7 @@ except ImportError:  # pragma: no cover - package import used by tests
         ship_subject,
     )
     from scripts.pipeline_state import PipelineState
+    from scripts.isolation import publication_base
     from scripts import _common
 
 
@@ -67,23 +69,35 @@ def live_remote_ref(project: Path, ref: str) -> Optional[str]:
     return rows[0][0]
 
 
+def publishable_bound_branch(project: Path, branch: str, ship_commit: str) -> Optional[str]:
+    """The live origin SHA the bound ref may move from: absent, the ship
+    commit, or an owner-adopted rebased head proven by its archived receipt."""
+    remote_sha = live_remote_ref(project, f"refs/heads/{branch}")
+    if remote_sha is None or remote_sha == ship_commit:
+        return remote_sha
+    try:
+        approved_base = publication_base(project, branch, ship_commit)
+    except (RuntimeError, OSError) as error:
+        raise ArchiveError(f"rebase publication proof failed: {error}") from error
+    if remote_sha != approved_base:
+        raise ArchiveError(f"origin/{branch} moved or collides: {remote_sha} != {ship_commit}")
+    return remote_sha
+
+
 def publish_bound_branch(project: Path, branch: str, ship_commit: str) -> None:
     remote_ref = f"refs/heads/{branch}"
-    remote_sha = live_remote_ref(project, remote_ref)
-    if remote_sha is None:
+    remote_sha = publishable_bound_branch(project, branch, ship_commit)
+    if remote_sha != ship_commit:
+        # An absent ref carries an empty lease; an adopted head leases its exact SHA.
         archive_milestone.require_git_success(
             run_git(
                 project,
                 "push",
-                f"--force-with-lease={remote_ref}:",
+                f"--force-with-lease={remote_ref}:{remote_sha or ''}",
                 "origin",
                 f"{ship_commit}:{remote_ref}",
             ),
-            "create bound branch with absent-ref lease",
-        )
-    elif remote_sha != ship_commit:
-        raise ArchiveError(
-            f"origin/{branch} moved or collides: {remote_sha} != {ship_commit}"
+            "publish bound branch under its observed lease",
         )
 
     confirmed_sha = live_remote_ref(project, remote_ref)
@@ -1015,6 +1029,7 @@ def integrate(repo: Path, slug: str) -> dict:
             archive_name,
             ship_commit,
         )
+    publishable_bound_branch(project, bound_branch, ship_commit)
     integration_branch, worktree = integration_names(project, archive_name)
     interrupted_worktree = registered_worktree(project, integration_branch)
     if (
