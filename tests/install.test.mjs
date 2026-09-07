@@ -42,6 +42,13 @@ function makeSource(base) {
     fs.writeFileSync(path.join(skill, "guide.md"), "Use $gsd-path.\n");
     fs.writeFileSync(path.join(skill, "agents", "openai.yaml"), 'default_prompt: "Use $gsd-path."\n');
     fs.writeFileSync(path.join(skill, "references", "dispatch.md"), "old dispatch\n");
+    if (name === "gsd-path" || Object.hasOwn(installer.ROUTER_ALIASES, name)) {
+      fs.mkdirSync(path.join(skill, "scripts"));
+      fs.copyFileSync(
+        path.join(REPO_ROOT, "scripts", "pipeline_state.py"),
+        path.join(skill, "scripts", "pipeline_state.py")
+      );
+    }
   }
   for (const target of installer.TARGETS) {
     const adapter = path.join(src, "platforms", target, "dispatch.md");
