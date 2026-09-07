@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import io
 import json
 import os
 import re
@@ -26,6 +27,8 @@ try:
         attest_commit_body,
         attest_commit_subject,
         is_bound_branch,
+        ship_commit_body,
+        ship_subject,
         task_commit_body,
         task_commit_subject,
     )
@@ -35,6 +38,8 @@ except ImportError:  # pragma: no cover - package import used by tests
         attest_commit_body,
         attest_commit_subject,
         is_bound_branch,
+        ship_commit_body,
+        ship_subject,
         task_commit_body,
         task_commit_subject,
     )
@@ -53,6 +58,15 @@ LANDED_VERDICTS = frozenset({"recovered", "attested"})
 # Orchestrator bookkeeping that may stay uncommitted in the primary while a
 # parallel task lands; the next `.project` checkpoint commits it.
 BOOKKEEPING_PATHS = DISCUSSION_PATHS | {VERIFY_LEDGER_PATH}
+# Bookkeeping path prefixes: pipeline records plus the guard's own install
+# artifacts. git_guard and the post-adoption proof share this one definition.
+BOOKKEEPING_PREFIXES = (
+    ".project/",
+    ".gsd-path/",
+    ".claude/settings.json",
+    ".codex/hooks.json",
+    ".cursor/hooks.json",
+)
 TASK_ID_RE = re.compile(r"^[A-Za-z][A-Za-z0-9._-]*$")
 NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 FIELD_PATTERN = _common.FIELD_PATTERN
@@ -1879,7 +1893,8 @@ def _recover_task(
         return result("block", reason=f"done task has invalid base: {error}")
 
     proven, rejected = [], []
-    for sha, body in history.get(subject, []):
+    candidates = history.get(subject, [])
+    for sha, body in candidates:
         base, why = _prove_task_commit(
             primary,
             sha,
@@ -1928,6 +1943,22 @@ def _recover_task(
                 base=base,
             )
         return result("recovered", commit=commit, base=base)
+    if not retained and len(candidates) == 1:
+        landing = candidates[0][0]
+        project_root = path.parent.parent  # .project or .project/archive/<n>
+        try:
+            rebased_base = _prove_rebase_adoption(
+                primary, project_root, task_file, head, landing, task_text
+            )
+        except IsolationError as error:
+            return result("block", reason=f"rebase adoption receipt is invalid: {error}")
+        if rebased_base is not None:
+            return result(
+                "attested",
+                commit=landing,
+                base=rebased_base,
+                provenance="owner-authorized-rebase",
+            )
     if not retained and head == recorded_base:
         retry_error = _landing_retry_error(
             primary, recorded_base, task_file, task_text, subject
@@ -1999,6 +2030,24 @@ def _recovery_task_inventory(
     return task_paths, "; ".join(details) or None
 
 
+def _first_parent_records(repo: Path, revision: str) -> list[tuple[str, str, str]]:
+    """First-parent commits of `revision` as (sha, subject, stripped body) in log order."""
+    log = git_output(repo, "log", "--first-parent", "--format=%x1e%H%x00%s%x00%b", revision)
+    records = []
+    for record in filter(None, log.split("\x1e")):
+        sha, subject, body = record.split("\x00", 2)
+        records.append((sha, subject, body.strip()))
+    return records
+
+
+def _first_parent_history(repo: Path, revision: str) -> Dict[str, list[tuple[str, str]]]:
+    """Map each first-parent commit subject to its [(sha, body)] in log order."""
+    history: Dict[str, list[tuple[str, str]]] = {}
+    for sha, subject, body in _first_parent_records(repo, revision):
+        history.setdefault(subject, []).append((sha, body))
+    return history
+
+
 def recover(primary: Path, tasks_dir: Path) -> Dict[str, object]:
     """Prove each task's landing state from git. Read-only.
 
@@ -2023,11 +2072,7 @@ def recover(primary: Path, tasks_dir: Path) -> Dict[str, object]:
             "reason": "task inventory differs from trusted Git state: "
             + inventory_error,
         }
-    history: Dict[str, list[tuple[str, str]]] = {}
-    log = git_output(primary, "log", "--first-parent", "--format=%x1e%H%x00%s%x00%b", bound)
-    for record in filter(None, log.split("\x1e")):
-        sha, subject, body = record.split("\x00", 2)
-        history.setdefault(subject, []).append((sha, body.strip()))
+    history = _first_parent_history(primary, bound)
     branches = set(
         git_output(primary, "for-each-ref", "--format=%(refname:short)", f"refs/heads/{TASK_BRANCH_PREFIX}").splitlines()
     )
@@ -2056,17 +2101,7 @@ def verify_landed_task_files(
     bound = require_attached(primary)
     resolved_head = require_commit(primary, require_full_sha(head))
     canonical_dir = relative_posix(canonical_tasks_dir)
-    history: Dict[str, list[tuple[str, str]]] = {}
-    log = git_output(
-        primary,
-        "log",
-        "--first-parent",
-        "--format=%x1e%H%x00%s%x00%b",
-        resolved_head,
-    )
-    for record in filter(None, log.split("\x1e")):
-        sha, subject, body = record.split("\x00", 2)
-        history.setdefault(subject, []).append((sha, body.strip()))
+    history = _first_parent_history(primary, resolved_head)
     branches = set(
         git_output(
             primary,
@@ -2435,6 +2470,15 @@ def _task_contract_error(base_text: str, text: str, label: str) -> Optional[str]
     return None
 
 
+def task_log_delta(base_text: str, text: str) -> str:
+    """The task body appended since its base; raises unless the task is an append-only extension."""
+    error = _task_contract_error(base_text, text, "task")
+    if error:
+        raise IsolationError(error)
+    base_body = _normalize_newlines(split_frontmatter(base_text)[1])
+    return _normalize_newlines(split_frontmatter(text)[1])[len(base_body):]
+
+
 def _attest_body_fields(body: str) -> tuple[Dict[str, str], list[str]]:
     fields: Dict[str, str] = {}
     files: list[str] = []
@@ -2558,6 +2602,309 @@ def _prove_attest_commit(
     if current_oid != after_oid or head_oid != after_oid:
         return None, "current done task differs from its attestation"
     return base, None
+
+
+REBASE_ADOPTION_SCHEMA = "gsd-path/rebase-adoption/v1"
+REBASE_ADOPTION_RECEIPT = "build/rebase-adoption.json"
+REBASE_ADOPTION_PATH = ".project/" + REBASE_ADOPTION_RECEIPT
+
+
+def _one_landing(history: Dict[str, list[tuple[str, str]]], subject: str) -> tuple[str, str]:
+    """The single (sha, body) landing for `subject`; adoption needs exactly one."""
+    candidates = history.get(subject, [])
+    if len(candidates) != 1:
+        raise IsolationError("rebase adoption requires one landing: " + subject)
+    return candidates[0]
+
+
+def _committed_task_paths(repo: Path, revision: str) -> list[str]:
+    return git_text(repo, "ls-tree", "-r", "--name-only", revision, "--", ".project/tasks").splitlines()
+
+
+def _ordered_edits(repo: Path, sha: str) -> list[bytes]:
+    """Every changed byte, path, mode and binary payload of `sha`; hunk
+    coordinates and content-addressed index headers excluded."""
+    result = subprocess.run(
+        ("git", "-C", str(repo), "diff", "--binary", "--full-index", "--no-renames",
+         "--unified=0", sha + "^", sha),
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout).decode("utf-8", errors="replace").strip()
+        raise IsolationError(detail or "git command failed")
+    return [line for line in io.BytesIO(result.stdout)
+            if not line.startswith((b"index ", b"@@ "))]
+
+
+def _task_contract_section(text: str) -> str:
+    """Everything before the task's `## Log`: the part adoption keeps immutable."""
+    before, separator, _ = text.partition("\n## Log\n")
+    if not separator:
+        raise IsolationError("task is missing its Log boundary")
+    return before
+
+
+def _task_proof(
+    repo: Path,
+    path: str,
+    original: tuple[str, str],
+    rebased: tuple[str, str],
+    adopted: str,
+    current_text: str,
+) -> Dict[str, object]:
+    """One receipt row: `rebased` replays the strictly proven `original` landing."""
+    (original_sha, original_body), (rebased_sha, rebased_body) = original, rebased
+    original_text = git_text(repo, "show", f"{original_sha}:{path}")
+    fields, error = task_frontmatter(original_text)
+    if error or fields is None:
+        raise IsolationError(error or "invalid original task")
+    base = str(fields.get("base", ""))
+    _, error = _prove_task_commit(repo, original_sha, original_body, path, base, None)
+    if error:
+        raise IsolationError("original landing is invalid: " + error)
+    parent, error = _single_parent(repo, rebased_sha)
+    if error or parent is None:
+        raise IsolationError(error or "invalid rebased parent")
+    # Subjects already match: both landings were looked up under the same subject.
+    if original_body != rebased_body:
+        raise IsolationError("rebased landing message differs")
+    if _ordered_edits(repo, original_sha) != _ordered_edits(repo, rebased_sha):
+        raise IsolationError("rebased landing changes different bytes, paths or modes")
+    if _regular_blob_oid(repo, original_sha, path) != _regular_blob_oid(repo, rebased_sha, path):
+        raise IsolationError("rebased task differs from original landing")
+    _regular_blob_oid(repo, adopted, path)  # rejects a symlinked task at the adopted head
+    if _task_contract_section(current_text) != _task_contract_section(original_text):
+        raise IsolationError("adopted task contract differs from original landing")
+    return {"path": path, "original_landing": original_sha, "rebased_landing": rebased_sha,
+            "original_base": base, "original_task": original_text,
+            "adopted_task": current_text,
+            "context_changed": git_text(repo, "diff", "--binary", original_sha + "^", original_sha)
+                               != git_text(repo, "diff", "--binary", rebased_sha + "^", rebased_sha)}
+
+
+def adopt_rebase(primary: Path, original_head: str, head: str, ruling: str) -> Dict[str, object]:
+    """Compute the owner-ruled receipt adopting every done task's rebased landing.
+
+    Adoption attests a pinned rebased revision, not behavioral equivalence or
+    final acceptance: each done task needs its original canonical landing on
+    `original_head`, one landing with identical message and ordered edits on
+    `head`, and an unchanged task contract. Pending tasks are skipped; tasks in
+    flight cannot be adopted.
+    """
+    if not ruling.strip():
+        raise IsolationError("an explicit owner ruling is required")
+    for sha in (original_head, head):
+        require_commit(primary, require_full_sha(sha))
+    if original_head == head:
+        raise IsolationError("original and adopted heads must differ")
+    old, new = _first_parent_history(primary, original_head), _first_parent_history(primary, head)
+    paths = _committed_task_paths(primary, head)
+    if not paths:
+        raise IsolationError("no committed task inventory")
+    tasks = []
+    for path in paths:
+        text = git_text(primary, "show", f"{head}:{path}")
+        fields, error = task_frontmatter(text)
+        if error or fields is None:
+            raise IsolationError(f"{path}: {error or 'unreadable task frontmatter'}")
+        status = str(fields.get("status", ""))
+        if status == "pending":
+            continue
+        if status != "done":
+            raise IsolationError(f"rebasing a {status} task is unsupported: {path}")
+        subject = task_commit_subject(str(fields.get("id", "")), str(fields.get("title", "")))
+        tasks.append(_task_proof(primary, path, _one_landing(old, subject), _one_landing(new, subject), head, text))
+    return {"schema": REBASE_ADOPTION_SCHEMA, "original_head": original_head, "head": head,
+            "ruling": ruling.strip(), "tasks": tasks}
+
+
+# Proof outcomes per process, including failures: git objects are immutable, so
+# a receipt or range that failed once fails for every task that asks again.
+_ADOPTION_MEMO: Dict[tuple, tuple[bool, object]] = {}
+
+
+def _memoized(key: tuple, compute):
+    if key not in _ADOPTION_MEMO:
+        try:
+            _ADOPTION_MEMO[key] = (True, compute())
+        except IsolationError as error:
+            _ADOPTION_MEMO[key] = (False, error)
+    ok, value = _ADOPTION_MEMO[key]
+    if not ok:
+        raise value
+    return value
+
+
+def _require_landings_after(repo: Path, adopted: str, head: str) -> None:
+    """After adoption every product change must be a strictly proven landing."""
+    _memoized(("landings", str(repo), adopted, head), lambda: _check_landings_after(repo, adopted, head))
+
+
+def _check_landings_after(repo: Path, adopted: str, head: str) -> None:
+    if run_git(repo, "merge-base", "--is-ancestor", adopted, head).returncode:
+        raise IsolationError("adopted revision is not an ancestor")
+    inventory = set(_committed_task_paths(repo, head))
+    archived_paths = git_text(
+        repo, "ls-tree", "-r", "--name-only", head, "--", ".project/archive"
+    ).splitlines()
+    for path in archived_paths:
+        match = re.fullmatch(r"\.project/archive/[^/]+/tasks/([^/]+\.md)", path)
+        if match:
+            inventory.add(".project/tasks/" + match.group(1))
+    for sha, _, body in _first_parent_records(repo, f"{adopted}..{head}"):
+        changed = git_output(repo, "diff", "--name-only", sha + "^", sha).splitlines()
+        # Bookkeeping, including real attestations, cannot change product paths.
+        if all(path.startswith(BOOKKEEPING_PREFIXES) for path in changed):
+            continue
+        fields, _ = _attest_body_fields(body)
+        task_file, base = fields.get("Task", ""), fields.get("Base", "")
+        if task_file in inventory and re.fullmatch(r"[0-9a-f]{40}", base):
+            _, error = _prove_task_commit(repo, sha, body, task_file, base, None)
+            if error is None:
+                continue
+        raise IsolationError("product changed outside a proven landing after the adopted revision")
+
+
+def _receipt_path(project_root: Path) -> Path:
+    """The adoption receipt beside a live (.project/) or archived project root."""
+    path = project_root / REBASE_ADOPTION_RECEIPT
+    try:
+        resolved = path.resolve()
+    except (RuntimeError, OSError) as error:
+        raise IsolationError(f"unsafe rebase adoption receipt path: {error}") from error
+    if resolved != path.absolute():
+        raise IsolationError("unsafe rebase adoption receipt path")
+    return path
+
+
+def _receipt_bytes(project_root: Path) -> Optional[bytes]:
+    """The receipt's bytes, or None when the project root has no receipt."""
+    path = _receipt_path(project_root)
+    if not os.path.lexists(path):
+        return None
+    if not path.is_file():
+        raise IsolationError("rebase adoption receipt is not a regular file")
+    try:
+        return path.read_bytes()
+    except OSError as error:
+        raise IsolationError(str(error)) from error
+
+
+def _validated_receipt(repo: Path, raw: bytes) -> Dict[str, object]:
+    """Parse and recompute a receipt once per process; git objects are immutable."""
+    key = ("receipt", str(repo), hashlib.sha256(raw).hexdigest())
+    return _memoized(key, lambda: _validate_receipt(repo, raw))
+
+
+def _validate_receipt(repo: Path, raw: bytes) -> Dict[str, object]:
+    try:
+        receipt = json.loads(raw)
+        if not isinstance(receipt, dict) or receipt.get("schema") != REBASE_ADOPTION_SCHEMA:
+            raise IsolationError("unknown schema")
+        for field in ("original_head", "head"):
+            if not isinstance(receipt.get(field), str):
+                raise IsolationError(f"{field} must be a full lowercase SHA")
+            require_full_sha(receipt[field])
+        if not isinstance(receipt.get("ruling"), str) or not receipt["ruling"].strip():
+            raise IsolationError("ruling must be a non-empty string")
+        if not isinstance(receipt.get("tasks"), list) or any(
+            not isinstance(row, dict) for row in receipt["tasks"]
+        ):
+            raise IsolationError("tasks must be a list of objects")
+        expected = adopt_rebase(repo, receipt["original_head"], receipt["head"], receipt["ruling"])
+    except (KeyError, TypeError, ValueError) as error:
+        raise IsolationError(str(error)) from error
+    if receipt != expected:
+        raise IsolationError("receipt does not match recomputed Git evidence")
+    return receipt
+
+
+def _prove_rebase_adoption(
+    repo: Path, project_root: Path, task_file: str, head: str, landing: str, current_text: str
+) -> Optional[str]:
+    """Return the original base the receipt binds to `landing`; None without a receipt.
+
+    `project_root` is the task artifact's own root: `.project` for live tasks,
+    `.project/archive/<n>` for archived ones.
+    """
+    raw = _receipt_bytes(project_root)
+    if raw is None:
+        return None
+    receipt = _validated_receipt(repo, raw)
+    if receipt["head"] != head:
+        _require_landings_after(repo, receipt["head"], head)
+    rows = [row for row in receipt["tasks"] if row["path"] == task_file]
+    if len(rows) != 1 or rows[0]["rebased_landing"] != landing:
+        raise IsolationError("receipt does not bind this landing")
+    if rows[0]["adopted_task"] != current_text:
+        raise IsolationError("current task differs from adopted task")
+    return str(rows[0]["original_base"])
+
+
+def record_rebase_adoption(
+    primary: Path, original_head: str, head: str, ruling: str
+) -> Dict[str, object]:
+    """Write the adoption receipt for the bound milestone worktree at `head`."""
+    primary = require_directory(primary, "primary worktree")
+    if worktree_root(primary) != primary:
+        raise IsolationError(f"primary is not its Git root: {primary}")
+    bound = require_bound(primary)
+    if current_sha(primary) != head:
+        raise IsolationError("HEAD differs from approved adopted revision")
+    receipt = adopt_rebase(primary, original_head, head, ruling)
+    existing = _receipt_bytes(primary / ".project")
+    try:
+        if existing is not None and json.loads(existing) != receipt:
+            raise IsolationError("another adoption receipt already exists")
+    except ValueError as error:
+        raise IsolationError(f"unreadable existing receipt: {error}") from error
+    target = _receipt_path(primary / ".project")
+    _common.atomic_write(target, json.dumps(receipt, indent=2) + "\n")
+    return {"bound_branch": bound, "head": head, "path": str(target),
+            "tasks": len(receipt["tasks"]), "verdict": "adopted"}
+
+
+def publication_base(repo: Path, branch: str, ship_commit: str) -> Optional[str]:
+    """The adopted head a shipped, owner-adopted milestone may advance from.
+
+    Returns None when the milestone is not an adopted one; raises when the
+    archived receipt, ship commit, or archived tasks fail proof.
+    """
+    try:
+        from pipeline_state import load_state
+    except ImportError:  # pragma: no cover - package import used by tests
+        from scripts.pipeline_state import load_state
+    repo = require_directory(repo, "repository")
+    state, state_text, _ = load_state(repo)
+    if (state.phase, state.status, state.integration, state.branch) != (
+        "shipped", "done", "direct", branch
+    ) or state.archive is None:
+        return None
+    raw = _receipt_bytes(repo / state.archive)
+    if raw is None:
+        return None
+    if current_sha(repo) != ship_commit or uncommitted_paths(repo):
+        raise IsolationError("publication requires the clean ship commit")
+    if git_text(repo, "show", f"{ship_commit}:.project/STATE.md") != state_text:
+        raise IsolationError("ship state differs from committed state")
+    receipt = _validated_receipt(repo, raw)
+    parent, error = _single_parent(repo, ship_commit)
+    if error or parent != receipt["head"]:
+        raise IsolationError("ship parent is not the adopted revision")
+    changed = git_output(repo, "diff", "--name-only", parent, ship_commit).splitlines()
+    if any(not name.startswith(".project/") for name in changed):
+        raise IsolationError("ship commit changes product files")
+    expected = (ship_subject(Path(state.archive).name) + "\n\n"
+                + ship_commit_body(state.archive, parent)).strip()
+    if git_text(repo, "show", "-s", "--format=%B", ship_commit).strip() != expected:
+        raise IsolationError("ship commit message is not canonical")
+    for row in receipt["tasks"]:
+        name = Path(str(row["path"])).name
+        task = _real_file(repo, f"{state.archive}/tasks/{name}", "archived task")
+        if _read_task_text(task)[0] != row["adopted_task"]:
+            raise IsolationError("archived task differs from adopted record")
+    return parent
 
 
 def attest(
@@ -3029,6 +3376,14 @@ def parser() -> argparse.ArgumentParser:
     attest_parser.add_argument("--ruling", required=True)
     attest_parser.add_argument("--base", help="full or abbreviated base SHA; defaults to the task's recorded base")
 
+    adopt_parser = subparsers.add_parser(
+        "adopt-rebase", help="record an owner ruling adopting every done task's rebased landing"
+    )
+    adopt_parser.add_argument("--repo", type=Path, required=True)
+    adopt_parser.add_argument("--original-head", required=True, help="preserved original tip, full SHA")
+    adopt_parser.add_argument("--head", required=True, help="rebased HEAD being adopted, full SHA")
+    adopt_parser.add_argument("--ruling", required=True)
+
     recover_parser = subparsers.add_parser(
         "recover", help="prove landed task commits from git; read-only"
     )
@@ -3110,6 +3465,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         elif arguments.command == "attest":
             result = attest(
                 arguments.repo, arguments.task_file, arguments.ruling, arguments.base
+            )
+        elif arguments.command == "adopt-rebase":
+            result = record_rebase_adoption(
+                arguments.repo, arguments.original_head, arguments.head, arguments.ruling
             )
         elif arguments.command == "recover":
             result = recover(arguments.repo, arguments.tasks_dir)
