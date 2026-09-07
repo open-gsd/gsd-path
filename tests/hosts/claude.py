@@ -68,7 +68,8 @@ def bind_child(run_root, child_id):
                     a["task_notification"] = {k: ev.get(k) for k in ("task_id", "status", "summary")}
     completed = []
     for a in attempts.values():
-        background = a["tool_use"]["input"].get("run_in_background") or "launched" in str(a.get("tool_result", {}).get("content", "")).lower()
+        background = (a["tool_use"]["input"].get("run_in_background")
+                      or a.get("task_started", {}).get("is_backgrounded"))
         if background:
             if a.get("task_notification", {}).get("status") == "completed":
                 completed.append(a)
