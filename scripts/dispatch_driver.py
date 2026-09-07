@@ -951,6 +951,338 @@ class Review:
             return stop(self.receipt, error)
 
 
+# --- the review panel and fix tasks ----------------------------------------
+
+
+def helper_json(receipt: Dict[str, object], script: str, *arguments: str, cwd: Path) -> Dict[str, object]:
+    """Run a bundled helper and return its JSON stdout; a non-zero exit is a typed stop."""
+    command = [sys.executable, "-B", str(Path(__file__).resolve().parent / script), *arguments]
+    completed = subprocess.run(command, cwd=cwd, capture_output=True, text=True)
+    step = {"script": script, "command": command, "exit_code": completed.returncode,
+            "stdout": completed.stdout, "stderr": completed.stderr}
+    receipt["steps"].append(step)
+    try:
+        result = json.loads(completed.stdout) if completed.stdout.strip() else {}
+    except json.JSONDecodeError:
+        result = {}
+    if completed.returncode:
+        raise DriverStop(f"{script} failed: {result.get('error') or completed.stderr.strip()}", result=result)
+    return result
+
+
+class Panel:
+    """Step 6's optional review panel: resolve, one panelist per family in its own sidecar,
+    collect, merge, then the single on-pass checkpoint with the canonical review."""
+
+    def __init__(self, primary: Path, options: argparse.Namespace) -> None:
+        self.primary, self.options = primary, options
+        self.project_dir, self.wave, self.cycle = options.project_dir, options.wave, options.cycle
+        self.root = records_root(primary) / "panels"
+        self.receipt: Dict[str, object] = {"status": None, "wave": self.wave, "cycle": self.cycle,
+                                           "families": {}, "in_flight": [], "blocked": [], "steps": []}
+
+    def family_name(self, family: str) -> str:
+        return f"review_wave_{self.wave}_cycle_{self.cycle}_panel_{family}"
+
+    def relative(self, family: str) -> str:
+        return f"{self.project_dir}/review/wave-{self.wave}.cycle{self.cycle}.panel.{family}.md"
+
+    def brief(self, state: Dict[str, object], tasks: List[Dict[str, object]], depth: str, review: str) -> str:
+        agents = self.primary / "AGENTS.md"
+        lines = [
+            f"You are one review-panel child for GSD Path wave {self.wave}, cycle {self.cycle}; logical task "
+            f"name {state['task_id']}. Mode: wave panel. Family: {state['family']}. Model: {state['slug']}.",
+            f"Read the reviewer role brief first and follow its Wave panel mode exactly: {self.options.role_brief}",
+            f"Template (use only this): {self.options.template}",
+            f"AGENTS.md: {agents if agents.exists() else 'absent'}",
+            f"Depth for this brief: {'adversarial' if depth == 'deep' else 'full'}.",
+            f"Repository root, read-only: {self.primary}",
+            f"Canonical wave review, read-only: {self.primary / review}",
+            f"Your verify sidecar root, the only place you may write or apply patches: {state['worktree']} "
+            f"on branch {state['branch']} at the recorded review base {state['base']}.",
+            f"Write exactly this output file: {Path(str(state['worktree'])) / str(state['relative'])}",
+            f"INTENT.md: {self.primary / '.project/intent/INTENT.md'}",
+            "Tasks in this wave, each with its recorded base and proven landing commit:",
+        ]
+        for task in tasks:
+            lines.append(f"- {task['task_id']}: {self.primary / str(task['task'])} — base {task['base']}, "
+                         f"landing commit {task['commit']}")
+        lines += ["Do not write a Wave verdict or edit the canonical review. Never edit the primary. "
+                  "Never delegate. Never stage or commit.",
+                  "Terminal result: the file you wrote is your result; name its finding count in your final message."]
+        return "\n".join(lines) + "\n"
+
+    def run(self) -> Dict[str, object]:
+        deadline = time.monotonic() + self.options.wait if self.options.wait else None
+        try:
+            project = self.primary / self.project_dir
+            plan_text = (project / "plan/PLAN.md").read_text(encoding="utf-8")
+            depth = review_findings.wave_depth(plan_text, self.wave)
+            self.receipt["depth"] = depth
+            if depth == "verify-only":
+                raise DriverStop("never spawn a review panel at verify-only")
+            paths = review_findings.review_paths(project, self.wave, self.cycle, depth)
+            review = next(iter(paths.values())).relative_to(self.primary).as_posix()
+            if not all(path.is_file() for path in paths.values()):
+                raise DriverStop("the canonical wave review must be collected before the panel")
+            output = project / "review" / f"wave-{self.wave}.cycle{self.cycle}.panel.md"
+            skipped = project / "review" / f"wave-{self.wave}.cycle{self.cycle}.panel.skipped.json"
+            states = {str(state["family"]): state for state in latest_states(self.root)
+                      if state.get("wave") == self.wave and state.get("cycle") == self.cycle}
+            if not states:
+                arguments = ["resolve", "--plan", str(project / "plan/PLAN.md"),
+                             "--intent", str(project / "intent/INTENT.md"),
+                             "--advertised", self.options.advertised]
+                if self.options.parent_slug:
+                    arguments += ["--parent-slug", self.options.parent_slug]
+                if (project / "CHARTER.md").exists():
+                    arguments += ["--charter", str(project / "CHARTER.md")]
+                resolved = helper_json(self.receipt, "review_panel.py", *arguments, cwd=self.primary)
+                self.receipt["resolve"] = resolved
+                if resolved["status"] == "off":
+                    self.receipt["status"] = "off"
+                    return self.receipt
+                if resolved["status"] == "skipped":
+                    if skipped.exists():
+                        raise DriverStop("panel skipped receipt already exists", path=str(skipped))
+                    _common.atomic_write(skipped, self.receipt["steps"][-1]["stdout"])
+                    self.receipt["skipped_receipt"] = str(skipped)
+                    self.receipt["checkpoint"] = checkpoint_project(
+                        self.primary, self.receipt, f"build: record wave {self.wave} cycle {self.cycle} review",
+                        f"Why: persist the wave review and the skipped panel receipt\nWave: {self.wave}")
+                    self.receipt["status"] = "skipped"
+                    return self.receipt
+                if skipped.exists():
+                    raise DriverStop("a skipped-panel receipt exists for this cycle", path=str(skipped))
+                self.receipt["mode"] = resolved["mode"]
+                tasks = [task for task in recover_report(self.primary, self.project_dir, self.receipt)["tasks"]
+                         if task["verdict"] in ("recovered", "attested") and contracts._task_wave(
+                             (self.primary / str(task["task"])).read_text(encoding="utf-8"),
+                             str(task.get("task_id"))) == self.wave]
+                base = isolation.current_sha(self.primary)
+                for selected in resolved["selected"]:
+                    family, slug = selected["family"], selected["slug"]
+                    sidecar = isolation.isolate_verify(self.primary, base,
+                                                       f"wave-{self.wave}-cycle-{self.cycle}-panel-{family}")
+                    self.receipt["steps"].append({"script": "isolation.py isolate-verify", "result": sidecar})
+                    state = {"task_id": self.family_name(family), "family": family, "slug": slug,
+                             "wave": self.wave, "cycle": self.cycle, "base": base, "mode": resolved["mode"],
+                             "worktree": str(sidecar["worktree"]), "branch": str(sidecar["branch"]),
+                             "relative": self.relative(family)}
+                    options = argparse.Namespace(**vars(self.options))
+                    options.child_command = self.options.child_command.replace("{model}", slug)
+                    spawn(self.root, state, options, lambda fresh: self.brief(fresh, tasks, depth, review))
+                states = {str(state["family"]): state for state in latest_states(self.root)
+                          if state.get("wave") == self.wave and state.get("cycle") == self.cycle}
+            while True:
+                self.receipt["in_flight"], self.receipt["blocked"], self.receipt["families"] = [], [], {}
+                for family, state in states.items():
+                    if state.get("outcome") is None:
+                        if state.get("finished_at") is not None:
+                            self.collect(state)
+                        elif state.get("pid") and process_alive(int(state["pid"])):
+                            self.receipt["in_flight"].append(summary(state))
+                            continue
+                        else:
+                            update_state(state, outcome="blocked", reason="child wrapper exited without recording a result")
+                    if state.get("outcome") == "collected":
+                        self.receipt["families"][family] = {"slug": state.get("slug"), "path": state.get("relative")}
+                    elif state.get("outcome") == "blocked":
+                        self.receipt["blocked"].append({**summary(state), "reason": state.get("reason")})
+                if all(state.get("outcome") in ("collected", "blocked") for state in states.values()):
+                    break
+                if deadline is None or time.monotonic() >= deadline:
+                    self.receipt["status"] = "in-flight"
+                    return self.receipt
+                time.sleep(POLL_SECONDS)
+                states = {str(state["family"]): state for state in latest_states(self.root)
+                          if state.get("wave") == self.wave and state.get("cycle") == self.cycle}
+            if self.receipt["blocked"]:
+                self.receipt["status"] = "blocked"
+                return self.receipt
+            mode = next(iter(states.values())).get("mode")
+            inputs = ",".join(str(self.primary / entry["path"]) for entry in self.receipt["families"].values())
+            merged = helper_json(self.receipt, "review_panel.py", "merge", "--kind", "wave", "--wave", str(self.wave),
+                                 "--cycle", str(self.cycle), "--inputs", inputs, "--output", str(output),
+                                 "--mode", str(mode), cwd=self.primary)
+            self.receipt["merge"] = merged
+            self.receipt["panel"] = output.relative_to(self.primary).as_posix()
+            self.receipt["checkpoint"] = checkpoint_project(
+                self.primary, self.receipt, f"build: record wave {self.wave} cycle {self.cycle} review",
+                f"Why: persist the wave review and its review panel\nWave: {self.wave}")
+            self.receipt["status"] = "pass"
+            return self.receipt
+        except STOP_ERRORS as error:
+            return stop(self.receipt, error)
+
+    def collect(self, state: Dict[str, object]) -> None:
+        sidecar, relative = Path(str(state["worktree"])), str(state["relative"])
+        if state.get("timed_out") or state.get("exit_code") != 0:
+            update_state(state, outcome="blocked", reason=f"panel child exited {state.get('exit_code')}")
+            return
+        if not (sidecar / relative).is_file():
+            update_state(state, outcome="blocked", reason="panel child wrote no file")
+            return
+        try:
+            collected = isolation.collect_artifact(self.primary, sidecar, str(state["base"]), str(state["branch"]),
+                                                   relative, relative, None)
+            self.receipt["steps"].append({"script": "isolation.py collect-artifact", "result": collected})
+            update_state(state, outcome="collected")
+            isolation.clean_verify(self.primary, sidecar, str(state["base"]), str(state["branch"]))
+            isolation.retire(self.primary, sidecar, str(state["branch"]), False)
+        except isolation.IsolationError as error:
+            if state.get("outcome") != "collected":
+                update_state(state, outcome="blocked", reason=str(error), helper="isolation.py")
+
+
+def next_task_id(tasks_dir: Path) -> str:
+    numbers = []
+    for path in tasks_dir.glob("*.md"):
+        fields, _ = isolation.task_frontmatter(path.read_text(encoding="utf-8"))
+        match = re.fullmatch(r"T(\d+)", str((fields or {}).get("id", "")))
+        if match:
+            numbers.append(int(match.group(1)))
+    return f"T{max(numbers, default=0) + 1:03d}"
+
+
+def fix_tasks(primary: Path, options: argparse.Namespace) -> Dict[str, object]:
+    """Step 7: one fix task per findings batch, carrying failed criteria and observations verbatim."""
+    receipt: Dict[str, object] = {"status": None, "wave": options.wave, "cycle": options.cycle,
+                                  "created": [], "blocked": [], "steps": []}
+    try:
+        findings = review_findings.compute(primary, options.project_dir, options.wave, options.cycle)
+        receipt["findings"] = findings
+        for key in ("structural_blockers", "skeptic_groups"):
+            if findings.get(key):
+                receipt.update(status="escalate", reason=f"{key} need the parent's step 7 handling")
+                return receipt
+        if findings.get("cap_reached") or findings.get("all_refuted"):
+            receipt.update(status="escalate", reason="cycle cap or all-refuted ruling needs the user")
+            return receipt
+        if not findings.get("fix_batches"):
+            receipt.update(status="none", reason="no fix batches")
+            return receipt
+        project = primary / options.project_dir
+        tasks_dir = project / "tasks"
+        wave_tasks = review_findings.load_wave_tasks(project, options.wave)
+        texts = {}
+        for path in tasks_dir.glob("*.md"):
+            fields, _ = isolation.task_frontmatter(path.read_text(encoding="utf-8"))
+            if fields:
+                texts[str(fields.get("id"))] = path.read_text(encoding="utf-8")
+        groups = {group["locator"]: group for group in findings["groups"]}
+        today = now()[:10]
+        # Same-wave file overlap is forbidden, so repairs land in a newly appended wave.
+        plan_path = project / "plan/PLAN.md"
+        plan_text = plan_path.read_text(encoding="utf-8")
+        depths, waves = contracts._plan_waves(plan_text)
+        fix_wave = max(waves) + 1
+        rows = []
+        for batch in findings["fix_batches"]:
+            batch_groups = [groups[locator] for locator in batch["locators"]]
+            sources = sorted({task for group in batch_groups for task in group["tasks"]})
+            for source in sources:
+                if source not in texts:
+                    raise DriverStop(f"fix batch names unknown task {source}")
+            task_id = next_task_id(tasks_dir)
+            verify = " && ".join(dict.fromkeys(_common.task_verify_command(texts[source]) for source in sources))
+            heavy = any(re.search(r"(?m)^Heavy:\s*yes", texts[source]) for source in sources)
+            criteria = "\n".join(f"{index}. {criterion}" for index, criterion in
+                                 enumerate(dict.fromkeys(group["criterion"] for group in batch_groups), 1))
+            blocks = "\n\n".join(
+                f"### {group['locator']}\nCriterion: {group['criterion']}\n"
+                + "\n".join(f"- {item['text']}" for item in group["observations"]) for group in batch_groups)
+            files = "\n".join(f"  - {path}" for path in batch["files"])
+            title = f"Fix wave {options.wave} cycle {options.cycle} review findings in {', '.join(sources)}"
+            rows.append(f"| {task_id} | {title} | {', '.join(sources)} | {', '.join(batch['files'])} |")
+            text = f"""---
+id: {task_id}
+title: {title}
+wave: {fix_wave}
+deps: [{', '.join(sources)}]
+status: pending
+agent: null
+base: null
+worktree: null
+task_branch: null
+files:
+{files}
+---
+
+# {task_id} — {title}
+
+## Context
+
+Repair task created from the wave {options.wave} cycle {options.cycle} review of {', '.join(sources)}.
+The failed criteria and every reviewer observation are recorded verbatim under Review findings.
+The source task contracts are unchanged; read them and .project/intent/INTENT.md before editing.
+
+## Approach
+
+- Fix only what the Review findings name, inside the listed files; do not change the source
+  tasks' acceptance criteria or interface contracts.
+- Re-run the source tasks' Verify commands after the fix and record the result in the Log.
+
+## Interface contract
+
+- None
+
+## Intent coverage
+
+- None
+
+## Acceptance criteria
+
+{criteria}
+
+## Verify
+
+```bash
+{verify}
+```
+
+Heavy: {'yes' if heavy else 'no'}
+
+## Review findings
+
+{blocks}
+
+## Log
+
+- {today} — created by dispatch_driver.py fix-tasks from wave {options.wave} cycle {options.cycle}
+"""
+            path = tasks_dir / f"{task_id}-fix-wave-{options.wave}-cycle-{options.cycle}.md"
+            _common.atomic_write(path, text)
+            receipt["created"].append({"task": task_id, "path": path.relative_to(primary).as_posix(),
+                                       "wave": fix_wave, "deps": sources, "files": batch["files"],
+                                       "locators": batch["locators"]})
+        block = (f"## Wave {fix_wave} — fix wave {options.wave} cycle {options.cycle} review findings\n\n"
+                 f"Goal: Repair the blocking findings of the wave {options.wave} cycle {options.cycle} review "
+                 "without changing source task contracts.\n"
+                 f"Review depth: {depths[options.wave]}\n\n| Task | Title | Deps | Files |\n|------|-------|------|-------|\n"
+                 + "\n".join(rows) + "\n\n")
+        marker = "## Intent coverage"
+        index = plan_text.index(marker) if marker in plan_text else len(plan_text)
+        _common.atomic_write(plan_path, plan_text[:index] + block + plan_text[index:])
+        receipt["plan_wave"] = fix_wave
+        lint = subprocess.run([sys.executable, "-B", str(Path(__file__).resolve().parent / "check_task_briefs.py"),
+                               "--repo", str(primary), "--base", isolation.current_sha(primary),
+                               "--tasks-dir", f"{options.project_dir}/tasks"], capture_output=True, text=True)
+        receipt["steps"].append({"script": "check_task_briefs.py", "exit_code": lint.returncode,
+                                 "stdout": lint.stdout, "stderr": lint.stderr})
+        if lint.returncode:
+            raise DriverStop("fix task briefs failed lint", stderr=lint.stderr.strip())
+        # The blocked review and its fix tasks land in one bookkeeping checkpoint, as step 7 requires.
+        receipt["checkpoint"] = checkpoint_project(
+            primary, receipt, f"build: record wave {options.wave} cycle {options.cycle} review and fix tasks",
+            f"Why: persist the blocked review verdict with the fix tasks it batched\nWave: {options.wave}\n"
+            f"Tasks: {', '.join(item['task'] for item in receipt['created'])}")
+        receipt["status"] = "created"
+        return receipt
+    except STOP_ERRORS as error:
+        return stop(receipt, error)
+
+
 # --- other actions ---------------------------------------------------------
 
 
@@ -1020,6 +1352,24 @@ def main(argv=None) -> int:
                                help="review_findings.py repair-evidence receipt for a re-review")
     review_parser.add_argument("--role-brief", type=Path, default=default_resource("references/reviewer.md"))
     review_parser.add_argument("--template", type=Path, default=default_resource("templates/wave-review.md"))
+    panel_parser = commands.add_parser("panel", help="run the optional review panel for a collected wave review")
+    panel_parser.add_argument("--repo", type=Path, required=True)
+    panel_parser.add_argument("--project-dir", default=".project")
+    panel_parser.add_argument("--wave", type=int, required=True)
+    panel_parser.add_argument("--cycle", type=positive_int, required=True)
+    panel_parser.add_argument("--child-command", required=True,
+                              help="owner-supplied command; a literal {model} is replaced by the family slug")
+    panel_parser.add_argument("--advertised", required=True, help="comma-separated model slugs the host advertises")
+    panel_parser.add_argument("--parent-slug", help="the parent's model slug when known")
+    panel_parser.add_argument("--wait", type=float, help="seconds to keep polling before returning")
+    panel_parser.add_argument("--child-timeout", type=float, help="per-child wall clock in seconds")
+    panel_parser.add_argument("--role-brief", type=Path, default=default_resource("references/reviewer.md"))
+    panel_parser.add_argument("--template", type=Path, default=default_resource("templates/wave-panel.md"))
+    fix_parser = commands.add_parser("fix-tasks", help="write one fix task per findings batch of a blocked cycle")
+    fix_parser.add_argument("--repo", type=Path, required=True)
+    fix_parser.add_argument("--project-dir", default=".project")
+    fix_parser.add_argument("--wave", type=int, required=True)
+    fix_parser.add_argument("--cycle", type=positive_int, required=True)
     finish_parser = commands.add_parser(
         "finish", help="verify, land, record, and retire one in-progress task whose coder has returned")
     finish_parser.add_argument("--repo", type=Path, required=True)
@@ -1040,9 +1390,14 @@ def main(argv=None) -> int:
     primary = arguments.repo.resolve()
     lock = None
     try:
-        if arguments.action in ("round", "review", "finish", "answer"):
+        if arguments.action in ("round", "review", "panel", "fix-tasks", "finish", "answer"):
             lock = acquire_lock(primary)
-        if arguments.action == "review":
+        if arguments.action == "panel":
+            require_files(parser, arguments, "role_brief", "template")
+            result = Panel(primary, arguments).run()
+        elif arguments.action == "fix-tasks":
+            result = fix_tasks(primary, arguments)
+        elif arguments.action == "review":
             require_files(parser, arguments, "role_brief", "template",
                           *(["repair_evidence"] if arguments.repair_evidence is not None else []))
             result = Review(primary, arguments).run()
