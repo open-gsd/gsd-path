@@ -229,7 +229,7 @@ def brief_text(state: Dict[str, object], role_brief: Path, task_template: Path) 
 
 
 def spawn(root: Path, state: Dict[str, object], options: argparse.Namespace,
-          brief: Callable[[Dict[str, object]], str]) -> Dict[str, object]:
+          brief: Callable[[Dict[str, object]], str], command: Optional[str] = None) -> Dict[str, object]:
     """Create the next attempt record, write the brief the callback builds, and start the wrapper."""
     task_dir = root / str(state["task_id"])
     attempt = max((attempt_number(path) for path in task_dir.glob("attempt-*")), default=0) + 1
@@ -239,7 +239,7 @@ def spawn(root: Path, state: Dict[str, object], options: argparse.Namespace,
              "usage_recorded")
     state = {key: value for key, value in state.items()
              if not key.startswith("_") and key not in stale}
-    state.update({"attempt": attempt, "command": shlex.split(options.child_command),
+    state.update({"attempt": attempt, "command": shlex.split(command or options.child_command),
                   "child_timeout": options.child_timeout, "outcome": None,
                   "dispatched_at": now(), "origin": "question" if state.get("answered") else "dispatch"})
     state_path = attempt_dir / "state.json"
@@ -392,6 +392,21 @@ def checkpoint_project(primary: Path, receipt: Dict[str, object], subject: str, 
     result = isolation.checkpoint(primary, isolation.current_sha(primary), subject, body, [".project"])
     receipt["steps"].append({"script": "isolation.py checkpoint", "result": result})
     return str(result.get("commit"))
+
+
+def wave_tasks(primary: Path, project_dir: str, wave: int, receipt: Dict[str, object]) -> List[Dict[str, object]]:
+    """The wave's tasks with proven landings; an unproven task is a stop."""
+    tasks = []
+    for task in recover_report(primary, project_dir, receipt)["tasks"]:
+        text = (primary / str(task["task"])).read_text(encoding="utf-8")
+        if contracts._task_wave(text, str(task.get("task_id"))) != wave:
+            continue
+        if task["verdict"] not in ("recovered", "attested"):
+            raise DriverStop(f"task {task.get('task_id')} has no proven landing: {task['verdict']}", recover=task)
+        tasks.append(task)
+    if not tasks:
+        raise DriverStop(f"wave {wave} has no tasks")
+    return tasks
 
 
 def stop(receipt: Dict[str, object], error: BaseException) -> Dict[str, object]:
@@ -742,19 +757,7 @@ class Review:
                 if str(state["task_id"]) in names}
 
     def wave_tasks(self) -> List[Dict[str, object]]:
-        tasks = []
-        for task in recover_report(self.primary, self.project_dir, self.receipt)["tasks"]:
-            fields, _ = isolation.task_frontmatter((self.primary / str(task["task"])).read_text(encoding="utf-8"))
-            if fields is None or contracts._task_wave((self.primary / str(task["task"])).read_text(encoding="utf-8"),
-                                                     str(task.get("task_id"))) != self.wave:
-                continue
-            if task["verdict"] not in ("recovered", "attested"):
-                raise DriverStop(f"task {task.get('task_id')} has no proven landing: {task['verdict']}",
-                                 recover=task)
-            tasks.append(task)
-        if not tasks:
-            raise DriverStop(f"wave {self.wave} has no tasks")
-        return tasks
+        return wave_tasks(self.primary, self.project_dir, self.wave, self.receipt)
 
     def dispatch(self, lenses: Dict[str, str], depth: str, base: Optional[str] = None) -> None:
         dirty = sorted(isolation.uncommitted_paths(self.primary))
@@ -967,6 +970,7 @@ def helper_json(receipt: Dict[str, object], script: str, *arguments: str, cwd: P
         result = {}
     if completed.returncode:
         raise DriverStop(f"{script} failed: {result.get('error') or completed.stderr.strip()}", result=result)
+    result["_stdout"] = completed.stdout
     return result
 
 
@@ -983,6 +987,10 @@ class Panel:
 
     def family_name(self, family: str) -> str:
         return f"review_wave_{self.wave}_cycle_{self.cycle}_panel_{family}"
+
+    def states(self) -> Dict[str, Dict[str, object]]:
+        return {str(state["family"]): state for state in latest_states(self.root)
+                if state.get("wave") == self.wave and state.get("cycle") == self.cycle}
 
     def relative(self, family: str) -> str:
         return f"{self.project_dir}/review/wave-{self.wave}.cycle{self.cycle}.panel.{family}.md"
@@ -1027,8 +1035,7 @@ class Panel:
                 raise DriverStop("the canonical wave review must be collected before the panel")
             output = project / "review" / f"wave-{self.wave}.cycle{self.cycle}.panel.md"
             skipped = project / "review" / f"wave-{self.wave}.cycle{self.cycle}.panel.skipped.json"
-            states = {str(state["family"]): state for state in latest_states(self.root)
-                      if state.get("wave") == self.wave and state.get("cycle") == self.cycle}
+            states = self.states()
             if not states:
                 arguments = ["resolve", "--plan", str(project / "plan/PLAN.md"),
                              "--intent", str(project / "intent/INTENT.md"),
@@ -1045,7 +1052,7 @@ class Panel:
                 if resolved["status"] == "skipped":
                     if skipped.exists():
                         raise DriverStop("panel skipped receipt already exists", path=str(skipped))
-                    _common.atomic_write(skipped, self.receipt["steps"][-1]["stdout"])
+                    _common.atomic_write(skipped, str(resolved.pop("_stdout")))
                     self.receipt["skipped_receipt"] = str(skipped)
                     self.receipt["checkpoint"] = checkpoint_project(
                         self.primary, self.receipt, f"build: record wave {self.wave} cycle {self.cycle} review",
@@ -1055,10 +1062,7 @@ class Panel:
                 if skipped.exists():
                     raise DriverStop("a skipped-panel receipt exists for this cycle", path=str(skipped))
                 self.receipt["mode"] = resolved["mode"]
-                tasks = [task for task in recover_report(self.primary, self.project_dir, self.receipt)["tasks"]
-                         if task["verdict"] in ("recovered", "attested") and contracts._task_wave(
-                             (self.primary / str(task["task"])).read_text(encoding="utf-8"),
-                             str(task.get("task_id"))) == self.wave]
+                tasks = wave_tasks(self.primary, self.project_dir, self.wave, self.receipt)
                 base = isolation.current_sha(self.primary)
                 for selected in resolved["selected"]:
                     family, slug = selected["family"], selected["slug"]
@@ -1069,11 +1073,9 @@ class Panel:
                              "wave": self.wave, "cycle": self.cycle, "base": base, "mode": resolved["mode"],
                              "worktree": str(sidecar["worktree"]), "branch": str(sidecar["branch"]),
                              "relative": self.relative(family)}
-                    options = argparse.Namespace(**vars(self.options))
-                    options.child_command = self.options.child_command.replace("{model}", slug)
-                    spawn(self.root, state, options, lambda fresh: self.brief(fresh, tasks, depth, review))
-                states = {str(state["family"]): state for state in latest_states(self.root)
-                          if state.get("wave") == self.wave and state.get("cycle") == self.cycle}
+                    spawn(self.root, state, self.options, lambda fresh: self.brief(fresh, tasks, depth, review),
+                          command=self.options.child_command.replace("{model}", slug))
+                states = self.states()
             while True:
                 self.receipt["in_flight"], self.receipt["blocked"], self.receipt["families"] = [], [], {}
                 for family, state in states.items():
@@ -1095,8 +1097,7 @@ class Panel:
                     self.receipt["status"] = "in-flight"
                     return self.receipt
                 time.sleep(POLL_SECONDS)
-                states = {str(state["family"]): state for state in latest_states(self.root)
-                          if state.get("wave") == self.wave and state.get("cycle") == self.cycle}
+                states = self.states()
             if self.receipt["blocked"]:
                 self.receipt["status"] = "blocked"
                 return self.receipt
@@ -1152,24 +1153,17 @@ def fix_tasks(primary: Path, options: argparse.Namespace) -> Dict[str, object]:
     try:
         findings = review_findings.compute(primary, options.project_dir, options.wave, options.cycle)
         receipt["findings"] = findings
-        for key in ("structural_blockers", "skeptic_groups"):
-            if findings.get(key):
-                receipt.update(status="escalate", reason=f"{key} need the parent's step 7 handling")
-                return receipt
-        if findings.get("cap_reached") or findings.get("all_refuted"):
-            receipt.update(status="escalate", reason="cycle cap or all-refuted ruling needs the user")
+        escalation = [key for key in ("structural_blockers", "skeptic_groups", "cap_reached", "all_refuted")
+                      if findings.get(key)]
+        if escalation:  # step 7's branch table for these stays with the parent and the user
+            receipt.update(status="escalate", escalation=escalation)
             return receipt
         if not findings.get("fix_batches"):
             receipt.update(status="none", reason="no fix batches")
             return receipt
         project = primary / options.project_dir
         tasks_dir = project / "tasks"
-        wave_tasks = review_findings.load_wave_tasks(project, options.wave)
-        texts = {}
-        for path in tasks_dir.glob("*.md"):
-            fields, _ = isolation.task_frontmatter(path.read_text(encoding="utf-8"))
-            if fields:
-                texts[str(fields.get("id"))] = path.read_text(encoding="utf-8")
+        texts = contracts._task_texts(primary, options.project_dir)
         groups = {group["locator"]: group for group in findings["groups"]}
         today = now()[:10]
         # Same-wave file overlap is forbidden, so repairs land in a newly appended wave.

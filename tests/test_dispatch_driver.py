@@ -996,7 +996,7 @@ class DispatchDriverTests(unittest.TestCase):
         self.assertEqual(self.round(root, "--wait", "60")["status"], "done")
         receipt = self.driver(root, "fix-tasks", "--wave", "1", "--cycle", "1")
         self.assertEqual(receipt["status"], "escalate", receipt)
-        self.assertIn("structural_blockers", receipt["reason"])
+        self.assertEqual(receipt["escalation"], ["structural_blockers"])
 
     def test_panel_named_family_runs_merges_and_checkpoints_with_the_review(self) -> None:
         root = self.root
