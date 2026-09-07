@@ -7,6 +7,11 @@ import subprocess
 import sys
 from pathlib import Path
 
+try:
+    from scripts import _common
+except ImportError:  # bundled copy inside a skill's scripts directory
+    import _common
+
 
 class StepFailed(RuntimeError):
     pass
@@ -51,7 +56,11 @@ def run_workflow(repo: Path, action: str, project_dir: str, expected_head: str =
                 step("isolation.py", "isolate-verify", "--repo", str(repo),
                      "--base", expected_head, "--name", f"task-{task_id.lower()}-verify")
         elif action == "build-evidence":
-            step("build_state.py", "verify-landed", *common, "--head", expected_head)
+            proof = step("build_state.py", "verify-landed", *common, "--head", expected_head)
+            # The landing proof has one canonical home; lean final-review reuse allows only this path.
+            evidence = repo / project_dir / "build" / "evidence.json"
+            _common.atomic_write(evidence, json.dumps(proof, indent=2, sort_keys=True) + "\n")
+            steps.append({"script": "workflow_run.py", "evidence": str(evidence)})
         elif action == "prepare-final":
             if project_dir != ".project":
                 raise StepFailed("final review requires the active milestone")

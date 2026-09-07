@@ -590,6 +590,22 @@ class DispatchDriverTests(unittest.TestCase):
         self.assertIn("reached the attempt limit (2)", receipt["blocked"][0]["reason"])
         self.assertEqual(receipt["dispatched"], [])
 
+    def test_build_evidence_receipt_lands_at_its_canonical_path(self) -> None:
+        root = self.root
+        self.fixture(root)
+        self.assertEqual(self.round(root, "--wait", "60")["status"], "done")
+        head = self.head(root)
+        completed = subprocess.run(
+            [sys.executable, "-B", str(PROJECT_ROOT / "scripts/workflow_run.py"), "build-evidence",
+             "--repo", str(root), "--expected-head", head], capture_output=True, text=True)
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        receipt = json.loads(completed.stdout)
+        evidence = root / ".project/build/evidence.json"
+        self.assertEqual(Path(receipt["steps"][-1]["evidence"]).resolve(), evidence.resolve())
+        proof = json.loads(evidence.read_text())
+        self.assertEqual(proof, receipt["steps"][0]["result"])
+        self.assertEqual(sorted(entry["task"]["id"] for entry in proof["tasks"]), ["T001", "T002"])
+
 
 if __name__ == "__main__":
     unittest.main()

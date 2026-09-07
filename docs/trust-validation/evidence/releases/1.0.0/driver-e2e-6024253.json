@@ -1,0 +1,153 @@
+{
+  "candidate": "6024253ce78a89de458defedf49877a7f5d94511",
+  "comparison_candidate": "62f5e0f26ba2ab600494785b54d56fa92c06a5a5",
+  "external_root": "/Users/jeremymcspadden/orca/evaluations/gsd-path-driver-6024253",
+  "host": {
+    "cli": "codex-cli 0.153.4",
+    "model": "gpt-6-astra",
+    "reasoning": "high",
+    "sandbox": "danger-full-access",
+    "child_command": "codex exec --sandbox workspace-write --ignore-user-config --model gpt-6-astra -c model_reasoning_effort=high --json -",
+    "driver_values": {
+      "wait": 540,
+      "child_timeout": null,
+      "capacity": null,
+      "token_limits": null
+    }
+  },
+  "parent_thread": "01a07c49-0287-7672-b07f-41ec4b4162ee",
+  "invocations": [
+    {
+      "run": "run-20260907T143234609781Z",
+      "purpose": "inspect, docs audit, define",
+      "output_tokens": 5831,
+      "seconds": 321.8
+    },
+    {
+      "run": "run-20260907T143827670793Z",
+      "purpose": "intent approval, plan; plan gate failed on SC6",
+      "output_tokens": 6239,
+      "seconds": 240.5
+    },
+    {
+      "run": "run-20260907T144252640287Z",
+      "purpose": "owner SC6 correction, plan re-gate",
+      "output_tokens": 3956,
+      "seconds": 155.9
+    },
+    {
+      "run": "run-20260907T144557729994Z",
+      "purpose": "build through dispatch_driver.py, wave review, final preparation, final review",
+      "output_tokens": 8076,
+      "seconds": 806.2
+    },
+    {
+      "run": "run-20260907T150002352369Z",
+      "purpose": "archive and ship, direct integration",
+      "output_tokens": 1752,
+      "seconds": 113.2
+    }
+  ],
+  "children": [
+    {
+      "session": "01a07c4a-697c",
+      "role": "inspect_codebase",
+      "output_tokens": 2604,
+      "interval": [
+        "2026-09-07T14:34:06Z",
+        "2026-09-07T14:35:52Z"
+      ]
+    },
+    {
+      "session": "01a07c4a-ba11",
+      "role": "inspect_docs",
+      "output_tokens": 1935,
+      "interval": [
+        "2026-09-07T14:34:27Z",
+        "2026-09-07T14:36:06Z"
+      ]
+    },
+    {
+      "session": "01a07c56-4f75",
+      "role": "build_t001 (dispatch_driver child)",
+      "output_tokens": 2870,
+      "interval": [
+        "2026-09-07T14:47:06Z",
+        "2026-09-07T14:49:08Z"
+      ]
+    },
+    {
+      "session": "01a07c58-d367",
+      "role": "review_wave_1_cycle_1 (final scope)",
+      "output_tokens": 7024,
+      "interval": [
+        "2026-09-07T14:49:51Z",
+        "2026-09-07T14:53:59Z"
+      ]
+    },
+    {
+      "session": "01a07c5e-957f",
+      "role": "review_final (fresh; reuse refused)",
+      "output_tokens": 3322,
+      "interval": [
+        "2026-09-07T14:56:08Z",
+        "2026-09-07T14:58:31Z"
+      ]
+    }
+  ],
+  "metrics": {
+    "parent_output_tokens": 25854,
+    "inspection_output_tokens": 4539,
+    "coder_output_tokens": 2870,
+    "review_output_tokens": 10346,
+    "all_output_tokens": 43609,
+    "parent_share": 0.593,
+    "build_turn_parent_output_tokens": 8076,
+    "build_turn_parent_commands": 34,
+    "build_turn_seconds": 806.2,
+    "driver_round_calls": 1,
+    "total_cli_seconds": 1637.5,
+    "invocations": 5,
+    "product_lines": 8,
+    "test_lines": 70
+  },
+  "comparison_lean_62f5e0f": {
+    "parent_output_tokens": 25355,
+    "coder_output_tokens": 2860,
+    "review_output_tokens": 4232,
+    "all_output_tokens": 38848,
+    "parent_share": 0.653,
+    "build_turn_parent_output_tokens": 9086,
+    "build_turn_parent_commands": 50,
+    "build_turn_seconds": 589.8,
+    "total_cli_seconds": 1530.8,
+    "invocations": 6
+  },
+  "driver_record": "/Users/jeremymcspadden/orca/evaluations/gsd-path-driver-6024253/path/repo/.git/gsd-path/dispatch/gsd-path-M001/T001/attempt-1",
+  "landing": {
+    "task_commit": "55e06aef6d6fd5d3054e6a60427d0a9e8bf822b6",
+    "bookkeeping_checkpoint": "43b12dc6f13effec2c65befad2da7daaa12ce7ad",
+    "ship": "f2c014db7d4065aae921d747c6083336bc45bbd2",
+    "integrate": "f0351d1",
+    "tag": "milestone/001-widget-counter-cli"
+  },
+  "defects_observed": [
+    {
+      "where": "plan",
+      "what": "planner wrote integration as SC6, which no task Verify can prove; owner correction cost one invocation (3,956 parent tokens)",
+      "driver_related": false
+    },
+    {
+      "where": "ship",
+      "what": "final-review reuse refused: parent saved the landing proof as .project/build/build-evidence.json while lean_verification allows only .project/build/evidence.json; a fresh final review (3,322 child tokens, ~2.4 min) followed",
+      "driver_related": false,
+      "fixed_by": "workflow_run.py build-evidence now writes .project/build/evidence.json"
+    },
+    {
+      "where": "harness",
+      "what": "the coder child under sandbox workspace-write could not append the evaluator's activities file outside its worktree; reported honestly, no product effect",
+      "driver_related": false
+    }
+  ],
+  "method": "Parent tokens: turn.completed usage from each invocation's --json stream. Child tokens: final token_count total per subagent or exec session under the Orca-managed CODEX_HOME sessions directory for 2026-09-07 whose cwd is the evaluation repo. Build-turn commands: completed command_execution items in the build invocation. One observation; not a controlled estimate."
+}
