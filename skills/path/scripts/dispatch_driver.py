@@ -1055,18 +1055,25 @@ class Panel:
                     self.receipt["status"] = "off"
                     return self.receipt
                 if resolved["status"] == "skipped":
+                    review_base = next((state["base"] for state in latest_states(records_root(self.primary) / "reviews")
+                                        if state.get("wave") == self.wave and state.get("cycle") == self.cycle), None)
+                    if review_base is None:
+                        raise DriverStop("review base is not recorded; run review first")
+                    failure = self.input_failure(str(review_base), paths)
+                    if failure:
+                        raise DriverStop(failure)
                     if skipped.exists():  # an interrupted checkpoint left a valid receipt: reuse it
                         try:
                             saved = json.loads(skipped.read_text(encoding="utf-8"))
                         except (OSError, json.JSONDecodeError):
                             saved = {}
-                        if saved.get("status") != "skipped":
+                        if not isinstance(saved, dict) or saved.get("status") != "skipped":
                             raise DriverStop("panel skipped receipt exists but is not a skipped receipt",
                                              path=str(skipped))
                     else:
                         _common.atomic_write(skipped, str(resolved.pop("_stdout")))
                     self.receipt["skipped_receipt"] = str(skipped)
-                    failure = self.input_failure(isolation.current_sha(self.primary), paths)
+                    failure = self.input_failure(str(review_base), paths)
                     if failure:
                         raise DriverStop(failure)
                     self.checkpoint(paths, "persist the wave review and the skipped panel receipt")
@@ -1141,6 +1148,9 @@ class Panel:
                 raise DriverStop("the complete panel roster must be collected before merge")
             mode = roster["mode"]
             inputs = ",".join(str(self.primary / entry["path"]) for entry in self.receipt["families"].values())
+            failure = self.input_failure(str(roster["base"]), paths)
+            if failure:
+                raise DriverStop(failure)
             merged = helper_json(self.receipt, "review_panel.py", "merge", "--kind", "wave", "--wave", str(self.wave),
                                  "--cycle", str(self.cycle), "--inputs", inputs, "--output", str(output),
                                  "--mode", str(mode), cwd=self.primary)

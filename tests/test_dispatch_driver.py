@@ -1181,6 +1181,47 @@ class DispatchDriverTests(unittest.TestCase):
         self.assertEqual(receipt["status"], "blocked", receipt)
         self.assertIn("inputs changed after the review base", receipt["blocked"][0]["reason"])
         self.assertEqual(self.head(root), head)
+        self.assertIsNone(receipt.get("checkpoint"))
+        self.assertFalse((root / ".project/review/wave-1.cycle1.panel.md").exists())
+
+    def test_panel_skipped_retry_blocks_after_a_post_review_intent_commit(self) -> None:
+        root = self.root
+        self.fixture(root)
+        self.set_panel(root, "detected")
+        self.assertEqual(self.round(root, "--wait", "60")["status"], "done")
+        self.assertEqual(self.review(root, "--wait", "60")["status"], "pass")
+        skipped = root / ".project/review/wave-1.cycle1.panel.skipped.json"
+        saved = json.dumps({"status": "skipped", "mode": "detected", "selected": []})
+        skipped.write_text(saved)
+        with (root / ".project/intent/INTENT.md").open("a") as handle:
+            handle.write("\n7. An unreviewed criterion.\n")
+        run_git(root, "add", ".project/intent/INTENT.md")
+        run_git(root, "commit", "-m", "intent: add criterion after review")
+        head = self.head(root)
+        receipt = self.panel(root, "--wait", "60", advertised="claude-opus")
+        self.assertEqual(receipt["status"], "blocked", receipt)
+        self.assertEqual(receipt["blocked"][0]["reason"],
+                         "inputs changed after the review base; run a new cycle")
+        self.assertIsNone(receipt.get("checkpoint"))
+        self.assertEqual(self.head(root), head)
+        self.assertEqual(skipped.read_text(), saved)
+
+    def test_panel_rejects_a_null_skipped_receipt(self) -> None:
+        root = self.root
+        self.fixture(root)
+        self.set_panel(root, "detected")
+        self.assertEqual(self.round(root, "--wait", "60")["status"], "done")
+        self.assertEqual(self.review(root, "--wait", "60")["status"], "pass")
+        head = self.head(root)
+        skipped = root / ".project/review/wave-1.cycle1.panel.skipped.json"
+        skipped.write_text("null")
+        receipt = self.panel(root, "--wait", "60", advertised="claude-opus")
+        self.assertEqual(receipt["status"], "blocked", receipt)
+        self.assertEqual(receipt["blocked"][0]["reason"],
+                         "panel skipped receipt exists but is not a skipped receipt")
+        self.assertIsNone(receipt.get("checkpoint"))
+        self.assertEqual(self.head(root), head)
+        self.assertEqual(skipped.read_text(), "null")
 
     def test_panel_reuses_a_valid_skipped_receipt_after_an_interrupted_checkpoint(self) -> None:
         root = self.root
