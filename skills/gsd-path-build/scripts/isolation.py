@@ -2470,6 +2470,15 @@ def _task_contract_error(base_text: str, text: str, label: str) -> Optional[str]
     return None
 
 
+def task_log_delta(base_text: str, text: str) -> str:
+    """The task body appended since its base; raises unless the task is an append-only extension."""
+    error = _task_contract_error(base_text, text, "task")
+    if error:
+        raise IsolationError(error)
+    base_body = _normalize_newlines(split_frontmatter(base_text)[1])
+    return _normalize_newlines(split_frontmatter(text)[1])[len(base_body):]
+
+
 def _attest_body_fields(body: str) -> tuple[Dict[str, str], list[str]]:
     fields: Dict[str, str] = {}
     files: list[str] = []

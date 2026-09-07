@@ -30,6 +30,38 @@ The runner avoids having to remove a live product patch merely to create a sidec
 Task verification, wave review, and ship-only project verification retain their
 existing responsibilities.
 
+## Dispatch driver
+
+`dispatch_driver.py` in the router and build bundles runs one build wave's
+deterministic loop so the orchestrating model only supplies judgment. Every
+call re-derives its state from Git, the task files, and dispatch records under
+the Git common directory (`gsd-path/dispatch/<task>/attempt-N/`), so a call
+may be repeated after a crash or a tool timeout.
+
+| Command | Result |
+| --- | --- |
+| `round --repo <root> --child-command '<cmd>' [--wait <s>] [--child-timeout <s>]` | Recover, settle exited children, checkpoint bookkeeping, `ready`, lint, isolate, dispatch; Verify, land, record, retire each result in task-id order. Receipt status `done`, `in-flight`, `question`, or `blocked`. |
+| `finish --repo <root> --task-id <id>` | Verify, land, record, and retire one exited task on its own. |
+| `answer --repo <root> --task-id <id> --answer '<text>'` | Append `Orchestrator answer:` to the isolate's task Log; the next `round` redispatches that isolate. |
+| `status --repo <root>` | Every task's newest dispatch record. |
+
+The child command is owner-supplied shell words. The driver runs it with the
+isolated worktree as its working directory and the self-contained brief on
+stdin; the owner's flags decide the child's permissions and model. Verified
+templates: `claude -p --output-format json <owner permission flags>` and
+`codex exec --json <owner sandbox flags>`. A child ends its final message with
+`RESULT: <task id> ready|blocked`; no line means blocked. A Log delta whose
+first entry after the last recorded `Orchestrator answer:` leads with
+`NEEDS-ORCHESTRATOR:` is a question.
+`--wait`, `--child-timeout`, and `--capacity` (concurrent children) have
+no defaults. At most one `Heavy: yes`
+Verify task is in flight at a time, and a round stops at a wave boundary.
+
+The driver reports and never repairs: a failed child, a failed Verify, a
+recovery or reconciliation verdict, or a `ready` error returns `blocked` with
+the evidence, and the isolate stays in place for the build contract's
+documented procedure.
+
 ## Token accounting
 
 `token_budget.py` is in the router bundle. Limits have no defaults. Configure one
