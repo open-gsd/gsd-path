@@ -395,6 +395,10 @@ class Round:
                              budget=result)
         return result
 
+    def admit(self, task_id: str) -> None:
+        if self.budgeted:
+            self.budget("admit", "--task", task_id)
+
     def configure_budget(self) -> None:
         if getattr(self.options, "task_limit", None) is not None:
             self.budget("configure", "--task-limit", str(getattr(self.options, "task_limit", None)),
@@ -441,6 +445,7 @@ class Round:
             outcome = state.get("outcome")
             if outcome == "question":
                 if state.get("answered"):
+                    self.admit(str(state["task_id"]))
                     self.launch(dict(state, answered=True))
                     update_state(state, outcome="redispatched")
                     changed = True
@@ -524,8 +529,6 @@ class Round:
         if state.get("wave") != self.receipt["wave"]:
             raise DriverStop("task is outside the requested wave", task=state["task_id"],
                              wave=state.get("wave"), requested_wave=self.receipt["wave"])
-        if self.budgeted:
-            self.budget("admit", "--task", str(state["task_id"]))
         fresh = spawn(self.root, state, self.options)
         self.receipt["dispatched"].append(self.summary(fresh))
         self.receipt["in_flight"].append(self.summary(fresh))
@@ -592,6 +595,7 @@ class Round:
             if used >= self.options.max_attempts:
                 raise DriverStop(f"task {task['id']} reached the attempt limit ({self.options.max_attempts}) "
                                  "for this milestone; a person must rule", task=task["id"], attempts=used)
+            self.admit(task["id"])
         head = isolation.current_sha(self.primary)
         self.runner("lint-round", head)
         round_size = len(selected) + len(in_flight)

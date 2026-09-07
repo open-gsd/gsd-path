@@ -487,6 +487,27 @@ class DispatchDriverTests(unittest.TestCase):
                              "--budget-authority", "test policy", mode="claudejson")
         self.assertIn("token budget configure", receipt["blocked"][0]["reason"])
 
+    def test_budget_rejection_leaves_dependent_pending_without_isolation(self) -> None:
+        root = self.root
+        self.fixture(root, deps_t002="[T001]")
+        task_path = root / ".project/tasks/T002-demo.md"
+        before = task_path.read_bytes()
+        budget = ("--task-limit", "3", "--session-limit", "3", "--budget-authority", "test policy")
+        receipt = self.round(root, "--wait", "60", *budget, mode="claudejson")
+        for retry in (False, True):
+            if retry:
+                receipt = self.round(root, "--wait", "60", mode="claudejson")
+            self.assertEqual(receipt["status"], "blocked", receipt)
+            self.assertIn("token budget admit", receipt["blocked"][0]["reason"])
+            fields, _ = dispatch_driver.isolation.task_frontmatter(task_path.read_text())
+            self.assertEqual(fields["status"], "pending")
+            self.assertEqual(task_path.read_bytes(), before)
+            self.assertFalse((dispatch_driver.records_root(root) / "T002").exists())
+            self.assertEqual(self.branches(root), ["gsd-path/M001"])
+            worktrees = run_git(root, "worktree", "list", "--porcelain").stdout.splitlines()
+            self.assertEqual([line for line in worktrees if line.startswith("worktree ")],
+                             [f"worktree {root.resolve()}"])
+
     def test_budget_stops_when_child_output_cannot_prove_usage(self) -> None:
         root = self.root.parent / "plain"
         root.mkdir()
