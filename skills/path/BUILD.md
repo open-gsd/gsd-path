@@ -158,7 +158,10 @@ approved artifacts or the user, record it with `answer --task-id <id>
 --answer '<answer> — <citation>'`, and call `round` again, which redispatches
 the retained isolate; `blocked` names the task, reason, and output and leaves
 the isolate in place — apply the recovery, retry, or plan-defect procedure in
-steps 1–2 by hand, then call `round` again. Do not repeat a step the receipt
+steps 1–2 by hand, then call `round` again. The driver counts dispatches per
+task per milestone and stops at `--max-attempts` (default 2: the first
+dispatch plus this contract's one logged redispatch); owner token limits, when
+supplied, gate every dispatch through the milestone's budget ledger. Do not repeat a step the receipt
 already proves. Without a child command, dispatch through the runtime
 dispatch contract and perform steps 1–5 by hand.
 

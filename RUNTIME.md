@@ -37,12 +37,14 @@ existing responsibilities.
 deterministic loop so the orchestrating model only supplies judgment. `round`
 and `finish` run recovery against Git and the task files before processing
 dispatch records under the Git common directory
-(`gsd-path/dispatch/<task>/attempt-N/`). `answer` and `status` read the newest
-attempt records.
+(`gsd-path/dispatch/<bound branch>/<task>/attempt-N/`). `answer` and `status`
+read the newest attempt records. Records are keyed by the bound branch, so a
+new milestone starts with no attempts and the previous milestone's records
+remain as evidence.
 
 | Command | Result |
 | --- | --- |
-| `round --repo <root> --wave <N> --child-command '<cmd>' [--wait <s>] [--child-timeout <s>] [--capacity <N>]` | Recover, settle exited children, `ready`, checkpoint bookkeeping, lint, isolate, dispatch; Verify, land, record, retire each result in task-id order. Receipt status `done`, `in-flight`, `question`, or `blocked`. |
+| `round --repo <root> --wave <N> --child-command '<cmd>' [--wait <s>] [--child-timeout <s>] [--capacity <N>] [--max-attempts <N>] [--task-limit <N> --session-limit <N> --budget-authority '<policy>']` | Recover, settle exited children, `ready`, checkpoint bookkeeping, lint, isolate, dispatch; Verify, land, record, retire each result in task-id order. Receipt status `done`, `in-flight`, `question`, or `blocked`. |
 | `finish --repo <root> --task-id <id>` | Recover first; return a proven landing without repeating Verify, or verify, land, record, and retire one returned task. Without a dispatch record, derive the isolate from task frontmatter. |
 | `answer --repo <root> --task-id <id> --answer '<text>'` | Append `Orchestrator answer:` to the isolate's task Log; the next `round` redispatches that isolate. |
 | `status --repo <root>` | Every task's newest dispatch record. |
@@ -60,7 +62,19 @@ calls. An unfinished earlier wave blocks dispatch before the bookkeeping
 checkpoint. Child completion is recorded in `exit.json`; the parent alone
 writes `state.json`.
 `--wait`, `--child-timeout`, and `--capacity` (concurrent children) have
-no defaults. At most one `Heavy: yes`
+no defaults. `--max-attempts` defaults to 2 dispatches per task per milestone,
+the build contract's one logged redispatch after the first attempt; question
+redispatches do not count. At the limit `round` returns `blocked` naming the
+task, and a person rules.
+
+Token budgets are opt-in. Passing `--task-limit`, `--session-limit`, and
+`--budget-authority` together configures this milestone's ledger at
+`gsd-path/budget/<bound branch>.json` under the Git common directory, records
+each child's usage from its captured stdout when it exits, and runs `admit`
+before every dispatch; a blocked admission stops the round. The ledger's
+policy is fixed once configured, and a new milestone gets a new ledger. Usage
+is read from Codex `--json` events or Claude `--output-format json`; output
+that proves no usage stops the round rather than estimating. At most one `Heavy: yes`
 Verify task is in flight at a time, and a round stops at a wave boundary.
 Without `--wait`, the call returns after processing currently available work;
 children continue running. `--capacity`, when supplied, must be positive.
@@ -73,8 +87,7 @@ in-progress primary task has no open dispatch record.
 
 Verify output is saved in `verify.json`. A `verify-record` ledger entry is
 written only when the landing commit's parent equals the recorded task base;
-a later parallel landing can therefore have no ledger entry. Token-budget
-admission for headless children remains deferred.
+a later parallel landing can therefore have no ledger entry.
 
 The driver reports and never repairs: a failed child, a failed Verify, a
 recovery or reconciliation verdict, or a `ready` error returns `blocked` with

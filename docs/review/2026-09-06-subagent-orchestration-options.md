@@ -255,3 +255,12 @@ refuses any task with a dispatch record that is not an unread exit, manual
 finishes keep `verify.json` under the records root, and `--capacity` must be
 positive. Still deferred by design: token-budget admission for headless
 children, and the parent-owned retry procedure.
+
+### Follow-up (2026-09-07, after PR #75 review)
+
+Owner ruling: safe defaults with per-milestone resets. Dispatch records and the
+token ledger are now keyed by the bound branch, `--max-attempts` defaults to 2
+(the contract's one logged redispatch), question redispatches do not count,
+and budgets are opt-in through `--task-limit`, `--session-limit`, and
+`--budget-authority` with a Claude JSON usage adapter in `token_budget.py`.
+A child that writes a question and then fails is classified as a failure.

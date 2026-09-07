@@ -43,11 +43,17 @@ FAKE_CODER = textwrap.dedent(
         task_path.write_text(text + "- 2026-09-07 — NEEDS-ORCHESTRATOR: which file? — readings: a, b\\n")
         print(f"RESULT: {task_id} blocked")
         sys.exit(0)
+    if mode == "questioncrash":
+        task_path.write_text(text + "- 2026-09-07 — NEEDS-ORCHESTRATOR: which file? — readings: a, b\\n")
+        sys.exit(2)
     target = worktree / declared
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text("raise SystemExit(1)\\n" if mode == "badverify" else "print('hello')\\n")
     task_path.write_text(text + f"- 2026-09-07 — implemented {declared}; Verify pass\\n")
-    if mode != "silent":
+    if mode == "claudejson":
+        import json
+        print(json.dumps({"result": f"RESULT: {task_id} ready", "usage": {"output_tokens": 3}}))
+    elif mode != "silent":
         print(f"RESULT: {task_id} ready")
     """
 )
@@ -209,7 +215,7 @@ class DispatchDriverTests(unittest.TestCase):
         root = self.root
         head = self.fixture(root, deps_t002="[T001]")
         self.assertEqual(self.round(root, "--wait", "60", mode="question")["status"], "question")
-        record = root / ".git/gsd-path/dispatch/T001/attempt-1/state.json"
+        record = root / ".git/gsd-path/dispatch/gsd-path-M001/T001/attempt-1/state.json"
         state = json.loads(record.read_text())
         state["outcome"] = "redispatched"
         record.write_text(json.dumps(state))
@@ -224,7 +230,7 @@ class DispatchDriverTests(unittest.TestCase):
     def test_child_exit_receipt_preserves_parent_state_and_is_loaded_by_status(self) -> None:
         root = self.root
         self.fixture(root)
-        attempt = root / ".git/gsd-path/dispatch/T001/attempt-1"
+        attempt = root / ".git/gsd-path/dispatch/gsd-path-M001/T001/attempt-1"
         attempt.mkdir(parents=True)
         record = attempt / "state.json"
         state = {"task_id": "T001", "worktree": str(root), "pid": 123,
@@ -381,7 +387,7 @@ class DispatchDriverTests(unittest.TestCase):
         self.assertEqual(receipt["status"], "done", receipt)
         landing = next(item for item in receipt["landed"] if item["task"] == "T001")
         self.assertEqual(landing["mode"], "parallel")
-        record = root / ".git/gsd-path/dispatch/T001/attempt-1/state.json"
+        record = root / ".git/gsd-path/dispatch/gsd-path-M001/T001/attempt-1/state.json"
         state = json.loads(record.read_text())
         self.assertFalse(Path(state["worktree"]).exists())
         state["outcome"] = None
@@ -423,7 +429,7 @@ class DispatchDriverTests(unittest.TestCase):
         receipt = self.round(root, "--wait", "60", mode="slow")
         self.assertEqual(receipt["status"], "done", receipt)
         # Simulate an interruption after land but before the record was updated.
-        records = list((root / ".git/gsd-path/dispatch/T001").glob("attempt-*/state.json"))
+        records = list((root / ".git/gsd-path/dispatch/gsd-path-M001/T001").glob("attempt-*/state.json"))
         state = json.loads(records[0].read_text())
         state["outcome"] = None
         records[0].write_text(json.dumps(state))
@@ -431,6 +437,61 @@ class DispatchDriverTests(unittest.TestCase):
         self.assertEqual(receipt["status"], "done", receipt)
         self.assertEqual(json.loads(records[0].read_text())["outcome"], "landed")
 
+    def reset_after_failed_serial_attempt(self, root: Path) -> None:
+        """Stand in for the parent's documented retry: discard the rejected patch, task back to pending."""
+        run_git(root, "checkout", "--", ".")
+        run_git(root, "clean", "-fdq", "--", "src")
+
+    def test_attempt_limit_per_milestone_stops_for_a_person(self) -> None:
+        root = self.root
+        self.fixture(root, deps_t002="[T001]")
+        self.assertEqual(self.round(root, "--wait", "60", mode="badverify")["status"], "blocked")
+        self.reset_after_failed_serial_attempt(root)
+        receipt = self.round(root, "--wait", "60", mode="badverify")
+        self.assertEqual(receipt["status"], "blocked", receipt)
+        self.assertEqual(receipt["dispatched"][0]["attempt"], 2)
+        self.reset_after_failed_serial_attempt(root)
+        receipt = self.round(root, "--wait", "60")
+        self.assertEqual(receipt["status"], "blocked", receipt)
+        self.assertIn("reached the attempt limit (2)", receipt["blocked"][0]["reason"])
+        self.assertEqual(receipt["dispatched"], [])
+        receipt = self.round(root, "--wait", "60", "--max-attempts", "3")
+        self.assertEqual(receipt["status"], "done", receipt)
+        self.assertEqual([item["task"] for item in receipt["landed"]], ["T001", "T002"])
+
+    def test_child_that_asks_then_crashes_is_a_failure_not_a_question(self) -> None:
+        root = self.root
+        self.fixture(root, deps_t002="[T001]")
+        receipt = self.round(root, "--wait", "60", mode="questioncrash")
+        self.assertEqual(receipt["status"], "blocked", receipt)
+        self.assertEqual(receipt["questions"], [])
+        self.assertIn("child exited 2", receipt["blocked"][0]["reason"])
+
+    def test_budget_ledger_is_per_milestone_and_blocks_admission(self) -> None:
+        root = self.root
+        self.fixture(root, deps_t002="[T001]")
+        budget = ("--task-limit", "3", "--session-limit", "3", "--budget-authority", "test policy")
+        receipt = self.round(root, "--wait", "60", *budget, mode="claudejson")
+        self.assertEqual(receipt["status"], "blocked", receipt)
+        self.assertIn("token budget admit", receipt["blocked"][0]["reason"])
+        self.assertEqual([item["task"] for item in receipt["landed"]], ["T001"])
+        ledger = json.loads((root / ".git/gsd-path/budget/gsd-path-M001.json").read_text())
+        self.assertEqual([row["output_tokens"] for row in ledger["observations"].values()], [3])
+        # A wider session limit on the same ledger is refused: the policy is fixed per milestone.
+        receipt = self.round(root, "--wait", "60", "--task-limit", "3", "--session-limit", "30",
+                             "--budget-authority", "test policy", mode="claudejson")
+        self.assertIn("token budget configure", receipt["blocked"][0]["reason"])
+
+    def test_budget_stops_when_child_output_cannot_prove_usage(self) -> None:
+        root = self.root.parent / "plain"
+        root.mkdir()
+        self.fixture(root, deps_t002="[T001]")
+        receipt = self.round(root, "--wait", "60", "--task-limit", "50", "--session-limit", "50",
+                             "--budget-authority", "test policy")
+        self.assertEqual(receipt["status"], "blocked", receipt)
+        self.assertIn("token budget record", receipt["blocked"][0]["reason"])
+        self.assertEqual(receipt["landed"], [])
+        self.assertEqual(self.driver(root, "status")["dispatches"][0]["outcome"], None)
 
 if __name__ == "__main__":
     unittest.main()

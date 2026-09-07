@@ -244,6 +244,8 @@
     ["scripts/loop_run.py", "skills/gsd-path-loop/scripts/loop_run.py"],
     ["scripts/loop_run.py", "skills/gsd-path/scripts/loop_run.py"],
     ["scripts/token_budget.py", "skills/gsd-path/scripts/token_budget.py"],
+    ["scripts/token_budget.py", "skills/gsd-path-build/scripts/token_budget.py"],
+    ["scripts/loop_run.py", "skills/gsd-path-build/scripts/loop_run.py"],
     ["scripts/workflow_run.py", "skills/gsd-path/scripts/workflow_run.py"],
     ["scripts/workflow_run.py", "skills/gsd-path-plan/scripts/workflow_run.py"],
     ["scripts/workflow_run.py", "skills/gsd-path-build/scripts/workflow_run.py"],

@@ -70,8 +70,23 @@ def tail(text: str) -> str:
 # --- dispatch records ------------------------------------------------------
 
 
+def milestone_slug(primary: Path) -> str:
+    """The bound branch as a path segment; every record and ledger is scoped to one milestone."""
+    return isolation.require_bound(primary).replace("/", "-")
+
+
 def records_root(primary: Path) -> Path:
-    return isolation.common_git_dir(primary) / "gsd-path" / "dispatch"
+    return isolation.common_git_dir(primary) / "gsd-path" / "dispatch" / milestone_slug(primary)
+
+
+def budget_ledger(primary: Path) -> Path:
+    return isolation.common_git_dir(primary) / "gsd-path" / "budget" / f"{milestone_slug(primary)}.json"
+
+
+def attempts_used(root: Path, task_id: str) -> int:
+    """Dispatches of this task in this milestone, excluding question redispatches."""
+    return sum(1 for path in (root / task_id).glob("attempt-*/state.json")
+               if not load_state(path).get("answered"))
 
 
 def acquire_lock(primary: Path) -> BinaryIO:
@@ -356,10 +371,33 @@ class Round:
         self.project_dir = options.project_dir
         self.root = records_root(primary)
         self.proven: Dict[str, str] = {}  # task id -> landing commit proven by recover
+        self.budgeted = getattr(options, "task_limit", None) is not None
         self.receipt: Dict[str, object] = {
             "status": None, "wave": getattr(options, "wave", None), "landed": [],
             "dispatched": [], "in_flight": [], "questions": [], "blocked": [], "steps": [],
         }
+
+    # token budget ---------------------------------------------------------
+
+    def budget(self, action: str, *arguments: str) -> Dict[str, object]:
+        """Run the bundled token_budget.py against this milestone's ledger; blocked is a stop."""
+        command = [sys.executable, "-B", str(Path(__file__).resolve().parent / "token_budget.py"),
+                   action, "--ledger", str(budget_ledger(self.primary)), *arguments]
+        completed = subprocess.run(command, cwd=self.primary, capture_output=True, text=True)
+        result = json.loads(completed.stdout) if completed.stdout.strip() else {}
+        self.receipt["steps"].append({"script": f"token_budget.py {action}", "command": command,
+                                      "exit_code": completed.returncode, "result": result,
+                                      "stderr": completed.stderr})
+        if completed.returncode:
+            raise DriverStop(f"token budget {action}: {result.get('reason', completed.stderr.strip())}",
+                             budget=result)
+        return result
+
+    def configure_budget(self) -> None:
+        if self.budgeted:
+            self.budget("configure", "--task-limit", str(self.options.task_limit),
+                        "--session-limit", str(self.options.session_limit),
+                        "--authority", self.options.budget_authority)
 
     # recovery -------------------------------------------------------------
 
@@ -435,6 +473,9 @@ class Round:
 
     def classify(self, state: Dict[str, object]) -> bool:
         attempt_dir = Path(str(state["_path"])).parent
+        if self.budgeted and not state.get("usage_recorded"):
+            self.budget("record", "--task", str(state["task_id"]), "--events", str(attempt_dir / "stdout"))
+            update_state(state, usage_recorded=True)
         message = final_message((attempt_dir / "stdout").read_text(encoding="utf-8", errors="replace"))
         stderr = (attempt_dir / "stderr").read_text(encoding="utf-8", errors="replace")
         try:
@@ -445,19 +486,18 @@ class Round:
         entries = [line for line in delta.splitlines() if line.strip()]
         answered_at = max((index for index, line in enumerate(entries) if ANSWER_MARK in line), default=-1)
         unanswered = entries[answered_at + 1:]
-        if unanswered and QUESTION_MARK in unanswered[0]:
-            update_state(state, outcome="question", question=unanswered[0], answered=False)
-            self.receipt["questions"].append({**self.summary(state), "question": unanswered[0],
-                                              "log_delta": delta.strip()})
-            return False
         matches = list(RESULT_LINE.finditer(message))
         verdict = matches[-1].group("verdict").lower() if matches else None
         named = matches[-1].group("task").lower() if matches else None
-        if state.get("timed_out"):
+        if state.get("timed_out"):  # a failed child is a failure even when it wrote a question
             self.fail(state, "child exceeded the configured timeout", log_delta=delta.strip())
         elif state.get("exit_code") != 0:
             self.fail(state, f"child exited {state.get('exit_code')}", stderr_tail=tail(stderr),
                       stdout_tail=tail(message), log_delta=delta.strip())
+        elif unanswered and QUESTION_MARK in unanswered[0]:
+            update_state(state, outcome="question", question=unanswered[0], answered=False)
+            self.receipt["questions"].append({**self.summary(state), "question": unanswered[0],
+                                              "log_delta": delta.strip()})
         elif verdict != "ready" or named != str(state["task_id"]).lower():
             self.fail(state, "child returned blocked" if verdict == "blocked"
                       else "child returned no RESULT line", stdout_tail=tail(message),
@@ -543,6 +583,13 @@ class Round:
             selected.append(task)
         if not selected:
             return False
+        for task in selected:
+            used = attempts_used(self.root, task["id"])
+            if used >= self.options.max_attempts:
+                raise DriverStop(f"task {task['id']} reached the attempt limit ({self.options.max_attempts}) "
+                                 "for this milestone; a person must rule", task=task["id"], attempts=used)
+            if self.budgeted:
+                self.budget("admit", "--task", task["id"])
         head = isolation.current_sha(self.primary)
         self.runner("lint-round", head)
         round_size = len(selected) + len(in_flight)
@@ -572,6 +619,7 @@ class Round:
     def run(self) -> Dict[str, object]:
         deadline = time.monotonic() + self.options.wait if self.options.wait else None
         try:
+            self.configure_budget()
             self.recover()
             changed = True
             while True:
@@ -616,7 +664,7 @@ def answer(primary: Path, task_id: str, text: str) -> Dict[str, object]:
 def positive_int(value: str) -> int:
     number = int(value)
     if number < 1:
-        raise argparse.ArgumentTypeError("capacity must be at least 1")
+        raise argparse.ArgumentTypeError("value must be at least 1")
     return number
 
 
@@ -637,6 +685,13 @@ def main(argv=None) -> int:
     round_parser.add_argument("--wave", type=int, required=True, help="wave selected by the parent")
     round_parser.add_argument("--child-timeout", type=float, help="per-child wall clock in seconds")
     round_parser.add_argument("--capacity", type=positive_int, help="owner's concurrent-child limit")
+    round_parser.add_argument("--max-attempts", type=positive_int, default=2,
+                              help="dispatches per task per milestone before a person must rule; "
+                                   "default 2 is the build contract's one logged redispatch")
+    round_parser.add_argument("--task-limit", type=positive_int, help="owner output-token limit per task")
+    round_parser.add_argument("--session-limit", type=positive_int,
+                              help="owner output-token limit for the milestone")
+    round_parser.add_argument("--budget-authority", help="quoted owner policy for the limits")
     round_parser.add_argument("--role-brief", type=Path, default=default_resource("references/coder.md"))
     round_parser.add_argument("--task-template", type=Path, default=default_resource("templates/task.md"))
     finish_parser = commands.add_parser(
@@ -662,6 +717,9 @@ def main(argv=None) -> int:
         if arguments.action in ("round", "finish", "answer"):
             lock = acquire_lock(primary)
         if arguments.action == "round":
+            budget_values = (arguments.task_limit, arguments.session_limit, arguments.budget_authority)
+            if any(value is not None for value in budget_values) and None in budget_values:
+                parser.error("--task-limit, --session-limit, and --budget-authority go together")
             for name in ("role_brief", "task_template"):
                 value = getattr(arguments, name)
                 if value is None or not Path(value).is_file():
