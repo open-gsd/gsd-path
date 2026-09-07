@@ -102,6 +102,13 @@ class AntigravityHostTests(unittest.TestCase):
         with self.assertRaises(LookupError):
             antigravity.bind_child(self.run_root, "build_T001")
 
+    def test_missing_child_ids_cannot_produce_receipt(self):
+        for index, output in enumerate((None, {}, "", "   ", {"conversation_id": ""})):
+            with self.subTest(output=output):
+                self.record([spawn("build_T001", output=output), done(cid=None)], run=f"run-{index}")
+                with self.assertRaises(LookupError):
+                    antigravity.bind_child(self.run_root, "build_T001")
+
     def test_bind_child_raises_on_empty_run_root(self):
         with self.assertRaises(LookupError):
             antigravity.bind_child(self.run_root, "build_T001")

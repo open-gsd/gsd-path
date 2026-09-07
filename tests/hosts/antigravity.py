@@ -103,14 +103,22 @@ def bind_child(run_root, child_id):
                 params = _as_dict(info.get("parameters"))
                 if params.get("Role") == child_id:
                     output = info.get("output")
-                    cid = _first(_as_dict(output), ID_KEYS) or (output if isinstance(output, str) else None)
+                    decoded = output
+                    if isinstance(output, str):
+                        try:
+                            decoded = json.loads(output)
+                        except ValueError:
+                            pass
+                    cid = _first(decoded, ID_KEYS) if isinstance(decoded, dict) else decoded
+                    if not isinstance(cid, str) or not cid.strip():
+                        continue
                     spawns[cid] = {"run": events.parent.name, "step_index": step.get("step_index"),
                                    "parameters": {k: v for k, v in params.items() if k not in ("prompt", "message")},
                                    "output": str(output)[:4000]}
             sub = _as_dict(step.get("subagent_info"))
             cid = _first(sub, ID_KEYS)
             state = str(sub.get("status") or sub.get("state") or "").lower()
-            if cid in spawns and state in DONE_STATES:
+            if isinstance(cid, str) and cid.strip() and cid in spawns and state in DONE_STATES:
                 completions[cid] = {"run": events.parent.name, "step_index": step.get("step_index"), "subagent_info": sub}
     if not spawns:
         raise LookupError(f"no DONE invoke_subagent step with Role {child_id!r} in {run_root}")

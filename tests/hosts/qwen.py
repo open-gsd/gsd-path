@@ -77,14 +77,14 @@ def bind_child(run_root, child_id):
 
     Foreground launch (``run_in_background`` false): a non-error tool_result for the same
     tool_use id. Background launch (documented default): a ``list_agents`` tool_result whose
-    row for this child (matched by ``description`` or by the ``task_id`` quoted in the launch
-    tool_result) reports status ``completed``. The background completion notification's
+    row for this child (matched by the launch ``task_id``, or by ``description`` only
+    when no task id was recorded) reports status ``completed``. The background completion notification's
     stream-json shape is not documented, so it is not used as evidence.
     """
     attempts = {}
     list_results = []
+    pending_lists = {}
     for events in sorted(Path(run_root).glob("quick/run-*/events.jsonl")):
-        pending_lists = set()
         for line in events.read_text().splitlines():
             try:
                 ev = json.loads(json.loads(line)["raw"])
@@ -99,7 +99,7 @@ def bind_child(run_root, child_id):
                             "id": c["id"], "input": {k: v for k, v in c["input"].items() if k != "prompt"},
                             "prompt_sha256": hashlib.sha256(c["input"].get("prompt", "").encode()).hexdigest()}}
                     elif c.get("name") == "list_agents":
-                        pending_lists.add(c["id"])
+                        pending_lists[c["id"]] = set(attempts)
             elif ev.get("type") == "user":
                 for c in ev.get("message", {}).get("content", []):
                     if not isinstance(c, dict) or c.get("type") != "tool_result":
@@ -111,17 +111,19 @@ def bind_child(run_root, child_id):
                         if m:
                             a["task_id"] = m.group(1)
                     elif c.get("tool_use_id") in pending_lists:
-                        list_results.append({"run": events.parent.name, "rows": _agent_rows(_json_in(c.get("content")))})
+                        list_results.append({"attempts": pending_lists[c["tool_use_id"]], "rows": _agent_rows(_json_in(c.get("content")))})
     completed = []
-    for a in attempts.values():
+    for call_id, a in attempts.items():
         if a["tool_use"]["input"].get("run_in_background") is False:
             if a.get("tool_result") and not a["tool_result"]["is_error"]:
                 completed.append(a)
             continue
-        states = [row for lr in list_results for row in lr["rows"]
-                  if row.get("description") == child_id or (a.get("task_id") and row.get("task_id") == a["task_id"])]
+        match_by = "task_id" if a.get("task_id") else "description"
+        match_value = a.get("task_id") or child_id
+        states = [row for lr in list_results if call_id in lr["attempts"] for row in lr["rows"]
+                  if row.get(match_by) == match_value]
         if any(row.get("status") == "completed" for row in states):
-            completed.append({**a, "list_agents_states": states})
+            completed.append({**a, "list_agents_states": states, "completion_match": match_by})
     if not completed:
         if attempts:
             raise LookupError(f"agent child {child_id!r} in {run_root} has no inline result and no list_agents row with status completed; "

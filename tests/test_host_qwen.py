@@ -108,6 +108,38 @@ class QwenHostTests(unittest.TestCase):
         self.record([_launch("t1", "build_T001"), _result("t1", 'launched {"task_id": "task-9"}'), *_list_agents("t2", rows)])
         self.assertEqual(qwen.bind_child(self.run_root, "build_T001")["list_agents_states"], rows)
 
+    def test_retry_uses_known_task_id_exclusively(self):
+        rows = [{"task_id": "task-1", "description": "build_T001", "status": "completed"},
+                {"task_id": "task-2", "description": "build_T001", "status": "running"}]
+        self.record([_launch("first", "build_T001"), _result("first", "task_id=task-1"),
+                     _launch("retry", "build_T001"), _result("retry", "task_id=task-2"),
+                     *_list_agents("list", rows)])
+        bound = qwen.bind_child(self.run_root, "build_T001")
+        self.assertEqual(bound["tool_use"]["id"], "first")
+        self.assertEqual(bound["task_id"], "task-1")
+        self.assertEqual(bound["list_agents_states"], rows[:1])
+
+    def test_earlier_listing_cannot_complete_later_launch(self):
+        rows = [{"description": "build_T001", "status": "completed"}]
+        self.record(_list_agents("list", rows), run="run-1")
+        self.record([_launch("retry", "build_T001")], run="run-2")
+        with self.assertRaises(LookupError):
+            qwen.bind_child(self.run_root, "build_T001")
+
+    def test_description_fallback_is_recorded_without_task_id(self):
+        rows = [{"description": "build_T001", "status": "completed"}]
+        self.record([_launch("first", "build_T001"), *_list_agents("list", rows)])
+        bound = qwen.bind_child(self.run_root, "build_T001")
+        self.assertEqual(bound["completion_match"], "description")
+        self.assertEqual(bound["list_agents_states"], rows)
+
+    def test_later_task_id_disables_description_fallback(self):
+        rows = [{"task_id": "old", "description": "build_T001", "status": "completed"}]
+        self.record([_launch("retry", "build_T001"), *_list_agents("list", rows),
+                     _result("retry", "task_id=new")])
+        with self.assertRaises(LookupError):
+            qwen.bind_child(self.run_root, "build_T001")
+
     def test_bind_child_background_without_completed_listing_raises(self):
         self.record([_launch("t1", "build_T001"), _result("t1", "Launched background agent task_id=task-9"),
                      *_list_agents("t2", [{"task_id": "task-9", "description": "build_T001", "status": "running"}])])

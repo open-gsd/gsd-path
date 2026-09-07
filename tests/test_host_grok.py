@@ -99,6 +99,15 @@ class BindChildTests(unittest.TestCase):
         self.assertEqual(bound["completion"]["exit_code"], 0)
         self.assertIsNone(bound["transcript"])
 
+    def test_background_child_completes_after_resume(self):
+        self.record(HEAD + TAIL, run="run-1")
+        self.record([COMPLETION] + TAIL, run="run-2")
+        bound = grok.bind_child(self.run_root, "build_probe")
+        self.assertEqual(bound["run"], "run-1")
+        self.assertEqual(bound["subagent_id"], SUBAGENT)
+        self.assertEqual(bound["completion"]["task_id"], SUBAGENT)
+        self.assertEqual(bound["completion"]["status"], "completed")
+
     def test_child_that_never_completed_raises(self):
         self.record(HEAD + TAIL)
         with self.assertRaises(LookupError) as raised:

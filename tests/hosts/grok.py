@@ -105,7 +105,6 @@ def bind_child(run_root, child_id):
     run_root = Path(run_root)
     attempts, session = {}, None
     for events in sorted(run_root.glob("quick/run-*/events.jsonl")):
-        by_call = {}
         for line in events.read_text().splitlines():
             try:
                 ev = json.loads(json.loads(line)["raw"])
@@ -115,11 +114,11 @@ def bind_child(run_root, child_id):
             if kind == "tool_call" and ev.get("toolName") == "spawn_subagent":
                 inp = ev.get("rawInput") or {}
                 if inp.get("description") == child_id:
-                    by_call[call] = attempts[call] = {"run": events.parent.name, "tool_call_id": call, "spawn_input": {
+                    attempts[call] = {"run": events.parent.name, "tool_call_id": call, "spawn_input": {
                         k: v for k, v in inp.items() if k != "prompt"},
                         "prompt_sha256": hashlib.sha256(str(inp.get("prompt", "")).encode()).hexdigest()}
-            elif kind == "tool_call_update" and call in by_call and ev.get("status") == "completed":
-                a = by_call[call]; text = _output_text(ev)
+            elif kind == "tool_call_update" and call in attempts and ev.get("status") == "completed":
+                a = attempts[call]; text = _output_text(ev)
                 m = _SUBAGENT_ID.search(text)
                 a["spawn_output"] = text[:4000]
                 if m:
@@ -128,7 +127,7 @@ def bind_child(run_root, child_id):
                     a["foreground_completed"] = True
             elif kind == "tool_call_update" and ev.get("status") == "completed":
                 for r in _results(ev.get("rawOutput")):
-                    for a in by_call.values():
+                    for a in attempts.values():
                         if a.get("subagent_id") == r.get("task_id"):
                             a["completion"] = {"tool_call_id": call, **{k: r.get(k) for k in ("task_id", "command", "status", "exit_code", "started", "ended", "duration_secs")},
                                                "output": str(r.get("output", ""))[:4000]}

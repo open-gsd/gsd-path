@@ -67,30 +67,58 @@ def bind_child(run_root, child_id):
                 threads.add(ev["thread_id"])
     if len(threads) != 1:
         raise LookupError(f"expected one Codex thread in {run_root}, found {sorted(threads)}")
-    thread = threads.pop(); transcript = transcript_for(thread)
-    spawn = spawn_out = None; call_id = None; statuses = []
+    thread = threads.pop()
+    transcript = transcript_for(thread)
+    attempts = {}
+    list_calls = set()
     for line in transcript.read_text().splitlines():
         try:
             p = json.loads(line).get("payload", {})
         except ValueError:
             continue
-        if p.get("type") == "function_call" and p.get("name") == "spawn_agent" and f'"task_name":"{child_id}"' in p.get("arguments", ""):
-            args = json.loads(p["arguments"]); args.pop("message", None)  # the brief is encrypted in the transcript
-            spawn = {"call_id": p.get("call_id"), "namespace": p.get("namespace"), "arguments": args}; call_id = p.get("call_id")
-        elif p.get("type") == "function_call_output" and p.get("call_id") == call_id and spawn_out is None:
-            spawn_out = p.get("output")
-        elif p.get("type") == "function_call_output" and isinstance(p.get("output"), str) and "agent_status" in p["output"]:
+        call_id = p.get("call_id")
+        if p.get("type") == "function_call":
+            if p.get("name") == "list_agents":
+                list_calls.add(call_id)
+            elif p.get("name") == "spawn_agent" and call_id:
+                try:
+                    args = json.loads(p.get("arguments", ""))
+                except ValueError:
+                    continue
+                if not isinstance(args, dict) or args.get("task_name") != child_id:
+                    continue
+                args.pop("message", None)
+                attempts[call_id] = {
+                    "spawn_call": {"call_id": call_id, "namespace": p.get("namespace"), "arguments": args},
+                    "list_agents_states": [],
+                }
+        elif p.get("type") == "function_call_output":
             try:
-                statuses += [ag for ag in json.loads(p["output"]).get("agents", []) if str(ag.get("agent_name", "")).endswith("/" + child_id)]
-            except ValueError:
-                pass
-    done = lambda s: s.get("agent_status") == "completed" or (isinstance(s.get("agent_status"), dict) and "completed" in s["agent_status"])
-    if spawn is None or spawn_out is None:
-        raise LookupError(f"transcript {transcript.name} has no spawn_agent call/output for {child_id}")
-    if not any(done(s) for s in statuses):
-        raise LookupError(f"transcript never lists {child_id} as completed via list_agents; ask the orchestrator to call list_agents after the child returns")
+                output = json.loads(p.get("output", ""))
+            except (ValueError, TypeError):
+                continue
+            if not isinstance(output, dict):
+                continue
+            if call_id in attempts:
+                name = output.get("task_name")
+                if isinstance(name, str) and name.endswith("/" + child_id):
+                    attempts[call_id].update(spawn_output=p["output"], agent_name=name)
+            elif call_id in list_calls:
+                for state in output.get("agents", []):
+                    for attempt in attempts.values():
+                        if attempt.get("agent_name") and state.get("agent_name") == attempt["agent_name"]:
+                            attempt["list_agents_states"].append(state)
+    completed = []
+    for attempt in attempts.values():
+        for state in attempt["list_agents_states"]:
+            status = state.get("agent_status")
+            if status == "completed" or (isinstance(status, dict) and "completed" in status):
+                completed.append(attempt)
+                break
+    if not completed:
+        raise LookupError(f"transcript {transcript.name} has no completed spawn_agent attempt for {child_id}; ask the orchestrator to call list_agents after the child returns")
     return {"child_id": child_id, "status": "completed", "child_api": "collaboration.spawn_agent", "thread": thread,
-            "transcript": transcript.name, "spawn_call": spawn, "spawn_output": spawn_out, "list_agents_states": statuses}
+            "transcript": transcript.name, **completed[-1]}
 
 
 SPEC = HostSpec(
