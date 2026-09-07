@@ -1,4 +1,5 @@
 import argparse
+import io
 import json
 import os
 import subprocess
@@ -6,6 +7,7 @@ import sys
 import tempfile
 import textwrap
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
 
@@ -105,6 +107,23 @@ class DispatchDriverTests(unittest.TestCase):
 
     def branches(self, root: Path) -> list:
         return run_git(root, "for-each-ref", "--format=%(refname:short)", "refs/heads/").stdout.split()
+
+    def test_mutating_commands_refuse_a_held_repository_lock(self) -> None:
+        root = self.root
+        head = self.fixture(root)
+        with dispatch_driver.acquire_lock(root):
+            receipts = [self.round(root),
+                        self.driver(root, "finish", "--task-id", "T001"),
+                        self.driver(root, "answer", "--task-id", "T001", "--answer", "hello")]
+            for receipt in receipts:
+                self.assertEqual(receipt["status"], "blocked", receipt)
+                self.assertEqual(receipt["reason"],
+                                 "another dispatch_driver invocation holds the lock")
+            self.assertEqual(self.driver(root, "status")["dispatches"], [])
+            self.assertEqual(self.head(root), head)
+            self.assertEqual(run_git(root, "status", "--porcelain").stdout, "")
+        receipt = self.round(root, "--wait", "60")
+        self.assertEqual(receipt["status"], "done", receipt)
 
     def test_parallel_round_lands_both_tasks_and_retires_isolates(self) -> None:
         root = self.root
@@ -292,8 +311,13 @@ class DispatchDriverTests(unittest.TestCase):
 
     def test_finish_lands_a_task_dispatched_by_hand_from_its_frontmatter(self) -> None:
         root = self.root
-        head = self.fixture(root, deps_t002="[T001]")
-        # The orchestrator isolated and activated the task itself, then a coder edited the primary.
+        self.fixture(root, deps_t002="[T001]")
+        (root / ".gitignore").write_text("*.env\n")
+        (root / "config.env").write_text("GREETING=hello\n")
+        run_git(root, "add", ".gitignore")
+        run_git(root, "add", "-f", "config.env")
+        run_git(root, "commit", "-m", "track ignored configuration")
+        head = self.head(root)
         subprocess.run([sys.executable, "-B", str(PROJECT_ROOT / "scripts/workflow_run.py"),
                         "prepare-task", "--repo", str(root), "--expected-head", head,
                         "--task-id", "T001", "--round-size", "1"], check=True, capture_output=True)
@@ -303,7 +327,21 @@ class DispatchDriverTests(unittest.TestCase):
                        check=True, capture_output=True)
         (root / "src").mkdir()
         (root / "src/app.py").write_text("print('hello')\n")
-        receipt = self.driver(root, "finish", "--task-id", "T001")
+        expected_paths = run_git(root, "ls-files").stdout.splitlines() + ["src/app.py"]
+        expected = {path: (root / path).read_bytes() for path in expected_paths}
+        verify = dispatch_driver.run_verify
+
+        def check_sidecar(command: str, sidecar: Path) -> dict:
+            self.assertNotEqual(sidecar, root)
+            paths = run_git(sidecar, "ls-files").stdout.splitlines()
+            self.assertEqual({path: (sidecar / path).read_bytes() for path in paths}, expected)
+            return verify(command, sidecar)
+
+        output = io.StringIO()
+        with mock.patch.object(dispatch_driver, "run_verify", side_effect=check_sidecar), redirect_stdout(output):
+            code = dispatch_driver.main(["finish", "--repo", str(root), "--task-id", "T001"])
+        self.assertEqual(code, 0, output.getvalue())
+        receipt = json.loads(output.getvalue())
         self.assertEqual(receipt["status"], "landed", receipt)
         self.assertEqual(receipt["landed"][0]["mode"], "serial")
         self.assertTrue(Path(receipt["landed"][0]["verify"]["evidence"]).is_file())

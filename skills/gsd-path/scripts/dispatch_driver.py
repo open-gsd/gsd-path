@@ -14,6 +14,7 @@ brief on stdin; the owner therefore owns the child's permission posture.
 from __future__ import annotations
 
 import argparse
+import errno
 import json
 import os
 import re
@@ -25,7 +26,7 @@ import tempfile
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import BinaryIO, Dict, List, Optional
 
 try:
     from scripts import _common, build_state, isolation, workflow_run
@@ -34,6 +35,11 @@ except ImportError:  # bundled copy inside a skill's scripts directory
     import build_state
     import isolation
     import workflow_run
+
+if os.name == "nt":
+    import msvcrt
+else:
+    import fcntl
 
 RESULT_LINE = re.compile(r"(?im)^RESULT:\s*(?P<task>\S+)\s+(?P<verdict>ready|blocked)\s*$")
 QUESTION_MARK = "NEEDS-ORCHESTRATOR:"
@@ -66,6 +72,24 @@ def tail(text: str) -> str:
 
 def records_root(primary: Path) -> Path:
     return isolation.common_git_dir(primary) / "gsd-path" / "dispatch"
+
+
+def acquire_lock(primary: Path) -> BinaryIO:
+    root = records_root(primary)
+    root.mkdir(parents=True, exist_ok=True)
+    handle = open(root / "driver.lock", "a+b")
+    try:
+        if os.name == "nt":
+            handle.seek(0)
+            msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError as error:
+        handle.close()
+        if error.errno in (errno.EACCES, errno.EAGAIN, errno.EDEADLK):
+            raise DriverStop("another dispatch_driver invocation holds the lock") from error
+        raise
+    return handle
 
 
 def attempt_number(path: Path) -> int:
@@ -228,7 +252,7 @@ def snapshot_tree(primary: Path) -> str:
     """Tree of the primary's complete working tree via a temporary index; the real index is untouched."""
     with tempfile.TemporaryDirectory() as temporary:
         env = dict(os.environ, GIT_INDEX_FILE=str(Path(temporary) / "index"))
-        for arguments in (("add", "-A"), ("write-tree",)):
+        for arguments in (("read-tree", "HEAD"), ("add", "-A"), ("write-tree",)):
             completed = subprocess.run(("git", "-C", str(primary), *arguments), env=env,
                                        text=True, capture_output=True)
             if completed.returncode:
@@ -633,7 +657,10 @@ def main(argv=None) -> int:
     if arguments.action == "_child":
         return child_main(arguments.state)
     primary = arguments.repo.resolve()
+    lock = None
     try:
+        if arguments.action in ("round", "finish", "answer"):
+            lock = acquire_lock(primary)
         if arguments.action == "round":
             for name in ("role_brief", "task_template"):
                 value = getattr(arguments, name)
@@ -665,6 +692,9 @@ def main(argv=None) -> int:
                 for state in latest_states(records_root(primary))]}
     except STOP_ERRORS as error:
         result = {"status": "blocked", "reason": str(error), **getattr(error, "details", {})}
+    finally:
+        if lock is not None:
+            lock.close()
     print(json.dumps(result, sort_keys=True, default=str))
     return 0 if result["status"] != "blocked" else 1
 
