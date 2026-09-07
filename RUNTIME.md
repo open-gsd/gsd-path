@@ -16,6 +16,7 @@ All commands require `--repo <absolute repository root>`.
 | `route` | Optional `--project-dir .project/next` | Canonical route; follow its action even when it blocks or requests recovery. |
 | `gate-plan` | Git HEAD; optional lookahead project directory | Pending discussion, intent coverage, brief paths, and panel configuration checked in order. |
 | `approve-plan` | Owner approval and `--expected-head <reviewed full SHA>` | Plan gates followed by the existing journaled approval checkpoint. |
+| `lint-round` | Git HEAD; optional `--project-dir .project/next` | Task brief checks against HEAD, then plan handoff checks. |
 | `prepare-task` | `--expected-head <clean base> --task-id <id> --round-size <ready task count>` | Canonical task isolation; serial work also gets a verification sidecar before the primary becomes dirty. |
 | `build-evidence` | `--expected-head <full SHA>` | Canonical landing proof with the correct repo-relative project directory. |
 
@@ -33,15 +34,16 @@ existing responsibilities.
 ## Dispatch driver
 
 `dispatch_driver.py` in the router and build bundles runs one build wave's
-deterministic loop so the orchestrating model only supplies judgment. Every
-call re-derives its state from Git, the task files, and dispatch records under
-the Git common directory (`gsd-path/dispatch/<task>/attempt-N/`), so a call
-may be repeated after a crash or a tool timeout.
+deterministic loop so the orchestrating model only supplies judgment. `round`
+and `finish` run recovery against Git and the task files before processing
+dispatch records under the Git common directory
+(`gsd-path/dispatch/<task>/attempt-N/`). `answer` and `status` read the newest
+attempt records.
 
 | Command | Result |
 | --- | --- |
-| `round --repo <root> --wave <N> --child-command '<cmd>' [--wait <s>] [--child-timeout <s>]` | Recover, settle exited children, checkpoint bookkeeping, `ready`, lint, isolate, dispatch; Verify, land, record, retire each result in task-id order. Receipt status `done`, `in-flight`, `question`, or `blocked`. |
-| `finish --repo <root> --task-id <id>` | Verify, land, record, and retire one exited task on its own. |
+| `round --repo <root> --wave <N> --child-command '<cmd>' [--wait <s>] [--child-timeout <s>] [--capacity <N>]` | Recover, settle exited children, `ready`, checkpoint bookkeeping, lint, isolate, dispatch; Verify, land, record, retire each result in task-id order. Receipt status `done`, `in-flight`, `question`, or `blocked`. |
+| `finish --repo <root> --task-id <id>` | Recover first; return a proven landing without repeating Verify, or verify, land, record, and retire one returned task. Without a dispatch record, derive the isolate from task frontmatter. |
 | `answer --repo <root> --task-id <id> --answer '<text>'` | Append `Orchestrator answer:` to the isolate's task Log; the next `round` redispatches that isolate. |
 | `status --repo <root>` | Every task's newest dispatch record. |
 
@@ -53,11 +55,26 @@ templates: `claude -p --output-format json <owner permission flags>` and
 `RESULT: <task id> ready|blocked`; no line means blocked. A Log delta whose
 first entry after the last recorded `Orchestrator answer:` leads with
 `NEEDS-ORCHESTRATOR:` is a question.
-`--wave` is required and pins the parent-selected wave, including on resumed calls. Child completion
-is recorded in `exit.json`; the parent alone writes `state.json`.
+`--wave` is required and pins the parent-selected wave, including on resumed
+calls. An unfinished earlier wave blocks dispatch before the bookkeeping
+checkpoint. Child completion is recorded in `exit.json`; the parent alone
+writes `state.json`.
 `--wait`, `--child-timeout`, and `--capacity` (concurrent children) have
 no defaults. At most one `Heavy: yes`
 Verify task is in flight at a time, and a round stops at a wave boundary.
+Without `--wait`, the call returns after processing currently available work;
+children continue running. `--capacity`, when supplied, must be positive.
+
+`round`, `finish`, and `answer` hold a repository-scoped advisory lock for the
+whole call, including `--wait`. A concurrent invocation returns `blocked`
+with `another dispatch_driver invocation holds the lock`; wait for the
+active call to return before retrying. Bookkeeping also blocks if an
+in-progress primary task has no open dispatch record.
+
+Verify output is saved in `verify.json`. A `verify-record` ledger entry is
+written only when the landing commit's parent equals the recorded task base;
+a later parallel landing can therefore have no ledger entry. Token-budget
+admission for headless children remains deferred.
 
 The driver reports and never repairs: a failed child, a failed Verify, a
 recovery or reconciliation verdict, or a `ready` error returns `blocked` with

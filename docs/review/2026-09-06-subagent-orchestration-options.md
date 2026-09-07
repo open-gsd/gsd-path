@@ -1,7 +1,10 @@
 # Sub-agent orchestration options for path runs
 
-Date: 2026-09-06. Research only; no source change. Branch
-`jeremymcs/subagent-orchestration` at `a972804`.
+Initial research: 2026-09-06, before implementation, on branch
+`jeremymcs/subagent-orchestration` at `a972804`. The options and recommendation
+below record that research; the 2026-09-07 owner decision supersedes the
+proposed Orca adapter and runner action names. Current commands and behavior
+are documented in [RUNTIME.md](../../RUNTIME.md#dispatch-driver).
 
 ## The problem, as measured
 
@@ -218,61 +221,17 @@ Decision: build the driver, not a message bus. Path's task frontmatter,
 completion proof. The only missing piece is a process that spawns children,
 waits on them, and calls the existing helpers in the contract's order.
 
-### Deliverable
+### Implemented contract
 
-`scripts/dispatch_driver.py`, bundled into `gsd-path` and `gsd-path-build`
-like `workflow_run.py`. Four actions, every one idempotent and re-derived
-from `recover` and on-disk state:
+The owner selected a Path-native driver with an owner-supplied headless child
+command, without Orca orchestration. See the authoritative
+[dispatch driver reference](../../RUNTIME.md#dispatch-driver) for commands,
+records, recovery, and limits, and the
+[build wave loop](../../skills/gsd-path-build/SKILL.md#wave-loop) for the parent
+procedure. Regression coverage lives in
+[tests/test_dispatch_driver.py](../../tests/test_dispatch_driver.py).
 
-| Action | Owns |
-|---|---|
-| `round` | recover, settle exited children, checkpoint bookkeeping, `ready`, brief lint, `prepare-task`, `activate-task`, spawn, optional bounded wait |
-| `finish` | Verify in the isolate (serial: reproduced in the pre-created sidecar), Log append, `land`, `verify-record`, `retire` |
-| `answer` | append `Orchestrator answer:` to the isolated task Log; the next `round` redispatches the same isolate |
-| `status` | list dispatch records |
-
-Receipt statuses: `done` (wave complete, review next), `in-flight`,
-`question`, `blocked`. Every helper call is a step receipt, fail-stop, as in
-`workflow_run.py`.
-
-### Children
-
-- Spawned through an owner-supplied `--child-command` (shell words). The
-  driver runs it with the isolated worktree as cwd and the brief on stdin,
-  wrapped by `dispatch_driver.py _child`, which records exit code and
-  timestamps so the exit survives the driver process. Verified templates:
-  `claude -p --output-format json ...` and `codex exec --json ...`. The owner
-  owns the permission flags; the driver never defaults to skipping them.
-- Records live outside every worktree under the Git common directory:
-  `gsd-path/dispatch/<task>/attempt-N/{brief.md,stdout,stderr,state.json}`.
-- A child ends its final message with `RESULT: <task id> ready|blocked`.
-  No line means blocked, never success.
-- A Log delta containing `NEEDS-ORCHESTRATOR:` is a `question`. The answer
-  is written to the Log and the same isolate is redispatched with a fresh
-  self-contained brief; session resume is a later option.
-- `--child-timeout` and `--wait` are owner values with no defaults.
-- Heavy Verify: at most one `verify_heavy` task in flight at a time.
-- Round size counts in-flight tasks, so a task that becomes ready while
-  others run is isolated in parallel mode and the primary stays clean.
-- The driver stops at a wave boundary and reports `done`; wave review stays
-  with the model.
-
-### Out of scope for v1 (parent follows the existing contract in prose)
-
-Failed-implementation retry and retirement of rejected isolates, attest
-rulings, plan-defect repair, token ledger recording for Claude JSON output.
-A failed child or failed Verify returns `blocked` with the Log delta, output
-tail, and isolate path, and leaves the isolate in place.
-
-### Verification
-
-`tests/test_dispatch_driver.py` with a fake coder script: serial land,
-parallel land with retirement, question then answer then land, Verify
-failure leaves no commit and deactivates the isolate, wave boundary stop,
-no-RESULT child is blocked. Then `npm run verify`, then a Codex review of
-the diff.
-
-### Review outcome (2026-09-07)
+### Initial review outcome (2026-09-07)
 
 Implemented as `scripts/dispatch_driver.py` with `isolation.task_log_delta`,
 `workflow_run.py lint-round`, the coder brief's `RESULT:` line, and eleven
