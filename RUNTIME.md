@@ -46,12 +46,15 @@ read the newest attempt records. Records are keyed by the bound branch, so a
 new milestone starts with no attempts and the previous milestone's records
 remain as evidence.
 Review attempts use `gsd-path/dispatch/<milestone slug>/reviews/<logical name>/attempt-N/`;
+panel attempts use the same layout under `panels/` instead of `reviews/`.
 `status` and `answer` cover task attempts only.
 
 | Command | Result |
 | --- | --- |
 | `round --repo <root> --wave <N> --child-command '<cmd>' [--wait <s>] [--child-timeout <s>] [--capacity <N>] [--max-attempts <N>] [--task-limit <N> --session-limit <N> --budget-authority '<policy>']` | Recover, settle exited children, `ready`, checkpoint bookkeeping, lint, isolate, dispatch; Verify, land, record, retire each result in task-id order. Receipt status `done`, `in-flight`, `question`, or `blocked`. |
 | `review --repo <root> --wave <N> --cycle <C> --child-command '<cmd>' [--wait <s>] [--child-timeout <s>] [--repair-evidence <receipt>]` | Step 6 at `full` or `deep` depth: clean review base, one verify sidecar and reviewer child per lens, validate in the sidecar, collect, retire; after every lens settles, checkpoint a `pass` when no panel is configured, or return the `review_findings.py collect` grouping on `blocked`. `verify-only` returns `not-applicable`; `panel_required` reports the PLAN panel setting. |
+| `panel --repo <root> --wave <N> --cycle <C> --advertised <slugs> [--parent-slug <slug>] --child-command '<cmd with {model}>' [--wait <s>]` | Step 6 panel: `review_panel.py resolve`; `off`, a persisted skipped receipt, or one panelist per family in its own sidecar; collect, `review_panel.py merge`, then the single on-pass checkpoint with the review. |
+| `fix-tasks --repo <root> --wave <N> --cycle <C>` | Step 7 batching: one fix task per `review_findings.py collect` batch with the failed criteria and observations verbatim, lint-checked; `escalate` for structural blockers, skeptic groups, cycle cap, or all-refuted. |
 | `finish --repo <root> --task-id <id>` | Recover first; return a proven landing without repeating Verify, or verify, land, record, and retire one returned task. Without a dispatch record, derive the isolate from task frontmatter. |
 | `answer --repo <root> --task-id <id> --answer '<text>'` | Append `Orchestrator answer:` to the isolate's task Log; the next `round` redispatches that isolate. |
 | `status --repo <root>` | Every task's newest dispatch record. |
@@ -65,8 +68,10 @@ templates: `claude -p --output-format json <owner permission flags>` and
 first entry after the last recorded `Orchestrator answer:` leads with
 `NEEDS-ORCHESTRATOR:` is a question only when the child exits successfully;
 a timeout or nonzero exit is a failure even if the child wrote a question.
-Reviewer children instead return the `Wave verdict:` line in their validated
-review artifact; they do not need a `RESULT:` line.
+Canonical reviewer children instead return the `Wave verdict:` line in their
+validated review artifact; they do not need a `RESULT:` line.
+Panel children write family findings without a Wave verdict. The panel command
+replaces literal `{model}` in its child command with the resolved family slug.
 `--wave` is required and pins the parent-selected wave, including on resumed
 calls. In `round`, an unfinished earlier wave blocks dispatch before the bookkeeping
 checkpoint. Child completion is recorded in `exit.json`; the parent alone
@@ -93,8 +98,9 @@ Verify task is in flight at a time, and a round stops at a wave boundary.
 Without `--wait`, the call returns after processing currently available work;
 children continue running. `--capacity`, when supplied, must be positive.
 
-`round`, `review`, `finish`, and `answer` hold a repository-scoped advisory lock for the
-whole call, including `--wait`. A concurrent invocation returns `blocked`
+`round`, `review`, `panel`, `fix-tasks`, `finish`, and `answer` hold a
+repository-scoped advisory lock for the whole call, including `--wait`.
+A concurrent invocation returns `blocked`
 with `another dispatch_driver invocation holds the lock`; wait for the
 active call to return before retrying. Bookkeeping also blocks if an
 in-progress primary task has no open dispatch record.
@@ -118,6 +124,23 @@ Reusing a collected verdict requires the canonical artifact to match its saved
 validation hash. Review inputs must still match the recorded base: only this
 cycle's review artifacts may differ, and HEAD may advance only by the cycle's
 own review checkpoint. Other changes block reuse and require a new cycle.
+
+Resume an `in-flight` panel with `panel` for the same wave and cycle. Before
+the first spawn, it saves the families, slugs, mode, and base in
+`panels/wave-N-cycle-C/roster.json` under the milestone's dispatch directory.
+Missing families resume only at that base. Merge waits for the whole roster
+and successful cleanup; later calls retry pending cleanup. Panel `status`
+describes panel processing; `review_verdict` holds the canonical verdict.
+A blocked canonical review leaves `checkpoint: null`, including for a skipped
+panel, so `fix-tasks` can checkpoint the blocked review with its repairs.
+
+`fix-tasks` reconciles existing repair tasks and PLAN rows before linting and
+checkpointing. It creates missing batches in an appended repair wave and
+reports new tasks in `created`, reused tasks in `existing`, and batches already
+covered by other repair tasks in `carried`. Status `created` includes restored
+PLAN rows or pending project bookkeeping; `exists` means nothing was written
+and no project changes needed a checkpoint. Status `none` means no batches
+need work; `escalate` leaves the named decisions with build step 7 and the user.
 
 ## Token accounting
 

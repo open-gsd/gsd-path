@@ -159,11 +159,17 @@ review base, creates one verify sidecar per lens, briefs one reviewer child
 per lens with every task's base and landing commit, validates each file in
 its sidecar, copies it to the canonical path, retires the sidecar, and only
 after every lens settles concludes: a passing cycle with no panel is
-checkpointed; with a panel configured (`panel_required: true`) the panel and
-the single on-pass checkpoint stay with step 7; `blocked` returns the
-`review_findings.py collect` grouping for step 7. The driver never writes a
-`verify-only` file (`status: not-applicable`), runs a panel or skeptic, or
-creates fix tasks; those stay with this contract;
+checkpointed; with a panel configured (`panel_required: true`) run `panel
+--wave <N> --cycle <C> --advertised <slugs> [--parent-slug <slug>]
+--child-command '<owner command with {model}>'`, which resolves the panel,
+persists a skipped receipt or runs one panelist per family in its own
+sidecar, merges the family files, and makes the single on-pass checkpoint;
+`blocked` returns the `review_findings.py collect` grouping, and `fix-tasks
+--wave <N> --cycle <C>` writes one lint-clean fix task per batch carrying the
+failed criteria and observations verbatim, or returns `escalate` for
+structural blockers, skeptic groups, the cycle cap, or an all-refuted
+ruling, which stay with step 7 and the user. The driver never writes a
+`verify-only` file (`status: not-applicable`) or runs a skeptic;
 `in-flight` means call `round` again; `question` means answer from the
 approved artifacts or the user, record it with `answer --task-id <id>
 --answer '<answer> — <citation>'`, and call `round` again, which redispatches
