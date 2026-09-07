@@ -166,6 +166,14 @@ export function preCommitHook(interpreter) {
     `exec ${interpreter} "$(git rev-parse --show-toplevel)/${HOOKS_DIRECTORY}/git_guard.py" pre-commit\n`
   );
 }
+export function prePushHook(interpreter) {
+  return (
+    "#!/bin/sh\n" +
+    "# gsd-path guard: bound branches publish only as ship commits.\n" +
+    `exec ${interpreter} "$(git rev-parse --show-toplevel)/${HOOKS_DIRECTORY}/git_guard.py" pre-push "$@"\n`
+  );
+}
+
 export function commitMsgHook(interpreter) {
   return (
     "#!/bin/sh\n" +
@@ -173,6 +181,13 @@ export function commitMsgHook(interpreter) {
     `exec ${interpreter} "$(git rev-parse --show-toplevel)/${HOOKS_DIRECTORY}/git_guard.py" commit-msg "$1"\n`
   );
 }
+
+export const GIT_HOOKS = [
+  ["pre-commit", preCommitHook],
+  ["commit-msg", commitMsgHook],
+  ["pre-push", prePushHook],
+];
+export const GIT_HOOK_NAMES = GIT_HOOKS.map(([name]) => name);
 
 // Every interpreter a managed hook may legitimately be pinned to.
 const INTERPRETER_CANDIDATES = ["python3", "python"];
@@ -1101,18 +1116,9 @@ function projectDestinations(project, selected, hooksEnabled, interpreter, hooks
       ]);
     }
     if (hooksDir !== null) {
-      destinations.push([
-        path.join(hooksDir, "pre-commit"),
-        null,
-        preCommitHook(interpreter),
-        true,
-      ]);
-      destinations.push([
-        path.join(hooksDir, "commit-msg"),
-        null,
-        commitMsgHook(interpreter),
-        true,
-      ]);
+      for (const [hookName, generator] of GIT_HOOKS) {
+        destinations.push([path.join(hooksDir, hookName), null, generator(interpreter), true]);
+      }
     }
   }
   return destinations;
@@ -1361,7 +1367,7 @@ function hasManagedGuardWiring(project) {
   const hooksDir = gitHooksDirectory(project);
   return (
     hooksDir !== null &&
-    ["pre-commit", "commit-msg"].some((name) => isManagedGitHook(path.join(hooksDir, name)))
+    GIT_HOOK_NAMES.some((name) => isManagedGitHook(path.join(hooksDir, name)))
   );
 }
 
@@ -1658,7 +1664,7 @@ function validateHooksRefresh(sourceRoot, project, full, hooksDir, selected, ini
       }
     }
     if (hooksDir !== null) {
-      for (const hookName of ["pre-commit", "commit-msg"]) {
+      for (const hookName of GIT_HOOK_NAMES) {
         const hookPath = path.join(hooksDir, hookName);
         if (isSymlink(hookPath)) {
           throw new InstallerError(`refusing to refresh a symlink: ${hookPath}`);
@@ -1795,11 +1801,10 @@ function refreshHooksUnlocked(sourceRoot, project, full, dryRun, selected, initi
       }
     }
     if (hooksDir !== null) {
-      for (const hookName of ["pre-commit", "commit-msg"]) {
+      for (const [hookName, generator] of GIT_HOOKS) {
         const hookPath = path.join(hooksDir, hookName);
         if (!dryRun) {
-          const content =
-            hookName === "pre-commit" ? preCommitHook(interpreter) : commitMsgHook(interpreter);
+          const content = generator(interpreter);
           fs.mkdirSync(path.dirname(hookPath), { recursive: true });
           writeFileAtomic(hookPath, content, 0o755);
         }
@@ -2245,7 +2250,7 @@ export function doctor(sourceRoot, { targets, rootFor, project = null }) {
   if (lexists(path.join(project, ".git"))) {
     const hooksDir = gitHooksDirectory(project);
     if (hooksDir !== null) {
-      for (const name of ["pre-commit", "commit-msg"]) {
+      for (const name of GIT_HOOK_NAMES) {
         const hookPath = path.join(hooksDir, name);
         if (!lexists(hookPath)) continue;
         if (isSymlink(hookPath)) {
@@ -2344,10 +2349,7 @@ export function doctor(sourceRoot, { targets, rootFor, project = null }) {
       } else {
         const custom = !samePath(hooksDir, path.join(dotGit, "hooks"));
         let missingFromCustom = false;
-        for (const [hookName, generator] of [
-          ["pre-commit", preCommitHook],
-          ["commit-msg", commitMsgHook],
-        ]) {
+        for (const [hookName, generator] of GIT_HOOKS) {
           const hookPath = path.join(hooksDir, hookName);
           const label = describeProjectPath(project, hookPath);
           if (unreadableGitHooks.has(hookPath)) {

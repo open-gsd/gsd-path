@@ -226,6 +226,23 @@ def commit_msg_hook(interpreter: str) -> str:
     )
 
 
+def pre_push_hook(interpreter: str) -> str:
+    return (
+        "#!/bin/sh\n"
+        "# gsd-path guard: bound branches publish only as ship commits.\n"
+        f"exec {interpreter} \"$(git rev-parse --show-toplevel)/"
+        f"{HOOKS_DIRECTORY}/git_guard.py\" pre-push \"$@\"\n"
+    )
+
+
+GIT_HOOKS = (
+    ("pre-commit", pre_commit_hook),
+    ("commit-msg", commit_msg_hook),
+    ("pre-push", pre_push_hook),
+)
+GIT_HOOK_NAMES = tuple(name for name, _ in GIT_HOOKS)
+
+
 def _detect_python_interpreter() -> Optional[str]:
     """Probe for a runnable interpreter (python3, then python).
 
@@ -1006,12 +1023,10 @@ def _project_destinations(
                 )
             )
         if hooks_dir is not None:
-            destinations.append(
-                (hooks_dir / "pre-commit", None, pre_commit_hook(interpreter), True)
-            )
-            destinations.append(
-                (hooks_dir / "commit-msg", None, commit_msg_hook(interpreter), True)
-            )
+            for hook_name, generator in GIT_HOOKS:
+                destinations.append(
+                    (hooks_dir / hook_name, None, generator(interpreter), True)
+                )
     return destinations
 
 
@@ -1331,7 +1346,7 @@ def _has_managed_guard_wiring(project: Path) -> bool:
     hooks_dir = _git_hooks_directory(project)
     return hooks_dir is not None and any(
         _is_managed_git_hook(hooks_dir / name)
-        for name in ("pre-commit", "commit-msg")
+        for name in GIT_HOOK_NAMES
     )
 
 
@@ -1653,7 +1668,7 @@ def _validate_hooks_refresh(
                         f"not a managed GSD Path hook settings file: {settings}"
                     )
         if hooks_dir is not None:
-            for hook_name in ("pre-commit", "commit-msg"):
+            for hook_name in GIT_HOOK_NAMES:
                 hook_path = hooks_dir / hook_name
                 if hook_path.is_symlink():
                     raise InstallerError(
@@ -1793,14 +1808,10 @@ def _refresh_hooks_unlocked(
                     _atomic_write(settings, content)
                 refreshed.append(_describe_project_path(project, settings))
         if hooks_dir is not None:
-            for hook_name in ("pre-commit", "commit-msg"):
+            for hook_name, generator in GIT_HOOKS:
                 hook_path = hooks_dir / hook_name
                 if not dry_run:
-                    content = (
-                        pre_commit_hook(interpreter)
-                        if hook_name == "pre-commit"
-                        else commit_msg_hook(interpreter)
-                    )
+                    content = generator(interpreter)
                     hook_path.parent.mkdir(parents=True, exist_ok=True)
                     _atomic_write(hook_path, content, mode=0o755)
                 refreshed.append(_describe_project_path(project, hook_path))
@@ -2388,7 +2399,7 @@ def doctor(
     if _lexists(project / ".git"):
         hooks_dir = _git_hooks_directory(project)
         if hooks_dir is not None:
-            for name in ("pre-commit", "commit-msg"):
+            for name in GIT_HOOK_NAMES:
                 hook_path = hooks_dir / name
                 if not _lexists(hook_path):
                     continue
@@ -2476,10 +2487,7 @@ def doctor(
             else:
                 custom = not _same_path(hooks_dir, dot_git / "hooks")
                 missing_from_custom = False
-                for hook_name, generator in (
-                    ("pre-commit", pre_commit_hook),
-                    ("commit-msg", commit_msg_hook),
-                ):
+                for hook_name, generator in GIT_HOOKS:
                     hook_path = hooks_dir / hook_name
                     label = _describe_project_path(project, hook_path)
                     if hook_path in unreadable_git_hooks:

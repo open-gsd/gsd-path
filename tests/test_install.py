@@ -1628,7 +1628,10 @@ class InstallerTests(unittest.TestCase):
         commit_msg = project / ".git" / "hooks" / "commit-msg"
         self.assertEqual(install.pre_commit_hook("python3"), pre_commit.read_text(encoding="utf-8"))
         self.assertEqual(install.commit_msg_hook("python3"), commit_msg.read_text(encoding="utf-8"))
+        pre_push = project / ".git" / "hooks" / "pre-push"
+        self.assertEqual(install.pre_push_hook("python3"), pre_push.read_text(encoding="utf-8"))
         self.assertTrue(os.access(commit_msg, os.X_OK))
+        self.assertTrue(os.access(pre_push, os.X_OK))
         self.assertIn(".gsd-path/guard_hook.py", output)
         self.assertIn(".git/hooks/pre-commit", output)
         self.assertIn(".git/hooks/commit-msg", output)
@@ -2802,7 +2805,7 @@ class InstallerTests(unittest.TestCase):
             (project / install.HOOKS_DIRECTORY / name).unlink()
         hooks = [
             project / ".git" / "hooks" / name
-            for name in ("pre-commit", "commit-msg")
+            for name in install.GIT_HOOK_NAMES
         ]
         for hook in hooks:
             hook.chmod(0)
@@ -2814,7 +2817,7 @@ class InstallerTests(unittest.TestCase):
             for hook in hooks:
                 hook.chmod(0o755)
 
-        for name in ("pre-commit", "commit-msg"):
+        for name in install.GIT_HOOK_NAMES:
             self.assertTrue(
                 any(
                     finding["level"] == "fail"

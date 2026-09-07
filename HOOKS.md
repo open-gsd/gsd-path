@@ -48,10 +48,11 @@ Native configs for unselected hosts are ignored.
 | File | Purpose |
 | --- | --- |
 | `.gsd-path/guard_hook.py` | Pre-tool-use guard (stdin JSON → exit 2 + denial JSON) |
-| `.gsd-path/git_guard.py` | Staged-path + ship-subject validator |
+| `.gsd-path/git_guard.py` | Commit and publication validator |
 | `.gsd-path/runtime/` | Canonical read-only state validation and routing used for plain-prompt re-entry |
 | `.git/hooks/pre-commit` | Runs `git_guard.py` before commit |
 | `.git/hooks/commit-msg` | Runs `git_guard.py` with commit message |
+| `.git/hooks/pre-push` | Runs `git_guard.py` on every pushed ref update |
 | `.claude/settings.json` | Claude PreToolUse wiring (`claude` target) |
 | `.codex/hooks.json` | Codex PreToolUse wiring (`codex` target) |
 | `.cursor/hooks.json` | Cursor fail-closed preToolUse wiring (`cursor` target) |
@@ -135,18 +136,66 @@ helper with `--repo <root>` remain allowed by the archive guard. Deleting an
 archive ancestor, such as `rm -rf .project`, remains blocked. A simple command
 such as `rm -rf scratch` passes the archive check; other guard rules still apply.
 
-**`git_guard.py`** (pre-commit + commit-msg):
+**`git_guard.py`** (pre-commit + commit-msg + pre-push):
 
 - modifies, deletes, or renames away tracked archive paths
 - `ship:` commits (case-insensitive) staging paths outside `.project/`
-- while the committed `STATE.md` is in `build` on its bound branch or a
-  `gsd-path-task/` branch: commits staging paths outside `.project/` (or the
-  guard's own `.gsd-path/` and native hook settings) unless
-  they are landing commits as `isolation.py land` writes them — subject
-  `<task id>: <task title>` matching the task file at `Base:`, a full base SHA
-  HEAD descends from, the staged task file, only that task's declared `files:`,
-  and a `Files:` list of exactly the staged paths
+- on unshipped pipeline lineage (the committed `STATE.md` names a bound
+  `gsd-path/M###` branch that is not `shipped/done`, and HEAD descends from
+  it — the bound branch itself, `gsd-path-task/` branches, sidecars, and any
+  branch cut from them): commits staging paths outside `.project/` (or the
+  guard's own `.gsd-path/` and native hook settings) unless the phase is
+  `build` and they are landing commits as `isolation.py land` writes them —
+  subject `<task id>: <task title>` matching the task file at `Base:`, a full
+  base SHA HEAD descends from, the staged task file, only that task's declared
+  `files:`, and a `Files:` list of exactly the staged paths. Outside build the
+  reviewed HEAD is frozen; product fixes reopen through the patch plan
+- pushes (to any remote) that move a `gsd-path/M###` ref anywhere but its
+  strict ship commit, or delete it while it holds anything else; and pushes of
+  any other ref whose commit carries a `STATE.md` that still owes a ship commit
+  (names a bound branch, not `shipped/done`). The ship state's `branch` must
+  match every bound name in the local and remote refs. Malformed pre-push
+  records and failed object inspection block the push; a present commit
+  without `STATE.md` passes on an ordinary ref. An absent bound ref passes
+  deletion. The authorized publisher is `archive_milestone.py integrate`;
+  the hook checks ref updates, not which client initiated them
 - **allows** adding files to archive (ship transaction)
+
+These local hooks cover pushes made by plain Git and clients that invoke
+Git with hooks enabled. Creating a PR from an already published ref does not
+run the pre-push hook. A branch cut from `main` carrying `shipped/done` passes;
+if `main` instead carries an unshipped bound state, pushes of branches carrying
+that state remain blocked until the milestone records are repaired through the
+pipeline.
+
+## GitHub-side gate
+
+The guards above stop agents on the developer machine. A person can still
+merge a pull request from a bound branch in the GitHub UI. To surface that on
+the pull request, add a job to the consumer repository's pull-request workflow
+that fails unless a `gsd-path/M*` head is the ship commit at `shipped/done`:
+
+```yaml
+  gsd-path-ship-gate:
+    if: startsWith(github.head_ref, 'gsd-path/M')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - run: |
+          gsd_phase=$(sed -n 's/^phase: *\([a-z]*\).*/\1/p' .project/STATE.md | head -1)
+          gsd_status=$(sed -n 's/^status: *\([a-z]*\).*/\1/p' .project/STATE.md | head -1)
+          state="$gsd_phase/$gsd_status"
+          subject=$(git log -1 --format=%s)
+          case "$subject" in "ship: M"*) ship=1 ;; *) ship=0 ;; esac
+          [ "$state" = shipped/done ] && [ "$ship" = 1 ] && exit 0
+          echo "::error::gsd-path: head is $state with subject '$subject'; a gsd-path/M* branch reaches main only through archive_milestone.py integrate"
+          exit 1
+```
+
+The job is advisory until branch protection or a ruleset requires it, which
+GitHub offers on public repositories and paid plans.
 
 ## Wire other hosts
 

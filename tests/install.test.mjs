@@ -1254,6 +1254,10 @@ test("hooks install guard scripts, settings, and git hook", async () => {
   const commitMsg = path.join(project, ".git", "hooks", "commit-msg");
   assert.equal(fs.readFileSync(preCommit, "utf8"), installer.preCommitHook("python3"));
   assert.equal(fs.readFileSync(commitMsg, "utf8"), installer.commitMsgHook("python3"));
+  assert.equal(
+    fs.readFileSync(path.join(project, ".git", "hooks", "pre-push"), "utf8"),
+    installer.prePushHook("python3")
+  );
   if (process.platform !== "win32") {
     assert.ok(fs.statSync(commitMsg).mode & 0o100);
   }
@@ -2471,9 +2475,7 @@ test("doctor reports unreadable effective git hooks", async () => {
   for (const name of installer.GUARD_SCRIPTS) {
     fs.rmSync(path.join(project, installer.HOOKS_DIRECTORY, name));
   }
-  const hooks = ["pre-commit", "commit-msg"].map((name) =>
-    path.join(project, ".git", "hooks", name)
-  );
+  const hooks = installer.GIT_HOOK_NAMES.map((name) => path.join(project, ".git", "hooks", name));
   for (const hook of hooks) fs.chmodSync(hook, 0);
   let findings;
   try {
@@ -2486,7 +2488,7 @@ test("doctor reports unreadable effective git hooks", async () => {
     for (const hook of hooks) fs.chmodSync(hook, 0o755);
   }
 
-  for (const name of ["pre-commit", "commit-msg"]) {
+  for (const name of installer.GIT_HOOK_NAMES) {
     assert.ok(
       findings.some(
         ({ level, text }) =>
