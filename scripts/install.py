@@ -505,7 +505,16 @@ def _is_managed_name(name: str) -> bool:
 
 
 def _is_owned_router_alias(skill_dir: Path) -> bool:
-    return (skill_dir / "scripts" / "pipeline_state.py").is_file()
+    if not (skill_dir / "scripts" / "pipeline_state.py").is_file():
+        return False
+    version_file = skill_dir / "VERSION"
+    if not version_file.is_file():
+        return False
+    try:
+        version = version_file.read_text(encoding="utf-8").strip()
+    except (OSError, UnicodeError):
+        return False
+    return re.fullmatch(r"[0-9]+(?:\.[0-9]+)+", version) is not None
 
 
 def _is_managed_install_entry(root: Path, name: str) -> bool:

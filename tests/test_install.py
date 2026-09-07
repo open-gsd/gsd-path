@@ -422,7 +422,8 @@ class InstallerTests(unittest.TestCase):
     def test_install_refuses_to_replace_an_unrelated_path_skill(self):
         target = self.root / "foreign-path" / "skills"
         foreign = target / "path"
-        foreign.mkdir(parents=True)
+        (foreign / "scripts").mkdir(parents=True)
+        (foreign / "scripts" / "pipeline_state.py").touch()
         (foreign / "SKILL.md").write_text(
             "---\nname: path\n---\nforeign\n", encoding="utf-8"
         )
@@ -434,11 +435,24 @@ class InstallerTests(unittest.TestCase):
             (foreign / "SKILL.md").read_text(encoding="utf-8"),
         )
 
+    def test_install_refuses_path_alias_with_invalid_version(self):
+        target = self.root / "invalid-path-version" / "skills"
+        foreign = target / "path"
+        (foreign / "scripts").mkdir(parents=True)
+        (foreign / "scripts" / "pipeline_state.py").touch()
+        for version in ("", "release", "1..0", "1.0.beta", "1.0\nforeign"):
+            with self.subTest(version=version):
+                (foreign / "VERSION").write_text(version, encoding="utf-8")
+                with self.assertRaisesRegex(install.InstallerError, "unrelated skill"):
+                    install.install(self.source, [install.TargetPlan("grok", target)])
+                self.assertEqual(version, (foreign / "VERSION").read_text(encoding="utf-8"))
+
     def test_install_replaces_an_owned_path_router_alias(self):
         target = self.root / "owned-path" / "skills"
         owned = target / "path" / "scripts"
         owned.mkdir(parents=True)
         (owned / "pipeline_state.py").write_text("# previous alias\n", encoding="utf-8")
+        (owned.parent / "VERSION").write_text("1.0.0\n", encoding="utf-8")
         results = install.install(self.source, [install.TargetPlan("grok", target)])
         self.assertTrue(any("backed up" in line for line in results))
         skill = (target / "path" / "SKILL.md").read_text(encoding="utf-8")

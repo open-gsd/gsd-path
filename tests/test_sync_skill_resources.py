@@ -8,6 +8,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from scripts.check_task_briefs import _frontmatter
 from scripts.sync_skill_resources import SKILL_NAMES, rewrite_router_alias_skill
 
 
@@ -210,14 +211,16 @@ class SyncSkillResourcesTests(unittest.TestCase):
                 )
 
         state_template = (PROJECT_ROOT / "skills" / "gsd-path" / "templates" / "state.md").read_text()
-        self.assertIn("pipeline: gsd-path/v2", state_template)
-        self.assertIn("milestone: null", state_template)
-        self.assertIn("branch: null", state_template)
-        self.assertIn("archive: null", state_template)
+        state_fields, error = _frontmatter(state_template)
+        self.assertIsNone(error)
+        self.assertEqual(state_fields["pipeline"], "gsd-path/v2")
+        for key in ("milestone", "branch", "archive"):
+            self.assertEqual(state_fields[key], "null")
         task_template = (PROJECT_ROOT / "skills" / "gsd-path" / "templates" / "task.md").read_text()
-        self.assertIn("base: null", task_template)
-        self.assertIn("worktree: null", task_template)
-        self.assertIn("task_branch: null", task_template)
+        task_fields, error = _frontmatter(task_template)
+        self.assertIsNone(error)
+        for key in ("base", "worktree", "task_branch"):
+            self.assertEqual(task_fields[key], "null")
         final_review = (
             PROJECT_ROOT / "skills" / "gsd-path" / "templates" / "final-review.md"
         ).read_text()

@@ -180,7 +180,8 @@ test("discussion skill is installed and invocable", async () => {
 test("install refuses to replace an unrelated path skill", async () => {
   const target = path.join(root, "foreign-path", "skills");
   const foreign = path.join(target, "path");
-  fs.mkdirSync(foreign, { recursive: true });
+  fs.mkdirSync(path.join(foreign, "scripts"), { recursive: true });
+  fs.writeFileSync(path.join(foreign, "scripts", "pipeline_state.py"), "");
   fs.writeFileSync(path.join(foreign, "SKILL.md"), "---\nname: path\n---\nforeign\n");
 
   await assert.rejects(
@@ -190,11 +191,27 @@ test("install refuses to replace an unrelated path skill", async () => {
   assert.equal(fs.readFileSync(path.join(foreign, "SKILL.md"), "utf8"), "---\nname: path\n---\nforeign\n");
 });
 
+test("install refuses path alias with invalid version", async () => {
+  const target = path.join(root, "invalid-path-version", "skills");
+  const foreign = path.join(target, "path");
+  fs.mkdirSync(path.join(foreign, "scripts"), { recursive: true });
+  fs.writeFileSync(path.join(foreign, "scripts", "pipeline_state.py"), "");
+  for (const version of ["", "release", "1..0", "1.0.beta", "1.0\nforeign"]) {
+    fs.writeFileSync(path.join(foreign, "VERSION"), version);
+    await assert.rejects(
+      () => runInstall([installer.targetPlan("grok", target)]),
+      /unrelated skill/
+    );
+    assert.equal(fs.readFileSync(path.join(foreign, "VERSION"), "utf8"), version);
+  }
+});
+
 test("install replaces an owned path router alias", async () => {
   const target = path.join(root, "owned-path", "skills");
   const owned = path.join(target, "path");
   fs.mkdirSync(path.join(owned, "scripts"), { recursive: true });
   fs.writeFileSync(path.join(owned, "scripts", "pipeline_state.py"), "# previous alias\n");
+  fs.writeFileSync(path.join(owned, "VERSION"), "1.0.0\n");
 
   const results = await runInstall([installer.targetPlan("grok", target)]);
   assert.match(results.join("\n"), /backed up/);

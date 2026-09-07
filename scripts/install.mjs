@@ -458,7 +458,14 @@ function isManagedName(name) {
 }
 
 function isOwnedRouterAlias(skillDir) {
-  return isFile(path.join(skillDir, "scripts", "pipeline_state.py"));
+  if (!isFile(path.join(skillDir, "scripts", "pipeline_state.py"))) return false;
+  const versionFile = path.join(skillDir, "VERSION");
+  if (!isFile(versionFile)) return false;
+  try {
+    return /^[0-9]+(?:\.[0-9]+)+$/.test(fs.readFileSync(versionFile, "utf8").trim());
+  } catch {
+    return false;
+  }
 }
 
 function isManagedInstallEntry(root, name) {
