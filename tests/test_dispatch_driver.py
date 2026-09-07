@@ -980,7 +980,7 @@ class DispatchDriverTests(unittest.TestCase):
         self.assertIn("— found: wrong output, src/app.py:1", text)
         self.assertEqual(text.count("1. The demo command prints hello."), 1)
         self.assertNotIn("2. The demo command prints hello.", text)
-        self.assertEqual(dispatch_driver._common.task_verify_command(text), "set -e\npython3 src/app.py")
+        self.assertEqual(dispatch_driver._common.task_verify_command(text), "set -e\n(\npython3 src/app.py\n)")
         self.assertEqual(receipt["plan_wave"], 2)
         self.assertIn("## Wave 2 — fix wave 1 cycle 1 review findings", (root / ".project/plan/PLAN.md").read_text())
         self.assertEqual(self.subjects(root)[0], "build: record wave 1 cycle 1 review and fix tasks")
@@ -1121,8 +1121,11 @@ class DispatchDriverTests(unittest.TestCase):
         self.assertEqual(receipt["status"], "created", receipt)
         command = dispatch_driver._common.task_verify_command((root / receipt["created"][0]["path"]).read_text())
         texts = dispatch_driver.contracts._task_texts(root, ".project")
-        self.assertEqual(command.splitlines(), ["set -e", *[
-            dispatch_driver._common.task_verify_command(texts[source]) for source in ("T001", "T002")]])
+        self.assertEqual(command.splitlines(), ["set -e", *[line for source in ("T001", "T002") for line in
+            ("(", dispatch_driver._common.task_verify_command(texts[source]), ")")]])
+        # A source Verify ending in `exit 0` ends only its own subshell; the next one still runs.
+        probe = subprocess.run(["bash", "-c", "set -e\n(\ntrue; exit 0\n)\n(\nexit 7\n)"], capture_output=True)
+        self.assertEqual(probe.returncode, 7)
         (root / "tests/test_app.py").write_text("raise SystemExit(7)\n")
         result = subprocess.run(["bash", "-c", command], cwd=root, capture_output=True, text=True)
         self.assertEqual(result.returncode, 7, result)
@@ -1163,6 +1166,73 @@ class DispatchDriverTests(unittest.TestCase):
         self.assertEqual(receipt["status"], "skipped", receipt)
         skipped = root / ".project/review/wave-1.cycle1.panel.skipped.json"
         self.assertEqual(json.loads(skipped.read_text())["status"], "skipped")
+        self.assertEqual(self.subjects(root)[0], "build: record wave 1 cycle 1 review")
+
+    def test_panel_blocks_when_inputs_changed_after_the_review_base(self) -> None:
+        root = self.root
+        self.fixture(root)
+        self.set_panel(root, "gpt")
+        self.assertEqual(self.round(root, "--wait", "60")["status"], "done")
+        self.assertEqual(self.review(root, "--wait", "60")["status"], "pass")
+        head = self.head(root)
+        with (root / ".project/intent/INTENT.md").open("a") as handle:
+            handle.write("\n7. An unreviewed criterion.\n")
+        receipt = self.panel(root, "--wait", "60")
+        self.assertEqual(receipt["status"], "blocked", receipt)
+        self.assertIn("inputs changed after the review base", receipt["blocked"][0]["reason"])
+        self.assertEqual(self.head(root), head)
+        self.assertIsNone(receipt.get("checkpoint"))
+        self.assertFalse((root / ".project/review/wave-1.cycle1.panel.md").exists())
+
+    def test_panel_skipped_retry_blocks_after_a_post_review_intent_commit(self) -> None:
+        root = self.root
+        self.fixture(root)
+        self.set_panel(root, "detected")
+        self.assertEqual(self.round(root, "--wait", "60")["status"], "done")
+        self.assertEqual(self.review(root, "--wait", "60")["status"], "pass")
+        skipped = root / ".project/review/wave-1.cycle1.panel.skipped.json"
+        saved = json.dumps({"status": "skipped", "mode": "detected", "selected": []})
+        skipped.write_text(saved)
+        with (root / ".project/intent/INTENT.md").open("a") as handle:
+            handle.write("\n7. An unreviewed criterion.\n")
+        run_git(root, "add", ".project/intent/INTENT.md")
+        run_git(root, "commit", "-m", "intent: add criterion after review")
+        head = self.head(root)
+        receipt = self.panel(root, "--wait", "60", advertised="claude-opus")
+        self.assertEqual(receipt["status"], "blocked", receipt)
+        self.assertEqual(receipt["blocked"][0]["reason"],
+                         "inputs changed after the review base; run a new cycle")
+        self.assertIsNone(receipt.get("checkpoint"))
+        self.assertEqual(self.head(root), head)
+        self.assertEqual(skipped.read_text(), saved)
+
+    def test_panel_rejects_a_null_skipped_receipt(self) -> None:
+        root = self.root
+        self.fixture(root)
+        self.set_panel(root, "detected")
+        self.assertEqual(self.round(root, "--wait", "60")["status"], "done")
+        self.assertEqual(self.review(root, "--wait", "60")["status"], "pass")
+        head = self.head(root)
+        skipped = root / ".project/review/wave-1.cycle1.panel.skipped.json"
+        skipped.write_text("null")
+        receipt = self.panel(root, "--wait", "60", advertised="claude-opus")
+        self.assertEqual(receipt["status"], "blocked", receipt)
+        self.assertEqual(receipt["blocked"][0]["reason"],
+                         "panel skipped receipt exists but is not a skipped receipt")
+        self.assertIsNone(receipt.get("checkpoint"))
+        self.assertEqual(self.head(root), head)
+        self.assertEqual(skipped.read_text(), "null")
+
+    def test_panel_reuses_a_valid_skipped_receipt_after_an_interrupted_checkpoint(self) -> None:
+        root = self.root
+        self.fixture(root)
+        self.set_panel(root, "detected")
+        self.assertEqual(self.round(root, "--wait", "60")["status"], "done")
+        self.assertEqual(self.review(root, "--wait", "60")["status"], "pass")
+        skipped = root / ".project/review/wave-1.cycle1.panel.skipped.json"
+        skipped.write_text(json.dumps({"status": "skipped", "mode": "detected", "selected": []}))
+        receipt = self.panel(root, "--wait", "60", advertised="claude-opus")
+        self.assertEqual(receipt["status"], "skipped", receipt)
         self.assertEqual(self.subjects(root)[0], "build: record wave 1 cycle 1 review")
 
 

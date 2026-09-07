@@ -129,7 +129,17 @@ Resume an `in-flight` panel with `panel` for the same wave and cycle. Before
 the first spawn, it saves the families, slugs, mode, and base in
 `panels/wave-N-cycle-C/roster.json` under the milestone's dispatch directory.
 Missing families resume only at that base. Merge waits for the whole roster
-and successful cleanup; later calls retry pending cleanup. Panel `status`
+and successful cleanup; later calls retry pending cleanup. Before merging or
+checkpointing, HEAD must still equal the recorded base. Only this cycle's
+review files, panel family files, merged panel, and skipped receipt may differ.
+Other changes return `blocked` with
+`inputs changed after the review base; run a new cycle` and no checkpoint.
+A skipped-panel retry uses the base saved in this cycle's review records;
+missing records block with `review base is not recorded; run review first`.
+An interrupted checkpoint's skipped receipt is reused only if it is a JSON
+object with `status: skipped`; other contents block as an invalid receipt.
+The same input guard runs before writing or reusing that receipt and again
+before checkpointing. Panel `status`
 describes panel processing; `review_verdict` holds the canonical verdict.
 A blocked canonical review leaves `checkpoint: null`, including for a skipped
 panel, so `fix-tasks` can checkpoint the blocked review with its repairs.
@@ -141,6 +151,9 @@ covered by other repair tasks in `carried`. Status `created` includes restored
 PLAN rows or pending project bookkeeping; `exists` means nothing was written
 and no project changes needed a checkpoint. Status `none` means no batches
 need work; `escalate` leaves the named decisions with build step 7 and the user.
+Each generated fix-task Verify runs the distinct source Verify commands in
+separate subshells under `set -e`. An `exit 0` or trailing comment in one source
+cannot skip the next source command, and a failing subshell stops the Verify.
 
 ## Token accounting
 
