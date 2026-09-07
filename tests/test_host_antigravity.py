@@ -51,7 +51,7 @@ class AntigravityHostTests(unittest.TestCase):
     def transcript(self, last_status="DONE"):
         path = self.run_root / "child-transcript.jsonl"
         path.write_text(json.dumps({"step_index": 0, "type": "USER_INPUT", "status": "DONE", "content": "brief"}) + "\n"
-                        + json.dumps({"step_index": 1, "type": "PLANNER_RESPONSE", "status": last_status, "content": "done"}) + "\n")
+                        + json.dumps({"step_index": 1, "source": "MODEL", "type": "PLANNER_RESPONSE", "status": last_status, "content": "done"}) + "\n")
         return f"file://{path}"
 
     def test_spec_matches_manifest_facts(self):
@@ -97,6 +97,17 @@ class AntigravityHostTests(unittest.TestCase):
         bound = antigravity.bind_child(self.run_root, "build_T001")
         self.assertEqual(bound["transcript"]["final_content"], "done")
         self.assertIsNone(bound["listing"])
+
+    def test_bind_child_rejects_done_nonfinal_transcript_record(self):
+        log_uri = self.transcript()
+        self.record([INIT, spawn("build_T001", log_uri=log_uri), listing(state="running"), RESULT])
+        for source, record_type in (("USER", "USER_INPUT"), ("USER", "PLANNER_RESPONSE"), ("MODEL", "USER_INPUT")):
+            with self.subTest(source=source, record_type=record_type):
+                self.transcript()
+                with (self.run_root / "child-transcript.jsonl").open("a") as transcript:
+                    transcript.write(json.dumps({"source": source, "type": record_type, "status": "DONE"}) + "\n")
+                with self.assertRaises(LookupError):
+                    antigravity.bind_child(self.run_root, "build_T001")
 
     def test_bind_child_raises_without_spawn_for_role(self):
         self.record([INIT, spawn("build_T002"), listing(), RESULT])

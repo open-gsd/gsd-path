@@ -9,7 +9,8 @@ Live observations (probe: one ``invoke_subagent`` child with Role ``build_probe`
 - Completion reaches the parent as a ``system_message`` step without content; the proof used
   here is the ``manage_subagents`` (``Action: list``) tool output, a text line followed by a
   JSON list whose entries carry ``conversationId`` and ``state`` (``idle`` once finished),
-  and the child's own transcript whose last record is ``status: DONE``.
+  and the child's own transcript whose last record is ``source: MODEL``,
+  ``type: PLANNER_RESPONSE``, ``status: DONE``.
 - ``result`` nests ``conversation_id``, ``response`` and ``usage`` under ``result``.
 
 
@@ -78,14 +79,14 @@ def _listing(output):
 
 
 def _transcript_done(log_uri):
-    """The child's own JSONL transcript when its last record is DONE; None otherwise."""
+    """The child's JSONL transcript ending in a DONE MODEL PLANNER_RESPONSE; None otherwise."""
     uri = str(log_uri or "")
     path = Path(uri[len("file://"):] if uri.startswith("file://") else uri)
     if not path.is_file():
         return None
     steps = list(_events(path.read_text().splitlines()))
     last = steps[-1] if steps else {}
-    if last.get("status") != "DONE":
+    if last.get("source") != "MODEL" or last.get("type") != "PLANNER_RESPONSE" or last.get("status") != "DONE":
         return None
     return {"path": str(path), "steps": len(steps), "last_type": last.get("type"), "final_content": str(last.get("content", ""))[:4000]}
 
@@ -96,7 +97,7 @@ def bind_child(run_root, child_id):
     Spawn evidence: a DONE step with ``tool_name`` ``invoke_subagent`` whose ``subagent_info.subagents``
     entry has ``role == child_id`` and a ``conversation_id``. Completion evidence: a later DONE
     ``manage_subagents`` listing that shows that conversation in a ``DONE_STATES`` state, or the child's
-    transcript (``log_uri``) ending in a DONE record. Anything less raises ``LookupError``.
+    transcript (``log_uri``) ending in a DONE MODEL PLANNER_RESPONSE. Anything less raises ``LookupError``.
     """
     spawns, listings = {}, {}
     for events in sorted(Path(run_root).glob("quick/run-*/events.jsonl")):
@@ -126,7 +127,7 @@ def bind_child(run_root, child_id):
             return {"child_id": child_id, "status": "completed", "child_api": "invoke_subagent", "child_conversation_id": cid,
                     "spawn": spawns[cid], "listing": listings.get(cid), "transcript": transcript}
     raise LookupError(f"invoke_subagent for {child_id!r} spawned {sorted(spawns)} but no manage_subagents listing shows a "
-                      f"{sorted(DONE_STATES)} state and no child transcript ends DONE; wait for the child before finishing")
+                      f"{sorted(DONE_STATES)} state and no child transcript ends in a DONE MODEL PLANNER_RESPONSE; wait for the child before finishing")
 
 
 SPEC = HostSpec(
