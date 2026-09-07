@@ -1,11 +1,11 @@
 {
   "schema": "gsd-path/live-step-evidence/v1",
   "host": "codex",
-  "run_id": "01a0783b-f94a-7770-9e90-d88b6908ffe4",
+  "run_id": "01a078a8-ba6e-76b1-9839-e966690c6688",
   "result": "pass",
   "step": "task-verify",
-  "command": "python3 -B tests/test_count.py",
-  "output": "{\"command\": \"python3 -B tests/test_count.py\", \"commit\": \"22c6dd741cd8f3c87f1bc71bf19caf40ee845d09\", \"recorded_at\": \"2026-09-06T19:53:08+00:00\", \"result\": \"pass\", \"schema\": \"gsd-path/verify-ledger/v2\"}\n{\"command\": \"python3 -B -m unittest discover -s tests -p 'test_*.py' -v\", \"commit\": \"3b7302ea06888cbcb2ded14ae51997cb01e9c83b\", \"execution\": {\"branch\": \"gsd-path-verify/project-verify\", \"exit_code\": 0, \"stderr\": \"test_invalid_arguments (test_count.CountCliTests) ... ok\\ntest_json_output (test_count.CountCliTests) ... ok\\ntest_text_output (test_count.CountCliTests) ... ok\\n\\n----------------------------------------------------------------------\\nRan 3 tests in 0.317s\\n\\nOK\\n\", \"stdout\": \"\", \"worktree\": \"/Users/jeremymcspadden/orca/evaluations/gsd-path-release-codex-1e3a552/quick/repo.gsd-path/verify/project-verify\"}, \"recorded_at\": \"2026-09-06T19:58:05+00:00\", \"result\": \"pass\", \"schema\": \"gsd-path/verify-ledger/v2\"}\n",
-  "verify_artifact": ".project/archive/001-widget-counter/build/verify-ledger.jsonl",
+  "command": "python3 -B tests/test_count_cli.py",
+  "output": "{\"command\": \"python3 -B tests/test_count_cli.py\", \"commit\": \"9a68ab7d98fbd5a0dc2fbaa07f2d536199278f96\", \"recorded_at\": \"2026-09-06T21:53:17+00:00\", \"result\": \"pass\", \"schema\": \"gsd-path/verify-ledger/v2\"}\n{\"command\": \"python3 -B -m unittest discover -s tests -p 'test_*.py' -v\", \"commit\": \"c39be3d0df689ad08f28f04292fd1012ab438f56\", \"execution\": {\"branch\": \"gsd-path-verify/project-verify\", \"exit_code\": 0, \"stderr\": \"test_default_text (test_count_cli.CountCliTests) ... ok\\ntest_invalid_arguments (test_count_cli.CountCliTests) ... ok\\ntest_json_default (test_count_cli.CountCliTests) ... ok\\ntest_json_on_either_side_of_signed_count (test_count_cli.CountCliTests) ... ok\\ntest_signed_text_counts (test_count_cli.CountCliTests) ... ok\\n\\n----------------------------------------------------------------------\\nRan 5 tests in 0.401s\\n\\nOK\\n\", \"stdout\": \"\", \"worktree\": \"/Users/jeremymcspadden/orca/evaluations/gsd-path-release-codex-3c32f3d/quick/repo.gsd-path/verify/project-verify\"}, \"recorded_at\": \"2026-09-06T21:59:10+00:00\", \"result\": \"pass\", \"schema\": \"gsd-path/verify-ledger/v2\"}\n",
+  "verify_artifact": ".project/archive/001-widget-counter-cli/build/verify-ledger.jsonl",
   "verify_exit_code": 0
 }

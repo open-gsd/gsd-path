@@ -6,7 +6,7 @@ full-milestone receipt for every host below.
 
 | Host | Install | Native guard installed | Full live milestone | Current posture |
 |---|---|---|---|---|
-| Codex | automated | project hook requires `/hooks` trust; Git hooks guaranteed | regenerating at candidate 3c32f3d: run paused at the ship step by the Codex usage limit (resumes after 21:27 CDT); the tracked codex.md is bound to the earlier candidate 1e3a552 | release blocked until the 3c32f3d receipt lands |
+| Codex | automated | project hook requires `/hooks` trust; Git hooks guaranteed | present: [codex.md](evidence/releases/1.0.0/codex.md), candidate 3c32f3d, 2026-09-06 | receipt passes the validator; release still blocked by the other hosts |
 | Claude Code | automated | fail-closed project hook + Git hooks | present: [claude.md](evidence/releases/1.0.0/claude.md), candidate 3c32f3d, 2026-09-06; native guard probe passed against the fixed guard | receipt passes the validator; release still blocked by the other hosts |
 | Grok | automated | not installed; Git hooks | missing | release blocked |
 | OpenCode | automated | not installed; Git hooks | missing | release blocked |
