@@ -1,9 +1,8 @@
 """Offline checks for the Cursor host module.
 
-Sample lines follow Cursor's documented stream-json schema (system/init, tool_call
-started|completed, result). They were not captured from a live run: the local CLI refused
-headless authentication, so the Task call key and arguments are the inferred shapes named
-in tests/hosts/cursor.py.
+Sample lines follow Cursor's stream-json schema as confirmed by a live run on 2026-09-07
+(system/init, tool_call started|completed, result); the tool_call body carries the
+``toolCallId``/``startedAtMs``/``completedAtMs`` envelope keys beside ``taskToolCall``.
 """
 
 import json
@@ -19,12 +18,14 @@ INIT = json.dumps({"type": "system", "subtype": "init", "apiKeySource": "login",
                    "session_id": SESSION, "model": "composer-2.5", "permissionMode": "default"})
 TASK_STARTED = json.dumps({"type": "tool_call", "subtype": "started", "call_id": "call_7",
                            "tool_call": {"taskToolCall": {"args": {"description": "build_T001", "subagent_type": "gsd-path",
-                                                                   "prompt": "Read /abs/role.md then implement T001."}}},
+                                                                   "prompt": "Read /abs/role.md then implement T001."}},
+                                         "toolCallId": "call_7", "startedAtMs": "1"},
                            "session_id": SESSION})
 TASK_COMPLETED = json.dumps({"type": "tool_call", "subtype": "completed", "call_id": "call_7",
                              "tool_call": {"taskToolCall": {"args": {"description": "build_T001", "subagent_type": "gsd-path",
                                                                      "prompt": "Read /abs/role.md then implement T001."},
-                                                            "result": {"success": {"content": "T001 landed at 1a2b3c4"}}}},
+                                                            "result": {"success": {"content": "T001 landed at 1a2b3c4"}}},
+                                           "toolCallId": "call_7", "startedAtMs": "1", "completedAtMs": "2"},
                              "session_id": SESSION})
 TASK_FAILED = json.dumps({"type": "tool_call", "subtype": "completed", "call_id": "call_7",
                           "tool_call": {"taskToolCall": {"args": {"description": "build_T001", "subagent_type": "gsd-path",
@@ -106,7 +107,7 @@ class CommandAndSpecTests(unittest.TestCase):
         self.assertEqual((SPEC.name, SPEC.install_flag, SPEC.skill_root), ("cursor", "--cursor", ".cursor/skills"))
         self.assertEqual((SPEC.child_api, SPEC.guard_tier), ("Task", "native-fail-closed"))
         self.assertFalse(SPEC.prompt_on_stdin)
-        self.assertFalse(SPEC.verified_live)
+        self.assertTrue(SPEC.verified_live)
         self.assertIn("UNVERIFIED", SPEC.extra["native_guard_probe"])
 
 
