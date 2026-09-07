@@ -59,6 +59,12 @@ class InstallerTests(unittest.TestCase):
             (skill / "references" / "dispatch.md").write_text(
                 "old dispatch\n", encoding="utf-8"
             )
+            if name == "gsd-path" or name in install.ROUTER_ALIASES:
+                (skill / "scripts").mkdir()
+                shutil.copy2(
+                    PROJECT_ROOT / "scripts" / "pipeline_state.py",
+                    skill / "scripts" / "pipeline_state.py",
+                )
         for target in install.TARGETS:
             adapter = self.source / "platforms" / target / "dispatch.md"
             adapter.parent.mkdir(parents=True)

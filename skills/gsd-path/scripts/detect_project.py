@@ -304,7 +304,9 @@ def is_verified_skill_bundle(relative: str, root: Path) -> bool:
     if not parts:
         return False
     name = parts[-1]
-    if not is_skill_bundle_name(name):
+    if not (is_skill_bundle_name(name) or (
+        name.casefold() == "path" and is_verified_installer_bundle(parts)
+    )):
         return False
     if not has_safe_bundle_path(root, parts):
         return False
@@ -321,7 +323,11 @@ def is_managed_pipeline_directory(relative: str, root: Path) -> bool:
 
 def is_verified_skill_bundle_at(relative: str, directory_fd: int) -> bool:
     parts = PurePosixPath(relative).parts
-    if not parts or not is_skill_bundle_name(parts[-1]):
+    if not parts:
+        return False
+    if not (is_skill_bundle_name(parts[-1]) or (
+        parts[-1].casefold() == "path" and is_verified_installer_bundle(parts)
+    )):
         return False
     if is_verified_installer_bundle(parts):
         return True

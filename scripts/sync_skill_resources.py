@@ -64,7 +64,7 @@ def resource_pairs(root: Path) -> Iterable[Tuple[Path, Path]]:
 
 def _skill_files(skill_root: Path) -> Iterable[Path]:
     for directory, names, files in os.walk(skill_root):
-        names[:] = [name for name in names if name not in (".git", "node_modules")]
+        names[:] = [name for name in names if name not in (".git", "node_modules", "__pycache__")]
         for name in files:
             if name == ".DS_Store":
                 continue

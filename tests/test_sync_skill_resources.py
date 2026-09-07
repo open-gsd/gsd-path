@@ -1,5 +1,6 @@
 import json
 import os
+import py_compile
 import re
 import shutil
 import subprocess
@@ -16,6 +17,34 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 class SyncSkillResourcesTests(unittest.TestCase):
+    def test_router_alias_ignores_python_cache(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory) / "bundle"
+            shutil.copytree(
+                PROJECT_ROOT, root,
+                ignore=shutil.ignore_patterns(".git", "__pycache__"),
+            )
+            runtime = root / "skills" / "gsd-path" / "scripts" / "pipeline_state.py"
+            py_compile.compile(
+                str(runtime), cfile=str(runtime.parent / "__pycache__" / "pipeline_state.pyc"),
+                doraise=True,
+            )
+            self.assertTrue((runtime.parent / "__pycache__").is_dir())
+            commands = [
+                [sys.executable, str(root / "scripts" / "sync_skill_resources.py"), "--check"],
+                ["node", "--input-type=module", "-e",
+                 "import { mismatches } from './scripts/install.mjs'; "
+                 "const problems = mismatches(process.cwd()); "
+                 "console.log(JSON.stringify(problems)); process.exit(problems.length ? 1 : 0);"],
+            ]
+            for command in commands:
+                with self.subTest(command=command[0]):
+                    result = subprocess.run(command, cwd=root, text=True, capture_output=True)
+                    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            result = self.run_sync(root)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertFalse((root / "skills" / "path" / "scripts" / "__pycache__").exists())
+
     def run_sync(self, root: Path, *args: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             [sys.executable, str(root / "scripts" / "sync_skill_resources.py"), "--root", str(root), *args],

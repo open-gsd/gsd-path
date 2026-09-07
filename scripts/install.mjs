@@ -684,7 +684,9 @@ export function mismatches(root) {
     const aliasDirectory = path.join(root, "skills", alias);
     walk(canonicalDirectory, (candidate, entry) => {
       if (!entry.isFile() || path.basename(candidate) === ".DS_Store") return;
-      pairs.push([candidate, path.join(aliasDirectory, path.relative(canonicalDirectory, candidate))]);
+      const relative = path.relative(canonicalDirectory, candidate);
+      if (relative.split(path.sep).includes("__pycache__")) return;
+      pairs.push([candidate, path.join(aliasDirectory, relative)]);
     });
   }
   for (const [source, destination] of pairs) {
