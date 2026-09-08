@@ -121,6 +121,28 @@ class GuardHookTests(unittest.TestCase):
                     "tool_input": {"command": helper + suffix},
                 })
 
+    def test_bundled_helper_rejects_shell_redirections(self):
+        archive = ".project/archive/001-x/MANIFEST.md"
+        for suffix in (
+            f"&> {archive}",
+            f"&>> {archive}",
+            f">& {archive}",
+            f"2> {archive}",
+            f"1>> {archive}",
+            f"< {archive}",
+            f"--archive {archive} 2>&1",
+            f"--archive {archive} <&0",
+            f"--archive {archive} > out.txt",
+            f"--archive {archive} >| out.txt",
+        ):
+            with self.subTest(suffix=suffix):
+                self.assert_denied({
+                    "tool_name": "Bash",
+                    "tool_input": {
+                        "command": f"python3 scripts/pipeline_state.py --help {suffix}",
+                    },
+                })
+
     def test_bundled_helper_rejects_identical_copy_outside_runtime(self):
         for name in ("pipeline_state.py", "archive_milestone.py"):
             with self.subTest(helper=name), tempfile.TemporaryDirectory() as temporary:

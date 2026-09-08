@@ -1680,7 +1680,10 @@ def bundled_helper_invocation(command, tokens, working_directories):
     segments = list(command_segments(tokens))
     if len(segments) != 1 or segments[0] != tokens:
         return False
-    if any(token and set(token) <= set("<>") for token in tokens):
+    if any(
+        re.fullmatch(r"[<>&|]*[<>][<>&|]*|[0-9]+(?:[<>]|&>).*", token)
+        for token in tokens
+    ):
         return False
     _, substitutions = split_command_substitutions(command)
     if substitutions or wrapped_command_tokens(segments[0]) is not None:
