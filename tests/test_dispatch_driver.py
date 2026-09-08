@@ -1239,6 +1239,35 @@ class DispatchDriverTests(unittest.TestCase):
         self.assertTrue((root / ".project/build/evidence.json").is_file())
         self.assertEqual(run_git(root, "status", "--porcelain").stdout, "")
 
+    def test_complete_recovers_build_done_after_passing_review(self) -> None:
+        root = self.root
+        self.fixture(root)
+        self.assertEqual(self.round(root, "--wait", "60")["status"], "done")
+        self.assertEqual(self.review(root, "--wait", "60")["status"], "pass")
+        state, _, _ = pipeline_state.load_state(root)
+        pipeline_state.transition_state(root, state.json(), {"status": "done"}, "build done")
+        run_git(root, "commit", "-qam", "fixture: crash-left build done")
+        receipt = self.driver(root, "complete")
+        self.assertEqual(receipt["status"], "done", receipt)
+        self.assertEqual(receipt["review_cycles"], [1])
+        self.assertEqual(self.state(root), "ship/active")
+        self.assertEqual(self.subjects(root)[0], "build: complete milestone")
+        self.assertTrue((root / ".project/build/evidence.json").is_file())
+        self.assertEqual(run_git(root, "status", "--porcelain").stdout, "")
+
+    def test_build_done_rejects_dispatch_and_unfinished_completion(self) -> None:
+        root = self.root
+        head = self.fixture(root, state=("build", "done"))
+        with self.assertRaises(dispatch_driver.build_state.BuildStateError) as raised:
+            dispatch_driver.build_state.ready(str(root))
+        self.assertEqual(raised.exception.code, "invalid-build-state")
+        receipt = self.driver(root, "complete")
+        self.assertEqual(receipt["status"], "blocked", receipt)
+        self.assertEqual(receipt["blocked"][0]["reason"], "wave 1 is still unfinished")
+        self.assertEqual(self.state(root), "build/done")
+        self.assertEqual(self.head(root), head)
+        self.assertEqual(run_git(root, "status", "--porcelain").stdout, "")
+
     def test_fix_tasks_escalates_structural_blockers(self) -> None:
         root = self.root
         self.fixture(root)

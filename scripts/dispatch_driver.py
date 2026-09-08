@@ -1619,7 +1619,7 @@ def complete(primary: Path, options: argparse.Namespace) -> Dict[str, object]:
         state, _, _ = pipeline_state.load_state(primary, options.project_dir)
         if (state.phase, state.status) not in (("build", "active"), ("build", "done")):
             raise DriverStop(f"completion requires build/active, not {state.phase}/{state.status}")
-        ready = build_state.ready(str(primary), options.project_dir)
+        ready = build_state.ready(str(primary), options.project_dir, allow_done=True)
         receipt["steps"].append({"script": "build_state.py ready", "result": ready})
         if ready["current_wave"] is not None:
             raise DriverStop(f"wave {ready['current_wave']} is still unfinished")
