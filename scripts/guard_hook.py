@@ -1673,7 +1673,7 @@ def bundled_helper_invocation(command, tokens, working_directories):
     """Allow one plain ``python[3] [-B] <script>`` from the guard-owned runtime.
 
     The interpreter token must be exactly python or python3, and the script
-    operand is the exact parsed token, with unresolved expansions refused.
+    operand is the exact parsed token, with expansions and parent traversal refused.
     The resolved helper must be a regular file inside runtime/ beside this guard,
     or beside the guard itself in the repository layout. Resolve only in supplied
     tool working directories, falling back to cwd when none are supplied.
@@ -1697,7 +1697,11 @@ def bundled_helper_invocation(command, tokens, working_directories):
     if not rest:
         return False
     operand = rest[0]
-    if operand.startswith("~") or any(char in operand for char in "$`*?[]"):
+    if (
+        operand.startswith("~")
+        or any(char in operand for char in "$`*?[]{}")
+        or ".." in operand.split("/")
+    ):
         return False
     here = Path(__file__).resolve().parent
     runtime = here / "runtime"

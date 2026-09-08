@@ -199,6 +199,9 @@ class GuardHookTests(unittest.TestCase):
             name = "pipeline_state.py"
             shutil.copyfile(SCRIPT.parent / name, runtime / name)
             shutil.copyfile(SCRIPT.parent / name, runtime.parent / name)
+            brace_directory = runtime / "{child,child}"
+            brace_directory.mkdir()
+            shutil.copyfile(SCRIPT.parent / name, brace_directory / name)
             with mock.patch.object(guard_hook, "__file__", str(runtime.parent / "guard_hook.py")):
                 for operand in (
                     f".gsd-path/runtime/$X/../{name}",
@@ -207,6 +210,10 @@ class GuardHookTests(unittest.TestCase):
                     f".gsd-path/runtime/?/../{name}",
                     f"~/.gsd-path/runtime/{name}",
                     f".gsd-path/runtime//../{name}",
+                    f".gsd-path/runtime/{{..,..}}/../{name}",
+                    f".gsd-path/runtime/{{child,child}}/{name}",
+                    f".gsd-path/runtime/../.gsd-path/runtime/{name}",
+                    f".gsd-path/runtime/../runtime/{name}",
                 ):
                     with self.subTest(operand=operand):
                         self.assert_denied({
