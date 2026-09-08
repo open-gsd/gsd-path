@@ -152,7 +152,11 @@ python3 <absolute dispatch_driver.py> round --repo <absolute primary> --wave <N>
   [--child-timeout <owner seconds>]
 ```
 
-Act only on its receipt: `done` means every wave task landed — run
+`round` makes the entry transition itself (`plan/done` or `build/blocked` to
+`build/active`, event `build started`, checkpointed as `build: start
+milestone`) and sets `build/blocked` on a dependency deadlock or a blocked
+recovery; every other stop stays with the parent. Act only on its receipt:
+`done` means every wave task landed — run
 `review --wave <N> --cycle <C> --child-command '<owner command>' [--wait
 <owner seconds>]` for step 6 at `full` or `deep` depth: it records the clean
 review base, creates one verify sidecar per lens, briefs one reviewer child
@@ -632,7 +636,10 @@ dispatch contract and perform steps 1–5 by hand.
 
 ## Completion
 
-After every wave passes, record exact full HEAD and prove every task landed
+`complete --repo <absolute primary>` runs this section when every wave landed
+and each wave's latest review cycle validates as `pass`: landing proof, the
+`ship/active` transition, and its checkpoint. By hand:
+after every wave passes, record exact full HEAD and prove every task landed
 with `python3 <absolute workflow_run.py> build-evidence --repo <absolute primary>
 --expected-head <HEAD>`. The runner writes the wrapped `verify-landed` result
 to `.project/build/evidence.json`; that path is the only landing-proof

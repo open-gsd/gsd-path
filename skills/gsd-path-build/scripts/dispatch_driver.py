@@ -30,13 +30,17 @@ from pathlib import Path
 from typing import BinaryIO, Callable, Dict, List, Optional
 
 try:
-    from scripts import _common, build_state, isolation, review_findings, review_panel, workflow_run
+    from scripts import (_common, archive_milestone, build_state, discussion_validate, isolation,
+                         pipeline_state, review_findings, review_panel, workflow_run)
     from scripts import check_handoffs as contracts
 except ImportError:  # bundled copy inside a skill's scripts directory
     import _common
+    import archive_milestone
     import build_state
     import check_handoffs as contracts
+    import discussion_validate
     import isolation
+    import pipeline_state
     import review_findings
     import review_panel
     import workflow_run
@@ -65,7 +69,12 @@ class DriverStop(RuntimeError):
 
 
 STOP_ERRORS = (DriverStop, isolation.IsolationError, build_state.BuildStateError,
-               contracts.HandoffError, review_findings.ReviewFindingsError)
+               contracts.HandoffError, review_findings.ReviewFindingsError,
+               pipeline_state.PipelineStateError, archive_milestone.ArchiveError)
+RECOVERY_BLOCKED = "recovery blocked"
+# The stops the build contract answers with build/blocked when the round raises them (steps 1 and 2);
+# the same stops from review, panel, or skeptics stay with the parent.
+BLOCKING_STOPS = {"dependency-deadlock": "dependency deadlock", RECOVERY_BLOCKED: "blocked recovery"}
 
 
 def now() -> str:
@@ -393,7 +402,7 @@ def recover_report(primary: Path, project_dir: str, receipt: Dict[str, object]) 
     report = isolation.recover(primary, Path(project_dir) / "tasks")
     receipt["steps"].append({"script": "isolation.py recover", "result": report})
     if report["verdict"] == "block":
-        raise DriverStop("recovery blocked", recover=report)
+        raise DriverStop(RECOVERY_BLOCKED, recover=report)
     return report
 
 
@@ -404,6 +413,23 @@ def checkpoint_project(primary: Path, receipt: Dict[str, object], subject: str, 
     result = isolation.checkpoint(primary, isolation.current_sha(primary), subject, body, [".project"])
     receipt["steps"].append({"script": "isolation.py checkpoint", "result": result})
     return str(result.get("commit"))
+
+
+def transition(primary: Path, project_dir: str, receipt: Dict[str, object], state: pipeline_state.PipelineState,
+               changes: Dict[str, str], event: str) -> None:
+    """Move STATE.md through pipeline_state, expecting exactly the state the caller inspected."""
+    result = pipeline_state.transition_state(primary, state.json(), changes, event, project_dir)
+    receipt["steps"].append({"script": "pipeline_state.py transition", "result": result})
+
+
+def run_step(primary: Path, project_dir: str, receipt: Dict[str, object], action: str, head: str,
+             task_id: Optional[str] = None, round_size: Optional[int] = None) -> List[Dict[str, object]]:
+    """One workflow_run action; its steps join the receipt and a blocked result is a stop."""
+    result = workflow_run.run_workflow(primary, action, project_dir, head, task_id, round_size)
+    receipt["steps"].extend(result["steps"])
+    if result["status"] != "complete":
+        raise DriverStop(f"{action} {task_id or ''}: {result['reason']}".rstrip())
+    return result["steps"]
 
 
 def wave_tasks(primary: Path, project_dir: str, wave: int, receipt: Dict[str, object]) -> List[Dict[str, object]]:
@@ -445,6 +471,33 @@ class Round:
             "status": None, "wave": getattr(options, "wave", None), "landed": [],
             "dispatched": [], "in_flight": [], "questions": [], "blocked": [], "steps": [],
         }
+
+    # state transitions ----------------------------------------------------
+
+    def enter(self) -> None:
+        """The contract's checkpointed entry from plan/done, or recovery from build/blocked."""
+        state, _, _ = pipeline_state.load_state(self.primary, self.project_dir)
+        if (state.phase, state.status) not in (("plan", "done"), ("build", "blocked")):
+            return
+        transition(self.primary, self.project_dir, self.receipt, state, {"phase": "build", "status": "active"},
+                   "build started")
+        checkpoint_project(self.primary, self.receipt, "build: start milestone",
+                           f"Why: enter build from {state.phase}/{state.status} with the initial .project artifacts")
+
+    def block(self) -> None:
+        """Set build/blocked when the stop just recorded is one the contract names, and checkpoint it."""
+        last = self.receipt["blocked"][-1]
+        cause = BLOCKING_STOPS.get(last.get("code")) or BLOCKING_STOPS.get(last["reason"])
+        if cause is None:
+            return
+        try:
+            state, _, _ = pipeline_state.load_state(self.primary, self.project_dir)
+            transition(self.primary, self.project_dir, self.receipt, state, {"status": "blocked"},
+                       f"build blocked: {cause}")
+            self.receipt["checkpoint"] = checkpoint_project(
+                self.primary, self.receipt, f"build: record {cause}", f"Why: {last['reason']}")
+        except STOP_ERRORS as inner:
+            self.receipt["blocked"].append({"reason": str(inner), "helper": "pipeline_state.py transition"})
 
     # token budget ---------------------------------------------------------
 
@@ -671,16 +724,12 @@ class Round:
 
     def runner(self, action: str, head: str, task_id: Optional[str] = None,
                round_size: Optional[int] = None) -> List[Dict[str, object]]:
-        result = workflow_run.run_workflow(self.primary, action, self.project_dir, head,
-                                           task_id, round_size)
-        self.receipt["steps"].extend(result["steps"])
-        if result["status"] != "complete":
-            raise DriverStop(f"{action} {task_id or ''}: {result['reason']}".rstrip())
-        return result["steps"]
+        return run_step(self.primary, self.project_dir, self.receipt, action, head, task_id, round_size)
 
     def run(self) -> Dict[str, object]:
         deadline = time.monotonic() + self.options.wait if self.options.wait else None
         try:
+            self.enter()
             self.configure_budget()
             self.recover()
             changed = True
@@ -701,7 +750,9 @@ class Round:
                     return self.receipt
                 time.sleep(POLL_SECONDS)
         except STOP_ERRORS as error:
-            return stop(self.receipt, error)
+            stop(self.receipt, error)
+            self.block()
+            return self.receipt
 
 
 # --- the wave review -------------------------------------------------------
@@ -1558,6 +1609,36 @@ Heavy: {'yes' if heavy else 'no'}
         return stop(receipt, error)
 
 
+def complete(primary: Path, options: argparse.Namespace) -> Dict[str, object]:
+    """Completion: every wave landed and its last review cycle passed; landing proof; ship/active; checkpoint."""
+    receipt: Dict[str, object] = {"status": None, "blocked": [], "steps": []}
+    try:
+        dirty = sorted(isolation.uncommitted_paths(primary))
+        if dirty:
+            raise DriverStop("completion requires a clean primary", paths=dirty)
+        state, _, _ = pipeline_state.load_state(primary, options.project_dir)
+        if (state.phase, state.status) not in (("build", "active"), ("build", "done")):
+            raise DriverStop(f"completion requires build/active, not {state.phase}/{state.status}")
+        ready = build_state.ready(str(primary), options.project_dir)
+        receipt["steps"].append({"script": "build_state.py ready", "result": ready})
+        if ready["current_wave"] is not None:
+            raise DriverStop(f"wave {ready['current_wave']} is still unfinished")
+        # The archive-time check is the one definition of "every wave passed": contiguous cycles,
+        # passing last-cycle wave and task verdicts, and the panel and skeptic artifacts each cycle owes.
+        receipt["review_cycles"] = list(discussion_validate.review_cycle_counts(primary / options.project_dir))
+        head = isolation.current_sha(primary)
+        run_step(primary, options.project_dir, receipt, "build-evidence", head)
+        transition(primary, options.project_dir, receipt, state, {"phase": "ship", "status": "active"},
+                   "build done; final review pending")
+        receipt["checkpoint"] = checkpoint_project(
+            primary, receipt, "build: complete milestone",
+            f"Why: every wave landed and its latest review passed; landing proof recorded\nBase: {head}")
+        receipt["status"] = "done"
+        return receipt
+    except STOP_ERRORS as error:
+        return stop(receipt, error)
+
+
 # --- other actions ---------------------------------------------------------
 
 
@@ -1643,6 +1724,10 @@ def main(argv=None) -> int:
     fix_parser.add_argument("--project-dir", default=".project")
     fix_parser.add_argument("--wave", type=int, required=True)
     fix_parser.add_argument("--cycle", type=positive_int, required=True)
+    complete_parser = commands.add_parser(
+        "complete", help="prove every wave landed and passed review, record landing evidence, enter ship")
+    complete_parser.add_argument("--repo", type=Path, required=True)
+    complete_parser.add_argument("--project-dir", default=".project")
     finish_parser = commands.add_parser(
         "finish", help="verify, land, record, and retire one in-progress task whose coder has returned")
     finish_parser.add_argument("--repo", type=Path, required=True)
@@ -1663,7 +1748,7 @@ def main(argv=None) -> int:
     primary = arguments.repo.resolve()
     lock = None
     try:
-        if arguments.action in ("round", "review", "panel", "skeptics", "fix-tasks", "finish", "answer"):
+        if arguments.action != "status":
             lock = acquire_lock(primary)
         if arguments.action == "panel":
             require_files(parser, arguments, "role_brief", "template")
@@ -1673,6 +1758,8 @@ def main(argv=None) -> int:
             result = Skeptics(primary, arguments).run()
         elif arguments.action == "fix-tasks":
             result = fix_tasks(primary, arguments)
+        elif arguments.action == "complete":
+            result = complete(primary, arguments)
         elif arguments.action == "review":
             require_files(parser, arguments, "role_brief", "template",
                           *(["repair_evidence"] if arguments.repair_evidence is not None else []))
