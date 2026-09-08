@@ -4,7 +4,9 @@
 Reads one hook event as JSON on stdin and enforces the two pipeline
 invariants a prompt contract cannot guarantee:
 
-- committed archives under .project/archive/ are read-only, and
+- committed archives under .project/archive/ are read-only (only the bundled
+  helpers pipeline_state.py and archive_milestone.py in the guard-owned runtime
+  directory may name that path in a single plain python or python3 command), and
 - destructive git commands that break build recovery are refused.
 
 Allow: exit 0 with no output, except Cursor (whose fail-closed hooks treat
@@ -116,7 +118,7 @@ SHELL_ASSIGNMENT_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 
 ARCHIVE_REASON = (
     "committed GSD Path archives under .project/archive/ are read-only; "
-    "only the bundled archive helper may write there during a ship transaction"
+    "only the bundled pipeline helpers may write there during a ship transaction"
 )
 ARCHIVE_MARKER = ".project/archive"
 INVALID_INPUT_REASON = "GSD Path guard could not validate the tool request"
@@ -1664,6 +1666,64 @@ def destructive_git_reason(tokens, resolved_aliases=frozenset()):
     return None
 
 
+PIPELINE_HELPERS = frozenset({"pipeline_state.py", "archive_milestone.py"})
+
+
+def bundled_helper_invocation(command, tokens, working_directories):
+    """Allow one plain ``python[3] [-B] <script>`` from the guard-owned runtime.
+
+    The interpreter token must be exactly python or python3, and the script
+    operand is the exact parsed token, with expansions and parent traversal refused.
+    The resolved helper must be a regular file inside runtime/ beside this guard,
+    or beside the guard itself in the repository layout. Resolve only in supplied
+    tool working directories, falling back to cwd when none are supplied.
+    """
+    if any(char in command for char in "\n\r\\"):
+        return False
+    segments = list(command_segments(tokens))
+    if len(segments) != 1 or segments[0] != tokens:
+        return False
+    if any(
+        re.fullmatch(r"[<>&|]*[<>][<>&|]*|[0-9]+(?:[<>]|&>).*", token)
+        for token in tokens
+    ):
+        return False
+    _, substitutions = split_command_substitutions(command)
+    if substitutions or wrapped_command_tokens(segments[0]) is not None:
+        return False
+    if tokens[0] not in ("python", "python3"):
+        return False
+    rest = tokens[1:]
+    if rest[:1] == ["-B"]:
+        rest = rest[1:]
+    if not rest:
+        return False
+    operand = rest[0]
+    if (
+        operand.startswith("~")
+        or any(char in operand for char in "$`*?[]{}")
+        or ".." in operand.split("/")
+    ):
+        return False
+    here = Path(__file__).resolve().parent
+    runtime = here / "runtime"
+    if not runtime.exists():
+        runtime = here
+    runtime = runtime.resolve()
+    for base in working_directories or [os.getcwd()]:
+        try:
+            script = (Path(base) / operand).resolve()
+            if (
+                script.name in PIPELINE_HELPERS
+                and script.is_relative_to(runtime)
+                and script.is_file()
+            ):
+                return True
+        except (OSError, RuntimeError):
+            continue
+    return False
+
+
 def archive_command_is_read_only(command, tokens, archive_context=False):
     if archive_context and AMBIGUOUS_SHELL_SYNTAX.search(command):
         return False
@@ -1812,7 +1872,9 @@ def command_denial(command, working_directories, allow_destructive=True):
             or command_references_archive(tokens, working_directories)
             or unresolved_archive_expansion(outer, tokens, working_directories)
         )
-        if not archive_command_is_read_only(command, tokens, archive_context):
+        if not archive_command_is_read_only(command, tokens, archive_context) and not (
+            archive_context and bundled_helper_invocation(command, tokens, working_directories)
+        ):
             return ARCHIVE_REASON
         reason = destructive_git_reason(tokens) or protected_shell_write_reason(
             tokens, working_directories

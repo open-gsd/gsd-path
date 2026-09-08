@@ -104,6 +104,211 @@ class GuardHookTests(unittest.TestCase):
             }
         )
 
+    def test_bundled_helper_may_name_the_archive(self):
+        helper = 'python3 -B scripts/pipeline_state.py record-shipment --repo . --archive .project/archive/001-x --event "archive preflight passed; shipment recorded"'
+        self.assert_allowed({"tool_name": "Bash", "tool_input": {"command": helper}})
+        for suffix in (
+            " && git commit -qm ship",
+            "; git commit -qm ship",
+            " | cat",
+            " &",
+            " > receipt.txt",
+            " $(printf shipped)",
+            ' --event "two\nlines"',
+            ' --event "two\rlines"',
+            r" --event sh\ipped",
+        ):
+            with self.subTest(suffix=suffix):
+                self.assert_denied({
+                    "tool_name": "Bash",
+                    "tool_input": {"command": helper + suffix},
+                })
+
+    def test_documented_record_shipment_command_is_allowed(self):
+        ship = SCRIPT.parent.parent / "skills" / "gsd-path" / "SHIP.md"
+        blocks = (
+            section.split("```", 1)[0].strip()
+            for section in ship.read_text(encoding="utf-8").split("```bash\n")[1:]
+        )
+        command = next(
+            block for block in blocks
+            if block.startswith("python3 <absolute pipeline_state.py> record-shipment")
+        )
+        command = (
+            command.replace(
+                "<absolute pipeline_state.py>",
+                shlex.quote(str(SCRIPT.parent / "pipeline_state.py")),
+            )
+            .replace("<root>", ".")
+            .replace("<STATE.archive>", ".project/archive/001-x")
+        )
+        self.assert_allowed({
+            "tool_name": "Bash",
+            "tool_input": {"command": command},
+        })
+
+    def test_bundled_helper_rejects_shell_redirections(self):
+        archive = ".project/archive/001-x/MANIFEST.md"
+        for suffix in (
+            f"&> {archive}",
+            f"&>> {archive}",
+            f">& {archive}",
+            f"2> {archive}",
+            f"1>> {archive}",
+            f"< {archive}",
+            f"--archive {archive} 2>&1",
+            f"--archive {archive} <&0",
+            f"--archive {archive} > out.txt",
+            f"--archive {archive} >| out.txt",
+        ):
+            with self.subTest(suffix=suffix):
+                self.assert_denied({
+                    "tool_name": "Bash",
+                    "tool_input": {
+                        "command": f"python3 scripts/pipeline_state.py --help {suffix}",
+                    },
+                })
+
+    def test_bundled_helper_rejects_identical_copy_outside_runtime(self):
+        for name in ("pipeline_state.py", "archive_milestone.py"):
+            with self.subTest(helper=name), tempfile.TemporaryDirectory() as temporary:
+                helper = Path(temporary) / name
+                shutil.copyfile(SCRIPT.parent / name, helper)
+                self.assert_denied({
+                    "tool_name": "Bash",
+                    "tool_input": {
+                        "command": f"python3 -B {helper} --archive .project/archive/001-x",
+                    },
+                })
+
+    def test_bundled_helper_rejects_interpreter_paths(self):
+        for interpreter in ("tools/python3", "/usr/bin/python3", "./python", "Python3"):
+            with self.subTest(interpreter=interpreter):
+                self.assert_denied({
+                    "tool_name": "Bash",
+                    "tool_input": {
+                        "command": f"{interpreter} scripts/pipeline_state.py --archive .project/archive/001-x",
+                    },
+                })
+
+    def test_bundled_helper_uses_installed_runtime_directory(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            runtime = root / ".gsd-path" / "runtime"
+            runtime.mkdir(parents=True)
+            with mock.patch.object(guard_hook, "__file__", str(runtime.parent / "guard_hook.py")):
+                for name in ("pipeline_state.py", "archive_milestone.py"):
+                    helper = runtime / name
+                    shutil.copyfile(SCRIPT.parent / name, helper)
+                    shutil.copyfile(helper, runtime.parent / name)
+                    for interpreter in ("python", "python3 -B"):
+                        with self.subTest(helper=name, interpreter=interpreter):
+                            self.assert_allowed({
+                                "tool_name": "Bash",
+                                "tool_input": {
+                                    "command": f"{interpreter} .gsd-path/runtime/{name} --archive .project/archive/001-x",
+                                    "workdir": str(root),
+                                },
+                            })
+                    self.assert_denied({
+                        "tool_name": "Bash",
+                        "tool_input": {
+                            "command": f"python3 {runtime.parent / name} --archive .project/archive/001-x",
+                        },
+                    })
+
+    def test_bundled_helper_rejects_script_expansions(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            runtime = root / ".gsd-path" / "runtime"
+            runtime.mkdir(parents=True)
+            name = "pipeline_state.py"
+            shutil.copyfile(SCRIPT.parent / name, runtime / name)
+            shutil.copyfile(SCRIPT.parent / name, runtime.parent / name)
+            brace_directory = runtime / "{child,child}"
+            brace_directory.mkdir()
+            shutil.copyfile(SCRIPT.parent / name, brace_directory / name)
+            with mock.patch.object(guard_hook, "__file__", str(runtime.parent / "guard_hook.py")):
+                for operand in (
+                    f".gsd-path/runtime/$X/../{name}",
+                    f".gsd-path/runtime/${{X}}/../{name}",
+                    f".gsd-path/runtime/*/../{name}",
+                    f".gsd-path/runtime/?/../{name}",
+                    f"~/.gsd-path/runtime/{name}",
+                    f".gsd-path/runtime//../{name}",
+                    f".gsd-path/runtime/{{..,..}}/../{name}",
+                    f".gsd-path/runtime/{{child,child}}/{name}",
+                    f".gsd-path/runtime/../.gsd-path/runtime/{name}",
+                    f".gsd-path/runtime/../runtime/{name}",
+                ):
+                    with self.subTest(operand=operand):
+                        self.assert_denied({
+                            "tool_name": "Bash",
+                            "tool_input": {
+                                "command": f"python3 {operand} --archive .project/archive/001-x",
+                                "workdir": str(root),
+                            },
+                        })
+
+    def test_bundled_helper_preserves_literal_quotes_in_script_operand(self):
+        self.assert_denied({
+            "tool_name": "Bash",
+            "tool_input": {
+                "command": """python3 "'scripts/pipeline_state.py'" --archive .project/archive/001-x""",
+            },
+        })
+
+    def test_bundled_helper_allows_spaces_and_quotes_in_runtime_path(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            for directory in ("My Project", "Owner's Project", 'A "quoted" project'):
+                root = Path(temporary) / directory
+                runtime = root / ".gsd-path" / "runtime"
+                runtime.mkdir(parents=True)
+                with mock.patch.object(guard_hook, "__file__", str(runtime.parent / "guard_hook.py")):
+                    for name in ("pipeline_state.py", "archive_milestone.py"):
+                        helper = runtime / name
+                        shutil.copyfile(SCRIPT.parent / name, helper)
+                        with self.subTest(directory=directory, helper=name):
+                            self.assert_allowed({
+                                "tool_name": "Bash",
+                                "tool_input": {
+                                    "command": f"python3 -B {shlex.quote(str(helper))} --archive .project/archive/001-x",
+                                    "workdir": str(root),
+                                },
+                            })
+
+    def test_bundled_helper_rejects_continuation_inside_script_path(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "My Project"
+            runtime = root / ".gsd-path" / "runtime"
+            runtime.mkdir(parents=True)
+            helper = runtime / "pipeline_state.py"
+            shutil.copyfile(SCRIPT.parent / helper.name, helper)
+            with mock.patch.object(guard_hook, "__file__", str(runtime.parent / "guard_hook.py")):
+                for continuation in ("\\\n", "\\\r\n"):
+                    operand = str(helper).replace("My Project", f"My{continuation}Project")
+                    with self.subTest(continuation=continuation):
+                        self.assert_denied({
+                            "tool_name": "Bash",
+                            "tool_input": {
+                                "command": f'python3 "{operand}" --archive .project/archive/001-x',
+                                "workdir": str(root),
+                            },
+                        })
+
+    def test_bundled_helper_tool_directory_does_not_fall_back_to_cwd(self):
+        for key in ("working_directory", "workdir", "cwd"):
+            with self.subTest(key=key), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                with mock.patch.object(guard_hook.os, "getcwd", return_value=str(SCRIPT.parent.parent)):
+                    self.assert_denied({
+                        "tool_name": "Bash",
+                        "tool_input": {
+                            "command": "python3 -B scripts/pipeline_state.py --archive .project/archive/001-x",
+                            key: str(root),
+                        },
+                    })
+
     def test_cursor_event_gets_explicit_allow(self):
         payload = {"cursor_version": "2026.09.02-c22c1a3", "hook_event_name": "preToolUse",
                    "tool_name": "Edit", "tool_input": {"file_path": ".project/plan/PLAN.md"}}

@@ -113,7 +113,17 @@ See [UPDATE.md](UPDATE.md).
   target a routing control (`.git`, `.project/STATE.md`, `.project/next`,
   `.gsd-path`) while `.project/STATE.md` exists
 - shell commands that reference the archive unless the whole command is a
-  recognized standalone read
+  recognized standalone read or a single-command invocation of the bundled
+  `pipeline_state.py` / `archive_milestone.py` helper, resolved to a regular file
+  inside the guard-owned `.gsd-path/runtime/` directory (beside `guard_hook.py`
+  in the repository layout), using exactly `python` or `python3` with optional
+  `-B`; supplied tool working directories are authoritative, and cwd is used
+  only when none are supplied. The helper exception refuses chains, pipes,
+  wrappers, substitutions, redirections, and any newline, carriage return, or
+  backslash in the command text. The parsed script path must contain no `$`,
+  backticks, glob characters (`*`, `?`, `[`, `]`), braces, or `..` path components,
+  and must not start with `~`. Quoted spaces in paths and quoted punctuation
+  within arguments, such as the shipment event's semicolon, are allowed
 - deletion or move commands outside a single simple segment, including command
   chains, pipes, newlines, grouping, directory changes, and command substitution
 - deletion or move commands with any argument outside the literal-path character

@@ -174,9 +174,12 @@ so the position is unchanged. Then:
 
 ## Archive transaction
 
-Resolve bundled `scripts/archive_milestone.py` and `scripts/pipeline_state.py`
-to absolute paths and invoke them with `python3`; the files need not be
-executable. The archive helper is the sole MANIFEST.md and integration writer.
+Resolve the project's guard-owned `.gsd-path/runtime/archive_milestone.py` and
+`.gsd-path/runtime/pipeline_state.py` to absolute paths for `prepare`,
+`render-manifest`, `preflight`, `record-shipment`, `validate`, `integrate`, and
+`validate-integrated`. Invoke them with `python3`; the files need not be
+executable. Skill-bundle copies are not the guard's trust anchor, even when
+byte-identical. The archive helper is the sole MANIFEST.md and integration writer.
 The persisted `STATE.archive` field is the transaction identity.
 
 1. Normally require STATE `ship/active`, the bound build branch, and no
@@ -184,8 +187,7 @@ The persisted `STATE.archive` field is the transaction identity.
    `shipped/done` with a concrete target that is absent from HEAD; this is an
    uncommitted transaction and resumes without rewinding STATE. On every
    initial run or retry, run:
-   `python3 <absolute archive_milestone.py> prepare --repo <root> --slug
-   <STATE.milestone>`.
+   `python3 <absolute archive_milestone.py> prepare --repo <root> --slug <STATE.milestone>`.
    The helper strict-loads STATE.md, requires its canonical `gsd-path/M00N`
    branch with `N >= 1` to equal the next collision-free archive sequence,
    rejects any `000-*` archive entry, and writes the exact
@@ -211,8 +213,7 @@ The persisted `STATE.archive` field is the transaction identity.
    persistence applies to program artifacts when present: CHARTER.md,
    ROADMAP.md, and a top-level program SYNTHESIS.md ship in the commit but
    never archive.
-   Then run `python3 <absolute archive_milestone.py> render-manifest --repo
-   <root>`. The helper derives final verdicts, wave/task/cycle counts,
+   Then run `python3 <absolute archive_milestone.py> render-manifest --repo <root>`. The helper derives final verdicts, wave/task/cycle counts,
    carry-forward count, and the exact archive inventory, then atomically
    replaces MANIFEST.md through its deterministic same-directory temporary.
    Never render or edit the manifest directly. `prepare` removes that exact
@@ -240,10 +241,7 @@ The persisted `STATE.archive` field is the transaction identity.
    the current entry to `Status: shipped` with the exact `Archive:` pointer:
 
    ```bash
-   python3 <absolute pipeline_state.py> record-shipment \
-     --repo <root> \
-     --archive <STATE.archive> \
-     --event "archive preflight passed; shipment recorded"
+   python3 <absolute pipeline_state.py> record-shipment --repo <root> --archive <STATE.archive> --event "archive preflight passed; shipment recorded"
    ```
 
    Require the returned state to be `shipped/done` with the unchanged branch
@@ -260,8 +258,7 @@ The persisted `STATE.archive` field is the transaction identity.
    `Reviewed-HEAD: <reviewed SHA>`. M00N and NNN come from STATE.archive.
    There is no untracked-project exception and no product or older-archive
    path may enter this commit.
-6. Immediately run `python3 <absolute archive_milestone.py> validate --repo
-   <root>`. It requires the committed shipped state, exact archive and
+6. Immediately run `python3 <absolute archive_milestone.py> validate --repo <root>`. It requires the committed shipped state, exact archive and
    manifest, valid carry-forward, no active milestone artifacts, a clean
    worktree, exactly one current-milestone commit with the canonical ship
    subject and body in first-parent history, only `.project/` paths in that
@@ -271,8 +268,7 @@ The persisted `STATE.archive` field is the transaction identity.
    SHA, and link the archived MANIFEST.md as the final review surface. The
    milestone is not shipped until integration below passes.
 7. Integrate only after the postcommit `validate` passes, with the recorded
-   ship commit and exact reviewed HEAD unchanged. Run `python3 <absolute
-   archive_milestone.py> integrate --repo <root> --slug <STATE.milestone>`.
+   ship commit and exact reviewed HEAD unchanged. Run `python3 <absolute archive_milestone.py> integrate --repo <root> --slug <STATE.milestone>`.
    This helper validates the ship commit, fetches origin, requires remote
    default `main`, and follows the locked `STATE.integration` mode:
 
@@ -312,8 +308,7 @@ The persisted `STATE.archive` field is the transaction identity.
    A non-zero result blocks; rerun the exact `integrate` command to resume a
    safe partial transaction instead of repairing refs or Git state manually.
    For a later validation recheck with origin network access, run
-   `python3 <absolute archive_milestone.py> validate-integrated --repo <root>
-   --slug <STATE.milestone>`; PR mode fetches and refreshes `origin/main` and
+   `python3 <absolute archive_milestone.py> validate-integrated --repo <root> --slug <STATE.milestone>`; PR mode fetches and refreshes `origin/main` and
    mirrored milestone-tag refs, then revalidates the PR identity, state, merge
    provenance, and live branch and tag publication.
    Report shipped only when the integration result passes.
