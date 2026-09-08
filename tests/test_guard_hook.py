@@ -104,6 +104,21 @@ class GuardHookTests(unittest.TestCase):
             }
         )
 
+    def test_bundled_helper_may_name_the_archive(self):
+        helper = "python3 -B scripts/pipeline_state.py record-shipment --repo . --archive .project/archive/001-x --event shipped"
+        status, output, error = run_guard({"tool_name": "Bash", "tool_input": {"command": helper}})
+        self.assertEqual((status, output, error), (0, "", ""))
+        chained = helper + " && git commit -qm ship"
+        status, output, _ = run_guard({"tool_name": "Bash", "tool_input": {"command": chained}})
+        self.assertEqual((status, json.loads(output)["permissionDecision"]), (2, "deny"))
+        with tempfile.TemporaryDirectory() as temporary:
+            forged = Path(temporary) / "tools" / "pipeline_state.py"
+            forged.parent.mkdir()
+            forged.write_text("import shutil\n")
+            status, output, _ = run_guard({"tool_name": "Bash", "tool_input": {
+                "command": f"python3 -B {forged} record-shipment --archive .project/archive/001-x"}})
+            self.assertEqual((status, json.loads(output)["permissionDecision"]), (2, "deny"))
+
     def test_cursor_event_gets_explicit_allow(self):
         payload = {"cursor_version": "2026.09.02-c22c1a3", "hook_event_name": "preToolUse",
                    "tool_name": "Edit", "tool_input": {"file_path": ".project/plan/PLAN.md"}}

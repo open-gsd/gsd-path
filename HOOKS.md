@@ -113,7 +113,9 @@ See [UPDATE.md](UPDATE.md).
   target a routing control (`.git`, `.project/STATE.md`, `.project/next`,
   `.gsd-path`) while `.project/STATE.md` exists
 - shell commands that reference the archive unless the whole command is a
-  recognized standalone read
+  recognized standalone read or a single-command invocation of the bundled
+  `pipeline_state.py` / `archive_milestone.py` helper (byte-identical to the
+  guard-owned runtime copy)
 - deletion or move commands outside a single simple segment, including command
   chains, pipes, newlines, grouping, directory changes, and command substitution
 - deletion or move commands with any argument outside the literal-path character

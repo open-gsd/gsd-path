@@ -4,7 +4,9 @@
 Reads one hook event as JSON on stdin and enforces the two pipeline
 invariants a prompt contract cannot guarantee:
 
-- committed archives under .project/archive/ are read-only, and
+- committed archives under .project/archive/ are read-only (only the bundled
+  helpers pipeline_state.py and archive_milestone.py may name that path in a
+  shell command), and
 - destructive git commands that break build recovery are refused.
 
 Allow: exit 0 with no output, except Cursor (whose fail-closed hooks treat
@@ -116,7 +118,7 @@ SHELL_ASSIGNMENT_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 
 ARCHIVE_REASON = (
     "committed GSD Path archives under .project/archive/ are read-only; "
-    "only the bundled archive helper may write there during a ship transaction"
+    "only the bundled pipeline helpers may write there during a ship transaction"
 )
 ARCHIVE_MARKER = ".project/archive"
 INVALID_INPUT_REASON = "GSD Path guard could not validate the tool request"
@@ -1664,6 +1666,35 @@ def destructive_git_reason(tokens, resolved_aliases=frozenset()):
     return None
 
 
+PIPELINE_HELPERS = frozenset({"pipeline_state.py", "archive_milestone.py"})
+
+
+def bundled_helper_invocation(command, tokens, working_directories):
+    """``python[3] [-B] <script>`` as one plain command, where ``<script>`` is byte-identical
+    to the guard-owned copy of pipeline_state.py or archive_milestone.py (the bundled
+    helpers own archive writes during a ship transaction)."""
+    if AMBIGUOUS_SHELL_SYNTAX.search(command) or not tokens:
+        return False
+    if tokens[0].replace("\\", "/").rsplit("/", 1)[-1].casefold() not in ("python", "python3"):
+        return False
+    rest = tokens[1:]
+    script = rest[1] if rest[:1] == ["-B"] else (rest[0] if rest else "")
+    name = script.replace("\\", "/").rsplit("/", 1)[-1]
+    if name not in PIPELINE_HELPERS:
+        return False
+    here = Path(__file__).resolve().parent
+    bundled = next((c for c in (here / "runtime" / name, here / name) if c.is_file()), None)
+    if bundled is None:
+        return False
+    for base in [*(str(v) for v in working_directories), os.getcwd()]:
+        try:
+            if (Path(base) / script).resolve().read_bytes() == bundled.read_bytes():
+                return True
+        except OSError:
+            continue
+    return False
+
+
 def archive_command_is_read_only(command, tokens, archive_context=False):
     if archive_context and AMBIGUOUS_SHELL_SYNTAX.search(command):
         return False
@@ -1812,7 +1843,9 @@ def command_denial(command, working_directories, allow_destructive=True):
             or command_references_archive(tokens, working_directories)
             or unresolved_archive_expansion(outer, tokens, working_directories)
         )
-        if not archive_command_is_read_only(command, tokens, archive_context):
+        if not archive_command_is_read_only(command, tokens, archive_context) and not (
+            archive_context and bundled_helper_invocation(command, tokens, working_directories)
+        ):
             return ARCHIVE_REASON
         reason = destructive_git_reason(tokens) or protected_shell_write_reason(
             tokens, working_directories
