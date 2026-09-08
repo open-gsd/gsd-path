@@ -105,7 +105,7 @@ Verify task is in flight at a time, and a round stops at a wave boundary.
 Without `--wait`, the call returns after processing currently available work;
 children continue running. `--capacity`, when supplied, must be positive.
 
-`round`, `review`, `panel`, `skeptics`, `fix-tasks`, `finish`, and `answer` hold a
+Every action except `status` holds a
 repository-scoped advisory lock for the whole call, including `--wait`.
 A concurrent invocation returns `blocked`
 with `another dispatch_driver invocation holds the lock`; wait for the
