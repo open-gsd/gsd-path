@@ -118,7 +118,12 @@ See [UPDATE.md](UPDATE.md).
   inside the guard-owned `.gsd-path/runtime/` directory (beside `guard_hook.py`
   in the repository layout), using exactly `python` or `python3` with optional
   `-B`; supplied tool working directories are authoritative, and cwd is used
-  only when none are supplied
+  only when none are supplied. The helper exception refuses chains, pipes,
+  wrappers, substitutions, redirections, and any newline, carriage return, or
+  backslash in the command text. The parsed script path must contain no `$`,
+  backticks, glob characters (`*`, `?`, `[`, `]`), braces, or `..` path components,
+  and must not start with `~`. Quoted spaces in paths and quoted punctuation
+  within arguments, such as the shipment event's semicolon, are allowed
 - deletion or move commands outside a single simple segment, including command
   chains, pipes, newlines, grouping, directory changes, and command substitution
 - deletion or move commands with any argument outside the literal-path character
