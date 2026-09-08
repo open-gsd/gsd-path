@@ -191,6 +191,32 @@ class GuardHookTests(unittest.TestCase):
                         },
                     })
 
+    def test_bundled_helper_rejects_script_expansions(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            runtime = root / ".gsd-path" / "runtime"
+            runtime.mkdir(parents=True)
+            name = "pipeline_state.py"
+            shutil.copyfile(SCRIPT.parent / name, runtime / name)
+            shutil.copyfile(SCRIPT.parent / name, runtime.parent / name)
+            with mock.patch.object(guard_hook, "__file__", str(runtime.parent / "guard_hook.py")):
+                for operand in (
+                    f".gsd-path/runtime/$X/../{name}",
+                    f".gsd-path/runtime/${{X}}/../{name}",
+                    f".gsd-path/runtime/*/../{name}",
+                    f".gsd-path/runtime/~/../{name}",
+                    f"~/.gsd-path/runtime/{name}",
+                    f".gsd-path/runtime//../{name}",
+                ):
+                    with self.subTest(operand=operand):
+                        self.assert_denied({
+                            "tool_name": "Bash",
+                            "tool_input": {
+                                "command": f"python3 {operand} --archive .project/archive/001-x",
+                                "workdir": str(root),
+                            },
+                        })
+
     def test_bundled_helper_tool_directory_does_not_fall_back_to_cwd(self):
         for key in ("working_directory", "workdir", "cwd"):
             with self.subTest(key=key), tempfile.TemporaryDirectory() as temporary:

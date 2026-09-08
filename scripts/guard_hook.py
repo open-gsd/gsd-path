@@ -1672,7 +1672,8 @@ PIPELINE_HELPERS = frozenset({"pipeline_state.py", "archive_milestone.py"})
 def bundled_helper_invocation(command, tokens, working_directories):
     """Allow one plain ``python[3] [-B] <script>`` from the guard-owned runtime.
 
-    The interpreter token must be exactly python or python3. The resolved helper
+    The interpreter token must be exactly python or python3, and the script
+    operand must pass literal_path before resolution. The resolved helper
     must be a regular file inside runtime/ beside this guard, or beside the guard
     itself in the repository layout. Resolve only in supplied tool working
     directories, falling back to cwd when none are supplied.
@@ -1695,6 +1696,9 @@ def bundled_helper_invocation(command, tokens, working_directories):
         rest = rest[1:]
     if not rest:
         return False
+    operand = literal_path(rest[0])
+    if operand is None:
+        return False
     here = Path(__file__).resolve().parent
     runtime = here / "runtime"
     if not runtime.exists():
@@ -1702,7 +1706,7 @@ def bundled_helper_invocation(command, tokens, working_directories):
     runtime = runtime.resolve()
     for base in working_directories or [os.getcwd()]:
         try:
-            script = (Path(base) / rest[0]).resolve()
+            script = (Path(base) / operand).resolve()
             if (
                 script.name in PIPELINE_HELPERS
                 and script.is_relative_to(runtime)
