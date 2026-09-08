@@ -112,7 +112,7 @@ SPEC = HostSpec(
     ),
     extra={
         "native_guard_probe": (
-            "UNVERIFIED (guard not exercised in the 2026-09-07 live run). Installer writes .cursor/hooks.json {version:1, hooks:{preToolUse:[{command, "
+            "UNVERIFIED (guard not exercised in the 2026-09-07 live run; an allowed call must print an allow object, since Cursor treats empty stdout as a hook failure). Installer writes .cursor/hooks.json {version:1, hooks:{preToolUse:[{command, "
             "matcher:'.*', failClosed:true}]}}. Per the hooks docs, guard_hook.py denies with "
             "{permission:'deny', user_message, agent_message}; with failClosed the edit is also blocked on hook "
             "crash/timeout/invalid JSON. Expected headless evidence: a tool_call completed event for the edit tool "

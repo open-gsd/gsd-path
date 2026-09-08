@@ -104,6 +104,12 @@ class GuardHookTests(unittest.TestCase):
             }
         )
 
+    def test_cursor_event_gets_explicit_allow(self):
+        payload = {"cursor_version": "2026.09.02-c22c1a3", "hook_event_name": "preToolUse",
+                   "tool_name": "Edit", "tool_input": {"file_path": ".project/plan/PLAN.md"}}
+        status, output, error = run_guard(payload)
+        self.assertEqual((status, json.loads(output), error), (0, {"permission": "allow"}, ""))
+
     def test_plain_prompt_denies_product_write_outside_build(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

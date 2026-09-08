@@ -7,7 +7,9 @@ invariants a prompt contract cannot guarantee:
 - committed archives under .project/archive/ are read-only, and
 - destructive git commands that break build recovery are refused.
 
-Allow: exit 0 with no output. Deny: exit 2, a one-line reason on stderr,
+Allow: exit 0 with no output, except Cursor (whose fail-closed hooks treat
+empty stdout as a failure) also gets {"permission": "allow"} on stdout.
+Deny: exit 2, a one-line reason on stderr,
 and a denial JSON on stdout carrying every supported host's decision keys
 (exit code 2 satisfies Claude Code, Codex, Qwen, Kimi, Grok, Cursor, and
 Kiro; the JSON covers hosts that read a decision object instead).
@@ -1820,12 +1822,18 @@ def command_denial(command, working_directories, allow_destructive=True):
     return reason and describe_substitutions(reason, substitutions)
 
 
+def allow(event):
+    if "cursor_version" in event:  # Cursor fails closed on empty stdout; see the module docstring
+        print(json.dumps({"permission": "allow"}))
+
+
 def main():
     try:
         event = json.load(sys.stdin)
         if not isinstance(event, dict):
             raise ValueError("hook event must be an object")
         evaluate(event)
+        allow(event)
     except SystemExit:
         raise
     except ValueError as error:
