@@ -108,8 +108,8 @@ def run(host, directory, resume=None, prompt_file=None):
     spec = load(host)
     arm = Path(directory).resolve() / "quick"
     run_dir = arm / ("run-" + dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")); run_dir.mkdir()
-    prompt_path = Path(prompt_file or arm / "prompt.txt").resolve()
-    (run_dir / "prompt.txt").write_text(prompt_path.read_text())
+    prompt_path = run_dir / "prompt.txt"  # lives in the run dir: a host whose CLI writes files targets prompt_path.parent
+    prompt_path.write_text(Path(prompt_file or arm / "prompt.txt").read_text())
     args = spec.command(prompt_path, resume)
     started = time.monotonic(); started_at = dt.datetime.now(dt.timezone.utc).isoformat(); lines = []
     with (run_dir / "stderr.txt").open("w") as err, (run_dir / "events.jsonl").open("w") as events:

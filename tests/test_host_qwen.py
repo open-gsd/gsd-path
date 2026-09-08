@@ -1,7 +1,7 @@
-"""Tests for the documentation-derived Qwen Code host module.
+"""Tests for the Qwen Code host module.
 
-Every sample below is built from the Qwen Code docs cited in ``tests/hosts/qwen.py``.
-None of it has been checked against a live ``qwen`` CLI (SPEC.verified_live is False).
+The samples follow the Qwen Code docs cited in ``tests/hosts/qwen.py``; a live run on
+2026-09-07 confirmed the tool_use/tool_result shapes they use.
 """
 
 import json
@@ -53,8 +53,8 @@ class QwenHostTests(unittest.TestCase):
         self.assertEqual(qwen.SPEC.skill_root, ".qwen/skills")
         self.assertEqual(qwen.SPEC.child_api, "agent")
         self.assertEqual(qwen.SPEC.guard_tier, "git-only")
-        self.assertFalse(qwen.SPEC.verified_live)
-        self.assertIn("not installed", qwen.SPEC.notes)
+        self.assertTrue(qwen.SPEC.verified_live)
+        self.assertIn("Verified live", qwen.SPEC.notes)
 
     def test_command_places_prompt_in_argv_and_resumes_by_session_id(self):
         prompt = self.run_root / "prompt.txt"

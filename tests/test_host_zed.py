@@ -1,14 +1,15 @@
-"""Zed host module tests on documentation-derived samples.
+"""Zed host module tests.
 
-UNVERIFIED AGAINST A LIVE HOST: Zed is not installed on the authoring machine. The
-samples below follow the shapes read from the Zed sources cited in tests/hosts/zed.py
-(eval-cli result/stderr lines, spawn_agent input/output, DbThread tool uses/results);
-they are not recordings.
+Samples follow the Zed sources cited in tests/hosts/zed.py; ``sample_thread`` uses the
+typed-input / keyed-tool_results / structured-output layout of the thread.json a live
+eval-cli run wrote on 2026-09-07.
 """
 
 import json
+import os
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 
 from tests.hosts import zed
@@ -28,21 +29,20 @@ RESULT_STDERR = [
 ]
 
 
-def sample_thread(label="build_T001", is_error=False, content=None):
-    if content is None:
-        content = json.dumps({"session_id": "sess-child-1", "output": "done"})
-    return {
-        "title": "sample",
-        "messages": [
-            {"User": {"content": [{"Text": "/gsd-path"}]}},
-            {"Agent": {
-                "content": [{"ToolUse": {"id": "tu-1", "name": "spawn_agent",
-                                         "input": {"label": label, "message": "brief text"}}}],
-                "tool_results": {"tu-1": {"tool_use_id": "tu-1", "tool_name": "spawn_agent",
-                                          "is_error": is_error, "content": content}},
-            }},
-        ],
-    }
+def sample_thread(label="build_T001", is_error=False, output=None):
+    """The DbThread layout a live eval-cli wrote: typed tool input, tool_results keyed by call id
+    with a structured output."""
+    if output is None:
+        output = {"session_id": "sess-child-1", "output": "done"}
+    return {"messages": [
+        {"User": {"content": [{"Text": "/gsd-path"}]}},
+        {"Agent": {
+            "content": [{"ToolUse": {"id": "tu-1", "name": "spawn_agent",
+                                     "input": {"type": "json", "value": {"label": label, "message": "brief text"}}}}],
+            "tool_results": {"tu-1": {"tool_use_id": "tu-1", "is_error": is_error,
+                                      "content": [{"Text": json.dumps(output)}], "output": output}},
+        }},
+    ]}
 
 
 class ZedSpecTests(unittest.TestCase):
@@ -50,17 +50,18 @@ class ZedSpecTests(unittest.TestCase):
         s = zed.SPEC
         self.assertEqual((s.name, s.install_flag, s.skill_root, s.invocation, s.child_api, s.guard_tier),
                          ("zed", "--zed", ".agents/skills", "/gsd-path", "spawn_agent", "git-only"))
-        self.assertFalse(s.verified_live)
-        self.assertIn("not installed", s.notes)
+        self.assertTrue(s.verified_live)
+        self.assertTrue(s.prompt_on_stdin)
+        self.assertIn("Verified live", s.notes)
 
-    def test_command_raises_with_reason_and_alternative(self):
-        with self.assertRaises(NotImplementedError) as ctx:
-            zed.SPEC.command(Path("/tmp/prompt.txt"), None)
-        self.assertIn("eval-cli", str(ctx.exception))
-        self.assertIn("ACP client", str(ctx.exception))
-        with self.assertRaises(NotImplementedError) as ctx:
-            zed.SPEC.command(Path("/tmp/prompt.txt"), "sess-1")
-        self.assertIn("cannot resume", str(ctx.exception))
+    def test_command_writes_beside_the_prompt_and_has_no_resume_flag(self):
+        env = {"ZED_EVAL_CLI": "/opt/eval-cli", "ZED_EVAL_MODEL": "openrouter/x"}
+        with unittest.mock.patch.dict(os.environ, env, clear=True):
+            args = zed.command(Path("/runs/run-1/prompt.txt"))
+        self.assertEqual(args, ["/opt/eval-cli", "--workdir", ".", "--output-dir", "/runs/run-1", "--model", "openrouter/x"])
+        with unittest.mock.patch.dict(os.environ, {"ZED_EVAL_CLI": "/opt/eval-cli"}, clear=True):
+            resumed = zed.command(Path("/runs/run-2/prompt.txt"), "thread-1")
+        self.assertEqual(resumed, ["/opt/eval-cli", "--workdir", ".", "--output-dir", "/runs/run-2"])
 
 
 class ZedParseEventsTests(unittest.TestCase):
@@ -119,12 +120,12 @@ class ZedBindChildTests(unittest.TestCase):
             zed.bind_child(self.root, "build_T001")
 
     def test_error_result_raises(self):
-        self.write_thread(sample_thread(is_error=True, content=json.dumps({"error": "boom"})))
+        self.write_thread(sample_thread(is_error=True, output={"error": "boom"}))
         with self.assertRaises(LookupError):
             zed.bind_child(self.root, "build_T001")
 
     def test_error_payload_without_is_error_flag_raises(self):
-        self.write_thread(sample_thread(content=json.dumps({"session_id": "s", "error": "boom"})))
+        self.write_thread(sample_thread(output={"session_id": "s", "error": "boom"}))
         with self.assertRaises(LookupError):
             zed.bind_child(self.root, "build_T001")
 

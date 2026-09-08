@@ -9,7 +9,8 @@ Contract for a host module (``tests/hosts/<host>.py``):
 - ``SPEC.name`` matches the key in ``scripts/skill-resources.json`` ``hosts``.
 - ``SPEC.command(prompt_path, resume)`` returns the headless argv, or raises
   ``NotImplementedError`` with the documented alternative when none is available.
-  The prompt is piped
+  ``prompt_path`` is the copy inside the run directory, so a host whose CLI writes
+  files (Zed's eval-cli) targets ``prompt_path.parent``. The prompt is piped
   on stdin unless ``SPEC.prompt_on_stdin`` is False, in which case the module must
   place the prompt text into argv itself.
 - ``SPEC.parse_events(lines)`` reads the recorded stdout lines and returns
