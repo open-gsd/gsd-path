@@ -5,12 +5,11 @@
     python3 -B tests/evaluate_host.py run --host claude --directory /abs/new [--resume ID --prompt-file F]
     python3 -B tests/evaluate_host.py child --host claude --directory /abs/new --child-id build_T001
 
-Host capabilities and limitations are recorded in tests/hosts/<host>.py SPEC and
-its module docstring. In particular, Zed's command raises NotImplementedError and
-names its developer-only alternative. Documentation-derived runners remain unverified.
+Host setup, capabilities, resume behavior, and live verification limits are recorded
+in tests/hosts/<host>.py SPEC and its docstrings.
 
 Live execution is explicit and opt-in; tests/test_host_*.py never invokes a host.
-The evaluator answers owner gates by resuming with --prompt-file. Nothing here grades
+The evaluator answers owner gates with follow-up prompts via --prompt-file. Nothing here grades
 the run or assembles the complete release receipt: the evaluator supplies guard
 evidence and the archive JSON files requested by RELEASE_ADDENDUM.
 """
@@ -108,8 +107,8 @@ def run(host, directory, resume=None, prompt_file=None):
     spec = load(host)
     arm = Path(directory).resolve() / "quick"
     run_dir = arm / ("run-" + dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")); run_dir.mkdir()
-    prompt_path = Path(prompt_file or arm / "prompt.txt").resolve()
-    (run_dir / "prompt.txt").write_text(prompt_path.read_text())
+    prompt_path = run_dir / "prompt.txt"  # lives in the run dir: a host whose CLI writes files targets prompt_path.parent
+    prompt_path.write_text(Path(prompt_file or arm / "prompt.txt").read_text())
     args = spec.command(prompt_path, resume)
     started = time.monotonic(); started_at = dt.datetime.now(dt.timezone.utc).isoformat(); lines = []
     with (run_dir / "stderr.txt").open("w") as err, (run_dir / "events.jsonl").open("w") as events:

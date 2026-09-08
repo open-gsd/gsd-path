@@ -1,4 +1,8 @@
-"""Qwen Code headless runner (documentation-derived, NOT verified live; the CLI is not installed here).
+"""Qwen Code headless runner (verified live 2026-09-07, Qwen Code 0.23.0 via OpenRouter).
+
+Setup on the verifying machine: the free Qwen OAuth tier ended 2026-04-15, so
+``~/.qwen/settings.json`` pins ``security.auth.selectedType`` to ``openai`` and
+``OPENAI_API_KEY``/``OPENAI_BASE_URL``/``OPENAI_MODEL`` point at OpenRouter.
 
 Sources (read 2026-09-06):
 
@@ -135,22 +139,13 @@ def bind_child(run_root, child_id):
 
 
 SPEC = HostSpec(
-    name="qwen", install_flag="--qwen", skill_root=".qwen/skills", invocation="/gsd-path",  # slash-command form documented for Gemini-style CLIs; unverified live
+    name="qwen", install_flag="--qwen", skill_root=".qwen/skills", invocation="/gsd-path",
     child_api="agent", guard_tier="git-only", command=command, parse_events=parse_events,
-    bind_child=bind_child, prompt_on_stdin=False, verified_live=False,
+    bind_child=bind_child, prompt_on_stdin=False, verified_live=True,
     notes=(
-        "Documentation-derived; Qwen Code is not installed on the authoring machine, so nothing here was run live. "
-        "Confirm on a machine with the CLI: "
-        "(1) `-p <text>` with stdin closed enters headless mode and keeps the whole multi-line prompt "
-        "(the docs also show `echo prompt | qwen`; switch to prompt_on_stdin=True if argv is rejected); "
-        "(2) `--resume <id> -p ...` resumes non-interactively when the id is given; "
-        "(3) stream-json emits `tool_use` blocks in assistant messages and `tool_result` blocks in user messages "
-        "with `tool_use_id`/`is_error` (only `parent_tool_use_id` and bounded `tool_result.content` are documented); "
-        "(4) the stream-json shape of a background completion notification (undocumented; bind_child ignores it); "
-        "(5) the `list_agents` result: only `task_id`, a status, and `resume_blocked_reason` are documented, so the "
-        "`agents` list wrapper, the `description` key and the literal status `completed` are assumptions; "
-        "(6) whether the launch tool_result of a background agent quotes its task_id; "
-        "(7) `--yolo` loads project skills and hooks (no documented flag keeps operator config out without also "
-        "disabling skills, which `--safe-mode` does)."
+        "Verified live 2026-09-07 (Qwen Code 0.23.0, OpenAI-compatible auth via OpenRouter): argv prompt, "
+        "tool_use/tool_result shapes, a foreground agent child (description build_probe) completed inline, "
+        "list_agents empty for a foreground child, `--resume <session_id> -p` resumes. Not verified: /gsd-path end "
+        "to end, background children and their completion notification."
     ),
 )
