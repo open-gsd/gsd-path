@@ -76,6 +76,10 @@ replaces literal `{model}` in its child command with the resolved family slug.
 calls. In `round`, an unfinished earlier wave blocks dispatch before the bookkeeping
 checkpoint. Child completion is recorded in `exit.json`; the parent alone
 writes `state.json`.
+For `review` and `panel`, when the child process is gone and `finished_at` is
+unset, the driver rereads that attempt's state and exit receipt before
+collecting the result or blocking with
+`child wrapper exited without recording a result`.
 `--wait`, `--child-timeout`, and `--capacity` (concurrent children) have
 no defaults. `--max-attempts` defaults to 2 dispatches per task per milestone,
 the build contract's one logged redispatch after the first attempt; question

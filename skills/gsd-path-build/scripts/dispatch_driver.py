@@ -53,6 +53,9 @@ OUTPUT_TAIL_LINES = 20
 POLL_SECONDS = 1  # ponytail: fixed poll cadence; make it an owner value if it ever matters
 
 
+ORPHANED = "child wrapper exited without recording a result"
+
+
 class DriverStop(RuntimeError):
     """A typed stop: the receipt carries the reason; the parent decides."""
 
@@ -139,12 +142,21 @@ def latest_states(root: Path) -> List[Dict[str, object]]:
             attempts = sorted(task_dir.glob("attempt-*/state.json"),
                               key=lambda path: attempt_number(path.parent))
             if attempts:
-                state = dict(load_state(attempts[-1]), _path=str(attempts[-1]))
-                exit_path = attempts[-1].with_name("exit.json")
-                if exit_path.is_file():
-                    state.update(load_state(exit_path))
-                states.append(state)
+                states.append(read_attempt(attempts[-1]))
     return states
+
+
+def read_attempt(path: Path) -> Dict[str, object]:
+    """One attempt's state.json merged with the exit receipt its child wrapper writes."""
+    state = dict(load_state(path), _path=str(path))
+    exit_path = path.with_name("exit.json")
+    if exit_path.is_file():
+        state.update(load_state(exit_path))
+    return state
+
+
+def child_running(state: Dict[str, object]) -> bool:
+    return state.get("finished_at") is None and bool(state.get("pid")) and process_alive(int(state["pid"]))
 
 
 def process_alive(pid: int) -> bool:
@@ -514,10 +526,10 @@ class Round:
                 if str(state["task_id"]) in self.proven:  # landed, then interrupted before recording
                     update_state(state, outcome="landed", commit=self.proven[str(state["task_id"])])
                 elif state.get("finished_at") is None:
-                    if state.get("pid") and process_alive(int(state["pid"])):
+                    if child_running(state):
                         self.receipt["in_flight"].append(self.summary(state))
                     else:
-                        self.fail(state, "child wrapper exited without recording a result")
+                        self.fail(state, ORPHANED)
                 else:
                     changed = self.classify(state) or changed
         return changed
@@ -695,6 +707,36 @@ class Round:
 # --- the wave review -------------------------------------------------------
 
 
+def advance(state: Dict[str, object], collect: Callable[[Dict[str, object]], None]) -> bool:
+    """Move one sidecar child toward a terminal outcome, in place. False while it still runs."""
+    if state.get("outcome") == "collected" and (
+            state.get("cleanup_pending") or not state.get("cleanup_complete")):
+        collect(state)
+    if state.get("outcome") is None:
+        if state.get("finished_at") is None:
+            if child_running(state):
+                return False
+            state.update(read_attempt(Path(str(state["_path"]))))  # the wrapper may have just recorded its result
+        if state.get("finished_at") is not None:
+            collect(state)
+        else:
+            update_state(state, outcome="blocked", reason=ORPHANED)
+    return True
+
+
+def retire_sidecar(primary: Path, state: Dict[str, object]) -> None:
+    """Clean and retire a collected child's sidecar; a failure stays pending for the next run."""
+    sidecar = Path(str(state["worktree"]))
+    try:
+        if sidecar.exists():
+            isolation.clean_verify(primary, sidecar, str(state["base"]), str(state["branch"]))
+        isolation.retire(primary, sidecar, str(state["branch"]), False)
+    except isolation.IsolationError as error:
+        update_state(state, cleanup_pending=True, cleanup_error=str(error))
+        return
+    update_state(state, cleanup_complete=True, cleanup_pending=False, cleanup_error=None)
+
+
 def review_brief(state: Dict[str, object], options: argparse.Namespace, primary: Path,
                  tasks: List[Dict[str, object]], final_scope: bool, previous: Optional[Path]) -> str:
     wave, cycle, lens = state["wave"], state["cycle"], state.get("lens")
@@ -825,14 +867,7 @@ class Review:
                     return
                 update_state(state, outcome="collected")
                 self.receipt["steps"].append({"script": "isolation.py collect-artifact", "result": collected})
-        try:
-            if sidecar.exists():
-                isolation.clean_verify(self.primary, sidecar, str(state["base"]), str(state["branch"]))
-            isolation.retire(self.primary, sidecar, str(state["branch"]), False)
-        except isolation.IsolationError as error:
-            update_state(state, cleanup_pending=True, cleanup_error=str(error))
-            return
-        update_state(state, cleanup_complete=True, cleanup_pending=False, cleanup_error=None)
+        retire_sidecar(self.primary, state)
 
     def input_failure(self, base: str) -> Optional[Dict[str, str]]:
         paths = review_findings.review_paths(self.primary / self.project_dir, self.wave,
@@ -855,17 +890,9 @@ class Review:
         """Advance every lens and render the receipt from the records; settle is their only writer."""
         self.receipt["in_flight"], self.receipt["blocked"], self.receipt["lenses"] = [], [], {}
         for key, state in states.items():
-            if state.get("outcome") == "collected" and (
-                    state.get("cleanup_pending") or not state.get("cleanup_complete")):
-                self.collect(state)
-            if state.get("outcome") is None:
-                if state.get("finished_at") is not None:
-                    self.collect(state)
-                elif state.get("pid") and process_alive(int(state["pid"])):
-                    self.receipt["in_flight"].append(summary(state))
-                    continue
-                else:
-                    update_state(state, outcome="blocked", reason="child wrapper exited without recording a result")
+            if not advance(state, self.collect):
+                self.receipt["in_flight"].append(summary(state))
+                continue
             self.receipt["base"] = state.get("base")
             if state.get("outcome") == "collected":
                 failure = self.input_failure(str(state["base"]))
@@ -1110,22 +1137,9 @@ class Panel:
             while True:
                 self.receipt["in_flight"], self.receipt["blocked"], self.receipt["families"] = [], [], {}
                 for family, state in states.items():
-                    if state.get("outcome") == "collected" and (
-                            state.get("cleanup_pending") or not state.get("cleanup_complete")):
-                        self.collect(state)
-                    if state.get("outcome") is None:
-                        if state.get("finished_at") is not None:
-                            self.collect(state)
-                        elif state.get("pid") and process_alive(int(state["pid"])):
-                            self.receipt["in_flight"].append(summary(state))
-                            continue
-                        else:
-                            state = self.states()[family]
-                            states[family] = state
-                            if state.get("finished_at") is not None:
-                                self.collect(state)
-                            else:
-                                update_state(state, outcome="blocked", reason="child wrapper exited without recording a result")
+                    if not advance(state, self.collect):
+                        self.receipt["in_flight"].append(summary(state))
+                        continue
                     if state.get("cleanup_pending"):
                         self.receipt["blocked"].append({**summary(state), "reason": state.get("cleanup_error"),
                                                         "helper": "isolation.py retire"})
@@ -1207,14 +1221,7 @@ class Panel:
                 return
             self.receipt["steps"].append({"script": "isolation.py collect-artifact", "result": collected})
             update_state(state, outcome="collected")
-        try:
-            if sidecar.exists():
-                isolation.clean_verify(self.primary, sidecar, str(state["base"]), str(state["branch"]))
-            isolation.retire(self.primary, sidecar, str(state["branch"]), False)
-        except isolation.IsolationError as error:
-            update_state(state, cleanup_pending=True, cleanup_error=str(error))
-            return
-        update_state(state, cleanup_complete=True, cleanup_pending=False, cleanup_error=None)
+        retire_sidecar(self.primary, state)
 
 
 def next_task_id(tasks_dir: Path) -> str:
