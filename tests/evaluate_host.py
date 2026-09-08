@@ -5,12 +5,11 @@
     python3 -B tests/evaluate_host.py run --host claude --directory /abs/new [--resume ID --prompt-file F]
     python3 -B tests/evaluate_host.py child --host claude --directory /abs/new --child-id build_T001
 
-Host capabilities and limitations are recorded in tests/hosts/<host>.py SPEC and
-its module docstring. In particular, Zed's command raises NotImplementedError and
-names its developer-only alternative. Documentation-derived runners remain unverified.
+Host setup, capabilities, resume behavior, and live verification limits are recorded
+in tests/hosts/<host>.py SPEC and its docstrings.
 
 Live execution is explicit and opt-in; tests/test_host_*.py never invokes a host.
-The evaluator answers owner gates by resuming with --prompt-file. Nothing here grades
+The evaluator answers owner gates with follow-up prompts via --prompt-file. Nothing here grades
 the run or assembles the complete release receipt: the evaluator supplies guard
 evidence and the archive JSON files requested by RELEASE_ADDENDUM.
 """
