@@ -124,6 +124,29 @@ class GuardHookTests(unittest.TestCase):
                     "tool_input": {"command": helper + suffix},
                 })
 
+    def test_documented_record_shipment_command_is_allowed(self):
+        ship = SCRIPT.parent.parent / "skills" / "gsd-path" / "SHIP.md"
+        blocks = (
+            section.split("```", 1)[0].strip()
+            for section in ship.read_text(encoding="utf-8").split("```bash\n")[1:]
+        )
+        command = next(
+            block for block in blocks
+            if block.startswith("python3 <absolute pipeline_state.py> record-shipment")
+        )
+        command = (
+            command.replace(
+                "<absolute pipeline_state.py>",
+                shlex.quote(str(SCRIPT.parent / "pipeline_state.py")),
+            )
+            .replace("<root>", ".")
+            .replace("<STATE.archive>", ".project/archive/001-x")
+        )
+        self.assert_allowed({
+            "tool_name": "Bash",
+            "tool_input": {"command": command},
+        })
+
     def test_bundled_helper_rejects_shell_redirections(self):
         archive = ".project/archive/001-x/MANIFEST.md"
         for suffix in (
