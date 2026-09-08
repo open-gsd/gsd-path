@@ -635,9 +635,8 @@ dispatch contract and perform steps 1–5 by hand.
 Run `python3 <absolute dispatch_driver.py> complete --repo <absolute primary>`
 from a clean primary at `build/active` or crash-left `build/done`. It checks
 readiness and the archive-time review cycle contract before recording landing
-proof, entering `ship/active`, and checkpointing. The [runtime command
-reference](../../RUNTIME.md#dispatch-driver) describes these checks. A blocked
-receipt stops completion; a `done` receipt proves these steps, so do not repeat
+proof, entering `ship/active`, and checkpointing. A blocked receipt stops
+completion; a `done` receipt proves these steps, so do not repeat
 them. For manual completion:
 after every wave passes, record exact full HEAD and prove every task landed
 with `python3 <absolute workflow_run.py> build-evidence --repo <absolute primary>
