@@ -1,0 +1,11 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "copilot",
+  "run_id": "b920e2b9-ed25-4d18-aa6a-dd7c19b5cbf2",
+  "result": "pass",
+  "step": "reviews",
+  "command": "task description=review_wave_1_cycle_1 in sidecar /Users/jeremymcspadden/orca/evaluations/gsd-path-release-copilot-091d279/quick/repo.gsd-path/verify/wave-1-cycle-1; python3 -B .github/skills/gsd-path/scripts/check_handoffs.py wave --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-copilot-091d279/quick/repo --review .project/review/wave-1.cycle1.md; python3 -B .github/skills/gsd-path/scripts/workflow_run.py prepare-final --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-copilot-091d279/quick/repo (final.reused: true)",
+  "output": "# Review \u2014 wave 1, cycle 1\n\nWave verdict: pass\nCycle: 1\nDepth: full\nTasks reviewed: 1\n# Final Review \u2014 reused full wave\n\nReviewed HEAD: 0263d088d45486183d1c535f97535c91b2b21d79\nOverall verdict: pass\nSource review: .project/review/wave-1.cycle1.md\nSource commit: a6f8d961c9cd405a15b17ce024c2a3e0b1a34a7d",
+  "wave_review_artifact": ".project/archive/001-count-json-cli/review/wave-1.cycle1.md",
+  "final_review_artifact": ".project/archive/001-count-json-cli/review/FINAL.md"
+}

@@ -1,0 +1,44 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "copilot",
+  "run_id": "b920e2b9-ed25-4d18-aa6a-dd7c19b5cbf2",
+  "result": "pass",
+  "step": "child-spawn",
+  "command": "task",
+  "child_api": "task",
+  "child_id": "build_T001",
+  "child_status": "completed",
+  "output": {
+    "child_id": "build_T001",
+    "status": "completed",
+    "child_api": "task",
+    "source": "session-state/b920e2b9-ed25-4d18-aa6a-dd7c19b5cbf2",
+    "matched_argument": "description",
+    "agent_id": "aa1f6ffe-4e51-44cc-b84d-0d39d21b33ed",
+    "tool_call": {
+      "toolCallId": "toolu_016dobSFeZemP3ig3Kz9Qdpi",
+      "arguments": {
+        "agent_type": "general-purpose",
+        "description": "build_T001",
+        "mode": "background",
+        "name": "build_T001"
+      },
+      "prompt_sha256": "cd3174df74aea27e934a9810db456946f783978650f3ced75b739a47b90c2435"
+    },
+    "tool_result": {
+      "success": true,
+      "content": "Agent started in background with agent_id: aa1f6ffe-4e51-44cc-b84d-0d39d21b33ed. You'll be notified when it completes. Tell the user you're waiting and end your response, or continue unrelated work until notified. The agent supports multi-turn conversations \u2014 use write_agent to send follow-up messages."
+    },
+    "started": {
+      "agentName": "general-purpose",
+      "model": "gpt-5.4"
+    },
+    "completed": {
+      "agentName": "general-purpose",
+      "model": "gpt-5.4",
+      "durationMs": 62580,
+      "totalTokens": 359481,
+      "totalToolCalls": 23
+    }
+  }
+}

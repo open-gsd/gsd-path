@@ -1,0 +1,11 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "copilot",
+  "run_id": "b920e2b9-ed25-4d18-aa6a-dd7c19b5cbf2",
+  "result": "pass",
+  "step": "worktrees",
+  "command": "git worktree list --porcelain",
+  "output": "worktree /Users/jeremymcspadden/orca/evaluations/gsd-path-release-copilot-091d279/quick/repo\nHEAD e9d7af70d8ace89c16700393e65d970fed5bc6ee\nbranch refs/heads/gsd-path/M001\n",
+  "primary_worktree": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-copilot-091d279/quick/repo",
+  "integration_worktree": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-copilot-091d279/quick/.repo-gsd-path-integrate-M001"
+}
