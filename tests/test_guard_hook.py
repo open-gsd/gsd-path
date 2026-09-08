@@ -204,7 +204,7 @@ class GuardHookTests(unittest.TestCase):
                     f".gsd-path/runtime/$X/../{name}",
                     f".gsd-path/runtime/${{X}}/../{name}",
                     f".gsd-path/runtime/*/../{name}",
-                    f".gsd-path/runtime/~/../{name}",
+                    f".gsd-path/runtime/?/../{name}",
                     f"~/.gsd-path/runtime/{name}",
                     f".gsd-path/runtime//../{name}",
                 ):
@@ -216,6 +216,33 @@ class GuardHookTests(unittest.TestCase):
                                 "workdir": str(root),
                             },
                         })
+
+    def test_bundled_helper_preserves_literal_quotes_in_script_operand(self):
+        self.assert_denied({
+            "tool_name": "Bash",
+            "tool_input": {
+                "command": """python3 "'scripts/pipeline_state.py'" --archive .project/archive/001-x""",
+            },
+        })
+
+    def test_bundled_helper_allows_spaces_and_quotes_in_runtime_path(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            for directory in ("My Project", "Owner's Project", 'A "quoted" project'):
+                root = Path(temporary) / directory
+                runtime = root / ".gsd-path" / "runtime"
+                runtime.mkdir(parents=True)
+                with mock.patch.object(guard_hook, "__file__", str(runtime.parent / "guard_hook.py")):
+                    for name in ("pipeline_state.py", "archive_milestone.py"):
+                        helper = runtime / name
+                        shutil.copyfile(SCRIPT.parent / name, helper)
+                        with self.subTest(directory=directory, helper=name):
+                            self.assert_allowed({
+                                "tool_name": "Bash",
+                                "tool_input": {
+                                    "command": f"python3 -B {shlex.quote(str(helper))} --archive .project/archive/001-x",
+                                    "workdir": str(root),
+                                },
+                            })
 
     def test_bundled_helper_tool_directory_does_not_fall_back_to_cwd(self):
         for key in ("working_directory", "workdir", "cwd"):
