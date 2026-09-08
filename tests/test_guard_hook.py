@@ -119,6 +119,56 @@ class GuardHookTests(unittest.TestCase):
                 "command": f"python3 -B {forged} record-shipment --archive .project/archive/001-x"}})
             self.assertEqual((status, json.loads(output)["permissionDecision"]), (2, "deny"))
 
+    def test_bundled_helper_rejects_untrusted_import_context(self):
+        for name in ("pipeline_state.py", "archive_milestone.py"):
+            for sibling in ("_common.py", "json.py", "tempfile.py"):
+                with self.subTest(helper=name, sibling=sibling), tempfile.TemporaryDirectory() as temporary:
+                    root = Path(temporary)
+                    helper = root / name
+                    shutil.copyfile(SCRIPT.parent / name, helper)
+                    (root / sibling).write_text("raise RuntimeError('untrusted sibling')\n")
+                    self.assert_denied({
+                        "tool_name": "Bash",
+                        "tool_input": {
+                            "command": f"python3 -B {helper} --archive .project/archive/001-x",
+                        },
+                    })
+
+    def test_bundled_helper_allows_unrelated_extra_script(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            runtime = root / ".gsd-path" / "runtime"
+            runtime.mkdir(parents=True)
+            for source in SCRIPT.parent.glob("*.py"):
+                if source.name != "build_state.py":
+                    shutil.copyfile(source, runtime / source.name)
+            helper = root / "pipeline_state.py"
+            shutil.copyfile(SCRIPT.parent / helper.name, helper)
+            (root / "build_state.py").write_text("raise RuntimeError('unused')\n")
+            with mock.patch.object(guard_hook, "__file__", str(runtime.parent / "guard_hook.py")):
+                self.assert_allowed({
+                    "tool_name": "Bash",
+                    "tool_input": {
+                        "command": f"python3 -B {helper} --archive .project/archive/001-x",
+                    },
+                })
+
+    def test_bundled_helper_tool_directory_does_not_fall_back_to_cwd(self):
+        for key in ("working_directory", "workdir", "cwd"):
+            with self.subTest(key=key), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                helper = root / "scripts" / "pipeline_state.py"
+                helper.parent.mkdir()
+                helper.write_text("raise RuntimeError('forged helper')\n")
+                with mock.patch.object(guard_hook.os, "getcwd", return_value=str(SCRIPT.parent.parent)):
+                    self.assert_denied({
+                        "tool_name": "Bash",
+                        "tool_input": {
+                            "command": "python3 -B scripts/pipeline_state.py --archive .project/archive/001-x",
+                            key: str(root),
+                        },
+                    })
+
     def test_cursor_event_gets_explicit_allow(self):
         payload = {"cursor_version": "2026.09.02-c22c1a3", "hook_event_name": "preToolUse",
                    "tool_name": "Edit", "tool_input": {"file_path": ".project/plan/PLAN.md"}}

@@ -6,7 +6,9 @@ invariants a prompt contract cannot guarantee:
 
 - committed archives under .project/archive/ are read-only (only the bundled
   helpers pipeline_state.py and archive_milestone.py may name that path in a
-  shell command), and
+  shell command when their entry script and runtime-matched Python siblings are
+  byte-identical to guard-owned copies and no extra Python sibling shadows an
+  import in either helper's transitive runtime import closure), and
 - destructive git commands that break build recovery are refused.
 
 Allow: exit 0 with no output, except Cursor (whose fail-closed hooks treat
@@ -1669,10 +1671,46 @@ def destructive_git_reason(tokens, resolved_aliases=frozenset()):
 PIPELINE_HELPERS = frozenset({"pipeline_state.py", "archive_milestone.py"})
 
 
+def bundled_helper_context_matches(script, bundled):
+    if script.read_bytes() != bundled.read_bytes():
+        return False
+    runtime = {path.stem: path for path in bundled.parent.glob("*.py")}
+    imported = set()
+    visited = set()
+    pending = [Path(name).stem for name in PIPELINE_HELPERS]
+    while pending:
+        name = pending.pop()
+        if name in visited:
+            continue
+        visited.add(name)
+        source = runtime[name].read_text(encoding="utf-8")
+        for match in re.finditer(
+            r"^[ \t]*(?:from[ \t]+([.\w]+)[ \t]+import\b|import[ \t]+([^\n#;]+))",
+            source,
+            re.MULTILINE,
+        ):
+            modules = match[1] or match[2]
+            for module in modules.split(","):
+                imported.update(module.strip().split()[0].split("."))
+        pending.extend(imported.intersection(runtime).difference(visited))
+    for sibling in script.parent.glob("*.py"):
+        counterpart = runtime.get(sibling.stem)
+        if counterpart is not None:
+            if sibling.read_bytes() != counterpart.read_bytes():
+                return False
+        elif sibling.stem in imported:
+            return False
+    return True
+
+
 def bundled_helper_invocation(command, tokens, working_directories):
-    """``python[3] [-B] <script>`` as one plain command, where ``<script>`` is byte-identical
-    to the guard-owned copy of pipeline_state.py or archive_milestone.py (the bundled
-    helpers own archive writes during a ship transaction)."""
+    """Allow one plain ``python[3] [-B] <script>`` with a trusted import closure.
+
+    The helper and every Python sibling with a runtime counterpart must match
+    the guard-owned bytes. Extra Python siblings must not shadow imports from
+    either helper's transitive runtime closure. Resolve only in supplied tool
+    working directories, falling back to cwd when none are supplied.
+    """
     if AMBIGUOUS_SHELL_SYNTAX.search(command) or not tokens:
         return False
     if tokens[0].replace("\\", "/").rsplit("/", 1)[-1].casefold() not in ("python", "python3"):
@@ -1686,11 +1724,11 @@ def bundled_helper_invocation(command, tokens, working_directories):
     bundled = next((c for c in (here / "runtime" / name, here / name) if c.is_file()), None)
     if bundled is None:
         return False
-    for base in [*(str(v) for v in working_directories), os.getcwd()]:
+    for base in working_directories or [os.getcwd()]:
         try:
-            if (Path(base) / script).resolve().read_bytes() == bundled.read_bytes():
+            if bundled_helper_context_matches((Path(base) / script).resolve(), bundled):
                 return True
-        except OSError:
+        except (OSError, UnicodeError, KeyError):
             continue
     return False
 
