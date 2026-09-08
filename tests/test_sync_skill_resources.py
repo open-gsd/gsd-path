@@ -10,7 +10,11 @@ import unittest
 from pathlib import Path
 
 from scripts.check_task_briefs import _frontmatter
-from scripts.sync_skill_resources import SKILL_NAMES, rewrite_router_alias_skill
+from scripts.sync_skill_resources import (
+    SKILL_NAMES,
+    rewrite_router_alias_codex_yaml,
+    rewrite_router_alias_skill,
+)
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -215,6 +219,21 @@ class SyncSkillResourcesTests(unittest.TestCase):
             "---\nname: path\n"
             "description: Use only when the user explicitly invokes $path or $gsd-path.\n---\n"
             "Call $gsd-path-plan next.\n",
+        )
+
+    def test_router_alias_codex_yaml_uses_the_short_catalog_name(self) -> None:
+        rewritten = rewrite_router_alias_codex_yaml(
+            'interface:\n  display_name: "GSD Path Router"\n'
+            '  short_description: "Route and resume the GSD Path pipeline"\n'
+            '  default_prompt: "Use $gsd-path to inspect and $gsd-path-build."\n',
+            "path",
+            "gsd-path",
+        )
+        self.assertEqual(
+            rewritten,
+            'interface:\n  display_name: "path"\n'
+            '  short_description: "Route and resume the GSD Path pipeline"\n'
+            '  default_prompt: "Use $path to inspect and $gsd-path-build."\n',
         )
 
     def test_distribution_layout_is_self_contained(self) -> None:

@@ -493,6 +493,14 @@ class InstallerTests(unittest.TestCase):
         self.assertNotRegex(skill, r"(?m)^name: gsd-path$")
         self.assertIn("invokes /path or /gsd-path", skill)
         self.assertIn("/gsd-path-undo", skill)
+        codex = self.root / "staged-router-alias-codex"
+        codex.mkdir()
+        install.stage_target(PROJECT_ROOT, install.SHARED_AGENT_PROFILE, codex)
+        yaml = (codex / "path" / "agents" / "openai.yaml").read_text(encoding="utf-8")
+        self.assertRegex(yaml, r'(?m)^ {2}display_name: "path"$')
+        self.assertNotIn('display_name: "GSD Path Router"', yaml)
+        self.assertIn("Use $path to inspect", yaml)
+        self.assertNotIn("Use $gsd-path to inspect", yaml)
 
     def test_v2_canonical_skills_are_installed_without_aliases(self):
         self.assertEqual({}, install.SKILL_ALIASES)

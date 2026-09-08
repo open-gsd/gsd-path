@@ -525,13 +525,35 @@ function rewriteRouterAliasSkill(text, alias, canonical) {
   return `---\n${headerText}${rest}`;
 }
 
+function rewriteRouterAliasCodexYaml(text, alias, canonical) {
+  const display = text.replace(/^(  display_name: )".*"$/m, `$1"${alias}"`);
+  if (display === text || display.split(`display_name: "${alias}"`).length !== 2) {
+    throw new InstallerError(`router alias ${alias} is missing a unique display_name`);
+  }
+  const token = new RegExp(`\\$${canonical}(?!-)`);
+  if (!token.test(display)) {
+    throw new InstallerError(`router alias ${alias} is missing $${canonical} in openai.yaml`);
+  }
+  return display.replace(new RegExp(`\\$${canonical}(?!-)`, "g"), `$${alias}`);
+}
+
 function materializedResourceBytes(source, destination) {
   const data = fs.readFileSync(source);
-  if (path.basename(destination) !== "SKILL.md") return data;
-  const alias = path.basename(path.dirname(destination));
+  const basename = path.basename(destination);
+  let alias;
+  let rewriter;
+  if (basename === "SKILL.md") {
+    alias = path.basename(path.dirname(destination));
+    rewriter = rewriteRouterAliasSkill;
+  } else if (basename === "openai.yaml" && path.basename(path.dirname(destination)) === "agents") {
+    alias = path.basename(path.dirname(path.dirname(destination)));
+    rewriter = rewriteRouterAliasCodexYaml;
+  } else {
+    return data;
+  }
   const canonical = ROUTER_ALIASES[alias];
   if (!canonical) return data;
-  return Buffer.from(rewriteRouterAliasSkill(data.toString("utf8"), alias, canonical));
+  return Buffer.from(rewriter(data.toString("utf8"), alias, canonical));
 }
 
 function resolveNonStrict(value) {
