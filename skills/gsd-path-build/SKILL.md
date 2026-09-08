@@ -164,12 +164,15 @@ checkpointed; with a panel configured (`panel_required: true`) run `panel
 --child-command '<owner command with {model}>'`, which resolves the panel,
 persists a skipped receipt or runs one panelist per family in its own
 sidecar, merges the family files, and makes the single on-pass checkpoint;
-`blocked` returns the `review_findings.py collect` grouping, and `fix-tasks
---wave <N> --cycle <C>` writes one lint-clean fix task per batch carrying the
-failed criteria and observations verbatim, or returns `escalate` for
-structural blockers, skeptic groups, the cycle cap, or an all-refuted
-ruling, which stay with step 7 and the user. The driver never writes a
-`verify-only` file (`status: not-applicable`) or runs a skeptic;
+`blocked` returns the `review_findings.py collect` grouping; when its
+`skeptic_groups` is non-empty, `skeptics --wave <N> --cycle <C>
+--child-command '<owner command>'` runs one read-only skeptic per locator in
+its own sidecar at the review base, validates and collects each file, and
+reruns the helper; then `fix-tasks --wave <N> --cycle <C>` writes one
+lint-clean fix task per batch carrying the failed criteria and observations
+verbatim, or returns `escalate` for structural blockers, skeptic groups, the
+cycle cap, or an all-refuted ruling, which stay with step 7 and the user.
+The driver never writes a `verify-only` file (`status: not-applicable`);
 `in-flight` means call `round` again; `question` means answer from the
 approved artifacts or the user, record it with `answer --task-id <id>
 --answer '<answer> — <citation>'`, and call `round` again, which redispatches
