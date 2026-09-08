@@ -13,7 +13,7 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
 
-from scripts import dispatch_driver
+from scripts import dispatch_driver, pipeline_state
 from tests import test_handoffs
 from tests.test_pipeline_state import run_git
 
@@ -153,7 +153,8 @@ class DispatchDriverTests(unittest.TestCase):
     def head(self, root: Path) -> str:
         return run_git(root, "rev-parse", "HEAD").stdout.strip()
 
-    def fixture(self, root: Path, deps_t002: str = "[]", wave_t002: int = 1) -> str:
+    def fixture(self, root: Path, deps_t002: str = "[]", wave_t002: int = 1,
+                state: tuple = ("build", "active")) -> str:
         run_git(root, "init", "-b", "gsd-path/M001")
         # Finish automatic housekeeping before TemporaryDirectory removes Git objects.
         run_git(root, "config", "gc.autoDetach", "false")
@@ -173,7 +174,7 @@ class DispatchDriverTests(unittest.TestCase):
                 "Review depth: full\n\n| Task | Title | Deps | Files |\n|------|-------|------|-------|\n"
                 "| T002 | Demo task T002 | — | tests/test_app.py |\n\n## Intent coverage", 1)
             plan.write_text(text)
-        handoffs.write_state(root, "build", "active")
+        handoffs.write_state(root, *state)
         (root / "fake_coder.py").write_text(FAKE_CODER)
         (root / "fake_reviewer.py").write_text(FAKE_REVIEWER)
         (root / "fake_panelist.py").write_text(FAKE_PANELIST)
@@ -1189,6 +1190,83 @@ class DispatchDriverTests(unittest.TestCase):
         self.assertEqual(receipt["escalation"], ["structural_blockers"])
         self.assertEqual(self.review(root, "--wait", "60")["status"], "pass")
         self.assertEqual(self.skeptics(root, "--wait", "60")["status"], "none")
+
+    def state(self, root: Path) -> str:
+        state, _, _ = pipeline_state.load_state(root)
+        return f"{state.phase}/{state.status}"
+
+    def test_round_enters_build_from_plan_done_and_checkpoints_the_transition(self) -> None:
+        root = self.root
+        self.fixture(root, state=("plan", "done"))
+        receipt = self.round(root, "--wait", "60")
+        self.assertEqual(receipt["status"], "done", receipt)
+        self.assertEqual(self.state(root), "build/active")
+        self.assertIn("build: start milestone", self.subjects(root))
+        self.assertIn("build started", (root / ".project/STATE.md").read_text())
+
+    def test_round_records_build_blocked_when_recovery_blocks(self) -> None:
+        root = self.root
+        head = self.fixture(root)
+        task = next((root / ".project/tasks").glob("T001*.md"))  # done by hand, no landing commit
+        task.write_text(task.read_text().replace("status: pending", "status: done", 1)
+                        .replace("agent: null", "agent: fake", 1).replace("base: null", f"base: {head}", 1))
+        run_git(root, "commit", "-qam", "task: T001 marked done outside land")
+        receipt = self.round(root, "--wait", "60")
+        self.assertEqual(receipt["status"], "blocked", receipt)
+        self.assertEqual(receipt["blocked"][0]["reason"], "recovery blocked")
+        self.assertEqual(self.state(root), "build/blocked")
+        self.assertEqual(self.subjects(root)[0], "build: record blocked recovery")
+        self.assertEqual(run_git(root, "status", "--porcelain").stdout, "")
+        again = self.round(root, "--wait", "60")  # recovery re-enters build/active, then blocks again
+        self.assertEqual(again["status"], "blocked", again)
+        self.assertEqual(self.state(root), "build/blocked")
+        self.assertEqual(self.subjects(root)[:3], ["build: record blocked recovery", "build: start milestone",
+                                                   "build: record blocked recovery"])
+
+    def test_complete_proves_every_wave_then_enters_ship(self) -> None:
+        root = self.root
+        self.fixture(root)
+        self.assertEqual(self.round(root, "--wait", "60")["status"], "done")
+        early = self.driver(root, "complete")
+        self.assertEqual(early["status"], "blocked", early)
+        self.assertEqual(early["blocked"][0]["reason"], "review cycle waves do not match PLAN.md")
+        self.assertEqual(self.review(root, "--wait", "60")["status"], "pass")
+        receipt = self.driver(root, "complete")
+        self.assertEqual(receipt["status"], "done", receipt)
+        self.assertEqual(receipt["review_cycles"], [1])
+        self.assertEqual(self.state(root), "ship/active")
+        self.assertEqual(self.subjects(root)[0], "build: complete milestone")
+        self.assertTrue((root / ".project/build/evidence.json").is_file())
+        self.assertEqual(run_git(root, "status", "--porcelain").stdout, "")
+
+    def test_complete_recovers_build_done_after_passing_review(self) -> None:
+        root = self.root
+        self.fixture(root)
+        self.assertEqual(self.round(root, "--wait", "60")["status"], "done")
+        self.assertEqual(self.review(root, "--wait", "60")["status"], "pass")
+        state, _, _ = pipeline_state.load_state(root)
+        pipeline_state.transition_state(root, state.json(), {"status": "done"}, "build done")
+        run_git(root, "commit", "-qam", "fixture: crash-left build done")
+        receipt = self.driver(root, "complete")
+        self.assertEqual(receipt["status"], "done", receipt)
+        self.assertEqual(receipt["review_cycles"], [1])
+        self.assertEqual(self.state(root), "ship/active")
+        self.assertEqual(self.subjects(root)[0], "build: complete milestone")
+        self.assertTrue((root / ".project/build/evidence.json").is_file())
+        self.assertEqual(run_git(root, "status", "--porcelain").stdout, "")
+
+    def test_build_done_rejects_dispatch_and_unfinished_completion(self) -> None:
+        root = self.root
+        head = self.fixture(root, state=("build", "done"))
+        with self.assertRaises(dispatch_driver.build_state.BuildStateError) as raised:
+            dispatch_driver.build_state.ready(str(root))
+        self.assertEqual(raised.exception.code, "invalid-build-state")
+        receipt = self.driver(root, "complete")
+        self.assertEqual(receipt["status"], "blocked", receipt)
+        self.assertEqual(receipt["blocked"][0]["reason"], "wave 1 is still unfinished")
+        self.assertEqual(self.state(root), "build/done")
+        self.assertEqual(self.head(root), head)
+        self.assertEqual(run_git(root, "status", "--porcelain").stdout, "")
 
     def test_fix_tasks_escalates_structural_blockers(self) -> None:
         root = self.root

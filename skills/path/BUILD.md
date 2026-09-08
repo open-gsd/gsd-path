@@ -20,13 +20,8 @@ rule; never invoke an explicit-only sibling skill yourself.
   from `build/done`; any later phase or an incomplete predecessor blocks
   rather than rewinding state. A concrete STATE.archive during `build/*`
   marks an interrupted milestone-abandon transaction: resume the Milestone
-  abandon procedure below before any recovery or dispatch. `build/done` is never a normal execution state:
-  re-prove all wave gates at current HEAD — each task's Verify counts as
-  proven when `python3 <absolute build_state.py> verify-lookup --repo
-  <absolute primary> --command <task Verify> --commit <HEAD>` returns
-  `reuse: true`; otherwise run it in an `isolate-verify` sidecar at HEAD and
-  record it — then finish the
-  checkpointed transition to `ship/active`. Project Verify waits for ship.
+  abandon procedure below before any recovery or dispatch. `build/done` is
+  recovery-only: follow [Completion](#completion) instead of dispatching.
 - Read the local [coder role](references/coder.md),
   [reviewer role](references/reviewer.md), [dispatch contract](references/dispatch.md),
   [task template](templates/task.md),
@@ -94,9 +89,10 @@ rule; never invoke an explicit-only sibling skill yourself.
   later `gsd-path/M00N` created at the then-current remote-default SHA. Adopt
   the proven worktree and default checkout; do not parse STATE log prose or
   create another primary worktree.
-- On entry from `plan/done`, run the bundled `pipeline_state.py transition`
-  helper with expected `phase: plan`, `status: done`, exact bound branch, and
-  archive. Set `phase: build` and `status: active`, and use event `build
+- With the dispatch driver, let `round` perform the entry transition below.
+  For manual dispatch, on entry from `plan/done`, run the bundled
+  `pipeline_state.py transition` helper with the loaded state's full field
+  set expected. Set `phase: build` and `status: active`, and use event `build
   started`. Recover `build/blocked` the same way with all old values expected.
   Checkpoint that transition with the expected initial `.project/` artifacts
   before dispatch. Never edit or append STATE.md through model-side text
@@ -152,7 +148,11 @@ python3 <absolute dispatch_driver.py> round --repo <absolute primary> --wave <N>
   [--child-timeout <owner seconds>]
 ```
 
-Act only on its receipt: `done` means every wave task landed — run
+`round` owns the entry transition described in Preconditions and branch
+binding, checkpointed as `build: start milestone`, and sets `build/blocked`
+on a dependency deadlock or a blocked
+recovery; every other stop stays with the parent. Act only on its receipt:
+`done` means every wave task landed — run
 `review --wave <N> --cycle <C> --child-command '<owner command>' [--wait
 <owner seconds>]` for step 6 at `full` or `deep` depth: it records the clean
 review base, creates one verify sidecar per lens, briefs one reviewer child
@@ -632,7 +632,13 @@ dispatch contract and perform steps 1–5 by hand.
 
 ## Completion
 
-After every wave passes, record exact full HEAD and prove every task landed
+Run `python3 <absolute dispatch_driver.py> complete --repo <absolute primary>`
+from a clean primary at `build/active` or crash-left `build/done`. It checks
+readiness and the archive-time review cycle contract before recording landing
+proof, entering `ship/active`, and checkpointing. A blocked receipt stops
+completion; a `done` receipt proves these steps, so do not repeat
+them. For manual completion:
+after every wave passes, record exact full HEAD and prove every task landed
 with `python3 <absolute workflow_run.py> build-evidence --repo <absolute primary>
 --expected-head <HEAD>`. The runner writes the wrapped `verify-landed` result
 to `.project/build/evidence.json`; that path is the only landing-proof

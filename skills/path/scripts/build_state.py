@@ -465,10 +465,11 @@ def _overlap(left: Task, right: Task) -> List[str]:
     return sorted(set(left.files) & set(right.files))
 
 
-def ready(repo: str, project_dir: str = DEFAULT_PROJECT_DIR) -> Dict[str, object]:
-    """Return pending tasks that the orchestrator may dispatch now."""
+def ready(repo: str, project_dir: str = DEFAULT_PROJECT_DIR, *,
+          allow_done: bool = False) -> Dict[str, object]:
+    """Return task readiness, optionally accepting build/done for completion checks."""
 
-    project = _load_project(repo, project_dir, ("active",))
+    project = _load_project(repo, project_dir, ("active", "done") if allow_done else ("active",))
     _validate_ready_metadata(project)
     by_id = {task.task_id: task for task in project.tasks}
     unfinished_waves = sorted({task.wave for task in project.tasks if task.status != "done"})
