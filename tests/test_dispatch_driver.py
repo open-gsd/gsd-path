@@ -101,6 +101,29 @@ FAKE_REVIEWER = textwrap.dedent(
     """
 )
 
+# A stand-in skeptic: restates the briefed observations and records one verdict for all of them.
+FAKE_SKEPTIC = textwrap.dedent(
+    """
+    import os, re, sys
+    from pathlib import Path
+    brief = sys.stdin.read()
+    staged = Path(re.search(r"^Write exactly this output file: (.+)$", brief, re.M).group(1))
+    locator = re.search(r"^Criterion locator: (\\S+)$", brief, re.M).group(1)
+    observations = re.findall(r"^- \\[(\\w+)\\] (.+)$", brief, re.M)
+    verdict = os.environ.get("FAKE_SKEPTIC", "stands")
+    lines = [f"- Criterion locator: {locator}", "", "## Observations", ""]
+    for n, (lens, text) in enumerate(observations, 1):
+        lines += [f"### Observation {n} — {lens}", "", text, ""]
+    lines += ["## Observation verdicts", ""]
+    for n in range(1, len(observations) + 1):
+        lines += [f"### Observation {n}: {verdict}", "", "checked", ""]
+    lines += ["## Verdict", "", verdict, "", "## Evidence", "", "Re-ran Verify in the sidecar.", ""]
+    staged.parent.mkdir(parents=True, exist_ok=True)
+    staged.write_text("\\n".join(lines))
+    print(f"Verdict: {verdict}")
+    """
+)
+
 # A stand-in panelist: writes a wave-panel file with no findings.
 FAKE_PANELIST = textwrap.dedent(
     """
@@ -154,12 +177,13 @@ class DispatchDriverTests(unittest.TestCase):
         (root / "fake_coder.py").write_text(FAKE_CODER)
         (root / "fake_reviewer.py").write_text(FAKE_REVIEWER)
         (root / "fake_panelist.py").write_text(FAKE_PANELIST)
+        (root / "fake_skeptic.py").write_text(FAKE_SKEPTIC)
         run_git(root, "add", ".")
         run_git(root, "commit", "-m", "fixture")
         return self.head(root)
 
-    def driver(self, root: Path, *args: str, mode: str = "ready") -> dict:
-        env = dict(os.environ, FAKE_MODE=mode)
+    def driver(self, root: Path, *args: str, mode: str = "ready", **fake: str) -> dict:
+        env = dict(os.environ, FAKE_MODE=mode, **fake)
         completed = subprocess.run(
             [sys.executable, "-B", str(SCRIPT), *args, "--repo", str(root)],
             capture_output=True, text=True, env=env,
@@ -194,6 +218,20 @@ class DispatchDriverTests(unittest.TestCase):
              *extra, "--repo", str(root)], capture_output=True, text=True)
         self.assertTrue(completed.stdout.strip(), completed.stderr)
         return json.loads(completed.stdout)
+
+    def skeptics(self, root: Path, *extra: str, verdict: str = "stands") -> dict:
+        return self.driver(
+            root, "skeptics", "--wave", "1", "--cycle", "1",
+            "--child-command", f"{sys.executable} {root / 'fake_skeptic.py'}",
+            "--role-brief", str(PROJECT_ROOT / "skills/gsd-path-build/references/reviewer.md"),
+            "--template", str(PROJECT_ROOT / "skills/gsd-path-build/templates/skeptic.md"),
+            *extra, FAKE_SKEPTIC=verdict)
+
+    def set_deep_review_with_skeptics(self, root: Path) -> None:
+        plan = root / ".project/plan/PLAN.md"
+        text = plan.read_text().replace("Review depth: full", "Review depth: deep", 1)
+        plan.write_text(text.replace("- review_panel: off", "- review_panel: off\n- finding_skeptics: on", 1))
+        run_git(root, "commit", "-qam", "plan: deep review with skeptics")
 
     def set_panel(self, root: Path, value: str) -> None:
         plan = root / ".project/plan/PLAN.md"
@@ -1069,6 +1107,88 @@ class DispatchDriverTests(unittest.TestCase):
         self.assertIsNotNone(receipt["checkpoint"])
         self.assertEqual(run_git(root, "status", "--porcelain").stdout, "")
         self.assertEqual(self.round(root, "--wait", "60", wave=2)["status"], "done")
+
+    def test_child_collection_recovers_after_source_removal(self) -> None:
+        self.fixture(self.root)
+        base = self.head(self.root)
+        sidecar = dispatch_driver.isolation.isolate_verify(self.root, base, "collection-recovery")
+        relative = ".project/review/wave-1.cycle1.skeptic-t001_ac1.md"
+        staged = Path(sidecar["worktree"]) / relative
+        staged.parent.mkdir(parents=True, exist_ok=True)
+        staged.write_text("validated skeptic output")
+        record = self.root / ".project/collection-state.json"
+        state = {**sidecar, "relative": relative, "exit_code": 0, "_path": str(record)}
+        dispatch_driver.save_state(record, state)
+        receipt = {"steps": []}
+        collect = dispatch_driver.isolation.collect_artifact
+
+        def interrupted(*args):
+            collect(*args)
+            raise RuntimeError("interrupted after collection")
+
+        with mock.patch.object(dispatch_driver.isolation, "collect_artifact", side_effect=interrupted):
+            with self.assertRaisesRegex(RuntimeError, "interrupted after collection"):
+                dispatch_driver.collect_file(self.root, receipt, state, lambda path: {"verdict": "refuted"})
+        self.assertFalse(staged.exists())
+        state = dispatch_driver.load_state(record)
+        dispatch_driver.collect_file(self.root, receipt, state,
+                                     lambda path: self.fail("resume must use persisted validation"))
+        self.assertEqual(state["outcome"], "collected")
+        self.assertEqual(state["verdict"], "refuted")
+        self.assertEqual((self.root / relative).read_text(), "validated skeptic output")
+        self.assertFalse(Path(sidecar["worktree"]).exists())
+        self.assertEqual(receipt["steps"][0]["script"], "isolation.py collect-artifact")
+
+    def test_skeptics_run_once_per_locator_and_fix_tasks_batches_what_stands(self) -> None:
+        root = self.root
+        self.fixture(root)
+        self.set_deep_review_with_skeptics(root)
+        self.assertEqual(self.round(root, "--wait", "60")["status"], "done")
+        review = self.review(root, "--wait", "60", verdict="blocked")
+        self.assertEqual(review["status"], "blocked", review)
+        locators = review["findings"]["skeptic_groups"]
+        self.assertTrue(locators, review["findings"])
+        self.assertEqual(self.driver(root, "fix-tasks", "--wave", "1", "--cycle", "1")["escalation"],
+                         ["skeptic_groups"])
+        receipt = self.skeptics(root, "--wait", "60")
+        self.assertEqual(receipt["status"], "done", receipt)
+        self.assertEqual({key: item["verdict"] for key, item in receipt["skeptics"].items()},
+                         {locator: "stands" for locator in locators})
+        for locator in locators:
+            text = (root / f".project/review/wave-1.cycle1.skeptic-{locator}.md").read_text()
+            self.assertIn(f"- Criterion locator: {locator}", text)
+        self.assertEqual(receipt["findings"]["skeptic_groups"], [])
+        self.assertEqual(sorted(receipt["findings"]["fix_groups"]), sorted(locators))
+        self.assertEqual(self.branches(root), ["gsd-path/M001"])
+        again = self.skeptics(root, "--wait", "60")
+        self.assertEqual(again["status"], "done", again)
+        self.assertFalse([step for step in again["steps"] if step["script"] == "isolation.py isolate-verify"])
+        fixes = self.driver(root, "fix-tasks", "--wave", "1", "--cycle", "1")
+        self.assertEqual(fixes["status"], "created", fixes)
+        self.assertEqual(run_git(root, "status", "--porcelain").stdout, "")
+
+    def test_skeptics_that_refute_everything_leave_the_ruling_to_the_user(self) -> None:
+        root = self.root
+        self.fixture(root)
+        self.set_deep_review_with_skeptics(root)
+        self.assertEqual(self.round(root, "--wait", "60")["status"], "done")
+        self.assertEqual(self.review(root, "--wait", "60", verdict="blocked")["status"], "blocked")
+        receipt = self.skeptics(root, "--wait", "60", verdict="refuted")
+        self.assertEqual(receipt["status"], "done", receipt)
+        self.assertTrue(receipt["findings"]["all_refuted"], receipt["findings"])
+        self.assertEqual(self.driver(root, "fix-tasks", "--wave", "1", "--cycle", "1")["escalation"],
+                         ["all_refuted"])
+
+    def test_skeptics_report_none_for_a_passing_cycle_and_escalate_structural_blockers(self) -> None:
+        root = self.root
+        self.fixture(root)
+        self.set_deep_review_with_skeptics(root)
+        self.assertEqual(self.round(root, "--wait", "60")["status"], "done")
+        receipt = self.skeptics(root, "--wait", "60")
+        self.assertEqual(receipt["status"], "escalate", receipt)
+        self.assertEqual(receipt["escalation"], ["structural_blockers"])
+        self.assertEqual(self.review(root, "--wait", "60")["status"], "pass")
+        self.assertEqual(self.skeptics(root, "--wait", "60")["status"], "none")
 
     def test_fix_tasks_escalates_structural_blockers(self) -> None:
         root = self.root

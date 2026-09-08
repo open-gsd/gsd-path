@@ -10,7 +10,9 @@
 ## Observations
 
 <!-- Repeat for every distinct lens observation. Collapse only true
-     duplicates. The criterion locator, not these local numbers, is the
+     duplicates. Give each observation a unique number and exactly one
+     verdict with that number below; unknown or duplicate verdict numbers
+     are invalid. The criterion locator, not these local numbers, is the
      finding identity across cycles. -->
 
 ### Observation <n> — <contract | adversarial>

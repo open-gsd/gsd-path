@@ -737,6 +737,25 @@ def retire_sidecar(primary: Path, state: Dict[str, object]) -> None:
     update_state(state, cleanup_complete=True, cleanup_pending=False, cleanup_error=None)
 
 
+def review_base(records: Path, wave: int, cycle: int) -> str:
+    """The clean base the cycle's review recorded; a stop when no review ran."""
+    base = next((state["base"] for state in latest_states(records / "reviews")
+                 if state.get("wave") == wave and state.get("cycle") == cycle), None)
+    if base is None:
+        raise DriverStop("review base is not recorded; run review first")
+    return str(base)
+
+
+def spawn_in_sidecar(root: Path, primary: Path, receipt: Dict[str, object], options: argparse.Namespace,
+                     name: str, state: Dict[str, object], brief: Callable[[Dict[str, object]], str],
+                     command: Optional[str] = None) -> None:
+    """Cut a verify sidecar at the state's base and start one child in it."""
+    sidecar = isolation.isolate_verify(primary, str(state["base"]), name)
+    receipt["steps"].append({"script": "isolation.py isolate-verify", "result": sidecar})
+    spawn(root, dict(state, worktree=str(sidecar["worktree"]), branch=str(sidecar["branch"])), options, brief,
+          command=command)
+
+
 def review_brief(state: Dict[str, object], options: argparse.Namespace, primary: Path,
                  tasks: List[Dict[str, object]], final_scope: bool, previous: Optional[Path]) -> str:
     wave, cycle, lens = state["wave"], state["cycle"], state.get("lens")
@@ -822,15 +841,12 @@ class Review:
         self.receipt["base"] = base
         for key, relative in lenses.items():
             name = f"wave-{self.wave}-cycle-{self.cycle}" + ("" if key == "canonical" else f"-{key}")
-            sidecar = isolation.isolate_verify(self.primary, base, name)
-            self.receipt["steps"].append({"script": "isolation.py isolate-verify", "result": sidecar})
             previous = earlier.get(key)
             state = {"task_id": self.lens_name(key), "lens": None if key == "canonical" else key,
-                     "wave": self.wave, "cycle": self.cycle, "base": base,
-                     "worktree": str(sidecar["worktree"]), "branch": str(sidecar["branch"]), "relative": relative}
-            spawn(self.root, state, self.options,
-                  lambda fresh, previous=previous: review_brief(fresh, self.options, self.primary, tasks,
-                                                                 final_scope, previous))
+                     "wave": self.wave, "cycle": self.cycle, "base": base, "relative": relative}
+            spawn_in_sidecar(self.root, self.primary, self.receipt, self.options, name, state,
+                             lambda fresh, previous=previous: review_brief(fresh, self.options, self.primary, tasks,
+                                                                            final_scope, previous))
 
     def collect(self, state: Dict[str, object]) -> None:
         """Validate in the sidecar, then copy to the canonical path, then retire: the contract's order."""
@@ -1001,23 +1017,105 @@ def helper_json(receipt: Dict[str, object], script: str, *arguments: str, cwd: P
     return result
 
 
-class Panel:
-    """Step 6's optional review panel: resolve, one panelist per family in its own sidecar,
-    collect, merge, then the single on-pass checkpoint with the canonical review."""
+class Children:
+    """One sidecar child per key of a wave cycle, each polled to a terminal outcome and its file
+    collected; Panel and Skeptics differ only in what they dispatch and record."""
+
+    records = ""  # dispatch records subdirectory
+    field = ""  # the state key naming a child
+    results = ""  # the receipt key holding collected entries
 
     def __init__(self, primary: Path, options: argparse.Namespace) -> None:
         self.primary, self.options = primary, options
         self.project_dir, self.wave, self.cycle = options.project_dir, options.wave, options.cycle
-        self.root = records_root(primary) / "panels"
+        self.root = records_root(primary) / self.records
         self.receipt: Dict[str, object] = {"status": None, "wave": self.wave, "cycle": self.cycle,
-                                           "families": {}, "in_flight": [], "blocked": [], "steps": []}
+                                           self.results: {}, "in_flight": [], "blocked": [], "steps": []}
+
+    def states(self) -> Dict[str, Dict[str, object]]:
+        return {str(state[self.field]): state for state in latest_states(self.root)
+                if state.get("wave") == self.wave and state.get("cycle") == self.cycle}
+
+    def validate(self, staged: Path) -> Dict[str, object]:
+        """State fields read from the staged file; raises review_findings.ReviewFindingsError."""
+        return {}
+
+    def entry(self, state: Dict[str, object]) -> Dict[str, object]:
+        raise NotImplementedError
+
+    def collect(self, state: Dict[str, object]) -> None:
+        collect_file(self.primary, self.receipt, state, self.validate)
+
+    def poll(self, states: Dict[str, Dict[str, object]], deadline: Optional[float]) -> bool:
+        """Advance every child; True once all are terminal, False when the deadline passes first."""
+        while True:
+            self.receipt["in_flight"], self.receipt["blocked"], self.receipt[self.results] = [], [], {}
+            for key, state in states.items():
+                if not advance(state, self.collect):
+                    self.receipt["in_flight"].append(summary(state))
+                    continue
+                if state.get("cleanup_pending"):
+                    self.receipt["blocked"].append({**summary(state), "reason": state.get("cleanup_error"),
+                                                    "helper": "isolation.py retire"})
+                if state.get("outcome") == "collected":
+                    self.receipt[self.results][key] = self.entry(state)
+                elif state.get("outcome") == "blocked":
+                    self.receipt["blocked"].append({**summary(state), "reason": state.get("reason"),
+                                                    "helper": state.get("helper")})
+            if all(state.get("outcome") in ("collected", "blocked") for state in states.values()):
+                return True
+            if deadline is None or time.monotonic() >= deadline:
+                self.receipt["status"] = "in-flight"
+                return False
+            time.sleep(POLL_SECONDS)
+            states.update(self.states())  # an unreaped wrapper still looks alive; its exit receipt does not
+
+
+def collect_file(primary: Path, receipt: Dict[str, object], state: Dict[str, object],
+                 validate: Callable[[Path], Dict[str, object]]) -> None:
+    """Validate a child's staged file in its sidecar, copy it to the canonical path, then retire."""
+    sidecar, relative = Path(str(state["worktree"])), str(state["relative"])
+    if state.get("outcome") != "collected":
+        if state.get("timed_out") or state.get("exit_code") != 0:
+            update_state(state, outcome="blocked", reason=f"child exited {state.get('exit_code')}")
+            return
+        staged = sidecar / relative
+        if staged.is_file():
+            try:
+                fields = validate(staged)
+            except review_findings.ReviewFindingsError as error:
+                update_state(state, outcome="blocked", reason=str(error), helper="review_findings.py")
+                return
+            update_state(state, validated=True,
+                         validated_sha256=hashlib.sha256(staged.read_bytes()).hexdigest(), **fields)
+        else:
+            canonical = primary / relative
+            if (not state.get("validated") or not canonical.is_file()
+                    or hashlib.sha256(canonical.read_bytes()).hexdigest() != state.get("validated_sha256")):
+                update_state(state, outcome="blocked", reason="child wrote no file or collected file changed")
+                return
+        try:
+            collected = isolation.collect_artifact(primary, sidecar, str(state["base"]), str(state["branch"]),
+                                                   relative, relative, None)
+        except isolation.IsolationError as error:
+            update_state(state, outcome="blocked", reason=str(error), helper="isolation.py")
+            return
+        receipt["steps"].append({"script": "isolation.py collect-artifact", "result": collected})
+        update_state(state, outcome="collected")
+    retire_sidecar(primary, state)
+
+
+class Panel(Children):
+    """Step 6's optional review panel: resolve, one panelist per family in its own sidecar,
+    collect, merge, then the single on-pass checkpoint with the canonical review."""
+
+    records, field, results = "panels", "family", "families"
 
     def family_name(self, family: str) -> str:
         return f"review_wave_{self.wave}_cycle_{self.cycle}_panel_{family}"
 
-    def states(self) -> Dict[str, Dict[str, object]]:
-        return {str(state["family"]): state for state in latest_states(self.root)
-                if state.get("wave") == self.wave and state.get("cycle") == self.cycle}
+    def entry(self, state: Dict[str, object]) -> Dict[str, object]:
+        return {"slug": state.get("slug"), "path": state.get("relative")}
 
     def relative(self, family: str) -> str:
         return f"{self.project_dir}/review/wave-{self.wave}.cycle{self.cycle}.panel.{family}.md"
@@ -1082,11 +1180,8 @@ class Panel:
                     self.receipt["status"] = "off"
                     return self.receipt
                 if resolved["status"] == "skipped":
-                    review_base = next((state["base"] for state in latest_states(records_root(self.primary) / "reviews")
-                                        if state.get("wave") == self.wave and state.get("cycle") == self.cycle), None)
-                    if review_base is None:
-                        raise DriverStop("review base is not recorded; run review first")
-                    failure = self.input_failure(str(review_base), paths)
+                    base = review_base(self.root.parent, self.wave, self.cycle)
+                    failure = self.input_failure(base, paths)
                     if failure:
                         raise DriverStop(failure)
                     if skipped.exists():  # an interrupted checkpoint left a valid receipt: reuse it
@@ -1100,7 +1195,7 @@ class Panel:
                     else:
                         _common.atomic_write(skipped, str(resolved.pop("_stdout")))
                     self.receipt["skipped_receipt"] = str(skipped)
-                    failure = self.input_failure(str(review_base), paths)
+                    failure = self.input_failure(base, paths)
                     if failure:
                         raise DriverStop(failure)
                     self.checkpoint(paths, "persist the wave review and the skipped panel receipt")
@@ -1124,36 +1219,16 @@ class Panel:
                 tasks = wave_tasks(self.primary, self.project_dir, self.wave, self.receipt)
                 for family in missing:
                     slug = roster["slugs"][family]
-                    sidecar = isolation.isolate_verify(self.primary, base,
-                                                       f"wave-{self.wave}-cycle-{self.cycle}-panel-{family}")
-                    self.receipt["steps"].append({"script": "isolation.py isolate-verify", "result": sidecar})
                     state = {"task_id": self.family_name(family), "family": family, "slug": slug,
                              "wave": self.wave, "cycle": self.cycle, "base": base, "mode": roster["mode"],
-                             "worktree": str(sidecar["worktree"]), "branch": str(sidecar["branch"]),
                              "relative": self.relative(family)}
-                    spawn(self.root, state, self.options, lambda fresh: self.brief(fresh, tasks, depth, review),
-                          command=self.options.child_command.replace("{model}", slug))
+                    spawn_in_sidecar(self.root, self.primary, self.receipt, self.options,
+                                     f"wave-{self.wave}-cycle-{self.cycle}-panel-{family}", state,
+                                     lambda fresh: self.brief(fresh, tasks, depth, review),
+                                     command=self.options.child_command.replace("{model}", slug))
                 states = self.states()
-            while True:
-                self.receipt["in_flight"], self.receipt["blocked"], self.receipt["families"] = [], [], {}
-                for family, state in states.items():
-                    if not advance(state, self.collect):
-                        self.receipt["in_flight"].append(summary(state))
-                        continue
-                    if state.get("cleanup_pending"):
-                        self.receipt["blocked"].append({**summary(state), "reason": state.get("cleanup_error"),
-                                                        "helper": "isolation.py retire"})
-                    if state.get("outcome") == "collected":
-                        self.receipt["families"][family] = {"slug": state.get("slug"), "path": state.get("relative")}
-                    elif state.get("outcome") == "blocked":
-                        self.receipt["blocked"].append({**summary(state), "reason": state.get("reason")})
-                if all(state.get("outcome") in ("collected", "blocked") for state in states.values()):
-                    break
-                if deadline is None or time.monotonic() >= deadline:
-                    self.receipt["status"] = "in-flight"
-                    return self.receipt
-                time.sleep(POLL_SECONDS)
-                states = self.states()
+            if not self.poll(states, deadline):
+                return self.receipt
             if self.receipt["blocked"]:
                 self.receipt["status"] = "blocked"
                 return self.receipt
@@ -1204,24 +1279,93 @@ class Panel:
                 self.primary, self.receipt, f"build: record wave {self.wave} cycle {self.cycle} review",
                 f"Why: {reason}\nWave: {self.wave}")
 
-    def collect(self, state: Dict[str, object]) -> None:
-        sidecar, relative = Path(str(state["worktree"])), str(state["relative"])
-        if state.get("outcome") != "collected":
-            if state.get("timed_out") or state.get("exit_code") != 0:
-                update_state(state, outcome="blocked", reason=f"panel child exited {state.get('exit_code')}")
-                return
-            if not (sidecar / relative).is_file():
-                update_state(state, outcome="blocked", reason="panel child wrote no file")
-                return
-            try:
-                collected = isolation.collect_artifact(self.primary, sidecar, str(state["base"]), str(state["branch"]),
-                                                       relative, relative, None)
-            except isolation.IsolationError as error:
-                update_state(state, outcome="blocked", reason=str(error), helper="isolation.py")
-                return
-            self.receipt["steps"].append({"script": "isolation.py collect-artifact", "result": collected})
-            update_state(state, outcome="collected")
-        retire_sidecar(self.primary, state)
+
+class Skeptics(Children):
+    """Step 7's skeptic branch: one read-only skeptic per `needs-skeptic` locator in its own sidecar at
+    the review base, validated, collected, retired, then the findings helper rerun. The skeptic files
+    stay uncommitted for the fix-task or ruling checkpoint."""
+
+    records, field, results = "skeptics", "locator", "skeptics"
+
+    def compute(self) -> Dict[str, object]:
+        try:
+            return review_findings.compute(self.primary, self.project_dir, self.wave, self.cycle)
+        except review_findings.ReviewFindingsError as error:
+            raise DriverStop(str(error), helper="review_findings.py collect")
+
+    def validate(self, staged: Path) -> Dict[str, object]:
+        group = next(group for group in self.compute()["groups"]
+                     if staged.name == f"wave-{self.wave}.cycle{self.cycle}.skeptic-{group['locator']}.md")
+        return {"verdict": review_findings.parse_skeptic(
+            staged, self.wave, [item["text"] for item in group["observations"]])["verdict"]}
+
+    def entry(self, state: Dict[str, object]) -> Dict[str, object]:
+        return {"verdict": state.get("verdict"), "path": state.get("relative")}
+
+    def brief(self, state: Dict[str, object], group: Dict[str, object], tasks: List[Dict[str, object]]) -> str:
+        worktree = Path(str(state["worktree"]))
+        cited = [task for task in tasks if task["task_id"] in group["tasks"]]
+        lines = [
+            f"You are one finding-skeptic child for GSD Path wave {self.wave}, cycle {self.cycle}; logical task "
+            f"name {state['task_id']}. Mode: skeptic.",
+            f"Read the reviewer role brief first and follow its Skeptic mode exactly: {self.options.role_brief}",
+            f"Template (use only this): {self.options.template}",
+            f"Criterion locator: {group['locator']}",
+            f"Criterion: {group['criterion']}",
+            f"Lenses: {', '.join(group['lenses'])}",
+            "Observations to refute, verbatim, one per line:",
+            *[f"- [{item['lens']}] {item['text']}" for item in group["observations"]],
+            f"Repository root, read-only: {self.primary}",
+            f"Your verify sidecar root, the only place you may write or apply patches: {worktree} "
+            f"on branch {state['branch']} at the recorded review base {state['base']}.",
+            f"Write exactly this output file: {worktree / str(state['relative'])}",
+            f"INTENT.md: {self.primary / self.project_dir / 'intent/INTENT.md'}",
+            "Tasks the observations cite, each with its recorded base and proven landing commit:",
+            *[f"- {task['task_id']}: {self.primary / str(task['task'])} — base {task['base']}, "
+              f"landing commit {task['commit']}" for task in cited],
+            "Do not write a Wave verdict. Never edit the primary. Never delegate. Never stage or commit.",
+            "Terminal result: the `## Verdict` of the file you wrote is your result; name it in your final message.",
+        ]
+        return "\n".join(lines) + "\n"
+
+    def run(self) -> Dict[str, object]:
+        deadline = time.monotonic() + self.options.wait if self.options.wait else None
+        try:
+            findings = self.compute()
+            self.receipt["findings"] = findings
+            escalation = [key for key in ("structural_blockers", "cap_reached") if findings.get(key)]
+            if escalation:
+                self.receipt.update(status="escalate", escalation=escalation)
+                return self.receipt
+            states = self.states()
+            missing = [locator for locator in findings["skeptic_groups"] if locator not in states]
+            if not states and not missing:
+                self.receipt.update(status="none", reason="no skeptic groups")
+                return self.receipt
+            if missing:
+                base = review_base(self.root.parent, self.wave, self.cycle)
+                if isolation.current_sha(self.primary) != base:
+                    raise DriverStop("cannot dispatch skeptics: HEAD moved from the recorded review base")
+                groups = {group["locator"]: group for group in findings["groups"]}
+                tasks = wave_tasks(self.primary, self.project_dir, self.wave, self.receipt)
+                for locator in missing:
+                    state = {"task_id": f"review_wave_{self.wave}_cycle_{self.cycle}_skeptic_{locator}",
+                             "locator": locator, "wave": self.wave, "cycle": self.cycle, "base": base,
+                             "relative": f"{self.project_dir}/review/wave-{self.wave}.cycle{self.cycle}.skeptic-{locator}.md"}
+                    spawn_in_sidecar(self.root, self.primary, self.receipt, self.options,
+                                     f"wave-{self.wave}-cycle-{self.cycle}-skeptic-{locator}", state,
+                                     lambda fresh, group=groups[locator]: self.brief(fresh, group, tasks))
+                states = self.states()
+            if not self.poll(states, deadline):
+                return self.receipt
+            if self.receipt["blocked"]:
+                self.receipt["status"] = "blocked"
+                return self.receipt
+            self.receipt["findings"] = self.compute()  # the helper routes refutations and fix groups
+            self.receipt["status"] = "done"
+            return self.receipt
+        except STOP_ERRORS as error:
+            return stop(self.receipt, error)
 
 
 def next_task_id(tasks_dir: Path) -> str:
@@ -1470,32 +1614,30 @@ def main(argv=None) -> int:
     round_parser.add_argument("--budget-authority", help="quoted owner policy for the limits")
     round_parser.add_argument("--role-brief", type=Path, default=default_resource("references/coder.md"))
     round_parser.add_argument("--task-template", type=Path, default=default_resource("templates/task.md"))
-    review_parser = commands.add_parser("review", help="run one wave review cycle at full or deep depth")
-    review_parser.add_argument("--repo", type=Path, required=True)
-    review_parser.add_argument("--project-dir", default=".project")
-    review_parser.add_argument("--wave", type=int, required=True)
-    review_parser.add_argument("--cycle", type=positive_int, required=True)
-    review_parser.add_argument("--child-command", required=True,
-                               help="owner-supplied command that reads the brief on stdin")
-    review_parser.add_argument("--wait", type=float, help="seconds to keep polling before returning")
-    review_parser.add_argument("--child-timeout", type=float, help="per-child wall clock in seconds")
+    cycle_child = argparse.ArgumentParser(add_help=False)  # shared by the review-cycle child runners
+    cycle_child.add_argument("--repo", type=Path, required=True)
+    cycle_child.add_argument("--project-dir", default=".project")
+    cycle_child.add_argument("--wave", type=int, required=True)
+    cycle_child.add_argument("--cycle", type=positive_int, required=True)
+    cycle_child.add_argument("--child-command", required=True,
+                             help="owner-supplied command that reads the brief on stdin; "
+                                  "for panel, a literal {model} is replaced by the family slug")
+    cycle_child.add_argument("--wait", type=float, help="seconds to keep polling before returning")
+    cycle_child.add_argument("--child-timeout", type=float, help="per-child wall clock in seconds")
+    cycle_child.add_argument("--role-brief", type=Path, default=default_resource("references/reviewer.md"))
+    review_parser = commands.add_parser("review", parents=[cycle_child],
+                                        help="run one wave review cycle at full or deep depth")
     review_parser.add_argument("--repair-evidence", type=Path,
                                help="review_findings.py repair-evidence receipt for a re-review")
-    review_parser.add_argument("--role-brief", type=Path, default=default_resource("references/reviewer.md"))
     review_parser.add_argument("--template", type=Path, default=default_resource("templates/wave-review.md"))
-    panel_parser = commands.add_parser("panel", help="run the optional review panel for a collected wave review")
-    panel_parser.add_argument("--repo", type=Path, required=True)
-    panel_parser.add_argument("--project-dir", default=".project")
-    panel_parser.add_argument("--wave", type=int, required=True)
-    panel_parser.add_argument("--cycle", type=positive_int, required=True)
-    panel_parser.add_argument("--child-command", required=True,
-                              help="owner-supplied command; a literal {model} is replaced by the family slug")
+    panel_parser = commands.add_parser("panel", parents=[cycle_child],
+                                       help="run the optional review panel for a collected wave review")
     panel_parser.add_argument("--advertised", required=True, help="comma-separated model slugs the host advertises")
     panel_parser.add_argument("--parent-slug", help="the parent's model slug when known")
-    panel_parser.add_argument("--wait", type=float, help="seconds to keep polling before returning")
-    panel_parser.add_argument("--child-timeout", type=float, help="per-child wall clock in seconds")
-    panel_parser.add_argument("--role-brief", type=Path, default=default_resource("references/reviewer.md"))
     panel_parser.add_argument("--template", type=Path, default=default_resource("templates/wave-panel.md"))
+    skeptic_parser = commands.add_parser("skeptics", parents=[cycle_child],
+                                         help="run one finding skeptic per needs-skeptic locator")
+    skeptic_parser.add_argument("--template", type=Path, default=default_resource("templates/skeptic.md"))
     fix_parser = commands.add_parser("fix-tasks", help="write one fix task per findings batch of a blocked cycle")
     fix_parser.add_argument("--repo", type=Path, required=True)
     fix_parser.add_argument("--project-dir", default=".project")
@@ -1521,11 +1663,14 @@ def main(argv=None) -> int:
     primary = arguments.repo.resolve()
     lock = None
     try:
-        if arguments.action in ("round", "review", "panel", "fix-tasks", "finish", "answer"):
+        if arguments.action in ("round", "review", "panel", "skeptics", "fix-tasks", "finish", "answer"):
             lock = acquire_lock(primary)
         if arguments.action == "panel":
             require_files(parser, arguments, "role_brief", "template")
             result = Panel(primary, arguments).run()
+        elif arguments.action == "skeptics":
+            require_files(parser, arguments, "role_brief", "template")
+            result = Skeptics(primary, arguments).run()
         elif arguments.action == "fix-tasks":
             result = fix_tasks(primary, arguments)
         elif arguments.action == "review":

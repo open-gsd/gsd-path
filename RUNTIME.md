@@ -46,7 +46,8 @@ read the newest attempt records. Records are keyed by the bound branch, so a
 new milestone starts with no attempts and the previous milestone's records
 remain as evidence.
 Review attempts use `gsd-path/dispatch/<milestone slug>/reviews/<logical name>/attempt-N/`;
-panel attempts use the same layout under `panels/` instead of `reviews/`.
+panel attempts use the same layout under `panels/` instead of `reviews/`, and
+skeptic attempts under `skeptics/`.
 `status` and `answer` cover task attempts only.
 
 | Command | Result |
@@ -54,6 +55,7 @@ panel attempts use the same layout under `panels/` instead of `reviews/`.
 | `round --repo <root> --wave <N> --child-command '<cmd>' [--wait <s>] [--child-timeout <s>] [--capacity <N>] [--max-attempts <N>] [--task-limit <N> --session-limit <N> --budget-authority '<policy>']` | Recover, settle exited children, `ready`, checkpoint bookkeeping, lint, isolate, dispatch; Verify, land, record, retire each result in task-id order. Receipt status `done`, `in-flight`, `question`, or `blocked`. |
 | `review --repo <root> --wave <N> --cycle <C> --child-command '<cmd>' [--wait <s>] [--child-timeout <s>] [--repair-evidence <receipt>]` | Step 6 at `full` or `deep` depth: clean review base, one verify sidecar and reviewer child per lens, validate in the sidecar, collect, retire; after every lens settles, checkpoint a `pass` when no panel is configured, or return the `review_findings.py collect` grouping on `blocked`. `verify-only` returns `not-applicable`; `panel_required` reports the PLAN panel setting. |
 | `panel --repo <root> --wave <N> --cycle <C> --advertised <slugs> [--parent-slug <slug>] --child-command '<cmd with {model}>' [--wait <s>]` | Step 6 panel: `review_panel.py resolve`; `off`, a persisted skipped receipt, or one panelist per family in its own sidecar; collect, `review_panel.py merge`, then the single on-pass checkpoint with the review. |
+| `skeptics --repo <root> --wave <N> --cycle <C> --child-command '<cmd>' [--wait <s>] [--child-timeout <s>]` | Step 7 skeptic branch: one read-only skeptic per `skeptic_groups` locator in its own sidecar at the recorded review base, briefed with the criterion, every observation, and the cited tasks verbatim; validate with `review_findings.py`, collect, retire, then rerun the helper. `none` without skeptic groups; `escalate` for structural blockers or the cycle cap. The skeptic files stay uncommitted for the fix-task or ruling checkpoint. |
 | `fix-tasks --repo <root> --wave <N> --cycle <C>` | Step 7 batching: one fix task per `review_findings.py collect` batch with the failed criteria and observations verbatim, lint-checked; `escalate` for structural blockers, skeptic groups, cycle cap, or all-refuted. |
 | `finish --repo <root> --task-id <id>` | Recover first; return a proven landing without repeating Verify, or verify, land, record, and retire one returned task. Without a dispatch record, derive the isolate from task frontmatter. |
 | `answer --repo <root> --task-id <id> --answer '<text>'` | Append `Orchestrator answer:` to the isolate's task Log; the next `round` redispatches that isolate. |
@@ -76,7 +78,7 @@ replaces literal `{model}` in its child command with the resolved family slug.
 calls. In `round`, an unfinished earlier wave blocks dispatch before the bookkeeping
 checkpoint. Child completion is recorded in `exit.json`; the parent alone
 writes `state.json`.
-For `review` and `panel`, when the child process is gone and `finished_at` is
+For `review`, `panel`, and `skeptics`, when the child process is gone and `finished_at` is
 unset, the driver rereads that attempt's state and exit receipt before
 collecting the result or blocking with
 `child wrapper exited without recording a result`.
@@ -102,7 +104,7 @@ Verify task is in flight at a time, and a round stops at a wave boundary.
 Without `--wait`, the call returns after processing currently available work;
 children continue running. `--capacity`, when supplied, must be positive.
 
-`round`, `review`, `panel`, `fix-tasks`, `finish`, and `answer` hold a
+`round`, `review`, `panel`, `skeptics`, `fix-tasks`, `finish`, and `answer` hold a
 repository-scoped advisory lock for the whole call, including `--wait`.
 A concurrent invocation returns `blocked`
 with `another dispatch_driver invocation holds the lock`; wait for the
@@ -147,6 +149,12 @@ before checkpointing. Panel `status`
 describes panel processing; `review_verdict` holds the canonical verdict.
 A blocked canonical review leaves `checkpoint: null`, including for a skipped
 panel, so `fix-tasks` can checkpoint the blocked review with its repairs.
+
+Resume an `in-flight` skeptic run with `skeptics` for the same wave and cycle.
+Dispatching missing locators requires HEAD to equal the recorded review base.
+Panel and skeptic collection save validated fields and a content hash before
+moving the staged file. If interrupted after that move, collection resumes
+through its receipt only when the canonical file matches the saved hash.
 
 `fix-tasks` reconciles existing repair tasks and PLAN rows before linting and
 checkpointing. It creates missing batches in an appended repair wave and
