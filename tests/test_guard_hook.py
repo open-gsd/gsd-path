@@ -105,12 +105,21 @@ class GuardHookTests(unittest.TestCase):
         )
 
     def test_bundled_helper_may_name_the_archive(self):
-        helper = "python3 -B scripts/pipeline_state.py record-shipment --repo . --archive .project/archive/001-x --event shipped"
-        status, output, error = run_guard({"tool_name": "Bash", "tool_input": {"command": helper}})
-        self.assertEqual((status, output, error), (0, "", ""))
-        chained = helper + " && git commit -qm ship"
-        status, output, _ = run_guard({"tool_name": "Bash", "tool_input": {"command": chained}})
-        self.assertEqual((status, json.loads(output)["permissionDecision"]), (2, "deny"))
+        helper = 'python3 -B scripts/pipeline_state.py record-shipment --repo . --archive .project/archive/001-x --event "archive preflight passed; shipment recorded"'
+        self.assert_allowed({"tool_name": "Bash", "tool_input": {"command": helper}})
+        for suffix in (
+            " && git commit -qm ship",
+            "; git commit -qm ship",
+            " | cat",
+            " &",
+            " > receipt.txt",
+            " $(printf shipped)",
+        ):
+            with self.subTest(suffix=suffix):
+                self.assert_denied({
+                    "tool_name": "Bash",
+                    "tool_input": {"command": helper + suffix},
+                })
 
     def test_bundled_helper_rejects_identical_copy_outside_runtime(self):
         for name in ("pipeline_state.py", "archive_milestone.py"):

@@ -1677,7 +1677,13 @@ def bundled_helper_invocation(command, tokens, working_directories):
     itself in the repository layout. Resolve only in supplied tool working
     directories, falling back to cwd when none are supplied.
     """
-    if AMBIGUOUS_SHELL_SYNTAX.search(command) or not tokens:
+    segments = list(command_segments(tokens))
+    if len(segments) != 1 or segments[0] != tokens:
+        return False
+    if any(token and set(token) <= set("<>") for token in tokens):
+        return False
+    _, substitutions = split_command_substitutions(command)
+    if substitutions or wrapped_command_tokens(segments[0]) is not None:
         return False
     if tokens[0] not in ("python", "python3"):
         return False
