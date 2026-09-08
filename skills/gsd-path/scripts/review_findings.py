@@ -320,7 +320,7 @@ def parse_lens(text: str, lens: str, tasks: Dict[str, dict]) -> dict:
 # --- skeptic files ---------------------------------------------------------
 
 
-def parse_skeptic(path: Path, wave: int) -> dict:
+def parse_skeptic(path: Path, wave: int, expected_observations: Optional[Sequence[str]] = None) -> dict:
     """Validate one skeptic file against the template; return its verdict and observations."""
 
     named = SKEPTIC_FILE_NAME.fullmatch(path.name)
@@ -342,6 +342,10 @@ def parse_skeptic(path: Path, wave: int) -> dict:
         observations.append(_normalize(" ".join(lines[start + 1 : end])))
     if not observations or any(not item for item in observations):
         raise ReviewFindingsError(f"{path.name} records no observation text")
+    if expected_observations is not None and not {
+        _normalize(item) for item in expected_observations
+    } <= set(observations):
+        raise ReviewFindingsError(f"{path.name} omits dispatched observations")
     observation_verdicts = [
         match.group("verdict")
         for line in (_section(text, "Observation verdicts") or "").splitlines()
@@ -508,6 +512,13 @@ def compute(
         group["skeptic"] = None
         earlier = earlier_refuted.get(locator)
         current = current_skeptics.get(locator)
+        if current is not None:
+            try:
+                parse_skeptic(Path(current["path"]), wave,
+                              [item["text"] for item in group["observations"]])
+            except ReviewFindingsError as error:
+                structural.append({"kind": "invalid-skeptic", "path": current["path"], "detail": str(error)})
+                current = None
         if not skeptics_active:
             group["disposition"] = "fix"
         elif earlier is not None:

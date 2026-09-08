@@ -1080,14 +1080,20 @@ def collect_file(primary: Path, receipt: Dict[str, object], state: Dict[str, obj
             update_state(state, outcome="blocked", reason=f"child exited {state.get('exit_code')}")
             return
         staged = sidecar / relative
-        if not staged.is_file():
-            update_state(state, outcome="blocked", reason="child wrote no file")
-            return
-        try:
-            fields = validate(staged)
-        except review_findings.ReviewFindingsError as error:
-            update_state(state, outcome="blocked", reason=str(error), helper="review_findings.py")
-            return
+        if staged.is_file():
+            try:
+                fields = validate(staged)
+            except review_findings.ReviewFindingsError as error:
+                update_state(state, outcome="blocked", reason=str(error), helper="review_findings.py")
+                return
+            update_state(state, validated=True,
+                         validated_sha256=hashlib.sha256(staged.read_bytes()).hexdigest(), **fields)
+        else:
+            canonical = primary / relative
+            if (not state.get("validated") or not canonical.is_file()
+                    or hashlib.sha256(canonical.read_bytes()).hexdigest() != state.get("validated_sha256")):
+                update_state(state, outcome="blocked", reason="child wrote no file or collected file changed")
+                return
         try:
             collected = isolation.collect_artifact(primary, sidecar, str(state["base"]), str(state["branch"]),
                                                    relative, relative, None)
@@ -1095,7 +1101,7 @@ def collect_file(primary: Path, receipt: Dict[str, object], state: Dict[str, obj
             update_state(state, outcome="blocked", reason=str(error), helper="isolation.py")
             return
         receipt["steps"].append({"script": "isolation.py collect-artifact", "result": collected})
-        update_state(state, outcome="collected", **fields)
+        update_state(state, outcome="collected")
     retire_sidecar(primary, state)
 
 
@@ -1288,7 +1294,10 @@ class Skeptics(Children):
             raise DriverStop(str(error), helper="review_findings.py collect")
 
     def validate(self, staged: Path) -> Dict[str, object]:
-        return {"verdict": review_findings.parse_skeptic(staged, self.wave)["verdict"]}
+        group = next(group for group in self.compute()["groups"]
+                     if staged.name == f"wave-{self.wave}.cycle{self.cycle}.skeptic-{group['locator']}.md")
+        return {"verdict": review_findings.parse_skeptic(
+            staged, self.wave, [item["text"] for item in group["observations"]])["verdict"]}
 
     def entry(self, state: Dict[str, object]) -> Dict[str, object]:
         return {"verdict": state.get("verdict"), "path": state.get("relative")}

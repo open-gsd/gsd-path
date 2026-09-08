@@ -268,6 +268,22 @@ class SkepticSelectionTest(unittest.TestCase):
         self.assertEqual(result["skeptic_groups"], [])
         self.assertFalse(result["all_refuted"])
 
+    def test_partial_refutation_cannot_hide_an_unexamined_observation(self):
+        fixture = Fixture(self)
+        first = "Parses CSV rows — found: no, parser.py:1 fix: correct it"
+        second = "Parses CSV rows — found: drops rows, parser.py:9 fix: correct it"
+        fixture.lens("contract", t001_fails=[first.replace(" fix: correct it", "")])
+        fixture.lens("adversarial", t001_fails=[second.replace(" fix: correct it", "")])
+        fixture.skeptic("t001_ac1", 1, "refuted", [first])
+        _, result = fixture.run()
+        self.assertEqual(result["refuted_groups"], [])
+        self.assertEqual(result["skeptic_groups"], ["t001_ac1"])
+        self.assertFalse(result["all_refuted"])
+        self.assertEqual(result["structural_blockers"][0]["kind"], "invalid-skeptic")
+        fixture.skeptic("t001_ac1", 1, "refuted", [first, second])
+        _, result = fixture.run()
+        self.assertTrue(result["all_refuted"], result)
+
     def test_all_refuted_branch(self):
         fixture = Fixture(self)
         obs = "Parses CSV rows — found: no, parser.py:1 fix: correct it"

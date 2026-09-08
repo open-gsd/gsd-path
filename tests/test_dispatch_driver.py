@@ -1108,6 +1108,37 @@ class DispatchDriverTests(unittest.TestCase):
         self.assertEqual(run_git(root, "status", "--porcelain").stdout, "")
         self.assertEqual(self.round(root, "--wait", "60", wave=2)["status"], "done")
 
+    def test_child_collection_recovers_after_source_removal(self) -> None:
+        self.fixture(self.root)
+        base = self.head(self.root)
+        sidecar = dispatch_driver.isolation.isolate_verify(self.root, base, "collection-recovery")
+        relative = ".project/review/wave-1.cycle1.skeptic-t001_ac1.md"
+        staged = Path(sidecar["worktree"]) / relative
+        staged.parent.mkdir(parents=True, exist_ok=True)
+        staged.write_text("validated skeptic output")
+        record = self.root / ".project/collection-state.json"
+        state = {**sidecar, "relative": relative, "exit_code": 0, "_path": str(record)}
+        dispatch_driver.save_state(record, state)
+        receipt = {"steps": []}
+        collect = dispatch_driver.isolation.collect_artifact
+
+        def interrupted(*args):
+            collect(*args)
+            raise RuntimeError("interrupted after collection")
+
+        with mock.patch.object(dispatch_driver.isolation, "collect_artifact", side_effect=interrupted):
+            with self.assertRaisesRegex(RuntimeError, "interrupted after collection"):
+                dispatch_driver.collect_file(self.root, receipt, state, lambda path: {"verdict": "refuted"})
+        self.assertFalse(staged.exists())
+        state = dispatch_driver.load_state(record)
+        dispatch_driver.collect_file(self.root, receipt, state,
+                                     lambda path: self.fail("resume must use persisted validation"))
+        self.assertEqual(state["outcome"], "collected")
+        self.assertEqual(state["verdict"], "refuted")
+        self.assertEqual((self.root / relative).read_text(), "validated skeptic output")
+        self.assertFalse(Path(sidecar["worktree"]).exists())
+        self.assertEqual(receipt["steps"][0]["script"], "isolation.py collect-artifact")
+
     def test_skeptics_run_once_per_locator_and_fix_tasks_batches_what_stands(self) -> None:
         root = self.root
         self.fixture(root)
