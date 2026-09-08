@@ -1,0 +1,11 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "opencode",
+  "run_id": "ses_f80a511edffePvaCxTcpyMblfH",
+  "result": "pass",
+  "step": "archive",
+  "command": "python3 -B .opencode/skills/gsd-path/scripts/archive_milestone.py validate --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-opencode-091d279/quick/repo",
+  "output": "{\"archive\": \".project/archive/001-count-json-cli\", \"commit\": \"9be177344ce61cd44dd33751fcfe7022cdb5c5d9\"}",
+  "archive_path": ".project/archive/001-count-json-cli",
+  "validation_exit_code": 0
+}
