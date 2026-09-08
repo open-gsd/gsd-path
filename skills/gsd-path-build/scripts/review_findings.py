@@ -336,9 +336,13 @@ def parse_skeptic(path: Path, wave: int, expected_observations: Optional[Sequenc
         raise ReviewFindingsError(f"{path.name} Verdict must be `refuted` or `stands`")
     observations: List[str] = []
     lines = (_section(text, "Observations") or "").splitlines()
-    starts = [index for index, line in enumerate(lines) if SKEPTIC_OBSERVATION.match(line.strip())]
-    for position, start in enumerate(starts):
-        end = starts[position + 1] if position + 1 < len(starts) else len(lines)
+    starts = [(index, int(match.group("n"))) for index, line in enumerate(lines)
+              if (match := SKEPTIC_OBSERVATION.match(line.strip()))]
+    observation_numbers = {number for _, number in starts}
+    if len(observation_numbers) != len(starts):
+        raise ReviewFindingsError(f"{path.name} has duplicate observation numbers")
+    for position, (start, _) in enumerate(starts):
+        end = starts[position + 1][0] if position + 1 < len(starts) else len(lines)
         observations.append(_normalize(" ".join(lines[start + 1 : end])))
     if not observations or any(not item for item in observations):
         raise ReviewFindingsError(f"{path.name} records no observation text")
@@ -347,15 +351,16 @@ def parse_skeptic(path: Path, wave: int, expected_observations: Optional[Sequenc
     } <= set(observations):
         raise ReviewFindingsError(f"{path.name} omits dispatched observations")
     observation_verdicts = [
-        match.group("verdict")
+        (int(match.group("n")), match.group("verdict"))
         for line in (_section(text, "Observation verdicts") or "").splitlines()
         if (match := SKEPTIC_OBSERVATION_VERDICT.match(line.strip()))
     ]
-    if len(observation_verdicts) != len(observations):
+    verdict_numbers = {number for number, _ in observation_verdicts}
+    if len(verdict_numbers) != len(observation_verdicts) or verdict_numbers != observation_numbers:
         raise ReviewFindingsError(
-            f"{path.name} has {len(observations)} observations but {len(observation_verdicts)} observation verdicts"
+            f"{path.name} must have exactly one matching verdict per observation number"
         )
-    if verdict == "refuted" and any(item != "refuted" for item in observation_verdicts):
+    if verdict == "refuted" and any(item != "refuted" for _, item in observation_verdicts):
         raise ReviewFindingsError(
             f"{path.name} records Verdict refuted while an observation stands"
         )

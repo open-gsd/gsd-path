@@ -284,6 +284,43 @@ class SkepticSelectionTest(unittest.TestCase):
         _, result = fixture.run()
         self.assertTrue(result["all_refuted"], result)
 
+    def test_invalid_observation_numbers_cannot_refute_a_group(self):
+        fixture = Fixture(self)
+        first = "Parses CSV rows — found: no, parser.py:1 fix: correct it"
+        second = "Parses CSV rows — found: drops rows, parser.py:9 fix: correct it"
+        fixture.lens("contract", t001_fails=[first.replace(" fix: correct it", "")])
+        fixture.lens("adversarial", t001_fails=[second.replace(" fix: correct it", "")])
+        path = fixture.project / "review/wave-1.cycle1.skeptic-t001_ac1.md"
+        valid = skeptic_text("t001_ac1", 1, "refuted", [first, second])
+        for label, old, new in (
+            ("duplicate observation", "Observation 2 —", "Observation 1 —"),
+            ("duplicate verdict", "Observation 2: refuted", "Observation 1: refuted"),
+            ("unknown verdict", "Observation 2: refuted", "Observation 3: refuted"),
+            ("missing verdict", "### Observation 2: refuted", ""),
+            ("aliased observation", "Observation 2 —", "Observation 01 —"),
+            ("aliased verdict", "Observation 2: refuted", "Observation 01: refuted"),
+        ):
+            with self.subTest(label=label):
+                write(path, valid.replace(old, new))
+                with self.assertRaises(review_findings.ReviewFindingsError):
+                    review_findings.parse_skeptic(path, 1)
+                _, result = fixture.run()
+                self.assertEqual(result["refuted_groups"], [])
+                self.assertEqual(result["skeptic_groups"], ["t001_ac1"])
+                self.assertFalse(result["all_refuted"])
+                self.assertEqual(result["structural_blockers"][0]["kind"], "invalid-skeptic")
+
+    def test_verdicts_match_observation_numbers_independent_of_order(self):
+        fixture = Fixture(self)
+        path = fixture.project / "review/wave-1.cycle1.skeptic-t001_ac1.md"
+        text = skeptic_text("t001_ac1", 1, "refuted", ["first observation", "second observation"])
+        text = text.replace("Observation 1: refuted", "Observation 02: refuted")
+        text = text.replace("Observation 2: refuted", "Observation 1: refuted")
+        write(path, text)
+        parsed = review_findings.parse_skeptic(path, 1)
+        self.assertEqual(parsed["verdict"], "refuted")
+        self.assertEqual(parsed["observations"], ["first observation", "second observation"])
+
     def test_all_refuted_branch(self):
         fixture = Fixture(self)
         obs = "Parses CSV rows — found: no, parser.py:1 fix: correct it"
