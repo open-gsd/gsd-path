@@ -213,6 +213,18 @@ test("install refuses path alias with invalid version", async () => {
   }
 });
 
+test("install replaces a pre-stamp path alias with the managed runtime", async () => {
+  const target = path.join(root, "pre-stamp-path", "skills");
+  const scripts = path.join(target, "path", "scripts");
+  fs.mkdirSync(scripts, { recursive: true });
+  fs.writeFileSync(
+    path.join(scripts, "pipeline_state.py"),
+    `#!/usr/bin/env python3\n# ${installer.PROJECT_RUNTIME_MARKER}\n`
+  );
+  await runInstall([installer.targetPlan("grok", target)]);
+  assert.match(fs.readFileSync(path.join(target, "path", "SKILL.md"), "utf8"), /^name: path$/m);
+});
+
 test("install replaces an owned path router alias", async () => {
   const target = path.join(root, "owned-path", "skills");
   const owned = path.join(target, "path");

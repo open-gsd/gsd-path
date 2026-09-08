@@ -453,6 +453,17 @@ class InstallerTests(unittest.TestCase):
                     install.install(self.source, [install.TargetPlan("grok", target)])
                 self.assertEqual(version, (foreign / "VERSION").read_text(encoding="utf-8"))
 
+    def test_install_replaces_a_pre_stamp_path_alias_with_the_managed_runtime(self):
+        target = self.root / "pre-stamp-path" / "skills"
+        scripts = target / "path" / "scripts"
+        scripts.mkdir(parents=True)
+        (scripts / "pipeline_state.py").write_text(
+            f"#!/usr/bin/env python3\n# {install.PROJECT_RUNTIME_MARKER}\n", encoding="utf-8"
+        )
+        install.install(self.source, [install.TargetPlan("grok", target)])
+        skill = (target / "path" / "SKILL.md").read_text(encoding="utf-8")
+        self.assertRegex(skill, r"(?m)^name: path$")
+
     def test_install_replaces_an_owned_path_router_alias(self):
         target = self.root / "owned-path" / "skills"
         owned = target / "path" / "scripts"

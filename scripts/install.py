@@ -505,11 +505,12 @@ def _is_managed_name(name: str) -> bool:
 
 
 def _is_owned_router_alias(skill_dir: Path) -> bool:
-    if not (skill_dir / "scripts" / "pipeline_state.py").is_file():
+    runtime = skill_dir / "scripts" / "pipeline_state.py"
+    if not runtime.is_file():
         return False
     version_file = skill_dir / "VERSION"
-    if not version_file.is_file():
-        return False
+    if not version_file.is_file():  # installs before alias version stamping
+        return _is_managed_project_runtime(runtime)
     try:
         version = version_file.read_text(encoding="utf-8").strip()
     except (OSError, UnicodeError):
