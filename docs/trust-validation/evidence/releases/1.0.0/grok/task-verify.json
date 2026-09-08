@@ -1,0 +1,11 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "grok",
+  "run_id": "01a07eea-fbe8-7ad1-9c7e-6c95723a7bf6",
+  "result": "pass",
+  "step": "task-verify",
+  "command": "python3 count.py && python3 count.py --json && python3 -m unittest tests/test_count.py",
+  "output": "{\"command\": \"python3 count.py && python3 count.py --json && python3 -m unittest tests/test_count.py\", \"commit\": \"7455cacd2e0a13a8008ef86f59a43be896ea77fb\", \"recorded_at\": \"2026-09-08T03:20:16+00:00\", \"result\": \"pass\", \"schema\": \"gsd-path/verify-ledger/v2\"}\n{\"command\": \"python3 -m unittest tests/test_count.py\", \"commit\": \"dae0d41b901b4ff77ae223cb58a819fa26201746\", \"execution\": {\"branch\": \"gsd-path-verify/project-verify\", \"exit_code\": 0, \"stderr\": \".........\\n----------------------------------------------------------------------\\nRan 9 tests in 0.139s\\n\\nOK\\n\", \"stdout\": \"\", \"worktree\": \"/Users/jeremymcspadden/orca/evaluations/gsd-path-release-grok-091d279/quick/repo.gsd-path/verify/project-verify\"}, \"recorded_at\": \"2026-09-08T03:27:16+00:00\", \"result\": \"pass\", \"schema\": \"gsd-path/verify-ledger/v2\"}\n",
+  "verify_artifact": ".project/archive/001-widget-counter/build/verify-ledger.jsonl",
+  "verify_exit_code": 0
+}

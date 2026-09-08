@@ -1,0 +1,17 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "grok",
+  "run_id": "01a07eea-fbe8-7ad1-9c7e-6c95723a7bf6",
+  "result": "pass",
+  "step": "task-landing",
+  "command": "python3 -B .grok/skills/gsd-path/scripts/isolation.py land --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-grok-091d279/quick/repo --source /Users/jeremymcspadden/orca/evaluations/gsd-path-release-grok-091d279/quick/repo --base 092817a --task-id T001 (serial isolation; landing see task-landing.json)",
+  "output": "commit 7455cacd2e0a13a8008ef86f59a43be896ea77fb\nAuthor:     Feature Evaluation <evaluation@example.invalid>\nAuthorDate: Mon Sep 7 22:20:07 2026 -0500\nCommit:     Feature Evaluation <evaluation@example.invalid>\nCommitDate: Mon Sep 7 22:20:07 2026 -0500\n\n    T001: Extend count.py CLI and add real CLI tests\n    \n    Task: .project/tasks/T001-extend-count-cli.md\n    Base: 092817a9d51070d2055b48ede48ebacb875f1e09\n    Files:\n    - .project/tasks/T001-extend-count-cli.md\n    - count.py\n    - tests/test_count.py\n\n .project/tasks/T001-extend-count-cli.md |  9 ++--\n count.py                                | 32 ++++++++++++++-\n tests/test_count.py                     | 73 +++++++++++++++++++++++++++++++++\n 3 files changed, 109 insertions(+), 5 deletions(-)",
+  "fixture_bundle": "grok/fixture.bundle",
+  "run_manifest": ".project/archive/001-widget-counter/trust-run-manifest.json",
+  "fixture_base_commit": "092817a9d51070d2055b48ede48ebacb875f1e09",
+  "task_branch": "gsd-path-verify/task-t001-verify",
+  "task_worktree": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-grok-091d279/quick/repo.gsd-path/verify/task-t001-verify",
+  "landing_commit": "7455cacd2e0a13a8008ef86f59a43be896ea77fb",
+  "isolation_mode": "serial",
+  "isolation_note": "A one-task wave uses the helper's serial mode: the coder worked on the bound branch in the primary worktree at the recorded base, and the named branch and worktree are the isolated Task Verify sidecar created for this task and retired after landing."
+}
