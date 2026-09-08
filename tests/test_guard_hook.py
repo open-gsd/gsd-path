@@ -111,55 +111,59 @@ class GuardHookTests(unittest.TestCase):
         chained = helper + " && git commit -qm ship"
         status, output, _ = run_guard({"tool_name": "Bash", "tool_input": {"command": chained}})
         self.assertEqual((status, json.loads(output)["permissionDecision"]), (2, "deny"))
-        with tempfile.TemporaryDirectory() as temporary:
-            forged = Path(temporary) / "tools" / "pipeline_state.py"
-            forged.parent.mkdir()
-            forged.write_text("import shutil\n")
-            status, output, _ = run_guard({"tool_name": "Bash", "tool_input": {
-                "command": f"python3 -B {forged} record-shipment --archive .project/archive/001-x"}})
-            self.assertEqual((status, json.loads(output)["permissionDecision"]), (2, "deny"))
 
-    def test_bundled_helper_rejects_untrusted_import_context(self):
+    def test_bundled_helper_rejects_identical_copy_outside_runtime(self):
         for name in ("pipeline_state.py", "archive_milestone.py"):
-            for sibling in ("_common.py", "json.py", "tempfile.py"):
-                with self.subTest(helper=name, sibling=sibling), tempfile.TemporaryDirectory() as temporary:
-                    root = Path(temporary)
-                    helper = root / name
-                    shutil.copyfile(SCRIPT.parent / name, helper)
-                    (root / sibling).write_text("raise RuntimeError('untrusted sibling')\n")
-                    self.assert_denied({
-                        "tool_name": "Bash",
-                        "tool_input": {
-                            "command": f"python3 -B {helper} --archive .project/archive/001-x",
-                        },
-                    })
-
-    def test_bundled_helper_allows_unrelated_extra_script(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            runtime = root / ".gsd-path" / "runtime"
-            runtime.mkdir(parents=True)
-            for source in SCRIPT.parent.glob("*.py"):
-                if source.name != "build_state.py":
-                    shutil.copyfile(source, runtime / source.name)
-            helper = root / "pipeline_state.py"
-            shutil.copyfile(SCRIPT.parent / helper.name, helper)
-            (root / "build_state.py").write_text("raise RuntimeError('unused')\n")
-            with mock.patch.object(guard_hook, "__file__", str(runtime.parent / "guard_hook.py")):
-                self.assert_allowed({
+            with self.subTest(helper=name), tempfile.TemporaryDirectory() as temporary:
+                helper = Path(temporary) / name
+                shutil.copyfile(SCRIPT.parent / name, helper)
+                self.assert_denied({
                     "tool_name": "Bash",
                     "tool_input": {
                         "command": f"python3 -B {helper} --archive .project/archive/001-x",
                     },
                 })
 
+    def test_bundled_helper_rejects_interpreter_paths(self):
+        for interpreter in ("tools/python3", "/usr/bin/python3", "./python", "Python3"):
+            with self.subTest(interpreter=interpreter):
+                self.assert_denied({
+                    "tool_name": "Bash",
+                    "tool_input": {
+                        "command": f"{interpreter} scripts/pipeline_state.py --archive .project/archive/001-x",
+                    },
+                })
+
+    def test_bundled_helper_uses_installed_runtime_directory(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            runtime = root / ".gsd-path" / "runtime"
+            runtime.mkdir(parents=True)
+            with mock.patch.object(guard_hook, "__file__", str(runtime.parent / "guard_hook.py")):
+                for name in ("pipeline_state.py", "archive_milestone.py"):
+                    helper = runtime / name
+                    shutil.copyfile(SCRIPT.parent / name, helper)
+                    shutil.copyfile(helper, runtime.parent / name)
+                    for interpreter in ("python", "python3 -B"):
+                        with self.subTest(helper=name, interpreter=interpreter):
+                            self.assert_allowed({
+                                "tool_name": "Bash",
+                                "tool_input": {
+                                    "command": f"{interpreter} .gsd-path/runtime/{name} --archive .project/archive/001-x",
+                                    "workdir": str(root),
+                                },
+                            })
+                    self.assert_denied({
+                        "tool_name": "Bash",
+                        "tool_input": {
+                            "command": f"python3 {runtime.parent / name} --archive .project/archive/001-x",
+                        },
+                    })
+
     def test_bundled_helper_tool_directory_does_not_fall_back_to_cwd(self):
         for key in ("working_directory", "workdir", "cwd"):
             with self.subTest(key=key), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
-                helper = root / "scripts" / "pipeline_state.py"
-                helper.parent.mkdir()
-                helper.write_text("raise RuntimeError('forged helper')\n")
                 with mock.patch.object(guard_hook.os, "getcwd", return_value=str(SCRIPT.parent.parent)):
                     self.assert_denied({
                         "tool_name": "Bash",

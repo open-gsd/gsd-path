@@ -174,9 +174,12 @@ so the position is unchanged. Then:
 
 ## Archive transaction
 
-Resolve bundled `scripts/archive_milestone.py` and `scripts/pipeline_state.py`
-to absolute paths and invoke them with `python3`; the files need not be
-executable. The archive helper is the sole MANIFEST.md and integration writer.
+Resolve the project's guard-owned `.gsd-path/runtime/archive_milestone.py` and
+`.gsd-path/runtime/pipeline_state.py` to absolute paths for `prepare`,
+`render-manifest`, `preflight`, `record-shipment`, `validate`, `integrate`, and
+`validate-integrated`. Invoke them with `python3`; the files need not be
+executable. Skill-bundle copies are not the guard's trust anchor, even when
+byte-identical. The archive helper is the sole MANIFEST.md and integration writer.
 The persisted `STATE.archive` field is the transaction identity.
 
 1. Normally require STATE `ship/active`, the bound build branch, and no

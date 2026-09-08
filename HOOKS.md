@@ -114,11 +114,11 @@ See [UPDATE.md](UPDATE.md).
   `.gsd-path`) while `.project/STATE.md` exists
 - shell commands that reference the archive unless the whole command is a
   recognized standalone read or a single-command invocation of the bundled
-  `pipeline_state.py` / `archive_milestone.py` helper whose entry script and every
-  Python sibling with a guard-owned runtime counterpart are byte-identical to
-  those copies, with no extra Python sibling shadowing an import in either
-  helper's transitive runtime import closure; supplied tool working directories
-  are authoritative, and cwd is used only when none are supplied
+  `pipeline_state.py` / `archive_milestone.py` helper, resolved to a regular file
+  inside the guard-owned `.gsd-path/runtime/` directory (beside `guard_hook.py`
+  in the repository layout), using exactly `python` or `python3` with optional
+  `-B`; supplied tool working directories are authoritative, and cwd is used
+  only when none are supplied
 - deletion or move commands outside a single simple segment, including command
   chains, pipes, newlines, grouping, directory changes, and command substitution
 - deletion or move commands with any argument outside the literal-path character

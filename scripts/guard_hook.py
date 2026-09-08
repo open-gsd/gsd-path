@@ -5,10 +5,8 @@ Reads one hook event as JSON on stdin and enforces the two pipeline
 invariants a prompt contract cannot guarantee:
 
 - committed archives under .project/archive/ are read-only (only the bundled
-  helpers pipeline_state.py and archive_milestone.py may name that path in a
-  shell command when their entry script and runtime-matched Python siblings are
-  byte-identical to guard-owned copies and no extra Python sibling shadows an
-  import in either helper's transitive runtime import closure), and
+  helpers pipeline_state.py and archive_milestone.py in the guard-owned runtime
+  directory may name that path in a single plain python or python3 command), and
 - destructive git commands that break build recovery are refused.
 
 Allow: exit 0 with no output, except Cursor (whose fail-closed hooks treat
@@ -1671,64 +1669,38 @@ def destructive_git_reason(tokens, resolved_aliases=frozenset()):
 PIPELINE_HELPERS = frozenset({"pipeline_state.py", "archive_milestone.py"})
 
 
-def bundled_helper_context_matches(script, bundled):
-    if script.read_bytes() != bundled.read_bytes():
-        return False
-    runtime = {path.stem: path for path in bundled.parent.glob("*.py")}
-    imported = set()
-    visited = set()
-    pending = [Path(name).stem for name in PIPELINE_HELPERS]
-    while pending:
-        name = pending.pop()
-        if name in visited:
-            continue
-        visited.add(name)
-        source = runtime[name].read_text(encoding="utf-8")
-        for match in re.finditer(
-            r"^[ \t]*(?:from[ \t]+([.\w]+)[ \t]+import\b|import[ \t]+([^\n#;]+))",
-            source,
-            re.MULTILINE,
-        ):
-            modules = match[1] or match[2]
-            for module in modules.split(","):
-                imported.update(module.strip().split()[0].split("."))
-        pending.extend(imported.intersection(runtime).difference(visited))
-    for sibling in script.parent.glob("*.py"):
-        counterpart = runtime.get(sibling.stem)
-        if counterpart is not None:
-            if sibling.read_bytes() != counterpart.read_bytes():
-                return False
-        elif sibling.stem in imported:
-            return False
-    return True
-
-
 def bundled_helper_invocation(command, tokens, working_directories):
-    """Allow one plain ``python[3] [-B] <script>`` with a trusted import closure.
+    """Allow one plain ``python[3] [-B] <script>`` from the guard-owned runtime.
 
-    The helper and every Python sibling with a runtime counterpart must match
-    the guard-owned bytes. Extra Python siblings must not shadow imports from
-    either helper's transitive runtime closure. Resolve only in supplied tool
-    working directories, falling back to cwd when none are supplied.
+    The interpreter token must be exactly python or python3. The resolved helper
+    must be a regular file inside runtime/ beside this guard, or beside the guard
+    itself in the repository layout. Resolve only in supplied tool working
+    directories, falling back to cwd when none are supplied.
     """
     if AMBIGUOUS_SHELL_SYNTAX.search(command) or not tokens:
         return False
-    if tokens[0].replace("\\", "/").rsplit("/", 1)[-1].casefold() not in ("python", "python3"):
+    if tokens[0] not in ("python", "python3"):
         return False
     rest = tokens[1:]
-    script = rest[1] if rest[:1] == ["-B"] else (rest[0] if rest else "")
-    name = script.replace("\\", "/").rsplit("/", 1)[-1]
-    if name not in PIPELINE_HELPERS:
+    if rest[:1] == ["-B"]:
+        rest = rest[1:]
+    if not rest:
         return False
     here = Path(__file__).resolve().parent
-    bundled = next((c for c in (here / "runtime" / name, here / name) if c.is_file()), None)
-    if bundled is None:
-        return False
+    runtime = here / "runtime"
+    if not runtime.exists():
+        runtime = here
+    runtime = runtime.resolve()
     for base in working_directories or [os.getcwd()]:
         try:
-            if bundled_helper_context_matches((Path(base) / script).resolve(), bundled):
+            script = (Path(base) / rest[0]).resolve()
+            if (
+                script.name in PIPELINE_HELPERS
+                and script.is_relative_to(runtime)
+                and script.is_file()
+            ):
                 return True
-        except (OSError, UnicodeError, KeyError):
+        except (OSError, RuntimeError):
             continue
     return False
 
