@@ -1678,6 +1678,8 @@ def bundled_helper_invocation(command, tokens, working_directories):
     or beside the guard itself in the repository layout. Resolve only in supplied
     tool working directories, falling back to cwd when none are supplied.
     """
+    if any(char in command for char in "\n\r\\"):
+        return False
     segments = list(command_segments(tokens))
     if len(segments) != 1 or segments[0] != tokens:
         return False

@@ -114,6 +114,9 @@ class GuardHookTests(unittest.TestCase):
             " &",
             " > receipt.txt",
             " $(printf shipped)",
+            ' --event "two\nlines"',
+            ' --event "two\rlines"',
+            r" --event sh\ipped",
         ):
             with self.subTest(suffix=suffix):
                 self.assert_denied({
@@ -250,6 +253,25 @@ class GuardHookTests(unittest.TestCase):
                                     "workdir": str(root),
                                 },
                             })
+
+    def test_bundled_helper_rejects_continuation_inside_script_path(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "My Project"
+            runtime = root / ".gsd-path" / "runtime"
+            runtime.mkdir(parents=True)
+            helper = runtime / "pipeline_state.py"
+            shutil.copyfile(SCRIPT.parent / helper.name, helper)
+            with mock.patch.object(guard_hook, "__file__", str(runtime.parent / "guard_hook.py")):
+                for continuation in ("\\\n", "\\\r\n"):
+                    operand = str(helper).replace("My Project", f"My{continuation}Project")
+                    with self.subTest(continuation=continuation):
+                        self.assert_denied({
+                            "tool_name": "Bash",
+                            "tool_input": {
+                                "command": f'python3 "{operand}" --archive .project/archive/001-x',
+                                "workdir": str(root),
+                            },
+                        })
 
     def test_bundled_helper_tool_directory_does_not_fall_back_to_cwd(self):
         for key in ("working_directory", "workdir", "cwd"):
