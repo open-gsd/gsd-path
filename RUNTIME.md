@@ -78,7 +78,7 @@ replaces literal `{model}` in its child command with the resolved family slug.
 calls. In `round`, an unfinished earlier wave blocks dispatch before the bookkeeping
 checkpoint. Child completion is recorded in `exit.json`; the parent alone
 writes `state.json`.
-For `review` and `panel`, when the child process is gone and `finished_at` is
+For `review`, `panel`, and `skeptics`, when the child process is gone and `finished_at` is
 unset, the driver rereads that attempt's state and exit receipt before
 collecting the result or blocking with
 `child wrapper exited without recording a result`.
@@ -104,7 +104,7 @@ Verify task is in flight at a time, and a round stops at a wave boundary.
 Without `--wait`, the call returns after processing currently available work;
 children continue running. `--capacity`, when supplied, must be positive.
 
-`round`, `review`, `panel`, `fix-tasks`, `finish`, and `answer` hold a
+`round`, `review`, `panel`, `skeptics`, `fix-tasks`, `finish`, and `answer` hold a
 repository-scoped advisory lock for the whole call, including `--wait`.
 A concurrent invocation returns `blocked`
 with `another dispatch_driver invocation holds the lock`; wait for the
@@ -149,6 +149,12 @@ before checkpointing. Panel `status`
 describes panel processing; `review_verdict` holds the canonical verdict.
 A blocked canonical review leaves `checkpoint: null`, including for a skipped
 panel, so `fix-tasks` can checkpoint the blocked review with its repairs.
+
+Resume an `in-flight` skeptic run with `skeptics` for the same wave and cycle.
+Dispatching missing locators requires HEAD to equal the recorded review base.
+Panel and skeptic collection save validated fields and a content hash before
+moving the staged file. If interrupted after that move, collection resumes
+through its receipt only when the canonical file matches the saved hash.
 
 `fix-tasks` reconciles existing repair tasks and PLAN rows before linting and
 checkpointing. It creates missing batches in an appended repair wave and
