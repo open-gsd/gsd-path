@@ -666,8 +666,7 @@ def meaningful_review_evidence(lines: Sequence[str], marker: str, task_text: str
     return bool(evidence) and all(
         item
         and item.casefold() not in {"none", "n/a", "null"}
-        and "<" not in item
-        and ">" not in item
+        and not archive_milestone.contains_placeholder(item)
         for item in evidence
     )
 

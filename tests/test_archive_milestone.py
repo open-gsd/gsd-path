@@ -2777,6 +2777,24 @@ Tasks reviewed: 1
             self.assertNotEqual(preflight.returncode, 0)
             self.assertIn("non-placeholder evidence", preflight.stderr)
 
+    def test_preflight_accepts_angle_brackets_in_concrete_task_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            archive = self.prepare_archive(repo)
+            wave = archive / "review" / "wave-1.cycle1.md"
+            wave.write_text(
+                wave.read_text().replace(
+                    "- ✅ demo works — focused Verify passed",
+                    "- ✅ demo works — validated Result< T> in 120ms < 200ms",
+                )
+            )
+            self.write_manifest(archive)
+
+            preflight = self.preflight(repo)
+
+            self.assertEqual(preflight.returncode, 0, preflight.stderr)
+
     def test_preflight_rejects_owned_sc_without_evidence(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             repo = Path(temporary_directory)
