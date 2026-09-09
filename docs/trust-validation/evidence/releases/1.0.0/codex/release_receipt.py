@@ -129,12 +129,24 @@ def phase_manifest(a):
               "declared_tier": GUARD_TIER, "native_guard": native, "git_hooks": hooks["git_hooks"],
               "native_guard_evidence": native_evidence,
               "git_hook_check": hooks, "checked_at": dt.datetime.now(dt.timezone.utc).isoformat()}
+    child_id = task["agent"]
+    if HOST not in ("codex", "claude"):
+        # check_trust_evidence requires the task agent field to name the child that did the work.
+        # Bind it now so a host that dispatched under a different label fails here, before the ship
+        # commit, instead of after the archive is committed and integrated.
+        try:
+            transcript_child(str(Path(a.fixture).resolve().parent.parent), child_id)
+        except Exception as exc:
+            raise SystemExit(f"the task file records agent {child_id!r} but no completed child "
+                             f"was dispatched under that label ({exc}). The host broke the dispatch "
+                             "contract; rerun its build so the dispatched label and the task agent "
+                             "field match. Do not override this: the receipt validator cross-checks them.")
     manifest = {"schema": "gsd-path/live-run-manifest/v1", "host": HOST, "run_id": a.run_id,
                 "host_version": a.host_version, "candidate": a.candidate, "package_version": a.package_version,
-                "child_api": CHILD_API, "child_id": task["agent"], "guard_tier": GUARD_TIER,
+                "child_api": CHILD_API, "child_id": child_id, "guard_tier": GUARD_TIER,
                 "fixture_base_commit": task["base"], "landing_commit": landing,
                 "task_branch": a.task_branch, "bound_branch": state_field(repo, "branch"),
-                "default_branch": "main", "pre_integration_default_commit": git(repo, "rev-parse", "origin/main"),
+                "default_branch": "main", "pre_integration_default_commit": remote_default_commit(repo),
                 "milestone_tag": f"milestone/{Path(archive).name}",
                 "artifacts": {"state": ".project/STATE.md", "verify": f"{archive}/build/verify-ledger.jsonl",
                               "wave_review": f"{archive}/review/wave-1.cycle1.md",
@@ -146,8 +158,21 @@ def phase_manifest(a):
     (repo / archive / "guards.json").write_text(json.dumps(guards, indent=2) + "\n")
     (repo / archive / "trust-run-manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     print(json.dumps({"archive": archive, "git_hooks": hooks["git_hooks"], "landing_commit": landing,
-                      "child_id": task["agent"], "manifest": f"{archive}/trust-run-manifest.json"}, indent=2))
+                      "child_id": child_id, "manifest": f"{archive}/trust-run-manifest.json"}, indent=2))
     return 0 if hooks["git_hooks"] == "pass" else 1
+
+
+def remote_default_commit(repo):
+    """The remote's own main, not the local remote-tracking ref.
+
+    ``origin/main`` can lag or hold an abandoned integration if a fetch has not
+    rewound it; the integration merge's first parent is checked against this
+    value, so a stale read produces a receipt that cannot validate.
+    """
+    line = git(repo, "ls-remote", "origin", "refs/heads/main")
+    if line:
+        return line.split()[0]
+    return git(repo, "rev-parse", "origin/main")
 
 
 def transcript_child(transcript, child_id):
