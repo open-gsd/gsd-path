@@ -94,6 +94,9 @@ WAVE_SKEPTIC_PATTERN = re.compile(
     r"^wave-([1-9]\d*)\.cycle([1-9]\d*)\.skeptic-"
     r"([a-z0-9]+(?:_[a-z0-9]+)*)\.md$"
 )
+WAVE_REPAIR_PATTERN = re.compile(
+    r"^wave-([1-9]\d*)\.cycle([1-9]\d*)\.repair-T\d{3}\.json$"
+)
 # A review file claims to be wave-cycle evidence when its name starts with a
 # wave number followed by "cycle" (a missing dot is a typo, not a note). Other
 # wave-* names are free-form review notes like any non-canonical review file.
@@ -910,6 +913,7 @@ def canonical_wave_files(reviews: Path) -> Sequence[WaveArtifact]:
             match is None
             and WAVE_PANEL_SKIP_PATTERN.fullmatch(path.name) is None
             and WAVE_SKEPTIC_PATTERN.fullmatch(path.name) is None
+            and WAVE_REPAIR_PATTERN.fullmatch(path.name) is None
         )
         or not is_real_file(path)
         for path, match in matches
@@ -918,7 +922,7 @@ def canonical_wave_files(reviews: Path) -> Sequence[WaveArtifact]:
             "canonical wave artifacts must be real wave-N.cycleC.md files "
             "(a .contract, .adversarial, or .panel lens suffix is allowed), "
             "canonical .panel.skipped.json receipts, or auxiliary "
-            ".skeptic-<locator>.md evidence"
+            ".skeptic-<locator>.md and .repair-T###.json evidence"
         )
     return [
         WaveArtifact(
