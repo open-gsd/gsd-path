@@ -1,0 +1,30 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "qwen",
+  "run_id": "ae51c129-2987-48c6-ba46-88f01f205493",
+  "result": "pass",
+  "step": "child-spawn",
+  "command": "agent",
+  "child_api": "agent",
+  "child_id": "build_t001",
+  "child_status": "completed",
+  "output": {
+    "child_id": "build_t001",
+    "status": "completed",
+    "child_api": "agent",
+    "run": "run-20260908T134043033732Z",
+    "tool_use": {
+      "id": "call_d8b2a0f143ca459b8e62ee1b",
+      "input": {
+        "description": "build_t001",
+        "run_in_background": false,
+        "subagent_type": "general-purpose"
+      },
+      "prompt_sha256": "bb5e64bf1b56aa520bfdce070d95e4ae3a0dcc61ab102a9b8da3d11672ede424"
+    },
+    "tool_result": {
+      "is_error": false,
+      "content": "T001 \u2014 **ready**.\n\nVerify: PASS. `python3 -B -m unittest discover -s tests -v && python3 count.py --json 7 && python3 count.py && ! python3 count.py abc` \u2192 exit 0; suite `Ran 22 tests / OK`, then `{\"widgets\": 7}`, then `0 widgets`, then the exit-2 stderr line. Same suite also passes under `python3.14` (Python 3.14.5) with byte-identical stdout/stderr/statuses, satisfying the interpreter-independent constraint.\n\nPreflight was clean at base `c7e2b89a86ed912d148d585c0c859c54b48e681a` on `gsd-path/M001`; SC1\u2013SC6 all exist as INTENT.md success criteria 1\u20136; Interface contract is `None` with no sibling task file. `count.py` now owns its usage wording and exit status 2 (no argparse), keeps `int()` grammar so `+5`/`-3`/`-0`/`\" 5 \"`/`1_0` stay valid, and preserves `{n} widgets` byte-for-byte; `tests/test_count.py` is stdlib `unittest`, 22 tests, subprocess-only, never importing `count`, with `json.loads` type assertions against literal expected stdout. Post-run `git status --porcelain -uall` shows only the two declared product paths (plus the orchestrator-owned task file), and no `__pycache__`, `.pytest_cache`, `*.pyc`, `tests/__init__.py`, or `conftest.py` exists. Nothing staged or committed; frontmatter untouched, Log appended.\n\nChanged paths:\n- `count.py` (modified)\n- `tests/test_count.py` (created)\n- `.project/tasks/T001-count-cli-json-and-tests.md` (`## Log` append only)\n\nRESULT: T001 ready"
+    }
+  }
+}
