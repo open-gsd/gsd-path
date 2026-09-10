@@ -337,27 +337,35 @@ fixed in a newer trusted GSD Path checkout. Never run `prepare`,
 `render-manifest`, `preflight`, `record-shipment`, or `integrate`, and never
 edit the committed archive, STATE.md, Git history, refs, or tags.
 
-1. From the trusted fixed GSD Path checkout, preview and then refresh the
-   project's managed trust anchor:
+1. Create separate disposable trust and validation checkouts from the same
+   published origin and `STATE.branch`. This separation is required because a
+   managed runtime refresh may dirty a checkout when `.gsd-path/` is tracked,
+   while archive validation requires a clean checkout. Never use the primary
+   worktree for either role.
+2. From the trusted fixed GSD Path checkout, preview and then refresh only the
+   disposable trust checkout's managed trust anchor:
 
    ```bash
-   node <trusted-gsd-path>/scripts/install.mjs --hooks-refresh --dry-run --project <root>
-   node <trusted-gsd-path>/scripts/install.mjs --hooks-refresh --project <root>
+   node <trusted-gsd-path>/scripts/install.mjs --hooks-refresh --dry-run --project <trust-root>
+   node <trusted-gsd-path>/scripts/install.mjs --hooks-refresh --project <trust-root>
    ```
 
    Continue only when the preview names managed `.gsd-path/` runtime or guard
    files and no `.project/` path. The installer owns the atomic refresh and
    refuses unmanaged or unsafe runtime entries.
-2. Run only the refreshed project-local validator:
+3. Use only the refreshed project-local trust anchor to refresh publication
+   refs in the clean validation checkout and validate its integrated milestone:
 
    ```bash
-   python3 <root>/.gsd-path/runtime/archive_milestone.py validate-integrated --repo <root> --slug <STATE.milestone>
+   python3 <trust-root>/.gsd-path/runtime/archive_milestone.py refresh-origin --repo <validation-root>
+   python3 <trust-root>/.gsd-path/runtime/archive_milestone.py validate-integrated --repo <validation-root> --slug <STATE.milestone>
    ```
 
-3. A pass restores the normal shipped handoff without another commit or
-   publication action. A failure is a new validation finding: report it with
-   the archived MANIFEST.md and stop. Never repair an already-committed
-   archive to satisfy a newer validator.
+4. A pass restores the normal shipped handoff without another commit or
+   publication action. Remove only the disposable checkouts. A failure is a
+   new validation finding: report it with the primary worktree's archived
+   MANIFEST.md and stop. Never repair an already-committed archive to satisfy
+   a newer validator.
 
 Legacy ship and integration subjects may be ignored only while scanning older
 milestones. They never satisfy the current milestone transaction. Current
