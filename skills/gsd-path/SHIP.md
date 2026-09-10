@@ -329,6 +329,36 @@ The persisted `STATE.archive` field is the transaction identity.
    is pending, never report shipped or start the next milestone; route back to
    ship.
 
+## Published validation recovery
+
+Use this recovery only when STATE is `shipped/done`, the archive and ship
+commit are already published, and `validate-integrated` is blocked by a defect
+fixed in a newer trusted GSD Path checkout. Never run `prepare`,
+`render-manifest`, `preflight`, `record-shipment`, or `integrate`, and never
+edit the committed archive, STATE.md, Git history, refs, or tags.
+
+1. From the trusted fixed GSD Path checkout, preview and then refresh the
+   project's managed trust anchor:
+
+   ```bash
+   node <trusted-gsd-path>/scripts/install.mjs --hooks-refresh --dry-run --project <root>
+   node <trusted-gsd-path>/scripts/install.mjs --hooks-refresh --project <root>
+   ```
+
+   Continue only when the preview names managed `.gsd-path/` runtime or guard
+   files and no `.project/` path. The installer owns the atomic refresh and
+   refuses unmanaged or unsafe runtime entries.
+2. Run only the refreshed project-local validator:
+
+   ```bash
+   python3 <root>/.gsd-path/runtime/archive_milestone.py validate-integrated --repo <root> --slug <STATE.milestone>
+   ```
+
+3. A pass restores the normal shipped handoff without another commit or
+   publication action. A failure is a new validation finding: report it with
+   the archived MANIFEST.md and stop. Never repair an already-committed
+   archive to satisfy a newer validator.
+
 Legacy ship and integration subjects may be ignored only while scanning older
 milestones. They never satisfy the current milestone transaction. Current
 validation requires exactly one canonical ship commit. Direct integration
