@@ -226,7 +226,13 @@ The persisted `STATE.archive` field is the transaction identity.
    allowlist and carry-forward, reviewed revision, manifest metadata and
    criteria against FINAL.md, exact ordered PLAN wave task/title rows with
    non-placeholder evidence for every task and owned success criterion, actual
-   cycle counts, completed Notes, and the exact file inventory. Immediately
+   cycle counts, completed Notes, and the exact file inventory. Canonical
+   `wave-N.cycleC.repair-T###.json` receipts are auxiliary evidence, not review
+   verdicts; their payload identity must match their filename. Same-wave repair
+   tasks enter review coverage only after their receipt's source cycle, and a
+   later review cycle is required. Concrete evidence may contain generic types
+   such as `Result<T>` or comparisons; template placeholders remain invalid.
+   Immediately
    before this command, recheck for an active
    `discuss/` copy created after prepare; if present, rerun `prepare`, regenerate
    MANIFEST.md by rerunning `render-manifest`, and only then preflight. Do not
@@ -335,7 +341,8 @@ Use this recovery only when STATE is `shipped/done`, the archive and ship
 commit are already published, and `validate-integrated` is blocked by a defect
 fixed in a newer trusted GSD Path checkout. Never run `prepare`,
 `render-manifest`, `preflight`, `record-shipment`, or `integrate`, and never
-edit the committed archive, STATE.md, Git history, refs, or tags.
+edit the committed archive, STATE.md, Git history, or published refs and tags.
+Only the validation checkout's local refs may be refreshed by the commands below.
 
 1. Create separate disposable trust and validation checkouts from the same
    published origin and `STATE.branch`. This separation is required because a
