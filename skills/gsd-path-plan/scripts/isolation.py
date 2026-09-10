@@ -354,6 +354,8 @@ def _validated_collect_journal(
         raise IsolationError(
             f"artifact collection journal has an invalid request: {error}"
         ) from error
+    if not Path(str(journal["primary_worktree"])).is_absolute():
+        raise IsolationError("artifact collection primary worktree must be absolute")
     source_worktree = Path(str(journal["source_worktree"]))
     if not source_worktree.is_absolute():
         raise IsolationError("artifact collection source worktree must be absolute")

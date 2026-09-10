@@ -572,6 +572,23 @@ class PipelineStateTests(unittest.TestCase):
                 pipeline_state.status_state(repo)["journals"]["collect_artifact"]
             )
 
+    def test_status_rejects_completed_receipts_with_invalid_primary(self) -> None:
+        for primary in ("", ".", "previous-primary"):
+            with self.subTest(primary=primary), tempfile.TemporaryDirectory() as tmp:
+                repo = repo_with_collect_journal(
+                    Path(tmp), stage="complete", previous_primary=True
+                )
+                receipt = repo / ".git/gsd-path/collect-artifact/receipt.json"
+                journal = json.loads(receipt.read_text(encoding="utf-8"))
+                journal["primary_worktree"] = primary
+                receipt.write_text(json.dumps(journal), encoding="utf-8")
+
+                with self.assertRaisesRegex(
+                    pipeline_state.PipelineStateError,
+                    "artifact collection primary worktree must be absolute",
+                ):
+                    pipeline_state.status_state(repo)
+
     def test_status_rejects_incomplete_receipts_from_previous_primary(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             repo = repo_with_collect_journal(
