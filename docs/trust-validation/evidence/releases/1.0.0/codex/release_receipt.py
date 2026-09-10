@@ -4,15 +4,17 @@
 Select --host <manifest host> (default codex) before the phase name; host facts come
 from tests/hosts/<host>.py in --repo. Codex and Claude retain their stricter inline
 child binders; other hosts use SPEC.bind_child. A native-tier host's manifest requires
---native-guard-evidence pointing to a passing probe JSON. For receipt, --transcript is
+--native-guard-evidence pointing to a passing probe JSON. For both phases, --transcript is
 a Codex session JSONL file or, for every other host, the tests/evaluate_host.py run
-root containing quick/run-*/events.jsonl.
+root containing quick/run-*/events.jsonl. Manifest requires it for Codex; for other
+hosts, manifest defaults to the fixture repository's grandparent directory.
 
 Two phases, both driven by the evaluator against the fixture repository:
 
   manifest  -- at the ship-time pause (after `archive_milestone.py prepare`, before
                render-manifest): runs the Git-hook guard check in a disposable clone,
-               then writes <archive>/guards.json and <archive>/trust-run-manifest.json.
+               checks that the task agent names a completed child, then writes
+               <archive>/guards.json and <archive>/trust-run-manifest.json.
   receipt   -- after integration: writes the ten step files, the fixture bundle and
                <host>.md under the repo's evidence directory, then validates them with
                scripts/check_trust_evidence._validate_receipt.

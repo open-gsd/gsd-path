@@ -165,7 +165,7 @@ npm test && python3 -m unittest discover -s tests -q
 | Host dispatch (all eleven hosts) | Prove first | **Met** (2026-09-09) — each receipt binds a real child spawned through that host's declared child API; the 2026-08-11 reconciliation applied to the earlier top-level CLI runs, which these receipts supersede |
 | Live dogfood (Cursor slice) | Prove first | **Partial met** — router read + a `generalPurpose` child; contract's `gsd-path` subagent unavailable; not full UI `/gsd-path` session |
 | Guards (Claude) | Use with checks | **OK to use** — deny/allow reproduced in test repo |
-| Guards (Codex/Cursor pre-tool-use) | Use with checks | unchanged — git hooks proven; pre-tool-use not wired |
+| Guards (Codex/Cursor pre-tool-use) | Use with checks | See [Release evidence](#release-evidence-2026-09-09) for the current guard tiers and native probes |
 | Build orchestration | Prove first | **Met** — every one of the eleven receipts binds a completed native child to the landed task commit |
 | CI | Prove first | **Automated** — `.github/workflows/ci.yml` now runs Node, Python, and resource-sync checks; this was not part of the 2026-08-05 manual run |
 

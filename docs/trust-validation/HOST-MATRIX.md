@@ -63,6 +63,7 @@ of `evidence/releases/<version>/`; other notes live under `notes/`. Every
 receipt must name one frozen candidate, and only evidence files plus this
 matrix and TRUST-EVIDENCE.md may change after that candidate. So the order
 is: merge every code and documentation change first, freeze the candidate,
-run all eleven host receipts against it, then publish. For receipt assembly
+run all eleven host receipts against it, then seek the separate
+[publication decision](TRUST-EVIDENCE.md#release-evidence-2026-09-09). For receipt assembly
 options, see the [assembly tool](evidence/releases/1.0.0/codex/release_receipt.py)
 usage docstring.
