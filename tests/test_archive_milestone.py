@@ -10,7 +10,15 @@ from pathlib import Path
 from typing import Optional
 from unittest import mock
 
-from scripts import archive_milestone, build_state, integration, isolation, pipeline_git, review_panel
+from scripts import (
+    archive_milestone,
+    build_state,
+    discussion_validate,
+    integration,
+    isolation,
+    pipeline_git,
+    review_panel,
+)
 
 if sys.platform != "win32":
     import fcntl
@@ -2154,6 +2162,119 @@ refuted
 
             self.assertEqual(preflight.returncode, 0, preflight.stderr)
 
+    def test_wave_classifier_accepts_repair_receipts_as_auxiliary_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            review = Path(temporary_directory)
+            receipt = review / "wave-1.cycle1.repair-T002.json"
+            receipt.write_text(
+                json.dumps(
+                    {
+                        "command": "repair-evidence",
+                        "repair": {"task": "T002"},
+                        "source": {"cycle": 1, "wave": 1},
+                        "status": "ok",
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            self.assertEqual(archive_milestone.canonical_wave_files(review), [])
+            artifacts = archive_milestone.canonical_wave_repair_files(review)
+            self.assertEqual(
+                [(item.wave, item.cycle, item.task) for item in artifacts],
+                [(1, 1, "T002")],
+            )
+
+            receipt.write_text(
+                receipt.read_text(encoding="utf-8").replace('"wave": 1', '"wave": 2'),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                archive_milestone.ArchiveError, "identity does not match"
+            ):
+                archive_milestone.canonical_wave_repair_files(review)
+
+    def test_repair_task_joins_its_wave_after_the_source_cycle(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            project = repo / ".project"
+            original = project / "tasks/T001-demo.md"
+            repair = project / "tasks/T002-repair.md"
+            repair.write_text(
+                original.read_text(encoding="utf-8")
+                .replace("id: T001", "id: T002")
+                .replace("title: demo", "title: repair")
+                .replace("# T001 — demo", "# T002 — repair")
+                .replace(
+                    "## Log",
+                    "## Review findings\n\n### sc1\nCriterion: demo works\n"
+                    "Observation 1 — canonical: failed before repair\n\n## Log",
+                ),
+                encoding="utf-8",
+            )
+            review = project / "review"
+            cycle_one = review / "wave-1.cycle1.md"
+            cycle_one.write_text(
+                cycle_one.read_text(encoding="utf-8")
+                .replace("Wave verdict: pass", "Wave verdict: blocked")
+                .replace("T001 — demo: pass", "T001 — demo: fail")
+                .replace("- ✅ demo works", "- ❌ demo works"),
+                encoding="utf-8",
+            )
+            (review / "wave-1.cycle1.repair-T002.json").write_text(
+                json.dumps(
+                    {
+                        "command": "repair-evidence",
+                        "repair": {"task": "T002"},
+                        "source": {"cycle": 1, "wave": 1},
+                        "status": "ok",
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            (review / "wave-1.cycle2.md").write_text(
+                """# Review — wave 1, cycle 2
+
+Wave verdict: pass
+Cycle: 2
+Depth: full
+Tasks reviewed: 2
+
+## T001 — demo: pass
+
+- ✅ demo works — original task passes after repair
+
+## T002 — repair: pass
+
+- ✅ repair closes the recorded finding
+
+## Intent coverage
+
+### SC1 — demo works: pass
+
+- ✅ focused Verify passed after repair
+""",
+                encoding="utf-8",
+            )
+
+            self.assertEqual(discussion_validate.review_cycle_counts(project), [2])
+
+            (review / "wave-1.cycle2.md").unlink()
+            cycle_one.write_text(
+                cycle_one.read_text(encoding="utf-8")
+                .replace("Wave verdict: blocked", "Wave verdict: pass")
+                .replace("T001 — demo: fail", "T001 — demo: pass")
+                .replace("- ❌ demo works", "- ✅ demo works"),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                archive_milestone.ArchiveError, "requires a later review cycle"
+            ):
+                discussion_validate.review_cycle_counts(project)
+
     def test_prepare_rejects_orphan_skeptic_file(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             repo = Path(temporary_directory)
@@ -2747,6 +2868,47 @@ Tasks reviewed: 1
 
             self.assertNotEqual(preflight.returncode, 0)
             self.assertIn("non-placeholder evidence", preflight.stderr)
+
+    def test_review_evidence_distinguishes_generics_from_placeholders(self) -> None:
+        for observation in (
+            "validated Result<T> serialization",
+            "validated Result< T> serialization",
+            "validated Result<Vec<T>> serialization",
+            "completed in 120ms < 200ms",
+        ):
+            with self.subTest(observation=observation):
+                self.assertTrue(discussion_validate.meaningful_review_evidence(
+                    [f"- ✅ {observation}"], "✅"
+                ))
+        for observation in (
+            "<T>",
+            "<record observation>",
+            "`<record observation>`",
+            "validated Result<T>: <record observation>",
+            "none",
+        ):
+            with self.subTest(observation=observation):
+                self.assertFalse(discussion_validate.meaningful_review_evidence(
+                    [f"- ✅ {observation}"], "✅"
+                ))
+
+    def test_preflight_accepts_angle_brackets_in_concrete_task_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            archive = self.prepare_archive(repo)
+            wave = archive / "review" / "wave-1.cycle1.md"
+            wave.write_text(
+                wave.read_text().replace(
+                    "- ✅ demo works — focused Verify passed",
+                    "- ✅ demo works — validated Result<T> in 120ms < 200ms",
+                )
+            )
+            self.write_manifest(archive)
+
+            preflight = self.preflight(repo)
+
+            self.assertEqual(preflight.returncode, 0, preflight.stderr)
 
     def test_preflight_rejects_owned_sc_without_evidence(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

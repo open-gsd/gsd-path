@@ -94,6 +94,9 @@ WAVE_SKEPTIC_PATTERN = re.compile(
     r"^wave-([1-9]\d*)\.cycle([1-9]\d*)\.skeptic-"
     r"([a-z0-9]+(?:_[a-z0-9]+)*)\.md$"
 )
+WAVE_REPAIR_PATTERN = re.compile(
+    r"^wave-([1-9]\d*)\.cycle([1-9]\d*)\.repair-(T\d{3})\.json$"
+)
 # A review file claims to be wave-cycle evidence when its name starts with a
 # wave number followed by "cycle" (a missing dot is a typo, not a note). Other
 # wave-* names are free-form review notes like any non-canonical review file.
@@ -898,6 +901,13 @@ class SkepticArtifact(NamedTuple):
     locator: str
 
 
+class RepairArtifact(NamedTuple):
+    path: Path
+    wave: int
+    cycle: int
+    task: str
+
+
 def canonical_wave_files(reviews: Path) -> Sequence[WaveArtifact]:
     if reviews.is_symlink() or not reviews.is_dir():
         return ()
@@ -910,6 +920,7 @@ def canonical_wave_files(reviews: Path) -> Sequence[WaveArtifact]:
             match is None
             and WAVE_PANEL_SKIP_PATTERN.fullmatch(path.name) is None
             and WAVE_SKEPTIC_PATTERN.fullmatch(path.name) is None
+            and WAVE_REPAIR_PATTERN.fullmatch(path.name) is None
         )
         or not is_real_file(path)
         for path, match in matches
@@ -918,7 +929,7 @@ def canonical_wave_files(reviews: Path) -> Sequence[WaveArtifact]:
             "canonical wave artifacts must be real wave-N.cycleC.md files "
             "(a .contract, .adversarial, or .panel lens suffix is allowed), "
             "canonical .panel.skipped.json receipts, or auxiliary "
-            ".skeptic-<locator>.md evidence"
+            ".skeptic-<locator>.md and .repair-T###.json evidence"
         )
     return [
         WaveArtifact(
@@ -1002,6 +1013,38 @@ def canonical_wave_panel_skip_files(reviews: Path) -> dict[tuple[int, int], Path
     return receipts
 
 
+def canonical_wave_repair_files(reviews: Path) -> Sequence[RepairArtifact]:
+    if reviews.is_symlink() or not reviews.is_dir():
+        return ()
+    artifacts = []
+    for path in sorted(reviews.iterdir()):
+        match = WAVE_REPAIR_PATTERN.fullmatch(path.name)
+        if match is None:
+            continue
+        if not is_real_file(path):
+            raise ArchiveError(f"repair receipt must be a real file: {path.name}")
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError) as error:
+            raise ArchiveError(f"{path.name} is not valid repair-evidence JSON") from error
+        wave = int(match.group(1))
+        cycle = int(match.group(2))
+        task = match.group(3)
+        if (
+            not isinstance(payload, dict)
+            or payload.get("command") != "repair-evidence"
+            or payload.get("status") != "ok"
+            or payload.get("source") != {"wave": wave, "cycle": cycle}
+            or not isinstance(payload.get("repair"), dict)
+            or payload["repair"].get("task") != task
+        ):
+            raise ArchiveError(
+                f"{path.name} identity does not match its repair-evidence payload"
+            )
+        artifacts.append(RepairArtifact(path, wave, cycle, task))
+    return artifacts
+
+
 def require_canonical_transaction_inputs(active_root: Path, archive: Path) -> None:
     missing = [
         relative
@@ -1021,6 +1064,7 @@ def require_canonical_transaction_inputs(active_root: Path, archive: Path) -> No
     plan_text = plan.read_text(encoding="utf-8")
     _, wave_depths = plan_wave_depths(plan_text)
     validate_wave_skeptic_files(reviews, wave_depths, wave_artifacts)
+    canonical_wave_repair_files(reviews)
     require_plan_panel_evidence(
         plan_text,
         selected_transaction_path(active_root, archive, "review/PLAN-PANEL.md"),

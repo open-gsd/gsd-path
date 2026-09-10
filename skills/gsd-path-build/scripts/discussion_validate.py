@@ -666,8 +666,7 @@ def meaningful_review_evidence(lines: Sequence[str], marker: str, task_text: str
     return bool(evidence) and all(
         item
         and item.casefold() not in {"none", "n/a", "null"}
-        and "<" not in item
-        and ">" not in item
+        and re.search(r"(?<!\w)<[a-zA-Z][^<>\n]*>", item) is None
         for item in evidence
     )
 
@@ -930,6 +929,17 @@ def review_cycle_counts(archive: Path) -> Sequence[int]:
     artifacts = {}
     panel_config = archive_milestone.plan_review_panel_config(plan_text)
     panel_skip_receipts = archive_milestone.canonical_wave_panel_skip_files(archive / "review")
+    repair_receipts = archive_milestone.canonical_wave_repair_files(archive / "review")
+    repair_introductions = {}
+    for receipt in repair_receipts:
+        task_text = task_texts.get(receipt.task)
+        if task_text is None or "## Review findings" not in task_text:
+            raise ArchiveError(
+                f"{receipt.path.name} does not name an archived repair task"
+            )
+        if receipt.task in repair_introductions:
+            raise ArchiveError(f"multiple repair receipts name {receipt.task}")
+        repair_introductions[receipt.task] = (receipt.wave, receipt.cycle)
     wave_artifacts = archive_milestone.canonical_wave_files(archive / "review")
     archive_milestone.validate_wave_skeptic_files(archive / "review", wave_depths, wave_artifacts)
     for path, wave, cycle, lens in wave_artifacts:
@@ -949,6 +959,18 @@ def review_cycle_counts(archive: Path) -> Sequence[int]:
         artifacts.setdefault(wave, {}).setdefault(cycle, {})[lens] = path
     if sorted(artifacts) != wave_numbers:
         raise ArchiveError("review cycle waves do not match PLAN.md")
+    for receipt in repair_receipts:
+        if receipt.wave not in artifacts or receipt.cycle not in artifacts[receipt.wave]:
+            raise ArchiveError(
+                f"{receipt.path.name} does not match an archived review cycle"
+            )
+        if (
+            any(task_id == receipt.task for task_id, _ in wave_tasks[receipt.wave])
+            and max(artifacts[receipt.wave]) <= receipt.cycle
+        ):
+            raise ArchiveError(
+                f"{receipt.path.name} requires a later review cycle for its repair task"
+            )
 
     counts = []
     for wave in wave_numbers:
@@ -993,13 +1015,20 @@ def review_cycle_counts(archive: Path) -> Sequence[int]:
 
             wave_verdicts[cycle] = []
             task_verdicts[cycle] = []
+            expected_tasks = [
+                task
+                for task in wave_tasks[wave]
+                if task[0] not in repair_introductions
+                or repair_introductions[task[0]][0] != wave
+                or cycle > repair_introductions[task[0]][1]
+            ]
             for path, depth, lens in expected:
                 lines = path.read_text(encoding="utf-8").splitlines()
                 wave_verdicts[cycle].append(completed_field(lines, "Wave verdict:", path.name))
                 task_verdicts[cycle].extend(
                     validate_wave_review(
                         path,
-                        wave_tasks[wave],
+                        expected_tasks,
                         wave_criteria[wave],
                         depth,
                         lens,
