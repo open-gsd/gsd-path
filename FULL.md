@@ -365,7 +365,7 @@ Log, and redispatches without consuming the task's one failure retry.
 
 ## Resume and recovery
 
-Everything durable lives in `.project/`:
+Durable project artifacts live in `.project/`:
 
 ```text
 .project/
@@ -392,6 +392,15 @@ To resume: invoke the router. It reconciles STATE and task frontmatter,
 reports position, and continues. **Do not hand-edit** task state or SHAs mid-pipeline.
 
 If STATE and artifacts disagree, the router stops and asks rather than guessing.
+
+Artifact-collection journals live under `gsd-path/collect-artifact/` in the Git
+common directory. After the primary worktree moves, status, diagnosis, and
+routing validate completed journals from the former primary as durable receipts
+and omit them from pending recoveries. The former primary need not still exist;
+its recorded path must be absolute. Incomplete journals from another primary
+still block recovery, and active `collect-artifact` operations still require
+the recorded primary to match. Journal validation and unsafe-file checks remain
+in force; see [the collection helper](scripts/isolation.py).
 
 ---
 
