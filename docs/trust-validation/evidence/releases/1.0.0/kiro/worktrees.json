@@ -5,7 +5,7 @@
   "result": "pass",
   "step": "worktrees",
   "command": "git worktree list --porcelain",
-  "output": "worktree /Users/jeremymcspadden/orca/evaluations/gsd-path-release-kiro-091d279/quick/repo\nHEAD 88efbc4b1efa91ec78a3471bcfa314f5d0543238\nbranch refs/heads/gsd-path/M001\n",
+  "output": "worktree /Users/jeremymcspadden/orca/evaluations/gsd-path-release-kiro-091d279/quick/repo\nHEAD ef9f477a0da792d707072d4a32f9d572b905e0c1\nbranch refs/heads/gsd-path/M001\n",
   "primary_worktree": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-kiro-091d279/quick/repo",
   "integration_worktree": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-kiro-091d279/quick/.repo-gsd-path-integrate-M001"
 }

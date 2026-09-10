@@ -5,7 +5,7 @@
   "result": "pass",
   "step": "archive",
   "command": "python3 -B .kiro/skills/gsd-path/scripts/archive_milestone.py validate --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-kiro-091d279/quick/repo",
-  "output": "{\"archive\": \".project/archive/001-count-json-cli\", \"commit\": \"88efbc4b1efa91ec78a3471bcfa314f5d0543238\"}",
+  "output": "{\"archive\": \".project/archive/001-count-json-cli\", \"commit\": \"ef9f477a0da792d707072d4a32f9d572b905e0c1\"}",
   "archive_path": ".project/archive/001-count-json-cli",
   "validation_exit_code": 0
 }
