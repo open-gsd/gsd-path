@@ -319,7 +319,12 @@ def _read_collect_journal(path: Path) -> Dict[str, object]:
     return payload
 
 
-def _validated_collect_journal(primary: Path, path: Path) -> Dict[str, object]:
+def _validated_collect_journal(
+    primary: Path,
+    path: Path,
+    *,
+    allow_complete_from_other_worktree: bool = False,
+) -> Dict[str, object]:
     journal = _read_collect_journal(path)
     request_fields = {
         "schema",
@@ -341,8 +346,6 @@ def _validated_collect_journal(primary: Path, path: Path) -> Dict[str, object]:
     string_fields = request_fields - {"schema", "expected_destination"}
     if any(not isinstance(journal.get(field), str) for field in string_fields):
         raise IsolationError("artifact collection journal has invalid request fields")
-    if journal.get("primary_worktree") != str(primary):
-        raise IsolationError("artifact collection journal belongs to another worktree")
     try:
         require_full_sha(str(journal["base"]))
         relative_posix(str(journal["source"]))
@@ -373,6 +376,10 @@ def _validated_collect_journal(primary: Path, path: Path) -> Dict[str, object]:
         r"[0-9a-f]{64}", str(expected)
     ):
         raise IsolationError("artifact collection journal has invalid expected destination")
+    if journal.get("primary_worktree") != str(primary) and not (
+        allow_complete_from_other_worktree and journal["stage"] == "complete"
+    ):
+        raise IsolationError("artifact collection journal belongs to another worktree")
     return journal
 
 
@@ -388,7 +395,9 @@ def collect_artifact_recoveries(primary: Path) -> list[Dict[str, object]]:
     for path in sorted(root.iterdir()):
         if path.suffix != ".json" or path.is_symlink() or not path.is_file():
             raise IsolationError(f"artifact collection journal entry is unsafe: {path}")
-        journal = _validated_collect_journal(primary, path)
+        journal = _validated_collect_journal(
+            primary, path, allow_complete_from_other_worktree=True
+        )
         if journal["stage"] != "complete":
             recoveries.append({**journal, "journal": str(path)})
     return recoveries
