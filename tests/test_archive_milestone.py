@@ -2262,6 +2262,19 @@ Tasks reviewed: 2
 
             self.assertEqual(discussion_validate.review_cycle_counts(project), [2])
 
+            (review / "wave-1.cycle2.md").unlink()
+            cycle_one.write_text(
+                cycle_one.read_text(encoding="utf-8")
+                .replace("Wave verdict: blocked", "Wave verdict: pass")
+                .replace("T001 — demo: fail", "T001 — demo: pass")
+                .replace("- ❌ demo works", "- ✅ demo works"),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                archive_milestone.ArchiveError, "requires a later review cycle"
+            ):
+                discussion_validate.review_cycle_counts(project)
+
     def test_prepare_rejects_orphan_skeptic_file(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             repo = Path(temporary_directory)
@@ -2856,6 +2869,29 @@ Tasks reviewed: 1
             self.assertNotEqual(preflight.returncode, 0)
             self.assertIn("non-placeholder evidence", preflight.stderr)
 
+    def test_review_evidence_distinguishes_generics_from_placeholders(self) -> None:
+        for observation in (
+            "validated Result<T> serialization",
+            "validated Result< T> serialization",
+            "validated Result<Vec<T>> serialization",
+            "completed in 120ms < 200ms",
+        ):
+            with self.subTest(observation=observation):
+                self.assertTrue(discussion_validate.meaningful_review_evidence(
+                    [f"- ✅ {observation}"], "✅"
+                ))
+        for observation in (
+            "<T>",
+            "<record observation>",
+            "`<record observation>`",
+            "validated Result<T>: <record observation>",
+            "none",
+        ):
+            with self.subTest(observation=observation):
+                self.assertFalse(discussion_validate.meaningful_review_evidence(
+                    [f"- ✅ {observation}"], "✅"
+                ))
+
     def test_preflight_accepts_angle_brackets_in_concrete_task_evidence(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             repo = Path(temporary_directory)
@@ -2865,7 +2901,7 @@ Tasks reviewed: 1
             wave.write_text(
                 wave.read_text().replace(
                     "- ✅ demo works — focused Verify passed",
-                    "- ✅ demo works — validated Result< T> in 120ms < 200ms",
+                    "- ✅ demo works — validated Result<T> in 120ms < 200ms",
                 )
             )
             self.write_manifest(archive)

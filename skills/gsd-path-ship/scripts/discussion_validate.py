@@ -666,7 +666,7 @@ def meaningful_review_evidence(lines: Sequence[str], marker: str, task_text: str
     return bool(evidence) and all(
         item
         and item.casefold() not in {"none", "n/a", "null"}
-        and not archive_milestone.contains_placeholder(item)
+        and re.search(r"(?<!\w)<[a-zA-Z][^<>\n]*>", item) is None
         for item in evidence
     )
 
@@ -963,6 +963,13 @@ def review_cycle_counts(archive: Path) -> Sequence[int]:
         if receipt.wave not in artifacts or receipt.cycle not in artifacts[receipt.wave]:
             raise ArchiveError(
                 f"{receipt.path.name} does not match an archived review cycle"
+            )
+        if (
+            any(task_id == receipt.task for task_id, _ in wave_tasks[receipt.wave])
+            and max(artifacts[receipt.wave]) <= receipt.cycle
+        ):
+            raise ArchiveError(
+                f"{receipt.path.name} requires a later review cycle for its repair task"
             )
 
     counts = []
