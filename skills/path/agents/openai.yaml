@@ -1,6 +1,6 @@
 interface:
-  display_name: "path"
+  display_name: "GSD Path Router"
   short_description: "Route and resume the GSD Path pipeline"
-  default_prompt: "Use $path to inspect project state and continue the next valid GSD Path phase."
+  default_prompt: "Use $gsd-path to inspect project state and continue the next valid GSD Path phase."
 policy:
   allow_implicit_invocation: false

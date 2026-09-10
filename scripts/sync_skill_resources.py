@@ -4,7 +4,6 @@
 import argparse
 import json
 import os
-import re
 import shutil
 import sys
 from pathlib import Path
@@ -98,36 +97,17 @@ def rewrite_router_alias_skill(text: str, alias: str, canonical: str) -> str:
     return "---\n" + header + rest
 
 
-def rewrite_router_alias_codex_yaml(text: str, alias: str, canonical: str) -> str:
-    """Give the alias its own Codex catalog name so $path is not 'GSD Path Router'."""
-    display, count = re.subn(
-        r'(?m)^(  display_name: )".*"$',
-        rf'\1"{alias}"',
-        text,
-        count=1,
-    )
-    if count != 1:
-        raise ValueError(f"router alias {alias} is missing a unique display_name")
-    token = re.compile(rf"\${re.escape(canonical)}(?!-)")
-    if not token.search(display):
-        raise ValueError(f"router alias {alias} is missing ${canonical} in openai.yaml")
-    return token.sub(f"${alias}", display)
-
-
 def materialized_resource_bytes(source: Path, destination: Path) -> bytes:
     data = source.read_bytes()
-    if destination.name == "SKILL.md":
-        alias = destination.parent.name
-        rewriter = rewrite_router_alias_skill
-    elif destination.name == "openai.yaml" and destination.parent.name == "agents":
-        alias = destination.parent.parent.name
-        rewriter = rewrite_router_alias_codex_yaml
-    else:
+    if destination.name != "SKILL.md":
         return data
+    alias = destination.parent.name
     canonical = ROUTER_ALIASES.get(alias)
     if canonical is None:
         return data
-    return rewriter(data.decode("utf-8"), alias, canonical).encode("utf-8")
+    return rewrite_router_alias_skill(
+        data.decode("utf-8"), alias, canonical
+    ).encode("utf-8")
 
 
 def package_metadata(root: Path) -> Iterable[Path]:

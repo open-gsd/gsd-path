@@ -257,15 +257,6 @@ test("path is a short slash name for the router", () => {
   assert.doesNotMatch(skill, /^name: gsd-path$/m);
   assert.match(skill, /invokes \/path or \/gsd-path/);
   assert.match(skill, /\/gsd-path-undo/);
-
-  const codex = path.join(root, "staged-router-alias-codex");
-  fs.mkdirSync(codex);
-  installer.stageTarget(REPO_ROOT, installer.SHARED_AGENT_PROFILE, codex);
-  const yaml = fs.readFileSync(path.join(codex, "path", "agents", "openai.yaml"), "utf8");
-  assert.match(yaml, /^ {2}display_name: "path"$/m);
-  assert.doesNotMatch(yaml, /display_name: "GSD Path Router"/);
-  assert.match(yaml, /Use \$path to inspect/);
-  assert.doesNotMatch(yaml, /Use \$gsd-path to inspect/);
 });
 
 test("v2 canonical skills are installed without aliases", async () => {
