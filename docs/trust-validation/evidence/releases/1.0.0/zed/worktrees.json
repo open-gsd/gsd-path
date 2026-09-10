@@ -1,0 +1,11 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "zed",
+  "run_id": "run-20260909T010700708658Z",
+  "result": "pass",
+  "step": "worktrees",
+  "command": "git worktree list --porcelain",
+  "output": "worktree /Users/jeremymcspadden/orca/evaluations/gsd-path-release-zed-091d279/quick/repo\nHEAD d94143e25087e840dfef3a3b18fa49a221fcbb09\nbranch refs/heads/gsd-path/M001\n",
+  "primary_worktree": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-zed-091d279/quick/repo",
+  "integration_worktree": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-zed-091d279/quick/.repo-gsd-path-integrate-M001"
+}

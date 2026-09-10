@@ -1,0 +1,11 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "qwen",
+  "run_id": "ae51c129-2987-48c6-ba46-88f01f205493",
+  "result": "pass",
+  "step": "reviews",
+  "command": "agent description=review_wave_1_cycle_1 in sidecar /Users/jeremymcspadden/orca/evaluations/gsd-path-release-qwen-091d279/quick/repo.gsd-path/verify/wave-1-cycle-1; python3 -B .qwen/skills/gsd-path/scripts/check_handoffs.py wave --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-qwen-091d279/quick/repo --review .project/review/wave-1.cycle1.md; python3 -B .qwen/skills/gsd-path/scripts/workflow_run.py prepare-final --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-qwen-091d279/quick/repo (final.reused: true)",
+  "output": "# Review \u2014 wave 1, cycle 1\n\nWave verdict: pass\nCycle: 1\nDepth: full\nTasks reviewed: 1\n# Final Review \u2014 reused full wave\n\nReviewed HEAD: 5c54b6621504ea64322759204279ec92c8508916\nOverall verdict: pass\nSource review: .project/review/wave-1.cycle1.md\nSource commit: 7fd2c453eacae066784c59e845739e77598f036e",
+  "wave_review_artifact": ".project/archive/001-count-json-cli/review/wave-1.cycle1.md",
+  "final_review_artifact": ".project/archive/001-count-json-cli/review/FINAL.md"
+}

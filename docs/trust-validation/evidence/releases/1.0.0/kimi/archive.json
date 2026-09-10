@@ -1,0 +1,11 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "kimi",
+  "run_id": "session_8952c763-3a67-469b-8347-c80884b7d24d",
+  "result": "pass",
+  "step": "archive",
+  "command": "python3 -B .kimi-code/skills/gsd-path/scripts/archive_milestone.py validate --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-kimi-091d279/quick/repo",
+  "output": "{\"archive\": \".project/archive/001-count-json-cli\", \"commit\": \"e740a340506c56dac617909643ed84cdc9885d0e\"}",
+  "archive_path": ".project/archive/001-count-json-cli",
+  "validation_exit_code": 0
+}

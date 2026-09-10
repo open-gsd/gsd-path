@@ -1,17 +1,17 @@
 {
   "schema": "gsd-path/live-step-evidence/v1",
   "host": "codex",
-  "run_id": "01a078a8-ba6e-76b1-9839-e966690c6688",
+  "run_id": "01a07eea-9e57-7ae0-ac94-3df8df75205c",
   "result": "pass",
   "step": "task-landing",
-  "command": "python3 -B .agents/skills/gsd-path/scripts/isolation.py land --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-codex-3c32f3d/quick/repo --source /Users/jeremymcspadden/orca/evaluations/gsd-path-release-codex-3c32f3d/quick/repo --base a49bf392e81f7fa7a9794edae40bb5550b442819 --task-id T001 (serial isolation; landing 9a68ab7d98fbd5a0dc2fbaa07f2d536199278f96)",
-  "output": "commit 9a68ab7d98fbd5a0dc2fbaa07f2d536199278f96\nAuthor:     Feature Evaluation <evaluation@example.invalid>\nAuthorDate: Sun Sep 6 16:53:03 2026 -0500\nCommit:     Feature Evaluation <evaluation@example.invalid>\nCommitDate: Sun Sep 6 16:53:03 2026 -0500\n\n    T001: Add JSON widget counts and real CLI tests\n    \n    Task: .project/tasks/T001-widget-counter-cli.md\n    Base: a49bf392e81f7fa7a9794edae40bb5550b442819\n    Files:\n    - .project/tasks/T001-widget-counter-cli.md\n    - count.py\n    - tests/test_count_cli.py\n\n .project/tasks/T001-widget-counter-cli.md | 29 ++++++++++--\n count.py                                  | 15 +++++--\n tests/test_count_cli.py                   | 74 +++++++++++++++++++++++++++++++\n 3 files changed, 112 insertions(+), 6 deletions(-)",
+  "command": "python3 -B .agents/skills/gsd-path/scripts/isolation.py land --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-codex-091d279/quick/repo --source /Users/jeremymcspadden/orca/evaluations/gsd-path-release-codex-091d279/quick/repo --base fa916de --task-id T001 (serial isolation; landing see task-landing.json)",
+  "output": "commit 3a69fc926c9a3a94368476d82d80b7e56b5caf24\nAuthor:     Feature Evaluation <evaluation@example.invalid>\nAuthorDate: Mon Sep 7 22:04:55 2026 -0500\nCommit:     Feature Evaluation <evaluation@example.invalid>\nCommitDate: Mon Sep 7 22:04:55 2026 -0500\n\n    T001: Add JSON output and validated input to the widget counter CLI\n    \n    Task: .project/tasks/T001-widget-counter-cli.md\n    Base: fa916ded9347b8592162c2a439f3e56fc5e6c0db\n    Files:\n    - .project/tasks/T001-widget-counter-cli.md\n    - count.py\n    - tests/test_count_cli.py\n\n .project/tasks/T001-widget-counter-cli.md | 34 ++++++++++++--\n count.py                                  | 15 +++++--\n tests/test_count_cli.py                   | 74 +++++++++++++++++++++++++++++++\n 3 files changed, 117 insertions(+), 6 deletions(-)",
   "fixture_bundle": "codex/fixture.bundle",
   "run_manifest": ".project/archive/001-widget-counter-cli/trust-run-manifest.json",
-  "fixture_base_commit": "a49bf392e81f7fa7a9794edae40bb5550b442819",
+  "fixture_base_commit": "fa916ded9347b8592162c2a439f3e56fc5e6c0db",
   "task_branch": "gsd-path-verify/task-t001-verify",
-  "task_worktree": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-codex-3c32f3d/quick/repo.gsd-path/verify/task-t001-verify",
-  "landing_commit": "9a68ab7d98fbd5a0dc2fbaa07f2d536199278f96",
+  "task_worktree": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-codex-091d279/quick/repo.gsd-path/verify/task-t001-verify",
+  "landing_commit": "3a69fc926c9a3a94368476d82d80b7e56b5caf24",
   "isolation_mode": "serial",
   "isolation_note": "A one-task wave uses the helper's serial mode: the coder worked on the bound branch in the primary worktree at the recorded base, and the named branch and worktree are the isolated Task Verify sidecar created for this task and retired after landing."
 }

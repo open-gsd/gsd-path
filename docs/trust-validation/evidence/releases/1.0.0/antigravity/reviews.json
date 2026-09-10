@@ -1,0 +1,11 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "antigravity",
+  "run_id": "96f8d698-59c3-47d8-8557-0a8f27975fc7",
+  "result": "pass",
+  "step": "reviews",
+  "command": "invoke_subagent role=review_wave_1_cycle_1 in sidecar /Users/jeremymcspadden/orca/evaluations/gsd-path-release-antigravity-091d279/quick/repo.gsd-path/verify/wave-1-cycle-1; python3 -B .agents/skills/gsd-path/scripts/check_handoffs.py wave --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-antigravity-091d279/quick/repo --review .project/review/wave-1.cycle1.md; python3 -B .agents/skills/gsd-path/scripts/workflow_run.py prepare-final --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-antigravity-091d279/quick/repo (final.reused: true)",
+  "output": "# Review \u2014 wave 1, cycle 1\n\nReviewed HEAD: d200ed768a6ea79d99252200a476ff9c5b792597\nReview scope: final\nWave verdict: pass\nCycle: 1\n# Final Review \u2014 reused full wave\n\nReviewed HEAD: d3fcff5069b19339cdfed525baee40ed64c5fb12\nOverall verdict: pass\nSource review: .project/review/wave-1.cycle1.md\nSource commit: d200ed768a6ea79d99252200a476ff9c5b792597",
+  "wave_review_artifact": ".project/archive/001-count-json-cli/review/wave-1.cycle1.md",
+  "final_review_artifact": ".project/archive/001-count-json-cli/review/FINAL.md"
+}

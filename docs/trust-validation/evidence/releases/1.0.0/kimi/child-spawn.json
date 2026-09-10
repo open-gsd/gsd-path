@@ -1,0 +1,44 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "kimi",
+  "run_id": "session_8952c763-3a67-469b-8347-c80884b7d24d",
+  "result": "pass",
+  "step": "child-spawn",
+  "command": "Agent",
+  "child_api": "Agent",
+  "child_id": "build_T001",
+  "child_status": "completed",
+  "output": {
+    "child_id": "build_T001",
+    "status": "completed",
+    "child_api": "Agent",
+    "run": "run-20260908T122331176047Z",
+    "session_id": "session_8952c763-3a67-469b-8347-c80884b7d24d",
+    "tool_call": {
+      "id": "tool_WerGpFFJ6IdvvX0EgeovXDpo",
+      "input": {
+        "description": "build_T001",
+        "subagent_type": "coder"
+      },
+      "prompt_sha256": "62115ff73d2968c324281dc346d436917a030ee701440a6565bdae5738c32d00"
+    },
+    "tool_result": {
+      "agent_id": "agent-2",
+      "actual_subagent_type": "coder",
+      "status": "completed",
+      "stop_reason": "completed",
+      "content": "agent_id: agent-2\nactual_subagent_type: coder\nstatus: completed\nstop_reason: completed\n\n[summary]\nT001 \u2014 ready. Verify `python3 test_count.py`: `Ran 8 tests in 0.392s \u2014 OK`, exit 0. Changed paths: - `count.py` (argparse CLI, `--json` either position, useful stderr errors, exit 2)\n- `test_count.py` (new; 8 subprocess real-CLI tests covering AC1\u2013AC4)\n- `.project/tasks/T001-count-json-cli.md` (append-only Log lines)\n\nNo frontmatter touched, no Git mutation, no other paths edited.\n\nRESULT: T001 ready\n\nresume_hint: Continue with Agent(resume=\"agent-2\", prompt=\"...\"). Use agent_id only; do not set subagent_type. The subagent retains its prior context; redo any unfinished tool call if its result was lost."
+    },
+    "session_store": {
+      "state": "session_8952c763-3a67-469b-8347-c80884b7d24d",
+      "type": "sub",
+      "labels": {
+        "parentAgentId": "main",
+        "profileName": "coder"
+      },
+      "turn_ended_reasons": [
+        "completed"
+      ]
+    }
+  }
+}

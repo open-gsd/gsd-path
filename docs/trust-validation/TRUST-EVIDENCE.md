@@ -153,8 +153,8 @@ npm test && python3 -m unittest discover -s tests -q
 | Dispatch smoke | Claude | **UNVERIFIABLE** | §5 (top-level CLI run; no child spawn — downgraded 2026-08-11) |
 | Pipeline slice | Cursor | **PARTIAL** | §6 (Task API lacks `gsd-path` subagent type; child ran as `generalPurpose`) |
 | Codex implicit catalog | Codex | **PASS** | §3 |
-| Build orchestration | — | **NOT RUN** | deferred per spec |
-| Full milestone ship | — | **NOT RUN** | deferred per spec |
+| Build orchestration | All 11 | **PASS** | §Release evidence — every receipt carries a native child spawn and an isolated Task Verify |
+| Full milestone ship | All 11 | **PASS** | §Release evidence — eleven passing receipts on candidate 091d279 |
 
 ---
 
@@ -162,9 +162,39 @@ npm test && python3 -m unittest discover -s tests -q
 
 | Dimension | Prior | After manual runs |
 |-----------|-------|-------------------|
-| Host dispatch (Codex, Claude, Cursor) | Prove first | **Still prove first** (reconciled 2026-08-11) — recorded runs were top-level CLI invocations, not child-agent spawns through the dispatch contract |
+| Host dispatch (all eleven hosts) | Prove first | **Met** (2026-09-09) — each receipt binds a real child spawned through that host's declared child API; the 2026-08-11 reconciliation applied to the earlier top-level CLI runs, which these receipts supersede |
 | Live dogfood (Cursor slice) | Prove first | **Partial met** — router read + a `generalPurpose` child; contract's `gsd-path` subagent unavailable; not full UI `/gsd-path` session |
 | Guards (Claude) | Use with checks | **OK to use** — deny/allow reproduced in test repo |
-| Guards (Codex/Cursor pre-tool-use) | Use with checks | unchanged — git hooks proven; pre-tool-use not wired |
-| Build orchestration | Prove first | unchanged — not run |
+| Guards (Codex/Cursor pre-tool-use) | Use with checks | See [Release evidence](#release-evidence-2026-09-09) for the current guard tiers and native probes |
+| Build orchestration | Prove first | **Met** — every one of the eleven receipts binds a completed native child to the landed task commit |
 | CI | Prove first | **Automated** — `.github/workflows/ci.yml` now runs Node, Python, and resource-sync checks; this was not part of the 2026-08-05 manual run |
+
+---
+
+## Release evidence (2026-09-09)
+
+Every one of the eleven supported hosts holds a passing full-milestone receipt
+on the frozen candidate `091d27927a2c0c2ecc55ce386fb2232556da6336`. Each receipt
+records a real run on a fresh fixture: the router reaching `shipped`, a native
+child spawned through that host's own child API and bound to the landed task
+commit, an isolated Task Verify, a full-wave review, the archive transaction,
+the single `.project`-only ship commit, integration to a local origin, and the
+Git-hook guard result. `scripts/check_trust_evidence.py` validates all eleven
+against that candidate, and the accompanying `fixture.bundle` carries the
+history each claim is checked against.
+
+Guard tiers: Claude Code and Cursor install a fail-closed project hook, and both
+receipts include a native guard probe in which the host's own tooling refused an
+edit to a committed archive file while an ordinary shell command was allowed.
+The other nine hosts are declared git-only, so the Git hooks carry enforcement
+and `native_guard` reads `not-applicable`.
+
+Owner gates were answered by the session evaluator and are recorded verbatim in
+each evaluation directory. Seven hosts honored every gate unaided; Cursor, GitHub
+Copilot CLI, Qwen Code, and Kimi Code required a hard-stop prompt addendum after
+self-approving a gate, which is recorded in their receipts. Host-specific
+setup and behaviour notes live in [HOST-MATRIX.md](HOST-MATRIX.md).
+
+Publication remains a separate owner decision. These receipts establish that
+the pipeline runs end to end on every supported host; they do not by themselves
+authorize a version tag, a registry publish, or a visibility change.

@@ -1,0 +1,31 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "zed",
+  "run_id": "run-20260909T010700708658Z",
+  "result": "pass",
+  "step": "child-spawn",
+  "command": "spawn_agent",
+  "child_api": "spawn_agent",
+  "child_id": "build_T001",
+  "child_status": "completed",
+  "output": {
+    "child_id": "build_T001",
+    "status": "completed",
+    "child_api": "spawn_agent",
+    "child_session_id": "687ac417-6630-4630-8563-db3c87a807b6",
+    "run": "run-20260909T195603761626Z",
+    "tool_use": {
+      "id": "toolu_01VhMogHaLno27MovXCKYWGi",
+      "input": {
+        "label": "build_T001"
+      },
+      "prompt_sha256": "4e60928d088d071a95c356c141c51c3d01826693ddcf8754615cc1f71bf7bbe1"
+    },
+    "tool_result": {
+      "is_error": false,
+      "completed": true,
+      "session_id": "687ac417-6630-4630-8563-db3c87a807b6",
+      "content": "{\"session_id\":\"687ac417-6630-4630-8563-db3c87a807b6\",\"output\":\"Implemented opt-in `--json` flag in `count.py` (stdlib `json` only, default text output unchanged). Verify command passed all four assertions in-worktree. Changed paths: `count.py`, `.project/tasks/T001-add-json-output-flag.md` (Log only).\\n\\nRESULT: T001 ready\"}"
+    }
+  }
+}

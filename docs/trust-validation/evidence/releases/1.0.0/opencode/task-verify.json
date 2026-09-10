@@ -1,0 +1,11 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "opencode",
+  "run_id": "ses_f80a511edffePvaCxTcpyMblfH",
+  "result": "pass",
+  "step": "task-verify",
+  "command": "python3 tests/test_count.py -v",
+  "output": "{\"command\": \"python3 tests/test_count.py -v\", \"commit\": \"337f12dd447da9024e3e8e094673e7b8d4cd4330\", \"recorded_at\": \"2026-09-08T05:12:30+00:00\", \"result\": \"pass\", \"schema\": \"gsd-path/verify-ledger/v2\"}\n{\"command\": \"python3 -m unittest discover -s tests -v\", \"commit\": \"ca1a397b792e48393b09f1ff5d2b44b64ffe4fdc\", \"execution\": {\"branch\": \"gsd-path-verify/project-verify\", \"exit_code\": 0, \"stderr\": \"test_invalid_input_fails_usefully (test_count.CountCliTests) ... ok\\ntest_invalid_input_prints_nothing_to_stdout (test_count.CountCliTests) ... ok\\ntest_json_flag_after_count (test_count.CountCliTests) ... ok\\ntest_json_flag_alone_defaults_to_zero (test_count.CountCliTests) ... ok\\ntest_json_flag_before_count (test_count.CountCliTests) ... ok\\ntest_negative_count (test_count.CountCliTests) ... ok\\ntest_no_args_defaults_to_zero (test_count.CountCliTests) ... ok\\ntest_positive_count (test_count.CountCliTests) ... ok\\n\\n----------------------------------------------------------------------\\nRan 8 tests in 0.151s\\n\\nOK\\n\", \"stdout\": \"\", \"worktree\": \"/Users/jeremymcspadden/orca/evaluations/gsd-path-release-opencode-091d279/quick/repo.gsd-path/verify/project-verify\"}, \"recorded_at\": \"2026-09-08T05:16:19+00:00\", \"result\": \"pass\", \"schema\": \"gsd-path/verify-ledger/v2\"}\n",
+  "verify_artifact": ".project/archive/001-count-json-cli/build/verify-ledger.jsonl",
+  "verify_exit_code": 0
+}

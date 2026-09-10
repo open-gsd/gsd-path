@@ -1,0 +1,14 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "kimi",
+  "run_id": "session_8952c763-3a67-469b-8347-c80884b7d24d",
+  "result": "pass",
+  "step": "install",
+  "command": "node /Users/jeremymcspadden/orca/evaluations/gsd-path-release-kimi-091d279/plugin/scripts/install.mjs --kimi --local --project /Users/jeremymcspadden/orca/evaluations/gsd-path-release-kimi-091d279/quick/repo --hooks --no-color",
+  "output": "\u2726 GSD Path installer v1.0.0\n  project install into /Users/jeremymcspadden/orca/evaluations/gsd-path-release-kimi-091d279/quick/repo\n\n  \u2713 kimi: installed 15 skills to /Users/jeremymcspadden/orca/evaluations/gsd-path-release-kimi-091d279/quick/repo/.kimi-code/skills\n  \u2713 project: copied AGENTS.md, WORKFLOW.md, .gsd-path/status_runtime.py, .gsd-path/runtime/pipeline_state.py, .gsd-path/runtime/check_handoffs.py, .gsd-path/runtime/check_task_briefs.py, .gsd-path/runtime/isolation.py, .gsd-path/runtime/discussion_records.py, .gsd-path/runtime/pipeline_git.py, .gsd-path/runtime/archive_milestone.py, .gsd-path/runtime/review_panel.py, .gsd-path/runtime/_common.py, .gsd-path/runtime/state_checkpoint.py, .gsd-path/runtime/state_promote.py, .gsd-path/runtime/discussion_validate.py, .gsd-path/runtime/integration.py, .gsd-path/guard_hook.py, .gsd-path/git_guard.py, .git/hooks/pre-commit, .git/hooks/commit-msg, .git/hooks/pre-push to /Users/jeremymcspadden/orca/evaluations/gsd-path-release-kimi-091d279/quick/repo\n\n  Done. Restart active agent sessions, then invoke the router explicitly.",
+  "host_version": "kimi 0.41.0",
+  "install_root": ".kimi-code/skills",
+  "candidate": "091d27927a2c0c2ecc55ce386fb2232556da6336",
+  "package_version": "1.0.0",
+  "exit_code": 0
+}

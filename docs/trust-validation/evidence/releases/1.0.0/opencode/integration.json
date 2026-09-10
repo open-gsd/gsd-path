@@ -1,0 +1,17 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "opencode",
+  "run_id": "ses_f80a511edffePvaCxTcpyMblfH",
+  "result": "pass",
+  "step": "integration",
+  "command": "python3 -B .opencode/skills/gsd-path/scripts/archive_milestone.py integrate --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-opencode-091d279/quick/repo --slug count-json-cli; validate-integrated --slug count-json-cli",
+  "output": "{\"archive\": \".project/archive/001-count-json-cli\", \"base\": \"7a0ab1469ae9ff004ec522d3312fec6fcb19ab94\", \"commit\": \"9be177344ce61cd44dd33751fcfe7022cdb5c5d9\", \"integrate\": \"7a0ab1469ae9ff004ec522d3312fec6fcb19ab94\", \"landing\": \"7a0ab1469ae9ff004ec522d3312fec6fcb19ab94\", \"mode\": \"direct\", \"tag\": \"milestone/001-count-json-cli\"}",
+  "fixture_bundle": "opencode/fixture.bundle",
+  "run_manifest": ".project/archive/001-count-json-cli/trust-run-manifest.json",
+  "ship_commit": "9be177344ce61cd44dd33751fcfe7022cdb5c5d9",
+  "bound_branch": "gsd-path/M001",
+  "default_branch": "main",
+  "pre_integration_default_commit": "858b418c54416da5b13a5726c5b46cba5629aedc",
+  "integration_commit": "7a0ab1469ae9ff004ec522d3312fec6fcb19ab94",
+  "milestone_tag": "milestone/001-count-json-cli"
+}

@@ -1,0 +1,17 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "cursor",
+  "run_id": "e73ef00e-5082-4aa9-98b2-c7e5655f8ab9",
+  "result": "pass",
+  "step": "task-landing",
+  "command": "python3 -B .cursor/skills/gsd-path/scripts/isolation.py land --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-cursor-091d279/quick/repo --source /Users/jeremymcspadden/orca/evaluations/gsd-path-release-cursor-091d279/quick/repo --base c32cfd2 --task-id T001 (serial isolation; landing see task-landing.json)",
+  "output": "commit f2eecc1418c3f56d117cf1acfdbb108c187be076\nAuthor:     Feature Evaluation <evaluation@example.invalid>\nAuthorDate: Tue Sep 8 00:30:53 2026 -0500\nCommit:     Feature Evaluation <evaluation@example.invalid>\nCommitDate: Tue Sep 8 00:30:53 2026 -0500\n\n    T001: Extend count.py with JSON output, error handling, and CLI tests\n    \n    Task: .project/tasks/T001-count-json-cli.md\n    Base: c32cfd2ac950bb6b4cf3a4e48122d5fb720719e5\n    Files:\n    - .project/tasks/T001-count-json-cli.md\n    - count.py\n    - tests/test_count_cli.py\n\n .project/tasks/T001-count-json-cli.md |  7 ++--\n count.py                              | 26 ++++++++++++--\n tests/test_count_cli.py               | 68 +++++++++++++++++++++++++++++++++++\n 3 files changed, 96 insertions(+), 5 deletions(-)",
+  "fixture_bundle": "cursor/fixture.bundle",
+  "run_manifest": ".project/archive/001-count-json-cli/trust-run-manifest.json",
+  "fixture_base_commit": "c32cfd2ac950bb6b4cf3a4e48122d5fb720719e5",
+  "task_branch": "gsd-path-verify/task-t001-verify",
+  "task_worktree": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-cursor-091d279/quick/repo.gsd-path/verify/task-t001-verify",
+  "landing_commit": "f2eecc1418c3f56d117cf1acfdbb108c187be076",
+  "isolation_mode": "serial",
+  "isolation_note": "A one-task wave uses the helper's serial mode: the coder worked on the bound branch in the primary worktree at the recorded base, and the named branch and worktree are the isolated Task Verify sidecar created for this task and retired after landing."
+}

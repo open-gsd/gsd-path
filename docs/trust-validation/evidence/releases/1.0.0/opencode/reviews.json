@@ -1,0 +1,11 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "opencode",
+  "run_id": "ses_f80a511edffePvaCxTcpyMblfH",
+  "result": "pass",
+  "step": "reviews",
+  "command": "Task description=review_wave_1_cycle_1 in sidecar /Users/jeremymcspadden/orca/evaluations/gsd-path-release-opencode-091d279/quick/repo.gsd-path/verify/wave-1-cycle-1; python3 -B .opencode/skills/gsd-path/scripts/check_handoffs.py wave --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-opencode-091d279/quick/repo --review .project/review/wave-1.cycle1.md; python3 -B .opencode/skills/gsd-path/scripts/workflow_run.py prepare-final --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-opencode-091d279/quick/repo (final.reused: true)",
+  "output": "# Review \u2014 wave 1, cycle 1\n\n<!-- Written by the reviewer role in wave mode. File: wave-N.cycleC.md \u2014\n     deep reviews use wave-N.cycleC.contract.md and\n     wave-N.cycleC.adversarial.md instead. Keep validated fields on their\n     own lines: Cycle holds only the number\n# Final Review \u2014 reused full wave\n\nReviewed HEAD: ca1a397b792e48393b09f1ff5d2b44b64ffe4fdc\nOverall verdict: pass\nSource review: .project/review/wave-1.cycle1.md\nSource commit: 337f12dd447da9024e3e8e094673e7b8d4cd4330",
+  "wave_review_artifact": ".project/archive/001-count-json-cli/review/wave-1.cycle1.md",
+  "final_review_artifact": ".project/archive/001-count-json-cli/review/FINAL.md"
+}
