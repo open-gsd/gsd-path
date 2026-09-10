@@ -130,17 +130,26 @@ def phase_manifest(a):
               "native_guard_evidence": native_evidence,
               "git_hook_check": hooks, "checked_at": dt.datetime.now(dt.timezone.utc).isoformat()}
     child_id = task["agent"]
-    if HOST not in ("codex", "claude"):
-        # check_trust_evidence requires the task agent field to name the child that did the work.
-        # Bind it now so a host that dispatched under a different label fails here, before the ship
-        # commit, instead of after the archive is committed and integrated.
-        try:
-            transcript_child(str(Path(a.fixture).resolve().parent.parent), child_id)
-        except Exception as exc:
-            raise SystemExit(f"the task file records agent {child_id!r} but no completed child "
-                             f"was dispatched under that label ({exc}). The host broke the dispatch "
-                             "contract; rerun its build so the dispatched label and the task agent "
-                             "field match. Do not override this: the receipt validator cross-checks them.")
+    transcript = a.transcript
+    if not transcript:
+        if HOST == "codex":
+            raise SystemExit("codex manifest requires --transcript <session JSONL file>")
+        transcript = str(repo.parent.parent)
+    try:
+        transcript_child(transcript, child_id)
+    except (Exception, SystemExit) as exc:
+        raise SystemExit(f"the task file records agent {child_id!r} but no completed child "
+                         f"was dispatched under that label ({exc}). The host broke the dispatch "
+                         "contract; rerun its build so the dispatched label and the task agent "
+                         "field match. Do not override this: the receipt validator cross-checks them.")
+    final = (repo / archive / "review/FINAL.md").read_text()
+    source = re.search(r"^Source review:[ \t]*(.*)$", final, re.M)
+    wave_review = "wave-1.cycle1.md"
+    if source:
+        match = re.fullmatch(r"\.project/review/(wave-1\.cycle[1-9][0-9]*\.md)", source.group(1).strip())
+        if not match:
+            raise SystemExit(f"invalid FINAL.md Source review: {source.group(1)}")
+        wave_review = match.group(1)
     manifest = {"schema": "gsd-path/live-run-manifest/v1", "host": HOST, "run_id": a.run_id,
                 "host_version": a.host_version, "candidate": a.candidate, "package_version": a.package_version,
                 "child_api": CHILD_API, "child_id": child_id, "guard_tier": GUARD_TIER,
@@ -149,7 +158,7 @@ def phase_manifest(a):
                 "default_branch": "main", "pre_integration_default_commit": remote_default_commit(repo),
                 "milestone_tag": f"milestone/{Path(archive).name}",
                 "artifacts": {"state": ".project/STATE.md", "verify": f"{archive}/build/verify-ledger.jsonl",
-                              "wave_review": f"{archive}/review/wave-1.cycle1.md",
+                              "wave_review": f"{archive}/review/{wave_review}",
                               "final_review": f"{archive}/review/FINAL.md", "archive": archive,
                               "guards": f"{archive}/guards.json"}}
     for rel in manifest["artifacts"].values():
@@ -172,7 +181,7 @@ def remote_default_commit(repo):
     line = git(repo, "ls-remote", "origin", "refs/heads/main")
     if line:
         return line.split()[0]
-    return git(repo, "rev-parse", "origin/main")
+    raise SystemExit("remote origin has no refs/heads/main")
 
 
 def transcript_child(transcript, child_id):
@@ -368,6 +377,7 @@ def main():
     m = sub.add_parser("manifest")
     for k in ("fixture", "repo", "run_id", "candidate", "host_version", "task_branch"):
         m.add_argument(f"--{k.replace('_', '-')}", required=True)
+    m.add_argument("--transcript", help="Codex session JSONL file (required for codex); otherwise the host run root")
     m.add_argument("--package-version", default="1.0.0")
     m.add_argument("--committed-archive-repo"); m.add_argument("--committed-archive"); m.add_argument("--native-guard-evidence")
     r = sub.add_parser("receipt")

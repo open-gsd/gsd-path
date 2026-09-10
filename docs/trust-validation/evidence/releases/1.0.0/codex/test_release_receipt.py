@@ -75,3 +75,76 @@ class ClaudeChildReceiptTests(unittest.TestCase):
         self.assertEqual("b", self.collect(events, "b")["tool_use"]["id"])
         with self.assertRaisesRegex(SystemExit, "has no completion evidence"):
             self.collect(events, "missing")
+
+
+class ManifestBindingTests(unittest.TestCase):
+    def test_manifest_binds_completed_child_and_final_review(self):
+        from contextlib import redirect_stdout
+        from io import StringIO
+        from types import SimpleNamespace
+        from unittest.mock import patch
+
+        for host in ("codex", "claude"):
+            for agent, source in (("build_t001", None), ("build_T001", None),
+                                  ("build_T001", ".project/review/wave-1.cycle6.md")):
+                with self.subTest(host=host, agent=agent, source=source), tempfile.TemporaryDirectory(dir=ROOT) as tmp:
+                    root = Path(tmp)
+                    repo = root / "quick/fixture"
+                    archive = ".project/archive/001-test"
+                    archived = repo / archive
+                    (archived / "tasks").mkdir(parents=True)
+                    (archived / "tasks/T001.md").write_text(f"id: T001\nagent: {agent}\nbase: base\n")
+                    (repo / ".project/STATE.md").write_text(f"archive: {archive}\nbranch: gsd-path/M001\n")
+                    (archived / "build").mkdir()
+                    (archived / "build/verify-ledger.jsonl").write_text("")
+                    (archived / "review").mkdir()
+                    wave = "wave-1.cycle6.md" if source else "wave-1.cycle1.md"
+                    (archived / "review" / wave).write_text("Wave verdict: pass\n")
+                    (archived / "review/FINAL.md").write_text(f"Source review: {source}\n" if source else "Overall verdict: pass\n")
+                    native = root / "native.json"
+                    native.write_text('{"native_guard": "pass"}')
+                    if host == "codex":
+                        transcript = root / "session.jsonl"
+                        payloads = [
+                            {"type": "function_call", "name": "spawn_agent", "call_id": "a", "arguments": '{"task_name":"build_T001"}'},
+                            {"type": "function_call_output", "call_id": "a", "output": "spawned"},
+                            {"type": "function_call_output", "call_id": "b", "output": json.dumps({"agents": [{"agent_name": "/root/build_T001", "agent_status": "completed"}]})},
+                        ]
+                        transcript.write_text("".join(json.dumps({"payload": p}) + "\n" for p in payloads))
+                    else:
+                        stream = root / "quick/run-001/events.jsonl"
+                        stream.parent.mkdir()
+                        helper = ClaudeChildReceiptTests()
+                        stream.write_text("".join(json.dumps({"raw": json.dumps(e)}) + "\n" for e in (helper.use("a"), helper.result("a"))))
+                        transcript = None
+                    args = SimpleNamespace(repo=str(ROOT), fixture=str(repo), transcript=str(transcript) if transcript else None,
+                                           committed_archive_repo=None, committed_archive=None, native_guard_evidence=str(native),
+                                           run_id="test", host_version="test", candidate="candidate", package_version="1.0.0", task_branch="task")
+                    with patch.multiple(release_receipt, HOST=host, GUARD_TIER="git-only", CHILD_API="test"), \
+                         patch.object(release_receipt, "git_hook_check", return_value={"git_hooks": "pass"}), \
+                         patch.object(release_receipt, "git", side_effect=lambda repo, *args: "landing" if args[0] == "log" else "remote refs/heads/main"), \
+                         redirect_stdout(StringIO()):
+                        if agent == "build_t001":
+                            with self.assertRaisesRegex(SystemExit, "no completed child"):
+                                release_receipt.phase_manifest(args)
+                            self.assertFalse((archived / "trust-run-manifest.json").exists())
+                        else:
+                            self.assertEqual(0, release_receipt.phase_manifest(args))
+                            manifest = json.loads((archived / "trust-run-manifest.json").read_text())
+                            self.assertEqual(f"{archive}/review/{wave}", manifest["artifacts"]["wave_review"])
+                            self.assertEqual(agent, manifest["child_id"])
+
+    def test_remote_default_never_uses_stale_tracking_ref(self):
+        from types import SimpleNamespace
+        from unittest.mock import patch
+
+        def command(args, **kwargs):
+            output = remote if args[1] == "ls-remote" else "stale\n"
+            return SimpleNamespace(returncode=0, stdout=output, stderr="")
+
+        with patch.object(release_receipt.subprocess, "run", side_effect=command):
+            remote = "fresh\trefs/heads/main\n"
+            self.assertEqual("fresh", release_receipt.remote_default_commit(ROOT))
+            remote = ""
+            with self.assertRaisesRegex(SystemExit, "refs/heads/main"):
+                release_receipt.remote_default_commit(ROOT)

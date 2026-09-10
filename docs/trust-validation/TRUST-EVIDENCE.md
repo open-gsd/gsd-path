@@ -190,7 +190,7 @@ The other nine hosts are declared git-only, so the Git hooks carry enforcement
 and `native_guard` reads `not-applicable`.
 
 Owner gates were answered by the session evaluator and are recorded verbatim in
-each evaluation directory. Six hosts honored every gate unaided; Cursor, GitHub
+each evaluation directory. Seven hosts honored every gate unaided; Cursor, GitHub
 Copilot CLI, Qwen Code, and Kimi Code required a hard-stop prompt addendum after
 self-approving a gate, which is recorded in their receipts. Host-specific
 setup and behaviour notes live in [HOST-MATRIX.md](HOST-MATRIX.md).

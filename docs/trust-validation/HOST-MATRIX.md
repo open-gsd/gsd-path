@@ -44,8 +44,9 @@ around the bound-branch guard without an explicit ruling. Two host behaviours
 need care when driving it: it may dispatch a child under a label whose case
 differs from the `agent:` field it writes, which the validator rejects, and it
 commits final-gate evidence as its own commit, which moves HEAD past the
-reviewed revision so `preflight` refuses to ship. Both are caught before the
-ship commit by the manifest phase of the assembly tool.
+reviewed revision so `preflight` refuses to ship. The assembly tool’s manifest
+phase catches the child-label mismatch. `archive_milestone.py preflight` catches
+the reviewed-HEAD drift before the ship commit.
 
 **Kiro.** `kiro-cli chat` returns `runError: Internal error` at the prompt stage
 under sustained agent load, at varying points in a run; a trivial prompt with
