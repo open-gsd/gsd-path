@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<!--
+  PROTOTYPE — throwaway. Question: "what should the gsd-path daemon interface look like?"
+  Four variants of the daemon UI, switchable via ?variant= or the bottom bar (←/→ keys).
+  Run: open daemon/prototype-ui.html
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>gsd-path daemon — UI prototype</title>
+<style>
+  :root {
+    --bg: #1e1f24; --panel: #26272e; --panel2: #2e3038; --line: #3a3c46;
+    --text: #e8e9ee; --dim: #9a9ca8; --faint: #6a6c78;
+    --green: #34c759; --yellow: #ffd60a; --red: #ff453a; --blue: #0a84ff; --purple: #bf5af2;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { background: var(--bg); color: var(--text); font: 13px/1.45 -apple-system, "SF Pro Text", "Segoe UI", sans-serif; min-height: 100vh; }
+  .banner { position: fixed; top: 0; left: 0; right: 0; z-index: 50; background: #3d2e00; color: var(--yellow);
+            text-align: center; font-size: 11px; padding: 4px; letter-spacing: .4px; }
+  .stage { padding: 44px 24px 120px; }
+  .pill { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+  .pill.active  { background: #0f3d22; color: var(--green); }
+  .pill.blocked { background: #451614; color: var(--red); }
+  .pill.done    { background: #0d2f52; color: var(--blue); }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
+  .dot.g { background: var(--green); } .dot.y { background: var(--yellow); } .dot.r { background: var(--red); }
+  .bar { height: 5px; border-radius: 3px; background: var(--line); overflow: hidden; }
+  .bar > i { display: block; height: 100%; background: var(--green); border-radius: 3px; }
+  .dim { color: var(--dim); } .faint { color: var(--faint); }
+  kbd { background: var(--panel2); border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; font-size: 11px; }
+
+  /* fake macOS desktop + menu bar (variants A & B) */
+  .desktop { max-width: 980px; margin: 0 auto; border: 1px solid var(--line); border-radius: 12px; overflow: hidden;
+             background: linear-gradient(160deg, #2b3a55, #1a2030 60%, #241f2e); min-height: 560px; position: relative; }
+  .menubar { display: flex; align-items: center; gap: 18px; height: 26px; padding: 0 12px;
+             background: rgba(30,30,34,.82); backdrop-filter: blur(14px); font-size: 12px; }
+  .menubar .sp { flex: 1; }
+  .trayicon { display: flex; align-items: center; gap: 5px; background: rgba(255,255,255,.12); border-radius: 5px; padding: 1px 7px; cursor: default; }
+  .trayicon svg { display: block; }
+
+  /* Variant A — native dropdown menu */
+  .menu { position: absolute; top: 28px; right: 90px; width: 340px; background: rgba(38,38,44,.96); backdrop-filter: blur(20px);
+          border: 1px solid rgba(255,255,255,.09); border-radius: 9px; box-shadow: 0 14px 44px rgba(0,0,0,.55); padding: 5px; }
+  .mi { display: flex; align-items: center; gap: 8px; padding: 4px 10px; border-radius: 5px; white-space: nowrap; }
+  .mi:hover { background: var(--blue); color: #fff; }
+  .mi.header { font-weight: 700; }
+  .mi.sub { padding-left: 26px; color: var(--dim); }
+  .mi.sub:hover { color: #fff; }
+  .mi .r { margin-left: auto; color: var(--faint); font-size: 11px; }
+  .mi:hover .r { color: #cfe1ff; }
+  .sep { height: 1px; background: var(--line); margin: 5px 10px; }
+
+  /* Variant B — popover card panel */
+  .popover { position: absolute; top: 30px; right: 40px; width: 400px; background: rgba(34,35,41,.97); backdrop-filter: blur(24px);
+             border: 1px solid rgba(255,255,255,.09); border-radius: 14px; box-shadow: 0 18px 60px rgba(0,0,0,.6); padding: 14px;
+             max-height: 540px; overflow: auto; }
+  .pcard { background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: 11px 12px; margin-bottom: 10px; }
+  .pcard .top { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
+  .pcard .name { font-weight: 700; font-size: 14px; }
+  .pcard .ms { color: var(--dim); font-size: 11px; }
+  .steps { display: flex; align-items: center; gap: 3px; margin: 9px 0 7px; }
+  .step { flex: 1; height: 4px; border-radius: 2px; background: var(--line); position: relative; }
+  .step.done { background: var(--green); }
+  .step.now { background: var(--blue); box-shadow: 0 0 6px var(--blue); }
+  .steplabel { font-size: 10px; color: var(--faint); display: flex; justify-content: space-between; margin-bottom: 8px; }
+  .prow { display: flex; justify-content: space-between; font-size: 12px; color: var(--dim); margin-top: 3px; }
+  .prow b { color: var(--text); font-weight: 600; }
+
+  /* Variant C — full dashboard */
+  .dash { max-width: 1180px; margin: 0 auto; display: grid; grid-template-columns: 240px 1fr; gap: 0;
+          border: 1px solid var(--line); border-radius: 12px; overflow: hidden; min-height: 640px; background: var(--panel); }
+  .side { border-right: 1px solid var(--line); padding: 14px 10px; background: #23242a; }
+  .side h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .8px; color: var(--faint); padding: 6px 10px; }
+  .sitem { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 7px; cursor: default; }
+  .sitem.sel { background: var(--panel2); }
+  .sitem .nm { font-weight: 600; }
+  .sitem .sub { font-size: 11px; color: var(--faint); }
+  .main { padding: 18px 22px; }
+  .main h2 { font-size: 19px; margin-bottom: 2px; }
+  .statrow { display: flex; gap: 12px; margin: 14px 0 18px; }
+  .stat { flex: 1; background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; }
+  .stat .v { font-size: 20px; font-weight: 700; }
+  .stat .k { font-size: 11px; color: var(--faint); }
+  table.tasks { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  table.tasks th { text-align: left; color: var(--faint); font-size: 11px; text-transform: uppercase; letter-spacing: .5px;
+                   padding: 6px 10px; border-bottom: 1px solid var(--line); }
+  table.tasks td { padding: 7px 10px; border-bottom: 1px solid #2b2c33; }
+  .wavehead td { padding-top: 16px; font-weight: 700; color: var(--dim); border-bottom: none; }
+
+  /* Variant C tabs + detail widgets */
+  .sitem { cursor: pointer; } .sitem:hover { background: #2a2b32; }
+  .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); margin: 14px 0 16px; }
+  .tab { padding: 7px 14px; font-size: 12.5px; color: var(--dim); cursor: pointer; border-bottom: 2px solid transparent; }
+  .tab:hover { color: var(--text); }
+  .tab.sel { color: var(--text); border-bottom-color: var(--blue); font-weight: 600; }
+  .tab .n { background: var(--panel2); border-radius: 8px; padding: 0 6px; font-size: 10.5px; margin-left: 4px; }
+  .tab.sel .n { background: var(--blue); color: #fff; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .box { background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+  .box h4 { font-size: 11px; text-transform: uppercase; letter-spacing: .6px; color: var(--faint); margin-bottom: 8px; }
+  .crit { display: flex; gap: 8px; padding: 5px 0; border-top: 1px solid #2b2c33; font-size: 12.5px; }
+  .crit:first-of-type { border-top: none; }
+  .vmet { color: var(--green); font-weight: 700; width: 86px; flex: none; }
+  .vnot { color: var(--red); font-weight: 700; width: 86px; flex: none; }
+  .vunv { color: var(--yellow); font-weight: 700; width: 86px; flex: none; }
+  .ans { background: #23242a; border: 1px solid var(--line); border-left: 3px solid var(--yellow); border-radius: 8px;
+         padding: 9px 12px; margin-bottom: 8px; font-size: 12.5px; }
+  .ans .meta { color: var(--faint); font-size: 11px; margin-top: 4px; }
+  .ans.resolved { border-left-color: var(--green); opacity: .65; }
+  .rev { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid #2b2c33; font-size: 12.5px; }
+  .rev:first-of-type { border-top: none; }
+  .ledger { font: 11.5px/1.7 ui-monospace, monospace; color: var(--dim); }
+  .ledger .pass { color: var(--green); } .ledger .fail { color: var(--red); }
+  .rms { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-top: 1px solid #2b2c33; font-size: 13px; }
+  .rms:first-of-type { border-top: none; }
+  .rms .mnum { font-weight: 700; width: 48px; }
+  .rms .arch { margin-left: auto; font: 10.5px ui-monospace, monospace; color: var(--faint); }
+
+  /* Variant D — timeline swimlanes */
+  .tl { max-width: 1100px; margin: 0 auto; }
+  .lanegrid { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); padding: 18px; margin-bottom: 16px; }
+  .axis { display: grid; grid-template-columns: 130px repeat(8, 1fr); font-size: 10.5px; color: var(--faint); margin-bottom: 10px; }
+  .axis span { text-align: center; }
+  .lane { display: grid; grid-template-columns: 130px repeat(8, 1fr); align-items: center; height: 46px; border-top: 1px solid #2b2c33; }
+  .lane .who { font-weight: 600; font-size: 12.5px; }
+  .lane .who .sub { display: block; font-weight: 400; font-size: 10.5px; color: var(--faint); }
+  .seg { height: 14px; border-radius: 7px; margin: 0 2px; background: var(--line); position: relative; }
+  .seg.done { background: #1f5c35; }
+  .seg.now  { background: var(--blue); box-shadow: 0 0 8px rgba(10,132,255,.6); }
+  .seg.blocked { background: var(--red); }
+  .feed { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); padding: 14px 18px; }
+  .feed h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .7px; color: var(--faint); margin-bottom: 8px; }
+  .fe { display: flex; gap: 10px; padding: 6px 0; border-top: 1px solid #2b2c33; font-size: 12.5px; }
+  .fe time { color: var(--faint); width: 52px; flex: none; }
+
+  /* data drawer */
+  .drawer-toggle { position: fixed; bottom: 86px; right: 16px; z-index: 60; background: var(--panel2); border: 1px solid var(--line);
+                   color: var(--dim); border-radius: 7px; padding: 5px 10px; cursor: pointer; font-size: 11.5px; }
+  .drawer { position: fixed; bottom: 122px; right: 16px; z-index: 60; width: 420px; max-height: 50vh; overflow: auto; display: none;
+            background: #141519; border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+  .drawer.open { display: block; }
+  .drawer pre { font: 10.5px/1.5 ui-monospace, monospace; color: #9fd0a8; white-space: pre-wrap; }
+
+  /* switcher */
+  .switcher { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); z-index: 70;
+              display: flex; align-items: center; gap: 4px; background: #f5f5f7; color: #111;
+              border-radius: 999px; padding: 6px 8px; box-shadow: 0 10px 34px rgba(0,0,0,.6); font-weight: 600; }
+  .switcher button { border: none; background: #e2e2e8; color: #111; width: 34px; height: 34px; border-radius: 50%;
+                     font-size: 16px; cursor: pointer; }
+  .switcher button:hover { background: #d0d0da; }
+  .switcher .label { min-width: 300px; text-align: center; font-size: 13px; }
+  .switcher .label small { display: block; font-weight: 400; color: #555; font-size: 10.5px; }
+</style>
+</head>
+<body>
+<div class="banner">PROTOTYPE — THROWAWAY · mock data, no wiring · question: what should the daemon interface look like?</div>
+<div class="stage" id="stage"></div>
+
+<button class="drawer-toggle" onclick="document.querySelector('.drawer').classList.toggle('open')">{ } mock state</button>
+<div class="drawer"><pre id="mockjson"></pre></div>
+
+<div class="switcher">
+  <button onclick="cycle(-1)">‹</button>
+  <div class="label" id="vlabel"></div>
+  <button onclick="cycle(1)">›</button>
+</div>
+
+<script>
+/* ---------- mock state: shape mirrors gsd_daemon.model.ProjectStatus.to_dict() ---------- */
+const MOCK = {
+  schema: "gsd-path-daemon/status/v1",
+  generated_at: "2026-09-11T14:32:07Z",
+  projects: [
+    { root: "~/orca/workspaces/orca", project: "orca", milestone: "fleet-ui",
+      phase: "build", status: "active", branch: "gsd-path/M002", git: {dirty: false},
+      tasks_done: 7, tasks_total: 12, current_wave: 2,
+      waves: {1: "graph model", 2: "fleet intents", 3: "resolve"},
+      pending_answers: [{answer: "A014", owner: "gsd-path-plan", status: "NEEDS-USER"}],
+      next_skill: "gsd-path-build", status_source: "runtime", last_activity_iso: "2026-09-11T14:29:51Z" },
+    { root: "~/orca/workspaces/gsd-path/daemon", project: "gsd-path", milestone: "daemon",
+      phase: "ship", status: "blocked", branch: "gsd-path/M001", git: {dirty: true},
+      tasks_done: 12, tasks_total: 12, current_wave: null,
+      waves: {1: "core parsers", 2: "watcher", 3: "tray"},
+      pending_answers: [
+        {answer: "A002", owner: "gsd-path-define", status: "final"},
+        {answer: "A007", owner: "gsd-path-plan",  status: "NEEDS-USER"}],
+      next_skill: "gsd-path-forensics", status_source: "runtime", last_activity_iso: "2026-09-11T13:58:12Z",
+      note: "final review: 1 criterion not-met (SC4)" },
+    { root: "~/work/memtrace", project: "memtrace", milestone: "cortex-sync",
+      phase: "research", status: "active", branch: "gsd-path/M003", git: {dirty: false},
+      tasks_done: 0, tasks_total: 0, current_wave: null, waves: {},
+      pending_answers: [], next_skill: "gsd-path-decide", status_source: "parse-only",
+      last_activity_iso: "2026-09-10T22:14:40Z",
+      next_milestone: {phase: "define", status: "active", milestone: "edge-cache"} },
+    { root: "~/work/loopy", project: "loopy", milestone: "publish-flow",
+      phase: "shipped", status: "done", branch: null, git: {dirty: false},
+      tasks_done: 9, tasks_total: 9, current_wave: null, waves: {1: "spec", 2: "runner"},
+      pending_answers: [], next_skill: null, status_source: "parse-only",
+      last_activity_iso: "2026-09-08T17:02:33Z" }
+  ],
+  history: [
+    {t: "14:29", ev: "tasks-changed",    p: "orca",     d: "6/12 → 7/12 (T207 done)"},
+    {t: "14:11", ev: "pending-answers",  p: "gsd-path", d: "A007 NEEDS-USER (plan)"},
+    {t: "13:58", ev: "blocked",          p: "gsd-path", d: "ship blocked — SC4 not-met"},
+    {t: "13:02", ev: "phase-changed",    p: "gsd-path", d: "build → ship"},
+    {t: "11:47", ev: "project-added",    p: "memtrace", d: "discovered under ~/work"},
+    {t: "09:15", ev: "phase-changed",    p: "memtrace", d: "define → research"}
+  ]
+};
+document.getElementById("mockjson").textContent = JSON.stringify(MOCK, null, 1);
+
+const PHASES = ["inspect","define","research","decide","roadmap","plan","build","ship"];
+const pct = p => p.tasks_total ? Math.round(100*p.tasks_done/p.tasks_total) : 0;
+const health = p => p.status === "blocked" ? "r" : (p.pending_answers.length || (p.git&&p.git.dirty)) ? "y" : "g";
+const badge = p => p.status === "blocked" ? '<span class="pill blocked">blocked</span>'
+                 : p.phase === "shipped"      ? '<span class="pill done">shipped</span>'
+                 : '<span class="pill active">' + p.phase + '</span>';
+const ms = p => p.milestone ? "M· " + p.milestone : "—";
+const esc = s => s.replace(/&/g,"&amp;").replace(/</g,"&lt;");
+/* display form of a skill id: "gsd-path-forensics" -> "FORENSICS". Raw id kept for copy actions. */
+const skill = s => s ? s.replace(/^gsd-path-/, "").toUpperCase() : null;
+const fmt = n => n >= 1e6 ? (n/1e6).toFixed(1)+"M" : n >= 1e3 ? Math.round(n/1e3)+"k" : String(n);
+const icon = () => `<svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="6" fill="none" stroke="#ffd60a" stroke-width="2"/><circle cx="7" cy="7" r="2.4" fill="#ffd60a"/></svg>`;
+const active = MOCK.projects.filter(p => p.status !== "done" || p.phase !== "shipped");
+
+/* ============================ VARIANT A — native menu list ============================ */
+function VariantA() {
+  let rows = "";
+  for (const p of MOCK.projects) {
+    rows += `<div class="mi header"><span class="dot ${health(p)}"></span> ${esc(p.project)} <span class="r">${esc(ms(p))}</span></div>`;
+    if (p.phase === "shipped") {
+      rows += `<div class="mi sub">Shipped · ${p.tasks_done}/${p.tasks_total} tasks <span class="r">8 Sep</span></div>`;
+    } else {
+      rows += `<div class="mi sub">Phase: ${p.phase} (${p.status}) ${p.status==="blocked"?'· <b style="color:#ff9f0a">SC4 not-met</b>':''}</div>`;
+      if (p.tasks_total) rows += `<div class="mi sub">Tasks: ${p.tasks_done}/${p.tasks_total} done${p.current_wave ? " — Wave " + p.current_wave + " ("+esc(p.waves[p.current_wave])+")" : ""}</div>`;
+      if (p.branch) rows += `<div class="mi sub">Branch: ${esc(p.branch)} (${p.git.dirty ? "dirty" : "clean"})</div>`;
+      if (p.pending_answers.length) rows += `<div class="mi sub">⚠ Pending answers: ${p.pending_answers.length} <span class="r">${p.pending_answers.map(a=>a.answer).join(", ")}</span></div>`;
+      if (p.next_milestone) rows += `<div class="mi sub">⏭ Next: ${esc(p.next_milestone.milestone)} (${p.next_milestone.phase})</div>`;
+      if (p.next_skill) rows += `<div class="mi sub">Next: <kbd>${skill(p.next_skill)}</kbd> <span class="r">⌘C copies $${p.next_skill}</span></div>`;
+      const ua = DETAILS[p.project] && DETAILS[p.project].usage;
+      if (ua) rows += `<div class="mi sub">⚡ ${fmt(ua.tokens_in+ua.tokens_out)} tok · $${ua.cost.toFixed(2)} · ${esc(ua.models[0][0])} ${Math.round(ua.models[0][2]*100)}%</div>`;
+      rows += `<div class="mi sub">Reveal in Finder</div><div class="mi sub">Copy status JSON</div>`;
+    }
+    rows += `<div class="sep"></div>`;
+  }
+  return `
+  <div class="desktop">
+    <div class="menubar"><b></b> File &nbsp;Edit &nbsp;View <span class="sp"></span>
+      <span class="trayicon">${icon()} 2 active · 1 blocked</span> <span class="dim">Fri 14:32</span></div>
+    <div class="menu">
+      ${rows}
+      <div class="mi">Add watched folder…</div>
+      <div class="mi">Watched folders <span class="r">~/orca/workspaces, ~/work ▸</span></div>
+      <div class="mi">Rescan now</div>
+      <div class="mi">Pause monitoring <span class="r">☐</span></div>
+      <div class="sep"></div>
+      <div class="mi">Open dashboard <span class="r">localhost:8765</span></div>
+      <div class="mi">Quit gsd-path daemon</div>
+    </div>
+  </div>
+  <p class="faint" style="max-width:980px;margin:10px auto 0">Faithful OS-native dropdown (what pystray can actually render): plain text items, submenus, no widgets. Cheapest to build, zero custom UI, works identically on macOS + Windows — but dense projects get long, and progress is words, not pictures.</p>`;
+}
+
+/* ===================== VARIANT B — menu-bar popover (card panel) ===================== */
+function VariantB() {
+  let cards = "";
+  for (const p of MOCK.projects) {
+    const idx = PHASES.indexOf(p.phase);
+    let steps = "";
+    for (let i = 0; i < PHASES.length; i++) {
+      const cls = p.phase === "shipped" ? "done" : i < idx ? "done" : i === idx ? (p.status==="blocked" ? "now\" style=\"background:var(--red);box-shadow:0 0 6px var(--red)" : "now") : "";
+      steps += `<div class="step ${cls}"></div>`;
+    }
+    cards += `
+    <div class="pcard">
+      <div class="top"><span class="dot ${health(p)}"></span><span class="name">${esc(p.project)}</span>
+        <span class="ms">${esc(ms(p))}</span><span style="margin-left:auto">${badge(p)}</span></div>
+      <div class="steps">${steps}</div>
+      <div class="steplabel"><span>inspect</span><span>decide</span><span>build</span><span>ship</span></div>
+      ${p.tasks_total ? `<div class="bar"><i style="width:${pct(p)}%"></i></div>
+      <div class="prow"><span>Tasks <b>${p.tasks_done}/${p.tasks_total}</b>${p.current_wave?` · wave ${p.current_wave} “${esc(p.waves[p.current_wave])}”`:" · all done"}</span><span>${pct(p)}%</span></div>` : `<div class="prow"><span>No tasks yet — pre-plan phase</span></div>`}
+      <div class="prow"><span>${p.branch ? esc(p.branch) + (p.git.dirty ? " · <b style='color:var(--yellow)'>dirty</b>" : " · clean") : "no branch"}</span>
+        ${p.next_skill ? `<span><kbd>${skill(p.next_skill)}</kbd></span>` : ""}</div>
+      ${p.pending_answers.length ? `<div class="prow"><span style="color:var(--yellow)">⚠ ${p.pending_answers.length} pending answer${p.pending_answers.length>1?"s":""} — ${p.pending_answers.map(a=>a.answer+" ("+a.status+")").join(", ")}</span></div>` : ""}
+      ${p.note ? `<div class="prow"><span style="color:var(--red)">⛔ ${esc(p.note)}</span></div>` : ""}
+      ${p.next_milestone ? `<div class="prow"><span>⏭ lookahead: ${esc(p.next_milestone.milestone)} (${p.next_milestone.phase})</span></div>` : ""}
+      ${(() => { const du = DETAILS[p.project]; if (!du || !du.usage) return ""; const u = du.usage;
+        return `<div class="prow"><span>⚡ ${fmt(u.tokens_in+u.tokens_out)} tok · $${u.cost.toFixed(2)}</span>
+        <span>${p.phase !== "shipped" ? `⏱ ${du.time_in_phase} in ${p.phase}` : "milestone complete"}</span></div>`; })()}
+    </div>`;
+  }
+  return `
+  <div class="desktop">
+    <div class="menubar"><b></b> File &nbsp;Edit &nbsp;View <span class="sp"></span>
+      <span class="trayicon">${icon()} 16/33 tasks</span> <span class="dim">Fri 14:32</span></div>
+    <div class="popover">
+      <div style="display:flex;align-items:baseline;margin-bottom:10px">
+        <b style="font-size:15px">gsd-path</b>
+        <span class="dim" style="margin-left:8px;font-size:11px">${MOCK.projects.length} projects · updated 14:32:07</span>
+        <span style="margin-left:auto" class="faint">⏸ &nbsp;⟳ &nbsp;⚙</span></div>
+      ${cards}
+      <div class="prow" style="margin-top:4px"><span>+ Add watched folder…</span><span class="faint">Quit</span></div>
+    </div>
+  </div>
+  <p class="faint" style="max-width:980px;margin:10px auto 0">Modern menu-bar popover (like Stats/iStat): phase pipeline stepper, progress bars, badges at a glance. Needs a custom popover instead of pystray's plain menu (rump/pyobjc or Tauri on macOS; custom on Windows) — more build cost, much higher glanceability.</p>`;
+}
+
+/* ============ VARIANT C — full localhost dashboard (multi-tab, clickable) ============ */
+/* Per-project detail the daemon can serve: reviews, discussion, ledger, roadmap, activity. */
+const DETAILS = {
+  "orca": {
+    time_in_phase: "3d 4h",
+    tasks: [["T201","fleet intent schema",1,"done","verify pass @ 4af9c1e"],["T202","episode classifier",1,"done","verify pass @ 91b02dd"],
+            ["T203","conflict classes A/B/C",1,"done","verify pass @ 4af9c1e"],["T204","publish-intent MCP tool",2,"done","verify pass @ 77e10ab"],
+            ["T205","get_escalation polling",2,"done","verify pass @ 77e10ab"],["T206","needs-human queue",2,"done","verify pass @ c2d44f0"],
+            ["T207","agent judge submit",2,"done","verify pass @ 0e9a3b1"],["T208","record human decision",2,"in-progress",""],
+            ["T209","branch coordination doc",2,"pending",""],["T210","class C resolve flow",3,"pending",""],
+            ["T211","fleet e2e scenario",3,"pending",""],["T212","escalation caps",3,"pending",""]],
+    reviews: [{name:"wave-1.cycle1.md",verdict:"pass",depth:"full",note:"3/3 tasks pass; intent coverage SC1–SC3"},
+              {name:"wave-2.cycle1.md",verdict:"blocked",depth:"full",note:"T206 missing escalation cap evidence"},
+              {name:"wave-2.cycle2.md",verdict:"pass",depth:"verify-only",note:"4/4 tasks pass after fix"}],
+    criteria: null,
+    answers: [{id:"A014",q:"Should fleet_submit_verdict accept verdicts from the same model family as the worker?",owner:"gsd-path-plan",status:"NEEDS-USER",thread:"X003",target:".project/plan/PLAN.md"}],
+    ledger: [["14:29","pytest tests/test_fleet.py","pass","0e9a3b1"],["13:51","pytest tests/test_fleet.py","pass","77e10ab"],["11:20","pytest tests/test_fleet.py","fail","a1b2c3d"],["11:02","pytest tests/test_fleet.py","pass","c2d44f0"]],
+    activity: [["14:29","tasks-changed","6/12 → 7/12 (T207 done)"],["13:02","tasks-changed","5/12 → 6/12 (T206 done)"],["09:40","status-changed","wave review cycle 2 pass"]],
+    roadmap: [["M001","graph-memory","shipped",".project/archive/001-graph-memory"],["M002","fleet-ui","active",null],["M003","cortex-sync","pending",null]]
+  },
+  "gsd-path": {
+    time_in_phase: "58m",
+    tasks: [["T101","state/task parsers",1,"done","verify pass @ 1a2b3c4"],["T102","discovery scan",1,"done","verify pass @ 1a2b3c4"],
+            ["T103","watcher diff events",2,"done","verify pass @ 5d6e7f8"],["T104","serve /status",2,"done","verify pass @ 5d6e7f8"],
+            ["T105","tray icon + menu",3,"done","verify pass @ 9a0b1c2"],["T106","native notifications",3,"done","verify pass @ 9a0b1c2"],
+            ["T107","history.jsonl",3,"done","verify pass @ 9a0b1c2"],["T108","config excludes",1,"done","verify pass @ 1a2b3c4"],
+            ["T109","runtime enrichment",2,"done","verify pass @ 5d6e7f8"],["T110","folder pickers",3,"done","verify pass @ 9a0b1c2"],
+            ["T111","daemon tests ×47",3,"done","47/47 OK"],["T112","autostart installer",3,"done","verify pass @ 9a0b1c2"]],
+    reviews: [{name:"wave-1.cycle1.md",verdict:"pass",depth:"full",note:"4/4 tasks pass"},
+              {name:"wave-2.cycle1.md",verdict:"pass",depth:"full",note:"3/3 tasks pass"},
+              {name:"wave-3.cycle1.md",verdict:"pass",depth:"deep",note:"5/5 tasks pass; panel: no findings"},
+              {name:"FINAL.md",verdict:"blocked",depth:"final",note:"SC4 not-met — tray launch unverified on Windows"}],
+    criteria: [["SC1","daemon discovers v2 projects under watched parents","met"],["SC2","progress parses read-only, no project mutation","met"],
+               ["SC3","macOS menu-bar tray shows live progress","met"],["SC4","Windows tray parity verified on a real machine","not-met"],
+               ["SC5","notifications on phase change + blocked","met"]],
+    answers: [{id:"A002",q:"Default poll interval: 5s vs 10s for large monorepo parents?",owner:"gsd-path-define",status:"final",thread:"X001",target:".project/intent/INTENT.md"},
+              {id:"A007",q:"Is Windows verification in scope for M001 or deferred to M002?",owner:"gsd-path-plan",status:"NEEDS-USER",thread:"X004",target:".project/plan/PLAN.md"}],
+    ledger: [["13:58","python3 -m unittest discover -s tests","pass","9a0b1c2"],["13:41","python3 -m unittest discover -s tests","pass","8f7e6d5"],["12:15","npm test","pass","9a0b1c2"]],
+    activity: [["14:11","pending-answers","A007 NEEDS-USER (plan)"],["13:58","blocked","ship blocked — SC4 not-met"],["13:02","phase-changed","build → ship"],["11:47","tasks-changed","11/12 → 12/12 (T112 done)"]],
+    roadmap: [["M001","daemon","active",null]]
+  },
+  "memtrace": {
+    time_in_phase: "16h",
+    tasks: [],
+    reviews: [],
+    criteria: null,
+    answers: [],
+    ledger: [],
+    activity: [["09:15","phase-changed","define → research"],["08:30","tasks-changed","research dispatched: cortex, sync-dimensions"]],
+    roadmap: [["M001","graph-algos","shipped",".project/archive/001-graph-algos"],["M002","decision-memory","shipped",".project/archive/002-decision-memory"],["M003","cortex-sync","active",null],["M004","edge-cache","pending",null]]
+  },
+  "loopy": {
+    time_in_phase: "—",
+    tasks: [["T001","loop spec format",1,"done","met at ship"],["T002","runner",2,"done","met at ship"]],
+    reviews: [{name:"FINAL.md",verdict:"pass",depth:"final",note:"all criteria met; project verify passed"}],
+    criteria: [["SC1","discover loops from threads","met"],["SC2","craft + debrief flow","met"],["SC3","publish to registry","met"]],
+    answers: [],
+    ledger: [],
+    activity: [["17:02","phase-changed","ship → shipped · tagged milestone/003-publish-flow"]],
+    roadmap: [["M003","publish-flow","shipped",".project/archive/003-publish-flow"]]
+  }
+};
+/* Mock usage + per-phase time. NOTE: .project/ does not record tokens or wall-clock time today —
+   a real implementation would mine host session logs per task dispatch, or the pipeline would log it. */
+DETAILS["orca"].usage = { tokens_in: 412000, tokens_out: 133000, cost: 9.80,
+  models: [["claude-opus-4.5","claude",0.55],["kimi-k2","kimi",0.31],["qwen3-coder","qwen",0.14]],
+  phases: [["define","2h 10m",42000],["research","5h 32m",88000],["decide","1h 4m",27000],["roadmap","—",0],["plan","1h 51m",54000],["build","3d 4h · so far",298000]] };
+DETAILS["orca"].rstats = {"M001":["4d 2h","388k"],"M002":["3d 4h · so far","545k"]};
+DETAILS["gsd-path"].usage = { tokens_in: 184000, tokens_out: 61000, cost: 4.12,
+  models: [["kimi-k2","kimi",0.46],["claude-opus-4.5","claude",0.34],["gpt-5.2-codex","gpt",0.20]],
+  phases: [["inspect","12m",4000],["define","1h 5m",18000],["decide","22m",9000],["roadmap","8m",3000],["plan","41m",31000],["build","2d 6h",152000],["ship","58m · so far",28000]] };
+DETAILS["gsd-path"].rstats = {"M001":["3d 9h · so far","245k"]};
+DETAILS["memtrace"].usage = { tokens_in: 96000, tokens_out: 24000, cost: 1.90,
+  models: [["kimi-k2","kimi",0.72],["gemini-3-pro","gemini",0.28]],
+  phases: [["inspect","31m",9000],["define","3h 12m",38000],["research","16h · so far",73000]] };
+DETAILS["memtrace"].rstats = {"M001":["5d 7h","701k"],"M002":["3d 1h","455k"],"M003":["19h · so far","120k"]};
+DETAILS["loopy"].usage = { tokens_in: 158000, tokens_out: 47000, cost: 3.55,
+  models: [["claude-sonnet-4.5","claude",0.66],["kimi-k2","kimi",0.34]],
+  phases: [["define","58m",21000],["plan","34m",16000],["build","1d 9h",141000],["ship","1h 12m",27000]] };
+DETAILS["loopy"].rstats = {"M003":["1d 11h","205k"]};
+
+let CState = { sel: 1, tab: "overview" };
+function cSel(i) { CState.sel = i; CState.tab = "overview"; render(); }
+function cTab(t) { CState.tab = t; render(); }
+
+function VariantC() {
+  const p = MOCK.projects[CState.sel];
+  const d = DETAILS[p.project];
+  const PILL = {done:'<span class="pill active">done</span>',failed:'<span class="pill blocked">failed</span>',
+                "in-progress":'<span class="pill" style="background:#3d2e00;color:var(--yellow)">in-progress</span>',
+                pending:'<span class="pill" style="background:var(--panel2);color:var(--dim)">pending</span>'};
+
+  /* sidebar */
+  let side = "";
+  MOCK.projects.forEach((q, i) => {
+    side += `<div class="sitem ${i===CState.sel?'sel':''}" onclick="cSel(${i})"><span class="dot ${health(q)}"></span>
+      <span><span class="nm">${esc(q.project)}</span><br><span class="sub">${q.phase} · ${q.tasks_done}/${q.tasks_total}</span></span>
+      ${q.pending_answers.length?`<span style="margin-left:auto" class="pill blocked">${q.pending_answers.length}</span>`:""}</div>`;
+  });
+
+  /* tabs */
+  const tabs = [["overview","Overview"],["tasks",`Tasks <span class="n">${p.tasks_done}/${p.tasks_total}</span>`],
+    ["reviews",`Reviews <span class="n">${d.reviews.length}</span>`],
+    ["discussion",`Discussion ${p.pending_answers.length?`<span class="n">${p.pending_answers.length}</span>`:""}`],
+    ["usage","Usage"],["activity","Activity"],["roadmap","Roadmap"]];
+  const tabbar = tabs.map(([k,label]) =>
+    `<div class="tab ${CState.tab===k?'sel':''}" onclick="cTab('${k}')">${label}</div>`).join("");
+
+  /* phase stepper (shared with B's look) */
+  const idx = PHASES.indexOf(p.phase);
+  let steps = "";
+  for (let i = 0; i < PHASES.length; i++) {
+    const cls = p.phase === "shipped" ? "done" : i < idx ? "done" : i === idx ? (p.status==="blocked" ? "now\" style=\"background:var(--red);box-shadow:0 0 6px var(--red)" : "now") : "";
+    steps += `<div class="step ${cls}"></div>`;
+  }
+
+  let body = "";
+  if (CState.tab === "overview") {
+    body = `
+      <div class="steps" style="margin-top:16px">${steps}</div>
+      <div class="steplabel"><span>inspect</span><span>define</span><span>research</span><span>decide</span><span>roadmap</span><span>plan</span><span>build</span><span>ship</span></div>
+      <div class="statrow">
+        <div class="stat"><div class="v">${p.tasks_done}/${p.tasks_total || "—"}</div><div class="k">tasks done${p.current_wave?` · wave ${p.current_wave} “${esc(p.waves[p.current_wave])}”`:""}</div></div>
+        <div class="stat"><div class="v">${d.time_in_phase}</div><div class="k">time in ${p.phase}</div></div>
+        <div class="stat"><div class="v" style="color:${p.pending_answers.length?"var(--yellow)":"var(--text)"}">${p.pending_answers.length}</div><div class="k">pending answers</div></div>
+        <div class="stat"><div class="v">${p.git ? (p.git.dirty ? '<span style="color:var(--yellow)">dirty</span>' : "clean") : "—"}</div><div class="k">git · ${esc(p.branch || "no branch")}</div></div>
+      </div>
+      <div class="grid2">
+        <div class="box"><h4>Next action</h4>
+          ${p.next_skill ? `<kbd style="font-size:13px;padding:3px 9px">${skill(p.next_skill)}</kbd>
+            <span class="dim" style="margin-left:8px">${p.status==="blocked"?"route: "+p.phase+" (blocked) — resolve before advancing":"click copies $"+p.next_skill}</span>`
+          : `<span class="dim">nothing pending — milestone shipped</span>`}
+          ${p.note ? `<div style="color:var(--red);margin-top:8px">⛔ ${esc(p.note)}</div>` : ""}
+          ${p.next_milestone ? `<div class="dim" style="margin-top:8px">⏭ lookahead: ${esc(p.next_milestone.milestone)} — ${p.next_milestone.phase} (${p.next_milestone.status})</div>` : ""}
+        </div>
+        <div class="box"><h4>Verify ledger — recent</h4><div class="ledger">
+          ${d.ledger.length ? d.ledger.map(([t,c,r,sha]) => `<div><span class="faint">${t}</span> ${esc(c)} <span class="${r}">${r}</span> <span class="faint">@${sha}</span></div>`).join("") : '<span class="faint">no verify runs recorded yet</span>'}
+        </div></div>
+      </div>`;
+  } else if (CState.tab === "tasks") {
+    let rows = "", lastWave = -1;
+    for (const [id,t,w,st,ev] of d.tasks) {
+      if (w !== lastWave) { rows += `<tr class="wavehead"><td colspan="4">Wave ${w} — ${esc(p.waves[w]||"")}</td></tr>`; lastWave = w; }
+      rows += `<tr><td class="dim">${id}</td><td>${esc(t)}</td><td>${PILL[st]||st}</td><td class="faint">${esc(ev)}</td></tr>`;
+    }
+    body = d.tasks.length
+      ? `<div style="margin:12px 0"><div class="bar" style="max-width:340px"><i style="width:${pct(p)}%"></i></div>
+         <div class="faint" style="margin-top:4px">${pct(p)}% · ${p.tasks_done} of ${p.tasks_total} tasks</div></div>
+         <table class="tasks"><tr><th>Task</th><th>Title</th><th>Status</th><th>Evidence</th></tr>${rows}</table>`
+      : `<p class="dim" style="padding:30px 0">No tasks yet — ${p.phase} is a pre-plan phase. Tasks appear here after <kbd>PLAN</kbd>.</p>`;
+  } else if (CState.tab === "reviews") {
+    let revs = d.reviews.map(r => `<div class="rev">
+      <span class="${r.verdict==="pass"?"vmet":"vnot"}" style="width:64px">${r.verdict.toUpperCase()}</span>
+      <b style="width:150px">${r.name}</b><span class="dim">${esc(r.note)}</span>
+      <span class="faint" style="margin-left:auto">${r.depth}</span></div>`).join("") || '<p class="dim">No reviews recorded yet.</p>';
+    let crits = "";
+    if (d.criteria) {
+      crits = `<div class="box" style="margin-top:14px"><h4>Success criteria — final review</h4>` +
+        d.criteria.map(([id,txt,v]) => `<div class="crit"><span class="${v==="met"?"vmet":v==="not-met"?"vnot":"vunv"}">${v}</span>
+          <span><b>${id}</b> — ${esc(txt)}</span></div>`).join("") + `</div>`;
+    }
+    body = `<div class="box" style="margin-top:4px"><h4>Wave &amp; final reviews</h4>${revs}</div>${crits}`;
+  } else if (CState.tab === "discussion") {
+    body = d.answers.length ? d.answers.map(a => `<div class="ans ${a.status==="final"?"":"resolved"}">
+        <div style="display:flex;gap:8px;align-items:center"><b>${a.id}</b>
+          <span class="pill ${a.status==="NEEDS-USER"?"blocked":"active"}">${a.status}</span>
+          ${a.status==="NEEDS-USER"?'<span class="faint" style="margin-left:auto">awaiting your reply in-session</span>':""}</div>
+        <div style="margin-top:5px">${esc(a.q)}</div>
+        <div class="meta">thread ${a.thread} · owner ${skill(a.owner)} · target ${esc(a.target)}</div></div>`).join("")
+      : '<p class="dim" style="padding:30px 0">No open discussion records — nothing waiting on you.</p>';
+  } else if (CState.tab === "activity") {
+    body = `<div class="feed" style="margin-top:4px"><h3>${esc(p.project)} — transitions (history.jsonl)</h3>` +
+      d.activity.map(([t,ev,txt]) => `<div class="fe"><time>${t}</time>
+        <b style="color:${ev==="blocked"?"var(--red)":ev==="pending-answers"?"var(--yellow)":"var(--dim)"};width:130px;flex:none">${ev}</b>
+        <span>${esc(txt)}</span></div>`).join("") + `</div>`;
+  } else if (CState.tab === "usage") {
+    const u = d.usage;
+    if (!u) {
+      body = '<p class="dim" style="padding:30px 0">No usage recorded for this milestone yet.</p>';
+    } else {
+      const tot = u.tokens_in + u.tokens_out;
+      const mrows = u.models.map(([m,fam,share]) => `<div class="prow" style="align-items:center">
+        <span style="width:170px"><b>${esc(m)}</b> <span class="faint">${fam}</span></span>
+        <span style="flex:1;margin:0 12px"><span class="bar"><i style="width:${Math.round(share*100)}%;background:var(--blue)"></i></span></span>
+        <span class="dim" style="width:120px;text-align:right">${fmt(Math.round(tot*share))} tok · ${Math.round(share*100)}%</span></div>`).join("");
+      const maxT = Math.max(...u.phases.map(x => x[2]), 1);
+      const prows = u.phases.map(([ph,dur,tok]) => `<div class="prow" style="align-items:center">
+        <span style="width:170px">${ph}${dur.includes("so far") ? ' <span class="pill active">now</span>' : ""}</span>
+        <span style="flex:1;margin:0 12px"><span class="bar"><i style="width:${tok?Math.max(3,Math.round(100*tok/maxT)):2}%;background:${dur.includes("so far")?"var(--blue)":"var(--purple)"}"></i></span></span>
+        <span class="dim" style="width:160px;text-align:right">${dur} · ${tok?fmt(tok)+" tok":"—"}</span></div>`).join("");
+      body = `
+      <div class="statrow">
+        <div class="stat"><div class="v">${fmt(tot)}</div><div class="k">tokens · in ${fmt(u.tokens_in)} / out ${fmt(u.tokens_out)}</div></div>
+        <div class="stat"><div class="v">$${u.cost.toFixed(2)}</div><div class="k">est. cost this milestone</div></div>
+        <div class="stat"><div class="v">${u.models.length}</div><div class="k">model families</div></div>
+        <div class="stat"><div class="v">${d.time_in_phase}</div><div class="k">time in ${p.phase}</div></div>
+      </div>
+      <div class="grid2">
+        <div class="box"><h4>Tokens by model</h4>${mrows}
+          <div class="faint" style="margin-top:9px;font-size:10.5px">same-model agreement counts as one evidence path — mixed families make reviews independent</div></div>
+        <div class="box"><h4>Time &amp; tokens by phase — ${esc(ms(p))}</h4>${prows}</div>
+      </div>
+      <p class="faint" style="margin-top:10px;font-size:10.5px">⚠ mock data — .project/ does not record tokens or wall-clock time today; a real build mines host session logs per task dispatch or adds pipeline usage logging.</p>`;
+    }
+  } else if (CState.tab === "roadmap") {
+    body = `<div class="box" style="margin-top:4px"><h4>Milestones — ROADMAP.md</h4>` +
+      d.roadmap.map(([n,s,st,arch]) => { const rs = d.rstats && d.rstats[n];
+        return `<div class="rms"><span class="mnum">${n}</span><b>${esc(s)}</b>
+        <span class="pill ${st==="active"?"active":st==="shipped"?"done":""}" style="${st==="pending"?"background:var(--panel2);color:var(--dim)":""}">${st}</span>
+        ${rs?`<span class="faint" style="margin-left:auto">⏱ ${rs[0]} · ⚡ ${rs[1]} tok</span>`:""}
+        ${arch?`<span class="arch"${rs?' style="margin-left:12px"':""}>${esc(arch)}</span>`:""}</div>`; }).join("") + `</div>`;
+  }
+
+  return `
+  <div class="dash">
+    <div class="side">
+      <h3>Projects</h3>${side}
+      <h3 style="margin-top:14px">Watched folders</h3>
+      <div class="sitem"><span class="sub">~/orca/workspaces</span></div>
+      <div class="sitem"><span class="sub">~/work</span></div>
+      <h3 style="margin-top:14px">Daemon</h3>
+      <div class="sitem"><span class="sub">poll 5s · 2 parents<br>4 projects · updated 14:32:07</span></div>
+    </div>
+    <div class="main">
+      <h2>${esc(p.project)} <span class="dim" style="font-size:13px;font-weight:400">${esc(ms(p))}</span> ${badge(p)}</h2>
+      <div class="faint">${esc(p.root)} · source: ${p.status_source}</div>
+      <div class="tabs">${tabbar}</div>
+      ${body}
+    </div>
+  </div>
+  <p class="faint" style="max-width:1180px;margin:10px auto 0">Dashboard-first, now with drill-down: clickable sidebar, seven tabs per project. Overview = stepper + stat cards + next action + verify ledger. Reviews = wave cycles + success-criteria verdicts. Discussion = pending answers with owner/thread/target. Usage = tokens/cost by model family + time-and-tokens by phase. Activity = per-project history.jsonl. Roadmap = milestones with per-milestone time + token totals. Click around — try the blocked <b>gsd-path</b> project's Reviews, Usage, and Discussion tabs.</p>`;
+}
+
+/* ===================== VARIANT D — timeline / fleet swimlanes ===================== */
+function VariantD() {
+  let lanes = "";
+  for (const p of MOCK.projects) {
+    const idx = PHASES.indexOf(p.phase);
+    let segs = "";
+    for (let i = 0; i < 8; i++) {
+      const cls = p.phase === "shipped" ? "done" : i < idx ? "done" : i === idx ? (p.status==="blocked"?"blocked":"now") : "";
+      segs += `<div class="seg ${cls}"></div>`;
+    }
+    lanes += `<div class="lane"><div class="who"><span class="dot ${health(p)}"></span> ${esc(p.project)}
+      <span class="sub">${esc(ms(p))}${p.tasks_total ? " · "+p.tasks_done+"/"+p.tasks_total : ""}</span></div>${segs}</div>`;
+  }
+  let feed = "";
+  for (const h of MOCK.history) {
+    const color = h.ev === "blocked" ? "var(--red)" : h.ev === "pending-answers" ? "var(--yellow)" : "var(--dim)";
+    feed += `<div class="fe"><time>${h.t}</time><b style="color:${color};width:130px;flex:none">${h.ev}</b>
+      <span><b>${esc(h.p)}</b> — ${esc(h.d)}</span></div>`;
+  }
+  return `
+  <div class="tl">
+    <div class="lanegrid">
+      <div style="display:flex;align-items:baseline;margin-bottom:12px">
+        <b style="font-size:15px">Fleet</b>
+        <span class="dim" style="margin-left:10px;font-size:11.5px">phase position per project · <span style="color:var(--green)">■</span> done <span style="color:var(--blue)">■</span> current <span style="color:var(--red)">■</span> blocked</span></div>
+      <div class="axis"><span></span>${PHASES.map(p=>`<span>${p}</span>`).join("")}</div>
+      ${lanes}
+    </div>
+    <div class="feed"><h3>Activity — from history.jsonl</h3>${feed}</div>
+  </div>
+  <p class="faint" style="max-width:1100px;margin:10px auto 0">Fleet-at-a-glance: every project as a swimlane on the phase axis + the transition feed the watcher already emits. Best answer to "what moved since this morning" across many projects; weakest for single-project detail (clicking a lane would drill into variant C).</p>`;
+}
+
+/* ===================== switcher ===================== */
+const VARIANTS = [
+  ["A", "Native menu list", VariantA],
+  ["B", "Menu-bar popover cards", VariantB],
+  ["C", "Localhost dashboard", VariantC],
+  ["D", "Fleet timeline + feed", VariantD],
+];
+function current() {
+  const v = new URLSearchParams(location.search).get("variant") || "A";
+  return VARIANTS.some(x => x[0] === v) ? v : "A";
+}
+function render() {
+  const i = VARIANTS.findIndex(x => x[0] === current());
+  document.getElementById("stage").innerHTML = VARIANTS[i][2]();
+  document.getElementById("vlabel").innerHTML =
+    `${VARIANTS[i][0]} — ${VARIANTS[i][1]}<small>?variant=${VARIANTS[i][0]} · ←/→ to switch · ${VARIANTS.length} variants</small>`;
+}
+function cycle(d) {
+  const i = VARIANTS.findIndex(x => x[0] === current());
+  const n = VARIANTS[(i + d + VARIANTS.length) % VARIANTS.length][0];
+  const u = new URL(location.href); u.searchParams.set("variant", n);
+  history.replaceState(null, "", u); render();
+}
+document.addEventListener("keydown", e => {
+  if (/INPUT|TEXTAREA/.test(e.target.tagName) || e.target.isContentEditable) return;
+  if (e.key === "ArrowLeft") cycle(-1);
+  if (e.key === "ArrowRight") cycle(1);
+});
+render();
+</script>
+</body>
+</html>
