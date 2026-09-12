@@ -65,7 +65,7 @@ class InboxUITests(unittest.TestCase):
         self.assertEqual(self.js("getComputedStyle(document.body).backgroundColor"), "rgb(12, 13, 16)")
         self.assertEqual(self.js("getComputedStyle(document.querySelector('.brand')).fontSize"), "16px")
         self.assertEqual(self.js("getComputedStyle(document.querySelector('.intro h1')).fontSize"), "16px")
-        self.assertEqual(self.js("getComputedStyle(document.querySelector('.project-item')).paddingTop"), "10px")
+        self.assertEqual(self.js("getComputedStyle(document.querySelector('.project-item')).paddingTop"), "8px")
         self.assertEqual(self.js("document.querySelector('.inbox-detail h2').textContent"), "API version strategy")
         self.assertIn("Keep the current response format?", self.js("document.querySelector('.inbox-detail').innerText"))
         self.assertIn("python3 -m unittest test_api", self.js("document.querySelector('.inbox-detail').innerText"))

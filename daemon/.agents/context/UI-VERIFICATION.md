@@ -132,3 +132,15 @@ passed. An intermediate run failed in the browser tool during navigation; final
 rerun passed. Server tests: 13 passed. Live 390px frame: document width 390px.
 Installed local package, restarted launchd, reloaded live browser. Screenshot
 capture reported visibility timeout; rendered browser assertions are the proof.
+
+## Compact both surfaces
+User: "Too large—make them more compact". Reused existing 8px/4px spacing.
+Removed inherited 66px toolbar minimum; live toolbar now 54px. Title/summary
+share a line; live intro is 35.75px. Tightened rows and detail spacing while
+keeping 14px body text. Tray actions share project heading; connection shares
+app heading. Same native fixture window decreased from 645px to 509px high.
+Browser and native regression checks failed before changes and on deliberate
+sabotage, then passed after restoration. Server tests: 13 passed. Ponytail:
+existing CSS/native stack layout only, no new dependency or arbitrary size cap.
+Rebuilt and relaunched tray, installed/restarted daemon. Inspected live dashboard
+and native sample window screenshots; closed the sample window.

@@ -167,7 +167,9 @@ final class PopoverViewController: NSViewController {
         let updated = makeLabel(stamp.map { "Updated \($0)" } ?? "Update time unavailable", size: 11, color: .secondaryLabelColor)
         let sub = NSStackView(views: [count, updated])
         sub.distribution = .equalSpacing
-        views += [header, connected, separator(), sub]
+        let titleRow = NSStackView(views: [header, connected])
+        titleRow.distribution = .equalSpacing
+        views += [titleRow, separator(), sub]
 
         // Sort by health severity (red, amber, green), then name.
         let sorted = projects.sorted { a, b in
@@ -310,8 +312,8 @@ final class ProjectRowView: NSView {
         let stack = NSStackView()
         stack.orientation = .vertical
         stack.alignment = .leading
-        stack.spacing = 7
-        stack.edgeInsets = NSEdgeInsets(top: 10, left: 14, bottom: 10, right: 14)
+        stack.spacing = 4
+        stack.edgeInsets = NSEdgeInsets(top: 8, left: 14, bottom: 8, right: 14)
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
         NSLayoutConstraint.activate([
@@ -358,7 +360,9 @@ final class ProjectRowView: NSView {
             copy.representedObject = raw
             actions.menu?.addItem(copy)
         }
-        stack.addArrangedSubview(actions)
+        actions.controlSize = .small
+        actions.font = .systemFont(ofSize: 12)
+        top.addArrangedSubview(actions)
     }
 
     @available(*, unavailable)

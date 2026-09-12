@@ -51,6 +51,9 @@ struct TrayUITest {
         let copy = buttons().compactMap { $0 as? NSPopUpButton }.flatMap { $0.itemArray }.first { $0.title.contains("command") }!
         NSApp.sendAction(copy.action!, to: copy.target, from: copy)
         require(copy.title == "Copied" && NSPasteboard.general.string(forType: .string) == "$gsd-path-build", "copy feedback and command")
+        let projectName = buttons().first { $0.title.contains("Atlas API") }!
+        let rowActions = buttons().compactMap { $0 as? NSPopUpButton }.first!
+        require(projectName.superview === rowActions.superview, "row actions share the project heading")
         let names = buttons().map(\.title)
         require(names.firstIndex(where: { $0.contains("Atlas API") })! < names.firstIndex(where: { $0.contains("GSD Path") })!, "attention project first")
         buttons().first { $0.title == "Rescan" }?.performClick(nil)

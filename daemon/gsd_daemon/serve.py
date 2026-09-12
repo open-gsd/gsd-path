@@ -282,7 +282,7 @@ DASHBOARD_PAGE = """<!doctype html>
   /* Studio console: fixed navigation and status; the work panes scroll. */
   body { font:14px/1.5 var(--ui); }
   .stage { display:grid; grid-template-columns:minmax(0,1fr); grid-template-rows:auto auto minmax(0,1fr); height:100dvh; }
-  .topbar { display:flex; align-items:center; gap:16px; padding:8px 16px; background:var(--rail); border:0; border-bottom:1px solid var(--line); }
+  .topbar { display:flex; min-height:0; align-items:center; gap:16px; padding:8px 16px; background:var(--rail); border:0; border-bottom:1px solid var(--line); }
   .brand { display:flex; gap:8px; align-items:center; padding:0; border:0; background:none; color:var(--text); font-size:16px; font-weight:600; cursor:pointer; }
   .brand::before { content:"G"; display:grid; place-items:center; width:24px; height:24px; background:var(--accent-fill); color:var(--accent-fg); border-radius:7px; font-size:12.5px; }
   .connection { margin-left:auto; font-size:12.5px; }
@@ -290,26 +290,27 @@ DASHBOARD_PAGE = """<!doctype html>
   .settings-menu summary { cursor:pointer; padding:7px 12px; border:1px solid var(--line); border-radius:8px; }
   .settings-menu nav { position:absolute; right:0; top:100%; z-index:10; display:grid; padding:8px; background:var(--card); border:1px solid var(--line); border-radius:8px; box-shadow:var(--shadow); white-space:nowrap; }
   .settings-menu .btn { text-align:left; border:0; }
-  .intro { padding:12px 16px; }
-  .intro h1 { font-size:16px; font-weight:600; letter-spacing:-.01em; margin:0 0 4px; }
+  .intro { display:flex; flex-wrap:wrap; align-items:baseline; gap:8px 16px; padding:8px 16px; }
+  .intro h1 { font-size:16px; font-weight:600; letter-spacing:-.01em; margin:0; }
   .intro p { font-size:12.5px; margin:0; }
   .eyebrow { font-size:10.5px; }
   .inbox { grid-column:1; margin:0 16px 16px; min-height:0; grid-template-columns:240px minmax(0,1fr); grid-template-rows:auto minmax(0,1fr); border:0; border-radius:14px; box-shadow:var(--shadow); overflow:hidden; background:var(--card); }
   .filters { grid-column:1/3; display:flex; gap:8px; padding:8px 14px; border:0; border-bottom:1px solid var(--line); }
   .filter { width:auto; gap:12px; margin:0; padding:7px 12px; border-radius:8px; font-size:12.5px; }
   .inbox-list { min-height:0; overflow:auto; background:var(--rail); }
-  .list-heading { padding:10px 14px; font-size:12.5px; }
-  .project-item { padding:10px 14px; gap:8px; }
-  .project-copy { gap:4px; }
+  .list-heading { padding:8px 14px; font-size:12.5px; }
+  .project-item { padding:8px 14px; gap:8px; }
+  .project-copy { gap:0; }
   .project-icon { width:24px; height:24px; font-size:12.5px; background:var(--sunken); color:var(--dim); border-radius:8px; }
   .project-item.sel .project-icon { background:var(--accent-fill); color:var(--accent-fg); }
   .project-copy small, .count, .detail-kicker > span:last-child, .ledger, kbd { font-family:var(--mono); font-size:12.5px; }
   .inbox-detail { min-height:0; padding:16px; overflow:auto; }
-  .inbox-detail h2 { font-size:16px; font-weight:600; letter-spacing:-.01em; margin:12px 0; }
+  .inbox-detail h2 { font-size:16px; font-weight:600; letter-spacing:-.01em; margin:8px 0; }
+  .inbox-detail .tabs .nav { padding:8px 0; }
   .detail-question { font-size:14px; margin:12px 0; }
   .detail-meta { gap:24px; padding:12px 0; margin:12px 0 0; }
   .detail-meta dt { margin-bottom:4px; }
-  .next-action, .evidence { padding:12px 0; }
+  .next-action, .evidence { padding:8px 0; }
   .next-action h3, .evidence h3 { margin:0 0 8px; }
   .next-action .btn { padding:7px 12px; }
   .more { padding-top:8px; }
