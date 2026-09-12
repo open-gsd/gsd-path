@@ -975,7 +975,13 @@ def _require_task_structure(task_id: str, text: str, *, initial: bool) -> None:
         body = _strip_comments(_section(text, heading)).strip()
         if not body:
             raise HandoffError(f"{task_id} {heading} is empty or still a placeholder")
-        _reject_placeholder(body, f"{task_id} {heading}")
+        # Log is append-only narrative that keeps growing after a task lands and
+        # its file becomes immutable, so a placeholder there can never be
+        # repaired: editing it breaks the landing proof and attest refuses while
+        # that rejection stands. Coders also legitimately write <name> notation
+        # for key formats. Require Log non-empty; scan only the contract fields.
+        if heading != "Log":
+            _reject_placeholder(body, f"{task_id} {heading}")
 
 
 def _validate_task_graph(
