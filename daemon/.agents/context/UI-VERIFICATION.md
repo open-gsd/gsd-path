@@ -259,3 +259,27 @@ models are listed as unpriced. Installed and restarted the daemon and tray;
 inspected the live board (4 rows, shipped rows collapsed, turns on the right)
 and the report-dashboard page with its usage block at 1280px; no console
 errors, document width 1280.
+
+## Price table and startup latency
+User: "add the price table for both models". Wrote standard short-context API
+rates per million tokens into `~/.gsd-path/daemon.json` (user config, not the
+repo): gpt-6-astra input 10 / cached 1 / output 50; gpt-5.6-sol input 4 /
+cached 0.4 / output 20 (third-party pricing trackers; openai.com refused the
+fetch). Live report-dashboard now reads $845.81 over 9,233 turns; gsd-workbench
+stays "—" because claude-opus-5 has no price.
+
+The restart exposed two startup defects, both fixed:
+- `serve()` ran a full poll, including the session scan, before binding the
+  port. It now polls with `scan_sessions=False` first; the poll loop's first
+  cycle attaches spend. Test: `SpendAttachmentTests` in `test_daemon_watcher.py`.
+- The file-to-cwd head index was memory only, so every restart re-read the head
+  of 12,079 files. It is persisted to `~/.gsd-path/sessions-index.json`
+  (atomic write, corrupt file ignored). Test: `test_cwd_cache_persists_across_instances`.
+- Under launchd the same work that takes 3 s in a shell took minutes: the
+  LaunchAgent ran at background QoS. The installer now writes
+  `ProcessType: Interactive`; test asserts the key. After reinstall the server
+  bound within 5 s and spend appeared 5 s later.
+Shell timings: discovery 1.78 s, probes ≤ 0.44 s, cache load 0.01 s, session
+parse of 217 files / 978 MB 3.29 s. Python suite green; `git diff --check`
+passed. A stray `gsd_daemon serve --port 8793` process from a day earlier is
+unrelated and was left running.

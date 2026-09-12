@@ -95,6 +95,7 @@ class PlistTests(unittest.TestCase):
             )
             self.assertIs(loaded["RunAtLoad"], True)
             self.assertIs(loaded["KeepAlive"], True)
+            self.assertEqual(loaded["ProcessType"], "Interactive")
             logs = installer.home / ".gsd-path" / "logs"
             self.assertEqual(loaded["StandardOutPath"], str(logs / "stdout.log"))
             self.assertEqual(loaded["StandardErrorPath"], str(logs / "stderr.log"))

@@ -37,7 +37,8 @@ re-running it upgrades cleanly. It:
    (`python -m gsd_daemon serve --port 8765`):
    - **macOS** — a LaunchAgent at
      `~/Library/LaunchAgents/org.gsd-path.daemon.plist` (`RunAtLoad` +
-     `KeepAlive`, logs in `~/.gsd-path/logs/{stdout,stderr}.log`), loaded with
+     `KeepAlive`, `ProcessType` Interactive so the scan is not throttled to
+     background QoS, logs in `~/.gsd-path/logs/{stdout,stderr}.log`), loaded with
      `launchctl bootstrap gui/<uid>` (falls back to `launchctl load`).
    - **Windows** — a `gsd-path-daemon.lnk` shortcut in the Startup folder
      targeting `<venv>\Scripts\pythonw.exe -m gsd_daemon tray --serve` (one
@@ -140,7 +141,10 @@ cost. It shows no next steps, commands, or attention items.
   tokens per model, e.g. `{"prices": {"gpt-6-astra": {"input": 1.25,
   "cached": 0.125, "output": 10}}}`. There are no built-in prices: a model
   without a price contributes tokens only and is listed as unpriced.
-  `session_dirs` overrides the scanned locations (glob patterns).
+  `session_dirs` overrides the scanned locations (glob patterns). The daemon
+  keeps the file-to-working-directory index in `~/.gsd-path/sessions-index.json`
+  so a restart only reads the head of session files it has not seen; the
+  dashboard binds before the first scan and usage appears on the next poll.
 - Sources for the rest: `ROADMAP.md`, `archive/*/MANIFEST.md`, the `STATE.md`
   log, `CHARTER.md` Vision, `intent/INTENT.md` Summary, `LESSONS.md`, task
   files, `review/FINAL.md`, the verify ledger, and `next/STATE.md`.

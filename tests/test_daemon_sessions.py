@@ -133,6 +133,27 @@ class SessionIndexTests(unittest.TestCase):
         self.assertEqual(spend["recent"][0]["at"], "2026-09-10T10:01:01.000Z")
         self.assertEqual(spend["recent"][0]["cost"], round((500 + 150 + 1000) / 1e6, 4))
 
+    def test_cwd_cache_persists_across_instances(self) -> None:
+        cache = self.base / "state" / "sessions-index.json"
+        first = sessions.SessionIndex([str(self.base / "codex"), str(self.base / "claude")], cache_path=cache)
+        first.scan([self.root])
+        saved = json.loads(cache.read_text(encoding="utf-8"))
+        self.assertEqual(saved[str(self.codex / "other.jsonl")], str(self.base / "elsewhere"))
+        # A fresh index must not re-read any file head: make head reads fail loudly.
+        original = sessions._read_head_cwd
+        sessions._read_head_cwd = lambda path: (_ for _ in ()).throw(AssertionError("head re-read " + str(path)))
+        try:
+            second = sessions.SessionIndex([str(self.base / "codex"), str(self.base / "claude")], cache_path=cache)
+            second.scan([self.root])
+        finally:
+            sessions._read_head_cwd = original
+        self.assertEqual(len(second.records_for(self.root)), 4)
+        # A corrupt cache is ignored, not fatal.
+        cache.write_text("{not json", encoding="utf-8")
+        third = sessions.SessionIndex([str(self.base / "codex")], cache_path=cache)
+        third.scan([self.root])
+        self.assertEqual(len(third.records_for(self.root)), 2)
+
     def test_spend_is_none_without_records(self) -> None:
         self.index.scan([str(self.base / "nothing")])
         self.assertIsNone(self.index.spend_for(str(self.base / "nothing"), [], "M001"))

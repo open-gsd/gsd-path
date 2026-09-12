@@ -872,7 +872,9 @@ class _Handler(BaseHTTPRequestHandler):
 
 def serve(watcher: Watcher, port: int = DEFAULT_PORT,
           plugin: Optional[PluginManager] = None) -> ThreadingHTTPServer:
-    watcher.poll_once()
+    # Bind before the first session scan: scanning every host session log on
+    # the machine can take a while cold, and the dashboard must not wait on it.
+    watcher.poll_once(scan_sessions=False)
     handler = type("Handler", (_Handler,),
                    {"watcher": watcher, "plugin": plugin or PluginManager()})
     server = ThreadingHTTPServer(("127.0.0.1", port), handler)

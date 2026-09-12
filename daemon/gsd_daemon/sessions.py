@@ -16,6 +16,7 @@ import glob
 import json
 import os
 import re
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
@@ -201,11 +202,38 @@ class SessionIndex:
     """Incrementally parsed session files, keyed by path; only files whose cwd
     lies under a watched root are parsed in full."""
 
-    def __init__(self, dirs: Iterable[str], prices: Optional[dict] = None):
+    def __init__(self, dirs: Iterable[str], prices: Optional[dict] = None,
+                 cache_path: Optional[Path] = None):
         self.dirs = list(dirs)
         self.prices = prices or {}
-        self._cwd: Dict[str, Optional[str]] = {}
+        self.cache_path = Path(cache_path) if cache_path else None
+        # path -> cwd read from the file head; persisted so a daemon restart
+        # does not re-read the head of every session file on the machine.
+        self._cwd: Dict[str, Optional[str]] = self._load_cache()
         self._parsed: Dict[str, Tuple[Tuple[int, float], List[dict]]] = {}
+
+    def _load_cache(self) -> Dict[str, Optional[str]]:
+        if self.cache_path is None:
+            return {}
+        try:
+            data = json.loads(self.cache_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return {}
+        if not isinstance(data, dict):
+            return {}
+        return {k: v for k, v in data.items() if isinstance(k, str) and (v is None or isinstance(v, str))}
+
+    def _save_cache(self) -> None:
+        if self.cache_path is None:
+            return
+        try:
+            self.cache_path.parent.mkdir(parents=True, exist_ok=True)
+            fd, tmp = tempfile.mkstemp(prefix=self.cache_path.name + ".", dir=str(self.cache_path.parent))
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                json.dump(self._cwd, handle)
+            os.replace(tmp, self.cache_path)
+        except OSError:
+            pass
 
     def _files(self) -> Iterable[Path]:
         for base in self.dirs:
@@ -226,10 +254,12 @@ class SessionIndex:
 
     def scan(self, roots: Iterable[str]) -> None:
         roots = [os.path.abspath(r) for r in roots]
+        new_heads = 0
         for path in self._files():
             key = str(path)
             if key not in self._cwd:
                 self._cwd[key] = _read_head_cwd(path)
+                new_heads += 1
             root = self._owner(self._cwd[key], roots)
             if root is None:
                 continue
@@ -245,6 +275,8 @@ class SessionIndex:
             if cwd and self._cwd[key] is None:
                 self._cwd[key] = cwd
             self._parsed[key] = (stamp, records)
+        if new_heads:
+            self._save_cache()
 
     def records_for(self, root: str) -> List[dict]:
         root = os.path.abspath(root)
