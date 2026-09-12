@@ -367,7 +367,7 @@ def _collect_answers(answers_path: Union[str, Path],
         base = by_id.get(answer_id, {})
         merged.append({
             "id": answer_id,
-            "question": base.get("question"),
+            "question": base.get("question") or (record.get("question") or None),
             "owner": record.get("owner") or base.get("owner"),
             "status": record.get("status") or base.get("status"),
             "thread": base.get("thread"),
