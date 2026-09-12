@@ -80,9 +80,10 @@ DASHBOARD_PAGE = r"""<!doctype html>
   .btn.danger { border-color: var(--danger); color: var(--danger); }
   kbd { background: var(--sunken); border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; font: 11px var(--mono); }
 
-  /* Studio console: fixed toolbar, the board scrolls. */
-  .stage { display: grid; grid-template-rows: auto minmax(0, 1fr); height: 100dvh; }
-  .topbar { display: flex; align-items: center; gap: 16px; padding: 8px 16px; background: var(--rail); border-bottom: 1px solid var(--line); }
+  /* Studio console: sticky toolbar, the page itself scrolls only when it must. */
+  html { overscroll-behavior: none; }
+  .stage { min-height: 100dvh; }
+  .topbar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 16px; padding: 8px 16px; background: var(--rail); border-bottom: 1px solid var(--line); }
   .brand { display: flex; gap: 8px; align-items: center; padding: 0; border: 0; background: none; color: var(--text); font-size: 16px; font-weight: 600; cursor: pointer; }
   .brand::before { content: "G"; display: grid; place-items: center; width: 24px; height: 24px; background: var(--accent-fill); color: var(--accent-fg); border-radius: 7px; font-size: 12.5px; }
   .summary { font-size: 12.5px; color: var(--dim); }
@@ -93,7 +94,7 @@ DASHBOARD_PAGE = r"""<!doctype html>
   .settings-menu .btn { text-align: left; border: 0; }
 
   /* Status board: one card per project holding its milestone stack. */
-  .board { min-height: 0; overflow: auto; padding: 16px; display: grid; align-content: start;
+  .board { padding: 16px; display: grid; align-content: start;
            grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr)); gap: 14px; }
   .board .empty { grid-column: 1 / -1; padding: 28px; color: var(--dim); }
   .card { background: var(--card); border-radius: 14px; box-shadow: var(--shadow); padding: 12px 14px; min-width: 0; overflow-wrap: anywhere; }
@@ -121,7 +122,7 @@ DASHBOARD_PAGE = r"""<!doctype html>
   .bar > i { display: block; height: 100%; background: var(--run); }
 
   /* Settings views */
-  .settings { min-height: 0; overflow: auto; width: 100%; max-width: 1000px; margin: 0 auto; padding: 24px 24px 40px; }
+  .settings { width: 100%; max-width: 1000px; margin: 0 auto; padding: 24px 24px 40px; }
   .settings h2 { font-size: 16px; font-weight: 600; margin-bottom: 16px; }
   .box { background: var(--card); border-radius: 14px; box-shadow: var(--shadow); padding: 16px; }
   .box h4 { font-size: 11px; text-transform: uppercase; letter-spacing: .6px; color: var(--faint); margin-bottom: 8px; }
@@ -141,9 +142,7 @@ DASHBOARD_PAGE = r"""<!doctype html>
   .browse-row .proj { margin-left: auto; font-size: 10.5px; color: var(--run); }
 
   @media(max-width:760px) {
-    .stage { display: block; height: auto; }
     .topbar { flex-wrap: wrap; gap: 8px; }
-    .board, .settings { overflow: visible; }
   }
 </style>
 </head>
@@ -406,10 +405,6 @@ function tabPlugin() {
 function render() {
   const stage = document.getElementById("stage");
   const previousKey = stage.dataset.readingKey;
-  const scroll = ['.board', '.settings'].map(selector => {
-    const el = stage.querySelector(selector);
-    return [selector, el?.scrollTop || 0];
-  });
   const settingsOpen = !!stage.querySelector('.settings-menu[open]');
   const pageScroll = [window.scrollX, window.scrollY];
   const focusIndex = [...stage.querySelectorAll('button, summary, [tabindex]')].indexOf(document.activeElement);
@@ -437,7 +432,6 @@ function render() {
   stage.dataset.readingKey = readingKey;
   if (previousKey === readingKey) {
     stage.querySelector('.settings-menu').open = settingsOpen;
-    for (const [selector, top] of scroll) stage.querySelector(selector)?.scrollTo(0, top);
     window.scrollTo(...pageScroll);
     if (focusIndex >= 0) stage.querySelectorAll('button, summary, [tabindex]')[focusIndex]?.focus({preventScroll: true});
   }

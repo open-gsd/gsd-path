@@ -113,6 +113,11 @@ final class PopoverViewController: NSViewController {
     override func loadView() {
         let scroll = NSScrollView()
         scroll.hasVerticalScroller = true
+        scroll.autohidesScrollers = true
+        scroll.scrollerStyle = .overlay
+        // The popover grows to its content; the list only scrolls past the screen height, and never bounces.
+        scroll.verticalScrollElasticity = .none
+        scroll.horizontalScrollElasticity = .none
         scroll.drawsBackground = false
         scroll.borderType = .noBorder
 
