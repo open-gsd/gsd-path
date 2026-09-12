@@ -30,3 +30,15 @@ same workspace. Plugin and watched-folder management remain separate controls.
 User approved removing the left navigation rail. Use a slim top toolbar for the
 GSD Path home action, connection status, and Settings menu. Group Plugin and
 Watched Folders in Settings. The project workspace occupies the full width.
+
+## Status board correction
+User: "i think i want to make it just a status board .. no next steps. just
+what we've done, where we are and where the path is headed. state is fine".
+Chosen from five throwaway variants (`daemon/prototype-statusboard.html`):
+variant E, milestone stacks, on both the tray and the dashboard, with light
+mode. Each project shows shipped milestones, the current milestone with phase,
+wave, tasks and git position, and planned milestones from ROADMAP.md plus the
+lookahead in next/STATE.md. Remove attention items, next commands, copy and
+reveal actions, evidence, activity and usage views. Keep the state pill and
+health dot, the Settings menu with Plugin and Watched Folders, and offline
+handling.

@@ -144,3 +144,46 @@ sabotage, then passed after restoration. Server tests: 13 passed. Ponytail:
 existing CSS/native stack layout only, no new dependency or arbitrary size cap.
 Rebuilt and relaunched tray, installed/restarted daemon. Inspected live dashboard
 and native sample window screenshots; closed the sample window.
+
+## Status board (milestone stacks)
+User chose variant E of `daemon/prototype-statusboard.html` for both surfaces
+and asked for light mode. Replaced the attention inbox with one card per
+project: shipped milestones, the current milestone (phase, wave, tasks, time in
+phase, waves, git branch/head) and planned milestones from `roadmap_milestones`
+plus `next_milestone`. Removed attention items, next commands, copy and reveal
+actions, evidence, activity and usage views from both surfaces. Kept Settings
+(Plugin, Watched folders), offline handling, `#project=` deep links, and the
+Studio light/dark tokens with `data-theme` override.
+
+- `daemon/gsd_daemon/serve.py`: board renderer, milestone stack builder, page
+  CSS; 698 lines changed, net -282. `node --check` on the inline script passes.
+- `daemon/macos/Sources/GSDPathTray/Models.swift`: `roadmap_milestones`,
+  `milestoneStack`, `stackText`, `hereText`, `stateLabel`, `stateRank`.
+- `PopoverViewController.swift`: stack row, no attention summary or Actions menu.
+- Tests: `tests/test_daemon_board_ui.py` replaces `test_daemon_inbox_ui.py`;
+  `tests/daemon_tray_ui.swift`, `test_daemon_serve.py` and
+  `test_daemon_plugin.py` updated for the removed inbox markers.
+
+RED: `test_daemon_serve.test_dashboard_html` and
+`test_daemon_plugin.test_dashboard_has_plugin_tab` failed against the new page
+until their inbox markers were replaced; the tray test's stack assertions do not
+exist in the old row view.
+GREEN: `python3 -m unittest discover -s tests -p 'test_daemon_*.py'`: 157 pass,
+1 skipped; `test_daemon_attention.test_pending_answer_question_amber` fails
+identically on the untouched HEAD and is out of scope.
+`GSD_UI_TEST=1 ... test_daemon_board_ui.py` passed in Orca's browser: theme
+palettes, card order, done/here/ahead stack, lookahead milestone, no commands
+on the board, deep-link reveal surviving refresh, Settings menu, folders and
+plugin views, 390px frame width 390, empty and offline states.
+Native: compiled `tests/daemon_tray_ui.swift` with the app sources; passed
+stack lines, state pills, absence of actions, footer, order, rescan, deep link,
+empty and offline states. `bash daemon/macos/build.sh` built and signed.
+`git diff --check` passed.
+Installed the local package, restarted launchd, relaunched the tray. Inspected
+the live dashboard in Orca at 1440px in dark and light: 4 project cards,
+summary "4 projects · 1 in progress · 3 shipped", report-dashboard stack
+M001-M004 shipped and M005 pending, no console errors, no horizontal overflow.
+Native window screenshot was blocked by the display capture permission; the
+AppKit assertions are the tray proof.
+Ponytail review: one render path, no new dependencies or abstractions; the
+stack builder is shared logic in the page script and in Models.swift.

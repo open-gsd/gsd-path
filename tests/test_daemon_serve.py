@@ -164,11 +164,13 @@ class ServeTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertIn("text/html", content_type)
         html = body.decode("utf-8")
-        for marker in ("gsd-path daemon", "class=\"tabs\"", "Overview", "Activity",
-                       "Usage", "Plugin", "Needs you", "healthbadge",
-                       "VERIFY", "DISCUSSION",
+        for marker in ("gsd-path daemon", "Status board", "milestoneStack", "end of roadmap",
+                       "Plugin", "Watched folders",
                        "fetch(\"/status\")", "setInterval(refresh, 5000)"):
             self.assertIn(marker, html)
+        # A status board shows done / here / ahead only: no inbox, next steps or copy actions.
+        for gone in ("Needs you", "Next step", "next_skill", "data-copy", "class=\"tabs\"", "Attention"):
+            self.assertNotIn(gone, html)
         self.assertNotIn("PROTOTYPE", html)
         self.assertNotIn("switcher", html)
 

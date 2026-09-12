@@ -32,14 +32,14 @@ open build/GSDPathTray.app
 
 Click the menu-bar icon to open the dropdown. The icon uses an aggregate
 progress ring and an attention badge; offline it becomes a gray ring. The
-dropdown shows connection state, watched-project count, and an attention summary
-that opens the dashboard's Attention filter. All projects remain visible,
-ordered by health and name, including projects that do not have tasks yet.
+dropdown is a status board: connection state, watched-project count, and one
+row per project ordered blocked, then in progress, then shipped.
 
-Each row shows phase/milestone, task progress when available, and the first
-attention item. Click the project name to open its dashboard workspace. The
-Actions menu reveals its folder or copies the next command when supplied, with
-copy feedback. The fixed footer keeps dashboard, plugin, watched-folder, daemon
+Each row shows the project name (click to open its dashboard card), a state
+pill (Blocked, In <phase>, Shipped), the milestone stack on one line —
+`M001 ✓  M002 ●  M003 ○` for done / here / ahead, ■ when blocked — and a
+here line with phase, wave and task progress. Rows carry no commands or
+actions. The fixed footer keeps dashboard, plugin, watched-folder, daemon
 lifecycle, rescan, and quit controls outside the scrolling project list.
 
 ## Self-test (no GUI required)
@@ -74,5 +74,5 @@ in a temporary window. Stop that test process when finished.
 The dashboard browser test uses Orca's embedded browser and the real HTTP handler:
 
 ```sh
-GSD_UI_TEST=1 python3 -m unittest discover -s tests -p test_daemon_inbox_ui.py
+GSD_UI_TEST=1 python3 -m unittest discover -s tests -p test_daemon_board_ui.py
 ```

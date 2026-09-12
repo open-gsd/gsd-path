@@ -171,18 +171,10 @@ final class PopoverViewController: NSViewController {
         titleRow.distribution = .equalSpacing
         views += [titleRow, separator(), sub]
 
-        // Sort by health severity (red, amber, green), then name.
+        // Board order: blocked, then active, then shipped; name within each.
         let sorted = projects.sorted { a, b in
-            if a.severity != b.severity { return a.severity < b.severity }
+            if a.stateRank != b.stateRank { return a.stateRank < b.stateRank }
             return a.displayProject.localizedCaseInsensitiveCompare(b.displayProject) == .orderedAscending
-        }
-
-        let attentionCount = sorted.reduce(0) { $0 + $1.attentionItems.count }
-        if attentionCount > 0 {
-            let attention = NSButton(title: "\(attentionCount) item\(attentionCount == 1 ? "" : "s") needs you  ›", target: self, action: #selector(attentionPressed))
-            attention.bezelStyle = .rounded
-            attention.contentTintColor = .systemOrange
-            views.append(attention)
         }
         for project in sorted {
             views.append(ProjectRowView(project: project, dashboardURL: dashboardURL))
@@ -266,9 +258,6 @@ final class PopoverViewController: NSViewController {
     @objc private func foldersPressed() {
         DashboardWindowController.shared.show(URL(string: "http://localhost:8765/#folders")!)
     }
-    @objc private func attentionPressed() {
-        DashboardWindowController.shared.show(URL(string: "http://localhost:8765/#filter=attention")!)
-    }
 
     @objc private func addFolderPressed() {
         let panel = NSOpenPanel()
@@ -302,7 +291,7 @@ private func separator() -> NSBox {
     return line
 }
 
-// MARK: - Compact project row
+// MARK: - Milestone stack row (status board)
 
 final class ProjectRowView: NSView {
     init(project p: ProjectStatus, dashboardURL: URL) {
@@ -312,7 +301,7 @@ final class ProjectRowView: NSView {
         let stack = NSStackView()
         stack.orientation = .vertical
         stack.alignment = .leading
-        stack.spacing = 4
+        stack.spacing = 3
         stack.edgeInsets = NSEdgeInsets(top: 8, left: 14, bottom: 8, right: 14)
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
@@ -328,41 +317,36 @@ final class ProjectRowView: NSView {
         name.font = .systemFont(ofSize: 14, weight: .semibold)
         name.alignment = .left
         name.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        let hasQuestion = p.attentionItems.contains { $0.kind == "question" }
-        let status = p.status == "blocked" ? "Blocked" : hasQuestion ? "Needs input" : p.isShipped ? "Shipped" : p.displayPhase.capitalized
-        let pill = makePill(status, textColor: healthColor(p.effectiveHealth))
+        let pill = makePill(p.stateLabel, textColor: healthColor(p.effectiveHealth))
         let top = NSStackView(views: [name, pill])
         top.distribution = .fill
         top.spacing = 10
         stack.addArrangedSubview(top)
         top.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -28).isActive = true
-        let context = [p.milestone, p.phase?.capitalized, p.current_wave.map { "Wave \($0)" }].compactMap { $0 }.joined(separator: " · ")
-        let contextLabel = makeLabel(context, size: 12.5, color: .secondaryLabelColor)
-        contextLabel.font = .monospacedSystemFont(ofSize: 12.5, weight: .regular)
-        stack.addArrangedSubview(contextLabel)
-        if p.total > 0 {
-            stack.addArrangedSubview(makeLabel("\(p.done) of \(p.total) tasks done", size: 12, color: .secondaryLabelColor))
+
+        // Done / here / ahead on one line: M001 ✓  M002 ●  M003 ○
+        let line = NSMutableAttributedString()
+        let mono = NSFont.monospacedSystemFont(ofSize: 12, weight: .medium)
+        let nowColor = p.projectState == "blocked" ? healthColor(.red) : p.projectState == "shipped" ? healthColor(.green) : studioAccent
+        for (index, entry) in p.milestoneStack.enumerated() {
+            let color: NSColor
+            switch entry.kind {
+            case .done: color = healthColor(.green)
+            case .now: color = nowColor
+            case .ahead: color = .tertiaryLabelColor
+            }
+            let piece = p.stackText.components(separatedBy: "  ")[index]
+            line.append(NSAttributedString(string: (index == 0 ? "" : "  ") + piece,
+                                           attributes: [.font: mono, .foregroundColor: color]))
         }
-        if let attention = p.attentionItems.first {
-            let label = makeLabel(attention.label ?? "Needs attention", size: 12, color: .secondaryLabelColor)
-            label.toolTip = attention.label
-            stack.addArrangedSubview(label)
-        }
-        let actions = NSPopUpButton(title: "Actions", target: nil, action: nil)
-        actions.pullsDown = true
-        actions.addItem(withTitle: "Actions")
-        let reveal = NSMenuItem(title: "Reveal in Finder", action: #selector(revealPressed), keyEquivalent: "")
-        reveal.target = self
-        actions.menu?.addItem(reveal)
-        if let raw = p.next_skill {
-            let copy = NSMenuItem(title: "Copy \(skillDisplayName(raw)) command", action: #selector(copySkill(_:)), keyEquivalent: "")
-            copy.target = self
-            copy.representedObject = raw
-            actions.menu?.addItem(copy)
-        }
-        actions.controlSize = .small
-        actions.font = .systemFont(ofSize: 12)
-        top.addArrangedSubview(actions)
+        let stackLabel = NSTextField(labelWithAttributedString: line)
+        stackLabel.lineBreakMode = .byTruncatingTail
+        stackLabel.toolTip = p.milestoneStack.map { "\($0.number) \($0.slug)" }.joined(separator: "\n")
+        stack.addArrangedSubview(stackLabel)
+
+        let here = makeLabel(p.hereText, size: 12, color: .secondaryLabelColor)
+        here.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
+        stack.addArrangedSubview(here)
     }
 
     @available(*, unavailable)
@@ -370,26 +354,6 @@ final class ProjectRowView: NSView {
 
     private var project: ProjectStatus?
     private var dashboardURL: URL?
-
-    @objc private func copySkill(_ sender: NSMenuItem) {
-        guard let raw = sender.representedObject as? String else { return }
-        NSPasteboard.general.clearContents()
-        let copied = NSPasteboard.general.setString("$\(raw)", forType: .string)
-        sender.title = copied ? "Copied" : "Copy failed"
-    }
-
-    @objc private func revealPressed() {
-        guard let root = project?.root else { return }
-        let path = (root as NSString).expandingTildeInPath
-        NSWorkspace.shared.selectFile(path, inFileViewerRootedAtPath: "")
-    }
-
-    @objc private func detailPressed() {
-        guard let base = dashboardURL else { return }
-        let link = projectDeepLink(base: base, root: project?.root)
-        let suffix = project?.attentionItems.contains { $0.kind == "question" } == true ? "&tab=activity" : ""
-        DashboardWindowController.shared.show(URL(string: link.absoluteString + suffix))
-    }
 
     @objc private func dashPressed() {
         guard let base = dashboardURL else {

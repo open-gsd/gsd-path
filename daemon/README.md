@@ -109,26 +109,30 @@ gsd-path-daemon plugin <status|install|update|uninstall>          # manage the s
 - `GET /` — a self-contained dashboard (inline CSS/JS, no build step) that
   polls `/status` every 5 seconds.
 
-The dashboard uses the GSD Cloud Studio theme (system light/dark) and a
-single project workspace:
+The dashboard uses the GSD Cloud Studio theme (system light/dark, or force one
+with `<html data-theme="light|dark">`) and is a pure **status board**: what each
+project has done, where it is now, and where its roadmap goes next. It shows
+no next steps, commands, or attention items.
 
-- A slim top toolbar contains the project-home action, connection status, and
-  **Settings** menu for Plugin and Watched Folders.
-- **Attention**, **Active**, and **All projects** filters control the project list.
-- Each project has **Overview**, **Activity**, and **Usage** tabs. Overview shows
-  its path, attention items, next-command copy action, recorded verification,
-  and expandable progress, success criteria, and roadmap.
-- The project list and detail pane scroll independently. Refresh preserves
-  scroll position, expanded details, and focus within the same project view.
+- A slim top toolbar contains the GSD Path home action, a one-line summary
+  (projects, in progress, blocked, shipped), connection status with the last
+  update time, and a **Settings** menu for Plugin and Watched Folders.
+- One card per project holds its **milestone stack**: shipped milestones
+  collapsed to a line, the current milestone expanded with phase, wave, task
+  progress, time in phase, waves (done ✓ / current ● / ahead ○) and the git
+  branch and head, then planned milestones as ghosts, or "end of roadmap".
+  Past and planned milestones come from `.project/ROADMAP.md`; the lookahead
+  milestone from `.project/next/STATE.md` is appended when it is not listed.
+- Cards are ordered blocked, then in progress, then shipped, by name within
+  each group. The state pill reads Blocked, In <phase>, or Shipped; the dot
+  keeps the daemon's health colour.
 
-Navigation and filters survive reload through the URL fragment. Native project
-links select the same project in the dashboard. `#plugin` and `#folders` open
-settings directly; the GSD Path toolbar button returns to projects.
-Connection status changes to Offline after a failed status request; the last
-received data remains visible with an explicit offline label.
-
-Skill ids render in short uppercase form; copy actions keep the original
-`$gsd-path-*` command. The dashboard does not execute pipeline commands.
+`#project=<root>` (used by the native tray) highlights and reveals that card.
+`#plugin` and `#folders` open settings directly; the GSD Path toolbar button
+returns to the board. Refresh preserves scroll position, the open Settings
+menu, and focus. Connection status changes to Offline after a failed status
+request; the last received data remains visible with an explicit offline label.
+The dashboard does not execute pipeline commands.
 
 ## Plugin lifecycle
 

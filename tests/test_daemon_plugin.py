@@ -653,7 +653,7 @@ class EndpointTests(unittest.TestCase):
         html = response.read().decode("utf-8")
         connection.close()
         self.assertEqual(response.status, 200)
-        for marker in ('["plugin","Plugin"]', "tabPlugin", "/api/plugin/status",
+        for marker in ('data-nav="plugin"', "tabPlugin", "/api/plugin/status",
                        "uninstallPlan", "Install for all detected hosts"):
             self.assertIn(marker, html)
 

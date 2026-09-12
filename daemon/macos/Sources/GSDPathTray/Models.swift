@@ -22,6 +22,13 @@ struct PluginHost: Codable {
     var root: String?
 }
 
+struct RoadmapMilestone: Codable {
+    var number: String?
+    var slug: String?
+    var status: String?
+    var archive: String?
+}
+
 struct ProjectStatus: Codable {
     var root: String?
     var project: String?
@@ -29,6 +36,8 @@ struct ProjectStatus: Codable {
     var phase: String?
     var status: String?
     var branch: String?
+    var archive: String?
+    var roadmap_milestones: [RoadmapMilestone]?
     var git: GitStatus?
     var tasks_done: Int?
     var tasks_total: Int?
@@ -134,6 +143,72 @@ extension ProjectStatus {
     /// "gsd-path-forensics" -> "FORENSICS". Raw id is kept for copy actions.
     var nextSkillDisplay: String? {
         next_skill.map(skillDisplayName)
+    }
+}
+
+// MARK: - Milestone stack (done / here / ahead) for the status board
+
+enum StackKind { case done, now, ahead }
+
+struct StackEntry: Equatable {
+    let number: String
+    let slug: String
+    let kind: StackKind
+}
+
+extension ProjectStatus {
+    /// "blocked" | "shipped" | "active" — the only states the status board shows.
+    var projectState: String {
+        if status == "blocked" { return "blocked" }
+        if isShipped || status == "shipped" || archive != nil { return "shipped" }
+        return "active"
+    }
+    var stateLabel: String {
+        switch projectState {
+        case "blocked": return "Blocked"
+        case "shipped": return "Shipped"
+        default: return "In \(phase ?? "progress")"
+        }
+    }
+    /// Sort rank for the board: blocked, then active, then shipped.
+    var stateRank: Int { ["blocked": 0, "active": 1, "shipped": 2][projectState] ?? 1 }
+
+    /// Milestones before, at and after the current one, from ROADMAP.md, STATE.md and next/STATE.md.
+    var milestoneStack: [StackEntry] {
+        let roadmap = roadmap_milestones ?? []
+        let isDone: (RoadmapMilestone) -> Bool = { $0.status == "shipped" || $0.status == "archived" || $0.archive != nil }
+        let index = roadmap.firstIndex { $0.slug != nil && $0.slug == milestone }
+        let before = index.map { Array(roadmap[..<$0]) } ?? roadmap.filter(isDone)
+        var after = index.map { Array(roadmap[($0 + 1)...]) } ?? roadmap.filter { !isDone($0) }
+        let fromBranch = branch.flatMap { b in b.range(of: #"M\d{3,}"#, options: .regularExpression).map { String(b[$0]) } }
+        let number = index.map { roadmap[$0].number ?? "?" } ?? fromBranch ?? "now"
+        if let next = next_milestone?.milestone, next != milestone, !after.contains(where: { $0.slug == next }) {
+            after.append(RoadmapMilestone(number: "next", slug: next, status: next_milestone?.status, archive: nil))
+        }
+        return before.map { StackEntry(number: $0.number ?? "?", slug: $0.slug ?? "", kind: .done) }
+            + [StackEntry(number: number, slug: milestone ?? "no milestone", kind: .now)]
+            + after.map { StackEntry(number: $0.number ?? "?", slug: $0.slug ?? "", kind: .ahead) }
+    }
+
+    /// "M001 ✓  M002 ●  M003 ○" — the tray's one-line stack. Blocked shows ■, shipped ✓.
+    var stackText: String {
+        milestoneStack.map { entry -> String in
+            let glyph: String
+            switch entry.kind {
+            case .done: glyph = "✓"
+            case .now: glyph = projectState == "blocked" ? "■" : projectState == "shipped" ? "✓" : "●"
+            case .ahead: glyph = "○"
+            }
+            return "\(entry.number) \(glyph)"
+        }.joined(separator: "  ")
+    }
+
+    /// "build · wave 2 · 7 of 12 tasks" — where the current milestone is.
+    var hereText: String {
+        var parts = [phase ?? "no phase"]
+        if let wave = current_wave { parts.append("wave \(wave)") }
+        parts.append(total > 0 ? "\(done) of \(total) tasks" : "no tasks yet")
+        return parts.joined(separator: " · ")
     }
 }
 
