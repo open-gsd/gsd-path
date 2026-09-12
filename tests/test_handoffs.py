@@ -346,6 +346,40 @@ Intent: `.project/intent/INTENT.md`
             check_handoffs._non_placeholder("<fill in>", "label")
         self.assertIn("label still contains the placeholder <fill in>", str(failure.exception))
 
+    def test_task_log_is_exempt_from_the_placeholder_scan(self) -> None:
+        """Log is append-only and immutable after landing, so it cannot be repaired."""
+        def task(log: str, context: str = "Real context.") -> str:
+            return (
+                "---\n"
+                "id: T001\n"
+                "title: Demo task\n"
+                "status: pending\n"
+                "agent: null\n"
+                "base: null\n"
+                "worktree: null\n"
+                "task_branch: null\n"
+                "---\n\n"
+                "## Context\n\n" + context + "\n\n"
+                "## Approach\n\nReal approach.\n\n"
+                "## Interface contract\n\nReal contract.\n\n"
+                "## Log\n\n" + log + "\n"
+            )
+
+        # Unquoted <name> notation in Log is accepted: coders write key formats.
+        check_handoffs._require_task_structure(
+            "T001", task("Keyed report-schedule:<versionId>:<instant>."), initial=True
+        )
+        # The contract fields are still scanned.
+        with self.assertRaises(check_handoffs.HandoffError) as failure:
+            check_handoffs._require_task_structure(
+                "T001", task("Real log.", context="<fill in the context>"), initial=True
+            )
+        self.assertIn("Context", str(failure.exception))
+        # Log must still be non-empty.
+        with self.assertRaises(check_handoffs.HandoffError) as failure:
+            check_handoffs._require_task_structure("T001", task(""), initial=True)
+        self.assertIn("Log", str(failure.exception))
+
     def test_research_handoff_rejects_placeholder_evidence(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
