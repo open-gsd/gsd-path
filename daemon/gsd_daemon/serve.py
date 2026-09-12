@@ -40,6 +40,7 @@ DASHBOARD_PAGE = r"""<!doctype html>
     --text: #14161a; --dim: #5b6270; --faint: #66707e;
     --run: #0d7d53; --run-soft: #e6f7f0; --wait: #7c5205; --wait-soft: #fdf3e0; --danger: #b23a2c; --danger-soft: #fdecea;
     --shadow: 0 1px 2px rgb(16 24 40 / .06), 0 0 0 1px rgb(16 24 40 / .05);
+    --run-fill: #0d7d53; --danger-fill: #b23a2c;
     --ui: Inter, -apple-system, "Segoe UI", sans-serif;
     --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
   }
@@ -49,6 +50,7 @@ DASHBOARD_PAGE = r"""<!doctype html>
     --text: #eceef2; --dim: #9ba1ad; --faint: #8b93a1;
     --run: #3ddc97; --run-soft: #0f2b22; --wait: #f5b544; --wait-soft: #2e2312; --danger: #ff6b5e; --danger-soft: #331715;
     --shadow: 0 1px 2px rgb(0 0 0 / .3), 0 0 0 1px rgb(255 255 255 / .04);
+    --run-fill: #1f8f62; --danger-fill: #d9483a;
   }}
   :root[data-theme="dark"] {
     --accent: #7c8cff; --accent-fill: #5a68e8; --accent-soft: #1b1f3a;
@@ -56,6 +58,7 @@ DASHBOARD_PAGE = r"""<!doctype html>
     --text: #eceef2; --dim: #9ba1ad; --faint: #8b93a1;
     --run: #3ddc97; --run-soft: #0f2b22; --wait: #f5b544; --wait-soft: #2e2312; --danger: #ff6b5e; --danger-soft: #331715;
     --shadow: 0 1px 2px rgb(0 0 0 / .3), 0 0 0 1px rgb(255 255 255 / .04);
+    --run-fill: #1f8f62; --danger-fill: #d9483a;
   }
   * { box-sizing: border-box; margin: 0; }
   body { background: var(--bg); color: var(--text); font: 14px/1.5 var(--ui); min-height: 100vh; }
@@ -97,7 +100,10 @@ DASHBOARD_PAGE = r"""<!doctype html>
   .card.sel { box-shadow: 0 0 0 2px var(--accent), var(--shadow); }
   .card .title { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
   .card .title b { font-size: 14px; }
-  .card .title .pill { margin-left: auto; }
+  .card .title .pill { margin-left: auto; color: #fff; }
+  .card .title .pill.progress { background: var(--accent-fill); }
+  .card .title .pill.shipped { background: var(--run-fill); }
+  .card .title .pill.blocked { background: var(--danger-fill); }
   .card .path { font-family: var(--mono); font-size: 11.5px; color: var(--faint); margin: -6px 0 8px; }
   .ms { display: flex; gap: 10px; padding: 6px 0; border-top: 1px solid var(--line); font-size: 12.5px; align-items: flex-start; }
   .ms:first-of-type { border-top: 0; }

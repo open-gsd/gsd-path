@@ -41,13 +41,44 @@ func makeLabel(_ text: String, size: CGFloat, weight: NSFont.Weight = .regular,
     return f
 }
 
-func makePill(_ text: String, textColor: NSColor) -> NSTextField {
-    let f = makeLabel(text, size: 11, weight: .semibold, color: textColor)
-    f.wantsLayer = true
-    f.layer?.cornerRadius = 9
-    f.layer?.backgroundColor = textColor.withAlphaComponent(0.18).cgColor
-    f.setContentHuggingPriority(.required, for: .horizontal)
-    return f
+/// Solid state capsule: white text on a filled background so it reads on both surfaces.
+final class PillView: NSView {
+    let label: NSTextField
+    init(_ text: String, fill: NSColor) {
+        label = makeLabel(text, size: 11, weight: .semibold, color: .white)
+        super.init(frame: .zero)
+        wantsLayer = true
+        layer?.cornerRadius = 9
+        layer?.backgroundColor = fill.cgColor
+        self.fill = fill
+        label.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(label)
+        NSLayoutConstraint.activate([
+            label.topAnchor.constraint(equalTo: topAnchor, constant: 2),
+            label.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -2),
+            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
+            label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
+        ])
+        setContentHuggingPriority(.required, for: .horizontal)
+        setContentCompressionResistancePriority(.required, for: .horizontal)
+    }
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError() }
+    private var fill: NSColor = .systemGray
+    override func viewDidChangeEffectiveAppearance() {
+        effectiveAppearance.performAsCurrentDrawingAppearance { layer?.backgroundColor = fill.cgColor }
+    }
+}
+
+func makePill(_ text: String, fill: NSColor) -> NSView { PillView(text, fill: fill) }
+
+/// Fill colour for the state pill: blocked red, shipped green, otherwise the accent.
+func stateFill(_ state: String) -> NSColor {
+    switch state {
+    case "blocked": return studioColor(light: 0xb23a2c, dark: 0xd9483a)
+    case "shipped": return studioColor(light: 0x0d7d53, dark: 0x1f8f62)
+    default: return studioColor(light: 0x4f5fe0, dark: 0x5a68e8)
+    }
 }
 
 func healthColor(_ h: Health) -> NSColor {
@@ -317,7 +348,7 @@ final class ProjectRowView: NSView {
         name.font = .systemFont(ofSize: 14, weight: .semibold)
         name.alignment = .left
         name.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        let pill = makePill(p.stateLabel, textColor: healthColor(p.effectiveHealth))
+        let pill = makePill(p.stateLabel, fill: stateFill(p.projectState))
         let top = NSStackView(views: [name, pill])
         top.distribution = .fill
         top.spacing = 10
