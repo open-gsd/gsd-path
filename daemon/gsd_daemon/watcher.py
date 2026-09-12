@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Callable, Dict, List, Optional
 
 from . import discovery, probe, sessions
-from .config import Config
+from .config import Config, resolve_config_path
 from .model import ProjectStatus
 
 Event = Dict[str, object]
@@ -26,9 +26,10 @@ class Watcher:
         self.projects: Dict[str, ProjectStatus] = {}
         self._mtimes: Dict[str, Optional[float]] = {}
         self._probe_hook = probe_hook
-        self.sessions = sessions.SessionIndex(sessions.expand_session_dirs(config.session_dirs), config.prices)
+        self.sessions = sessions.SessionIndex(sessions.expand_session_dirs(config.session_dirs), config.prices,
+                                              cache_path=resolve_config_path().parent / "sessions-index.json")
 
-    def poll_once(self) -> List[Event]:
+    def poll_once(self, scan_sessions: bool = True) -> List[Event]:
         roots = discovery.scan(self.config.parents, self.config.excludes, self.config.max_depth)
         events: List[Event] = []
         current: Dict[str, ProjectStatus] = {}
@@ -57,7 +58,12 @@ class Watcher:
                 "detail": old.project or root,
             })
             self._mtimes.pop(root, None)
-        self._attach_spend(current)
+        if scan_sessions:
+            self._attach_spend(current)
+        else:
+            for root, status in current.items():
+                previous = self.projects.get(root)
+                status.spend = previous.spend if previous is not None else None
         self.projects = current
         return events
 

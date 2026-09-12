@@ -154,3 +154,17 @@ class WatcherTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SpendAttachmentTests(unittest.TestCase):
+    def test_first_poll_can_skip_the_session_scan(self) -> None:
+        from unittest import mock
+        from gsd_daemon.config import Config
+        from gsd_daemon.watcher import Watcher
+        watcher = Watcher(Config(parents=[]))
+        with mock.patch.object(watcher.sessions, "scan", side_effect=AssertionError("scanned")) as scan:
+            watcher.poll_once(scan_sessions=False)
+            self.assertEqual(scan.call_count, 0)
+        with mock.patch.object(watcher.sessions, "scan") as scan:
+            watcher.poll_once()
+            self.assertEqual(scan.call_count, 1)
