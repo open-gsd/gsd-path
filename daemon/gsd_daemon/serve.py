@@ -77,7 +77,6 @@ DASHBOARD_PAGE = """<!doctype html>
   table.tasks th { text-align: left; color: var(--faint); font-size: 11px; text-transform: uppercase; letter-spacing: .5px;
                    padding: 6px 10px; border-bottom: 1px solid var(--line); }
   table.tasks td { padding: 7px 10px; border-bottom: 1px solid #2b2c33; }
-  .wavehead td { padding-top: 16px; font-weight: 700; color: var(--dim); border-bottom: none; }
 
   .steps { display: flex; align-items: center; gap: 3px; margin: 9px 0 7px; }
   .step { flex: 1; height: 4px; border-radius: 2px; background: var(--line); position: relative; }
@@ -100,12 +99,6 @@ DASHBOARD_PAGE = """<!doctype html>
   .vmet { color: var(--green); font-weight: 700; width: 86px; flex: none; }
   .vnot { color: var(--red); font-weight: 700; width: 86px; flex: none; }
   .vunv { color: var(--yellow); font-weight: 700; width: 86px; flex: none; }
-  .ans { background: #23242a; border: 1px solid var(--line); border-left: 3px solid var(--yellow); border-radius: 8px;
-         padding: 9px 12px; margin-bottom: 8px; font-size: 12.5px; }
-  .ans .meta { color: var(--faint); font-size: 11px; margin-top: 4px; }
-  .ans.resolved { border-left-color: var(--green); opacity: .65; }
-  .rev { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid #2b2c33; font-size: 12.5px; }
-  .rev:first-of-type { border-top: none; }
   .ledger { font: 11.5px/1.7 ui-monospace, monospace; color: var(--dim); }
   .ledger .pass { color: var(--green); } .ledger .fail { color: var(--red); }
   .rms { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-top: 1px solid #2b2c33; font-size: 13px; }
@@ -116,6 +109,19 @@ DASHBOARD_PAGE = """<!doctype html>
   .feed h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .7px; color: var(--faint); margin-bottom: 8px; }
   .fe { display: flex; gap: 10px; padding: 6px 0; border-top: 1px solid #2b2c33; font-size: 12.5px; }
   .fe time { color: var(--faint); width: 96px; flex: none; }
+  .pass { color: var(--green); } .fail { color: var(--red); } .warn { color: var(--yellow); }
+  .tagchip { display: inline-block; width: 86px; flex: none; text-align: center; padding: 1px 0;
+             border-radius: 8px; font-size: 10.5px; font-weight: 700; letter-spacing: .4px; align-self: flex-start; margin-top: 1px; }
+  .tagchip.task { background: #0d2f52; color: var(--blue); }
+  .tagchip.review { background: #2b1b4d; color: var(--purple); }
+  .tagchip.discussion { background: #3d2e00; color: var(--yellow); }
+  .tagchip.verify { background: #0f3d22; color: var(--green); }
+  .attn { background: #23242a; border: 1px solid var(--line); border-left: 3px solid var(--yellow);
+          border-radius: 8px; padding: 8px 12px; margin-bottom: 8px; font-size: 12.5px;
+          display: flex; gap: 10px; align-items: center; }
+  .attn.red { border-left-color: var(--red); }
+  .healthbadge { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600;
+                 padding: 2px 10px; border-radius: 10px; background: var(--panel2); border: 1px solid var(--line); }
   .btn { background: var(--panel2); border: 1px solid var(--line); color: var(--text);
          border-radius: 7px; padding: 3px 10px; font-size: 12px; cursor: pointer; }
   .btn:hover { border-color: var(--blue); }
@@ -147,8 +153,16 @@ DASHBOARD_PAGE = """<!doctype html>
 <script>
 const DAEMON = __DAEMON_JSON__;
 const PHASES = ["inspect","define","research","decide","roadmap","plan","build","ship"];
-const pct = p => p.tasks_total ? Math.round(100*p.tasks_done/p.tasks_total) : 0;
-const health = p => p.status === "blocked" ? "r" : ((p.pending_answers||[]).length || (p.git&&p.git.dirty)) ? "y" : "g";
+/* health comes from the backend; fall back to a local guess for older payloads */
+const healthOf = p => p.health || (p.status === "blocked" ? "red" : ((p.pending_answers||[]).length || (p.git&&p.git.dirty)) ? "amber" : "green");
+const healthDot = p => ({red: "r", amber: "y", green: "g"})[healthOf(p)] || "g";
+const HEALTH_LABEL = {green: "healthy", amber: "needs attention", red: "blocked"};
+const SEV = {red: 0, amber: 1, green: 2};
+const ATTN_PILL = {blocked: '<span class="pill blocked">blocked</span>',
+                   failed: '<span class="pill blocked">failed</span>',
+                   question: '<span class="pill prog">question</span>',
+                   stale: '<span class="pill pend">stale</span>'};
+const ATTN_CLS = {blocked: "red", failed: "red"};
 const badge = p => p.status === "blocked" ? '<span class="pill blocked">blocked</span>'
                  : p.phase === "shipped"      ? '<span class="pill done">shipped</span>'
                  : '<span class="pill active">' + esc(p.phase || "?") + '</span>';
@@ -165,20 +179,25 @@ const dur = s => {
 const shortT = iso => typeof iso === "string" && iso.length >= 16 ? iso.slice(5,10)+" "+iso.slice(11,16) : (iso || "");
 
 let DATA = {schema: null, generated_at: null, projects: []};
-let ACTIVITY = [];
 let PLUGIN = null;
 let CState = {root: null, tab: "overview"};
+const TABS = ["overview", "activity", "usage", "plugin"];
+function setHash() {
+  if (CState.tab === "plugin") {
+    history.replaceState(null, "", "#plugin");
+  } else if (CState.root) {
+    history.replaceState(null, "", "#project=" + encodeURIComponent(CState.root) + "&tab=" + CState.tab);
+  }
+}
 function cSel(root) {
   CState.root = root; CState.tab = "overview";
-  history.replaceState(null, "", "#project=" + encodeURIComponent(root));
+  setHash();
   render();
 }
 function cTab(t) {
   CState.tab = t;
-  if (t === "plugin") {
-    history.replaceState(null, "", "#plugin");
-    loadPlugin().then(render);
-  }
+  setHash();
+  if (t === "plugin") loadPlugin().then(render);
   render();
 }
 async function loadPlugin() {
@@ -311,9 +330,8 @@ function removeParent(path) {
 
 async function refresh() {
   try {
-    const [s, a] = await Promise.all([fetch("/status"), fetch("/activity")]);
+    const s = await fetch("/status");
     if (s.ok) DATA = await s.json();
-    if (a.ok) { const payload = await a.json(); ACTIVITY = payload.events || []; }
   } catch (e) { /* keep last good data */ }
   render();
 }
@@ -335,13 +353,35 @@ function tabOverview(p) {
     '<div><span class="faint">' + esc(shortT(e.recorded_at)) + '</span> ' + esc(e.command)
     + ' <span class="' + (e.result === "pass" ? "pass" : "fail") + '">' + esc(e.result || "?") + '</span>'
     + (e.commit ? ' <span class="faint">@' + esc(String(e.commit).slice(0,7)) + '</span>' : "") + '</div>').join("");
+  const attn = p.attention || [];
+  const needsYou = attn.length
+    ? `<div class="box" style="margin-bottom:14px;border-color:#5a4a1a"><h4>Needs you</h4>` +
+      attn.map(a => `<div class="attn ${ATTN_CLS[a.kind] || ""}">${ATTN_PILL[a.kind] || esc(a.kind || "?")}
+        <span>${esc(a.label || "")}</span>${a.ref ? `<span class="faint" style="margin-left:auto">${esc(a.ref)}</span>` : ""}</div>`).join("")
+      + `</div>` : "";
+  const healthBadge = `<span class="healthbadge"><span class="dot ${healthDot(p)}"></span>${esc(HEALTH_LABEL[healthOf(p)] || healthOf(p))}</span>`;
+  const crits = p.criteria || [];
+  const cCount = v => crits.filter(c => c.verdict === v).length;
+  const critBox = `<div class="box"><h4>Success criteria</h4>` + (crits.length
+    ? `<div style="margin-bottom:4px"><span class="vmet">${cCount("met")} met</span> · <span class="vnot">${cCount("not-met")} not-met</span> · <span class="vunv">${cCount("unverifiable")} unverifiable</span></div>` +
+      crits.filter(c => c.verdict !== "met").map(c =>
+        `<div class="crit"><span class="${c.verdict === "not-met" ? "vnot" : "vunv"}">${esc(c.verdict || "—")}</span>
+         <span><b>${esc(c.id || "—")}</b> — ${esc(c.text)}</span></div>`).join("")
+    : '<span class="dim">no final review yet</span>') + `</div>`;
+  const rmRows = (p.roadmap_milestones || []).map(m => `<div class="rms"><span class="mnum">${esc(m.number)}</span><b>${esc(m.slug)}</b>
+    <span class="pill ${m.status === "active" ? "active" : m.status === "shipped" ? "done" : "pend"}">${esc(m.status || "?")}</span>
+    ${m.archive ? `<span class="arch">${esc(m.archive)}</span>` : ""}</div>`).join("");
+  const roadmapBox = `<div class="box"><h4>Roadmap</h4>`
+    + (rmRows || '<span class="dim">No milestones in ROADMAP.md yet.</span>') + `</div>`;
   return `
-    <div class="steps" style="margin-top:16px">${steps}</div>
+    ${needsYou}
+    <div style="margin-bottom:6px">${healthBadge}</div>
+    <div class="steps" style="margin-top:10px">${steps}</div>
     <div class="steplabel">${PHASES.map(x => "<span>"+x+"</span>").join("")}</div>
     <div class="statrow">
       <div class="stat"><div class="v">${p.tasks_done}/${p.tasks_total || "—"}</div><div class="k">tasks done${p.current_wave ? ` · wave ${p.current_wave} “${esc(p.waves[p.current_wave]||"")}”` : ""}</div></div>
       <div class="stat"><div class="v">${dur(p.time_in_phase_s)}</div><div class="k">time in ${esc(p.phase || "?")}</div></div>
-      <div class="stat"><div class="v" style="color:${(p.pending_answers||[]).length ? "var(--yellow)" : "var(--text)"}">${(p.pending_answers||[]).length}</div><div class="k">pending answers</div></div>
+      <div class="stat"><div class="v" style="color:${attn.length ? "var(--yellow)" : "var(--text)"}">${attn.length}</div><div class="k">attention items</div></div>
       <div class="stat"><div class="v">${p.git ? (p.git.dirty ? '<span style="color:var(--yellow)">dirty</span>' : "clean") : "—"}</div><div class="k">git · ${esc(p.branch || "no branch")}</div></div>
     </div>
     <div class="grid2">
@@ -354,56 +394,8 @@ function tabOverview(p) {
       <div class="box"><h4>Verify ledger — recent</h4><div class="ledger">
         ${ledger || '<span class="faint">no verify runs recorded yet</span>'}
       </div></div>
-    </div>`;
-}
-
-function tabTasks(p) {
-  const PILL = {done:'<span class="pill active">done</span>', failed:'<span class="pill blocked">failed</span>',
-                "in-progress":'<span class="pill prog">in-progress</span>',
-                pending:'<span class="pill pend">pending</span>'};
-  let rows = "", lastWave = null;
-  for (const t of (p.tasks || [])) {
-    if (t.wave !== lastWave) {
-      rows += `<tr class="wavehead"><td colspan="4">Wave ${t.wave == null ? "?" : t.wave} — ${esc((p.waves||{})[t.wave]||"")}</td></tr>`;
-      lastWave = t.wave;
-    }
-    rows += `<tr><td class="dim">${esc(t.id)}</td><td>${esc(t.title||"")}</td><td>${PILL[t.status]||esc(t.status||"")}</td><td class="faint">${esc((t.files||[]).join(", "))}</td></tr>`;
-  }
-  return (p.tasks || []).length
-    ? `<div style="margin:12px 0"><div class="bar" style="max-width:340px"><i style="width:${pct(p)}%"></i></div>
-       <div class="faint" style="margin-top:4px">${pct(p)}% · ${p.tasks_done} of ${p.tasks_total} tasks</div></div>
-       <table class="tasks"><tr><th>Task</th><th>Title</th><th>Status</th><th>Evidence</th></tr>${rows}</table>`
-    : `<p class="dim" style="padding:30px 0">No tasks yet — ${esc(p.phase)} is a pre-plan phase. Tasks appear here after <kbd>PLAN</kbd>.</p>`;
-}
-
-function tabReviews(p) {
-  const revs = (p.reviews || []).map(r => {
-    const verdict = r.verdict || "—";
-    const cls = r.verdict === "pass" ? "vmet" : r.verdict ? "vnot" : "vunv";
-    const meta = [r.kind, r.cycle != null ? "cycle "+r.cycle : null, r.depth].filter(Boolean).join(" · ");
-    return `<div class="rev">
-      <span class="${cls}" style="width:70px">${esc(verdict.toUpperCase())}</span>
-      <b style="width:180px">${esc(r.file)}</b><span class="dim">${esc(r.note||"")}</span>
-      <span class="faint" style="margin-left:auto">${esc(meta)}</span></div>`;
-  }).join("") || '<p class="dim">No reviews recorded yet.</p>';
-  let crits = "";
-  if (p.criteria) {
-    crits = `<div class="box" style="margin-top:14px"><h4>Success criteria — final review</h4>` +
-      p.criteria.map(c => `<div class="crit"><span class="${c.verdict === "met" ? "vmet" : c.verdict === "not-met" ? "vnot" : "vunv"}">${esc(c.verdict || "—")}</span>
-        <span><b>${esc(c.id || "—")}</b> — ${esc(c.text)}</span></div>`).join("") + `</div>`;
-  }
-  return `<div class="box" style="margin-top:4px"><h4>Wave &amp; final reviews</h4>${revs}</div>${crits}`;
-}
-
-function tabDiscussion(p) {
-  const answers = p.answers || [];
-  return answers.length ? answers.map(a => `<div class="ans ${a.status === "final" ? "" : "resolved"}">
-      <div style="display:flex;gap:8px;align-items:center"><b>${esc(a.id)}</b>
-        <span class="pill ${a.status === "NEEDS-USER" ? "blocked" : "active"}">${esc(a.status || "?")}</span>
-        ${a.status === "NEEDS-USER" ? '<span class="faint" style="margin-left:auto">awaiting your reply in-session</span>' : ""}</div>
-      <div style="margin-top:5px">${esc(a.question || "")}</div>
-      <div class="meta">${[a.thread ? "thread "+a.thread : null, a.owner ? "owner "+skill(a.owner) : null, a.target ? "target "+a.target : null].filter(Boolean).map(esc).join(" · ")}</div></div>`).join("")
-    : '<p class="dim" style="padding:30px 0">No open discussion records — nothing waiting on you.</p>';
+    </div>
+    <div class="grid2" style="margin-top:12px">${critBox}${roadmapBox}</div>`;
 }
 
 function tabUsage(p) {
@@ -438,23 +430,48 @@ function tabUsage(p) {
     <table class="tasks"><tr><th>Task</th><th>Model</th><th>Tokens</th></tr>${trows}</table></div>` : ""}`;
 }
 
-function tabActivity(p) {
-  const events = ACTIVITY.filter(e => e.root === p.root).slice(0, 50);
-  const rows = events.map(e => `<div class="fe"><time>${esc(shortT(e.at))}</time>
-    <b style="color:${e.type === "blocked" ? "var(--red)" : e.type === "pending-answers" ? "var(--yellow)" : "var(--dim)"};width:130px;flex:none">${esc(e.type)}</b>
-    <span>${esc(e.detail)}</span></div>`).join("");
-  return `<div class="feed" style="margin-top:4px"><h3>${esc(p.project || p.root)} — transitions (history.jsonl)</h3>`
-    + (rows || '<p class="dim">no events recorded yet for this project</p>') + `</div>`;
+function activityItems(p) {
+  const dated = [], undated = [];
+  for (const e of (p.ledger || [])) {
+    dated.push({ts: e.recorded_at || null, tag: "verify", chip: "VERIFY",
+      title: e.command || "(no command)",
+      right: e.result || "?", cls: e.result === "pass" ? "pass" : "fail",
+      sub: e.commit ? "@" + String(e.commit).slice(0,7) : null});
+  }
+  for (const t of (p.tasks || [])) {
+    undated.push({tag: "task", chip: "TASK",
+      title: (t.id || "?") + (t.title ? " — " + t.title : ""),
+      right: t.status || "?", cls: t.status === "done" ? "pass" : (t.status === "failed" ? "fail" : ""),
+      sub: t.wave != null ? "wave " + t.wave : null});
+  }
+  for (const r of (p.reviews || [])) {
+    undated.push({tag: "review", chip: "REVIEW",
+      title: (r.file || "?") + (r.note ? " — " + r.note : ""),
+      right: (r.verdict || "—").toUpperCase(),
+      cls: r.verdict === "pass" ? "pass" : (r.verdict ? "fail" : ""),
+      sub: [r.kind, r.cycle != null ? "cycle " + r.cycle : null, r.depth].filter(Boolean).join(" · ")});
+  }
+  for (const a of (p.answers || [])) {
+    undated.push({tag: "discussion", chip: "DISCUSSION",
+      title: (a.id || "?") + (a.question ? " — " + a.question : ""),
+      right: a.status || "?", cls: a.status === "final" ? "pass" : (a.status === "NEEDS-USER" ? "warn" : ""),
+      sub: [a.thread ? "thread " + a.thread : null, a.owner ? "owner " + skill(a.owner) : null,
+            a.target ? "target " + a.target : null].filter(Boolean).join(" · ")});
+  }
+  dated.sort((x, y) => String(y.ts).localeCompare(String(x.ts)));
+  return dated.concat(undated);
 }
 
-function tabRoadmap(p) {
-  const rows = (p.roadmap_milestones || []).map(m => `<div class="rms"><span class="mnum">${esc(m.number)}</span><b>${esc(m.slug)}</b>
-    <span class="pill ${m.status === "active" ? "active" : m.status === "shipped" ? "done" : "pend"}">${esc(m.status || "?")}</span>
-    ${m.duration_s != null ? `<span class="faint" style="margin-left:auto">⏱ ${dur(m.duration_s)}</span>` : ""}
-    ${m.tokens != null ? `<span class="faint"${m.duration_s != null ? "" : ' style="margin-left:auto"'}>⚡ ${fmt(m.tokens)} tok</span>` : ""}
-    ${m.archive ? `<span class="arch"${(m.duration_s != null || m.tokens != null) ? ' style="margin-left:12px"' : ""}>${esc(m.archive)}</span>` : ""}</div>`).join("");
-  return `<div class="box" style="margin-top:4px"><h4>Milestones — ROADMAP.md</h4>`
-    + (rows || '<p class="dim">No milestones in ROADMAP.md yet.</p>') + `</div>`;
+function tabActivity(p) {
+  const items = activityItems(p).slice(0, 100);
+  const rows = items.map(it => `<div class="fe">
+    <span class="tagchip ${it.tag}">${it.chip}</span>
+    <span style="flex:1">${esc(it.title)}${it.sub ? `<br><span class="faint">${esc(it.sub)}</span>` : ""}</span>
+    <time>${it.ts ? esc(shortT(it.ts)) : "—"}</time>
+    <b class="${it.cls}" style="width:110px;flex:none;text-align:right">${esc(it.right)}</b>
+  </div>`).join("");
+  return `<div class="feed" style="margin-top:4px"><h3>${esc(p.project || p.root)} — activity</h3>`
+    + (rows || '<p class="dim">no activity recorded yet for this project</p>') + `</div>`;
 }
 
 function tabPlugin() {
@@ -533,27 +550,24 @@ function render() {
   CState.root = p.root;
 
   let side = "";
-  projects.forEach(q => {
-    side += `<div class="sitem ${q.root === p.root ? "sel" : ""}" onclick="cSel(decodeURIComponent('${encodeURIComponent(q.root)}'))"><span class="dot ${health(q)}"></span>
+  const ordered = projects.slice().sort((a, b) =>
+    ((SEV[healthOf(a)] != null ? SEV[healthOf(a)] : 2) - (SEV[healthOf(b)] != null ? SEV[healthOf(b)] : 2))
+    || String(a.project || a.root).localeCompare(String(b.project || b.root)));
+  ordered.forEach(q => {
+    const attn = q.attention || [];
+    side += `<div class="sitem ${q.root === p.root ? "sel" : ""}" onclick="cSel(decodeURIComponent('${encodeURIComponent(q.root)}'))"><span class="dot ${healthDot(q)}"></span>
       <span><span class="nm">${esc(q.project || q.root)}</span><br><span class="sub">${esc(q.phase || "?")} · ${q.tasks_done}/${q.tasks_total}</span></span>
-      ${(q.pending_answers||[]).length ? `<span style="margin-left:auto" class="pill blocked">${q.pending_answers.length}</span>` : ""}</div>`;
+      ${attn.length ? `<span style="margin-left:auto" class="pill ${healthOf(q) === "red" ? "blocked" : "prog"}">${attn.length}</span>` : ""}</div>`;
   });
 
-  const tabs = [["overview","Overview"],["tasks",`Tasks <span class="n">${p.tasks_done}/${p.tasks_total}</span>`],
-    ["reviews",`Reviews <span class="n">${(p.reviews||[]).length}</span>`],
-    ["discussion",`Discussion ${(p.pending_answers||[]).length ? `<span class="n">${p.pending_answers.length}</span>` : ""}`],
-    ["usage","Usage"],["activity","Activity"],["roadmap","Roadmap"],["plugin","Plugin"]];
+  const tabs = [["overview","Overview"],["activity","Activity"],["usage","Usage"],["plugin","Plugin"]];
   const tabbar = tabs.map(([k,label]) =>
     `<div class="tab ${CState.tab === k ? "sel" : ""}" onclick="cTab('${k}')">${label}</div>`).join("");
 
   let body = "";
   if (CState.tab === "overview") body = tabOverview(p);
-  else if (CState.tab === "tasks") body = tabTasks(p);
-  else if (CState.tab === "reviews") body = tabReviews(p);
-  else if (CState.tab === "discussion") body = tabDiscussion(p);
-  else if (CState.tab === "usage") body = tabUsage(p);
   else if (CState.tab === "activity") body = tabActivity(p);
-  else if (CState.tab === "roadmap") body = tabRoadmap(p);
+  else if (CState.tab === "usage") body = tabUsage(p);
   else if (CState.tab === "plugin") body = tabPlugin();
 
   const parents = (DAEMON.parents || []).map(x =>
@@ -582,8 +596,12 @@ function render() {
 function applyHash() {
   const h = location.hash || "";
   if (h.indexOf("#project=") === 0) {
-    CState.root = decodeURIComponent(h.slice(9));
-    CState.tab = "overview";
+    const parts = h.slice(9).split("&");
+    CState.root = decodeURIComponent(parts[0]);
+    const tabParam = parts.slice(1).find(x => x.indexOf("tab=") === 0);
+    const tab = tabParam ? tabParam.slice(4) : "overview";
+    CState.tab = TABS.indexOf(tab) >= 0 ? tab : "overview";
+    if (CState.tab === "plugin") loadPlugin().then(render);
   } else if (h === "#plugin") {
     CState.tab = "plugin";
     loadPlugin().then(render);

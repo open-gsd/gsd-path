@@ -62,17 +62,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             online = true
             let projects = status.projects ?? []
             let aggregate = projects.reduce(Health.green) { worst, p in
-                let h = p.health
+                let h = p.effectiveHealth
                 if worst == .red || h == .red { return .red }
                 if worst == .yellow || h == .yellow { return .yellow }
                 return worst
             }
-            let active = projects.filter { !$0.isShipped }
+            // Only projects with real remaining work dilute the ring.
+            let active = projects.filter { !$0.isShipped && $0.total > 0 && $0.done < $0.total }
             let done = active.reduce(0) { $0 + $1.done }
             let total = active.reduce(0) { $0 + $1.total }
             let fraction = total > 0 ? Double(done) / Double(total) : 0
+            let badge = projects.contains { !$0.attentionItems.isEmpty }
             button.title = ""
-            button.image = makeRingIcon(fraction: fraction, arcColor: healthColor(aggregate))
+            button.image = makeRingIcon(fraction: fraction, arcColor: healthColor(aggregate), badge: badge)
             vc.show(status: status)
         case .failure:
             online = false
@@ -85,9 +87,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 /// Progress-ring glyph drawn in code (no assets): a subtle full-circle track
 /// plus a clockwise arc from 12 o'clock tinted by aggregate health. Offline
-/// (arcColor == nil) draws just a hollow gray ring. The drawing handler
-/// re-rasterizes per display scale, so it stays crisp at 2x.
-func makeRingIcon(fraction: Double, arcColor: NSColor?) -> NSImage {
+/// (arcColor == nil) draws just a hollow gray ring. When `badge` is set, a
+/// small filled dot in the arc color marks unresolved attention items.
+/// The drawing handler re-rasterizes per display scale, so it stays crisp at 2x.
+func makeRingIcon(fraction: Double, arcColor: NSColor?, badge: Bool = false) -> NSImage {
     let size = NSSize(width: 18, height: 18)
     let image = NSImage(size: size, flipped: false) { rect in
         let lineWidth: CGFloat = 2.5
@@ -123,6 +126,14 @@ func makeRingIcon(fraction: Double, arcColor: NSColor?) -> NSImage {
                 arc.stroke()
             }
         }
+
+        // Attention badge: filled dot at the top-right in the worst health color.
+        if badge, let color = arcColor {
+            color.setFill()
+            let d: CGFloat = 5
+            NSBezierPath(ovalIn: NSRect(x: rect.maxX - d - 1, y: rect.maxY - d - 1,
+                                        width: d, height: d)).fill()
+        }
         return true
     }
     image.isTemplate = false
@@ -132,14 +143,14 @@ func makeRingIcon(fraction: Double, arcColor: NSColor?) -> NSImage {
 /// `--dump-icon <dir>` debug helper: renders the ring states to PNGs so the
 /// icon can be eyeballed without launching the app.
 func dumpIcons(directory: String) -> Int32 {
-    let states: [(String, Double, NSColor?)] = [
-        ("icon-green-60", 0.6, healthColor(.green)),
-        ("icon-yellow-35", 0.35, healthColor(.yellow)),
-        ("icon-red-80", 0.8, healthColor(.red)),
-        ("icon-offline", 0, nil),
+    let states: [(String, Double, NSColor?, Bool)] = [
+        ("icon-green-60", 0.6, healthColor(.green), false),
+        ("icon-yellow-35-badge", 0.35, healthColor(.yellow), true),
+        ("icon-red-80-badge", 0.8, healthColor(.red), true),
+        ("icon-offline", 0, nil, false),
     ]
-    for (name, fraction, color) in states {
-        let image = makeRingIcon(fraction: fraction, arcColor: color)
+    for (name, fraction, color, badge) in states {
+        let image = makeRingIcon(fraction: fraction, arcColor: color, badge: badge)
         guard let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 36, pixelsHigh: 36,
                                          bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true,
                                          isPlanar: false, colorSpaceName: .deviceRGB,

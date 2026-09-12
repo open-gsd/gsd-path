@@ -38,6 +38,10 @@ ANSWER_FIELD_RE = re.compile(r"^-\s+\*\*([^*]+)\*\*:\s*(.*)$")
 STATE_LOG_RE = re.compile(r"^-\s+(\d{4}-\d{2}-\d{2})\s+—\s+([a-z]+)\s+—")
 META_LINE_RE = re.compile(r"^(?:\*\*)?[A-Za-z][A-Za-z /()-]*(?:\*\*)?\s*:")
 
+STALE_AFTER_S = 12 * 3600
+NEGATIVE_REVIEW_VERDICTS = {"blocked", "fail", "failed", "not-met", "unverifiable"}
+NEGATIVE_CRITERION_VERDICTS = {"not-met", "unverifiable"}
+
 STATE_KEYS = (
     "pipeline",
     "project",
@@ -530,6 +534,71 @@ def _runtime_status(root: str) -> Optional[dict]:
     return payload
 
 
+def _activity_time(status: ProjectStatus) -> Optional[datetime]:
+    parsed = _parse_iso(status.last_activity_iso)
+    if parsed is not None:
+        return parsed
+    if status.state_mtime is not None:
+        return datetime.fromtimestamp(status.state_mtime, tz=timezone.utc)
+    return None
+
+
+def _human_age(seconds: float) -> str:
+    days = int(seconds // 86400)
+    if days >= 1:
+        return f"{days}d"
+    return f"{max(0, int(seconds // 3600))}h"
+
+
+def compute_attention(status: ProjectStatus,
+                      now: Optional[datetime] = None) -> List[dict]:
+    items: List[dict] = []
+    questions = status.pending_answers or status.answers
+    for pending in questions:
+        if not isinstance(pending, dict):
+            continue
+        label = pending.get("question") or pending.get("id") or "pending question"
+        items.append({"kind": "question", "label": label, "ref": pending.get("id")})
+    for task in status.tasks:
+        if task.status and "blocked" in task.status.lower():
+            label = f"{task.id} — {task.title}" if task.title else str(task.id)
+            items.append({"kind": "blocked", "label": label, "ref": task.id})
+    for review in status.reviews:
+        verdict = review.get("verdict")
+        if isinstance(verdict, str) and verdict.lower() in NEGATIVE_REVIEW_VERDICTS:
+            name = review.get("file") or "review"
+            items.append({"kind": "failed",
+                          "label": f"{name} — {verdict.lower()}",
+                          "ref": review.get("file")})
+    for criterion in status.criteria or []:
+        verdict = criterion.get("verdict")
+        if isinstance(verdict, str) and verdict.lower() in NEGATIVE_CRITERION_VERDICTS:
+            ref = criterion.get("id")
+            text = criterion.get("text") or "criterion"
+            label = f"{ref} — {text}" if ref else text
+            items.append({"kind": "failed", "label": label, "ref": ref})
+    shipped = (status.status or "").lower() in ("shipped", "archived") or bool(status.archive)
+    active_work = status.tasks_total > status.tasks_done
+    activity = _activity_time(status)
+    if not shipped and active_work and activity is not None:
+        now = now or datetime.now(timezone.utc)
+        age = (now - activity).total_seconds()
+        if age > STALE_AFTER_S:
+            items.append({"kind": "stale",
+                          "label": f"no activity for {_human_age(age)}",
+                          "ref": None})
+    return items
+
+
+def health_for(attention: List[dict]) -> str:
+    kinds = {item.get("kind") for item in attention}
+    if kinds & {"blocked", "failed"}:
+        return "red"
+    if kinds & {"question", "stale"}:
+        return "amber"
+    return "green"
+
+
 def probe_project(root: Union[str, Path], enrich: bool = True) -> ProjectStatus:
     root = os.path.abspath(str(root))
     project_dir = Path(root) / ".project"
@@ -599,6 +668,8 @@ def probe_project(root: Union[str, Path], enrich: bool = True) -> ProjectStatus:
                 status.git = runtime_git
             status.status_source = "runtime"
     status.answers = _collect_answers(project_dir / "discuss" / "ANSWERS.md", runtime_pending)
+    status.attention = compute_attention(status)
+    status.health = health_for(status.attention)
     return status
 
 

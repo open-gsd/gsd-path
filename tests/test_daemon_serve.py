@@ -164,9 +164,11 @@ class ServeTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertIn("text/html", content_type)
         html = body.decode("utf-8")
-        for marker in ("gsd-path daemon", "class=\"tabs\"", "Overview", "Reviews",
-                       "Discussion", "Usage", "Activity", "Roadmap",
-                       "fetch(\"/status\")", "setInterval(refresh, 5000)"):
+        for marker in ("gsd-path daemon", "class=\"tabs\"", "Overview", "Activity",
+                       "Usage", "Plugin", "Needs you", "healthbadge",
+                       "VERIFY", "DISCUSSION",
+                       "fetch(\"/status\")", "setInterval(refresh, 5000)",
+                       "&tab="):
             self.assertIn(marker, html)
         self.assertNotIn("PROTOTYPE", html)
         self.assertNotIn("switcher", html)

@@ -1,7 +1,9 @@
+import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "daemon"))
 
@@ -104,6 +106,51 @@ class DiscoveryTests(unittest.TestCase):
         stray.mkdir()
         (stray / "STATE.md").write_text(STATE_V2, encoding="utf-8")
         self.assertEqual(self.scan(), [])
+
+
+class WorktreeDedupTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.parent = Path(self.tmp.name) / "work"
+        self.parent.mkdir()
+
+    def _git(self, *args: str, cwd: Path) -> None:
+        subprocess.run(
+            ["git", "-c", "user.name=Test", "-c", "user.email=test@example.com", *args],
+            cwd=str(cwd),
+            check=True,
+            capture_output=True,
+        )
+
+    def make_repo_with_worktree(self) -> tuple:
+        main = self.parent / "repo"
+        main.mkdir()
+        self._git("init", cwd=main)
+        make_project(main)
+        self._git("add", ".project/STATE.md", cwd=main)
+        self._git("commit", "-m", "init", cwd=main)
+        linked = self.parent / "repo-linked"
+        self._git("worktree", "add", str(linked), cwd=main)
+        return main, linked
+
+    def test_linked_worktree_deduped_to_main_checkout(self) -> None:
+        main, linked = self.make_repo_with_worktree()
+        self.assertTrue((main / ".git").is_dir())
+        self.assertTrue((linked / ".git").is_file())
+        self.assertEqual(discovery.scan([str(self.parent)]), [str(main)])
+
+    def test_unrelated_projects_not_deduped(self) -> None:
+        main, _linked = self.make_repo_with_worktree()
+        other = make_project(self.parent / "other")
+        results = discovery.scan([str(self.parent)])
+        self.assertEqual(results, [str(other), str(main)])
+
+    def test_git_failure_treats_each_root_as_own_group(self) -> None:
+        main, linked = self.make_repo_with_worktree()
+        with mock.patch("subprocess.run", side_effect=OSError("git missing")):
+            results = discovery.scan([str(self.parent)])
+        self.assertEqual(results, [str(main), str(linked)])
 
 
 if __name__ == "__main__":

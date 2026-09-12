@@ -40,6 +40,14 @@ struct ProjectStatus: Codable {
     var usage: Usage?
     var next_milestone: NextMilestone?
     var note: String?
+    var health: String?
+    var attention: [AttentionItem]?
+}
+
+struct AttentionItem: Codable {
+    var kind: String?
+    var label: String?
+    var ref: String?
 }
 
 struct GitStatus: Codable {
@@ -90,12 +98,38 @@ extension ProjectStatus {
     var total: Int { tasks_total ?? 0 }
     var answers: [PendingAnswer] { pending_answers ?? [] }
     var isDirty: Bool { git?.dirty ?? false }
+    var attentionItems: [AttentionItem] { attention ?? [] }
 
-    var health: Health {
+    /// Server-reported health ("green" | "amber" | "red"), nil on older daemons.
+    var serverHealth: Health? {
+        switch health {
+        case "red": return .red
+        case "amber": return .yellow
+        case "green": return .green
+        default: return nil
+        }
+    }
+
+    /// Local fallback when the server does not report health.
+    var derivedHealth: Health {
         if status == "blocked" { return .red }
         if !answers.isEmpty || isDirty { return .yellow }
         return .green
     }
+
+    var effectiveHealth: Health { serverHealth ?? derivedHealth }
+
+    /// Sort rank: red first, then amber, then green.
+    var severity: Int {
+        switch effectiveHealth {
+        case .red: return 0
+        case .yellow: return 1
+        default: return 2
+        }
+    }
+
+    /// Green projects that are shipped or have no incomplete tasks.
+    var isQuiet: Bool { effectiveHealth == .green && (isShipped || done >= total) }
 
     /// "gsd-path-forensics" -> "FORENSICS". Raw id is kept for copy actions.
     var nextSkillDisplay: String? {
@@ -107,6 +141,15 @@ func skillDisplayName(_ raw: String) -> String {
     var s = raw
     if s.hasPrefix("gsd-path-") { s = String(s.dropFirst("gsd-path-".count)) }
     return s.uppercased()
+}
+
+func healthName(_ h: Health) -> String {
+    switch h {
+    case .green: return "green"
+    case .yellow: return "amber"
+    case .red: return "red"
+    case .gray: return "gray"
+    }
 }
 
 /// 412000 -> "412k", 1500000 -> "1.5M"

@@ -61,6 +61,8 @@ final class PopoverViewController: NSViewController {
     private let parentsURL = URL(string: "http://127.0.0.1:8765/api/config/parents")!
     private let stack = NSStackView()
     private var onRescan: () -> Void = {}
+    private var lastStatus: StatusResponse?
+    private var quietExpanded = false
 
     init(statusURL: URL, onRescan: @escaping () -> Void) {
         self.statusURL = statusURL
@@ -138,6 +140,7 @@ final class PopoverViewController: NSViewController {
     }
 
     func show(status: StatusResponse) {
+        lastStatus = status
         let projects = status.projects ?? []
         var views: [NSView] = []
 
@@ -151,8 +154,42 @@ final class PopoverViewController: NSViewController {
         headRow.spacing = 8
         views.append(headRow)
 
-        for p in projects {
+        // Sort by health severity (red, amber, green), then name.
+        let sorted = projects.sorted { a, b in
+            if a.severity != b.severity { return a.severity < b.severity }
+            return a.displayProject.localizedCaseInsensitiveCompare(b.displayProject) == .orderedAscending
+        }
+
+        // "Needs you": one row per attention item across all projects.
+        let attentionPairs = sorted.flatMap { p in p.attentionItems.map { (item: $0, project: p) } }
+        if !attentionPairs.isEmpty {
+            views.append(makeLabel("NEEDS YOU", size: 11, weight: .semibold,
+                                   color: .secondaryLabelColor))
+            for pair in attentionPairs {
+                views.append(AttentionRowView(item: pair.item, project: pair.project,
+                                              dashboardURL: dashboardURL))
+            }
+        }
+
+        // Quiet projects collapse behind a disclosure row at the bottom.
+        let loud = sorted.filter { !$0.isQuiet }
+        let quiet = sorted.filter { $0.isQuiet }
+        for p in loud {
             views.append(ProjectCardView(project: p, dashboardURL: dashboardURL))
+        }
+        if !quiet.isEmpty {
+            let toggle = NSButton(
+                title: "\(quietExpanded ? "▾" : "▸") \(quiet.count) quiet project\(quiet.count == 1 ? "" : "s")",
+                target: self, action: #selector(toggleQuiet))
+            toggle.bezelStyle = .inline
+            toggle.setButtonType(.momentaryPushIn)
+            toggle.font = .systemFont(ofSize: 12)
+            views.append(toggle)
+            if quietExpanded {
+                for p in quiet {
+                    views.append(ProjectCardView(project: p, dashboardURL: dashboardURL))
+                }
+            }
         }
         if projects.isEmpty {
             views.append(makeLabel("No gsd-path projects under the watched folders.",
@@ -229,6 +266,10 @@ final class PopoverViewController: NSViewController {
     @objc private func rescanPressed() { onRescan() }
     @objc private func dashboardPressed() { DashboardWindowController.shared.show() }
     @objc private func pluginPressed() { DashboardWindowController.shared.show(pluginURL) }
+    @objc private func toggleQuiet() {
+        quietExpanded.toggle()
+        if let status = lastStatus { show(status: status) }
+    }
 
     @objc private func addFolderPressed() {
         let panel = NSOpenPanel()
@@ -284,7 +325,7 @@ final class ProjectCardView: NSView {
 
         // Top row: health dot + name + milestone + pill.
         let dot = DotView()
-        dot.color = healthColor(p.health)
+        dot.color = healthColor(p.effectiveHealth)
         dot.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([dot.widthAnchor.constraint(equalToConstant: 8),
                                      dot.heightAnchor.constraint(equalToConstant: 8)])
@@ -474,11 +515,59 @@ final class ProjectCardView: NSView {
     }
 
     @objc private func dashPressed() {
-        guard let root = project?.root, let base = dashboardURL else {
+        guard let base = dashboardURL else {
             DashboardWindowController.shared.show()
             return
         }
-        let encoded = root.addingPercentEncoding(withAllowedCharacters: .urlFragmentAllowed) ?? root
-        DashboardWindowController.shared.show(URL(string: "\(base.absoluteString)#project=\(encoded)"))
+        DashboardWindowController.shared.show(projectDeepLink(base: base, root: project?.root))
+    }
+}
+
+/// Dashboard deep link selecting a project by its (fragment-encoded) root.
+func projectDeepLink(base: URL, root: String?) -> URL {
+    guard let root = root else { return base }
+    let encoded = root.addingPercentEncoding(withAllowedCharacters: .urlFragmentAllowed) ?? root
+    return URL(string: "\(base.absoluteString)#project=\(encoded)") ?? base
+}
+
+// MARK: - "Needs you" attention row
+
+/// One attention item: kind pill in the project's health color, the item
+/// label, the project name. Clicking opens the project deep link in the
+/// native dashboard window.
+final class AttentionRowView: NSView {
+    private let url: URL
+
+    init(item: AttentionItem, project: ProjectStatus, dashboardURL: URL) {
+        url = projectDeepLink(base: dashboardURL, root: project.root)
+        super.init(frame: .zero)
+
+        let pill = makePill(item.kind ?? "?", textColor: healthColor(project.effectiveHealth))
+        let label = makeLabel(item.label ?? "?", size: 12)
+        label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        let name = makeLabel(project.displayProject, size: 11, color: .secondaryLabelColor)
+        name.setContentHuggingPriority(.required, for: .horizontal)
+        let row = NSStackView(views: [pill, label, name])
+        row.orientation = .horizontal
+        row.alignment = .centerY
+        row.spacing = 8
+        row.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(row)
+        NSLayoutConstraint.activate([
+            row.topAnchor.constraint(equalTo: topAnchor),
+            row.leadingAnchor.constraint(equalTo: leadingAnchor),
+            row.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor),
+            row.bottomAnchor.constraint(equalTo: bottomAnchor),
+        ])
+
+        let click = NSClickGestureRecognizer(target: self, action: #selector(openDashboard))
+        addGestureRecognizer(click)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError() }
+
+    @objc private func openDashboard() {
+        DashboardWindowController.shared.show(url)
     }
 }

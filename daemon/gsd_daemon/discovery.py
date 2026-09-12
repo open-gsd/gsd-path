@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import os
-from typing import Iterable, List
+import subprocess
+from typing import Dict, Iterable, List, Optional, Tuple
 
 from .probe import is_project_root
 
@@ -19,6 +20,38 @@ def _is_excluded(path: str, excludes: List[str]) -> bool:
     return False
 
 
+def _git_common_dir(root: str) -> Optional[str]:
+    try:
+        result = subprocess.run(
+            ["git", "-C", root, "rev-parse", "--git-common-dir"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if result.returncode != 0:
+        return None
+    common = result.stdout.strip()
+    if not common:
+        return None
+    if not os.path.isabs(common):
+        common = os.path.join(root, common)
+    return os.path.realpath(common)
+
+
+def _dedupe_rank(root: str) -> Tuple[int, int, str]:
+    return (0 if os.path.isdir(os.path.join(root, ".git")) else 1, len(root), root)
+
+
+def _dedupe_worktrees(roots: List[str]) -> List[str]:
+    groups: Dict[str, List[str]] = {}
+    for root in roots:
+        groups.setdefault(_git_common_dir(root) or root, []).append(root)
+    return [min(members, key=_dedupe_rank) for members in groups.values()]
+
+
 def scan(parents: Iterable[str], excludes: Iterable[str] = (), max_depth: int = 6) -> List[str]:
     excluded = _normalized(excludes)
     found: List[str] = []
@@ -26,7 +59,7 @@ def scan(parents: Iterable[str], excludes: Iterable[str] = (), max_depth: int = 
         if _is_excluded(parent, excluded) or not os.path.isdir(parent):
             continue
         _walk(parent, 0, max_depth, excluded, found)
-    return sorted(found)
+    return sorted(_dedupe_worktrees(found))
 
 
 def _walk(current: str, depth: int, max_depth: int,

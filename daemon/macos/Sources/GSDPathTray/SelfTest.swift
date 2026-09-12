@@ -20,7 +20,10 @@ func runSelfTest(urlString: String) -> Int32 {
     case .success(let status):
         for p in status.projects ?? [] {
             let next = p.nextSkillDisplay ?? "-"
-            print("\(p.displayProject) \(p.displayPhase)/\(p.displayStatus) tasks=\(p.done)/\(p.total) next=\(next)")
+            print("\(p.displayProject) \(p.displayPhase)/\(p.displayStatus) tasks=\(p.done)/\(p.total) next=\(next) health=\(healthName(p.effectiveHealth))")
+            for a in p.attentionItems {
+                print("attention \(p.displayProject) \(a.kind ?? "?") \(a.label ?? "?")")
+            }
         }
         if let plugin = status.plugin, plugin.update_available == true, let latest = plugin.latest {
             print("plugin-update-available \(latest)")
