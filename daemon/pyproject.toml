@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gsd-path-daemon"
+version = "0.1.0"
+description = "Progress-monitoring daemon and tray app for GSD Path projects"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+
+[project.optional-dependencies]
+tray = ["pystray", "Pillow"]
+
+[project.scripts]
+gsd-path-daemon = "gsd_daemon.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["gsd_daemon*"]
