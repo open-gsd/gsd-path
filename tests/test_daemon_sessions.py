@@ -1,8 +1,10 @@
 import json
+import os
 import sys
 from datetime import datetime, timezone
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "daemon"))
@@ -153,6 +155,39 @@ class SessionIndexTests(unittest.TestCase):
         third = sessions.SessionIndex([str(self.base / "codex")], cache_path=cache)
         third.scan([self.root])
         self.assertEqual(len(third.records_for(self.root)), 2)
+
+    def test_unresolved_head_retries_only_after_file_changes(self) -> None:
+        for change in ("size", "mtime"):
+            with self.subTest(change=change):
+                path = self.codex / "a.jsonl"
+                content = codex_rollout(self.root)
+                path.write_text(" " * len(content) if change == "mtime" else "", encoding="utf-8")
+                index = sessions.SessionIndex([str(self.codex)])
+                with mock.patch.object(sessions, "_read_head_cwd", wraps=sessions._read_head_cwd) as read:
+                    index.scan([self.root])
+                    self.assertEqual(index.records_for(self.root), [])
+                    read.reset_mock()
+                    index.scan([self.root])
+                    read.assert_not_called()
+                    before = path.stat()
+                    path.write_text(content, encoding="utf-8")
+                    mtime = before.st_mtime_ns + 1_000_000_000 if change == "mtime" else before.st_mtime_ns
+                    os.utime(path, ns=(before.st_atime_ns, mtime))
+                    index.scan([self.root])
+                    self.assertEqual(len(index.records_for(self.root)), 2)
+                    read.assert_called_once_with(path)
+
+    def test_persisted_unresolved_head_is_retried_on_restart(self) -> None:
+        cache = self.base / "sessions-index.json"
+        path = self.codex / "a.jsonl"
+        other = self.codex / "other.jsonl"
+        cache.write_text(json.dumps({str(path): None, str(other): str(self.base / "elsewhere")}), encoding="utf-8")
+        index = sessions.SessionIndex([str(self.codex)], cache_path=cache)
+        with mock.patch.object(sessions, "_read_head_cwd", wraps=sessions._read_head_cwd) as read:
+            index.scan([self.root])
+            read.assert_called_once_with(path)
+        self.assertEqual(len(index.records_for(self.root)), 2)
+        self.assertEqual(json.loads(cache.read_text())[str(path)], self.root)
 
     def test_spend_is_none_without_records(self) -> None:
         self.index.scan([str(self.base / "nothing")])

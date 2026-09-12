@@ -194,7 +194,7 @@ def run(config: Config = None, config_path=None, serve_port=None) -> None:
         icon.menu = build_menu()
         icon.update_menu()
 
-    watcher.poll_once()
+    watcher.poll_once(scan_sessions=False)
     projects = list(watcher.projects.values())
     if serve_port is not None:
         server, _dashboard_thread = serve_in_thread(watcher, port=serve_port)

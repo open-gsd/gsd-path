@@ -210,6 +210,7 @@ class SessionIndex:
         # path -> cwd read from the file head; persisted so a daemon restart
         # does not re-read the head of every session file on the machine.
         self._cwd: Dict[str, Optional[str]] = self._load_cache()
+        self._unresolved: Dict[str, Tuple[int, int]] = {}
         self._parsed: Dict[str, Tuple[Tuple[int, float], List[dict]]] = {}
 
     def _load_cache(self) -> Dict[str, Optional[str]]:
@@ -221,7 +222,7 @@ class SessionIndex:
             return {}
         if not isinstance(data, dict):
             return {}
-        return {k: v for k, v in data.items() if isinstance(k, str) and (v is None or isinstance(v, str))}
+        return {k: v for k, v in data.items() if isinstance(k, str) and isinstance(v, str)}
 
     def _save_cache(self) -> None:
         if self.cache_path is None:
@@ -230,7 +231,7 @@ class SessionIndex:
             self.cache_path.parent.mkdir(parents=True, exist_ok=True)
             fd, tmp = tempfile.mkstemp(prefix=self.cache_path.name + ".", dir=str(self.cache_path.parent))
             with os.fdopen(fd, "w", encoding="utf-8") as handle:
-                json.dump(self._cwd, handle)
+                json.dump({k: v for k, v in self._cwd.items() if v is not None}, handle)
             os.replace(tmp, self.cache_path)
         except OSError:
             pass
@@ -257,9 +258,19 @@ class SessionIndex:
         new_heads = 0
         for path in self._files():
             key = str(path)
-            if key not in self._cwd:
-                self._cwd[key] = _read_head_cwd(path)
-                new_heads += 1
+            if self._cwd.get(key) is None:
+                try:
+                    stat = path.stat()
+                except OSError:
+                    continue
+                head_stamp = (stat.st_size, stat.st_mtime_ns)
+                if self._unresolved.get(key) != head_stamp:
+                    self._cwd[key] = _read_head_cwd(path)
+                    if self._cwd[key] is None:
+                        self._unresolved[key] = head_stamp
+                    else:
+                        self._unresolved.pop(key, None)
+                    new_heads += 1
             root = self._owner(self._cwd[key], roots)
             if root is None:
                 continue
