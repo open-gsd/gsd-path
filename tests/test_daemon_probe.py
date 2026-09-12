@@ -778,3 +778,11 @@ class ProbeNewFieldsTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AttentionContextTests(unittest.TestCase):
+    def test_runtime_answer_uses_merged_question(self):
+        status = ProjectStatus(root="/sample", pending_answers=[{"answer": "A012"}],
+                               answers=[{"id": "A012", "question": "Which API?"}])
+        self.assertEqual(probe.compute_attention(status)[0],
+                         {"kind": "question", "label": "Which API?", "ref": "A012"})

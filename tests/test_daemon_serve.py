@@ -167,8 +167,7 @@ class ServeTests(unittest.TestCase):
         for marker in ("gsd-path daemon", "class=\"tabs\"", "Overview", "Activity",
                        "Usage", "Plugin", "Needs you", "healthbadge",
                        "VERIFY", "DISCUSSION",
-                       "fetch(\"/status\")", "setInterval(refresh, 5000)",
-                       "&tab="):
+                       "fetch(\"/status\")", "setInterval(refresh, 5000)"):
             self.assertIn(marker, html)
         self.assertNotIn("PROTOTYPE", html)
         self.assertNotIn("switcher", html)

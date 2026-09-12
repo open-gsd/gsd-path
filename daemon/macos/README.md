@@ -1,8 +1,7 @@
 # GSDPathTray — native macOS menu-bar app for the gsd-path daemon
 
-Renders per-project progress cards in an `NSPopover` from the daemon's
-`http://127.0.0.1:8765/status` JSON (polled every 5 s). Layout follows
-Variant B of `../prototype-ui.html`.
+Renders compact project rows in an `NSPopover` from the daemon's
+`http://127.0.0.1:8765/status` JSON (polled every 5 s). The dropdown follows the selected menu-bar design and adapts to the native system appearance.
 
 ## Requirements
 
@@ -31,12 +30,17 @@ icon), and ad-hoc signs it. Idempotent; prints the resulting `.app` path.
 open build/GSDPathTray.app
 ```
 
-Click the menu-bar icon to open the popover. The icon dot shows aggregate
-health (red = any blocked project, yellow = pending answers or dirty git,
-green = clean, gray = daemon offline); the title shows `<done>/<total>`
-task counts across non-shipped projects. Card actions: Reveal in Finder,
-copy next-skill invocation (`$gsd-path-…`), open the dashboard
-(`http://localhost:8765`). Footer: Open Dashboard, Rescan, Quit.
+Click the menu-bar icon to open the dropdown. The icon uses an aggregate
+progress ring and an attention badge; offline it becomes a gray ring. The
+dropdown shows connection state, watched-project count, and an attention summary
+that opens the dashboard's Attention filter. All projects remain visible,
+ordered by health and name, including projects that do not have tasks yet.
+
+Each row shows phase/milestone, task progress when available, and the first
+attention item. Click the project name to open its dashboard workspace. The
+Actions menu reveals its folder or copies the next command when supplied, with
+copy feedback. The fixed footer keeps dashboard, plugin, watched-folder, daemon
+lifecycle, rescan, and quit controls outside the scrolling project list.
 
 ## Self-test (no GUI required)
 
@@ -53,4 +57,22 @@ manual testing when the real daemon is not running:
 
 ```sh
 python3 stub_server.py
+```
+
+## UI acceptance checks
+
+From the repository root, compile the real AppKit views with the test entry point:
+
+```sh
+swiftc -o /tmp/gsd-tray-ui-test $(rg --files daemon/macos/Sources/GSDPathTray | rg '\.swift$' | rg -v '/main.swift$') tests/daemon_tray_ui.swift
+/tmp/gsd-tray-ui-test
+```
+
+Pass `--preview` to the test binary to inspect the real views using sample data
+in a temporary window. Stop that test process when finished.
+
+The dashboard browser test uses Orca's embedded browser and the real HTTP handler:
+
+```sh
+GSD_UI_TEST=1 python3 -m unittest discover -s tests -p test_daemon_inbox_ui.py
 ```

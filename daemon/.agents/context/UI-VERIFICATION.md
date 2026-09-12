@@ -1,0 +1,134 @@
+# Attention inbox and menu-bar implementation
+
+## Contract
+Implement selected design 2 and the compact native menu-bar dropdown using the
+existing daemon status payload and existing management actions.
+
+## Changed code and proof
+- `daemon/gsd_daemon/serve.py`: attention inbox, project filters, detail pane,
+  health strip, URL navigation, settings access, explicit offline state.
+  Exercised through the real HTTP handler by `tests/test_daemon_inbox_ui.py`.
+- `daemon/macos/Sources/GSDPathTray/PopoverViewController.swift`: compact rows,
+  attention summary, visible pre-plan projects, settings and project links.
+  Exercised by `tests/daemon_tray_ui.swift` using real AppKit controls.
+- `tests/test_daemon_serve.py`: removed the obsolete literal `&tab=` source
+  assertion. The browser test now verifies navigation and reload behavior.
+
+## RED
+On the original implementation at HEAD `472244e`:
+- `GSD_UI_TEST=1 python3 -m unittest discover -s tests -p test_daemon_inbox_ui.py`
+  exited 1: `What needs you` was absent; the old project overview rendered.
+- Compile the native test using the command in `daemon/macos/README.md`, then
+  `/tmp/gsd-tray-ui-test`: exited 1, `compact watched-project count`.
+
+## GREEN
+- `GSD_UI_TEST=1 python3 -m unittest discover -s tests -p 'test_daemon_*.py'`:
+  157 tests passed, including the embedded-browser acceptance test.
+- Native compile and `/tmp/gsd-tray-ui-test`: passed project order, task counts,
+  attention summary, settings, rescan callback, encoded project link,
+  empty state, offline state and retry callback.
+- `bash daemon/macos/build.sh`: built and signed `GSDPathTray.app`.
+- `git diff --check`: passed.
+
+## Sabotage
+- Temporarily forced filter selection to `all`; ran the inbox test above.
+  Exit 1: Atlas API incorrectly remained in Running.
+- Temporarily changed `attentionCount > 0` to `attentionCount < 0`; compiled
+  and ran the native test above. Exit 1: `attention summary action`.
+- Restored both files before the final passing runs.
+
+## Visual review
+Viewed the rendered dashboard in Orca's embedded browser and the real AppKit
+view in a temporary native window. Rechecked corrected tab spacing (22px).
+At a 390px viewport, the dashboard document width was also 390px, with no
+horizontal page overflow. Native controls follow system light/dark appearance.
+Sample data is limited to the test fixtures. No new runtime dependencies.
+
+## Scope
+Local implementation and app build. No installation, commit, push or PR.
+
+## Studio restyle
+Reference: `/Users/jeremymcspadden/github/open-gsd/gsd-cloud/web/app/globals.css`
+and `docs/design.md`. Applied its exact light/dark palette, left rail, spacing,
+indigo selection and monospace metadata to the dashboard and native dropdown.
+
+Proof for `serve.py` and `PopoverViewController.swift`:
+- RED: browser test failed on the former warm background; native test failed
+  with `Studio dark surface` before implementation.
+- GREEN: `GSD_UI_TEST=1 python3 -m unittest discover -s tests -p test_daemon_inbox_ui.py`
+  passed; `python3 -m unittest discover -s tests -p test_daemon_serve.py` passed 13 tests.
+- GREEN: compiled `tests/daemon_tray_ui.swift` with the app sources excluding
+  `main.swift`; the binary passed, including its new rendered dark-surface check.
+- Sabotage: replacing the web light background with black failed the browser
+  assertion; replacing the native dark background with black failed its assertion.
+  Both restored before final passing checks. No runtime dependencies added.
+- Built the native app and reinstalled the local daemon package; restarted the
+  daemon and launched the rebuilt tray. Viewed the live dashboard in Orca and
+  the real native views in a temporary test window. The test window was closed.
+
+Earlier Claude review findings remain open; this change addresses visual design.
+
+## Compact dashboard sizing
+User screenshot showed excessive dashboard spacing. Kept the Studio palette and
+14px body text; reused its 16px section heading and 10px/14px row padding.
+Reused the existing responsive widths (190px navigation, 240px project list) for
+desktop. Removed the redundant eyebrow and tightened detail spacing.
+
+- Browser test: RED at 24px heading versus intended 16px; GREEN after change.
+- Sabotage: restored 24px heading temporarily; assertion failed, then restored
+  compact CSS and passed the browser test again.
+- Focused server tests: 13 passed. `git diff --check` passed.
+- Ponytail review: CSS and redundant label only; reused existing layout and
+  spacing values, with no dependencies or new layout abstractions.
+- Installed local daemon and restarted launchd; inspected live Orca screenshot.
+- At 1422x959 viewport, header decreased from 129.6px to 65.1px; rail from
+  244px to 190px; detail pane increased from 830px to 960px.
+- At 390px viewport, document width was 390px (no horizontal overflow).
+- Native dropdown unchanged. Existing Claude review findings remain open.
+
+## Scroll continuity and layout
+Reproduced expanded detail closing and scroll resetting during refresh in a
+900x600 browser frame (native minimum window dimensions). Browser regression
+failed before implementation, passed after, failed again when restoration was
+sabotaged, and passed after restoration. Focused server tests: 13 passed.
+Removed the duplicate health footer; bounded both panes with min-height:0 and
+made them keyboard focusable. Restore expansion and scroll only for the same
+view/filter/project/tab. Empty focus datasets no longer match the first button.
+Ponytail review: use native scrolling and existing render path, no dependencies.
+Installed and restarted local daemon. Inspected live expanded/scrolled dashboard
+in Orca; expansion and scroll survived polling. Native wheel input was not tested.
+
+## Unified project workspace and review fixes
+Removed overlapping Inbox/Projects/Activity navigation. Kept project tabs,
+rendered all attention items, restored path/copy, removed repeated overview
+sections, made unknown verification neutral, and distinguished initial loading.
+Cold links retain their requested project while loading; refresh retains focused
+controls and panes for the same project view. Runtime attention uses merged
+answer context. Native rows have one opening action and an Actions menu; footer
+controls remain outside the scroll area; copy feedback and icon accessibility
+labels added.
+
+Proof: browser acceptance passed; probe tests 41 passed; server tests 13 passed;
+AppKit harness passed. Sabotage caught cold-link fallback, missing merged answer
+context, and missing native copy feedback. Restored all before final passing
+checks. Browser checks include multiple attention items, neutral unknown result,
+project path, cold reload, focus/scroll retention. Native checks include fixed
+Dashboard control and actual clipboard copy. Ponytail review kept existing
+renderer and native controls, with no new dependencies.
+Built and relaunched native app; installed local daemon and restarted launchd.
+Inspected live dashboard after reload: Projects/Plugin navigation and requested
+report-dashboard selection. Inspected native test window; closed it afterwards.
+
+## Remove navigation rail
+Replaced the left rail with a top toolbar containing the project-home action,
+connection state and Settings disclosure. Plugin and Watched Folders remain
+reachable through Settings; expanded menu survives polling and Escape closes it.
+The project workspace now occupies the full width. Ponytail review used native
+details/summary and the existing navigation handler; no new dependencies.
+
+Browser acceptance: RED with the old rail, GREEN with toolbar; sabotage disabled
+menu-state restoration and failed the assertion. Restored final browser run
+passed. An intermediate run failed in the browser tool during navigation; final
+rerun passed. Server tests: 13 passed. Live 390px frame: document width 390px.
+Installed local package, restarted launchd, reloaded live browser. Screenshot
+capture reported visibility timeout; rendered browser assertions are the proof.

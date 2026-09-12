@@ -73,6 +73,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let total = active.reduce(0) { $0 + $1.total }
             let fraction = total > 0 ? Double(done) / Double(total) : 0
             let badge = projects.contains { !$0.attentionItems.isEmpty }
+            let description = "GSD Path: \(projects.count) projects, \(projects.filter { !$0.attentionItems.isEmpty }.count) need attention"
+            button.toolTip = description
+            button.setAccessibilityLabel(description)
             button.title = ""
             button.image = makeRingIcon(fraction: fraction, arcColor: healthColor(aggregate), badge: badge)
             vc.show(status: status)
@@ -80,6 +83,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             online = false
             button.title = ""
             button.image = makeRingIcon(fraction: 0, arcColor: nil)
+            button.toolTip = "GSD Path: daemon offline"
+            button.setAccessibilityLabel("GSD Path: daemon offline")
             vc.showOffline()
         }
     }

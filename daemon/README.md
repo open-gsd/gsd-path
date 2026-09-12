@@ -107,39 +107,28 @@ gsd-path-daemon plugin <status|install|update|uninstall>          # manage the s
   schema below). Also consumed by the native macOS app.
 - `GET /activity` — recent events from `history.jsonl`, newest first.
 - `GET /` — a self-contained dashboard (inline CSS/JS, no build step) that
-  polls `/status` and `/activity` every 5 seconds.
+  polls `/status` every 5 seconds.
 
-The dashboard has a clickable project sidebar (health dot, phase, task
-counts, pending-answer badge, watched folders, daemon status), seven
-tabs per project, and one daemon-level Plugin tab (see below):
+The dashboard uses the GSD Cloud Studio theme (system light/dark) and a
+single project workspace:
 
-- **Overview** — phase stepper, stat cards (tasks, time in phase, pending
-  answers, git state), next action with a copy-to-clipboard `$gsd-path-*`
-  affordance, and the recent verify ledger.
-- **Tasks** — wave-grouped task table with status pills and declared files.
-- **Reviews** — wave/final/gap/patch review verdicts parsed from
-  `.project/review/*.md`, plus per-criterion verdicts from `FINAL.md`.
-- **Discussion** — pending discussion records (id, question, owner, status,
-  thread, target artifact).
-- **Usage** — token/cost totals by model, phase, and task. Rendered only
-  when a usage ledger exists; otherwise an empty state names the opt-in
-  file (see below).
-- **Activity** — per-project events from the daemon's `history.jsonl`.
-- **Roadmap** — milestones from `ROADMAP.md` with status and archive paths.
+- A slim top toolbar contains the project-home action, connection status, and
+  **Settings** menu for Plugin and Watched Folders.
+- **Attention**, **Active**, and **All projects** filters control the project list.
+- Each project has **Overview**, **Activity**, and **Usage** tabs. Overview shows
+  its path, attention items, next-command copy action, recorded verification,
+  and expandable progress, success criteria, and roadmap.
+- The project list and detail pane scroll independently. Refresh preserves
+  scroll position, expanded details, and focus within the same project view.
 
-Skill ids render in short uppercase form (`gsd-path-forensics` →
-`FORENSICS`); the raw `$gsd-path-*` form appears only in copy
-affordances.
+Navigation and filters survive reload through the URL fragment. Native project
+links select the same project in the dashboard. `#plugin` and `#folders` open
+settings directly; the GSD Path toolbar button returns to projects.
+Connection status changes to Offline after a failed status request; the last
+received data remains visible with an explicit offline label.
 
-An eighth **Plugin** tab (daemon-level, not per-project) shows the plugin
-lifecycle view: installed versions vs the latest known version with an
-"Update available" pill and Update button, a per-host table (root, version,
-status, Install/Update/Uninstall actions, plus "Install for all detected
-hosts"), and a watched-projects section with per-project
-contracts/runtime/local-skill pills and Install/Update/Uninstall buttons.
-Uninstall is a two-step flow: the first click fetches a dry-run plan and
-opens a modal listing every path to remove (with reasons) and everything
-skipped; confirming posts the destructive call.
+Skill ids render in short uppercase form; copy actions keep the original
+`$gsd-path-*` command. The dashboard does not execute pipeline commands.
 
 ## Plugin lifecycle
 

@@ -1,5 +1,27 @@
 import AppKit
 
+// Studio palette from gsd-cloud/web/app/globals.css.
+func studioColor(light: Int, dark: Int) -> NSColor {
+    NSColor(name: nil) { appearance in
+        let value = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? dark : light
+        return NSColor(srgbRed: CGFloat((value >> 16) & 255) / 255,
+                       green: CGFloat((value >> 8) & 255) / 255,
+                       blue: CGFloat(value & 255) / 255, alpha: 1)
+    }
+}
+let studioText = studioColor(light: 0x14161a, dark: 0xeceef2)
+let studioAccent = studioColor(light: 0x4f5fe0, dark: 0x7c8cff)
+
+final class StudioSurface: NSView {
+    override var wantsUpdateLayer: Bool { true }
+    override func updateLayer() {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            layer?.backgroundColor = studioColor(light: 0xf7f8fa, dark: 0x0c0d10).cgColor
+        }
+    }
+    override func viewDidChangeEffectiveAppearance() { needsDisplay = true }
+}
+
 // MARK: - Small view building blocks
 
 final class DotView: NSView {
@@ -10,23 +32,8 @@ final class DotView: NSView {
     }
 }
 
-final class BarView: NSView {
-    var fraction: Double = 0 { didSet { needsDisplay = true } }
-    var fillColor: NSColor = .systemGreen { didSet { needsDisplay = true } }
-    override func draw(_ dirtyRect: NSRect) {
-        NSColor.gray.withAlphaComponent(0.3).setFill()
-        NSBezierPath(roundedRect: bounds, xRadius: 2.5, yRadius: 2.5).fill()
-        let w = bounds.width * CGFloat(max(0, min(1, fraction)))
-        if w > 0 {
-            fillColor.setFill()
-            NSBezierPath(roundedRect: NSRect(x: 0, y: 0, width: w, height: bounds.height),
-                         xRadius: 2.5, yRadius: 2.5).fill()
-        }
-    }
-}
-
 func makeLabel(_ text: String, size: CGFloat, weight: NSFont.Weight = .regular,
-               color: NSColor = .labelColor) -> NSTextField {
+               color: NSColor = studioText) -> NSTextField {
     let f = NSTextField(labelWithString: text)
     f.font = .systemFont(ofSize: size, weight: weight)
     f.textColor = color
@@ -45,9 +52,9 @@ func makePill(_ text: String, textColor: NSColor) -> NSTextField {
 
 func healthColor(_ h: Health) -> NSColor {
     switch h {
-    case .green: return .systemGreen
-    case .yellow: return .systemYellow
-    case .red: return .systemRed
+    case .green: return studioColor(light: 0x0d7d53, dark: 0x3ddc97)
+    case .yellow: return studioColor(light: 0x7c5205, dark: 0xf5b544)
+    case .red: return studioColor(light: 0xb23a2c, dark: 0xff6b5e)
     case .gray: return .systemGray
     }
 }
@@ -60,9 +67,8 @@ final class PopoverViewController: NSViewController {
     private let pluginURL = URL(string: "http://localhost:8765/#plugin")!
     private let parentsURL = URL(string: "http://127.0.0.1:8765/api/config/parents")!
     private let stack = NSStackView()
+    private let controls = NSStackView()
     private var onRescan: () -> Void = {}
-    private var lastStatus: StatusResponse?
-    private var quietExpanded = false
 
     init(statusURL: URL, onRescan: @escaping () -> Void) {
         self.statusURL = statusURL
@@ -90,14 +96,24 @@ final class PopoverViewController: NSViewController {
         doc.addSubview(stack)
         scroll.documentView = doc
 
-        let content = NSView()
+        let content = StudioSurface()
+        content.wantsLayer = true
         content.addSubview(scroll)
+        controls.orientation = .vertical
+        controls.alignment = .leading
+        controls.spacing = 8
+        controls.edgeInsets = NSEdgeInsets(top: 8, left: 14, bottom: 12, right: 14)
+        controls.translatesAutoresizingMaskIntoConstraints = false
+        content.addSubview(controls)
         scroll.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
             scroll.topAnchor.constraint(equalTo: content.topAnchor),
             scroll.leadingAnchor.constraint(equalTo: content.leadingAnchor),
             scroll.trailingAnchor.constraint(equalTo: content.trailingAnchor),
-            scroll.bottomAnchor.constraint(equalTo: content.bottomAnchor),
+            scroll.bottomAnchor.constraint(equalTo: controls.topAnchor),
+            controls.leadingAnchor.constraint(equalTo: content.leadingAnchor),
+            controls.trailingAnchor.constraint(equalTo: content.trailingAnchor),
+            controls.bottomAnchor.constraint(equalTo: content.bottomAnchor),
             stack.topAnchor.constraint(equalTo: doc.topAnchor),
             stack.leadingAnchor.constraint(equalTo: doc.leadingAnchor),
             stack.trailingAnchor.constraint(equalTo: doc.trailingAnchor),
@@ -111,7 +127,7 @@ final class PopoverViewController: NSViewController {
 
     func showOffline() {
         rebuild {
-            let title = makeLabel("gsd-path", size: 15, weight: .bold)
+            let title = makeLabel("GSD Path", size: 20, weight: .bold)
             let msg = makeLabel("daemon not reachable on 127.0.0.1:8765", size: 12,
                                 color: .secondaryLabelColor)
             let cmd = makeLabel("python3 -m gsd_daemon serve", size: 12)
@@ -135,24 +151,23 @@ final class PopoverViewController: NSViewController {
             buttons.spacing = 8
             let daemonRow = DaemonRowView()
             daemonRow.onRescan = onRescan
-            return [title, msg, hint, cmd, daemonRow, buttons]
+            return [title, makeLabel("Offline", size: 12, color: .systemRed), msg, hint, cmd, daemonRow, buttons]
         }
     }
 
     func show(status: StatusResponse) {
-        lastStatus = status
         let projects = status.projects ?? []
         var views: [NSView] = []
 
-        // Header: project count + generated_at time.
-        let header = makeLabel("gsd-path", size: 15, weight: .bold)
+        let header = makeLabel("GSD Path", size: 16, weight: .semibold)
+        header.textColor = studioAccent
+        let connected = makeLabel("Connected", size: 12, color: .systemGreen)
+        let count = makeLabel("\(projects.count) watched project\(projects.count == 1 ? "" : "s")", size: 12)
         let stamp = generatedStamp(status.generated_at)
-        let sub = makeLabel("\(projects.count) project\(projects.count == 1 ? "" : "s")\(stamp.map { " · updated \($0)" } ?? "")",
-                            size: 11, color: .secondaryLabelColor)
-        let headRow = NSStackView(views: [header, sub])
-        headRow.alignment = .firstBaseline
-        headRow.spacing = 8
-        views.append(headRow)
+        let updated = makeLabel(stamp.map { "Updated \($0)" } ?? "Update time unavailable", size: 11, color: .secondaryLabelColor)
+        let sub = NSStackView(views: [count, updated])
+        sub.distribution = .equalSpacing
+        views += [header, connected, separator(), sub]
 
         // Sort by health severity (red, amber, green), then name.
         let sorted = projects.sorted { a, b in
@@ -160,41 +175,20 @@ final class PopoverViewController: NSViewController {
             return a.displayProject.localizedCaseInsensitiveCompare(b.displayProject) == .orderedAscending
         }
 
-        // "Needs you": one row per attention item across all projects.
-        let attentionPairs = sorted.flatMap { p in p.attentionItems.map { (item: $0, project: p) } }
-        if !attentionPairs.isEmpty {
-            views.append(makeLabel("NEEDS YOU", size: 11, weight: .semibold,
-                                   color: .secondaryLabelColor))
-            for pair in attentionPairs {
-                views.append(AttentionRowView(item: pair.item, project: pair.project,
-                                              dashboardURL: dashboardURL))
-            }
+        let attentionCount = sorted.reduce(0) { $0 + $1.attentionItems.count }
+        if attentionCount > 0 {
+            let attention = NSButton(title: "\(attentionCount) item\(attentionCount == 1 ? "" : "s") needs you  ›", target: self, action: #selector(attentionPressed))
+            attention.bezelStyle = .rounded
+            attention.contentTintColor = .systemOrange
+            views.append(attention)
         }
-
-        // Quiet projects collapse behind a disclosure row at the bottom.
-        let loud = sorted.filter { !$0.isQuiet }
-        let quiet = sorted.filter { $0.isQuiet }
-        for p in loud {
-            views.append(ProjectCardView(project: p, dashboardURL: dashboardURL))
-        }
-        if !quiet.isEmpty {
-            let toggle = NSButton(
-                title: "\(quietExpanded ? "▾" : "▸") \(quiet.count) quiet project\(quiet.count == 1 ? "" : "s")",
-                target: self, action: #selector(toggleQuiet))
-            toggle.bezelStyle = .inline
-            toggle.setButtonType(.momentaryPushIn)
-            toggle.font = .systemFont(ofSize: 12)
-            views.append(toggle)
-            if quietExpanded {
-                for p in quiet {
-                    views.append(ProjectCardView(project: p, dashboardURL: dashboardURL))
-                }
-            }
+        for project in sorted {
+            views.append(ProjectRowView(project: project, dashboardURL: dashboardURL))
         }
         if projects.isEmpty {
-            views.append(makeLabel("No gsd-path projects under the watched folders.",
-                                   size: 12, color: .secondaryLabelColor))
+            views.append(makeLabel("No projects in your watched folders.", size: 12, color: .secondaryLabelColor))
         }
+        views.append(separator())
 
         // Plugin update row, only when the daemon reports one.
         if let plugin = status.plugin, plugin.update_available == true, let latest = plugin.latest {
@@ -212,32 +206,33 @@ final class PopoverViewController: NSViewController {
             views.append(update)
         }
 
-        // Daemon lifecycle row, just above the watched-folder action.
+        var footerViews: [NSView] = []
+        let dash = NSButton(title: "Open Dashboard", target: self, action: #selector(dashboardPressed))
+        let plugin = NSButton(title: "Plugin settings…", target: self, action: #selector(pluginPressed))
+        let folders = NSButton(title: "Watched folders…", target: self, action: #selector(foldersPressed))
+        for button in [dash, plugin, folders] {
+            button.bezelStyle = .inline
+            button.isBordered = false
+            button.alignment = .left
+            button.font = .systemFont(ofSize: 13)
+            footerViews.append(button)
+        }
         let daemonRow = DaemonRowView()
         daemonRow.onRescan = onRescan
-        views.append(daemonRow)
-
-        // Watched-folder action, on its own row just above the footer.
-        let addFolder = NSButton(title: "Add Watched Folder…", target: self, action: #selector(addFolderPressed))
-        addFolder.bezelStyle = .rounded
-        views.append(addFolder)
-
-        // Footer row: Open Dashboard, Rescan, Quit.
-        let dash = NSButton(title: "Open Dashboard", target: self, action: #selector(dashboardPressed))
-        dash.bezelStyle = .rounded
+        footerViews.append(daemonRow)
         let rescan = NSButton(title: "Rescan", target: self, action: #selector(rescanPressed))
-        rescan.bezelStyle = .rounded
         let quit = NSButton(title: "Quit", target: self, action: #selector(quitPressed))
-        quit.bezelStyle = .rounded
-        let footer = NSStackView(views: [dash, rescan, quit])
-        footer.orientation = .horizontal
-        footer.spacing = 8
-        views.append(footer)
+        for button in [rescan, quit] { button.bezelStyle = .inline }
+        let footer = NSStackView(views: [rescan, quit])
+        footer.distribution = .equalSpacing
+        footerViews.append(footer)
 
-        rebuild { views }
+        rebuild(footer: footerViews) { views }
     }
 
-    private func rebuild(_ makeViews: () -> [NSView]) {
+    private func rebuild(footer: [NSView] = [], _ makeViews: () -> [NSView]) {
+        for v in controls.arrangedSubviews { controls.removeArrangedSubview(v); v.removeFromSuperview() }
+        for v in footer { controls.addArrangedSubview(v) }
         for v in stack.arrangedSubviews { stack.removeArrangedSubview(v); v.removeFromSuperview() }
         for v in makeViews() {
             stack.addArrangedSubview(v)
@@ -245,8 +240,8 @@ final class PopoverViewController: NSViewController {
                                      constant: -(stack.edgeInsets.left + stack.edgeInsets.right)).isActive = true
         }
         stack.layoutSubtreeIfNeeded()
-        let contentHeight = stack.fittingSize.height
-        preferredContentSize = NSSize(width: 400, height: min(max(contentHeight, 120), 600))
+        let contentHeight = stack.fittingSize.height + controls.fittingSize.height
+        preferredContentSize = NSSize(width: 440, height: min(max(contentHeight, 120), NSScreen.main.map { $0.visibleFrame.height } ?? 600))
     }
 
     private func generatedStamp(_ iso: String?) -> String? {
@@ -266,9 +261,11 @@ final class PopoverViewController: NSViewController {
     @objc private func rescanPressed() { onRescan() }
     @objc private func dashboardPressed() { DashboardWindowController.shared.show() }
     @objc private func pluginPressed() { DashboardWindowController.shared.show(pluginURL) }
-    @objc private func toggleQuiet() {
-        quietExpanded.toggle()
-        if let status = lastStatus { show(status: status) }
+    @objc private func foldersPressed() {
+        DashboardWindowController.shared.show(URL(string: "http://localhost:8765/#folders")!)
+    }
+    @objc private func attentionPressed() {
+        DashboardWindowController.shared.show(URL(string: "http://localhost:8765/#filter=attention")!)
     }
 
     @objc private func addFolderPressed() {
@@ -297,20 +294,24 @@ final class PopoverViewController: NSViewController {
     @objc private func quitPressed() { NSApplication.shared.terminate(nil) }
 }
 
-// MARK: - Project card (prototype variant B)
+private func separator() -> NSBox {
+    let line = NSBox()
+    line.boxType = .separator
+    return line
+}
 
-final class ProjectCardView: NSView {
+// MARK: - Compact project row
+
+final class ProjectRowView: NSView {
     init(project p: ProjectStatus, dashboardURL: URL) {
         super.init(frame: .zero)
-        wantsLayer = true
-        layer?.cornerRadius = 10
-        layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
-
+        self.project = p
+        self.dashboardURL = dashboardURL
         let stack = NSStackView()
         stack.orientation = .vertical
         stack.alignment = .leading
-        stack.spacing = 6
-        stack.edgeInsets = NSEdgeInsets(top: 11, left: 12, bottom: 11, right: 12)
+        stack.spacing = 7
+        stack.edgeInsets = NSEdgeInsets(top: 10, left: 14, bottom: 10, right: 14)
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
         NSLayoutConstraint.activate([
@@ -319,181 +320,45 @@ final class ProjectCardView: NSView {
             stack.trailingAnchor.constraint(equalTo: trailingAnchor),
             stack.bottomAnchor.constraint(equalTo: bottomAnchor),
         ])
-        let fullWidth = { (v: NSView) in
-            v.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -24).isActive = true
-        }
-
-        // Top row: health dot + name + milestone + pill.
-        let dot = DotView()
-        dot.color = healthColor(p.effectiveHealth)
-        dot.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([dot.widthAnchor.constraint(equalToConstant: 8),
-                                     dot.heightAnchor.constraint(equalToConstant: 8)])
-        let name = makeLabel(p.displayProject, size: 14, weight: .bold)
-        let ms = makeLabel(p.milestone.map { "M· \($0)" } ?? "—", size: 11, color: .secondaryLabelColor)
-        let pill: NSTextField
-        if p.status == "blocked" {
-            pill = makePill("blocked", textColor: .systemRed)
-        } else if p.isShipped {
-            pill = makePill("shipped", textColor: .systemBlue)
-        } else {
-            pill = makePill(p.displayPhase, textColor: .systemGreen)
-        }
-        let top = NSStackView(views: [dot, name, ms, pill])
-        top.orientation = .horizontal
-        top.alignment = .centerY
-        top.spacing = 8
+        let name = NSButton(title: p.displayProject + "  ›", target: self, action: #selector(dashPressed))
+        name.bezelStyle = .inline
+        name.isBordered = false
+        name.font = .systemFont(ofSize: 14, weight: .semibold)
+        name.alignment = .left
+        name.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        let hasQuestion = p.attentionItems.contains { $0.kind == "question" }
+        let status = p.status == "blocked" ? "Blocked" : hasQuestion ? "Needs input" : p.isShipped ? "Shipped" : p.displayPhase.capitalized
+        let pill = makePill(status, textColor: healthColor(p.effectiveHealth))
+        let top = NSStackView(views: [name, pill])
+        top.distribution = .fill
+        top.spacing = 10
         stack.addArrangedSubview(top)
-        fullWidth(top)
-
-        // 8-segment phase stepper.
-        let idx = canonicalPhases.firstIndex(of: p.phase ?? "")
-        let steps = NSStackView()
-        steps.orientation = .horizontal
-        steps.spacing = 3
-        steps.distribution = .fillEqually
-        for i in 0..<canonicalPhases.count {
-            let seg = NSView()
-            seg.wantsLayer = true
-            seg.layer?.cornerRadius = 2
-            if p.isShipped || (idx != nil && i < idx!) {
-                seg.layer?.backgroundColor = NSColor.systemGreen.cgColor
-            } else if idx != nil && i == idx! {
-                seg.layer?.backgroundColor = (p.status == "blocked" ? NSColor.systemRed : NSColor.systemBlue).cgColor
-            } else {
-                seg.layer?.backgroundColor = NSColor.gray.withAlphaComponent(0.35).cgColor
-            }
-            seg.translatesAutoresizingMaskIntoConstraints = false
-            seg.heightAnchor.constraint(equalToConstant: 4).isActive = true
-            steps.addArrangedSubview(seg)
-        }
-        stack.addArrangedSubview(steps)
-        fullWidth(steps)
-
-        // Step labels: inspect … decide … build … ship.
-        let labels = ["inspect", "decide", "build", "ship"].map {
-            makeLabel($0, size: 10, color: .tertiaryLabelColor)
-        }
-        let labelRow = NSStackView()
-        labelRow.orientation = .horizontal
-        labelRow.distribution = .equalSpacing
-        for l in labels { labelRow.addArrangedSubview(l) }
-        stack.addArrangedSubview(labelRow)
-        fullWidth(labelRow)
-
-        // Tasks progress.
+        top.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -28).isActive = true
+        let context = [p.milestone, p.phase?.capitalized, p.current_wave.map { "Wave \($0)" }].compactMap { $0 }.joined(separator: " · ")
+        let contextLabel = makeLabel(context, size: 12.5, color: .secondaryLabelColor)
+        contextLabel.font = .monospacedSystemFont(ofSize: 12.5, weight: .regular)
+        stack.addArrangedSubview(contextLabel)
         if p.total > 0 {
-            let bar = BarView()
-            bar.fraction = Double(p.done) / Double(p.total)
-            bar.fillColor = p.status == "blocked" ? .systemRed : .systemGreen
-            bar.translatesAutoresizingMaskIntoConstraints = false
-            bar.heightAnchor.constraint(equalToConstant: 5).isActive = true
-            stack.addArrangedSubview(bar)
-            fullWidth(bar)
-
-            var taskText = "Tasks \(p.done)/\(p.total)"
-            if let wave = p.current_wave, let waveName = p.waves?[String(wave)] {
-                taskText += " · wave \(wave) “\(waveName)”"
-            } else if p.done == p.total {
-                taskText += " · all done"
-            }
-            let pct = Int(round(100.0 * Double(p.done) / Double(p.total)))
-            let taskRow = NSStackView(views: [
-                makeLabel(taskText, size: 12, color: .secondaryLabelColor),
-                makeLabel("\(pct)%", size: 12, color: .secondaryLabelColor),
-            ])
-            taskRow.distribution = .equalSpacing
-            stack.addArrangedSubview(taskRow)
-            fullWidth(taskRow)
-        } else {
-            let l = makeLabel("No tasks yet — pre-plan phase", size: 12, color: .secondaryLabelColor)
-            stack.addArrangedSubview(l)
-            fullWidth(l)
+            stack.addArrangedSubview(makeLabel("\(p.done) of \(p.total) tasks done", size: 12, color: .secondaryLabelColor))
         }
-
-        // Branch + clean/dirty, next-skill chip on the right.
-        let branchText: String
-        if let branch = p.branch {
-            branchText = p.isDirty ? "\(branch) · dirty" : "\(branch) · clean"
-        } else {
-            branchText = "no branch"
+        if let attention = p.attentionItems.first {
+            let label = makeLabel(attention.label ?? "Needs attention", size: 12, color: .secondaryLabelColor)
+            label.toolTip = attention.label
+            stack.addArrangedSubview(label)
         }
-        let branchLabel = makeLabel(branchText, size: 12,
-                                    color: p.isDirty ? .systemYellow : .secondaryLabelColor)
-        let branchRow = NSStackView()
-        branchRow.orientation = .horizontal
-        branchRow.distribution = .equalSpacing
-        branchRow.addArrangedSubview(branchLabel)
-        if let skill = p.nextSkillDisplay {
-            let chip = NSButton(title: skill, target: nil, action: nil)
-            chip.bezelStyle = .inline
-            chip.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .medium)
-            chip.setButtonType(.momentaryPushIn)
-            if let raw = p.next_skill {
-                chip.target = self
-                chip.action = #selector(copySkill(_:))
-                chip.identifier = NSUserInterfaceItemIdentifier(raw)
-            } else {
-                chip.isEnabled = false
-            }
-            branchRow.addArrangedSubview(chip)
+        let actions = NSPopUpButton(title: "Actions", target: nil, action: nil)
+        actions.pullsDown = true
+        actions.addItem(withTitle: "Actions")
+        let reveal = NSMenuItem(title: "Reveal in Finder", action: #selector(revealPressed), keyEquivalent: "")
+        reveal.target = self
+        actions.menu?.addItem(reveal)
+        if let raw = p.next_skill {
+            let copy = NSMenuItem(title: "Copy \(skillDisplayName(raw)) command", action: #selector(copySkill(_:)), keyEquivalent: "")
+            copy.target = self
+            copy.representedObject = raw
+            actions.menu?.addItem(copy)
         }
-        stack.addArrangedSubview(branchRow)
-        fullWidth(branchRow)
-
-        // Pending answers warning.
-        if !p.answers.isEmpty {
-            let ids = p.answers.map { "\($0.answer ?? "?") (\($0.status ?? "?"))" }.joined(separator: ", ")
-            let l = makeLabel("⚠ \(p.answers.count) pending answer\(p.answers.count > 1 ? "s" : "") — \(ids)",
-                              size: 12, color: .systemYellow)
-            stack.addArrangedSubview(l)
-            fullWidth(l)
-        }
-
-        // Optional note (tolerated, not in the core contract).
-        if let note = p.note, !note.isEmpty {
-            let l = makeLabel("⛔ \(note)", size: 12, color: .systemRed)
-            stack.addArrangedSubview(l)
-            fullWidth(l)
-        }
-
-        // Lookahead, only when present.
-        if let next = p.next_milestone, let msName = next.milestone {
-            let l = makeLabel("⏭ lookahead: \(msName) (\(next.phase ?? "?"))",
-                              size: 12, color: .secondaryLabelColor)
-            stack.addArrangedSubview(l)
-            fullWidth(l)
-        }
-
-        // Usage footer, only when usage non-null.
-        if let usage = p.usage {
-            let tokens = (usage.tokens_in ?? 0) + (usage.tokens_out ?? 0)
-            var text = "⚡ \(fmtTokens(tokens)) tok · $\(String(format: "%.2f", usage.cost ?? 0))"
-            if p.isShipped {
-                text += " · milestone complete"
-            } else if let t = p.time_in_phase_s {
-                text += " · ⏱ \(fmtDuration(t)) in \(p.displayPhase)"
-            }
-            let l = makeLabel(text, size: 12, color: .secondaryLabelColor)
-            stack.addArrangedSubview(l)
-            fullWidth(l)
-        }
-
-        // Card actions.
-        let reveal = NSButton(title: "Reveal", target: self, action: #selector(revealPressed))
-        let dash = NSButton(title: "Dashboard", target: self, action: #selector(dashPressed))
-        for b in [reveal, dash] {
-            b.bezelStyle = .rounded
-            b.controlSize = .small
-            b.font = .systemFont(ofSize: 11)
-        }
-        let actions = NSStackView(views: [reveal, dash])
-        actions.orientation = .horizontal
-        actions.spacing = 8
         stack.addArrangedSubview(actions)
-
-        self.project = p
-        self.dashboardURL = dashboardURL
     }
 
     @available(*, unavailable)
@@ -502,16 +367,24 @@ final class ProjectCardView: NSView {
     private var project: ProjectStatus?
     private var dashboardURL: URL?
 
-    @objc private func copySkill(_ sender: NSButton) {
-        guard let raw = sender.identifier?.rawValue else { return }
+    @objc private func copySkill(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String else { return }
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString("$\(raw)", forType: .string)
+        let copied = NSPasteboard.general.setString("$\(raw)", forType: .string)
+        sender.title = copied ? "Copied" : "Copy failed"
     }
 
     @objc private func revealPressed() {
         guard let root = project?.root else { return }
         let path = (root as NSString).expandingTildeInPath
         NSWorkspace.shared.selectFile(path, inFileViewerRootedAtPath: "")
+    }
+
+    @objc private func detailPressed() {
+        guard let base = dashboardURL else { return }
+        let link = projectDeepLink(base: base, root: project?.root)
+        let suffix = project?.attentionItems.contains { $0.kind == "question" } == true ? "&tab=activity" : ""
+        DashboardWindowController.shared.show(URL(string: link.absoluteString + suffix))
     }
 
     @objc private func dashPressed() {
@@ -526,48 +399,7 @@ final class ProjectCardView: NSView {
 /// Dashboard deep link selecting a project by its (fragment-encoded) root.
 func projectDeepLink(base: URL, root: String?) -> URL {
     guard let root = root else { return base }
-    let encoded = root.addingPercentEncoding(withAllowedCharacters: .urlFragmentAllowed) ?? root
+    let safe = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-._~"))
+    let encoded = root.addingPercentEncoding(withAllowedCharacters: safe) ?? ""
     return URL(string: "\(base.absoluteString)#project=\(encoded)") ?? base
-}
-
-// MARK: - "Needs you" attention row
-
-/// One attention item: kind pill in the project's health color, the item
-/// label, the project name. Clicking opens the project deep link in the
-/// native dashboard window.
-final class AttentionRowView: NSView {
-    private let url: URL
-
-    init(item: AttentionItem, project: ProjectStatus, dashboardURL: URL) {
-        url = projectDeepLink(base: dashboardURL, root: project.root)
-        super.init(frame: .zero)
-
-        let pill = makePill(item.kind ?? "?", textColor: healthColor(project.effectiveHealth))
-        let label = makeLabel(item.label ?? "?", size: 12)
-        label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        let name = makeLabel(project.displayProject, size: 11, color: .secondaryLabelColor)
-        name.setContentHuggingPriority(.required, for: .horizontal)
-        let row = NSStackView(views: [pill, label, name])
-        row.orientation = .horizontal
-        row.alignment = .centerY
-        row.spacing = 8
-        row.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(row)
-        NSLayoutConstraint.activate([
-            row.topAnchor.constraint(equalTo: topAnchor),
-            row.leadingAnchor.constraint(equalTo: leadingAnchor),
-            row.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor),
-            row.bottomAnchor.constraint(equalTo: bottomAnchor),
-        ])
-
-        let click = NSClickGestureRecognizer(target: self, action: #selector(openDashboard))
-        addGestureRecognizer(click)
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError() }
-
-    @objc private func openDashboard() {
-        DashboardWindowController.shared.show(url)
-    }
 }

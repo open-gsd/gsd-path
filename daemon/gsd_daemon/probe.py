@@ -553,12 +553,12 @@ def _human_age(seconds: float) -> str:
 def compute_attention(status: ProjectStatus,
                       now: Optional[datetime] = None) -> List[dict]:
     items: List[dict] = []
-    questions = status.pending_answers or status.answers
+    questions = status.answers or status.pending_answers
     for pending in questions:
         if not isinstance(pending, dict):
             continue
-        label = pending.get("question") or pending.get("id") or "pending question"
-        items.append({"kind": "question", "label": label, "ref": pending.get("id")})
+        label = pending.get("question") or pending.get("id") or pending.get("answer") or "pending question"
+        items.append({"kind": "question", "label": label, "ref": pending.get("id") or pending.get("answer")})
     for task in status.tasks:
         if task.status and "blocked" in task.status.lower():
             label = f"{task.id} — {task.title}" if task.title else str(task.id)
