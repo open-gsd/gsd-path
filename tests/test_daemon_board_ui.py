@@ -12,20 +12,37 @@ from unittest.mock import Mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "daemon"))
 from gsd_daemon.config import Config
-from gsd_daemon.model import ProjectStatus
+from gsd_daemon.model import ProjectStatus, TaskSummary
 from gsd_daemon.serve import serve_in_thread
 
 
 def sample_projects():
     roadmap = [
-        {"number": "M003", "slug": "core", "status": "shipped", "archive": ".project/archive/003-core"},
-        {"number": "M004", "slug": "daemon", "status": "active", "archive": None},
-        {"number": "M005", "slug": "notify", "status": "pending", "archive": None},
+        {"number": "M003", "slug": "core", "status": "shipped", "archive": ".project/archive/003-core",
+         "goal": "Parsers and the status endpoint.", "depends": [], "integrated": "158ab3a6554e3d6be083e4a752583763a5d682a5",
+         "manifest": {"shipped": "2026-09-06", "verdict": "all criteria met", "waves": 3, "tasks_done": 12,
+                      "tasks_total": 12, "cycles_avg": 1.3, "carried": 2}},
+        {"number": "M004", "slug": "daemon", "status": "active", "archive": None,
+         "goal": "Native tray and dashboard for the daemon.", "depends": ["M003"], "integrated": None, "manifest": None},
+        {"number": "M005", "slug": "notify", "status": "pending", "archive": None,
+         "goal": "Desktop notifications.", "depends": ["M004"], "integrated": None, "manifest": None},
     ]
     return [
         ProjectStatus(root="/sample/gsd", project="GSD Path", milestone="daemon", phase="build",
                       status="active", branch="gsd-path/M004", tasks_done=6, tasks_total=9, current_wave=2,
                       waves={1: "parsers", 2: "watcher", 3: "tray"}, roadmap_milestones=roadmap,
+                      tasks=[TaskSummary(id="T001", title="state parser", wave=1, status="done"),
+                             TaskSummary(id="T005", title="poll loop", wave=2, status="done"),
+                             TaskSummary(id="T006", title="notify hook", wave=2, status="pending")],
+                      criteria=[{"id": "SC1", "text": "a", "verdict": "met"}, {"id": "SC2", "text": "b", "verdict": "met"},
+                                {"id": "SC3", "text": "c", "verdict": "not-met"}],
+                      ledger=[{"command": "make test", "commit": "abc1234", "result": "pass", "recorded_at": "2026-09-12T14:32:00+00:00"}],
+                      phase_log=[{"phase": "define", "date": "2026-09-09"}, {"phase": "plan", "date": "2026-09-09"},
+                                 {"phase": "build", "date": "2026-09-10"}],
+                      vision="See every gsd-path project's state without a terminal.",
+                      intent="Operators stop polling STATE.md by hand.",
+                      lesson="003-core — Land task evidence through the isolation helper.",
+                      usage={"tokens_in": 412000, "tokens_out": 133000, "cost": 9.8, "models": []},
                       time_in_phase_s=3600 * 5, git={"branch": "gsd-path/M004", "head": "0e9a3b1abcdef", "dirty": True},
                       next_skill="gsd-path-build"),
         ProjectStatus(root="/sample/atlas'&tab=usage", project="Atlas API", milestone="api-v2", phase="ship",
@@ -79,9 +96,19 @@ class BoardUITests(unittest.TestCase):
         self.assertEqual(self.js(f"[...{gsd}.querySelectorAll('.ms')].map(m=>m.className.split(' ')[1]+':'+m.querySelector('.k').textContent).join('|')"),
                          "done:M003|now:M004|ahead:M005")
         text = self.js(f"{gsd}.innerText")
-        for expected in ("core", "daemon", "notify", "build · wave 2", "6 of 9 tasks", "5h 0m in build",
-                         "✓ wave 1 parsers", "● wave 2 watcher", "○ wave 3 tray", "gsd-path/M004 · 0e9a3b1 · dirty", "In build"):
+        for expected in ("core", "daemon", "notify", "build · wave 2", "6 of 9 tasks", "entered build 2026-09-10 · 5h 0m · 545k tok · $9.80",
+                         "✓ wave 1 parsers", "● wave 2 watcher", "○ wave 3 tray", "gsd-path/M004 · 0e9a3b1 · dirty", "In build",
+                         # briefing details
+                         "See every gsd-path project's state without a terminal.", "shipped 2026-09-06",
+                         "12 of 12 tasks · 3 waves · 1.3 review cycles avg · integrated 158ab3a · 2 rulings carried",
+                         "Parsers and the status endpoint.", "after M003", "Native tray and dashboard for the daemon.",
+                         "Operators stop polling STATE.md by hand.", "T001 state parser ✓", "T005 poll loop ✓", "T006 notify hook ○",
+                         "2 of 3 criteria met", "verify pass 14:32:00", "Desktop notifications.", "after M004",
+                         "latest lesson · 003-core — Land task evidence through the isolation helper."):
             self.assertIn(expected, text)
+        self.assertEqual(self.js(f"[...{gsd}.querySelectorAll('.phase-log div')].map(d=>d.className+':'+d.textContent).join('|')"),
+                         ":def09-09|:plan09-09|now:build09-10")
+        self.assertEqual(self.js(f"[...{gsd}.querySelectorAll('.crit i')].map(i=>i.className).join('|')"), "met|met|not-met")
         # No next steps, commands or attention copy anywhere on the board.
         board = self.js("document.querySelector('.board').innerText")
         for gone in ("gsd-path-build", "forensics", "Copy", "Next step", "ship blocked", "Needs"):

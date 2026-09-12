@@ -165,6 +165,7 @@ class ServeTests(unittest.TestCase):
         self.assertIn("text/html", content_type)
         html = body.decode("utf-8")
         for marker in ("gsd-path daemon", "Status board", "milestoneStack", "end of roadmap",
+                       "phase-log", "criteria met", "latest lesson",
                        "Plugin", "Watched folders",
                        "fetch(\"/status\")", "setInterval(refresh, 5000)"):
             self.assertIn(marker, html)

@@ -22,11 +22,36 @@ struct PluginHost: Codable {
     var root: String?
 }
 
+struct MilestoneManifest: Codable {
+    var shipped: String?
+    var verdict: String?
+    var waves: Int?
+    var tasks_done: Int?
+    var tasks_total: Int?
+    var cycles_avg: Double?
+    var carried: Int?
+}
+
 struct RoadmapMilestone: Codable {
     var number: String?
     var slug: String?
     var status: String?
     var archive: String?
+    var goal: String?
+    var depends: [String]?
+    var integrated: String?
+    var manifest: MilestoneManifest?
+}
+
+struct PhaseLogEntry: Codable {
+    var phase: String?
+    var date: String?
+}
+
+struct Criterion: Codable {
+    var id: String?
+    var text: String?
+    var verdict: String?
 }
 
 struct ProjectStatus: Codable {
@@ -38,6 +63,11 @@ struct ProjectStatus: Codable {
     var branch: String?
     var archive: String?
     var roadmap_milestones: [RoadmapMilestone]?
+    var phase_log: [PhaseLogEntry]?
+    var vision: String?
+    var intent: String?
+    var lesson: String?
+    var criteria: [Criterion]?
     var git: GitStatus?
     var tasks_done: Int?
     var tasks_total: Int?
@@ -203,11 +233,30 @@ extension ProjectStatus {
         }.joined(separator: "  ")
     }
 
-    /// "build · wave 2 · 7 of 12 tasks" — where the current milestone is.
+    /// "build · wave 2 · 7 of 12 tasks · 3/5 criteria · since 2026-09-10" — where the current milestone is.
     var hereText: String {
         var parts = [phase ?? "no phase"]
         if let wave = current_wave { parts.append("wave \(wave)") }
         parts.append(total > 0 ? "\(done) of \(total) tasks" : "no tasks yet")
+        if let criteria = criteria, !criteria.isEmpty {
+            parts.append("\(criteria.filter { $0.verdict == "met" }.count)/\(criteria.count) criteria")
+        }
+        if let since = (phase_log?.first { $0.phase == phase } ?? phase_log?.last)?.date { parts.append("since \(since)") }
+        return parts.joined(separator: " · ")
+    }
+
+    /// The current milestone's goal from ROADMAP.md, if listed.
+    var goalText: String? {
+        (roadmap_milestones ?? []).first { $0.slug != nil && $0.slug == milestone }?.goal
+    }
+
+    /// "last shipped M004 · 2026-09-08 · 18 tasks" from the newest archived milestone's manifest.
+    var lastShippedText: String? {
+        guard let last = milestoneStack.last(where: { $0.kind == .done }),
+              let entry = (roadmap_milestones ?? []).first(where: { $0.number == last.number }) else { return nil }
+        var parts = ["last shipped \(last.number)"]
+        if let shipped = entry.manifest?.shipped { parts.append(shipped) }
+        if let tasks = entry.manifest?.tasks_total { parts.append("\(tasks) tasks") }
         return parts.joined(separator: " · ")
     }
 }

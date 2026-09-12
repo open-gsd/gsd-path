@@ -118,11 +118,20 @@ no next steps, commands, or attention items.
   (projects, in progress, blocked, shipped), connection status with the last
   update time, and a **Settings** menu for Plugin and Watched Folders.
 - One card per project holds its **milestone stack**: shipped milestones
-  collapsed to a line, the current milestone expanded with phase, wave, task
-  progress, time in phase, waves (done ✓ / current ● / ahead ○) and the git
-  branch and head, then planned milestones as ghosts, or "end of roadmap".
-  Past and planned milestones come from `.project/ROADMAP.md`; the lookahead
-  milestone from `.project/next/STATE.md` is appended when it is not listed.
+  collapsed to a line with the ship date and, from the archive manifest, tasks,
+  waves, average review cycles, integrated commit and carried rulings, plus the
+  milestone goal; the current milestone expanded with phase, wave, goal, intent,
+  task progress, the date it entered the phase, time in phase, usage, waves with
+  their task names (done ✓ / current ● / ahead ○), success criteria met with the
+  last verify result, a phase log strip with dates from STATE.md, and the git
+  branch and head; then planned milestones as ghosts with their goal and
+  depends-on chain, or "end of roadmap". A charter vision heads the card and
+  the latest lesson closes it when the project records them.
+- Sources: `ROADMAP.md` (goal, depends-on, status, archive, integrated commit),
+  `archive/*/MANIFEST.md`, `STATE.md` log, `CHARTER.md` Vision,
+  `intent/INTENT.md` Summary, `LESSONS.md`, task files, `review/FINAL.md` and
+  the verify ledger. The lookahead milestone from `next/STATE.md` is appended
+  when it is not in the roadmap.
 - Cards are ordered blocked, then in progress, then shipped, by name within
   each group. The state pill reads Blocked, In <phase>, or Shipped; the dot
   keeps the daemon's health colour.

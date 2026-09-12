@@ -225,14 +225,89 @@ class ParseTaskTests(unittest.TestCase):
 
     def test_parse_roadmap(self) -> None:
         milestones = probe.parse_roadmap(self.root / ".project" / "ROADMAP.md")
+        extra = {"depends": [], "integrated": None, "manifest": None, "duration_s": None, "tokens": None}
         self.assertEqual(milestones, [
-            {"number": "M001", "slug": "demo-ms", "status": "active", "archive": None,
-             "duration_s": None, "tokens": None},
-            {"number": "M002", "slug": "next-ms", "status": "pending", "archive": None,
-             "duration_s": None, "tokens": None},
-            {"number": "M003", "slug": "old-ms", "status": "shipped", "archive": None,
-             "duration_s": None, "tokens": None},
+            dict({"number": "M001", "slug": "demo-ms", "status": "active", "archive": None, "goal": "first"}, **extra),
+            dict({"number": "M002", "slug": "next-ms", "status": "pending", "archive": None, "goal": "second"}, **extra),
+            dict({"number": "M003", "slug": "old-ms", "status": "shipped", "archive": None, "goal": "done"}, **extra),
         ])
+
+    def test_parse_roadmap_depends_and_integrated(self) -> None:
+        path = Path(self.tmp.name) / "roadmap2.md"
+        path.write_text(
+            "### M002 — two\n\nGoal: second thing\nDepends on: [M001, M000]\nStatus: shipped\n"
+            "Archive: .project/archive/002-two\nIntegrated: 158ab3a6554e3d6be083e4a752583763a5d682a5\n",
+            encoding="utf-8",
+        )
+        milestone = probe.parse_roadmap(path)[0]
+        self.assertEqual(milestone["depends"], ["M001", "M000"])
+        self.assertEqual(milestone["integrated"], "158ab3a6554e3d6be083e4a752583763a5d682a5")
+        self.assertEqual(milestone["goal"], "second thing")
+
+    def test_parse_manifest(self) -> None:
+        path = Path(self.tmp.name) / "MANIFEST.md"
+        path.write_text(
+            "# Archive — 004-x\n\nMilestone: x\nShipped: 2026-09-08\nFinal verdict: all criteria met\n"
+            "Waves: 14  Tasks: 18 done / 18 total  Review cycles used: 1/2/3/2\nCarried forward: 3 DOCS-AUDIT ruling(s)\n",
+            encoding="utf-8",
+        )
+        self.assertEqual(probe.parse_manifest(path), {
+            "shipped": "2026-09-08", "verdict": "all criteria met", "waves": 14,
+            "tasks_done": 18, "tasks_total": 18, "cycles_avg": 2.0, "carried": 3,
+        })
+        self.assertIsNone(probe.parse_manifest(path.with_name("missing.md")))
+
+    def test_parse_phase_log_collapses_repeats(self) -> None:
+        path = Path(self.tmp.name) / "STATE-log.md"
+        path.write_text(
+            "## Log\n- 2026-08-26 — define — started\n- 2026-08-26 — define — charter approved\n"
+            "- 2026-08-27 — research — started\n- 2026-09-10 — build — started\n",
+            encoding="utf-8",
+        )
+        self.assertEqual(probe.parse_phase_log(path), [
+            {"phase": "define", "date": "2026-08-26"},
+            {"phase": "research", "date": "2026-08-27"},
+            {"phase": "build", "date": "2026-09-10"},
+        ])
+        self.assertEqual(probe.parse_phase_log(path.with_name("missing.md")), [])
+
+    def test_parse_phase_log_scopes_to_current_milestone(self) -> None:
+        path = Path(self.tmp.name) / "STATE-log2.md"
+        path.write_text(
+            "## Log\n- 2026-08-26 — inspect — initialized\n- 2026-08-26 — define — started\n"
+            "- 2026-08-27 — build — started\n- 2026-08-30 — shipped — done\n"
+            "- 2026-09-01 — define — next milestone\n- 2026-09-02 — plan — started\n",
+            encoding="utf-8",
+        )
+        self.assertEqual(probe.parse_phase_log(path), [
+            {"phase": "define", "date": "2026-09-01"},
+            {"phase": "plan", "date": "2026-09-02"},
+        ])
+
+    def test_parse_phase_log_keeps_each_phase_once_dating_current_by_latest(self) -> None:
+        path = Path(self.tmp.name) / "STATE-log3.md"
+        path.write_text(
+            "## Log\n- 2026-09-01 — define — started\n- 2026-09-02 — plan — started\n"
+            "- 2026-09-03 — build — started\n- 2026-09-04 — ship — started\n"
+            "- 2026-09-05 — plan — patch\n- 2026-09-06 — build — patch\n",
+            encoding="utf-8",
+        )
+        self.assertEqual(probe.parse_phase_log(path), [
+            {"phase": "define", "date": "2026-09-01"},
+            {"phase": "plan", "date": "2026-09-02"},
+            {"phase": "build", "date": "2026-09-06"},
+            {"phase": "ship", "date": "2026-09-04"},
+        ])
+
+    def test_section_paragraph_and_latest_lesson(self) -> None:
+        charter = Path(self.tmp.name) / "CHARTER.md"
+        charter.write_text("# Charter\n\nReview panel: off\n\n## Vision\n\nFirst line\ncontinues here.\n\nSecond paragraph.\n\n## Scope\n- x\n", encoding="utf-8")
+        self.assertEqual(probe._section_paragraph(charter, "Vision"), "First line continues here.")
+        self.assertIsNone(probe._section_paragraph(charter, "Missing"))
+        lessons = Path(self.tmp.name) / "LESSONS.md"
+        lessons.write_text("- 001-a — first lesson\n- 002-b — latest lesson\n\n", encoding="utf-8")
+        self.assertEqual(probe.parse_latest_lesson(lessons), "002-b — latest lesson")
+        self.assertIsNone(probe.parse_latest_lesson(lessons.with_name("nope.md")))
 
     def test_parse_roadmap_archive_path(self) -> None:
         path = Path(self.tmp.name) / "roadmap.md"
@@ -270,6 +345,10 @@ class ProbeProjectTests(unittest.TestCase):
         self.assertEqual(status.current_wave, 1)
         self.assertEqual(status.waves, {1: "risk burn-down", 2: "walking skeleton"})
         self.assertEqual(len(status.roadmap_milestones), 3)
+        self.assertEqual(status.phase_log, [{"phase": "build", "date": "2026-09-01"}])
+        self.assertIsNone(status.vision)
+        self.assertIsNone(status.intent)
+        self.assertIsNone(status.lesson)
         self.assertEqual(status.next_milestone, {
             "milestone": "next-ms",
             "phase": "research",

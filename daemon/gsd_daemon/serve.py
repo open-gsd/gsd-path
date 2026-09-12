@@ -120,6 +120,22 @@ DASHBOARD_PAGE = r"""<!doctype html>
   .ms .git { margin-top: 4px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); }
   .bar { height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; margin: 6px 0 3px; }
   .bar > i { display: block; height: 100%; background: var(--run); }
+  .card .vision { font-size: 12.5px; color: var(--dim); border-left: 3px solid var(--line); padding: 2px 10px; margin: 0 0 10px; }
+  .ms .goal { font-size: 12px; color: var(--dim); margin-top: 2px; }
+  .ms .intent { font-size: 12px; color: var(--dim); margin-top: 2px; font-style: italic; }
+  .ms .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); margin-top: 2px; }
+  .ms .sub { font-size: 12px; color: var(--dim); margin-top: 3px; }
+  .ms .waves small { display: block; color: var(--faint); font-size: 11px; margin-left: 14px; }
+  .crit { display: flex; gap: 3px; margin-top: 5px; align-items: center; font-size: 12px; color: var(--dim); }
+  .crit i { width: 14px; height: 6px; border-radius: 2px; background: var(--line); display: block; }
+  .crit i.met { background: var(--run); } .crit i.not-met, .crit i.unverifiable { background: var(--danger); }
+  .crit span { margin-left: 6px; }
+  .phase-log { display: flex; gap: 2px; margin-top: 6px; align-items: flex-end; }
+  .phase-log div { flex: 1; min-width: 0; text-align: center; font: 10px var(--mono); color: var(--faint); overflow: hidden; white-space: nowrap; }
+  .phase-log div i { display: block; height: 4px; border-radius: 2px; background: var(--run); margin-bottom: 3px; }
+  .phase-log div.now { color: var(--accent); } .phase-log div.now i { background: var(--accent); }
+  .card .lesson { font-size: 12px; color: var(--dim); border-top: 1px dashed var(--line); margin-top: 6px; padding-top: 6px; }
+  .card .lesson b { color: var(--faint); font-weight: 600; }
 
   /* Settings views */
   .settings { width: 100%; max-width: 1000px; margin: 0 auto; padding: 24px 24px 40px; }
@@ -321,35 +337,77 @@ function milestoneStack(p) {
   }
   return {before, cur, after};
 }
+const fmt = n => n >= 1e6 ? (n/1e6).toFixed(1)+"M" : n >= 1e3 ? Math.round(n/1e3)+"k" : String(n);
+const TASK_GLYPH = {done: "✓", failed: "✗"};
 function waveRows(p) {
   const waves = Object.entries(p.waves || {}).map(([n, name]) => [Number(n), name]).sort((a, b) => a[0] - b[0]);
   const allDone = stateOf(p) === "shipped" || (p.tasks_total > 0 && p.tasks_done >= p.tasks_total);
+  const tasks = p.tasks || [];
   return waves.map(([n, name]) => {
     const kind = p.current_wave != null ? (n < p.current_wave ? "done" : n === p.current_wave ? "now" : "ahead") : allDone ? "done" : "ahead";
     const glyph = kind === "done" ? "✓" : kind === "now" ? "●" : "○";
-    return `<span class="w-${kind}">${glyph} wave ${n} ${esc(name)}</span>`;
+    const names = tasks.filter(t => t.wave === n).map(t => `${esc(t.id)} ${esc(t.title || "")} ${TASK_GLYPH[t.status] || (kind === "done" ? "✓" : "○")}`).join(" · ");
+    return `<span class="w-${kind}">${glyph} wave ${n} ${esc(name)}${names ? `<small>${names}</small>` : ""}</span>`;
   }).join("");
 }
+function criteriaStrip(p) {
+  const crits = p.criteria || [];
+  if (!crits.length) return "";
+  const met = crits.filter(c => c.verdict === "met").length;
+  return `<div class="crit">${crits.map(c => `<i class="${esc(c.verdict || "")}" title="${esc((c.id ? c.id + " — " : "") + (c.text || ""))}"></i>`).join("")}<span>${met} of ${crits.length} criteria met</span></div>`;
+}
+function verifyLine(p) {
+  const last = (p.ledger || [])[0];
+  if (!last) return "";
+  const ok = last.result === "pass";
+  return `<div class="sub">verify <span style="color:${ok ? "var(--run)" : last.result === "fail" ? "var(--danger)" : "var(--dim)"}">${esc(last.result || "unknown")}${last.recorded_at ? " " + esc(shortT(last.recorded_at)) : ""}</span></div>`;
+}
+const PHASE_SHORT = {inspect: "insp", define: "def", research: "rsch", decide: "dec", roadmap: "rmap", plan: "plan", build: "build", ship: "ship", shipped: "done"};
+function phaseLog(p) {
+  const log = p.phase_log || [];
+  if (!log.length) return "";
+  return `<div class="phase-log">${log.map(e => `<div class="${e.phase === p.phase ? "now" : ""}" title="${esc(e.phase)} · ${esc(e.date)}"><i></i>${esc(PHASE_SHORT[e.phase] || String(e.phase).slice(0, 5))}<br>${esc(String(e.date).slice(5))}</div>`).join("")}</div>`;
+}
+const manifestMeta = m => {
+  const mf = m.manifest || {};
+  return [mf.tasks_total != null ? `${mf.tasks_done} of ${mf.tasks_total} tasks` : null,
+          mf.waves != null ? `${mf.waves} waves` : null,
+          mf.cycles_avg != null ? `${mf.cycles_avg} review cycles avg` : null,
+          m.integrated ? "integrated " + String(m.integrated).slice(0, 7) : null,
+          mf.carried ? `${mf.carried} rulings carried` : null].filter(Boolean).join(" · ");
+};
 function card(p) {
   const {before, cur, after} = milestoneStack(p);
   const st = stateOf(p);
   const here = [esc(p.phase || "no phase"), p.current_wave != null ? "wave " + p.current_wave : null].filter(Boolean).join(" · ");
+  const entered = (p.phase_log || []).find(e => e.phase === p.phase) || (p.phase_log || []).slice(-1)[0];
   const age = dur(p.time_in_phase_s);
+  const usage = p.usage && (p.usage.tokens_in || p.usage.tokens_out) ? `${fmt((p.usage.tokens_in || 0) + (p.usage.tokens_out || 0))} tok${p.usage.cost ? " · $" + Number(p.usage.cost).toFixed(2) : ""}` : null;
+  const when = [entered ? "entered " + esc(entered.phase) + " " + esc(entered.date) : null, age, usage].filter(Boolean).join(" · ");
   const progress = p.tasks_total
-    ? `<div class="bar"><i style="width:${Math.round(100 * (p.tasks_done || 0) / p.tasks_total)}%"></i></div><div class="dim" style="font-size:12px">${p.tasks_done || 0} of ${p.tasks_total} tasks${age ? " · " + age + " in " + esc(p.phase || "phase") : ""}</div>`
-    : `<div class="dim" style="font-size:12px;margin-top:4px">${age ? age + " in " + esc(p.phase || "phase") + " · " : ""}no tasks yet</div>`;
-  const git = p.git ? `<div class="git">${esc(p.git.branch || p.branch || "no branch")} · ${esc(String(p.git.head || "").slice(0, 7) || "—")}${p.git.dirty ? " · dirty" : ""}</div>`
-                    : (p.branch ? `<div class="git">${esc(p.branch)}</div>` : "");
-  const doneRows = before.map(m => `<div class="ms done"><span class="k">${esc(m.number)}</span><div class="body">${esc(m.slug)} <span class="faint">· ${esc(m.status || "shipped")}</span></div></div>`).join("");
+    ? `<div class="bar"><i style="width:${Math.round(100 * (p.tasks_done || 0) / p.tasks_total)}%"></i></div><div class="sub">${p.tasks_done || 0} of ${p.tasks_total} tasks${when ? " · " + when : ""}</div>`
+    : `<div class="sub">${when ? when + " · " : ""}no tasks yet</div>`;
+  const git = p.git ? `<div class="meta">${esc(p.git.branch || p.branch || "no branch")} · ${esc(String(p.git.head || "").slice(0, 7) || "—")}${p.git.dirty ? " · dirty" : ""}</div>`
+                    : (p.branch ? `<div class="meta">${esc(p.branch)}</div>` : "");
+  const depends = m => (m.depends || []).length ? ` <span class="faint">· after ${esc(m.depends.join(", "))}</span>` : "";
+  const goal = m => m.goal ? `<div class="goal">${esc(m.goal)}</div>` : "";
+  const doneRows = before.map(m => {
+    const shipped = m.manifest && m.manifest.shipped;
+    const meta = manifestMeta(m);
+    return `<div class="ms done"><span class="k">${esc(m.number)}</span><div class="body">${esc(m.slug)} <span class="faint">· ${shipped ? "shipped " + esc(shipped) : esc(m.status || "shipped")}</span>${meta ? `<div class="meta">${meta}</div>` : ""}${goal(m)}</div></div>`;
+  }).join("");
   const aheadRows = after.length
-    ? after.map(m => `<div class="ms ahead"><span class="k">${esc(m.number)}</span><div class="body">${esc(m.slug)} <span>· ${esc(m.phase || m.status || "planned")}</span></div></div>`).join("")
+    ? after.map(m => `<div class="ms ahead"><span class="k">${esc(m.number)}</span><div class="body">${esc(m.slug)} <span>· ${esc(m.phase || m.status || "planned")}</span>${depends(m)}${goal(m)}</div></div>`).join("")
     : `<div class="ms ahead"><span class="k">—</span><div class="body">end of roadmap</div></div>`;
+  const waves = waveRows(p);
   return `<article class="card ${CState.root === p.root ? "sel" : ""}" data-root="${esc(p.root)}">
     <div class="title"><span class="dot ${healthDot(p)}"></span><b>${esc(p.project || p.root)}</b><span class="pill ${st === "active" ? "progress" : st}">${esc(stateLabel(p))}</span></div>
     <div class="path">${esc(p.root)}</div>
+    ${p.vision ? `<div class="vision">${esc(p.vision)}</div>` : ""}
     ${doneRows}
-    <div class="ms now ${st}"><span class="k">${esc(cur.number)}</span><div class="body"><b>${esc(cur.slug)}</b> · ${here}${progress}${waveRows(p) ? `<div class="waves">${waveRows(p)}</div>` : ""}${git}</div></div>
+    <div class="ms now ${st}"><span class="k">${esc(cur.number)}</span><div class="body"><b>${esc(cur.slug)}</b> · ${here}${depends(cur)}${goal(cur)}${p.intent ? `<div class="intent">${esc(p.intent)}</div>` : ""}${progress}${waves ? `<div class="waves">${waves}</div>` : ""}${criteriaStrip(p)}${verifyLine(p)}${phaseLog(p)}${git}</div></div>
     ${aheadRows}
+    ${p.lesson ? `<div class="lesson"><b>latest lesson</b> · ${esc(p.lesson)}</div>` : ""}
   </article>`;
 }
 function tabPlugin() {

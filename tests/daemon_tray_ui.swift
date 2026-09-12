@@ -8,7 +8,9 @@ struct TrayUITest {
         let data = Data("""
         {"projects":[
           {"root":"/sample/gsd","project":"GSD Path","milestone":"daemon","phase":"build","status":"active","branch":"gsd-path/M004","next_skill":"gsd-path-build","tasks_done":6,"tasks_total":9,"current_wave":2,
-           "roadmap_milestones":[{"number":"M003","slug":"core","status":"shipped","archive":".project/archive/003-core"},{"number":"M004","slug":"daemon","status":"active"},{"number":"M005","slug":"notify","status":"pending"}]},
+           "roadmap_milestones":[{"number":"M003","slug":"core","status":"shipped","archive":".project/archive/003-core","manifest":{"shipped":"2026-09-06","tasks_total":12}},{"number":"M004","slug":"daemon","status":"active","goal":"Native tray and dashboard for the daemon."},{"number":"M005","slug":"notify","status":"pending"}],
+           "criteria":[{"id":"SC1","verdict":"met"},{"id":"SC2","verdict":"met"},{"id":"SC3","verdict":"not-met"}],
+           "phase_log":[{"phase":"plan","date":"2026-09-09"},{"phase":"build","date":"2026-09-10"}]},
           {"root":"/sample/atlas'&tab=usage","project":"Atlas API","milestone":"api-v2","phase":"ship","status":"blocked","branch":"gsd-path/M002","health":"red","attention":[{"kind":"blocked","label":"ship blocked","ref":null}],
            "next_milestone":{"milestone":"api-v3","phase":"define","status":"pending"}},
           {"root":"/sample/notes","project":"Field Notes","milestone":"bootstrap","phase":"research","status":"active","branch":"gsd-path/M001"}
@@ -44,7 +46,9 @@ struct TrayUITest {
         require(labels().contains("M003 ✓  M004 ●  M005 ○"), "roadmap stack line")
         require(labels().contains("M002 ■  next ○"), "blocked stack with lookahead milestone")
         require(labels().contains("M001 ●"), "pre-plan project stack from branch")
-        require(labels().contains("build · wave 2 · 6 of 9 tasks"), "here line with wave and tasks")
+        require(labels().contains("build · wave 2 · 6 of 9 tasks · 2/3 criteria · since 2026-09-10"), "here line with wave, tasks, criteria and since date")
+        require(labels().contains("Native tray and dashboard for the daemon."), "milestone goal line")
+        require(labels().contains("last shipped M003 · 2026-09-06 · 12 tasks"), "last shipped line from the manifest")
         require(labels().contains("research · no tasks yet"), "here line without tasks")
         require(labels().contains("Blocked") && labels().contains("In build"), "state pills")
         // A status board: no attention summary, next steps, copy or reveal actions.

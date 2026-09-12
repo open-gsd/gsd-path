@@ -187,3 +187,30 @@ Native window screenshot was blocked by the display capture permission; the
 AppKit assertions are the tray proof.
 Ponytail review: one render path, no new dependencies or abstractions; the
 stack builder is shared logic in the page script and in Models.swift.
+
+## Briefing details on both surfaces
+User chose variant B of `daemon/prototype-details.html`. New parsers in
+`probe.py`: roadmap goal, depends-on and integrated commit; archive
+`MANIFEST.md` (ship date, verdict, waves, tasks, review cycles average, carried
+rulings); `parse_phase_log` (STATE.md log scoped to the current milestone, each
+phase once in first-seen order, current phase dated by its latest entry);
+`_section_paragraph` for CHARTER.md Vision and intent Summary;
+`parse_latest_lesson`. `model.py` carries `phase_log`, `vision`, `intent`,
+`lesson`. The dashboard card renders vision, manifest metadata and goals on
+shipped rows, goal, intent, depends-on, entered date, usage, task names per
+wave, criteria strip with the last verify result, phase-log strip and the
+latest lesson. The tray row adds criteria and since-date to the here line, the
+goal line and a last-shipped line. Still no next steps or actions.
+
+Proof: Python suite 164 tests, OK, 1 skipped (new probe tests for roadmap
+fields, manifest, phase log scoping and de-duplication, section paragraphs,
+lessons). `GSD_UI_TEST=1 ... test_daemon_board_ui.py` passed in Orca with the
+briefing assertions (vision, manifest line, goals, depends-on, intent, task
+names, 2 of 3 criteria, verify pass, phase log `def|plan|now:build`, lesson).
+Native test passed the here line with criteria and since-date, the goal line and
+the last-shipped line. `git diff --check` passed. The real report-dashboard
+project probes to a 6-entry phase log after scoping (106 raw entries before),
+4 manifests, a vision and a lesson. Installed and restarted the daemon and tray;
+inspected the live board at 1440px in dark and light with 4 real projects, no
+console errors, document width 1440. Phase labels abbreviated after live
+inspection showed them wrapping in narrow segments.

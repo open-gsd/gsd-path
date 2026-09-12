@@ -19,6 +19,14 @@ WAVE_HEADING_RE = re.compile(r"^## Wave (?P<wave>\d+) — (?P<name>.+?)\s*$", re
 ROADMAP_HEADING_RE = re.compile(r"^### (M\d{3,}) — ([a-z0-9][a-z0-9-]*)\s*$", re.MULTILINE)
 ROADMAP_STATUS_RE = re.compile(r"^Status:\s*([a-z]+)", re.MULTILINE)
 ROADMAP_ARCHIVE_RE = re.compile(r"^Archive:\s*(\S+)", re.MULTILINE)
+ROADMAP_GOAL_RE = re.compile(r"^Goal:\s*(.+?)\s*$", re.MULTILINE)
+ROADMAP_DEPENDS_RE = re.compile(r"^Depends on:\s*\[([^\]]*)\]", re.MULTILINE)
+ROADMAP_INTEGRATED_RE = re.compile(r"^Integrated:\s*([0-9a-f]{7,40})", re.MULTILINE)
+MANIFEST_SHIPPED_RE = re.compile(r"^Shipped:\s*(\d{4}-\d{2}-\d{2})", re.MULTILINE)
+MANIFEST_VERDICT_RE = re.compile(r"^Final verdict:\s*(.+?)\s*$", re.MULTILINE)
+MANIFEST_COUNTS_RE = re.compile(r"^Waves:\s*(\d+)\s+Tasks:\s*(\d+)\s+done\s*/\s*(\d+)\s+total(?:\s+Review cycles used:\s*([\d/]+))?", re.MULTILINE)
+MANIFEST_CARRIED_RE = re.compile(r"^Carried forward:\s*(\d+)", re.MULTILINE)
+SECTION_RE_TEMPLATE = r"^##\s+{heading}\s*$\n(.*?)(?=^##\s|\Z)"
 TASK_FILE_RE = re.compile(r"^(T\d{3,})-[a-z0-9][a-z0-9-]*\.md$")
 BLOCK_LIST_ITEM_RE = re.compile(r"^\s*-\s+(\S.*?)\s*$")
 RUNTIME_STATUS_SCHEMA = "gsd-path/status/v1"
@@ -167,15 +175,106 @@ def parse_roadmap(path: Union[str, Path]) -> List[dict]:
         status_match = ROADMAP_STATUS_RE.search(block)
         archive_match = ROADMAP_ARCHIVE_RE.search(block)
         archive = archive_match.group(1) if archive_match else None
+        goal_match = ROADMAP_GOAL_RE.search(block)
+        depends_match = ROADMAP_DEPENDS_RE.search(block)
+        integrated_match = ROADMAP_INTEGRATED_RE.search(block)
         milestones.append({
             "number": match.group(1),
             "slug": match.group(2),
             "status": status_match.group(1) if status_match else None,
             "archive": None if archive in (None, "null") else archive,
+            "goal": goal_match.group(1)[:400] if goal_match else None,
+            "depends": [d.strip() for d in depends_match.group(1).split(",") if d.strip()] if depends_match else [],
+            "integrated": integrated_match.group(1) if integrated_match else None,
+            "manifest": None,
             "duration_s": None,
             "tokens": None,
         })
     return milestones
+
+
+def parse_manifest(path: Union[str, Path]) -> Optional[dict]:
+    """Ship summary of an archived milestone from its MANIFEST.md."""
+    try:
+        text = Path(path).read_text(encoding="utf-8")
+    except OSError:
+        return None
+    shipped = MANIFEST_SHIPPED_RE.search(text)
+    verdict = MANIFEST_VERDICT_RE.search(text)
+    counts = MANIFEST_COUNTS_RE.search(text)
+    carried = MANIFEST_CARRIED_RE.search(text)
+    cycles = [int(c) for c in counts.group(4).split("/") if c] if counts and counts.group(4) else []
+    return {
+        "shipped": shipped.group(1) if shipped else None,
+        "verdict": verdict.group(1)[:200] if verdict else None,
+        "waves": int(counts.group(1)) if counts else None,
+        "tasks_done": int(counts.group(2)) if counts else None,
+        "tasks_total": int(counts.group(3)) if counts else None,
+        "cycles_avg": round(sum(cycles) / len(cycles), 1) if cycles else None,
+        "carried": int(carried.group(1)) if carried else 0,
+    }
+
+
+def parse_phase_log(state_path: Union[str, Path]) -> List[dict]:
+    """Phases of the current milestone from the STATE.md log.
+
+    Each phase once, in the order it was first entered; the current phase
+    carries the date it was last entered. The log persists across milestones,
+    so only the tail from the latest milestone start (its define, or the
+    inspect right before it) is read.
+    """
+    try:
+        text = Path(state_path).read_text(encoding="utf-8")
+    except OSError:
+        return []
+    log = []
+    for line in text.splitlines():
+        match = STATE_LOG_RE.match(line.strip())
+        if not match:
+            continue
+        date, phase = match.group(1), match.group(2)
+        if not log or log[-1]["phase"] != phase:
+            log.append({"phase": phase, "date": date})
+    start = max((i for i, entry in enumerate(log) if entry["phase"] == "define"), default=0)
+    if start > 0 and log[start - 1]["phase"] == "inspect":
+        start -= 1
+    # Ship can send a milestone back through plan and build; keep each phase
+    # once, in first-seen order, and date the current phase by its latest entry.
+    seen: Dict[str, dict] = {}
+    for entry in log[start:]:
+        seen.setdefault(entry["phase"], dict(entry))
+    if log:
+        seen[log[-1]["phase"]]["date"] = log[-1]["date"]
+    return list(seen.values())
+
+
+def _section_paragraph(path: Union[str, Path], heading: str, limit: int = 400) -> Optional[str]:
+    """First paragraph under a '## heading' section, or None."""
+    try:
+        text = Path(path).read_text(encoding="utf-8")
+    except OSError:
+        return None
+    match = re.search(SECTION_RE_TEMPLATE.format(heading=re.escape(heading)), text,
+                      re.MULTILINE | re.DOTALL)
+    if not match:
+        return None
+    for paragraph in re.split(r"\n\s*\n", match.group(1).strip()):
+        joined = " ".join(line.strip() for line in paragraph.splitlines()).strip()
+        if joined:
+            return joined[:limit]
+    return None
+
+
+def parse_latest_lesson(path: Union[str, Path], limit: int = 300) -> Optional[str]:
+    try:
+        lines = Path(path).read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return None
+    for line in reversed(lines):
+        item = BLOCK_LIST_ITEM_RE.match(line)
+        if item:
+            return item.group(1)[:limit]
+    return None
 
 
 def _natural_key(name: str) -> list:
@@ -627,6 +726,11 @@ def probe_project(root: Union[str, Path], enrich: bool = True) -> ProjectStatus:
                 "status": next_state.get("status"),
             }
 
+    roadmap = parse_roadmap(project_dir / "ROADMAP.md")
+    for milestone in roadmap:
+        if milestone["archive"]:
+            milestone["manifest"] = parse_manifest(Path(root) / milestone["archive"] / "MANIFEST.md")
+
     status = ProjectStatus(
         root=root,
         project=state.get("project"),
@@ -641,8 +745,12 @@ def probe_project(root: Union[str, Path], enrich: bool = True) -> ProjectStatus:
         tasks_total=len(tasks),
         current_wave=unfinished_waves[0] if unfinished_waves else None,
         waves=parse_plan(project_dir / "plan" / "PLAN.md"),
-        roadmap_milestones=parse_roadmap(project_dir / "ROADMAP.md"),
+        roadmap_milestones=roadmap,
         next_milestone=next_milestone,
+        phase_log=parse_phase_log(state_path),
+        vision=_section_paragraph(project_dir / "CHARTER.md", "Vision"),
+        intent=_section_paragraph(project_dir / "intent" / "INTENT.md", "Summary"),
+        lesson=parse_latest_lesson(project_dir / "LESSONS.md"),
         git=gitinfo.git_branch_head_dirty(root),
         status_source="parse-only",
         state_mtime=tree_mtime(state_path),

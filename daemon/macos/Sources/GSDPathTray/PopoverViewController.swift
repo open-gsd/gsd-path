@@ -383,6 +383,18 @@ final class ProjectRowView: NSView {
         let here = makeLabel(p.hereText, size: 12, color: .secondaryLabelColor)
         here.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
         stack.addArrangedSubview(here)
+        if let goal = p.goalText {
+            let label = makeLabel(goal, size: 12, color: .secondaryLabelColor)
+            label.lineBreakMode = .byWordWrapping
+            label.maximumNumberOfLines = 2
+            label.preferredMaxLayoutWidth = 400
+            stack.addArrangedSubview(label)
+        }
+        if let shipped = p.lastShippedText {
+            let label = makeLabel(shipped, size: 12, color: .secondaryLabelColor)
+            label.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
+            stack.addArrangedSubview(label)
+        }
     }
 
     @available(*, unavailable)

@@ -51,6 +51,10 @@ class ProjectStatus:
     waves: Dict[int, str] = field(default_factory=dict)
     roadmap_milestones: List[dict] = field(default_factory=list)
     next_milestone: Optional[dict] = None
+    phase_log: List[dict] = field(default_factory=list)
+    vision: Optional[str] = None
+    intent: Optional[str] = None
+    lesson: Optional[str] = None
     git: Optional[dict] = None
     pending_answers: List[dict] = field(default_factory=list)
     next_skill: Optional[str] = None
@@ -83,6 +87,10 @@ class ProjectStatus:
             "waves": {str(number): name for number, name in sorted(self.waves.items())},
             "roadmap_milestones": list(self.roadmap_milestones),
             "next_milestone": self.next_milestone,
+            "phase_log": list(self.phase_log),
+            "vision": self.vision,
+            "intent": self.intent,
+            "lesson": self.lesson,
             "git": self.git,
             "pending_answers": list(self.pending_answers),
             "next_skill": self.next_skill,
@@ -118,6 +126,10 @@ class ProjectStatus:
             waves={int(number): name for number, name in waves.items()},
             roadmap_milestones=list(data.get("roadmap_milestones") or []),
             next_milestone=data.get("next_milestone"),
+            phase_log=list(data.get("phase_log") or []),
+            vision=data.get("vision"),
+            intent=data.get("intent"),
+            lesson=data.get("lesson"),
             git=data.get("git"),
             pending_answers=list(data.get("pending_answers") or []),
             next_skill=data.get("next_skill"),

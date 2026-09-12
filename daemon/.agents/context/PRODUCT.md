@@ -42,3 +42,11 @@ lookahead in next/STATE.md. Remove attention items, next commands, copy and
 reveal actions, evidence, activity and usage views. Keep the state pill and
 health dot, the Settings menu with Plugin and Watched Folders, and offline
 handling.
+
+## Briefing details
+User: "B on both, implement" after `daemon/prototype-details.html` (A Glance,
+B Briefing). Both surfaces read more of `.project`: ROADMAP.md goal, depends-on
+and integrated commit; archive MANIFEST.md ship date, tasks, waves, review
+cycles and carried rulings; the STATE.md log as a phase timeline; CHARTER.md
+Vision; intent Summary; task names per wave; success criteria with the last
+verify result; and the latest LESSONS.md entry. Still no next steps or actions.
