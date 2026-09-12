@@ -111,37 +111,45 @@ gsd-path-daemon plugin <status|install|update|uninstall>          # manage the s
 
 The dashboard uses the GSD Cloud Studio theme (system light/dark, or force one
 with `<html data-theme="light|dark">`) and is a pure **status board**: what each
-project has done, where it is now, and where its roadmap goes next. It shows
-no next steps, commands, or attention items.
+project has done, where it is now, where its roadmap goes next, and what it has
+cost. It shows no next steps, commands, or attention items.
 
-- A slim top toolbar contains the GSD Path home action, a one-line summary
-  (projects, in progress, blocked, shipped), connection status with the last
-  update time, and a **Settings** menu for Plugin and Watched Folders.
-- One card per project holds its **milestone stack**: shipped milestones
-  collapsed to a line with the ship date and, from the archive manifest, tasks,
-  waves, average review cycles, integrated commit and carried rulings, plus the
-  milestone goal; the current milestone expanded with phase, wave, goal, intent,
-  task progress, the date it entered the phase, time in phase, usage, waves with
-  their task names (done ✓ / current ● / ahead ○), success criteria met with the
-  last verify result, a phase log strip with dates from STATE.md, and the git
-  branch and head; then planned milestones as ghosts with their goal and
-  depends-on chain, or "end of roadmap". A charter vision heads the card and
-  the latest lesson closes it when the project records them.
-- Sources: `ROADMAP.md` (goal, depends-on, status, archive, integrated commit),
-  `archive/*/MANIFEST.md`, `STATE.md` log, `CHARTER.md` Vision,
-  `intent/INTENT.md` Summary, `LESSONS.md`, task files, `review/FINAL.md` and
-  the verify ledger. The lookahead milestone from `next/STATE.md` is appended
-  when it is not in the roadmap.
-- Cards are ordered blocked, then in progress, then shipped, by name within
-  each group. The state pill reads Blocked, In <phase>, or Shipped; the dot
-  keeps the daemon's health colour.
+- **Board**: one compact row per project, grouped Needs attention / In progress
+  / Shipped. A row shows the milestone stack (`M001 ✓  M002 ●  M003 ○`, ■ when
+  blocked), a here line with phase, wave, task progress, criteria met, last
+  shipped milestone and the current goal, then cost and turn count for the
+  current milestone, and the state pill. Shipped projects collapse to one line.
+- **Project page** (click a row, or the tray's `#project=<root>` deep link): the
+  full briefing as one scrolling page. The toolbar becomes a back button and a
+  project switcher. The page holds the charter vision; shipped milestones with
+  ship date, tasks, waves, review cycles, integrated commit, carried rulings,
+  cost and turns; the current milestone with goal, intent, depends-on, task
+  progress, entered date, waves with task names, criteria with the last verify
+  result, a phase-log strip and git position; planned milestones with goals;
+  the latest lesson; and a **Usage** block.
+- **Usage** comes from host session logs matched to the project root by working
+  directory: Codex rollouts (`~/.codex/sessions` and Orca's per-account homes)
+  and Claude Code transcripts (`~/.claude/projects`). It shows cost, turns,
+  tokens and models for the current milestone, all-milestone totals, a bar per
+  model, a per-agent table (the `$gsd-path-*` skill and task named in the
+  session, subagents marked), and a folded per-turn ledger with time, agent,
+  model, in / cached / out tokens, cost and duration. A turn is one model
+  response. Turns dated on or before a milestone's ship date count toward that
+  milestone; later turns toward the current one.
+- **Cost** is tokens × the `prices` table in `daemon.json`, USD per million
+  tokens per model, e.g. `{"prices": {"gpt-6-astra": {"input": 1.25,
+  "cached": 0.125, "output": 10}}}`. There are no built-in prices: a model
+  without a price contributes tokens only and is listed as unpriced.
+  `session_dirs` overrides the scanned locations (glob patterns).
+- Sources for the rest: `ROADMAP.md`, `archive/*/MANIFEST.md`, the `STATE.md`
+  log, `CHARTER.md` Vision, `intent/INTENT.md` Summary, `LESSONS.md`, task
+  files, `review/FINAL.md`, the verify ledger, and `next/STATE.md`.
 
-`#project=<root>` (used by the native tray) highlights and reveals that card.
-`#plugin` and `#folders` open settings directly; the GSD Path toolbar button
-returns to the board. Refresh preserves scroll position, the open Settings
-menu, and focus. Connection status changes to Offline after a failed status
-request; the last received data remains visible with an explicit offline label.
-The dashboard does not execute pipeline commands.
+`#plugin` and `#folders` open settings directly; the GSD Path button and Back
+return to the board. Refresh preserves page scroll, the open Settings menu and
+focus. Connection status changes to Offline after a failed status request; the
+last received data remains visible with an explicit offline label. The
+dashboard does not execute pipeline commands.
 
 ## Plugin lifecycle
 

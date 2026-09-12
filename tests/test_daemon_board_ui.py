@@ -42,7 +42,15 @@ def sample_projects():
                       vision="See every gsd-path project's state without a terminal.",
                       intent="Operators stop polling STATE.md by hand.",
                       lesson="003-core — Land task evidence through the isolation helper.",
-                      usage={"tokens_in": 412000, "tokens_out": 133000, "cost": 9.8, "models": []},
+                      spend={"turns": 90, "prompts": 12, "tokens_in": 9000000, "tokens_cached": 5000000, "tokens_out": 100000,
+                             "cost": 26.1, "unpriced": ["claude-sonnet-5"],
+                             "models": [{"model": "gpt-6-astra", "host": "codex", "turns": 84, "tokens": 14000000, "cost": 24.6},
+                                        {"model": "claude-sonnet-5", "host": "claude", "turns": 6, "tokens": 100000, "cost": None}],
+                             "agents": [{"agent": "$gsd-path-build · T006", "models": ["gpt-6-astra"], "turns": 60, "tokens": 10000000, "cost": 18.0},
+                                        {"agent": "$gsd-path-build · reviewer", "models": ["claude-sonnet-5"], "turns": 6, "tokens": 100000, "cost": None}],
+                             "milestones": {"M003": {"turns": 6, "tokens": 1000000, "cost": 1.5}, "M004": {"turns": 84, "tokens": 14100000, "cost": 24.6}},
+                             "recent": [{"at": "2026-09-12T14:32:07+00:00", "agent": "$gsd-path-build · T006", "model": "gpt-6-astra", "host": "codex",
+                                         "tokens_in": 214830, "tokens_cached": 171200, "tokens_out": 4226, "cost": 0.68, "duration_s": 41.0}]},
                       time_in_phase_s=3600 * 5, git={"branch": "gsd-path/M004", "head": "0e9a3b1abcdef", "dirty": True},
                       next_skill="gsd-path-build"),
         ProjectStatus(root="/sample/atlas'&tab=usage", project="Atlas API", milestone="api-v2", phase="ship",
@@ -88,44 +96,69 @@ class BoardUITests(unittest.TestCase):
         self.assertEqual(self.js("getComputedStyle(document.body).backgroundColor"), "rgb(247, 248, 250)")
         self.js("document.documentElement.dataset.theme = 'dark'")
         self.assertEqual(self.js("getComputedStyle(document.body).backgroundColor"), "rgb(12, 13, 16)")
-        # One card per project, blocked first, then active, then shipped.
-        self.assertEqual(self.js("[...document.querySelectorAll('.card .title b')].map(b=>b.textContent).join('|')"),
+        # Board: one compact row per project grouped by state; blocked first, then active, then shipped.
+        self.assertEqual(self.js("[...document.querySelectorAll('.prow .name span:last-child')].map(b=>b.textContent).join('|')"),
                          "Atlas API|Field Notes|GSD Path|Done Thing")
-        # Done / here / ahead stack from ROADMAP.md.
-        gsd = "[...document.querySelectorAll('.card')].find(c=>c.dataset.root==='/sample/gsd')"
+        self.assertEqual(self.js("[...document.querySelectorAll('.group')].map(g=>g.textContent).join('|')"),
+                         "Needs attention · 1|In progress · 2|Shipped · 1")
+        gsd_row = "document.querySelector('.prow[data-root=\"/sample/gsd\"]')"
+        self.assertEqual(self.js(f"{gsd_row}.querySelector('.stack').textContent"), "M003 ✓  M004 ●  M005 ○")
+        self.assertEqual(self.js(f"{gsd_row}.querySelector('.here').textContent"),
+                         "build · wave 2 · 6 of 9 tasks · 2/3 criteria · last shipped M003 2026-09-06 — Native tray and dashboard for the daemon.")
+        self.assertEqual(self.js(f"{gsd_row}.querySelector('.spend').textContent"), "$24.60 · 84 turns")
+        self.assertEqual(self.js("document.querySelector('.prow.shipped .here') === null"), 'true')
+        self.assertEqual(self.js("document.querySelectorAll('.card').length"), '0')
+        # No next steps, commands or attention copy anywhere on the board.
+        board = self.js("document.querySelector('.board').innerText")
+        for gone in ("gsd-path-build", "forensics", "Copy", "Next step", "ship blocked", "Needs you"):
+            self.assertNotIn(gone, board)
+        # A row opens the project page: full briefing card, back button, project switcher, hash deep link.
+        self.js(f"{gsd_row}.click()")
+        self.assertEqual(self.js("location.hash"), "#project=%2Fsample%2Fgsd")
+        self.assertEqual(self.js("document.querySelectorAll('.card').length"), '1')
+        self.assertEqual(self.js("[...document.querySelectorAll('.switcher button')].map(b=>b.textContent+(b.classList.contains('sel')?'*':'')).join('|')"),
+                         "Atlas API|Field Notes|GSD Path*|Done Thing")
+        gsd = "document.querySelector('.card')"
         self.assertEqual(self.js(f"[...{gsd}.querySelectorAll('.ms')].map(m=>m.className.split(' ')[1]+':'+m.querySelector('.k').textContent).join('|')"),
                          "done:M003|now:M004|ahead:M005")
         text = self.js(f"{gsd}.innerText")
-        for expected in ("core", "daemon", "notify", "build · wave 2", "6 of 9 tasks", "entered build 2026-09-10 · 5h 0m · 545k tok · $9.80",
+        for expected in ("core", "daemon", "notify", "build · wave 2", "6 of 9 tasks", "entered build 2026-09-10 · 5h 0m",
                          "✓ wave 1 parsers", "● wave 2 watcher", "○ wave 3 tray", "gsd-path/M004 · 0e9a3b1 · dirty", "In build",
                          # briefing details
                          "See every gsd-path project's state without a terminal.", "shipped 2026-09-06",
-                         "12 of 12 tasks · 3 waves · 1.3 review cycles avg · integrated 158ab3a · 2 rulings carried",
+                         "12 of 12 tasks · 3 waves · 1.3 review cycles avg · integrated 158ab3a · 2 rulings carried · $1.50 · 6 turns",
                          "Parsers and the status endpoint.", "after M003", "Native tray and dashboard for the daemon.",
                          "Operators stop polling STATE.md by hand.", "T001 state parser ✓", "T005 poll loop ✓", "T006 notify hook ○",
                          "2 of 3 criteria met", "verify pass 14:32:00", "Desktop notifications.", "after M004",
-                         "latest lesson · 003-core — Land task evidence through the isolation helper."):
+                         "latest lesson · 003-core — Land task evidence through the isolation helper.",
+                         # usage: cost, turns, models, agents; unpriced model excluded from cost
+                         "USAGE · M004", "$24.60", "84", "14.1M", "$26.10", "gpt-6-astra", "84 turns · 14.0M · $24.60",
+                         "claude-sonnet-5", "6 turns · 100k · —", "$gsd-path-build · T006", "$gsd-path-build · reviewer",
+                         "No price configured for claude-sonnet-5"):
             self.assertIn(expected, text)
         self.assertEqual(self.js(f"[...{gsd}.querySelectorAll('.phase-log div')].map(d=>d.className+':'+d.textContent).join('|')"),
                          ":def09-09|:plan09-09|now:build09-10")
         self.assertEqual(self.js(f"[...{gsd}.querySelectorAll('.crit i')].map(i=>i.className).join('|')"), "met|met|not-met")
-        # No next steps, commands or attention copy anywhere on the board.
-        board = self.js("document.querySelector('.board').innerText")
-        for gone in ("gsd-path-build", "forensics", "Copy", "Next step", "ship blocked", "Needs"):
-            self.assertNotIn(gone, board)
-        # Lookahead milestone from next/STATE.md, number from the branch when ROADMAP.md is empty.
-        atlas = "[...document.querySelectorAll('.card')].find(c=>c.dataset.root.startsWith('/sample/atlas'))"
-        self.assertEqual(self.js(f"[...{atlas}.querySelectorAll('.ms .k')].map(k=>k.textContent).join('|')"), "M002|next")
-        self.assertIn("api-v3 · define", self.js(f"{atlas}.innerText"))
-        self.assertIn("Blocked", self.js(f"{atlas}.querySelector('.pill').textContent"))
-        self.assertIn("end of roadmap", self.js("[...document.querySelectorAll('.card')].find(c=>c.dataset.root==='/sample/notes').innerText"))
-        self.assertIn("Shipped", self.js("[...document.querySelectorAll('.card')].find(c=>c.dataset.root==='/sample/done').querySelector('.pill').textContent"))
+        # Turn ledger is folded by default and lists the latest turns.
+        self.assertEqual(self.js("document.querySelector('details.turns').open"), 'false')
+        self.assertIn("14:32:07", self.js("document.querySelector('details.turns table').textContent"))
+        self.assertIn("41s", self.js("document.querySelector('details.turns table').textContent"))
+        # The page survives polling and the switcher moves between projects.
+        self.assertEqual(self.js("(async()=>{await refresh();return document.querySelectorAll('.card').length})()"), '1')
+        self.js("[...document.querySelectorAll('.switcher button')].find(b=>b.textContent==='Atlas API').click()")
+        self.assertIn("api-v3 · define", self.js("document.querySelector('.card').innerText"))
+        self.assertEqual(self.js("[...document.querySelector('.card').querySelectorAll('.ms .k')].map(k=>k.textContent).join('|')"), "M002|next")
+        self.assertIn("Blocked", self.js("document.querySelector('.card .pill').textContent"))
+        # Cold deep link (the tray) opens the page directly; Back returns to the board.
+        self.js("location.hash = 'project=' + encodeURIComponent('/sample/notes')")
+        self.orca("wait", "--page", self.page, "--text", "end of roadmap")
+        self.assertEqual(self.js("document.querySelector('.card').dataset.root"), "/sample/notes")
+        self.js("document.querySelector('[data-nav=board]').click()")
+        self.assertEqual(self.js("document.querySelectorAll('.prow').length"), '4')
+        self.assertEqual(self.js("location.hash"), "")
         # Toolbar summary and connection.
         self.assertEqual(self.js("document.querySelector('.summary').textContent"), "4 projects · 2 in progress · 1 blocked · 1 shipped")
         self.assertIn("Connected", self.js("document.querySelector('.connection').textContent"))
-        # Deep link from the tray selects and reveals the card; the selection survives polling.
-        self.js("location.hash = 'project=' + encodeURIComponent('/sample/notes')")
-        self.assertEqual(self.js("(async()=>{await new Promise(r=>setTimeout(r,50));await refresh();return document.querySelector('.card.sel').dataset.root})()"), "/sample/notes")
         # Settings menu: survives polling, Escape closes it, Plugin and Watched folders remain reachable.
         self.assertEqual(self.js("document.querySelector('.settings-menu').open"), 'false')
         self.js("document.querySelector('.settings-menu summary').click()")
@@ -139,13 +172,13 @@ class BoardUITests(unittest.TestCase):
         self.orca("wait", "--page", self.page, "--text", "Plugin")
         self.assertEqual(self.js("(async()=>{await loadPlugin();render();return document.querySelector('.box h4').textContent})()"), "Global hosts")
         self.js("document.querySelector('[data-nav=board]').click()")
-        self.assertEqual(self.js("document.querySelectorAll('.card').length"), '4')
-        # Narrow frame: no horizontal overflow.
+        self.assertEqual(self.js("document.querySelectorAll('.prow').length"), '4')
+        # Narrow frame: no horizontal overflow on the board and on a project page.
         self.assertEqual(self.js("""new Promise(resolve => {
           const f = document.createElement('iframe');
           f.id = 'narrow'; f.style = 'width:390px;height:600px;border:0';
-          f.src = location.href.split('#')[0];
-          f.onload = () => resolve(String(f.contentDocument.documentElement.scrollWidth));
+          f.src = location.href.split('#')[0] + '#project=%2Fsample%2Fgsd';
+          f.onload = () => setTimeout(() => resolve(String(f.contentDocument.documentElement.scrollWidth)), 300);
           document.body.append(f);
         })"""), '390')
         self.js("document.querySelector('#narrow').remove()")

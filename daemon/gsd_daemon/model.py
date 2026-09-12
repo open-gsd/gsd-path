@@ -67,6 +67,7 @@ class ProjectStatus:
     answers: List[dict] = field(default_factory=list)
     time_in_phase_s: Optional[int] = None
     usage: Optional[dict] = None
+    spend: Optional[dict] = None
     health: str = "green"
     attention: List[dict] = field(default_factory=list)
 
@@ -103,6 +104,7 @@ class ProjectStatus:
             "answers": list(self.answers),
             "time_in_phase_s": self.time_in_phase_s,
             "usage": self.usage,
+            "spend": self.spend,
             "health": self.health,
             "attention": list(self.attention),
         }
@@ -142,6 +144,7 @@ class ProjectStatus:
             answers=list(data.get("answers") or []),
             time_in_phase_s=data.get("time_in_phase_s"),
             usage=data.get("usage"),
+            spend=data.get("spend"),
             health=data.get("health") or "green",
             attention=list(data.get("attention") or []),
         )

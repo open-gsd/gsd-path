@@ -54,6 +54,18 @@ struct Criterion: Codable {
     var verdict: String?
 }
 
+struct MilestoneSpend: Codable {
+    var turns: Int?
+    var tokens: Int?
+    var cost: Double?
+}
+
+struct Spend: Codable {
+    var turns: Int?
+    var cost: Double?
+    var milestones: [String: MilestoneSpend]?
+}
+
 struct ProjectStatus: Codable {
     var root: String?
     var project: String?
@@ -68,6 +80,7 @@ struct ProjectStatus: Codable {
     var intent: String?
     var lesson: String?
     var criteria: [Criterion]?
+    var spend: Spend?
     var git: GitStatus?
     var tasks_done: Int?
     var tasks_total: Int?
@@ -242,6 +255,18 @@ extension ProjectStatus {
             parts.append("\(criteria.filter { $0.verdict == "met" }.count)/\(criteria.count) criteria")
         }
         if let since = (phase_log?.first { $0.phase == phase } ?? phase_log?.last)?.date { parts.append("since \(since)") }
+        if let spend = currentSpendText { parts.append(spend) }
+        return parts.joined(separator: " · ")
+    }
+
+    /// "$24.60 · 84 turns" for the current milestone; tokens-only projects show turns alone.
+    var currentSpendText: String? {
+        let number = (roadmap_milestones ?? []).first { $0.slug != nil && $0.slug == milestone }?.number
+            ?? branch.flatMap { b in b.range(of: #"M\d{3,}"#, options: .regularExpression).map { String(b[$0]) } } ?? "now"
+        guard let slot = spend?.milestones?[number], let turns = slot.turns, turns > 0 else { return nil }
+        var parts: [String] = []
+        if let cost = slot.cost { parts.append(String(format: "$%.2f", cost)) }
+        parts.append("\(turns) turns")
         return parts.joined(separator: " · ")
     }
 

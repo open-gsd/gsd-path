@@ -214,3 +214,48 @@ project probes to a 6-entry phase log after scoping (106 raw entries before),
 inspected the live board at 1440px in dark and light with 4 real projects, no
 console errors, document width 1440. Phase labels abbreviated after live
 inspection showed them wrapping in narrow segments.
+
+## Board, project page, and usage from host session logs
+User chose the board → project page layout (`daemon/prototype-pages.html` A)
+and the usage ledger (`daemon/prototype-usage.html` B, ledger folded).
+
+- `daemon/gsd_daemon/sessions.py` (new): parses Codex rollouts (session_meta /
+  turn_context cwd and model, task_started timing, token_usage_record per model
+  response, `$gsd-path-*` skill and task id from user prompts) and Claude Code
+  transcripts (assistant `message.model` + `message.usage`, cwd, sidechains as
+  subagents). `SessionIndex` reads only the head of each file for its cwd, parses
+  files under a watched root, and re-parses only when size or mtime change.
+  `spend_for` aggregates turns, prompts, tokens, cost, models, agents, recent
+  turns and per-milestone slots (a turn dated on or before a ship date belongs
+  to that milestone). Cost is tokens × `Config.prices`; a slot with no priced
+  turn has cost `null`, never `$0.00`.
+- `config.py`: `session_dirs` (glob patterns, defaults for `~/.codex`, Orca's
+  codex-accounts homes and `~/.claude/projects`) and `prices` per model.
+- `watcher.py`: scans sessions and attaches `spend` on every poll, since usage
+  changes without touching `.project`; failures never stop the poll.
+- `serve.py`: board rows grouped Needs attention / In progress / Shipped with
+  stack line, here line, cost · turns and pill; project page with back button
+  and project switcher; usage block with stat tiles, per-model bars, per-agent
+  table, folded per-turn ledger and an unpriced-models note; milestone cost on
+  stack rows. `#project=<root>` opens the page.
+- Tray: `Spend` model; here line appends `$cost · N turns` for the current
+  milestone when present.
+
+Proof: Python suite 173 tests, OK, 1 skipped (new `test_daemon_sessions.py`:
+Codex and Claude parsing, duration, agent naming, price table, index caching and
+re-parse on growth, root matching, spend totals, unpriced handling, milestone
+attribution; config price parsing). `GSD_UI_TEST=1 ... test_daemon_board_ui.py`
+passed in Orca: row order and groups, stack and here lines, cost · turns on the
+row, no cards on the board, page open with hash, switcher, briefing details,
+usage tiles, model bars, agent table, folded ledger content, page survives
+polling, switcher navigation, cold deep link, Back, Settings, folders, plugin,
+390px page width. Native test passed the here line with cost and turns.
+`git diff --check` passed.
+Real data: 12,049 session files scanned in 4.85 s once, then 0.08 s per poll;
+214 files matched watched roots. report-dashboard resolved to 9,233 model
+responses over 282 prompts, models gpt-5.6-sol and gpt-6-astra, agents such as
+`$gsd-path-ship · T003`; with no price table every cost reads "—" and both
+models are listed as unpriced. Installed and restarted the daemon and tray;
+inspected the live board (4 rows, shipped rows collapsed, turns on the right)
+and the report-dashboard page with its usage block at 1280px; no console
+errors, document width 1280.

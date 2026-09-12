@@ -5,7 +5,7 @@ import os
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional, Union
+from typing import Dict, List, Optional, Union
 
 ENV_CONFIG = "GSD_DAEMON_CONFIG"
 
@@ -35,6 +35,9 @@ class Config:
     poll_seconds: int = 5
     notify: bool = True
     history: bool = True
+    # Host session log locations (glob patterns) and USD-per-million-token prices per model.
+    session_dirs: List[str] = field(default_factory=lambda: list(DEFAULT_SESSION_DIRS))
+    prices: Dict[str, Dict[str, float]] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return {
@@ -44,6 +47,8 @@ class Config:
             "poll_seconds": self.poll_seconds,
             "notify": self.notify,
             "history": self.history,
+            "session_dirs": list(self.session_dirs),
+            "prices": {model: dict(price) for model, price in self.prices.items()},
         }
 
     @classmethod
@@ -59,6 +64,9 @@ class Config:
             poll_seconds=_int_or(data.get("poll_seconds"), 5),
             notify=bool(data.get("notify", True)),
             history=bool(data.get("history", True)),
+            session_dirs=[d for d in data["session_dirs"] if isinstance(d, str)]
+            if isinstance(data.get("session_dirs"), list) else list(DEFAULT_SESSION_DIRS),
+            prices=_prices(data.get("prices")),
         )
 
     @classmethod
@@ -96,6 +104,27 @@ class Config:
         folder = _abs(folder)
         if folder in self.parents:
             self.parents.remove(folder)
+
+
+DEFAULT_SESSION_DIRS = (
+    "~/.codex/sessions",
+    "~/Library/Application Support/orca/codex-accounts/*/home/sessions",
+    "~/.claude/projects",
+)
+
+
+def _prices(value) -> Dict[str, Dict[str, float]]:
+    prices: Dict[str, Dict[str, float]] = {}
+    if not isinstance(value, dict):
+        return prices
+    for model, price in value.items():
+        if not isinstance(model, str) or not isinstance(price, dict):
+            continue
+        clean = {key: float(price[key]) for key in ("input", "cached", "output")
+                 if isinstance(price.get(key), (int, float)) and not isinstance(price.get(key), bool)}
+        if clean:
+            prices[model] = clean
+    return prices
 
 
 def _int_or(value, default: int) -> int:

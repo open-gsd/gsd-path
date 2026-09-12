@@ -98,7 +98,6 @@ DASHBOARD_PAGE = r"""<!doctype html>
            grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr)); gap: 14px; }
   .board .empty { grid-column: 1 / -1; padding: 28px; color: var(--dim); }
   .card { background: var(--card); border-radius: 14px; box-shadow: var(--shadow); padding: 12px 14px; min-width: 0; overflow-wrap: anywhere; }
-  .card.sel { box-shadow: 0 0 0 2px var(--accent), var(--shadow); }
   .card .title { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
   .card .title b { font-size: 14px; }
   .card .title .pill { margin-left: auto; color: #fff; }
@@ -136,6 +135,46 @@ DASHBOARD_PAGE = r"""<!doctype html>
   .phase-log div.now { color: var(--accent); } .phase-log div.now i { background: var(--accent); }
   .card .lesson { font-size: 12px; color: var(--dim); border-top: 1px dashed var(--line); margin-top: 6px; padding-top: 6px; }
   .card .lesson b { color: var(--faint); font-weight: 600; }
+
+  /* Board: one compact row per project, grouped by state. */
+  .board { display: block; padding: 10px 16px 24px; }
+  .group { font-size: 10.5px; text-transform: uppercase; letter-spacing: .8px; color: var(--faint); padding: 12px 2px 6px; }
+  .prow { display: grid; grid-template-columns: minmax(140px, 200px) minmax(0, 1fr) auto auto; gap: 14px; align-items: center;
+          width: 100%; text-align: left; background: var(--card); border: 0; border-radius: 10px; box-shadow: var(--shadow);
+          padding: 9px 14px; margin-bottom: 8px; color: var(--text); cursor: pointer; font: inherit; }
+  .prow:hover { box-shadow: 0 0 0 1.5px var(--accent), var(--shadow); }
+  .prow.shipped { padding: 6px 14px; }
+  .prow .name { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 13.5px; min-width: 0; }
+  .prow .name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .prow .mid { min-width: 0; }
+  .prow .stack { font-family: var(--mono); font-size: 12px; font-weight: 500; }
+  .prow .stack .s-done { color: var(--run); } .prow .stack .s-now { color: var(--accent); } .prow .stack .s-now.blocked { color: var(--danger); } .prow .stack .s-ahead { color: var(--faint); }
+  .prow .here { font-family: var(--mono); font-size: 11.5px; color: var(--dim); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .prow .spend { font-family: var(--mono); font-size: 11.5px; color: var(--dim); white-space: nowrap; }
+  .board .empty { padding: 28px 0; color: var(--dim); }
+  /* Project page: the full card, one scrolling page. */
+  .page { padding: 16px; max-width: 860px; }
+  .back { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; font-size: 12.5px; color: var(--text); cursor: pointer; white-space: nowrap; }
+  .switcher { display: flex; gap: 2px; background: var(--sunken); padding: 3px; border-radius: 9px; overflow: auto; min-width: 0; }
+  .switcher button { display: flex; align-items: center; gap: 6px; padding: 4px 10px; border: 0; border-radius: 7px; background: none; color: var(--dim); font-size: 12.5px; white-space: nowrap; cursor: pointer; }
+  .switcher button.sel { background: var(--card); color: var(--text); box-shadow: var(--shadow); font-weight: 600; }
+  /* Usage: cost, turns, models and the per-turn ledger from host session logs. */
+  .usage { border-top: 1px solid var(--line); margin-top: 8px; padding-top: 8px; }
+  .usage h4 { font-size: 11px; text-transform: uppercase; letter-spacing: .7px; color: var(--faint); margin: 0 0 4px; }
+  .stat { display: flex; gap: 10px; flex-wrap: wrap; margin: 8px 0; }
+  .stat div { background: var(--sunken); border-radius: 8px; padding: 6px 10px; min-width: 96px; }
+  .stat .v { font-size: 15px; font-weight: 650; } .stat .k { font-size: 10.5px; color: var(--faint); text-transform: uppercase; letter-spacing: .5px; }
+  .mrow { display: flex; align-items: center; gap: 10px; font-size: 12px; margin-top: 4px; }
+  .mrow .nm { width: 150px; font-family: var(--mono); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mrow .bar { flex: 1; margin: 0; } .mrow .bar > i.claude { background: var(--wait); } .mrow .bar > i.codex { background: var(--accent); }
+  .mrow .r { width: 170px; text-align: right; color: var(--dim); font-family: var(--mono); font-size: 11px; }
+  table.u { width: 100%; border-collapse: collapse; font-size: 11.5px; margin-top: 6px; }
+  table.u th { text-align: left; color: var(--faint); font-size: 10px; text-transform: uppercase; letter-spacing: .5px; padding: 4px 6px; border-bottom: 1px solid var(--line); }
+  table.u td { padding: 4px 6px; border-bottom: 1px solid var(--line); font-family: var(--mono); }
+  table.u td.t { font-family: var(--ui); } table.u td.n, table.u th.n { text-align: right; }
+  details.turns summary { cursor: pointer; font-size: 12px; color: var(--accent); margin-top: 8px; }
+  .usage .note { font-size: 11px; color: var(--faint); margin-top: 6px; }
+  .ms .meta .spend { color: var(--dim); }
 
   /* Settings views */
   .settings { width: 100%; max-width: 1000px; margin: 0 auto; padding: 24px 24px 40px; }
@@ -180,12 +219,14 @@ const healthDot = p => ({red: "r", amber: "y", green: "g"})[healthOf(p)] || "g";
 let DATA = {schema: null, generated_at: null, projects: []};
 let PLUGIN = null;
 let ONLINE = null;
-let CState = {view: "board", root: null, reveal: false};
+let CState = {view: "board", root: null};
 
 function setHash() {
-  if (CState.view === "board") history.replaceState(null, "", CState.root ? "#" + new URLSearchParams({project: CState.root}) : location.pathname);
+  if (CState.view === "project" && CState.root) history.replaceState(null, "", "#" + new URLSearchParams({project: CState.root}));
+  else if (CState.view === "board") history.replaceState(null, "", location.pathname);
   else history.replaceState(null, "", "#" + CState.view);
 }
+function openProject(root) { CState.view = "project"; CState.root = root; setHash(); render(); window.scrollTo(0, 0); }
 function navigate(view) {
   CState.view = view;
   setHash(); render();
@@ -368,22 +409,41 @@ function phaseLog(p) {
   if (!log.length) return "";
   return `<div class="phase-log">${log.map(e => `<div class="${e.phase === p.phase ? "now" : ""}" title="${esc(e.phase)} · ${esc(e.date)}"><i></i>${esc(PHASE_SHORT[e.phase] || String(e.phase).slice(0, 5))}<br>${esc(String(e.date).slice(5))}</div>`).join("")}</div>`;
 }
-const manifestMeta = m => {
+const money = v => v == null ? "—" : "$" + Number(v).toFixed(2);
+const spendText = slot => slot && slot.turns ? [slot.cost != null ? money(slot.cost) : null, `${slot.turns} turns`].filter(Boolean).join(" · ") : "";
+const manifestMeta = (p, m) => {
   const mf = m.manifest || {};
+  const slot = ((p.spend || {}).milestones || {})[m.number];
   return [mf.tasks_total != null ? `${mf.tasks_done} of ${mf.tasks_total} tasks` : null,
           mf.waves != null ? `${mf.waves} waves` : null,
           mf.cycles_avg != null ? `${mf.cycles_avg} review cycles avg` : null,
           m.integrated ? "integrated " + String(m.integrated).slice(0, 7) : null,
-          mf.carried ? `${mf.carried} rulings carried` : null].filter(Boolean).join(" · ");
+          mf.carried ? `${mf.carried} rulings carried` : null,
+          spendText(slot) ? `<span class="spend">${spendText(slot)}</span>` : null].filter(Boolean).join(" · ");
 };
+function usageBlock(p, cur) {
+  const sp = p.spend;
+  if (!sp || !sp.turns) return "";
+  const slot = (sp.milestones || {})[cur.number] || {turns: 0, tokens: 0, cost: null};
+  const maxTok = Math.max(...sp.models.map(m => m.tokens), 1);
+  const models = sp.models.map(m => `<div class="mrow"><span class="nm" title="${esc(m.model)}">${esc(m.model)}</span><span class="bar"><i class="${esc(m.host)}" style="width:${Math.max(2, Math.round(100 * m.tokens / maxTok))}%"></i></span><span class="r">${m.turns} turns · ${fmt(m.tokens)} · ${money(m.cost)}</span></div>`).join("");
+  const agents = sp.agents.map(a => `<tr><td class="t">${esc(a.agent)}</td><td>${esc(a.models.join(", "))}</td><td class="n">${a.turns}</td><td class="n">${fmt(a.tokens)}</td><td class="n">${money(a.cost)}</td></tr>`).join("");
+  const turns = sp.recent.map(t => `<tr><td>${esc(shortT(t.at))}</td><td class="t">${esc(t.agent)}</td><td>${esc(t.model || "?")}</td><td class="n">${fmt(t.tokens_in)}</td><td class="n">${fmt(t.tokens_cached)}</td><td class="n">${fmt(t.tokens_out)}</td><td class="n">${money(t.cost)}</td><td class="n">${t.duration_s != null ? t.duration_s + "s" : "—"}</td></tr>`).join("");
+  const note = sp.unpriced.length ? `<div class="note">No price configured for ${esc(sp.unpriced.join(", "))}: tokens counted, cost excluded. Add prices per million tokens under "prices" in daemon.json.</div>` : "";
+  return `<div class="usage"><h4>Usage · ${esc(cur.number)}</h4>
+    <div class="stat"><div><div class="v">${money(slot.cost)}</div><div class="k">cost</div></div><div><div class="v">${slot.turns}</div><div class="k">turns</div></div><div><div class="v">${fmt(slot.tokens || 0)}</div><div class="k">tokens</div></div><div><div class="v">${sp.models.length}</div><div class="k">models</div></div><div><div class="v">${money(sp.cost)}</div><div class="k">all milestones</div></div><div><div class="v">${sp.turns}</div><div class="k">turns · all</div></div></div>
+    ${models}
+    <table class="u"><tr><th>Agent</th><th>Models</th><th class="n">Turns</th><th class="n">Tokens</th><th class="n">Cost</th></tr>${agents}</table>
+    <details class="turns"><summary>Turn ledger · latest ${sp.recent.length} of ${sp.turns}</summary><table class="u"><tr><th>Time</th><th>Agent</th><th>Model</th><th class="n">In</th><th class="n">Cached</th><th class="n">Out</th><th class="n">Cost</th><th class="n">Dur</th></tr>${turns}</table></details>
+    ${note}<div class="note">From host session logs matched to this project by working directory.</div></div>`;
+}
 function card(p) {
   const {before, cur, after} = milestoneStack(p);
   const st = stateOf(p);
   const here = [esc(p.phase || "no phase"), p.current_wave != null ? "wave " + p.current_wave : null].filter(Boolean).join(" · ");
   const entered = (p.phase_log || []).find(e => e.phase === p.phase) || (p.phase_log || []).slice(-1)[0];
   const age = dur(p.time_in_phase_s);
-  const usage = p.usage && (p.usage.tokens_in || p.usage.tokens_out) ? `${fmt((p.usage.tokens_in || 0) + (p.usage.tokens_out || 0))} tok${p.usage.cost ? " · $" + Number(p.usage.cost).toFixed(2) : ""}` : null;
-  const when = [entered ? "entered " + esc(entered.phase) + " " + esc(entered.date) : null, age, usage].filter(Boolean).join(" · ");
+  const when = [entered ? "entered " + esc(entered.phase) + " " + esc(entered.date) : null, age].filter(Boolean).join(" · ");
   const progress = p.tasks_total
     ? `<div class="bar"><i style="width:${Math.round(100 * (p.tasks_done || 0) / p.tasks_total)}%"></i></div><div class="sub">${p.tasks_done || 0} of ${p.tasks_total} tasks${when ? " · " + when : ""}</div>`
     : `<div class="sub">${when ? when + " · " : ""}no tasks yet</div>`;
@@ -393,22 +453,46 @@ function card(p) {
   const goal = m => m.goal ? `<div class="goal">${esc(m.goal)}</div>` : "";
   const doneRows = before.map(m => {
     const shipped = m.manifest && m.manifest.shipped;
-    const meta = manifestMeta(m);
+    const meta = manifestMeta(p, m);
     return `<div class="ms done"><span class="k">${esc(m.number)}</span><div class="body">${esc(m.slug)} <span class="faint">· ${shipped ? "shipped " + esc(shipped) : esc(m.status || "shipped")}</span>${meta ? `<div class="meta">${meta}</div>` : ""}${goal(m)}</div></div>`;
   }).join("");
   const aheadRows = after.length
     ? after.map(m => `<div class="ms ahead"><span class="k">${esc(m.number)}</span><div class="body">${esc(m.slug)} <span>· ${esc(m.phase || m.status || "planned")}</span>${depends(m)}${goal(m)}</div></div>`).join("")
     : `<div class="ms ahead"><span class="k">—</span><div class="body">end of roadmap</div></div>`;
   const waves = waveRows(p);
-  return `<article class="card ${CState.root === p.root ? "sel" : ""}" data-root="${esc(p.root)}">
+  return `<article class="card" data-root="${esc(p.root)}">
     <div class="title"><span class="dot ${healthDot(p)}"></span><b>${esc(p.project || p.root)}</b><span class="pill ${st === "active" ? "progress" : st}">${esc(stateLabel(p))}</span></div>
     <div class="path">${esc(p.root)}</div>
     ${p.vision ? `<div class="vision">${esc(p.vision)}</div>` : ""}
     ${doneRows}
-    <div class="ms now ${st}"><span class="k">${esc(cur.number)}</span><div class="body"><b>${esc(cur.slug)}</b> · ${here}${depends(cur)}${goal(cur)}${p.intent ? `<div class="intent">${esc(p.intent)}</div>` : ""}${progress}${waves ? `<div class="waves">${waves}</div>` : ""}${criteriaStrip(p)}${verifyLine(p)}${phaseLog(p)}${git}</div></div>
+    <div class="ms now ${st}"><span class="k">${esc(cur.number)}</span><div class="body"><b>${esc(cur.slug)}</b> · ${here}${depends(cur)}${goal(cur)}${p.intent ? `<div class="intent">${esc(p.intent)}</div>` : ""}${progress}${waves ? `<div class="waves">${waves}</div>` : ""}${criteriaStrip(p)}${verifyLine(p)}${phaseLog(p)}${git}${usageBlock(p, cur)}</div></div>
     ${aheadRows}
     ${p.lesson ? `<div class="lesson"><b>latest lesson</b> · ${esc(p.lesson)}</div>` : ""}
   </article>`;
+}
+function stackLine(p) {
+  const {before, cur, after} = milestoneStack(p);
+  const st = stateOf(p);
+  return [...before.map(m => `<span class="s-done">${esc(m.number)} ✓</span>`),
+          `<span class="s-now ${st}">${esc(cur.number)} ${st === "blocked" ? "■" : st === "shipped" ? "✓" : "●"}</span>`,
+          ...after.map(m => `<span class="s-ahead">${esc(m.number)} ○</span>`)].join("  ");
+}
+function boardRow(p) {
+  const st = stateOf(p);
+  const {cur} = milestoneStack(p);
+  const crits = p.criteria || [];
+  const last = (p.roadmap_milestones || []).filter(isDoneMilestone).slice(-1)[0];
+  const here = [esc(p.phase || "no phase"), p.current_wave != null ? "wave " + p.current_wave : null,
+                p.tasks_total ? `${p.tasks_done || 0} of ${p.tasks_total} tasks` : "no tasks yet",
+                crits.length ? `${crits.filter(c => c.verdict === "met").length}/${crits.length} criteria` : null,
+                last ? `last shipped ${esc(last.number)}${last.manifest && last.manifest.shipped ? " " + esc(last.manifest.shipped) : ""}` : null]
+               .filter(Boolean).join(" · ") + (cur.goal ? " — " + esc(cur.goal) : "");
+  const slot = ((p.spend || {}).milestones || {})[cur.number];
+  return `<button class="prow ${st}" data-root="${esc(p.root)}" aria-label="Open ${esc(p.project || p.root)}">
+    <span class="name"><span class="dot ${healthDot(p)}"></span><span>${esc(p.project || p.root)}</span></span>
+    <span class="mid"><span class="stack">${stackLine(p)}</span>${st === "shipped" ? "" : `<span class="here" style="display:block">${here}</span>`}</span>
+    <span class="spend">${spendText(slot)}</span>
+    <span class="pill ${st === "active" ? "progress" : st}">${esc(stateLabel(p))}</span></button>`;
 }
 function tabPlugin() {
   if (!PLUGIN) {
@@ -477,13 +561,25 @@ function render() {
        counts.shipped ? `${counts.shipped} shipped` : null].filter(Boolean).join(" · ")
     : "";
   const connection = ONLINE === null ? "Connecting…" : ONLINE ? "Connected" + (DATA.generated_at ? " · updated " + esc(shortT(DATA.generated_at)) : "") : "Offline · showing last update";
-  const header = `<header class="topbar"><button class="brand" data-nav="board" aria-label="GSD Path status board">GSD Path</button><span class="summary">${summary}</span><span class="connection" role="status"><span class="dot ${ONLINE === null ? "" : ONLINE ? "g" : "r"}"></span> ${connection}</span><details class="settings-menu"><summary>Settings</summary><nav aria-label="Settings"><button class="btn" data-nav="plugin">Plugin</button><button class="btn" data-nav="folders">Watched folders</button></nav></details></header>`;
-  let body;
-  if (CState.view === "plugin") body = `<main class="settings"><h2>Plugin</h2>${tabPlugin()}</main>`;
-  else if (CState.view === "folders") body = `<main class="settings"><h2>Watched folders</h2><p class="dim">Projects inside these folders appear automatically.</p>${(DAEMON.parents || []).map((path, i) => `<div class="folder-row"><span>${esc(path)}</span><button class="btn danger" data-remove-parent="${i}">Stop watching</button></div>`).join("")}<p style="margin-top:16px"><button class="btn" data-action="add-folder">Add folder…</button></p></main>`;
-  else {
-    const empty = ONLINE === null ? "Loading projects…" : !ONLINE && !projects.length ? "Cannot load projects. Check the daemon connection." : "No projects yet. Add a watched folder to get started.";
-    body = `<main class="board" tabindex="0" aria-label="Status board">${projects.length ? projects.map(card).join("") : `<div class="empty">${empty}</div>`}</main>`;
+  const settings = `<details class="settings-menu"><summary>Settings</summary><nav aria-label="Settings"><button class="btn" data-nav="plugin">Plugin</button><button class="btn" data-nav="folders">Watched folders</button></nav></details>`;
+  const status = `<span class="connection" role="status"><span class="dot ${ONLINE === null ? "" : ONLINE ? "g" : "r"}"></span> ${connection}</span>`;
+  const current = CState.view === "project" ? projects.find(p => p.root === CState.root) : null;
+  let header, body;
+  if (current) {
+    header = `<header class="topbar"><button class="back" data-nav="board" aria-label="Back to the status board">‹ Board</button><nav class="switcher" aria-label="Projects">${projects.map(q => `<button class="${q.root === current.root ? "sel" : ""}" data-root="${esc(q.root)}" aria-pressed="${q.root === current.root}"><span class="dot ${healthDot(q)}"></span>${esc(q.project || q.root)}</button>`).join("")}</nav>${status}${settings}</header>`;
+    body = `<main class="page">${card(current)}</main>`;
+  } else {
+    header = `<header class="topbar"><button class="brand" data-nav="board" aria-label="GSD Path status board">GSD Path</button><span class="summary">${summary}</span>${status}${settings}</header>`;
+    if (CState.view === "plugin") body = `<main class="settings"><h2>Plugin</h2>${tabPlugin()}</main>`;
+    else if (CState.view === "folders") body = `<main class="settings"><h2>Watched folders</h2><p class="dim">Projects inside these folders appear automatically.</p>${(DAEMON.parents || []).map((path, i) => `<div class="folder-row"><span>${esc(path)}</span><button class="btn danger" data-remove-parent="${i}">Stop watching</button></div>`).join("")}<p style="margin-top:16px"><button class="btn" data-action="add-folder">Add folder…</button></p></main>`;
+    else {
+      if (CState.view === "project" && ONLINE !== null) { CState.view = "board"; CState.root = null; setHash(); }
+      const empty = ONLINE === null ? "Loading projects…" : !ONLINE && !projects.length ? "Cannot load projects. Check the daemon connection." : "No projects yet. Add a watched folder to get started.";
+      const groups = [["blocked", "Needs attention"], ["active", "In progress"], ["shipped", "Shipped"]]
+        .map(([st, label]) => [label, projects.filter(p => stateOf(p) === st)]).filter(([, list]) => list.length)
+        .map(([label, list]) => `<div class="group">${label} · ${list.length}</div>${list.map(boardRow).join("")}`).join("");
+      body = `<main class="board" aria-label="Status board">${groups || `<div class="empty">${empty}</div>`}</main>`;
+    }
   }
   const readingKey = JSON.stringify([CState.view, CState.root]);
   stage.innerHTML = header + body;
@@ -493,21 +589,14 @@ function render() {
     window.scrollTo(...pageScroll);
     if (focusIndex >= 0) stage.querySelectorAll('button, summary, [tabindex]')[focusIndex]?.focus({preventScroll: true});
   }
-  if (CState.reveal) {
-    const target = stage.querySelector('.card.sel');
-    if (target) { target.scrollIntoView({block: "nearest"}); CState.reveal = false; }
-  }
 }
 document.getElementById("stage").addEventListener("click", event => {
   const b = event.target.closest("button");
-  if (b) {
-    if (b.dataset.nav) { CState.root = null; navigate(b.dataset.nav); }
-    else if (b.dataset.action === "add-folder") addParent();
-    else if (b.dataset.removeParent != null) removeParent(DAEMON.parents[Number(b.dataset.removeParent)]);
-    return;
-  }
-  const c = event.target.closest(".card");
-  if (c) { CState.root = CState.root === c.dataset.root ? null : c.dataset.root; setHash(); render(); }
+  if (!b) return;
+  if (b.dataset.nav) { CState.root = null; navigate(b.dataset.nav); }
+  else if (b.dataset.root) openProject(b.dataset.root);
+  else if (b.dataset.action === "add-folder") addParent();
+  else if (b.dataset.removeParent != null) removeParent(DAEMON.parents[Number(b.dataset.removeParent)]);
 });
 function applyHash() {
   const h = location.hash.slice(1);
@@ -515,9 +604,8 @@ function applyHash() {
     CState.view = h;
     if (h === "plugin") loadPlugin().then(render);
   } else {
-    CState.view = "board";
     CState.root = new URLSearchParams(h).get("project") || null;
-    CState.reveal = !!CState.root;
+    CState.view = CState.root ? "project" : "board";
   }
   render();
 }

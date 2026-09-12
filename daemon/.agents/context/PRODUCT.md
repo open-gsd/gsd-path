@@ -50,3 +50,14 @@ and integrated commit; archive MANIFEST.md ship date, tasks, waves, review
 cycles and carried rulings; the STATE.md log as a phase timeline; CHARTER.md
 Vision; intent Summary; task names per wave; success criteria with the last
 verify result; and the latest LESSONS.md entry. Still no next steps or actions.
+
+## Board, project page and usage
+User: "should we do a per-project page with tabs? i feel that 1 page is going
+to get cluttered". Chosen (`daemon/prototype-pages.html` A): a compact board
+row per project and a per-project page with a back button and project switcher;
+no tabs. User: "i also want to show cost + per turn + model/agent used". Chosen
+(`daemon/prototype-usage.html` B with the ledger folded): usage read from host
+session logs (Codex rollouts, Claude Code transcripts) matched by working
+directory; cost from a per-model price table in daemon.json with no defaults;
+cost and turns on the board row, the tray here line and each milestone; a
+per-agent table and a per-turn ledger on the project page.

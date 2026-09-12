@@ -96,3 +96,19 @@ class ConfigTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SessionConfigTests(unittest.TestCase):
+    def test_defaults_include_host_session_dirs_and_no_prices(self) -> None:
+        config = Config()
+        self.assertIn("~/.codex/sessions", config.session_dirs)
+        self.assertIn("~/.claude/projects", config.session_dirs)
+        self.assertEqual(config.prices, {})
+
+    def test_prices_round_trip_and_reject_junk(self) -> None:
+        config = Config.from_dict({"prices": {"gpt-6-astra": {"input": 1.25, "cached": "x", "output": 10},
+                                              "bad": "nope", 7: {"input": 1}},
+                                   "session_dirs": ["/tmp/sessions", 3]})
+        self.assertEqual(config.prices, {"gpt-6-astra": {"input": 1.25, "output": 10.0}})
+        self.assertEqual(config.session_dirs, ["/tmp/sessions"])
+        self.assertEqual(Config.from_dict(config.to_dict()).prices, config.prices)

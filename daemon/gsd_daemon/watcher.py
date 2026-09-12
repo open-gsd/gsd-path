@@ -1,14 +1,23 @@
 from __future__ import annotations
 
+import re
 import threading
 from pathlib import Path
 from typing import Callable, Dict, List, Optional
 
-from . import discovery, probe
+from . import discovery, probe, sessions
 from .config import Config
 from .model import ProjectStatus
 
 Event = Dict[str, object]
+
+
+def _current_number(status: ProjectStatus) -> Optional[str]:
+    for milestone in status.roadmap_milestones:
+        if milestone.get("slug") and milestone.get("slug") == status.milestone:
+            return milestone.get("number")
+    match = re.search(r"M\d{3,}", status.branch or "")
+    return match.group(0) if match else "now"
 
 
 class Watcher:
@@ -17,6 +26,7 @@ class Watcher:
         self.projects: Dict[str, ProjectStatus] = {}
         self._mtimes: Dict[str, Optional[float]] = {}
         self._probe_hook = probe_hook
+        self.sessions = sessions.SessionIndex(sessions.expand_session_dirs(config.session_dirs), config.prices)
 
     def poll_once(self) -> List[Event]:
         roots = discovery.scan(self.config.parents, self.config.excludes, self.config.max_depth)
@@ -47,8 +57,22 @@ class Watcher:
                 "detail": old.project or root,
             })
             self._mtimes.pop(root, None)
+        self._attach_spend(current)
         self.projects = current
         return events
+
+    def _attach_spend(self, current: Dict[str, ProjectStatus]) -> None:
+        """Usage from host session logs changes without touching .project, so
+        it is refreshed on every poll, from the incremental session index."""
+        try:
+            self.sessions.scan(list(current))
+        except Exception:  # a broken session file must never stop the poll
+            return
+        for root, status in current.items():
+            try:
+                status.spend = self.sessions.spend_for(root, status.roadmap_milestones, _current_number(status))
+            except Exception:
+                status.spend = None
 
     def run(self, callback: Callable[[List[Event]], None],
             stop_event: Optional[threading.Event] = None) -> None:

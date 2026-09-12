@@ -165,7 +165,7 @@ class ServeTests(unittest.TestCase):
         self.assertIn("text/html", content_type)
         html = body.decode("utf-8")
         for marker in ("gsd-path daemon", "Status board", "milestoneStack", "end of roadmap",
-                       "phase-log", "criteria met", "latest lesson",
+                       "phase-log", "criteria met", "latest lesson", "boardRow", "switcher", "Turn ledger",
                        "Plugin", "Watched folders",
                        "fetch(\"/status\")", "setInterval(refresh, 5000)"):
             self.assertIn(marker, html)
@@ -173,7 +173,7 @@ class ServeTests(unittest.TestCase):
         for gone in ("Needs you", "Next step", "next_skill", "data-copy", "class=\"tabs\"", "Attention"):
             self.assertNotIn(gone, html)
         self.assertNotIn("PROTOTYPE", html)
-        self.assertNotIn("switcher", html)
+        self.assertNotIn("PrototypeSwitcher", html)
 
     def test_dashboard_inline_js_parses(self) -> None:
         node = shutil.which("node")

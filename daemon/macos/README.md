@@ -38,8 +38,8 @@ row per project ordered blocked, then in progress, then shipped.
 Each row shows the project name (click to open its dashboard card), a state
 pill (Blocked, In <phase>, Shipped), the milestone stack on one line —
 `M001 ✓  M002 ●  M003 ○` for done / here / ahead, ■ when blocked — a here line
-with phase, wave, task progress, criteria met and the date the phase started,
-the current milestone's goal, and the last shipped milestone with its date and
+with phase, wave, task progress, criteria met, the date the phase started and
+the current milestone's cost and turn count, the current milestone's goal, and the last shipped milestone with its date and
 task count from the archive manifest. Rows carry no commands or actions. The
 fixed footer keeps dashboard, plugin, watched-folder, daemon lifecycle, rescan,
 and quit controls outside the scrolling project list.
