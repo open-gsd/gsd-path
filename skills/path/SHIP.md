@@ -231,7 +231,11 @@ The persisted `STATE.archive` field is the transaction identity.
    verdicts; their payload identity must match their filename. Same-wave repair
    tasks enter review coverage only after their receipt's source cycle, and a
    later review cycle is required. Concrete evidence may contain generic types
-   such as `Result<T>` or comparisons; template placeholders remain invalid.
+   such as `Result<T>` or comparisons. Markdown code spans with matching
+   backtick delimiters may contain placeholder-shaped quoted evidence, such
+   as `Queues unavailable: <stored reason>`. A whole value containing only
+   `<record observation>` remains invalid, even inside a code span; unquoted
+   template placeholders also remain invalid.
    Immediately
    before this command, recheck for an active
    `discuss/` copy created after prepare; if present, rerun `prepare`, regenerate
@@ -314,9 +318,12 @@ The persisted `STATE.archive` field is the transaction identity.
    A non-zero result blocks; rerun the exact `integrate` command to resume a
    safe partial transaction instead of repairing refs or Git state manually.
    For a later validation recheck with origin network access, run
-   `python3 <absolute archive_milestone.py> validate-integrated --repo <root> --slug <STATE.milestone>`; PR mode fetches and refreshes `origin/main` and
-   mirrored milestone-tag refs, then revalidates the PR identity, state, merge
-   provenance, and live branch and tag publication.
+   `python3 <absolute archive_milestone.py> validate-integrated --repo <root> --slug <STATE.milestone>`.
+   Both integration modes refresh the remote-default and mirrored milestone-tag
+   refs when an `origin` remote exists. Without that remote, validation resolves
+   the existing remote-default refs locally, preserving offline direct-mode
+   fixtures. PR mode also revalidates the PR identity, state, merge provenance,
+   and live branch and tag publication.
    Report shipped only when the integration result passes.
    Leave the primary worktree and STATE.branch on the shipped
    `gsd-path/M00N` at the ship commit. The router owns the later handoff to a
