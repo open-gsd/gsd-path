@@ -4,8 +4,9 @@
 is end-to-end trusted only when `npm run verify:release` finds a current passing
 full-milestone receipt for every host below.
 
-Release candidate `e6f48333cba4f939e27ab7d6bd20d39f0eabd412` is frozen on
-`main` (2026-09-13). All eleven host receipts are being refreshed against it;
+Release candidate `bd7516713dd33ba483129ac9ba5cc16f5a3b7e18` is frozen on the
+release branch (2026-09-13; includes PR #101 plus release-prep tooling). All
+eleven host receipts are being refreshed against it;
 `npm run verify:release` stays red until every receipt passes.
 
 Historical receipts on `091d27927a2c0c2ecc55ce386fb2232556da6336` remain under
@@ -14,17 +15,17 @@ once non-evidence files change after that candidate.
 
 | Host | Install | Native guard installed | Full live milestone | Current posture |
 |---|---|---|---|---|
-| Codex | automated | git-only tier: the `--ignore-user-config` harness run has no native hook, so Git hooks carry it | prior: [codex.md](evidence/releases/1.0.0/codex.md) | **refresh pending** on `e6f4833` |
-| Claude Code | automated | fail-closed project hook + Git hooks | prior: [claude.md](evidence/releases/1.0.0/claude.md) | **refresh pending** on `e6f4833` |
-| Grok | automated | not installed; Git hooks | prior: [grok.md](evidence/releases/1.0.0/grok.md) | **refresh pending** on `e6f4833` |
-| OpenCode | automated | not installed; Git hooks | prior: [opencode.md](evidence/releases/1.0.0/opencode.md) | **refresh pending** on `e6f4833` |
-| GitHub Copilot CLI | automated | not installed; Git hooks | prior: [copilot.md](evidence/releases/1.0.0/copilot.md) | **refresh pending** on `e6f4833` |
-| Qwen Code | automated | not installed; Git hooks | prior: [qwen.md](evidence/releases/1.0.0/qwen.md) | **refresh pending** on `e6f4833` |
-| Antigravity CLI | automated | not installed; Git hooks | prior: [antigravity.md](evidence/releases/1.0.0/antigravity.md) | **refresh pending** on `e6f4833` |
-| Cursor | automated | fail-closed project hook + Git hooks | prior: [cursor.md](evidence/releases/1.0.0/cursor.md) | **refresh pending** on `e6f4833` |
-| Zed | automated | no native hook API; Git hooks | prior: [zed.md](evidence/releases/1.0.0/zed.md) | **refresh pending** on `e6f4833` |
-| Kiro | automated | not installed; Git hooks | prior: [kiro.md](evidence/releases/1.0.0/kiro.md) | **refresh pending** on `e6f4833` |
-| Kimi Code | automated | not installed; Git hooks | prior: [kimi.md](evidence/releases/1.0.0/kimi.md) | **refresh pending** on `e6f4833` |
+| Codex | automated | git-only tier: the `--ignore-user-config` harness run has no native hook, so Git hooks carry it | prior: [codex.md](evidence/releases/1.0.0/codex.md) | **refresh pending** on `bd75167` |
+| Claude Code | automated | fail-closed project hook + Git hooks | prior: [claude.md](evidence/releases/1.0.0/claude.md) | **refresh pending** on `bd75167` |
+| Grok | automated | not installed; Git hooks | prior: [grok.md](evidence/releases/1.0.0/grok.md) | **refresh pending** on `bd75167` |
+| OpenCode | automated | not installed; Git hooks | prior: [opencode.md](evidence/releases/1.0.0/opencode.md) | **refresh pending** on `bd75167` |
+| GitHub Copilot CLI | automated | not installed; Git hooks | prior: [copilot.md](evidence/releases/1.0.0/copilot.md) | **refresh pending** on `bd75167` |
+| Qwen Code | automated | not installed; Git hooks | prior: [qwen.md](evidence/releases/1.0.0/qwen.md) | **refresh pending** on `bd75167` |
+| Antigravity CLI | automated | not installed; Git hooks | prior: [antigravity.md](evidence/releases/1.0.0/antigravity.md) | **refresh pending** on `bd75167` |
+| Cursor | automated | fail-closed project hook + Git hooks | prior: [cursor.md](evidence/releases/1.0.0/cursor.md) | **refresh pending** on `bd75167` |
+| Zed | automated | no native hook API; Git hooks | prior: [zed.md](evidence/releases/1.0.0/zed.md) | **refresh pending** on `bd75167` |
+| Kiro | automated | not installed; Git hooks | prior: [kiro.md](evidence/releases/1.0.0/kiro.md) | **refresh pending** on `bd75167` |
+| Kimi Code | automated | not installed; Git hooks | prior: [kimi.md](evidence/releases/1.0.0/kimi.md) | **refresh pending** on `bd75167` |
 
 Historical smoke evidence remains under `evidence/`; release receipts belong
 under `evidence/releases/<version>/` and are never inferred from smoke runs.
@@ -75,8 +76,8 @@ usage docstring.
 
 ### 1.0.0 refresh (2026-09-13)
 
-Frozen candidate: `e6f48333cba4f939e27ab7d6bd20d39f0eabd412` (`main` after
-PR #101). Prepare every host harness:
+Frozen candidate: `bd7516713dd33ba483129ac9ba5cc16f5a3b7e18` (release branch
+after PR #101 and release-prep tooling). Prepare every host harness:
 
 ```bash
 bash scripts/prepare_release_evidence.sh \

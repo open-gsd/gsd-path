@@ -203,14 +203,14 @@ authorize a version tag, a registry publish, or a visibility change.
 
 ## Release evidence (2026-09-13)
 
-Candidate frozen at `e6f48333cba4f939e27ab7d6bd20d39f0eabd412` on `main` after
-merging PR #101 (migrate documentation and test-harness updates on top of the
-1.0.0 feature set). All eleven host receipts from the 2026-09-09 freeze remain
-in the tree for comparison but no longer pass `scripts/check_trust_evidence.py`
-because non-evidence files changed after `091d279`.
+Candidate frozen at `bd7516713dd33ba483129ac9ba5cc16f5a3b7e18` on the release
+branch after merging PR #101 and adding `scripts/prepare_release_evidence.sh`.
+All eleven host receipts from the 2026-09-09 freeze remain in the tree for
+comparison but no longer pass `scripts/check_trust_evidence.py` because
+non-evidence files changed after `091d279`.
 
 Refresh status: **in progress**. Use `scripts/prepare_release_evidence.sh` to
 stage per-host quick-lane harnesses, rerun each live milestone, and assemble
 new receipts with `docs/trust-validation/evidence/releases/1.0.0/codex/release_receipt.py`.
 `npm run verify:release` and npm publication stay blocked until every host
-receipt names `e6f4833` and passes validation.
+receipt names `bd75167` and passes validation.
