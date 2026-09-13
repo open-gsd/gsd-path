@@ -18,6 +18,7 @@ from scripts import (
 )
 
 from tests.test_pipeline_undo import write_plan_tasks
+from tests.test_task_briefs import PLAN_WAVE
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -183,7 +184,7 @@ class PipelineDiagnoseTests(unittest.TestCase):
             parent = run_git(repo, "rev-parse", "HEAD").stdout.strip()
             (project / "plan").mkdir()
             (project / "plan" / "PLAN.md").write_text(
-                "# Plan — first\n",
+                PLAN_WAVE.format(title="first"),
                 encoding="utf-8",
             )
             write_plan_tasks(repo)

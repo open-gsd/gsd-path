@@ -2875,6 +2875,8 @@ Tasks reviewed: 1
             "validated Result< T> serialization",
             "validated Result<Vec<T>> serialization",
             "completed in 120ms < 200ms",
+            "`Record<ApprovalPolicyV1, { stage: ScheduleSweepStage; safeNextAction: string }>`",
+            "`Queues unavailable: <stored reason>`",
         ):
             with self.subTest(observation=observation):
                 self.assertTrue(discussion_validate.meaningful_review_evidence(
@@ -2892,6 +2894,39 @@ Tasks reviewed: 1
                     [f"- ✅ {observation}"], "✅"
                 ))
 
+    def test_contains_placeholder_skips_code_spans_not_whole_quoted_tokens(self) -> None:
+        self.assertFalse(
+            archive_milestone.contains_placeholder(
+                "`Record<ApprovalPolicyV1, { stage: ScheduleSweepStage; safeNextAction: string }>`"
+            )
+        )
+        self.assertFalse(
+            archive_milestone.contains_placeholder("`Queues unavailable: <stored reason>`")
+        )
+        self.assertTrue(archive_milestone.contains_placeholder("<record observation>"))
+        self.assertTrue(archive_milestone.contains_placeholder("`<record observation>`"))
+        self.assertTrue(
+            archive_milestone.contains_placeholder("Queues unavailable: <stored reason>")
+        )
+
+    def test_placeholder_scan_matches_complete_backtick_runs(self) -> None:
+        for value in (
+            "``Queues unavailable: <stored reason>``",
+            "```Queues `unavailable`: <stored reason>```",
+            "``Queues ` unavailable: <stored reason>``",
+        ):
+            with self.subTest(value=value):
+                self.assertFalse(archive_milestone.contains_placeholder(value))
+                self.assertTrue(archive_milestone.contains_placeholder(value + " <record observation>"))
+        for value in (
+            "``<record observation>``",
+            "```<record observation>```",
+            "``Queues unavailable: <stored reason>`",
+            "`Queues unavailable: <stored reason>``",
+        ):
+            with self.subTest(value=value):
+                self.assertTrue(archive_milestone.contains_placeholder(value))
+
     def test_preflight_accepts_angle_brackets_in_concrete_task_evidence(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             repo = Path(temporary_directory)
@@ -2904,6 +2939,31 @@ Tasks reviewed: 1
                     "- ✅ demo works — validated Result<T> in 120ms < 200ms",
                 )
             )
+            self.write_manifest(archive)
+
+            preflight = self.preflight(repo)
+
+            self.assertEqual(preflight.returncode, 0, preflight.stderr)
+
+    def test_preflight_accepts_quoted_generics_and_stored_reason_tokens(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            final = repo / ".project/review/FINAL.md"
+            final.write_text(
+                final.read_text().replace(
+                    "- **Observed**: focused tests passed",
+                    "- **Observed**: `Record<ApprovalPolicyV1, { stage: ScheduleSweepStage; safeNextAction: string }>`",
+                )
+            )
+            wave = repo / ".project/review/wave-1.cycle1.md"
+            wave.write_text(
+                wave.read_text().replace(
+                    "- ✅ demo works — focused Verify passed",
+                    "- ✅ demo works — `Queues unavailable: <stored reason>`",
+                )
+            )
+            archive = self.prepare_archive(repo)
             self.write_manifest(archive)
 
             preflight = self.preflight(repo)
@@ -4708,6 +4768,11 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                 "refs/heads/gsd-path-integrate/M001",
                 self.git(repo, "worktree", "list", "--porcelain").stdout,
             )
+            self.assertFalse((repo / ".git" / "origin").exists())
+            self.assertEqual(
+                self.git(repo, "rev-parse", "refs/remotes/origin/main").stdout.strip(),
+                merge_sha,
+            )
 
     def test_integrate_resumes_a_merge_that_has_no_tag(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -5595,6 +5660,25 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
 
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("missing published milestone tag", result.stderr)
+
+    def test_validate_integrated_refreshes_direct_mode_milestone_tag(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            repo = root / "primary"
+            repo.mkdir()
+            remote = root / "origin.git"
+            self.make_publishable_bound_repo(repo, remote)
+            archive_name, _ship_sha = self.ship_canonical_bound(repo)
+            integrated = self.integrate(repo)
+            self.assertEqual(integrated.returncode, 0, integrated.stderr)
+            deleted = self.git(
+                repo, "update-ref", "-d", f"refs/remotes/origin/tags/milestone/{archive_name}"
+            )
+            self.assertEqual(deleted.returncode, 0, deleted.stderr)
+
+            result = self.validate_integrated(repo)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_refresh_origin_updates_stale_origin_head(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

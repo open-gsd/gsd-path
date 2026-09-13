@@ -1113,7 +1113,7 @@ def integrate(repo: Path, slug: str) -> dict:
                 "push integration merge to main",
             )
             archive_milestone.require_git_success(
-                run_git(project, "update-ref", remote_default, merge_commit),
+                run_git(project, "update-ref", f"refs/remotes/{remote_default}", merge_commit),
                 "refresh local remote-default ref",
             )
         elif published_merge.returncode != 0:
@@ -1225,7 +1225,9 @@ def validate_integrated(repo: Path, slug: str) -> dict:
     ship_commit = shipped["commit"]
     archive_name = PurePosixPath(configured).name
 
-    if state.integration == "pull-request":
+    # Refresh whenever origin exists so direct mode cannot miss a published tag.
+    # Fixtures that only plant refs/remotes/origin/* keep resolve_remote_default.
+    if run_git(project, "remote", "get-url", "origin").returncode == 0:
         remote_default = refresh_origin(project)["remote_default"]
     else:
         remote_default = resolve_remote_default(project)

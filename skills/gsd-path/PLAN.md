@@ -230,6 +230,13 @@ as stated in Lookahead mode.
      --expected-head <recorded full HEAD>
    ```
 
+   Before approval, the helper validates the task graph and brief paths.
+   Pending briefs may reference files supplied by transitive dependencies.
+   Landed briefs use their recorded historical base, with no dependency-file
+   allowance, so later file changes do not invalidate immutable briefs.
+   This applies to plan re-approval too; the dispatch CLI remains HEAD-only
+   with no overrides.
+
    The helper journals before mutation, changes the track STATE from
    `plan/active` to `plan/done` with event `plan approved`, validates that the
    active worktree is on its bound branch, and checkpoints all pending

@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest import mock
 
 from scripts import archive_milestone, isolation, pipeline_state, pipeline_undo
-from tests.test_task_briefs import TASK_TEMPLATE
+from tests.test_task_briefs import PLAN_WAVE, TASK_TEMPLATE
 
 
 def run_git(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -116,7 +116,9 @@ class PipelineUndoTests(unittest.TestCase):
             run_git(repo, "commit", "-m", "fixture: approval base")
             expected_head = run_git(repo, "rev-parse", "HEAD").stdout.strip()
             (project / "plan").mkdir()
-            (project / "plan" / "PLAN.md").write_text("# Plan — first\n", encoding="utf-8")
+            (project / "plan" / "PLAN.md").write_text(
+                PLAN_WAVE.format(title="first"), encoding="utf-8"
+            )
             write_plan_tasks(repo)
             pipeline_state.checkpoint_approval(repo, "plan", expected_head)
             approved = run_git(repo, "rev-parse", "HEAD").stdout.strip()
@@ -151,7 +153,9 @@ class PipelineUndoTests(unittest.TestCase):
             (discussion / "DIALOGUE.md").write_text(dialogue, encoding="utf-8")
             (discussion / "ANSWERS.md").write_text(answers, encoding="utf-8")
             (project / "plan").mkdir()
-            (project / "plan" / "PLAN.md").write_text("# Plan — first\n", encoding="utf-8")
+            (project / "plan" / "PLAN.md").write_text(
+                PLAN_WAVE.format(title="first"), encoding="utf-8"
+            )
             write_plan_tasks(repo)
             pipeline_state.checkpoint_approval(repo, "plan", parent)
             approved = run_git(repo, "rev-parse", "HEAD").stdout.strip()
@@ -174,7 +178,9 @@ class PipelineUndoTests(unittest.TestCase):
             run_git(repo, "commit", "-m", "fixture: approval base")
             expected_head = run_git(repo, "rev-parse", "HEAD").stdout.strip()
             (project / "plan").mkdir()
-            (project / "plan" / "PLAN.md").write_text("# Plan — first\n", encoding="utf-8")
+            (project / "plan" / "PLAN.md").write_text(
+                PLAN_WAVE.format(title="first"), encoding="utf-8"
+            )
             write_plan_tasks(repo)
             pipeline_state.checkpoint_approval(repo, "plan", expected_head)
             origin = root / "origin.git"
@@ -202,7 +208,9 @@ class PipelineUndoTests(unittest.TestCase):
             run_git(repo, "commit", "-m", "fixture: approval base")
             parent = run_git(repo, "rev-parse", "HEAD").stdout.strip()
             (project / "plan").mkdir()
-            (project / "plan" / "PLAN.md").write_text("# Plan — first\n", encoding="utf-8")
+            (project / "plan" / "PLAN.md").write_text(
+                PLAN_WAVE.format(title="first"), encoding="utf-8"
+            )
             write_plan_tasks(repo)
             pipeline_state.checkpoint_approval(repo, "plan", parent)
             approved = run_git(repo, "rev-parse", "HEAD").stdout.strip()
@@ -234,7 +242,9 @@ class PipelineUndoTests(unittest.TestCase):
             run_git(repo, "commit", "-m", "fixture: approval base")
             parent = run_git(repo, "rev-parse", "HEAD").stdout.strip()
             (project / "plan").mkdir()
-            (project / "plan" / "PLAN.md").write_text("# Plan — first\n", encoding="utf-8")
+            (project / "plan" / "PLAN.md").write_text(
+                PLAN_WAVE.format(title="first"), encoding="utf-8"
+            )
             write_plan_tasks(repo)
             pipeline_state.checkpoint_approval(repo, "plan", parent)
             approved = run_git(repo, "rev-parse", "HEAD").stdout.strip()
@@ -268,7 +278,9 @@ class PipelineUndoTests(unittest.TestCase):
             run_git(repo, "commit", "-m", "fixture: approval base")
             parent = run_git(repo, "rev-parse", "HEAD").stdout.strip()
             (project / "plan").mkdir()
-            (project / "plan" / "PLAN.md").write_text("# Plan — first\n", encoding="utf-8")
+            (project / "plan" / "PLAN.md").write_text(
+                PLAN_WAVE.format(title="first"), encoding="utf-8"
+            )
             write_plan_tasks(repo)
             pipeline_state.checkpoint_approval(repo, "plan", parent)
             approved = run_git(repo, "rev-parse", "HEAD").stdout.strip()
