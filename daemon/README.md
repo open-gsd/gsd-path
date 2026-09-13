@@ -110,7 +110,8 @@ gsd-path-daemon plugin <status|install|update|uninstall>          # manage the s
 - `GET /` — a self-contained dashboard (inline CSS/JS, no build step) that
   polls `/status` every 5 seconds.
 
-The dashboard uses the Instrument theme, light by default. Settings → Appearance
+The dashboard uses graphite neutrals with the macOS accent color (CSS `AccentColor`,
+system blue where unsupported), light by default. Settings → Appearance
 switches between System, Light and Dark; the choice is kept in the browser, and
 the tray passes its own choice as `?theme=`. It is a pure **status board**: what each
 project has done, where it is now, where its roadmap goes next, and what it has

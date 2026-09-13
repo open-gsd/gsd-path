@@ -32,7 +32,8 @@ open build/GSDPathTray.app
 
 Click the menu-bar icon to open the dropdown. The icon uses an aggregate
 progress ring and an attention badge; offline it becomes a gray ring. The
-dropdown is a status board in the dashboard's Instrument palette: the last
+dropdown is a status board in native macOS colors (label, separator and accent
+colors; the standard selection highlight on hover): the last
 update time, then projects under In progress (blocked first) and Shipped.
 
 Each row is one button (click to open the project page) with the project name,

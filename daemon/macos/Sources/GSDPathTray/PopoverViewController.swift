@@ -1,24 +1,5 @@
 import AppKit
 
-// Instrument palette, shared with the dashboard CSS in daemon/gsd_daemon/serve.py. Keep both in sync.
-func paletteColor(light: Int, dark: Int) -> NSColor {
-    NSColor(name: nil) { appearance in
-        let value = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? dark : light
-        return NSColor(srgbRed: CGFloat((value >> 16) & 255) / 255,
-                       green: CGFloat((value >> 8) & 255) / 255,
-                       blue: CGFloat(value & 255) / 255, alpha: 1)
-    }
-}
-let paletteText = paletteColor(light: 0x1a1d22, dark: 0xe9ebee)
-let paletteDim = paletteColor(light: 0x595e64, dark: 0xa7abb1)
-let paletteFaint = paletteColor(light: 0x71757a, dark: 0x82878c)
-let paletteDone = paletteColor(light: 0x51565c, dark: 0xa0a5ab)
-let paletteSegment = paletteColor(light: 0xe0e3e6, dark: 0x2b2e32)
-let paletteAccent = paletteColor(light: 0x008f83, dark: 0x3dbbae)
-let paletteOnAccent = paletteColor(light: 0xffffff, dark: 0x101214)
-let paletteDanger = paletteColor(light: 0xc9302d, dark: 0xef675c)
-let paletteWarn = paletteColor(light: 0x8d5e00, dark: 0xe4ac59)
-
 /// Appearance shared by the popover and the dashboard window: "system", "light" (default) or "dark".
 let appearanceChoices = ["system", "light", "dark"]
 var appearanceChoice: String {
@@ -33,16 +14,6 @@ func applyAppearance() {
     NSApp.windows.forEach { $0.appearance = appearance }
 }
 
-final class PaletteSurface: NSView {
-    override var wantsUpdateLayer: Bool { true }
-    override func updateLayer() {
-        effectiveAppearance.performAsCurrentDrawingAppearance {
-            layer?.backgroundColor = paletteColor(light: 0xfbfcfd, dark: 0x101214).cgColor
-        }
-    }
-    override func viewDidChangeEffectiveAppearance() { needsDisplay = true }
-}
-
 // MARK: - Small view building blocks
 
 final class DotView: NSView {
@@ -54,7 +25,7 @@ final class DotView: NSView {
 }
 
 func makeLabel(_ text: String, size: CGFloat, weight: NSFont.Weight = .regular,
-               color: NSColor = paletteText) -> NSTextField {
+               color: NSColor = NSColor.labelColor) -> NSTextField {
     let f = NSTextField(labelWithString: text)
     f.font = .systemFont(ofSize: size, weight: weight)
     f.textColor = color
@@ -64,9 +35,9 @@ func makeLabel(_ text: String, size: CGFloat, weight: NSFont.Weight = .regular,
 
 func healthColor(_ h: Health) -> NSColor {
     switch h {
-    case .green: return paletteAccent
-    case .yellow: return paletteWarn
-    case .red: return paletteDanger
+    case .green: return .systemGreen
+    case .yellow: return NSColor.systemOrange
+    case .red: return NSColor.systemRed
     case .gray: return .systemGray
     }
 }
@@ -92,9 +63,9 @@ final class PhaseMeterView: NSView {
         for (index, kind) in segments.enumerated() {
             let color: NSColor
             switch kind {
-            case .done: color = highlighted ? paletteOnAccent : paletteDone
-            case .now: color = highlighted ? paletteOnAccent : blocked ? paletteDanger : paletteAccent
-            case .ahead: color = highlighted ? paletteOnAccent.withAlphaComponent(0.35) : paletteSegment
+            case .done: color = highlighted ? NSColor.alternateSelectedControlTextColor : NSColor.secondaryLabelColor
+            case .now: color = highlighted ? NSColor.alternateSelectedControlTextColor : blocked ? NSColor.systemRed : NSColor.controlAccentColor
+            case .ahead: color = highlighted ? NSColor.alternateSelectedControlTextColor.withAlphaComponent(0.35) : NSColor.quaternaryLabelColor
             }
             color.setFill()
             NSBezierPath(roundedRect: NSRect(x: CGFloat(index) * 12, y: 0, width: 10, height: 8), xRadius: 1.5, yRadius: 1.5).fill()
@@ -123,7 +94,7 @@ class MenuRowButton: NSButton {
     override func mouseExited(with event: NSEvent) { hovered = false }
     func hoverChanged() {
         effectiveAppearance.performAsCurrentDrawingAppearance {
-            layer?.backgroundColor = hovered ? paletteAccent.cgColor : NSColor.clear.cgColor
+            layer?.backgroundColor = hovered ? NSColor.selectedContentBackgroundColor.cgColor : NSColor.clear.cgColor
         }
     }
 }
@@ -145,7 +116,7 @@ final class IconButton: MenuRowButton {
     }
     override func hoverChanged() {
         super.hoverChanged()
-        contentTintColor = hovered ? paletteOnAccent : paletteDim
+        contentTintColor = hovered ? NSColor.alternateSelectedControlTextColor : NSColor.secondaryLabelColor
     }
 }
 
@@ -174,7 +145,7 @@ final class MenuItemButton: MenuRowButton {
     override func hoverChanged() {
         super.hoverChanged()
         attributedTitle = NSAttributedString(string: title, attributes: [
-            .font: NSFont.systemFont(ofSize: 13), .foregroundColor: hovered ? paletteOnAccent : paletteText,
+            .font: NSFont.systemFont(ofSize: 13), .foregroundColor: hovered ? NSColor.alternateSelectedControlTextColor : NSColor.labelColor,
         ])
     }
 }
@@ -221,7 +192,7 @@ final class PopoverViewController: NSViewController {
         doc.addSubview(stack)
         scroll.documentView = doc
 
-        let content = PaletteSurface()
+        let content = NSView()
         content.wantsLayer = true
         content.addSubview(scroll)
         controls.orientation = .vertical
@@ -276,7 +247,7 @@ final class PopoverViewController: NSViewController {
             buttons.spacing = 8
             let daemonRow = DaemonRowView()
             daemonRow.onRescan = onRescan
-            return [title, makeLabel("Offline", size: 12, color: paletteDanger), msg, hint, cmd, daemonRow, buttons].map { inset($0, top: 4) }
+            return [title, makeLabel("Offline", size: 12, color: NSColor.systemRed), msg, hint, cmd, daemonRow, buttons].map { inset($0, top: 4) }
         }
     }
 
@@ -285,15 +256,15 @@ final class PopoverViewController: NSViewController {
         var views: [NSView] = []
 
         let icon = NSImageView(image: NSImage(systemSymbolName: "tablecells", accessibilityDescription: nil) ?? NSImage())
-        icon.contentTintColor = paletteText
+        icon.contentTintColor = NSColor.labelColor
         let title = makeLabel("GSD Path", size: 13, weight: .semibold)
         let spacer = NSView()
         spacer.setContentHuggingPriority(.init(1), for: .horizontal)
         let dot = DotView()
-        dot.color = paletteAccent
+        dot.color = .systemGreen
         dot.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([dot.widthAnchor.constraint(equalToConstant: 7), dot.heightAnchor.constraint(equalToConstant: 7)])
-        let updated = makeLabel(generatedStamp(status.generated_at).map { "Updated \($0)" } ?? "Connected", size: 12, color: paletteDim)
+        let updated = makeLabel(generatedStamp(status.generated_at).map { "Updated \($0)" } ?? "Connected", size: 12, color: NSColor.secondaryLabelColor)
         let header = NSStackView(views: [icon, title, spacer, dot, updated])
         header.spacing = 6
         header.edgeInsets = NSEdgeInsets(top: 4, left: 9, bottom: 6, right: 9)
@@ -306,11 +277,11 @@ final class PopoverViewController: NSViewController {
         }
         for (caption, list) in [("In progress", sorted.filter { $0.projectState != "shipped" }),
                                 ("Shipped", sorted.filter { $0.projectState == "shipped" })] where !list.isEmpty {
-            views.append(inset(makeLabel(caption, size: 11, weight: .semibold, color: paletteFaint), top: 6))
+            views.append(inset(makeLabel(caption, size: 11, weight: .semibold, color: NSColor.tertiaryLabelColor), top: 6))
             views += list.map { ProjectRowView(project: $0, dashboardURL: dashboardURL) }
         }
         if projects.isEmpty {
-            views.append(inset(makeLabel("No projects in your watched folders.", size: 12, color: paletteDim), top: 6))
+            views.append(inset(makeLabel("No projects in your watched folders.", size: 12, color: NSColor.secondaryLabelColor), top: 6))
         }
 
         // Plugin update row, only when the daemon reports one.
@@ -436,7 +407,7 @@ final class ProjectRowView: MenuRowButton {
         project = p
         self.dashboardURL = dashboardURL
         name = makeLabel(p.displayProject, size: 13, weight: .semibold)
-        detail = makeLabel(p.trayDetail, size: 11.5, color: paletteDim)
+        detail = makeLabel(p.trayDetail, size: 11.5, color: NSColor.secondaryLabelColor)
         meter = PhaseMeterView(p.phaseMeter, blocked: p.projectState == "blocked")
         super.init()
         title = ""
@@ -473,8 +444,8 @@ final class ProjectRowView: MenuRowButton {
 
     override func hoverChanged() {
         super.hoverChanged()
-        name.textColor = hovered ? paletteOnAccent : paletteText
-        detail.textColor = hovered ? paletteOnAccent : paletteDim
+        name.textColor = hovered ? NSColor.alternateSelectedControlTextColor : NSColor.labelColor
+        detail.textColor = hovered ? NSColor.alternateSelectedControlTextColor : NSColor.secondaryLabelColor
         meter.highlighted = hovered
     }
 

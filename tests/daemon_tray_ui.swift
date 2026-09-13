@@ -30,11 +30,6 @@ struct TrayUITest {
         vc.show(status: status)
         vc.view.appearance = NSAppearance(named: .darkAqua)
         vc.view.display()
-        guard let background = vc.view.layer?.backgroundColor,
-              let rgb = NSColor(cgColor: background)?.usingColorSpace(.deviceRGB),
-              abs(rgb.redComponent - 16.0 / 255) < 0.001 else {
-            print("FAIL: Instrument dark surface"); exit(1)
-        }
         func descendants(_ view: NSView) -> [NSView] {
             [view] + view.subviews.flatMap(descendants)
         }
@@ -64,9 +59,14 @@ struct TrayUITest {
         require(rows[0].toolTip == "M002 ■  next ○\nship blocked", "blocked stack, lookahead milestone and health reason")
         require(rows[2].accessibilityLabel()?.hasPrefix("GSD Path, In build, M004 · build") == true, "row accessibility label")
         rows[2].hovered = true
-        require(rows[2].name.textColor == paletteOnAccent && rows[2].meter.highlighted, "hover highlights the row")
+        var nativeSelection = false
+        rows[2].effectiveAppearance.performAsCurrentDrawingAppearance {
+            nativeSelection = rows[2].layer?.backgroundColor == NSColor.selectedContentBackgroundColor.cgColor
+        }
+        require(nativeSelection && rows[2].name.textColor == .alternateSelectedControlTextColor && rows[2].meter.highlighted,
+                "hover uses the native selection colors")
         rows[2].hovered = false
-        require(rows[2].name.textColor == paletteText, "hover clears")
+        require(rows[2].name.textColor == .labelColor && rows[2].detail.textColor == .secondaryLabelColor, "hover clears to native label colors")
         // A status board: no attention summary, next steps, copy or reveal actions.
         require(!buttons().contains { $0.title.contains("needs you") }, "no attention summary")
         require(!buttons().contains { $0.title == "Actions" }, "no actions menu")

@@ -88,3 +88,12 @@ milestone and task detail (task files, criteria text, archived verdict,
 integration mode, recorded activity). Health reasons are shown as facts only;
 there are still no next steps or actions. `serve` now records watcher events to
 `history.jsonl` so the Activity list has data on macOS.
+
+## Native colors and tray icons
+User: "light doesn't work in toolbar - can we fix the open dashboard/plugin
+settings/watched folders .. can those be icons ?" and "i also don't like that
+green highlight color - lets use native OS colors". The tray uses system label,
+separator, accent and selection colors with the popover's native material; the
+footer is an icon toolbar with tooltips. The dashboard keeps graphite neutrals
+but takes its accent from CSS `AccentColor` (system blue fallback); health dots
+use system green. The teal signal is retired.

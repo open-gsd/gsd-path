@@ -335,3 +335,23 @@ Shell timings: discovery 1.78 s, probes ≤ 0.44 s, cache load 0.01 s, session
 parse of 217 files / 978 MB 3.29 s. Python suite green; `git diff --check`
 passed. A stray `gsd_daemon serve --port 8793` process from a day earlier is
 unrelated and was left running.
+
+## Tray light fix, icon footer and native colors
+- Cause: NSPopover follows the menu-bar button's appearance, not `NSApp`.
+  `applyAppearance` now sets open windows too; AppDelegate sets
+  `popover.appearance` before showing. Confirmed with a real screen capture of
+  the opened popover in Light.
+- Footer: `IconButton` toolbar; `DaemonRowView` fixed 24 pt height, because its
+  status arrived after sizing and cut off the project list (seen in the user's
+  screenshot).
+- Colors: tray uses `labelColor`, `secondaryLabelColor`, `tertiaryLabelColor`,
+  `quaternaryLabelColor`, `controlAccentColor`, `selectedContentBackgroundColor`,
+  `alternateSelectedControlTextColor`, `systemGreen/Orange/Red`; the custom
+  surface is gone. Dashboard accent tokens use `AccentColor` inside
+  `@supports`, with system blue fallbacks.
+
+Proof: native test passed (window appearance follows the choice, icon tooltips
+and accessibility names, appearance segment icons, fixed daemon row height,
+native hover colors). Sabotage: dropping the window update failed "open windows
+take the choice"; a teal hover failed "hover uses the native selection colors";
+both restored. Browser test passed; daemon suite passed after merging main (#96).

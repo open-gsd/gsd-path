@@ -33,12 +33,12 @@ DASHBOARD_PAGE = r"""<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>gsd-path daemon</title>
 <style>
-  /* Instrument palette. Hex values are shared with the tray (PopoverViewController.swift); keep both palettes in sync. */
+  /* Instrument palette: graphite neutrals and the macOS accent colour (system blue where AccentColor is unsupported). */
   :root {
     --bg: #fbfcfd; --chrome: #eef0f3; --card: #ffffff; --text: #1a1d22; --dim: #595e64; --faint: #71757a;
     --line: #e1e3e6; --hover: #f0f4f7; --seg: #e0e3e6; --done: #51565c;
-    --accent: #006c62; --accent-fill: #008f83; --accent-fg: #ffffff; --accent-soft: #d9f6f1;
-    --danger: #c9302d; --danger-soft: #ffe7e4; --wait: #8d5e00; --wait-soft: #fdf1dc;
+    --accent: #0062cc; --accent-fill: #007aff; --accent-fg: #ffffff; --accent-soft: #e5f1ff;
+    --danger: #c9302d; --danger-soft: #ffe7e4; --wait: #8d5e00; --wait-soft: #fdf1dc; --ok: #34c759;
     --run: var(--accent); --run-soft: var(--accent-soft); --sunken: var(--chrome);
     --shadow: 0 1px 2px rgb(26 29 34 / .08), 0 0 0 1px rgb(26 29 34 / .06);
     --ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, "Segoe UI", system-ui, sans-serif;
@@ -48,19 +48,24 @@ DASHBOARD_PAGE = r"""<!doctype html>
   @media(prefers-color-scheme:dark) { :root:not([data-theme="light"]) {
     --bg: #101214; --chrome: #171a1d; --card: #141619; --text: #e9ebee; --dim: #a7abb1; --faint: #82878c;
     --line: #292c2f; --hover: #1d1f23; --seg: #2b2e32; --done: #a0a5ab;
-    --accent: #63ccc0; --accent-fill: #3dbbae; --accent-fg: #101214; --accent-soft: #0d2f2b;
-    --danger: #ef675c; --danger-soft: #47211d; --wait: #e4ac59; --wait-soft: #3a2a12;
+    --accent: #4da3ff; --accent-fill: #0a84ff; --accent-fg: #ffffff; --accent-soft: #0f2640;
+    --danger: #ef675c; --danger-soft: #47211d; --wait: #e4ac59; --wait-soft: #3a2a12; --ok: #30d158;
     --shadow: 0 1px 2px rgb(0 0 0 / .4), 0 0 0 1px rgb(255 255 255 / .06);
     color-scheme: dark;
   }}
   :root[data-theme="dark"] {
     --bg: #101214; --chrome: #171a1d; --card: #141619; --text: #e9ebee; --dim: #a7abb1; --faint: #82878c;
     --line: #292c2f; --hover: #1d1f23; --seg: #2b2e32; --done: #a0a5ab;
-    --accent: #63ccc0; --accent-fill: #3dbbae; --accent-fg: #101214; --accent-soft: #0d2f2b;
-    --danger: #ef675c; --danger-soft: #47211d; --wait: #e4ac59; --wait-soft: #3a2a12;
+    --accent: #4da3ff; --accent-fill: #0a84ff; --accent-fg: #ffffff; --accent-soft: #0f2640;
+    --danger: #ef675c; --danger-soft: #47211d; --wait: #e4ac59; --wait-soft: #3a2a12; --ok: #30d158;
     --shadow: 0 1px 2px rgb(0 0 0 / .4), 0 0 0 1px rgb(255 255 255 / .06);
     color-scheme: dark;
   }
+  /* The OS accent where supported (WebKit, the tray's dashboard window). :root:root outranks the theme blocks. */
+  @supports (color: AccentColor) { :root:root {
+    --accent: AccentColor; --accent-fill: AccentColor; --accent-fg: AccentColorText;
+    --accent-soft: color-mix(in srgb, AccentColor 11%, transparent);
+  }}
   * { box-sizing: border-box; margin: 0; }
   body { background: var(--bg); color: var(--text); font: 13px/1.5 var(--ui); -webkit-font-smoothing: antialiased; min-height: 100vh; }
   button, input, select { font: inherit; color: inherit; }
@@ -68,7 +73,7 @@ DASHBOARD_PAGE = r"""<!doctype html>
   .dim { color: var(--dim); } .faint { color: var(--faint); }
   .mono { font-family: var(--mono); font-size: 12px; }
   .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; flex: none; background: var(--faint); }
-  .dot.g { background: var(--accent-fill); } .dot.y { background: var(--wait); } .dot.r { background: var(--danger); }
+  .dot.g { background: var(--ok); } .dot.y { background: var(--wait); } .dot.r { background: var(--danger); }
   .pill { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; white-space: nowrap; }
   .pill.active, .pill.shipped { background: var(--run-soft); color: var(--run); }
   .pill.blocked { background: var(--danger-soft); color: var(--danger); }
