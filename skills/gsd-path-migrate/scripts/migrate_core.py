@@ -49,10 +49,13 @@ def snapshot(repo):
 
 
 def snapshot_source(source):
+    def scan_error(error):
+        raise error
+
     if source.is_symlink() or not source.is_dir():
         raise ValueError(f"expected a real Core directory: {source}")
     files = {}
-    for directory, directories, names in os.walk(source, followlinks=False):
+    for directory, directories, names in os.walk(source, followlinks=False, onerror=scan_error):
         for name in sorted(directories + names):
             path = Path(directory) / name
             metadata = path.lstat()

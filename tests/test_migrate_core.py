@@ -96,6 +96,46 @@ class CoreMigrationTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertFalse(output.exists())
 
+    def test_unreadable_nested_source_rejects_capture_without_output(self):
+        phases = self.planning / "phases"
+        mode = phases.stat().st_mode
+        phases.chmod(0)
+        try:
+            for command in ("preview", "prepare"):
+                with self.subTest(command=command):
+                    output = self.root / "bundle"
+                    args = ("--output", str(output)) if command == "prepare" else ()
+                    result = self.run_command(command, *args)
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn("Permission denied", result.stderr)
+                    self.assertIn(str(phases), result.stderr)
+                    self.assertEqual(result.stdout, "")
+                    self.assertFalse(output.exists())
+        finally:
+            phases.chmod(mode)
+
+    def test_unreadable_nested_bundle_rejects_incomplete_manifest(self):
+        output = self.root / "bundle"
+        prepared = self.run_command("prepare", "--output", str(output))
+        self.assertEqual(prepared.returncode, 0, prepared.stderr)
+        manifest_path = output / "manifest.json"
+        manifest = json.loads(manifest_path.read_text())
+        manifest["files"] = [
+            entry for entry in manifest["files"] if not entry["path"].startswith("phases/")
+        ]
+        manifest_path.write_text(json.dumps(manifest))
+        phases = output / "core/phases"
+        mode = phases.stat().st_mode
+        phases.chmod(0)
+        try:
+            result = self.verify(output)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Permission denied", result.stderr)
+            self.assertIn(str(phases), result.stderr)
+            self.assertEqual(result.stdout, "")
+        finally:
+            phases.chmod(mode)
+
     def test_hook_inventory_preserves_commands_plugins_and_settings(self):
         settings = self.root / "settings.json"
         content = json.dumps({
