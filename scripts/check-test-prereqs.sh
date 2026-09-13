@@ -61,7 +61,7 @@ if [[ ! -f package-lock.json ]]; then
   fail "package-lock.json is missing; run npm install from a release checkout"
 fi
 
-if [[ -f package-lock.json ]] && ! node -e "const p=require('./package.json'); process.exit(Object.keys(p.dependencies||{}).length?0:1)" 2>/dev/null; then
+if node -e "const p=require('./package.json'); process.exit(Object.keys(p.dependencies||{}).length?0:1)" 2>/dev/null; then
   if [[ ! -d node_modules ]]; then
     echo "  note: node_modules/ is absent — run 'make install' or 'npm ci' before tests"
   fi
