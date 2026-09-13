@@ -25,8 +25,12 @@ var appearanceChoice: String {
     get { UserDefaults.standard.string(forKey: "appearance").flatMap { appearanceChoices.contains($0) ? $0 : nil } ?? "light" }
     set { UserDefaults.standard.set(newValue, forKey: "appearance"); applyAppearance() }
 }
+/// Popovers take their appearance from the menu-bar button, not NSApp, so open windows are set too;
+/// AppDelegate sets the popover's own appearance before showing it.
 func applyAppearance() {
-    NSApp.appearance = appearanceChoice == "system" ? nil : NSAppearance(named: appearanceChoice == "dark" ? .darkAqua : .aqua)
+    let appearance = appearanceChoice == "system" ? nil : NSAppearance(named: appearanceChoice == "dark" ? .darkAqua : .aqua)
+    NSApp.appearance = appearance
+    NSApp.windows.forEach { $0.appearance = appearance }
 }
 
 final class PaletteSurface: NSView {
@@ -121,6 +125,27 @@ class MenuRowButton: NSButton {
         effectiveAppearance.performAsCurrentDrawingAppearance {
             layer?.backgroundColor = hovered ? paletteAccent.cgColor : NSColor.clear.cgColor
         }
+    }
+}
+
+/// Borderless SF Symbol button for the footer toolbar; the label is its tooltip and accessibility name.
+final class IconButton: MenuRowButton {
+    init(symbol: String, label: String, target: AnyObject, action: Selector) {
+        super.init()
+        setButtonType(.momentaryPushIn)
+        image = NSImage(systemSymbolName: symbol, accessibilityDescription: label)
+        imagePosition = .imageOnly
+        toolTip = label
+        setAccessibilityLabel(label)
+        self.target = target
+        self.action = action
+        translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([widthAnchor.constraint(equalToConstant: 30), heightAnchor.constraint(equalToConstant: 26)])
+        hoverChanged()
+    }
+    override func hoverChanged() {
+        super.hoverChanged()
+        contentTintColor = hovered ? paletteOnAccent : paletteDim
     }
 }
 
@@ -295,25 +320,25 @@ final class PopoverViewController: NSViewController {
 
         let daemonRow = DaemonRowView()
         daemonRow.onRescan = onRescan
-        let appearance = NSSegmentedControl(labels: ["System", "Light", "Dark"], trackingMode: .selectOne,
-                                            target: self, action: #selector(appearanceChanged(_:)))
+        let symbols = [("circle.lefthalf.filled", "System"), ("sun.max", "Light"), ("moon", "Dark")]
+        let appearance = NSSegmentedControl(images: symbols.map { NSImage(systemSymbolName: $0.0, accessibilityDescription: $0.1) ?? NSImage() },
+                                            trackingMode: .selectOne, target: self, action: #selector(appearanceChanged(_:)))
+        for (index, symbol) in symbols.enumerated() { appearance.setToolTip("Appearance: \(symbol.1)", forSegment: index) }
         appearance.controlSize = .small
         appearance.selectedSegment = appearanceChoices.firstIndex(of: appearanceChoice) ?? 1
-        let appearanceSpacer = NSView()
-        appearanceSpacer.setContentHuggingPriority(.init(1), for: .horizontal)
-        let appearanceRow = NSStackView(views: [makeLabel("Appearance", size: 13), appearanceSpacer, appearance])
-        appearanceRow.edgeInsets = NSEdgeInsets(top: 2, left: 9, bottom: 2, right: 9)
-        let footerViews: [NSView] = [
-            separator(),
-            MenuItemButton("Open Dashboard", target: self, action: #selector(dashboardPressed)),
-            MenuItemButton("Plugin settings…", target: self, action: #selector(pluginPressed)),
-            MenuItemButton("Watched folders…", target: self, action: #selector(foldersPressed)),
-            MenuItemButton("Rescan", target: self, action: #selector(rescanPressed)),
-            inset(daemonRow, top: 4),
-            appearanceRow,
-            separator(),
-            MenuItemButton("Quit", target: self, action: #selector(quitPressed)),
-        ]
+        let toolbarSpacer = NSView()
+        toolbarSpacer.setContentHuggingPriority(.init(1), for: .horizontal)
+        let toolbar = NSStackView(views: [
+            IconButton(symbol: "macwindow", label: "Open dashboard", target: self, action: #selector(dashboardPressed)),
+            IconButton(symbol: "puzzlepiece.extension", label: "Plugin settings", target: self, action: #selector(pluginPressed)),
+            IconButton(symbol: "folder", label: "Watched folders", target: self, action: #selector(foldersPressed)),
+            IconButton(symbol: "arrow.clockwise", label: "Rescan", target: self, action: #selector(rescanPressed)),
+            toolbarSpacer, appearance,
+            IconButton(symbol: "power", label: "Quit", target: self, action: #selector(quitPressed)),
+        ])
+        toolbar.spacing = 2
+        toolbar.edgeInsets = NSEdgeInsets(top: 2, left: 3, bottom: 0, right: 3)
+        let footerViews: [NSView] = [separator(), inset(daemonRow, top: 4), toolbar]
         rebuild(footer: footerViews) { views }
     }
 

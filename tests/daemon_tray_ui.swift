@@ -72,22 +72,26 @@ struct TrayUITest {
         require(!buttons().contains { $0.title == "Actions" }, "no actions menu")
         require(!buttons().contains { $0 is NSPopUpButton }, "no per-row menus")
         require(!labels().contains("ship blocked"), "no attention copy")
-        let menu = buttons().compactMap { ($0 as? MenuItemButton)?.title }
-        require(menu == ["Open Dashboard", "Plugin settings…", "Watched folders…", "Rescan", "Quit"], "menu items")
+        let icons = buttons().compactMap { $0 as? IconButton }
+        require(icons.map { $0.toolTip ?? "" } == ["Open dashboard", "Plugin settings", "Watched folders", "Rescan", "Quit"], "footer icon buttons")
+        require(icons.allSatisfy { $0.image != nil && $0.accessibilityLabel() == $0.toolTip }, "icons have symbols and accessibility names")
+        require(descendants(vc.view).compactMap { $0 as? DaemonRowView }.first!.fittingSize.height == 24, "daemon row is sized before its status arrives")
         // Appearance: light by default; the choice is stored and applied app-wide.
         let appearance = descendants(vc.view).compactMap { $0 as? NSSegmentedControl }.first!
         require(appearance.selectedSegment == 1 && appearanceChoice == "light", "light appearance by default")
         appearance.selectedSegment = 2
         _ = appearance.sendAction(appearance.action, to: appearance.target)
         require(UserDefaults.standard.string(forKey: "appearance") == "dark" && NSApp.appearance?.name == .darkAqua, "dark appearance applied")
+        require(window.appearance?.name == .darkAqua, "open windows (the popover's included) take the choice")
         appearance.selectedSegment = 0
         _ = appearance.sendAction(appearance.action, to: appearance.target)
-        require(NSApp.appearance == nil, "system appearance follows macOS")
+        require(NSApp.appearance == nil && window.appearance == nil, "system appearance follows macOS")
+        require(appearance.toolTip(forSegment: 1) == "Appearance: Light" && appearance.image(forSegment: 1) != nil, "appearance icons with tooltips")
         let themed = themedDashboardURL(projectDeepLink(base: URL(string: "http://localhost:8765")!, root: "/sample/gsd"), choice: "dark")
         require(themed.absoluteString == "http://localhost:8765?theme=dark#project=%2Fsample%2Fgsd", "dashboard link carries the appearance")
         let scroll = descendants(vc.view).compactMap { $0 as? NSScrollView }.first!
-        require(!descendants(scroll).contains { ($0 as? NSButton)?.title == "Open Dashboard" }, "dashboard stays outside scrolling content")
-        buttons().first { $0.title == "Rescan" }?.performClick(nil)
+        require(!descendants(scroll).contains { $0 is IconButton }, "footer stays outside scrolling content")
+        buttons().first { $0.toolTip == "Rescan" }?.performClick(nil)
         require(rescans == 1, "rescan action invokes its callback")
         let link = projectDeepLink(base: URL(string: "http://localhost:8765")!, root: "/sample/atlas'&tab=usage")
         require(link.fragment?.contains("&tab=usage") == false, "root cannot inject a dashboard tab")

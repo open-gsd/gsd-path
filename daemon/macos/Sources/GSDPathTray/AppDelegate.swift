@@ -42,6 +42,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             // Refresh immediately on open so the cards are never one poll stale.
             poll()
+            popover.appearance = NSApp.appearance
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         }
     }

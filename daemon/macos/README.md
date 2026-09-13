@@ -41,10 +41,11 @@ phase, wave, task progress, criteria met, the date the phase started and the
 current milestone's cost and turns; shipped rows show the ship date and task
 count from the archive manifest. The tooltip carries the milestone stack
 (`M001 ✓  M002 ●  M003 ○`), the current goal and the health reason. Rows carry
-no commands or actions. The fixed footer keeps dashboard, plugin, watched-folder,
-rescan, daemon lifecycle, Appearance (System / Light / Dark, light by default,
-applied to the popover and the dashboard window) and quit items outside the
-scrolling project list.
+no commands or actions. The fixed footer, outside the scrolling project list,
+holds the daemon lifecycle row and an icon toolbar: open dashboard, plugin
+settings, watched folders, rescan, Appearance (System / Light / Dark, light by
+default, applied to the popover and the dashboard window) and quit. Each icon
+has a tooltip and an accessibility name.
 
 ## Self-test (no GUI required)
 
