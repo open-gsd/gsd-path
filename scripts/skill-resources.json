@@ -22,6 +22,7 @@
     "gsd-path-forensics",
     "gsd-path-inspect",
     "gsd-path-loop",
+    "gsd-path-migrate",
     "gsd-path-plan",
     "gsd-path-research",
     "gsd-path-roadmap",
@@ -37,6 +38,9 @@
     "plugin.json",
     "scripts/install.mjs",
     "scripts/install.py",
+    "scripts/migrate_core.py",
+    "scripts/core_hook_gate.py",
+    "scripts/core_hook_settings.py",
     "scripts/sync_skill_resources.py",
     "scripts/wizard.mjs",
     "scripts/skill-resources.json",
@@ -71,6 +75,7 @@
     "scripts/pipeline_undo.py",
     "scripts/pipeline_diagnose.py",
     "README.md",
+    "MIGRATE.md",
     "RUNTIME.md",
     "DOCS.md",
     "HOOKS.md",
@@ -116,6 +121,7 @@
       "templates/state.md"
     ],
     "gsd-path-forensics": [],
+    "gsd-path-migrate": [],
     "gsd-path-loop": [
       "templates/loop.md"
     ],
@@ -155,6 +161,10 @@
     "gsd-path-undo": []
   },
   "script_targets": [
+    ["scripts/migrate_core.py", "skills/gsd-path-migrate/scripts/migrate_core.py"],
+    ["scripts/core_hook_gate.py", "skills/gsd-path-migrate/scripts/core_hook_gate.py"],
+    ["scripts/core_hook_settings.py", "skills/gsd-path-migrate/scripts/core_hook_settings.py"],
+    ["scripts/discussion_records.py", "skills/gsd-path-migrate/scripts/discussion_records.py"],
     ["scripts/_common.py", "skills/gsd-path/scripts/_common.py"],
     ["scripts/_common.py", "skills/gsd-path-build/scripts/_common.py"],
     ["scripts/_common.py", "skills/gsd-path-decide/scripts/_common.py"],
