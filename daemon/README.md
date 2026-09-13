@@ -37,7 +37,8 @@ re-running it upgrades cleanly. It:
    (`python -m gsd_daemon serve --port 8765`):
    - **macOS** — a LaunchAgent at
      `~/Library/LaunchAgents/org.gsd-path.daemon.plist` (`RunAtLoad` +
-     `KeepAlive`, logs in `~/.gsd-path/logs/{stdout,stderr}.log`), loaded with
+     `KeepAlive`, `ProcessType` Interactive so the scan is not throttled to
+     background QoS, logs in `~/.gsd-path/logs/{stdout,stderr}.log`), loaded with
      `launchctl bootstrap gui/<uid>` (falls back to `launchctl load`).
    - **Windows** — a `gsd-path-daemon.lnk` shortcut in the Startup folder
      targeting `<venv>\Scripts\pythonw.exe -m gsd_daemon tray --serve` (one
@@ -151,7 +152,14 @@ cost. It shows no next steps, commands, or attention items.
   tokens per model, e.g. `{"prices": {"gpt-6-astra": {"input": 1.25,
   "cached": 0.125, "output": 10}}}`. There are no built-in prices: a model
   without a price contributes tokens only and is listed as unpriced.
-  `session_dirs` overrides the scanned locations (glob patterns).
+  `session_dirs` overrides the scanned locations (glob patterns). The daemon
+  atomically saves resolved file-to-working-directory matches in
+  `~/.gsd-path/sessions-index.json`; an unreadable or corrupt cache is ignored.
+  With `GSD_DAEMON_CONFIG`, the cache sits beside that config file; `--config`
+  alone does not move it. Restarts reuse resolved matches and retry unresolved
+  heads. Within a run, unresolved heads are retried when file size or mtime
+  changes. Both `serve` and `tray --serve` bind the dashboard before the first
+  session scan; usage appears when the first background poll completes.
 - Sources for the rest: `ROADMAP.md`, `archive/*/MANIFEST.md`, the `STATE.md`
   log, `CHARTER.md` Vision, `intent/INTENT.md` Summary, `LESSONS.md`, task
   files, `review/FINAL.md`, the verify ledger, and `next/STATE.md`.
@@ -325,28 +333,17 @@ below are only for hand-rolled setups.
 `~/Library/LaunchAgents/org.gsd-path.daemon.plist` (the label the installer
 uses — keep them identical so `uninstall` can clean up):
 
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>Label</key><string>org.gsd-path.daemon</string>
-  <key>ProgramArguments</key>
-  <array>
-    <string>/Users/you/.gsd-path/venv/bin/python3</string>
-    <string>-m</string>
-    <string>gsd_daemon</string>
-    <string>serve</string>
-    <string>--port</string>
-    <string>8765</string>
-  </array>
-  <key>RunAtLoad</key><true/>
-  <key>KeepAlive</key><true/>
-  <key>StandardOutPath</key><string>/Users/you/.gsd-path/logs/stdout.log</string>
-  <key>StandardErrorPath</key><string>/Users/you/.gsd-path/logs/stderr.log</string>
-</dict>
-</plist>
+Use the plist emitted by the installer's preview instead of maintaining a
+separate template. From a repository checkout:
+
+```bash
+GSD_DAEMON_PLATFORM=darwin PYTHONPATH=daemon python3 -m gsd_daemon install --dry-run --no-tray
 ```
+
+Copy the XML shown for that LaunchAgent path (without the preview's `|`
+prefixes), adjusting the Python executable and log paths for your setup.
+Create the log directory before loading it. Keep the generated process type
+and label; see [Install (one command)](#install-one-command) for their purpose.
 
 Then `launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/org.gsd-path.daemon.plist`
 (or `launchctl load -w` on older macOS).

@@ -181,6 +181,10 @@ class Installer:
             ],
             "RunAtLoad": True,
             "KeepAlive": True,
+            # The daemon answers the dashboard and tray interactively; without
+            # this launchd runs it at background QoS and a 3 s session scan
+            # takes minutes.
+            "ProcessType": "Interactive",
             "StandardOutPath": str(self.logs_dir / "stdout.log"),
             "StandardErrorPath": str(self.logs_dir / "stderr.log"),
         }
