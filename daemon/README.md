@@ -109,29 +109,31 @@ gsd-path-daemon plugin <status|install|update|uninstall>          # manage the s
 - `GET /` — a self-contained dashboard (inline CSS/JS, no build step) that
   polls `/status` every 5 seconds.
 
-The dashboard uses the GSD Cloud Studio theme (system light/dark, or force one
-with `<html data-theme="light|dark">`) and is a pure **status board**: what each
+The dashboard uses the Instrument theme (system light/dark, or force one with
+`<html data-theme="light|dark">`) and is a pure **status board**: what each
 project has done, where it is now, where its roadmap goes next, and what it has
 cost. It shows no next steps, commands, or attention items.
 
-- **Board**: one compact row per project, grouped Needs attention / In progress
-  / Shipped. A row shows the milestone stack (`M001 ✓  M002 ●  M003 ○`, ■ when
-  blocked), a here line with phase, wave, task progress, criteria met, last
-  shipped milestone and the current goal, then cost and turn count for the
-  current milestone, and the state pill. Shipped projects collapse to one line.
+- **Toolbar**: GSD Path, All / Active / Shipped filters with counts, a project
+  search, the last update time, and the Settings menu (Plugin, Watched folders).
+- **Board**: one table row per project, blocked first, then in progress, then
+  shipped. Columns: project with health dot and path, route (one square per
+  milestone: done, current, ahead; red when blocked), current milestone, an
+  8-segment phase meter (inspect, define, research, decide, roadmap, plan,
+  build, ship), tasks, cost and turns for the project, last activity, state.
 - **Project page** (click a row, or the tray's `#project=<root>` deep link): the
-  full briefing as one scrolling page. The toolbar becomes a back button and a
-  project switcher. The page holds the charter vision; shipped milestones with
-  ship date, tasks, waves, review cycles, integrated commit, carried rulings,
-  cost and turns; the current milestone with goal, intent, depends-on, task
-  progress, entered date, waves with task names, criteria with the last verify
-  result, a phase-log strip and git position; planned milestones with goals;
-  the latest lesson; and a **Usage** block.
+  toolbar becomes Back and a project switcher. The page shows a facts strip
+  (state, milestone, branch, head, updated, cost, turns) and the charter vision.
+  The left column holds the phase track with entry dates; the current milestone
+  with goal, intent, task progress, entered date, waves, criteria with the last
+  verify result; a milestone table (shipped milestones with ship date, tasks,
+  waves, review cycles, integrated commit, carried rulings; planned milestones
+  with depends-on; usage per milestone); and the task table. The right column
+  holds **Usage** and the latest lesson.
 - **Usage** comes from host session logs matched to the project root by working
   directory: Codex rollouts (`~/.codex/sessions` and Orca's per-account homes)
-  and Claude Code transcripts (`~/.claude/projects`). It shows cost, turns,
-  tokens and models for the current milestone, all-milestone totals, a bar per
-  model, a per-agent table (the `$gsd-path-*` skill and task named in the
+  and Claude Code transcripts (`~/.claude/projects`). It shows prompts and
+  tokens, a per-model table with turns, tokens and cost, a per-agent table (the `$gsd-path-*` skill and task named in the
   session, subagents marked), and a folded per-turn ledger with time, agent,
   model, in / cached / out tokens, cost and duration. A turn is one model
   response. Turns dated on or before a milestone's ship date count toward that

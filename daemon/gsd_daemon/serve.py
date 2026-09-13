@@ -33,148 +33,163 @@ DASHBOARD_PAGE = r"""<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>gsd-path daemon</title>
 <style>
-  /* Studio tokens from gsd-cloud/web/app/globals.css. Keep both palettes in sync. */
+  /* Instrument palette. Hex values are shared with the tray (PopoverViewController.swift); keep both palettes in sync. */
   :root {
-    --accent: #4f5fe0; --accent-fill: #4f5fe0; --accent-fg: #ffffff; --accent-soft: #edefff;
-    --bg: #f7f8fa; --card: #ffffff; --sunken: #f2f4f7; --rail: #ffffff; --line: #e3e7ed;
-    --text: #14161a; --dim: #5b6270; --faint: #66707e;
-    --run: #0d7d53; --run-soft: #e6f7f0; --wait: #7c5205; --wait-soft: #fdf3e0; --danger: #b23a2c; --danger-soft: #fdecea;
-    --shadow: 0 1px 2px rgb(16 24 40 / .06), 0 0 0 1px rgb(16 24 40 / .05);
-    --run-fill: #0d7d53; --danger-fill: #b23a2c;
-    --ui: Inter, -apple-system, "Segoe UI", sans-serif;
-    --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    --bg: #fbfcfd; --chrome: #eef0f3; --card: #ffffff; --text: #1a1d22; --dim: #595e64; --faint: #71757a;
+    --line: #e1e3e6; --hover: #f0f4f7; --seg: #e0e3e6; --done: #51565c;
+    --accent: #006c62; --accent-fill: #008f83; --accent-fg: #ffffff; --accent-soft: #d9f6f1;
+    --danger: #c9302d; --danger-soft: #ffe7e4; --wait: #8d5e00; --wait-soft: #fdf1dc;
+    --run: var(--accent); --run-soft: var(--accent-soft); --sunken: var(--chrome);
+    --shadow: 0 1px 2px rgb(26 29 34 / .08), 0 0 0 1px rgb(26 29 34 / .06);
+    --ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, "Segoe UI", system-ui, sans-serif;
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+    color-scheme: light;
   }
   @media(prefers-color-scheme:dark) { :root:not([data-theme="light"]) {
-    --accent: #7c8cff; --accent-fill: #5a68e8; --accent-soft: #1b1f3a;
-    --bg: #0c0d10; --card: #131519; --sunken: #1a1d23; --rail: #0e1013; --line: #24272f;
-    --text: #eceef2; --dim: #9ba1ad; --faint: #8b93a1;
-    --run: #3ddc97; --run-soft: #0f2b22; --wait: #f5b544; --wait-soft: #2e2312; --danger: #ff6b5e; --danger-soft: #331715;
-    --shadow: 0 1px 2px rgb(0 0 0 / .3), 0 0 0 1px rgb(255 255 255 / .04);
-    --run-fill: #1f8f62; --danger-fill: #d9483a;
+    --bg: #101214; --chrome: #171a1d; --card: #141619; --text: #e9ebee; --dim: #a7abb1; --faint: #82878c;
+    --line: #292c2f; --hover: #1d1f23; --seg: #2b2e32; --done: #a0a5ab;
+    --accent: #63ccc0; --accent-fill: #3dbbae; --accent-fg: #101214; --accent-soft: #0d2f2b;
+    --danger: #ef675c; --danger-soft: #47211d; --wait: #e4ac59; --wait-soft: #3a2a12;
+    --shadow: 0 1px 2px rgb(0 0 0 / .4), 0 0 0 1px rgb(255 255 255 / .06);
+    color-scheme: dark;
   }}
   :root[data-theme="dark"] {
-    --accent: #7c8cff; --accent-fill: #5a68e8; --accent-soft: #1b1f3a;
-    --bg: #0c0d10; --card: #131519; --sunken: #1a1d23; --rail: #0e1013; --line: #24272f;
-    --text: #eceef2; --dim: #9ba1ad; --faint: #8b93a1;
-    --run: #3ddc97; --run-soft: #0f2b22; --wait: #f5b544; --wait-soft: #2e2312; --danger: #ff6b5e; --danger-soft: #331715;
-    --shadow: 0 1px 2px rgb(0 0 0 / .3), 0 0 0 1px rgb(255 255 255 / .04);
-    --run-fill: #1f8f62; --danger-fill: #d9483a;
+    --bg: #101214; --chrome: #171a1d; --card: #141619; --text: #e9ebee; --dim: #a7abb1; --faint: #82878c;
+    --line: #292c2f; --hover: #1d1f23; --seg: #2b2e32; --done: #a0a5ab;
+    --accent: #63ccc0; --accent-fill: #3dbbae; --accent-fg: #101214; --accent-soft: #0d2f2b;
+    --danger: #ef675c; --danger-soft: #47211d; --wait: #e4ac59; --wait-soft: #3a2a12;
+    --shadow: 0 1px 2px rgb(0 0 0 / .4), 0 0 0 1px rgb(255 255 255 / .06);
+    color-scheme: dark;
   }
   * { box-sizing: border-box; margin: 0; }
-  body { background: var(--bg); color: var(--text); font: 14px/1.5 var(--ui); min-height: 100vh; }
-  button { font: inherit; }
-  button:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  body { background: var(--bg); color: var(--text); font: 13px/1.5 var(--ui); -webkit-font-smoothing: antialiased; min-height: 100vh; }
+  button, input, select { font: inherit; color: inherit; }
+  button:focus-visible, summary:focus-visible, select:focus-visible, tr:focus-visible { outline: 2px solid var(--accent-fill); outline-offset: 2px; }
   .dim { color: var(--dim); } .faint { color: var(--faint); }
   .mono { font-family: var(--mono); font-size: 12px; }
-  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; flex: none; }
-  .dot.g { background: var(--run); } .dot.y { background: var(--wait); } .dot.r { background: var(--danger); }
+  .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; flex: none; background: var(--faint); }
+  .dot.g { background: var(--accent-fill); } .dot.y { background: var(--wait); } .dot.r { background: var(--danger); }
   .pill { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; white-space: nowrap; }
   .pill.active, .pill.shipped { background: var(--run-soft); color: var(--run); }
   .pill.blocked { background: var(--danger-soft); color: var(--danger); }
   .pill.progress, .pill.done { background: var(--accent-soft); color: var(--accent); }
   .pill.missing { background: var(--sunken); color: var(--faint); }
   .pill.outdated { background: var(--wait-soft); color: var(--wait); }
-  .btn { background: var(--card); border: 1px solid var(--line); color: var(--text); border-radius: 8px; padding: 7px 12px; font-size: 12px; cursor: pointer; }
-  .btn:hover { border-color: var(--accent); }
+  .btn { background: var(--card); border: 1px solid var(--line); color: var(--text); border-radius: 7px; padding: 6px 12px; font-size: 12.5px; cursor: pointer; }
+  .btn:hover { border-color: var(--faint); }
   .btn.primary { background: var(--accent-fill); border-color: var(--accent-fill); color: var(--accent-fg); }
   .btn.danger { border-color: var(--danger); color: var(--danger); }
   kbd { background: var(--sunken); border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; font: 11px var(--mono); }
 
-  /* Studio console: sticky toolbar, the page itself scrolls only when it must. */
+  /* Toolbar: title, filters and search on the board; back and project switcher on a project. */
   html { overscroll-behavior: none; }
   .stage { min-height: 100dvh; }
-  .topbar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 16px; padding: 8px 16px; background: var(--rail); border-bottom: 1px solid var(--line); }
-  .brand { display: flex; gap: 8px; align-items: center; padding: 0; border: 0; background: none; color: var(--text); font-size: 16px; font-weight: 600; cursor: pointer; }
-  .brand::before { content: "G"; display: grid; place-items: center; width: 24px; height: 24px; background: var(--accent-fill); color: var(--accent-fg); border-radius: 7px; font-size: 12.5px; }
-  .summary { font-size: 12.5px; color: var(--dim); }
-  .connection { margin-left: auto; font-size: 12.5px; display: flex; align-items: center; gap: 6px; }
+  .topbar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 8px 16px; background: var(--chrome); border-bottom: 1px solid var(--line); }
+  .brand { display: flex; gap: 8px; align-items: center; padding: 0; border: 0; background: none; font-size: 13.5px; font-weight: 650; cursor: pointer; white-space: nowrap; }
+  .brand svg, .settings-menu summary svg, .search svg { width: 16px; height: 16px; flex: none; }
+  .segc { display: flex; padding: 2px; border-radius: 7px; background: var(--seg); }
+  .segc button { padding: 3px 12px; border: 0; border-radius: 5px; background: none; font-size: 12.5px; color: var(--dim); cursor: pointer; white-space: nowrap; }
+  .segc button[aria-pressed="true"] { background: var(--card); color: var(--text); font-weight: 600; box-shadow: var(--shadow); }
+  .segc button span { color: var(--faint); margin-left: 4px; font-weight: 400; }
+  .search { margin-left: auto; display: flex; align-items: center; gap: 6px; height: 28px; width: 220px; padding: 0 8px; border-radius: 7px; background: var(--card); box-shadow: inset 0 0 0 1px var(--line); color: var(--faint); }
+  .search input { border: 0; outline: 0; background: transparent; width: 100%; min-width: 0; font-size: 13px; color: var(--text); }
+  .search:focus-within { box-shadow: inset 0 0 0 1px var(--accent-fill), 0 0 0 3px var(--accent-soft); }
+  .back { display: flex; align-items: center; gap: 2px; padding: 4px 8px; border: 0; border-radius: 6px; background: none; color: var(--dim); cursor: pointer; white-space: nowrap; }
+  .back:hover { background: var(--seg); color: var(--text); }
+  .switcher { min-width: 0; max-width: 40vw; padding: 3px 6px; border: 0; border-radius: 6px; background: transparent; font-weight: 650; font-size: 13.5px; cursor: pointer; }
+  .switcher:hover { background: var(--seg); }
+  .connection { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--dim); white-space: nowrap; }
+  .topbar .spacer { margin-left: auto; }
   .settings-menu { position: relative; }
-  .settings-menu summary { cursor: pointer; padding: 7px 12px; border: 1px solid var(--line); border-radius: 8px; list-style: none; }
-  .settings-menu nav { position: absolute; right: 0; top: 100%; z-index: 10; display: grid; padding: 8px; background: var(--card); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow); white-space: nowrap; }
-  .settings-menu .btn { text-align: left; border: 0; }
+  .settings-menu summary { display: grid; place-items: center; width: 30px; height: 28px; border-radius: 6px; color: var(--dim); cursor: pointer; list-style: none; }
+  .settings-menu summary::-webkit-details-marker { display: none; }
+  .settings-menu summary:hover, .settings-menu[open] summary { background: var(--seg); color: var(--text); }
+  .settings-menu nav { position: absolute; right: 0; top: calc(100% + 4px); z-index: 10; display: grid; padding: 4px; background: var(--card); border-radius: 8px; box-shadow: 0 8px 24px rgb(26 29 34 / .14), var(--shadow); white-space: nowrap; }
+  .settings-menu .btn { text-align: left; border: 0; border-radius: 5px; }
+  .settings-menu .btn:hover { background: var(--accent-fill); color: var(--accent-fg); }
 
-  /* Status board: one card per project holding its milestone stack. */
-  .board { padding: 16px; display: grid; align-content: start;
-           grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr)); gap: 14px; }
-  .board .empty { grid-column: 1 / -1; padding: 28px; color: var(--dim); }
-  .card { background: var(--card); border-radius: 14px; box-shadow: var(--shadow); padding: 12px 14px; min-width: 0; overflow-wrap: anywhere; }
-  .card .title { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-  .card .title b { font-size: 14px; }
-  .card .title .pill { margin-left: auto; color: #fff; }
-  .card .title .pill.progress { background: var(--accent-fill); }
-  .card .title .pill.shipped { background: var(--run-fill); }
-  .card .title .pill.blocked { background: var(--danger-fill); }
-  .card .path { font-family: var(--mono); font-size: 11.5px; color: var(--faint); margin: -6px 0 8px; }
-  .ms { display: flex; gap: 10px; padding: 6px 0; border-top: 1px solid var(--line); font-size: 12.5px; align-items: flex-start; }
-  .ms:first-of-type { border-top: 0; }
-  .ms .k { width: 48px; flex: none; font-family: var(--mono); font-size: 11.5px; padding-top: 2px; }
-  .ms .body { min-width: 0; flex: 1; }
-  .ms.done .k { color: var(--run); }
-  .ms.now { background: var(--accent-soft); margin: 0 -14px; padding: 8px 14px; border-top: 0; border-radius: 8px; }
-  .ms.now .k { color: var(--accent); }
-  .ms.now.blocked .k { color: var(--danger); }
-  .ms.ahead { color: var(--faint); }
-  .ms .waves { margin-top: 4px; font-size: 12px; color: var(--dim); display: flex; flex-wrap: wrap; gap: 4px 12px; }
-  .ms .waves .w-done { color: var(--run); } .ms .waves .w-now { color: var(--accent); } .ms .waves .w-ahead { color: var(--faint); }
-  .ms .git { margin-top: 4px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); }
-  .bar { height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; margin: 6px 0 3px; }
-  .bar > i { display: block; height: 100%; background: var(--run); }
-  .card .vision { font-size: 12.5px; color: var(--dim); border-left: 3px solid var(--line); padding: 2px 10px; margin: 0 0 10px; }
-  .ms .goal { font-size: 12px; color: var(--dim); margin-top: 2px; }
-  .ms .intent { font-size: 12px; color: var(--dim); margin-top: 2px; font-style: italic; }
-  .ms .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); margin-top: 2px; }
-  .ms .sub { font-size: 12px; color: var(--dim); margin-top: 3px; }
-  .ms .waves small { display: block; color: var(--faint); font-size: 11px; margin-left: 14px; }
-  .crit { display: flex; gap: 3px; margin-top: 5px; align-items: center; font-size: 12px; color: var(--dim); }
-  .crit i { width: 14px; height: 6px; border-radius: 2px; background: var(--line); display: block; }
-  .crit i.met { background: var(--run); } .crit i.not-met, .crit i.unverifiable { background: var(--danger); }
+  /* Board: one table row per project. */
+  .board { padding-bottom: 24px; overflow-x: auto; }
+  table.grid { width: 100%; border-collapse: collapse; min-width: 900px; }
+  .grid th { text-align: left; font-size: 11.5px; font-weight: 600; color: var(--dim); padding: 8px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  .grid td { padding: 8px 12px; border-bottom: 1px solid var(--line); vertical-align: middle; white-space: nowrap; }
+  .grid th:first-child, .grid td:first-child { padding-left: 20px; }
+  .grid .n { text-align: right; font-variant-numeric: tabular-nums; }
+  .prow { cursor: pointer; }
+  .prow:hover td { background: var(--hover); }
+  .pname { display: flex; align-items: center; gap: 7px; padding: 0; border: 0; background: none; font-weight: 600; cursor: pointer; }
+  .ppath { font: 11px var(--mono); color: var(--faint); padding-left: 14px; max-width: 280px; overflow: hidden; text-overflow: ellipsis; }
+  .msl { max-width: 280px; overflow: hidden; text-overflow: ellipsis; }
+  .msl .mono { color: var(--dim); margin-right: 4px; }
+  .route { display: inline-flex; gap: 3px; vertical-align: middle; }
+  .route i { width: 9px; height: 9px; border-radius: 2px; background: var(--done); }
+  .route i.now { background: var(--accent-fill); } .route i.blocked { background: var(--danger); }
+  .route i.ahead { background: none; box-shadow: inset 0 0 0 1.5px var(--faint); }
+  .meter { display: inline-flex; gap: 2px; vertical-align: middle; margin-right: 8px; }
+  .meter i { width: 10px; height: 8px; border-radius: 1.5px; background: var(--seg); }
+  .meter i.done { background: var(--done); } .meter i.now { background: var(--accent-fill); }
+  .meter.blocked i.now { background: var(--danger); }
+  .phlabel { color: var(--dim); }
+  .state { font-size: 12.5px; color: var(--dim); }
+  .state.active { color: var(--accent); font-weight: 600; } .state.blocked { color: var(--danger); font-weight: 600; }
+  .board .empty { padding: 28px 20px; color: var(--dim); }
+
+  /* Project page: facts strip, then the path on the left and usage on the right. */
+  .page { padding: 20px 20px 40px; max-width: 1240px; }
+  .phead { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; min-width: 0; }
+  .phead h1 { font-size: 20px; font-weight: 680; letter-spacing: -.015em; }
+  .phead .mono { color: var(--faint); overflow-wrap: anywhere; }
+  .facts { display: flex; flex-wrap: wrap; margin: 14px 0 0; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--card); }
+  .facts div { padding: 7px 14px; border-right: 1px solid var(--line); min-width: 0; }
+  .facts div:last-child { border-right: 0; }
+  .facts dt { font-size: 11px; color: var(--faint); }
+  .facts dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+  .vision { max-width: 80ch; color: var(--dim); margin-top: 12px; text-wrap: pretty; }
+  .cols { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 32px; margin-top: 8px; }
+  .page h2 { font-size: 12.5px; font-weight: 650; margin: 20px 0 8px; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+  .page h2 span { color: var(--faint); font-weight: 400; }
+  .phases { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 3px; }
+  .phases div { font-size: 11.5px; color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .phases i { display: block; height: 6px; border-radius: 2px; background: var(--seg); margin-bottom: 4px; }
+  .phases .done { color: var(--dim); } .phases .done i { background: var(--done); }
+  .phases .now { color: var(--accent); font-weight: 650; } .phases .now i { background: var(--accent-fill); }
+  .phases.blocked .now { color: var(--danger); } .phases.blocked .now i { background: var(--danger); }
+  .phases small { display: block; font: 10.5px var(--mono); }
+  .now-box { margin-top: 10px; padding: 10px 12px; border-radius: 8px; background: var(--accent-soft); }
+  .now-box.blocked { background: var(--danger-soft); }
+  .goal { color: var(--dim); text-wrap: pretty; }
+  .intent { color: var(--dim); font-style: italic; margin-top: 2px; }
+  .sub { color: var(--dim); margin-top: 4px; }
+  .bar { height: 4px; border-radius: 2px; background: var(--seg); overflow: hidden; margin: 8px 0 2px; }
+  .bar > i { display: block; height: 100%; background: var(--accent-fill); }
+  .crit { display: flex; gap: 3px; margin-top: 6px; align-items: center; color: var(--dim); }
+  .crit i { width: 14px; height: 6px; border-radius: 2px; background: var(--seg); display: block; }
+  .crit i.met { background: var(--accent-fill); } .crit i.not-met, .crit i.unverifiable { background: var(--danger); }
   .crit span { margin-left: 6px; }
-  .phase-log { display: flex; gap: 2px; margin-top: 6px; align-items: flex-end; }
-  .phase-log div { flex: 1; min-width: 0; text-align: center; font: 10px var(--mono); color: var(--faint); overflow: hidden; white-space: nowrap; }
-  .phase-log div i { display: block; height: 4px; border-radius: 2px; background: var(--run); margin-bottom: 3px; }
-  .phase-log div.now { color: var(--accent); } .phase-log div.now i { background: var(--accent); }
-  .card .lesson { font-size: 12px; color: var(--dim); border-top: 1px dashed var(--line); margin-top: 6px; padding-top: 6px; }
-  .card .lesson b { color: var(--faint); font-weight: 600; }
+  .waves { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 2px 14px; color: var(--dim); }
+  .waves .w-done { color: var(--done); } .waves .w-now { color: var(--accent); font-weight: 600; } .waves .w-ahead { color: var(--faint); }
+  table.t { width: 100%; border-collapse: collapse; }
+  .t th { text-align: left; font-size: 11px; font-weight: 600; color: var(--faint); padding: 5px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  .t td { padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .t .n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .t td.mono, .t td.st { white-space: nowrap; }
+  .t .goal, .t .meta { font-size: 12px; margin-top: 1px; }
+  .t .meta { color: var(--faint); }
+  .t tr.now td { background: var(--accent-soft); }
+  .t tr.now.blocked td { background: var(--danger-soft); }
+  .t tr.ahead td { color: var(--dim); }
+  .t tr.end td { color: var(--faint); }
+  .tablewrap { overflow-x: auto; }
+  details.turns summary { cursor: pointer; color: var(--accent); margin-top: 12px; font-size: 12.5px; }
+  .note { font-size: 12px; color: var(--faint); margin-top: 8px; max-width: 70ch; }
+  .lesson { color: var(--dim); text-wrap: pretty; }
 
-  /* Board: one compact row per project, grouped by state. */
-  .board { display: block; padding: 10px 16px 24px; }
-  .group { font-size: 10.5px; text-transform: uppercase; letter-spacing: .8px; color: var(--faint); padding: 12px 2px 6px; }
-  .prow { display: grid; grid-template-columns: minmax(140px, 200px) minmax(0, 1fr) auto auto; gap: 14px; align-items: center;
-          width: 100%; text-align: left; background: var(--card); border: 0; border-radius: 10px; box-shadow: var(--shadow);
-          padding: 9px 14px; margin-bottom: 8px; color: var(--text); cursor: pointer; font: inherit; }
-  .prow:hover { box-shadow: 0 0 0 1.5px var(--accent), var(--shadow); }
-  .prow.shipped { padding: 6px 14px; }
-  .prow .name { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 13.5px; min-width: 0; }
-  .prow .name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .prow .mid { min-width: 0; }
-  .prow .stack { font-family: var(--mono); font-size: 12px; font-weight: 500; }
-  .prow .stack .s-done { color: var(--run); } .prow .stack .s-now { color: var(--accent); } .prow .stack .s-now.blocked { color: var(--danger); } .prow .stack .s-ahead { color: var(--faint); }
-  .prow .here { font-family: var(--mono); font-size: 11.5px; color: var(--dim); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .prow .spend { font-family: var(--mono); font-size: 11.5px; color: var(--dim); white-space: nowrap; }
-  .board .empty { padding: 28px 0; color: var(--dim); }
-  /* Project page: the full card, one scrolling page. */
-  .page { padding: 16px; max-width: 860px; }
-  .back { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; font-size: 12.5px; color: var(--text); cursor: pointer; white-space: nowrap; }
-  .switcher { display: flex; gap: 2px; background: var(--sunken); padding: 3px; border-radius: 9px; overflow: auto; min-width: 0; }
-  .switcher button { display: flex; align-items: center; gap: 6px; padding: 4px 10px; border: 0; border-radius: 7px; background: none; color: var(--dim); font-size: 12.5px; white-space: nowrap; cursor: pointer; }
-  .switcher button.sel { background: var(--card); color: var(--text); box-shadow: var(--shadow); font-weight: 600; }
-  /* Usage: cost, turns, models and the per-turn ledger from host session logs. */
-  .usage { border-top: 1px solid var(--line); margin-top: 8px; padding-top: 8px; }
-  .usage h4 { font-size: 11px; text-transform: uppercase; letter-spacing: .7px; color: var(--faint); margin: 0 0 4px; }
-  .stat { display: flex; gap: 10px; flex-wrap: wrap; margin: 8px 0; }
-  .stat div { background: var(--sunken); border-radius: 8px; padding: 6px 10px; min-width: 96px; }
-  .stat .v { font-size: 15px; font-weight: 650; } .stat .k { font-size: 10.5px; color: var(--faint); text-transform: uppercase; letter-spacing: .5px; }
-  .mrow { display: flex; align-items: center; gap: 10px; font-size: 12px; margin-top: 4px; }
-  .mrow .nm { width: 150px; font-family: var(--mono); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .mrow .bar { flex: 1; margin: 0; } .mrow .bar > i.claude { background: var(--wait); } .mrow .bar > i.codex { background: var(--accent); }
-  .mrow .r { width: 170px; text-align: right; color: var(--dim); font-family: var(--mono); font-size: 11px; }
-  table.u { width: 100%; border-collapse: collapse; font-size: 11.5px; margin-top: 6px; }
-  table.u th { text-align: left; color: var(--faint); font-size: 10px; text-transform: uppercase; letter-spacing: .5px; padding: 4px 6px; border-bottom: 1px solid var(--line); }
-  table.u td { padding: 4px 6px; border-bottom: 1px solid var(--line); font-family: var(--mono); }
-  table.u td.t { font-family: var(--ui); } table.u td.n, table.u th.n { text-align: right; }
-  details.turns summary { cursor: pointer; font-size: 12px; color: var(--accent); margin-top: 8px; }
-  .usage .note { font-size: 11px; color: var(--faint); margin-top: 6px; }
-  .ms .meta .spend { color: var(--dim); }
+  @media(max-width:760px) {
+    .topbar { flex-wrap: wrap; gap: 8px; }
+    .search { width: 100%; order: 5; margin-left: 0; }
+    .cols { grid-template-columns: minmax(0, 1fr); gap: 0; }
+    .phases small { display: none; }
+  }
 
   /* Settings views */
   .settings { width: 100%; max-width: 1000px; margin: 0 auto; padding: 24px 24px 40px; }
@@ -196,9 +211,6 @@ DASHBOARD_PAGE = r"""<!doctype html>
   .browse-row:hover { background: var(--sunken); }
   .browse-row .proj { margin-left: auto; font-size: 10.5px; color: var(--run); }
 
-  @media(max-width:760px) {
-    .topbar { flex-wrap: wrap; gap: 8px; }
-  }
 </style>
 </head>
 <body>
@@ -219,7 +231,7 @@ const healthDot = p => ({red: "r", amber: "y", green: "g"})[healthOf(p)] || "g";
 let DATA = {schema: null, generated_at: null, projects: []};
 let PLUGIN = null;
 let ONLINE = null;
-let CState = {view: "board", root: null};
+let CState = {view: "board", root: null, filter: "all", q: ""};
 
 function setHash() {
   if (CState.view === "project" && CState.root) history.replaceState(null, "", "#" + new URLSearchParams({project: CState.root}));
@@ -378,17 +390,55 @@ function milestoneStack(p) {
   }
   return {before, cur, after};
 }
-const fmt = n => n >= 1e6 ? (n/1e6).toFixed(1)+"M" : n >= 1e3 ? Math.round(n/1e3)+"k" : String(n);
+const fmt = n => n >= 1e9 ? (n/1e9).toFixed(2)+"B" : n >= 1e6 ? (n/1e6).toFixed(1)+"M" : n >= 1e3 ? Math.round(n/1e3)+"k" : String(n);
+const int = n => Number(n).toLocaleString("en-US");
+const money = v => v == null ? "—" : "$" + Number(v).toLocaleString("en-US", {minimumFractionDigits: 2, maximumFractionDigits: 2});
+const DASH = '<span class="faint">—</span>';
+/* Same order as canonicalPhases in the tray's Models.swift. */
+const PHASES = ["inspect", "define", "research", "decide", "roadmap", "plan", "build", "ship"];
+const phaseIndex = p => stateOf(p) === "shipped" ? PHASES.length : PHASES.indexOf(p.phase);
+const ago = iso => {
+  const t = Date.parse(iso), now = Date.parse(DATA.generated_at) || Date.now();
+  if (isNaN(t)) return "—";
+  const s = Math.max(0, (now - t) / 1000);
+  return s < 60 ? "just now" : s < 3600 ? Math.floor(s/60) + "m ago" : s < 86400 ? Math.floor(s/3600) + "h ago" : Math.floor(s/86400) + "d ago";
+};
+function stackLine(p) {
+  const {before, cur, after} = milestoneStack(p);
+  const st = stateOf(p);
+  return [...before.map(m => `${m.number} ✓`), `${cur.number} ${st === "blocked" ? "■" : st === "shipped" ? "✓" : "●"}`,
+          ...after.map(m => `${m.number} ○`)].join("  ");
+}
+function routeMarks(p) {
+  const {before, cur, after} = milestoneStack(p), st = stateOf(p);
+  const mark = (m, kind) => `<i class="${kind}" title="${esc(m.number + " " + m.slug)}"></i>`;
+  return `<span class="route" role="img" aria-label="${esc(stackLine(p))}">${before.map(m => mark(m, "done")).join("")}${mark(cur, st === "shipped" ? "done" : st === "blocked" ? "blocked" : "now")}${after.map(m => mark(m, "ahead")).join("")}</span>`;
+}
+function phaseMeter(p) {
+  const i = phaseIndex(p);
+  return `<span class="meter ${stateOf(p)}" role="img" aria-label="${esc(p.phase || "no phase")}">${PHASES.map((ph, k) => `<i class="${k < i ? "done" : k === i ? "now" : ""}" title="${ph}"></i>`).join("")}</span>`;
+}
+function boardRow(p) {
+  const st = stateOf(p), {cur} = milestoneStack(p), sp = p.spend || {};
+  const tail = String(p.root || "").split("/").slice(-2).join("/");
+  return `<tr class="prow ${st}" data-root="${esc(p.root)}">
+    <td><button class="pname" data-root="${esc(p.root)}" aria-label="Open ${esc(p.project || p.root)}"><span class="dot ${healthDot(p)}" title="health ${esc(healthOf(p))}"></span><span>${esc(p.project || p.root)}</span></button><div class="ppath">${esc(tail)}</div></td>
+    <td>${routeMarks(p)}</td>
+    <td class="msl"><span class="mono">${esc(cur.number)}</span>${esc(cur.slug)}</td>
+    <td>${phaseMeter(p)}<span class="phlabel">${esc(p.phase || "no phase")}</span></td>
+    <td class="n">${p.tasks_total ? `${p.tasks_done || 0}/${p.tasks_total}` : DASH}</td>
+    <td class="n">${sp.turns && sp.cost != null ? money(sp.cost) : DASH}</td>
+    <td class="n">${sp.turns ? int(sp.turns) : DASH}</td>
+    <td class="n">${ago(p.last_activity_iso)}</td>
+    <td><span class="state ${st}">${esc(stateLabel(p))}</span></td></tr>`;
+}
 const TASK_GLYPH = {done: "✓", failed: "✗"};
 function waveRows(p) {
   const waves = Object.entries(p.waves || {}).map(([n, name]) => [Number(n), name]).sort((a, b) => a[0] - b[0]);
   const allDone = stateOf(p) === "shipped" || (p.tasks_total > 0 && p.tasks_done >= p.tasks_total);
-  const tasks = p.tasks || [];
   return waves.map(([n, name]) => {
     const kind = p.current_wave != null ? (n < p.current_wave ? "done" : n === p.current_wave ? "now" : "ahead") : allDone ? "done" : "ahead";
-    const glyph = kind === "done" ? "✓" : kind === "now" ? "●" : "○";
-    const names = tasks.filter(t => t.wave === n).map(t => `${esc(t.id)} ${esc(t.title || "")} ${TASK_GLYPH[t.status] || (kind === "done" ? "✓" : "○")}`).join(" · ");
-    return `<span class="w-${kind}">${glyph} wave ${n} ${esc(name)}${names ? `<small>${names}</small>` : ""}</span>`;
+    return `<span class="w-${kind}">${kind === "done" ? "✓" : kind === "now" ? "●" : "○"} wave ${n} ${esc(name)}</span>`;
   }).join("");
 }
 function criteriaStrip(p) {
@@ -401,98 +451,90 @@ function verifyLine(p) {
   const last = (p.ledger || [])[0];
   if (!last) return "";
   const ok = last.result === "pass";
-  return `<div class="sub">verify <span style="color:${ok ? "var(--run)" : last.result === "fail" ? "var(--danger)" : "var(--dim)"}">${esc(last.result || "unknown")}${last.recorded_at ? " " + esc(shortT(last.recorded_at)) : ""}</span></div>`;
+  return `<div class="sub">verify <span style="color:${ok ? "var(--accent)" : last.result === "fail" ? "var(--danger)" : "var(--dim)"}">${esc(last.result || "unknown")}${last.recorded_at ? " " + esc(shortT(last.recorded_at)) : ""}</span></div>`;
 }
-const PHASE_SHORT = {inspect: "insp", define: "def", research: "rsch", decide: "dec", roadmap: "rmap", plan: "plan", build: "build", ship: "ship", shipped: "done"};
-function phaseLog(p) {
-  const log = p.phase_log || [];
-  if (!log.length) return "";
-  return `<div class="phase-log">${log.map(e => `<div class="${e.phase === p.phase ? "now" : ""}" title="${esc(e.phase)} · ${esc(e.date)}"><i></i>${esc(PHASE_SHORT[e.phase] || String(e.phase).slice(0, 5))}<br>${esc(String(e.date).slice(5))}</div>`).join("")}</div>`;
+function phaseTrack(p) {
+  const i = phaseIndex(p), log = p.phase_log || [];
+  const dateOf = ph => ((ph === p.phase ? log.filter(e => e.phase === ph).slice(-1)[0] : log.find(e => e.phase === ph)) || {}).date;
+  return `<div class="phases ${stateOf(p)}">${PHASES.map((ph, k) => `<div class="${k < i ? "done" : k === i ? "now" : ""}" title="${ph}${dateOf(ph) ? " · " + esc(dateOf(ph)) : ""}"><i></i>${ph}<small>${esc(String(dateOf(ph) || "").slice(5)) || "&nbsp;"}</small></div>`).join("")}</div>`;
 }
-const money = v => v == null ? "—" : "$" + Number(v).toFixed(2);
-const spendText = slot => slot && slot.turns ? [slot.cost != null ? money(slot.cost) : null, `${slot.turns} turns`].filter(Boolean).join(" · ") : "";
-const manifestMeta = (p, m) => {
+const spendText = slot => slot && slot.turns ? [slot.cost != null ? money(slot.cost) : null, `${int(slot.turns)} turns`].filter(Boolean).join(" · ") : "";
+const manifestMeta = m => {
   const mf = m.manifest || {};
-  const slot = ((p.spend || {}).milestones || {})[m.number];
   return [mf.tasks_total != null ? `${mf.tasks_done} of ${mf.tasks_total} tasks` : null,
           mf.waves != null ? `${mf.waves} waves` : null,
           mf.cycles_avg != null ? `${mf.cycles_avg} review cycles avg` : null,
           m.integrated ? "integrated " + String(m.integrated).slice(0, 7) : null,
-          mf.carried ? `${mf.carried} rulings carried` : null,
-          spendText(slot) ? `<span class="spend">${spendText(slot)}</span>` : null].filter(Boolean).join(" · ");
+          mf.carried ? `${mf.carried} rulings carried` : null].filter(Boolean).join(" · ");
 };
-function usageBlock(p, cur) {
-  const sp = p.spend;
-  if (!sp || !sp.turns) return "";
-  const slot = (sp.milestones || {})[cur.number] || {turns: 0, tokens: 0, cost: null};
-  const maxTok = Math.max(...sp.models.map(m => m.tokens), 1);
-  const models = sp.models.map(m => `<div class="mrow"><span class="nm" title="${esc(m.model)}">${esc(m.model)}</span><span class="bar"><i class="${esc(m.host)}" style="width:${Math.max(2, Math.round(100 * m.tokens / maxTok))}%"></i></span><span class="r">${m.turns} turns · ${fmt(m.tokens)} · ${money(m.cost)}</span></div>`).join("");
-  const agents = sp.agents.map(a => `<tr><td class="t">${esc(a.agent)}</td><td>${esc(a.models.join(", "))}</td><td class="n">${a.turns}</td><td class="n">${fmt(a.tokens)}</td><td class="n">${money(a.cost)}</td></tr>`).join("");
-  const turns = sp.recent.map(t => `<tr><td>${esc(shortT(t.at))}</td><td class="t">${esc(t.agent)}</td><td>${esc(t.model || "?")}</td><td class="n">${fmt(t.tokens_in)}</td><td class="n">${fmt(t.tokens_cached)}</td><td class="n">${fmt(t.tokens_out)}</td><td class="n">${money(t.cost)}</td><td class="n">${t.duration_s != null ? t.duration_s + "s" : "—"}</td></tr>`).join("");
-  const note = sp.unpriced.length ? `<div class="note">No price configured for ${esc(sp.unpriced.join(", "))}: tokens counted, cost excluded. Add prices per million tokens under "prices" in daemon.json.</div>` : "";
-  return `<div class="usage"><h4>Usage · ${esc(cur.number)}</h4>
-    <div class="stat"><div><div class="v">${money(slot.cost)}</div><div class="k">cost</div></div><div><div class="v">${slot.turns}</div><div class="k">turns</div></div><div><div class="v">${fmt(slot.tokens || 0)}</div><div class="k">tokens</div></div><div><div class="v">${sp.models.length}</div><div class="k">models</div></div><div><div class="v">${money(sp.cost)}</div><div class="k">all milestones</div></div><div><div class="v">${sp.turns}</div><div class="k">turns · all</div></div></div>
-    ${models}
-    <table class="u"><tr><th>Agent</th><th>Models</th><th class="n">Turns</th><th class="n">Tokens</th><th class="n">Cost</th></tr>${agents}</table>
-    <details class="turns"><summary>Turn ledger · latest ${sp.recent.length} of ${sp.turns}</summary><table class="u"><tr><th>Time</th><th>Agent</th><th>Model</th><th class="n">In</th><th class="n">Cached</th><th class="n">Out</th><th class="n">Cost</th><th class="n">Dur</th></tr>${turns}</table></details>
-    ${note}<div class="note">From host session logs matched to this project by working directory.</div></div>`;
+function milestoneTable(p) {
+  const {before, cur, after} = milestoneStack(p), st = stateOf(p);
+  const slots = (p.spend || {}).milestones || {};
+  const depends = m => (m.depends || []).length ? `after ${esc(m.depends.join(", "))}` : "";
+  const row = (m, kind, status) => {
+    const meta = [kind === "done" ? manifestMeta(m) : "", depends(m)].filter(Boolean).join(" · ");
+    const tasks = m.manifest && m.manifest.tasks_total != null ? m.manifest.tasks_total : kind === "now" && p.tasks_total ? p.tasks_total : null;
+    return `<tr class="ms ${kind}${kind === "now" ? " " + st : ""}"><td class="mono k">${esc(m.number)}</td><td><div>${esc(m.slug)}</div>${m.goal ? `<div class="goal">${esc(m.goal)}</div>` : ""}${meta ? `<div class="meta">${meta}</div>` : ""}</td>
+      <td class="st">${esc(status)}</td><td class="n">${tasks != null ? tasks : DASH}</td><td class="n">${spendText(slots[m.number]) || DASH}</td></tr>`;
+  };
+  const shippedOn = m => m.manifest && m.manifest.shipped ? "shipped " + m.manifest.shipped : m.status || "shipped";
+  const rows = [...before.map(m => row(m, "done", shippedOn(m))),
+                row(cur, st === "shipped" ? "done" : "now", st === "shipped" ? shippedOn(cur) : stateLabel(p)),
+                ...after.map(m => row(m, "ahead", [m.phase, m.status || "planned"].filter(Boolean).join(" · ")))].join("");
+  const end = after.length ? "" : `<tr class="end"><td class="mono">—</td><td colspan="4">end of roadmap</td></tr>`;
+  return `<div class="tablewrap"><table class="t milestones"><tr><th>#</th><th>Milestone</th><th>Status</th><th class="n">Tasks</th><th class="n">Usage</th></tr>${rows}${end}</table></div>`;
 }
-function card(p) {
-  const {before, cur, after} = milestoneStack(p);
+function nowBox(p) {
   const st = stateOf(p);
-  const here = [esc(p.phase || "no phase"), p.current_wave != null ? "wave " + p.current_wave : null].filter(Boolean).join(" · ");
-  const entered = (p.phase_log || []).find(e => e.phase === p.phase) || (p.phase_log || []).slice(-1)[0];
-  const age = dur(p.time_in_phase_s);
-  const when = [entered ? "entered " + esc(entered.phase) + " " + esc(entered.date) : null, age].filter(Boolean).join(" · ");
+  if (st === "shipped") return "";
+  const {cur} = milestoneStack(p);
+  const entered = (p.phase_log || []).filter(e => e.phase === p.phase).slice(-1)[0];
+  const when = [entered ? "entered " + esc(entered.phase) + " " + esc(entered.date) : null, dur(p.time_in_phase_s)].filter(Boolean).join(" · ");
   const progress = p.tasks_total
     ? `<div class="bar"><i style="width:${Math.round(100 * (p.tasks_done || 0) / p.tasks_total)}%"></i></div><div class="sub">${p.tasks_done || 0} of ${p.tasks_total} tasks${when ? " · " + when : ""}</div>`
     : `<div class="sub">${when ? when + " · " : ""}no tasks yet</div>`;
-  const git = p.git ? `<div class="meta">${esc(p.git.branch || p.branch || "no branch")} · ${esc(String(p.git.head || "").slice(0, 7) || "—")}${p.git.dirty ? " · dirty" : ""}</div>`
-                    : (p.branch ? `<div class="meta">${esc(p.branch)}</div>` : "");
-  const depends = m => (m.depends || []).length ? ` <span class="faint">· after ${esc(m.depends.join(", "))}</span>` : "";
-  const goal = m => m.goal ? `<div class="goal">${esc(m.goal)}</div>` : "";
-  const doneRows = before.map(m => {
-    const shipped = m.manifest && m.manifest.shipped;
-    const meta = manifestMeta(p, m);
-    return `<div class="ms done"><span class="k">${esc(m.number)}</span><div class="body">${esc(m.slug)} <span class="faint">· ${shipped ? "shipped " + esc(shipped) : esc(m.status || "shipped")}</span>${meta ? `<div class="meta">${meta}</div>` : ""}${goal(m)}</div></div>`;
-  }).join("");
-  const aheadRows = after.length
-    ? after.map(m => `<div class="ms ahead"><span class="k">${esc(m.number)}</span><div class="body">${esc(m.slug)} <span>· ${esc(m.phase || m.status || "planned")}</span>${depends(m)}${goal(m)}</div></div>`).join("")
-    : `<div class="ms ahead"><span class="k">—</span><div class="body">end of roadmap</div></div>`;
   const waves = waveRows(p);
-  return `<article class="card" data-root="${esc(p.root)}">
-    <div class="title"><span class="dot ${healthDot(p)}"></span><b>${esc(p.project || p.root)}</b><span class="pill ${st === "active" ? "progress" : st}">${esc(stateLabel(p))}</span></div>
-    <div class="path">${esc(p.root)}</div>
-    ${p.vision ? `<div class="vision">${esc(p.vision)}</div>` : ""}
-    ${doneRows}
-    <div class="ms now ${st}"><span class="k">${esc(cur.number)}</span><div class="body"><b>${esc(cur.slug)}</b> · ${here}${depends(cur)}${goal(cur)}${p.intent ? `<div class="intent">${esc(p.intent)}</div>` : ""}${progress}${waves ? `<div class="waves">${waves}</div>` : ""}${criteriaStrip(p)}${verifyLine(p)}${phaseLog(p)}${git}${usageBlock(p, cur)}</div></div>
-    ${aheadRows}
-    ${p.lesson ? `<div class="lesson"><b>latest lesson</b> · ${esc(p.lesson)}</div>` : ""}
-  </article>`;
+  return `<div class="now-box ${st}"><div><b>${esc(cur.number)} ${esc(cur.slug)}</b> · ${esc([p.phase || "no phase", p.current_wave != null ? "wave " + p.current_wave : null].filter(Boolean).join(" · "))}</div>
+    ${cur.goal ? `<div class="goal">${esc(cur.goal)}</div>` : ""}${p.intent ? `<div class="intent">${esc(p.intent)}</div>` : ""}
+    ${progress}${waves ? `<div class="waves">${waves}</div>` : ""}${criteriaStrip(p)}${verifyLine(p)}</div>`;
 }
-function stackLine(p) {
-  const {before, cur, after} = milestoneStack(p);
-  const st = stateOf(p);
-  return [...before.map(m => `<span class="s-done">${esc(m.number)} ✓</span>`),
-          `<span class="s-now ${st}">${esc(cur.number)} ${st === "blocked" ? "■" : st === "shipped" ? "✓" : "●"}</span>`,
-          ...after.map(m => `<span class="s-ahead">${esc(m.number)} ○</span>`)].join("  ");
+function taskTable(p) {
+  const tasks = p.tasks || [];
+  if (!tasks.length) return "";
+  const waves = p.waves || {};
+  return `<h2>Tasks <span>${p.tasks_done || 0} of ${p.tasks_total || tasks.length}</span></h2><div class="tablewrap"><table class="t tasks-t"><tr><th>ID</th><th>Task</th><th>Wave</th><th>Status</th></tr>${tasks.map(t =>
+    `<tr><td class="mono">${esc(t.id)}</td><td>${esc(t.title || "")}</td><td>${esc(t.wave != null ? t.wave + (waves[t.wave] ? " " + waves[t.wave] : "") : "—")}</td><td>${TASK_GLYPH[t.status] || "○"} ${esc(t.status || "pending")}</td></tr>`).join("")}</table></div>`;
 }
-function boardRow(p) {
-  const st = stateOf(p);
-  const {cur} = milestoneStack(p);
-  const crits = p.criteria || [];
-  const last = (p.roadmap_milestones || []).filter(isDoneMilestone).slice(-1)[0];
-  const here = [esc(p.phase || "no phase"), p.current_wave != null ? "wave " + p.current_wave : null,
-                p.tasks_total ? `${p.tasks_done || 0} of ${p.tasks_total} tasks` : "no tasks yet",
-                crits.length ? `${crits.filter(c => c.verdict === "met").length}/${crits.length} criteria` : null,
-                last ? `last shipped ${esc(last.number)}${last.manifest && last.manifest.shipped ? " " + esc(last.manifest.shipped) : ""}` : null]
-               .filter(Boolean).join(" · ") + (cur.goal ? " — " + esc(cur.goal) : "");
-  const slot = ((p.spend || {}).milestones || {})[cur.number];
-  return `<button class="prow ${st}" data-root="${esc(p.root)}" aria-label="Open ${esc(p.project || p.root)}">
-    <span class="name"><span class="dot ${healthDot(p)}"></span><span>${esc(p.project || p.root)}</span></span>
-    <span class="mid"><span class="stack">${stackLine(p)}</span>${st === "shipped" ? "" : `<span class="here" style="display:block">${here}</span>`}</span>
-    <span class="spend">${spendText(slot)}</span>
-    <span class="pill ${st === "active" ? "progress" : st}">${esc(stateLabel(p))}</span></button>`;
+function usageColumn(p) {
+  const sp = p.spend;
+  if (!sp || !sp.turns) return `<h2>Usage</h2><p class="note">No host session logs matched this project yet.</p>`;
+  const models = sp.models.map(m => `<tr><td class="mono">${esc(m.model)}</td><td class="n">${int(m.turns)}</td><td class="n">${fmt(m.tokens)}</td><td class="n">${money(m.cost)}</td></tr>`).join("");
+  const agents = sp.agents.map(a => `<tr><td>${esc(a.agent)}</td><td class="mono">${esc(a.models.join(", "))}</td><td class="n">${int(a.turns)}</td><td class="n">${fmt(a.tokens)}</td><td class="n">${money(a.cost)}</td></tr>`).join("");
+  const turns = sp.recent.map(t => `<tr><td class="mono">${esc(shortT(t.at))}</td><td>${esc(t.agent)}</td><td class="mono">${esc(t.model || "?")}</td><td class="n">${fmt(t.tokens_in)}</td><td class="n">${fmt(t.tokens_cached)}</td><td class="n">${fmt(t.tokens_out)}</td><td class="n">${money(t.cost)}</td><td class="n">${t.duration_s != null ? t.duration_s + "s" : "—"}</td></tr>`).join("");
+  const note = sp.unpriced.length ? `<div class="note">No price configured for ${esc(sp.unpriced.join(", "))}: tokens counted, cost excluded. Add prices per million tokens under "prices" in daemon.json.</div>` : "";
+  return `<h2>Models <span>${int(sp.prompts || 0)} prompts · ${fmt((sp.tokens_in || 0) + (sp.tokens_cached || 0) + (sp.tokens_out || 0))} tokens</span></h2>
+    <div class="tablewrap"><table class="t models"><tr><th>Model</th><th class="n">Turns</th><th class="n">Tokens</th><th class="n">Cost</th></tr>${models}</table></div>
+    <h2>Agents</h2><div class="tablewrap"><table class="t agents"><tr><th>Agent</th><th>Models</th><th class="n">Turns</th><th class="n">Tokens</th><th class="n">Cost</th></tr>${agents}</table></div>
+    <details class="turns"><summary>Turn ledger · latest ${sp.recent.length} of ${int(sp.turns)}</summary><div class="tablewrap"><table class="t"><tr><th>Time</th><th>Agent</th><th>Model</th><th class="n">In</th><th class="n">Cached</th><th class="n">Out</th><th class="n">Cost</th><th class="n">Dur</th></tr>${turns}</table></div></details>
+    ${note}<div class="note">From host session logs matched to this project by working directory.</div>`;
+}
+function projectPage(p) {
+  const {cur} = milestoneStack(p), sp = p.spend, git = p.git || {};
+  const head = git.head ? String(git.head).slice(0, 7) + (git.dirty ? " · dirty" : "") : "—";
+  const facts = [["State", stateLabel(p)], ["Milestone", cur.number], ["Branch", git.branch || p.branch || "—"], ["Head", head],
+                 ["Updated", ago(p.last_activity_iso)], ["Cost", sp && sp.turns ? money(sp.cost) : "—"], ["Turns", sp && sp.turns ? int(sp.turns) : "—"]];
+  return `<article class="project" data-root="${esc(p.root)}">
+    <div class="phead"><h1><span class="dot ${healthDot(p)}" title="health ${esc(healthOf(p))}"></span> ${esc(p.project || p.root)}</h1><span class="mono">${esc(p.root)}</span></div>
+    <dl class="facts">${facts.map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join("")}</dl>
+    ${p.vision ? `<p class="vision">${esc(p.vision)}</p>` : ""}
+    <div class="cols"><section>
+      <h2>Phase <span>${esc(p.phase || "no phase")}</span></h2>${phaseTrack(p)}${nowBox(p)}
+      <h2>Milestones</h2>${milestoneTable(p)}
+      ${taskTable(p)}
+    </section><section>
+      ${usageColumn(p)}
+      ${p.lesson ? `<h2>Latest lesson</h2><p class="lesson">${esc(p.lesson)}</p>` : ""}
+    </section></div></article>`;
 }
 function tabPlugin() {
   if (!PLUGIN) {
@@ -544,41 +586,46 @@ function tabPlugin() {
                 : '<p class="dim">No watched projects.</p>') + `</div>`;
   return banner + hostsTable + projectsBox;
 }
+const ICON = {
+  grid: '<svg viewBox="0 0 18 18" fill="none" aria-hidden="true"><rect x="2" y="3" width="14" height="12" rx="2.5" stroke="currentColor" stroke-width="1.5"/><path d="M2 7h14M7 7v8" stroke="currentColor" stroke-width="1.5"/></svg>',
+  gear: '<svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="2.2" stroke="currentColor" stroke-width="1.4"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>',
+  search: '<svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.5"/><path d="m10.5 10.5 3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>',
+};
 function render() {
   const stage = document.getElementById("stage");
   const previousKey = stage.dataset.readingKey;
   const settingsOpen = !!stage.querySelector('.settings-menu[open]');
   const pageScroll = [window.scrollX, window.scrollY];
-  const focusIndex = [...stage.querySelectorAll('button, summary, [tabindex]')].indexOf(document.activeElement);
+  const focusIndex = [...stage.querySelectorAll('button, summary, select, input, [tabindex]')].indexOf(document.activeElement);
+  const caret = document.activeElement && document.activeElement.matches("[data-search]") ? document.activeElement.selectionStart : null;
   const projects = (DATA.projects || []).slice().sort((a, b) =>
     STATE_RANK[stateOf(a)] - STATE_RANK[stateOf(b)] || String(a.project || a.root).localeCompare(String(b.project || b.root)));
-  const counts = {blocked: 0, active: 0, shipped: 0};
-  for (const p of projects) counts[stateOf(p)]++;
-  const summary = projects.length
-    ? [`${projects.length} project${projects.length === 1 ? "" : "s"}`,
-       counts.active ? `${counts.active} in progress` : null,
-       counts.blocked ? `${counts.blocked} blocked` : null,
-       counts.shipped ? `${counts.shipped} shipped` : null].filter(Boolean).join(" · ")
-    : "";
-  const connection = ONLINE === null ? "Connecting…" : ONLINE ? "Connected" + (DATA.generated_at ? " · updated " + esc(shortT(DATA.generated_at)) : "") : "Offline · showing last update";
-  const settings = `<details class="settings-menu"><summary>Settings</summary><nav aria-label="Settings"><button class="btn" data-nav="plugin">Plugin</button><button class="btn" data-nav="folders">Watched folders</button></nav></details>`;
-  const status = `<span class="connection" role="status"><span class="dot ${ONLINE === null ? "" : ONLINE ? "g" : "r"}"></span> ${connection}</span>`;
+  const shipped = projects.filter(p => stateOf(p) === "shipped").length;
+  const connection = ONLINE === null ? "Connecting…" : ONLINE ? (DATA.generated_at ? "Updated " + esc(shortT(DATA.generated_at)) : "Connected") : "Offline · showing last update";
+  const settings = `<details class="settings-menu"><summary aria-label="Settings" title="Settings">${ICON.gear}</summary><nav aria-label="Settings"><button class="btn" data-nav="plugin">Plugin</button><button class="btn" data-nav="folders">Watched folders</button></nav></details>`;
+  const status = `<span class="connection" role="status"><span class="dot ${ONLINE === null ? "" : ONLINE ? "g" : "r"}"></span>${connection}</span>`;
   const current = CState.view === "project" ? projects.find(p => p.root === CState.root) : null;
   let header, body;
   if (current) {
-    header = `<header class="topbar"><button class="back" data-nav="board" aria-label="Back to the status board">‹ Board</button><nav class="switcher" aria-label="Projects">${projects.map(q => `<button class="${q.root === current.root ? "sel" : ""}" data-root="${esc(q.root)}" aria-pressed="${q.root === current.root}"><span class="dot ${healthDot(q)}"></span>${esc(q.project || q.root)}</button>`).join("")}</nav>${status}${settings}</header>`;
-    body = `<main class="page">${card(current)}</main>`;
+    header = `<header class="topbar"><button class="back" data-nav="board" aria-label="Back to projects">‹ Projects</button><select class="switcher" data-switch aria-label="Project">${projects.map(q => `<option value="${esc(q.root)}"${q.root === current.root ? " selected" : ""}>${esc(q.project || q.root)}</option>`).join("")}</select><span class="spacer"></span>${status}${settings}</header>`;
+    body = `<main class="page">${projectPage(current)}</main>`;
   } else {
-    header = `<header class="topbar"><button class="brand" data-nav="board" aria-label="GSD Path status board">GSD Path</button><span class="summary">${summary}</span>${status}${settings}</header>`;
+    const filters = [["all", "All", projects.length], ["active", "Active", projects.length - shipped], ["shipped", "Shipped", shipped]]
+      .map(([k, label, n]) => `<button data-filter="${k}" aria-pressed="${CState.filter === k}">${label}<span>${n}</span></button>`).join("");
+    const onBoard = !["plugin", "folders"].includes(CState.view);
+    header = `<header class="topbar"><button class="brand" data-nav="board" aria-label="GSD Path projects">${ICON.grid}GSD Path</button>${onBoard ? `<div class="segc" role="group" aria-label="Show projects">${filters}</div><label class="search">${ICON.search}<input type="search" data-search placeholder="Filter projects" aria-label="Filter projects" value="${esc(CState.q)}"></label>` : `<span class="spacer"></span>`}${status}${settings}</header>`;
     if (CState.view === "plugin") body = `<main class="settings"><h2>Plugin</h2>${tabPlugin()}</main>`;
     else if (CState.view === "folders") body = `<main class="settings"><h2>Watched folders</h2><p class="dim">Projects inside these folders appear automatically.</p>${(DAEMON.parents || []).map((path, i) => `<div class="folder-row"><span>${esc(path)}</span><button class="btn danger" data-remove-parent="${i}">Stop watching</button></div>`).join("")}<p style="margin-top:16px"><button class="btn" data-action="add-folder">Add folder…</button></p></main>`;
     else {
       if (CState.view === "project" && ONLINE !== null) { CState.view = "board"; CState.root = null; setHash(); }
-      const empty = ONLINE === null ? "Loading projects…" : !ONLINE && !projects.length ? "Cannot load projects. Check the daemon connection." : "No projects yet. Add a watched folder to get started.";
-      const groups = [["blocked", "Needs attention"], ["active", "In progress"], ["shipped", "Shipped"]]
-        .map(([st, label]) => [label, projects.filter(p => stateOf(p) === st)]).filter(([, list]) => list.length)
-        .map(([label, list]) => `<div class="group">${label} · ${list.length}</div>${list.map(boardRow).join("")}`).join("");
-      body = `<main class="board" aria-label="Status board">${groups || `<div class="empty">${empty}</div>`}</main>`;
+      const q = CState.q.trim().toLowerCase();
+      const shown = projects.filter(p => (CState.filter === "all" || (CState.filter === "shipped") === (stateOf(p) === "shipped"))
+        && String(p.project || p.root).toLowerCase().includes(q));
+      const empty = ONLINE === null ? "Loading projects…" : !ONLINE && !projects.length ? "Cannot load projects. Check the daemon connection."
+        : !projects.length ? "No projects yet. Add a watched folder to get started." : "No projects match this filter.";
+      body = `<main class="board" aria-label="Status board">${shown.length
+        ? `<table class="grid"><thead><tr><th>Project</th><th>Route</th><th>Milestone</th><th>Phase</th><th class="n">Tasks</th><th class="n">Cost</th><th class="n">Turns</th><th class="n">Updated</th><th>State</th></tr></thead><tbody>${shown.map(boardRow).join("")}</tbody></table>`
+        : `<div class="empty">${empty}</div>`}</main>`;
     }
   }
   const readingKey = JSON.stringify([CState.view, CState.root]);
@@ -587,16 +634,27 @@ function render() {
   if (previousKey === readingKey) {
     stage.querySelector('.settings-menu').open = settingsOpen;
     window.scrollTo(...pageScroll);
-    if (focusIndex >= 0) stage.querySelectorAll('button, summary, [tabindex]')[focusIndex]?.focus({preventScroll: true});
+    const target = focusIndex >= 0 ? stage.querySelectorAll('button, summary, select, input, [tabindex]')[focusIndex] : null;
+    if (target) {
+      target.focus({preventScroll: true});
+      if (caret != null && target.matches("[data-search]")) target.setSelectionRange(caret, caret);
+    }
   }
 }
 document.getElementById("stage").addEventListener("click", event => {
-  const b = event.target.closest("button");
+  const b = event.target.closest("button, tr[data-root]");
   if (!b) return;
   if (b.dataset.nav) { CState.root = null; navigate(b.dataset.nav); }
+  else if (b.dataset.filter) { CState.filter = b.dataset.filter; render(); }
   else if (b.dataset.root) openProject(b.dataset.root);
   else if (b.dataset.action === "add-folder") addParent();
   else if (b.dataset.removeParent != null) removeParent(DAEMON.parents[Number(b.dataset.removeParent)]);
+});
+document.getElementById("stage").addEventListener("input", event => {
+  if (event.target.matches("[data-search]")) { CState.q = event.target.value; render(); }
+});
+document.getElementById("stage").addEventListener("change", event => {
+  if (event.target.matches("[data-switch]")) openProject(event.target.value);
 });
 function applyHash() {
   const h = location.hash.slice(1);

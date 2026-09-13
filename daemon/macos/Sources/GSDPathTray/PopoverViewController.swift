@@ -1,7 +1,7 @@
 import AppKit
 
-// Studio palette from gsd-cloud/web/app/globals.css.
-func studioColor(light: Int, dark: Int) -> NSColor {
+// Instrument palette, shared with the dashboard CSS in daemon/gsd_daemon/serve.py. Keep both in sync.
+func paletteColor(light: Int, dark: Int) -> NSColor {
     NSColor(name: nil) { appearance in
         let value = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? dark : light
         return NSColor(srgbRed: CGFloat((value >> 16) & 255) / 255,
@@ -9,14 +9,21 @@ func studioColor(light: Int, dark: Int) -> NSColor {
                        blue: CGFloat(value & 255) / 255, alpha: 1)
     }
 }
-let studioText = studioColor(light: 0x14161a, dark: 0xeceef2)
-let studioAccent = studioColor(light: 0x4f5fe0, dark: 0x7c8cff)
+let paletteText = paletteColor(light: 0x1a1d22, dark: 0xe9ebee)
+let paletteDim = paletteColor(light: 0x595e64, dark: 0xa7abb1)
+let paletteFaint = paletteColor(light: 0x71757a, dark: 0x82878c)
+let paletteDone = paletteColor(light: 0x51565c, dark: 0xa0a5ab)
+let paletteSegment = paletteColor(light: 0xe0e3e6, dark: 0x2b2e32)
+let paletteAccent = paletteColor(light: 0x008f83, dark: 0x3dbbae)
+let paletteOnAccent = paletteColor(light: 0xffffff, dark: 0x101214)
+let paletteDanger = paletteColor(light: 0xc9302d, dark: 0xef675c)
+let paletteWarn = paletteColor(light: 0x8d5e00, dark: 0xe4ac59)
 
-final class StudioSurface: NSView {
+final class PaletteSurface: NSView {
     override var wantsUpdateLayer: Bool { true }
     override func updateLayer() {
         effectiveAppearance.performAsCurrentDrawingAppearance {
-            layer?.backgroundColor = studioColor(light: 0xf7f8fa, dark: 0x0c0d10).cgColor
+            layer?.backgroundColor = paletteColor(light: 0xfbfcfd, dark: 0x101214).cgColor
         }
     }
     override func viewDidChangeEffectiveAppearance() { needsDisplay = true }
@@ -33,7 +40,7 @@ final class DotView: NSView {
 }
 
 func makeLabel(_ text: String, size: CGFloat, weight: NSFont.Weight = .regular,
-               color: NSColor = studioText) -> NSTextField {
+               color: NSColor = paletteText) -> NSTextField {
     let f = NSTextField(labelWithString: text)
     f.font = .systemFont(ofSize: size, weight: weight)
     f.textColor = color
@@ -41,52 +48,99 @@ func makeLabel(_ text: String, size: CGFloat, weight: NSFont.Weight = .regular,
     return f
 }
 
-/// Solid state capsule: white text on a filled background so it reads on both surfaces.
-final class PillView: NSView {
-    let label: NSTextField
-    init(_ text: String, fill: NSColor) {
-        label = makeLabel(text, size: 11, weight: .semibold, color: .white)
+func healthColor(_ h: Health) -> NSColor {
+    switch h {
+    case .green: return paletteAccent
+    case .yellow: return paletteWarn
+    case .red: return paletteDanger
+    case .gray: return .systemGray
+    }
+}
+
+/// Eight phase segments, as on the dashboard board: done, the current phase, then ahead.
+final class PhaseMeterView: NSView {
+    let segments: [StackKind]
+    private let blocked: Bool
+    var highlighted = false { didSet { needsDisplay = true } }
+    init(_ segments: [StackKind], blocked: Bool) {
+        self.segments = segments
+        self.blocked = blocked
         super.init(frame: .zero)
-        wantsLayer = true
-        layer?.cornerRadius = 9
-        layer?.backgroundColor = fill.cgColor
-        self.fill = fill
-        label.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(label)
+        translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
-            label.topAnchor.constraint(equalTo: topAnchor, constant: 2),
-            label.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -2),
-            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
-            label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
+            widthAnchor.constraint(equalToConstant: CGFloat(segments.count) * 12 - 2),
+            heightAnchor.constraint(equalToConstant: 8),
         ])
-        setContentHuggingPriority(.required, for: .horizontal)
-        setContentCompressionResistancePriority(.required, for: .horizontal)
     }
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
-    private var fill: NSColor = .systemGray
-    override func viewDidChangeEffectiveAppearance() {
-        effectiveAppearance.performAsCurrentDrawingAppearance { layer?.backgroundColor = fill.cgColor }
+    override func draw(_ dirtyRect: NSRect) {
+        for (index, kind) in segments.enumerated() {
+            let color: NSColor
+            switch kind {
+            case .done: color = highlighted ? paletteOnAccent : paletteDone
+            case .now: color = highlighted ? paletteOnAccent : blocked ? paletteDanger : paletteAccent
+            case .ahead: color = highlighted ? paletteOnAccent.withAlphaComponent(0.35) : paletteSegment
+            }
+            color.setFill()
+            NSBezierPath(roundedRect: NSRect(x: CGFloat(index) * 12, y: 0, width: 10, height: 8), xRadius: 1.5, yRadius: 1.5).fill()
+        }
     }
 }
 
-func makePill(_ text: String, fill: NSColor) -> NSView { PillView(text, fill: fill) }
-
-/// Fill colour for the state pill: blocked red, shipped green, otherwise the accent.
-func stateFill(_ state: String) -> NSColor {
-    switch state {
-    case "blocked": return studioColor(light: 0xb23a2c, dark: 0xd9483a)
-    case "shipped": return studioColor(light: 0x0d7d53, dark: 0x1f8f62)
-    default: return studioColor(light: 0x4f5fe0, dark: 0x5a68e8)
+/// Borderless full-width button that highlights like a menu item while the pointer is over it.
+class MenuRowButton: NSButton {
+    var hovered = false { didSet { hoverChanged() } }
+    init() {
+        super.init(frame: .zero)
+        isBordered = false
+        setButtonType(.momentaryChange)
+        wantsLayer = true
+        layer?.cornerRadius = 6
+    }
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError() }
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self))
+    }
+    override func mouseEntered(with event: NSEvent) { hovered = true }
+    override func mouseExited(with event: NSEvent) { hovered = false }
+    func hoverChanged() {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            layer?.backgroundColor = hovered ? paletteAccent.cgColor : NSColor.clear.cgColor
+        }
     }
 }
 
-func healthColor(_ h: Health) -> NSColor {
-    switch h {
-    case .green: return studioColor(light: 0x0d7d53, dark: 0x3ddc97)
-    case .yellow: return studioColor(light: 0x7c5205, dark: 0xf5b544)
-    case .red: return studioColor(light: 0xb23a2c, dark: 0xff6b5e)
-    case .gray: return .systemGray
+private final class InsetTitleCell: NSButtonCell {
+    override func drawTitle(_ title: NSAttributedString, withFrame frame: NSRect, in controlView: NSView) -> NSRect {
+        super.drawTitle(title, withFrame: frame.offsetBy(dx: 9, dy: 0), in: controlView)
+    }
+}
+
+final class MenuItemButton: MenuRowButton {
+    init(_ title: String, target: AnyObject, action: Selector) {
+        super.init()
+        let cell = InsetTitleCell(textCell: title)
+        cell.isBordered = false
+        cell.alignment = .left
+        self.cell = cell
+        setButtonType(.momentaryChange)
+        self.title = title
+        self.target = target
+        self.action = action
+        hoverChanged()
+    }
+    override var intrinsicContentSize: NSSize {
+        NSSize(width: super.intrinsicContentSize.width + 18, height: 24)
+    }
+    override func hoverChanged() {
+        super.hoverChanged()
+        attributedTitle = NSAttributedString(string: title, attributes: [
+            .font: NSFont.systemFont(ofSize: 13), .foregroundColor: hovered ? paletteOnAccent : paletteText,
+        ])
     }
 }
 
@@ -123,8 +177,8 @@ final class PopoverViewController: NSViewController {
 
         stack.orientation = .vertical
         stack.alignment = .leading
-        stack.spacing = 10
-        stack.edgeInsets = NSEdgeInsets(top: 14, left: 14, bottom: 12, right: 14)
+        stack.spacing = 1
+        stack.edgeInsets = NSEdgeInsets(top: 6, left: 6, bottom: 4, right: 6)
         stack.translatesAutoresizingMaskIntoConstraints = false
 
         let doc = NSView()
@@ -132,13 +186,13 @@ final class PopoverViewController: NSViewController {
         doc.addSubview(stack)
         scroll.documentView = doc
 
-        let content = StudioSurface()
+        let content = PaletteSurface()
         content.wantsLayer = true
         content.addSubview(scroll)
         controls.orientation = .vertical
         controls.alignment = .leading
-        controls.spacing = 8
-        controls.edgeInsets = NSEdgeInsets(top: 8, left: 14, bottom: 12, right: 14)
+        controls.spacing = 1
+        controls.edgeInsets = NSEdgeInsets(top: 0, left: 6, bottom: 6, right: 6)
         controls.translatesAutoresizingMaskIntoConstraints = false
         content.addSubview(controls)
         scroll.translatesAutoresizingMaskIntoConstraints = false
@@ -163,7 +217,7 @@ final class PopoverViewController: NSViewController {
 
     func showOffline() {
         rebuild {
-            let title = makeLabel("GSD Path", size: 20, weight: .bold)
+            let title = makeLabel("GSD Path", size: 13, weight: .semibold)
             let msg = makeLabel("daemon not reachable on 127.0.0.1:8765", size: 12,
                                 color: .secondaryLabelColor)
             let cmd = makeLabel("python3 -m gsd_daemon serve", size: 12)
@@ -187,7 +241,7 @@ final class PopoverViewController: NSViewController {
             buttons.spacing = 8
             let daemonRow = DaemonRowView()
             daemonRow.onRescan = onRescan
-            return [title, makeLabel("Offline", size: 12, color: .systemRed), msg, hint, cmd, daemonRow, buttons]
+            return [title, makeLabel("Offline", size: 12, color: paletteDanger), msg, hint, cmd, daemonRow, buttons].map { inset($0, top: 4) }
         }
     }
 
@@ -195,74 +249,62 @@ final class PopoverViewController: NSViewController {
         let projects = status.projects ?? []
         var views: [NSView] = []
 
-        let header = makeLabel("GSD Path", size: 16, weight: .semibold)
-        header.textColor = studioAccent
-        let connected = makeLabel("Connected", size: 12, color: .systemGreen)
-        let count = makeLabel("\(projects.count) watched project\(projects.count == 1 ? "" : "s")", size: 12)
-        let stamp = generatedStamp(status.generated_at)
-        let updated = makeLabel(stamp.map { "Updated \($0)" } ?? "Update time unavailable", size: 11, color: .secondaryLabelColor)
-        let sub = NSStackView(views: [count, updated])
-        sub.distribution = .equalSpacing
-        let titleRow = NSStackView(views: [header, connected])
-        titleRow.distribution = .equalSpacing
-        views += [titleRow, separator(), sub]
+        let icon = NSImageView(image: NSImage(systemSymbolName: "tablecells", accessibilityDescription: nil) ?? NSImage())
+        icon.contentTintColor = paletteText
+        let title = makeLabel("GSD Path", size: 13, weight: .semibold)
+        let spacer = NSView()
+        spacer.setContentHuggingPriority(.init(1), for: .horizontal)
+        let dot = DotView()
+        dot.color = paletteAccent
+        dot.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([dot.widthAnchor.constraint(equalToConstant: 7), dot.heightAnchor.constraint(equalToConstant: 7)])
+        let updated = makeLabel(generatedStamp(status.generated_at).map { "Updated \($0)" } ?? "Connected", size: 12, color: paletteDim)
+        let header = NSStackView(views: [icon, title, spacer, dot, updated])
+        header.spacing = 6
+        header.edgeInsets = NSEdgeInsets(top: 4, left: 9, bottom: 6, right: 9)
+        views.append(header)
 
         // Board order: blocked, then active, then shipped; name within each.
         let sorted = projects.sorted { a, b in
             if a.stateRank != b.stateRank { return a.stateRank < b.stateRank }
             return a.displayProject.localizedCaseInsensitiveCompare(b.displayProject) == .orderedAscending
         }
-        for project in sorted {
-            views.append(ProjectRowView(project: project, dashboardURL: dashboardURL))
+        for (caption, list) in [("In progress", sorted.filter { $0.projectState != "shipped" }),
+                                ("Shipped", sorted.filter { $0.projectState == "shipped" })] where !list.isEmpty {
+            views.append(inset(makeLabel(caption, size: 11, weight: .semibold, color: paletteFaint), top: 6))
+            views += list.map { ProjectRowView(project: $0, dashboardURL: dashboardURL) }
         }
         if projects.isEmpty {
-            views.append(makeLabel("No projects in your watched folders.", size: 12, color: .secondaryLabelColor))
+            views.append(inset(makeLabel("No projects in your watched folders.", size: 12, color: paletteDim), top: 6))
         }
-        views.append(separator())
 
         // Plugin update row, only when the daemon reports one.
         if let plugin = status.plugin, plugin.update_available == true, let latest = plugin.latest {
-            let update = NSButton(title: "", target: self, action: #selector(pluginPressed))
-            update.bezelStyle = .inline
-            update.setButtonType(.momentaryPushIn)
-            let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 12)]
-            let title = NSMutableAttributedString(
-                string: "⬆ ",
-                attributes: attrs.merging([.foregroundColor: NSColor.systemYellow]) { _, new in new })
-            title.append(NSAttributedString(
-                string: "GSD Path update available — v\(latest)",
-                attributes: attrs.merging([.foregroundColor: NSColor.labelColor]) { _, new in new }))
-            update.attributedTitle = title
-            views.append(update)
+            views.append(MenuItemButton("GSD Path update available — v\(latest)", target: self, action: #selector(pluginPressed)))
         }
 
-        var footerViews: [NSView] = []
-        let dash = NSButton(title: "Open Dashboard", target: self, action: #selector(dashboardPressed))
-        let plugin = NSButton(title: "Plugin settings…", target: self, action: #selector(pluginPressed))
-        let folders = NSButton(title: "Watched folders…", target: self, action: #selector(foldersPressed))
-        for button in [dash, plugin, folders] {
-            button.bezelStyle = .inline
-            button.isBordered = false
-            button.alignment = .left
-            button.font = .systemFont(ofSize: 13)
-            footerViews.append(button)
-        }
         let daemonRow = DaemonRowView()
         daemonRow.onRescan = onRescan
-        footerViews.append(daemonRow)
-        let rescan = NSButton(title: "Rescan", target: self, action: #selector(rescanPressed))
-        let quit = NSButton(title: "Quit", target: self, action: #selector(quitPressed))
-        for button in [rescan, quit] { button.bezelStyle = .inline }
-        let footer = NSStackView(views: [rescan, quit])
-        footer.distribution = .equalSpacing
-        footerViews.append(footer)
-
+        let footerViews: [NSView] = [
+            separator(),
+            MenuItemButton("Open Dashboard", target: self, action: #selector(dashboardPressed)),
+            MenuItemButton("Plugin settings…", target: self, action: #selector(pluginPressed)),
+            MenuItemButton("Watched folders…", target: self, action: #selector(foldersPressed)),
+            MenuItemButton("Rescan", target: self, action: #selector(rescanPressed)),
+            inset(daemonRow, top: 4),
+            separator(),
+            MenuItemButton("Quit", target: self, action: #selector(quitPressed)),
+        ]
         rebuild(footer: footerViews) { views }
     }
 
     private func rebuild(footer: [NSView] = [], _ makeViews: () -> [NSView]) {
         for v in controls.arrangedSubviews { controls.removeArrangedSubview(v); v.removeFromSuperview() }
-        for v in footer { controls.addArrangedSubview(v) }
+        for v in footer {
+            controls.addArrangedSubview(v)
+            v.widthAnchor.constraint(equalTo: controls.widthAnchor,
+                                     constant: -(controls.edgeInsets.left + controls.edgeInsets.right)).isActive = true
+        }
         for v in stack.arrangedSubviews { stack.removeArrangedSubview(v); v.removeFromSuperview() }
         for v in makeViews() {
             stack.addArrangedSubview(v)
@@ -271,7 +313,7 @@ final class PopoverViewController: NSViewController {
         }
         stack.layoutSubtreeIfNeeded()
         let contentHeight = stack.fittingSize.height + controls.fittingSize.height
-        preferredContentSize = NSSize(width: 440, height: min(max(contentHeight, 120), NSScreen.main.map { $0.visibleFrame.height } ?? 600))
+        preferredContentSize = NSSize(width: 400, height: min(max(contentHeight, 120), NSScreen.main.map { $0.visibleFrame.height } ?? 600))
     }
 
     private func generatedStamp(_ iso: String?) -> String? {
@@ -327,88 +369,69 @@ private func separator() -> NSBox {
     return line
 }
 
-// MARK: - Milestone stack row (status board)
+/// Wraps a view with the tray's inner padding so text lines up with row titles.
+private func inset(_ view: NSView, top: CGFloat = 0) -> NSStackView {
+    let box = NSStackView(views: [view])
+    box.edgeInsets = NSEdgeInsets(top: top, left: 9, bottom: 2, right: 9)
+    return box
+}
 
-final class ProjectRowView: NSView {
+// MARK: - Project row: name, phase meter and one detail line
+
+final class ProjectRowView: MenuRowButton {
+    let project: ProjectStatus
+    let meter: PhaseMeterView
+    let name: NSTextField
+    let detail: NSTextField
+    private let dashboardURL: URL
+
     init(project p: ProjectStatus, dashboardURL: URL) {
-        super.init(frame: .zero)
-        self.project = p
+        project = p
         self.dashboardURL = dashboardURL
-        let stack = NSStackView()
-        stack.orientation = .vertical
-        stack.alignment = .leading
-        stack.spacing = 3
-        stack.edgeInsets = NSEdgeInsets(top: 8, left: 14, bottom: 8, right: 14)
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(stack)
-        NSLayoutConstraint.activate([
-            stack.topAnchor.constraint(equalTo: topAnchor),
-            stack.leadingAnchor.constraint(equalTo: leadingAnchor),
-            stack.trailingAnchor.constraint(equalTo: trailingAnchor),
-            stack.bottomAnchor.constraint(equalTo: bottomAnchor),
-        ])
-        let name = NSButton(title: p.displayProject + "  ›", target: self, action: #selector(dashPressed))
-        name.bezelStyle = .inline
-        name.isBordered = false
-        name.font = .systemFont(ofSize: 14, weight: .semibold)
-        name.alignment = .left
+        name = makeLabel(p.displayProject, size: 13, weight: .semibold)
+        detail = makeLabel(p.trayDetail, size: 11.5, color: paletteDim)
+        meter = PhaseMeterView(p.phaseMeter, blocked: p.projectState == "blocked")
+        super.init()
+        title = ""
+        target = self
+        action = #selector(openProject)
+        name.setContentHuggingPriority(.defaultLow, for: .horizontal)
         name.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        let pill = makePill(p.stateLabel, fill: stateFill(p.projectState))
-        let top = NSStackView(views: [name, pill])
+        detail.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        let top = NSStackView(views: [name, meter])
+        top.spacing = 12
         top.distribution = .fill
-        top.spacing = 10
-        stack.addArrangedSubview(top)
-        top.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -28).isActive = true
-
-        // Done / here / ahead on one line: M001 ✓  M002 ●  M003 ○
-        let line = NSMutableAttributedString()
-        let mono = NSFont.monospacedSystemFont(ofSize: 12, weight: .medium)
-        let nowColor = p.projectState == "blocked" ? healthColor(.red) : p.projectState == "shipped" ? healthColor(.green) : studioAccent
-        for (index, entry) in p.milestoneStack.enumerated() {
-            let color: NSColor
-            switch entry.kind {
-            case .done: color = healthColor(.green)
-            case .now: color = nowColor
-            case .ahead: color = .tertiaryLabelColor
-            }
-            let piece = p.stackText.components(separatedBy: "  ")[index]
-            line.append(NSAttributedString(string: (index == 0 ? "" : "  ") + piece,
-                                           attributes: [.font: mono, .foregroundColor: color]))
-        }
-        let stackLabel = NSTextField(labelWithAttributedString: line)
-        stackLabel.lineBreakMode = .byTruncatingTail
-        stackLabel.toolTip = p.milestoneStack.map { "\($0.number) \($0.slug)" }.joined(separator: "\n")
-        stack.addArrangedSubview(stackLabel)
-
-        let here = makeLabel(p.hereText, size: 12, color: .secondaryLabelColor)
-        here.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
-        stack.addArrangedSubview(here)
-        if let goal = p.goalText {
-            let label = makeLabel(goal, size: 12, color: .secondaryLabelColor)
-            label.lineBreakMode = .byWordWrapping
-            label.maximumNumberOfLines = 2
-            label.preferredMaxLayoutWidth = 400
-            stack.addArrangedSubview(label)
-        }
-        if let shipped = p.lastShippedText {
-            let label = makeLabel(shipped, size: 12, color: .secondaryLabelColor)
-            label.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
-            stack.addArrangedSubview(label)
-        }
+        let column = NSStackView(views: [top, detail])
+        column.orientation = .vertical
+        column.alignment = .leading
+        column.spacing = 1
+        column.edgeInsets = NSEdgeInsets(top: 5, left: 9, bottom: 5, right: 9)
+        column.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(column)
+        NSLayoutConstraint.activate([
+            column.topAnchor.constraint(equalTo: topAnchor),
+            column.leadingAnchor.constraint(equalTo: leadingAnchor),
+            column.trailingAnchor.constraint(equalTo: trailingAnchor),
+            column.bottomAnchor.constraint(equalTo: bottomAnchor),
+            top.widthAnchor.constraint(equalTo: column.widthAnchor, constant: -18),
+            detail.widthAnchor.constraint(lessThanOrEqualTo: column.widthAnchor, constant: -18),
+        ])
+        toolTip = [p.stackText, p.goalText].compactMap { $0 }.joined(separator: "\n")
+        setAccessibilityLabel("\(p.displayProject), \(p.stateLabel), \(p.trayDetail)")
     }
 
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError() }
+    // The whole row is one control: labels never swallow the click.
+    override func hitTest(_ point: NSPoint) -> NSView? { NSPointInRect(point, frame) ? self : nil }
 
-    private var project: ProjectStatus?
-    private var dashboardURL: URL?
+    override func hoverChanged() {
+        super.hoverChanged()
+        name.textColor = hovered ? paletteOnAccent : paletteText
+        detail.textColor = hovered ? paletteOnAccent : paletteDim
+        meter.highlighted = hovered
+    }
 
-    @objc private func dashPressed() {
-        guard let base = dashboardURL else {
-            DashboardWindowController.shared.show()
-            return
-        }
-        DashboardWindowController.shared.show(projectDeepLink(base: base, root: project?.root))
+    @objc private func openProject() {
+        DashboardWindowController.shared.show(projectDeepLink(base: dashboardURL, root: project.root))
     }
 }
 

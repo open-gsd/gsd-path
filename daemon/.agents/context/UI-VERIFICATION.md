@@ -259,3 +259,36 @@ models are listed as unpriced. Installed and restarted the daemon and tray;
 inspected the live board (4 rows, shipped rows collapsed, turns on the right)
 and the report-dashboard page with its usage block at 1280px; no console
 errors, document width 1280.
+
+## Instrument redesign (tray and dashboard)
+User chose B Instrument from `daemon/prototype-redesign.html` (untracked).
+
+- `serve.py`: Instrument palette (light and dark), toolbar with filters, search
+  and Settings gear; table board; project page with facts strip, phase track,
+  current milestone box, milestone, task, model and agent tables, folded turn
+  ledger. Search keeps focus and caret through polling.
+- Tray: `PhaseMeterView`, `MenuRowButton`, `MenuItemButton`; `ProjectRowView`
+  is one borderless button with a hover highlight. `Models.swift` adds
+  `phaseMeter` and `trayDetail`, removes `lastShippedText`. State pills removed.
+- Phase meter uses the tray's existing `canonicalPhases` (8 phases); the
+  prototype's 7-phase list with "verify" was not a pipeline phase.
+
+Proof:
+- `GSD_UI_TEST=1 python3 -m unittest discover -s tests -p test_daemon_board_ui.py`
+  passed in Orca: palettes, row order, filter counts, route and meter classes,
+  row cells, blocked meter, filters, search focus through refresh, no-match
+  state, row click, switcher, facts, milestone kinds, phase track dates,
+  briefing and usage text, criteria, folded ledger, polling, cold deep link,
+  Back, Settings, folders, plugin, 390px width 390, empty and offline states.
+  Sabotage: filter forced to all; test failed on the Shipped filter; restored.
+- Native: compiled `tests/daemon_tray_ui.swift` with the app sources; passed row
+  order, detail lines, phase meters, tooltips, accessibility label, hover,
+  menu items, rescan, deep link, empty and offline. Sabotage: meter `<` to `<=`
+  failed "phase meters in canonical phase order"; restored.
+- `python3 -m unittest discover -s tests -p 'test_daemon_*.py'`: 173 tests, OK,
+  1 skipped. `bash daemon/macos/build.sh` built and signed. `git diff --check`
+  passed.
+- Visual: headless Chrome screenshots of the board and project pages with the
+  test fixtures plus the live status payload, light and dark at 1440px; the
+  real `PopoverViewController` rendered offscreen to PNG in light and dark with
+  a hovered row. Not installed; the running daemon and tray are unchanged.

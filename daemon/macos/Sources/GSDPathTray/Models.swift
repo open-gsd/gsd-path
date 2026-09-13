@@ -275,14 +275,23 @@ extension ProjectStatus {
         (roadmap_milestones ?? []).first { $0.slug != nil && $0.slug == milestone }?.goal
     }
 
-    /// "last shipped M004 · 2026-09-08 · 18 tasks" from the newest archived milestone's manifest.
-    var lastShippedText: String? {
-        guard let last = milestoneStack.last(where: { $0.kind == .done }),
-              let entry = (roadmap_milestones ?? []).first(where: { $0.number == last.number }) else { return nil }
-        var parts = ["last shipped \(last.number)"]
-        if let shipped = entry.manifest?.shipped { parts.append(shipped) }
-        if let tasks = entry.manifest?.tasks_total { parts.append("\(tasks) tasks") }
-        return parts.joined(separator: " · ")
+    /// Eight segments in canonicalPhases order: done before the current phase, now at it; shipped fills all.
+    var phaseMeter: [StackKind] {
+        let index = projectState == "shipped" ? canonicalPhases.count : canonicalPhases.firstIndex(of: phase ?? "") ?? -1
+        return canonicalPhases.indices.map { $0 < index ? .done : $0 == index ? .now : .ahead }
+    }
+
+    /// The tray's detail line: "M004 · build · wave 2 · …" while in progress, "M003 shipped 2026-09-06 · 12 tasks" once shipped.
+    var trayDetail: String {
+        let current = milestoneStack.first { $0.kind == .now }?.number ?? "now"
+        switch projectState {
+        case "shipped":
+            let manifest = (roadmap_milestones ?? []).first { $0.number == current }?.manifest
+            return (["\(current) shipped" + (manifest?.shipped.map { " \($0)" } ?? "")]
+                    + [manifest?.tasks_total.map { "\($0) tasks" }].compactMap { $0 }).joined(separator: " · ")
+        case "blocked": return "\(current) · Blocked · \(hereText)"
+        default: return "\(current) · \(hereText)"
+        }
     }
 }
 

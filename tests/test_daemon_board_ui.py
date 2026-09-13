@@ -93,72 +93,89 @@ class BoardUITests(unittest.TestCase):
         self.orca("wait", "--page", self.page, "--text", "Atlas API")
         # Theme: light and dark palettes both resolve.
         self.js("document.documentElement.dataset.theme = 'light'")
-        self.assertEqual(self.js("getComputedStyle(document.body).backgroundColor"), "rgb(247, 248, 250)")
+        self.assertEqual(self.js("getComputedStyle(document.body).backgroundColor"), "rgb(251, 252, 253)")
         self.js("document.documentElement.dataset.theme = 'dark'")
-        self.assertEqual(self.js("getComputedStyle(document.body).backgroundColor"), "rgb(12, 13, 16)")
-        # Board: one compact row per project grouped by state; blocked first, then active, then shipped.
-        self.assertEqual(self.js("[...document.querySelectorAll('.prow .name span:last-child')].map(b=>b.textContent).join('|')"),
-                         "Atlas API|Field Notes|GSD Path|Done Thing")
-        self.assertEqual(self.js("[...document.querySelectorAll('.group')].map(g=>g.textContent).join('|')"),
-                         "Needs attention · 1|In progress · 2|Shipped · 1")
+        self.assertEqual(self.js("getComputedStyle(document.body).backgroundColor"), "rgb(16, 18, 20)")
+        # Board: one table row per project; blocked first, then active, then shipped.
+        names = "[...document.querySelectorAll('.prow .pname span:last-child')].map(b=>b.textContent).join('|')"
+        self.assertEqual(self.js(names), "Atlas API|Field Notes|GSD Path|Done Thing")
+        self.assertEqual(self.js("[...document.querySelectorAll('.segc button')].map(b=>b.textContent+(b.getAttribute('aria-pressed')==='true'?'*':'')).join('|')"),
+                         "All4*|Active3|Shipped1")
         gsd_row = "document.querySelector('.prow[data-root=\"/sample/gsd\"]')"
-        self.assertEqual(self.js(f"{gsd_row}.querySelector('.stack').textContent"), "M003 ✓  M004 ●  M005 ○")
-        self.assertEqual(self.js(f"{gsd_row}.querySelector('.here').textContent"),
-                         "build · wave 2 · 6 of 9 tasks · 2/3 criteria · last shipped M003 2026-09-06 — Native tray and dashboard for the daemon.")
-        self.assertEqual(self.js(f"{gsd_row}.querySelector('.spend').textContent"), "$24.60 · 84 turns")
-        self.assertEqual(self.js("document.querySelector('.prow.shipped .here') === null"), 'true')
-        self.assertEqual(self.js("document.querySelectorAll('.card').length"), '0')
+        self.assertEqual(self.js(f"{gsd_row}.querySelector('.route').getAttribute('aria-label')"), "M003 ✓  M004 ●  M005 ○")
+        self.assertEqual(self.js(f"[...{gsd_row}.querySelectorAll('.route i')].map(i=>i.className).join('|')"), "done|now|ahead")
+        self.assertEqual(self.js(f"[...{gsd_row}.cells].slice(2).map(c=>c.textContent.trim()).join('|')"),
+                         "M004daemon|build|6/9|$26.10|90|—|In build")
+        self.assertEqual(self.js(f"[...{gsd_row}.querySelectorAll('.meter i')].map(i=>i.className[0]||'-').join('')"), "ddddddn-")
+        atlas_row = "document.querySelector('.prow.blocked')"
+        self.assertEqual(self.js(f"{atlas_row}.querySelector('.route').getAttribute('aria-label')"), "M002 ■  next ○")
+        self.assertEqual(self.js(f"{atlas_row}.querySelector('.meter.blocked i.now').title"), "ship")
+        self.assertEqual(self.js("document.querySelector('.prow.shipped .state').textContent"), "Shipped")
+        self.assertEqual(self.js("document.querySelectorAll('.prow.shipped .meter i.done').length"), '8')
         # No next steps, commands or attention copy anywhere on the board.
         board = self.js("document.querySelector('.board').innerText")
         for gone in ("gsd-path-build", "forensics", "Copy", "Next step", "ship blocked", "Needs you"):
             self.assertNotIn(gone, board)
-        # A row opens the project page: full briefing card, back button, project switcher, hash deep link.
-        self.js(f"{gsd_row}.click()")
+        # Filters and search narrow the table; the search field keeps focus through polling.
+        self.js("document.querySelector('[data-filter=shipped]').click()")
+        self.assertEqual(self.js(names), "Done Thing")
+        self.js("document.querySelector('[data-filter=all]').click()")
+        self.js("(()=>{const q=document.querySelector('[data-search]');q.focus();q.value='atl';q.dispatchEvent(new Event('input',{bubbles:true}))})()")
+        self.assertEqual(self.js(names), "Atlas API")
+        self.assertEqual(self.js("(async()=>{await refresh();const a=document.activeElement;return a.matches('[data-search]')+':'+a.value+':'+a.selectionStart})()"), "true:atl:3")
+        self.js("(()=>{const q=document.querySelector('[data-search]');q.value='zzz';q.dispatchEvent(new Event('input',{bubbles:true}))})()")
+        self.assertEqual(self.js("document.querySelector('.board .empty').textContent"), "No projects match this filter.")
+        self.js("(()=>{const q=document.querySelector('[data-search]');q.value='';q.dispatchEvent(new Event('input',{bubbles:true}));q.blur()})()")
+        self.assertEqual(self.js("document.querySelectorAll('.prow').length"), '4')
+        # A row opens the project page: facts, phase track, milestones, usage; switcher and hash deep link.
+        self.js(f"{gsd_row}.cells[3].click()")
         self.assertEqual(self.js("location.hash"), "#project=%2Fsample%2Fgsd")
-        self.assertEqual(self.js("document.querySelectorAll('.card').length"), '1')
-        self.assertEqual(self.js("[...document.querySelectorAll('.switcher button')].map(b=>b.textContent+(b.classList.contains('sel')?'*':'')).join('|')"),
+        self.assertEqual(self.js("document.querySelectorAll('.project').length"), '1')
+        self.assertEqual(self.js("[...document.querySelectorAll('.switcher option')].map(o=>o.textContent+(o.selected?'*':'')).join('|')"),
                          "Atlas API|Field Notes|GSD Path*|Done Thing")
-        gsd = "document.querySelector('.card')"
-        self.assertEqual(self.js(f"[...{gsd}.querySelectorAll('.ms')].map(m=>m.className.split(' ')[1]+':'+m.querySelector('.k').textContent).join('|')"),
+        page = "document.querySelector('.project')"
+        self.assertEqual(self.js(f"[...{page}.querySelectorAll('.facts div')].map(d=>d.querySelector('dt').textContent+'='+d.querySelector('dd').textContent).join('|')"),
+                         "State=In build|Milestone=M004|Branch=gsd-path/M004|Head=0e9a3b1 · dirty|Updated=—|Cost=$26.10|Turns=90")
+        self.assertEqual(self.js(f"[...{page}.querySelectorAll('.milestones tr.ms')].map(m=>m.classList[1]+':'+m.querySelector('.k').textContent).join('|')"),
                          "done:M003|now:M004|ahead:M005")
-        text = self.js(f"{gsd}.innerText")
-        for expected in ("core", "daemon", "notify", "build · wave 2", "6 of 9 tasks", "entered build 2026-09-10 · 5h 0m",
-                         "✓ wave 1 parsers", "● wave 2 watcher", "○ wave 3 tray", "gsd-path/M004 · 0e9a3b1 · dirty", "In build",
+        self.assertEqual(self.js(f"[...{page}.querySelectorAll('.phases div')].map(d=>(d.className||'-')+':'+d.title).join('|')"),
+                         "done:inspect|done:define · 2026-09-09|done:research|done:decide|done:roadmap|done:plan · 2026-09-09|now:build · 2026-09-10|-:ship")
+        text = self.js(f"{page}.innerText")
+        for expected in ("core", "daemon", "notify", "M004 daemon · build · wave 2", "6 of 9 tasks · entered build 2026-09-10 · 5h 0m",
+                         "✓ wave 1 parsers", "● wave 2 watcher", "○ wave 3 tray",
                          # briefing details
                          "See every gsd-path project's state without a terminal.", "shipped 2026-09-06",
-                         "12 of 12 tasks · 3 waves · 1.3 review cycles avg · integrated 158ab3a · 2 rulings carried · $1.50 · 6 turns",
+                         "12 of 12 tasks · 3 waves · 1.3 review cycles avg · integrated 158ab3a · 2 rulings carried",
+                         "$1.50 · 6 turns", "$24.60 · 84 turns",
                          "Parsers and the status endpoint.", "after M003", "Native tray and dashboard for the daemon.",
-                         "Operators stop polling STATE.md by hand.", "T001 state parser ✓", "T005 poll loop ✓", "T006 notify hook ○",
+                         "Operators stop polling STATE.md by hand.", "state parser", "poll loop", "notify hook", "2 watcher",
                          "2 of 3 criteria met", "verify pass 14:32:00", "Desktop notifications.", "after M004",
-                         "latest lesson · 003-core — Land task evidence through the isolation helper.",
-                         # usage: cost, turns, models, agents; unpriced model excluded from cost
-                         "USAGE · M004", "$24.60", "84", "14.1M", "$26.10", "gpt-6-astra", "84 turns · 14.0M · $24.60",
-                         "claude-sonnet-5", "6 turns · 100k · —", "$gsd-path-build · T006", "$gsd-path-build · reviewer",
-                         "No price configured for claude-sonnet-5"):
+                         "003-core — Land task evidence through the isolation helper.",
+                         # usage: models, agents; unpriced model excluded from cost
+                         "12 prompts · 14.1M tokens", "gpt-6-astra", "$24.60", "claude-sonnet-5",
+                         "$gsd-path-build · T006", "$gsd-path-build · reviewer", "No price configured for claude-sonnet-5"):
             self.assertIn(expected, text)
-        self.assertEqual(self.js(f"[...{gsd}.querySelectorAll('.phase-log div')].map(d=>d.className+':'+d.textContent).join('|')"),
-                         ":def09-09|:plan09-09|now:build09-10")
-        self.assertEqual(self.js(f"[...{gsd}.querySelectorAll('.crit i')].map(i=>i.className).join('|')"), "met|met|not-met")
+        self.assertEqual(self.js(f"[...{page}.querySelectorAll('.crit i')].map(i=>i.className).join('|')"), "met|met|not-met")
         # Turn ledger is folded by default and lists the latest turns.
         self.assertEqual(self.js("document.querySelector('details.turns').open"), 'false')
         self.assertIn("14:32:07", self.js("document.querySelector('details.turns table').textContent"))
         self.assertIn("41s", self.js("document.querySelector('details.turns table').textContent"))
         # The page survives polling and the switcher moves between projects.
-        self.assertEqual(self.js("(async()=>{await refresh();return document.querySelectorAll('.card').length})()"), '1')
-        self.js("[...document.querySelectorAll('.switcher button')].find(b=>b.textContent==='Atlas API').click()")
-        self.assertIn("api-v3 · define", self.js("document.querySelector('.card').innerText"))
-        self.assertEqual(self.js("[...document.querySelector('.card').querySelectorAll('.ms .k')].map(k=>k.textContent).join('|')"), "M002|next")
-        self.assertIn("Blocked", self.js("document.querySelector('.card .pill').textContent"))
+        self.assertEqual(self.js("(async()=>{await refresh();return document.querySelectorAll('.project').length})()"), '1')
+        self.js("(()=>{const s=document.querySelector('.switcher');s.value=\"/sample/atlas'&tab=usage\";s.dispatchEvent(new Event('change',{bubbles:true}))})()")
+        self.assertIn("api-v3", self.js("document.querySelector('.project').innerText"))
+        self.assertIn("define · pending", self.js("document.querySelector('.project').innerText"))
+        self.assertEqual(self.js("[...document.querySelectorAll('.milestones .k')].map(k=>k.textContent).join('|')"), "M002|next")
+        self.assertEqual(self.js("document.querySelector('.facts dd').textContent"), "Blocked")
         # Cold deep link (the tray) opens the page directly; Back returns to the board.
         self.js("location.hash = 'project=' + encodeURIComponent('/sample/notes')")
         self.orca("wait", "--page", self.page, "--text", "end of roadmap")
-        self.assertEqual(self.js("document.querySelector('.card').dataset.root"), "/sample/notes")
+        self.assertEqual(self.js("document.querySelector('.project').dataset.root"), "/sample/notes")
         self.js("document.querySelector('[data-nav=board]').click()")
         self.assertEqual(self.js("document.querySelectorAll('.prow').length"), '4')
         self.assertEqual(self.js("location.hash"), "")
-        # Toolbar summary and connection.
-        self.assertEqual(self.js("document.querySelector('.summary').textContent"), "4 projects · 2 in progress · 1 blocked · 1 shipped")
-        self.assertIn("Connected", self.js("document.querySelector('.connection').textContent"))
+        # Toolbar connection.
+        self.assertIn("Updated", self.js("document.querySelector('.connection').textContent"))
         # Settings menu: survives polling, Escape closes it, Plugin and Watched folders remain reachable.
         self.assertEqual(self.js("document.querySelector('.settings-menu').open"), 'false')
         self.js("document.querySelector('.settings-menu summary').click()")

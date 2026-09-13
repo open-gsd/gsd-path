@@ -14,7 +14,9 @@ struct TrayUITest {
            "spend":{"turns":90,"cost":26.1,"milestones":{"M003":{"turns":6,"tokens":1000,"cost":1.5},"M004":{"turns":84,"tokens":14100000,"cost":24.6}}}},
           {"root":"/sample/atlas'&tab=usage","project":"Atlas API","milestone":"api-v2","phase":"ship","status":"blocked","branch":"gsd-path/M002","health":"red","attention":[{"kind":"blocked","label":"ship blocked","ref":null}],
            "next_milestone":{"milestone":"api-v3","phase":"define","status":"pending"}},
-          {"root":"/sample/notes","project":"Field Notes","milestone":"bootstrap","phase":"research","status":"active","branch":"gsd-path/M001"}
+          {"root":"/sample/notes","project":"Field Notes","milestone":"bootstrap","phase":"research","status":"active","branch":"gsd-path/M001"},
+          {"root":"/sample/done","project":"Done Thing","milestone":"graph","phase":"shipped","status":"shipped","archive":".project/archive/001-graph",
+           "roadmap_milestones":[{"number":"M001","slug":"graph","status":"shipped","archive":".project/archive/001-graph","manifest":{"shipped":"2026-09-01","tasks_total":4}}]}
         ]}
         """.utf8)
         let status = try JSONDecoder().decode(StatusResponse.self, from: data)
@@ -28,8 +30,8 @@ struct TrayUITest {
         vc.view.display()
         guard let background = vc.view.layer?.backgroundColor,
               let rgb = NSColor(cgColor: background)?.usingColorSpace(.deviceRGB),
-              abs(rgb.redComponent - 12.0 / 255) < 0.001 else {
-            print("FAIL: Studio dark surface"); exit(1)
+              abs(rgb.redComponent - 16.0 / 255) < 0.001 else {
+            print("FAIL: Instrument dark surface"); exit(1)
         }
         func descendants(_ view: NSView) -> [NSView] {
             [view] + view.subviews.flatMap(descendants)
@@ -41,30 +43,37 @@ struct TrayUITest {
         func require(_ condition: Bool, _ message: String) {
             if !condition { print("FAIL: \(message)"); exit(1) }
         }
-        require(labels().contains("3 watched projects"), "compact watched-project count")
-        require(labels().contains("Connected"), "connected state")
-        // Milestone stack: done / here / ahead from ROADMAP.md, lookahead from next/STATE.md, number from the branch.
-        require(labels().contains("M003 ✓  M004 ●  M005 ○"), "roadmap stack line")
-        require(labels().contains("M002 ■  next ○"), "blocked stack with lookahead milestone")
-        require(labels().contains("M001 ●"), "pre-plan project stack from branch")
-        require(labels().contains("build · wave 2 · 6 of 9 tasks · 2/3 criteria · since 2026-09-10 · $24.60 · 84 turns"), "here line with wave, tasks, criteria, since date, cost and turns")
-        require(labels().contains("Native tray and dashboard for the daemon."), "milestone goal line")
-        require(labels().contains("last shipped M003 · 2026-09-06 · 12 tasks"), "last shipped line from the manifest")
-        require(labels().contains("research · no tasks yet"), "here line without tasks")
-        require(labels().contains("Blocked") && labels().contains("In build"), "state pills")
+        require(labels().contains("GSD Path") && labels().contains("Connected"), "header with connection state")
+        require(labels().contains("In progress") && labels().contains("Shipped"), "in progress and shipped captions")
+        let rows = descendants(vc.view).compactMap { $0 as? ProjectRowView }
+        // Board order: blocked first, then active by name, then shipped.
+        require(rows.map(\.name.stringValue) == ["Atlas API", "Field Notes", "GSD Path", "Done Thing"], "row order")
+        require(rows.map(\.detail.stringValue) == [
+            "M002 · Blocked · ship · no tasks yet",
+            "M001 · research · no tasks yet",
+            "M004 · build · wave 2 · 6 of 9 tasks · 2/3 criteria · since 2026-09-10 · $24.60 · 84 turns",
+            "M001 shipped 2026-09-01 · 4 tasks",
+        ], "detail lines: milestone, phase, wave, tasks, criteria, since date, cost and turns; shipped date and tasks")
+        let meter: (ProjectRowView) -> String = { row in
+            row.meter.segments.map { $0 == .done ? "d" : $0 == .now ? "n" : "-" }.joined()
+        }
+        require(rows.map(meter) == ["dddddddn", "ddn-----", "ddddddn-", "dddddddd"], "phase meters in canonical phase order")
+        require(rows[2].toolTip == "M003 ✓  M004 ●  M005 ○\nNative tray and dashboard for the daemon.", "stack and goal tooltip")
+        require(rows[0].toolTip == "M002 ■  next ○", "blocked stack with lookahead milestone")
+        require(rows[2].accessibilityLabel()?.hasPrefix("GSD Path, In build, M004 · build") == true, "row accessibility label")
+        rows[2].hovered = true
+        require(rows[2].name.textColor == paletteOnAccent && rows[2].meter.highlighted, "hover highlights the row")
+        rows[2].hovered = false
+        require(rows[2].name.textColor == paletteText, "hover clears")
         // A status board: no attention summary, next steps, copy or reveal actions.
         require(!buttons().contains { $0.title.contains("needs you") }, "no attention summary")
         require(!buttons().contains { $0.title == "Actions" }, "no actions menu")
         require(!buttons().contains { $0 is NSPopUpButton }, "no per-row menus")
         require(!labels().contains("ship blocked"), "no attention copy")
-        require(buttons().contains { $0.title.contains("Field Notes") }, "pre-plan projects remain visible")
-        require(buttons().contains { $0.title == "Plugin settings…" }, "plugin settings always available")
-        require(buttons().contains { $0.title == "Watched folders…" }, "folder settings available")
+        let menu = buttons().compactMap { ($0 as? MenuItemButton)?.title }
+        require(menu == ["Open Dashboard", "Plugin settings…", "Watched folders…", "Rescan", "Quit"], "menu items")
         let scroll = descendants(vc.view).compactMap { $0 as? NSScrollView }.first!
         require(!descendants(scroll).contains { ($0 as? NSButton)?.title == "Open Dashboard" }, "dashboard stays outside scrolling content")
-        let names = buttons().map(\.title)
-        require(names.firstIndex(where: { $0.contains("Atlas API") })! < names.firstIndex(where: { $0.contains("Field Notes") })!
-                && names.firstIndex(where: { $0.contains("Field Notes") })! < names.firstIndex(where: { $0.contains("GSD Path") })!, "blocked first, then active by name")
         buttons().first { $0.title == "Rescan" }?.performClick(nil)
         require(rescans == 1, "rescan action invokes its callback")
         let link = projectDeepLink(base: URL(string: "http://localhost:8765")!, root: "/sample/atlas'&tab=usage")
@@ -86,6 +95,6 @@ struct TrayUITest {
         require(!labels().contains("Connected"), "no stale connected status")
         buttons().first { $0.title == "Retry" }?.performClick(nil)
         require(rescans == 2, "offline retry")
-        print("PASS: milestone stacks, state pills, settings, rescan, links, empty and offline states")
+        print("PASS: rows, detail lines, phase meters, hover, menu items, rescan, links, empty and offline states")
     }
 }

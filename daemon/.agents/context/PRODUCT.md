@@ -61,3 +61,19 @@ session logs (Codex rollouts, Claude Code transcripts) matched by working
 directory; cost from a per-model price table in daemon.json with no defaults;
 cost and turns on the board row, the tray here line and each milestone; a
 per-agent table and a per-turn ledger on the project page.
+
+## Instrument redesign
+User: "lets use the impeccable skill and redesign the toolbar and dashboard",
+scope both the tray and the dashboard, problem "looks generic". Chosen from three
+directions (`daemon/prototype-redesign.html`: A Route, B Instrument, C Lanes):
+"B Instrument on both". Replaces the Studio palette with a cool graphite
+Instrument palette and one teal signal, shared as hex values by `serve.py` and
+`PopoverViewController.swift`. Dashboard toolbar: GSD Path, All / Active /
+Shipped filters with counts, project search, update time, Settings gear. Board:
+one table row per project with route squares, milestone, an 8-segment phase
+meter in `canonicalPhases` order, tasks, cost, turns, updated, state. Project
+page: Back and a project switcher, a facts strip, phase track, current
+milestone, milestone and task tables, usage tables and the folded turn ledger.
+Tray: menu-style rows (name, phase meter, one detail line) under In progress and
+Shipped, and menu items in the footer. State pills and the tray goal and
+last-shipped lines are removed.
