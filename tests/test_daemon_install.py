@@ -7,6 +7,7 @@ import sys
 import tempfile
 import types
 import unittest
+import threading
 from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
@@ -95,6 +96,7 @@ class PlistTests(unittest.TestCase):
             )
             self.assertIs(loaded["RunAtLoad"], True)
             self.assertIs(loaded["KeepAlive"], True)
+            self.assertEqual(loaded["ProcessType"], "Interactive")
             logs = installer.home / ".gsd-path" / "logs"
             self.assertEqual(loaded["StandardOutPath"], str(logs / "stdout.log"))
             self.assertEqual(loaded["StandardErrorPath"], str(logs / "stderr.log"))
@@ -430,6 +432,19 @@ class TrayServeFlagTests(unittest.TestCase):
         health_results = []
         servers = []
         real_serve_in_thread = serve_module.serve_in_thread
+        scans = []
+        bound = []
+        scanned = threading.Event()
+        real_server = serve_module.ThreadingHTTPServer
+
+        def bind(*args, **kwargs):
+            server = real_server(*args, **kwargs)
+            bound.append(server.server_address)
+            return server
+
+        def attach_spend(watcher, current):
+            scans.append(bool(bound))
+            scanned.set()
 
         def spy(watcher, port):
             server, thread = real_serve_in_thread(watcher, port)
@@ -438,9 +453,14 @@ class TrayServeFlagTests(unittest.TestCase):
 
         modules = _fake_tray_modules(health_results, servers)
         with mock.patch.dict(sys.modules, modules):
-            with mock.patch.object(tray_module, "serve_in_thread", spy):
-                tray_module.run(Config(), serve_port=0)
+            with mock.patch.object(tray_module, "serve_in_thread", spy), mock.patch.object(
+                tray_module.Watcher, "_attach_spend", attach_spend
+            ), mock.patch.object(serve_module, "ThreadingHTTPServer", bind):
+                tray_module.run(Config(session_dirs=[]), serve_port=0)
+                self.assertTrue(scanned.wait(5))
 
+        self.assertTrue(scans)
+        self.assertTrue(all(scans), "session scan ran before the dashboard server started")
         self.assertEqual(len(servers), 1)
         self.assertNotEqual(servers[0].server_address[1], 0)
         self.assertEqual(health_results, [(200, {"ok": True})])
