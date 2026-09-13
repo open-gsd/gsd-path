@@ -330,6 +330,25 @@ Intent: `.project/intent/INTENT.md`
         self.assertEqual(values["files"], ["a.py", "b#.py"])
         self.assertEqual(values["deps"], ["T00#1"])
 
+    def test_placeholder_scan_ignores_code_spans_not_whole_quoted_tokens(self) -> None:
+        self.assertEqual(
+            check_handoffs._non_placeholder(
+                "`Record<ApprovalPolicyV1, { stage: ScheduleSweepStage }>`",
+                "x",
+            ),
+            "Record<ApprovalPolicyV1, { stage: ScheduleSweepStage }>",
+        )
+        self.assertEqual(
+            check_handoffs._non_placeholder("`Queues unavailable: <stored reason>`", "x"),
+            "Queues unavailable: <stored reason>",
+        )
+        with self.assertRaises(check_handoffs.HandoffError) as failure:
+            check_handoffs._non_placeholder("`<fill in>`", "label")
+        self.assertIn("<fill in>", str(failure.exception))
+        with self.assertRaises(check_handoffs.HandoffError) as failure:
+            check_handoffs._non_placeholder("Queues unavailable: <stored reason>", "label")
+        self.assertIn("<stored reason>", str(failure.exception))
+
     def test_placeholder_checks_accept_comparison_angle_brackets(self) -> None:
         self.assertEqual(
             check_handoffs._non_placeholder("p95 latency < 200ms and > 0", "x"),
@@ -1796,7 +1815,8 @@ Tasks reviewed: 2
                         with self.assertRaises(check_handoffs.HandoffError):
                             check_handoffs.validate_wave(root, review=relative)
                 review.write_text(original.replace(
-                    old, f"- {marker} AC1 — `other.py <integer>` prints the signed integer. — ran hello.py 7"
+                    old,
+                    f"- {marker} AC1 — `other.py <integer>` prints the signed integer. — <observed result>",
                 ))
                 with self.assertRaisesRegex(check_handoffs.HandoffError, "placeholder"):
                     check_handoffs.validate_wave(root, review=relative)

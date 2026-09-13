@@ -662,11 +662,20 @@ def meaningful_review_evidence(lines: Sequence[str], marker: str, task_text: str
         if not stripped.startswith(prefix):
             continue
         item = task_review_observation(stripped.removeprefix(prefix), task_text)
-        evidence.append(item.strip().strip("`"))
+        # Keep the code spans intact: unquoting first would drop a leading or
+        # trailing backtick and unbalance every span after it, so quoted code
+        # would read as an unfilled placeholder.
+        evidence.append(item.strip())
     return bool(evidence) and all(
-        item
-        and item.casefold() not in {"none", "n/a", "null"}
-        and re.search(r"(?<!\w)<[a-zA-Z][^<>\n]*>", item) is None
+        item.strip("`")
+        and item.strip("`").casefold() not in {"none", "n/a", "null"}
+        and archive_milestone.PLACEHOLDER_PATTERN.fullmatch(item.strip("`")) is None
+        # Blank the code spans before the scan, so a placeholder-shaped token
+        # that is quoted evidence is not read as an unfilled placeholder.
+        and re.search(
+            r"(?<!\w)<[a-zA-Z][^<>\n]*>",
+            archive_milestone.CODE_SPAN_PATTERN.sub(" ", item),
+        ) is None
         for item in evidence
     )
 

@@ -186,11 +186,18 @@ ABANDON_REQUIRED_DIRECTORIES = ("intent", "research", "plan", "tasks")
 
 # Template placeholders look like <name> or <one line>. Comparison text such
 # as "120ms < 200ms" or "a -> b" is legitimate evidence, not a placeholder.
-PLACEHOLDER_PATTERN = re.compile(r"<[a-zA-Z][^<>\n]*>")
+PLACEHOLDER_PATTERN = re.compile(r"(?<!\w)<[a-zA-Z][^<>\n]*>")
+CODE_SPAN_PATTERN = re.compile(r"`[^`]*`")
 
 
 def contains_placeholder(value: str) -> bool:
-    return PLACEHOLDER_PATTERN.search(value) is not None
+    # A wholly unfilled value is a placeholder even when quoted.
+    cleaned = value.strip().strip("`")
+    if PLACEHOLDER_PATTERN.fullmatch(cleaned):
+        return True
+    # Scan with code spans blanked out: quoted code such as a TypeScript
+    # generic is not an unfilled placeholder.
+    return PLACEHOLDER_PATTERN.search(CODE_SPAN_PATTERN.sub(" ", value)) is not None
 
 
 def plan_review_panel_config(plan_text: str) -> dict:

@@ -12,6 +12,13 @@ from scripts import check_task_briefs
 
 CONTRACT = "- `render(name: str) -> str` in `src/app.py` returns the greeting."
 
+PLAN_WAVE = (
+    "# Plan — {title}\n\n"
+    "## Wave 1 — Deliver the module\n\n"
+    "Goal: Deliver the module\n"
+    "Review depth: full\n"
+)
+
 TASK_TEMPLATE = """---
 id: {task_id}
 title: Demo task {task_id}
@@ -180,6 +187,47 @@ class TaskBriefTests(unittest.TestCase):
             self.assertEqual(code, 1)
             self.assertIn("Context names a path missing at the layer base: src/extra.py", error)
             self.assertIn("Verify names a path missing at the layer base: .project/intent/INTENT.md", error)
+
+    def test_plan_approval_allows_dependency_produced_files(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.init_repo(root)
+            base = self.commit(root)
+            self.write_task(
+                root, "T001", files=("src/produced.py",), contract="- None",
+                context="Create the owned module.", verify="python3 src/produced.py",
+            )
+            self.write_task(
+                root, "T002", files=("tests/test_app.py",), contract="- None",
+                context="Read `src/produced.py`.",
+            )
+            with self.assertRaises(check_task_briefs.BriefError) as failure:
+                check_task_briefs.validate_task_briefs(root, base)
+            self.assertIn("src/produced.py", str(failure.exception))
+            result = check_task_briefs.validate_task_briefs(
+                root, base, dependency_files={"T002": {"src/produced.py"}},
+            )
+            self.assertEqual(result["tasks"], 2)
+
+    def test_landed_briefs_use_recorded_historical_base(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.init_repo(root)
+            self.write(root, "src/helper.ts", "export {}\n")
+            historical = self.commit(root)
+            (root / "src/helper.ts").unlink()
+            head = self.commit(root)
+            self.write_task(
+                root, "T001", files=("src/owned.py",), contract="- None",
+                context="Read `src/helper.ts`.", verify="python3 src/owned.py",
+            )
+            with self.assertRaises(check_task_briefs.BriefError) as failure:
+                check_task_briefs.validate_task_briefs(root, head)
+            self.assertIn("src/helper.ts", str(failure.exception))
+            result = check_task_briefs.validate_task_briefs(
+                root, head, landed_bases={"T001": historical},
+            )
+            self.assertEqual(result["tasks"], 1)
 
     def test_lookahead_prose_uses_its_own_uncommitted_contracts(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

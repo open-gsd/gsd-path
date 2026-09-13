@@ -10,7 +10,7 @@ from pathlib import Path
 from unittest import mock
 
 from scripts import pipeline_git, pipeline_state, state_checkpoint, state_promote
-from tests.test_task_briefs import TASK_TEMPLATE
+from tests.test_task_briefs import PLAN_WAVE, TASK_TEMPLATE
 
 
 SETTLED_SYNTHESIS = """# Synthesis
@@ -1528,7 +1528,7 @@ class PipelineStateTests(unittest.TestCase):
             )
             (project / "plan").mkdir()
             (project / "plan" / "PLAN.md").write_text(
-                "# Plan — first\n",
+                PLAN_WAVE.format(title="first"),
                 encoding="utf-8",
             )
         else:
@@ -1709,6 +1709,67 @@ class PipelineStateTests(unittest.TestCase):
                 ).exists()
             )
 
+    def test_plan_approval_uses_historical_bases_and_dependency_files(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp) / "repo"
+            run_git(Path(tmp), "init", "-b", "gsd-path/M001", str(repo))
+            run_git(repo, "config", "user.name", "GSD Path Test")
+            run_git(repo, "config", "user.email", "test@example.com")
+            (repo / "src").mkdir()
+            (repo / "src" / "legacy.ts").write_text("export {}\n", encoding="utf-8")
+            (repo / "src" / "helper.ts").write_text("export {}\n", encoding="utf-8")
+            run_git(repo, "add", "src/legacy.ts", "src/helper.ts")
+            run_git(repo, "commit", "-m", "historical product")
+            historical = run_git(repo, "rev-parse", "HEAD").stdout.strip()
+            (repo / "src" / "legacy.ts").unlink()
+            (repo / "src" / "helper.ts").unlink()
+            run_git(repo, "add", "-u", "src/legacy.ts", "src/helper.ts")
+            run_git(repo, "commit", "-m", "remove historical product")
+            project = repo / ".project"
+            project.mkdir()
+            (project / "STATE.md").write_text(
+                state_text(
+                    milestone="first",
+                    phase="plan",
+                    status="active",
+                    branch="gsd-path/M001",
+                ),
+                encoding="utf-8",
+            )
+            run_git(repo, "add", ".project/STATE.md")
+            run_git(repo, "commit", "-m", "fixture: approval base")
+            expected_head = run_git(repo, "rev-parse", "HEAD").stdout.strip()
+            (project / "plan").mkdir()
+            (project / "plan" / "PLAN.md").write_text(
+                PLAN_WAVE.format(title="first"),
+                encoding="utf-8",
+            )
+            (project / "tasks").mkdir()
+            t001 = TASK_TEMPLATE.format(
+                task_id="T001",
+                files_block="  - src/legacy.ts",
+                context="Read `src/helper.ts`.",
+                approach="Keep the historical file.",
+                contract="- None",
+                verify="python3 src/legacy.ts",
+            ).replace("status: pending", "status: done").replace(
+                "agent: null", "agent: coder"
+            ).replace("base: null", f"base: {historical}")
+            t002 = TASK_TEMPLATE.format(
+                task_id="T002",
+                files_block="  - src/other.py",
+                context="Read `src/legacy.ts`.",
+                approach="Consume the landed file.",
+                contract="- None",
+                verify="python3 src/other.py",
+            ).replace("deps: []", "deps: [T001]")
+            (project / "tasks" / "T001-legacy.md").write_text(t001, encoding="utf-8")
+            (project / "tasks" / "T002-other.md").write_text(t002, encoding="utf-8")
+
+            result = pipeline_state.checkpoint_approval(repo, "plan", expected_head)
+
+            self.assertEqual(result["status"], "approved")
+
     def test_roadmap_approval_owns_selection_state_and_checkpoint(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             repo, expected_head = self._approval_repo(tmp, "roadmap")
@@ -1872,12 +1933,23 @@ class PipelineStateTests(unittest.TestCase):
             ),
             encoding="utf-8",
         )
+        (project / "next" / "tasks" / "T001-base.md").write_text(
+            TASK_TEMPLATE.format(
+                task_id="T001",
+                files_block="  - src/base.py",
+                context="Create the base module.",
+                approach="Implement the base.",
+                contract="- None",
+                verify="python3 src/base.py",
+            ),
+            encoding="utf-8",
+        )
         (project / "next" / "tasks" / "T002-change-app.md").write_text(
             task_text(),
             encoding="utf-8",
         )
         (project / "next" / "plan" / "PLAN.md").write_text(
-            "# Plan — second\n",
+            PLAN_WAVE.format(title="second"),
             encoding="utf-8",
         )
         (project / "next" / "review" / "PLAN-PANEL.md").write_text(

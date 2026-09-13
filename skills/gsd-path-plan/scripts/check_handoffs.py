@@ -42,7 +42,8 @@ VERIFY_BLOCK_PATTERN = _common.VERIFY_BLOCK_PATTERN
 FILES_FIELD_PATTERN = re.compile(r"^files:\s*(?P<value>[^#]*?)(?:\s+#.*)?$")
 INLINE_LIST_PATTERN = _common.INLINE_LIST_PATTERN
 LIST_ITEM_PATTERN = _common.LIST_ITEM_PATTERN
-PLACEHOLDER_PATTERN = re.compile(r"<[a-zA-Z][^<>\n]*>")
+PLACEHOLDER_PATTERN = re.compile(r"(?<!\w)<[a-zA-Z][^<>\n]*>")
+CODE_SPAN_PATTERN = re.compile(r"`[^`]*`")
 VERIFY_PATH_SPLIT = re.compile(r"[=,:]")
 WAVE_REVIEW_NAME = re.compile(
     r"wave-(?P<wave>[1-9]\d*)\.cycle(?P<cycle>[1-9]\d*)"
@@ -111,7 +112,7 @@ def _strip_quotes(value: str) -> str:
 
 
 def _reject_placeholder(value: str, label: str) -> None:
-    placeholder = PLACEHOLDER_PATTERN.search(value)
+    placeholder = PLACEHOLDER_PATTERN.search(CODE_SPAN_PATTERN.sub(" ", value))
     if placeholder is not None:
         raise HandoffError(
             f"{label} still contains the placeholder {placeholder.group(0)}; "
@@ -225,10 +226,20 @@ def _section(text: str, heading: str) -> str:
 
 
 def _non_placeholder(value: str, label: str) -> str:
-    cleaned = value.strip().strip("`")
+    text = value.strip()
+    cleaned = text.strip("`")
     if not cleaned or cleaned.casefold() in {"none", "n/a", "null"}:
         raise HandoffError(f"{label} is empty")
-    _reject_placeholder(cleaned, label)
+    # A wholly unfilled value is a placeholder whether or not it is quoted.
+    if PLACEHOLDER_PATTERN.fullmatch(cleaned):
+        raise HandoffError(
+            f"{label} still contains the placeholder {cleaned}; "
+            "replace it with the real value"
+        )
+    # Scan the text with its code spans intact. Stripping a backtick from a value
+    # that merely begins or ends with a code span unbalances every span after it,
+    # which would make quoted code look unquoted.
+    _reject_placeholder(text, label)
     return cleaned
 
 
@@ -804,9 +815,12 @@ def task_review_observation(item: str, task_text: str) -> str:
     section = _common.section_body(task_text, "Acceptance criteria")
     if section is not None:
         for criterion in _numbered_items(section, continuations=True).values():
-            prefix = _normalize_ws(criterion) + " — "
+            quoted = _normalize_ws(criterion)
+            prefix = quoted + " — "
             if item.startswith(prefix):
                 return item[len(prefix) :]
+            if item in {quoted, quoted + " —"}:
+                return ""
     return item
 
 
@@ -975,18 +989,15 @@ def _require_task_structure(task_id: str, text: str, *, initial: bool) -> None:
         body = _strip_comments(_section(text, heading)).strip()
         if not body:
             raise HandoffError(f"{task_id} {heading} is empty or still a placeholder")
-        # Log is append-only narrative that keeps growing after a task lands and
-        # its file becomes immutable, so a placeholder there can never be
-        # repaired: editing it breaks the landing proof and attest refuses while
-        # that rejection stands. Coders also legitimately write <name> notation
-        # for key formats. Require Log non-empty; scan only the contract fields.
+        # Log is append-only narrative; editing landed tasks breaks their landing proof.
+        # Key formats in that narrative may legitimately contain <name> notation.
         if heading != "Log":
             _reject_placeholder(body, f"{task_id} {heading}")
 
 
 def _validate_task_graph(
     wave_depths: Dict[int, str], tasks: Dict[str, str], *, initial: bool
-) -> None:
+) -> Dict[str, Set[str]]:
     task_ids = list(tasks)
     expected = [f"T{number:03d}" for number in range(1, len(task_ids) + 1)]
     if task_ids != expected:
@@ -1025,6 +1036,7 @@ def _validate_task_graph(
 
     visiting: Set[str] = set()
     visited: Set[str] = set()
+    dependency_files: Dict[str, Set[str]] = {}
 
     def visit(task_id: str) -> None:
         if task_id in visiting:
@@ -1032,13 +1044,25 @@ def _validate_task_graph(
         if task_id in visited:
             return
         visiting.add(task_id)
+        dependency_files[task_id] = set()
         for dependency in graph[task_id]:
             visit(dependency)
+            dependency_files[task_id].update(task_files[dependency])
+            dependency_files[task_id].update(dependency_files[dependency])
         visiting.remove(task_id)
         visited.add(task_id)
 
     for task_id in graph:
         visit(task_id)
+    return dependency_files
+
+
+def plan_brief_inputs(
+    root: Path, project_dir: str = DEFAULT_PROJECT_DIR
+) -> Tuple[Dict[str, str], Dict[str, Set[str]]]:
+    tasks = _task_texts(root, project_dir)
+    wave_depths, _ = _plan_waves(_read(root, f"{project_dir}/plan/PLAN.md"))
+    return tasks, _validate_task_graph(wave_depths, tasks, initial=True)
 
 
 def _intent_path(project_dir: str) -> str:

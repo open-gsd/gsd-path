@@ -180,12 +180,17 @@ def _verify_tokens(block: str) -> List[str]:
     return tokens
 
 
-def _lint_task(repo: Path, base: str, path: Path) -> Tuple[str, List[str], Optional[str], int]:
+def _lint_task(
+    repo: Path, base: str, path: Path,
+    dependency_files: Optional[Dict[str, Set[str]]] = None,
+    landed_bases: Optional[Dict[str, str]] = None,
+) -> Tuple[str, List[str], Optional[str], int]:
     text = path.read_text(encoding="utf-8")
     fields, error = _frontmatter(text)
     task_id = path.stem
     if fields and isinstance(fields.get("id"), str):
         task_id = fields["id"]  # type: ignore[assignment]
+    base = (landed_bases or {}).get(task_id, base)
     problems: List[str] = []
     checked = 0
     if fields is None:
@@ -206,6 +211,7 @@ def _lint_task(repo: Path, base: str, path: Path) -> Tuple[str, List[str], Optio
         elif not _clean(body):
             problems.append(f"## {name} section is empty")
 
+    supplied = (dependency_files or {}).get(task_id, set())
     declared: Set[str] = set()
     files = fields.get("files")
     if isinstance(files, str):
@@ -244,6 +250,7 @@ def _lint_task(repo: Path, base: str, path: Path) -> Tuple[str, List[str], Optio
             checked += 1
             if (
                 token not in declared
+                and token not in supplied
                 and not _supplied_contract(repo, path, token)
                 and not _base_exists(repo, base, token)
             ):
@@ -257,7 +264,7 @@ def _lint_task(repo: Path, base: str, path: Path) -> Tuple[str, List[str], Optio
         else:
             for token in _verify_tokens(block.group("block")):
                 checked += 1
-                if token not in declared and not _base_exists(repo, base, token):
+                if token not in declared and token not in supplied and not _base_exists(repo, base, token):
                     problems.append(f"## Verify names a path missing at the layer base: {token}")
 
     contract = None
@@ -271,9 +278,18 @@ def _lint_task(repo: Path, base: str, path: Path) -> Tuple[str, List[str], Optio
 
 
 def validate_task_briefs(
-    root: Path, base: str, tasks_dir: str = DEFAULT_TASKS_DIR
+    root: Path, base: str, tasks_dir: str = DEFAULT_TASKS_DIR,
+    *, dependency_files: Optional[Dict[str, Set[str]]] = None,
+    landed_bases: Optional[Dict[str, str]] = None,
 ) -> Dict[str, object]:
-    """Lint every task brief in tasks_dir against the layer base commit."""
+    """Lint task briefs using the caller's validation bases.
+
+    Dispatch uses the layer base without overrides. Plan approval supplies
+    transitive dependency files for pending tasks and resolved historical bases
+    for landed tasks, whose immutable briefs must survive later file changes.
+    The caller validates the task graph and landed metadata before supplying
+    these mappings; landed tasks receive no dependency-file allowance.
+    """
 
     resolved_base = _resolve_base(root, base)
     tasks_path = root / tasks_dir
@@ -288,7 +304,7 @@ def validate_task_briefs(
         raise BriefError(f"no task briefs found in {tasks_dir}")
     for path in task_files:
         task_id, task_problems, contract, task_checked = _lint_task(
-            root, resolved_base, path
+            root, resolved_base, path, dependency_files, landed_bases
         )
         problems.extend(f"{task_id}: {problem}" for problem in task_problems)
         if contract is not None:
