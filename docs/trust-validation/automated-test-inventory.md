@@ -2,7 +2,7 @@
 
 **Generated:** 2026-08-05; **inventory updated 2026-08-23**
 **Repo:** `open-gsd/gsd-path` @ local workspace
-**Complete local gate:** `npm run verify`
+**Complete local gate:** `npm run verify` (see [TEST_ENVIRONMENT.md](../../TEST_ENVIRONMENT.md))
 
 ## CI
 

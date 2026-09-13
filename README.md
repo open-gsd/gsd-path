@@ -252,6 +252,14 @@ the authoritative host API table and delegation rules.
 
 `platforms/` is installer-only — not user-invoked skills.
 
+## Testing
+
+Contributors and CI use one offline gate. See **[TEST_ENVIRONMENT.md](TEST_ENVIRONMENT.md)** for prerequisites, tiers, fixtures, and troubleshooting.
+
+```bash
+make install && make verify    # same path as GitHub Actions CI
+```
+
 ## Repository layout
 
 | Path | Purpose |
@@ -267,4 +275,6 @@ the authoritative host API table and delegation rules.
 | `scripts/install.py` | Python installer |
 | `AGENTS.md` | Operating rules (installed to projects) |
 | `WORKFLOW.md` | Phase SOP (installed to projects) |
+| `TEST_ENVIRONMENT.md` | Local/CI test setup and tiers |
+| `fixtures/` | Sample `.project/` pipeline for manual runs |
 | `LICENSE` | MIT |
