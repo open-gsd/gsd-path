@@ -37,7 +37,7 @@ final class DashboardWindowController: NSWindowController, NSWindowDelegate, WKN
         errorView.isHidden = true
         content.addSubview(errorView)
 
-        webView.load(URLRequest(url: dashboardURL))
+        webView.load(URLRequest(url: themedDashboardURL(dashboardURL, choice: appearanceChoice)))
     }
 
     @available(*, unavailable)
@@ -50,7 +50,7 @@ final class DashboardWindowController: NSWindowController, NSWindowDelegate, WKN
     /// same-document navigation, so the page's hashchange handler fires
     /// without a full reload.
     func show(_ url: URL? = nil) {
-        let target = url ?? dashboardURL
+        let target = themedDashboardURL(url ?? dashboardURL, choice: appearanceChoice)
         if window?.isVisible != true || webView.url?.absoluteString != target.absoluteString {
             webView.load(URLRequest(url: target))
         } else {
@@ -124,10 +124,17 @@ final class DashboardWindowController: NSWindowController, NSWindowDelegate, WKN
 
     @objc private func retryPressed() {
         errorView.isHidden = true
-        webView.load(URLRequest(url: dashboardURL))
+        webView.load(URLRequest(url: themedDashboardURL(dashboardURL, choice: appearanceChoice)))
     }
 
     @objc private func browserPressed() {
-        NSWorkspace.shared.open(dashboardURL)
+        NSWorkspace.shared.open(themedDashboardURL(dashboardURL, choice: appearanceChoice))
     }
+}
+
+/// Adds the tray's appearance choice as ?theme= so the page matches the popover; the fragment is kept.
+func themedDashboardURL(_ url: URL, choice: String) -> URL {
+    guard var parts = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return url }
+    parts.queryItems = [URLQueryItem(name: "theme", value: choice)]
+    return parts.url ?? url
 }

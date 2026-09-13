@@ -61,3 +61,39 @@ session logs (Codex rollouts, Claude Code transcripts) matched by working
 directory; cost from a per-model price table in daemon.json with no defaults;
 cost and turns on the board row, the tray here line and each milestone; a
 per-agent table and a per-turn ledger on the project page.
+
+## Instrument redesign
+User: "lets use the impeccable skill and redesign the toolbar and dashboard",
+scope both the tray and the dashboard, problem "looks generic". Chosen from three
+directions (`daemon/prototype-redesign.html`: A Route, B Instrument, C Lanes):
+"B Instrument on both". Replaces the Studio palette with a cool graphite
+Instrument palette and one teal signal, shared as hex values by `serve.py` and
+`PopoverViewController.swift`. Dashboard toolbar: GSD Path, All / Active /
+Shipped filters with counts, project search, update time, Settings gear. Board:
+one table row per project with route squares, milestone, an 8-segment phase
+meter in `canonicalPhases` order, tasks, cost, turns, updated, state. Project
+page: Back and a project switcher, a facts strip, phase track, current
+milestone, milestone and task tables, usage tables and the folded turn ledger.
+Tray: menu-style rows (name, phase meter, one detail line) under In progress and
+Shipped, and menu items in the footer. State pills and the tray goal and
+last-shipped lines are removed.
+
+## Light default and full data
+User: "where is the light version .. also .. are we revealing all data/info/stats
+that we can ?" Chosen: light by default with a System / Light / Dark switch on
+both surfaces, and all four data groups: reviews and verify history; deeper
+usage (token split, cache hit, agent time, cost and time per turn, tokens per
+milestone, host per model); the reason behind a health dot, as plain text; and
+milestone and task detail (task files, criteria text, archived verdict,
+integration mode, recorded activity). Health reasons are shown as facts only;
+there are still no next steps or actions. `serve` now records watcher events to
+`history.jsonl` so the Activity list has data on macOS.
+
+## Native colors and tray icons
+User: "light doesn't work in toolbar - can we fix the open dashboard/plugin
+settings/watched folders .. can those be icons ?" and "i also don't like that
+green highlight color - lets use native OS colors". The tray uses system label,
+separator, accent and selection colors with the popover's native material; the
+footer is an icon toolbar with tooltips. The dashboard keeps graphite neutrals
+but takes its accent from CSS `AccentColor` (system blue fallback); health dots
+use system green. The teal signal is retired.

@@ -32,17 +32,21 @@ open build/GSDPathTray.app
 
 Click the menu-bar icon to open the dropdown. The icon uses an aggregate
 progress ring and an attention badge; offline it becomes a gray ring. The
-dropdown is a status board: connection state, watched-project count, and one
-row per project ordered blocked, then in progress, then shipped.
+dropdown is a status board in native macOS colors (label, separator and accent
+colors; the standard selection highlight on hover): the last
+update time, then projects under In progress (blocked first) and Shipped.
 
-Each row shows the project name (click to open its dashboard card), a state
-pill (Blocked, In <phase>, Shipped), the milestone stack on one line —
-`M001 ✓  M002 ●  M003 ○` for done / here / ahead, ■ when blocked — a here line
-with phase, wave, task progress, criteria met, the date the phase started and
-the current milestone's cost and turn count, the current milestone's goal, and the last shipped milestone with its date and
-task count from the archive manifest. Rows carry no commands or actions. The
-fixed footer keeps dashboard, plugin, watched-folder, daemon lifecycle, rescan,
-and quit controls outside the scrolling project list.
+Each row is one button (click to open the project page) with the project name,
+an 8-segment phase meter (red when blocked) and one detail line: milestone,
+phase, wave, task progress, criteria met, the date the phase started and the
+current milestone's cost and turns; shipped rows show the ship date and task
+count from the archive manifest. The tooltip carries the milestone stack
+(`M001 ✓  M002 ●  M003 ○`), the current goal and the health reason. Rows carry
+no commands or actions. The fixed footer, outside the scrolling project list,
+holds the daemon lifecycle row and an icon toolbar: open dashboard, plugin
+settings, watched folders, rescan, Appearance (System / Light / Dark, light by
+default, applied to the popover and the dashboard window) and quit. Each icon
+has a tooltip and an accessibility name.
 
 ## Self-test (no GUI required)
 

@@ -126,10 +126,11 @@ final class DaemonRowView: NSView {
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
         NSLayoutConstraint.activate([
-            stack.topAnchor.constraint(equalTo: topAnchor),
+            // Fixed height: the status arrives after the popover is sized, so the row must not grow.
+            heightAnchor.constraint(equalToConstant: 24),
+            stack.centerYAnchor.constraint(equalTo: centerYAnchor),
             stack.leadingAnchor.constraint(equalTo: leadingAnchor),
             stack.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor),
-            stack.bottomAnchor.constraint(equalTo: bottomAnchor),
         ])
         refresh()
     }

@@ -110,29 +110,41 @@ gsd-path-daemon plugin <status|install|update|uninstall>          # manage the s
 - `GET /` — a self-contained dashboard (inline CSS/JS, no build step) that
   polls `/status` every 5 seconds.
 
-The dashboard uses the GSD Cloud Studio theme (system light/dark, or force one
-with `<html data-theme="light|dark">`) and is a pure **status board**: what each
+The dashboard uses graphite neutrals with the macOS accent color (CSS `AccentColor`,
+system blue where unsupported), light by default. Settings → Appearance
+switches between System, Light and Dark; the choice is kept in the browser, and
+the tray passes its own choice as `?theme=`. It is a pure **status board**: what each
 project has done, where it is now, where its roadmap goes next, and what it has
 cost. It shows no next steps, commands, or attention items.
 
-- **Board**: one compact row per project, grouped Needs attention / In progress
-  / Shipped. A row shows the milestone stack (`M001 ✓  M002 ●  M003 ○`, ■ when
-  blocked), a here line with phase, wave, task progress, criteria met, last
-  shipped milestone and the current goal, then cost and turn count for the
-  current milestone, and the state pill. Shipped projects collapse to one line.
+- **Toolbar**: GSD Path, All / Active / Shipped filters with counts, a project
+  search, the last update time, and the Settings menu (Plugin, Watched folders).
+- **Board**: one table row per project, blocked first, then in progress, then
+  shipped. Columns: project with health dot and path, route (one square per
+  milestone: done, current, ahead; red when blocked), current milestone, an
+  8-segment phase meter (inspect, define, research, decide, roadmap, plan,
+  build, ship), tasks, cost and turns for the project, last activity, state.
+  The health dot's tooltip gives the reason (for example `no activity for 21d`).
 - **Project page** (click a row, or the tray's `#project=<root>` deep link): the
-  full briefing as one scrolling page. The toolbar becomes a back button and a
-  project switcher. The page holds the charter vision; shipped milestones with
-  ship date, tasks, waves, review cycles, integrated commit, carried rulings,
-  cost and turns; the current milestone with goal, intent, depends-on, task
-  progress, entered date, waves with task names, criteria with the last verify
-  result, a phase-log strip and git position; planned milestones with goals;
-  the latest lesson; and a **Usage** block.
+  toolbar becomes Back and a project switcher. The page shows a facts strip
+  (state, health with its reason, milestone, branch, head, integration mode,
+  updated, cost, turns) and the charter vision. The left column holds the phase
+  track with entry dates; the current milestone with goal, intent, task
+  progress, entered date, waves, criteria and the last verify result; success
+  criteria with their text and verdict; a milestone table (shipped milestones
+  with ship date, tasks, waves, review cycles, integrated commit, carried
+  rulings and verdict; planned milestones with depends-on; cost, turns and
+  tokens per milestone); tasks with their files; reviews (kind, cycle, depth,
+  verdict, note); and the verify ledger (latest 20 runs). The right column holds
+  **Usage**, **Activity** (changes recorded in `history.jsonl` for the project)
+  and the latest lesson.
 - **Usage** comes from host session logs matched to the project root by working
   directory: Codex rollouts (`~/.codex/sessions` and Orca's per-account homes)
   and Claude Code transcripts (`~/.claude/projects`). It shows cost, turns,
-  tokens and models for the current milestone, all-milestone totals, a bar per
-  model, a per-agent table (the `$gsd-path-*` skill and task named in the
+  prompts, tokens in / cached / out, cache hit rate, agent time (Codex turn
+  durations; Claude transcripts carry none), cost per priced turn and time per
+  timed turn; a per-model table with host, turns, tokens and cost; a per-agent table
+  with agent time (the `$gsd-path-*` skill and task named in the
   session, subagents marked), and a folded per-turn ledger with time, agent,
   model, in / cached / out tokens, cost and duration. A turn is one model
   response. Turns dated on or before a milestone's ship date count toward that
@@ -309,7 +321,7 @@ JSON at `~/.gsd-path/daemon.json` (override with `--config` or the
 - `max_depth` — how deep below each parent to look for `.project/STATE.md`.
 - `poll_seconds` — watcher poll interval.
 - `notify` — desktop notifications for phase changes, blocks, pending answers.
-- `history` — append events to `~/.gsd-path/history.jsonl`
+- `history` — append events to `~/.gsd-path/history.jsonl` (both `serve` and the Python tray record changes after their startup scan)
   (override with `GSD_DAEMON_HISTORY`).
 
 ## Autostart (manual fallback)

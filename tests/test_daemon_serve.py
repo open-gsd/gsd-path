@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import urllib.parse
 import unittest
 from pathlib import Path
@@ -165,7 +166,8 @@ class ServeTests(unittest.TestCase):
         self.assertIn("text/html", content_type)
         html = body.decode("utf-8")
         for marker in ("gsd-path daemon", "Status board", "milestoneStack", "end of roadmap",
-                       "phase-log", "criteria met", "latest lesson", "boardRow", "switcher", "Turn ledger",
+                       "phaseTrack", "criteria met", "Latest lesson", "boardRow", "data-switch", "Turn ledger",
+                       "data-filter", "data-search",
                        "Plugin", "Watched folders",
                        "fetch(\"/status\")", "setInterval(refresh, 5000)"):
             self.assertIn(marker, html)
@@ -193,6 +195,39 @@ class ServeTests(unittest.TestCase):
     def test_not_found(self) -> None:
         status, content_type, body = self.get("/nope")
         self.assertEqual(status, 404)
+
+
+class ServeHistoryTests(unittest.TestCase):
+    def test_poll_loop_records_changes_but_not_the_startup_scan(self) -> None:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        parent = Path(tmp.name) / "work"
+        parent.mkdir()
+        project = make_project(parent / "demo")
+        history = Path(tmp.name) / "history.jsonl"
+        env = mock.patch.dict("os.environ", {"GSD_DAEMON_HISTORY": str(history)})
+        env.start()
+        self.addCleanup(env.stop)
+        watcher = Watcher(Config(parents=[str(parent)], poll_seconds=1, session_dirs=[]))
+        server = serve(watcher, port=0)
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.watcher_stop.set)
+        deadline = time.time() + 10
+        while not watcher.projects and time.time() < deadline:
+            time.sleep(0.05)
+        self.assertTrue(watcher.projects)
+        state = project / ".project" / "STATE.md"
+        # Replace atomically: a poll must never see a half-written STATE.md.
+        staged = state.with_name("STATE.md.tmp")
+        staged.write_text(state.read_text(encoding="utf-8").replace("phase: build", "phase: ship"), encoding="utf-8")
+        os.utime(staged, (time.time() + 5, time.time() + 5))
+        os.replace(staged, state)
+        while "phase-changed" not in (history.read_text(encoding="utf-8") if history.exists() else "") and time.time() < deadline:
+            time.sleep(0.05)
+        # Other test classes leave poll threads running that share the patched history path.
+        events = [e for e in map(json.loads, history.read_text(encoding="utf-8").splitlines()) if e["root"] == str(project)]
+        self.assertEqual([e["type"] for e in events], ["phase-changed"])
+        self.assertEqual(events[0]["detail"], "build -> ship")
 
 
 class ParentsEndpointTests(unittest.TestCase):

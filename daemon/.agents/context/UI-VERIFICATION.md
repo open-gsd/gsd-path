@@ -260,6 +260,63 @@ inspected the live board (4 rows, shipped rows collapsed, turns on the right)
 and the report-dashboard page with its usage block at 1280px; no console
 errors, document width 1280.
 
+## Instrument redesign (tray and dashboard)
+User chose B Instrument from `daemon/prototype-redesign.html` (untracked).
+
+- `serve.py`: Instrument palette (light and dark), toolbar with filters, search
+  and Settings gear; table board; project page with facts strip, phase track,
+  current milestone box, milestone, task, model and agent tables, folded turn
+  ledger. Search keeps focus and caret through polling.
+- Tray: `PhaseMeterView`, `MenuRowButton`, `MenuItemButton`; `ProjectRowView`
+  is one borderless button with a hover highlight. `Models.swift` adds
+  `phaseMeter` and `trayDetail`, removes `lastShippedText`. State pills removed.
+- Phase meter uses the tray's existing `canonicalPhases` (8 phases); the
+  prototype's 7-phase list with "verify" was not a pipeline phase.
+
+Proof:
+- `GSD_UI_TEST=1 python3 -m unittest discover -s tests -p test_daemon_board_ui.py`
+  passed in Orca: palettes, row order, filter counts, route and meter classes,
+  row cells, blocked meter, filters, search focus through refresh, no-match
+  state, row click, switcher, facts, milestone kinds, phase track dates,
+  briefing and usage text, criteria, folded ledger, polling, cold deep link,
+  Back, Settings, folders, plugin, 390px width 390, empty and offline states.
+  Sabotage: filter forced to all; test failed on the Shipped filter; restored.
+- Native: compiled `tests/daemon_tray_ui.swift` with the app sources; passed row
+  order, detail lines, phase meters, tooltips, accessibility label, hover,
+  menu items, rescan, deep link, empty and offline. Sabotage: meter `<` to `<=`
+  failed "phase meters in canonical phase order"; restored.
+- `python3 -m unittest discover -s tests -p 'test_daemon_*.py'`: 173 tests, OK,
+  1 skipped. `bash daemon/macos/build.sh` built and signed. `git diff --check`
+  passed.
+- Visual: headless Chrome screenshots of the board and project pages with the
+  test fixtures plus the live status payload, light and dark at 1440px; the
+  real `PopoverViewController` rendered offscreen to PNG in light and dark with
+  a hovered row. Not installed; the running daemon and tray are unchanged.
+
+## Light default, appearance switch and full data
+- Dashboard: `<html data-theme="light">`; Settings → Appearance (System / Light /
+  Dark) stored in localStorage; `?theme=` wins so the tray's choice carries into
+  its window (a non-persistent WKWebView). Facts add health reason and
+  integration; new tables for success criteria, task files, reviews, verify
+  ledger and activity; usage stats grid; host per model; agent time; tokens per
+  milestone; archived verdict.
+- `sessions.py`: `duration_s`, `timed_turns`, `priced_turns` totals and agent
+  `duration_s`. `serve.py` poll loop appends watcher events to history.
+- Tray: `appearanceChoice` in UserDefaults (light default) applied to `NSApp`;
+  footer segmented control; `themedDashboardURL` adds `?theme=`; row tooltip
+  adds health reason.
+
+Proof: browser test passed in Orca (default light, palettes, dot tooltip, facts
+with health and integration, criteria verdict classes, reviews, ledger,
+activity scoped to the project and newest first, usage stats, agent time, host,
+milestone tokens, appearance switch with menu kept open, `?theme=dark` in the
+390px iframe). Native test passed (light default, dark and system applied,
+themed link, health tooltip). New `ServeHistoryTests` and session duration
+assertions pass; full daemon suite 174 tests OK, 1 skipped; app build signed;
+`git diff --check` clean. Sabotage: page default "system" failed the browser
+test; tray default "system" failed "light appearance by default"; both restored.
+The history test replaces STATE.md atomically after one flaky run showed a
+half-written file read as project removed and re-added.
 ## Price table and startup latency
 User: "add the price table for both models". Wrote the user-chosen
 rates per million tokens into `~/.gsd-path/daemon.json` (user config, not the
@@ -278,3 +335,23 @@ Shell timings: discovery 1.78 s, probes ≤ 0.44 s, cache load 0.01 s, session
 parse of 217 files / 978 MB 3.29 s. Python suite green; `git diff --check`
 passed. A stray `gsd_daemon serve --port 8793` process from a day earlier is
 unrelated and was left running.
+
+## Tray light fix, icon footer and native colors
+- Cause: NSPopover follows the menu-bar button's appearance, not `NSApp`.
+  `applyAppearance` now sets open windows too; AppDelegate sets
+  `popover.appearance` before showing. Confirmed with a real screen capture of
+  the opened popover in Light.
+- Footer: `IconButton` toolbar; `DaemonRowView` fixed 24 pt height, because its
+  status arrived after sizing and cut off the project list (seen in the user's
+  screenshot).
+- Colors: tray uses `labelColor`, `secondaryLabelColor`, `tertiaryLabelColor`,
+  `quaternaryLabelColor`, `controlAccentColor`, `selectedContentBackgroundColor`,
+  `alternateSelectedControlTextColor`, `systemGreen/Orange/Red`; the custom
+  surface is gone. Dashboard accent tokens use `AccentColor` inside
+  `@supports`, with system blue fallbacks.
+
+Proof: native test passed (window appearance follows the choice, icon tooltips
+and accessibility names, appearance segment icons, fixed daemon row height,
+native hover colors). Sabotage: dropping the window update failed "open windows
+take the choice"; a teal hover failed "hover uses the native selection colors";
+both restored. Browser test passed; daemon suite passed after merging main (#96).
