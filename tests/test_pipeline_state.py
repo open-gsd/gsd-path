@@ -1967,11 +1967,12 @@ class PipelineStateTests(unittest.TestCase):
             if duplicate_approval:
                 plan_path = project / "next" / "plan" / "PLAN.md"
                 plan_path.write_text("# Plan — second revision\n", encoding="utf-8")
-                task_path = project / "next" / "tasks" / "T002-change-app.md"
-                task_path.write_text(
-                    task_path.read_text(encoding="utf-8") + "\n## Revision\n\n- approved again\n",
-                    encoding="utf-8",
-                )
+                # A matching approval must checkpoint the complete task set.
+                for task_path in (project / "next" / "tasks").glob("*.md"):
+                    task_path.write_text(
+                        task_path.read_text(encoding="utf-8") + "\n## Revision\n\n- approved again\n",
+                        encoding="utf-8",
+                    )
                 next_state_path = project / "next" / "STATE.md"
                 next_state_path.write_text(
                     next_state_path.read_text(encoding="utf-8")
