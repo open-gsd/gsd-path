@@ -63,7 +63,11 @@ Sources: [Claude plugin commands](https://code.claude.com/docs/en/plugins-refere
 [Codex configuration](https://learn.chatgpt.com/docs/config-file/config-reference),
 [official marketplace format](https://raw.githubusercontent.com/openai/plugins/main/.agents/plugins/marketplace.json).
 
-## Executable verification
+## Recorded implementation verification
+
+These are implementation-time results, not current test counts or verification
+of later review fixes. The current checks are defined in `package.json` and
+the referenced test files.
 
 - `python3 -B -m unittest discover -s tests -p test_migrate_core.py`: 10 pass.
 - `python3 -B -m unittest discover -s tests -p 'test_core_hook*.py'`: 7 pass.
