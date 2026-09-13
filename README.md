@@ -66,6 +66,7 @@ sidecar to discuss, diagnose, or undo without advancing.
 | `gsd-path-docs-audit` | Standalone doc-vs-code drift check |
 | `gsd-path-loop` | Standalone bounded loop runner driven by a LOOP.md spec |
 | `gsd-path-forensics` | Read-only stuck-pipeline diagnosis |
+| `gsd-path-migrate` | [Import GSD Core work and review hook coexistence](MIGRATE.md) |
 | `gsd-path-undo` | Helper-owned undo of unpublished pipeline work |
 
 See [invocation by host](#install-summary). Phase names keep the `gsd-path-` prefix.

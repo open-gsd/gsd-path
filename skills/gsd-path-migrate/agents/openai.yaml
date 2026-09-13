@@ -1,0 +1,6 @@
+interface:
+  display_name: "GSD Path Migrate"
+  short_description: "Import Core context and review hook coexistence"
+  default_prompt: "Use $gsd-path-migrate to preserve Core work for GSD Path intake."
+policy:
+  allow_implicit_invocation: false
