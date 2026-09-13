@@ -20,6 +20,7 @@ Complete walkthrough from install to shipped milestone.
 | [WORKFLOW.md](WORKFLOW.md) | Agent phase SOP |
 | [AGENTS.md](AGENTS.md) | Operating rules |
 | [HOOKS.md](HOOKS.md) | Guard hooks |
+| [MIGRATE.md](MIGRATE.md) | Move from GSD Core to Path |
 
 ---
 

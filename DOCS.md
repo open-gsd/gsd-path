@@ -138,6 +138,7 @@ Run one phase only; stops at handoff:
 | `gsd-path-docs-audit` | `/gsd-path-docs-audit` | Standalone doc drift check |
 | `gsd-path-loop` | `/gsd-path-loop` | Bounded loop runner driven by a LOOP.md spec |
 | `gsd-path-forensics` | `/gsd-path-forensics` | Read-only stuck-pipeline diagnosis |
+| `gsd-path-migrate` | `/gsd-path-migrate` | Import GSD Core context and review hook coexistence |
 | `gsd-path-undo` | `/gsd-path-undo` | Helper-owned undo of unpublished pipeline work |
 
 Codex: use `$` instead of `/` (e.g. `$gsd-path-plan`).
@@ -174,6 +175,7 @@ Huge multi-milestone program    → router → define (program mode: charter →
                                   research → decide → roadmap → milestone loop)
 Already mid-pipeline            → router (continues)
 Doc drift between phases        → /gsd-path-docs-audit
+Moving from GSD Core            → /gsd-path-migrate (see MIGRATE.md)
 Closed laptop, came back        → router (reads .project/)
 ```
 
@@ -302,6 +304,11 @@ snapshot and stops.
 **The pipeline is stuck. Do I invent git commands?**
 No. `$gsd-path-forensics` is read-only diagnosis. `$gsd-path-undo` previews
 then applies helper-owned undo of unpublished work. Neither force-pushes.
+
+**Moving from GSD Core?**
+Invoke `$gsd-path-migrate` (Claude Code and Codex first release). It prepares
+an external import bundle, reviews hook coexistence, and hands off to the Path
+router through inspect and define. See **[MIGRATE.md](MIGRATE.md)**.
 
 **Brownfield vs greenfield?**
 The router runs the bundled `scripts/detect_project.py initialize --repo

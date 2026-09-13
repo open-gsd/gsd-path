@@ -50,6 +50,9 @@ For the separate opt-in release-evidence driver, see the usage and limitations i
 | `tests/test_implicit_invocation.py` | unittest | Codex CLI — router absent from ordinary skill catalog (**skips if `codex` not on PATH**) |
 | `tests/test_isolation.py` | unittest | `scripts/isolation.py` — named worktrees, task landing, artifact collection, checkpoints, guarded retirement, CLI E2E |
 | `tests/test_loop_run.py` | unittest | `scripts/loop_run.py` — atomic claims, recovery, admission limits, completion, and status |
+| `tests/test_migrate_core.py` | unittest | `scripts/migrate_core.py` — Core bundle capture, manifest verification, hook inventory, and partial/quick-only trees |
+| `tests/test_core_hook_gate.py` | unittest | `scripts/core_hook_gate.py` — scoped Core hook bypass for migrated projects |
+| `tests/test_core_hook_settings.py` | unittest | `scripts/core_hook_settings.py` — receipt-based Core hook cutover and rollback |
 | `tests/test_pipeline_git.py` | unittest | `scripts/pipeline_git.py` — canonical subjects, initial/next branch binding, and mutation refusal |
 | `tests/test_pipeline_state.py` | unittest | `scripts/pipeline_state.py` — state validation, route decisions, status snapshot, transitions, and lookahead promotion recovery |
 | `tests/test_pipeline_undo.py` | unittest | `scripts/pipeline_undo.py` — unpublished checkpoint, task, archive, and lookahead undo |
@@ -71,6 +74,7 @@ the interactive wizard and npm entry point.
 | Dimension | Automated signal | Strength |
 |-----------|------------------|----------|
 | **1. Install & update** | `install.test.mjs`, `test_install.py`, `test_check_update.py`, hook install/refresh tests | **Strong** for Node and Python local/update transactions |
+| **1b. Core migration** | `test_migrate_core.py`, `test_core_hook_gate.py`, `test_core_hook_settings.py` | **Strong** for bundle capture, hook cutover receipts, and scoped bypass |
 | **2. Invoke & route** | `test_detect_project.py`, `test_router_contract.py`, `test_pipeline_state.py`, `test_full_cycle.py`, `test_implicit_invocation.py` | **Partial** — classification, initialization, route, and transition decisions are deterministic; live host routing is covered only by dogfood |
 | **3. Phase execution** | `test_full_cycle.py`, `test_handoffs.py`, `test_task_briefs.py` | **Strong** for the disk contract — phase outputs have executable gates |
 | **4. Build orchestration** | `test_build_state.py`, `test_isolation.py`, `test_full_cycle.py` | **Partial** — readiness, recovery, and helper chain are proven; live child-agent dispatch is not automated |
