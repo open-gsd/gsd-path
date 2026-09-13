@@ -121,8 +121,12 @@ class SessionIndexTests(unittest.TestCase):
         self.assertEqual(spend["models"][1]["host"], "claude")
         self.assertIsNone(spend["models"][1]["cost"])
         self.assertAlmostEqual(spend["models"][0]["cost"], spend["cost"])
+        # Agent time sums the Codex turn durations; Claude turns carry none.
+        self.assertEqual((spend["duration_s"], spend["timed_turns"], spend["priced_turns"]), (60.0, 2, 2))
         agents = {a["agent"]: a for a in spend["agents"]}
         self.assertEqual(agents["$gsd-path-build · T006"]["turns"], 2)
+        self.assertEqual(agents["$gsd-path-build · T006"]["duration_s"], 60.0)
+        self.assertNotIn("duration_s", agents["$gsd-path-plan · subagent"])
         self.assertEqual(agents["$gsd-path-plan · subagent"]["turns"], 1)
         self.assertIsNone(agents["$gsd-path-plan · subagent"]["cost"])
         # Claude turns are dated Sep 1, before M001 shipped; Codex turns are current.

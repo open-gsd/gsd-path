@@ -77,3 +77,14 @@ milestone, milestone and task tables, usage tables and the folded turn ledger.
 Tray: menu-style rows (name, phase meter, one detail line) under In progress and
 Shipped, and menu items in the footer. State pills and the tray goal and
 last-shipped lines are removed.
+
+## Light default and full data
+User: "where is the light version .. also .. are we revealing all data/info/stats
+that we can ?" Chosen: light by default with a System / Light / Dark switch on
+both surfaces, and all four data groups: reviews and verify history; deeper
+usage (token split, cache hit, agent time, cost and time per turn, tokens per
+milestone, host per model); the reason behind a health dot, as plain text; and
+milestone and task detail (task files, criteria text, archived verdict,
+integration mode, recorded activity). Health reasons are shown as facts only;
+there are still no next steps or actions. `serve` now records watcher events to
+`history.jsonl` so the Activity list has data on macOS.

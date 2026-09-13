@@ -7,7 +7,7 @@ import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import List, Optional, Tuple
 
-from .history import resolve_history_path
+from .history import append_event, resolve_history_path
 from .model import aggregate
 from .plugin import PluginManager
 from .probe import utc_now_iso
@@ -27,7 +27,7 @@ class _BadRequest(Exception):
     pass
 
 DASHBOARD_PAGE = r"""<!doctype html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -107,6 +107,12 @@ DASHBOARD_PAGE = r"""<!doctype html>
   .settings-menu nav { position: absolute; right: 0; top: calc(100% + 4px); z-index: 10; display: grid; padding: 4px; background: var(--card); border-radius: 8px; box-shadow: 0 8px 24px rgb(26 29 34 / .14), var(--shadow); white-space: nowrap; }
   .settings-menu .btn { text-align: left; border: 0; border-radius: 5px; }
   .settings-menu .btn:hover { background: var(--accent-fill); color: var(--accent-fg); }
+  .appearance { display: grid; gap: 4px; padding: 6px 8px 4px; margin-top: 4px; border-top: 1px solid var(--line); font-size: 11.5px; color: var(--faint); }
+  .stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); margin: 0; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--card); }
+  .stats div { padding: 6px 10px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); margin: 0 -1px -1px 0; }
+  .stats dt { font-size: 11px; color: var(--faint); }
+  .stats dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .verdict-pass, .verdict-met { color: var(--accent); } .verdict-fail, .verdict-not-met, .verdict-unverifiable { color: var(--danger); }
 
   /* Board: one table row per project. */
   .board { padding-bottom: 24px; overflow-x: auto; }
@@ -226,19 +232,39 @@ const dur = s => {
 const shortT = iso => typeof iso === "string" && iso.length >= 19 ? iso.slice(11,19) : (iso || "");
 /* health comes from the backend; fall back to a local guess for older payloads */
 const healthOf = p => p.health || (p.status === "blocked" ? "red" : "green");
+const healthReason = p => [healthOf(p), ...(p.attention || []).map(a => a.label).filter(Boolean)].join(" · ");
 const healthDot = p => ({red: "r", amber: "y", green: "g"})[healthOf(p)] || "g";
 
 let DATA = {schema: null, generated_at: null, projects: []};
 let PLUGIN = null;
 let ONLINE = null;
 let CState = {view: "board", root: null, filter: "all", q: ""};
+let ACTIVITY = [];
+/* Appearance: light unless chosen otherwise. The tray passes its choice as ?theme=. */
+const THEMES = ["system", "light", "dark"];
+let THEME = (() => {
+  let saved = null;
+  try { saved = localStorage.getItem("gsd-theme"); } catch (e) { /* storage blocked */ }
+  const asked = new URLSearchParams(location.search).get("theme");
+  return THEMES.includes(asked) ? asked : THEMES.includes(saved) ? saved : "light";
+})();
+function applyTheme() {
+  if (THEME === "system") delete document.documentElement.dataset.theme;
+  else document.documentElement.dataset.theme = THEME;
+}
+function setTheme(choice) {
+  THEME = choice;
+  try { localStorage.setItem("gsd-theme", choice); } catch (e) { /* storage blocked */ }
+  applyTheme(); render();
+}
+applyTheme();
 
 function setHash() {
   if (CState.view === "project" && CState.root) history.replaceState(null, "", "#" + new URLSearchParams({project: CState.root}));
   else if (CState.view === "board") history.replaceState(null, "", location.pathname);
   else history.replaceState(null, "", "#" + CState.view);
 }
-function openProject(root) { CState.view = "project"; CState.root = root; setHash(); render(); window.scrollTo(0, 0); }
+function openProject(root) { CState.view = "project"; CState.root = root; setHash(); render(); window.scrollTo(0, 0); loadActivity().then(render); }
 function navigate(view) {
   CState.view = view;
   setHash(); render();
@@ -368,7 +394,14 @@ async function refresh() {
     if (!response.ok) throw new Error("Status unavailable");
     DATA = await response.json(); ONLINE = true;
   } catch (e) { ONLINE = false; }
+  if (CState.view === "project") await loadActivity();
   render();
+}
+async function loadActivity() {
+  try {
+    const r = await fetch("/activity");
+    if (r.ok) ACTIVITY = (await r.json()).events || [];
+  } catch (e) { /* keep last good data */ }
 }
 
 /* ---- milestone stack: done / here / ahead from ROADMAP.md, STATE.md and next/STATE.md ---- */
@@ -422,7 +455,7 @@ function boardRow(p) {
   const st = stateOf(p), {cur} = milestoneStack(p), sp = p.spend || {};
   const tail = String(p.root || "").split("/").slice(-2).join("/");
   return `<tr class="prow ${st}" data-root="${esc(p.root)}">
-    <td><button class="pname" data-root="${esc(p.root)}" aria-label="Open ${esc(p.project || p.root)}"><span class="dot ${healthDot(p)}" title="health ${esc(healthOf(p))}"></span><span>${esc(p.project || p.root)}</span></button><div class="ppath">${esc(tail)}</div></td>
+    <td><button class="pname" data-root="${esc(p.root)}" aria-label="Open ${esc(p.project || p.root)}"><span class="dot ${healthDot(p)}" title="health ${esc(healthReason(p))}"></span><span>${esc(p.project || p.root)}</span></button><div class="ppath">${esc(tail)}</div></td>
     <td>${routeMarks(p)}</td>
     <td class="msl"><span class="mono">${esc(cur.number)}</span>${esc(cur.slug)}</td>
     <td>${phaseMeter(p)}<span class="phlabel">${esc(p.phase || "no phase")}</span></td>
@@ -465,7 +498,7 @@ const manifestMeta = m => {
           mf.waves != null ? `${mf.waves} waves` : null,
           mf.cycles_avg != null ? `${mf.cycles_avg} review cycles avg` : null,
           m.integrated ? "integrated " + String(m.integrated).slice(0, 7) : null,
-          mf.carried ? `${mf.carried} rulings carried` : null].filter(Boolean).join(" · ");
+          mf.carried ? `${mf.carried} rulings carried` : null, mf.verdict || null].filter(Boolean).join(" · ");
 };
 function milestoneTable(p) {
   const {before, cur, after} = milestoneStack(p), st = stateOf(p);
@@ -475,7 +508,7 @@ function milestoneTable(p) {
     const meta = [kind === "done" ? manifestMeta(m) : "", depends(m)].filter(Boolean).join(" · ");
     const tasks = m.manifest && m.manifest.tasks_total != null ? m.manifest.tasks_total : kind === "now" && p.tasks_total ? p.tasks_total : null;
     return `<tr class="ms ${kind}${kind === "now" ? " " + st : ""}"><td class="mono k">${esc(m.number)}</td><td><div>${esc(m.slug)}</div>${m.goal ? `<div class="goal">${esc(m.goal)}</div>` : ""}${meta ? `<div class="meta">${meta}</div>` : ""}</td>
-      <td class="st">${esc(status)}</td><td class="n">${tasks != null ? tasks : DASH}</td><td class="n">${spendText(slots[m.number]) || DASH}</td></tr>`;
+      <td class="st">${esc(status)}</td><td class="n">${tasks != null ? tasks : DASH}</td><td class="n">${spendText(slots[m.number]) ? spendText(slots[m.number]) + `<div class="meta">${fmt(slots[m.number].tokens)} tokens</div>` : DASH}</td></tr>`;
   };
   const shippedOn = m => m.manifest && m.manifest.shipped ? "shipped " + m.manifest.shipped : m.status || "shipped";
   const rows = [...before.map(m => row(m, "done", shippedOn(m))),
@@ -502,37 +535,74 @@ function taskTable(p) {
   const tasks = p.tasks || [];
   if (!tasks.length) return "";
   const waves = p.waves || {};
-  return `<h2>Tasks <span>${p.tasks_done || 0} of ${p.tasks_total || tasks.length}</span></h2><div class="tablewrap"><table class="t tasks-t"><tr><th>ID</th><th>Task</th><th>Wave</th><th>Status</th></tr>${tasks.map(t =>
-    `<tr><td class="mono">${esc(t.id)}</td><td>${esc(t.title || "")}</td><td>${esc(t.wave != null ? t.wave + (waves[t.wave] ? " " + waves[t.wave] : "") : "—")}</td><td>${TASK_GLYPH[t.status] || "○"} ${esc(t.status || "pending")}</td></tr>`).join("")}</table></div>`;
+  return `<h2>Tasks <span>${p.tasks_done || 0} of ${p.tasks_total || tasks.length}</span></h2><div class="tablewrap"><table class="t tasks-t"><tr><th>ID</th><th>Task</th><th>Wave</th><th>Status</th><th>Files</th></tr>${tasks.map(t =>
+    `<tr><td class="mono">${esc(t.id)}</td><td>${esc(t.title || "")}</td><td>${esc(t.wave != null ? t.wave + (waves[t.wave] ? " " + waves[t.wave] : "") : "—")}</td><td class="st">${TASK_GLYPH[t.status] || "○"} ${esc(t.status || "pending")}</td><td class="mono">${(t.files || []).map(esc).join("<br>") || DASH}</td></tr>`).join("")}</table></div>`;
+}
+const verdict = v => v ? `<span class="verdict-${esc(v)}">${esc(v)}</span>` : DASH;
+function criteriaTable(p) {
+  const crits = p.criteria || [];
+  if (!crits.length) return "";
+  return `<h2>Success criteria <span>${crits.filter(c => c.verdict === "met").length} of ${crits.length} met</span></h2><div class="tablewrap"><table class="t criteria"><tr><th>ID</th><th>Criterion</th><th>Verdict</th></tr>${crits.map(c =>
+    `<tr><td class="mono">${esc(c.id || "—")}</td><td>${esc(c.text || "")}</td><td class="st">${verdict(c.verdict)}</td></tr>`).join("")}</table></div>`;
+}
+function reviewTable(p) {
+  const reviews = p.reviews || [];
+  if (!reviews.length) return "";
+  return `<h2>Reviews <span>${reviews.length}</span></h2><div class="tablewrap"><table class="t reviews"><tr><th>Review</th><th class="n">Cycle</th><th>Depth</th><th>Verdict</th><th>Note</th></tr>${reviews.map(r =>
+    `<tr title="${esc(r.file)}"><td>${esc(r.kind)}</td><td class="n">${r.cycle != null ? r.cycle : DASH}</td><td>${esc(r.depth || "—")}</td><td class="st">${verdict(r.verdict)}</td><td>${esc(r.note || "")}</td></tr>`).join("")}</table></div>`;
+}
+function ledgerTable(p) {
+  const ledger = p.ledger || [];
+  if (!ledger.length) return "";
+  return `<h2>Verify ledger <span>latest ${ledger.length}</span></h2><div class="tablewrap"><table class="t ledger"><tr><th>Recorded</th><th>Command</th><th>Commit</th><th>Result</th></tr>${ledger.map(e =>
+    `<tr><td class="mono">${esc(String(e.recorded_at || "").slice(0, 16).replace("T", " "))}</td><td class="mono">${esc(e.command || "")}</td><td class="mono">${esc(String(e.commit || "").slice(0, 7))}</td><td class="st">${verdict(e.result)}</td></tr>`).join("")}</table></div>`;
+}
+function activityTable(p) {
+  const events = ACTIVITY.filter(e => e.root === p.root).slice(0, 30);
+  return `<h2>Activity <span>recorded changes</span></h2>${events.length
+    ? `<div class="tablewrap"><table class="t activity"><tr><th>When</th><th>Change</th><th>Detail</th></tr>${events.map(e =>
+      `<tr><td class="mono">${esc(String(e.at || "").slice(0, 16).replace("T", " "))}</td><td>${esc(e.type)}</td><td>${esc(e.detail || "")}</td></tr>`).join("")}</table></div>`
+    : `<p class="note">No recorded changes yet.</p>`}`;
 }
 function usageColumn(p) {
   const sp = p.spend;
   if (!sp || !sp.turns) return `<h2>Usage</h2><p class="note">No host session logs matched this project yet.</p>`;
-  const models = sp.models.map(m => `<tr><td class="mono">${esc(m.model)}</td><td class="n">${int(m.turns)}</td><td class="n">${fmt(m.tokens)}</td><td class="n">${money(m.cost)}</td></tr>`).join("");
-  const agents = sp.agents.map(a => `<tr><td>${esc(a.agent)}</td><td class="mono">${esc(a.models.join(", "))}</td><td class="n">${int(a.turns)}</td><td class="n">${fmt(a.tokens)}</td><td class="n">${money(a.cost)}</td></tr>`).join("");
+  const models = sp.models.map(m => `<tr><td class="mono">${esc(m.model)}</td><td>${esc(m.host || "")}</td><td class="n">${int(m.turns)}</td><td class="n">${fmt(m.tokens)}</td><td class="n">${money(m.cost)}</td></tr>`).join("");
+  const agents = sp.agents.map(a => `<tr><td>${esc(a.agent)}<div class="meta mono">${esc(a.models.join(", "))}</div></td><td class="n">${int(a.turns)}</td><td class="n">${fmt(a.tokens)}</td><td class="n">${a.duration_s ? dur(a.duration_s) : DASH}</td><td class="n">${money(a.cost)}</td></tr>`).join("");
+  const inputs = (sp.tokens_in || 0) + (sp.tokens_cached || 0);
+  const stats = [["Cost", money(sp.cost)], ["Turns", int(sp.turns)], ["Prompts", int(sp.prompts || 0)],
+                 ["Tokens in", fmt(sp.tokens_in || 0)], ["Cached", fmt(sp.tokens_cached || 0)], ["Tokens out", fmt(sp.tokens_out || 0)],
+                 ["Cache hit", inputs ? Math.round(100 * (sp.tokens_cached || 0) / inputs) + "%" : "—"],
+                 ["Agent time", sp.timed_turns ? dur(sp.duration_s) : "—"],
+                 ["Cost / turn", sp.cost != null && sp.priced_turns ? money(sp.cost / sp.priced_turns) : "—"],
+                 ["Time / turn", sp.timed_turns ? Math.round(sp.duration_s / sp.timed_turns) + "s" : "—"]];
   const turns = sp.recent.map(t => `<tr><td class="mono">${esc(shortT(t.at))}</td><td>${esc(t.agent)}</td><td class="mono">${esc(t.model || "?")}</td><td class="n">${fmt(t.tokens_in)}</td><td class="n">${fmt(t.tokens_cached)}</td><td class="n">${fmt(t.tokens_out)}</td><td class="n">${money(t.cost)}</td><td class="n">${t.duration_s != null ? t.duration_s + "s" : "—"}</td></tr>`).join("");
   const note = sp.unpriced.length ? `<div class="note">No price configured for ${esc(sp.unpriced.join(", "))}: tokens counted, cost excluded. Add prices per million tokens under "prices" in daemon.json.</div>` : "";
-  return `<h2>Models <span>${int(sp.prompts || 0)} prompts · ${fmt((sp.tokens_in || 0) + (sp.tokens_cached || 0) + (sp.tokens_out || 0))} tokens</span></h2>
-    <div class="tablewrap"><table class="t models"><tr><th>Model</th><th class="n">Turns</th><th class="n">Tokens</th><th class="n">Cost</th></tr>${models}</table></div>
-    <h2>Agents</h2><div class="tablewrap"><table class="t agents"><tr><th>Agent</th><th>Models</th><th class="n">Turns</th><th class="n">Tokens</th><th class="n">Cost</th></tr>${agents}</table></div>
+  return `<h2>Usage</h2><dl class="stats">${stats.map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join("")}</dl>
+    <h2>Models</h2>
+    <div class="tablewrap"><table class="t models"><tr><th>Model</th><th>Host</th><th class="n">Turns</th><th class="n">Tokens</th><th class="n">Cost</th></tr>${models}</table></div>
+    <h2>Agents</h2><div class="tablewrap"><table class="t agents"><tr><th>Agent · models</th><th class="n">Turns</th><th class="n">Tokens</th><th class="n">Time</th><th class="n">Cost</th></tr>${agents}</table></div>
     <details class="turns"><summary>Turn ledger · latest ${sp.recent.length} of ${int(sp.turns)}</summary><div class="tablewrap"><table class="t"><tr><th>Time</th><th>Agent</th><th>Model</th><th class="n">In</th><th class="n">Cached</th><th class="n">Out</th><th class="n">Cost</th><th class="n">Dur</th></tr>${turns}</table></div></details>
     ${note}<div class="note">From host session logs matched to this project by working directory.</div>`;
 }
 function projectPage(p) {
   const {cur} = milestoneStack(p), sp = p.spend, git = p.git || {};
   const head = git.head ? String(git.head).slice(0, 7) + (git.dirty ? " · dirty" : "") : "—";
-  const facts = [["State", stateLabel(p)], ["Milestone", cur.number], ["Branch", git.branch || p.branch || "—"], ["Head", head],
+  const facts = [["State", stateLabel(p)], ["Health", healthReason(p)], ["Milestone", cur.number], ["Branch", git.branch || p.branch || "—"], ["Head", head],
+                 ...(p.integration ? [["Integration", p.integration]] : []),
                  ["Updated", ago(p.last_activity_iso)], ["Cost", sp && sp.turns ? money(sp.cost) : "—"], ["Turns", sp && sp.turns ? int(sp.turns) : "—"]];
   return `<article class="project" data-root="${esc(p.root)}">
-    <div class="phead"><h1><span class="dot ${healthDot(p)}" title="health ${esc(healthOf(p))}"></span> ${esc(p.project || p.root)}</h1><span class="mono">${esc(p.root)}</span></div>
+    <div class="phead"><h1><span class="dot ${healthDot(p)}" title="health ${esc(healthReason(p))}"></span> ${esc(p.project || p.root)}</h1><span class="mono">${esc(p.root)}</span></div>
     <dl class="facts">${facts.map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join("")}</dl>
     ${p.vision ? `<p class="vision">${esc(p.vision)}</p>` : ""}
     <div class="cols"><section>
       <h2>Phase <span>${esc(p.phase || "no phase")}</span></h2>${phaseTrack(p)}${nowBox(p)}
+      ${criteriaTable(p)}
       <h2>Milestones</h2>${milestoneTable(p)}
-      ${taskTable(p)}
+      ${taskTable(p)}${reviewTable(p)}${ledgerTable(p)}
     </section><section>
       ${usageColumn(p)}
+      ${activityTable(p)}
       ${p.lesson ? `<h2>Latest lesson</h2><p class="lesson">${esc(p.lesson)}</p>` : ""}
     </section></div></article>`;
 }
@@ -602,7 +672,7 @@ function render() {
     STATE_RANK[stateOf(a)] - STATE_RANK[stateOf(b)] || String(a.project || a.root).localeCompare(String(b.project || b.root)));
   const shipped = projects.filter(p => stateOf(p) === "shipped").length;
   const connection = ONLINE === null ? "Connecting…" : ONLINE ? (DATA.generated_at ? "Updated " + esc(shortT(DATA.generated_at)) : "Connected") : "Offline · showing last update";
-  const settings = `<details class="settings-menu"><summary aria-label="Settings" title="Settings">${ICON.gear}</summary><nav aria-label="Settings"><button class="btn" data-nav="plugin">Plugin</button><button class="btn" data-nav="folders">Watched folders</button></nav></details>`;
+  const settings = `<details class="settings-menu"><summary aria-label="Settings" title="Settings">${ICON.gear}</summary><nav aria-label="Settings"><button class="btn" data-nav="plugin">Plugin</button><button class="btn" data-nav="folders">Watched folders</button><div class="appearance" role="group" aria-label="Appearance">Appearance<div class="segc">${THEMES.map(t => `<button data-theme-choice="${t}" aria-pressed="${THEME === t}">${t[0].toUpperCase() + t.slice(1)}</button>`).join("")}</div></div></nav></details>`;
   const status = `<span class="connection" role="status"><span class="dot ${ONLINE === null ? "" : ONLINE ? "g" : "r"}"></span>${connection}</span>`;
   const current = CState.view === "project" ? projects.find(p => p.root === CState.root) : null;
   let header, body;
@@ -646,6 +716,7 @@ document.getElementById("stage").addEventListener("click", event => {
   if (!b) return;
   if (b.dataset.nav) { CState.root = null; navigate(b.dataset.nav); }
   else if (b.dataset.filter) { CState.filter = b.dataset.filter; render(); }
+  else if (b.dataset.themeChoice) setTheme(b.dataset.themeChoice);
   else if (b.dataset.root) openProject(b.dataset.root);
   else if (b.dataset.action === "add-folder") addParent();
   else if (b.dataset.removeParent != null) removeParent(DAEMON.parents[Number(b.dataset.removeParent)]);
@@ -938,9 +1009,13 @@ def serve(watcher: Watcher, port: int = DEFAULT_PORT,
     server.watcher_stop = stop  # callers may set() to end the poll loop
 
     def poll_loop() -> None:
+        # The startup poll above is not recorded, so a restart does not log every project as added.
         while not stop.is_set():
             try:
-                watcher.poll_once()
+                events = watcher.poll_once()
+                if watcher.config.history:
+                    for event in events:
+                        append_event(event)
             except Exception:
                 pass  # a failed cycle must never kill the poll loop
             stop.wait(watcher.config.poll_seconds)

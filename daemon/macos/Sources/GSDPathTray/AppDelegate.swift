@@ -8,6 +8,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var online = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        applyAppearance()
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = statusItem.button {
             button.image = makeRingIcon(fraction: 0, arcColor: nil)

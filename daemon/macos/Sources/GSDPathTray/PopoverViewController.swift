@@ -19,6 +19,16 @@ let paletteOnAccent = paletteColor(light: 0xffffff, dark: 0x101214)
 let paletteDanger = paletteColor(light: 0xc9302d, dark: 0xef675c)
 let paletteWarn = paletteColor(light: 0x8d5e00, dark: 0xe4ac59)
 
+/// Appearance shared by the popover and the dashboard window: "system", "light" (default) or "dark".
+let appearanceChoices = ["system", "light", "dark"]
+var appearanceChoice: String {
+    get { UserDefaults.standard.string(forKey: "appearance").flatMap { appearanceChoices.contains($0) ? $0 : nil } ?? "light" }
+    set { UserDefaults.standard.set(newValue, forKey: "appearance"); applyAppearance() }
+}
+func applyAppearance() {
+    NSApp.appearance = appearanceChoice == "system" ? nil : NSAppearance(named: appearanceChoice == "dark" ? .darkAqua : .aqua)
+}
+
 final class PaletteSurface: NSView {
     override var wantsUpdateLayer: Bool { true }
     override func updateLayer() {
@@ -285,6 +295,14 @@ final class PopoverViewController: NSViewController {
 
         let daemonRow = DaemonRowView()
         daemonRow.onRescan = onRescan
+        let appearance = NSSegmentedControl(labels: ["System", "Light", "Dark"], trackingMode: .selectOne,
+                                            target: self, action: #selector(appearanceChanged(_:)))
+        appearance.controlSize = .small
+        appearance.selectedSegment = appearanceChoices.firstIndex(of: appearanceChoice) ?? 1
+        let appearanceSpacer = NSView()
+        appearanceSpacer.setContentHuggingPriority(.init(1), for: .horizontal)
+        let appearanceRow = NSStackView(views: [makeLabel("Appearance", size: 13), appearanceSpacer, appearance])
+        appearanceRow.edgeInsets = NSEdgeInsets(top: 2, left: 9, bottom: 2, right: 9)
         let footerViews: [NSView] = [
             separator(),
             MenuItemButton("Open Dashboard", target: self, action: #selector(dashboardPressed)),
@@ -292,6 +310,7 @@ final class PopoverViewController: NSViewController {
             MenuItemButton("Watched folders…", target: self, action: #selector(foldersPressed)),
             MenuItemButton("Rescan", target: self, action: #selector(rescanPressed)),
             inset(daemonRow, top: 4),
+            appearanceRow,
             separator(),
             MenuItemButton("Quit", target: self, action: #selector(quitPressed)),
         ]
@@ -331,6 +350,9 @@ final class PopoverViewController: NSViewController {
     }
 
     @objc private func rescanPressed() { onRescan() }
+    @objc private func appearanceChanged(_ sender: NSSegmentedControl) {
+        appearanceChoice = appearanceChoices[max(0, sender.selectedSegment)]
+    }
     @objc private func dashboardPressed() { DashboardWindowController.shared.show() }
     @objc private func pluginPressed() { DashboardWindowController.shared.show(pluginURL) }
     @objc private func foldersPressed() {
@@ -416,7 +438,8 @@ final class ProjectRowView: MenuRowButton {
             top.widthAnchor.constraint(equalTo: column.widthAnchor, constant: -18),
             detail.widthAnchor.constraint(lessThanOrEqualTo: column.widthAnchor, constant: -18),
         ])
-        toolTip = [p.stackText, p.goalText].compactMap { $0 }.joined(separator: "\n")
+        let health = p.attentionItems.compactMap(\.label).joined(separator: " · ")
+        toolTip = [p.stackText, p.goalText, health.isEmpty ? nil : health].compactMap { $0 }.joined(separator: "\n")
         setAccessibilityLabel("\(p.displayProject), \(p.stateLabel), \(p.trayDetail)")
     }
 

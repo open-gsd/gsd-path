@@ -20,6 +20,8 @@ struct TrayUITest {
         ]}
         """.utf8)
         let status = try JSONDecoder().decode(StatusResponse.self, from: data)
+        UserDefaults.standard.removeObject(forKey: "appearance")
+        defer { UserDefaults.standard.removeObject(forKey: "appearance") }
         var rescans = 0
         let vc = PopoverViewController(statusURL: URL(string: "http://127.0.0.1:8765/status")!) { rescans += 1 }
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 440, height: 680),
@@ -59,7 +61,7 @@ struct TrayUITest {
         }
         require(rows.map(meter) == ["dddddddn", "ddn-----", "ddddddn-", "dddddddd"], "phase meters in canonical phase order")
         require(rows[2].toolTip == "M003 ✓  M004 ●  M005 ○\nNative tray and dashboard for the daemon.", "stack and goal tooltip")
-        require(rows[0].toolTip == "M002 ■  next ○", "blocked stack with lookahead milestone")
+        require(rows[0].toolTip == "M002 ■  next ○\nship blocked", "blocked stack, lookahead milestone and health reason")
         require(rows[2].accessibilityLabel()?.hasPrefix("GSD Path, In build, M004 · build") == true, "row accessibility label")
         rows[2].hovered = true
         require(rows[2].name.textColor == paletteOnAccent && rows[2].meter.highlighted, "hover highlights the row")
@@ -72,6 +74,17 @@ struct TrayUITest {
         require(!labels().contains("ship blocked"), "no attention copy")
         let menu = buttons().compactMap { ($0 as? MenuItemButton)?.title }
         require(menu == ["Open Dashboard", "Plugin settings…", "Watched folders…", "Rescan", "Quit"], "menu items")
+        // Appearance: light by default; the choice is stored and applied app-wide.
+        let appearance = descendants(vc.view).compactMap { $0 as? NSSegmentedControl }.first!
+        require(appearance.selectedSegment == 1 && appearanceChoice == "light", "light appearance by default")
+        appearance.selectedSegment = 2
+        _ = appearance.sendAction(appearance.action, to: appearance.target)
+        require(UserDefaults.standard.string(forKey: "appearance") == "dark" && NSApp.appearance?.name == .darkAqua, "dark appearance applied")
+        appearance.selectedSegment = 0
+        _ = appearance.sendAction(appearance.action, to: appearance.target)
+        require(NSApp.appearance == nil, "system appearance follows macOS")
+        let themed = themedDashboardURL(projectDeepLink(base: URL(string: "http://localhost:8765")!, root: "/sample/gsd"), choice: "dark")
+        require(themed.absoluteString == "http://localhost:8765?theme=dark#project=%2Fsample%2Fgsd", "dashboard link carries the appearance")
         let scroll = descendants(vc.view).compactMap { $0 as? NSScrollView }.first!
         require(!descendants(scroll).contains { ($0 as? NSButton)?.title == "Open Dashboard" }, "dashboard stays outside scrolling content")
         buttons().first { $0.title == "Rescan" }?.performClick(nil)

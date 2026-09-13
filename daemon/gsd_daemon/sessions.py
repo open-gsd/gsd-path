@@ -161,9 +161,11 @@ def parse_session(path: Path) -> Tuple[Optional[str], List[dict]]:
     return cwd, records
 
 
-def _add(slot: dict, tokens: int, cost: Optional[float]) -> None:
+def _add(slot: dict, tokens: int, cost: Optional[float], duration: Optional[float] = None) -> None:
     slot["turns"] += 1
     slot["tokens"] += tokens
+    if duration is not None:
+        slot["duration_s"] = slot.get("duration_s", 0.0) + duration
     if cost is not None:
         slot["cost"] += cost
         slot["priced"] += 1
@@ -174,6 +176,8 @@ def _finish(slot: dict) -> dict:
     out = dict(slot)
     out["cost"] = round(slot["cost"], 2) if slot.pop("priced", 0) else None
     out.pop("priced", None)
+    if "duration_s" in out:
+        out["duration_s"] = round(out["duration_s"], 1)
     return out
 
 
@@ -269,7 +273,8 @@ class SessionIndex:
             ((m["manifest"]["shipped"], m["number"]) for m in milestones
              if isinstance(m, dict) and isinstance(m.get("manifest"), dict) and m["manifest"].get("shipped")),
         )
-        totals = {"turns": 0, "prompts": set(), "tokens_in": 0, "tokens_cached": 0, "tokens_out": 0, "cost": 0.0, "priced": 0}
+        totals = {"turns": 0, "prompts": set(), "tokens_in": 0, "tokens_cached": 0, "tokens_out": 0, "cost": 0.0, "priced": 0,
+                  "duration_s": 0.0, "timed": 0}
         models: Dict[str, dict] = {}
         agents: Dict[str, dict] = {}
         by_milestone: Dict[str, dict] = {}
@@ -283,6 +288,9 @@ class SessionIndex:
             totals["tokens_in"] += entry["tokens_in"]
             totals["tokens_cached"] += entry["tokens_cached"]
             totals["tokens_out"] += entry["tokens_out"]
+            if entry.get("duration_s") is not None:
+                totals["duration_s"] += entry["duration_s"]
+                totals["timed"] += 1
             if cost is None:
                 if entry.get("model") and entry["model"] not in unpriced:
                     unpriced.append(entry["model"])
@@ -292,7 +300,7 @@ class SessionIndex:
             model_slot = models.setdefault(entry.get("model") or "unknown", {"model": entry.get("model") or "unknown", "host": entry["host"], "turns": 0, "tokens": 0, "cost": 0.0, "priced": 0})
             _add(model_slot, tokens, cost)
             agent_slot = agents.setdefault(entry["agent"], {"agent": entry["agent"], "models": [], "turns": 0, "tokens": 0, "cost": 0.0, "priced": 0})
-            _add(agent_slot, tokens, cost)
+            _add(agent_slot, tokens, cost, entry.get("duration_s"))
             if entry.get("model") and entry["model"] not in agent_slot["models"]:
                 agent_slot["models"].append(entry["model"])
             day = (entry.get("at") or "")[:10]
@@ -310,6 +318,9 @@ class SessionIndex:
             "tokens_cached": totals["tokens_cached"],
             "tokens_out": totals["tokens_out"],
             "cost": round(totals["cost"], 2) if totals["priced"] else None,
+            "priced_turns": totals["priced"],
+            "duration_s": round(totals["duration_s"], 1),
+            "timed_turns": totals["timed"],
             "unpriced": unpriced,
             "models": [_finish(m) for m in sorted(models.values(), key=lambda m: -m["tokens"])],
             "agents": [_finish(a) for a in sorted(agents.values(), key=lambda a: -a["tokens"])],

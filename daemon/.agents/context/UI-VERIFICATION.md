@@ -292,3 +292,28 @@ Proof:
   test fixtures plus the live status payload, light and dark at 1440px; the
   real `PopoverViewController` rendered offscreen to PNG in light and dark with
   a hovered row. Not installed; the running daemon and tray are unchanged.
+
+## Light default, appearance switch and full data
+- Dashboard: `<html data-theme="light">`; Settings → Appearance (System / Light /
+  Dark) stored in localStorage; `?theme=` wins so the tray's choice carries into
+  its window (a non-persistent WKWebView). Facts add health reason and
+  integration; new tables for success criteria, task files, reviews, verify
+  ledger and activity; usage stats grid; host per model; agent time; tokens per
+  milestone; archived verdict.
+- `sessions.py`: `duration_s`, `timed_turns`, `priced_turns` totals and agent
+  `duration_s`. `serve.py` poll loop appends watcher events to history.
+- Tray: `appearanceChoice` in UserDefaults (light default) applied to `NSApp`;
+  footer segmented control; `themedDashboardURL` adds `?theme=`; row tooltip
+  adds health reason.
+
+Proof: browser test passed in Orca (default light, palettes, dot tooltip, facts
+with health and integration, criteria verdict classes, reviews, ledger,
+activity scoped to the project and newest first, usage stats, agent time, host,
+milestone tokens, appearance switch with menu kept open, `?theme=dark` in the
+390px iframe). Native test passed (light default, dark and system applied,
+themed link, health tooltip). New `ServeHistoryTests` and session duration
+assertions pass; full daemon suite 174 tests OK, 1 skipped; app build signed;
+`git diff --check` clean. Sabotage: page default "system" failed the browser
+test; tray default "system" failed "light appearance by default"; both restored.
+The history test replaces STATE.md atomically after one flaky run showed a
+half-written file read as project removed and re-added.
