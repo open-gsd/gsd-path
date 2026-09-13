@@ -26,7 +26,7 @@ def hook_inventory(settings):
     def collect(value, location):
         if isinstance(value, dict):
             if "command" in value:
-                commands.append({"location": location, "command": value["command"]})
+                commands.append({"location": location + ["command"], "command": value["command"]})
             for key, child in value.items():
                 collect(child, location + [key])
         elif isinstance(value, list):

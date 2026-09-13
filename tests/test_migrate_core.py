@@ -1,3 +1,4 @@
+import base64
 import hashlib
 import json
 import shlex
@@ -160,6 +161,28 @@ class CoreMigrationTests(unittest.TestCase):
         self.assertEqual(settings.read_text(), content)
         self.assertEqual(json.loads((output / "manifest.json").read_text())["hook_review"], review)
         self.assertFalse(json.loads(result.stdout)["hooks_verified"])
+
+        for index, item in enumerate(review[0]["commands"]):
+            with self.subTest(command=item["command"]):
+                receipt = self.root / f"hook-{index}.json"
+                planned = subprocess.run([
+                    sys.executable, "-B", str(SCRIPT.with_name("core_hook_settings.py")),
+                    "plan", "--settings", review[0]["settings"], "--repo", str(self.repo),
+                    "--location", json.dumps(item["location"]), "--receipt", str(receipt),
+                ], capture_output=True, text=True)
+                self.assertEqual(planned.returncode, 0, planned.stderr)
+                self.assertEqual(json.loads(planned.stdout)["status"], "planned")
+                change = json.loads(receipt.read_text())
+                self.assertEqual(change["original_command"], item["command"])
+                self.assertEqual(base64.b64decode(change["before"]), content.encode())
+                expected = json.loads(content)
+                selected = expected
+                for key in item["location"][:-1]:
+                    selected = selected[key]
+                selected[item["location"][-1]] = change["replacement_command"]
+                self.assertNotEqual(change["replacement_command"], item["command"])
+                self.assertEqual(json.loads(base64.b64decode(change["after"])), expected)
+                self.assertEqual(settings.read_text(), content)
 
     def test_hook_inventory_rejects_invalid_settings_before_preparing(self):
         settings = self.root / "settings.json"
