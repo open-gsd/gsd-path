@@ -187,7 +187,7 @@ ABANDON_REQUIRED_DIRECTORIES = ("intent", "research", "plan", "tasks")
 # Template placeholders look like <name> or <one line>. Comparison text such
 # as "120ms < 200ms" or "a -> b" is legitimate evidence, not a placeholder.
 PLACEHOLDER_PATTERN = re.compile(r"(?<!\w)<[a-zA-Z][^<>\n]*>")
-CODE_SPAN_PATTERN = re.compile(r"`[^`]*`")
+CODE_SPAN_PATTERN = re.compile(r"(?<!`)(`+)(?!`)[\s\S]*?(?<!`)\1(?!`)")
 
 
 def contains_placeholder(value: str) -> bool:

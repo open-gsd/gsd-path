@@ -2909,6 +2909,24 @@ Tasks reviewed: 1
             archive_milestone.contains_placeholder("Queues unavailable: <stored reason>")
         )
 
+    def test_placeholder_scan_matches_complete_backtick_runs(self) -> None:
+        for value in (
+            "``Queues unavailable: <stored reason>``",
+            "```Queues `unavailable`: <stored reason>```",
+            "``Queues ` unavailable: <stored reason>``",
+        ):
+            with self.subTest(value=value):
+                self.assertFalse(archive_milestone.contains_placeholder(value))
+                self.assertTrue(archive_milestone.contains_placeholder(value + " <record observation>"))
+        for value in (
+            "``<record observation>``",
+            "```<record observation>```",
+            "``Queues unavailable: <stored reason>`",
+            "`Queues unavailable: <stored reason>``",
+        ):
+            with self.subTest(value=value):
+                self.assertTrue(archive_milestone.contains_placeholder(value))
+
     def test_preflight_accepts_angle_brackets_in_concrete_task_evidence(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             repo = Path(temporary_directory)

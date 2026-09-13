@@ -43,7 +43,7 @@ FILES_FIELD_PATTERN = re.compile(r"^files:\s*(?P<value>[^#]*?)(?:\s+#.*)?$")
 INLINE_LIST_PATTERN = _common.INLINE_LIST_PATTERN
 LIST_ITEM_PATTERN = _common.LIST_ITEM_PATTERN
 PLACEHOLDER_PATTERN = re.compile(r"(?<!\w)<[a-zA-Z][^<>\n]*>")
-CODE_SPAN_PATTERN = re.compile(r"`[^`]*`")
+CODE_SPAN_PATTERN = re.compile(r"(?<!`)(`+)(?!`)[\s\S]*?(?<!`)\1(?!`)")
 VERIFY_PATH_SPLIT = re.compile(r"[=,:]")
 WAVE_REVIEW_NAME = re.compile(
     r"wave-(?P<wave>[1-9]\d*)\.cycle(?P<cycle>[1-9]\d*)"
@@ -112,7 +112,9 @@ def _strip_quotes(value: str) -> str:
 
 
 def _reject_placeholder(value: str, label: str) -> None:
-    placeholder = PLACEHOLDER_PATTERN.search(CODE_SPAN_PATTERN.sub(" ", value))
+    placeholder = PLACEHOLDER_PATTERN.fullmatch(value.strip().strip("`"))
+    if placeholder is None:
+        placeholder = PLACEHOLDER_PATTERN.search(CODE_SPAN_PATTERN.sub(" ", value))
     if placeholder is not None:
         raise HandoffError(
             f"{label} still contains the placeholder {placeholder.group(0)}; "
@@ -230,12 +232,6 @@ def _non_placeholder(value: str, label: str) -> str:
     cleaned = text.strip("`")
     if not cleaned or cleaned.casefold() in {"none", "n/a", "null"}:
         raise HandoffError(f"{label} is empty")
-    # A wholly unfilled value is a placeholder whether or not it is quoted.
-    if PLACEHOLDER_PATTERN.fullmatch(cleaned):
-        raise HandoffError(
-            f"{label} still contains the placeholder {cleaned}; "
-            "replace it with the real value"
-        )
     # Scan the text with its code spans intact. Stripping a backtick from a value
     # that merely begins or ends with a code span unbalances every span after it,
     # which would make quoted code look unquoted.
@@ -496,11 +492,11 @@ def _raw_source_field(block: str, field: str, source: str) -> str:
 
 
 def _source_field(block: str, field: str, source: str) -> str:
-    value = _raw_source_field(block, field, source).strip().strip("`")
-    if not value:
+    value = _raw_source_field(block, field, source).strip()
+    if not value.strip("`"):
         raise HandoffError(f"{source} has an empty {field}; fill it in")
     _reject_placeholder(value, f"{source} {field}")
-    return value
+    return value.strip("`")
 
 
 def _heading_block(text: str, heading: re.Match[str]) -> str:

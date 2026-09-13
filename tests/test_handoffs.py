@@ -349,6 +349,25 @@ Intent: `.project/intent/INTENT.md`
             check_handoffs._non_placeholder("Queues unavailable: <stored reason>", "label")
         self.assertIn("<stored reason>", str(failure.exception))
 
+    def test_repair_source_scans_intact_code_spans(self) -> None:
+        for ticks in ("`", "``", "```"):
+            evidence = f"{ticks}Queues unavailable: <stored reason>{ticks}"
+            text = (
+                "### SC1 — Demo\n"
+                "- **Verdict**: not-met\n"
+                f"- **Finding**: {evidence}\n"
+                "- **Fix direction**: Restore queues\n"
+            )
+            with self.subTest(ticks=ticks):
+                self.assertEqual(
+                    check_handoffs._source_repair_fields("FINAL.md", text, "SC1"),
+                    ("Queues unavailable: <stored reason>", "Restore queues"),
+                )
+                with self.assertRaises(check_handoffs.HandoffError):
+                    check_handoffs._source_repair_fields(
+                        "FINAL.md", text.replace(evidence, f"{ticks}<record observation>{ticks}"), "SC1"
+                    )
+
     def test_placeholder_checks_accept_comparison_angle_brackets(self) -> None:
         self.assertEqual(
             check_handoffs._non_placeholder("p95 latency < 200ms and > 0", "x"),
@@ -394,6 +413,15 @@ Intent: `.project/intent/INTENT.md`
                 "T001", task("Real log.", context="<fill in the context>"), initial=True
             )
         self.assertIn("Context", str(failure.exception))
+        for heading in ("Context", "Approach", "Interface contract"):
+            for ticks in ("`", "``", "```"):
+                with self.subTest(heading=heading, ticks=ticks):
+                    text = task("Real log.")
+                    body = check_handoffs._section(text, heading).strip()
+                    with self.assertRaisesRegex(check_handoffs.HandoffError, heading):
+                        check_handoffs._require_task_structure(
+                            "T001", text.replace(body, f"{ticks}<record observation>{ticks}"), initial=True
+                        )
         # Log must still be non-empty.
         with self.assertRaises(check_handoffs.HandoffError) as failure:
             check_handoffs._require_task_structure("T001", task(""), initial=True)
