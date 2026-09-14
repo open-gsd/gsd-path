@@ -56,7 +56,7 @@ Native configs for unselected hosts are ignored.
 | --- | --- |
 | `.gsd-path/guard_hook.py` | Pre-tool-use guard (stdin JSON → exit 2 + denial JSON) |
 | `.gsd-path/git_guard.py` | Commit and publication validator |
-| `.gsd-path/runtime/` | Canonical read-only state validation and routing used for plain-prompt re-entry |
+| `.gsd-path/runtime/` | Project-local pipeline helpers, including the read-only status engine |
 | `.git/hooks/pre-commit` | Runs `git_guard.py` before commit |
 | `.git/hooks/commit-msg` | Runs `git_guard.py` with commit message |
 | `.git/hooks/pre-push` | Runs `git_guard.py` on every pushed ref update |
@@ -141,8 +141,10 @@ See [UPDATE.md](UPDATE.md).
 - destructive Git commands nested in supported shell and command wrappers
 - archive glob/brace expansions and execution-capable read options such as
   `rg --pre`
-- direct write, edit, and patch tool calls that target product files while the
-  deterministic route is outside build
+- direct write, edit, and patch tool calls targeting `.project/STATE.md`,
+  `.project/next/STATE.md`, their protected parent directories, or `.gsd-path/`;
+  product-file calls also require the deterministic build route, including
+  helper-proven parallel task worktrees
 
 Read tools (`Read`, `Grep`, `View`, …) may still open archive paths.
 
