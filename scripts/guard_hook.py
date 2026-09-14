@@ -1086,7 +1086,7 @@ def command_references_archive(tokens, working_directories):
     return False
 
 
-def copy_destinations(arguments, directories):
+def copy_destinations(arguments, directories, assignments=None):
     operands, destination, no_target_directory = [], None, False
     arguments = iter(arguments)
     command_arguments = []
@@ -1100,6 +1100,9 @@ def copy_destinations(arguments, directories):
                 raise ValueError("cp redirection lacks a target")
         else:
             command_arguments.append(argument)
+    command_arguments = [expand_environment_parameters(argument, assignments) for argument in command_arguments]
+    if any(SHELL_PARAMETER_SYNTAX.search(argument) or CMD_PARAMETER_SYNTAX.search(argument) for argument in command_arguments):
+        raise ValueError("cp operand cannot be resolved by the guard; pass a literal path")
     arguments = iter(command_arguments)
     for argument in arguments:
         if argument == "--":
@@ -1130,8 +1133,9 @@ def copy_destinations(arguments, directories):
             yield str(Path(destination) / Path(source).name)
 
 
-def shell_write_targets(tokens, working_directories):
+def shell_write_targets(tokens, working_directories, assignments=None):
     """Yield (target, directories) for every path a shell command may write."""
+    assignments = {**(assignments or {}), **shell_assignment_values(tokens)}
     for segment, directories in segment_directories(tokens, working_directories):
         for index, token in enumerate(segment[:-1]):
             if ">" not in token or not set(token) <= SHELL_WRITE_REDIRECTION_CHARS:
@@ -1142,7 +1146,7 @@ def shell_write_targets(tokens, working_directories):
             yield target, directories
         wrapped = wrapped_command_tokens(segment)
         if wrapped is not None:
-            yield from shell_write_targets(wrapped, directories)
+            yield from shell_write_targets(wrapped, directories, assignments)
             continue
         invocation = command_invocation(segment)
         if invocation is None:
@@ -1153,7 +1157,7 @@ def shell_write_targets(tokens, working_directories):
             or any(argument.startswith("--in-place") for argument in arguments)
         )
         if command.removesuffix(".exe") == "cp":
-            for destination in copy_destinations(arguments, directories):
+            for destination in copy_destinations(arguments, directories, assignments):
                 yield destination, directories
             continue
         if command.removesuffix(".exe") in SHELL_WRITE_COMMANDS or in_place:
