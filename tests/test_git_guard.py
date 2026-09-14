@@ -779,6 +779,10 @@ class GitGuardEndToEndTests(unittest.TestCase):
             (sibling / "dest").mkdir()
             (sibling / "dest/app.py").symlink_to(self.repo / "app.py")
             (sibling / "safe").mkdir()
+            (sibling / "src").mkdir()
+            (sibling / "src/app.py").write_text("new\n")
+            (sibling / "dest/src").mkdir()
+            (sibling / "dest/src/app.py").symlink_to(self.repo / "app.py")
             other_hooks = sibling / ".gsd-path"
             for guard in (hooks / "guard_hook.py", other_hooks / "guard_hook.py"):
                 for command, cwd, expected in (
@@ -812,6 +816,9 @@ class GitGuardEndToEndTests(unittest.TestCase):
                     (f'D={sibling}/dest; cp {sibling}/app.py "$D"', sibling, 2),
                     (f'S={sibling}/app.py; D={sibling}/dest; cp "$S" "$D"', sibling, 2),
                     (f'D={sibling}/safe; cp {self.repo}/app.py "$D"', sibling, 0),
+                    (f'D={self.repo}; cp {sibling}/app.py "$D"; D={sibling}', sibling, 2),
+                    (f"cp -R {sibling}/src {sibling}/dest", sibling, 2),
+                    (f"cp -R {sibling}/src {sibling}/safe", sibling, 0),
                     (f'export D={sibling}/dest; bash -c \'cp {sibling}/app.py "$D"\'', sibling, 2),
 
                     (f"cp -- {sibling}/app.py {self.repo}/app.py > {sibling}/copy.log", sibling, 2),

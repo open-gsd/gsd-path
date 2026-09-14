@@ -1128,9 +1128,26 @@ def copy_destinations(arguments, directories, assignments=None):
         destination = operands.pop()
     yield destination
     _, target = target_paths(destination, directories, repository_root())
-    if not no_target_directory and target.is_dir():
-        for source in operands:
-            yield str(Path(destination) / Path(source).name)
+    for source in operands:
+        output = Path(destination)
+        if not no_target_directory and target.is_dir():
+            output /= Path(source).name
+        yield str(output)
+        lexical, source_path = target_paths(source, directories, repository_root())
+        if source_path.is_dir():
+            # ponytail: reject ambiguous directory links instead of emulating cp flags.
+            if lexical.is_symlink():
+                raise ValueError("cp directory source is a symlink; pass a literal directory")
+
+            def unreadable(error):
+                raise ValueError(f"cp source tree cannot be inspected: {error}")
+
+            for root, folders, files in os.walk(source_path, onerror=unreadable):
+                for name in folders + files:
+                    entry = Path(root) / name
+                    if entry.is_symlink() and entry.is_dir():
+                        raise ValueError("cp source contains a directory symlink; copy it separately")
+                    yield str(output / entry.relative_to(source_path))
 
 
 def shell_write_targets(tokens, working_directories, assignments=None):
@@ -1219,6 +1236,8 @@ def shell_assignment_values(tokens):
                     continue
                 break
             name, value = token.split("=", 1)
+            if name in values:
+                raise ValueError(f"shell variable {name} is reassigned; split the commands")
             values[name] = expand_environment_parameters(value, values)
     return values
 
