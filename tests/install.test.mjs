@@ -2641,7 +2641,10 @@ test("doctor uses canonical pipeline state validation", async () => {
       "phase: plan\nstatus: done\nbranch: null\narchive: null\n---\n"
   );
   let findings = installer.doctor(source, { targets: [], rootFor: () => "", project });
-  assert.ok(findings.some((finding) => finding.level === "ok" && finding.text === "state: plan/done"));
+  assert.ok(
+    findings.some((finding) => finding.level === "ok" && finding.text === "state: plan/done"),
+    JSON.stringify(findings)
+  );
   assert.ok(!fs.existsSync(path.join(source, "scripts", "__pycache__")));
   const runtimeState = path.join(runtime, "pipeline_state.py");
   const originalRuntime = fs.readFileSync(runtimeState);

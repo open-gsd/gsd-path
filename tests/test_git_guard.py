@@ -1,3 +1,4 @@
+import json
 import re
 import subprocess
 import sys
@@ -693,6 +694,166 @@ class GitGuardEndToEndTests(unittest.TestCase):
         self.stage_product_change()
         result = self.run_guard("feat(app): ordinary work after integration")
         self.assertEqual(0, result.returncode, result.stderr)
+
+    def test_closed_branch_refuses_new_work_even_after_state_rewrite(self):
+        self.check_closed_branch_install([sys.executable, "-B", str(SCRIPT.with_name("install.py"))])
+
+    def test_closed_branch_node_install(self):
+        self.check_closed_branch_install(["node", str(SCRIPT.with_name("install.mjs"))])
+
+    def check_closed_branch_install(self, installer):
+        hooks = self.repo / ".gsd-path"
+        installed = subprocess.run(
+            [*installer, "--hooks-init", "--claude", "--project", str(self.repo)],
+            capture_output=True, text=True,
+        )
+        self.assertEqual(0, installed.returncode, installed.stderr)
+        # Fixture history includes deliberate out-of-band STATE rewrites.
+        self.git("config", "core.hooksPath", "/dev/null")
+        self.enter_build()
+        self.write_state("shipped", "done", archive=".project/archive/002-next",
+                         subject="ship: M002 — next")
+        # Execute installed selection against a real committed roadmap and fetched ref.
+        self.git("checkout", "-q", "-b", "fixture/default")
+        (self.repo / ".project" / "ROADMAP.md").write_text("### M002 — next\nStatus: shipped\n\n### M003 — later\nStatus: pending\nDepends on: [M002]\n")
+        self.git("add", ".project/ROADMAP.md")
+        self.commit("fixture: next roadmap")
+        base = self.head()
+        self.git("update-ref", "refs/remotes/origin/main", base)
+        self.git("checkout", "-q", "gsd-path/M002")
+        selected = subprocess.run(
+            [sys.executable, "-B", str(hooks / "runtime/promote_lookahead.py"), "select-base",
+             "--repo", str(self.repo), "--base", base, "--remote-default", "origin/main"],
+            capture_output=True, text=True,
+        )
+        self.assertEqual(0, selected.returncode, selected.stderr)
+        self.assertEqual("gsd-path/M003", json.loads(selected.stdout)["branch"])
+        for rewritten in (False, True):
+            if rewritten:
+                self.write_state("build", "active")
+            for path in ("app.py", ".project/note.md"):
+                (self.repo / path).write_text("new work\n")
+                self.git("add", "-A")
+                result = self.run_guard("chore: new work")
+                with self.subTest(rewritten=rewritten, path=path):
+                    self.assertEqual(1, result.returncode, result.stderr)
+                    self.assertIn("closed milestone", result.stderr)
+            for event in (
+                {"tool_name": "Edit", "tool_input": {"file_path": str(self.repo / "app.py")}},
+                {"tool_name": "Edit", "tool_input": {"file_path": str(self.repo / ".project/note.md")}},
+                {"tool_name": "Bash", "tool_input": {"command": "echo new > app.py"}},
+                {"tool_name": "Bash", "tool_input": {"command": "cat app.py > other.py"}},
+            ):
+                result = subprocess.run(
+                    [sys.executable, str(hooks / "guard_hook.py")],
+                    cwd=self.repo, input=json.dumps(event), capture_output=True, text=True,
+                )
+                with self.subTest(rewritten=rewritten, event=event):
+                    self.assertEqual(2, result.returncode, result.stderr)
+                    self.assertIn("closed milestone", result.stderr)
+
+            for command in (
+                "git status --short",
+                'python3 -B -c "import sys; raise SystemExit(sys.version_info < (3, 9))"',
+                "git fetch origin",
+                "git rev-parse origin/main",
+                f"python3 -B {hooks}/runtime/promote_lookahead.py select-base --repo {self.repo}",
+                f"python3 -B {hooks}/status_runtime.py --repo {self.repo}",
+                f"python3 -B {hooks}/runtime/pipeline_diagnose.py diagnose --repo {self.repo}",
+                f"python3 -B {hooks}/runtime/archive_milestone.py validate-integrated --repo {self.repo}",
+                f"python3 -B {hooks}/runtime/pipeline_git.py bind-next --repo {self.repo}",
+            ):
+                result = subprocess.run(
+                    [sys.executable, str(hooks / "guard_hook.py")], cwd=self.repo,
+                    input=json.dumps({"tool_name": "Bash", "tool_input": {"command": command}}),
+                    capture_output=True, text=True,
+                )
+                with self.subTest(allowed=command):
+                    self.assertEqual(0, result.returncode, result.stderr)
+
+        with tempfile.TemporaryDirectory() as directory:
+            sibling = Path(directory) / "feature"
+            self.git("worktree", "add", "-q", "-b", "feature/next", str(sibling))
+            (self.repo / "link").symlink_to(sibling / "app.py")
+            (self.repo / "dir-link").symlink_to(sibling, target_is_directory=True)
+            (sibling / "dest").mkdir()
+            (sibling / "dest/app.py").symlink_to(self.repo / "app.py")
+            (sibling / "contents").mkdir()
+            (sibling / "contents/app.py").symlink_to(self.repo / "app.py")
+            (sibling / "safe").mkdir()
+            (sibling / "src").mkdir()
+            (sibling / "src/app.py").write_text("new\n")
+            (sibling / "dest/src").mkdir()
+            (sibling / "dest/src/app.py").symlink_to(self.repo / "app.py")
+            other_hooks = sibling / ".gsd-path"
+            for guard in (hooks / "guard_hook.py", other_hooks / "guard_hook.py"):
+                for command, cwd, expected in (
+                    (f"echo new > {sibling}/app.py", self.repo, 0),
+                    (f"echo new > {self.repo}/app.py", sibling, 2),
+                    ("echo new > app.py", sibling, 0),
+                    ("echo new > app.py", self.repo, 2),
+                    (f"cd {sibling} && echo new > app.py", self.repo, 0),
+                    (f"cd {self.repo} && echo new > app.py", sibling, 2),
+                    (f"git -C {self.repo} restore --source=HEAD~1 -- app.py", sibling, 2),
+                    (f"git -C {self.repo} switch feature/next", sibling, 2),
+                    (f"git -C{self.repo} switch feature/next", sibling, 2),
+                    (f"git -C {self.repo.parent} -C {self.repo.name} switch feature/next", sibling, 2),
+                    (f"git -C {self.repo} status --short", sibling, 0),
+                    (f"git -C {self.repo} --work-tree={sibling} switch feature/next", sibling, 2),
+                    (f"git --git-dir={self.repo}/.git --work-tree={sibling} switch feature/next", sibling, 2),
+                    (f"git --git-dir {self.repo}/.git --work-tree {sibling} restore --source=HEAD -- app.py", sibling, 2),
+                    (f"git -C {self.repo} --work-tree={sibling} status --short", sibling, 0),
+                    (f"git --git-dir={self.repo}/.git --work-tree={sibling} log -1", sibling, 0),
+                    (f"git -C {sibling} --work-tree={self.repo} restore --source=HEAD -- app.py", sibling, 2),
+
+                    (f"git -C {sibling} restore --source=HEAD -- app.py", self.repo, 0),
+                    (f"rm {self.repo}/link", sibling, 2),
+                    (f"rm {self.repo}/dir-link", sibling, 2),
+                    (f"cp {self.repo}/app.py {sibling}/copy.py", sibling, 0),
+                    (f"cp {self.repo}/app.py {sibling}", sibling, 0),
+                    (f"cp -t {sibling} {self.repo}/app.py", sibling, 0),
+                    (f"cp --target-directory={sibling} {self.repo}/app.py", sibling, 0),
+                    (f"cp {sibling}/app.py {self.repo}/app.py", sibling, 2),
+                    (f"cp {sibling}/app.py {self.repo}/link", sibling, 2),
+                    (f'D={sibling}/dest; cp {sibling}/app.py "$D"', sibling, 2),
+                    (f'S={sibling}/app.py; D={sibling}/dest; cp "$S" "$D"', sibling, 2),
+                    (f'D={sibling}/safe; cp {self.repo}/app.py "$D"', sibling, 0),
+                    (f'D={self.repo}; cp {sibling}/app.py "$D"; D={sibling}', sibling, 2),
+                    (f"cp -R {sibling}/src {sibling}/dest", sibling, 2),
+                    (f"cp -R {sibling}/src {sibling}/safe", sibling, 0),
+                    (f"cp -R {sibling}/src/. {sibling}/contents", sibling, 2),
+                    (f"cp -R {sibling}/src/. {sibling}/safe", sibling, 0),
+                    (f"cp -R {sibling}/src/ {sibling}/contents", sibling, 2),
+                    (f"cp -R {sibling}/src/ {sibling}/safe", sibling, 0),
+                    (f'export D={sibling}/dest; bash -c \'cp {sibling}/app.py "$D"\'', sibling, 2),
+
+                    (f"cp -- {sibling}/app.py {self.repo}/app.py > {sibling}/copy.log", sibling, 2),
+                    (f"cp -- {sibling}/app.py {self.repo}/app.py 2> {sibling}/copy.log", sibling, 2),
+                    (f"cp -- {self.repo}/app.py {sibling}/copy.py > {sibling}/copy.log", sibling, 0),
+                    (f"cp -- {self.repo}/app.py {sibling}/copy.py > {self.repo}/copy.log", sibling, 2),
+                    (f"cp -- {sibling}/app.py > {sibling}/copy.log {self.repo}/app.py", sibling, 2),
+
+                    ("python3 -c 'print(1)'", self.repo, 2),
+                    ("git switch feature/next", self.repo, 2),
+                    (f"python3 -B {hooks}/runtime/discussion_records.py pending --repo {self.repo}", self.repo, 0 if guard.parent == hooks else 2),
+                    (f"python3 -B {hooks}/runtime/discussion_records.py dispose --repo {self.repo}", self.repo, 2),
+                ):
+                    for supplied in (True, False):
+                        with self.subTest(guard=guard, command=command, cwd=cwd, supplied=supplied):
+                            result = subprocess.run(
+                                [sys.executable, str(guard)], cwd=cwd,
+                                input=json.dumps({"tool_name": "Bash", "tool_input": {
+                                    "command": command, **({"cwd": str(cwd)} if supplied else {}),
+                                }}), capture_output=True, text=True,
+                            )
+                            self.assertEqual(expected, result.returncode, result.stderr)
+            for target in (sibling / "app.py", Path(directory) / "note.md"):
+                result = subprocess.run(
+                    [sys.executable, str(hooks / "guard_hook.py")], cwd=self.repo,
+                    input=json.dumps({"tool_name": "Edit", "tool_input": {"file_path": str(target)}}),
+                    capture_output=True, text=True,
+                )
+                self.assertEqual(0, result.returncode, result.stderr)
 
     def test_landing_rule_covers_branches_cut_from_the_bound_branch(self):
         self.enter_build()

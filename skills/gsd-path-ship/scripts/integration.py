@@ -401,8 +401,8 @@ def create_integration_merge(
             raise ArchiveError(
                 "integration merge conflicted; Git aborted it without resolving files: "
                 + ", ".join(conflicts.splitlines())
-                + f"; run: git -C {project} merge {default_name} on {bound_branch}, "
-                "resolve those paths, re-ship, then rerun integrate"
+                + "; closed milestone remains unchanged; run gsd-path-forensics and "
+                "obtain a user-approved integration recovery plan; do not merge into or re-ship the bound branch"
             )
         raise ArchiveError(f"create integration merge failed: {detail}")
 
@@ -1055,7 +1055,8 @@ def integrate(repo: Path, slug: str) -> dict:
         raise ArchiveError(
             "interrupted integration merge conflicted; Git aborted it without resolving files: "
             + ", ".join(conflicts.splitlines())
-            + "; resolve those paths on the bound branch, re-ship, then rerun integrate"
+            + "; closed milestone remains unchanged; run gsd-path-forensics and "
+            "obtain a user-approved integration recovery plan; do not merge into or re-ship the bound branch"
         )
     remove_registered_worktree(project, integration_branch, worktree)
     worktree_active = False

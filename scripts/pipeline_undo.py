@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# gsd-path project runtime
 """Helper-owned undo for unpublished GSD Path pipeline commits and worktrees.
 
 Preview is read-only. Apply mutates only after the caller supplies the exact

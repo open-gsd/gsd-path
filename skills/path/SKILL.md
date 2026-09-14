@@ -11,6 +11,12 @@ Any text the user is expected to send back verbatim (a ruling, an approval
 command, a reply) goes in its own fenced code block, never a blockquote or
 inline prose, so it pastes cleanly.
 
+When the project's `.gsd-path/runtime/` exists, resolve bundled helper paths
+for `pipeline_state.py`, `pipeline_git.py`, `archive_milestone.py`,
+`promote_lookahead.py`, `discussion_records.py`, and `pipeline_diagnose.py`
+to that runtime. It is the guard-approved location on a closed milestone.
+Use the skill bundle only when no project-local runtime exists.
+
 ## Status-only mode
 
 When the invocation argument is exactly `status`, report and stop:

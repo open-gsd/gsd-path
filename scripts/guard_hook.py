@@ -805,7 +805,27 @@ def pipeline_target_kinds(targets):
     ]
 
 
+def closed_target_reason(targets):
+    for path, working_directories in targets:
+        for target in dict.fromkeys(target_paths(path, working_directories, repository_root())):
+            directory = target if target.is_dir() and not target.is_symlink() else target.parent
+            while not directory.exists() and directory != directory.parent:
+                directory = directory.parent
+            root = subprocess.run(
+                ["git", "-C", str(directory), "rev-parse", "--show-toplevel"],
+                capture_output=True, text=True,
+            )
+            if root.returncode == 0:
+                reason = closed_milestone_reason(Path(root.stdout.strip()))
+                if reason:
+                    return reason
+    return None
+
+
 def enforce_pipeline_reentry(paths, working_directories):
+    reason = closed_target_reason((path, working_directories) for path in paths)
+    if reason:
+        deny(reason)
     classified = pipeline_target_kinds((path, working_directories) for path in paths)
     if classified is None:
         return
@@ -1066,8 +1086,77 @@ def command_references_archive(tokens, working_directories):
     return False
 
 
-def shell_write_targets(tokens, working_directories):
+def copy_destinations(arguments, directories, assignments=None):
+    operands, destination, no_target_directory = [], None, False
+    arguments = iter(arguments)
+    command_arguments = []
+    for argument in arguments:
+        if is_redirection(argument) or (
+            ">" in argument and set(argument) <= SHELL_WRITE_REDIRECTION_CHARS
+        ):
+            if command_arguments and command_arguments[-1].isdigit():
+                raise ValueError("cp numeric operand before redirection is ambiguous")
+            if next(arguments, None) is None:
+                raise ValueError("cp redirection lacks a target")
+        else:
+            command_arguments.append(argument)
+    command_arguments = [expand_environment_parameters(argument, assignments) for argument in command_arguments]
+    if any(SHELL_PARAMETER_SYNTAX.search(argument) or CMD_PARAMETER_SYNTAX.search(argument) for argument in command_arguments):
+        raise ValueError("cp operand cannot be resolved by the guard; pass a literal path")
+    arguments = iter(command_arguments)
+    for argument in arguments:
+        if argument == "--":
+            operands.extend(arguments)
+            break
+        if argument in {"-t", "--target-directory", "-S", "--suffix"}:
+            value = next(arguments, None)
+            if value is None:
+                raise ValueError(f"cp option {argument} lacks a value")
+            if argument in {"-t", "--target-directory"}:
+                destination = value
+        elif argument.startswith("--target-directory="):
+            destination = argument.split("=", 1)[1]
+        elif argument.startswith("-t") and not argument.startswith("--"):
+            destination = argument[2:]
+        elif argument in {"-T", "--no-target-directory"}:
+            no_target_directory = True
+        elif not argument.startswith("-"):
+            operands.append(argument)
+    if destination is None:
+        if len(operands) < 2:
+            raise ValueError("cp source and destination cannot be resolved")
+        destination = operands.pop()
+    yield destination
+    _, target = target_paths(destination, directories, repository_root())
+    for source in operands:
+        output = Path(destination)
+        if not no_target_directory and target.is_dir():
+            output /= os.path.basename(source.rstrip("/"))
+        outputs = [output]
+        if source.endswith("/") and output != Path(destination):
+            outputs.append(Path(destination))
+        yield from map(str, outputs)
+        lexical, source_path = target_paths(source, directories, repository_root())
+        if source_path.is_dir():
+            # ponytail: reject ambiguous directory links instead of emulating cp flags.
+            if lexical.is_symlink():
+                raise ValueError("cp directory source is a symlink; pass a literal directory")
+
+            def unreadable(error):
+                raise ValueError(f"cp source tree cannot be inspected: {error}")
+
+            for root, folders, files in os.walk(source_path, onerror=unreadable):
+                for name in folders + files:
+                    entry = Path(root) / name
+                    if entry.is_symlink() and entry.is_dir():
+                        raise ValueError("cp source contains a directory symlink; copy it separately")
+                    for output in outputs:
+                        yield str(output / entry.relative_to(source_path))
+
+
+def shell_write_targets(tokens, working_directories, assignments=None):
     """Yield (target, directories) for every path a shell command may write."""
+    assignments = {**(assignments or {}), **shell_assignment_values(tokens)}
     for segment, directories in segment_directories(tokens, working_directories):
         for index, token in enumerate(segment[:-1]):
             if ">" not in token or not set(token) <= SHELL_WRITE_REDIRECTION_CHARS:
@@ -1078,7 +1167,7 @@ def shell_write_targets(tokens, working_directories):
             yield target, directories
         wrapped = wrapped_command_tokens(segment)
         if wrapped is not None:
-            yield from shell_write_targets(wrapped, directories)
+            yield from shell_write_targets(wrapped, directories, assignments)
             continue
         invocation = command_invocation(segment)
         if invocation is None:
@@ -1088,6 +1177,10 @@ def shell_write_targets(tokens, working_directories):
             has_short_option(arguments, "i")
             or any(argument.startswith("--in-place") for argument in arguments)
         )
+        if command.removesuffix(".exe") == "cp":
+            for destination in copy_destinations(arguments, directories, assignments):
+                yield destination, directories
+            continue
         if command.removesuffix(".exe") in SHELL_WRITE_COMMANDS or in_place:
             for argument in arguments:
                 if argument and not argument.startswith("-"):
@@ -1108,6 +1201,9 @@ def protected_shell_write_reason(tokens, working_directories):
             )
         if expanded and expanded not in {"/dev/null", "NUL"}:
             targets.append((expanded, directories))
+    reason = closed_target_reason(targets)
+    if reason:
+        return reason
     classified = pipeline_target_kinds(targets) if targets else None
     if classified is None:
         return None
@@ -1144,6 +1240,8 @@ def shell_assignment_values(tokens):
                     continue
                 break
             name, value = token.split("=", 1)
+            if name in values:
+                raise ValueError(f"shell variable {name} is reassigned; split the commands")
             values[name] = expand_environment_parameters(value, values)
     return values
 
@@ -1432,8 +1530,8 @@ def git_command(segment):
     git_options = []
     while index < len(arguments) and arguments[index].startswith("-"):
         token = arguments[index]
-        if token.startswith("-c") and token != "-c" and not token.startswith("--"):
-            option, value = "-c", token[2:]
+        if token[:2] in {"-c", "-C"} and len(token) > 2 and not token.startswith("--"):
+            option, value = token[:2], token[2:]
         else:
             option = token.split("=", 1)[0]
             value = token.split("=", 1)[1] if "=" in token else None
@@ -1669,7 +1767,24 @@ def destructive_git_reason(tokens, resolved_aliases=frozenset()):
 PIPELINE_HELPERS = frozenset({"pipeline_state.py", "archive_milestone.py"})
 
 
-def bundled_helper_invocation(command, tokens, working_directories):
+def closed_milestone_reason(repo=None):
+    repo = repo or repository_root()
+    branch = subprocess.run(
+        ["git", "-C", str(repo), "branch", "--show-current"],
+        capture_output=True, text=True,
+    )
+    if not re.fullmatch(r"gsd-path/M\d{3,}", branch.stdout.strip()):
+        return None
+    result = subprocess.run(
+        [sys.executable, "-B", str(Path(__file__).with_name("git_guard.py")),
+         "closed-milestone"], cwd=repo, capture_output=True, text=True,
+    )
+    if result.returncode:
+        return result.stderr.strip() or "closed milestone inspection failed"
+    return None
+
+
+def bundled_helper_invocation(command, tokens, working_directories, helpers=PIPELINE_HELPERS):
     """Allow one plain ``python[3] [-B] <script>`` from the guard-owned runtime.
 
     The interpreter token must be exactly python or python3, and the script
@@ -1714,8 +1829,10 @@ def bundled_helper_invocation(command, tokens, working_directories):
         try:
             script = (Path(base) / operand).resolve()
             if (
-                script.name in PIPELINE_HELPERS
-                and script.is_relative_to(runtime)
+                script.name in helpers
+                and (script.is_relative_to(runtime) or (
+                    script.name == "status_runtime.py" and script == here / "status_runtime.py"
+                ))
                 and script.is_file()
             ):
                 return True
@@ -1724,7 +1841,7 @@ def bundled_helper_invocation(command, tokens, working_directories):
     return False
 
 
-def archive_command_is_read_only(command, tokens, archive_context=False):
+def archive_command_is_read_only(command, tokens, archive_context=False, git_commands=ARCHIVE_READ_GIT_COMMANDS):
     if archive_context and AMBIGUOUS_SHELL_SYNTAX.search(command):
         return False
     if not archive_context:
@@ -1741,7 +1858,7 @@ def archive_command_is_read_only(command, tokens, archive_context=False):
         return True
     if executable != "git" or len(tokens) < 2:
         return False
-    if tokens[1].casefold() not in ARCHIVE_READ_GIT_COMMANDS:
+    if tokens[1].casefold() not in git_commands:
         return False
     return not any(
         token in GIT_READ_WRITE_OPTIONS or token.startswith("--output=")
@@ -1844,11 +1961,68 @@ def destructive_shell_invocations(tokens):
             yield from destructive_shell_invocations(wrapped)
 
 
+def closed_shell_execution_reason(command, tokens, working_directories):
+    helpers = PIPELINE_HELPERS | {"pipeline_git.py", "status_runtime.py", "promote_lookahead.py", "pipeline_diagnose.py"}
+    rest = tokens[3:] if tokens[1:2] == ["-B"] else tokens[2:]
+    if rest[:1] == ["pending"]:
+        helpers = helpers | {"discussion_records.py"}
+    if bundled_helper_invocation(command, tokens, working_directories, helpers):
+        return None
+    for segment, directories in segment_directories(tokens, working_directories):
+        wrapped = wrapped_command_tokens(segment)
+        if wrapped is not None:
+            reason = closed_shell_execution_reason(shlex.join(wrapped), wrapped, directories)
+            if reason:
+                return reason
+            continue
+        metadata_closed = None
+        git = git_command(segment)
+        checked_segment = segment
+        if git is not None:
+            subcommand, arguments, options = git
+            checked_segment = ["git", subcommand, *arguments]
+            if options:
+                roots = []
+                for directory in directories:
+                    result = subprocess.run(
+                        ["git", *options, "rev-parse", "--show-toplevel", "--absolute-git-dir"],
+                        cwd=directory, capture_output=True, text=True,
+                    )
+                    if result.returncode:
+                        raise ValueError("git target repository cannot be resolved")
+                    root, metadata = result.stdout.splitlines()
+                    roots.append(root)
+                    metadata_closed = metadata_closed or closed_milestone_reason(Path(metadata))
+                directories = roots
+        closed = metadata_closed or closed_target_reason([(".", directories)])
+        if not closed:
+            continue
+        invocation = command_invocation(segment)
+        if invocation is None:
+            continue
+        executable, _ = invocation
+        if executable in DIRECTORY_CHANGE_COMMANDS or checked_segment == ["git", "fetch", "origin"]:
+            continue
+        plain = checked_segment[:next((i for i, token in enumerate(checked_segment) if is_redirection(token)), len(checked_segment))]
+        if executable in {"echo", "printf"} or archive_command_is_read_only(
+            shlex.join(plain), plain, True, ARCHIVE_READ_GIT_COMMANDS | {"rev-parse", "ls-remote"}
+        ):
+            continue
+        return closed
+    return None
+
+
 def command_denial(command, working_directories, allow_destructive=True):
     """Return why a shell command is denied, or None when it may run."""
+    working_directories = working_directories or [os.getcwd()]
     outer, substitutions = split_command_substitutions(command)
     try:
         tokens = shell_tokens(outer)
+        if tokens in (
+            [interpreter, "-B", "-c", "import sys; raise SystemExit(sys.version_info < (3, 9))"]
+            for interpreter in ("python3", "python")
+        ):
+            return None
         destructive = list(destructive_shell_invocations(tokens))
         if destructive and (
             not allow_destructive
@@ -1862,6 +2036,9 @@ def command_denial(command, working_directories, allow_destructive=True):
             )
         ):
             return ARCHIVE_REASON
+        reason = closed_shell_execution_reason(command, tokens, working_directories)
+        if reason:
+            return reason
         for inner in substitutions:
             reason = command_denial(inner, working_directories, allow_destructive=False)
             if reason is not None:

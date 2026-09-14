@@ -12,6 +12,12 @@ re-derive stuckness from a directory listing or `git status` prose.
 This skill never advances a phase gate, never edits `.project/`, and never
 runs git mutations.
 
+When the project's `.gsd-path/runtime/` exists, resolve bundled helper paths
+for `pipeline_state.py`, `pipeline_git.py`, `archive_milestone.py`,
+`promote_lookahead.py`, `discussion_records.py`, and `pipeline_diagnose.py`
+to that runtime. It is the guard-approved location on a closed milestone.
+Use the skill bundle only when no project-local runtime exists.
+
 ## Process
 
 1. **Diagnose.** Run `python3 <absolute-bundled-pipeline_diagnose.py> diagnose
