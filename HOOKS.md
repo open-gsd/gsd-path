@@ -9,7 +9,8 @@ Optional enforcement for pipeline invariants prompt contracts cannot guarantee:
 - a milestone branch with its canonical ship commit accepts no further edits or commits,
   even if STATE is later rewritten; writes are checked against the target worktree
 
-Closed branches still allow status inspection and the router handoff helpers, including
+Closed branches still allow read-only Git inspection (`status`, `log`, `diff`, `cat-file`,
+branch and worktree listing) and the router handoff helpers, including
 `git fetch origin`, SHA resolution, and next-base selection. Branch switching remains
 router-owned. The [ship contract](skills/gsd-path-ship/SKILL.md) owns integration
 conflict handling and published-validation recovery.
