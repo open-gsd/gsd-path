@@ -774,6 +774,66 @@ class GitGuardEndToEndTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             sibling = Path(directory) / "feature"
             self.git("worktree", "add", "-q", "-b", "feature/next", str(sibling))
+            (self.repo / "link").symlink_to(sibling / "app.py")
+            (self.repo / "dir-link").symlink_to(sibling, target_is_directory=True)
+            (sibling / "dest").mkdir()
+            (sibling / "dest/app.py").symlink_to(self.repo / "app.py")
+            (sibling / "safe").mkdir()
+            other_hooks = sibling / ".gsd-path"
+            for guard in (hooks / "guard_hook.py", other_hooks / "guard_hook.py"):
+                for command, cwd, expected in (
+                    (f"echo new > {sibling}/app.py", self.repo, 0),
+                    (f"echo new > {self.repo}/app.py", sibling, 2),
+                    ("echo new > app.py", sibling, 0),
+                    ("echo new > app.py", self.repo, 2),
+                    (f"cd {sibling} && echo new > app.py", self.repo, 0),
+                    (f"cd {self.repo} && echo new > app.py", sibling, 2),
+                    (f"git -C {self.repo} restore --source=HEAD~1 -- app.py", sibling, 2),
+                    (f"git -C {self.repo} switch feature/next", sibling, 2),
+                    (f"git -C{self.repo} switch feature/next", sibling, 2),
+                    (f"git -C {self.repo.parent} -C {self.repo.name} switch feature/next", sibling, 2),
+                    (f"git -C {self.repo} status --short", sibling, 0),
+                    (f"git -C {self.repo} --work-tree={sibling} switch feature/next", sibling, 2),
+                    (f"git --git-dir={self.repo}/.git --work-tree={sibling} switch feature/next", sibling, 2),
+                    (f"git --git-dir {self.repo}/.git --work-tree {sibling} restore --source=HEAD -- app.py", sibling, 2),
+                    (f"git -C {self.repo} --work-tree={sibling} status --short", sibling, 0),
+                    (f"git --git-dir={self.repo}/.git --work-tree={sibling} log -1", sibling, 0),
+                    (f"git -C {sibling} --work-tree={self.repo} restore --source=HEAD -- app.py", sibling, 2),
+
+                    (f"git -C {sibling} restore --source=HEAD -- app.py", self.repo, 0),
+                    (f"rm {self.repo}/link", sibling, 2),
+                    (f"rm {self.repo}/dir-link", sibling, 2),
+                    (f"cp {self.repo}/app.py {sibling}/copy.py", sibling, 0),
+                    (f"cp {self.repo}/app.py {sibling}", sibling, 0),
+                    (f"cp -t {sibling} {self.repo}/app.py", sibling, 0),
+                    (f"cp --target-directory={sibling} {self.repo}/app.py", sibling, 0),
+                    (f"cp {sibling}/app.py {self.repo}/app.py", sibling, 2),
+                    (f"cp {sibling}/app.py {self.repo}/link", sibling, 2),
+                    (f'D={sibling}/dest; cp {sibling}/app.py "$D"', sibling, 2),
+                    (f'S={sibling}/app.py; D={sibling}/dest; cp "$S" "$D"', sibling, 2),
+                    (f'D={sibling}/safe; cp {self.repo}/app.py "$D"', sibling, 0),
+                    (f'export D={sibling}/dest; bash -c \'cp {sibling}/app.py "$D"\'', sibling, 2),
+
+                    (f"cp -- {sibling}/app.py {self.repo}/app.py > {sibling}/copy.log", sibling, 2),
+                    (f"cp -- {sibling}/app.py {self.repo}/app.py 2> {sibling}/copy.log", sibling, 2),
+                    (f"cp -- {self.repo}/app.py {sibling}/copy.py > {sibling}/copy.log", sibling, 0),
+                    (f"cp -- {self.repo}/app.py {sibling}/copy.py > {self.repo}/copy.log", sibling, 2),
+                    (f"cp -- {sibling}/app.py > {sibling}/copy.log {self.repo}/app.py", sibling, 2),
+
+                    ("python3 -c 'print(1)'", self.repo, 2),
+                    ("git switch feature/next", self.repo, 2),
+                    (f"python3 -B {hooks}/runtime/discussion_records.py pending --repo {self.repo}", self.repo, 0 if guard.parent == hooks else 2),
+                    (f"python3 -B {hooks}/runtime/discussion_records.py dispose --repo {self.repo}", self.repo, 2),
+                ):
+                    for supplied in (True, False):
+                        with self.subTest(guard=guard, command=command, cwd=cwd, supplied=supplied):
+                            result = subprocess.run(
+                                [sys.executable, str(guard)], cwd=cwd,
+                                input=json.dumps({"tool_name": "Bash", "tool_input": {
+                                    "command": command, **({"cwd": str(cwd)} if supplied else {}),
+                                }}), capture_output=True, text=True,
+                            )
+                            self.assertEqual(expected, result.returncode, result.stderr)
             for target in (sibling / "app.py", Path(directory) / "note.md"):
                 result = subprocess.run(
                     [sys.executable, str(hooks / "guard_hook.py")], cwd=self.repo,

@@ -317,6 +317,10 @@ The persisted `STATE.archive` field is the transaction identity.
    A passing run returns the same proof exposed by `validate-integrated`.
    A non-zero result blocks; rerun the exact `integrate` command to resume a
    safe partial transaction instead of repairing refs or Git state manually.
+   An integration conflict is not a safe retry: the helper aborts the merge
+   and leaves the closed milestone branch unchanged. Invoke
+   `$gsd-path-forensics` and obtain a user-approved recovery plan before
+   continuing. Never merge into or re-ship the closed branch.
    For a later validation recheck with origin network access, run
    `python3 <absolute archive_milestone.py> validate-integrated --repo <root> --slug <STATE.milestone>`.
    Both integration modes refresh the remote-default and mirrored milestone-tag
@@ -350,6 +354,8 @@ fixed in a newer trusted GSD Path checkout. Never run `prepare`,
 `render-manifest`, `preflight`, `record-shipment`, or `integrate`, and never
 edit the committed archive, STATE.md, Git history, or published refs and tags.
 Only the validation checkout's local refs may be refreshed by the commands below.
+Run this recovery setup from a separate checkout, outside the closed primary
+worktree's guard.
 
 1. Create separate disposable trust and validation checkouts from the same
    published origin and `STATE.branch`. This separation is required because a

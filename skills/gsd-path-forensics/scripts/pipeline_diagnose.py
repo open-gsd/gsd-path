@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# gsd-path project runtime
 """Read-only diagnosis of a stuck GSD Path pipeline.
 
 Runs existing helpers and git probes. Never mutates the worktree, state, or
