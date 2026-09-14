@@ -139,8 +139,10 @@ See [UPDATE.md](UPDATE.md).
   `pipeline_state.py` / `archive_milestone.py` helper, resolved to a regular file
   inside the guard-owned `.gsd-path/runtime/` directory (beside `guard_hook.py`
   in the repository layout), using exactly `python` or `python3` with optional
-  `-B`; supplied tool working directories are authoritative, and cwd is used
-  only when none are supplied. The helper exception refuses chains, pipes,
+  `-B`; non-empty supplied tool working directories are authoritative. Empty
+  strings, including list items, are treated as absent: nested payloads inherit
+  their parent context, with the process cwd used when no directory is supplied.
+  The helper exception refuses chains, pipes,
   wrappers, substitutions, redirections, and any newline, carriage return, or
   backslash in the command text. The parsed script path must contain no `$`,
   backticks, glob characters (`*`, `?`, `[`, `]`), braces, or `..` path components,
