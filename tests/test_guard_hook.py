@@ -1729,6 +1729,21 @@ class GuardHookTests(unittest.TestCase):
                 }
             )
 
+    def test_empty_working_directory_is_treated_as_absent(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            repository = shlex.quote(str(Path(temporary).resolve()))
+            subprocess.run(["git", "init", "-q", temporary], check=True)
+            for command, assertion in (
+                (f"git -C {repository} status --short", self.assert_allowed),
+                (f"git -C {repository} reset --hard HEAD~1", self.assert_denied),
+            ):
+                with self.subTest(command=command):
+                    assertion({
+                        "tool_name": "Shell",
+                        "tool_input": {"command": command, "cwd": ""},
+                        "cwd": "",
+                    })
+
     def test_allows_safe_git_through_command_wrappers(self):
         for command in (
             "bash -lc 'git status'",
