@@ -1089,9 +1089,19 @@ def command_references_archive(tokens, working_directories):
 def copy_destinations(arguments, directories):
     operands, destination, no_target_directory = [], None, False
     arguments = iter(arguments)
+    command_arguments = []
     for argument in arguments:
-        if is_redirection(argument):
-            break
+        if is_redirection(argument) or (
+            ">" in argument and set(argument) <= SHELL_WRITE_REDIRECTION_CHARS
+        ):
+            if command_arguments and command_arguments[-1].isdigit():
+                raise ValueError("cp numeric operand before redirection is ambiguous")
+            if next(arguments, None) is None:
+                raise ValueError("cp redirection lacks a target")
+        else:
+            command_arguments.append(argument)
+    arguments = iter(command_arguments)
+    for argument in arguments:
         if argument == "--":
             operands.extend(arguments)
             break

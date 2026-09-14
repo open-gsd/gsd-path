@@ -799,6 +799,12 @@ class GitGuardEndToEndTests(unittest.TestCase):
                     (f"cp --target-directory={sibling} {self.repo}/app.py", sibling, 0),
                     (f"cp {sibling}/app.py {self.repo}/app.py", sibling, 2),
                     (f"cp {sibling}/app.py {self.repo}/link", sibling, 2),
+                    (f"cp -- {sibling}/app.py {self.repo}/app.py > {sibling}/copy.log", sibling, 2),
+                    (f"cp -- {sibling}/app.py {self.repo}/app.py 2> {sibling}/copy.log", sibling, 2),
+                    (f"cp -- {self.repo}/app.py {sibling}/copy.py > {sibling}/copy.log", sibling, 0),
+                    (f"cp -- {self.repo}/app.py {sibling}/copy.py > {self.repo}/copy.log", sibling, 2),
+                    (f"cp -- {sibling}/app.py > {sibling}/copy.log {self.repo}/app.py", sibling, 2),
+
                     ("python3 -c 'print(1)'", self.repo, 2),
                     ("git switch feature/next", self.repo, 2),
                     (f"python3 -B {hooks}/runtime/discussion_records.py pending --repo {self.repo}", self.repo, 0 if guard.parent == hooks else 2),
