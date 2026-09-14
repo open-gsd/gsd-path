@@ -1770,6 +1770,21 @@ class PipelineStateTests(unittest.TestCase):
 
             self.assertEqual(result["status"], "approved")
 
+    def test_approval_refused_for_project_junk_resumes_after_removal(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, expected_head = self._approval_repo(tmp, "plan")
+            junk = repo / ".project" / ".inspect-inventory.tmp"
+            junk.write_text("junk\n", encoding="utf-8")
+
+            with self.assertRaisesRegex(pipeline_state.PipelineStateError, "unsupported .project artifacts"):
+                pipeline_state.checkpoint_approval(repo, "plan", expected_head)
+            junk.unlink()
+            result = pipeline_state.checkpoint_approval(repo, "plan", expected_head)
+
+            self.assertEqual(result["status"], "approved")
+            self.assertNotEqual(run_git(repo, "rev-parse", "HEAD").stdout.strip(), expected_head)
+            self.assertFalse(pipeline_state._git_path(repo, pipeline_state.CHECKPOINT_JOURNAL_NAME).exists())
+
     def test_roadmap_approval_owns_selection_state_and_checkpoint(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             repo, expected_head = self._approval_repo(tmp, "roadmap")

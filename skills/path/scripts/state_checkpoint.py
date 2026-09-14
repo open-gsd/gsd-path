@@ -13,11 +13,11 @@ from pathlib import Path, PurePosixPath
 from typing import Mapping, Optional, Sequence
 
 try:
-    from isolation import IsolationError, checkpoint as isolation_checkpoint, require_commit, require_full_sha
+    from isolation import IsolationError, checkpoint as isolation_checkpoint, require_commit, require_full_sha, PROJECT_ENTRIES
 except ModuleNotFoundError as error:  # pragma: no cover - package imports used by tests
     if error.name != "isolation":
         raise
-    from scripts.isolation import IsolationError, checkpoint as isolation_checkpoint, require_commit, require_full_sha
+    from scripts.isolation import IsolationError, checkpoint as isolation_checkpoint, require_commit, require_full_sha, PROJECT_ENTRIES
 
 
 def _sha256(content: str) -> str:
@@ -51,7 +51,9 @@ def _checkpoint_artifact_digest(project: Path, mutable_paths: set[str]) -> str:
         if child.is_symlink():
             raise PipelineStateError(f"checkpoint path contains a symlink: {child}")
         relative = child.relative_to(project).as_posix()
-        if relative in mutable_paths:
+        # Unsupported entries (OS junk) are refused by the checkpoint itself; leaving them
+        # out lets a refused approval resume after the owner removes them.
+        if relative in mutable_paths or relative.split("/", 1)[0] not in PROJECT_ENTRIES:
             continue
         if child.is_dir():
             digest.update(f"d\0{relative}\0".encode())
