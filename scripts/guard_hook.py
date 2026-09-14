@@ -410,13 +410,15 @@ def collect(
         for key, value in node.items():
             if key.lower() not in WORKING_DIRECTORY_KEYS:
                 continue
+            # Cursor sends "cwd": "" when it has no directory; treat that as absent.
             if isinstance(value, str):
-                local_working_directories.append(value)
+                if value:
+                    local_working_directories.append(value)
             elif isinstance(value, list):
                 strings = [item for item in value if isinstance(item, str)]
                 if len(strings) != len(value):
                     raise ValueError("working directories cannot be validated")
-                local_working_directories.extend(strings)
+                local_working_directories.extend(item for item in strings if item)
         if len(local_working_directories) > 1:
             raise ValueError("working directory is ambiguous")
         working_directories.extend(local_working_directories)
