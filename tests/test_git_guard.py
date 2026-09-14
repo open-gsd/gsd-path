@@ -790,6 +790,13 @@ class GitGuardEndToEndTests(unittest.TestCase):
                     (f"git -C{self.repo} switch feature/next", sibling, 2),
                     (f"git -C {self.repo.parent} -C {self.repo.name} switch feature/next", sibling, 2),
                     (f"git -C {self.repo} status --short", sibling, 0),
+                    (f"git -C {self.repo} --work-tree={sibling} switch feature/next", sibling, 2),
+                    (f"git --git-dir={self.repo}/.git --work-tree={sibling} switch feature/next", sibling, 2),
+                    (f"git --git-dir {self.repo}/.git --work-tree {sibling} restore --source=HEAD -- app.py", sibling, 2),
+                    (f"git -C {self.repo} --work-tree={sibling} status --short", sibling, 0),
+                    (f"git --git-dir={self.repo}/.git --work-tree={sibling} log -1", sibling, 0),
+                    (f"git -C {sibling} --work-tree={self.repo} restore --source=HEAD -- app.py", sibling, 2),
+
                     (f"git -C {sibling} restore --source=HEAD -- app.py", self.repo, 0),
                     (f"rm {self.repo}/link", sibling, 2),
                     (f"rm {self.repo}/dir-link", sibling, 2),

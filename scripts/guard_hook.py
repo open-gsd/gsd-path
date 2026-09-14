@@ -1948,6 +1948,7 @@ def closed_shell_execution_reason(command, tokens, working_directories):
             if reason:
                 return reason
             continue
+        metadata_closed = None
         git = git_command(segment)
         checked_segment = segment
         if git is not None:
@@ -1957,14 +1958,16 @@ def closed_shell_execution_reason(command, tokens, working_directories):
                 roots = []
                 for directory in directories:
                     result = subprocess.run(
-                        ["git", *options, "rev-parse", "--show-toplevel"],
+                        ["git", *options, "rev-parse", "--show-toplevel", "--absolute-git-dir"],
                         cwd=directory, capture_output=True, text=True,
                     )
                     if result.returncode:
                         raise ValueError("git target repository cannot be resolved")
-                    roots.append(result.stdout.strip())
+                    root, metadata = result.stdout.splitlines()
+                    roots.append(root)
+                    metadata_closed = metadata_closed or closed_milestone_reason(Path(metadata))
                 directories = roots
-        closed = closed_target_reason([(".", directories)])
+        closed = metadata_closed or closed_target_reason([(".", directories)])
         if not closed:
             continue
         invocation = command_invocation(segment)
