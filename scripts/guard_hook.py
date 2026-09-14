@@ -120,6 +120,10 @@ ARCHIVE_REASON = (
     "committed GSD Path archives under .project/archive/ are read-only; "
     "only the bundled pipeline helpers may write there during a ship transaction"
 )
+DESTRUCTIVE_SHAPE_REASON = (
+    "destructive commands must run alone with literal paths; split compound, "
+    "substituted, or expanded destructive commands into single commands"
+)
 ARCHIVE_MARKER = ".project/archive"
 INVALID_INPUT_REASON = "GSD Path guard could not validate the tool request"
 CONTROL_PATHS = ".git, .project/STATE.md, .project/next, .gsd-path"
@@ -217,6 +221,16 @@ ARCHIVE_READ_COMMANDS = frozenset(
     }
 )
 ARCHIVE_READ_GIT_COMMANDS = frozenset({"status", "diff", "log", "show", "ls-files"})
+CLOSED_READ_GIT_COMMANDS = ARCHIVE_READ_GIT_COMMANDS | {
+    "rev-parse", "ls-remote", "ls-tree", "show-ref", "merge-base",
+}
+# Subcommands that also have write forms: only these listing options keep them read-only.
+CLOSED_LISTING_GIT_OPTIONS = {
+    "cat-file": frozenset({"-p", "-t", "-s", "-e"}),
+    "branch": frozenset({"-a", "--all", "-r", "--remotes", "-v", "-vv", "--verbose", "-l", "--list", "--show-current", "--no-color"}),
+    "worktree list": frozenset({"--porcelain", "-v", "--verbose", "-z"}),
+    "symbolic-ref": frozenset({"-q", "--quiet", "--short"}),
+}
 GIT_READ_WRITE_OPTIONS = frozenset({"--output", "--ext-diff", "--textconv"})
 ARCHIVE_READ_EXECUTION_OPTIONS = {"rg": frozenset({"--pre"})}
 AMBIGUOUS_SHELL_SYNTAX = re.compile(r"[\r\n|;&<>`]|\$\(|@\(")
@@ -1961,6 +1975,29 @@ def destructive_shell_invocations(tokens):
             yield from destructive_shell_invocations(wrapped)
 
 
+def closed_git_listing(tokens):
+    """Whether a Git call uses only the allowed object-read or listing forms."""
+    if len(tokens) < 2 or tokens[0] != "git":
+        return False
+    subcommand, arguments = tokens[1], tokens[2:]
+    if subcommand == "worktree":
+        if arguments[:1] != ["list"]:
+            return False
+        subcommand, arguments = "worktree list", arguments[1:]
+    allowed = CLOSED_LISTING_GIT_OPTIONS.get(subcommand)
+    if allowed is None:
+        return False
+    options = [argument for argument in arguments if argument.startswith("-")]
+    positionals = len(arguments) - len(options)
+    if any(option not in allowed for option in options):
+        return False
+    if subcommand == "branch":
+        return not positionals or bool({"-l", "--list"} & set(options))
+    if subcommand in {"cat-file", "symbolic-ref"}:
+        return positionals == 1
+    return not positionals
+
+
 def closed_shell_execution_reason(command, tokens, working_directories):
     helpers = PIPELINE_HELPERS | {"pipeline_git.py", "status_runtime.py", "promote_lookahead.py", "pipeline_diagnose.py"}
     rest = tokens[3:] if tokens[1:2] == ["-B"] else tokens[2:]
@@ -2004,8 +2041,8 @@ def closed_shell_execution_reason(command, tokens, working_directories):
         if executable in DIRECTORY_CHANGE_COMMANDS or checked_segment == ["git", "fetch", "origin"]:
             continue
         plain = checked_segment[:next((i for i, token in enumerate(checked_segment) if is_redirection(token)), len(checked_segment))]
-        if executable in {"echo", "printf"} or archive_command_is_read_only(
-            shlex.join(plain), plain, True, ARCHIVE_READ_GIT_COMMANDS | {"rev-parse", "ls-remote"}
+        if executable in {"echo", "printf"} or closed_git_listing(plain) or archive_command_is_read_only(
+            shlex.join(plain), plain, True, CLOSED_READ_GIT_COMMANDS
         ):
             continue
         return closed
@@ -2035,7 +2072,7 @@ def command_denial(command, working_directories, allow_destructive=True):
                 for operand in operands
             )
         ):
-            return ARCHIVE_REASON
+            return DESTRUCTIVE_SHAPE_REASON
         reason = closed_shell_execution_reason(command, tokens, working_directories)
         if reason:
             return reason

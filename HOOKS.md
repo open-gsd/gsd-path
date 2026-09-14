@@ -9,10 +9,15 @@ Optional enforcement for pipeline invariants prompt contracts cannot guarantee:
 - a milestone branch with its canonical ship commit accepts no further edits or commits,
   even if STATE is later rewritten; writes are checked against the target worktree
 
-Closed branches still allow status inspection and the router handoff helpers, including
+Closed branches still allow read-only Git inspection (`status`, `log`, `diff`, plain
+`cat-file` reads of one object, branch and worktree listing) and the router handoff helpers, including
 `git fetch origin`, SHA resolution, and next-base selection. Branch switching remains
 router-owned. The [ship contract](skills/gsd-path-ship/SKILL.md) owns integration
 conflict handling and published-validation recovery.
+
+`cat-file` options are restricted by `CLOSED_LISTING_GIT_OPTIONS` in
+[`scripts/guard_hook.py`](scripts/guard_hook.py); filter and text-conversion forms
+are blocked because they can execute external commands.
 
 **Docs:** [DOCS.md](DOCS.md) (hub) · [UPDATE.md](UPDATE.md) (refresh hooks) · [QUICK.md](QUICK.md) (first install with `--hooks`)
 

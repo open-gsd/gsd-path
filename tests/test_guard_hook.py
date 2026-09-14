@@ -1566,7 +1566,7 @@ class GuardHookTests(unittest.TestCase):
                 with self.subTest(archive_reason=command):
                     self.assertEqual(
                         guard_hook.command_denial(command, [str(repository)]),
-                        guard_hook.ARCHIVE_REASON,
+                        guard_hook.DESTRUCTIVE_SHAPE_REASON,
                     )
             for commands, assertion in ((denied, self.assert_denied), (allowed, self.assert_allowed)):
                 for command in commands:
@@ -2056,7 +2056,7 @@ class GuardHookTests(unittest.TestCase):
                         self.assertIn("shell command writes " + path, error)
                 status, _, error = run_guard(self.bash("cd .project && rm STATE.md"))
                 self.assertEqual(status, 2)
-                self.assertIn(guard_hook.ARCHIVE_REASON, error)
+                self.assertIn(guard_hook.DESTRUCTIVE_SHAPE_REASON, error)
                 for command in (
                     "echo x > build.log",
                     "echo x > .project/plan/PLAN.md",
