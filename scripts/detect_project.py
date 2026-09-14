@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# gsd-path project runtime
 """Classify or initialize a working tree.
 
 The router, define, and inspect phases call this instead of inferring
