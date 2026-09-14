@@ -171,7 +171,7 @@ class GitGuardEndToEndTests(unittest.TestCase):
         message = self.repo / "COMMIT_MSG"
         rendered = subject + "\n"
         if body:
-            rendered += "\n" + body.rstrip() + "\n"
+            rendered += "\n" + body + "\n"
         message.write_text(rendered, encoding="utf-8")
         return subprocess.run(
             [sys.executable, str(SCRIPT), str(message)],
@@ -239,11 +239,37 @@ class GitGuardEndToEndTests(unittest.TestCase):
         split = self.run_guard("ship: M002 — next", body.replace("\nReviewed-HEAD", "\n\nReviewed-HEAD"))
         self.assertEqual(1, split.returncode)
         self.assertIn("ship commit body does not match", split.stderr)
-        cleaned = self.run_guard("ship: M002 — next", "# comment\n" + body.replace("\n", "  \n") + "\n\n")
+        commented = self.run_guard("ship: M002 — next", "# comment\n" + body)
+        self.assertEqual(1, commented.returncode)
+        self.assertIn("ship commit body does not match", commented.stderr)
+        cleaned = self.run_guard("ship: M002 — next", body.replace("\n", "  \n") + "  \n\n")
         self.assertEqual(0, cleaned.returncode, cleaned.stderr)
         ordinary = self.run_guard("feat: not a ship")
         self.assertEqual(1, ordinary.returncode)
         self.assertIn("requires a ship commit", ordinary.stderr)
+
+        self.install_hooks()
+        for invalid_body in (body.replace("\n", "\n\n"), "# comment\n" + body):
+            with self.subTest(body=invalid_body):
+                refused = subprocess.run(
+                    ["git", "-c", "user.email=test@example.com", "-c", "user.name=Test",
+                     "commit", "-q", "-m", "ship: M002 — next", "-m", invalid_body],
+                    cwd=self.repo, capture_output=True, text=True,
+                )
+                self.assertEqual(1, refused.returncode, refused.stderr)
+                self.assertIn("ship commit body does not match", refused.stderr)
+                self.assertEqual(reviewed_head, self.head())
+        accepted = subprocess.run(
+            ["git", "-c", "user.email=test@example.com", "-c", "user.name=Test",
+             "commit", "-q", "-m", "ship: M002 — next", "-m", body],
+            cwd=self.repo, capture_output=True, text=True,
+        )
+        self.assertEqual(0, accepted.returncode, accepted.stderr)
+        stored = subprocess.run(
+            ["git", "show", "-s", "--format=%b", "HEAD"],
+            cwd=self.repo, capture_output=True, text=True, check=True,
+        ).stdout
+        self.assertEqual(body + "\n\n", stored)
 
     def test_ship_accepts_complete_integration_state(self) -> None:
         self.git("branch", "-m", "gsd-path/M002")
