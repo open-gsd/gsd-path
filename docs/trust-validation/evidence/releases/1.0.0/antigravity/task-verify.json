@@ -1,11 +1,11 @@
 {
   "schema": "gsd-path/live-step-evidence/v1",
   "host": "antigravity",
-  "run_id": "96f8d698-59c3-47d8-8557-0a8f27975fc7",
+  "run_id": "5484c6a1-894a-463e-b4fc-c072999f739a",
   "result": "pass",
   "step": "task-verify",
-  "command": "python3 test_count.py",
-  "output": "{\"command\": \"python3 test_count.py\", \"commit\": \"d200ed768a6ea79d99252200a476ff9c5b792597\", \"recorded_at\": \"2026-09-08T03:29:57+00:00\", \"result\": \"pass\", \"schema\": \"gsd-path/verify-ledger/v2\"}\n{\"command\": \"python3 -m unittest test_count.py\", \"commit\": \"d3fcff5069b19339cdfed525baee40ed64c5fb12\", \"execution\": {\"branch\": \"gsd-path-verify/project-verify\", \"exit_code\": 0, \"stderr\": \"...............\\n----------------------------------------------------------------------\\nRan 15 tests in 0.220s\\n\\nOK\\n\", \"stdout\": \"\", \"worktree\": \"/Users/jeremymcspadden/orca/evaluations/gsd-path-release-antigravity-091d279/quick/repo.gsd-path/verify/project-verify\"}, \"recorded_at\": \"2026-09-08T04:46:51+00:00\", \"result\": \"pass\", \"schema\": \"gsd-path/verify-ledger/v2\"}\n",
+  "command": "python3 -m unittest test_count.py",
+  "output": "{\"command\": \"python3 -m unittest test_count.py\", \"commit\": \"3652bda535b4d71707f9e9a731d0adb08db7d7e5\", \"recorded_at\": \"2026-09-14T23:41:10+00:00\", \"result\": \"pass\", \"schema\": \"gsd-path/verify-ledger/v2\"}\n{\"command\": \"python3 -m unittest discover -s . -p 'test_*.py'\", \"commit\": \"b3ddcfc417043a8594b956f5052bafd253a1dc4f\", \"execution\": {\"branch\": \"gsd-path-verify/project-verify\", \"exit_code\": 0, \"stderr\": \"...........\\n----------------------------------------------------------------------\\nRan 11 tests in 1.378s\\n\\nOK\\n\", \"stdout\": \"\", \"worktree\": \"/Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/antigravity/quick/repo.gsd-path/verify/project-verify\"}, \"recorded_at\": \"2026-09-14T23:46:10+00:00\", \"result\": \"pass\", \"schema\": \"gsd-path/verify-ledger/v2\"}\n",
   "verify_artifact": ".project/archive/001-count-json-cli/build/verify-ledger.jsonl",
   "verify_exit_code": 0
 }
