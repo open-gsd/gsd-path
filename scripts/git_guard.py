@@ -388,6 +388,20 @@ def current_branch():
     ).stdout.strip()
 
 
+def closed_milestone_reason():
+    branch = current_branch()
+    if BOUND_BRANCH.fullmatch(branch) is None:
+        return None
+    commits = subprocess.run(
+        ["git", "log", "--format=%H", "--grep=^ship:", "HEAD"],
+        capture_output=True, text=True, check=True,
+    ).stdout.splitlines()
+    if any(ship_commit_at(sha, branch) for sha in commits):
+        return (f"closed milestone {branch} accepts no new work; finish integration "
+                "through ship, then use the router's next-milestone handoff")
+    return None
+
+
 def head_descends_from(commit):
     return (
         subprocess.run(
@@ -683,6 +697,9 @@ def report(found, action):
 
 
 def main(argv):
+    if len(argv) > 1 and argv[1] == "closed-milestone":
+        reason = closed_milestone_reason()
+        return report([reason] if reason else [], "mutation")
     if len(argv) > 1 and argv[1] == "pre-push":
         try:
             found = pre_push_violations(sys.stdin.read().splitlines())
@@ -691,6 +708,9 @@ def main(argv):
             return 1
         return report(found, "push")
     try:
+        reason = closed_milestone_reason()
+        if reason:
+            return report([reason], "commit")
         entries = staged_entries()
         subject, body = commit_message(argv)
         existing = committed_archive_roots()

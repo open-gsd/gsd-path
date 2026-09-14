@@ -6,6 +6,14 @@ Optional enforcement for pipeline invariants prompt contracts cannot guarantee:
 - destructive Git operations do not erase recovery state, untracked evidence,
   or protected refs
 - direct product-file writes do not bypass a routed non-build phase
+- a milestone branch with its canonical ship commit accepts no further edits or commits,
+  even if STATE is later rewritten; writes are checked against the target worktree
+
+Closed branches still allow status inspection and the router handoff helpers, including
+`git fetch origin`, SHA resolution, and next-base selection. Branch switching remains
+router-owned. Run published-validation recovery setup from a separate checkout, not
+through the closed primary worktree guard. Integration conflicts leave the closed
+branch unchanged and require forensics plus a user-approved recovery plan.
 
 **Docs:** [DOCS.md](DOCS.md) (hub) · [UPDATE.md](UPDATE.md) (refresh hooks) · [QUICK.md](QUICK.md) (first install with `--hooks`)
 

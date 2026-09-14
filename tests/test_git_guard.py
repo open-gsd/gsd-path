@@ -1,4 +1,6 @@
+import json
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -693,6 +695,67 @@ class GitGuardEndToEndTests(unittest.TestCase):
         self.stage_product_change()
         result = self.run_guard("feat(app): ordinary work after integration")
         self.assertEqual(0, result.returncode, result.stderr)
+
+    def test_closed_branch_refuses_new_work_even_after_state_rewrite(self):
+        hooks = self.repo / ".gsd-path"
+        hooks.mkdir()
+        for name in ("guard_hook.py", "git_guard.py"):
+            shutil.copyfile(SCRIPT.with_name(name), hooks / name)
+        (hooks / "runtime").symlink_to(SCRIPT.parent, target_is_directory=True)
+        self.enter_build()
+        self.write_state("shipped", "done", archive=".project/archive/002-next",
+                         subject="ship: M002 — next")
+        for rewritten in (False, True):
+            if rewritten:
+                self.write_state("build", "active")
+            for path in ("app.py", ".project/note.md"):
+                (self.repo / path).write_text("new work\n")
+                self.git("add", "-A")
+                result = self.run_guard("chore: new work")
+                with self.subTest(rewritten=rewritten, path=path):
+                    self.assertEqual(1, result.returncode, result.stderr)
+                    self.assertIn("closed milestone", result.stderr)
+            for event in (
+                {"tool_name": "Edit", "tool_input": {"file_path": str(self.repo / "app.py")}},
+                {"tool_name": "Edit", "tool_input": {"file_path": str(self.repo / ".project/note.md")}},
+                {"tool_name": "Bash", "tool_input": {"command": "echo new > app.py"}},
+                {"tool_name": "Bash", "tool_input": {"command": "cat app.py > other.py"}},
+            ):
+                result = subprocess.run(
+                    [sys.executable, str(hooks / "guard_hook.py")],
+                    cwd=self.repo, input=json.dumps(event), capture_output=True, text=True,
+                )
+                with self.subTest(rewritten=rewritten, event=event):
+                    self.assertEqual(2, result.returncode, result.stderr)
+                    self.assertIn("closed milestone", result.stderr)
+
+            for command in (
+                "git status --short",
+                "git fetch origin",
+                "git rev-parse origin/main",
+                f"python3 -B {hooks}/runtime/promote_lookahead.py select-base --repo {self.repo}",
+                f"python3 -B {hooks}/runtime/status_runtime.py --repo {self.repo}",
+                f"python3 -B {hooks}/runtime/archive_milestone.py validate-integrated --repo {self.repo}",
+                f"python3 -B {hooks}/runtime/pipeline_git.py bind-next --repo {self.repo}",
+            ):
+                result = subprocess.run(
+                    [sys.executable, str(hooks / "guard_hook.py")], cwd=self.repo,
+                    input=json.dumps({"tool_name": "Bash", "tool_input": {"command": command}}),
+                    capture_output=True, text=True,
+                )
+                with self.subTest(allowed=command):
+                    self.assertEqual(0, result.returncode, result.stderr)
+
+        with tempfile.TemporaryDirectory() as directory:
+            sibling = Path(directory) / "feature"
+            self.git("worktree", "add", "-q", "-b", "feature/next", str(sibling))
+            for target in (sibling / "app.py", Path(directory) / "note.md"):
+                result = subprocess.run(
+                    [sys.executable, str(hooks / "guard_hook.py")], cwd=self.repo,
+                    input=json.dumps({"tool_name": "Edit", "tool_input": {"file_path": str(target)}}),
+                    capture_output=True, text=True,
+                )
+                self.assertEqual(0, result.returncode, result.stderr)
 
     def test_landing_rule_covers_branches_cut_from_the_bound_branch(self):
         self.enter_build()
