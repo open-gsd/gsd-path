@@ -222,10 +222,11 @@ ARCHIVE_READ_COMMANDS = frozenset(
 )
 ARCHIVE_READ_GIT_COMMANDS = frozenset({"status", "diff", "log", "show", "ls-files"})
 CLOSED_READ_GIT_COMMANDS = ARCHIVE_READ_GIT_COMMANDS | {
-    "rev-parse", "ls-remote", "cat-file", "ls-tree", "rev-list", "for-each-ref", "show-ref", "merge-base",
+    "rev-parse", "ls-remote", "ls-tree", "show-ref", "merge-base",
 }
 # Subcommands that also have write forms: only these listing options keep them read-only.
 CLOSED_LISTING_GIT_OPTIONS = {
+    "cat-file": frozenset({"-p", "-t", "-s", "-e"}),
     "branch": frozenset({"-a", "--all", "-r", "--remotes", "-v", "-vv", "--verbose", "-l", "--list", "--show-current", "--no-color"}),
     "worktree list": frozenset({"--porcelain", "-v", "--verbose", "-z"}),
     "symbolic-ref": frozenset({"-q", "--quiet", "--short"}),
@@ -1992,7 +1993,7 @@ def closed_git_listing(tokens):
         return False
     if subcommand == "branch":
         return not positionals or bool({"-l", "--list"} & set(options))
-    if subcommand == "symbolic-ref":
+    if subcommand in {"cat-file", "symbolic-ref"}:
         return positionals == 1
     return not positionals
 
@@ -2040,9 +2041,8 @@ def closed_shell_execution_reason(command, tokens, working_directories):
         if executable in DIRECTORY_CHANGE_COMMANDS or checked_segment == ["git", "fetch", "origin"]:
             continue
         plain = checked_segment[:next((i for i, token in enumerate(checked_segment) if is_redirection(token)), len(checked_segment))]
-        if executable in {"echo", "printf"} or closed_git_listing(plain) or (
-            "--filters" not in plain
-            and archive_command_is_read_only(shlex.join(plain), plain, True, CLOSED_READ_GIT_COMMANDS)
+        if executable in {"echo", "printf"} or closed_git_listing(plain) or archive_command_is_read_only(
+            shlex.join(plain), plain, True, CLOSED_READ_GIT_COMMANDS
         ):
             continue
         return closed
