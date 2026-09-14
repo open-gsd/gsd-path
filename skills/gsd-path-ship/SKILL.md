@@ -188,6 +188,10 @@ The persisted `STATE.archive` field is the transaction identity.
    uncommitted transaction and resumes without rewinding STATE. On every
    initial run or retry, run:
    `python3 <absolute archive_milestone.py> prepare --repo <root> --slug <STATE.milestone>`.
+   On a fresh transaction, `prepare` refuses a `review/FINAL.md` whose
+   `Reviewed HEAD` differs from current HEAD, before persisting STATE.archive
+   or creating archive directories. Regenerate the final review for the current
+   commit before archiving; preflight and validation retain their own checks.
    The helper strict-loads STATE.md, requires its canonical `gsd-path/M00N`
    branch with `N >= 1` to equal the next collision-free archive sequence,
    rejects any `000-*` archive entry, and writes the exact

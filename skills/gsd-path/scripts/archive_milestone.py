@@ -1142,6 +1142,15 @@ def prepare_locked(project: Path, active_root: Path, slug: str) -> dict:
         state_temporary.unlink()
     if configured is None:
         # Prove the inputs before STATE.archive is persisted or any directory exists.
+        # Archiving a stale final review cannot be undone, so check it here, not only in preflight.
+        final = active_root / "review" / "FINAL.md"
+        reviewed = re.search(r"(?m)^Reviewed HEAD:\s*(\S+)", final.read_text(encoding="utf-8")) if final.is_file() else None
+        head = require_git_success(run_git(project, "rev-parse", "HEAD"), "resolve HEAD").strip()
+        if reviewed and reviewed.group(1) != head:
+            raise ArchiveError(
+                f"FINAL.md Reviewed HEAD {reviewed.group(1)} does not match current HEAD {head}; "
+                "re-run the final review on the current commit before archiving"
+            )
         target = resolved_archive_target(project, slug, parsed_state)
         require_archive_milestone(target.name, parsed_state)
         require_complete_transaction_inputs(active_root, target)

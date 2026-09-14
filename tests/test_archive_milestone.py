@@ -341,6 +341,15 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
             "# GSD Path Discussion — Answers\n\n" + "\n".join(answer_records)
         )
 
+    def restamp_final_review(self, repo: Path) -> None:
+        """Point the final review at HEAD after a fixture commits more setup."""
+        head = self.git(repo, "rev-parse", "HEAD").stdout.strip()
+        for name in ("FINAL.md", "final-gap-1.md"):
+            path = repo / ".project" / "review" / name
+            text = path.read_text()
+            old = text.split("Reviewed HEAD: ", 1)[1].splitlines()[0]
+            path.write_text(text.replace(old, head))
+
     def prepare_archive(self, repo: Path, slug: str = "demo") -> Path:
         prepare = self.run_command(
             sys.executable,
@@ -589,6 +598,23 @@ refuted
 
             self.assertNotEqual(prepare.returncode, 0)
             self.assertIn("archive sequence", prepare.stderr)
+            self.assertEqual(self.snapshot_worktree(repo), before)
+
+    def test_prepare_rejects_stale_final_review_without_mutation(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            moved = self.git(repo, "commit", "-q", "--allow-empty", "-m", "build: record final review evidence")
+            self.assertEqual(moved.returncode, 0, moved.stderr)
+            before = self.snapshot_worktree(repo)
+
+            prepare = self.run_command(
+                sys.executable, str(ARCHIVE_SCRIPT), "prepare", "--repo", str(repo), "--slug", "demo",
+                cwd=PROJECT_ROOT,
+            )
+
+            self.assertNotEqual(prepare.returncode, 0)
+            self.assertIn("FINAL.md Reviewed HEAD", prepare.stderr)
             self.assertEqual(self.snapshot_worktree(repo), before)
 
     def test_prepare_rejects_m000_bound_branch_without_mutation(self) -> None:
@@ -1427,6 +1453,7 @@ refuted
                     (project / "ROADMAP.md").write_text("# Roadmap\n\n### M001 — demo\n\nStatus: shipped\nArchive: .project/archive/001-demo\n")
                     self.git(repo, "add", ".project/CHARTER.md", ".project/ROADMAP.md")
                     self.git(repo, "commit", "-q", "-m", "program metadata")
+                    self.restamp_final_review(repo)
                 archive = self.prepare_archive(repo)
                 if case != "missing" and not (project / "ROADMAP.md").exists():
                     pointer = ".project/archive/999-wrong" if case == "wrong" else ".project/archive/001-demo"
@@ -1761,6 +1788,7 @@ refuted
             self.git(repo, "add", str(older.relative_to(repo)))
             prior = self.git(repo, "commit", "-q", "-m", "older archive")
             self.assertEqual(prior.returncode, 0, prior.stderr)
+            self.restamp_final_review(repo)
 
             prepare = self.run_command(
                 sys.executable,
@@ -3024,10 +3052,11 @@ Tasks reviewed: 1
             with self.subTest(command=command), tempfile.TemporaryDirectory() as temporary_directory:
                 repo = Path(temporary_directory)
                 self.make_repo(repo)
-                final = repo / ".project" / "review" / "FINAL.md"
+                # prepare refuses a stale review, so drift the archived copy afterwards.
+                archive = self.prepare_archive(repo)
+                final = archive / "review" / "FINAL.md"
                 reviewed_head = final.read_text().split("Reviewed HEAD: ", 1)[1].splitlines()[0]
                 final.write_text(final.read_text().replace(reviewed_head, "0" * 40))
-                archive = self.prepare_archive(repo)
                 self.write_manifest(archive)
                 if command == "preflight":
                     result = self.preflight(repo)

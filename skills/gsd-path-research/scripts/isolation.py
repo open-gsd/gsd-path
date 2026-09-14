@@ -626,6 +626,13 @@ def _split_paths(block: str) -> Set[str]:
     return {line.strip() for line in block.splitlines() if line.strip()}
 
 
+# Top-level .project entries the pipeline owns; ship verification rejects anything else.
+PROJECT_ENTRIES = frozenset({
+    "STATE.md", "LESSONS.md", "REPOSITORY.md", "CHARTER.md", "ROADMAP.md", "SYNTHESIS.md",
+    "intent", "research", "plan", "tasks", "review", "build", "discuss", "archive", "next",
+})
+
+
 def uncommitted_paths(repo: Path) -> Set[str]:
     tracked = git_output(
         repo, "diff", "--no-renames", "--name-only", "--relative", "HEAD"
@@ -3110,6 +3117,16 @@ def checkpoint(
     )
     if unexpected:
         raise IsolationError("unexpected paths: " + ", ".join(unexpected))
+    unsupported = sorted({
+        path.split("/")[1]
+        for path in pending
+        if path.startswith(".project/") and path.split("/")[1] not in PROJECT_ENTRIES
+    })
+    if unsupported:
+        raise IsolationError(
+            "unsupported .project artifacts: " + ", ".join(unsupported)
+            + "; remove them before the checkpoint"
+        )
     normalized_subject = subject.strip()
     if normalized_subject.startswith("build:"):
         # Build owns fix-task additions and brief repairs, never the task

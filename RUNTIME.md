@@ -26,6 +26,12 @@ Plan approval recovery remains `pipeline_state.py resume-checkpoint`. Pre-Git
 approvals and patch approvals retain their existing canonical flows. The runner
 never changes a recorded base, retries a failed mutation, or repairs state itself.
 
+Checkpoint inputs must use the top-level `.project` entries defined by
+[`isolation.PROJECT_ENTRIES`](scripts/isolation.py); ship verification uses the
+same allowlist. `isolation.py checkpoint` refuses pending paths under any other
+top-level entry and asks for their removal before checkpointing. This check does
+not inspect nested entries inside an allowed directory.
+
 For serial work, keep the returned verification sidecar until the coder finishes.
 Validate the full task diff, reproduce only that patch in the sidecar, compare the
 product diffs, and run Task Verify there. Record that exact evidence before landing.

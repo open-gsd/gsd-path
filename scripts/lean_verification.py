@@ -145,11 +145,8 @@ def _require_ship_inputs(repo, expected_head):
     contracts._require_state(repo, "ship", "active", ".project")
     if _git(repo, "rev-parse", "HEAD") != expected_head:
         raise contracts.HandoffError("primary HEAD changed")
-    allowed = {"STATE.md", "LESSONS.md", "REPOSITORY.md", "CHARTER.md", "ROADMAP.md",
-               "SYNTHESIS.md", "intent", "research", "plan", "tasks", "review", "build",
-               "discuss", "archive", "next"}
     unexpected = sorted(path.name for path in (repo / ".project").iterdir()
-                        if path.name not in allowed)
+                        if path.name not in isolation.PROJECT_ENTRIES)
     if unexpected:
         raise contracts.HandoffError("unsupported .project artifacts: " + ", ".join(unexpected))
     dirty = isolation.uncommitted_paths(repo)
