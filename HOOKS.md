@@ -11,9 +11,8 @@ Optional enforcement for pipeline invariants prompt contracts cannot guarantee:
 
 Closed branches still allow status inspection and the router handoff helpers, including
 `git fetch origin`, SHA resolution, and next-base selection. Branch switching remains
-router-owned. Run published-validation recovery setup from a separate checkout, not
-through the closed primary worktree guard. Integration conflicts leave the closed
-branch unchanged and require forensics plus a user-approved recovery plan.
+router-owned. The [ship contract](skills/gsd-path-ship/SKILL.md) owns integration
+conflict handling and published-validation recovery.
 
 **Docs:** [DOCS.md](DOCS.md) (hub) · [UPDATE.md](UPDATE.md) (refresh hooks) · [QUICK.md](QUICK.md) (first install with `--hooks`)
 
