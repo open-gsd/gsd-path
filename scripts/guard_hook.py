@@ -807,18 +807,18 @@ def pipeline_target_kinds(targets):
 
 def closed_target_reason(targets):
     for path, working_directories in targets:
-        _, target = target_paths(path, working_directories, repository_root())
-        directory = target if target.is_dir() else target.parent
-        while not directory.exists() and directory != directory.parent:
-            directory = directory.parent
-        root = subprocess.run(
-            ["git", "-C", str(directory), "rev-parse", "--show-toplevel"],
-            capture_output=True, text=True,
-        )
-        if root.returncode == 0:
-            reason = closed_milestone_reason(Path(root.stdout.strip()))
-            if reason:
-                return reason
+        for target in dict.fromkeys(target_paths(path, working_directories, repository_root())):
+            directory = target if target.is_dir() and not target.is_symlink() else target.parent
+            while not directory.exists() and directory != directory.parent:
+                directory = directory.parent
+            root = subprocess.run(
+                ["git", "-C", str(directory), "rev-parse", "--show-toplevel"],
+                capture_output=True, text=True,
+            )
+            if root.returncode == 0:
+                reason = closed_milestone_reason(Path(root.stdout.strip()))
+                if reason:
+                    return reason
     return None
 
 
@@ -1086,6 +1086,40 @@ def command_references_archive(tokens, working_directories):
     return False
 
 
+def copy_destinations(arguments, directories):
+    operands, destination, no_target_directory = [], None, False
+    arguments = iter(arguments)
+    for argument in arguments:
+        if is_redirection(argument):
+            break
+        if argument == "--":
+            operands.extend(arguments)
+            break
+        if argument in {"-t", "--target-directory", "-S", "--suffix"}:
+            value = next(arguments, None)
+            if value is None:
+                raise ValueError(f"cp option {argument} lacks a value")
+            if argument in {"-t", "--target-directory"}:
+                destination = value
+        elif argument.startswith("--target-directory="):
+            destination = argument.split("=", 1)[1]
+        elif argument.startswith("-t") and not argument.startswith("--"):
+            destination = argument[2:]
+        elif argument in {"-T", "--no-target-directory"}:
+            no_target_directory = True
+        elif not argument.startswith("-"):
+            operands.append(argument)
+    if destination is None:
+        if len(operands) < 2:
+            raise ValueError("cp source and destination cannot be resolved")
+        destination = operands.pop()
+    yield destination
+    _, target = target_paths(destination, directories, repository_root())
+    if not no_target_directory and target.is_dir():
+        for source in operands:
+            yield str(Path(destination) / Path(source).name)
+
+
 def shell_write_targets(tokens, working_directories):
     """Yield (target, directories) for every path a shell command may write."""
     for segment, directories in segment_directories(tokens, working_directories):
@@ -1108,6 +1142,10 @@ def shell_write_targets(tokens, working_directories):
             has_short_option(arguments, "i")
             or any(argument.startswith("--in-place") for argument in arguments)
         )
+        if command.removesuffix(".exe") == "cp":
+            for destination in copy_destinations(arguments, directories):
+                yield destination, directories
+            continue
         if command.removesuffix(".exe") in SHELL_WRITE_COMMANDS or in_place:
             for argument in arguments:
                 if argument and not argument.startswith("-"):
@@ -1455,8 +1493,8 @@ def git_command(segment):
     git_options = []
     while index < len(arguments) and arguments[index].startswith("-"):
         token = arguments[index]
-        if token.startswith("-c") and token != "-c" and not token.startswith("--"):
-            option, value = "-c", token[2:]
+        if token[:2] in {"-c", "-C"} and len(token) > 2 and not token.startswith("--"):
+            option, value = token[:2], token[2:]
         else:
             option = token.split("=", 1)[0]
             value = token.split("=", 1)[1] if "=" in token else None
@@ -1900,6 +1938,22 @@ def closed_shell_execution_reason(command, tokens, working_directories):
             if reason:
                 return reason
             continue
+        git = git_command(segment)
+        checked_segment = segment
+        if git is not None:
+            subcommand, arguments, options = git
+            checked_segment = ["git", subcommand, *arguments]
+            if options:
+                roots = []
+                for directory in directories:
+                    result = subprocess.run(
+                        ["git", *options, "rev-parse", "--show-toplevel"],
+                        cwd=directory, capture_output=True, text=True,
+                    )
+                    if result.returncode:
+                        raise ValueError("git target repository cannot be resolved")
+                    roots.append(result.stdout.strip())
+                directories = roots
         closed = closed_target_reason([(".", directories)])
         if not closed:
             continue
@@ -1907,9 +1961,9 @@ def closed_shell_execution_reason(command, tokens, working_directories):
         if invocation is None:
             continue
         executable, _ = invocation
-        if executable in DIRECTORY_CHANGE_COMMANDS or segment == ["git", "fetch", "origin"]:
+        if executable in DIRECTORY_CHANGE_COMMANDS or checked_segment == ["git", "fetch", "origin"]:
             continue
-        plain = segment[:next((i for i, token in enumerate(segment) if is_redirection(token)), len(segment))]
+        plain = checked_segment[:next((i for i, token in enumerate(checked_segment) if is_redirection(token)), len(checked_segment))]
         if executable in {"echo", "printf"} or archive_command_is_read_only(
             shlex.join(plain), plain, True, ARCHIVE_READ_GIT_COMMANDS | {"rev-parse", "ls-remote"}
         ):
