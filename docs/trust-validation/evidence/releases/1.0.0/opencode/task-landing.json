@@ -1,17 +1,17 @@
 {
   "schema": "gsd-path/live-step-evidence/v1",
   "host": "opencode",
-  "run_id": "ses_f80a511edffePvaCxTcpyMblfH",
+  "run_id": "ses_f5dc9cc21ffemEUcj7w8mNfd8K",
   "result": "pass",
   "step": "task-landing",
-  "command": "python3 -B .opencode/skills/gsd-path/scripts/isolation.py land --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-opencode-091d279/quick/repo --source /Users/jeremymcspadden/orca/evaluations/gsd-path-release-opencode-091d279/quick/repo --base 1210868 --task-id T001 (serial isolation; landing see task-landing.json)",
-  "output": "commit 337f12dd447da9024e3e8e094673e7b8d4cd4330\nAuthor:     Feature Evaluation <evaluation@example.invalid>\nAuthorDate: Tue Sep 8 00:12:25 2026 -0500\nCommit:     Feature Evaluation <evaluation@example.invalid>\nCommitDate: Tue Sep 8 00:12:25 2026 -0500\n\n    T001: Extend count.py with validated signed-int count, --json output, and real-CLI tests\n    \n    Task: .project/tasks/T001-count-json-cli.md\n    Base: 1210868686ac95641ecb034fd8be2716af0fc721\n    Files:\n    - .project/tasks/T001-count-json-cli.md\n    - count.py\n    - tests/test_count.py\n\n .project/tasks/T001-count-json-cli.md | 12 ++++---\n count.py                              | 15 +++++++--\n tests/test_count.py                   | 63 +++++++++++++++++++++++++++++++++++\n 3 files changed, 82 insertions(+), 8 deletions(-)",
+  "command": "python3 /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/opencode/quick/repo/.opencode/skills/gsd-path/scripts/isolation.py land --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/opencode/quick/repo --source /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/opencode/quick/repo --base 4c0ee79f1173d5ba69a497d337cea6cd33d803e6 --task-id T001 --title \"Harden count.py CLI: signed counts, --json mode, error contract, real-CLI tests\" --task-file .project/tasks/T001-count-json-cli.md --allow-path count.py --allow-path test_count.py (serial isolation; Task Verify reran in sidecar /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/opencode/quick/repo.gsd-path/verify/task-t001-verify)",
+  "output": "commit a94147059908355ce66b2b49947e47f7fe51693e\nAuthor:     Feature Evaluation <evaluation@example.invalid>\nAuthorDate: Mon Sep 14 18:37:59 2026 -0500\nCommit:     Feature Evaluation <evaluation@example.invalid>\nCommitDate: Mon Sep 14 18:37:59 2026 -0500\n\n    T001: Harden count.py CLI: signed counts, --json mode, error contract, real-CLI tests\n    \n    Task: .project/tasks/T001-count-json-cli.md\n    Base: 4c0ee79f1173d5ba69a497d337cea6cd33d803e6\n    Files:\n    - .project/tasks/T001-count-json-cli.md\n    - count.py\n    - test_count.py\n\n .project/tasks/T001-count-json-cli.md |   8 ++-\n count.py                              |  36 +++++++++++-\n test_count.py                         | 104 ++++++++++++++++++++++++++++++++++\n 3 files changed, 143 insertions(+), 5 deletions(-)",
   "fixture_bundle": "opencode/fixture.bundle",
   "run_manifest": ".project/archive/001-count-json-cli/trust-run-manifest.json",
-  "fixture_base_commit": "1210868686ac95641ecb034fd8be2716af0fc721",
+  "fixture_base_commit": "4c0ee79f1173d5ba69a497d337cea6cd33d803e6",
   "task_branch": "gsd-path-verify/task-t001-verify",
-  "task_worktree": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-opencode-091d279/quick/repo.gsd-path/verify/task-t001-verify",
-  "landing_commit": "337f12dd447da9024e3e8e094673e7b8d4cd4330",
+  "task_worktree": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/opencode/quick/repo.gsd-path/verify/task-t001-verify",
+  "landing_commit": "a94147059908355ce66b2b49947e47f7fe51693e",
   "isolation_mode": "serial",
   "isolation_note": "A one-task wave uses the helper's serial mode: the coder worked on the bound branch in the primary worktree at the recorded base, and the named branch and worktree are the isolated Task Verify sidecar created for this task and retired after landing."
 }
