@@ -806,6 +806,19 @@ def pipeline_target_kinds(targets):
 
 
 def enforce_pipeline_reentry(paths, working_directories):
+    for path in paths:
+        _, target = target_paths(path, working_directories, repository_root())
+        directory = target if target.is_dir() else target.parent
+        while not directory.exists() and directory != directory.parent:
+            directory = directory.parent
+        root = subprocess.run(
+            ["git", "-C", str(directory), "rev-parse", "--show-toplevel"],
+            capture_output=True, text=True,
+        )
+        if root.returncode == 0:
+            reason = closed_milestone_reason(Path(root.stdout.strip()))
+            if reason:
+                deny(reason)
     classified = pipeline_target_kinds((path, working_directories) for path in paths)
     if classified is None:
         return
@@ -1669,7 +1682,24 @@ def destructive_git_reason(tokens, resolved_aliases=frozenset()):
 PIPELINE_HELPERS = frozenset({"pipeline_state.py", "archive_milestone.py"})
 
 
-def bundled_helper_invocation(command, tokens, working_directories):
+def closed_milestone_reason(repo=None):
+    repo = repo or repository_root()
+    branch = subprocess.run(
+        ["git", "-C", str(repo), "branch", "--show-current"],
+        capture_output=True, text=True,
+    )
+    if not re.fullmatch(r"gsd-path/M\d{3,}", branch.stdout.strip()):
+        return None
+    result = subprocess.run(
+        [sys.executable, "-B", str(Path(__file__).with_name("git_guard.py")),
+         "closed-milestone"], cwd=repo, capture_output=True, text=True,
+    )
+    if result.returncode:
+        return result.stderr.strip() or "closed milestone inspection failed"
+    return None
+
+
+def bundled_helper_invocation(command, tokens, working_directories, helpers=PIPELINE_HELPERS):
     """Allow one plain ``python[3] [-B] <script>`` from the guard-owned runtime.
 
     The interpreter token must be exactly python or python3, and the script
@@ -1714,7 +1744,7 @@ def bundled_helper_invocation(command, tokens, working_directories):
         try:
             script = (Path(base) / operand).resolve()
             if (
-                script.name in PIPELINE_HELPERS
+                script.name in helpers
                 and script.is_relative_to(runtime)
                 and script.is_file()
             ):
@@ -1724,7 +1754,7 @@ def bundled_helper_invocation(command, tokens, working_directories):
     return False
 
 
-def archive_command_is_read_only(command, tokens, archive_context=False):
+def archive_command_is_read_only(command, tokens, archive_context=False, git_commands=ARCHIVE_READ_GIT_COMMANDS):
     if archive_context and AMBIGUOUS_SHELL_SYNTAX.search(command):
         return False
     if not archive_context:
@@ -1741,7 +1771,7 @@ def archive_command_is_read_only(command, tokens, archive_context=False):
         return True
     if executable != "git" or len(tokens) < 2:
         return False
-    if tokens[1].casefold() not in ARCHIVE_READ_GIT_COMMANDS:
+    if tokens[1].casefold() not in git_commands:
         return False
     return not any(
         token in GIT_READ_WRITE_OPTIONS or token.startswith("--output=")
@@ -1849,6 +1879,14 @@ def command_denial(command, working_directories, allow_destructive=True):
     outer, substitutions = split_command_substitutions(command)
     try:
         tokens = shell_tokens(outer)
+        closed = closed_milestone_reason()
+        if closed and tokens != ["git", "fetch", "origin"] and not archive_command_is_read_only(
+            command, tokens, True, ARCHIVE_READ_GIT_COMMANDS | {"rev-parse", "ls-remote"}
+        ) and not (
+            bundled_helper_invocation(command, tokens, working_directories,
+                                      PIPELINE_HELPERS | {"pipeline_git.py", "status_runtime.py", "promote_lookahead.py"})
+        ):
+            return closed
         destructive = list(destructive_shell_invocations(tokens))
         if destructive and (
             not allow_destructive
