@@ -105,14 +105,20 @@ def staged_entries():
 
 
 def message_of(message_file):
+    # Mirror git's default cleanup (the hook runs before it): drop comments, strip
+    # trailing whitespace and edge blank lines, collapse blank runs. Blank lines
+    # inside the body stay, as in the stored commit the validators read.
     lines = [
-        line.strip()
+        line.rstrip()
         for line in Path(message_file).read_text(encoding="utf-8").splitlines()
-        if line.strip() and not line.lstrip().startswith("#")
+        if not line.startswith("#")
     ]
+    lines = [line for index, line in enumerate(lines) if line or (index and lines[index - 1])]
+    while lines and not lines[0]:
+        lines.pop(0)
     if not lines:
         return "", ""
-    return lines[0], "\n".join(lines[1:])
+    return lines[0].strip(), "\n".join(lines[1:]).strip("\n")
 
 
 def archive_root(path):

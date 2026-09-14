@@ -234,6 +234,13 @@ class GitGuardEndToEndTests(unittest.TestCase):
             0,
             self.run_guard("ship: M002 — next", body).returncode,
         )
+        # The stored body keeps inner blank lines, and archive_milestone.py
+        # validate rejects them, so the guard must reject them before the commit.
+        split = self.run_guard("ship: M002 — next", body.replace("\nReviewed-HEAD", "\n\nReviewed-HEAD"))
+        self.assertEqual(1, split.returncode)
+        self.assertIn("ship commit body does not match", split.stderr)
+        cleaned = self.run_guard("ship: M002 — next", "# comment\n" + body.replace("\n", "  \n") + "\n\n")
+        self.assertEqual(0, cleaned.returncode, cleaned.stderr)
         ordinary = self.run_guard("feat: not a ship")
         self.assertEqual(1, ordinary.returncode)
         self.assertIn("requires a ship commit", ordinary.stderr)
