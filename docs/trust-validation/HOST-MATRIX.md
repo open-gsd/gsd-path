@@ -4,22 +4,28 @@
 is end-to-end trusted only when `npm run verify:release` finds a current passing
 full-milestone receipt for every host below.
 
-All eleven hosts hold a passing receipt on the frozen candidate
-`091d27927a2c0c2ecc55ce386fb2232556da6336`, verified 2026-09-09.
+Release candidate `bd7516713dd33ba483129ac9ba5cc16f5a3b7e18` is frozen on the
+release branch (2026-09-13; includes PR #101 plus release-prep tooling). All
+eleven host receipts are being refreshed against it;
+`npm run verify:release` stays red until every receipt passes.
+
+Historical receipts on `091d27927a2c0c2ecc55ce386fb2232556da6336` remain under
+`evidence/releases/1.0.0/` for comparison but no longer satisfy the validator
+once non-evidence files change after that candidate.
 
 | Host | Install | Native guard installed | Full live milestone | Current posture |
 |---|---|---|---|---|
-| Codex | automated | git-only tier: the `--ignore-user-config` harness run has no native hook, so Git hooks carry it | present: [codex.md](evidence/releases/1.0.0/codex.md) | receipt passes the validator |
-| Claude Code | automated | fail-closed project hook + Git hooks | present: [claude.md](evidence/releases/1.0.0/claude.md); native guard probe passed | receipt passes the validator |
-| Grok | automated | not installed; Git hooks | present: [grok.md](evidence/releases/1.0.0/grok.md) | receipt passes the validator |
-| OpenCode | automated | not installed; Git hooks | present: [opencode.md](evidence/releases/1.0.0/opencode.md) | receipt passes the validator |
-| GitHub Copilot CLI | automated | not installed; Git hooks | present: [copilot.md](evidence/releases/1.0.0/copilot.md) | receipt passes the validator; needed the hard-stop prompt addendum to honor owner gates |
-| Qwen Code | automated | not installed; Git hooks | present: [qwen.md](evidence/releases/1.0.0/qwen.md) | receipt passes the validator; see the Qwen note below |
-| Antigravity CLI | automated | not installed; Git hooks | present: [antigravity.md](evidence/releases/1.0.0/antigravity.md) | receipt passes the validator; the 5-minute print timeout is bridged with resumes |
-| Cursor | automated | fail-closed project hook + Git hooks | present: [cursor.md](evidence/releases/1.0.0/cursor.md); native guard probe passed | receipt passes the validator; needed the hard-stop prompt addendum to honor owner gates |
-| Zed | automated | no native hook API; Git hooks | present: [zed.md](evidence/releases/1.0.0/zed.md) | receipt passes the validator; see the Zed note below |
-| Kiro | automated | not installed; Git hooks | present: [kiro.md](evidence/releases/1.0.0/kiro.md) | receipt passes the validator; see the Kiro note below |
-| Kimi Code | automated | not installed; Git hooks | present: [kimi.md](evidence/releases/1.0.0/kimi.md) | receipt passes the validator; needed the hard-stop prompt addendum to honor owner gates |
+| Codex | automated | git-only tier: the `--ignore-user-config` harness run has no native hook, so Git hooks carry it | prior: [codex.md](evidence/releases/1.0.0/codex.md) | **refresh pending** on `bd75167` |
+| Claude Code | automated | fail-closed project hook + Git hooks | prior: [claude.md](evidence/releases/1.0.0/claude.md) | **refresh pending** on `bd75167` |
+| Grok | automated | not installed; Git hooks | prior: [grok.md](evidence/releases/1.0.0/grok.md) | **refresh pending** on `bd75167` |
+| OpenCode | automated | not installed; Git hooks | prior: [opencode.md](evidence/releases/1.0.0/opencode.md) | **refresh pending** on `bd75167` |
+| GitHub Copilot CLI | automated | not installed; Git hooks | prior: [copilot.md](evidence/releases/1.0.0/copilot.md) | **refresh pending** on `bd75167` |
+| Qwen Code | automated | not installed; Git hooks | prior: [qwen.md](evidence/releases/1.0.0/qwen.md) | **refresh pending** on `bd75167` |
+| Antigravity CLI | automated | not installed; Git hooks | prior: [antigravity.md](evidence/releases/1.0.0/antigravity.md) | **refresh pending** on `bd75167` |
+| Cursor | automated | fail-closed project hook + Git hooks | prior: [cursor.md](evidence/releases/1.0.0/cursor.md) | **refresh pending** on `bd75167` |
+| Zed | automated | no native hook API; Git hooks | prior: [zed.md](evidence/releases/1.0.0/zed.md) | **refresh pending** on `bd75167` |
+| Kiro | automated | not installed; Git hooks | prior: [kiro.md](evidence/releases/1.0.0/kiro.md) | **refresh pending** on `bd75167` |
+| Kimi Code | automated | not installed; Git hooks | prior: [kimi.md](evidence/releases/1.0.0/kimi.md) | **refresh pending** on `bd75167` |
 
 Historical smoke evidence remains under `evidence/`; release receipts belong
 under `evidence/releases/<version>/` and are never inferred from smoke runs.
@@ -64,6 +70,20 @@ receipt must name one frozen candidate, and only evidence files plus this
 matrix and TRUST-EVIDENCE.md may change after that candidate. So the order
 is: merge every code and documentation change first, freeze the candidate,
 run all eleven host receipts against it, then seek the separate
-[publication decision](TRUST-EVIDENCE.md#release-evidence-2026-09-09). For receipt assembly
+[publication decision](TRUST-EVIDENCE.md#release-evidence-2026-09-13). For receipt assembly
 options, see the [assembly tool](evidence/releases/1.0.0/codex/release_receipt.py)
 usage docstring.
+
+### 1.0.0 refresh (2026-09-13)
+
+Frozen candidate: `bd7516713dd33ba483129ac9ba5cc16f5a3b7e18` (release branch
+after PR #101 and release-prep tooling). Prepare every host harness:
+
+```bash
+bash scripts/prepare_release_evidence.sh \
+  --candidate "$(git rev-parse HEAD)" \
+  --output-base "$HOME/evaluations/gsd-path-release-e6f4833"
+```
+
+Run each host's quick-lane milestone from its prepared directory, assemble
+receipts with `release_receipt.py`, then `npm run verify:release`.
