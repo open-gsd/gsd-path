@@ -1976,7 +1976,7 @@ def destructive_shell_invocations(tokens):
 
 
 def closed_git_listing(tokens):
-    """Whether a git branch, worktree list, or symbolic-ref call only reads refs."""
+    """Whether a Git call uses only the allowed object-read or listing forms."""
     if len(tokens) < 2 or tokens[0] != "git":
         return False
     subcommand, arguments = tokens[1], tokens[2:]
