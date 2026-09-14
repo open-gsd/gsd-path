@@ -240,7 +240,8 @@ as stated in Lookahead mode.
    The helper journals before mutation, changes the track STATE from
    `plan/active` to `plan/done` with event `plan approved`, validates that the
    active worktree is on its bound branch, and checkpoints all pending
-   `.project/` artifacts with the canonical plan subject and body. Require its
+   `.project/` artifacts under the [checkpoint input rules](../../RUNTIME.md#workflow-commands)
+   with the canonical plan subject and body. Require its
    typed result to report `schema: gsd-path/state-checkpoint/v1`, `status:
    approved`, `kind: plan`, the requested `project_dir`, `state.status: done`,
    and the returned current commit. Rerun the same command after interruption;
