@@ -178,7 +178,8 @@ precondition fails.
    `roadmap/active` to `roadmap/done` with that milestone and event `program
    roadmap approved`, and checkpoints all pending `.project/` artifacts with
    the canonical roadmap subject and body, subject to the
-   [checkpoint input rules](../../RUNTIME.md#workflow-commands). Require its typed result to report
+   top-level allowlist in
+   [isolation.PROJECT_ENTRIES](scripts/isolation.py). Require its typed result to report
    `schema: gsd-path/state-checkpoint/v1`, `status: approved`, `kind: roadmap`,
    `project_dir: .project`, `state.status: done`, the selected milestone, and
    the returned current commit. Rerun the same command after interruption; the
