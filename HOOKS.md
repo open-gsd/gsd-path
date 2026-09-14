@@ -119,6 +119,16 @@ See [UPDATE.md](UPDATE.md).
 - shell writes (redirections, `tee`, `cp`, `mv`, `rm`, `sed -i`, ...) that
   target a routing control (`.git`, `.project/STATE.md`, `.project/next`,
   `.gsd-path`) while `.project/STATE.md` exists
+- repeated assignments to the same shell variable within one command; split
+  these into separate tool calls so write targets can be resolved
+- copies whose destinations, including nested recursive-copy entries, resolve
+  into closed worktrees. Copy sources remain read-only inputs; ordinary safe
+  recursive copies are allowed. Supported variables are expanded before
+  destinations are derived, including contents-copy forms ending in `/.` or
+  `/`. Both lexical entries and resolved targets are checked. Unresolved copy
+  operands, unreadable source trees, directory sources that are symlinks, and
+  source trees containing directory symlinks are denied; use literal directory
+  paths and copy directory links separately
 - shell commands that reference the archive unless the whole command is a
   recognized standalone read or a single-command invocation of the bundled
   `pipeline_state.py` / `archive_milestone.py` helper, resolved to a regular file
@@ -178,7 +188,8 @@ such as `rm -rf scratch` passes the archive check; other guard rules still apply
   without `STATE.md` passes on an ordinary ref. An absent bound ref passes
   deletion. The authorized publisher is `archive_milestone.py integrate`;
   the hook checks ref updates, not which client initiated them
-- **allows** adding files to archive (ship transaction)
+- **allows** adding files to archive during the ship transaction, before the
+  branch closes
 
 These local hooks cover pushes made by plain Git and clients that invoke
 Git with hooks enabled. Creating a PR from an already published ref does not
