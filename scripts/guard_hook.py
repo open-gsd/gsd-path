@@ -1131,8 +1131,11 @@ def copy_destinations(arguments, directories, assignments=None):
     for source in operands:
         output = Path(destination)
         if not no_target_directory and target.is_dir():
-            output /= Path(source).name
-        yield str(output)
+            output /= os.path.basename(source.rstrip("/"))
+        outputs = [output]
+        if source.endswith("/") and output != Path(destination):
+            outputs.append(Path(destination))
+        yield from map(str, outputs)
         lexical, source_path = target_paths(source, directories, repository_root())
         if source_path.is_dir():
             # ponytail: reject ambiguous directory links instead of emulating cp flags.
@@ -1147,7 +1150,8 @@ def copy_destinations(arguments, directories, assignments=None):
                     entry = Path(root) / name
                     if entry.is_symlink() and entry.is_dir():
                         raise ValueError("cp source contains a directory symlink; copy it separately")
-                    yield str(output / entry.relative_to(source_path))
+                    for output in outputs:
+                        yield str(output / entry.relative_to(source_path))
 
 
 def shell_write_targets(tokens, working_directories, assignments=None):

@@ -778,6 +778,8 @@ class GitGuardEndToEndTests(unittest.TestCase):
             (self.repo / "dir-link").symlink_to(sibling, target_is_directory=True)
             (sibling / "dest").mkdir()
             (sibling / "dest/app.py").symlink_to(self.repo / "app.py")
+            (sibling / "contents").mkdir()
+            (sibling / "contents/app.py").symlink_to(self.repo / "app.py")
             (sibling / "safe").mkdir()
             (sibling / "src").mkdir()
             (sibling / "src/app.py").write_text("new\n")
@@ -819,6 +821,10 @@ class GitGuardEndToEndTests(unittest.TestCase):
                     (f'D={self.repo}; cp {sibling}/app.py "$D"; D={sibling}', sibling, 2),
                     (f"cp -R {sibling}/src {sibling}/dest", sibling, 2),
                     (f"cp -R {sibling}/src {sibling}/safe", sibling, 0),
+                    (f"cp -R {sibling}/src/. {sibling}/contents", sibling, 2),
+                    (f"cp -R {sibling}/src/. {sibling}/safe", sibling, 0),
+                    (f"cp -R {sibling}/src/ {sibling}/contents", sibling, 2),
+                    (f"cp -R {sibling}/src/ {sibling}/safe", sibling, 0),
                     (f'export D={sibling}/dest; bash -c \'cp {sibling}/app.py "$D"\'', sibling, 2),
 
                     (f"cp -- {sibling}/app.py {self.repo}/app.py > {sibling}/copy.log", sibling, 2),
