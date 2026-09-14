@@ -1745,7 +1745,9 @@ def bundled_helper_invocation(command, tokens, working_directories, helpers=PIPE
             script = (Path(base) / operand).resolve()
             if (
                 script.name in helpers
-                and script.is_relative_to(runtime)
+                and (script.is_relative_to(runtime) or (
+                    script.name == "status_runtime.py" and script == here / "status_runtime.py"
+                ))
                 and script.is_file()
             ):
                 return True
@@ -1879,12 +1881,17 @@ def command_denial(command, working_directories, allow_destructive=True):
     outer, substitutions = split_command_substitutions(command)
     try:
         tokens = shell_tokens(outer)
+        if tokens in (
+            [interpreter, "-B", "-c", "import sys; raise SystemExit(sys.version_info < (3, 9))"]
+            for interpreter in ("python3", "python")
+        ):
+            return None
         closed = closed_milestone_reason()
         if closed and tokens != ["git", "fetch", "origin"] and not archive_command_is_read_only(
             command, tokens, True, ARCHIVE_READ_GIT_COMMANDS | {"rev-parse", "ls-remote"}
         ) and not (
             bundled_helper_invocation(command, tokens, working_directories,
-                                      PIPELINE_HELPERS | {"pipeline_git.py", "status_runtime.py", "promote_lookahead.py"})
+                                      PIPELINE_HELPERS | {"pipeline_git.py", "status_runtime.py", "promote_lookahead.py", "pipeline_diagnose.py"})
         ):
             return closed
         destructive = list(destructive_shell_invocations(tokens))

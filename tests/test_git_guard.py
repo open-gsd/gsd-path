@@ -1,6 +1,5 @@
 import json
 import re
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -697,14 +696,38 @@ class GitGuardEndToEndTests(unittest.TestCase):
         self.assertEqual(0, result.returncode, result.stderr)
 
     def test_closed_branch_refuses_new_work_even_after_state_rewrite(self):
+        self.check_closed_branch_install([sys.executable, "-B", str(SCRIPT.with_name("install.py"))])
+
+    def test_closed_branch_node_install(self):
+        self.check_closed_branch_install(["node", str(SCRIPT.with_name("install.mjs"))])
+
+    def check_closed_branch_install(self, installer):
         hooks = self.repo / ".gsd-path"
-        hooks.mkdir()
-        for name in ("guard_hook.py", "git_guard.py"):
-            shutil.copyfile(SCRIPT.with_name(name), hooks / name)
-        (hooks / "runtime").symlink_to(SCRIPT.parent, target_is_directory=True)
+        installed = subprocess.run(
+            [*installer, "--hooks-init", "--claude", "--project", str(self.repo)],
+            capture_output=True, text=True,
+        )
+        self.assertEqual(0, installed.returncode, installed.stderr)
+        # Fixture history includes deliberate out-of-band STATE rewrites.
+        self.git("config", "core.hooksPath", "/dev/null")
         self.enter_build()
         self.write_state("shipped", "done", archive=".project/archive/002-next",
                          subject="ship: M002 — next")
+        # Execute installed selection against a real committed roadmap and fetched ref.
+        self.git("checkout", "-q", "-b", "fixture/default")
+        (self.repo / ".project" / "ROADMAP.md").write_text("### M002 — next\nStatus: shipped\n\n### M003 — later\nStatus: pending\nDepends on: [M002]\n")
+        self.git("add", ".project/ROADMAP.md")
+        self.commit("fixture: next roadmap")
+        base = self.head()
+        self.git("update-ref", "refs/remotes/origin/main", base)
+        self.git("checkout", "-q", "gsd-path/M002")
+        selected = subprocess.run(
+            [sys.executable, "-B", str(hooks / "runtime/promote_lookahead.py"), "select-base",
+             "--repo", str(self.repo), "--base", base, "--remote-default", "origin/main"],
+            capture_output=True, text=True,
+        )
+        self.assertEqual(0, selected.returncode, selected.stderr)
+        self.assertEqual("gsd-path/M003", json.loads(selected.stdout)["branch"])
         for rewritten in (False, True):
             if rewritten:
                 self.write_state("build", "active")
@@ -731,10 +754,12 @@ class GitGuardEndToEndTests(unittest.TestCase):
 
             for command in (
                 "git status --short",
+                'python3 -B -c "import sys; raise SystemExit(sys.version_info < (3, 9))"',
                 "git fetch origin",
                 "git rev-parse origin/main",
                 f"python3 -B {hooks}/runtime/promote_lookahead.py select-base --repo {self.repo}",
-                f"python3 -B {hooks}/runtime/status_runtime.py --repo {self.repo}",
+                f"python3 -B {hooks}/status_runtime.py --repo {self.repo}",
+                f"python3 -B {hooks}/runtime/pipeline_diagnose.py diagnose --repo {self.repo}",
                 f"python3 -B {hooks}/runtime/archive_milestone.py validate-integrated --repo {self.repo}",
                 f"python3 -B {hooks}/runtime/pipeline_git.py bind-next --repo {self.repo}",
             ):
