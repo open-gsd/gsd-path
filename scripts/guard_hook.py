@@ -805,8 +805,8 @@ def pipeline_target_kinds(targets):
     ]
 
 
-def enforce_pipeline_reentry(paths, working_directories):
-    for path in paths:
+def closed_target_reason(targets):
+    for path, working_directories in targets:
         _, target = target_paths(path, working_directories, repository_root())
         directory = target if target.is_dir() else target.parent
         while not directory.exists() and directory != directory.parent:
@@ -818,7 +818,14 @@ def enforce_pipeline_reentry(paths, working_directories):
         if root.returncode == 0:
             reason = closed_milestone_reason(Path(root.stdout.strip()))
             if reason:
-                deny(reason)
+                return reason
+    return None
+
+
+def enforce_pipeline_reentry(paths, working_directories):
+    reason = closed_target_reason((path, working_directories) for path in paths)
+    if reason:
+        deny(reason)
     classified = pipeline_target_kinds((path, working_directories) for path in paths)
     if classified is None:
         return
@@ -1121,6 +1128,9 @@ def protected_shell_write_reason(tokens, working_directories):
             )
         if expanded and expanded not in {"/dev/null", "NUL"}:
             targets.append((expanded, directories))
+    reason = closed_target_reason(targets)
+    if reason:
+        return reason
     classified = pipeline_target_kinds(targets) if targets else None
     if classified is None:
         return None
@@ -1876,8 +1886,41 @@ def destructive_shell_invocations(tokens):
             yield from destructive_shell_invocations(wrapped)
 
 
+def closed_shell_execution_reason(command, tokens, working_directories):
+    helpers = PIPELINE_HELPERS | {"pipeline_git.py", "status_runtime.py", "promote_lookahead.py", "pipeline_diagnose.py"}
+    rest = tokens[3:] if tokens[1:2] == ["-B"] else tokens[2:]
+    if rest[:1] == ["pending"]:
+        helpers = helpers | {"discussion_records.py"}
+    if bundled_helper_invocation(command, tokens, working_directories, helpers):
+        return None
+    for segment, directories in segment_directories(tokens, working_directories):
+        wrapped = wrapped_command_tokens(segment)
+        if wrapped is not None:
+            reason = closed_shell_execution_reason(shlex.join(wrapped), wrapped, directories)
+            if reason:
+                return reason
+            continue
+        closed = closed_target_reason([(".", directories)])
+        if not closed:
+            continue
+        invocation = command_invocation(segment)
+        if invocation is None:
+            continue
+        executable, _ = invocation
+        if executable in DIRECTORY_CHANGE_COMMANDS or segment == ["git", "fetch", "origin"]:
+            continue
+        plain = segment[:next((i for i, token in enumerate(segment) if is_redirection(token)), len(segment))]
+        if executable in {"echo", "printf"} or archive_command_is_read_only(
+            shlex.join(plain), plain, True, ARCHIVE_READ_GIT_COMMANDS | {"rev-parse", "ls-remote"}
+        ):
+            continue
+        return closed
+    return None
+
+
 def command_denial(command, working_directories, allow_destructive=True):
     """Return why a shell command is denied, or None when it may run."""
+    working_directories = working_directories or [os.getcwd()]
     outer, substitutions = split_command_substitutions(command)
     try:
         tokens = shell_tokens(outer)
@@ -1886,14 +1929,6 @@ def command_denial(command, working_directories, allow_destructive=True):
             for interpreter in ("python3", "python")
         ):
             return None
-        closed = closed_milestone_reason()
-        if closed and tokens != ["git", "fetch", "origin"] and not archive_command_is_read_only(
-            command, tokens, True, ARCHIVE_READ_GIT_COMMANDS | {"rev-parse", "ls-remote"}
-        ) and not (
-            bundled_helper_invocation(command, tokens, working_directories,
-                                      PIPELINE_HELPERS | {"pipeline_git.py", "status_runtime.py", "promote_lookahead.py", "pipeline_diagnose.py"})
-        ):
-            return closed
         destructive = list(destructive_shell_invocations(tokens))
         if destructive and (
             not allow_destructive
@@ -1907,6 +1942,9 @@ def command_denial(command, working_directories, allow_destructive=True):
             )
         ):
             return ARCHIVE_REASON
+        reason = closed_shell_execution_reason(command, tokens, working_directories)
+        if reason:
+            return reason
         for inner in substitutions:
             reason = command_denial(inner, working_directories, allow_destructive=False)
             if reason is not None:

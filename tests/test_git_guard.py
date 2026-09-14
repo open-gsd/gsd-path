@@ -774,6 +774,29 @@ class GitGuardEndToEndTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             sibling = Path(directory) / "feature"
             self.git("worktree", "add", "-q", "-b", "feature/next", str(sibling))
+            other_hooks = sibling / ".gsd-path"
+            for guard in (hooks / "guard_hook.py", other_hooks / "guard_hook.py"):
+                for command, cwd, expected in (
+                    (f"echo new > {sibling}/app.py", self.repo, 0),
+                    (f"echo new > {self.repo}/app.py", sibling, 2),
+                    ("echo new > app.py", sibling, 0),
+                    ("echo new > app.py", self.repo, 2),
+                    (f"cd {sibling} && echo new > app.py", self.repo, 0),
+                    (f"cd {self.repo} && echo new > app.py", sibling, 2),
+                    ("python3 -c 'print(1)'", self.repo, 2),
+                    ("git switch feature/next", self.repo, 2),
+                    (f"python3 -B {hooks}/runtime/discussion_records.py pending --repo {self.repo}", self.repo, 0 if guard.parent == hooks else 2),
+                    (f"python3 -B {hooks}/runtime/discussion_records.py dispose --repo {self.repo}", self.repo, 2),
+                ):
+                    for supplied in (True, False):
+                        with self.subTest(guard=guard, command=command, cwd=cwd, supplied=supplied):
+                            result = subprocess.run(
+                                [sys.executable, str(guard)], cwd=cwd,
+                                input=json.dumps({"tool_name": "Bash", "tool_input": {
+                                    "command": command, **({"cwd": str(cwd)} if supplied else {}),
+                                }}), capture_output=True, text=True,
+                            )
+                            self.assertEqual(expected, result.returncode, result.stderr)
             for target in (sibling / "app.py", Path(directory) / "note.md"):
                 result = subprocess.run(
                     [sys.executable, str(hooks / "guard_hook.py")], cwd=self.repo,

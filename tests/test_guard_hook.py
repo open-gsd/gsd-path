@@ -2034,6 +2034,7 @@ class GuardHookTests(unittest.TestCase):
             (root / ".project" / "STATE.md").write_text("owned\n", encoding="utf-8")
             (root / ".gsd-path").mkdir()
             with (
+                mock.patch.object(guard_hook.os, "getcwd", return_value=str(root)),
                 mock.patch.object(guard_hook, "repository_root", return_value=root),
                 mock.patch.object(guard_hook, "repository_control_roots", return_value=[]),
             ):
