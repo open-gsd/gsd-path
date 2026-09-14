@@ -1505,6 +1505,20 @@ class IsolationTests(unittest.TestCase):
                 "Why: approved roadmap checkpoint",
             )
 
+    def test_checkpoint_refuses_unsupported_project_entries(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            base = self.init_bound_repo(repo)
+            self.write(repo, ".project/STATE.md", "roadmap done\n")
+            self.write(repo, ".project/.DS_Store", "junk\n")
+
+            with self.assertRaisesRegex(isolation.IsolationError, r"unsupported \.project artifacts: \.DS_Store"):
+                isolation.checkpoint(
+                    repo, base, "roadmap: program roadmap approved", "Why: approved roadmap checkpoint", [".project"],
+                )
+            self.assertEqual(git(repo, "rev-parse", "HEAD"), base)
+
     def test_checkpoint_retry_returns_the_exact_existing_commit(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary) / "repo"
