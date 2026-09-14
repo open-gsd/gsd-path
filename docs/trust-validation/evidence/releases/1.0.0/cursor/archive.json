@@ -1,11 +1,11 @@
 {
   "schema": "gsd-path/live-step-evidence/v1",
   "host": "cursor",
-  "run_id": "e73ef00e-5082-4aa9-98b2-c7e5655f8ab9",
+  "run_id": "72cf53aa-9b12-4b3c-8659-3c01a7aa8015",
   "result": "pass",
   "step": "archive",
-  "command": "python3 -B .cursor/skills/gsd-path/scripts/archive_milestone.py validate --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-cursor-091d279/quick/repo",
-  "output": "{\"archive\": \".project/archive/001-count-json-cli\", \"commit\": \"e02181830e18ecccb2a1e9cf4c2c989b6248304a\"}",
+  "command": "python3 /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/cursor/quick/repo/.gsd-path/runtime/archive_milestone.py validate --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/cursor/quick/repo",
+  "output": "{\"archive\": \".project/archive/001-count-json-cli\", \"commit\": \"7f51f363708a94e3120147d0f140ad5e840e6902\"}",
   "archive_path": ".project/archive/001-count-json-cli",
   "validation_exit_code": 0
 }
