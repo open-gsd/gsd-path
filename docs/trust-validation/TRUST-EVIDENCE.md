@@ -209,8 +209,42 @@ All eleven host receipts from the 2026-09-09 freeze remain in the tree for
 comparison but no longer pass `scripts/check_trust_evidence.py` because
 non-evidence files changed after `091d279`.
 
-Refresh status: **in progress**. Use `scripts/prepare_release_evidence.sh` to
-stage per-host quick-lane harnesses, rerun each live milestone, and assemble
-new receipts with `docs/trust-validation/evidence/releases/1.0.0/codex/release_receipt.py`.
-`npm run verify:release` and npm publication stay blocked until every host
-receipt names `bd75167` and passes validation.
+Superseded: live receipt runs found defects that behave wrongly under correct
+use, so the candidate moved several times before all eleven hosts passed. See
+the 2026-09-15 section.
+
+---
+
+## Release evidence (2026-09-15)
+
+Every one of the eleven supported hosts holds a passing full-milestone receipt
+on the frozen candidate `052475792bbe211f104d34a524c22db056bdee71`, and
+`scripts/check_trust_evidence.py` validates all eleven. Each receipt records the
+same run shape as the 2026-09-09 set: a native child bound to the landed task
+commit, an isolated Task Verify, a full-wave review, the archive transaction,
+the `.project`-only ship commit, integration to a local origin, and the Git-hook
+guard result. Claude Code and Cursor also include a native guard probe.
+
+Before this freeze, live runs moved the candidate. Each of the following
+defects occurs when a host follows the documented contract, so each was fixed
+first:
+
+- PR #104: the closed-milestone guard blocked read-only git inspection.
+- PR #106: an empty hook `cwd` made every `git -C` command fail closed.
+- PR #107: the commit guard accepted ship bodies that `validate` rejects.
+- PR #108: checkpoints accepted `.project` junk that prepare-final rejects, and
+  archive prepare accepted a stale final review.
+- PR #110: an approval refused for `.project` junk could not resume after the
+  junk was removed.
+
+Owner release bar for 1.0.0: only defects under correct use block. Hardening
+against host misuse, and documentation that is stricter or looser than a gate
+that fails safe, are tracked for 1.0.1 in issues #105, #109, #111 and #112.
+
+Owner gates were answered by the session evaluator and are recorded in each
+evaluation directory. Codex, Claude Code, Grok and OpenCode honored every gate
+unaided. The other seven hosts ran with the hard-stop prompt addendum. Invalid
+attempts are kept beside each harness with the reason in the directory name.
+
+Publication remains a separate owner decision. These receipts do not by
+themselves authorize a version tag, a registry publish, or a visibility change.
