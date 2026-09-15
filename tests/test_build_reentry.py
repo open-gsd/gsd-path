@@ -244,6 +244,29 @@ class BuildReentryTests(unittest.TestCase):
         failure = self.move("plan", "active", "build plan repair requested", success=False)
         self.assertIn("settle dispatch records before recovery", failure)
 
+    def test_pending_reviewer_cleanup_blocks_recovery_until_settled(self):
+        from scripts import dispatch_driver
+        records = dispatch_driver.records_root(self.repo)
+        record = records / "reviews/wave-1/attempt-1/state.json"
+        record.parent.mkdir(parents=True)
+        record.write_text(json.dumps({"outcome": "collected", "cleanup_pending": True}))
+        original = (self.project / "STATE.md").read_bytes()
+        for phase, event in (
+            ("define", "build intent corrections requested"),
+            ("plan", "build plan repair requested"),
+        ):
+            with self.subTest(phase=phase):
+                failure = self.move(phase, "active", event, success=False)
+                self.assertIn("settle dispatch records before recovery", failure)
+                self.assertEqual((self.project / "STATE.md").read_bytes(), original)
+                self.assertEqual(dispatch_driver.records_root(self.repo), records)
+            (self.project / "STATE.md").write_bytes(original)
+        record.write_text(json.dumps({
+            "outcome": "collected", "cleanup_pending": False, "cleanup_complete": True,
+        }))
+        self.assertEqual(self.reopen("plan")["state"]["phase"], "plan")
+        self.assertNotEqual(dispatch_driver.records_root(self.repo), records)
+
     def test_blocked_build_returns_to_requested_contract_owner(self):
         for phase, event in (
             ("define", "build intent corrections requested"),
