@@ -36,6 +36,10 @@ ROADMAP.md exists), `roadmap/done`
 lookahead track at `define/active|blocked` also requires both current-track
 inspection artifacts and a Log entry proving `inspect/done` for the same
 milestone after its latest activation; otherwise route to inspect.
+The sole later-phase exception is a blocked build entered through the
+[build recovery contract](references/build-recovery.md). Follow its preparation
+and corrections procedure when the runtime returns mode `corrections`; keep
+the existing milestone identity and approval gate. Otherwise
 `define/done` or any later phase blocks rather than overwriting approved
 intent and leaving downstream artifacts stale. When an active router supplies
 the lookahead track root `.project/next/`, require its STATE.md to be a regular

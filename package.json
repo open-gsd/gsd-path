@@ -18,6 +18,7 @@
     "scripts/wizard.mjs",
     "scripts/skill-resources.json",
     "scripts/_common.py",
+    "scripts/build_recovery.py",
     "scripts/state_checkpoint.py",
     "scripts/state_promote.py",
     "scripts/discussion_validate.py",

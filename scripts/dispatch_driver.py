@@ -95,7 +95,7 @@ def milestone_slug(primary: Path) -> str:
 
 
 def records_root(primary: Path) -> Path:
-    return isolation.common_git_dir(primary) / "gsd-path" / "dispatch" / milestone_slug(primary)
+    return pipeline_state._build_recovery().records_root(primary)
 
 
 def budget_ledger(primary: Path) -> Path:

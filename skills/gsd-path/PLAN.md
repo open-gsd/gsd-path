@@ -29,8 +29,11 @@ Before dispatch, enter from `decide/done` or `define/done` with
 `--set-phase plan --set-status active`, and event `planning started`. Resume
 `plan/blocked` through the same helper with event `planning resumed`. Require
 the returned track state to be `plan/active`; never edit STATE directly.
-Any later phase blocks instead of replacing an approved plan. Patch mode is
-the only reopen exception: require an approved plan, no in-progress task, and
+For a blocked build, use the [build recovery contract](references/build-recovery.md).
+The runtime's `build-repair` mode owns structural changes to the remaining task
+inventory and the normal approval checkpoint; it is distinct from append-only
+patch mode. Otherwise later phases block instead of replacing an approved plan.
+Patch mode requires an approved plan, no in-progress task, and
 state `plan/done` or `ship/blocked`; any other state blocks. `build/done` is
 reserved exclusively for the build orchestrator's transition recovery and
 must return there instead of reopening planning. When an active router
