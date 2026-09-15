@@ -113,6 +113,11 @@ class EvaluationTests(unittest.TestCase):
             manifest = evaluation.prepare(destination, candidate)
             for mode in ("path", "direct"):
                 repo = destination / mode / "repo"
+                prompt = (destination / mode / "prompt.txt").read_text()
+                self.assertIn("Per-task output tokens above 4000 are a warning, not a\n"
+                              "hard task limit.", prompt)
+                self.assertIn("Keep the session output-token limit at 30000", prompt)
+                self.assertNotIn("Per-task token budget 4000", prompt)
                 self.assertEqual((repo / "count.py").read_text(), FIXTURE_SCRIPT)
                 evaluation.command(["git", "merge-base", "--is-ancestor", manifest["fixture"], "HEAD"], repo)
             self.assertTrue((destination / "path/repo/.agents/skills/gsd-path/SKILL.md").is_file())

@@ -24,8 +24,9 @@ with integer field widgets. The default count is zero; negative integers are
 valid. Invalid input must exit nonzero with a useful stderr error.
 Preserve plain text output. Add your own useful tests. No new dependencies.
 Do not read another comparison arm or the evaluator's acceptance tests.
-Record failures honestly. Per-task token budget 4000; session budget 30000,
-as required by the owner. Do not invent additional time or retry limits.
+Record failures honestly. Per-task output tokens above 4000 are a warning, not a
+hard task limit. Keep the session output-token limit at 30000, as required by
+the owner. Do not invent additional time or retry limits.
 """
 
 
