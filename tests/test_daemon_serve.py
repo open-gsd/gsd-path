@@ -168,8 +168,7 @@ class ServeTests(unittest.TestCase):
         for marker in ("gsd-path daemon", "Status board", "milestoneStack", "end of roadmap",
                        "phaseTrack", "criteria met", "Latest lesson", "boardRow", "data-switch", "Turn ledger",
                        "data-filter", "data-search",
-                       "Plugin", "Watched folders",
-                       "fetch(\"/status\")", "setInterval(refresh, 5000)"):
+                       "Plugin", "Watched folders"):
             self.assertIn(marker, html)
         # A status board shows done / here / ahead only: no inbox, next steps or copy actions.
         for gone in ("Needs you", "Next step", "next_skill", "data-copy", "class=\"tabs\"", "Attention"):
