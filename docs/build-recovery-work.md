@@ -45,13 +45,8 @@ and mandatory approval checkpoints. It ran in a disposable snapshot.
 
 ### R1 reviewer ownership correction
 
-Recovery rejects pending cleanup and sidecar-owning dispatch records without
-recorded cleanup completion. Reviewer ownership uses the existing `worktree`
-and `branch` fields; task dispatch uses `task_branch`. `Review.collect()` may
-block before retirement or persist `collected` before retirement finishes.
-`advance()` retries incomplete collected cleanup, while task `settle()` owns
-the separate `resolved` and `redispatched` outcomes. Recovery does not retire
-sidecars or resolve records itself.
+The reviewer retirement requirement is defined in the
+[build recovery contract](../skills/gsd-path/references/build-recovery.md#build-checkpoint-and-enter).
 
 Executable proof in `tests/test_build_reentry.py`:
 

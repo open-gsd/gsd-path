@@ -12,7 +12,12 @@ approval. Routing remains a caller handoff under AGENTS.md.
    Stop dispatch. Use the normal recovery and retirement procedures until
    every task is either unstarted `pending` with null dispatch metadata or
    proven `done`. Preserve owned uncommitted work before any retirement.
-   Settle reviewers and their sidecars too. Never infer that a timed-out child
+   Settle reviewers and their sidecars too. Dispatch records must have no pending
+   cleanup; records with reviewer `worktree` and `branch` ownership must also
+   record `cleanup_complete`. A `blocked` or `collected` outcome alone does not
+   prove retirement. Records that never owned a reviewer sidecar do not require
+   that retirement receipt. Use the existing dispatch retirement procedures;
+   recovery does not retire sidecars itself. Never infer that a timed-out child
    stopped. Checkpoint the blocked state and artifacts using the Build
    bookkeeping contract; the primary must be clean.
 2. Run `pipeline_state.py transition` with the complete current state expected,

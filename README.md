@@ -123,6 +123,8 @@ advance past an unresolved required follow-up.
 
 **Build, under the hood:**
 
+- For intent corrections or structural plan repair during a blocked build,
+  follow the [build recovery contract](skills/gsd-path/references/build-recovery.md).
 - Task briefs are linted against the real base tree (`check_task_briefs.py`)
   before any agent is dispatched, and every coder runs a preflight — paths
   exist or are declared, interface contracts match siblings verbatim — so a
