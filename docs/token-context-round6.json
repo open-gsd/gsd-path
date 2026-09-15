@@ -1,0 +1,74 @@
+{
+  "candidate": "7efc4399706309d8c997e4137953084a3d3c9848",
+  "fixture": "/Users/jeremymcspadden/orca/evaluations/token-inspect-complete-round6/path",
+  "model": "gpt-6-astra",
+  "reasoning": "high",
+  "task_limit": 4000,
+  "session_limit": 30000,
+  "metric": "output_tokens",
+  "parent_thread": "01a0a5e9-af9f-7f90-b877-a39de78ebacb",
+  "tasks": [
+    {
+      "task": "inspect_parent",
+      "output_tokens": 4396,
+      "events": "/Users/jeremymcspadden/orca/evaluations/token-inspect-complete-round6/path/run-20260915T163226194428Z/events.jsonl",
+      "measurement": "completed"
+    },
+    {
+      "task": "inspect_docs",
+      "output_tokens": 1518,
+      "events": "/Users/jeremymcspadden/Library/Application Support/orca/codex-accounts/86df0dc7-3078-4314-8766-60e244dd9765/home/sessions/2026/09/15/rollout-2026-09-15T11-34-16-01a0a5eb-4bcf-7c80-b2de-6507a55b5202.jsonl",
+      "measurement": "completed"
+    },
+    {
+      "task": "inspect_codebase",
+      "output_tokens": 2851,
+      "events": "/Users/jeremymcspadden/Library/Application Support/orca/codex-accounts/86df0dc7-3078-4314-8766-60e244dd9765/home/sessions/2026/09/15/rollout-2026-09-15T11-34-05-01a0a5eb-23e7-70f2-810f-3604a4a49677.jsonl",
+      "measurement": "completed"
+    },
+    {
+      "task": "planning_parent",
+      "output_tokens": 4645,
+      "events": "/Users/jeremymcspadden/orca/evaluations/token-inspect-complete-round6/path/run-20260915T164015969759Z/events.jsonl",
+      "measurement": "completed"
+    },
+    {
+      "task": "T001",
+      "output_tokens": 2995,
+      "events": "/Users/jeremymcspadden/orca/evaluations/token-inspect-complete-round6/path/repo/.git/gsd-path/dispatch/gsd-path-M001/T001/attempt-1/stdout",
+      "measurement": "completed"
+    },
+    {
+      "task": "review_wave_1_cycle_1",
+      "output_tokens": 5087,
+      "events": "/Users/jeremymcspadden/orca/evaluations/token-inspect-complete-round6/path/repo/.git/gsd-path/dispatch/gsd-path-M001/reviews/review_wave_1_cycle_1/attempt-1/stdout",
+      "measurement": "completed"
+    },
+    {
+      "task": "review_final",
+      "output_tokens": 3034,
+      "events": "/Users/jeremymcspadden/orca/evaluations/token-inspect-complete-round6/path/repo/.git/gsd-path/review-final-events.jsonl",
+      "measurement": "completed"
+    },
+    {
+      "task": "build_ship_parent",
+      "output_tokens": 6651,
+      "events": "/Users/jeremymcspadden/orca/evaluations/token-inspect-complete-round6/path/parent-interrupted-rollout.jsonl",
+      "measurement": "last observed cumulative counter minus prior completed invocation; interrupted, no turn.completed"
+    }
+  ],
+  "observed_output_tokens_lower_bound": 31177,
+  "pre_coding_output_tokens": 13410,
+  "coder_output_tokens": 2995,
+  "coder_share_observed_output": 0.09606440645347532,
+  "stop": "Evaluator sent SIGINT after final-review usage plus observed parent usage exceeded 30000. Budget was not increased.",
+  "product_acceptance": {
+    "verdict": "pass",
+    "checks_passed": 6,
+    "evidence": "External evaluator ran tests.widget_acceptance.evaluate once after stop; CLI default, count, JSON default, flag-after, negative JSON and invalid input passed."
+  },
+  "pipeline": "not completed: diagnosis returns ship/active; no shipment or integration proof",
+  "diagnosis": "/Users/jeremymcspadden/orca/evaluations/token-inspect-complete-round6/path/stopped-diagnosis.json",
+  "final_reuse_failure": "FINAL.md SC1 Surface must name CLI (`python3 count.py`)",
+  "scope": "Native trial only; excludes optimization conversation and fixture setup. Interrupted parent usage is a lower bound, not a completed ledger observation. Input tokens and output tokens are distinct."
+}

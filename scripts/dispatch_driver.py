@@ -31,13 +31,14 @@ from typing import BinaryIO, Callable, Dict, List, Optional
 
 try:
     from scripts import (_common, archive_milestone, build_state, discussion_validate, isolation,
-                         pipeline_state, review_findings, review_panel, workflow_run)
+                         pipeline_state, review_findings, review_panel, workflow_run, task_context)
     from scripts import check_handoffs as contracts
 except ImportError:  # bundled copy inside a skill's scripts directory
     import _common
     import archive_milestone
     import build_state
     import check_handoffs as contracts
+    import task_context
     import discussion_validate
     import isolation
     import pipeline_state
@@ -246,6 +247,7 @@ def brief_text(state: Dict[str, object], role_brief: Path, task_template: Path) 
     if state.get("answered"):
         lines.append(f"The task Log now records an `{ANSWER_MARK}` to your earlier question; "
                      "continue from it.")
+    lines.append(task_context.render(worktree, worktree / str(state['task_file'])))
     return "\n".join(lines) + "\n"
 
 

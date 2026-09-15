@@ -1,0 +1,34 @@
+{
+  "source_files": [
+    "/Users/jeremymcspadden/orca/evaluations/token-context-efe4163/path/run-20260915T135718781148Z/events.jsonl",
+    "/Users/jeremymcspadden/orca/evaluations/token-context-efe4163/path/run-20260915T140334646030Z/events.jsonl"
+  ],
+  "records": [
+    {
+      "hard_cap_supported": false,
+      "output_tokens": 4148,
+      "status": "recorded",
+      "task": "parent_invocation_1"
+    },
+    {
+      "hard_cap_supported": false,
+      "output_tokens": 4078,
+      "previous_events": "/Users/jeremymcspadden/orca/evaluations/token-context-efe4163/path/run-20260915T135718781148Z/events.jsonl",
+      "reported_output_tokens": 8226,
+      "session_id": "01a0a55b-9996-7681-8377-bdfd8d9a62c2",
+      "status": "recorded",
+      "task": "parent_invocation_2"
+    }
+  ],
+  "admission": {
+    "decision": "admit",
+    "enforcement": "observed-admission-only",
+    "hard_cap_supported": false,
+    "reason": "observed usage is within budget; unobserved and in-flight usage is unproven",
+    "session_output_tokens": 8226,
+    "session_remaining": 21774,
+    "task_output_tokens": 0,
+    "task_remaining": 4000
+  },
+  "method": "CLI cumulative counters across same-thread resume; retain raw totals and subtract only the previous recorded invocation."
+}

@@ -9,7 +9,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
-SKILLS = sorted(ROOT.glob("skills/gsd-path*/SKILL.md"))
+SKILLS = sorted([*ROOT.glob("skills/gsd-path*/SKILL.md"),
+                 *ROOT.glob("skills/gsd-path/references/*.md")])
 
 # `python3 <absolute helper.py> subcommand --flag ...` inside one code span or
 # fenced block; a trailing `\` joins the next line.

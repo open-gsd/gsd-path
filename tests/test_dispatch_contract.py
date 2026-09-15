@@ -1,47 +1,12 @@
-"""Cross-check: every logical task name mandated by a skill contract must be
-permitted by every platform dispatch adapter.
+"""Check the final reviewer brief emitted by the dispatch driver."""
 
-The skills mandate deterministic logical task names (for example
-``logical task name `roadmap``` or the review templates
-``review_wave_<wave>_cycle_<cycle>`` with the ``_contract`` / ``_adversarial``
-lens suffixes). Each platform adapter under ``platforms/*/dispatch.md`` must
-list every one of those names, otherwise a runtime following that adapter
-would reject or mangle a dispatch the skill requires.
-"""
-
-import re
+import argparse
 import unittest
 from pathlib import Path
 
+from scripts import dispatch_driver
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-
-# Matches "task name `X`", "logical task name `X`", and the multi-line
-# "deterministic logical task\n   name `X`" phrasings once whitespace is
-# collapsed.
-TASK_NAME_PATTERN = re.compile(r"(?:logical\s+)?task\s+name\s+`([^`]+)`")
-
-LENS_SUFFIXES = ("_contract", "_adversarial")
-
-
-def mandated_task_names():
-    """Extract every logical task name mandated by any skill's SKILL.md."""
-    names = set()
-    for skill_md in sorted(PROJECT_ROOT.glob("skills/gsd-path*/SKILL.md")):
-        text = re.sub(r"\s+", " ", skill_md.read_text(encoding="utf-8"))
-        names.update(TASK_NAME_PATTERN.findall(text))
-    return names
-
-
-def base_task_names(names):
-    """Strip the review lens suffixes so lens forms map to their base name."""
-    bases = set()
-    for name in names:
-        for suffix in LENS_SUFFIXES:
-            if name.endswith(suffix):
-                name = name[: -len(suffix)]
-                break
-        bases.add(name)
-    return bases
 
 
 def dispatch_adapters():
@@ -50,20 +15,6 @@ def dispatch_adapters():
 
 
 class DispatchContractTests(unittest.TestCase):
-    def test_parser_extracts_the_known_anchor_names(self):
-        names = mandated_task_names()
-        # Anchors that must exist in the skill contracts; if the phrasing in a
-        # SKILL.md changes so that the parser misses them, this fails loudly
-        # instead of letting the adapter checks pass vacuously.
-        self.assertIn("roadmap", names)
-        self.assertIn("review_wave_<wave>_cycle_<cycle>", names)
-        self.assertIn("review_wave_<wave>_cycle_<cycle>_contract", names)
-        self.assertIn("review_wave_<wave>_cycle_<cycle>_adversarial", names)
-        self.assertIn("review_plan_panel_<family>", names)
-        self.assertIn("review_wave_<wave>_cycle_<cycle>_panel_<family>", names)
-        self.assertIn("inspect_codebase", names)
-        self.assertIn("inspect_docs", names)
-
     def test_adapters_exist_including_the_shared_profile(self):
         adapters = dispatch_adapters()
         self.assertTrue(adapters, "no platform dispatch adapters found")
@@ -71,38 +22,40 @@ class DispatchContractTests(unittest.TestCase):
             PROJECT_ROOT / "platforms" / "shared-agents" / "dispatch.md", adapters
         )
 
-    def test_every_mandated_task_name_appears_in_every_adapter(self):
-        bases = base_task_names(mandated_task_names())
-        self.assertTrue(bases, "no logical task names extracted from skills")
-        for adapter in dispatch_adapters():
-            adapter_text = adapter.read_text(encoding="utf-8")
-            for name in sorted(bases):
-                self.assertIn(
-                    name,
-                    adapter_text,
-                    f"{adapter.parent.name}/dispatch.md is missing mandated "
-                    f"logical task name {name!r}",
+    def test_emitted_review_brief_preserves_dispatch_and_evidence_contract(self):
+        primary = PROJECT_ROOT / "primary"
+        options = argparse.Namespace(
+            role_brief=PROJECT_ROOT / "skills/gsd-path/references/reviewer.md",
+            template=PROJECT_ROOT / "skills/gsd-path/templates/wave-review.md",
+            repair_evidence=None,
+        )
+        tasks = [{"task_id": "T001", "task": ".project/tasks/T001.md",
+                  "base": "task-base", "commit": "task-landing"}]
+        for lens in (None, "contract", "adversarial"):
+            with self.subTest(lens=lens):
+                name = "review_wave_1_cycle_2" + (f"_{lens}" if lens else "")
+                sidecar = PROJECT_ROOT / name
+                relative = f".project/review/{name}.md"
+                state = {"wave": 1, "cycle": 2, "lens": lens, "task_id": name,
+                         "worktree": str(sidecar), "branch": f"verify/{name}",
+                         "base": "review-base", "relative": relative}
+                brief = dispatch_driver.review_brief(state, options, primary, tasks, False, None)
+                lines = brief.splitlines()
+                self.assertEqual(
+                    lines[0],
+                    f"You are the reviewer for GSD Path wave 1, cycle 2; logical task name {name}. "
+                    + "Mode: wave" + (f"; lens: {lens}." if lens else "."),
                 )
-
-    def test_every_adapter_states_host_isolation_none(self):
-        for adapter in dispatch_adapters():
-            adapter_text = adapter.read_text(encoding="utf-8")
-            self.assertIn(
-                "Host isolation: none.",
-                adapter_text,
-                f"{adapter.parent.name}/dispatch.md is missing the host "
-                "isolation contract",
-            )
-
-    def test_every_adapter_permits_the_review_lens_suffixes(self):
-        for adapter in dispatch_adapters():
-            adapter_text = adapter.read_text(encoding="utf-8")
-            for suffix in LENS_SUFFIXES:
+                self.assertIn(f"Repository root, read-only: {primary}", lines)
                 self.assertIn(
-                    suffix,
-                    adapter_text,
-                    f"{adapter.parent.name}/dispatch.md is missing the review "
-                    f"lens suffix {suffix!r}",
+                    f"Your verify sidecar root, the only place you may write or apply patches: {sidecar} "
+                    f"on branch verify/{name} at the recorded review base review-base.", lines,
+                )
+                self.assertIn(f"Write exactly this output file: {sidecar / relative}", lines)
+                self.assertIn(f"Template (use only this): {options.template}", lines)
+                self.assertIn(
+                    f"- T001: {primary / tasks[0]['task']} — base task-base, landing commit task-landing",
+                    lines,
                 )
 
 

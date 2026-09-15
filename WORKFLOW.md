@@ -5,6 +5,13 @@ Idea to shipped code through a gated pipeline. The `gsd-path` router reads
 Every handoff is on disk; the any-phase discussion sidecar also records its
 dialogue and answers on disk. AGENTS.md supplies the shared operating rules.
 
+**Path scope.** `.project/` paths describe the consuming project's artifacts.
+References to `skills/`, `scripts/`, `platforms/`, `RUNTIME.md`, and `HOOKS.md`
+describe the GSD Path source checkout, which an application need not contain.
+For execution in an installed project, resolve each role, template, and helper
+from the active skill's bundled absolute paths. Source-relative links below
+are navigation within the GSD Path source checkout, not installed-file claims.
+
 **Program flow.** When the work is a multi-milestone program, define runs in
 program mode and writes `.project/CHARTER.md` (enduring scope and vetoes),
 research and decide work at program scope, and the roadmap phase slices the
@@ -477,8 +484,7 @@ The ship phase closes the milestone with exactly one commit on the bound
 branch: the shipped STATE.md, the final-review artifacts, and the archive
 move with its MANIFEST.md, staged from `.project/` only, subject
 `ship: M00N — <milestone-slug>` and a body naming `Archive:` and
-`Reviewed-HEAD:`. Every other commit on the bound branch
-belongs to the build orchestrator. The commit must contain only `.project/`
+`Reviewed-HEAD:`. The ship commit must contain only `.project/`
 paths. There is no untracked-project fallback. Every pipeline commit carries
 the subject and field body defined by its canonical phase contract; task-land
 fields live only in the
@@ -645,7 +651,7 @@ with their exact ordered source-file and row list.
   research/evidence-codebase.md   brownfield ground truth (inspect)
   research/DOCS-AUDIT.md     doc-vs-code verdicts and remediation queue
   research/RESEARCH.md       research dispatch/question/output manifest
-  research/evidence-*.md     four required evidence dimensions
+  research/evidence-*.md     evidence for dispatched dimensions; RESEARCH.md records skips
   research/SYNTHESIS.md      decision artifact; authoritative after decide gate
   plan/PLAN.md               waves, config, and project verify
   tasks/T###-slug.md         full contract, clean base SHA, status

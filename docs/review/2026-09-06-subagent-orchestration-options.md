@@ -227,7 +227,7 @@ The owner selected a Path-native driver with an owner-supplied headless child
 command, without Orca orchestration. See the authoritative
 [dispatch driver reference](../../RUNTIME.md#dispatch-driver) for commands,
 records, recovery, and limits, and the
-[build wave loop](../../skills/gsd-path-build/SKILL.md#wave-loop) for the parent
+[build execution](../../skills/gsd-path-build/SKILL.md#execute-from-runtime-receipts) for the parent
 procedure. Regression coverage lives in
 [tests/test_dispatch_driver.py](../../tests/test_dispatch_driver.py).
 

@@ -122,6 +122,12 @@ directory for the full logical session; resumptions reuse it. Record completed
 parent CLI run events and each native child's session events with stable logical
 task names before the next dispatch. The helper reads host counters and refuses
 incomplete or ambiguous usage; never estimate tokens or reset the ledger.
+When the verified CLI adapter reports cumulative counters across `resume`, record
+each later invocation with `--previous-events <previous recorded CLI events>`.
+The helper checks thread identity and records only the new output, preserving the
+raw total and predecessor. Keep that chain in order; never sum cumulative totals.
+Use ordinary `record` for per-invocation counters. An unknown counter convention
+is unproven usage, not permission to guess.
 Run `admit` for the next task and stop dispatch on a blocked result. Preserve
 its output in the dispatch evidence. This gates observed usage only: concurrent
 or in-flight work can overrun before the host reports usage. Codex CLI has no

@@ -13,6 +13,10 @@ It does not dispatch models or supply owner approvals.
 Use the absolute `workflow_run.py` path in the active skill's scripts directory.
 All commands require `--repo <absolute repository root>`.
 
+Initial inspection also uses `prepare-inspect` and `finish-inspect`. Their
+inputs, receipt handling, and entry conditions are owned by the
+[inspection procedure](skills/gsd-path-inspect/SKILL.md#process).
+
 | Command | Required input | Result |
 | --- | --- | --- |
 | `route` | Optional `--project-dir .project/next` | Canonical route; follow its action even when it blocks or requests recovery. |
@@ -192,7 +196,9 @@ python3 <token_budget.py> admit --ledger <absolute ledger> --task <next logical 
 The metric is the host's `output_tokens`, including its reported reasoning output;
 reasoning is not added again. Input and cached input are not included. Resumptions
 reuse the ledger and task identity. Each CLI invocation uses its immutable event
-file. Re-observing that file is idempotent; new invocations accumulate. Native
+file. Re-observing that file is idempotent. For per-invocation versus cumulative
+resume counters, follow the [dispatch accounting contract](platforms/shared-agents/dispatch.md#configured-output-budgets):
+new invocations must charge only new output. Native
 single-invocation child sessions and Claude `--output-format json` usage
 receipts are supported. Resumed native child logs with
 ambiguous cumulative counters fail closed; use separate CLI run receipts instead.

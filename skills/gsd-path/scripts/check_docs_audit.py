@@ -21,7 +21,8 @@ are rejected.
 The frozen inventory travels in the dispatch brief; pass it with
 `--inventory FILE` (one POSIX path per line, `-` for stdin). Without it the
 gate derives the inventory from tracked Markdown files, excluding `.git`,
-`node_modules`, `.project/archive/**`, installed `*/skills/gsd-path*` bundles,
+`node_modules`, `.project/archive/**`, installed `*/skills/gsd-path*` and
+`*/skills/path` bundles,
 the audit itself, and — unless the
 audit declares `Alignment mode: yes` — everything else under `.project/`.
 """
@@ -100,9 +101,10 @@ def _not_placeholder(value: str, label: str) -> None:
 
 
 def _installed_skill(parts: Sequence[str]) -> bool:
-    """True for files inside an installed GSD Path skill bundle (<host>/skills/gsd-path*/…)."""
+    """Exclude installed GSD Path bundles, including the path router alias."""
     return any(
-        parts[index] == "skills" and parts[index + 1].startswith("gsd-path")
+        parts[index] == "skills" and
+        (parts[index + 1].startswith("gsd-path") or parts[index + 1] == "path")
         for index in range(len(parts) - 2)
     )
 

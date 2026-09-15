@@ -47,6 +47,31 @@ same milestone; a later milestone's `inspect/active` is a new scan.
 
 ## Process
 
+For an initial `inspect/active` inspection on the `.project` track, with neither output
+artifact present and a clean Git product at the recorded HEAD, run the bundled
+`python3 <absolute workflow_run.py> prepare-inspect --repo <absolute root>
+--expected-head <recorded HEAD>` first. It performs the inventory freeze and
+both sidecar preparations from steps 1–2 and writes complete assignment briefs.
+Its state validation and pending-answer check satisfy those entry checks;
+reuse their results at this boundary.
+Use its returned `inspection.inventory_file` for the gate. Before dispatch, read
+and apply the [runtime dispatch contract](references/dispatch.md), including its
+host-specific context isolation. Dispatch each returned logical `task_name` in a fresh context with its `brief_file` path and the current
+user constraints, including configured budgets. The child reads that file;
+the parent does not read or rewrite the roles, templates, or generated briefs.
+When both children return, review the mapper's Map and Findings against its
+template as in step 3. After that review passes, run the bundled
+`python3 <absolute workflow_run.py> finish-inspect --repo <absolute root>
+--expected-head <recorded HEAD> --inspection <returned receipt_file>
+--mapper-reviewed`. This runs the docs gate, checks the audit baseline,
+collects and retires both sidecars, checks pending discussion, and records
+`inspect/done` through the canonical transition. Do not repeat those operations.
+Present step 4's ground truth and use step 5's caller handoff. A failure uses
+step 3's failure contract and the returned step evidence; do not blindly rerun
+the completion command or repeat already proven steps.
+Prior evidence, lookahead, or a dirty/non-Git product uses steps 1–2 below.
+Preparation never changes phase state; neither command dispatches agents.
+
 1. Before creating or changing `.project/` Markdown, freeze the helper's exact
    stdout from `python3 <absolute check_docs_audit.py> --repo <absolute root>
    --emit-inventory` in a temporary file. Do not rediscover or edit that

@@ -94,7 +94,7 @@ def _final_view(relative, text, criteria, reviewed, head):
                   f"- **Reference**: {relative} — {criterion}",
                   "- **Finding**: none", "- **Fix direction**: none"]
         if "Surface" in fields:
-            lines.append(f"- **Surface**: {fields['Surface']}")
+            lines.append(f"- **Surface**: {contracts._unquoted(fields['Surface']).partition(',')[0]}")
         lines.append("")
     return "\n".join(lines)
 

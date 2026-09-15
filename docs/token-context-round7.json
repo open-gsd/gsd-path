@@ -1,0 +1,150 @@
+{
+  "candidate": "9f13dc06dd0eceab71ca763abc88c750f2cb0d52",
+  "fixture": "/Users/jeremymcspadden/orca/evaluations/token-delivery-round7/path",
+  "model": "gpt-6-astra",
+  "reasoning": "high",
+  "metric": "output_tokens",
+  "tasks": [
+    {
+      "task": "inspect_parent",
+      "output_tokens": 4289,
+      "events": "/Users/jeremymcspadden/orca/evaluations/token-delivery-round7/path/run-20260915T173243530227Z/events.jsonl"
+    },
+    {
+      "task": "inspect_docs",
+      "output_tokens": 1481,
+      "events": "/Users/jeremymcspadden/Library/Application Support/orca/codex-accounts/86df0dc7-3078-4314-8766-60e244dd9765/home/sessions/2026/09/15/rollout-2026-09-15T12-35-06-01a0a622-ff79-7e71-82c7-54dac6078b73.jsonl"
+    },
+    {
+      "task": "inspect_codebase",
+      "output_tokens": 2441,
+      "events": "/Users/jeremymcspadden/Library/Application Support/orca/codex-accounts/86df0dc7-3078-4314-8766-60e244dd9765/home/sessions/2026/09/15/rollout-2026-09-15T12-34-52-01a0a622-c8b1-7b32-b76d-7dc7c5d4ead7.jsonl"
+    },
+    {
+      "task": "planning_parent",
+      "output_tokens": 4002,
+      "events": "/Users/jeremymcspadden/orca/evaluations/token-delivery-round7/path/run-20260915T174040403011Z/events.jsonl"
+    },
+    {
+      "task": "T001",
+      "output_tokens": 2943,
+      "events": "/Users/jeremymcspadden/orca/evaluations/token-delivery-round7/path/repo/.git/gsd-path/dispatch/gsd-path-M001/T001/attempt-1/stdout"
+    },
+    {
+      "task": "review_wave_1_cycle_1",
+      "output_tokens": 3040,
+      "events": "/Users/jeremymcspadden/orca/evaluations/token-delivery-round7/path/repo/.git/gsd-path/dispatch/gsd-path-M001/reviews/review_wave_1_cycle_1/attempt-1/stdout"
+    },
+    {
+      "task": "review_final",
+      "output_tokens": 4367,
+      "events": "/Users/jeremymcspadden/orca/evaluations/token-delivery-round7/path/repo/.git/gsd-path/review-final-events.jsonl"
+    },
+    {
+      "task": "build_parent",
+      "output_tokens": 5543,
+      "events": "/Users/jeremymcspadden/orca/evaluations/token-delivery-round7/path/run-20260915T174549055949Z/events.jsonl"
+    },
+    {
+      "task": "ship_parent",
+      "output_tokens": 899,
+      "events": "/Users/jeremymcspadden/orca/evaluations/token-delivery-round7/path/run-20260915T180046484777Z/events.jsonl"
+    }
+  ],
+  "total_output_tokens": 29005,
+  "pre_coding_output_tokens": 12213,
+  "coder_output_tokens": 2943,
+  "coder_share": 0.10146526460955008,
+  "completed_delivery": true,
+  "integration": {
+    "archive": ".project/archive/001-widget-counter",
+    "base": "60f63fe16fe454b4c42248f894f6c9708bf7f3ca",
+    "commit": "742295ad839c2294fc5099257fcaeb1fd144f3cb",
+    "integrate": "60f63fe16fe454b4c42248f894f6c9708bf7f3ca",
+    "landing": "60f63fe16fe454b4c42248f894f6c9708bf7f3ca",
+    "mode": "direct",
+    "tag": "milestone/001-widget-counter"
+  },
+  "acceptance": {
+    "verdict": "pass",
+    "checks": [
+      {
+        "arguments": [],
+        "pass": true,
+        "exit_code": 0,
+        "stdout": "0 widgets\n",
+        "stderr": ""
+      },
+      {
+        "arguments": [
+          "3"
+        ],
+        "pass": true,
+        "exit_code": 0,
+        "stdout": "3 widgets\n",
+        "stderr": ""
+      },
+      {
+        "arguments": [
+          "--json"
+        ],
+        "pass": true,
+        "exit_code": 0,
+        "stdout": "{\"widgets\": 0}\n",
+        "stderr": ""
+      },
+      {
+        "arguments": [
+          "3",
+          "--json"
+        ],
+        "pass": true,
+        "exit_code": 0,
+        "stdout": "{\"widgets\": 3}\n",
+        "stderr": ""
+      },
+      {
+        "arguments": [
+          "--json",
+          "-2"
+        ],
+        "pass": true,
+        "exit_code": 0,
+        "stdout": "{\"widgets\": -2}\n",
+        "stderr": ""
+      },
+      {
+        "arguments": [
+          "invalid"
+        ],
+        "pass": true,
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "usage: count.py [-h] [--json] [count]\ncount.py: error: argument count: invalid int value: 'invalid'\n"
+      }
+    ]
+  },
+  "proof": "/Users/jeremymcspadden/orca/evaluations/token-delivery-round7/path/delivery-proof.json",
+  "original_policy": {
+    "task_limit": 4000,
+    "session_limit": 30000,
+    "task_overruns": [
+      "inspect_parent",
+      "planning_parent",
+      "review_final",
+      "build_parent"
+    ]
+  },
+  "current_owner_policy": {
+    "ruling": "Use 4k as a warning; keep the 30k session limit (Recommended)",
+    "task_warning": 4000,
+    "session_limit": 30000,
+    "assessment": "pass under the newly selected policy; original overruns retained"
+  },
+  "limitations": [
+    "One small CLI fixture; not a universal performance guarantee.",
+    "Native output only; excludes optimization conversation and fixture setup.",
+    "Trailing period on the wave surface name prevented reuse and caused a 4367-token final review.",
+    "Output tokens differ from prompt context and repeated/cached input."
+  ]
+}

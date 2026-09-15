@@ -44,6 +44,37 @@ class TokenBudgetTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("unsupported", json.loads(result.stdout)["reason"])
 
+    def test_cumulative_resume_records_only_new_output(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.run_cli(root, 'configure', '--task-limit', '4000', '--session-limit', '30000',
+                         '--authority', 'owner policy')
+            first, second = root / 'first.jsonl', root / 'second.jsonl'
+            for path, total in ((first, 3000), (second, 4100)):
+                path.write_text('\n'.join(json.dumps(event) for event in [
+                    {'type': 'thread.started', 'thread_id': 'same-thread'},
+                    {'type': 'turn.completed', 'usage': {'output_tokens': total}}]))
+            self.assertEqual(self.run_cli(root, 'record', '--task', 'inspect', '--events', str(first)).returncode, 0)
+            for _ in range(2):
+                result = self.run_cli(root, 'record', '--task', 'define', '--events', str(second),
+                                      '--previous-events', str(first))
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            admission = json.loads(self.run_cli(root, 'admit', '--task', 'define').stdout)
+            self.assertEqual(admission['session_output_tokens'], 4100)
+            self.assertEqual(admission['task_output_tokens'], 1100)
+            self.assertEqual(admission['decision'], 'admit')
+            saved = (root / 'budget.json').read_bytes()
+            first.write_text(first.read_text().replace('3000', '3500'))
+            result = self.run_cli(root, 'record', '--task', 'inspect', '--events', str(first))
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual((root / 'budget.json').read_bytes(), saved)
+            first.write_text(first.read_text().replace('3500', '3000'))
+            second.write_text(second.read_text().replace('same-thread', 'other-thread'))
+            result = self.run_cli(root, 'record', '--task', 'define', '--events', str(second),
+                                  '--previous-events', str(first))
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual((root / 'budget.json').read_bytes(), saved)
+
     def test_session_exhaustion_blocks_a_new_task(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

@@ -1,0 +1,190 @@
+{
+  "candidate": "efe4163a3707740ac3ca4c7f90d9268ab310c588",
+  "current_source_counter_fix": "0c9c7df",
+  "native_session": "01a0a55b-9996-7681-8377-bdfd8d9a62c2",
+  "path_arm": "/Users/jeremymcspadden/orca/evaluations/token-context-efe4163/path",
+  "direct_arm": "/Users/jeremymcspadden/orca/evaluations/token-context-504ebeb/direct",
+  "roles_output_tokens": {
+    "parent": 18346,
+    "inspect_codebase": 3672,
+    "inspect_docs": 4173,
+    "coder": 3058,
+    "wave_review": 6153
+  },
+  "total_output_tokens": 35402,
+  "parent_invocations": [
+    {
+      "events": "/Users/jeremymcspadden/orca/evaluations/token-context-efe4163/path/run-20260915T135718781148Z/events.jsonl",
+      "cumulative_output_tokens": 4148,
+      "new_output_tokens": 4148,
+      "seconds": 299.875917333,
+      "exit_code": 0
+    },
+    {
+      "events": "/Users/jeremymcspadden/orca/evaluations/token-context-efe4163/path/run-20260915T140334646030Z/events.jsonl",
+      "cumulative_output_tokens": 8226,
+      "new_output_tokens": 4078,
+      "seconds": 173.54556795899998,
+      "exit_code": 0
+    },
+    {
+      "events": "/Users/jeremymcspadden/orca/evaluations/token-context-efe4163/path/run-20260915T141410297391Z/events.jsonl",
+      "cumulative_output_tokens": 14032,
+      "new_output_tokens": 5806,
+      "seconds": 216.71713212499998,
+      "exit_code": 0
+    },
+    {
+      "events": "/Users/jeremymcspadden/orca/evaluations/token-context-efe4163/path/run-20260915T141954978619Z/events.jsonl",
+      "cumulative_output_tokens": 18346,
+      "new_output_tokens": 4314,
+      "seconds": 495.977138708,
+      "exit_code": 0
+    }
+  ],
+  "child_sources": {
+    "coder": "/Users/jeremymcspadden/orca/evaluations/token-context-efe4163/path/repo/.git/gsd-path/dispatch/gsd-path-M001/T001/attempt-1/stdout",
+    "wave_review": "/Users/jeremymcspadden/orca/evaluations/token-context-efe4163/path/repo/.git/gsd-path/dispatch/gsd-path-M001/reviews/review_wave_1_cycle_1/attempt-1/stdout",
+    "inspect_docs": "/Users/jeremymcspadden/Library/Application Support/orca/codex-accounts/86df0dc7-3078-4314-8766-60e244dd9765/home/sessions/2026/09/15/rollout-2026-09-15T08-58-51-01a0a55d-01c2-73c3-8a40-c6f54534a854.jsonl",
+    "inspect_codebase": "/Users/jeremymcspadden/Library/Application Support/orca/codex-accounts/86df0dc7-3078-4314-8766-60e244dd9765/home/sessions/2026/09/15/rollout-2026-09-15T08-58-30-01a0a55c-b13c-7ab3-a537-eb14a22f755a.jsonl"
+  },
+  "path_product": {
+    "verdict": "pass",
+    "checks": [
+      {
+        "arguments": [],
+        "pass": true,
+        "exit_code": 0,
+        "stdout": "0 widgets\n",
+        "stderr": ""
+      },
+      {
+        "arguments": [
+          "3"
+        ],
+        "pass": true,
+        "exit_code": 0,
+        "stdout": "3 widgets\n",
+        "stderr": ""
+      },
+      {
+        "arguments": [
+          "--json"
+        ],
+        "pass": true,
+        "exit_code": 0,
+        "stdout": "{\"widgets\": 0}\n",
+        "stderr": ""
+      },
+      {
+        "arguments": [
+          "3",
+          "--json"
+        ],
+        "pass": true,
+        "exit_code": 0,
+        "stdout": "{\"widgets\": 3}\n",
+        "stderr": ""
+      },
+      {
+        "arguments": [
+          "--json",
+          "-2"
+        ],
+        "pass": true,
+        "exit_code": 0,
+        "stdout": "{\"widgets\": -2}\n",
+        "stderr": ""
+      },
+      {
+        "arguments": [
+          "invalid"
+        ],
+        "pass": true,
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "usage: count.py [-h] [--json] [count]\ncount.py: error: argument count: invalid int value: 'invalid'\n"
+      }
+    ]
+  },
+  "direct_product": {
+    "verdict": "pass",
+    "checks": [
+      {
+        "arguments": [],
+        "pass": true,
+        "exit_code": 0,
+        "stdout": "0 widgets\n",
+        "stderr": ""
+      },
+      {
+        "arguments": [
+          "3"
+        ],
+        "pass": true,
+        "exit_code": 0,
+        "stdout": "3 widgets\n",
+        "stderr": ""
+      },
+      {
+        "arguments": [
+          "--json"
+        ],
+        "pass": true,
+        "exit_code": 0,
+        "stdout": "{\"widgets\": 0}\n",
+        "stderr": ""
+      },
+      {
+        "arguments": [
+          "3",
+          "--json"
+        ],
+        "pass": true,
+        "exit_code": 0,
+        "stdout": "{\"widgets\": 3}\n",
+        "stderr": ""
+      },
+      {
+        "arguments": [
+          "--json",
+          "-2"
+        ],
+        "pass": true,
+        "exit_code": 0,
+        "stdout": "{\"widgets\": -2}\n",
+        "stderr": ""
+      },
+      {
+        "arguments": [
+          "invalid"
+        ],
+        "pass": true,
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "usage: count.py [-h] [--json] [count]\ncount.py: error: argument count: invalid int value: 'invalid'\n"
+      }
+    ]
+  },
+  "path_head": "9b08419b6aa6a664fd6e8898704ae1704519f48f",
+  "direct_head": "705de1be17cc4043687f08cfc36b25cce355911d",
+  "direct_output_tokens": 3347,
+  "direct_seconds": 144.991774792,
+  "path_native_seconds": 1186.115756125,
+  "pipeline_outcome": "product landed and full wave review passed; budget admission blocked before shipment",
+  "budget": {
+    "task_limit": 4000,
+    "session_limit": 30000,
+    "recorded_total": 35402,
+    "compliant": false
+  },
+  "limits": [
+    "Incomplete Path pipeline; no completed speedup or optimality claim.",
+    "Fresh CLI cumulative resume counters were differenced, not summed.",
+    "Initial inspection run at candidate 504ebeb is a separate preserved partial run.",
+    "Direct uses the same widget requirements and model settings; Path adds its workflow and gates.",
+    "Evaluator approvals and counter normalization are disclosed operator work outside native token counters.",
+    "The live candidate is frozen; the newer counter recorder was separately exercised against its real trace."
+  ],
+  "direct_events": "/Users/jeremymcspadden/orca/evaluations/token-context-504ebeb/direct/run-20260915T134831605027Z/events.jsonl"
+}

@@ -1,0 +1,24 @@
+{
+  "tokenizer": "o200k_base",
+  "baseline_head": "ca1152d69e0a8e57bdbb9ddaae00708823587e5c",
+  "build_entry_and_required_reads": {
+    "before": 17637,
+    "after_driver_path": 2333,
+    "after_native_path": 12179,
+    "after_driver_with_host_counter_contract": 4399
+  },
+  "coder_fixed_including_repository_agents": {
+    "before": 7098,
+    "after": 6519
+  },
+  "reviewer_role": {
+    "before": 2153,
+    "after_wave": 1648,
+    "after_final": 780
+  },
+  "limits": "Static document tokens; excludes host context, tasks, intent views, source, tool output, caching and runtime behavior. Native path loads recovery procedures; no runtime token saving claimed.",
+  "build_skill_alone": {
+    "before": 10791,
+    "after": 2333
+  }
+}

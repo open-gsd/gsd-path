@@ -1,0 +1,476 @@
+# Token context work
+
+## Contract
+
+Reduce irrelevant instructions and model-managed bookkeeping without weakening
+approved constraints, task isolation, review, or publication gates.
+
+- Load build procedures and reviewer modes only when their branch applies.
+- Generate coder intent context from approved files, preserving constraints,
+  vetoes, corrections, source identity, and owned success criteria. Ambiguous
+  input retains full intent; it must never silently lose a requirement.
+- Use the existing deterministic driver for supported operations; preserve a
+  native-tool path when no owner-supplied child command exists.
+- Verify generated context and installed resource loading, measure before/after
+  instruction size, and exercise a completed delivery before claiming runtime
+  token savings.
+
+## Baseline
+
+Clean evaluation branch `jeremymcs/token-eval`, HEAD and live origin/main
+`ca1152d69e0a8e57bdbb9ddaae00708823587e5c`; no merged PR for this branch and
+no active `.project/STATE.md`. No CONTRIBUTING.md exists at this revision.
+
+Measured with o200k_base: build plus required role/template reads 17,637 tokens;
+coder role, task template, and repository AGENTS.md 7,098 tokens, before task,
+intent, product source, or host context. Historical runs are evidence of prior
+overhead, not a measurement of this change.
+
+## Implementation
+
+- Build loads the driver path first. Native dispatch/recovery and abandon are
+  separate procedures. Optional review templates are loaded only on their branch.
+- Reviewer modes have separate procedures with common authority and evidence rules.
+- Coder briefs contain a deterministic intent view with source/task hashes. All
+  non-criterion text stays verbatim, including unknown sections. Owned criteria
+  and explicit SC references in task/global text are retained. Unfamiliar criteria
+  formatting retains full intent. Invalid ownership fails before dispatch.
+- Native coders use the existing `finish` runtime after returning; both dispatch
+  paths use `complete`. This removes manual verification/landing and completion
+  sequences without introducing a new orchestration engine.
+- Canonical resources were synchronized into standalone skills and the alias.
+
+## Evidence
+
+- RED: `python3 -B -m unittest tests.test_task_context.TaskContextTests.test_dispatch_supplies_context_without_a_second_intent_read`
+  failed because the existing dispatch supplied only the intent path, with no
+  required criterion or global rule in the brief.
+- GREEN: `python3 -B -m unittest tests.test_task_context tests.test_dispatch_contract tests.test_skill_commands tests.test_sync_skill_resources`
+  passed 14 tests. This exercises generated output, ambiguous-format fallback,
+  explicit cross-criterion references, invalid ownership, standalone bundled
+  execution, resource synchronization, and disclosed command/name contracts.
+- `python3 -B -m unittest tests.test_dispatch_driver` passed 65 tests, including
+  isolated serial/parallel coding, native finish, collection, retry, and completion.
+- `python3 -B -m unittest tests.test_router_contract tests.test_lean_verification`
+  passed 15 tests, including final-review reuse and project verification evidence.
+- Sabotage: patched `scripts.dispatch_driver.task_context.render` in a disposable
+  Python process to return full intent. The dispatch contract test failed because
+  it received the unrelated SC2. The patch was restored on context-manager exit.
+- `python3 -B scripts/sync_skill_resources.py` completed with no divergence warnings.
+- Ponytail review: reused the existing driver and handoff parser; no dependency,
+  new tracking ledger, or model-based routing was added.
+
+## Measured prompt load
+
+See [machine counts](token-context-metrics.json). Build's initial driver path fell
+from 17,637 to 2,333 o200k_base tokens before conditional host-counter instructions.
+With those instructions the driver path totals 4,399; the native path totals 12,179.
+Coder fixed instructions, including repository AGENTS.md, fell from 7,098 to 6,519.
+The intent view's hashes/header add input; savings depend on how many unrelated
+criteria can be omitted. Small/all-owned intents may not shrink. These counts
+exclude tool output, host context, caching, and model behavior.
+
+## Historical open work
+
+The attempts below retain their original failures and open items. The completed
+round-seven result and current owner policy are summarized in
+[token-evaluation.md](token-evaluation.md); full counters are in
+[token-context-round7.json](token-context-round7.json).
+
+The fresh matched fixture is `/Users/jeremymcspadden/orca/evaluations/token-context-504ebeb`.
+It pins candidate `504ebeb580bf80b4d86b5a35c17a5403f4562966`, uses the same widget
+requirements for quick Path and direct coding, and records Codex CLI 0.154.0,
+gpt-6-astra/high, danger-full-access. Both remotes are local fixture repositories.
+Raw prompts, command events, counters, and execution status are in each arm's
+`run-*` directories. Path thread: `01a0a553-5d16-77b3-b6e2-e43f35ec379c`;
+direct thread: `01a0a553-8e49-7da0-abaa-55ebc5997950`.
+
+### Live finding: installed alias entered the docs audit
+
+The first Path run reached the intent gate without coding. Its frozen inventory
+contained 51 Markdown files, including 48 files from `.agents/skills/path/`.
+The existing exclusion recognized `gsd-path*` but missed the distributed `path`
+alias. The resulting audit created 12 unrelated alias findings, plus three
+fixture-root tooling findings. Parent output alone reached 6,050 tokens.
+The direct arm completed in 144.99 seconds with 3,347 output tokens.
+
+The alias exclusion now matches the canonical bundle exclusion. On the same live
+fixture the command emits only AGENTS.md, README.md, and WORKFLOW.md. RED:
+`python3 -B -m unittest tests.test_check_docs_audit.CheckDocsAuditTests.test_inventory_command_excludes_the_installed_path_router_alias`
+failed with two alias files in the result. GREEN: all 19 docs-audit tests passed.
+Sabotage: temporarily restored the old predicate in the canonical source; the
+same CLI test failed, then the exact source bytes were restored. An initial
+in-process mock did not affect the CLI subprocess and was correctly rejected as
+proof. Ponytail review: extended the existing exclusion; no new inventory or
+classification mechanism. The first native thread is terminal at the intent
+gate; it is retained as a partial run, not a completed benchmark.
+
+### Corrected candidate and cumulative counter proof
+
+The second fixture is `/Users/jeremymcspadden/orca/evaluations/token-context-efe4163`,
+pinning `efe4163a3707740ac3ca4c7f90d9268ab310c588`. Its native thread is
+`01a0a55b-9996-7681-8377-bdfd8d9a62c2`. Required general skill paths were supplied
+explicitly to remove fixture catalog ambiguity. The first invocation ended after
+inspection: parent 4,148, code inspector 3,672, docs inspector 4,173 output tokens.
+The three remaining root tooling findings received explicit fixture-only
+accept-drift rulings. These phases still exceed some per-task budgets; no budget
+compliance is claimed.
+
+The current CLI's native trace proves counters persist across resume: the first
+parent invocation ended at 4,148; the first counter in the next invocation was
+4,524 and its final counter was 8,226. The next invocation therefore generated
+4,078, not 8,226 additional tokens. Its artifact/owner-ruling work still cost more
+than 4,000. Do not sum the two cumulative totals. Historical CLI versions need
+their own trace interpretation; this finding does not recalculate old benchmarks.
+
+`token_budget.py record --previous-events` now supports an explicitly verified
+cumulative CLI counter convention. It requires the same thread, an unchanged
+recorded predecessor, and a non-reset counter. It retains the raw counter and
+predecessor while charging only the increment to that invocation's task. Ordinary
+per-invocation counters retain their existing behavior. See
+[real-trace accounting proof](token-context-counter-proof.json): parent total
+8,226, plus inspectors 7,845 = 16,071 through the intent draft.
+
+RED: `python3 -B -m unittest tests.test_token_budget.TokenBudgetTests.test_cumulative_resume_records_only_new_output`
+failed because the CLI lacked the predecessor option. GREEN: six token-budget
+tests passed. Sabotage replaced the subtraction with the full counter; the same
+test failed on 7,100 versus expected 4,100, then exact source was restored. The
+test also proves duplicate records do not add cost and a different thread cannot
+alter the ledger. Real preserved CLI events exercised the new option successfully.
+Ponytail review: extended the existing recorder, with no replacement ledger.
+
+Additional provenance check: temporarily replacing byte reads with newline-
+normalizing text reads made the CRLF source-hash test fail. The restored byte
+reader passed. This changes tests only; the tested candidate already reads bytes.
+
+The pinned native fixture remains unchanged. Its old recorder receives an
+evaluator-produced, source-linked usage delta file so the live ledger remains
+accurate without patching the installed candidate. Intent has been reviewed and
+approved with a precise positive-veto wording correction.
+
+## Final live result: delivery incomplete
+
+[Full machine evidence](token-context-live.json) records the completed native
+invocations and their sources. The coder landed its task and full wave review
+passed all five criteria. Both Path and direct products passed all six independent
+CLI acceptance checks. The Path run stopped at `observed output budget exhausted`
+before build completion and shipment. No integration or completed-run token saving
+is claimed.
+
+| Responsibility | Output tokens |
+|---|---:|
+| Parent, cumulative total across four invocations | 18,346 |
+| Code inspection | 3,672 |
+| Docs inspection | 4,173 |
+| Coder including tests | 3,058 |
+| Full wave review | 6,153 |
+| **Total** | **35,402** |
+
+Direct completed at 3,347 tokens and 144.99 native seconds. Path used 1,186.12
+native parent-execution seconds, including waits for its children, and remains
+unshipped. Owner waiting time is excluded. These are different delivery endpoints,
+so this is not a completed speedup comparison.
+
+The budget ledger now includes the final parent increment of 4,314, with source
+provenance, rather than stopping at the parent's partial 31,088 report. The
+session exceeded 30,000 by 5,402. The code inspector and coder stayed under 4,000;
+the docs inspector, reviewer, and each parent invocation exceeded it. In-flight
+generation was not hard-capped. Preserve these failures; do not reset the ledger.
+
+The source changes and focused verification are complete, with three local
+implementation checkpoints: `504ebeb`, `efe4163`, and `0c9c7df`. Remaining scope:
+a completed native pipeline run within the owner budget is unproven. Static
+loading improved and wrong inventory data was removed, but the live run still
+spent 21,877 tokens before coding and 32,344 outside the coder. Another optimization
+round needs a ruling under the supplied MSW three-round fuse; finishing this same
+native run would also require an explicit budget change. No further model work
+has been dispatched in the exhausted fixture.
+
+## Authorized next round: planning input
+
+The owner authorized another optimization round with unchanged 4,000-token task
+and 30,000-token session budgets. The source has no owned project state. Scope
+was narrowed to a directly reproduced loading defect rather than splitting more
+phase documents: the original planning trace executed full reads of both
+check_handoffs.py and review_panel.py, plus the unused planner role and panel
+template. Those four inputs total 24,493 o200k_base tokens. This is available
+source size, not billed input or a claimed output saving; tool truncation and
+repeat reads affect the actual transcript.
+
+Planning now resolves executable paths and consumes helper results. It reads
+source only for a concrete failure unexplained by documented recovery. Quick
+planning loads its own plan/task templates, skips the child planner role and
+runtime contract, and leaves the panel template to a ready panel. The canonical
+`planning started` event is now explicit in Quick mode; skipped phases go in
+synthesis, avoiding the rejected extended event seen in the native trace.
+
+Ponytail review: changed instructions only; reused every existing helper and
+gate. Deferred broad mode splitting and installer-provenance changes because
+the trace supports this smaller change. No new engine, ledger, dependency, or
+verification gate. Canonical sync passed with no warnings. The existing skill,
+dispatch, and resource suites passed all 12 tests; git diff --check passed.
+Runtime behavior and savings still require the phase replay below.
+
+### Planning replay result
+
+Candidate `232e810484c831815c85d5db792bc604efac63af` was exercised with
+Codex CLI 0.154.0, gpt-6-astra/high. The evidence is in
+[token-context-round4.json](token-context-round4.json), including native event
+paths, gate output, command reads, and budget records. Both replay fixtures
+start from the same approved intent, historical inspection artifacts, and
+settled synthesis at the original approval checkpoint. Fixture setup restores
+`define/done` before planning; this is not a new inspection or delivery receipt.
+
+- First replay: 3,979 output tokens, 176.89 seconds. The host loaded its global
+  old planning skill first and read both Python helpers. Retained as a
+  contaminated attempt, not a matched control or candidate success.
+- Exact-path candidate replay: 4,528 output tokens, 193.39 seconds. The native
+  command trace contains no reads of either Python helper. The existing
+  gate-plan command passed, and product source and approved intent stayed
+  unchanged. The plan stopped at `plan/active` for owner approval. Output was
+  528 over the unchanged 4,000 task budget; the completed counter was recorded
+  through the canonical helper and retained.
+- The candidate actor guessed a missing plan-bundle token helper, then found
+  the router copy and ran the required diagnosis. The cloned fixture also had
+  no origin/main ref. Those observed setup costs remain in the counters.
+- Both native replays together used 8,507 output tokens. This excludes the
+  optimization parent and fixture setup, so it is not complete session usage.
+
+Executable evidence checks assert that the old-skill replay read helper source,
+the exact candidate did not, each native plan gate exited zero, and neither
+replay changed product source or approved intent. Documentation-only changes
+need no new product tests. The earlier 12 contract/resource tests remain green.
+No completed-delivery speedup, causal output reduction, or end-to-end budget
+compliance is established. The original 21,877 pre-code output-token finding
+remains open. Further speculative mode splitting and inventory exclusions were
+not needed to prove this loading fix.
+
+## Continued goal: evaluator overhead and audit scope
+
+The owner requested continued work with the existing budgets. Three workstreams
+were exercised: evaluator prompts, installed documentation, and docs-auditor
+scope. See [round-five evidence](token-context-round5.json) and
+[evaluator verification](token-harness-verification.json).
+
+### Changes
+
+- The evaluator names the installed candidate by absolute path. Its default
+  prompts no longer require agent-authored timing wrappers. Native event and
+  process timing capture remain; unclassified activity is not invented. The
+  old review trace had two failed nested-shell attempts while writing its
+  artifact. This is measurement overhead, separate from skill overhead.
+- AGENTS.md scopes distribution paths and sync commands to the GSD Path source
+  checkout. WORKFLOW.md distinguishes source references from installed paths,
+  removes the stale catch-all commit ownership statement, and describes
+  evidence for dispatched research dimensions rather than four mandatory ones.
+- The auditor scopes claims to the repository's product. Excluded dependency
+  internals do not create unverifiable findings. Mixed documents retain their
+  application commands, configuration, and integration promises. GSD Path's own
+  source repository still audits its pipeline as the product. Instructions and
+  authority conflicts remain binding. Fixed-format inventory and remediation
+  fields retain exact paths and claims; explanations go in separate prose.
+
+### Observed verification
+
+The fresh native workflow at `b1962b1` stopped before coding at six docs rulings.
+The parent used 5,367 output tokens; code inspection used 2,962 and docs
+inspection 3,193. Its canonical ledger retains all 11,522 tokens. Both inspectors
+were within the 4,000 task budget; the parent was not. This run did not establish
+a completed-delivery improvement.
+
+A separate audit after the source-document clarification used 4,650 tokens and
+created 18 unverifiable dependency-internal findings. That failed result exposed
+the remaining scope bug; it is retained, not counted as a success.
+
+The scope proof used a fixture with a deliberately false README claim: running
+count.py with 9 allegedly prints 10 widgets. The real command prints 9 widgets.
+The auditor caught that drift, verified the correct CLI claim, and accounted for
+AGENTS.md and WORKFLOW.md as two descriptive documents. It created zero
+unverifiable dependency findings. Initial output was 1,496 tokens, but the parent
+format gate rejected explanations embedded in path bullets and mismatched
+remediation fields. The original wrapper captured that gate's stderr without
+retaining it; the failure is recorded explicitly. Diagnosis passed, reporting
+only expected uncommitted state and the active verification sidecar.
+
+A same-thread format repair consumed another 896 tokens, for 2,392 total charged
+to the same docs task. It used the corrected role at `80ae763`, reused the
+recorded product evidence, and did not repeat product checks. The canonical docs
+gate then passed; canonical collection and retirement also passed. Native
+cumulative counters were recorded with the verified previous-events convention,
+not summed twice. This is a successful scope-and-drift proof, not a fresh
+end-to-end run of the final candidate.
+
+All 25 existing docs-audit and resource tests passed. The evaluator's generated
+input integration check failed on the old unbound prompt, passed on the new
+installed candidate, failed when that candidate file was removed in a separate
+disposable fixture, and passed after restoration. A preliminary byte-equality
+assertion was rejected because installation legitimately transforms host syntax;
+the corrected check verifies the installed target and candidate receipt. No new
+product tests or full-repository suite were needed. Ponytail review retained the
+existing helpers, evidence formats, and gates without adding another runtime or
+ledger design.
+
+### Open contract
+
+Native trials in this pass used 18,564 output tokens, including the format repair.
+That number excludes the optimization conversation and fixture setup, so it is
+not complete session accounting. The last whole-workflow attempt exceeded the
+parent task budget. End-to-end delivery within both owner budgets remains
+unproven. The three-round fuse ends this pass; the remaining necessary work is
+reducing parent orchestration and measuring completed delivery. No universal
+optimality, causal whole-pipeline saving, or goal completion is claimed.
+
+## Parent inspection preparation runtime
+
+The continued goal targets the measured 5,367-token parent overrun. The existing
+workflow runtime now has `prepare-inspect` for an initial active-track inspection
+with no prior inspection outputs and a clean Git product. It validates state and
+pending discussion, freezes the canonical inventory outside .project, creates the
+two canonical verify sidecars, and generates exact role/template/output briefs.
+The parent dispatches brief-file references plus current user constraints, then
+uses the existing artifact gates, collection, retirement, and phase transition.
+Prior evidence, lookahead, and dirty/non-Git inspection retain the existing path.
+There is no new ledger, agent launcher, or phase-state writer.
+
+RED: the public CLI test failed because prepare-inspect was not a supported
+action. GREEN: the same test created two distinct worktrees at the recorded HEAD,
+kept later documents outside the frozen inventory and sidecars, and left primary
+research outputs untouched. The standalone inspect bundle passed the same test.
+Prior evidence and later phases block before sidecar creation. One initial test
+fixture lacked its research directory; after correcting the fixture, that guard
+test passed. The 20 targeted workflow/resource/command checks passed across the
+focused runs. Sabotage blanked the inventory write in the canonical runtime; the
+CLI test failed on missing AGENTS.md/README.md, then passed after restoration.
+Resource sync completed without warnings. Ponytail review: fixed composition of
+existing canonical helpers; original audit, isolation, and publication gates stay
+in force. Native end-to-end budget evidence is still pending.
+
+## Inspection completion runtime and round 6 result
+
+The prepare-only candidate `9f8bf34` reached an approvable quick-lane INTENT
+with no false dependency-doc findings. Its parent consumed 5,034 output tokens,
+still above 4,000. Native child counters report mapper 2,461 and docs 2,344,
+for 9,839 observed output tokens before coding. These exclude the optimization
+conversation and setup. The strict recorder accepted the parent but rejected
+the inherited child log shape: two session metadata and task-start records.
+The failing recorder stderr was not retained; source inspection establishes the
+unsupported shape, not an exact replayed error. Forensics returned status ok
+with expected uncommitted inspection and intent artifacts.
+
+The fast path had skipped the runtime dispatch reference before spawning; the
+child logs inherited parent lifecycle records. It now explicitly loads that
+reference and applies its context-isolation rule before dispatch.
+
+`finish-inspect` composes the existing docs gate, baseline check, collection,
+retirement, pending-discussion check, and expected-state transition. The parent
+still judges mapper coverage and must supply `--mapper-reviewed`. A frozen
+receipt binds the prepared inventory, assignment outputs, repository, and base.
+No agent launcher, product code, phase-state writer, or retry engine was added.
+
+Verification: 22 focused workflow, installed-resource, command, and dispatch
+checks passed. The standalone package initially failed before the new command
+was synced, then passed. Sabotage removed the docs gate; the real CLI accepted
+an invalid audit and the intent test failed. After restoring the gate the same
+test passed. Ponytail review retained canonical helpers and fail-stop behavior;
+partial collection still requires existing forensics rather than blind retry.
+Native full-delivery budget compliance remains unproven.
+
+## Completed inspection candidate: native delivery attempt
+
+Candidate `7efc439` was installed and executed in a fresh matched quick-lane
+widget fixture at `/Users/jeremymcspadden/orca/evaluations/token-inspect-complete-round6/path`. Both inspector logs now have one session metadata
+and task-start record; the strict recorder accepted them. The fresh-context
+dispatch instruction took effect. Codex still reported that the global skill
+catalog exceeded its description budget; that host-wide catalog is distinct
+from the phase files loaded by this skill.
+
+Observed output: inspection/intent parent 4,396; mapper 2,851; docs 1,518;
+planning parent 4,645; coder 2,995; full wave reviewer 5,087; final reviewer
+3,034; interrupted build/ship parent 6651. Total observed lower bound:
+**31,177**, including cumulative resume deltas exactly once. Pre-coding
+output was 13,410 versus the prior 21,877 observation (different candidate,
+single runs; no isolated causal claim). These native-trial figures exclude
+the optimization conversation and setup. Full details and event paths are in
+`docs/token-context-round6.json`.
+
+The coder and isolated driver verification passed; full wave review passed;
+project Verify ran once and passed. The external acceptance evaluator then
+passed all six CLI cases. The code is functional, but this is not a completed
+delivery result. After observed total exceeded the owner session budget, the
+evaluator interrupted the CLI. Diagnosis passed and returned ship/active with
+expected uncommitted final-review artifacts. There is no integration receipt.
+The stopped parent has no turn.completed counter, so its last observed usage
+is retained as a lower bound outside the strict completed-observation ledger.
+
+Remaining measured overhead: planning repaired references absent from the
+coder base; the reviewer created a missing report directory; the parent
+corrected a sidecar .git-file path used as a directory. The final-review reuse
+gate rejected a surface label: `FINAL.md SC1 Surface must name CLI
+(\`python3 count.py\`)`. That triggered another 3,034-token reviewer assignment
+although project and wave evidence already passed. This is a concrete next
+optimization candidate, not a proven safe fix or authorization for another
+unbounded round.
+
+Assessment: 4,000 is demonstrated for this small coding task (2,995; earlier
+3,058 and direct baseline 3,347), but not a reliable universal per-role cap.
+The coder represented about 9.6% of observed output, including its
+own tests; most usage remained in inspection, planning, orchestration and
+review. Consider 4,000 as an owner-approved warning threshold rather than
+increasing every task budget blindly. No token-policy change was made.
+Source implementation gates passed; whole-workflow budget optimization and
+completed native delivery remain open.
+
+## Surface-state conversion fix
+
+The round-six wave report records Surface as the declared surface followed by
+a comma and the walked state. FINAL.md requires the exact declared surface.
+The converter now extracts the name before the first comma; INTENT already
+uses commas to separate surface names. The unchanged final gate validates
+that name against the criterion's approved surface. Checks, observations and
+references remain unchanged, and the original wave retains the state text.
+
+A one-line canonical runtime change and generated copies implement this.
+`test_wave_surface_state_converts_without_accepting_a_different_surface`
+failed before the change on the same Surface mismatch, passed after the
+change, and still rejects Other CLI. A test fixture initially retained an old
+gap HEAD after its new evidence commit; regenerating the fixture gap fixed
+that unrelated setup error. Sabotage restored the old converter and the
+corrected test failed on the intended mismatch. All 19 lean-verification and
+resource tests then passed after restoration. Ponytail review: reuse the
+existing converter and exact final gate; no new model, validator, or policy.
+
+Read-only replay against the actual round-six native artifacts at
+`c6ffcab717d86847072d1f8c8cef0f13db6b3099` reproduced the original rejection
+with the committed old converter and passed validate_final with the fixed
+converter. It did not write fixture evidence or rerun product commands.
+This closes the measured format defect that triggered a 3,034-token final
+review; it does not establish a fresh whole-delivery token total.
+
+## Round seven: completed delivery and owner policy
+
+The fresh 9f13dc0 candidate completed the widget fixture through canonical
+archive and local direct integration. Recorded output totals 29,005, including
+every parent resume delta and child exactly once. Inspection/intent 4,289,
+mapper 2,441, docs 1,481, planning 4,002, coder 2,943, full review 3,040, final
+review 4,367, build parent 5,543, ship parent 899. Four actors exceeded the
+original task cap. Pre-coding usage was 12,213. Native integration returned
+merge 60f63fe16fe454b4c42248f894f6c9708bf7f3ca and tag
+milestone/001-widget-counter. All six external acceptance checks passed.
+
+The user then selected: "Use 4k as a warning; keep the 30k session limit
+(Recommended)". Future optimization work uses that policy. Historical ledger
+policy and overruns stay unchanged; the completed result passes the new policy.
+This does not change generic runtime defaults for other owners.
+
+A trailing period on the exact wave surface name still prevented final reuse,
+causing the 4,367-token final reviewer. The prior comma/state regression remains
+fixed; it is not universal normalization. This limitation is included in the
+evaluation rather than hidden in a global optimization claim.
+
+Contract audit: conditional build/reviewer loading and generated coder context
+have the recorded behavioral, fallback, isolation, and installed-resource proofs
+above. The native run used the supported driver with canonical verification and
+publication gates, passed product acceptance, and completed local delivery
+within the current 30,000-output-token session limit. The evaluation and this
+authorized optimization round are complete; no claim of universal optimality
+or completed-session savings from static prompt counts is made.
