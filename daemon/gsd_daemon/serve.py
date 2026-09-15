@@ -344,7 +344,7 @@ async function parentOp(action, path) {
     if (!r.ok) { alert(payload.error || ("Request failed (" + r.status + ")")); return; }
     DAEMON.parents = payload.parents || DAEMON.parents;
   } catch (e) { alert("Request failed: " + e); return; }
-  refresh();
+  await refresh();
 }
 function addParent() {
   openBrowseModal("~");
@@ -359,11 +359,11 @@ async function openBrowseModal(path) {
   } catch (e) { alert("Browse failed: " + e); return; }
   const rows = [];
   if (payload.parent) {
-    rows.push('<div class="browse-row" data-path=' + JSON.stringify(payload.parent)
-      + '>📁 <span class="dim">..</span></div>');
+    rows.push('<div class="browse-row" data-path="' + esc(payload.parent)
+      + '">📁 <span class="dim">..</span></div>');
   }
   for (const d of (payload.dirs || [])) {
-    rows.push('<div class="browse-row" data-path=' + JSON.stringify(d.path) + '>📁 ' + esc(d.name)
+    rows.push('<div class="browse-row" data-path="' + esc(d.path) + '">📁 ' + esc(d.name)
       + (d.project ? '<span class="proj">● gsd-path project</span>' : "") + '</div>');
   }
   if (!rows.length) rows.push('<div class="browse-row dim">(no subfolders)</div>');
@@ -380,7 +380,7 @@ async function openBrowseModal(path) {
     + '</div></div>';
   document.body.appendChild(back);
   back.querySelectorAll(".browse-row[data-path]").forEach(row => {
-    row.onclick = () => openBrowseModal(JSON.parse(row.getAttribute("data-path")));
+    row.onclick = () => openBrowseModal(row.dataset.path);
   });
   document.getElementById("plan-cancel").onclick = closeModal;
   document.getElementById("browse-select").onclick = () => {
@@ -390,14 +390,30 @@ async function openBrowseModal(path) {
   back.onclick = e => { if (e.target === back) closeModal(); };
 }
 function removeParent(path) {
-  if (confirm("Stop watching " + path + "?")) parentOp("remove", path);
+  closeModal();
+  const back = document.createElement("div");
+  back.className = "modal-back";
+  back.id = "plan-modal";
+  back.innerHTML = '<div class="modal"><h3>Stop watching this folder?</h3><p>' + esc(path)
+    + '</p><div style="display:flex;gap:10px;justify-content:flex-end">'
+    + '<button class="btn" id="plan-cancel">Cancel</button>'
+    + '<button class="btn danger" id="plan-confirm">Stop watching</button></div></div>';
+  document.body.appendChild(back);
+  back.querySelector("#plan-cancel").onclick = closeModal;
+  back.querySelector("#plan-confirm").onclick = () => { closeModal(); parentOp("remove", path); };
+  back.onclick = e => { if (e.target === back) closeModal(); };
 }
 
-async function refresh() {
+async function refresh(rescan = false) {
   try {
+    if (rescan) {
+      const scan = await fetch("/api/refresh", {method: "POST"});
+      if (!scan.ok) throw new Error("Refresh failed");
+    }
     const response = await fetch("/status");
     if (!response.ok) throw new Error("Status unavailable");
     DATA = await response.json(); ONLINE = true;
+    if (DATA.daemon) Object.assign(DAEMON, DATA.daemon);
   } catch (e) { ONLINE = false; }
   if (CState.view === "project") await loadActivity();
   render();
@@ -678,7 +694,7 @@ function render() {
   const shipped = projects.filter(p => stateOf(p) === "shipped").length;
   const connection = ONLINE === null ? "Connecting…" : ONLINE ? (DATA.generated_at ? "Updated " + esc(shortT(DATA.generated_at)) : "Connected") : "Offline · showing last update";
   const settings = `<details class="settings-menu"><summary aria-label="Settings" title="Settings">${ICON.gear}</summary><nav aria-label="Settings"><button class="btn" data-nav="plugin">Plugin</button><button class="btn" data-nav="folders">Watched folders</button><div class="appearance" role="group" aria-label="Appearance">Appearance<div class="segc">${THEMES.map(t => `<button data-theme-choice="${t}" aria-pressed="${THEME === t}">${t[0].toUpperCase() + t.slice(1)}</button>`).join("")}</div></div></nav></details>`;
-  const status = `<span class="connection" role="status"><span class="dot ${ONLINE === null ? "" : ONLINE ? "g" : "r"}"></span>${connection}</span>`;
+  const status = `<button class="btn" data-action="refresh" aria-label="Refresh dashboard">Refresh</button><span class="connection" role="status"><span class="dot ${ONLINE === null ? "" : ONLINE ? "g" : "r"}"></span>${connection}</span>`;
   const current = CState.view === "project" ? projects.find(p => p.root === CState.root) : null;
   let header, body;
   if (current) {
@@ -723,6 +739,7 @@ document.getElementById("stage").addEventListener("click", event => {
   else if (b.dataset.filter) { CState.filter = b.dataset.filter; render(); }
   else if (b.dataset.themeChoice) setTheme(b.dataset.themeChoice);
   else if (b.dataset.root) openProject(b.dataset.root);
+  else if (b.dataset.action === "refresh") refresh(true);
   else if (b.dataset.action === "add-folder") addParent();
   else if (b.dataset.removeParent != null) removeParent(DAEMON.parents[Number(b.dataset.removeParent)]);
 });
@@ -825,6 +842,7 @@ class _Handler(BaseHTTPRequestHandler):
             self._respond(code, "application/json", json.dumps(payload, indent=2, sort_keys=True))
         elif path.startswith("/status"):
             payload = aggregate(list(self.watcher.projects.values()), utc_now_iso())
+            payload["daemon"] = {"parents": list(self.watcher.config.parents), "poll_seconds": self.watcher.config.poll_seconds}
             payload["plugin"] = self._plugin_compact()
             self._respond(200, "application/json", json.dumps(payload, indent=2, sort_keys=True))
         elif path == "/api/plugin/status":
@@ -848,6 +866,14 @@ class _Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         path = self.path.split("?", 1)[0]
+        if path == "/api/refresh":
+            try:
+                self.scan(scan_sessions=False)
+            except Exception as error:
+                self._respond(500, "application/json", json.dumps({"error": str(error)}))
+                return
+            self._respond(200, "application/json", json.dumps({"ok": True}))
+            return
         if path == "/api/config/parents":
             self._parents_op()
             return
@@ -916,7 +942,8 @@ class _Handler(BaseHTTPRequestHandler):
             config.remove_parent(folder)
         try:
             config.save()
-        except OSError as error:
+            self.scan(scan_sessions=False)
+        except Exception as error:
             self._respond(500, "application/json", json.dumps({"error": str(error)}))
             return
         self._respond(200, "application/json", json.dumps(
@@ -1009,8 +1036,17 @@ def serve(watcher: Watcher, port: int = DEFAULT_PORT,
     # Bind before the first session scan: scanning every host session log on
     # the machine can take a while cold, and the dashboard must not wait on it.
     watcher.poll_once(scan_sessions=False)
+    scan_lock = threading.Lock()
+
+    def scan(scan_sessions=True):
+        with scan_lock:
+            events = watcher.poll_once(scan_sessions=scan_sessions)
+            if watcher.config.history:
+                for event in events:
+                    append_event(event)
+
     handler = type("Handler", (_Handler,),
-                   {"watcher": watcher, "plugin": plugin or PluginManager()})
+                   {"watcher": watcher, "plugin": plugin or PluginManager(), "scan": staticmethod(scan)})
     server = ThreadingHTTPServer(("127.0.0.1", port), handler)
     stop = threading.Event()
     server.watcher_stop = stop  # callers may set() to end the poll loop
@@ -1019,10 +1055,7 @@ def serve(watcher: Watcher, port: int = DEFAULT_PORT,
         # The startup poll above is not recorded, so a restart does not log every project as added.
         while not stop.is_set():
             try:
-                events = watcher.poll_once()
-                if watcher.config.history:
-                    for event in events:
-                        append_event(event)
+                scan()
             except Exception:
                 pass  # a failed cycle must never kill the poll loop
             stop.wait(watcher.config.poll_seconds)
