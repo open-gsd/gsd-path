@@ -2,6 +2,7 @@
 """Run canonical workflow helpers with fixed arguments and fail-stop receipts."""
 
 import argparse
+import hashlib
 import json
 import subprocess
 import sys
@@ -17,9 +18,13 @@ except ImportError:  # bundled copy inside a skill's scripts directory
 class StepFailed(RuntimeError):
     pass
 
+INSPECTION_SPECS = (("inspect_codebase", "codebase-mapper", "codebase", "evidence-codebase.md"),
+                    ("inspect_docs", "docs-auditor", "docs-audit", "DOCS-AUDIT.md"))
+
 
 def run_workflow(repo: Path, action: str, project_dir: str, expected_head: str = None,
-                 task_id: str = None, round_size: int = None) -> dict:
+                 task_id: str = None, round_size: int = None, inspection: Path = None,
+                 mapper_reviewed: bool = False) -> dict:
     steps = []
     outputs = {}
     scripts = Path(__file__).resolve().parent
@@ -48,10 +53,9 @@ def run_workflow(repo: Path, action: str, project_dir: str, expected_head: str =
             step("pipeline_state.py", "route", *common)
         elif action == "prepare-inspect":
             state = step("pipeline_state.py", "validate", *common)["state"]
-            if project_dir != ".project" or state["phase"] != "inspect" or state["status"] not in {"active", "blocked"}:
+            if project_dir != ".project" or state["phase"] != "inspect" or state["status"] != "active":
                 raise StepFailed("initial inspection requires the active inspect track")
-            specs = (("inspect_codebase", "codebase-mapper", "codebase", "evidence-codebase.md"),
-                     ("inspect_docs", "docs-auditor", "docs-audit", "DOCS-AUDIT.md"))
+            specs = INSPECTION_SPECS
             if any((repo / project_dir / "research" / spec[3]).exists() or
                    (repo / project_dir / "research" / spec[3]).is_symlink() for spec in specs):
                 raise StepFailed("prior inspection evidence requires the re-inspection contract")
@@ -95,7 +99,55 @@ def run_workflow(repo: Path, action: str, project_dir: str, expected_head: str =
                 assignments.append({**isolated, "task_name": task_name, "role": str(role_path),
                                     "template": str(template_path), "output": output,
                                     "brief_file": str(brief_file)})
-            outputs["inspection"] = {"inventory_file": str(inventory_file), "assignments": assignments}
+            receipt_file = staging / "inspection.json"
+            outputs["inspection"] = {"repo": str(repo), "base": expected_head,
+                                     "inventory_file": str(inventory_file),
+                                     "inventory_sha256": hashlib.sha256(inventory_file.read_bytes()).hexdigest(),
+                                     "assignments": assignments, "receipt_file": str(receipt_file)}
+            _common.atomic_write(receipt_file, json.dumps(outputs["inspection"], sort_keys=True) + "\n")
+        elif action == "finish-inspect":
+            if not mapper_reviewed or inspection is None or project_dir != ".project":
+                raise StepFailed("finish-inspect requires the prepared active track and mapper review")
+            prepared = json.loads(inspection.read_text(encoding="utf-8"))
+            if prepared["repo"] != str(repo) or prepared["base"] != expected_head:
+                raise StepFailed("inspection receipt does not match repository and expected HEAD")
+            assignments = {a["task_name"]: a for a in prepared["assignments"]}
+            if len(prepared["assignments"]) != len(INSPECTION_SPECS) or set(assignments) != {s[0] for s in INSPECTION_SPECS}:
+                raise StepFailed("inspection receipt must name both original assignments")
+            for task_name, _, _, filename in INSPECTION_SPECS:
+                assignment = assignments[task_name]
+                if assignment["base"] != expected_head or assignment["output"] != f".project/research/{filename}":
+                    raise StepFailed("inspection assignment changed its baseline or output")
+            inventory_file = Path(prepared["inventory_file"])
+            if hashlib.sha256(inventory_file.read_bytes()).hexdigest() != prepared["inventory_sha256"]:
+                raise StepFailed("frozen inspection inventory changed")
+            state = step("pipeline_state.py", "validate", *common)["state"]
+            if state["phase"] != "inspect" or state["status"] != "active":
+                raise StepFailed("inspection completion requires inspect/active")
+            branch = subprocess.run(["git", "branch", "--show-current"], cwd=repo,
+                                    capture_output=True, text=True, check=True).stdout.strip()
+            if state["branch"] != branch:
+                raise StepFailed("current branch differs from the recorded inspection branch")
+            pending = step("discussion_records.py", "pending", "--repo", str(repo))
+            if pending["pending"]:
+                raise StepFailed("pending discussion requires its owner disposition")
+            docs = assignments["inspect_docs"]
+            step("check_docs_audit.py", "--repo", docs["worktree"], "--audit", docs["output"],
+                 "--inventory", str(inventory_file))
+            if f"Audited HEAD: {expected_head}" not in (Path(docs["worktree"]) / docs["output"]).read_text().splitlines():
+                raise StepFailed("audit does not name the supplied inspection baseline")
+            for task_name, _, _, _ in INSPECTION_SPECS:
+                assignment = assignments[task_name]
+                step("isolation.py", "collect-artifact", "--repo", str(repo),
+                     "--source", assignment["worktree"], "--base", expected_head,
+                     "--branch", assignment["branch"], "--source-path", assignment["output"],
+                     "--destination-path", assignment["output"])
+                step("isolation.py", "retire", "--repo", str(repo), "--worktree", assignment["worktree"],
+                     "--branch", assignment["branch"])
+            expected = [part for key, value in state.items()
+                        for part in (f"--expect-{key}", "null" if value is None else str(value))]
+            step("pipeline_state.py", "transition", *common, *expected,
+                 "--set-phase", "inspect", "--set-status", "done", "--event", "inspection artifacts passed")
         elif action == "lint-round":
             head = subprocess.run(["git", "rev-parse", "--verify", "HEAD"],
                                   cwd=repo, capture_output=True, text=True, check=True).stdout.strip()
@@ -141,7 +193,7 @@ def run_workflow(repo: Path, action: str, project_dir: str, expected_head: str =
             if action == "approve-plan":
                 step("pipeline_state.py", "approve", *common, "--kind", "plan",
                      "--expected-head", expected_head)
-    except (StepFailed, OSError, subprocess.CalledProcessError) as error:
+    except (StepFailed, OSError, subprocess.CalledProcessError, ValueError, KeyError, TypeError) as error:
         return {"status": "blocked", "reason": str(error), "steps": steps,
                 "next": "$gsd-path-forensics"}
     return {"status": "complete", "steps": steps, **outputs}
@@ -149,20 +201,23 @@ def run_workflow(repo: Path, action: str, project_dir: str, expected_head: str =
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("route", "gate-plan", "approve-plan", "build-evidence", "lint-round", "prepare-task", "prepare-final", "prepare-inspect"))
+    parser.add_argument("action", choices=("route", "gate-plan", "approve-plan", "build-evidence", "lint-round", "prepare-task", "prepare-final", "prepare-inspect", "finish-inspect"))
     parser.add_argument("--repo", type=Path, required=True)
     parser.add_argument("--project-dir", choices=(".project", ".project/next"), default=".project")
     parser.add_argument("--expected-head")
     parser.add_argument("--task-id")
     parser.add_argument("--round-size", type=int)
+    parser.add_argument("--inspection", type=Path)
+    parser.add_argument("--mapper-reviewed", action="store_true")
     arguments = parser.parse_args(argv)
-    if arguments.action in {"approve-plan", "build-evidence", "prepare-task", "prepare-final", "prepare-inspect"} and not arguments.expected_head:
+    if arguments.action in {"approve-plan", "build-evidence", "prepare-task", "prepare-final", "prepare-inspect", "finish-inspect"} and not arguments.expected_head:
         parser.error(f"{arguments.action} requires --expected-head")
     if arguments.action == "prepare-task" and (not arguments.task_id or arguments.round_size is None):
         parser.error("prepare-task requires --task-id and --round-size")
     result = run_workflow(arguments.repo.resolve(), arguments.action,
                           arguments.project_dir, arguments.expected_head,
-                          arguments.task_id, arguments.round_size)
+                          arguments.task_id, arguments.round_size, arguments.inspection,
+                          arguments.mapper_reviewed)
     print(json.dumps(result, sort_keys=True))
     return 0 if result["status"] == "complete" else 1
 

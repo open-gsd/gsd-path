@@ -343,3 +343,33 @@ CLI test failed on missing AGENTS.md/README.md, then passed after restoration.
 Resource sync completed without warnings. Ponytail review: fixed composition of
 existing canonical helpers; original audit, isolation, and publication gates stay
 in force. Native end-to-end budget evidence is still pending.
+
+## Inspection completion runtime and round 6 result
+
+The prepare-only candidate `9f8bf34` reached an approvable quick-lane INTENT
+with no false dependency-doc findings. Its parent consumed 5,034 output tokens,
+still above 4,000. Native child counters report mapper 2,461 and docs 2,344,
+for 9,839 observed output tokens before coding. These exclude the optimization
+conversation and setup. The strict recorder accepted the parent but rejected
+the inherited child log shape: two session metadata and task-start records.
+The failing recorder stderr was not retained; source inspection establishes the
+unsupported shape, not an exact replayed error. Forensics returned status ok
+with expected uncommitted inspection and intent artifacts.
+
+The fast path had skipped the runtime dispatch reference before spawning; the
+child logs inherited parent lifecycle records. It now explicitly loads that
+reference and applies its context-isolation rule before dispatch.
+
+`finish-inspect` composes the existing docs gate, baseline check, collection,
+retirement, pending-discussion check, and expected-state transition. The parent
+still judges mapper coverage and must supply `--mapper-reviewed`. A frozen
+receipt binds the prepared inventory, assignment outputs, repository, and base.
+No agent launcher, product code, phase-state writer, or retry engine was added.
+
+Verification: 22 focused workflow, installed-resource, command, and dispatch
+checks passed. The standalone package initially failed before the new command
+was synced, then passed. Sabotage removed the docs gate; the real CLI accepted
+an invalid audit and the intent test failed. After restoring the gate the same
+test passed. Ponytail review retained canonical helpers and fail-stop behavior;
+partial collection still requires existing forensics rather than blind retry.
+Native full-delivery budget compliance remains unproven.

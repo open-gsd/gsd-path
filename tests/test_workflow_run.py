@@ -12,6 +12,53 @@ SCRIPT = Path(__file__).resolve().parents[1] / "scripts/workflow_run.py"
 
 
 class WorkflowRunTests(unittest.TestCase):
+    def test_inspection_finish_gates_before_collection_and_uses_canonical_transition(self, script=SCRIPT):
+        from tests.test_check_docs_audit import AUDIT
+        from tests import test_isolation
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "repo"
+            root.mkdir()
+            test_isolation.IsolationTests().init_bound_repo(root)
+            test_handoffs.HandoffValidationTests().write_state(root, "inspect", "active")
+            for name in ("AGENTS.md", "README.md"):
+                (root / name).write_text("Documentation.\n")
+            run_git(root, "add", ".")
+            run_git(root, "commit", "-m", "inspect fixture")
+            head = run_git(root, "rev-parse", "HEAD").stdout.strip()
+            prepared = json.loads(self.run_cli(root, "prepare-inspect", "--expected-head", head, script=script).stdout)["inspection"]
+            assignments = {a["task_name"]: a for a in prepared["assignments"]}
+            mapper = assignments["inspect_codebase"]
+            mapping = Path(mapper["worktree"]) / mapper["output"]
+            mapping.parent.mkdir(parents=True, exist_ok=True)
+            mapping.write_text("# Codebase\n\n## Map\nPython CLI.\n\n## Findings\nNone: no surprises.\n")
+            docs = assignments["inspect_docs"]
+            audit = Path(docs["worktree"]) / docs["output"]
+            audit.parent.mkdir(parents=True, exist_ok=True)
+            audit.write_text(f"# Invalid audit\nAudited HEAD: {head}\n")
+            args = ("finish-inspect", "--expected-head", head, "--inspection",
+                    prepared.get("receipt_file", str(root.parent / "unsupported.json")), "--mapper-reviewed")
+            rejected = self.run_cli(root, *args, script=script)
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertIn("check_docs_audit.py", rejected.stdout)
+            self.assertFalse((root / mapper["output"]).exists())
+            self.assertTrue(mapping.is_file())
+            audit.write_text(AUDIT.format(verified=1).replace("CONTRIBUTING.md", "AGENTS.md")
+                             .replace("Repo root: /repo", f"Repo root: {docs['worktree']}")
+                             .replace("Audited HEAD: none", f"Audited HEAD: {head}"))
+            accepted = self.run_cli(root, *args, script=script)
+            self.assertEqual(accepted.returncode, 0, accepted.stderr + accepted.stdout)
+            self.assertIn("Python CLI", (root / mapper["output"]).read_text())
+            self.assertTrue((root / docs["output"]).is_file())
+            self.assertFalse(Path(mapper["worktree"]).exists())
+            self.assertFalse(Path(docs["worktree"]).exists())
+            state = json.loads(self.run_cli(root, "route").stdout)["steps"][0]["result"]["state"]
+            self.assertEqual((state["phase"], state["status"]), ("inspect", "done"))
+            self.assertEqual(head, run_git(root, "rev-parse", "HEAD").stdout.strip())
+
+    def test_packaged_inspection_completion(self):
+        self.test_inspection_finish_gates_before_collection_and_uses_canonical_transition(
+            script=SCRIPT.parent.parent / "skills/gsd-path-inspect/scripts/workflow_run.py")
+
     def test_initial_inspection_freezes_inputs_and_isolates_both_assignments(self, script=SCRIPT):
         from tests import test_isolation
         with tempfile.TemporaryDirectory() as tmp:
