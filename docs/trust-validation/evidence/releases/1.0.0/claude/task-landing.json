@@ -1,17 +1,17 @@
 {
   "schema": "gsd-path/live-step-evidence/v1",
   "host": "claude",
-  "run_id": "c5d696f4-115b-4a36-ab0d-27a925cbfc18",
+  "run_id": "ecd2e7c8-166c-4314-86e1-bc0164b54a9f",
   "result": "pass",
   "step": "task-landing",
-  "command": "python3 -B .claude/skills/gsd-path/scripts/isolation.py land --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-claude-091d279/quick/repo --source /Users/jeremymcspadden/orca/evaluations/gsd-path-release-claude-091d279/quick/repo --base ec33fc9 --task-id T001 (serial isolation; landing see task-landing.json)",
-  "output": "commit 3293de3354410af3c29b80323175dabd201dd17b\nAuthor:     Feature Evaluation <evaluation@example.invalid>\nAuthorDate: Mon Sep 7 22:06:18 2026 -0500\nCommit:     Feature Evaluation <evaluation@example.invalid>\nCommitDate: Mon Sep 7 22:06:18 2026 -0500\n\n    T001: Extend count.py with signed count, --json output, input validation, and real-CLI tests\n    \n    Task: .project/tasks/T001-count-cli-json-tests.md\n    Base: ec33fc9f87c06c9a3bc09781f2d1b3cd769102ef\n    Files:\n    - .project/tasks/T001-count-cli-json-tests.md\n    - count.py\n    - test_count.py\n\n .project/tasks/T001-count-cli-json-tests.md |  8 ++-\n count.py                                    | 37 ++++++++++-\n test_count.py                               | 96 +++++++++++++++++++++++++++++\n 3 files changed, 136 insertions(+), 5 deletions(-)",
+  "command": "python3 /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/claude/quick/repo/.gsd-path/runtime/isolation.py land --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/claude/quick/repo --source /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/claude/quick/repo --base 87728f4c73824751f9fc79626bc4c0f233a47296 --task-id T001 --title \"Add signed count validation, --json output, and real-CLI tests to count.py\" --task-file .project/tasks/T001-count-json-cli.md --allow-path count.py --allow-path test_count.py  -> {\"bound_branch\": \"gsd-path/M001\", \"commit\": \"3f14c2146fe7585adb58a0d2cf97df5f69141bc8\", \"mode\": \"serial\", \"source_commit\": \"3f14c2146fe7585adb58a0d2cf97df5f69141bc8\", \"subject\": \"T001: Add signed count validation, --json output, and real-CLI tests to count.py\"}",
+  "output": "commit 3f14c2146fe7585adb58a0d2cf97df5f69141bc8\nAuthor:     Feature Evaluation <evaluation@example.invalid>\nAuthorDate: Mon Sep 14 18:52:17 2026 -0500\nCommit:     Feature Evaluation <evaluation@example.invalid>\nCommitDate: Mon Sep 14 18:52:17 2026 -0500\n\n    T001: Add signed count validation, --json output, and real-CLI tests to count.py\n    \n    Task: .project/tasks/T001-count-json-cli.md\n    Base: 87728f4c73824751f9fc79626bc4c0f233a47296\n    Files:\n    - .project/tasks/T001-count-json-cli.md\n    - count.py\n    - test_count.py\n\n .project/tasks/T001-count-json-cli.md |  8 +++--\n count.py                              | 28 +++++++++++++--\n test_count.py                         | 68 +++++++++++++++++++++++++++++++++++\n 3 files changed, 99 insertions(+), 5 deletions(-)",
   "fixture_bundle": "claude/fixture.bundle",
   "run_manifest": ".project/archive/001-count-json-cli/trust-run-manifest.json",
-  "fixture_base_commit": "ec33fc9f87c06c9a3bc09781f2d1b3cd769102ef",
+  "fixture_base_commit": "87728f4c73824751f9fc79626bc4c0f233a47296",
   "task_branch": "gsd-path-verify/task-t001-verify",
-  "task_worktree": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-claude-091d279/quick/repo.gsd-path/verify/task-t001-verify",
-  "landing_commit": "3293de3354410af3c29b80323175dabd201dd17b",
+  "task_worktree": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/claude/quick/repo.gsd-path/verify/task-t001-verify",
+  "landing_commit": "3f14c2146fe7585adb58a0d2cf97df5f69141bc8",
   "isolation_mode": "serial",
   "isolation_note": "A one-task wave uses the helper's serial mode: the coder worked on the bound branch in the primary worktree at the recorded base, and the named branch and worktree are the isolated Task Verify sidecar created for this task and retired after landing."
 }
