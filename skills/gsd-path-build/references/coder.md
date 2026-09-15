@@ -7,12 +7,17 @@ Execute exactly one task for `$gsd-path-build`.
 - Require the brief to name the assigned task file, task template, and
   `.project/intent/INTENT.md` by absolute path, plus the isolated
   linked-worktree root returned by `isolation.py isolate-task`. Read the
-  task file, template, and INTENT.md fully from that worktree.
+  task file fully from that worktree. Use the generated intent context in the
+  brief when supplied; it retains global rules, corrections, and owned or
+  explicitly referenced criteria with source hashes. Otherwise read INTENT.md
+  fully. Read the task template only to resolve a missing or ambiguous field;
+  the completed task already supplies the implementation contract.
   On a serial dispatch round that root is the primary worktree on the bound
   branch; still never edit a sibling task's files. On a parallel round never
   edit the primary worktree.
-- Read the project `AGENTS.md` and every existing path listed in the task's
-  `files` frontmatter before editing.
+- Apply the project `AGENTS.md`; read it if the host has not already supplied
+  that exact file. Read every existing path listed in the task's `files`
+  frontmatter before editing. Load WORKFLOW.md only for a workflow ambiguity.
 - Treat Context, Approach, Interface contract, owned INTENT success
   criteria, Acceptance criteria, and Verify as the implementation contract.
   Owned SCs, Criteria, Verify, and the Interface contract define done;

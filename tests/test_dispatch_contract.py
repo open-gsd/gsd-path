@@ -24,9 +24,11 @@ LENS_SUFFIXES = ("_contract", "_adversarial")
 
 
 def mandated_task_names():
-    """Extract every logical task name mandated by any skill's SKILL.md."""
+    """Include procedures disclosed by the skill entries, not only entry files."""
     names = set()
-    for skill_md in sorted(PROJECT_ROOT.glob("skills/gsd-path*/SKILL.md")):
+    documents = [*PROJECT_ROOT.glob("skills/gsd-path*/SKILL.md"),
+                 *PROJECT_ROOT.glob("skills/gsd-path/references/*.md")]
+    for skill_md in sorted(documents):
         text = re.sub(r"\s+", " ", skill_md.read_text(encoding="utf-8"))
         names.update(TASK_NAME_PATTERN.findall(text))
     return names

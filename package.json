@@ -43,6 +43,7 @@
     "scripts/loop_run.py",
     "scripts/workflow_run.py",
     "scripts/dispatch_driver.py",
+    "scripts/task_context.py",
     "scripts/lean_verification.py",
     "scripts/token_budget.py",
     "scripts/pipeline_undo.py",
