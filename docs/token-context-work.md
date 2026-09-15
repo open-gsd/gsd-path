@@ -418,3 +418,29 @@ review. Consider 4,000 as an owner-approved warning threshold rather than
 increasing every task budget blindly. No token-policy change was made.
 Source implementation gates passed; whole-workflow budget optimization and
 completed native delivery remain open.
+
+## Surface-state conversion fix
+
+The round-six wave report records Surface as the declared surface followed by
+a comma and the walked state. FINAL.md requires the exact declared surface.
+The converter now extracts the name before the first comma; INTENT already
+uses commas to separate surface names. The unchanged final gate validates
+that name against the criterion's approved surface. Checks, observations and
+references remain unchanged, and the original wave retains the state text.
+
+A one-line canonical runtime change and generated copies implement this.
+`test_wave_surface_state_converts_without_accepting_a_different_surface`
+failed before the change on the same Surface mismatch, passed after the
+change, and still rejects Other CLI. A test fixture initially retained an old
+gap HEAD after its new evidence commit; regenerating the fixture gap fixed
+that unrelated setup error. Sabotage restored the old converter and the
+corrected test failed on the intended mismatch. All 19 lean-verification and
+resource tests then passed after restoration. Ponytail review: reuse the
+existing converter and exact final gate; no new model, validator, or policy.
+
+Read-only replay against the actual round-six native artifacts at
+`c6ffcab717d86847072d1f8c8cef0f13db6b3099` reproduced the original rejection
+with the committed old converter and passed validate_final with the fixed
+converter. It did not write fixture evidence or rerun product commands.
+This closes the measured format defect that triggered a 3,034-token final
+review; it does not establish a fresh whole-delivery token total.

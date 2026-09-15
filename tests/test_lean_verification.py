@@ -253,6 +253,28 @@ Walkthrough:
             self.assertIn("hello followed by newline", final.read_text())
             self.assertEqual(check_handoffs.validate_final(root)["verdict"], "pass")
 
+    def test_wave_surface_state_converts_without_accepting_a_different_surface(self):
+        for named, expected in (("CLI, prints hello", True), ("Other CLI, prints hello", False)):
+            with self.subTest(surface=named), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                _, wave = self.fixture(root, surface=True)
+                wave.write_text(wave.read_text().replace("- **Surface**: CLI", f"- **Surface**: {named}"))
+                before = wave.read_bytes()
+                git(root, "add", str(wave.relative_to(root)))
+                git(root, "commit", "-qm", "record surface state in wave evidence")
+                test_handoffs.HandoffValidationTests().write_final_review(root)
+                (root / ".project/review/FINAL.md").unlink()
+                head = git_output(root, "rev-parse", "HEAD")
+                result = lean_verification.reuse_final(root, head)
+                self.assertEqual(result["reused"], expected, result)
+                self.assertEqual(wave.read_bytes(), before)
+                final = root / ".project/review/FINAL.md"
+                if expected:
+                    self.assertEqual(check_handoffs.validate_final(root)["verdict"], "pass")
+                    self.assertIn("hello followed by newline", final.read_text())
+                else:
+                    self.assertFalse(final.exists())
+
     def test_changed_product_or_contract_requires_fresh_review(self):
         for name in ("hello.py", ".project/intent/INTENT.md", ".project/plan/PLAN.md",
                      ".project/tasks/T001-demo.md"):
