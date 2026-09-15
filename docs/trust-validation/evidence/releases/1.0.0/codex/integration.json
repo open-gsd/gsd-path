@@ -1,17 +1,17 @@
 {
   "schema": "gsd-path/live-step-evidence/v1",
   "host": "codex",
-  "run_id": "01a07eea-9e57-7ae0-ac94-3df8df75205c",
+  "run_id": "01a0a234-e3f6-75e3-9275-51b81a86cb57",
   "result": "pass",
   "step": "integration",
-  "command": "python3 -B .agents/skills/gsd-path/scripts/archive_milestone.py integrate --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-codex-091d279/quick/repo --slug widget-counter-cli; validate-integrated --slug widget-counter-cli",
-  "output": "{\"archive\": \".project/archive/001-widget-counter-cli\", \"base\": \"0b82a15b9bfc468cef1f45ef06f422cee8c3d2f9\", \"commit\": \"8675cc8496cd673ee13f1fbc3cc957892c619a99\", \"integrate\": \"0b82a15b9bfc468cef1f45ef06f422cee8c3d2f9\", \"landing\": \"0b82a15b9bfc468cef1f45ef06f422cee8c3d2f9\", \"mode\": \"direct\", \"tag\": \"milestone/001-widget-counter-cli\"}",
+  "command": "python3 -B .gsd-path/runtime/archive_milestone.py integrate --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/codex/quick/repo --slug widget-counter; python3 -B .gsd-path/runtime/archive_milestone.py validate-integrated --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/codex/quick/repo --slug widget-counter",
+  "output": "{\"archive\": \".project/archive/001-widget-counter\", \"base\": \"9c26ce77a4188c0310e5c3ecc57766d903af5445\", \"commit\": \"f144b77d1869aa6e57d84fe497436585c3b25088\", \"integrate\": \"9c26ce77a4188c0310e5c3ecc57766d903af5445\", \"landing\": \"9c26ce77a4188c0310e5c3ecc57766d903af5445\", \"mode\": \"direct\", \"tag\": \"milestone/001-widget-counter\"}\n{\"archive\": \".project/archive/001-widget-counter\", \"base\": \"9c26ce77a4188c0310e5c3ecc57766d903af5445\", \"commit\": \"f144b77d1869aa6e57d84fe497436585c3b25088\", \"integrate\": \"9c26ce77a4188c0310e5c3ecc57766d903af5445\", \"landing\": \"9c26ce77a4188c0310e5c3ecc57766d903af5445\", \"mode\": \"direct\", \"tag\": \"milestone/001-widget-counter\"}",
   "fixture_bundle": "codex/fixture.bundle",
-  "run_manifest": ".project/archive/001-widget-counter-cli/trust-run-manifest.json",
-  "ship_commit": "8675cc8496cd673ee13f1fbc3cc957892c619a99",
+  "run_manifest": ".project/archive/001-widget-counter/trust-run-manifest.json",
+  "ship_commit": "f144b77d1869aa6e57d84fe497436585c3b25088",
   "bound_branch": "gsd-path/M001",
   "default_branch": "main",
-  "pre_integration_default_commit": "3a450627d58a1d9fbc4aace3782f1a4ffabc234a",
-  "integration_commit": "0b82a15b9bfc468cef1f45ef06f422cee8c3d2f9",
-  "milestone_tag": "milestone/001-widget-counter-cli"
+  "pre_integration_default_commit": "29150badab5b54599a17be50055f73a74ea16a67",
+  "integration_commit": "9c26ce77a4188c0310e5c3ecc57766d903af5445",
+  "milestone_tag": "milestone/001-widget-counter"
 }
