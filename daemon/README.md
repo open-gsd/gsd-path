@@ -104,11 +104,18 @@ gsd-path-daemon plugin <status|install|update|uninstall>          # manage the s
 8765):
 
 - `GET /health` — `{"ok": true}` liveness probe.
-- `GET /status` — aggregated status JSON (same shape as `dump`; see the
-  schema below). Also consumed by the native macOS app.
+- `GET /status` — aggregated status JSON (the `dump` schema below, plus
+  `daemon` with current `parents` and `poll_seconds`, and compact `plugin`
+  status). Also consumed by the native macOS app.
 - `GET /activity` — recent events from `history.jsonl`, newest first.
 - `GET /` — a self-contained dashboard (inline CSS/JS, no build step) that
   polls `/status` every 5 seconds.
+- `POST /api/refresh` — scans projects before returning `{"ok": true}`.
+- `POST /api/config/parents` — accepts `{"action": "add"|"remove", "path":
+  "<folder>"}`, saves the watched folders, and scans projects before returning
+  `ok`, the current `parents`, and the discovered `projects` count. These
+  request scans skip host session logs, share a lock with background scans,
+  and record changes when history is enabled.
 
 The dashboard uses graphite neutrals with the macOS accent color (CSS `AccentColor`,
 system blue where unsupported), light by default. Settings → Appearance
@@ -118,7 +125,13 @@ project has done, where it is now, where its roadmap goes next, and what it has
 cost. It shows no next steps, commands, or attention items.
 
 - **Toolbar**: GSD Path, All / Active / Shipped filters with counts, a project
-  search, the last update time, and the Settings menu (Plugin, Watched folders).
+  search, Refresh (requests a project scan and reloads status), the last update
+  time, and the Settings menu (Plugin, Watched folders).
+- **Watched folders**: Add folder opens a picker; click a folder or `..` to
+  navigate, then select the current folder. Stop watching opens a confirmation
+  dialog; Cancel or clicking outside it leaves the folder watched. Adding or
+  removing a folder updates discovered projects immediately. Other open
+  dashboards receive the current watched folders on their next status poll.
 - **Board**: one table row per project, blocked first, then in progress, then
   shipped. Columns: project with health dot and path, route (one square per
   milestone: done, current, ahead; red when blocked), current milestone, an
