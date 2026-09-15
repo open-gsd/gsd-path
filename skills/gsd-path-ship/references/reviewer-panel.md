@@ -15,4 +15,3 @@ On a `deep` wave the brief is the adversarial lens only. Record findings
 the same way as plan panel mode. Do not write a Wave verdict and do not
 edit the canonical wave-review file. The inherit reviewer remains the only
 pass/fail.
-

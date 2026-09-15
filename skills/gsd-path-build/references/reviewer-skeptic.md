@@ -18,4 +18,3 @@ those observations.
   supplied sidecar.
 - Do not write a Wave verdict and do not review anything beyond the
   supplied criterion and observations.
-

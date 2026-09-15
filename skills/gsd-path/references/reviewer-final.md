@@ -19,4 +19,3 @@ requires every criterion to be `met`.
 Use only gap-review.md. Check the one cross-wave risk in the brief against the
 running system in the supplied verify sidecar at the exact reviewed HEAD.
 Record evidence and `pass` or `blocked`; an unverified risk is blocked.
-

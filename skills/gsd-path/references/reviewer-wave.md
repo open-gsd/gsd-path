@@ -87,4 +87,3 @@ Wave mode rule above applies to both lenses.
 
 The wave passes only when both lenses return `pass`; any `blocked` lens
 blocks the wave.
-
