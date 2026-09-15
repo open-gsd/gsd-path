@@ -74,10 +74,17 @@ router supplied lookahead mode. Every per-milestone path below, including
 review-panel evidence, is rooted there. Program inputs remain at `.project/`
 as stated in Lookahead mode.
 
-1. Read the local [plan template](templates/plan.md), [task template](templates/task.md),
-   [plan-panel template](templates/plan-panel.md), `scripts/check_handoffs.py`,
-   and `scripts/review_panel.py`; resolve them to absolute paths.
-2. Read the local [planner role](references/planner.md), then follow the
+1. Resolve the local [plan template](templates/plan.md), [task template](templates/task.md),
+   `scripts/check_handoffs.py`, and `scripts/review_panel.py` to absolute paths.
+   Quick mode reads the plan and task templates because the parent writes
+   those artifacts. Other modes pass their paths to the planner. Execute the
+   helpers through the commands below and consume their results; their Python
+   source is not planning input. Read helper source only when diagnosing a
+   concrete failure that the returned error and documented recovery cannot
+   explain.
+2. In quick mode, skip planner dispatch and follow Quick mode below; do not
+   load the planner role or dispatch contract. In other modes, resolve the
+   local [planner role](references/planner.md) for the child, then follow the
    local [runtime dispatch contract](references/dispatch.md) with deterministic
    logical task name `plan`. Give it absolute role, `AGENTS.md`, `WORKFLOW.md`,
    input, template, and output paths, including `.project/LESSONS.md` when it
@@ -199,7 +206,9 @@ as stated in Lookahead mode.
    - `status: error` or exit 2 — use the same guarded transition to set
      `plan/blocked` with an event naming the helper error, link PLAN.md, and stop.
      A named family that is not advertised is an assertion failure.
-   - `status: ready` — for each selected family, spawn one independent child
+   - `status: ready` — resolve the local
+     [plan-panel template](templates/plan-panel.md) for the reviewers; other
+     statuses do not load this template. For each selected family, spawn one independent child
      with logical task name `review_plan_panel_<family>`, the reviewer role
      in plan-panel mode, the plan-panel template, and the exact helper-returned
      model slug when the host advertises model selection. Never override the
@@ -273,8 +282,8 @@ as stated in Lookahead mode.
 ## Quick mode
 
 Legal entry: `define/done` where INTENT.md records `Lane: quick` (transition
-to `plan/active`, logging that research and decide were skipped for the
-quick lane). Quick mode dispatches no planner agent — the orchestrator writes
+to `plan/active` using exactly the Preconditions event `planning started`;
+record the skipped research and decide phases in the synthesis). Quick mode dispatches no planner agent — the orchestrator writes
 the artifacts directly:
 
 1. Write `.project/research/SYNTHESIS.md` containing only `## Settled` lines

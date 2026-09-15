@@ -184,3 +184,28 @@ spent 21,877 tokens before coding and 32,344 outside the coder. Another optimiza
 round needs a ruling under the supplied MSW three-round fuse; finishing this same
 native run would also require an explicit budget change. No further model work
 has been dispatched in the exhausted fixture.
+
+## Authorized next round: planning input
+
+The owner authorized another optimization round with unchanged 4,000-token task
+and 30,000-token session budgets. The source has no owned project state. Scope
+was narrowed to a directly reproduced loading defect rather than splitting more
+phase documents: the original planning trace executed full reads of both
+check_handoffs.py and review_panel.py, plus the unused planner role and panel
+template. Those four inputs total 24,493 o200k_base tokens. This is available
+source size, not billed input or a claimed output saving; tool truncation and
+repeat reads affect the actual transcript.
+
+Planning now resolves executable paths and consumes helper results. It reads
+source only for a concrete failure unexplained by documented recovery. Quick
+planning loads its own plan/task templates, skips the child planner role and
+runtime contract, and leaves the panel template to a ready panel. The canonical
+`planning started` event is now explicit in Quick mode; skipped phases go in
+synthesis, avoiding the rejected extended event seen in the native trace.
+
+Ponytail review: changed instructions only; reused every existing helper and
+gate. Deferred broad mode splitting and installer-provenance changes because
+the trace supports this smaller change. No new engine, ledger, dependency, or
+verification gate. Canonical sync passed with no warnings. The existing skill,
+dispatch, and resource suites passed all 12 tests; git diff --check passed.
+Runtime behavior and savings still require the phase replay below.
