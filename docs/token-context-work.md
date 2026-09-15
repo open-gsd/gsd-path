@@ -209,3 +209,37 @@ the trace supports this smaller change. No new engine, ledger, dependency, or
 verification gate. Canonical sync passed with no warnings. The existing skill,
 dispatch, and resource suites passed all 12 tests; git diff --check passed.
 Runtime behavior and savings still require the phase replay below.
+
+### Planning replay result
+
+Candidate `232e810484c831815c85d5db792bc604efac63af` was exercised with
+Codex CLI 0.154.0, gpt-6-astra/high. The evidence is in
+[token-context-round4.json](token-context-round4.json), including native event
+paths, gate output, command reads, and budget records. Both replay fixtures
+start from the same approved intent, historical inspection artifacts, and
+settled synthesis at the original approval checkpoint. Fixture setup restores
+`define/done` before planning; this is not a new inspection or delivery receipt.
+
+- First replay: 3,979 output tokens, 176.89 seconds. The host loaded its global
+  old planning skill first and read both Python helpers. Retained as a
+  contaminated attempt, not a matched control or candidate success.
+- Exact-path candidate replay: 4,528 output tokens, 193.39 seconds. The native
+  command trace contains no reads of either Python helper. The existing
+  gate-plan command passed, and product source and approved intent stayed
+  unchanged. The plan stopped at `plan/active` for owner approval. Output was
+  528 over the unchanged 4,000 task budget; the completed counter was recorded
+  through the canonical helper and retained.
+- The candidate actor guessed a missing plan-bundle token helper, then found
+  the router copy and ran the required diagnosis. The cloned fixture also had
+  no origin/main ref. Those observed setup costs remain in the counters.
+- Both native replays together used 8,507 output tokens. This excludes the
+  optimization parent and fixture setup, so it is not complete session usage.
+
+Executable evidence checks assert that the old-skill replay read helper source,
+the exact candidate did not, each native plan gate exited zero, and neither
+replay changed product source or approved intent. Documentation-only changes
+need no new product tests. The earlier 12 contract/resource tests remain green.
+No completed-delivery speedup, causal output reduction, or end-to-end budget
+compliance is established. The original 21,877 pre-code output-token finding
+remains open. Further speculative mode splitting and inventory exclusions were
+not needed to prove this loading fix.

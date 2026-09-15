@@ -1,0 +1,127 @@
+{
+  "candidate": "232e810484c831815c85d5db792bc604efac63af",
+  "scope": "Planning-only replays; no completed-delivery or causal savings claim",
+  "budgets": {
+    "task": 4000,
+    "session": 30000
+  },
+  "removed_unconditional_source_tokens_o200k": 24493,
+  "runs": {
+    "plan-replay": {
+      "events": "/Users/jeremymcspadden/orca/evaluations/token-plan-input-round4/plan-replay/run-20260915T145056084804Z/events.jsonl",
+      "execution": {
+        "model": "gpt-6-astra",
+        "reasoning": "high",
+        "sandbox": "danger-full-access",
+        "cli": "codex-cli 0.154.0",
+        "command": [
+          "codex",
+          "exec",
+          "--sandbox",
+          "danger-full-access",
+          "--add-dir",
+          "/Users/jeremymcspadden/orca/evaluations/token-plan-input-round4/plan-replay",
+          "--ignore-user-config",
+          "--model",
+          "gpt-6-astra",
+          "-c",
+          "model_reasoning_effort=\"high\"",
+          "--json",
+          "-"
+        ],
+        "exit_code": 0,
+        "started_at": "2026-09-15T14:50:56.086445+00:00",
+        "elapsed_seconds": 176.88690745899999,
+        "head": "7b7880ff016202b088faa49d85a6be98e4768ed4"
+      },
+      "thread": "01a0a58c-b757-7db0-b104-c10cfbf81235",
+      "usage": {
+        "input_tokens": 545965,
+        "cached_input_tokens": 484480,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 3979,
+        "reasoning_output_tokens": 151
+      },
+      "within_task_budget": true,
+      "helper_source_reads": [
+        "/bin/zsh -lc 'cat .agents/skills/gsd-path-plan/scripts/check_handoffs.py .agents/skills/gsd-path-plan/scripts/review_panel.py'"
+      ],
+      "gate_evidence": [
+        {
+          "command": "/bin/zsh -lc 'python3 -B \"/Users/jeremymcspadden/orca/evaluations/token-plan-input-round4/plan-replay/repo/.agents/skills/gsd-path-plan/scripts/workflow_run.py\" gate-plan --repo \"/Users/jeremymcspadden/orca/evaluations/token-plan-input-round4/plan-replay/repo\"'",
+          "exit_code": 0,
+          "output": "{\"status\": \"complete\", \"steps\": [{\"command\": [\"/Applications/Xcode.app/Contents/Developer/usr/bin/python3\", \"-B\", \"/Users/jeremymcspadden/orca/evaluations/token-plan-input-round4/plan-replay/repo/.agents/skills/gsd-path-plan/scripts/discussion_records.py\", \"pending\", \"--repo\", \"/Users/jeremymcspadden/orca/evaluations/token-plan-input-round4/plan-replay/repo\"], \"exit_code\": 0, \"result\": {\"pending\": []}, \"script\": \"discussion_records.py\", \"stderr\": \"\", \"stdout\": \"{\\\"pending\\\": []}\\n\"}, {\"command\": [\"/Applications/Xcode.app/Contents/Developer/usr/bin/python3\", \"-B\", \"/Users/jeremymcspadden/orca/evaluations/token-plan-input-round4/plan-replay/repo/.agents/skills/gsd-path-plan/scripts/check_handoffs.py\", \"plan\", \"--repo\", \"/Users/jeremymcspadden/orca/evaluations/token-plan-input-round4/plan-replay/repo\", \"--project-dir\", \".project\"], \"exit_code\": 0, \"result\": {\"criteria\": [\"SC1\", \"SC2\", \"SC3\", \"SC4\", \"SC5\"], \"phase\": \"plan\", \"rows\": 5, \"surfaces\": {\"count.py CLI\": \"T001\"}, \"tasks\": 1, \"waves\": [1]}, \"script\": \"check_handoffs.py\", \"stderr\": \"\", \"stdout\": \"{\\\"criteria\\\": [\\\"SC1\\\", \\\"SC2\\\", \\\"SC3\\\", \\\"SC4\\\", \\\"SC5\\\"], \\\"phase\\\": \\\"plan\\\", \\\"rows\\\": 5, \\\"surfaces\\\": {\\\"count.py CLI\\\": \\\"T001\\\"}, \\\"tasks\\\": 1, \\\"waves\\\": [1]}\\n\"}, {\"command\": [\"/Applications/Xcode.app/Contents/Developer/usr/bin/python3\", \"-B\", \"/Users/jeremymcspadden/orca/evaluations/token-plan-input-round4/plan-replay/repo/.agents/skills/gsd-path-plan/scripts/check_task_briefs.py\", \"--repo\", \"/Users/jeremymcspadden/orca/evaluations/token-plan-input-round4/plan-replay/repo\", \"--base\", \"7b7880ff016202b088faa49d85a6be98e4768ed4\", \"--tasks-dir\", \".project/tasks\"], \"exit_code\": 0, \"result\": {\"base\": \"7b7880ff016202b088faa49d85a6be98e4768ed4\", \"checked\": 3, \"tasks\": 1}, \"script\": \"check_task_briefs.py\", \"stderr\": \"\", \"stdout\": \"{\\\"base\\\": \\\"7b7880ff016202b088faa49d85a6be98e4768ed4\\\", \\\"checked\\\": 3, \\\"tasks\\\": 1}\\n\"}, {\"command\": [\"/Applications/Xcode.app/Contents/Developer/usr/bin/python3\", \"-B\", \"/Users/jeremymcspadden/orca/evaluations/token-plan-input-round4/plan-replay/repo/.agents/skills/gsd-path-plan/scripts/review_panel.py\", \"validate-plan\", \"--plan\", \"/Users/jeremymcspadden/orca/evaluations/token-plan-input-round4/plan-replay/repo/.project/plan/PLAN.md\", \"--intent\", \"/Users/jeremymcspadden/orca/evaluations/token-plan-input-round4/plan-replay/repo/.project/intent/INTENT.md\"], \"exit_code\": 0, \"result\": {\"families\": [], \"mode\": \"off\", \"source\": \"plan\"}, \"script\": \"review_panel.py\", \"stderr\": \"\", \"stdout\": \"{\\n  \\\"families\\\": [],\\n  \\\"mode\\\": \\\"off\\\",\\n  \\\"source\\\": \\\"plan\\\"\\n}\\n\"}]}\n"
+        }
+      ],
+      "product_and_approved_intent_unchanged": true,
+      "qualification": "Global old skill loaded before candidate discovery",
+      "budget_record": {
+        "hard_cap_supported": false,
+        "output_tokens": 3979,
+        "status": "recorded",
+        "task": "plan"
+      }
+    },
+    "plan-candidate": {
+      "events": "/Users/jeremymcspadden/orca/evaluations/token-plan-input-round4/plan-candidate/run-20260915T145404014817Z/events.jsonl",
+      "execution": {
+        "model": "gpt-6-astra",
+        "reasoning": "high",
+        "sandbox": "danger-full-access",
+        "cli": "codex-cli 0.154.0",
+        "command": [
+          "codex",
+          "exec",
+          "--sandbox",
+          "danger-full-access",
+          "--add-dir",
+          "/Users/jeremymcspadden/orca/evaluations/token-plan-input-round4/plan-candidate",
+          "--ignore-user-config",
+          "--model",
+          "gpt-6-astra",
+          "-c",
+          "model_reasoning_effort=\"high\"",
+          "--json",
+          "-"
+        ],
+        "exit_code": 0,
+        "started_at": "2026-09-15T14:54:04.016591+00:00",
+        "elapsed_seconds": 193.386607042,
+        "head": "7b7880ff016202b088faa49d85a6be98e4768ed4"
+      },
+      "thread": "01a0a58f-93a8-7dd1-9f89-110ae2daba54",
+      "usage": {
+        "input_tokens": 541690,
+        "cached_input_tokens": 492416,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 4528,
+        "reasoning_output_tokens": 324
+      },
+      "within_task_budget": false,
+      "helper_source_reads": [],
+      "gate_evidence": [
+        {
+          "command": "/bin/zsh -lc 'python3 -B /Users/jeremymcspadden/orca/evaluations/token-plan-input-round4/plan-candidate/repo/.agents/skills/gsd-path-plan/scripts/workflow_run.py gate-plan --repo /Users/jeremymcspadden/orca/evaluations/token-plan-input-round4/plan-candidate/repo'",
+          "exit_code": 0,
+          "output": "{\"status\": \"complete\", \"steps\": [{\"command\": [\"/Applications/Xcode.app/Contents/Developer/usr/bin/python3\", \"-B\", \"/Users/jeremymcspadden/orca/evaluations/token-plan-input-round4/plan-candidate/repo/.agents/skills/gsd-path-plan/scripts/discussion_records.py\", \"pending\", \"--repo\", \"/Users/jeremymcspadden/orca/evaluations/token-plan-input-round4/plan-candidate/repo\"], \"exit_code\": 0, \"result\": {\"pending\": []}, \"script\": \"discussion_records.py\", \"stderr\": \"\", \"stdout\": \"{\\\"pending\\\": []}\\n\"}, {\"command\": [\"/Applications/Xcode.app/Contents/Developer/usr/bin/python3\", \"-B\", \"/Users/jeremymcspadden/orca/evaluations/token-plan-input-round4/plan-candidate/repo/.agents/skills/gsd-path-plan/scripts/check_handoffs.py\", \"plan\", \"--repo\", \"/Users/jeremymcspadden/orca/evaluations/token-plan-input-round4/plan-candidate/repo\", \"--project-dir\", \".project\"], \"exit_code\": 0, \"result\": {\"criteria\": [\"SC1\", \"SC2\", \"SC3\", \"SC4\", \"SC5\"], \"phase\": \"plan\", \"rows\": 5, \"surfaces\": {\"count.py CLI\": \"T001\"}, \"tasks\": 1, \"waves\": [1]}, \"script\": \"check_handoffs.py\", \"stderr\": \"\", \"stdout\": \"{\\\"criteria\\\": [\\\"SC1\\\", \\\"SC2\\\", \\\"SC3\\\", \\\"SC4\\\", \\\"SC5\\\"], \\\"phase\\\": \\\"plan\\\", \\\"rows\\\": 5, \\\"surfaces\\\": {\\\"count.py CLI\\\": \\\"T001\\\"}, \\\"tasks\\\": 1, \\\"waves\\\": [1]}\\n\"}, {\"command\": [\"/Applications/Xcode.app/Contents/Developer/usr/bin/python3\", \"-B\", \"/Users/jeremymcspadden/orca/evaluations/token-plan-input-round4/plan-candidate/repo/.agents/skills/gsd-path-plan/scripts/check_task_briefs.py\", \"--repo\", \"/Users/jeremymcspadden/orca/evaluations/token-plan-input-round4/plan-candidate/repo\", \"--base\", \"7b7880ff016202b088faa49d85a6be98e4768ed4\", \"--tasks-dir\", \".project/tasks\"], \"exit_code\": 0, \"result\": {\"base\": \"7b7880ff016202b088faa49d85a6be98e4768ed4\", \"checked\": 3, \"tasks\": 1}, \"script\": \"check_task_briefs.py\", \"stderr\": \"\", \"stdout\": \"{\\\"base\\\": \\\"7b7880ff016202b088faa49d85a6be98e4768ed4\\\", \\\"checked\\\": 3, \\\"tasks\\\": 1}\\n\"}, {\"command\": [\"/Applications/Xcode.app/Contents/Developer/usr/bin/python3\", \"-B\", \"/Users/jeremymcspadden/orca/evaluations/token-plan-input-round4/plan-candidate/repo/.agents/skills/gsd-path-plan/scripts/review_panel.py\", \"validate-plan\", \"--plan\", \"/Users/jeremymcspadden/orca/evaluations/token-plan-input-round4/plan-candidate/repo/.project/plan/PLAN.md\", \"--intent\", \"/Users/jeremymcspadden/orca/evaluations/token-plan-input-round4/plan-candidate/repo/.project/intent/INTENT.md\"], \"exit_code\": 0, \"result\": {\"families\": [], \"mode\": \"off\", \"source\": \"plan\"}, \"script\": \"review_panel.py\", \"stderr\": \"\", \"stdout\": \"{\\n  \\\"families\\\": [],\\n  \\\"mode\\\": \\\"off\\\",\\n  \\\"source\\\": \\\"plan\\\"\\n}\\n\"}]}\n"
+        }
+      ],
+      "product_and_approved_intent_unchanged": true,
+      "qualification": "Exact candidate skill path supplied; missing planning-bundle token helper lookup required diagnosis; cloned fixture had no origin/main ref",
+      "budget_record": {
+        "hard_cap_supported": false,
+        "output_tokens": 4528,
+        "status": "recorded",
+        "task": "plan"
+      }
+    }
+  },
+  "total_observed_replay_output_tokens": 8507,
+  "limitations": [
+    "Replays start from approved phase input snapshots, not from user requirements.",
+    "Old benchmark input commit also contains the settled synthesis; both replays restore that same file.",
+    "The first replay is contaminated by global skill selection; it is not a matched control.",
+    "The task budget failed for the exact candidate run; no end-to-end budget compliance is proven.",
+    "Replay total excludes the optimization parent conversation and fixture setup; it is not complete session accounting."
+  ]
+}
