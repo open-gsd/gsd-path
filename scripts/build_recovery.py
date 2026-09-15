@@ -110,6 +110,7 @@ def begin(repo: Path, before, after, event: str) -> dict:
         latest = max(directory.glob("attempt-*/state.json"), key=lambda path: int(path.parent.name.split("-")[1]))
         record = state._read_json(latest)
         if (record.get("cleanup_pending")
+                or (record.get("worktree") and record.get("branch") and not record.get("cleanup_complete"))
                 or record.get("outcome") not in {"landed", "collected", "blocked", "resolved", "redispatched"}):
             raise state.PipelineStateError(f"settle dispatch records before recovery: {latest}")
     tasks = settled_tasks(repo)

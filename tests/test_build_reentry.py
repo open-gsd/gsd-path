@@ -267,6 +267,36 @@ class BuildReentryTests(unittest.TestCase):
         self.assertEqual(self.reopen("plan")["state"]["phase"], "plan")
         self.assertNotEqual(dispatch_driver.records_root(self.repo), records)
 
+    def test_owned_reviewer_requires_recorded_retirement(self):
+        from scripts import dispatch_driver
+        records = dispatch_driver.records_root(self.repo)
+        record = records / "reviews/wave-1/attempt-1/state.json"
+        record.parent.mkdir(parents=True)
+        original = (self.project / "STATE.md").read_bytes()
+        for outcome in ("blocked", "collected"):
+            for phase, event in (
+                ("define", "build intent corrections requested"),
+                ("plan", "build plan repair requested"),
+            ):
+                with self.subTest(outcome=outcome, phase=phase):
+                    record.write_text(json.dumps({"outcome": outcome}))
+                    self.assertEqual(self.reopen(phase)["state"]["phase"], phase)
+                    (self.project / "STATE.md").write_bytes(original)
+                    ownership = {
+                        "outcome": outcome, "base": self.base,
+                        "worktree": str(self.repo / "review-sidecar"),
+                        "branch": "gsd-path/verify/wave-1-cycle-1",
+                    }
+                    record.write_text(json.dumps(ownership))
+                    failure = self.move(phase, "active", event, success=False)
+                    self.assertIn("settle dispatch records before recovery", failure)
+                    self.assertEqual((self.project / "STATE.md").read_bytes(), original)
+                    self.assertEqual(dispatch_driver.records_root(self.repo), records)
+                    record.write_text(json.dumps({**ownership, "cleanup_complete": True}))
+                    self.assertEqual(self.reopen(phase)["state"]["phase"], phase)
+                    self.assertNotEqual(dispatch_driver.records_root(self.repo), records)
+                (self.project / "STATE.md").write_bytes(original)
+
     def test_blocked_build_returns_to_requested_contract_owner(self):
         for phase, event in (
             ("define", "build intent corrections requested"),

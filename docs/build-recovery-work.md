@@ -43,6 +43,31 @@ and mandatory approval checkpoints. It ran in a disposable snapshot.
 
 ## Independent review disposition
 
+### R1 reviewer ownership correction
+
+Recovery rejects pending cleanup and sidecar-owning dispatch records without
+recorded cleanup completion. Reviewer ownership uses the existing `worktree`
+and `branch` fields; task dispatch uses `task_branch`. `Review.collect()` may
+block before retirement or persist `collected` before retirement finishes.
+`advance()` retries incomplete collected cleanup, while task `settle()` owns
+the separate `resolved` and `redispatched` outcomes. Recovery does not retire
+sidecars or resolve records itself.
+
+Executable proof in `tests/test_build_reentry.py`:
+
+- RED: `python3 -B -m unittest tests.test_build_reentry.BuildReentryTests.test_owned_reviewer_requires_recorded_retirement`
+  failed all four cases before the fix: blocked and collected ownership without
+  cleanup flags each incorrectly entered Define and Plan.
+- GREEN: `python3 -B -m unittest tests.test_build_reentry` passed 18 tests.
+  Rejection preserves STATE bytes and the dispatch directory; recorded retirement
+  permits entry. Records without sidecar ownership remain accepted.
+- Sabotage: the same single-test command failed all four cases in a disposable
+  snapshot with the cleanup-completion predicate disabled. The snapshot was removed.
+- Canonical resources were regenerated without warnings. Ponytail review found
+  no unnecessary machinery in the shared entry guard.
+
+### Initial implementation review
+
 Claude Fable 5.1 completed a read-only implementation review. Its sole finding
 claimed that the dispatch directory returns to the original location after
 `build started`. The current implementation selects the latest recovery record
