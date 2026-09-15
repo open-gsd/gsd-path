@@ -270,7 +270,7 @@ class ParentsEndpointTests(unittest.TestCase):
         cls._env = mock.patch.dict("os.environ", {"GSD_DAEMON_CONFIG": str(cls.config_path)})
         cls._env.start()
         cls.addClassCleanup(cls._env.stop)
-        watcher = Watcher(Config(parents=[]))
+        watcher = Watcher(Config(parents=[], session_dirs=[]))
         cls.server = serve(watcher, port=0)
         cls.port = cls.server.server_address[1]
         cls.thread = threading.Thread(target=cls.server.serve_forever, daemon=True)
