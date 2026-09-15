@@ -83,9 +83,46 @@ class BoardUITests(unittest.TestCase):
     def js(self, expression):
         return self.orca("eval", "--page", self.page, "--expression", expression)["result"]
 
+    def test_watched_folder_controls(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            child = root / 'folder "quoted" &amp; space'
+            child.mkdir()
+            config = Config(parents=[str(root)])
+            watcher = Mock(config=config, projects={})
+            watcher.poll_once.return_value = []
+            with mock.patch.object(config, "save", side_effect=lambda: Config.save(config, root / "config.json")):
+                server, _ = serve_in_thread(watcher, port=0, plugin=Mock())
+                self.addCleanup(server.server_close)
+                self.addCleanup(server.shutdown)
+                self.addCleanup(server.watcher_stop.set)
+                self.page = self.orca("tab", "create", "--url",
+                    f"http://127.0.0.1:{server.server_address[1]}/#folders")["browserPageId"]
+                self.orca("wait", "--page", self.page, "--text", "Stop watching")
+                # Match WKWebView without a JavaScript confirmation delegate.
+                self.js("window.confirm = () => false")
+                self.js("document.querySelector('[data-remove-parent]').click()")
+                self.assertEqual(self.js("!!document.querySelector('#plan-modal')"), "true")
+                self.js("document.querySelector('#plan-cancel').click()")
+                self.assertEqual(config.parents, [str(root)])
+                self.js("document.querySelector('[data-remove-parent]').click()")
+                self.js("document.querySelector('#plan-confirm').click()")
+                self.orca("wait", "--page", self.page, "--selector", ".settings:not(:has(.folder-row))")
+                self.assertEqual(config.parents, [])
+                self.assertEqual(Config.load(root / "config.json").parents, [])
+                self.js(f"openBrowseModal({json.dumps(str(root))})")
+                self.orca("wait", "--page", self.page, "--text", child.name)
+                self.js("[...document.querySelectorAll('.browse-row')].find(r=>r.textContent.includes('quoted')).click()")
+                self.orca("wait", "--page", self.page, "--selector", ".browse-list:has(.browse-row):not(:has(.proj))")
+                self.assertEqual(self.js("document.querySelector('.browse-path').textContent"), str(child))
+                self.js("document.querySelector('#browse-select').click()")
+                self.orca("wait", "--page", self.page, "--text", "Stop watching")
+                self.assertEqual(Config.load(root / "config.json").parents, [str(child)])
+
     def test_status_board(self):
         projects = sample_projects()
         watcher = Mock(config=Config(parents=["/sample"]))
+        watcher.poll_once.return_value = []
         watcher.projects = {p.root: p for p in projects}
         plugin = Mock()
         plugin.latest_version.return_value = None
@@ -209,6 +246,18 @@ class BoardUITests(unittest.TestCase):
         self.js("document.querySelector('[data-nav=board]').click()")
         self.assertEqual(self.js("document.querySelectorAll('.prow').length"), '4')
         self.assertEqual(self.js("location.hash"), "")
+        # Manual refresh reaches the scan endpoint and reloads the current folder list.
+        watcher.config.parents = ["/new-parent"]
+        self.js("void (window.scanRequest = new Promise(resolve => {const original = window.fetch; window.fetch = async (...args) => {const result = await original(...args); if(args[0] === '/api/refresh') resolve(result.status); return result;};}))")
+        self.js("document.querySelector('[data-action=refresh]').click()")
+        self.assertEqual(self.js("window.scanRequest"), '200')
+        self.orca("wait", "--page", self.page, "--text", "Updated")
+        self.js("document.querySelector('[data-nav=folders]').click()")
+        self.orca("wait", "--page", self.page, "--text", "/new-parent")
+        watcher.config.parents = ["/sample"]
+        self.js("refresh()")
+        self.orca("wait", "--page", self.page, "--text", "/sample")
+        self.js("document.querySelector('[data-nav=board]').click()")
         # Toolbar connection.
         self.assertIn("Updated", self.js("document.querySelector('.connection').textContent"))
         # Settings menu: survives polling, Escape closes it, Plugin and Watched folders remain reachable.

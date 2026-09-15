@@ -231,6 +231,37 @@ class ServeHistoryTests(unittest.TestCase):
 
 
 class ParentsEndpointTests(unittest.TestCase):
+    def test_folder_changes_and_manual_refresh_scan_immediately(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            watcher = Watcher(Config(parents=[], history=False, session_dirs=[]))
+            # No periodic scan: only the HTTP actions can discover these projects.
+            with mock.patch("threading.Thread.start"):
+                server = serve(watcher, port=0)
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            self.addCleanup(server.server_close)
+            self.addCleanup(server.shutdown)
+            with mock.patch.dict(os.environ, {"GSD_DAEMON_CONFIG": str(root / "config.json")}):
+                def request(method, path, body=None):
+                    conn = http.client.HTTPConnection(*server.server_address)
+                    conn.request(method, path, json.dumps(body) if body else None)
+                    response = conn.getresponse()
+                    data = response.read()
+                    conn.close()
+                    self.assertEqual(response.status, 200, data)
+                    return json.loads(data)
+                first = make_project(root / "first")
+                request("POST", "/api/config/parents", {"action": "add", "path": str(root)})
+                status = request("GET", "/status")
+                self.assertEqual([p["root"] for p in status["projects"]], [str(first)])
+                self.assertEqual(status["daemon"]["parents"], [str(root)])
+                second = make_project(root / "second")
+                request("POST", "/api/refresh")
+                self.assertEqual({p["root"] for p in request("GET", "/status")["projects"]}, {str(first), str(second)})
+                request("POST", "/api/config/parents", {"action": "remove", "path": str(root)})
+                self.assertEqual(request("GET", "/status")["projects"], [])
+
     @classmethod
     def setUpClass(cls) -> None:
         cls.tmp = tempfile.TemporaryDirectory()
