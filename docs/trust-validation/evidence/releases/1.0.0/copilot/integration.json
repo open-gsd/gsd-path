@@ -1,17 +1,17 @@
 {
   "schema": "gsd-path/live-step-evidence/v1",
   "host": "copilot",
-  "run_id": "b920e2b9-ed25-4d18-aa6a-dd7c19b5cbf2",
+  "run_id": "bacf512d-c45b-48d1-8dcd-f1a90b213127",
   "result": "pass",
   "step": "integration",
-  "command": "python3 -B .github/skills/gsd-path/scripts/archive_milestone.py integrate --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-copilot-091d279/quick/repo --slug count-json-cli; validate-integrated --slug count-json-cli",
-  "output": "{\"archive\": \".project/archive/001-count-json-cli\", \"base\": \"37b941a79b432294e14f9c0563ce032a43f4eb1c\", \"commit\": \"e9d7af70d8ace89c16700393e65d970fed5bc6ee\", \"integrate\": \"37b941a79b432294e14f9c0563ce032a43f4eb1c\", \"landing\": \"37b941a79b432294e14f9c0563ce032a43f4eb1c\", \"mode\": \"direct\", \"tag\": \"milestone/001-count-json-cli\"}",
+  "command": "python3 -B .gsd-path/runtime/archive_milestone.py integrate --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/copilot/quick/repo --slug count-json-cli; validate-integrated --slug count-json-cli",
+  "output": "{\"archive\": \".project/archive/001-count-json-cli\", \"base\": \"3f3f25862fe8e97e9cb08e34ff1b31e8b6a436ec\", \"commit\": \"68be0b5bed6627ff09cc4f1812a2125ec560df1e\", \"integrate\": \"3f3f25862fe8e97e9cb08e34ff1b31e8b6a436ec\", \"landing\": \"3f3f25862fe8e97e9cb08e34ff1b31e8b6a436ec\", \"mode\": \"direct\", \"tag\": \"milestone/001-count-json-cli\"}",
   "fixture_bundle": "copilot/fixture.bundle",
   "run_manifest": ".project/archive/001-count-json-cli/trust-run-manifest.json",
-  "ship_commit": "e9d7af70d8ace89c16700393e65d970fed5bc6ee",
+  "ship_commit": "68be0b5bed6627ff09cc4f1812a2125ec560df1e",
   "bound_branch": "gsd-path/M001",
   "default_branch": "main",
-  "pre_integration_default_commit": "eefd66061de43bf2c33367351ce97dacca3a4d4d",
-  "integration_commit": "37b941a79b432294e14f9c0563ce032a43f4eb1c",
+  "pre_integration_default_commit": "5752b661262cb5c26fc2c04240a7307ff7a12646",
+  "integration_commit": "3f3f25862fe8e97e9cb08e34ff1b31e8b6a436ec",
   "milestone_tag": "milestone/001-count-json-cli"
 }
