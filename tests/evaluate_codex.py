@@ -77,13 +77,15 @@ def prepare(directory: Path, candidate: Path) -> dict:
             command(["git", "push", "origin", "main"], repo)
         prompt = REQUIREMENTS
         if mode == "path":
-            prompt = "$gsd-path\n\n" + prompt + "\nUse the standard lane, full review, no optional panel, and direct integration to the existing local origin. Use real native children and canonical helpers. Stop at owner approval gates with reviewable artifacts; never invent approvals or phase receipts.\n"
+            prompt = (f"Explicitly invoke the candidate skill at {repo / '.agents/skills/gsd-path/SKILL.md'}. "
+                      "Read that exact file first. Resolve bundled phase contracts and helpers from this "
+                      "candidate installation; global skills with the same names are not the candidate.\n\n"
+                      + prompt + "\nUse the standard lane, full review, no optional panel, and direct integration to the existing local origin. Use real native children and canonical helpers. Stop at owner approval gates with reviewable artifacts; never invent approvals or phase receipts.\n")
         else:
             prompt += "\nImplement directly with normal Codex tools; do not initialize GSD Path. Commit the finished product and tests.\n"
-        prompt += ("\nFor measured shell work, invoke the evaluator's activity wrapper with the actual category "
-                   "implementation, verification, or review. It records the real command and duration. "
-                   f"Command: python3 {plugin / 'tests/evaluate_codex.py'} activity --arm {arm} "
-                   "--category CATEGORY -- COMMAND ARGS. Unwrapped work remains unclassified; do not estimate durations.\n")
+        prompt += ("\nUse ordinary tools in the correct worktree. The evaluator records native events "
+                   "and elapsed execution time externally; do not wrap commands for measurement or "
+                   "invent activity categories or durations.\n")
         (arm / "prompt.txt").write_text(prompt)
         write_json(arm / "setup.json", {"elapsed_seconds": time.monotonic() - setup_started})
     manifest = {"candidate": revision, "fixture": fixture, "created_at": dt.datetime.now(dt.timezone.utc).isoformat()}
