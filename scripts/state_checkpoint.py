@@ -381,6 +381,8 @@ def _resume_checkpoint_locked(
 def _validate_plan_briefs(repo: Path, kind: str, project_dir: str) -> None:
     if kind != "plan":
         return
+    if project_dir == ".project":
+        pipeline_state._build_recovery().validate_plan(repo)
     head = pipeline_state._run_git(repo, "rev-parse", "--verify", "HEAD", check=False)
     if head.returncode != 0:
         # Pre-Git approval defers base-dependent checks to build.
@@ -476,6 +478,8 @@ def checkpoint_approval(
         state, state_before, state_path = pipeline_state.load_state(resolved, project_dir)
         changes, event, subject, body = _approval_details(kind, state, selected_milestone)
         _validate_plan_briefs(resolved, kind, project_dir)
+        if kind == "plan" and project_dir == ".project":
+            pipeline_state._build_recovery().restore_unchanged_reviews(resolved)
         expected = {
             "phase": state.phase,
             "status": state.status,
@@ -576,6 +580,10 @@ def defer_approval(
     with pipeline_state._state_lock(project):
         state, state_before, state_path = pipeline_state.load_state(resolved, project_dir)
         changes, event, _, _ = _approval_details(kind, state, selected_milestone)
+        if project_dir == ".project":
+            recovery = pipeline_state._build_recovery().context(resolved, state_before)
+            if recovery and recovery["active"]:
+                raise PipelineStateError("build recovery requires a plan checkpoint")
         _validate_plan_briefs(resolved, kind, project_dir)
         if patch:
             event = "patch plan approved"

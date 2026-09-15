@@ -148,10 +148,12 @@ dispatch contract and perform steps 1–5 by hand.
    coverage rows, an ambiguous AC. It never adds, removes, splits, merges, or
    renames tasks, moves a task between waves, or rewrites another task's
    acceptance criteria; a defect that needs any of those sets `build/blocked`
-   with the lint output and returns to plan, which owns the task inventory.
+   with the lint output and follows [build recovery](build-recovery.md) to
+   plan, which owns the task inventory.
    A user ruling that changes a success criterion,
    constraint, or veto is not a plan defect: set `build/blocked`, do not
-   rewrite the AC, and send `$gsd-path-define` to append INTENT.md
+   rewrite the AC, and follow [build recovery](build-recovery.md) to
+   `$gsd-path-define` to append INTENT.md
    `## Corrections` before plan re-gates. A task Log is not that record. One failed implementation gets one logged redispatch when
    its contract remains valid. Repeated failure, ambiguous ownership, a user
    ruling, or a dependency deadlock sets build state to `blocked` and stops.

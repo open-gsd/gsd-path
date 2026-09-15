@@ -373,6 +373,12 @@ build's re-entry transition instead).
 **Input:** the approved plan and tasks. **Output:** committed code, updated
 task files, and wave reviews.
 
+A blocked build returns through the guarded
+[build recovery contract](skills/gsd-path/references/build-recovery.md) when
+approved intent must change or the remaining task inventory needs repair.
+It preserves landed work, re-gates changed contracts, and returns through a new
+plan approval checkpoint. Ship and archived milestones cannot use this path.
+
 The build contract is not restated here. Branch binding, the wave loop, task
 isolation and landing, wave review, fix batching, completion, and milestone
 abandon live only in the canonical

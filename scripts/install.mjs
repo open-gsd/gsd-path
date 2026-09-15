@@ -27,6 +27,7 @@ export const PROJECT_RUNTIME_SCRIPTS = [
   "archive_milestone.py",
   "review_panel.py",
   "_common.py",
+  "build_recovery.py",
   "state_checkpoint.py",
   "state_promote.py",
   "discussion_validate.py",

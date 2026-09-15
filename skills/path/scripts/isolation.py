@@ -2016,7 +2016,15 @@ def _recovery_task_inventory(
     relative_posix_dir = PurePosixPath(relative_dir.as_posix())
     revisions = [head]
     parents = git_output(primary, "show", "-s", "--format=%P", head).split()
-    if parents:
+    # A recovery plan checkpoint owns replacement of unstarted task briefs.
+    # Ordinary commits still require the parent inventory so a deletion cannot
+    # silently hide a task from recovery.
+    if __package__:
+        from scripts import build_recovery
+    else:
+        import build_recovery
+    replaced = build_recovery.inventory_checkpoint(primary, head)
+    if parents and not replaced:
         revisions.append(parents[0])
     tracked = set()
     for revision in revisions:

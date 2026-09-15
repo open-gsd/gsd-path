@@ -126,6 +126,8 @@ CROSS_PHASE_TRANSITIONS = {
     ("decide", "done", "plan", "active"),
     ("roadmap", "done", "define", "active"),
     ("plan", "done", "build", "active"),
+    ("build", "blocked", "define", "active"),
+    ("build", "blocked", "plan", "active"),
     ("build", "active", "ship", "active"),
     ("build", "done", "ship", "active"),
     ("ship", "active", "shipped", "done"),
@@ -1106,6 +1108,14 @@ def route_state(repo: Path, project_dir: str = ".project") -> dict[str, object]:
     """Route ordinary phase work only when its pending discussion owner can enter."""
     result = _route_state(repo, project_dir)
     route = result["route"]
+    if project_dir == ".project" and route["action"] == "run-phase":
+        recovery = _build_recovery().context(_repo_root(repo))
+        if recovery and recovery["active"]:
+            result["recovery"] = recovery
+            if route.get("phase") == "define":
+                route["mode"] = "corrections"
+            elif route.get("phase") == "plan":
+                route["mode"] = "build-repair"
     if route["action"] == "run-phase" and result["state"]["archive"] is None:
         reason = _pending_discussion_block(_repo_root(repo), route.get("phase"))
         if reason:
@@ -1736,6 +1746,16 @@ def transition_state(
             event,
             project_dir,
         )
+        recovery_context = _build_recovery().context(resolved, text) if project_dir == ".project" else None
+        if recovery_context and recovery_context["active"]:
+            if (state.milestone, state.branch, state.archive) != (after.milestone, after.branch, after.archive):
+                raise PipelineStateError("build recovery must preserve milestone identity")
+        if state.phase == "build" and after.phase in {"define", "plan"}:
+            recovery = _build_recovery().begin(resolved, state, after, event)
+            rendered = _append_event(
+                rendered, after.phase,
+                _build_recovery().MARKER + json.dumps(recovery, sort_keys=True),
+            )
         if after.status != "blocked":
             reason = _pending_discussion_block(
                 resolved, after.phase if after.status == "active" else None
@@ -1767,6 +1787,14 @@ def transition_state(
     }
 
 
+def _build_recovery():
+    if __package__:
+        from scripts import build_recovery
+    else:
+        import build_recovery
+    return build_recovery
+
+
 def configure_integration(
     repo: Path,
     scope: str,
@@ -1786,7 +1814,9 @@ def configure_integration(
     project = _track_root(resolved, project_dir)
     with _state_lock(project):
         state, text, path = load_state(resolved, project_dir)
-        if state.phase in {"build", "ship", "shipped"}:
+        if state.phase in {"build", "ship", "shipped"} or (
+            project_dir == ".project" and _build_recovery().context(resolved, text)
+        ):
             raise PipelineStateError("integration mode is locked when build starts")
         if scope == "default":
             integration = (
@@ -2163,7 +2193,7 @@ def _specified_fields(arguments: argparse.Namespace, prefix: str) -> dict[str, O
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
-    for command in ("validate", "route", "status"):
+    for command in ("validate", "route", "status", "prepare-build-recovery"):
         subparser = subparsers.add_parser(command)
         subparser.add_argument("--repo", required=True, type=Path)
         subparser.add_argument("--project-dir", default=".project")
@@ -2211,6 +2241,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             result = route_state(args.repo, args.project_dir)
         elif args.command == "status":
             result = status_state(args.repo, args.project_dir)
+        elif args.command == "prepare-build-recovery":
+            if args.project_dir != ".project":
+                raise PipelineStateError("build recovery requires the active track")
+            result = _build_recovery().prepare(args.repo)
         elif args.command == "transition":
             result = transition_state(
                 args.repo,
