@@ -69,6 +69,24 @@ def output_usage(path: Path) -> int:
     return sum(usages)
 
 
+def cumulative_counter(path: Path):
+    """One completed CLI invocation, with the thread identity needed for resume."""
+    identities, counters = set(), []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        event = json.loads(line)
+        if "raw" in event:
+            event = json.loads(event["raw"])
+        if event.get("type") == "thread.started":
+            identities.add(event["thread_id"])
+        if event.get("type") == "turn.completed":
+            counters.append(event["usage"]["output_tokens"])
+    if len(identities) != 1 or len(counters) != 1:
+        raise ValueError("cumulative usage requires one identified, completed CLI invocation")
+    if type(counters[0]) is not int or counters[0] < 0:
+        raise ValueError("invalid cumulative output counter")
+    return identities.pop(), counters[0]
+
+
 def operate(args):
     ledger = args.ledger.absolute()
     if ledger.is_symlink():
@@ -92,9 +110,28 @@ def operate(args):
         if args.action == "record":
             source = str(args.events.resolve())
             observation = {"task": args.task, "output_tokens": output_usage(args.events)}
+            prior_events = getattr(args, "previous_events", None)
+            if prior_events is not None:
+                prior_source = str(prior_events.resolve())
+                prior = data["observations"].get(prior_source)
+                identity, total = cumulative_counter(args.events)
+                prior_identity, prior_total = cumulative_counter(prior_events)
+                if source == prior_source or identity != prior_identity or total < prior_total:
+                    raise ValueError("cumulative resume has a different thread or a reset counter")
+                if prior is None or prior.get("reported_output_tokens", prior["output_tokens"]) != prior_total:
+                    raise ValueError("previous cumulative invocation must be recorded unchanged first")
+                if any(key != source and row.get("previous_events") == prior_source
+                       for key, row in data["observations"].items()):
+                    raise ValueError("previous cumulative invocation already has a recorded successor")
+                observation.update(output_tokens=total - prior_total, reported_output_tokens=total,
+                                   previous_events=prior_source, session_id=identity)
             previous = data["observations"].get(source)
+            if previous and previous != observation and any(
+                    row.get("previous_events") == source for row in data["observations"].values()):
+                raise ValueError("a cumulative predecessor cannot change after its successor is recorded")
             if previous and (previous["task"] != args.task or
-                             previous["output_tokens"] > observation["output_tokens"]):
+                             previous["output_tokens"] > observation["output_tokens"] or
+                             previous.get("previous_events") != observation.get("previous_events")):
                 raise ValueError("observation cannot change task or reduce recorded usage")
             data["observations"][source] = observation
             atomic_write(ledger, json.dumps(data, indent=2) + "\n")
@@ -131,6 +168,8 @@ def main(argv=None):
             command.add_argument("--task", required=True)
         if name == "record":
             command.add_argument("--events", type=Path, required=True)
+            command.add_argument("--previous-events", type=Path,
+                                 help="previous recorded invocation when this CLI reports cumulative resume counters")
         if name == "admit":
             command.add_argument("--require-hard-cap", action="store_true")
     try:

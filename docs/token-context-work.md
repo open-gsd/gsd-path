@@ -63,7 +63,8 @@ overhead, not a measurement of this change.
 ## Measured prompt load
 
 See [machine counts](token-context-metrics.json). Build's initial driver path fell
-from 17,637 to 2,333 o200k_base tokens. Native-path parent instructions total 12,091.
+from 17,637 to 2,333 o200k_base tokens before conditional host-counter instructions.
+With those instructions the driver path totals 4,399; the native path totals 12,179.
 Coder fixed instructions, including repository AGENTS.md, fell from 7,098 to 6,519.
 The intent view's hashes/header add input; savings depend on how many unrelated
 criteria can be omitted. Small/all-owned intents may not shrink. These counts
@@ -101,3 +102,46 @@ in-process mock did not affect the CLI subprocess and was correctly rejected as
 proof. Ponytail review: extended the existing exclusion; no new inventory or
 classification mechanism. The first native thread is terminal at the intent
 gate; it is retained as a partial run, not a completed benchmark.
+
+### Corrected candidate and cumulative counter proof
+
+The second fixture is `/Users/jeremymcspadden/orca/evaluations/token-context-efe4163`,
+pinning `efe4163a3707740ac3ca4c7f90d9268ab310c588`. Its native thread is
+`01a0a55b-9996-7681-8377-bdfd8d9a62c2`. Required general skill paths were supplied
+explicitly to remove fixture catalog ambiguity. The first invocation ended after
+inspection: parent 4,148, code inspector 3,672, docs inspector 4,173 output tokens.
+The three remaining root tooling findings received explicit fixture-only
+accept-drift rulings. These phases still exceed some per-task budgets; no budget
+compliance is claimed.
+
+The current CLI's native trace proves counters persist across resume: the first
+parent invocation ended at 4,148; the first counter in the next invocation was
+4,524 and its final counter was 8,226. The next invocation therefore generated
+4,078, not 8,226 additional tokens. Its artifact/owner-ruling work still cost more
+than 4,000. Do not sum the two cumulative totals. Historical CLI versions need
+their own trace interpretation; this finding does not recalculate old benchmarks.
+
+`token_budget.py record --previous-events` now supports an explicitly verified
+cumulative CLI counter convention. It requires the same thread, an unchanged
+recorded predecessor, and a non-reset counter. It retains the raw counter and
+predecessor while charging only the increment to that invocation's task. Ordinary
+per-invocation counters retain their existing behavior. See
+[real-trace accounting proof](token-context-counter-proof.json): parent total
+8,226, plus inspectors 7,845 = 16,071 through the intent draft.
+
+RED: `python3 -B -m unittest tests.test_token_budget.TokenBudgetTests.test_cumulative_resume_records_only_new_output`
+failed because the CLI lacked the predecessor option. GREEN: six token-budget
+tests passed. Sabotage replaced the subtraction with the full counter; the same
+test failed on 7,100 versus expected 4,100, then exact source was restored. The
+test also proves duplicate records do not add cost and a different thread cannot
+alter the ledger. Real preserved CLI events exercised the new option successfully.
+Ponytail review: extended the existing recorder, with no replacement ledger.
+
+Additional provenance check: temporarily replacing byte reads with newline-
+normalizing text reads made the CRLF source-hash test fail. The restored byte
+reader passed. This changes tests only; the tested candidate already reads bytes.
+
+The pinned native fixture remains unchanged. Its old recorder receives an
+evaluator-produced, source-linked usage delta file so the live ledger remains
+accurate without patching the installed candidate. Intent has been reviewed and
+approved with a precise positive-veto wording correction; planning is in progress.
