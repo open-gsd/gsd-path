@@ -24,6 +24,17 @@ actually does. Read-only: change nothing outside your single output file.
    `## Descriptive docs` list — never its own section, never skipped.
 2. **Extract claims** — statements reality can contradict: commands,
    features, structure, status/checkboxes, config, integrations.
+   Scope each claim to this repository's product. An exclusion is a scope
+   boundary, not an evidence gap: do not create `unverifiable` findings or
+   remediation rows for the implementation of an excluded dependency. In an
+   application that installs GSD Path, descriptions of GSD Path's source
+   distribution and pipeline internals are such dependency claims. In GSD
+   Path's own source repository, they are product claims and must be audited.
+   Keep application commands, configuration, and integration promises in
+   scope even when they use a dependency. In a mixed document, audit those
+   product claims; if none remain, account for the document in Descriptive
+   docs with a short scope reason. This never exempts instructions from being
+   followed or conflicting instructions from being surfaced.
 3. **Verify each claim** by the cheapest sufficient method: run the
    command, read the named code, run the relevant test, check git history.
    Record the evidence (file:line, or command + result) with the verdict:
