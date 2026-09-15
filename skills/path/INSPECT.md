@@ -47,6 +47,21 @@ same milestone; a later milestone's `inspect/active` is a new scan.
 
 ## Process
 
+For an initial inspection on the active `.project` track, with neither output
+artifact present and a clean Git product at the recorded HEAD, run the bundled
+`python3 <absolute workflow_run.py> prepare-inspect --repo <absolute root>
+--expected-head <recorded HEAD>` first. It performs the inventory freeze and
+both sidecar preparations from steps 1–2 and writes complete assignment briefs.
+Its state validation and pending-answer check satisfy those entry checks;
+reuse their results at this boundary.
+Use its returned `inspection.inventory_file` for the gate. Dispatch each returned
+logical `task_name` in a fresh context with its `brief_file` path and the current
+user constraints, including configured budgets. The child reads that file;
+the parent does not read or rewrite the roles, templates, or generated briefs.
+Continue at step 3 using each returned base, branch, worktree, and output path.
+Prior evidence, lookahead, or a dirty/non-Git product uses steps 1–2 below.
+The helper never changes phase state or dispatches agents itself.
+
 1. Before creating or changing `.project/` Markdown, freeze the helper's exact
    stdout from `python3 <absolute check_docs_audit.py> --repo <absolute root>
    --emit-inventory` in a temporary file. Do not rediscover or edit that

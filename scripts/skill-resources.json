@@ -271,6 +271,7 @@
     ["scripts/loop_run.py", "skills/gsd-path-build/scripts/loop_run.py"],
     ["scripts/workflow_run.py", "skills/gsd-path/scripts/workflow_run.py"],
     ["scripts/workflow_run.py", "skills/gsd-path-plan/scripts/workflow_run.py"],
+    ["scripts/workflow_run.py", "skills/gsd-path-inspect/scripts/workflow_run.py"],
     ["scripts/workflow_run.py", "skills/gsd-path-build/scripts/workflow_run.py"],
     ["scripts/dispatch_driver.py", "skills/gsd-path/scripts/dispatch_driver.py"],
     ["scripts/task_context.py", "skills/gsd-path/scripts/task_context.py"],

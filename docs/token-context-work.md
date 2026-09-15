@@ -318,3 +318,28 @@ parent task budget. End-to-end delivery within both owner budgets remains
 unproven. The three-round fuse ends this pass; the remaining necessary work is
 reducing parent orchestration and measuring completed delivery. No universal
 optimality, causal whole-pipeline saving, or goal completion is claimed.
+
+## Parent inspection preparation runtime
+
+The continued goal targets the measured 5,367-token parent overrun. The existing
+workflow runtime now has `prepare-inspect` for an initial active-track inspection
+with no prior inspection outputs and a clean Git product. It validates state and
+pending discussion, freezes the canonical inventory outside .project, creates the
+two canonical verify sidecars, and generates exact role/template/output briefs.
+The parent dispatches brief-file references plus current user constraints, then
+uses the existing artifact gates, collection, retirement, and phase transition.
+Prior evidence, lookahead, and dirty/non-Git inspection retain the existing path.
+There is no new ledger, agent launcher, or phase-state writer.
+
+RED: the public CLI test failed because prepare-inspect was not a supported
+action. GREEN: the same test created two distinct worktrees at the recorded HEAD,
+kept later documents outside the frozen inventory and sidecars, and left primary
+research outputs untouched. The standalone inspect bundle passed the same test.
+Prior evidence and later phases block before sidecar creation. One initial test
+fixture lacked its research directory; after correcting the fixture, that guard
+test passed. The 20 targeted workflow/resource/command checks passed across the
+focused runs. Sabotage blanked the inventory write in the canonical runtime; the
+CLI test failed on missing AGENTS.md/README.md, then passed after restoration.
+Resource sync completed without warnings. Ponytail review: fixed composition of
+existing canonical helpers; original audit, isolation, and publication gates stay
+in force. Native end-to-end budget evidence is still pending.
