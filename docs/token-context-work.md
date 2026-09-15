@@ -72,8 +72,9 @@ exclude tool output, host context, caching, and model behavior.
 
 ## Open work
 
-Fresh native fixture execution and token accounting remain pending. No runtime
-token saving or whole-pipeline completion improvement is claimed from static counts.
+Native attempts and their accounting are recorded below. Successful end-to-end
+delivery within the owner budget remains unproven. No runtime token saving or
+whole-pipeline completion improvement is claimed from static counts.
 
 The fresh matched fixture is `/Users/jeremymcspadden/orca/evaluations/token-context-504ebeb`.
 It pins candidate `504ebeb580bf80b4d86b5a35c17a5403f4562966`, uses the same widget
@@ -144,4 +145,42 @@ reader passed. This changes tests only; the tested candidate already reads bytes
 The pinned native fixture remains unchanged. Its old recorder receives an
 evaluator-produced, source-linked usage delta file so the live ledger remains
 accurate without patching the installed candidate. Intent has been reviewed and
-approved with a precise positive-veto wording correction; planning is in progress.
+approved with a precise positive-veto wording correction.
+
+## Final live result: delivery incomplete
+
+[Full machine evidence](token-context-live.json) records the completed native
+invocations and their sources. The coder landed its task and full wave review
+passed all five criteria. Both Path and direct products passed all six independent
+CLI acceptance checks. The Path run stopped at `observed output budget exhausted`
+before build completion and shipment. No integration or completed-run token saving
+is claimed.
+
+| Responsibility | Output tokens |
+|---|---:|
+| Parent, cumulative total across four invocations | 18,346 |
+| Code inspection | 3,672 |
+| Docs inspection | 4,173 |
+| Coder including tests | 3,058 |
+| Full wave review | 6,153 |
+| **Total** | **35,402** |
+
+Direct completed at 3,347 tokens and 144.99 native seconds. Path used 1,186.12
+native parent-execution seconds, including waits for its children, and remains
+unshipped. Owner waiting time is excluded. These are different delivery endpoints,
+so this is not a completed speedup comparison.
+
+The budget ledger now includes the final parent increment of 4,314, with source
+provenance, rather than stopping at the parent's partial 31,088 report. The
+session exceeded 30,000 by 5,402. The code inspector and coder stayed under 4,000;
+the docs inspector, reviewer, and each parent invocation exceeded it. In-flight
+generation was not hard-capped. Preserve these failures; do not reset the ledger.
+
+The source changes and focused verification are complete, with three local
+implementation checkpoints: `504ebeb`, `efe4163`, and `0c9c7df`. Remaining scope:
+a completed native pipeline run within the owner budget is unproven. Static
+loading improved and wrong inventory data was removed, but the live run still
+spent 21,877 tokens before coding and 32,344 outside the coder. Another optimization
+round needs a ruling under the supplied MSW three-round fuse; finishing this same
+native run would also require an explicit budget change. No further model work
+has been dispatched in the exhausted fixture.
