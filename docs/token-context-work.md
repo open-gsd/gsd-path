@@ -70,11 +70,12 @@ The intent view's hashes/header add input; savings depend on how many unrelated
 criteria can be omitted. Small/all-owned intents may not shrink. These counts
 exclude tool output, host context, caching, and model behavior.
 
-## Open work
+## Historical open work
 
-Native attempts and their accounting are recorded below. Successful end-to-end
-delivery within the owner budget remains unproven. No runtime token saving or
-whole-pipeline completion improvement is claimed from static counts.
+The attempts below retain their original failures and open items. The completed
+round-seven result and current owner policy are summarized in
+[token-evaluation.md](token-evaluation.md); full counters are in
+[token-context-round7.json](token-context-round7.json).
 
 The fresh matched fixture is `/Users/jeremymcspadden/orca/evaluations/token-context-504ebeb`.
 It pins candidate `504ebeb580bf80b4d86b5a35c17a5403f4562966`, uses the same widget
@@ -444,3 +445,32 @@ with the committed old converter and passed validate_final with the fixed
 converter. It did not write fixture evidence or rerun product commands.
 This closes the measured format defect that triggered a 3,034-token final
 review; it does not establish a fresh whole-delivery token total.
+
+## Round seven: completed delivery and owner policy
+
+The fresh 9f13dc0 candidate completed the widget fixture through canonical
+archive and local direct integration. Recorded output totals 29,005, including
+every parent resume delta and child exactly once. Inspection/intent 4,289,
+mapper 2,441, docs 1,481, planning 4,002, coder 2,943, full review 3,040, final
+review 4,367, build parent 5,543, ship parent 899. Four actors exceeded the
+original task cap. Pre-coding usage was 12,213. Native integration returned
+merge 60f63fe16fe454b4c42248f894f6c9708bf7f3ca and tag
+milestone/001-widget-counter. All six external acceptance checks passed.
+
+The user then selected: "Use 4k as a warning; keep the 30k session limit
+(Recommended)". Future optimization work uses that policy. Historical ledger
+policy and overruns stay unchanged; the completed result passes the new policy.
+This does not change generic runtime defaults for other owners.
+
+A trailing period on the exact wave surface name still prevented final reuse,
+causing the 4,367-token final reviewer. The prior comma/state regression remains
+fixed; it is not universal normalization. This limitation is included in the
+evaluation rather than hidden in a global optimization claim.
+
+Contract audit: conditional build/reviewer loading and generated coder context
+have the recorded behavioral, fallback, isolation, and installed-resource proofs
+above. The native run used the supported driver with canonical verification and
+publication gates, passed product acceptance, and completed local delivery
+within the current 30,000-output-token session limit. The evaluation and this
+authorized optimization round are complete; no claim of universal optimality
+or completed-session savings from static prompt counts is made.
