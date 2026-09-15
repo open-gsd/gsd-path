@@ -1,11 +1,11 @@
 {
   "schema": "gsd-path/live-step-evidence/v1",
   "host": "claude",
-  "run_id": "c5d696f4-115b-4a36-ab0d-27a925cbfc18",
+  "run_id": "ecd2e7c8-166c-4314-86e1-bc0164b54a9f",
   "result": "pass",
   "step": "reviews",
-  "command": "Agent description=review_wave_1_cycle_1 in sidecar /Users/jeremymcspadden/orca/evaluations/gsd-path-release-claude-091d279/quick/repo.gsd-path/verify/wave-1-cycle-1; python3 -B .claude/skills/gsd-path/scripts/check_handoffs.py wave --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-claude-091d279/quick/repo --review .project/review/wave-1.cycle1.md; python3 -B .claude/skills/gsd-path/scripts/workflow_run.py prepare-final --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-claude-091d279/quick/repo (final.reused: true)",
-  "output": "# Review \u2014 wave 1, cycle 1\n\nReviewed HEAD: 3293de3354410af3c29b80323175dabd201dd17b\nReview scope: final\n\nWave verdict: pass\n# Final Review \u2014 reused full wave\n\nReviewed HEAD: 1aa16c2a54228d9bc107506985f648805ded6ae1\nOverall verdict: pass\nSource review: .project/review/wave-1.cycle1.md\nSource commit: 3293de3354410af3c29b80323175dabd201dd17b",
+  "command": "Agent description=review_wave_1_cycle_1 (run_in_background); python3 /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/claude/quick/repo/.claude/skills/gsd-path/scripts/check_handoffs.py wave --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/claude/quick/repo --review .project/review/wave-1.cycle1.md -> {\"cycle\": 1, \"owned\": [\"SC1\", \"SC2\", \"SC3\", \"SC4\", \"SC5\"], \"phase\": \"wave\", \"review\": \".project/review/wave-1.cycle1.md\", \"verdict\": \"pass\", \"wave\": 1}; python3 /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/claude/quick/repo/.claude/skills/gsd-path/scripts/workflow_run.py --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/claude/quick/repo --expected-head 07f02049da371aa42e837582f6961e6ecf71868f prepare-final (repeated at the same HEAD; final.reused: true, verification.reused: true)",
+  "output": "# Review \u2014 wave 1, cycle 1\n\nReviewed HEAD: f9008566e1cee666d4f04e19fd89d32cf92b0227\nReview scope: final\n\nWave verdict: pass\n# Final Review \u2014 reused full wave\n\nReviewed HEAD: 07f02049da371aa42e837582f6961e6ecf71868f\nOverall verdict: pass\nSource review: .project/review/wave-1.cycle1.md\nSource commit: f9008566e1cee666d4f04e19fd89d32cf92b0227",
   "wave_review_artifact": ".project/archive/001-count-json-cli/review/wave-1.cycle1.md",
   "final_review_artifact": ".project/archive/001-count-json-cli/review/FINAL.md"
 }

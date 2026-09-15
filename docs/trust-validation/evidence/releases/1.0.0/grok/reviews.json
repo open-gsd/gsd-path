@@ -1,11 +1,11 @@
 {
   "schema": "gsd-path/live-step-evidence/v1",
   "host": "grok",
-  "run_id": "01a07eea-fbe8-7ad1-9c7e-6c95723a7bf6",
+  "run_id": "01a0a235-49d4-7e42-83d1-e7b6336ea6a6",
   "result": "pass",
   "step": "reviews",
-  "command": "spawn_subagent description=review_wave_1_cycle_1 in sidecar /Users/jeremymcspadden/orca/evaluations/gsd-path-release-grok-091d279/quick/repo.gsd-path/verify/wave-1-cycle-1; python3 -B .grok/skills/gsd-path/scripts/check_handoffs.py wave --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-grok-091d279/quick/repo --review .project/review/wave-1.cycle1.md; python3 -B .grok/skills/gsd-path/scripts/workflow_run.py prepare-final --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-grok-091d279/quick/repo (final.reused: true)",
-  "output": "# Review \u2014 wave 1, cycle 1\n\n<!-- Written by the reviewer role in wave mode. File: wave-N.cycleC.md \u2014\n     deep reviews use wave-N.cycleC.contract.md and\n     wave-N.cycleC.adversarial.md instead. Keep validated fields on their\n     own lines: Cycle holds only the number\n# Final Review \u2014 reused full wave\n\nReviewed HEAD: dae0d41b901b4ff77ae223cb58a819fa26201746\nOverall verdict: pass\nSource review: .project/review/wave-1.cycle1.md\nSource commit: 7455cacd2e0a13a8008ef86f59a43be896ea77fb",
-  "wave_review_artifact": ".project/archive/001-widget-counter/review/wave-1.cycle1.md",
-  "final_review_artifact": ".project/archive/001-widget-counter/review/FINAL.md"
+  "command": "spawn_subagent description=review_wave_1_cycle_1 in sidecar /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/grok/quick/repo.gsd-path/verify/wave-1-cycle-1; python3 .gsd-path/runtime/check_handoffs.py wave --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/grok/quick/repo --review .project/review/wave-1.cycle1.md; python3 .grok/skills/gsd-path/scripts/workflow_run.py prepare-final --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/grok/quick/repo --expected-head 29420b33217129d7756d9a62dbcf8ade2686d335 (final.reused true, no review_final dispatch)",
+  "output": "# Review \u2014 wave 1, cycle 1\n\nReviewed HEAD: 6508211f24be0f0dd7af27bfeebd1b1be8d536a9\nReview scope: final\nWave verdict: pass\nCycle: 1\n# Final Review \u2014 reused full wave\n\nReviewed HEAD: 29420b33217129d7756d9a62dbcf8ade2686d335\nOverall verdict: pass\nSource review: .project/review/wave-1.cycle1.md\nSource commit: 6508211f24be0f0dd7af27bfeebd1b1be8d536a9",
+  "wave_review_artifact": ".project/archive/001-count-cli/review/wave-1.cycle1.md",
+  "final_review_artifact": ".project/archive/001-count-cli/review/FINAL.md"
 }

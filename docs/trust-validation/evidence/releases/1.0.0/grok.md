@@ -3,7 +3,7 @@ schema: gsd-path/live-evidence/v1
 host: grok
 package: 1.0.0
 pipeline: gsd-path/v2
-candidate: 091d27927a2c0c2ecc55ce386fb2232556da6336
+candidate: 052475792bbe211f104d34a524c22db056bdee71
 verdict: pass
 child_spawn: pass
 state: pass
@@ -17,14 +17,14 @@ guard_tier: git-only
 
 # Live milestone evidence — grok
 
-Full quick-lane milestone run by the pinned candidate on a fresh fixture; evaluator-driven owner gates. Run directory: `/Users/jeremymcspadden/orca/evaluations/gsd-path-release-grok-091d279`.
+Full quick-lane milestone run by the pinned candidate on a fresh fixture; evaluator-driven owner gates. Run directory: `/Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/grok`.
 
 ## Environment
 
-- Host and CLI version: grok 1.0.13 (5e9a58528b76) [stable]
+- Host and CLI version: grok 1.0.30 (04b7ffed98c6) [stable]
 - Operator: Jeremy McSpadden; owner gates answered by the session evaluator and recorded in quick/owner-reply-*.txt
-- Date: 2026-09-07
-- Fixture repository: /Users/jeremymcspadden/orca/evaluations/gsd-path-release-grok-091d279/quick/repo
+- Date: 2026-09-14
+- Fixture repository: /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/grok/quick/repo
 - Child-agent API used: spawn_subagent (description build_t001)
 
 ## Evidence

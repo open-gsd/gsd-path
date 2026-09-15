@@ -1,11 +1,11 @@
 {
   "schema": "gsd-path/live-step-evidence/v1",
   "host": "grok",
-  "run_id": "01a07eea-fbe8-7ad1-9c7e-6c95723a7bf6",
+  "run_id": "01a0a235-49d4-7e42-83d1-e7b6336ea6a6",
   "result": "pass",
   "step": "task-verify",
-  "command": "python3 count.py && python3 count.py --json && python3 -m unittest tests/test_count.py",
-  "output": "{\"command\": \"python3 count.py && python3 count.py --json && python3 -m unittest tests/test_count.py\", \"commit\": \"7455cacd2e0a13a8008ef86f59a43be896ea77fb\", \"recorded_at\": \"2026-09-08T03:20:16+00:00\", \"result\": \"pass\", \"schema\": \"gsd-path/verify-ledger/v2\"}\n{\"command\": \"python3 -m unittest tests/test_count.py\", \"commit\": \"dae0d41b901b4ff77ae223cb58a819fa26201746\", \"execution\": {\"branch\": \"gsd-path-verify/project-verify\", \"exit_code\": 0, \"stderr\": \".........\\n----------------------------------------------------------------------\\nRan 9 tests in 0.139s\\n\\nOK\\n\", \"stdout\": \"\", \"worktree\": \"/Users/jeremymcspadden/orca/evaluations/gsd-path-release-grok-091d279/quick/repo.gsd-path/verify/project-verify\"}, \"recorded_at\": \"2026-09-08T03:27:16+00:00\", \"result\": \"pass\", \"schema\": \"gsd-path/verify-ledger/v2\"}\n",
-  "verify_artifact": ".project/archive/001-widget-counter/build/verify-ledger.jsonl",
+  "command": "python3 -m unittest test_count.py",
+  "output": "{\"command\": \"python3 -m unittest test_count.py\", \"commit\": \"6508211f24be0f0dd7af27bfeebd1b1be8d536a9\", \"recorded_at\": \"2026-09-15T00:36:08+00:00\", \"result\": \"pass\", \"schema\": \"gsd-path/verify-ledger/v2\"}\n{\"command\": \"python3 -m unittest -v test_count.py\", \"commit\": \"29420b33217129d7756d9a62dbcf8ade2686d335\", \"execution\": {\"branch\": \"gsd-path-verify/project-verify\", \"exit_code\": 0, \"stderr\": \"test_default_prints_zero_widgets (test_count.CountCLITests) ... ok\\ntest_invalid_duplicate_json (test_count.CountCLITests) ... ok\\ntest_invalid_extra_tokens (test_count.CountCLITests) ... ok\\ntest_invalid_non_integer (test_count.CountCLITests) ... ok\\ntest_invalid_unknown_flag (test_count.CountCLITests) ... ok\\ntest_json_after_count (test_count.CountCLITests) ... ok\\ntest_json_before_count (test_count.CountCLITests) ... ok\\ntest_json_default_zero (test_count.CountCLITests) ... ok\\ntest_json_signed_integer (test_count.CountCLITests) ... ok\\ntest_signed_integers_print_text_count (test_count.CountCLITests) ... ok\\n\\n----------------------------------------------------------------------\\nRan 10 tests in 0.266s\\n\\nOK\\n\", \"stdout\": \"\", \"worktree\": \"/Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/grok/quick/repo.gsd-path/verify/project-verify\"}, \"recorded_at\": \"2026-09-15T01:07:42+00:00\", \"result\": \"pass\", \"schema\": \"gsd-path/verify-ledger/v2\"}\n",
+  "verify_artifact": ".project/archive/001-count-cli/build/verify-ledger.jsonl",
   "verify_exit_code": 0
 }

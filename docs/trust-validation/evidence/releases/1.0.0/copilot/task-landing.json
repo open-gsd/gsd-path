@@ -1,17 +1,17 @@
 {
   "schema": "gsd-path/live-step-evidence/v1",
   "host": "copilot",
-  "run_id": "b920e2b9-ed25-4d18-aa6a-dd7c19b5cbf2",
+  "run_id": "bacf512d-c45b-48d1-8dcd-f1a90b213127",
   "result": "pass",
   "step": "task-landing",
-  "command": "python3 -B .github/skills/gsd-path/scripts/isolation.py land --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-copilot-091d279/quick/repo --source /Users/jeremymcspadden/orca/evaluations/gsd-path-release-copilot-091d279/quick/repo --base 0c5a889 --task-id T001 (serial isolation; landing see task-landing.json)",
-  "output": "commit a6f8d961c9cd405a15b17ce024c2a3e0b1a34a7d\nAuthor:     Feature Evaluation <evaluation@example.invalid>\nAuthorDate: Tue Sep 8 00:09:12 2026 -0500\nCommit:     Feature Evaluation <evaluation@example.invalid>\nCommitDate: Tue Sep 8 00:09:12 2026 -0500\n\n    T001: Add --json output mode and stderr-safe invalid-input handling to count.py\n    \n    Task: .project/tasks/T001-count-json-cli.md\n    Base: 0c5a8891911e4629a5e1ca0f5c819b83c74690af\n    Files:\n    - .project/tasks/T001-count-json-cli.md\n    - count.py\n    - test_count.py\n\n .project/tasks/T001-count-json-cli.md | 22 ++++++++++++--\n count.py                              | 48 +++++++++++++++++++++++++++--\n test_count.py                         | 57 +++++++++++++++++++++++++++++++++++\n 3 files changed, 122 insertions(+), 5 deletions(-)",
+  "command": "python3 -B .github/skills/gsd-path/scripts/isolation.py land --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/copilot/quick/repo --source /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/copilot/quick/repo --base 86e334e203249595e7a016e0a1fae2f61cb3c881 --task-id T001 (serial isolation; landing see task-landing.json)",
+  "output": "commit 560c73d13c7b15f538ce403ea20eecd8b6db183b\nAuthor:     Feature Evaluation <evaluation@example.invalid>\nAuthorDate: Mon Sep 14 19:24:32 2026 -0500\nCommit:     Feature Evaluation <evaluation@example.invalid>\nCommitDate: Mon Sep 14 19:24:32 2026 -0500\n\n    T001: Add --json output and invalid-input handling to count.py with real-CLI tests\n    \n    Task: .project/tasks/T001-count-json-cli.md\n    Base: 86e334e203249595e7a016e0a1fae2f61cb3c881\n    Files:\n    - .project/tasks/T001-count-json-cli.md\n    - count.py\n    - tests/test_count_cli.py\n\n .project/tasks/T001-count-json-cli.md | 22 ++++++++++--\n count.py                              | 23 ++++++++++--\n tests/test_count_cli.py               | 68 +++++++++++++++++++++++++++++++++++\n 3 files changed, 107 insertions(+), 6 deletions(-)",
   "fixture_bundle": "copilot/fixture.bundle",
   "run_manifest": ".project/archive/001-count-json-cli/trust-run-manifest.json",
-  "fixture_base_commit": "0c5a8891911e4629a5e1ca0f5c819b83c74690af",
+  "fixture_base_commit": "86e334e203249595e7a016e0a1fae2f61cb3c881",
   "task_branch": "gsd-path-verify/task-t001-verify",
-  "task_worktree": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-copilot-091d279/quick/repo.gsd-path/verify/task-t001-verify",
-  "landing_commit": "a6f8d961c9cd405a15b17ce024c2a3e0b1a34a7d",
+  "task_worktree": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/copilot/quick/repo.gsd-path/verify/task-t001-verify",
+  "landing_commit": "560c73d13c7b15f538ce403ea20eecd8b6db183b",
   "isolation_mode": "serial",
   "isolation_note": "A one-task wave uses the helper's serial mode: the coder worked on the bound branch in the primary worktree at the recorded base, and the named branch and worktree are the isolated Task Verify sidecar created for this task and retired after landing."
 }

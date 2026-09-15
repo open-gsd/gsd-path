@@ -1,14 +1,14 @@
 {
   "schema": "gsd-path/live-step-evidence/v1",
   "host": "antigravity",
-  "run_id": "96f8d698-59c3-47d8-8557-0a8f27975fc7",
+  "run_id": "5484c6a1-894a-463e-b4fc-c072999f739a",
   "result": "pass",
   "step": "install",
-  "command": "node /Users/jeremymcspadden/orca/evaluations/gsd-path-release-antigravity-091d279/plugin/scripts/install.mjs --antigravity --local --project /Users/jeremymcspadden/orca/evaluations/gsd-path-release-antigravity-091d279/quick/repo --hooks --no-color",
-  "output": "\u2726 GSD Path installer v1.0.0\n  project install into /Users/jeremymcspadden/orca/evaluations/gsd-path-release-antigravity-091d279/quick/repo\n\n  \u2713 antigravity: installed 15 shared skills to /Users/jeremymcspadden/orca/evaluations/gsd-path-release-antigravity-091d279/quick/repo/.agents/skills\n  \u2713 project: copied AGENTS.md, WORKFLOW.md, .gsd-path/status_runtime.py, .gsd-path/runtime/pipeline_state.py, .gsd-path/runtime/check_handoffs.py, .gsd-path/runtime/check_task_briefs.py, .gsd-path/runtime/isolation.py, .gsd-path/runtime/discussion_records.py, .gsd-path/runtime/pipeline_git.py, .gsd-path/runtime/archive_milestone.py, .gsd-path/runtime/review_panel.py, .gsd-path/runtime/_common.py, .gsd-path/runtime/state_checkpoint.py, .gsd-path/runtime/state_promote.py, .gsd-path/runtime/discussion_validate.py, .gsd-path/runtime/integration.py, .gsd-path/guard_hook.py, .gsd-path/git_guard.py, .git/hooks/pre-commit, .git/hooks/commit-msg, .git/hooks/pre-push to /Users/jeremymcspadden/orca/evaluations/gsd-path-release-antigravity-091d279/quick/repo\n  ! Antigravity discovers /gsd-path but has no documented hard explicit-only skill switch; invoke the skill explicitly.\n\n  Done. Restart active agent sessions, then invoke the router explicitly.",
-  "host_version": "agy 1.1.27",
+  "command": "node /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/antigravity/plugin/scripts/install.mjs --antigravity --local --project /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/antigravity/quick/repo --hooks --no-color",
+  "output": "\u2726 GSD Path installer v1.0.0\n  project install into /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/antigravity/quick/repo\n\n  \u2713 antigravity: installed 16 shared skills to /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/antigravity/quick/repo/.agents/skills\n  \u2713 project: copied AGENTS.md, WORKFLOW.md, .gsd-path/status_runtime.py, .gsd-path/runtime/pipeline_state.py, .gsd-path/runtime/check_handoffs.py, .gsd-path/runtime/check_task_briefs.py, .gsd-path/runtime/isolation.py, .gsd-path/runtime/discussion_records.py, .gsd-path/runtime/pipeline_git.py, .gsd-path/runtime/promote_lookahead.py, .gsd-path/runtime/detect_project.py, .gsd-path/runtime/pipeline_diagnose.py, .gsd-path/runtime/pipeline_undo.py, .gsd-path/runtime/archive_milestone.py, .gsd-path/runtime/review_panel.py, .gsd-path/runtime/_common.py, .gsd-path/runtime/state_checkpoint.py, .gsd-path/runtime/state_promote.py, .gsd-path/runtime/discussion_validate.py, .gsd-path/runtime/integration.py, .gsd-path/guard_hook.py, .gsd-path/git_guard.py, .git/hooks/pre-commit, .git/hooks/commit-msg, .git/hooks/pre-push to /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/antigravity/quick/repo\n  ! Antigravity discovers /gsd-path but has no documented hard explicit-only skill switch; invoke the skill explicitly.\n\n  Done. Restart active agent sessions, then invoke the router explicitly.",
+  "host_version": "agy 1.2.2",
   "install_root": ".agents/skills",
-  "candidate": "091d27927a2c0c2ecc55ce386fb2232556da6336",
+  "candidate": "052475792bbe211f104d34a524c22db056bdee71",
   "package_version": "1.0.0",
   "exit_code": 0
 }

@@ -1,11 +1,11 @@
 {
   "schema": "gsd-path/live-step-evidence/v1",
   "host": "cursor",
-  "run_id": "e73ef00e-5082-4aa9-98b2-c7e5655f8ab9",
+  "run_id": "72cf53aa-9b12-4b3c-8659-3c01a7aa8015",
   "result": "pass",
   "step": "reviews",
-  "command": "Task description=review_wave_1_cycle_1 in sidecar /Users/jeremymcspadden/orca/evaluations/gsd-path-release-cursor-091d279/quick/repo.gsd-path/verify/wave-1-cycle-1; python3 -B .cursor/skills/gsd-path/scripts/check_handoffs.py wave --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-cursor-091d279/quick/repo --review .project/review/wave-1.cycle1.md; python3 -B .cursor/skills/gsd-path/scripts/workflow_run.py prepare-final --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-cursor-091d279/quick/repo (final.reused: true)",
-  "output": "# Review \u2014 wave 1, cycle 1\n\nReviewed HEAD: f2eecc1418c3f56d117cf1acfdbb108c187be076\nReview scope: final\n\nWave verdict: pass\n# Final Review \u2014 count-json-cli\n\nReviewed HEAD: 055c005b31e223fe999eae5f155083ec20005459\nOverall verdict: pass\n\n## Success criteria",
+  "command": "Task description=review_wave_1_cycle_1 in sidecar /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/cursor/quick/repo.gsd-path/verify/wave-1-cycle-1; python3 /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/cursor/quick/repo/.cursor/skills/gsd-path/scripts/check_handoffs.py wave --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/cursor/quick/repo --review .project/review/wave-1.cycle1.md; python3 /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/cursor/quick/repo/.cursor/skills/gsd-path/scripts/workflow_run.py prepare-final --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/cursor/quick/repo --expected-head 2f3233885ecac972fe22a222ad0326f688ce402b (final.reused: true)",
+  "output": "# Review \u2014 wave 1, cycle 1\n\nReviewed HEAD: 916fee9dc28ae99e32d993130936e01352bf18a8\nReview scope: final\n\nWave verdict: pass\n# Final Review \u2014 reused full wave\n\nReviewed HEAD: 2f3233885ecac972fe22a222ad0326f688ce402b\nOverall verdict: pass\nSource review: .project/review/wave-1.cycle1.md\nSource commit: 916fee9dc28ae99e32d993130936e01352bf18a8",
   "wave_review_artifact": ".project/archive/001-count-json-cli/review/wave-1.cycle1.md",
   "final_review_artifact": ".project/archive/001-count-json-cli/review/FINAL.md"
 }

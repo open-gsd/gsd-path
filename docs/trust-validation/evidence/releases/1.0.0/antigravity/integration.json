@@ -1,17 +1,17 @@
 {
   "schema": "gsd-path/live-step-evidence/v1",
   "host": "antigravity",
-  "run_id": "96f8d698-59c3-47d8-8557-0a8f27975fc7",
+  "run_id": "5484c6a1-894a-463e-b4fc-c072999f739a",
   "result": "pass",
   "step": "integration",
-  "command": "python3 -B .agents/skills/gsd-path/scripts/archive_milestone.py integrate --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-antigravity-091d279/quick/repo --slug count-json-cli; validate-integrated --slug count-json-cli",
-  "output": "{\"archive\": \".project/archive/001-count-json-cli\", \"base\": \"aeb632be130a8469a921c573db69239d19147a3b\", \"commit\": \"bb3d356cf08d4d27d57ab34247418b17602ff877\", \"integrate\": \"aeb632be130a8469a921c573db69239d19147a3b\", \"landing\": \"aeb632be130a8469a921c573db69239d19147a3b\", \"mode\": \"direct\", \"tag\": \"milestone/001-count-json-cli\"}",
+  "command": "python3 /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/antigravity/quick/repo/.gsd-path/runtime/archive_milestone.py integrate --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/antigravity/quick/repo --slug count-json-cli; python3 /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/antigravity/quick/repo/.gsd-path/runtime/archive_milestone.py validate-integrated --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/antigravity/quick/repo --slug count-json-cli",
+  "output": "{\"archive\": \".project/archive/001-count-json-cli\", \"base\": \"1a3bd57072bd2bd1ee7151ea6445646257fbeaac\", \"commit\": \"6f86344aea6ca3be5770a2a94794017574a603aa\", \"integrate\": \"1a3bd57072bd2bd1ee7151ea6445646257fbeaac\", \"landing\": \"1a3bd57072bd2bd1ee7151ea6445646257fbeaac\", \"mode\": \"direct\", \"tag\": \"milestone/001-count-json-cli\"}",
   "fixture_bundle": "antigravity/fixture.bundle",
   "run_manifest": ".project/archive/001-count-json-cli/trust-run-manifest.json",
-  "ship_commit": "bb3d356cf08d4d27d57ab34247418b17602ff877",
+  "ship_commit": "6f86344aea6ca3be5770a2a94794017574a603aa",
   "bound_branch": "gsd-path/M001",
   "default_branch": "main",
-  "pre_integration_default_commit": "cfe65e72fb00557af0bd26b8198f34aab6aff26d",
-  "integration_commit": "aeb632be130a8469a921c573db69239d19147a3b",
+  "pre_integration_default_commit": "d83f40c4703789788e5b9d7bfa3b58260463672d",
+  "integration_commit": "1a3bd57072bd2bd1ee7151ea6445646257fbeaac",
   "milestone_tag": "milestone/001-count-json-cli"
 }

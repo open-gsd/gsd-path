@@ -1,11 +1,11 @@
 {
   "schema": "gsd-path/live-step-evidence/v1",
   "host": "codex",
-  "run_id": "01a07eea-9e57-7ae0-ac94-3df8df75205c",
+  "run_id": "01a0a234-e3f6-75e3-9275-51b81a86cb57",
   "result": "pass",
   "step": "archive",
-  "command": "python3 -B .agents/skills/gsd-path/scripts/archive_milestone.py validate --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-codex-091d279/quick/repo",
-  "output": "{\"archive\": \".project/archive/001-widget-counter-cli\", \"commit\": \"8675cc8496cd673ee13f1fbc3cc957892c619a99\"}",
-  "archive_path": ".project/archive/001-widget-counter-cli",
+  "command": "python3 -B .gsd-path/runtime/archive_milestone.py validate --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/codex/quick/repo",
+  "output": "{\"archive\": \".project/archive/001-widget-counter\", \"commit\": \"f144b77d1869aa6e57d84fe497436585c3b25088\"}",
+  "archive_path": ".project/archive/001-widget-counter",
   "validation_exit_code": 0
 }

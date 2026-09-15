@@ -1,11 +1,11 @@
 {
   "schema": "gsd-path/live-step-evidence/v1",
   "host": "copilot",
-  "run_id": "b920e2b9-ed25-4d18-aa6a-dd7c19b5cbf2",
+  "run_id": "bacf512d-c45b-48d1-8dcd-f1a90b213127",
   "result": "pass",
   "step": "archive",
-  "command": "python3 -B .github/skills/gsd-path/scripts/archive_milestone.py validate --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-copilot-091d279/quick/repo",
-  "output": "{\"archive\": \".project/archive/001-count-json-cli\", \"commit\": \"e9d7af70d8ace89c16700393e65d970fed5bc6ee\"}",
+  "command": "python3 -B .gsd-path/runtime/archive_milestone.py validate --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/copilot/quick/repo",
+  "output": "{\"archive\": \".project/archive/001-count-json-cli\", \"commit\": \"68be0b5bed6627ff09cc4f1812a2125ec560df1e\"}",
   "archive_path": ".project/archive/001-count-json-cli",
   "validation_exit_code": 0
 }

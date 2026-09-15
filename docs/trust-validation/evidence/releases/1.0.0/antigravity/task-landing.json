@@ -1,17 +1,17 @@
 {
   "schema": "gsd-path/live-step-evidence/v1",
   "host": "antigravity",
-  "run_id": "96f8d698-59c3-47d8-8557-0a8f27975fc7",
+  "run_id": "5484c6a1-894a-463e-b4fc-c072999f739a",
   "result": "pass",
   "step": "task-landing",
-  "command": "python3 -B .agents/skills/gsd-path/scripts/isolation.py land --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-antigravity-091d279/quick/repo --source /Users/jeremymcspadden/orca/evaluations/gsd-path-release-antigravity-091d279/quick/repo --base 36c8227 --task-id T001 (serial isolation; landing see task-landing.json)",
-  "output": "commit d200ed768a6ea79d99252200a476ff9c5b792597\nAuthor:     Feature Evaluation <evaluation@example.invalid>\nAuthorDate: Mon Sep 7 22:29:49 2026 -0500\nCommit:     Feature Evaluation <evaluation@example.invalid>\nCommitDate: Mon Sep 7 22:29:49 2026 -0500\n\n    T001: Extend count.py CLI and add automated tests\n    \n    Task: .project/tasks/T001-extend-count-cli.md\n    Base: 36c822719bff3878de86c03d4d64290f0063e936\n    Files:\n    - .project/tasks/T001-extend-count-cli.md\n    - count.py\n    - test_count.py\n\n .project/tasks/T001-extend-count-cli.md |   9 ++-\n count.py                                |  48 +++++++++++++-\n test_count.py                           | 111 ++++++++++++++++++++++++++++++++\n 3 files changed, 163 insertions(+), 5 deletions(-)",
+  "command": "python3 .agents/skills/gsd-path/scripts/isolation.py land --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/antigravity/quick/repo --source /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/antigravity/quick/repo --base 87cc160222166047112ba95fbbbe4836fe31c765 --task-id T001 --title \"Extend count.py with signed integer, --json flag, and CLI test suite\" --task-file .project/tasks/T001-count-json-cli.md --allow-path count.py --allow-path test_count.py",
+  "output": "commit 3652bda535b4d71707f9e9a731d0adb08db7d7e5\nAuthor:     Feature Evaluation <evaluation@example.invalid>\nAuthorDate: Mon Sep 14 18:41:04 2026 -0500\nCommit:     Feature Evaluation <evaluation@example.invalid>\nCommitDate: Mon Sep 14 18:41:04 2026 -0500\n\n    T001: Extend count.py with signed integer, --json flag, and CLI test suite\n    \n    Task: .project/tasks/T001-count-json-cli.md\n    Base: 87cc160222166047112ba95fbbbe4836fe31c765\n    Files:\n    - .project/tasks/T001-count-json-cli.md\n    - count.py\n    - test_count.py\n\n .project/tasks/T001-count-json-cli.md |   8 +-\n count.py                              |  49 ++++++++++-\n test_count.py                         | 153 ++++++++++++++++++++++++++++++++++\n 3 files changed, 205 insertions(+), 5 deletions(-)",
   "fixture_bundle": "antigravity/fixture.bundle",
   "run_manifest": ".project/archive/001-count-json-cli/trust-run-manifest.json",
-  "fixture_base_commit": "36c822719bff3878de86c03d4d64290f0063e936",
+  "fixture_base_commit": "87cc160222166047112ba95fbbbe4836fe31c765",
   "task_branch": "gsd-path-verify/task-t001-verify",
-  "task_worktree": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-antigravity-091d279/quick/repo.gsd-path/verify/task-t001-verify",
-  "landing_commit": "d200ed768a6ea79d99252200a476ff9c5b792597",
+  "task_worktree": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/antigravity/quick/repo.gsd-path/verify/task-t001-verify",
+  "landing_commit": "3652bda535b4d71707f9e9a731d0adb08db7d7e5",
   "isolation_mode": "serial",
   "isolation_note": "A one-task wave uses the helper's serial mode: the coder worked on the bound branch in the primary worktree at the recorded base, and the named branch and worktree are the isolated Task Verify sidecar created for this task and retired after landing."
 }

@@ -1,14 +1,14 @@
 {
   "schema": "gsd-path/live-step-evidence/v1",
   "host": "zed",
-  "run_id": "run-20260909T010700708658Z",
+  "run_id": "run-20260915T023848522535Z",
   "result": "pass",
   "step": "install",
-  "command": "node /Users/jeremymcspadden/orca/evaluations/gsd-path-release-zed-091d279/plugin/scripts/install.mjs --zed --local --project /Users/jeremymcspadden/orca/evaluations/gsd-path-release-zed-091d279/quick/repo --hooks --no-color",
-  "output": "\u2726 GSD Path installer v1.0.0\n  project install into /Users/jeremymcspadden/orca/evaluations/gsd-path-release-zed-091d279/quick/repo\n\n  \u2713 zed: installed 15 shared skills to /Users/jeremymcspadden/orca/evaluations/gsd-path-release-zed-091d279/quick/repo/.agents/skills\n  \u2713 project: copied AGENTS.md, WORKFLOW.md, .gsd-path/status_runtime.py, .gsd-path/runtime/pipeline_state.py, .gsd-path/runtime/check_handoffs.py, .gsd-path/runtime/check_task_briefs.py, .gsd-path/runtime/isolation.py, .gsd-path/runtime/discussion_records.py, .gsd-path/runtime/pipeline_git.py, .gsd-path/runtime/archive_milestone.py, .gsd-path/runtime/review_panel.py, .gsd-path/runtime/_common.py, .gsd-path/runtime/state_checkpoint.py, .gsd-path/runtime/state_promote.py, .gsd-path/runtime/discussion_validate.py, .gsd-path/runtime/integration.py, .gsd-path/guard_hook.py, .gsd-path/git_guard.py, .git/hooks/pre-commit, .git/hooks/commit-msg, .git/hooks/pre-push to /Users/jeremymcspadden/orca/evaluations/gsd-path-release-zed-091d279/quick/repo\n\n  Done. Restart active agent sessions, then invoke the router explicitly.",
+  "command": "node /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/zed/plugin/scripts/install.mjs --zed --local --project /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/zed/quick/repo --hooks --no-color",
+  "output": "\u2726 GSD Path installer v1.0.0\n  project install into /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/zed/quick/repo\n\n  \u2713 zed: installed 16 shared skills to /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/zed/quick/repo/.agents/skills\n  \u2713 project: copied AGENTS.md, WORKFLOW.md, .gsd-path/status_runtime.py, .gsd-path/runtime/pipeline_state.py, .gsd-path/runtime/check_handoffs.py, .gsd-path/runtime/check_task_briefs.py, .gsd-path/runtime/isolation.py, .gsd-path/runtime/discussion_records.py, .gsd-path/runtime/pipeline_git.py, .gsd-path/runtime/promote_lookahead.py, .gsd-path/runtime/detect_project.py, .gsd-path/runtime/pipeline_diagnose.py, .gsd-path/runtime/pipeline_undo.py, .gsd-path/runtime/archive_milestone.py, .gsd-path/runtime/review_panel.py, .gsd-path/runtime/_common.py, .gsd-path/runtime/state_checkpoint.py, .gsd-path/runtime/state_promote.py, .gsd-path/runtime/discussion_validate.py, .gsd-path/runtime/integration.py, .gsd-path/guard_hook.py, .gsd-path/git_guard.py, .git/hooks/pre-commit, .git/hooks/commit-msg, .git/hooks/pre-push to /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/zed/quick/repo\n\n  Done. Restart active agent sessions, then invoke the router explicitly.",
   "host_version": "Zed 1.18.1; eval-cli built from zed-industries/zed 4a217d5 (local settings-JSON fix + ZED_EVAL_UNSANDBOXED env gate setting agent.sandbox_permissions.allow_unsandboxed; model openrouter/anthropic/claude-sonnet-5)",
   "install_root": ".agents/skills",
-  "candidate": "091d27927a2c0c2ecc55ce386fb2232556da6336",
+  "candidate": "052475792bbe211f104d34a524c22db056bdee71",
   "package_version": "1.0.0",
   "exit_code": 0
 }

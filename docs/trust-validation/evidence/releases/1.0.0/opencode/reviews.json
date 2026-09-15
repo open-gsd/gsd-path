@@ -1,11 +1,11 @@
 {
   "schema": "gsd-path/live-step-evidence/v1",
   "host": "opencode",
-  "run_id": "ses_f80a511edffePvaCxTcpyMblfH",
+  "run_id": "ses_f5dc9cc21ffemEUcj7w8mNfd8K",
   "result": "pass",
   "step": "reviews",
-  "command": "Task description=review_wave_1_cycle_1 in sidecar /Users/jeremymcspadden/orca/evaluations/gsd-path-release-opencode-091d279/quick/repo.gsd-path/verify/wave-1-cycle-1; python3 -B .opencode/skills/gsd-path/scripts/check_handoffs.py wave --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-opencode-091d279/quick/repo --review .project/review/wave-1.cycle1.md; python3 -B .opencode/skills/gsd-path/scripts/workflow_run.py prepare-final --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-opencode-091d279/quick/repo (final.reused: true)",
-  "output": "# Review \u2014 wave 1, cycle 1\n\n<!-- Written by the reviewer role in wave mode. File: wave-N.cycleC.md \u2014\n     deep reviews use wave-N.cycleC.contract.md and\n     wave-N.cycleC.adversarial.md instead. Keep validated fields on their\n     own lines: Cycle holds only the number\n# Final Review \u2014 reused full wave\n\nReviewed HEAD: ca1a397b792e48393b09f1ff5d2b44b64ffe4fdc\nOverall verdict: pass\nSource review: .project/review/wave-1.cycle1.md\nSource commit: 337f12dd447da9024e3e8e094673e7b8d4cd4330",
+  "command": "Task description=review_wave_1_cycle_1 in sidecar /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/opencode/quick/repo.gsd-path/verify/wave-1-cycle-1; python3 /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/opencode/quick/repo/.opencode/skills/gsd-path/scripts/check_handoffs.py wave --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/opencode/quick/repo --review .project/review/wave-1.cycle1.md; python3 /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/opencode/quick/repo/.opencode/skills/gsd-path/scripts/workflow_run.py prepare-final --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/opencode/quick/repo --expected-head 899dd3548cfe71837b78c074d7d1b4ee26cb45ef; python3 /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/opencode/quick/repo/.opencode/skills/gsd-path/scripts/check_handoffs.py final --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/opencode/quick/repo",
+  "output": "# Review \u2014 wave 1, cycle 1\n\nReviewed HEAD: a94147059908355ce66b2b49947e47f7fe51693e\nReview scope: final\n\nWave verdict: pass\n# Final Review \u2014 reused full wave\n\nReviewed HEAD: 899dd3548cfe71837b78c074d7d1b4ee26cb45ef\nOverall verdict: pass\nSource review: .project/review/wave-1.cycle1.md\nSource commit: a94147059908355ce66b2b49947e47f7fe51693e",
   "wave_review_artifact": ".project/archive/001-count-json-cli/review/wave-1.cycle1.md",
   "final_review_artifact": ".project/archive/001-count-json-cli/review/FINAL.md"
 }

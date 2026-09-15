@@ -1,11 +1,11 @@
 {
   "schema": "gsd-path/live-step-evidence/v1",
   "host": "grok",
-  "run_id": "01a07eea-fbe8-7ad1-9c7e-6c95723a7bf6",
+  "run_id": "01a0a235-49d4-7e42-83d1-e7b6336ea6a6",
   "result": "pass",
   "step": "worktrees",
   "command": "git worktree list --porcelain",
-  "output": "worktree /Users/jeremymcspadden/orca/evaluations/gsd-path-release-grok-091d279/quick/repo\nHEAD 77b9cae78839e72ff9ae9b6a8c5944de98fceb7b\nbranch refs/heads/gsd-path/M001\n",
-  "primary_worktree": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-grok-091d279/quick/repo",
-  "integration_worktree": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-grok-091d279/quick/.repo-gsd-path-integrate-M001"
+  "output": "worktree /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/grok/quick/repo\nHEAD c2cabb750f6fc3feb20be1281e19f0a6cf241e0f\nbranch refs/heads/gsd-path/M001\n",
+  "primary_worktree": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/grok/quick/repo",
+  "integration_worktree": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/grok/quick/.repo-gsd-path-integrate-M001"
 }

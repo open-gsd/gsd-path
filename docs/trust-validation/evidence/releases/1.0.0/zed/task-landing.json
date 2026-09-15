@@ -1,17 +1,17 @@
 {
   "schema": "gsd-path/live-step-evidence/v1",
   "host": "zed",
-  "run_id": "run-20260909T010700708658Z",
+  "run_id": "run-20260915T023848522535Z",
   "result": "pass",
   "step": "task-landing",
-  "command": "python3 -B .agents/skills/gsd-path/scripts/isolation.py land --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-zed-091d279/quick/repo --source /Users/jeremymcspadden/orca/evaluations/gsd-path-release-zed-091d279/quick/repo --base 40311e6 --task-id T001 (serial isolation; landing see task-landing.json)",
-  "output": "commit 29d72f11d4c7b4aff45ff8de9891032ad7892370\nAuthor:     Feature Evaluation <evaluation@example.invalid>\nAuthorDate: Wed Sep 9 14:59:56 2026 -0500\nCommit:     Feature Evaluation <evaluation@example.invalid>\nCommitDate: Wed Sep 9 14:59:56 2026 -0500\n\n    T001: Add opt-in --json output flag to count.py\n    \n    Task: .project/tasks/T001-add-json-output-flag.md\n    Base: 40311e68ac022173fa5a2b585b9bc4316a123669\n    Files:\n    - .project/tasks/T001-add-json-output-flag.md\n    - count.py\n\n .project/tasks/T001-add-json-output-flag.md | 18 +++++++++++++++---\n count.py                                    |  8 ++++++--\n 2 files changed, 21 insertions(+), 5 deletions(-)",
+  "command": "python3 -B /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/zed/quick/repo/.agents/skills/gsd-path/scripts/isolation.py land --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/zed/quick/repo --source /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/zed/quick/repo --base 3a31f9ebadf27cc27bdd980f0449d189f8711ced --task-id T001 --title \"Add --json mode and input validation to count.py, with real-CLI tests\" --task-file .project/tasks/T001-json-mode-and-validation.md --allow-path count.py --allow-path tests/test_count_cli.py",
+  "output": "commit 8287216a55fc743ed48fb8ed8c11df327eca539a\nAuthor:     Feature Evaluation <evaluation@example.invalid>\nAuthorDate: Mon Sep 14 22:49:17 2026 -0500\nCommit:     Feature Evaluation <evaluation@example.invalid>\nCommitDate: Mon Sep 14 22:49:17 2026 -0500\n\n    T001: Add --json mode and input validation to count.py, with real-CLI tests\n    \n    Task: .project/tasks/T001-json-mode-and-validation.md\n    Base: 3a31f9ebadf27cc27bdd980f0449d189f8711ced\n    Files:\n    - .project/tasks/T001-json-mode-and-validation.md\n    - count.py\n    - tests/test_count_cli.py\n\n .project/tasks/T001-json-mode-and-validation.md | 28 +++++++++--\n count.py                                        | 20 +++++++-\n tests/test_count_cli.py                         | 64 +++++++++++++++++++++++++\n 3 files changed, 107 insertions(+), 5 deletions(-)",
   "fixture_bundle": "zed/fixture.bundle",
   "run_manifest": ".project/archive/001-count-json-cli/trust-run-manifest.json",
-  "fixture_base_commit": "40311e68ac022173fa5a2b585b9bc4316a123669",
+  "fixture_base_commit": "3a31f9ebadf27cc27bdd980f0449d189f8711ced",
   "task_branch": "gsd-path-verify/task-t001-verify",
-  "task_worktree": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-zed-091d279/quick/repo.gsd-path/verify/task-t001-verify",
-  "landing_commit": "29d72f11d4c7b4aff45ff8de9891032ad7892370",
+  "task_worktree": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/zed/quick/repo.gsd-path/verify/task-t001-verify",
+  "landing_commit": "8287216a55fc743ed48fb8ed8c11df327eca539a",
   "isolation_mode": "serial",
   "isolation_note": "A one-task wave uses the helper's serial mode: the coder worked on the bound branch in the primary worktree at the recorded base, and the named branch and worktree are the isolated Task Verify sidecar created for this task and retired after landing."
 }

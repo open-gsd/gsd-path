@@ -1,17 +1,17 @@
 {
   "schema": "gsd-path/live-step-evidence/v1",
   "host": "cursor",
-  "run_id": "e73ef00e-5082-4aa9-98b2-c7e5655f8ab9",
+  "run_id": "72cf53aa-9b12-4b3c-8659-3c01a7aa8015",
   "result": "pass",
   "step": "integration",
-  "command": "python3 -B .cursor/skills/gsd-path/scripts/archive_milestone.py integrate --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-cursor-091d279/quick/repo --slug count-json-cli; validate-integrated --slug count-json-cli",
-  "output": "{\"archive\": \".project/archive/001-count-json-cli\", \"base\": \"4e38344ee058a2b91d9614d607197f8dbd91a753\", \"commit\": \"e02181830e18ecccb2a1e9cf4c2c989b6248304a\", \"integrate\": \"4e38344ee058a2b91d9614d607197f8dbd91a753\", \"landing\": \"4e38344ee058a2b91d9614d607197f8dbd91a753\", \"mode\": \"direct\", \"tag\": \"milestone/001-count-json-cli\"}",
+  "command": "python3 /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/cursor/quick/repo/.gsd-path/runtime/archive_milestone.py integrate --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/cursor/quick/repo --slug count-json-cli; python3 /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/cursor/quick/repo/.gsd-path/runtime/archive_milestone.py validate-integrated --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/cursor/quick/repo --slug count-json-cli",
+  "output": "{\"archive\": \".project/archive/001-count-json-cli\", \"base\": \"e15ecb2f7dcbcb1670c16221a83a5ff5aa5f5eb4\", \"commit\": \"7f51f363708a94e3120147d0f140ad5e840e6902\", \"integrate\": \"e15ecb2f7dcbcb1670c16221a83a5ff5aa5f5eb4\", \"landing\": \"e15ecb2f7dcbcb1670c16221a83a5ff5aa5f5eb4\", \"mode\": \"direct\", \"tag\": \"milestone/001-count-json-cli\"}",
   "fixture_bundle": "cursor/fixture.bundle",
   "run_manifest": ".project/archive/001-count-json-cli/trust-run-manifest.json",
-  "ship_commit": "e02181830e18ecccb2a1e9cf4c2c989b6248304a",
+  "ship_commit": "7f51f363708a94e3120147d0f140ad5e840e6902",
   "bound_branch": "gsd-path/M001",
   "default_branch": "main",
-  "pre_integration_default_commit": "bad8491854882f38ba58fa9a2f3bf291c7dd895a",
-  "integration_commit": "4e38344ee058a2b91d9614d607197f8dbd91a753",
+  "pre_integration_default_commit": "6111b470922fe0188056fb71c3147aa65d3bbe58",
+  "integration_commit": "e15ecb2f7dcbcb1670c16221a83a5ff5aa5f5eb4",
   "milestone_tag": "milestone/001-count-json-cli"
 }
