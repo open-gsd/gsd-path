@@ -1,17 +1,17 @@
 {
   "schema": "gsd-path/live-step-evidence/v1",
   "host": "grok",
-  "run_id": "01a07eea-fbe8-7ad1-9c7e-6c95723a7bf6",
+  "run_id": "01a0a235-49d4-7e42-83d1-e7b6336ea6a6",
   "result": "pass",
   "step": "integration",
-  "command": "python3 -B .grok/skills/gsd-path/scripts/archive_milestone.py integrate --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-grok-091d279/quick/repo --slug widget-counter; validate-integrated --slug widget-counter",
-  "output": "{\"archive\": \".project/archive/001-widget-counter\", \"base\": \"bbecb897d8bee94cfa824a5434bd255c8148f500\", \"commit\": \"77b9cae78839e72ff9ae9b6a8c5944de98fceb7b\", \"integrate\": \"bbecb897d8bee94cfa824a5434bd255c8148f500\", \"landing\": \"bbecb897d8bee94cfa824a5434bd255c8148f500\", \"mode\": \"direct\", \"tag\": \"milestone/001-widget-counter\"}",
+  "command": "python3 .gsd-path/runtime/archive_milestone.py integrate --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/grok/quick/repo --slug count-cli; python3 .gsd-path/runtime/archive_milestone.py validate-integrated --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/grok/quick/repo --slug count-cli",
+  "output": "{\"archive\": \".project/archive/001-count-cli\", \"base\": \"c7e14f254164c9135cf5a1653506ad3d4897f3c1\", \"commit\": \"c2cabb750f6fc3feb20be1281e19f0a6cf241e0f\", \"integrate\": \"c7e14f254164c9135cf5a1653506ad3d4897f3c1\", \"landing\": \"c7e14f254164c9135cf5a1653506ad3d4897f3c1\", \"mode\": \"direct\", \"tag\": \"milestone/001-count-cli\"}",
   "fixture_bundle": "grok/fixture.bundle",
-  "run_manifest": ".project/archive/001-widget-counter/trust-run-manifest.json",
-  "ship_commit": "77b9cae78839e72ff9ae9b6a8c5944de98fceb7b",
+  "run_manifest": ".project/archive/001-count-cli/trust-run-manifest.json",
+  "ship_commit": "c2cabb750f6fc3feb20be1281e19f0a6cf241e0f",
   "bound_branch": "gsd-path/M001",
   "default_branch": "main",
-  "pre_integration_default_commit": "b140a8985c754b111b96274e12ccef063aee7ad5",
-  "integration_commit": "bbecb897d8bee94cfa824a5434bd255c8148f500",
-  "milestone_tag": "milestone/001-widget-counter"
+  "pre_integration_default_commit": "a327a53991df9a842c43fc188bf7107c3d0ee8ed",
+  "integration_commit": "c7e14f254164c9135cf5a1653506ad3d4897f3c1",
+  "milestone_tag": "milestone/001-count-cli"
 }
