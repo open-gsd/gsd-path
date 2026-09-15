@@ -3,7 +3,7 @@ schema: gsd-path/live-evidence/v1
 host: qwen
 package: 1.0.0
 pipeline: gsd-path/v2
-candidate: 091d27927a2c0c2ecc55ce386fb2232556da6336
+candidate: 052475792bbe211f104d34a524c22db056bdee71
 verdict: pass
 child_spawn: pass
 state: pass
@@ -17,14 +17,14 @@ guard_tier: git-only
 
 # Live milestone evidence — qwen
 
-Full quick-lane milestone run by the pinned candidate on a fresh fixture; evaluator-driven owner gates. Run directory: `/Users/jeremymcspadden/orca/evaluations/gsd-path-release-qwen-091d279`.
+Full quick-lane milestone run by the pinned candidate on a fresh fixture; evaluator-driven owner gates. Run directory: `/Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/qwen`.
 
 ## Environment
 
 - Host and CLI version: qwen-code 0.23.0 (OpenAI-compatible auth via OpenRouter, model qwen/qwen3.8-max-0902; model.maxToolCallsPerTurn=0)
 - Operator: Jeremy McSpadden; owner gates answered by the session evaluator and recorded in quick/owner-reply-*.txt
-- Date: 2026-09-08
-- Fixture repository: /Users/jeremymcspadden/orca/evaluations/gsd-path-release-qwen-091d279/quick/repo
+- Date: 2026-09-14
+- Fixture repository: /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/qwen/quick/repo
 - Child-agent API used: agent (description build_t001)
 
 ## Evidence

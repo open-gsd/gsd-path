@@ -1,14 +1,14 @@
 {
   "schema": "gsd-path/live-step-evidence/v1",
   "host": "qwen",
-  "run_id": "ae51c129-2987-48c6-ba46-88f01f205493",
+  "run_id": "795bf3f3-cbbd-4682-a8b3-14d80455cf76",
   "result": "pass",
   "step": "install",
-  "command": "node /Users/jeremymcspadden/orca/evaluations/gsd-path-release-qwen-091d279/plugin/scripts/install.mjs --qwen --local --project /Users/jeremymcspadden/orca/evaluations/gsd-path-release-qwen-091d279/quick/repo --hooks --no-color",
-  "output": "\u2726 GSD Path installer v1.0.0\n  project install into /Users/jeremymcspadden/orca/evaluations/gsd-path-release-qwen-091d279/quick/repo\n\n  \u2713 qwen: installed 15 skills to /Users/jeremymcspadden/orca/evaluations/gsd-path-release-qwen-091d279/quick/repo/.qwen/skills\n  \u2713 project: copied AGENTS.md, WORKFLOW.md, .gsd-path/status_runtime.py, .gsd-path/runtime/pipeline_state.py, .gsd-path/runtime/check_handoffs.py, .gsd-path/runtime/check_task_briefs.py, .gsd-path/runtime/isolation.py, .gsd-path/runtime/discussion_records.py, .gsd-path/runtime/pipeline_git.py, .gsd-path/runtime/archive_milestone.py, .gsd-path/runtime/review_panel.py, .gsd-path/runtime/_common.py, .gsd-path/runtime/state_checkpoint.py, .gsd-path/runtime/state_promote.py, .gsd-path/runtime/discussion_validate.py, .gsd-path/runtime/integration.py, .gsd-path/guard_hook.py, .gsd-path/git_guard.py, .git/hooks/pre-commit, .git/hooks/commit-msg, .git/hooks/pre-push to /Users/jeremymcspadden/orca/evaluations/gsd-path-release-qwen-091d279/quick/repo\n\n  Done. Restart active agent sessions, then invoke the router explicitly.",
+  "command": "node /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/qwen/plugin/scripts/install.mjs --qwen --local --project /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/qwen/quick/repo --hooks --no-color",
+  "output": "\u2726 GSD Path installer v1.0.0\n  project install into /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/qwen/quick/repo\n\n  \u2713 qwen: installed 16 skills to /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/qwen/quick/repo/.qwen/skills\n  \u2713 project: copied AGENTS.md, WORKFLOW.md, .gsd-path/status_runtime.py, .gsd-path/runtime/pipeline_state.py, .gsd-path/runtime/check_handoffs.py, .gsd-path/runtime/check_task_briefs.py, .gsd-path/runtime/isolation.py, .gsd-path/runtime/discussion_records.py, .gsd-path/runtime/pipeline_git.py, .gsd-path/runtime/promote_lookahead.py, .gsd-path/runtime/detect_project.py, .gsd-path/runtime/pipeline_diagnose.py, .gsd-path/runtime/pipeline_undo.py, .gsd-path/runtime/archive_milestone.py, .gsd-path/runtime/review_panel.py, .gsd-path/runtime/_common.py, .gsd-path/runtime/state_checkpoint.py, .gsd-path/runtime/state_promote.py, .gsd-path/runtime/discussion_validate.py, .gsd-path/runtime/integration.py, .gsd-path/guard_hook.py, .gsd-path/git_guard.py, .git/hooks/pre-commit, .git/hooks/commit-msg, .git/hooks/pre-push to /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/qwen/quick/repo\n\n  Done. Restart active agent sessions, then invoke the router explicitly.",
   "host_version": "qwen-code 0.23.0 (OpenAI-compatible auth via OpenRouter, model qwen/qwen3.8-max-0902; model.maxToolCallsPerTurn=0)",
   "install_root": ".qwen/skills",
-  "candidate": "091d27927a2c0c2ecc55ce386fb2232556da6336",
+  "candidate": "052475792bbe211f104d34a524c22db056bdee71",
   "package_version": "1.0.0",
   "exit_code": 0
 }
