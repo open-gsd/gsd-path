@@ -243,3 +243,78 @@ No completed-delivery speedup, causal output reduction, or end-to-end budget
 compliance is established. The original 21,877 pre-code output-token finding
 remains open. Further speculative mode splitting and inventory exclusions were
 not needed to prove this loading fix.
+
+## Continued goal: evaluator overhead and audit scope
+
+The owner requested continued work with the existing budgets. Three workstreams
+were exercised: evaluator prompts, installed documentation, and docs-auditor
+scope. See [round-five evidence](token-context-round5.json) and
+[evaluator verification](token-harness-verification.json).
+
+### Changes
+
+- The evaluator names the installed candidate by absolute path. Its default
+  prompts no longer require agent-authored timing wrappers. Native event and
+  process timing capture remain; unclassified activity is not invented. The
+  old review trace had two failed nested-shell attempts while writing its
+  artifact. This is measurement overhead, separate from skill overhead.
+- AGENTS.md scopes distribution paths and sync commands to the GSD Path source
+  checkout. WORKFLOW.md distinguishes source references from installed paths,
+  removes the stale catch-all commit ownership statement, and describes
+  evidence for dispatched research dimensions rather than four mandatory ones.
+- The auditor scopes claims to the repository's product. Excluded dependency
+  internals do not create unverifiable findings. Mixed documents retain their
+  application commands, configuration, and integration promises. GSD Path's own
+  source repository still audits its pipeline as the product. Instructions and
+  authority conflicts remain binding. Fixed-format inventory and remediation
+  fields retain exact paths and claims; explanations go in separate prose.
+
+### Observed verification
+
+The fresh native workflow at `b1962b1` stopped before coding at six docs rulings.
+The parent used 5,367 output tokens; code inspection used 2,962 and docs
+inspection 3,193. Its canonical ledger retains all 11,522 tokens. Both inspectors
+were within the 4,000 task budget; the parent was not. This run did not establish
+a completed-delivery improvement.
+
+A separate audit after the source-document clarification used 4,650 tokens and
+created 18 unverifiable dependency-internal findings. That failed result exposed
+the remaining scope bug; it is retained, not counted as a success.
+
+The scope proof used a fixture with a deliberately false README claim: running
+count.py with 9 allegedly prints 10 widgets. The real command prints 9 widgets.
+The auditor caught that drift, verified the correct CLI claim, and accounted for
+AGENTS.md and WORKFLOW.md as two descriptive documents. It created zero
+unverifiable dependency findings. Initial output was 1,496 tokens, but the parent
+format gate rejected explanations embedded in path bullets and mismatched
+remediation fields. The original wrapper captured that gate's stderr without
+retaining it; the failure is recorded explicitly. Diagnosis passed, reporting
+only expected uncommitted state and the active verification sidecar.
+
+A same-thread format repair consumed another 896 tokens, for 2,392 total charged
+to the same docs task. It used the corrected role at `80ae763`, reused the
+recorded product evidence, and did not repeat product checks. The canonical docs
+gate then passed; canonical collection and retirement also passed. Native
+cumulative counters were recorded with the verified previous-events convention,
+not summed twice. This is a successful scope-and-drift proof, not a fresh
+end-to-end run of the final candidate.
+
+All 25 existing docs-audit and resource tests passed. The evaluator's generated
+input integration check failed on the old unbound prompt, passed on the new
+installed candidate, failed when that candidate file was removed in a separate
+disposable fixture, and passed after restoration. A preliminary byte-equality
+assertion was rejected because installation legitimately transforms host syntax;
+the corrected check verifies the installed target and candidate receipt. No new
+product tests or full-repository suite were needed. Ponytail review retained the
+existing helpers, evidence formats, and gates without adding another runtime or
+ledger design.
+
+### Open contract
+
+Native trials in this pass used 18,564 output tokens, including the format repair.
+That number excludes the optimization conversation and fixture setup, so it is
+not complete session accounting. The last whole-workflow attempt exceeded the
+parent task budget. End-to-end delivery within both owner budgets remains
+unproven. The three-round fuse ends this pass; the remaining necessary work is
+reducing parent orchestration and measuring completed delivery. No universal
+optimality, causal whole-pipeline saving, or goal completion is claimed.

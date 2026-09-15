@@ -1,0 +1,301 @@
+{
+  "scope": "Evaluator input, installed documentation, and audit scope. No completed-delivery budget claim.",
+  "budgets": {
+    "task": 4000,
+    "session": 30000
+  },
+  "runs": {
+    "native_inspection": {
+      "invocations": [
+        {
+          "events": "/Users/jeremymcspadden/orca/evaluations/token-native-round5/path/run-20260915T151326500407Z/events.jsonl",
+          "execution": {
+            "model": "gpt-6-astra",
+            "reasoning": "high",
+            "sandbox": "danger-full-access",
+            "cli": "codex-cli 0.154.0",
+            "command": [
+              "codex",
+              "exec",
+              "--sandbox",
+              "danger-full-access",
+              "--add-dir",
+              "/Users/jeremymcspadden/orca/evaluations/token-native-round5/path",
+              "--ignore-user-config",
+              "--model",
+              "gpt-6-astra",
+              "-c",
+              "model_reasoning_effort=\"high\"",
+              "--json",
+              "-"
+            ],
+            "exit_code": 0,
+            "started_at": "2026-09-15T15:13:26.501374+00:00",
+            "elapsed_seconds": 369.69570825,
+            "head": "e9c0b06b95159af80703245cc28253a1e0fd3dfb"
+          },
+          "reported_usage": {
+            "input_tokens": 1180737,
+            "cached_input_tokens": 1126528,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 5367,
+            "reasoning_output_tokens": 898
+          }
+        }
+      ],
+      "output_tokens": 5367,
+      "ledger": {
+        "schema": "gsd-path/token-budget/v1",
+        "host": "codex-cli",
+        "metric": "output_tokens",
+        "task_limit": 4000,
+        "session_limit": 30000,
+        "authority": "Owner: Per-task token budget 4000; session budget 30000",
+        "observations": {
+          "/Users/jeremymcspadden/Library/Application Support/orca/codex-accounts/86df0dc7-3078-4314-8766-60e244dd9765/home/sessions/2026/09/15/rollout-2026-09-15T10-15-07-01a0a5a2-d7ad-7f43-ba88-bba022744d0c.jsonl": {
+            "task": "inspect_codebase",
+            "output_tokens": 2962
+          },
+          "/Users/jeremymcspadden/Library/Application Support/orca/codex-accounts/86df0dc7-3078-4314-8766-60e244dd9765/home/sessions/2026/09/15/rollout-2026-09-15T10-15-23-01a0a5a3-1023-7e00-93ca-e5fc624b691f.jsonl": {
+            "task": "inspect_docs",
+            "output_tokens": 3193
+          },
+          "/Users/jeremymcspadden/orca/evaluations/token-native-round5/path/run-20260915T151326500407Z/events.jsonl": {
+            "task": "inspect_parent",
+            "output_tokens": 5367
+          }
+        }
+      },
+      "total_output_with_children": 11522
+    },
+    "docs_before_scope": {
+      "invocations": [
+        {
+          "events": "/Users/jeremymcspadden/orca/evaluations/token-doc-scope-round5/docs/run-20260915T152421019079Z/events.jsonl",
+          "execution": {
+            "model": "gpt-6-astra",
+            "reasoning": "high",
+            "sandbox": "danger-full-access",
+            "cli": "codex-cli 0.154.0",
+            "command": [
+              "codex",
+              "exec",
+              "--sandbox",
+              "danger-full-access",
+              "--add-dir",
+              "/Users/jeremymcspadden/orca/evaluations/token-doc-scope-round5/docs",
+              "--ignore-user-config",
+              "--model",
+              "gpt-6-astra",
+              "-c",
+              "model_reasoning_effort=\"high\"",
+              "--json",
+              "-"
+            ],
+            "exit_code": 0,
+            "started_at": "2026-09-15T15:24:21.021263+00:00",
+            "elapsed_seconds": 189.040887458,
+            "head": "b34de57aeb79eb20e3e24f43e2546fffaa0213e4"
+          },
+          "reported_usage": {
+            "input_tokens": 387525,
+            "cached_input_tokens": 345344,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 4650,
+            "reasoning_output_tokens": 650
+          }
+        }
+      ],
+      "output_tokens": 4650
+    },
+    "docs_scope_proof": {
+      "invocations": [
+        {
+          "events": "/Users/jeremymcspadden/orca/evaluations/token-doc-scope-proof-round5/docs/run-20260915T153245711787Z/events.jsonl",
+          "execution": {
+            "model": "gpt-6-astra",
+            "reasoning": "high",
+            "sandbox": "danger-full-access",
+            "cli": "codex-cli 0.154.0",
+            "command": [
+              "codex",
+              "exec",
+              "--sandbox",
+              "danger-full-access",
+              "--add-dir",
+              "/Users/jeremymcspadden/orca/evaluations/token-doc-scope-proof-round5/docs",
+              "--ignore-user-config",
+              "--model",
+              "gpt-6-astra",
+              "-c",
+              "model_reasoning_effort=\"high\"",
+              "--json",
+              "-"
+            ],
+            "exit_code": 0,
+            "started_at": "2026-09-15T15:32:45.714089+00:00",
+            "elapsed_seconds": 77.369859209,
+            "head": "7e0c380e65a77d9b986f4fabbb0661ef2bb717d3"
+          },
+          "reported_usage": {
+            "input_tokens": 230803,
+            "cached_input_tokens": 194688,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 1496,
+            "reasoning_output_tokens": 194
+          }
+        },
+        {
+          "events": "/Users/jeremymcspadden/orca/evaluations/token-doc-scope-proof-round5/docs/run-20260915T153757234895Z/events.jsonl",
+          "execution": {
+            "model": "gpt-6-astra",
+            "reasoning": "high",
+            "sandbox": "danger-full-access",
+            "cli": "codex-cli 0.154.0",
+            "command": [
+              "codex",
+              "exec",
+              "--sandbox",
+              "danger-full-access",
+              "--add-dir",
+              "/Users/jeremymcspadden/orca/evaluations/token-doc-scope-proof-round5/docs",
+              "resume",
+              "01a0a5b3-0359-7413-85a3-aa892fa53c81",
+              "--ignore-user-config",
+              "--model",
+              "gpt-6-astra",
+              "-c",
+              "model_reasoning_effort=\"high\"",
+              "--json",
+              "-"
+            ],
+            "exit_code": 0,
+            "started_at": "2026-09-15T15:37:57.239222+00:00",
+            "elapsed_seconds": 65.182520417,
+            "head": "7e0c380e65a77d9b986f4fabbb0661ef2bb717d3"
+          },
+          "reported_usage": {
+            "input_tokens": 503887,
+            "cached_input_tokens": 458752,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 2392,
+            "reasoning_output_tokens": 223
+          }
+        }
+      ],
+      "output_tokens": 2392
+    }
+  },
+  "proof": {
+    "gate": {
+      "command": [
+        "python3",
+        "-B",
+        "/Users/jeremymcspadden/orca/evaluations/token-doc-scope-proof-round5/path/repo/.agents/skills/gsd-path/scripts/check_docs_audit.py",
+        "--repo",
+        "/Users/jeremymcspadden/orca/evaluations/token-doc-scope-proof-round5/path/repo.gsd-path/verify/inspect-docs",
+        "--audit",
+        ".project/research/DOCS-AUDIT.md",
+        "--inventory",
+        "/Users/jeremymcspadden/orca/evaluations/token-doc-scope-proof-round5/docs/inventory.txt"
+      ],
+      "exit_code": 0,
+      "stdout": "{\"alignment\": false, \"audit\": \".project/research/DOCS-AUDIT.md\", \"claims\": 2, \"descriptive\": [\"AGENTS.md\", \"WORKFLOW.md\"], \"docs\": [\"README.md\"], \"queue\": 1, \"rulings\": 0, \"verdicts\": {\"aspirational\": 0, \"stale\": 1, \"unverifiable\": 0, \"verified\": 1}}\n",
+      "stderr": ""
+    },
+    "collection": {
+      "command": [
+        "python3",
+        "-B",
+        "/Users/jeremymcspadden/orca/evaluations/token-doc-scope-proof-round5/path/repo/.agents/skills/gsd-path/scripts/isolation.py",
+        "collect-artifact",
+        "--repo",
+        "/Users/jeremymcspadden/orca/evaluations/token-doc-scope-proof-round5/path/repo",
+        "--source",
+        "/Users/jeremymcspadden/orca/evaluations/token-doc-scope-proof-round5/path/repo.gsd-path/verify/inspect-docs",
+        "--base",
+        "7e0c380e65a77d9b986f4fabbb0661ef2bb717d3",
+        "--branch",
+        "gsd-path-verify/inspect-docs",
+        "--source-path",
+        ".project/research/DOCS-AUDIT.md",
+        "--destination-path",
+        ".project/research/DOCS-AUDIT.md"
+      ],
+      "exit_code": 0,
+      "stdout": "{\"base\": \"7e0c380e65a77d9b986f4fabbb0661ef2bb717d3\", \"branch\": \"gsd-path-verify/inspect-docs\", \"bytes\": 2724, \"destination\": \".project/research/DOCS-AUDIT.md\", \"previous_sha256\": null, \"replaced\": false, \"sha256\": \"ee5651fd70a8816adc43140706f6c1816c8d2617297147ef5d5cbf59891ba12d\", \"source\": \".project/research/DOCS-AUDIT.md\"}\n",
+      "stderr": ""
+    },
+    "retirement": {
+      "command": [
+        "python3",
+        "-B",
+        "/Users/jeremymcspadden/orca/evaluations/token-doc-scope-proof-round5/path/repo/.agents/skills/gsd-path/scripts/isolation.py",
+        "retire",
+        "--repo",
+        "/Users/jeremymcspadden/orca/evaluations/token-doc-scope-proof-round5/path/repo",
+        "--worktree",
+        "/Users/jeremymcspadden/orca/evaluations/token-doc-scope-proof-round5/path/repo.gsd-path/verify/inspect-docs",
+        "--branch",
+        "gsd-path-verify/inspect-docs"
+      ],
+      "exit_code": 0,
+      "stdout": "{\"bound_branch\": \"gsd-path/M001\", \"branch\": \"gsd-path-verify/inspect-docs\", \"reason\": \"removed\", \"retired\": true, \"worktree\": \"/Users/jeremymcspadden/orca/evaluations/token-doc-scope-proof-round5/path/repo.gsd-path/verify/inspect-docs\"}\n",
+      "stderr": ""
+    },
+    "artifact": "/Users/jeremymcspadden/orca/evaluations/token-doc-scope-proof-round5/path/repo/.project/research/DOCS-AUDIT.md",
+    "expected_stale_product_claim_caught": true,
+    "unverifiable_claims": 0,
+    "descriptive_docs": 2,
+    "output_tokens_including_format_repair": 2392,
+    "within_task_budget": true,
+    "budget_records": [
+      {
+        "command": [
+          "python3",
+          "-B",
+          "/Users/jeremymcspadden/orca/evaluations/token-doc-scope-proof-round5/path/repo/.agents/skills/gsd-path/scripts/token_budget.py",
+          "record",
+          "--ledger",
+          "/Users/jeremymcspadden/orca/evaluations/token-doc-scope-proof-round5/docs/budget.json",
+          "--task",
+          "inspect_docs",
+          "--events",
+          "/Users/jeremymcspadden/orca/evaluations/token-doc-scope-proof-round5/docs/run-20260915T153245711787Z/events.jsonl"
+        ],
+        "exit_code": 0,
+        "stdout": "{\"hard_cap_supported\": false, \"output_tokens\": 1496, \"status\": \"recorded\", \"task\": \"inspect_docs\"}\n",
+        "stderr": ""
+      },
+      {
+        "command": [
+          "python3",
+          "-B",
+          "/Users/jeremymcspadden/orca/evaluations/token-doc-scope-proof-round5/path/repo/.agents/skills/gsd-path/scripts/token_budget.py",
+          "record",
+          "--ledger",
+          "/Users/jeremymcspadden/orca/evaluations/token-doc-scope-proof-round5/docs/budget.json",
+          "--task",
+          "inspect_docs",
+          "--events",
+          "/Users/jeremymcspadden/orca/evaluations/token-doc-scope-proof-round5/docs/run-20260915T153757234895Z/events.jsonl",
+          "--previous-events",
+          "/Users/jeremymcspadden/orca/evaluations/token-doc-scope-proof-round5/docs/run-20260915T153245711787Z/events.jsonl"
+        ],
+        "exit_code": 0,
+        "stdout": "{\"hard_cap_supported\": false, \"output_tokens\": 896, \"previous_events\": \"/Users/jeremymcspadden/orca/evaluations/token-doc-scope-proof-round5/docs/run-20260915T153245711787Z/events.jsonl\", \"reported_output_tokens\": 2392, \"session_id\": \"01a0a5b3-0359-7413-85a3-aa892fa53c81\", \"status\": \"recorded\", \"task\": \"inspect_docs\"}\n",
+        "stderr": ""
+      }
+    ],
+    "initial_format_gate": "failed before repair; stderr was captured but not retained by the original wrapper",
+    "diagnosis": "passed; expected uncommitted state and active sidecar reported",
+    "repair_role_commit": "80ae763"
+  },
+  "native_output_across_trials": 18564,
+  "limitations": [
+    "Native trial totals exclude this optimization conversation and setup commands; they are not complete session accounting.",
+    "The full workflow stopped before coding at a docs ruling; parent output exceeded the task budget.",
+    "The final role was tested against a deliberately wrong README claim and required a format repair, not a completed delivery.",
+    "No universal optimum or causal whole-pipeline savings are claimed."
+  ]
+}
