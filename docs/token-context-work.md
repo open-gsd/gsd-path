@@ -373,3 +373,48 @@ an invalid audit and the intent test failed. After restoring the gate the same
 test passed. Ponytail review retained canonical helpers and fail-stop behavior;
 partial collection still requires existing forensics rather than blind retry.
 Native full-delivery budget compliance remains unproven.
+
+## Completed inspection candidate: native delivery attempt
+
+Candidate `7efc439` was installed and executed in a fresh matched quick-lane
+widget fixture at `/Users/jeremymcspadden/orca/evaluations/token-inspect-complete-round6/path`. Both inspector logs now have one session metadata
+and task-start record; the strict recorder accepted them. The fresh-context
+dispatch instruction took effect. Codex still reported that the global skill
+catalog exceeded its description budget; that host-wide catalog is distinct
+from the phase files loaded by this skill.
+
+Observed output: inspection/intent parent 4,396; mapper 2,851; docs 1,518;
+planning parent 4,645; coder 2,995; full wave reviewer 5,087; final reviewer
+3,034; interrupted build/ship parent 6651. Total observed lower bound:
+**31,177**, including cumulative resume deltas exactly once. Pre-coding
+output was 13,410 versus the prior 21,877 observation (different candidate,
+single runs; no isolated causal claim). These native-trial figures exclude
+the optimization conversation and setup. Full details and event paths are in
+`docs/token-context-round6.json`.
+
+The coder and isolated driver verification passed; full wave review passed;
+project Verify ran once and passed. The external acceptance evaluator then
+passed all six CLI cases. The code is functional, but this is not a completed
+delivery result. After observed total exceeded the owner session budget, the
+evaluator interrupted the CLI. Diagnosis passed and returned ship/active with
+expected uncommitted final-review artifacts. There is no integration receipt.
+The stopped parent has no turn.completed counter, so its last observed usage
+is retained as a lower bound outside the strict completed-observation ledger.
+
+Remaining measured overhead: planning repaired references absent from the
+coder base; the reviewer created a missing report directory; the parent
+corrected a sidecar .git-file path used as a directory. The final-review reuse
+gate rejected a surface label: `FINAL.md SC1 Surface must name CLI
+(\`python3 count.py\`)`. That triggered another 3,034-token reviewer assignment
+although project and wave evidence already passed. This is a concrete next
+optimization candidate, not a proven safe fix or authorization for another
+unbounded round.
+
+Assessment: 4,000 is demonstrated for this small coding task (2,995; earlier
+3,058 and direct baseline 3,347), but not a reliable universal per-role cap.
+The coder represented about 9.6% of observed output, including its
+own tests; most usage remained in inspection, planning, orchestration and
+review. Consider 4,000 as an owner-approved warning threshold rather than
+increasing every task budget blindly. No token-policy change was made.
+Source implementation gates passed; whole-workflow budget optimization and
+completed native delivery remain open.
