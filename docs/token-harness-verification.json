@@ -1,0 +1,8 @@
+{
+  "red": "generated prompt does not bind candidate",
+  "green": "candidate resolves; wrapper absent; budgets retained",
+  "sabotage": "bound candidate is absent",
+  "restored": "pass",
+  "fixture": "/Users/jeremymcspadden/orca/evaluations/token-harness-sabotage-round5",
+  "qualification": "Generated-input integration proof, plus live exact-path execution; no claim of end-to-end savings."
+}
