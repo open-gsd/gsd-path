@@ -206,6 +206,18 @@ class CheckDocsAuditTests(unittest.TestCase):
         self.assertEqual(code, 0, err)
         self.assertEqual(out.splitlines(), ["CONTRIBUTING.md", "NOTES.md", "README.md"])
 
+    def test_inventory_command_excludes_the_installed_path_router_alias(self):
+        for name in ('.agents/skills/path/SKILL.md',
+                     '.agents/skills/path/references/coder.md',
+                     '.agents/skills/pathology/SKILL.md', 'docs/path.md'):
+            path = self.repo / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text('A documented claim.\n')
+        code, out, err = self.run_gate('--emit-inventory')
+        self.assertEqual(code, 0, err)
+        self.assertEqual(out.splitlines(), ['.agents/skills/pathology/SKILL.md',
+                                          'CONTRIBUTING.md', 'README.md', 'docs/path.md'])
+
     def test_explicit_inventory_wins(self):
         (self.repo / "inventory.txt").write_text("README.md\nCONTRIBUTING.md\nDOCS.md\n", encoding="utf-8")
         code, _, err = self.run_gate("--inventory", str(self.repo / "inventory.txt"))

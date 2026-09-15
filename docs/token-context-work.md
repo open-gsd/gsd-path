@@ -73,3 +73,31 @@ exclude tool output, host context, caching, and model behavior.
 
 Fresh native fixture execution and token accounting remain pending. No runtime
 token saving or whole-pipeline completion improvement is claimed from static counts.
+
+The fresh matched fixture is `/Users/jeremymcspadden/orca/evaluations/token-context-504ebeb`.
+It pins candidate `504ebeb580bf80b4d86b5a35c17a5403f4562966`, uses the same widget
+requirements for quick Path and direct coding, and records Codex CLI 0.154.0,
+gpt-6-astra/high, danger-full-access. Both remotes are local fixture repositories.
+Raw prompts, command events, counters, and execution status are in each arm's
+`run-*` directories. Path thread: `01a0a553-5d16-77b3-b6e2-e43f35ec379c`;
+direct thread: `01a0a553-8e49-7da0-abaa-55ebc5997950`.
+
+### Live finding: installed alias entered the docs audit
+
+The first Path run reached the intent gate without coding. Its frozen inventory
+contained 51 Markdown files, including 48 files from `.agents/skills/path/`.
+The existing exclusion recognized `gsd-path*` but missed the distributed `path`
+alias. The resulting audit created 12 unrelated alias findings, plus three
+fixture-root tooling findings. Parent output alone reached 6,050 tokens.
+The direct arm completed in 144.99 seconds with 3,347 output tokens.
+
+The alias exclusion now matches the canonical bundle exclusion. On the same live
+fixture the command emits only AGENTS.md, README.md, and WORKFLOW.md. RED:
+`python3 -B -m unittest tests.test_check_docs_audit.CheckDocsAuditTests.test_inventory_command_excludes_the_installed_path_router_alias`
+failed with two alias files in the result. GREEN: all 19 docs-audit tests passed.
+Sabotage: temporarily restored the old predicate in the canonical source; the
+same CLI test failed, then the exact source bytes were restored. An initial
+in-process mock did not affect the CLI subprocess and was correctly rejected as
+proof. Ponytail review: extended the existing exclusion; no new inventory or
+classification mechanism. The first native thread is terminal at the intent
+gate; it is retained as a partial run, not a completed benchmark.
