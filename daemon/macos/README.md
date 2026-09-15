@@ -22,7 +22,8 @@ and registers it as a login item. Build by hand only for development:
 
 Compiles the Swift sources (release), wraps the binary into
 `build/GSDPathTray.app` with `LSUIElement = true` (menu-bar-only, no Dock
-icon), and ad-hoc signs it. Idempotent; prints the resulting `.app` path.
+icon), copies `AppIcon.icns`, and ad-hoc signs it. Idempotent; prints the
+resulting `.app` path. Regenerate the icns with `python3 make_app_icon.py`.
 
 ## Run
 
@@ -30,11 +31,14 @@ icon), and ad-hoc signs it. Idempotent; prints the resulting `.app` path.
 open build/GSDPathTray.app
 ```
 
-Click the menu-bar icon to open the dropdown. The icon uses an aggregate
-progress ring and an attention badge; offline it becomes a gray ring. The
-dropdown is a status board in native macOS colors (label, separator and accent
-colors; the standard selection highlight on hover): the last
-update time, then projects under In progress (blocked first) and Shipped.
+Click the menu-bar icon to open the dropdown. The icon is the OpenGSD Path
+mark (three forward chevrons), drawn as a template so it follows the
+menu-bar tint. Attention is a corner dot; offline dims the item.
+The same mark sits next to the name in the dropdown and the dashboard
+toolbar. The dropdown is a status board in native macOS colors
+(label, separator and accent colors; the standard selection highlight on
+hover): the last update time, then projects under In progress (blocked
+first) and Shipped.
 
 Each row is one button (click to open the project page) with the project name,
 an 8-segment phase meter (red when blocked) and one detail line: milestone,

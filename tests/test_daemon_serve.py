@@ -165,16 +165,22 @@ class ServeTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertIn("text/html", content_type)
         html = body.decode("utf-8")
-        for marker in ("gsd-path daemon", "Status board", "milestoneStack", "end of roadmap",
+        for marker in ("OpenGSD Path", "Status board", "milestoneStack", "end of roadmap",
                        "phaseTrack", "criteria met", "Latest lesson", "boardRow", "data-switch", "Turn ledger",
                        "data-filter", "data-search",
                        "Plugin", "Watched folders"):
             self.assertIn(marker, html)
+        self.assertIn("<title>OpenGSD Path</title>", html)
+        self.assertIn('aria-label="OpenGSD Path projects"', html)
+        self.assertIn("OpenGSD Path</button>", html)
+        self.assertIn("M1.6 4 5.6 9 1.6 14", html)
+        self.assertNotIn("ICON.grid", html)
         # A status board shows done / here / ahead only: no inbox, next steps or copy actions.
         for gone in ("Needs you", "Next step", "next_skill", "data-copy", "class=\"tabs\"", "Attention"):
             self.assertNotIn(gone, html)
         self.assertNotIn("PROTOTYPE", html)
         self.assertNotIn("PrototypeSwitcher", html)
+        self.assertNotIn("max-width: 1240px", html)
 
     def test_dashboard_inline_js_parses(self) -> None:
         node = shutil.which("node")

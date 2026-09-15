@@ -117,6 +117,11 @@ gsd-path-daemon plugin <status|install|update|uninstall>          # manage the s
   request scans skip host session logs, share a lock with background scans,
   and record changes when history is enabled.
 
+The native dashboard window fills the display on first open (later sizes are
+kept) and the green button can take it into macOS full screen. The board and
+project page use the full window width; prose (vision, notes) stays at a
+readable line length.
+
 The dashboard uses graphite neutrals with the macOS accent color (CSS `AccentColor`,
 system blue where unsupported), light by default. Settings → Appearance
 switches between System, Light and Dark; the choice is kept in the browser, and
@@ -124,7 +129,7 @@ the tray passes its own choice as `?theme=`. It is a pure **status board**: what
 project has done, where it is now, where its roadmap goes next, and what it has
 cost. It shows no next steps, commands, or attention items.
 
-- **Toolbar**: GSD Path, All / Active / Shipped filters with counts, a project
+- **Toolbar**: OpenGSD Path mark and name, All / Active / Shipped filters with counts, a project
   search, Refresh (requests a project scan and reloads status), the last update
   time, and the Settings menu (Plugin, Watched folders).
 - **Watched folders**: Add folder opens a picker; click a folder or `..` to
@@ -178,7 +183,7 @@ cost. It shows no next steps, commands, or attention items.
   log, `CHARTER.md` Vision, `intent/INTENT.md` Summary, `LESSONS.md`, task
   files, `review/FINAL.md`, the verify ledger, and `next/STATE.md`.
 
-`#plugin` and `#folders` open settings directly; the GSD Path button and Back
+`#plugin` and `#folders` open settings directly; the OpenGSD Path button and Back
 return to the board. Refresh preserves page scroll, the open Settings menu and
 focus. Connection status changes to Offline after a failed status request; the
 last received data remains visible with an explicit offline label. The

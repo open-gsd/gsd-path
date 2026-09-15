@@ -26,9 +26,22 @@ def _icon_color(projects) -> str:
 
 
 def _make_image(draw_module, image_module, color: str):
-    image = image_module.new("RGBA", (64, 64), (0, 0, 0, 0))
+    # Same 18x18 chevron mark as ICON.mark in serve.py and makeBrandIcon.
+    size = 64
+    image = image_module.new("RGBA", (size, size), (0, 0, 0, 0))
     draw = draw_module.Draw(image)
-    draw.ellipse((4, 4, 60, 60), fill=color)
+    scale = size / 18.0
+    width = max(2, round(1.5 * scale))
+
+    def chevron(x):
+        draw.line(
+            [(x * scale, 4 * scale), ((x + 4) * scale, 9 * scale), (x * scale, 14 * scale)],
+            fill=color, width=width, joint="curve",
+        )
+
+    chevron(1.6)
+    chevron(7.0)
+    chevron(12.4)
     return image
 
 
