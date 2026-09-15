@@ -379,6 +379,11 @@ STATE.md.
 
 ## Distribution layout
 
+This section describes the GSD Path source checkout. These source paths and
+the sync command do not apply to an application that only installs GSD Path.
+In a consuming project, resolve roles, templates, and helpers from the active
+installed skill's absolute paths; the application need not contain this layout.
+
 | Path | Purpose |
 |------|---------|
 | `plugin.json` | Agent Plugins manifest (`agent-plugins.org` 1.0.0 schema) |
