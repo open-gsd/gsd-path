@@ -1,17 +1,17 @@
 {
   "schema": "gsd-path/live-step-evidence/v1",
   "host": "zed",
-  "run_id": "run-20260909T010700708658Z",
+  "run_id": "run-20260915T023848522535Z",
   "result": "pass",
   "step": "integration",
-  "command": "python3 -B .agents/skills/gsd-path/scripts/archive_milestone.py integrate --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-zed-091d279/quick/repo --slug count-json-cli; validate-integrated --slug count-json-cli",
-  "output": "{\"archive\": \".project/archive/001-count-json-cli\", \"base\": \"7142e4652c80301e15157396dab25b2dc6eb63e4\", \"commit\": \"d94143e25087e840dfef3a3b18fa49a221fcbb09\", \"integrate\": \"7142e4652c80301e15157396dab25b2dc6eb63e4\", \"landing\": \"7142e4652c80301e15157396dab25b2dc6eb63e4\", \"mode\": \"direct\", \"tag\": \"milestone/001-count-json-cli\"}",
+  "command": "python3 .gsd-path/runtime/archive_milestone.py integrate --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/zed/quick/repo --slug count-json-cli; python3 .gsd-path/runtime/archive_milestone.py validate-integrated --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/zed/quick/repo --slug count-json-cli",
+  "output": "{\"archive\": \".project/archive/001-count-json-cli\", \"base\": \"f31f5252da340aa6f2786985682c4fd38772dfca\", \"commit\": \"2f32fa586db0cfa45460d8d1ebfd99ec3ef9f805\", \"integrate\": \"f31f5252da340aa6f2786985682c4fd38772dfca\", \"landing\": \"f31f5252da340aa6f2786985682c4fd38772dfca\", \"mode\": \"direct\", \"tag\": \"milestone/001-count-json-cli\"}",
   "fixture_bundle": "zed/fixture.bundle",
   "run_manifest": ".project/archive/001-count-json-cli/trust-run-manifest.json",
-  "ship_commit": "d94143e25087e840dfef3a3b18fa49a221fcbb09",
+  "ship_commit": "2f32fa586db0cfa45460d8d1ebfd99ec3ef9f805",
   "bound_branch": "gsd-path/M001",
   "default_branch": "main",
-  "pre_integration_default_commit": "944bc96f67fdb38b387d65e24edf971b7565cfb0",
-  "integration_commit": "7142e4652c80301e15157396dab25b2dc6eb63e4",
+  "pre_integration_default_commit": "396b2f7fc12f459ef7c6cf5b4180c8f1cf4c7ef0",
+  "integration_commit": "f31f5252da340aa6f2786985682c4fd38772dfca",
   "milestone_tag": "milestone/001-count-json-cli"
 }
