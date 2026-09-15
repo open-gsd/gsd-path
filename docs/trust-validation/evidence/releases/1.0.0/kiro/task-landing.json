@@ -1,17 +1,17 @@
 {
   "schema": "gsd-path/live-step-evidence/v1",
   "host": "kiro",
-  "run_id": "0cde4448-82bc-49ec-baa8-fe4d6fd262b1",
+  "run_id": "d83c40d2-63e0-4702-893f-4defe27f55fa",
   "result": "pass",
   "step": "task-landing",
-  "command": "python3 -B .kiro/skills/gsd-path/scripts/isolation.py land --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-kiro-091d279/quick/repo --source /Users/jeremymcspadden/orca/evaluations/gsd-path-release-kiro-091d279/quick/repo --base b490cd2 --task-id T001 (serial isolation; landing see task-landing.json)",
-  "output": "commit f0ab61dc35820ddc2b8eb7d133dc8c9289694e42\nAuthor:     Feature Evaluation <evaluation@example.invalid>\nAuthorDate: Wed Sep 9 00:33:52 2026 -0500\nCommit:     Feature Evaluation <evaluation@example.invalid>\nCommitDate: Wed Sep 9 00:33:52 2026 -0500\n\n    T001: Extend count.py with --json flag, signed-integer counts, and validated input, plus real-CLI tests\n    \n    Task: .project/tasks/T001-count-json-cli.md\n    Base: b490cd210114b0f949ffbe48cad2a6b6a35aba7c\n    Files:\n    - .project/tasks/T001-count-json-cli.md\n    - count.py\n    - test_count.py\n\n .project/tasks/T001-count-json-cli.md |  9 ++--\n count.py                              | 35 +++++++++++++-\n test_count.py                         | 88 +++++++++++++++++++++++++++++++++++\n 3 files changed, 127 insertions(+), 5 deletions(-)",
+  "command": "python3 -B .gsd-path/runtime/isolation.py land --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/kiro/quick/repo --source /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/kiro/quick/repo --base ba3d84757850e433c73088911490ac8e4fde3ee0 --task-id T001 --title \"Extend count.py into the full widget-count CLI with subprocess tests\" --task-file .project/tasks/T001-count-json-cli.md --allow-path count.py --allow-path test_count.py (serial isolation; landing f2a9c317b1d1893b90739ae53756f596eff9d750)",
+  "output": "commit f2a9c317b1d1893b90739ae53756f596eff9d750\nAuthor:     Feature Evaluation <evaluation@example.invalid>\nAuthorDate: Mon Sep 14 18:44:48 2026 -0500\nCommit:     Feature Evaluation <evaluation@example.invalid>\nCommitDate: Mon Sep 14 18:44:48 2026 -0500\n\n    T001: Extend count.py into the full widget-count CLI with subprocess tests\n    \n    Task: .project/tasks/T001-count-json-cli.md\n    Base: ba3d84757850e433c73088911490ac8e4fde3ee0\n    Files:\n    - .project/tasks/T001-count-json-cli.md\n    - count.py\n    - test_count.py\n\n .project/tasks/T001-count-json-cli.md | 26 ++++++++--\n count.py                              | 60 +++++++++++++++++++++-\n test_count.py                         | 95 +++++++++++++++++++++++++++++++++++\n 3 files changed, 176 insertions(+), 5 deletions(-)",
   "fixture_bundle": "kiro/fixture.bundle",
   "run_manifest": ".project/archive/001-count-json-cli/trust-run-manifest.json",
-  "fixture_base_commit": "b490cd210114b0f949ffbe48cad2a6b6a35aba7c",
+  "fixture_base_commit": "ba3d84757850e433c73088911490ac8e4fde3ee0",
   "task_branch": "gsd-path-verify/task-t001-verify",
-  "task_worktree": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-kiro-091d279/quick/repo.gsd-path/verify/task-t001-verify",
-  "landing_commit": "f0ab61dc35820ddc2b8eb7d133dc8c9289694e42",
+  "task_worktree": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/kiro/quick/repo.gsd-path/verify/task-t001-verify",
+  "landing_commit": "f2a9c317b1d1893b90739ae53756f596eff9d750",
   "isolation_mode": "serial",
   "isolation_note": "A one-task wave uses the helper's serial mode: the coder worked on the bound branch in the primary worktree at the recorded base, and the named branch and worktree are the isolated Task Verify sidecar created for this task and retired after landing."
 }

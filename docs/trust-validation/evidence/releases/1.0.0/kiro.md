@@ -3,7 +3,7 @@ schema: gsd-path/live-evidence/v1
 host: kiro
 package: 1.0.0
 pipeline: gsd-path/v2
-candidate: 091d27927a2c0c2ecc55ce386fb2232556da6336
+candidate: 052475792bbe211f104d34a524c22db056bdee71
 verdict: pass
 child_spawn: pass
 state: pass
@@ -17,15 +17,15 @@ guard_tier: git-only
 
 # Live milestone evidence — kiro
 
-Full quick-lane milestone run by the pinned candidate on a fresh fixture; evaluator-driven owner gates. Run directory: `/Users/jeremymcspadden/orca/evaluations/gsd-path-release-kiro-091d279`.
+Full quick-lane milestone run by the pinned candidate on a fresh fixture; evaluator-driven owner gates. Run directory: `/Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/kiro`.
 
 ## Environment
 
 - Host and CLI version: kiro-cli 2.21.2
 - Operator: Jeremy McSpadden; owner gates answered by the session evaluator and recorded in quick/owner-reply-*.txt
-- Date: 2026-09-09
-- Fixture repository: /Users/jeremymcspadden/orca/evaluations/gsd-path-release-kiro-091d279/quick/repo
-- Child-agent API used: invoke_sub_agent (task build_T001)
+- Date: 2026-09-14
+- Fixture repository: /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/kiro/quick/repo
+- Child-agent API used: invoke_sub_agent (task build_t001)
 
 ## Evidence
 
