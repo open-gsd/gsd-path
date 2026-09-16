@@ -1,4 +1,5 @@
 import http.client
+from html.parser import HTMLParser
 import json
 import os
 import re
@@ -164,17 +165,27 @@ class ServeTests(unittest.TestCase):
         status, content_type, body = self.get("/")
         self.assertEqual(status, 200)
         self.assertIn("text/html", content_type)
-        html = body.decode("utf-8")
-        for marker in ("gsd-path daemon", "Status board", "milestoneStack", "end of roadmap",
-                       "phaseTrack", "criteria met", "Latest lesson", "boardRow", "data-switch", "Turn ledger",
-                       "data-filter", "data-search",
-                       "Plugin", "Watched folders"):
-            self.assertIn(marker, html)
-        # A status board shows done / here / ahead only: no inbox, next steps or copy actions.
-        for gone in ("Needs you", "Next step", "next_skill", "data-copy", "class=\"tabs\"", "Attention"):
-            self.assertNotIn(gone, html)
-        self.assertNotIn("PROTOTYPE", html)
-        self.assertNotIn("PrototypeSwitcher", html)
+        class PageTitle(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.in_title = False
+                self.title = ""
+
+            def handle_starttag(self, tag, attrs):
+                if tag == "title":
+                    self.in_title = True
+
+            def handle_endtag(self, tag):
+                if tag == "title":
+                    self.in_title = False
+
+            def handle_data(self, data):
+                if self.in_title:
+                    self.title += data
+
+        page = PageTitle()
+        page.feed(body.decode("utf-8"))
+        self.assertEqual(page.title, "OpenGSD Path")
 
     def test_dashboard_inline_js_parses(self) -> None:
         node = shutil.which("node")

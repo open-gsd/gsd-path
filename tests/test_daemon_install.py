@@ -381,6 +381,12 @@ def _fake_tray_modules(health_results, servers):
         def ellipse(self, *args, **kwargs):
             pass
 
+        def line(self, *args, **kwargs):
+            pass
+
+        def rounded_rectangle(self, *args, **kwargs):
+            pass
+
     pil_draw.Draw = _Draw
     pil.Image = pil_image
     pil.ImageDraw = pil_draw

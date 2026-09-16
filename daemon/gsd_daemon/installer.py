@@ -192,7 +192,7 @@ class Installer:
     def linux_unit(self) -> str:
         return (
             "[Unit]\n"
-            "Description=GSD Path progress daemon\n"
+            "Description=OpenGSD Path progress daemon\n"
             "\n"
             "[Service]\n"
             "Type=simple\n"

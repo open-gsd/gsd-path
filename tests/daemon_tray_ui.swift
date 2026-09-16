@@ -40,7 +40,7 @@ struct TrayUITest {
         func require(_ condition: Bool, _ message: String) {
             if !condition { print("FAIL: \(message)"); exit(1) }
         }
-        require(labels().contains("GSD Path") && labels().contains("Connected"), "header with connection state")
+        require(labels().contains("OpenGSD Path") && labels().contains("Connected"), "header with connection state")
         require(labels().contains("In progress") && labels().contains("Shipped"), "in progress and shipped captions")
         let rows = descendants(vc.view).compactMap { $0 as? ProjectRowView }
         // Board order: blocked first, then active by name, then shipped.

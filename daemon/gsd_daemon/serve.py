@@ -31,7 +31,7 @@ DASHBOARD_PAGE = r"""<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>gsd-path daemon</title>
+<title>OpenGSD Path</title>
 <style>
   /* Instrument palette: graphite neutrals and the macOS accent colour (system blue where AccentColor is unsupported). */
   :root {
@@ -91,7 +91,8 @@ DASHBOARD_PAGE = r"""<!doctype html>
   .stage { min-height: 100dvh; }
   .topbar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 8px 16px; background: var(--chrome); border-bottom: 1px solid var(--line); }
   .brand { display: flex; gap: 8px; align-items: center; padding: 0; border: 0; background: none; font-size: 13.5px; font-weight: 650; cursor: pointer; white-space: nowrap; }
-  .brand svg, .settings-menu summary svg, .search svg { width: 16px; height: 16px; flex: none; }
+  .brand svg { width: 18px; height: 18px; flex: none; }
+  .settings-menu summary svg, .search svg { width: 16px; height: 16px; flex: none; }
   .segc { display: flex; padding: 2px; border-radius: 7px; background: var(--seg); }
   .segc button { padding: 3px 12px; border: 0; border-radius: 5px; background: none; font-size: 12.5px; color: var(--dim); cursor: pointer; white-space: nowrap; }
   .segc button[aria-pressed="true"] { background: var(--card); color: var(--text); font-weight: 600; box-shadow: var(--shadow); }
@@ -121,16 +122,16 @@ DASHBOARD_PAGE = r"""<!doctype html>
 
   /* Board: one table row per project. */
   .board { padding-bottom: 24px; overflow-x: auto; }
-  table.grid { width: 100%; border-collapse: collapse; min-width: 900px; }
+  table.grid { width: 100%; border-collapse: collapse; min-width: 900px; table-layout: auto; }
   .grid th { text-align: left; font-size: 11.5px; font-weight: 600; color: var(--dim); padding: 8px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
   .grid td { padding: 8px 12px; border-bottom: 1px solid var(--line); vertical-align: middle; white-space: nowrap; }
-  .grid th:first-child, .grid td:first-child { padding-left: 20px; }
+  .grid th:first-child, .grid td:first-child { padding-left: 20px; width: 36%; }
   .grid .n { text-align: right; font-variant-numeric: tabular-nums; }
   .prow { cursor: pointer; }
   .prow:hover td { background: var(--hover); }
   .pname { display: flex; align-items: center; gap: 7px; padding: 0; border: 0; background: none; font-weight: 600; cursor: pointer; }
-  .ppath { font: 11px var(--mono); color: var(--faint); padding-left: 14px; max-width: 280px; overflow: hidden; text-overflow: ellipsis; }
-  .msl { max-width: 280px; overflow: hidden; text-overflow: ellipsis; }
+  .ppath { font: 11px var(--mono); color: var(--faint); padding-left: 14px; max-width: min(48vw, 640px); overflow: hidden; text-overflow: ellipsis; }
+  .msl { max-width: min(32vw, 420px); overflow: hidden; text-overflow: ellipsis; }
   .msl .mono { color: var(--dim); margin-right: 4px; }
   .route { display: inline-flex; gap: 3px; vertical-align: middle; }
   .route i { width: 9px; height: 9px; border-radius: 2px; background: var(--done); }
@@ -146,7 +147,7 @@ DASHBOARD_PAGE = r"""<!doctype html>
   .board .empty { padding: 28px 20px; color: var(--dim); }
 
   /* Project page: facts strip, then the path on the left and usage on the right. */
-  .page { padding: 20px 20px 40px; max-width: 1240px; }
+  .page { padding: 20px 24px 40px; width: 100%; max-width: none; }
   .phead { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; min-width: 0; }
   .phead h1 { font-size: 20px; font-weight: 680; letter-spacing: -.015em; }
   .phead .mono { color: var(--faint); overflow-wrap: anywhere; }
@@ -678,7 +679,7 @@ function tabPlugin() {
   return banner + hostsTable + projectsBox;
 }
 const ICON = {
-  grid: '<svg viewBox="0 0 18 18" fill="none" aria-hidden="true"><rect x="2" y="3" width="14" height="12" rx="2.5" stroke="currentColor" stroke-width="1.5"/><path d="M2 7h14M7 7v8" stroke="currentColor" stroke-width="1.5"/></svg>',
+  mark: '<svg viewBox="0 0 18 18" fill="none" aria-hidden="true"><path d="M1.6 4 5.6 9 1.6 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M7 4 11 9 7 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.4 4 16.4 9 12.4 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   gear: '<svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="2.2" stroke="currentColor" stroke-width="1.4"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>',
   search: '<svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.5"/><path d="m10.5 10.5 3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>',
 };
@@ -704,7 +705,7 @@ function render() {
     const filters = [["all", "All", projects.length], ["active", "Active", projects.length - shipped], ["shipped", "Shipped", shipped]]
       .map(([k, label, n]) => `<button data-filter="${k}" aria-pressed="${CState.filter === k}">${label}<span>${n}</span></button>`).join("");
     const onBoard = !["plugin", "folders"].includes(CState.view);
-    header = `<header class="topbar"><button class="brand" data-nav="board" aria-label="GSD Path projects">${ICON.grid}GSD Path</button>${onBoard ? `<div class="segc" role="group" aria-label="Show projects">${filters}</div><label class="search">${ICON.search}<input type="search" data-search placeholder="Filter projects" aria-label="Filter projects" value="${esc(CState.q)}"></label>` : `<span class="spacer"></span>`}${status}${settings}</header>`;
+    header = `<header class="topbar"><button class="brand" data-nav="board" aria-label="OpenGSD Path projects">${ICON.mark}OpenGSD Path</button>${onBoard ? `<div class="segc" role="group" aria-label="Show projects">${filters}</div><label class="search">${ICON.search}<input type="search" data-search placeholder="Filter projects" aria-label="Filter projects" value="${esc(CState.q)}"></label>` : `<span class="spacer"></span>`}${status}${settings}</header>`;
     if (CState.view === "plugin") body = `<main class="settings"><h2>Plugin</h2>${tabPlugin()}</main>`;
     else if (CState.view === "folders") body = `<main class="settings"><h2>Watched folders</h2><p class="dim">Projects inside these folders appear automatically.</p>${(DAEMON.parents || []).map((path, i) => `<div class="folder-row"><span>${esc(path)}</span><button class="btn danger" data-remove-parent="${i}">Stop watching</button></div>`).join("")}<p style="margin-top:16px"><button class="btn" data-action="add-folder">Add folder…</button></p></main>`;
     else {

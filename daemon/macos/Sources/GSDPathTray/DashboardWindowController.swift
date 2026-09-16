@@ -16,12 +16,18 @@ final class DashboardWindowController: NSWindowController, NSWindowDelegate, WKN
             contentRect: NSRect(x: 0, y: 0, width: 1200, height: 800),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered, defer: false)
-        window.title = "GSD Path"
+        window.title = "OpenGSD Path"
         window.minSize = NSSize(width: 900, height: 600)
-        window.center()
+        window.collectionBehavior = [.fullScreenPrimary]
         super.init(window: window)
         window.delegate = self
-        windowFrameAutosaveName = "GSDPathDashboard"
+        // New autosave name so this build opens on the visible screen once;
+        // later resizes are kept.
+        let restored = window.setFrameUsingName("GSDPathDashboardFull")
+        window.setFrameAutosaveName("GSDPathDashboardFull")
+        if !restored, let screen = window.screen ?? NSScreen.main {
+            window.setFrame(screen.visibleFrame, display: false)
+        }
 
         guard let content = window.contentView else { return }
 

@@ -9,12 +9,14 @@ APP_DIR="build/GSDPathTray.app"
 ARCH="$(uname -m)"
 
 rm -rf "$APP_DIR"
-mkdir -p "$APP_DIR/Contents/MacOS"
+mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
 
 swiftc -O -whole-module-optimization \
     -target "${ARCH}-apple-macosx12.0" \
     -o "$APP_DIR/Contents/MacOS/GSDPathTray" \
     Sources/GSDPathTray/*.swift
+
+cp AppIcon.icns "$APP_DIR/Contents/Resources/AppIcon.icns"
 
 cat > "$APP_DIR/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -24,7 +26,7 @@ cat > "$APP_DIR/Contents/Info.plist" <<'PLIST'
     <key>CFBundleName</key>
     <string>GSDPathTray</string>
     <key>CFBundleDisplayName</key>
-    <string>GSD Path Tray</string>
+    <string>OpenGSD Path</string>
     <key>CFBundleIdentifier</key>
     <string>org.gsd-path.tray</string>
     <key>CFBundleVersion</key>
@@ -35,6 +37,8 @@ cat > "$APP_DIR/Contents/Info.plist" <<'PLIST'
     <string>APPL</string>
     <key>CFBundleExecutable</key>
     <string>GSDPathTray</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
     <key>LSMinimumSystemVersion</key>
     <string>12.0</string>
     <key>LSUIElement</key>

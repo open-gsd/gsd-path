@@ -33,6 +33,16 @@ func makeLabel(_ text: String, size: CGFloat, weight: NSFont.Weight = .regular,
     return f
 }
 
+func makeBrandMarkView() -> NSImageView {
+    let icon = NSImageView(image: makeBrandIcon(color: .labelColor))
+    icon.translatesAutoresizingMaskIntoConstraints = false
+    NSLayoutConstraint.activate([
+        icon.widthAnchor.constraint(equalToConstant: 18),
+        icon.heightAnchor.constraint(equalToConstant: 18),
+    ])
+    return icon
+}
+
 func healthColor(_ h: Health) -> NSColor {
     switch h {
     case .green: return .systemGreen
@@ -223,7 +233,10 @@ final class PopoverViewController: NSViewController {
 
     func showOffline() {
         rebuild {
-            let title = makeLabel("GSD Path", size: 13, weight: .semibold)
+            let title = makeLabel("OpenGSD Path", size: 13, weight: .semibold)
+            let header = NSStackView(views: [makeBrandMarkView(), title])
+            header.spacing = 6
+            header.edgeInsets = NSEdgeInsets(top: 4, left: 9, bottom: 6, right: 9)
             let msg = makeLabel("daemon not reachable on 127.0.0.1:8765", size: 12,
                                 color: .secondaryLabelColor)
             let cmd = makeLabel("python3 -m gsd_daemon serve", size: 12)
@@ -247,7 +260,7 @@ final class PopoverViewController: NSViewController {
             buttons.spacing = 8
             let daemonRow = DaemonRowView()
             daemonRow.onRescan = onRescan
-            return [title, makeLabel("Offline", size: 12, color: NSColor.systemRed), msg, hint, cmd, daemonRow, buttons].map { inset($0, top: 4) }
+            return [header, makeLabel("Offline", size: 12, color: NSColor.systemRed), msg, hint, cmd, daemonRow, buttons].map { inset($0, top: 4) }
         }
     }
 
@@ -255,9 +268,7 @@ final class PopoverViewController: NSViewController {
         let projects = status.projects ?? []
         var views: [NSView] = []
 
-        let icon = NSImageView(image: NSImage(systemSymbolName: "tablecells", accessibilityDescription: nil) ?? NSImage())
-        icon.contentTintColor = NSColor.labelColor
-        let title = makeLabel("GSD Path", size: 13, weight: .semibold)
+        let title = makeLabel("OpenGSD Path", size: 13, weight: .semibold)
         let spacer = NSView()
         spacer.setContentHuggingPriority(.init(1), for: .horizontal)
         let dot = DotView()
@@ -265,7 +276,7 @@ final class PopoverViewController: NSViewController {
         dot.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([dot.widthAnchor.constraint(equalToConstant: 7), dot.heightAnchor.constraint(equalToConstant: 7)])
         let updated = makeLabel(generatedStamp(status.generated_at).map { "Updated \($0)" } ?? "Connected", size: 12, color: NSColor.secondaryLabelColor)
-        let header = NSStackView(views: [icon, title, spacer, dot, updated])
+        let header = NSStackView(views: [makeBrandMarkView(), title, spacer, dot, updated])
         header.spacing = 6
         header.edgeInsets = NSEdgeInsets(top: 4, left: 9, bottom: 6, right: 9)
         views.append(header)
@@ -286,7 +297,7 @@ final class PopoverViewController: NSViewController {
 
         // Plugin update row, only when the daemon reports one.
         if let plugin = status.plugin, plugin.update_available == true, let latest = plugin.latest {
-            views.append(MenuItemButton("GSD Path update available — v\(latest)", target: self, action: #selector(pluginPressed)))
+            views.append(MenuItemButton("OpenGSD Path update available — v\(latest)", target: self, action: #selector(pluginPressed)))
         }
 
         let daemonRow = DaemonRowView()
