@@ -1774,6 +1774,22 @@ Tasks reviewed: 2
         )
         return relative
 
+    def test_wave_accepts_empty_lens_without_consuming_next_field(self) -> None:
+        for field in ("Lens:", "Lens: \t"):
+            with self.subTest(field=field), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                self.write_plan_handoff(root)
+                relative = self.write_wave_review(root)
+                review = root / relative
+                review.write_text(review.read_text().replace(
+                    "Tasks reviewed:", field + "\nTasks reviewed:",
+                ))
+                result = check_handoffs.validate_wave(root, review=relative)
+                self.assertEqual(result["verdict"], "pass")
+                review.write_text(review.read_text().replace(field + "\n", "Lens: contract\n"))
+                with self.assertRaisesRegex(check_handoffs.HandoffError, "must not declare a review lens"):
+                    check_handoffs.validate_wave(root, review=relative)
+
     def test_wave_requires_owned_sc_headings(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

@@ -249,6 +249,16 @@ class GitGuardEndToEndTests(unittest.TestCase):
         self.assertIn("requires a ship commit", ordinary.stderr)
 
         self.install_hooks()
+        malformed_message = self.repo / "COMMIT_MSG"
+        malformed_message.write_text("ship: M002 — next\n" + body + "\n", encoding="utf-8")
+        refused = subprocess.run(
+            ["git", "-c", "user.email=test@example.com", "-c", "user.name=Test",
+             "commit", "-q", "-F", str(malformed_message)],
+            cwd=self.repo, capture_output=True, text=True,
+        )
+        self.assertEqual(1, refused.returncode, refused.stderr)
+        self.assertIn("ship commit subject must be", refused.stderr)
+        self.assertEqual(reviewed_head, self.head())
         for invalid_body in (body.replace("\n", "\n\n"), "# comment\n" + body):
             with self.subTest(body=invalid_body):
                 refused = subprocess.run(

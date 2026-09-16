@@ -114,7 +114,8 @@ def message_of(message_file):
         lines.pop(0)
     if not lines:
         return "", ""
-    return lines[0].strip(), "\n".join(lines[1:]).strip("\n")
+    subject_end = lines.index("") if "" in lines else len(lines)
+    return " ".join(line.strip() for line in lines[:subject_end]), "\n".join(lines[subject_end:]).strip("\n")
 
 
 def archive_root(path):

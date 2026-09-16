@@ -17,7 +17,7 @@ Wave verdict: <pass | blocked — blocked if any task fails>
 Cycle: <C>
 Depth: <full | deep | verify-only — verify-only is orchestrator-written from
         its isolated Verify evidence; no independent reviewer ran>
-Lens: <contract | adversarial — deep reviews only; empty or omitted
+Lens: <contract | adversarial — deep reviews only; leave this value empty or omit the line
        otherwise>
 Tasks reviewed: <count>
 
