@@ -35,7 +35,7 @@ is the single-milestone flow below.
 
 Use the host-specific child-agent tool defined by the runtime dispatch contract
 bundled in the `gsd-path` skill, or the build contract's
-[dispatch driver](RUNTIME.md#dispatch-driver) when the owner supplies a child
+[dispatch driver](https://github.com/open-gsd/gsd-path/blob/main/RUNTIME.md#dispatch-driver) when the owner supplies a child
 command. Spawn independent work up to the available
 child capacity and batch any remainder. Every spawned agent has isolated
 context, so its brief must include the absolute role path, exact input paths,
@@ -108,7 +108,7 @@ its exact `route.action` and `route.reason`. The status engine never initializes
 or advances a phase.
 
 The optional pre-tool guard backs this up where it has deterministic evidence.
-See [HOOKS.md](HOOKS.md#what-gets-blocked) for write restrictions, including
+See [HOOKS.md](https://github.com/open-gsd/gsd-path/blob/main/HOOKS.md#what-gets-blocked) for write restrictions, including
 closed milestone branches and target worktrees. Shell provenance
 cannot prove which skill initiated a command, so the always-loaded AGENTS.md
 contract owns shell cases.
@@ -221,8 +221,8 @@ milestone` instead: research and decide run only when the roadmap entry lists
 open questions, and planning writes a Settled-only milestone SYNTHESIS.md from
 the program synthesis before dispatching the planner. The quick lane skips
 research and decide — planning enters directly from `define/done`, writes
-a Settled-only SYNTHESIS.md and a single wave (verify-only review depth
-permitted, at most two tasks) without a planner agent, and the rest of the
+a Settled-only SYNTHESIS.md and a single wave (full or deep review depth,
+at most two tasks) without a planner agent, and the rest of the
 pipeline runs unchanged. A quick plan that outgrows those bounds corrects the
 lane to `standard` and reroutes through research.
 

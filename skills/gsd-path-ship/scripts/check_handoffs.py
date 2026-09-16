@@ -1462,7 +1462,7 @@ def validate_wave_evidence(
         raise HandoffError(f"{name} Cycle field does not match its filename")
     if _line_value(text, "Depth:") != expected_depth:
         raise HandoffError(f"{name} Depth does not match PLAN.md")
-    lens_fields = re.findall(r"(?m)^Lens:\s*(\S.*?)\s*$", text)
+    lens_fields = re.findall(r"(?m)^Lens:[ \t]*(\S.*?)[ \t]*$", text)
     if lens is None and lens_fields:
         raise HandoffError(f"{name} must not declare a review lens")
     if lens is not None and lens_fields != [lens]:

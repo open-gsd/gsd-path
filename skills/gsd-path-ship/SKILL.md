@@ -269,8 +269,9 @@ The persisted `STATE.archive` field is the transaction identity.
    create the ship phase's one commit with exact subject
    `ship: M00N — <milestone-slug>` and a body of exactly two consecutive lines,
    `Archive: .project/archive/<NNN>-<slug>` then
-   `Reviewed-HEAD: <reviewed SHA>`, with no comment lines or blank line between them
-   (pass the body as one `-m` value or from a message file). M00N and NNN come from STATE.archive.
+   `Reviewed-HEAD: <reviewed SHA>`, with no comment lines or blank line between them.
+   Write the subject, a blank line, and the two body lines to a message file,
+   then use `git commit -F <message-file>`. M00N and NNN come from STATE.archive.
    There is no untracked-project exception and no product or older-archive
    path may enter this commit.
 6. Immediately run `python3 <absolute archive_milestone.py> validate --repo <root>`. It requires the committed shipped state, exact archive and

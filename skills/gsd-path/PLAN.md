@@ -143,7 +143,7 @@ as stated in Lookahead mode.
    - Require a `Review depth` value (`full`, `deep`, or `verify-only`) on
      every wave. Wave 1 and any wave touching authentication, authorization,
      payments, data migration, or concurrency requires `full` or `deep`;
-     quick-lane single waves may use `verify-only`. The planner assigns `deep`
+     this includes quick-lane single waves. The planner assigns `deep`
      sparingly to waves where a wrong merge is irreversible or
      security-critical.
    - When INTENT.md `Surfaces:` is not `none`, require a PLAN.md
@@ -294,7 +294,7 @@ the artifacts directly:
    plus a minimal `## For the planner` naming the walking skeleton. No
    invented decisions or runner-ups.
 2. Write `.project/plan/PLAN.md` with exactly one wave — `Review depth:
-   verify-only` permitted — and at most two deliverable-sized task files
+   full` or `deep` — and at most two deliverable-sized task files
    (project policy),
    honoring every task-contract rule above and `.project/LESSONS.md` when it
    exists. Write `review_panel: off` and `finding_skeptics: off` regardless
