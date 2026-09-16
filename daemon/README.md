@@ -117,10 +117,10 @@ gsd-path-daemon plugin <status|install|update|uninstall>          # manage the s
   request scans skip host session logs, share a lock with background scans,
   and record changes when history is enabled.
 
-The native dashboard window fills the display on first open (later sizes are
-kept) and the green button can take it into macOS full screen. The board and
-project page use the full window width; prose (vision, notes) stays at a
-readable line length.
+The native dashboard window fills the display's usable area on first open
+(later sizes are kept) and the green button can take it into macOS full screen.
+The board and project page use the full window width; prose (vision, notes)
+stays at a readable line length.
 
 The dashboard uses graphite neutrals with the macOS accent color (CSS `AccentColor`,
 system blue where unsupported), light by default. Settings → Appearance

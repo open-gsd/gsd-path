@@ -21,9 +21,13 @@ and registers it as a login item. Build by hand only for development:
 ```
 
 Compiles the Swift sources (release), wraps the binary into
-`build/GSDPathTray.app` with `LSUIElement = true` (menu-bar-only, no Dock
-icon), copies `AppIcon.icns`, and ad-hoc signs it. Idempotent; prints the
-resulting `.app` path. Regenerate the icns with `python3 make_app_icon.py`.
+`build/GSDPathTray.app` with `LSUIElement = true`, copies `AppIcon.icns`,
+and ad-hoc signs it. The app stays menu-bar-only until the dashboard window
+opens; while that window is visible, it also appears in the Dock. The bundled
+icon is used in Finder and the Dock. The build is idempotent and prints the
+resulting `.app` path. To regenerate the icon on macOS, run
+`python3 make_app_icon.py` with Pillow installed in that Python environment;
+the script also uses macOS `iconutil`.
 
 ## Run
 
