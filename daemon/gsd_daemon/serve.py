@@ -204,7 +204,7 @@ DASHBOARD_PAGE = r"""<!doctype html>
   }
 
   /* Settings views */
-  .settings { width: 100%; max-width: none; margin: 0; padding: 24px 24px 40px; }
+  .settings { width: 100%; max-width: 1000px; margin: 0 auto; padding: 24px 24px 40px; }
   .settings h2 { font-size: 16px; font-weight: 600; margin-bottom: 16px; }
   .box { background: var(--card); border-radius: 14px; box-shadow: var(--shadow); padding: 16px; }
   .box h4 { font-size: 11px; text-transform: uppercase; letter-spacing: .6px; color: var(--faint); margin-bottom: 8px; }
