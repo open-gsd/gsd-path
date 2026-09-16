@@ -1,0 +1,126 @@
+name: Release
+
+# Publishes to npm and creates a GitHub Release after the trust-evidence gate.
+# Requires repository secret: NPM_TOKEN (Automation token with publish access).
+#
+# Triggers:
+#   1. Push a version tag: git tag v1.0.1 && git push origin v1.0.1
+#   2. Manual dispatch: creates the tag on the current commit, then the tag push
+#      starts the publish job below.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Semver version to release (without leading v)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate version and create tag
+        env:
+          VERSION: ${{ github.event.inputs.version }}
+        run: |
+          set -euo pipefail
+          if ! printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$'; then
+            echo "invalid semver version: $VERSION" >&2
+            exit 1
+          fi
+          tag="v$VERSION"
+          if git rev-parse "$tag" >/dev/null 2>&1; then
+            echo "tag $tag already exists" >&2
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$tag" -m "Release $tag"
+          git push origin "$tag"
+
+  publish:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve release version
+        id: version
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          if ! printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$'; then
+            echo "invalid semver version: $version" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: https://registry.npmjs.org
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check prerequisites
+        run: npm run check:prereqs
+
+      - name: Verify release gate
+        run: npm run verify:release
+
+      - name: Align package version
+        run: npm version "${{ steps.version.outputs.version }}" --no-git-tag-version --allow-same-version
+
+      - name: Publish to npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+          notes_file="$(mktemp)"
+          {
+            echo "GSD Path $VERSION"
+            echo
+            echo "Published to npm as \`gsd-path@$VERSION\`."
+            echo
+            echo "Trust evidence for this version is validated by \`npm run verify:release\`."
+            echo "See [HOST-MATRIX.md](docs/trust-validation/HOST-MATRIX.md) for per-host receipts."
+          } > "$notes_file"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "GitHub release $TAG already exists; skipping create"
+          else
+            gh release create "$TAG" \
+              --title "gsd-path $VERSION" \
+              --notes-file "$notes_file" \
+              --verify-tag
+          fi
