@@ -27,6 +27,7 @@ proof and each host's guard tier.
 | **[UPDATE.md](UPDATE.md)** | Refresh skills, hooks, or contracts |
 | [WORKFLOW.md](WORKFLOW.md) | Phase-by-phase agent SOP |
 | [HOOKS.md](HOOKS.md) | Optional archive/git guard hooks |
+| [RELEASE.md](RELEASE.md) | Maintainer CI and npm release cycle |
 | [GUIDE.md](GUIDE.md) | Pointer to the guides above |
 
 ```bash

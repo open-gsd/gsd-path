@@ -8,7 +8,10 @@
 
 | Item | Status |
 |------|--------|
-| `.github/workflows/ci.yml` | **Present** — runs Node and Python suites plus resource synchronization on pushes and pull requests |
+| `.github/workflows/ci.yml` | **Present** — `npm run verify` on Node 18 and 20 plus daemon package tests on every push and pull request |
+| `.github/workflows/release-trust.yml` | **Present** — `npm run verify:release` on release evidence, host-matrix summaries, `platforms/`, and host-manifest changes; manual dispatch |
+| `.github/workflows/release.yml` | **Present** — tag or manual dispatch → `verify:release` → npm publish + GitHub Release (`NPM_TOKEN` required) |
+| `.github/workflows/dogfood.yml` | **Present** — opt-in live host smoke (weekly or manual; API secrets required) |
 | Pre-merge gate | **Configured in repo** through GitHub Actions |
 
 ## How to run

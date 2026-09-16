@@ -3,6 +3,14 @@
   "version": "1.0.0",
   "description": "Disk-backed AI agent pipeline. Docs: DOCS.md (start here), QUICK.md, FULL.md, UPDATE.md",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/open-gsd/gsd-path.git"
+  },
+  "bugs": {
+    "url": "https://github.com/open-gsd/gsd-path/issues"
+  },
+  "homepage": "https://github.com/open-gsd/gsd-path#readme",
   "type": "module",
   "bin": {
     "gsd-path": "scripts/install.mjs"
