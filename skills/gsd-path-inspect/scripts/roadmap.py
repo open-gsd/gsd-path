@@ -319,4 +319,3 @@ def has_questions(text: str, milestone: Optional[str] = None) -> bool:
         if line.startswith("- ")
     ]
     return any(question.lower() != "none" for question in questions)
-
