@@ -28,6 +28,7 @@
     "scripts/_common.py",
     "scripts/build_recovery.py",
     "scripts/state_checkpoint.py",
+    "scripts/roadmap.py",
     "scripts/state_promote.py",
     "scripts/discussion_validate.py",
     "scripts/integration.py",

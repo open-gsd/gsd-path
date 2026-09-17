@@ -15,6 +15,7 @@ export const GUARD_SCRIPTS = ["guard_hook.py", "git_guard.py"];
 export const GUARD_MARKER = "gsd-path guard";
 export const PROJECT_RUNTIME_SCRIPTS = [
   "pipeline_state.py",
+  "roadmap.py",
   "check_handoffs.py",
   "check_task_briefs.py",
   "isolation.py",

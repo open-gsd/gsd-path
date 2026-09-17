@@ -676,7 +676,7 @@ def compute_attention(status: ProjectStatus,
             text = criterion.get("text") or "criterion"
             label = f"{ref} — {text}" if ref else text
             items.append({"kind": "failed", "label": label, "ref": ref})
-    shipped = (status.status or "").lower() in ("shipped", "archived") or bool(status.archive)
+    shipped = status.workflow.get("state") == "shipped"
     active_work = status.tasks_total > status.tasks_done
     activity = _activity_time(status)
     if not shipped and active_work and activity is not None:
@@ -693,9 +693,27 @@ def health_for(attention: List[dict]) -> str:
     kinds = {item.get("kind") for item in attention}
     if kinds & {"blocked", "failed"}:
         return "red"
-    if kinds & {"question", "stale"}:
+    if kinds & {"question", "stale", "unverified"}:
         return "amber"
     return "green"
+
+
+def workflow_projection(payload: Optional[dict]) -> dict:
+    """One presentation meaning for the browser and native tray adapters."""
+    state = payload.get("state") if payload else None
+    completion = payload.get("completion", {}) if payload else {}
+    if not isinstance(state, dict) or not isinstance(state.get("phase"), str):
+        return {"state": "unverified", "label": "Unverified",
+                "reason": "Runtime validation is unavailable."}
+    if state["phase"] == "shipped":
+        if completion.get("status") == "verified":
+            return {"state": "shipped", "label": "Shipped"}
+        return {"state": "unverified", "label": "Unverified",
+                "reason": completion.get("reason") or "Integration has not been verified."}
+    route = payload.get("route", {})
+    if state.get("status") == "blocked" or route.get("action") == "block":
+        return {"state": "blocked", "label": "Blocked", "reason": route.get("reason", "")}
+    return {"state": "active", "label": "In " + state["phase"]}
 
 
 def probe_project(root: Union[str, Path], enrich: bool = True) -> ProjectStatus:
@@ -763,20 +781,30 @@ def probe_project(root: Union[str, Path], enrich: bool = True) -> ProjectStatus:
     )
 
     runtime_pending: Optional[List[dict]] = None
+    payload = None
     if enrich:
         payload = _runtime_status(root)
         if payload is not None:
+            runtime_state = payload.get("state")
+            if isinstance(runtime_state, dict):
+                for key in ("project", "milestone", "phase", "status", "branch", "archive", "integration"):
+                    setattr(status, key, runtime_state.get(key))
             pending = payload.get("pending_answers")
             status.pending_answers = pending if isinstance(pending, list) else []
             runtime_pending = status.pending_answers
             next_skill = payload.get("next_skill")
             status.next_skill = next_skill if isinstance(next_skill, str) else None
+            handoff = payload.get("handoff")
+            status.handoff = handoff if isinstance(handoff, dict) else None
             runtime_git = payload.get("git")
             if isinstance(runtime_git, dict):
                 status.git = runtime_git
             status.status_source = "runtime"
     status.answers = _collect_answers(project_dir / "discuss" / "ANSWERS.md", runtime_pending)
+    status.workflow = workflow_projection(payload)
     status.attention = compute_attention(status)
+    if status.workflow["state"] == "unverified":
+        status.attention.append({"kind": "unverified", "label": status.workflow["reason"], "ref": None})
     status.health = health_for(status.attention)
     return status
 

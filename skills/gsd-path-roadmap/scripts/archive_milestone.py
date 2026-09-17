@@ -239,15 +239,10 @@ class ArchiveError(RuntimeError):
 
 
 PIPELINE_MARKER = _common.PIPELINE_MARKER
-PR_CREDIT_LINE = (
-    "PR prepared with [GSD Path](https://github.com/open-gsd/gsd-path)."
-)
-GITHUB_HOST = "github.com"
 
 
-# discussion_validate and integration call back into this module through a
-# module reference and import the constants and ArchiveError above, so this
-# import must stay below those definitions.
+# discussion_validate calls back into this module and imports its constants
+# and ArchiveError, so this import must stay below those definitions.
 if __package__:  # imported as scripts.archive_milestone
     from .discussion_validate import (
         record_sections,
@@ -279,42 +274,6 @@ if __package__:  # imported as scripts.archive_milestone
         archive_file_inventory,
         render_manifest,
         validate_manifest,
-    )
-    from .integration import (
-        resolve_remote_default,
-        live_remote_ref,
-        publish_bound_branch,
-        refresh_origin,
-        optional_ref,
-        integration_names,
-        registered_worktree,
-        remove_registered_worktree,
-        delete_integration_branch,
-        require_generated_integration_commit,
-        discard_unpublished_stale_integration,
-        create_integration_merge,
-        require_annotated_tag,
-        ensure_integration_tag,
-        github_repository,
-        require_github_authentication,
-        github_api_json,
-        require_pull_request_shape,
-        require_pull_request_pages,
-        pull_request_head_matches_repository,
-        require_pull_request_identity,
-        find_pull_request,
-        pull_request_body,
-        update_pull_request_body,
-        create_pull_request,
-        pull_request_tag_message,
-        pull_request_tag_metadata,
-        require_pull_request_merge,
-        require_pull_request_merge_provenance,
-        integrate_pull_request,
-        integrate,
-        find_integrate_commit,
-        validate_integrated,
-        require_published_integration,
     )
 else:  # standalone script or sibling import
     if __name__ == "__main__":
@@ -351,42 +310,6 @@ else:  # standalone script or sibling import
             render_manifest,
             validate_manifest,
         )
-        from integration import (
-            resolve_remote_default,
-            live_remote_ref,
-            publish_bound_branch,
-            refresh_origin,
-            optional_ref,
-            integration_names,
-            registered_worktree,
-            remove_registered_worktree,
-            delete_integration_branch,
-            require_generated_integration_commit,
-            discard_unpublished_stale_integration,
-            create_integration_merge,
-            require_annotated_tag,
-            ensure_integration_tag,
-            github_repository,
-            require_github_authentication,
-            github_api_json,
-            require_pull_request_shape,
-            require_pull_request_pages,
-            pull_request_head_matches_repository,
-            require_pull_request_identity,
-            find_pull_request,
-            pull_request_body,
-            update_pull_request_body,
-            create_pull_request,
-            pull_request_tag_message,
-            pull_request_tag_metadata,
-            require_pull_request_merge,
-            require_pull_request_merge_provenance,
-            integrate_pull_request,
-            integrate,
-            find_integrate_commit,
-            validate_integrated,
-            require_published_integration,
-        )
     except ImportError:  # pragma: no cover - package import used by tests
         from scripts.discussion_validate import (
             record_sections,
@@ -418,42 +341,6 @@ else:  # standalone script or sibling import
             archive_file_inventory,
             render_manifest,
             validate_manifest,
-        )
-        from scripts.integration import (
-            resolve_remote_default,
-            live_remote_ref,
-            publish_bound_branch,
-            refresh_origin,
-            optional_ref,
-            integration_names,
-            registered_worktree,
-            remove_registered_worktree,
-            delete_integration_branch,
-            require_generated_integration_commit,
-            discard_unpublished_stale_integration,
-            create_integration_merge,
-            require_annotated_tag,
-            ensure_integration_tag,
-            github_repository,
-            require_github_authentication,
-            github_api_json,
-            require_pull_request_shape,
-            require_pull_request_pages,
-            pull_request_head_matches_repository,
-            require_pull_request_identity,
-            find_pull_request,
-            pull_request_body,
-            update_pull_request_body,
-            create_pull_request,
-            pull_request_tag_message,
-            pull_request_tag_metadata,
-            require_pull_request_merge,
-            require_pull_request_merge_provenance,
-            integrate_pull_request,
-            integrate,
-            find_integrate_commit,
-            validate_integrated,
-            require_published_integration,
         )
 
 
@@ -2238,6 +2125,11 @@ def parser() -> argparse.ArgumentParser:
 def main(argv: Optional[Sequence[str]] = None) -> int:
     arguments = parser().parse_args(argv)
     try:
+        if arguments.command in {"validate-integrated", "refresh-origin", "integrate"}:
+            if __package__:
+                from . import integration
+            else:
+                import integration
         if arguments.command == "prepare":
             result = prepare(arguments.repo, arguments.slug)
         elif arguments.command == "render-manifest":
@@ -2247,11 +2139,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         elif arguments.command == "abandon":
             result = abandon(arguments.repo, arguments.slug, arguments.reason)
         elif arguments.command == "validate-integrated":
-            result = validate_integrated(arguments.repo, arguments.slug)
+            result = integration.validate_integrated(arguments.repo, arguments.slug)
         elif arguments.command == "refresh-origin":
-            result = refresh_origin(arguments.repo)
+            result = integration.refresh_origin(arguments.repo)
         elif arguments.command == "integrate":
-            result = integrate(arguments.repo, arguments.slug)
+            result = integration.integrate(arguments.repo, arguments.slug)
         else:
             result = validate(arguments.repo)
     except (ArchiveError, OSError) as error:

@@ -32,8 +32,9 @@ try:
         collect_artifact_recoveries,
     )
     import _common
+    import roadmap
 except ModuleNotFoundError as error:  # pragma: no cover - package imports used by tests
-    if error.name not in {"isolation", "_common"}:
+    if error.name not in {"isolation", "_common", "roadmap"}:
         raise
     from scripts.isolation import (
         IsolationError,
@@ -41,7 +42,7 @@ except ModuleNotFoundError as error:  # pragma: no cover - package imports used 
         checkpoint as isolation_checkpoint,
         collect_artifact_recoveries,
     )
-    from scripts import _common
+    from scripts import _common, roadmap
 
 try:  # pragma: no cover - exercised only on Windows
     import fcntl
@@ -82,7 +83,6 @@ SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 BOUND_BRANCH_RE = _common.BOUND_BRANCH_RE
 ARCHIVE_RE = re.compile(r"^\.project/archive/(\d{3,})-([a-z0-9][a-z0-9-]*)/?$")
 FRONTMATTER_RE = re.compile(r"^([a-z_]+):\s*([^#]*?)(?:\s+#.*)?$")
-ROADMAP_HEADING_RE = re.compile(r"^### (M\d{3,}) — ([a-z0-9][a-z0-9-]*)\s*$")
 TASK_ID_RE = re.compile(r"^T\d{3,}$")
 TASK_FILE_RE = re.compile(r"^(T\d{3,})-[a-z0-9][a-z0-9-]*\.md$")
 PLAN_APPROVAL_SUBJECT = "plan: build plan approved"
@@ -110,7 +110,7 @@ LOOKAHEAD_EVIDENCE_RE = re.compile(r"^research/evidence-[a-z0-9][a-z0-9-]*\.md$"
 PROMOTION_RESIDUAL = ".gsd-path-promote-next-residual"
 CHECKPOINT_SCHEMA = "gsd-path/state-checkpoint/v1"
 CHECKPOINT_JOURNAL_NAME = "gsd-path-state-checkpoint.json"
-CHECKPOINT_KINDS = ("plan", "roadmap")
+CHECKPOINT_KINDS = ("plan", "roadmap", "roadmap-reslice")
 SHIPMENT_SCHEMA = "gsd-path/shipment/v1"
 SHIPMENT_JOURNAL_NAME = "gsd-path-shipment.json"
 UNDO_TRANSACTION_SCHEMA = "gsd-path/undo-transaction/v2"
@@ -168,99 +168,10 @@ class ApprovedTaskContract:
     files: tuple[str, ...]
 
 
-# state_checkpoint and state_promote call back into this module through a
-# module reference and import the constants and classes above, so this import
-# must stay below those definitions.
-if __package__:  # imported as scripts.pipeline_state
-    from .state_checkpoint import (
-        _sha256,
-        _tree_digest,
-        _checkpoint_artifact_digest,
-        _roadmap_status,
-        _activate_roadmap_milestone,
-        _approval_details,
-        _checkpoint_request_fields,
-        _checkpoint_file,
-        _approval_journal,
-        _remove_checkpoint_temporary,
-        _converge_checkpoint_file,
-        _unlink_checkpoint_journal,
-        _resume_checkpoint_locked,
-        checkpoint_approval,
-        _checkpoint_deferral_error,
-        defer_approval,
-        resume_checkpoint,
-        _task_files,
-        _approval_checkpoint,
-        _validate_approval_track,
-        _safe_declared_paths,
-        _git_text_at,
-        _approved_task_contracts,
-        _task_contracts_at,
-        _classify_plan_drift,
-    )
-    from .state_promote import (
-        _render_roadmap,
-        _promotion_event,
-        _promotion_state,
-        _head_with_exact_message,
-        _tree_entries,
-        _promotion_tree_mapping,
-        _completed_promotion,
-        _prepare_promotion,
-        _require_journal_request,
-        _resume_track_moves,
-        _resume_metadata,
-        _resume_next_removal,
-        _commit_promotion,
-        promote_next,
-    )
-else:  # standalone script or sibling import
-    if __name__ == "__main__":
-        sys.modules.setdefault("pipeline_state", sys.modules[__name__])
-    from state_checkpoint import (
-        _sha256,
-        _tree_digest,
-        _checkpoint_artifact_digest,
-        _roadmap_status,
-        _activate_roadmap_milestone,
-        _approval_details,
-        _checkpoint_request_fields,
-        _checkpoint_file,
-        _approval_journal,
-        _remove_checkpoint_temporary,
-        _converge_checkpoint_file,
-        _unlink_checkpoint_journal,
-        _resume_checkpoint_locked,
-        checkpoint_approval,
-        _checkpoint_deferral_error,
-        defer_approval,
-        resume_checkpoint,
-        _task_files,
-        _approval_checkpoint,
-        _validate_approval_track,
-        _safe_declared_paths,
-        _git_text_at,
-        _approved_task_contracts,
-        _task_contracts_at,
-        _classify_plan_drift,
-    )
-    from state_promote import (
-        _render_roadmap,
-        _promotion_event,
-        _promotion_state,
-        _head_with_exact_message,
-        _tree_entries,
-        _promotion_tree_mapping,
-        _completed_promotion,
-        _prepare_promotion,
-        _require_journal_request,
-        _resume_track_moves,
-        _resume_metadata,
-        _resume_next_removal,
-        _commit_promotion,
-        promote_next,
-    )
+# Standalone transaction imports must reuse this state module and its types.
+if __name__ == "__main__":
+    sys.modules.setdefault("pipeline_state", sys.modules[__name__])
+
 
 def _run_git(
     repo: Path,
@@ -695,6 +606,21 @@ def _next_skill(route: Mapping[str, object]) -> Optional[str]:
     return None
 
 
+def _completion_status(repo: Path, state: Mapping[str, object], project_dir: str) -> dict:
+    if project_dir != ".project" or state.get("phase") != "shipped":
+        return {"status": "not-shipped"}
+    if __package__:
+        from . import integration
+    else:
+        import integration
+    try:
+        proof = integration.validate_integrated(
+            repo, str(state.get("milestone") or ""), refresh=False)
+    except (integration.ArchiveError, OSError) as error:
+        return {"status": "unverified", "reason": str(error)}
+    return {"status": "verified", "proof": proof}
+
+
 def status_state(repo: Path, project_dir: str = ".project") -> dict[str, object]:
     """Report owned state, route, and git facts without advancing a phase."""
     resolved = _repo_root(repo)
@@ -731,6 +657,7 @@ def status_state(repo: Path, project_dir: str = ".project") -> dict[str, object]
     return {
         "schema": STATUS_SCHEMA,
         "advance": False,
+        "completion": _completion_status(resolved, state, project_dir),
         "state": state,
         "route": route,
         "path": str(_track_root(resolved, project_dir) / "STATE.md"),
@@ -755,6 +682,24 @@ def status_state(repo: Path, project_dir: str = ".project") -> dict[str, object]
         "lookahead": lookahead.exists() or lookahead.is_symlink(),
         "journals": journals,
         "next_skill": _next_skill(route if isinstance(route, dict) else {}),
+        "handoff": phase_handoff(state, route, _track_root(resolved, project_dir) / "STATE.md"),
+    }
+
+
+def phase_handoff(state: Mapping[str, object], route: Mapping[str, object], path: Path) -> dict[str, str]:
+    """Present the authoritative route without granting continuation authority."""
+    action = route["action"]
+    if action == "run-phase":
+        next_action = f"Invoke $gsd-path to continue with {route['phase']}."
+        router_next = f"Continue with {route['phase']}; honor its input and approval gates."
+    else:
+        next_action = router_next = f"{action}: {route['reason']}"
+    return {
+        "outcome": f"{state['phase']}/{state['status']}",
+        "review": str(path),
+        "next": next_action,
+        "phase_next": next_action,
+        "router_next": router_next,
     }
 
 
@@ -786,50 +731,11 @@ def _intent_lane(track: Path) -> Optional[str]:
 
 
 def _active_roadmap_has_questions(project: Path, milestone: Optional[str] = None) -> bool:
-    """Report open questions for the active entry, or for ``milestone`` when given."""
     text = _read_real_file(project / "ROADMAP.md", "ROADMAP.md")
-    lines = text.splitlines()
-    active_section: Optional[list[str]] = None
-    for index, line in enumerate(lines):
-        heading = ROADMAP_HEADING_RE.fullmatch(line)
-        if heading is None:
-            continue
-        if int(heading.group(1).removeprefix("M")) < 1:
-            raise PipelineStateError(
-                f"ROADMAP.md has invalid milestone id: {heading.group(1)}"
-            )
-        end = next(
-            (
-                cursor
-                for cursor in range(index + 1, len(lines))
-                if ROADMAP_HEADING_RE.fullmatch(lines[cursor]) is not None
-            ),
-            len(lines),
-        )
-        section = lines[index:end]
-        if milestone is not None:
-            if heading.group(2) == milestone:
-                active_section = section
-            continue
-        if any(re.fullmatch(r"Status:\s*active(?:\s+#.*)?", item) for item in section):
-            if active_section is not None:
-                raise PipelineStateError("ROADMAP.md has more than one active milestone")
-            active_section = section
-    if active_section is None:
-        if milestone is not None:
-            raise PipelineStateError(f"ROADMAP.md is missing lookahead milestone: {milestone}")
-        raise PipelineStateError("ROADMAP.md has no active milestone")
     try:
-        start = active_section.index("Open questions") + 1
-    except ValueError as error:
-        raise PipelineStateError("active roadmap milestone has no Open questions") from error
-    questions = [
-        line[2:].strip()
-        for line in active_section[start:]
-        if line.startswith("- ")
-    ]
-    return any(question.lower() != "none" for question in questions)
-
+        return roadmap.has_questions(text, milestone)
+    except roadmap.RoadmapError as error:
+        raise PipelineStateError(str(error)) from error
 
 def _valid_patch_findings(repo: Path) -> bool:
     validator = Path(__file__).resolve().with_name("check_handoffs.py")
@@ -1169,7 +1075,11 @@ def _route_state(repo: Path, project_dir: str = ".project") -> dict[str, object]
                 return result
             checkpoint_journal = _git_path(resolved, CHECKPOINT_JOURNAL_NAME)
             if checkpoint_journal.exists() or checkpoint_journal.is_symlink():
-                transaction = _approval_journal(
+                if __package__:
+                    from . import state_checkpoint
+                else:
+                    import state_checkpoint
+                transaction = state_checkpoint._approval_journal(
                     resolved,
                     _read_json(checkpoint_journal),
                 )
@@ -2052,49 +1962,18 @@ def _render_transition(
 
 
 def _roadmap_sections(text: str) -> dict[str, tuple[str, int, int]]:
-    lines = text.splitlines(keepends=True)
-    headings: list[tuple[str, str, int]] = []
-    for index, line in enumerate(lines):
-        match = ROADMAP_HEADING_RE.fullmatch(line.rstrip("\r\n"))
-        if match:
-            if int(match.group(1).removeprefix("M")) < 1:
-                raise PipelineStateError(f"ROADMAP.md has invalid milestone id: {match.group(1)}")
-            headings.append((match.group(1), match.group(2), index))
-    sections: dict[str, tuple[str, int, int]] = {}
-    for position, (milestone_id, slug, start) in enumerate(headings):
-        end = headings[position + 1][2] if position + 1 < len(headings) else len(lines)
-        if slug in sections:
-            raise PipelineStateError(f"ROADMAP.md repeats milestone slug: {slug}")
-        sections[slug] = (milestone_id, start, end)
-    return sections
-
+    try:
+        return roadmap.strict_sections(text)
+    except roadmap.RoadmapError as error:
+        raise PipelineStateError(str(error)) from error
 
 def _replace_roadmap_field(
-    lines: list[str],
-    start: int,
-    end: int,
-    field: str,
-    expected: set[str],
-    value: str,
+    lines: list[str], start: int, end: int, field: str, expected: set[str], value: str,
 ) -> None:
-    found: Optional[int] = None
-    for index in range(start, end):
-        raw = lines[index].rstrip("\r\n")
-        ending = lines[index][len(raw) :]
-        match = re.match(rf"^({re.escape(field)}:\s*)(\S+)(.*)$", raw)
-        if match is None:
-            continue
-        if found is not None:
-            raise PipelineStateError(f"ROADMAP.md repeats {field} in one milestone")
-        if match.group(2) not in expected:
-            raise PipelineStateError(
-                f"ROADMAP.md {field} is {match.group(2)}, expected {sorted(expected)}"
-            )
-        lines[index] = f"{match.group(1)}{value}{match.group(3)}{ending}"
-        found = index
-    if found is None:
-        raise PipelineStateError(f"ROADMAP.md milestone is missing {field}")
-
+    try:
+        return roadmap.replace_field(lines, start, end, field, expected, value)
+    except roadmap.RoadmapError as error:
+        raise PipelineStateError(str(error)) from error
 
 def _git_path(repo: Path, name: str) -> Path:
     value = _run_git(repo, "rev-parse", "--git-path", name).stdout.strip()
@@ -2234,6 +2113,16 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
     args = parse_args(argv)
+    if args.command in {"approve", "resume-checkpoint"}:
+        if __package__:
+            from . import state_checkpoint
+        else:
+            import state_checkpoint
+    elif args.command == "promote-next":
+        if __package__:
+            from . import state_promote
+        else:
+            import state_promote
     try:
         if args.command == "validate":
             result = validate_state(args.repo, args.project_dir)
@@ -2258,7 +2147,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 raise PipelineStateError(
                     "--expected-head is not accepted with --defer-checkpoint or --patch"
                 )
-            result = defer_approval(
+            result = state_checkpoint.defer_approval(
                 args.repo,
                 args.kind,
                 args.project_dir,
@@ -2270,7 +2159,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 raise PipelineStateError(
                     "approve requires --expected-head unless --defer-checkpoint or --patch"
                 )
-            result = checkpoint_approval(
+            result = state_checkpoint.checkpoint_approval(
                 args.repo,
                 args.kind,
                 args.expected_head,
@@ -2278,7 +2167,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 args.milestone,
             )
         elif args.command == "resume-checkpoint":
-            result = resume_checkpoint(args.repo)
+            result = state_checkpoint.resume_checkpoint(args.repo)
         elif args.command == "promote-next":
             if args.integrate is not None and (
                 args.base is not None or args.landing is not None
@@ -2296,7 +2185,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 raise PipelineStateError(
                     "promote-next requires --base or legacy --integrate"
                 )
-            result = promote_next(
+            result = state_promote.promote_next(
                 args.repo,
                 args.milestone,
                 args.branch,

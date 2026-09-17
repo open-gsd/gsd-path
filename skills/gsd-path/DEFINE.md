@@ -278,18 +278,8 @@ After approval, finalize `.project/intent/INTENT.md` and run
 current milestone/branch/archive values, event `milestone intent approved`,
 `--set-phase define --set-status done --set-milestone <milestone slug>`, and
 `--project-dir .project/next` in lookahead. Require returned `define/done` and
-the exact milestone. Report the next phase
-from the approved lane. For `Lane: standard`, research is next. For
-`Lane: quick`, planning is next and research and decide are skipped. For
-`Lane: milestone`, use the resolved roadmap entry matching the track STATE's
-`milestone`: milestone-scoped research is next when that entry lists open
-questions; otherwise planning is next and research and decide are skipped.
-Confirm the approved outcome, link the final INTENT.md again, and name that
-next phase before routing. When routed by an active `$gsd-path`, return control
-to that router so its bundled next contract can auto-advance to the named
-phase. When invoked directly, stop and tell the user to explicitly invoke
-`$gsd-path`, which selects that next phase; do not invoke an explicit-only
-sibling skill yourself.
+the exact milestone. Confirm the approved outcome and link INTENT.md again.
+Use the executable phase handoff in AGENTS.md for the next action.
 
 ## Rules
 

@@ -11,6 +11,31 @@ from pathlib import Path, PurePosixPath
 from typing import Mapping, Optional
 
 
+if __package__:  # imported as scripts.state_promote
+    from . import pipeline_state, state_checkpoint
+    from .pipeline_state import (
+        NULL,
+        PROMOTION_RESIDUAL,
+        PROMOTION_SCHEMA,
+        PROMOTION_TRACKS,
+        SLUG_RE,
+        PipelineState,
+        PipelineStateError,
+    )
+else:  # standalone script or sibling import
+    import pipeline_state
+    import state_checkpoint
+    from pipeline_state import (
+        NULL,
+        PROMOTION_RESIDUAL,
+        PROMOTION_SCHEMA,
+        PROMOTION_TRACKS,
+        SLUG_RE,
+        PipelineState,
+        PipelineStateError,
+    )
+
+
 def _render_roadmap(
     text: str,
     previous_milestone: str,
@@ -243,9 +268,9 @@ def _completed_promotion(
     if _head_with_exact_message(repo, subject, fields) != head:
         raise PipelineStateError("completed promotion has the wrong commit message")
 
-    active_text = pipeline_state._git_text_at(repo, base, ".project/STATE.md")
-    next_text = pipeline_state._git_text_at(repo, base, ".project/next/STATE.md")
-    roadmap_text = pipeline_state._git_text_at(repo, base, ".project/ROADMAP.md")
+    active_text = state_checkpoint._git_text_at(repo, base, ".project/STATE.md")
+    next_text = state_checkpoint._git_text_at(repo, base, ".project/next/STATE.md")
+    roadmap_text = state_checkpoint._git_text_at(repo, base, ".project/ROADMAP.md")
     if active_text is None or next_text is None or roadmap_text is None:
         raise PipelineStateError("promotion parent is missing required metadata")
     active_state = pipeline_state._state_from_text(active_text, "promotion parent STATE.md")
@@ -265,7 +290,7 @@ def _completed_promotion(
         )
 
     _promotion_tree_mapping(repo, base, head)
-    drift = pipeline_state._classify_plan_drift(repo, next_state, base, landing)
+    drift = state_checkpoint._classify_plan_drift(repo, next_state, base, landing)
     expected_roadmap = _render_roadmap(
         roadmap_text,
         active_state.milestone,
@@ -273,11 +298,11 @@ def _completed_promotion(
         branch,
         landing,
     )
-    current_roadmap = pipeline_state._git_text_at(repo, head, ".project/ROADMAP.md")
+    current_roadmap = state_checkpoint._git_text_at(repo, head, ".project/ROADMAP.md")
     if current_roadmap != expected_roadmap:
         raise PipelineStateError("completed promotion has invalid ROADMAP.md")
 
-    current_state = pipeline_state._git_text_at(repo, head, ".project/STATE.md")
+    current_state = state_checkpoint._git_text_at(repo, head, ".project/STATE.md")
     if current_state is None:
         raise PipelineStateError("completed promotion has no STATE.md")
     event = re.escape(_promotion_event(drift, branch, landing, base))
@@ -438,10 +463,10 @@ def _prepare_promotion(
         if source.exists() or source.is_symlink():
             if destination.exists() or destination.is_symlink():
                 raise PipelineStateError(f"promotion destination already exists: {destination}")
-            tracks[name] = pipeline_state._tree_digest(source)
+            tracks[name] = state_checkpoint._tree_digest(source)
     if not tracks:
         raise PipelineStateError("lookahead track has no promotable artifacts")
-    drift = pipeline_state._classify_plan_drift(repo, next_state, base, landing)
+    drift = state_checkpoint._classify_plan_drift(repo, next_state, base, landing)
     roadmap_path = project / "ROADMAP.md"
     roadmap_text = pipeline_state._read_real_file(roadmap_path, "ROADMAP.md")
     target_state = _promotion_state(
@@ -464,10 +489,10 @@ def _prepare_promotion(
         "landing": landing,
         "base": base,
         "tracks": tracks,
-        "residual_sha256": pipeline_state._tree_digest(next_root, tuple(tracks)),
-        "next_state_sha256": pipeline_state._sha256(next_text),
-        "active_state_sha256": pipeline_state._sha256(active_text),
-        "roadmap_sha256": pipeline_state._sha256(roadmap_text),
+        "residual_sha256": state_checkpoint._tree_digest(next_root, tuple(tracks)),
+        "next_state_sha256": state_checkpoint._sha256(next_text),
+        "active_state_sha256": state_checkpoint._sha256(active_text),
+        "roadmap_sha256": state_checkpoint._sha256(roadmap_text),
         "target_state": target_state,
         "target_roadmap": target_roadmap,
         "drift": drift,
@@ -521,7 +546,7 @@ def _resume_track_moves(project: Path, journal: dict[str, object], path: Path) -
         if not source_exists and not destination_exists:
             raise PipelineStateError(f"promotion lost both source and destination: {name}")
         candidate = source if source_exists else destination
-        if pipeline_state._tree_digest(candidate) != expected_digest:
+        if state_checkpoint._tree_digest(candidate) != expected_digest:
             raise PipelineStateError(f"promotion track drifted: {name}")
         if source_exists:
             source.rename(destination)
@@ -542,7 +567,7 @@ def _resume_metadata(project: Path, journal: dict[str, object], path: Path) -> N
             raise PipelineStateError("promotion journal has invalid metadata")
         if current == desired:
             continue
-        if pipeline_state._sha256(current) != expected_original:
+        if state_checkpoint._sha256(current) != expected_original:
             raise PipelineStateError(f"promotion metadata drifted: {target}")
         pipeline_state._atomic_write(target, desired)
         journal["stage"] = f"updated:{target.name}"
@@ -560,9 +585,9 @@ def _resume_next_removal(
         if residual.exists() or residual.is_symlink():
             raise PipelineStateError("promotion has both next track and residual staging")
         next_text = pipeline_state._read_real_file(next_root / "STATE.md", "next/STATE.md")
-        if pipeline_state._sha256(next_text) != journal.get("next_state_sha256"):
+        if state_checkpoint._sha256(next_text) != journal.get("next_state_sha256"):
             raise PipelineStateError("lookahead STATE drifted during promotion")
-        if pipeline_state._tree_digest(next_root) != journal.get("residual_sha256"):
+        if state_checkpoint._tree_digest(next_root) != journal.get("residual_sha256"):
             raise PipelineStateError("lookahead residual drifted during promotion")
         next_root.rename(residual)
         journal["stage"] = "next-staged"
@@ -574,7 +599,7 @@ def _resume_next_removal(
         raise PipelineStateError("promotion lost next track and residual staging")
     if residual.is_symlink() or not residual.is_dir():
         raise PipelineStateError(f"promotion residual must be a real directory: {residual}")
-    if pipeline_state._tree_digest(residual) != journal.get("residual_sha256"):
+    if state_checkpoint._tree_digest(residual) != journal.get("residual_sha256"):
         raise PipelineStateError("staged lookahead residual drifted during promotion")
 
 
@@ -714,30 +739,3 @@ def promote_next(
         "commit": commit,
         "drift": journal["drift"],
     }
-
-
-# pipeline_state imports this module, so the parent is resolved after the
-# definitions above. Parent functions are looked up on the module at call time
-# so patches applied to pipeline_state stay visible here.
-if __package__:  # imported as scripts.state_promote
-    from . import pipeline_state
-    from .pipeline_state import (
-        NULL,
-        PROMOTION_RESIDUAL,
-        PROMOTION_SCHEMA,
-        PROMOTION_TRACKS,
-        SLUG_RE,
-        PipelineState,
-        PipelineStateError,
-    )
-else:  # standalone script or sibling import
-    import pipeline_state
-    from pipeline_state import (
-        NULL,
-        PROMOTION_RESIDUAL,
-        PROMOTION_SCHEMA,
-        PROMOTION_TRACKS,
-        SLUG_RE,
-        PipelineState,
-        PipelineStateError,
-    )

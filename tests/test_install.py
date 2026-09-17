@@ -231,12 +231,24 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(json.loads(result.stdout)["status"], "approved")
 
+    @unittest.skipUnless(shutil.which("node"), "requires Node installer")
+    def test_javascript_runtime_dependency_set_executes_status(self):
+        result = subprocess.run([
+            "node", "--input-type=module", "-e",
+            "import {PROJECT_RUNTIME_SCRIPTS} from './scripts/install.mjs'; "
+            "console.log(JSON.stringify(PROJECT_RUNTIME_SCRIPTS));",
+        ], cwd=PROJECT_ROOT, capture_output=True, text=True, check=True)
+        with mock.patch.object(install, "PROJECT_RUNTIME_SCRIPTS", json.loads(result.stdout)):
+            self.test_project_runtime_dependency_set_imports()
+
     def test_project_runtime_dependency_set_imports(self):
         project = self.root / "runtime-project"
         runtime = project / install.HOOKS_DIRECTORY / "runtime"
         runtime.mkdir(parents=True)
+        manifest = json.loads((PROJECT_ROOT / "scripts/skill-resources.json").read_text())
         for name in install.PROJECT_RUNTIME_SCRIPTS:
-            shutil.copy2(PROJECT_ROOT / "scripts" / name, runtime / name)
+            if f"scripts/{name}" in manifest["package_files"]:
+                shutil.copy2(PROJECT_ROOT / "scripts" / name, runtime / name)
         subprocess.run(
             ["git", "init", "-b", "main", str(project)],
             text=True,

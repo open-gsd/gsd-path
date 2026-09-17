@@ -1187,7 +1187,7 @@ class PipelineStateTests(unittest.TestCase):
             error = io.StringIO()
             with (
                 mock.patch.object(sys, "stderr", error),
-                mock.patch.object(pipeline_state, "promote_next") as promote,
+                mock.patch.object(state_promote, "promote_next") as promote,
             ):
                 result = pipeline_state.main(
                     [
@@ -1546,17 +1546,17 @@ class PipelineStateTests(unittest.TestCase):
                 pipeline_state.PipelineStateError,
                 "checkpoint deferral requires.*approve --kind plan --expected-head",
             ):
-                pipeline_state.defer_approval(repo, "plan")
+                state_checkpoint.defer_approval(repo, "plan")
             with self.assertRaisesRegex(
                 pipeline_state.PipelineStateError, "--patch applies only to --kind plan"
             ):
-                pipeline_state.defer_approval(repo, "roadmap", patch=True)
+                state_checkpoint.defer_approval(repo, "roadmap", patch=True)
 
             (repo / ".project" / "REPOSITORY.md").write_text(
                 "Kind: new-github\nRemote: https://github.com/o/r\n",
                 encoding="utf-8",
             )
-            result = pipeline_state.defer_approval(repo, "plan")
+            result = state_checkpoint.defer_approval(repo, "plan")
 
             self.assertEqual(result["status"], "approved")
             self.assertIsNone(result["commit"])
@@ -1568,7 +1568,7 @@ class PipelineStateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             repo, expected_head = self._approval_repo(tmp, "plan")
 
-            result = pipeline_state.defer_approval(repo, "plan", patch=True)
+            result = state_checkpoint.defer_approval(repo, "plan", patch=True)
 
             self.assertEqual(result["status"], "approved")
             self.assertEqual(result["kind"], "plan")
@@ -1675,9 +1675,9 @@ class PipelineStateTests(unittest.TestCase):
                 before = state.read_bytes()
                 with self.assertRaisesRegex(pipeline_state.PipelineStateError, "task brief.*validation|must not contain"):
                     if patch:
-                        pipeline_state.defer_approval(repo, "plan", patch=True)
+                        state_checkpoint.defer_approval(repo, "plan", patch=True)
                     else:
-                        pipeline_state.checkpoint_approval(repo, "plan", head)
+                        state_checkpoint.checkpoint_approval(repo, "plan", head)
                 self.assertEqual(before, state.read_bytes())
                 self.assertEqual(head, run_git(repo, "rev-parse", "HEAD").stdout.strip())
                 self.assertFalse(pipeline_state._git_path(repo, pipeline_state.CHECKPOINT_JOURNAL_NAME).exists())
@@ -1686,7 +1686,7 @@ class PipelineStateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             repo, expected_head = self._approval_repo(tmp, "plan")
 
-            result = pipeline_state.checkpoint_approval(
+            result = state_checkpoint.checkpoint_approval(
                 repo,
                 "plan",
                 expected_head,
@@ -1766,7 +1766,7 @@ class PipelineStateTests(unittest.TestCase):
             (project / "tasks" / "T001-legacy.md").write_text(t001, encoding="utf-8")
             (project / "tasks" / "T002-other.md").write_text(t002, encoding="utf-8")
 
-            result = pipeline_state.checkpoint_approval(repo, "plan", expected_head)
+            result = state_checkpoint.checkpoint_approval(repo, "plan", expected_head)
 
             self.assertEqual(result["status"], "approved")
 
@@ -1777,9 +1777,9 @@ class PipelineStateTests(unittest.TestCase):
             junk.write_text("junk\n", encoding="utf-8")
 
             with self.assertRaisesRegex(pipeline_state.PipelineStateError, "unsupported .project artifacts"):
-                pipeline_state.checkpoint_approval(repo, "plan", expected_head)
+                state_checkpoint.checkpoint_approval(repo, "plan", expected_head)
             junk.unlink()
-            result = pipeline_state.checkpoint_approval(repo, "plan", expected_head)
+            result = state_checkpoint.checkpoint_approval(repo, "plan", expected_head)
 
             self.assertEqual(result["status"], "approved")
             self.assertNotEqual(run_git(repo, "rev-parse", "HEAD").stdout.strip(), expected_head)
@@ -1789,7 +1789,7 @@ class PipelineStateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             repo, expected_head = self._approval_repo(tmp, "roadmap")
 
-            result = pipeline_state.checkpoint_approval(
+            result = state_checkpoint.checkpoint_approval(
                 repo,
                 "roadmap",
                 expected_head,
@@ -1822,7 +1822,7 @@ class PipelineStateTests(unittest.TestCase):
                     pipeline_state.PipelineStateError,
                     "simulated interruption",
                 ):
-                    pipeline_state.checkpoint_approval(
+                    state_checkpoint.checkpoint_approval(
                         repo,
                         "plan",
                         expected_head,
@@ -1835,7 +1835,7 @@ class PipelineStateTests(unittest.TestCase):
             self.assertEqual(routed["route"]["action"], "resume-checkpoint")
             self.assertEqual(routed["route"]["kind"], "plan")
 
-            result = pipeline_state.resume_checkpoint(repo)
+            result = state_checkpoint.resume_checkpoint(repo)
 
             self.assertEqual(result["status"], "approved")
             self.assertNotEqual(result["commit"], expected_head)
@@ -1849,7 +1849,7 @@ class PipelineStateTests(unittest.TestCase):
                 side_effect=pipeline_state.IsolationError("simulated interruption"),
             ):
                 with self.assertRaises(pipeline_state.PipelineStateError):
-                    pipeline_state.checkpoint_approval(
+                    state_checkpoint.checkpoint_approval(
                         repo,
                         "plan",
                         expected_head,
@@ -1863,7 +1863,7 @@ class PipelineStateTests(unittest.TestCase):
                 pipeline_state.PipelineStateError,
                 "approval artifacts drifted",
             ):
-                pipeline_state.resume_checkpoint(repo)
+                state_checkpoint.resume_checkpoint(repo)
 
     def test_resume_approval_after_commit_before_journal_cleanup(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1877,7 +1877,7 @@ class PipelineStateTests(unittest.TestCase):
                     pipeline_state.PipelineStateError,
                     "simulated cleanup crash",
                 ):
-                    pipeline_state.checkpoint_approval(
+                    state_checkpoint.checkpoint_approval(
                         repo,
                         "roadmap",
                         expected_head,
@@ -1886,7 +1886,7 @@ class PipelineStateTests(unittest.TestCase):
             committed = run_git(repo, "rev-parse", "HEAD").stdout.strip()
             self.assertNotEqual(committed, expected_head)
 
-            result = pipeline_state.resume_checkpoint(repo)
+            result = state_checkpoint.resume_checkpoint(repo)
 
             self.assertEqual(result["commit"], committed)
             self.assertFalse(
@@ -1973,7 +1973,7 @@ class PipelineStateTests(unittest.TestCase):
         )
         if next_phase == "plan" and next_status == "done":
             approval_base = run_git(repo, "rev-parse", "HEAD").stdout.strip()
-            pipeline_state.checkpoint_approval(
+            state_checkpoint.checkpoint_approval(
                 repo,
                 "plan",
                 approval_base,
@@ -2111,7 +2111,7 @@ class PipelineStateTests(unittest.TestCase):
             self.assertEqual(handoff["route"]["landing"], integrate)
             self.assertTrue(handoff["route"]["allow_remote_absent"])
 
-            result = pipeline_state.promote_next(
+            result = state_promote.promote_next(
                 repo,
                 "second",
                 "gsd-path/M002",
@@ -2139,7 +2139,7 @@ class PipelineStateTests(unittest.TestCase):
                 "router: promote lookahead milestone second",
             )
 
-            retry = pipeline_state.promote_next(
+            retry = state_promote.promote_next(
                 repo,
                 "second",
                 "gsd-path/M002",
@@ -2187,7 +2187,7 @@ class PipelineStateTests(unittest.TestCase):
             run_git(repo, "branch", "-f", "gsd-path/M002", base)
             run_git(repo, "switch", "gsd-path/M002")
 
-            result = pipeline_state.promote_next(
+            result = state_promote.promote_next(
                 repo,
                 "second",
                 "gsd-path/M002",
@@ -2217,7 +2217,7 @@ class PipelineStateTests(unittest.TestCase):
                 pipeline_state.PipelineStateError,
                 "milestone tag does not point at landing",
             ):
-                pipeline_state.promote_next(
+                state_promote.promote_next(
                     repo,
                     "second",
                     "gsd-path/M002",
@@ -2244,7 +2244,7 @@ class PipelineStateTests(unittest.TestCase):
                 pipeline_state.PipelineStateError,
                 "published milestone tag",
             ):
-                pipeline_state.promote_next(
+                state_promote.promote_next(
                     repo,
                     "second",
                     "gsd-path/M002",
@@ -2271,7 +2271,7 @@ class PipelineStateTests(unittest.TestCase):
                 pipeline_state.PipelineStateError,
                 "missing on origin",
             ):
-                pipeline_state.promote_next(
+                state_promote.promote_next(
                     repo,
                     "second",
                     "gsd-path/M002",
@@ -2286,7 +2286,7 @@ class PipelineStateTests(unittest.TestCase):
                 pull_request=True,
             )
 
-            result = pipeline_state.promote_next(
+            result = state_promote.promote_next(
                 repo,
                 "second",
                 "gsd-path/M002",
@@ -2299,7 +2299,7 @@ class PipelineStateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             repo, integrate = self._promotion_repo(tmp, drift=True)
 
-            result = pipeline_state.promote_next(
+            result = state_promote.promote_next(
                 repo,
                 "second",
                 "gsd-path/M002",
@@ -2320,7 +2320,7 @@ class PipelineStateTests(unittest.TestCase):
                 delete_declared=True,
             )
 
-            result = pipeline_state.promote_next(
+            result = state_promote.promote_next(
                 repo,
                 "second",
                 "gsd-path/M002",
@@ -2339,7 +2339,7 @@ class PipelineStateTests(unittest.TestCase):
                 mutate_plan=True,
             )
 
-            result = pipeline_state.promote_next(
+            result = state_promote.promote_next(
                 repo,
                 "second",
                 "gsd-path/M002",
@@ -2362,7 +2362,7 @@ class PipelineStateTests(unittest.TestCase):
                 mutate_task=True,
             )
 
-            result = pipeline_state.promote_next(
+            result = state_promote.promote_next(
                 repo,
                 "second",
                 "gsd-path/M002",
@@ -2384,7 +2384,7 @@ class PipelineStateTests(unittest.TestCase):
                 remove_task=True,
             )
 
-            result = pipeline_state.promote_next(
+            result = state_promote.promote_next(
                 repo,
                 "second",
                 "gsd-path/M002",
@@ -2408,7 +2408,7 @@ class PipelineStateTests(unittest.TestCase):
                 pipeline_state.PipelineStateError,
                 "multiple matching plan approval checkpoints",
             ):
-                pipeline_state.promote_next(
+                state_promote.promote_next(
                     repo,
                     "second",
                     "gsd-path/M002",
@@ -2464,7 +2464,7 @@ class PipelineStateTests(unittest.TestCase):
             )
 
             self.assertIsNone(
-                pipeline_state._approval_checkpoint(repo, candidate, integrate)
+                state_checkpoint._approval_checkpoint(repo, candidate, integrate)
             )
 
     def test_promote_next_rejects_spoofed_data_losing_commit(self) -> None:
@@ -2497,7 +2497,7 @@ class PipelineStateTests(unittest.TestCase):
                 pipeline_state.PipelineStateError,
                 "wrong path set|did not preserve track",
             ):
-                pipeline_state.promote_next(
+                state_promote.promote_next(
                     repo,
                     "second",
                     "gsd-path/M002",
@@ -2516,7 +2516,7 @@ class PipelineStateTests(unittest.TestCase):
                 pipeline_state.PipelineStateError,
                 "project does not match",
             ):
-                pipeline_state.promote_next(
+                state_promote.promote_next(
                     repo,
                     "second",
                     "gsd-path/M002",
@@ -2536,7 +2536,7 @@ class PipelineStateTests(unittest.TestCase):
                 pipeline_state.PipelineStateError,
                 "lookahead cannot enter build",
             ):
-                pipeline_state.promote_next(
+                state_promote.promote_next(
                     repo,
                     "second",
                     "gsd-path/M002",
@@ -2555,7 +2555,7 @@ class PipelineStateTests(unittest.TestCase):
                     pipeline_state.PipelineStateError,
                     "simulated interruption",
                 ):
-                    pipeline_state.promote_next(
+                    state_promote.promote_next(
                         repo,
                         "second",
                         "gsd-path/M002",
@@ -2569,7 +2569,7 @@ class PipelineStateTests(unittest.TestCase):
             self.assertEqual(recovery["route"]["base"], integrate)
             self.assertEqual(recovery["route"]["landing"], integrate)
 
-            result = pipeline_state.promote_next(
+            result = state_promote.promote_next(
                 repo,
                 "second",
                 "gsd-path/M002",
@@ -2591,7 +2591,7 @@ class PipelineStateTests(unittest.TestCase):
                     pipeline_state.PipelineStateError,
                     "simulated interruption",
                 ):
-                    pipeline_state.promote_next(
+                    state_promote.promote_next(
                         repo,
                         "second",
                         "gsd-path/M002",
@@ -2602,7 +2602,7 @@ class PipelineStateTests(unittest.TestCase):
             self.assertTrue(residual.is_dir())
             self.assertFalse((repo / ".project" / "next").exists())
 
-            result = pipeline_state.promote_next(
+            result = state_promote.promote_next(
                 repo,
                 "second",
                 "gsd-path/M002",

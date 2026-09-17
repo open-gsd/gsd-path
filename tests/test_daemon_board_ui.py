@@ -30,7 +30,7 @@ def sample_projects():
          "goal": "Desktop notifications.", "depends": ["M004"], "integrated": None, "manifest": None},
     ]
     return [
-        ProjectStatus(root="/sample/gsd", project="GSD Path", milestone="daemon", phase="build",
+        ProjectStatus(root="/sample/gsd", project="GSD Path", workflow={"state": "active", "label": "In build"}, milestone="daemon", phase="build",
                       status="active", branch="gsd-path/M004", tasks_done=6, tasks_total=9, current_wave=2,
                       waves={1: "parsers", 2: "watcher", 3: "tray"}, roadmap_milestones=roadmap,
                       tasks=[TaskSummary(id="T001", title="state parser", wave=1, status="done", files=["daemon/probe.py"]),
@@ -60,19 +60,63 @@ def sample_projects():
                                          "tokens_in": 214830, "tokens_cached": 171200, "tokens_out": 4226, "cost": 0.68, "duration_s": 41.0}]},
                       time_in_phase_s=3600 * 5, git={"branch": "gsd-path/M004", "head": "0e9a3b1abcdef", "dirty": True},
                       next_skill="gsd-path-build"),
-        ProjectStatus(root="/sample/atlas'&tab=usage", project="Atlas API", milestone="api-v2", phase="ship",
+        ProjectStatus(root="/sample/atlas'&tab=usage", project="Atlas API", workflow={"state": "blocked", "label": "Blocked"}, milestone="api-v2", phase="ship",
                       status="blocked", branch="gsd-path/M002", health="red", next_skill="gsd-path-forensics",
                       attention=[{"kind": "blocked", "label": "ship blocked", "ref": None}],
                       next_milestone={"milestone": "api-v3", "phase": "define", "status": "pending"}),
-        ProjectStatus(root="/sample/notes", project="Field Notes", milestone="bootstrap", phase="research",
+        ProjectStatus(root="/sample/notes", project="Field Notes", workflow={"state": "active", "label": "In research"}, milestone="bootstrap", phase="research",
                       status="active", branch="gsd-path/M001"),
-        ProjectStatus(root="/sample/done", project="Done Thing", milestone="graph", phase="shipped",
+        ProjectStatus(root="/sample/done", project="Done Thing", workflow={"state": "shipped", "label": "Shipped"}, milestone="graph", phase="shipped",
                       status="shipped", archive=".project/archive/001-graph"),
     ]
 
 
 @unittest.skipUnless(os.environ.get("GSD_UI_TEST"), "requires Orca embedded browser")
 class BoardUITests(unittest.TestCase):
+    def test_runtime_handoff_is_visible_and_escaped(self):
+        project = ProjectStatus.from_dict({"root": "/handoff", "project": "Handoff check",
+            "phase": "plan", "status": "done", "handoff": {
+                "outcome": "plan/done", "next": "Invoke $gsd-path to continue with build. <review>"}})
+        watcher = Mock(config=Config(parents=[], session_dirs=[]), projects={project.root: project})
+        watcher.poll_once.return_value = []
+        server, _ = serve_in_thread(watcher, port=0, plugin=Mock())
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        self.addCleanup(server.watcher_stop.set)
+        self.page = self.orca("tab", "create", "--url", f"http://127.0.0.1:{server.server_address[1]}")["browserPageId"]
+        tab = next(tab for tab in self.orca("tab", "list")["tabs"] if tab["browserPageId"] == self.page)
+        self.addCleanup(self.orca, "tab", "close", "--index", str(tab["index"]))
+        self.orca("wait", "--page", self.page, "--text", "Handoff check")
+        self.js("openProject('/handoff')")
+        self.assertEqual(self.js("document.querySelector('.runtime-handoff')?.textContent.trim() || ''"),
+            "plan/done — Invoke $gsd-path to continue with build. <review>")
+        self.assertEqual(self.js("document.querySelectorAll('.runtime-handoff review').length"), "0")
+
+    def test_workflow_labels_do_not_infer_shipped_from_archive(self):
+        projects = {}
+        for name, phase, workflow in [
+            ('Closing', 'ship', {'state': 'active', 'label': 'In ship'}),
+            ('Uncertain', 'shipped', {'state': 'unverified', 'label': 'Unverified'}),
+            ('Complete', 'shipped', {'state': 'shipped', 'label': 'Shipped'}),
+            ('Legacy', 'shipped', None),
+        ]:
+            projects['/' + name] = ProjectStatus.from_dict({'root': '/' + name, 'project': name,
+                'phase': phase, 'status': 'done', 'archive': '.project/archive/001-first',
+                'workflow': workflow})
+        watcher = Mock(config=Config(parents=[], session_dirs=[]), projects=projects)
+        watcher.poll_once.return_value = []
+        server, _ = serve_in_thread(watcher, port=0, plugin=Mock())
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        self.addCleanup(server.watcher_stop.set)
+        self.page = self.orca('tab', 'create', '--url', f'http://127.0.0.1:{server.server_address[1]}')['browserPageId']
+        tab = next(tab for tab in self.orca('tab', 'list')['tabs'] if tab['browserPageId'] == self.page)
+        self.addCleanup(self.orca, 'tab', 'close', '--index', str(tab['index']))
+        self.orca('wait', '--page', self.page, '--text', 'Closing')
+        labels = json.loads(self.js("JSON.stringify(Object.fromEntries([...document.querySelectorAll('tr.prow')].map(row => [row.dataset.root, row.querySelector('.state').textContent])))"))
+        self.assertEqual(labels, {'/Closing': 'In ship', '/Uncertain': 'Unverified',
+                                  '/Complete': 'Shipped', '/Legacy': 'Unverified'})
+
     def orca(self, *args):
         result = subprocess.run([os.environ.get("ORCA_CLI_COMMAND", "orca"), *args, "--json"],
                                 capture_output=True, text=True, check=True)

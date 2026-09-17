@@ -157,12 +157,7 @@ Preparation never changes phase state; neither command dispatches agents.
    <current branch or null> --expect-archive <current archive or null>
    --set-phase inspect --set-status done`. This helper is the only ordinary
    STATE mutation; require its returned state to be `inspect/done`.
-   Identify `$gsd-path-define` as next. When this phase was routed by an
-   active `$gsd-path`, return control to that router so its bundled define
-   contract runs in brownfield mode (and milestone mode when ROADMAP.md
-   exists). When invoked directly, stop and tell the
-   user to explicitly invoke `$gsd-path`, which routes to define; do not invoke
-   an explicit-only sibling skill yourself.
+   Use the executable phase handoff in AGENTS.md.
 
 ## Lookahead mode
 

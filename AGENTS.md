@@ -98,11 +98,19 @@ full-repo suite on a tiny edit outrank the phase brief.
   deterministic logical task name, and a bounded responsibility. Independent
   briefs may run in parallel up to available child capacity; a dependent
   brief runs as soon as its dependencies complete.
-- Any phase-contract instruction to route, return, or invoke another GSD Path
-  phase is a caller handoff, not permission to trigger an explicit-only
-  skill. If an active router or orchestrator supplied the contract, return
-  control to it. On a direct invocation, report the exact next skill and stop
-  until the user explicitly invokes it.
+- After a phase completes its gate and state update, run the bundled
+  `pipeline_state.py status --repo <absolute-root>` with the routed
+  `--project-dir`. Its `handoff` is the shared phase handoff for chat and the
+  dashboard. Present **Outcome** from `handoff.outcome` plus the completed
+  work; **Review** links the phase artifact, or `handoff.review` when absent.
+  An active router uses `handoff.router_next` for **Next** and follows the
+  returned route. A directly invoked phase uses `handoff.phase_next` and
+  stops. A status or plain-prompt reply uses `handoff.next` and stays read-only.
+  Convert the `$` invocation prefix to the host's slash form when needed.
+  Phase owners still stop for required input and approval before completion;
+  a route is not approval. Return to an active caller instead of invoking an
+  explicit-only sibling skill. Derive the next phase from this result, not
+  from another lane table in prose.
 
 ## Plain-prompt re-entry
 
@@ -118,13 +126,12 @@ full-repo suite on a tiny edit outrank the phase brief.
   authority.
   A plain change request does not authorize work outside the pipeline: make no
   changes and report **Outcome**, link the returned `path` under **Review**, and
-  under **Next** name `next_skill` only for a `run-phase` route; for every other
-  route, report `route.action` and `route.reason`. An explicit request to leave
+  under **Next** use `handoff.next`. An explicit request to leave
   or bypass the pipeline is a user ruling;
   route it through the router's undo or abandon flow instead of editing directly.
 - After any other plain-prompt turn with owned state, rerun the same read-only
   status command immediately before the final response and append the same
-  **Outcome** / **Review** / **Next** handoff with the same exact-route rule.
+  **Outcome** / **Review** / **Next** handoff with the same shared handoff rule.
   Keep an informational turn read-only from start to finish: do not use repository
   mutation tools or run commands that can create or alter files. A GSD Path skill
   already supplies this handoff, so emit it once. With no STATE.md, respond

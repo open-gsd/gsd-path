@@ -20,6 +20,43 @@ except ModuleNotFoundError as error:  # pragma: no cover - package imports used 
     from scripts.isolation import IsolationError, checkpoint as isolation_checkpoint, require_commit, require_full_sha, PROJECT_ENTRIES
 
 
+if __package__:
+    from . import roadmap
+else:
+    import roadmap
+
+if __package__:  # imported as scripts.state_checkpoint
+    from . import pipeline_state
+    from .pipeline_state import (
+        CHECKPOINT_JOURNAL_NAME,
+        CHECKPOINT_KINDS,
+        CHECKPOINT_SCHEMA,
+        PLAN_APPROVAL_SUBJECT,
+        PROMOTION_TRACKS,
+        SLUG_RE,
+        TASK_FILE_RE,
+        TASK_ID_RE,
+        ApprovedTaskContract,
+        PipelineState,
+        PipelineStateError,
+    )
+else:  # standalone script or sibling import
+    import pipeline_state
+    from pipeline_state import (
+        CHECKPOINT_JOURNAL_NAME,
+        CHECKPOINT_KINDS,
+        CHECKPOINT_SCHEMA,
+        PLAN_APPROVAL_SUBJECT,
+        PROMOTION_TRACKS,
+        SLUG_RE,
+        TASK_FILE_RE,
+        TASK_ID_RE,
+        ApprovedTaskContract,
+        PipelineState,
+        PipelineStateError,
+    )
+
+
 def _sha256(content: str) -> str:
     return hashlib.sha256(content.encode("utf-8")).hexdigest()
 
@@ -65,41 +102,29 @@ def _checkpoint_artifact_digest(project: Path, mutable_paths: set[str]) -> str:
     return digest.hexdigest()
 
 
-def _roadmap_status(lines: list[str], start: int, end: int) -> str:
-    values = []
-    for line in lines[start:end]:
-        match = re.fullmatch(r"Status:\s*(\S+)\s*", line.rstrip("\r\n"))
-        if match:
-            values.append(match.group(1))
-    if len(values) != 1:
-        raise PipelineStateError("ROADMAP.md milestone must have one Status field")
-    return values[0]
-
-
 def _activate_roadmap_milestone(text: str, milestone: str) -> str:
-    sections = pipeline_state._roadmap_sections(text)
-    if milestone not in sections:
-        raise PipelineStateError(f"ROADMAP.md is missing selected milestone: {milestone}")
-    lines = text.splitlines(keepends=True)
-    active = [
-        slug
-        for slug, (_, start, end) in sections.items()
-        if _roadmap_status(lines, start, end) == "active"
-    ]
-    if active:
-        raise PipelineStateError(
-            "ROADMAP.md already has an active milestone: " + ", ".join(active)
-        )
-    _, start, end = sections[milestone]
-    pipeline_state._replace_roadmap_field(lines, start, end, "Status", {"pending"}, "active")
-    return "".join(lines)
-
+    try:
+        return roadmap.activate_milestone(text, milestone)
+    except roadmap.RoadmapError as error:
+        raise PipelineStateError(str(error)) from error
 
 def _approval_details(
     kind: str,
     state: PipelineState,
     selected_milestone: Optional[str],
 ) -> tuple[dict[str, Optional[str]], str, str, str]:
+    if kind == "roadmap-reslice":
+        if state.status != "active" or state.archive is not None:
+            raise PipelineStateError("roadmap re-slice requires active, unarchived state")
+        if state.phase in {"inspect", "define"} and selected_milestone == state.milestone and state.milestone:
+            changes = {}
+            event = "program roadmap re-slice approved"
+        elif state.phase == "roadmap" and state.milestone is None and selected_milestone and SLUG_RE.fullmatch(selected_milestone):
+            changes = {"phase": "inspect", "milestone": selected_milestone}
+            event = "roadmap approved after abandoned milestone"
+        else:
+            raise PipelineStateError("roadmap re-slice must preserve the active milestone or select after abandon")
+        return changes, event, "roadmap: program roadmap approved", "Why: approved roadmap checkpoint"
     if kind == "plan":
         if selected_milestone is not None:
             raise PipelineStateError("plan approval does not accept a selected milestone")
@@ -125,6 +150,12 @@ def _approval_details(
         )
     raise PipelineStateError(f"unsupported approval kind: {kind}")
 
+
+def _reslice_roadmap(before: str, candidate: str, state: PipelineState, selected: str) -> str:
+    try:
+        return roadmap.reslice(before, candidate, state.phase, selected)
+    except roadmap.RoadmapError as error:
+        raise PipelineStateError(str(error)) from error
 
 def _checkpoint_request_fields(
     kind: str,
@@ -175,6 +206,10 @@ def _approval_journal(repo: Path, journal: Mapping[str, object]) -> dict[str, ob
         "roadmap_before",
         "roadmap_after",
     }
+    if journal.get("kind") == "roadmap-reslice":
+        expected_keys.add("baseline_before")
+        if not isinstance(journal.get("baseline_before"), str):
+            raise PipelineStateError("checkpoint journal has an invalid re-slice baseline")
     if set(journal) != expected_keys:
         raise PipelineStateError("checkpoint journal has invalid fields")
     if journal.get("schema") != CHECKPOINT_SCHEMA or journal.get("repo") != str(repo):
@@ -253,12 +288,14 @@ def _approval_journal(repo: Path, journal: Mapping[str, object]) -> dict[str, ob
         or journal["state_after"] != rendered
     ):
         raise PipelineStateError("checkpoint journal approval contract is invalid")
-    if str(journal["kind"]) == "roadmap":
+    if journal["kind"] in {"roadmap", "roadmap-reslice"}:
         if project_dir != ".project":
             raise PipelineStateError("roadmap approval is legal only on the active track")
         if journal["roadmap_path"] != ".project/ROADMAP.md":
             raise PipelineStateError("checkpoint journal has an invalid ROADMAP path")
-        expected_roadmap = _activate_roadmap_milestone(
+        expected_roadmap = _reslice_roadmap(
+            str(journal["baseline_before"]), str(journal["roadmap_before"]), before, str(selected),
+        ) if journal["kind"] == "roadmap-reslice" else _activate_roadmap_milestone(
             str(journal["roadmap_before"]),
             str(selected),
         )
@@ -307,6 +344,12 @@ def _resume_checkpoint_locked(
     transaction = _approval_journal(repo, journal)
     state_path = _checkpoint_file(repo, str(transaction["state_path"]), "STATE.md")
     mutable = {state_path.relative_to(project).as_posix()}
+    baseline = project / "ROADMAP.before-reslice.md" if transaction["kind"] == "roadmap-reslice" else None
+    if baseline is not None:
+        mutable.add(baseline.name)
+        if baseline.exists() or baseline.is_symlink():
+            if pipeline_state._read_real_file(baseline, "re-slice baseline") != transaction["baseline_before"]:
+                raise PipelineStateError("re-slice baseline drifted during checkpoint recovery")
     roadmap_path: Optional[Path] = None
     if transaction["roadmap_path"] is not None:
         roadmap_path = _checkpoint_file(
@@ -354,6 +397,8 @@ def _resume_checkpoint_locked(
             raise PipelineStateError("completed checkpoint has the wrong ROADMAP.md")
 
     try:
+        if baseline is not None and baseline.exists():
+            baseline.unlink()
         committed = isolation_checkpoint(
             repo,
             expected_head,
@@ -362,6 +407,8 @@ def _resume_checkpoint_locked(
             [".project"],
         )
     except IsolationError as error:
+        if baseline is not None and pipeline_state._run_git(repo, "rev-parse", "HEAD").stdout.strip() == expected_head:
+            pipeline_state._atomic_write(baseline, str(transaction["baseline_before"]))
         raise PipelineStateError(f"approval checkpoint failed: {error}") from error
     if committed.get("commit") != pipeline_state._run_git(repo, "rev-parse", "HEAD").stdout.strip():
         raise PipelineStateError("approval checkpoint returned the wrong commit")
@@ -501,13 +548,18 @@ def checkpoint_approval(
         roadmap_path: Optional[Path] = None
         roadmap_before: Optional[str] = None
         roadmap_after: Optional[str] = None
-        if kind == "roadmap":
+        baseline_before = None
+        if kind in {"roadmap", "roadmap-reslice"}:
             if project_dir != ".project":
                 raise PipelineStateError("roadmap approval is legal only on the active track")
             assert selected_milestone is not None
             roadmap_path = project / "ROADMAP.md"
             roadmap_before = pipeline_state._read_real_file(roadmap_path, "ROADMAP.md")
-            roadmap_after = _activate_roadmap_milestone(
+            if kind == "roadmap-reslice":
+                baseline_before = pipeline_state._read_real_file(project / "ROADMAP.before-reslice.md", "re-slice baseline")
+            roadmap_after = _reslice_roadmap(
+                baseline_before, roadmap_before, state, selected_milestone,
+            ) if kind == "roadmap-reslice" else _activate_roadmap_milestone(
                 roadmap_before,
                 selected_milestone,
             )
@@ -516,6 +568,8 @@ def checkpoint_approval(
         mutable = {state_relative}
         if roadmap_path is not None:
             mutable.add(roadmap_path.relative_to(project).as_posix())
+        if baseline_before is not None:
+            mutable.add("ROADMAP.before-reslice.md")
         journal: dict[str, object] = {
             "schema": CHECKPOINT_SCHEMA,
             "repo": str(resolved),
@@ -532,6 +586,8 @@ def checkpoint_approval(
             "roadmap_before": roadmap_before,
             "roadmap_after": roadmap_after,
         }
+        if baseline_before is not None:
+            journal["baseline_before"] = baseline_before
         pipeline_state._write_json(journal_path, journal)
         return _resume_checkpoint_locked(resolved, project, journal_path, journal)
 
@@ -603,17 +659,25 @@ def defer_approval(
             project_dir,
             approval_kind=kind,
         )
-        if kind == "roadmap":
+        baseline = None
+        if kind in {"roadmap", "roadmap-reslice"}:
             if project_dir != ".project":
                 raise PipelineStateError("roadmap approval is legal only on the active track")
             assert selected_milestone is not None
             roadmap_path = project / "ROADMAP.md"
-            roadmap_after = _activate_roadmap_milestone(
-                pipeline_state._read_real_file(roadmap_path, "ROADMAP.md"),
-                selected_milestone,
-            )
+            roadmap_before = pipeline_state._read_real_file(roadmap_path, "ROADMAP.md")
+            if kind == "roadmap-reslice":
+                baseline = project / "ROADMAP.before-reslice.md"
+                roadmap_after = _reslice_roadmap(
+                    pipeline_state._read_real_file(baseline, "re-slice baseline"),
+                    roadmap_before, state, selected_milestone,
+                )
+            else:
+                roadmap_after = _activate_roadmap_milestone(roadmap_before, selected_milestone)
             pipeline_state._atomic_write(roadmap_path, roadmap_after)
         pipeline_state._atomic_write(state_path, state_after)
+        if baseline is not None:
+            baseline.unlink()
     return {
         "schema": CHECKPOINT_SCHEMA,
         "status": "approved",
@@ -1010,38 +1074,3 @@ def _classify_plan_drift(
         "contract_paths": sorted(contract_paths),
         "reason": "; ".join(reasons) if reasons else "approval contracts and declared paths are unchanged",
     }
-
-
-# pipeline_state imports this module, so the parent is resolved after the
-# definitions above. Parent functions are looked up on the module at call time
-# so patches applied to pipeline_state stay visible here.
-if __package__:  # imported as scripts.state_checkpoint
-    from . import pipeline_state
-    from .pipeline_state import (
-        CHECKPOINT_JOURNAL_NAME,
-        CHECKPOINT_KINDS,
-        CHECKPOINT_SCHEMA,
-        PLAN_APPROVAL_SUBJECT,
-        PROMOTION_TRACKS,
-        SLUG_RE,
-        TASK_FILE_RE,
-        TASK_ID_RE,
-        ApprovedTaskContract,
-        PipelineState,
-        PipelineStateError,
-    )
-else:  # standalone script or sibling import
-    import pipeline_state
-    from pipeline_state import (
-        CHECKPOINT_JOURNAL_NAME,
-        CHECKPOINT_KINDS,
-        CHECKPOINT_SCHEMA,
-        PLAN_APPROVAL_SUBJECT,
-        PROMOTION_TRACKS,
-        SLUG_RE,
-        TASK_FILE_RE,
-        TASK_ID_RE,
-        ApprovedTaskContract,
-        PipelineState,
-        PipelineStateError,
-    )

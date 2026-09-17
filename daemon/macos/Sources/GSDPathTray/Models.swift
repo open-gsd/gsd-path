@@ -66,7 +66,14 @@ struct Spend: Codable {
     var milestones: [String: MilestoneSpend]?
 }
 
+struct WorkflowStatus: Codable {
+    var state: String
+    var label: String
+    var reason: String?
+}
+
 struct ProjectStatus: Codable {
+    var workflow: WorkflowStatus?
     var root: String?
     var project: String?
     var milestone: String?
@@ -145,7 +152,7 @@ extension ProjectStatus {
     var displayProject: String { project ?? "?" }
     var displayPhase: String { phase ?? "?" }
     var displayStatus: String { status ?? "?" }
-    var isShipped: Bool { phase == "shipped" }
+    var isShipped: Bool { projectState == "shipped" }
     var done: Int { tasks_done ?? 0 }
     var total: Int { tasks_total ?? 0 }
     var answers: [PendingAnswer] { pending_answers ?? [] }
@@ -200,21 +207,11 @@ struct StackEntry: Equatable {
 }
 
 extension ProjectStatus {
-    /// "blocked" | "shipped" | "active" — the only states the status board shows.
-    var projectState: String {
-        if status == "blocked" { return "blocked" }
-        if isShipped || status == "shipped" || archive != nil { return "shipped" }
-        return "active"
-    }
-    var stateLabel: String {
-        switch projectState {
-        case "blocked": return "Blocked"
-        case "shipped": return "Shipped"
-        default: return "In \(phase ?? "progress")"
-        }
-    }
+    /// Presentation meaning is supplied by the daemon's runtime projection.
+    var projectState: String { workflow?.state ?? "unverified" }
+    var stateLabel: String { workflow?.label ?? "Unverified" }
     /// Sort rank for the board: blocked, then active, then shipped.
-    var stateRank: Int { ["blocked": 0, "active": 1, "shipped": 2][projectState] ?? 1 }
+    var stateRank: Int { ["blocked": 0, "unverified": 1, "active": 1, "shipped": 2][projectState] ?? 1 }
 
     /// Milestones before, at and after the current one, from ROADMAP.md, STATE.md and next/STATE.md.
     var milestoneStack: [StackEntry] {
@@ -289,6 +286,7 @@ extension ProjectStatus {
             let manifest = (roadmap_milestones ?? []).first { $0.number == current }?.manifest
             return (["\(current) shipped" + (manifest?.shipped.map { " \($0)" } ?? "")]
                     + [manifest?.tasks_total.map { "\($0) tasks" }].compactMap { $0 }).joined(separator: " · ")
+        case "unverified": return "\(current) · Unverified · \(hereText)"
         case "blocked": return "\(current) · Blocked · \(hereText)"
         default: return "\(current) · \(hereText)"
         }

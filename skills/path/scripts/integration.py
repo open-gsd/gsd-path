@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # gsd-path project runtime
-"""Integrate a shipped milestone by merge, pull request and tag for archive_milestone."""
+"""Own milestone integration, publication, tags, and completion proof."""
 
 import json
 import re
@@ -35,6 +35,20 @@ except ImportError:  # pragma: no cover - package import used by tests
     from scripts.pipeline_state import PipelineState
     from scripts.isolation import publication_base
     from scripts import _common
+
+
+if __package__:
+    from . import archive_milestone
+    from .archive_milestone import ArchiveError
+else:
+    import archive_milestone
+    from archive_milestone import ArchiveError
+
+
+PR_CREDIT_LINE = (
+    "PR prepared with [GSD Path](https://github.com/open-gsd/gsd-path)."
+)
+GITHUB_HOST = "github.com"
 
 
 run_git = _common.run_git
@@ -1208,7 +1222,7 @@ def find_integrate_commit(
     return merge_commit
 
 
-def validate_integrated(repo: Path, slug: str) -> dict:
+def validate_integrated(repo: Path, slug: str, *, refresh: bool = True) -> dict:
     project = repo.resolve()
     active_root = archive_milestone.require_project_layout(project)
     state, _, loaded_state_path = archive_milestone.strict_state(project)
@@ -1228,7 +1242,8 @@ def validate_integrated(repo: Path, slug: str) -> dict:
 
     # Refresh whenever origin exists so direct mode cannot miss a published tag.
     # Fixtures that only plant refs/remotes/origin/* keep resolve_remote_default.
-    if run_git(project, "remote", "get-url", "origin").returncode == 0:
+    has_origin = run_git(project, "remote", "get-url", "origin").returncode == 0
+    if has_origin and refresh:
         remote_default = refresh_origin(project)["remote_default"]
     else:
         remote_default = resolve_remote_default(project)
@@ -1348,6 +1363,16 @@ def validate_integrated(repo: Path, slug: str) -> dict:
         "mode": state.integration,
         "tag": tag_name,
     }
+    if has_origin and not refresh:
+        # Status must not fetch or write refs. Missing/stale local evidence is
+        # unverified; the normal ship validator remains the refresh owner.
+        refs = [(f"refs/heads/{default_name}", result["base"]),
+                (f"refs/tags/{tag_name}", optional_ref(project, tag_ref))]
+        if state.integration == "direct":
+            refs.append((f"refs/heads/{bound_branch}", ship_commit))
+        for ref, expected in refs:
+            if live_remote_ref(project, ref) != expected:
+                raise ArchiveError(f"published {ref} differs from local integration evidence")
     if pull_request is not None:
         result["pull_request"] = pull_request
     return result
@@ -1412,22 +1437,3 @@ def require_published_integration(
         raise ArchiveError(
             f"published milestone tag {tag_name} does not point at the integration merge"
         )
-
-
-# archive_milestone imports this module, so the parent is resolved after the
-# definitions above. Parent functions are looked up on the module at call time
-# so patches applied to archive_milestone stay visible here.
-if __package__:  # imported as scripts.integration
-    from . import archive_milestone
-    from .archive_milestone import (
-        GITHUB_HOST,
-        PR_CREDIT_LINE,
-        ArchiveError,
-    )
-else:  # standalone script or sibling import
-    import archive_milestone
-    from archive_milestone import (
-        GITHUB_HOST,
-        PR_CREDIT_LINE,
-        ArchiveError,
-    )

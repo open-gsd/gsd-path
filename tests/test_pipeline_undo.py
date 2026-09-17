@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from scripts import state_checkpoint
 from scripts import archive_milestone, isolation, pipeline_state, pipeline_undo
 from tests.test_task_briefs import PLAN_WAVE, TASK_TEMPLATE
 
@@ -120,7 +121,7 @@ class PipelineUndoTests(unittest.TestCase):
                 PLAN_WAVE.format(title="first"), encoding="utf-8"
             )
             write_plan_tasks(repo)
-            pipeline_state.checkpoint_approval(repo, "plan", expected_head)
+            state_checkpoint.checkpoint_approval(repo, "plan", expected_head)
             approved = run_git(repo, "rev-parse", "HEAD").stdout.strip()
             self.assertNotEqual(approved, expected_head)
 
@@ -157,7 +158,7 @@ class PipelineUndoTests(unittest.TestCase):
                 PLAN_WAVE.format(title="first"), encoding="utf-8"
             )
             write_plan_tasks(repo)
-            pipeline_state.checkpoint_approval(repo, "plan", parent)
+            state_checkpoint.checkpoint_approval(repo, "plan", parent)
             approved = run_git(repo, "rev-parse", "HEAD").stdout.strip()
 
             pipeline_undo.apply_undo(repo, "checkpoint", approved)
@@ -182,7 +183,7 @@ class PipelineUndoTests(unittest.TestCase):
                 PLAN_WAVE.format(title="first"), encoding="utf-8"
             )
             write_plan_tasks(repo)
-            pipeline_state.checkpoint_approval(repo, "plan", expected_head)
+            state_checkpoint.checkpoint_approval(repo, "plan", expected_head)
             origin = root / "origin.git"
             subprocess.run(
                 ["git", "init", "-q", "--bare", str(origin)],
@@ -212,7 +213,7 @@ class PipelineUndoTests(unittest.TestCase):
                 PLAN_WAVE.format(title="first"), encoding="utf-8"
             )
             write_plan_tasks(repo)
-            pipeline_state.checkpoint_approval(repo, "plan", parent)
+            state_checkpoint.checkpoint_approval(repo, "plan", parent)
             approved = run_git(repo, "rev-parse", "HEAD").stdout.strip()
 
             with mock.patch.object(
@@ -246,7 +247,7 @@ class PipelineUndoTests(unittest.TestCase):
                 PLAN_WAVE.format(title="first"), encoding="utf-8"
             )
             write_plan_tasks(repo)
-            pipeline_state.checkpoint_approval(repo, "plan", parent)
+            state_checkpoint.checkpoint_approval(repo, "plan", parent)
             approved = run_git(repo, "rev-parse", "HEAD").stdout.strip()
             with mock.patch.object(
                 pipeline_undo,
@@ -282,7 +283,7 @@ class PipelineUndoTests(unittest.TestCase):
                 PLAN_WAVE.format(title="first"), encoding="utf-8"
             )
             write_plan_tasks(repo)
-            pipeline_state.checkpoint_approval(repo, "plan", parent)
+            state_checkpoint.checkpoint_approval(repo, "plan", parent)
             approved = run_git(repo, "rev-parse", "HEAD").stdout.strip()
             with mock.patch.object(
                 pipeline_undo,

@@ -15,24 +15,41 @@ import sys
 from pathlib import Path
 from typing import Optional, Sequence
 
-import _common
-import archive_milestone
-import detect_project
+if __package__:
+    from . import _common, archive_milestone, detect_project
+    from .roadmap import (
+        RoadmapError as LookaheadError,
+        NoEligibleMilestone as NoEligibleLookahead,
+        roadmap_blocks,
+        milestone_block,
+        dependency_ids,
+        next_eligible_pending,
+        selection_payload,
+        select_lookahead,
+        roadmap_contract,
+        compare_roadmap_entry,
+    )
+else:
+    from roadmap import (
+        RoadmapError as LookaheadError,
+        NoEligibleMilestone as NoEligibleLookahead,
+        roadmap_blocks,
+        milestone_block,
+        dependency_ids,
+        next_eligible_pending,
+        selection_payload,
+        select_lookahead,
+        roadmap_contract,
+        compare_roadmap_entry,
+    )
+    import _common
+    import archive_milestone
+    import detect_project
 
 
 PHASES = {"inspect", "define", "research", "decide", "plan"}
 STATUSES = {"active", "blocked", "done"}
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
-ROADMAP_HEADING_RE = re.compile(r"^### (M\d{3,}) — (.+)$")
-MUTABLE_ROADMAP_FIELDS_RE = re.compile(r"^(Status|Archive|Integrated):")
-
-
-class LookaheadError(RuntimeError):
-    pass
-
-
-class NoEligibleLookahead(LookaheadError):
-    pass
 
 
 def read_text(path: Path, description: str) -> str:
@@ -74,119 +91,6 @@ def state_fields(content: str) -> dict[str, str]:
     if fields is None:
         raise LookaheadError("STATE.md is missing YAML frontmatter")
     return fields
-
-
-def roadmap_blocks(content: str) -> list[dict]:
-    lines = content.splitlines(keepends=True)
-    headings = []
-    for index, line in enumerate(lines):
-        match = ROADMAP_HEADING_RE.fullmatch(line.rstrip("\r\n"))
-        if match:
-            headings.append((index, match.group(1), match.group(2).strip()))
-    blocks = []
-    for position, (start, milestone_id, title) in enumerate(headings):
-        end = headings[position + 1][0] if position + 1 < len(headings) else len(lines)
-        fields = {}
-        for index in range(start + 1, end):
-            match = re.match(
-                r"^(Status|Archive|Integrated|Depends on):\s*([^#]*?)\s*(?:#.*)?$",
-                lines[index].rstrip("\r\n"),
-            )
-            if match:
-                if match.group(1) in fields:
-                    raise LookaheadError(
-                        f"roadmap milestone {milestone_id} has duplicate "
-                        f"{match.group(1)} field"
-                    )
-                fields[match.group(1)] = (index, match.group(2).strip())
-        blocks.append(
-            {
-                "id": milestone_id,
-                "title": title,
-                "start": start,
-                "end": end,
-                "fields": fields,
-            }
-        )
-    return blocks
-
-
-def milestone_block(content: str, milestone: str) -> dict:
-    normalized = archive_milestone.normalized_slug(milestone)
-    matches = [
-        block
-        for block in roadmap_blocks(content)
-        if archive_milestone.normalized_slug(block["title"]) == normalized
-    ]
-    if len(matches) != 1:
-        raise LookaheadError(f"ROADMAP.md must contain exactly one entry for {milestone}")
-    return matches[0]
-
-
-def dependency_ids(block: dict) -> list[str]:
-    dependencies = block["fields"].get("Depends on")
-    if dependencies is None:
-        raise LookaheadError(f"roadmap milestone {block['id']} lacks dependencies")
-    dependency_list = re.fullmatch(
-        r"\[\s*(M\d{3,}(?:\s*,\s*M\d{3,})*)?\s*\]",
-        dependencies[1],
-    )
-    if dependency_list is None:
-        raise LookaheadError(f"roadmap milestone {block['id']} has invalid dependencies")
-    return re.findall(r"M\d{3,}", dependency_list.group(1) or "")
-
-
-def next_eligible_pending(content: str, active_milestone: Optional[str] = None) -> dict:
-    blocks = roadmap_blocks(content)
-    blocks_by_id = {block["id"]: block for block in blocks}
-    if len(blocks_by_id) != len(blocks):
-        raise LookaheadError("ROADMAP.md milestone ids must be unique")
-    active_id = None
-    if active_milestone is not None:
-        active = milestone_block(content, active_milestone)
-        if active["fields"].get("Status", (-1, ""))[1] != "active":
-            raise LookaheadError(f"roadmap milestone {active_milestone} is not active")
-        active_id = active["id"]
-    for block in blocks:
-        if block["fields"].get("Status", (-1, ""))[1] != "pending":
-            continue
-        dependencies = dependency_ids(block)
-        if all(
-            dependency in blocks_by_id
-            and (
-                blocks_by_id[dependency]["fields"].get("Status", (-1, ""))[1]
-                == "shipped"
-                or dependency == active_id
-            )
-            for dependency in dependencies
-        ):
-            return block
-    raise NoEligibleLookahead("ROADMAP.md has no dependency-ready pending milestone")
-
-
-def selection_payload(selected: dict) -> dict:
-    milestone = archive_milestone.normalized_slug(selected["title"])
-    return {
-        "status": "selected",
-        "id": selected["id"],
-        "milestone": milestone,
-        "branch": f"gsd-path/{selected['id']}",
-    }
-
-
-def select_lookahead(content: str, active_milestone: Optional[str] = None) -> dict:
-    try:
-        selected = next_eligible_pending(content, active_milestone)
-    except NoEligibleLookahead:
-        blocks = roadmap_blocks(content)
-        if blocks and all(
-            block["fields"].get("Status", (-1, ""))[1]
-            in {"shipped", "abandoned"}
-            for block in blocks
-        ):
-            return {"status": "complete"}
-        return {"status": "none"}
-    return selection_payload(selected)
 
 
 def select_track_branch(content: str, track_state: str) -> dict:
@@ -245,42 +149,6 @@ def snapshot_roadmap(source: Path, destination: Path) -> dict:
         "status": status,
         "sha256": hashlib.sha256(content.encode("utf-8")).hexdigest(),
     }
-
-
-def roadmap_contract(content: str, milestone: str) -> tuple[str, ...]:
-    block = milestone_block(content, milestone)
-    lines = content.splitlines()
-    return tuple(
-        line.rstrip()
-        for line in lines[block["start"] : block["end"]]
-        if not MUTABLE_ROADMAP_FIELDS_RE.match(line)
-    )
-
-
-def compare_roadmap_entry(
-    before: str,
-    after: str,
-    milestone: str,
-    active_milestone: Optional[str] = None,
-) -> dict:
-    before_contract = roadmap_contract(before, milestone)
-    try:
-        after_contract = roadmap_contract(after, milestone)
-        selected = milestone_block(after, milestone)
-        eligible = next_eligible_pending(after, active_milestone)
-    except LookaheadError:
-        after_contract = ()
-        selected = None
-        eligible = None
-    status = (
-        "unchanged"
-        if before_contract == after_contract
-        and selected is not None
-        and eligible is not None
-        and selected["id"] == eligible["id"]
-        else "changed"
-    )
-    return {"status": status, "milestone": milestone}
 
 
 def git_commit_file(root: Path, commit: str, relative: str) -> str:

@@ -58,6 +58,8 @@ class ProjectStatus:
     git: Optional[dict] = None
     pending_answers: List[dict] = field(default_factory=list)
     next_skill: Optional[str] = None
+    handoff: Optional[dict] = None
+    workflow: dict = field(default_factory=lambda: {"state": "unverified", "label": "Unverified"})
     status_source: str = "parse-only"
     state_mtime: Optional[float] = None
     last_activity_iso: Optional[str] = None
@@ -95,6 +97,8 @@ class ProjectStatus:
             "git": self.git,
             "pending_answers": list(self.pending_answers),
             "next_skill": self.next_skill,
+            "handoff": self.handoff,
+            "workflow": self.workflow,
             "status_source": self.status_source,
             "state_mtime": self.state_mtime,
             "last_activity_iso": self.last_activity_iso,
@@ -135,6 +139,8 @@ class ProjectStatus:
             git=data.get("git"),
             pending_answers=list(data.get("pending_answers") or []),
             next_skill=data.get("next_skill"),
+            handoff=data.get("handoff") if isinstance(data.get("handoff"), dict) else None,
+            workflow=data.get("workflow") if isinstance(data.get("workflow"), dict) else {"state": "unverified", "label": "Unverified"},
             status_source=data.get("status_source") or "parse-only",
             state_mtime=data.get("state_mtime"),
             last_activity_iso=data.get("last_activity_iso"),

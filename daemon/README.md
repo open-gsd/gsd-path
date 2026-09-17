@@ -10,7 +10,10 @@ HTTP endpoint, a JSONL event history, desktop notifications, and a system
 tray icon.
 
 The daemon is strictly read-only against watched projects: file reads plus
-`git` read commands only. It never writes into a watched project.
+`git` read commands only. Completion checks may read the remote refs and, for
+pull-request integration, GitHub metadata. They never fetch or write refs.
+Unavailable or stale proof is shown as **Unverified**, with available phase
+and task facts retained. The daemon never writes into a watched project.
 
 ## Install (one command)
 
@@ -284,7 +287,12 @@ VERSION-stamp probes plus the update-check cache, never a git fetch; see
   (`[{number, slug, status, archive, duration_s, tokens}]` — `duration_s`
   and `tokens` are null placeholders for now), `next_milestone`, `git`
   (`{branch, head, dirty}`).
-- Runtime enrichment: `pending_answers`, `next_skill`.
+- Runtime enrichment: `pending_answers`, `next_skill`, `handoff`. The project
+  detail page displays the runtime handoff outcome and next action.
+- `workflow`: `{state, label, reason?}` is the shared browser/tray presentation.
+  State is `active`, `blocked`, `shipped`, or `unverified`. Only runtime
+  integration proof permits `shipped`; an archive path alone does not. Older
+  payloads without this field display **Unverified**.
 - Dashboard detail:
   - `reviews` — `[{file, kind, verdict, cycle, depth, note}]` parsed from
     `.project/review/*.md` (`kind` is `wave`, `final`, `gap`,

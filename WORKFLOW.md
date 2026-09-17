@@ -102,10 +102,9 @@ Project installs include the router's read-only status engine at
 On any turn that did not explicitly invoke a GSD Path
 skill, an owned `.project/STATE.md` activates re-entry. Informational prompts
 finish read-only and end with the current **Outcome** / **Review** / **Next**
-handoff. Mutation prompts make no changes and point to the status result's
-`next_skill` only when `route.action` is `run-phase`. Every other route reports
-its exact `route.action` and `route.reason`. The status engine never initializes state
-or advances a phase.
+handoff. Both informational and mutation replies use the status result's
+`handoff.next` for **Next**. Mutation prompts make no changes. The status engine
+never initializes state or advances a phase.
 
 The optional pre-tool guard backs this up where it has deterministic evidence.
 See [HOOKS.md](https://github.com/open-gsd/gsd-path/blob/main/HOOKS.md#what-gets-blocked) for write restrictions, including

@@ -269,12 +269,8 @@ as stated in Lookahead mode.
    (event `patch plan approved`) without a plan checkpoint because build's
    patch re-entry commits the artifacts with its `build/active` transition.
    `pipeline_state.py transition` never approves a plan. Confirm approval,
-   link PLAN.md again, and state that
-   build starts next. Do not add another approval gate. When routed by an
-   active `$gsd-path`, return control to that router so its bundled build
-   contract starts. When invoked directly, stop and tell the user to explicitly
-   invoke `$gsd-path`, which routes to build; do not invoke an explicit-only
-   sibling skill yourself.
+   link PLAN.md again, and use the executable phase handoff in AGENTS.md.
+   The plan approval also authorizes build; do not add another approval gate.
 
 ## Ordering rules
 

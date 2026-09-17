@@ -98,12 +98,8 @@ rules are unchanged; never write an active-path artifact.
    branch and archive values, `--set-phase decide --set-status done`, and an
    event naming the validated synthesis path. Include `--project-dir
    .project/next` in lookahead and require returned `decide/done`. Confirm the
-   settled outcome, link SYNTHESIS.md again, and name
-   the next phase: the roadmap phase in program scope, planning otherwise.
-   When routed by an active `$gsd-path`, return control to
-   that router. When invoked directly, stop and tell the user to explicitly
-   invoke `$gsd-path`, which routes to that next phase; do not invoke an
-   explicit-only sibling skill yourself.
+   settled outcome, link SYNTHESIS.md again, and use the executable phase
+   handoff in AGENTS.md.
 
 ## Rules
 
