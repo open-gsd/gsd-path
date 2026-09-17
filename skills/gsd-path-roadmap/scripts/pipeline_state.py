@@ -654,10 +654,11 @@ def status_state(repo: Path, project_dir: str = ".project") -> dict[str, object]
         "undo": None,
         "collect_artifact": None,
     }
+    completion = _completion_status(resolved, state, project_dir)
     return {
         "schema": STATUS_SCHEMA,
         "advance": False,
-        "completion": _completion_status(resolved, state, project_dir),
+        "completion": completion,
         "state": state,
         "route": route,
         "path": str(_track_root(resolved, project_dir) / "STATE.md"),
@@ -682,11 +683,12 @@ def status_state(repo: Path, project_dir: str = ".project") -> dict[str, object]
         "lookahead": lookahead.exists() or lookahead.is_symlink(),
         "journals": journals,
         "next_skill": _next_skill(route if isinstance(route, dict) else {}),
-        "handoff": phase_handoff(state, route, _track_root(resolved, project_dir) / "STATE.md"),
+        "handoff": phase_handoff(state, route, _track_root(resolved, project_dir) / "STATE.md", completion),
     }
 
 
-def phase_handoff(state: Mapping[str, object], route: Mapping[str, object], path: Path) -> dict[str, str]:
+def phase_handoff(state: Mapping[str, object], route: Mapping[str, object], path: Path,
+                  completion: Mapping[str, object]) -> dict[str, str]:
     """Present the authoritative route without granting continuation authority."""
     action = route["action"]
     if action == "run-phase":
@@ -694,8 +696,11 @@ def phase_handoff(state: Mapping[str, object], route: Mapping[str, object], path
         router_next = f"Continue with {route['phase']}; honor its input and approval gates."
     else:
         next_action = router_next = f"{action}: {route['reason']}"
+    outcome = f"{state['phase']}/{state['status']}"
+    if completion["status"] == "unverified":
+        outcome = f"Unverified: {outcome}"
     return {
-        "outcome": f"{state['phase']}/{state['status']}",
+        "outcome": outcome,
         "review": str(path),
         "next": next_action,
         "phase_next": next_action,

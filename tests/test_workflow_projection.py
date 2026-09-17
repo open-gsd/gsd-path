@@ -41,13 +41,19 @@ class WorkflowProjectionTests(unittest.TestCase):
             remote = Path(tmp) / 'origin.git'
             fixture.make_publishable_bound_repo(repo, remote)
             archive, _ = fixture.ship_canonical_bound(repo)
-            self.assertEqual(self.status(repo).get('completion', {}).get('status'), 'unverified')
+            pending = self.status(repo)
+            self.assertEqual(pending['completion']['status'], 'unverified')
+            self.assertEqual(pending['handoff']['outcome'], 'Unverified: shipped/done')
+            self.assertEqual(pending['state']['phase'], 'shipped')
+            self.assertEqual(pending['state']['status'], 'done')
             integrated = fixture.integrate(repo)
             self.assertEqual(integrated.returncode, 0, integrated.stderr)
             refs = run_git(repo, 'show-ref').stdout
             head = run_git(repo, 'rev-parse', 'HEAD').stdout
             state = (repo / '.project/STATE.md').read_bytes()
-            self.assertEqual(self.status(repo)['completion']['status'], 'verified')
+            verified = self.status(repo)
+            self.assertEqual(verified['completion']['status'], 'verified')
+            self.assertEqual(verified['handoff']['outcome'], 'shipped/done')
             self.assertEqual(run_git(repo, 'show-ref').stdout, refs)
             self.assertEqual(run_git(repo, 'rev-parse', 'HEAD').stdout, head)
             self.assertEqual((repo / '.project/STATE.md').read_bytes(), state)
@@ -85,12 +91,14 @@ class WorkflowProjectionTests(unittest.TestCase):
                 self.assertEqual(arguments[0], "gh")
                 return subprocess.run([str(missing_gh), *arguments[1:]], check=False)
             output = io.StringIO()
-            with mock.patch.object(integration, "run_command", side_effect=unavailable_gh), \
+            with mock.patch.object(integration, "run_command", side_effect=unavailable_gh) as github, \
                  contextlib.redirect_stdout(output):
                 exit_code = pipeline_state.main(["status", "--repo", str(repo)])
             self.assertEqual(exit_code, 0)
+            self.assertEqual(github.call_count, 1)
             payload = json.loads(output.getvalue())
             self.assertEqual(payload["completion"]["status"], "unverified")
+            self.assertEqual(payload["handoff"]["outcome"], "Unverified: shipped/done")
             self.assertIn(str(missing_gh), payload["completion"]["reason"])
             self.assertEqual(payload["state"]["phase"], "shipped")
             self.assertEqual(payload["route"]["action"], "run-phase")
@@ -98,6 +106,9 @@ class WorkflowProjectionTests(unittest.TestCase):
             self.assertEqual(payload["route"]["mode"], "validate-integrated")
             self.assertEqual(payload["next_skill"], "gsd-path-ship")
             self.assertEqual(payload["handoff"]["next"], "Invoke $gsd-path to continue with ship.")
+            self.assertEqual(payload["handoff"]["phase_next"], payload["handoff"]["next"])
+            self.assertEqual(payload["handoff"]["router_next"],
+                             "Continue with ship; honor its input and approval gates.")
             self.assertEqual(payload["pending_answers"], [])
             self.assertEqual(probe.workflow_projection(payload)["label"], "Unverified")
             self.assertEqual(run_git(repo, "show-ref").stdout, refs)
