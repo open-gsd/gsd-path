@@ -87,8 +87,8 @@ In the **project directory**, type explicitly:
 
 Use the [router and phase invocation table](README.md#install-summary) for your host.
 
-“Continue the project” does not advance a phase. With an owned
-`.project/STATE.md` it reports the current handoff and next skill, read-only.
+For plain prompts such as “continue the project,” see the
+[invocation and handoff rules](README.md#the-flow).
 
 **One phase only?** e.g. `/gsd-path-plan` — see skill table in [DOCS.md](DOCS.md#using).
 Need to talk through a question without advancing? Use `/gsd-path-discuss`;
