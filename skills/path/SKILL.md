@@ -66,19 +66,27 @@ GitHub repository and no owned `.project/STATE.md` is active for that request.
    local workspace when absent; do not infer account ownership or visibility.
    Derive `gsd-path/M001` as the branch. The default checkout is
    `<resolved-workspace>/<repo-name>`; propose the distinct sibling
-   `<resolved-workspace>/<repo-name>-gsd-path` as the linked worktree. The user
+   `<resolved-workspace>/<repo-name>-gsd-path` as the linked worktree. When
+   starting in an empty non-Git folder, propose that existing folder as the
+   linked worktree with `--reuse-empty-worktree`, and a distinct absent default
+   checkout beside it. Use the parent as workspace so the journal stays outside
+   the worktree. Preserve the invocation folder and all its contents; never
+   delete it or STATE.md to satisfy a preview. A nonempty folder requires a
+   different target or an explicit recovery. The user
    may choose another workspace or worktree path before approval.
 2. Resolve the bundled `scripts/bootstrap_repository.py` to an absolute path.
    Run its `preview` command with the exact owner, repository, visibility,
    workspace, default checkout, linked worktree, and optional description. The
    helper checks authentication, remote state, path parents, and any matching
    transaction journal without mutation. `mode: create` means every target is
-   absent; `mode: resume` means the exact approved journal exists and the helper
+   absent, except an explicitly approved empty linked-worktree directory;
+   `mode: resume` means the exact approved journal exists and the helper
    can verify and adopt completed stages; `mode: complete` names an already
    initialized binding. Any ambiguity or unowned collision blocks.
 3. Present **Outcome** as a repository-creation preview. Present **Review** with
    the proposed GitHub URL, visibility, default-checkout path, GSD Path branch,
-   and linked-worktree path, all marked not yet created. Present **Next** as one
+   and linked-worktree path. Mark new targets not yet created and an existing
+   empty worktree folder as reused in place. Present **Next** as one
    choice: `Create repository and worktree (recommended)` for `mode: create`, or
    `Resume verified repository transaction (recommended)` for `mode: resume`,
    followed by `Change details` and `Cancel`. Present this review inline; do not
@@ -115,10 +123,15 @@ selects a milestone branch.
    mutation. In particular, never stamp the marker onto unowned state.
 2. With no STATE.md, run the bundled
    `python3 <absolute-bundled-script> initialize --repo <absolute-root>
-   --template <absolute-state-template>` helper
+   --template <absolute-state-template> --require-git` helper
    (`scripts/detect_project.py`) before asking anything. Do not classify
    brownfield, greenfield, or orphaned `.project/` from a directory listing or
-   conversation. If the command exits nonzero, returns `error`, or returns
+   conversation. Handle `route: setup-repository` before the write gate: the
+   helper left the folder unchanged and wrote no state. Ask whether to create
+   a new GitHub repository (recommended for an empty folder) or use an existing
+   repository. A new-repository choice enters the preview transaction above;
+   an existing-repository choice requires its path before continuing. Do not
+   bind a branch or enter a phase yet. If the command exits nonzero, returns `error`, or returns
    `wrote_state: false`, report the error and block without routing or claiming
    STATE.md was written. Otherwise follow the JSON `verdict` / `route` exactly.
    `initialize` classifies and, for brownfield or greenfield, writes STATE.md

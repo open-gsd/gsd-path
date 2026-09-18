@@ -56,6 +56,22 @@ class DetectProjectTests(unittest.TestCase):
     def git(self, repo: Path, *args: str) -> None:
         subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True)
 
+    def test_startup_without_git_preserves_folder_without_state(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            identity = repo.stat().st_ino
+            result = subprocess.run(
+                [sys.executable, str(SCRIPT), "initialize", "--repo", str(repo),
+                 "--template", str(ROOT / "skills/gsd-path/templates/state.md"),
+                 "--require-git"], cwd=repo, capture_output=True, text=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            payload = json.loads(result.stdout)
+            self.assertEqual(payload["route"], "setup-repository")
+            self.assertFalse(payload["wrote_state"])
+            self.assertEqual(repo.stat().st_ino, identity)
+            self.assertEqual(list(repo.iterdir()), [])
+
     def test_empty_directory_is_greenfield(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary)

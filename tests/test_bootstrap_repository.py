@@ -144,7 +144,7 @@ class BootstrapRepositoryTests(unittest.TestCase):
             str(repository_template),
         )
 
-    def complete_bootstrap(self, root: Path):
+    def complete_bootstrap(self, root: Path, reuse_empty: bool = False):
         workspace = root / "workspace"
         workspace.mkdir()
         binary, remotes = self.write_fake_gh(root)
@@ -164,7 +164,20 @@ class BootstrapRepositoryTests(unittest.TestCase):
         command = self.bootstrap_command(
             workspace, checkout, worktree, repository_template
         )
-        created = self.run_command(*command, cwd=workspace, env=environment)
+        invocation = workspace
+        if reuse_empty:
+            worktree.mkdir()
+            identity = worktree.stat().st_ino
+            invocation = worktree
+            command += ("--reuse-empty-worktree",)
+            preview_command = tuple("preview" if arg == "create" else arg for arg in command)
+            preview = self.run_command(*preview_command, cwd=invocation, env=environment)
+            self.assertEqual(preview.returncode, 0, preview.stderr)
+            self.assertEqual(json.loads(preview.stdout)["mode"], "create")
+            self.assertEqual(list(worktree.iterdir()), [])
+        created = self.run_command(*command, cwd=invocation, env=environment)
+        if reuse_empty:
+            self.assertEqual(worktree.stat().st_ino, identity)
         self.assertEqual(created.returncode, 0, created.stderr)
         self.assertEqual(
             self.git(worktree, "branch", "--show-current").stdout.strip(),
@@ -180,11 +193,22 @@ class BootstrapRepositoryTests(unittest.TestCase):
         )
         return workspace, checkout, worktree, remotes, environment, command
 
+    def test_create_in_empty_invocation_folder_preserves_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            _, _, worktree, _, environment, command = self.complete_bootstrap(
+                Path(temporary), reuse_empty=True
+            )
+            self.assertTrue((worktree / ".project/STATE.md").is_file())
+            repeated = self.run_command(*command, cwd=worktree, env=environment)
+            self.assertEqual(repeated.returncode, 0, repeated.stderr)
+
     def test_create_rejects_unjournaled_remote_and_path_collisions(self) -> None:
         cases = (
             ("remote", "GitHub repository already exists"),
             ("checkout", "default checkout path already exists"),
             ("worktree", "linked worktree path already exists"),
+            ("nonempty", "linked worktree path already exists"),
+            ("symlink", "linked worktree path already exists"),
         )
         for collision, expected in cases:
             with self.subTest(collision=collision), tempfile.TemporaryDirectory() as temporary:
@@ -200,11 +224,18 @@ class BootstrapRepositoryTests(unittest.TestCase):
                     worktree=str(workspace / "demo-gsd-path"),
                     branch="gsd-path/M001",
                     description=None,
+                    reuse_empty_worktree=collision in {"nonempty", "symlink"},
                 )
                 if collision == "checkout":
                     request.checkout_path.mkdir()
-                elif collision == "worktree":
+                elif collision in {"worktree", "nonempty"}:
                     request.worktree_path.mkdir()
+                    if collision == "nonempty":
+                        (request.worktree_path / "keep.txt").write_text("keep")
+                elif collision == "symlink":
+                    target = workspace / "empty"
+                    target.mkdir()
+                    request.worktree_path.symlink_to(target, target_is_directory=True)
 
                 with mock.patch.object(
                     bootstrap_repository, "gh_authentication"
@@ -223,6 +254,10 @@ class BootstrapRepositoryTests(unittest.TestCase):
                         )
 
                 self.assertFalse(request.journal_path.exists())
+                if collision == "nonempty":
+                    self.assertEqual((request.worktree_path / "keep.txt").read_text(), "keep")
+                if collision == "symlink":
+                    self.assertTrue(request.worktree_path.is_symlink())
 
     def test_create_rejects_remote_default_other_than_main(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
