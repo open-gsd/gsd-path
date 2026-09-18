@@ -27,23 +27,140 @@ proof and each host's guard tier.
 | **[UPDATE.md](UPDATE.md)** | Refresh skills, hooks, or contracts |
 | [WORKFLOW.md](WORKFLOW.md) | Phase-by-phase agent SOP |
 | [HOOKS.md](HOOKS.md) | Optional archive/git guard hooks |
+| [daemon/README.md](daemon/README.md) | Dashboard, menu-bar app, and monitoring setup |
 | [RELEASE.md](RELEASE.md) | Maintainer CI and npm release cycle |
 | [GUIDE.md](GUIDE.md) | Pointer to the guides above |
 
-```bash
-# New user
-node scripts/install.mjs --all --dry-run && node scripts/install.mjs --all
-cd your-repo && node scripts/install.mjs --all --project "$(pwd)"
-# In agent: invoke the router (see Install summary below)
+## Install from npm
 
-# Already installed
-node scripts/install.mjs --update
-cd your-repo && node scripts/install.mjs --update --project "$(pwd)"   # also refresh .gsd-path/
+Requires **Node.js 18.17+** for the npm installer and **Python 3.9+** for
+project contracts and pipeline helpers. Install and sign in to a supported
+coding-agent host separately; GSD Path installs its skills, not the host itself.
+The public npm package is **[@opengsd/gsd-path](https://www.npmjs.com/package/@opengsd/gsd-path)**.
+
+```bash
+# Interactive installer: choose hosts, install scope, contracts, and hooks
+npx @opengsd/gsd-path@latest
+
+# Or preview and install skills for all supported hosts
+npx @opengsd/gsd-path@latest --all --dry-run
+npx @opengsd/gsd-path@latest --all
+
+# Add contracts and the status runtime to your project
+npx @opengsd/gsd-path@latest --all --project /path/to/your-repo
+
+# Update existing installs
+npx @opengsd/gsd-path@latest --update
+npx @opengsd/gsd-path@latest --update --project /path/to/your-repo
 ```
 
-Interactive: `npx @opengsd/gsd-path` with no flags opens the OpenGSD wizard (pick hosts, scope, contracts, hooks; dry-run first)
+Use host flags such as `--claude --codex` instead of `--all` to select hosts.
+For project-local skills, run from your project directory and add `--local`
+to install and update commands. `--project PATH` selects where contracts are
+written; it does not change the directory used by `--local`. Run
+`npx @opengsd/gsd-path@latest --help` for all options. After installing, invoke
+`$path` in Codex or `/path` on slash-command hosts to start the pipeline.
+See [Install (summary)](#install-summary) for the host list and source-checkout commands.
+The npm command installs the latest published release; a source checkout may
+contain newer changes.
 
-npm (once published to npm): `npx @opengsd/gsd-path --all` · Help: `node scripts/install.mjs --help`
+### Start your first project
+
+1. Open your project folder in your coding-agent host. Existing repositories
+   need Git; GitHub repository creation and pull-request operations also need
+   an authenticated GitHub CLI (`gh`).
+2. Start or reload the host session so it discovers the installed skills.
+3. Invoke `$path` in Codex, or `/path` on slash-command hosts. The router
+   identifies the project and guides you through the required inputs and approvals.
+4. Resume later from the same folder with the router. Use `$path status`
+   (Codex) or `/path status` to inspect progress without advancing.
+
+For a missing skill or an install problem, run:
+
+```bash
+npx @opengsd/gsd-path@latest --doctor --project /path/to/your-repo
+```
+
+Add `--local` when checking project-local skills, from that project directory.
+See [QUICK.md](QUICK.md) for the first-run checklist and [HOOKS.md](HOOKS.md)
+for optional Git and host guard hooks.
+
+## Dashboard and menu-bar toolbar
+
+The optional **OpenGSD Path monitor** shows your projects without opening each
+project's `.project/` files. It watches the folders you choose and reads project
+state; it does not run pipeline commands or advance phase gates.
+The monitor is a separate install from the npm skills package.
+
+### Dashboard
+
+The project board shows blocked, active, and shipped work, with milestone and
+phase progress, task counts, last activity, and available usage data. Use the
+top toolbar to filter or search projects, refresh status, and open Settings for
+watched folders, plugin management, and appearance.
+
+![OpenGSD Path dashboard showing sample projects, phase progress, and toolbar controls](docs/images/dashboard-board.png)
+
+Click a project to see its milestone roadmap, tasks, success criteria, review
+results, verification history, and activity. Usage includes tokens and turns
+from supported host session logs; cost estimates require model prices in the
+daemon configuration.
+
+![Project dashboard showing milestone progress, criteria, tasks, and usage with sample data](docs/images/dashboard-project.png)
+
+### macOS menu bar
+
+Click the OpenGSD Path menu-bar icon for a compact project list with phase
+meters and task progress. Click a project to open its dashboard page. The
+bottom toolbar opens the dashboard, plugin settings, and watched folders;
+it also provides rescan, appearance, and quit controls. The daemon row shows
+its running state and provides restart and stop controls. Option-click the
+menu-bar icon to open the dashboard directly.
+
+<img src="docs/images/macos-menu-bar.png" alt="OpenGSD Path native macOS panel with sample projects and its bottom toolbar" width="400">
+
+*Screenshots show the current UI with sample project data. The native panel is
+captured in its preview window.*
+
+### Install the monitor
+
+The monitor requires Python 3.9+. From a source checkout, preview the setup,
+then install (macOS/Linux shell):
+
+```bash
+git clone https://github.com/open-gsd/gsd-path.git
+cd gsd-path
+PYTHONPATH=daemon python3 -m gsd_daemon install --dry-run
+PYTHONPATH=daemon python3 -m gsd_daemon install
+```
+
+On Windows, after cloning and entering `gsd-path`, use PowerShell:
+
+```powershell
+$env:PYTHONPATH = "daemon"
+python -m gsd_daemon install --dry-run
+python -m gsd_daemon install
+```
+
+On Windows, launch the installed shortcut for this session before opening the
+dashboard. It starts automatically at future logins:
+
+```powershell
+Start-Process "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup\gsd-path-daemon.lnk"
+```
+
+Open **http://127.0.0.1:8765**, then use **Settings → Watched folders** to add
+your project folders. The installer creates an isolated Python environment and
+configures autostart. On macOS it also builds and installs the native menu-bar
+app; this requires macOS 12+ and Xcode Command Line Tools (`swiftc`). On
+macOS, use `--no-tray` for the dashboard only. Linux autostart runs the
+dashboard; launch the optional tray separately with
+`~/.gsd-path/venv/bin/gsd-path-daemon tray`. Windows uses a tray-and-dashboard
+Startup shortcut; see the [daemon guide](daemon/README.md) for platform details.
+
+See the [daemon guide](daemon/README.md) for configuration, usage pricing,
+manual startup, and platform setup, or the [macOS guide](daemon/macos/README.md)
+for native menu-bar details.
 
 ## Skills
 
@@ -92,7 +209,7 @@ flowchart TD
     B --> W{"wave loop"}
     W -->|"briefs linted at base SHA"| C["parallel coders, isolated worktrees"]
     C -->|"streaming: dependents dispatch as deps land"| V{"wave review"}
-    V -->|"full — or deep: contract + adversarial lenses"| F{"verdict"}
+    V -->|"full / verify-only / deep"| F{"verdict"}
     F -->|"blocked → criterion triage"| W
     F -->|"pass → next wave"| W
     F -->|"all waves pass"| S["6 · ship — final review"]
@@ -218,9 +335,13 @@ top-level `SYNTHESIS.md`) remain active project metadata.
 
 ## Install (summary)
 
-Node 18.17+. Project installs also require Python 3.9+. Validates package,
+Node 18.17+ for the Node installer; Python 3.9+ for project installs and pipeline
+helpers. Validates package,
 backs up existing skills, and rolls back on failure.
 **Always** `--dry-run` first when unsure.
+
+The commands below run from a source checkout. For npm, replace
+`node scripts/install.mjs` with `npx @opengsd/gsd-path@latest`.
 
 ```bash
 node scripts/install.mjs --all --dry-run
@@ -286,6 +407,7 @@ make install && make verify    # same path as GitHub Actions CI
 | `HOOKS.md` | Guard hooks |
 | `skills/` | Canonical skills and generated aliases declared in [the resource manifest](scripts/skill-resources.json) |
 | `platforms/` | Host dispatch adapters |
+| `daemon/` | Project monitor, dashboard, and tray apps |
 | `scripts/install.mjs` | Installer (npm `gsd-path` bin) |
 | `scripts/install.py` | Python installer |
 | `AGENTS.md` | Operating rules (installed to projects) |
