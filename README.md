@@ -142,6 +142,13 @@ python -m gsd_daemon install --dry-run
 python -m gsd_daemon install
 ```
 
+On Windows, launch the installed shortcut for this session before opening the
+dashboard. It starts automatically at future logins:
+
+```powershell
+Start-Process "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup\gsd-path-daemon.lnk"
+```
+
 Open **http://127.0.0.1:8765**, then use **Settings → Watched folders** to add
 your project folders. The installer creates an isolated Python environment and
 configures autostart. On macOS it also builds and installs the native menu-bar
