@@ -41,7 +41,9 @@ Details: [docs/trust-validation/TRUST-VALIDATION-SPEC.md](docs/trust-validation/
 
 ## Recording trust evidence
 
-Before bumping `package.json` or publishing:
+Set the intended version in `package.json` and `package-lock.json` before
+freezing the candidate. Version changes invalidate existing candidate proof.
+Before publishing:
 
 1. Freeze a clean candidate on `main`:
 
@@ -73,10 +75,35 @@ current candidate proof before either publication path can pass `verify:release`
 
 ### Prerequisites
 
-- Repository secret `NPM_TOKEN` — npm Automation token with publish access for
-  the `gsd-path` package.
+- For automated releases, an npm Trusted Publisher connection for GitHub
+  owner `open-gsd`, repository `gsd-path`, workflow `release.yml`, with direct
+  `npm publish` allowed. Leave environment blank; this workflow uses none.
+  No `NPM_TOKEN` secret is needed.
 - `package.json` `version` matches the release you are shipping.
 - `npm run verify:release` passes on the release commit.
+
+### First npm publication
+
+The GitHub release and npm package are separate. If the npm package does not
+exist yet, publish the verified release checkout interactively first:
+
+```bash
+npm login --registry=https://registry.npmjs.org
+npm whoami --registry=https://registry.npmjs.org
+npm publish --access public --registry=https://registry.npmjs.org
+```
+
+Complete npm's browser login and publishing authentication when prompted.
+The publish command runs `prepublishOnly`; do not bypass the evidence gate.
+Do not push the release tag until this first publication is complete, since
+automated publishing needs the package's Trusted Publisher connection first.
+Create the first version's GitHub release separately after confirming npm
+publication; do not rerun automated publishing for an already published version.
+
+Then open the package's npm settings and add the Trusted Publisher connection
+described above. Future releases use GitHub OIDC on hosted runners. The workflow
+uses Node 24, which supplies an npm CLI supporting trusted publishing.
+See [npm's setup guide](https://docs.npmjs.com/trusted-publishers/).
 
 ### Option A — tag push (recommended)
 
@@ -93,8 +120,13 @@ publishes to npm, and creates a GitHub Release for the tag.
 
 1. Open **Actions → Release → Run workflow** on the release commit.
 2. Enter the semver version (for example `1.0.1`).
-3. The workflow creates and pushes `v1.0.1`, which starts the publish job
-   (`verify:release` → npm → GitHub Release).
+3. The same job verifies the release, creates `v1.0.1`, publishes to npm,
+   and creates the GitHub Release. It does not depend on a bot-created tag
+   triggering another workflow. An existing tag must point to this commit.
+
+Both triggers require the requested version to match `package.json`; the
+workflow never changes the frozen package version. Publish runs are serialized
+across tags and manual dispatches.
 
 ### After publish
 
