@@ -27,7 +27,7 @@ archive: null
 RUNTIME_PENDING = """import json
 print(json.dumps({
     "schema": "gsd-path/status/v1",
-    "state": {},
+    "state": {"phase": "build", "status": "active"},
     "route": {},
     "pending_answers": [{
         "answer": "A001",
@@ -176,7 +176,7 @@ class AttentionTests(unittest.TestCase):
         self.assertEqual(status.status_source, "parse-only")
         self.assertEqual(status.pending_answers, [])
         self.assertEqual([item["id"] for item in status.answers], ["A001"])
-        self.assertEqual(self.kinds(status), ["question"])
+        self.assertEqual(self.kinds(status), ["question", "unverified"])
         item = status.attention[0]
         self.assertEqual(item["label"], "Default poll interval: 5s vs 10s?")
         self.assertEqual(item["ref"], "A001")
@@ -206,7 +206,7 @@ class AttentionTests(unittest.TestCase):
             encoding="utf-8",
         )
         status = probe.probe_project(self.root)
-        self.assertEqual(self.kinds(status), ["blocked"])
+        self.assertEqual(self.kinds(status), ["blocked", "unverified"])
         item = status.attention[0]
         self.assertEqual(item["label"], "T002 — Second task")
         self.assertEqual(item["ref"], "T002")
@@ -219,8 +219,8 @@ class AttentionTests(unittest.TestCase):
         (review_dir / "FINAL.md").write_text(FINAL_REVIEW_BLOCKED, encoding="utf-8")
         (review_dir / "wave-1.cycle1.md").write_text(WAVE_REVIEW_PASS, encoding="utf-8")
         status = probe.probe_project(self.root)
-        self.assertEqual(self.kinds(status), ["failed", "failed"])
-        review_item, criterion_item = status.attention
+        self.assertEqual(self.kinds(status), ["failed", "failed", "unverified"])
+        review_item, criterion_item, _ = status.attention
         self.assertEqual(review_item["label"], "FINAL.md — blocked")
         self.assertEqual(review_item["ref"], "FINAL.md")
         self.assertEqual(criterion_item["label"], "SC4 — Windows tray parity verified")
@@ -233,14 +233,14 @@ class AttentionTests(unittest.TestCase):
         review_dir.mkdir()
         (review_dir / "wave-1.cycle1.md").write_text(WAVE_REVIEW_PASS, encoding="utf-8")
         status = probe.probe_project(self.root)
-        self.assertEqual(status.attention, [])
-        self.assertEqual(status.health, "green")
+        self.assertEqual(self.kinds(status), ["unverified"])
+        self.assertEqual(status.health, "amber")
 
     def test_stale_active_project_amber(self) -> None:
         make_project(self.root)
         age_tree(self.root / ".project", seconds=3 * 86400)
         status = probe.probe_project(self.root)
-        self.assertEqual(self.kinds(status), ["stale"])
+        self.assertEqual(self.kinds(status), ["stale", "unverified"])
         item = status.attention[0]
         self.assertEqual(item["label"], "no activity for 3d")
         self.assertIsNone(item["ref"])
@@ -249,18 +249,39 @@ class AttentionTests(unittest.TestCase):
     def test_shipped_project_not_stale(self) -> None:
         make_project(self.root)
         state_path = self.root / ".project" / "STATE.md"
-        state_path.write_text(STATE.replace("status: active", "status: shipped"),
-                              encoding="utf-8")
+        state_path.write_text(
+            STATE.replace("phase: build", "phase: shipped").replace("status: active", "status: done"),
+            encoding="utf-8",
+        )
+        runtime_dir = self.root / ".gsd-path" / "runtime"
+        runtime_dir.mkdir(parents=True)
         age_tree(self.root / ".project", seconds=3 * 86400)
-        status = probe.probe_project(self.root)
-        self.assertEqual(status.attention, [])
-        self.assertEqual(status.health, "green")
+        for completion in ("verified", "unverified"):
+            with self.subTest(completion=completion):
+                payload = {
+                    "schema": "gsd-path/status/v1",
+                    "state": {"phase": "shipped", "status": "done"},
+                    "completion": {"status": completion},
+                }
+                (runtime_dir / "pipeline_state.py").write_text(
+                    "import json\nprint(json.dumps(" + repr(payload) + "))\n",
+                    encoding="utf-8",
+                )
+                status = probe.probe_project(self.root)
+                if completion == "verified":
+                    self.assertEqual(status.workflow["state"], "shipped")
+                    self.assertEqual(status.attention, [])
+                    self.assertEqual(status.health, "green")
+                else:
+                    self.assertEqual(status.workflow["state"], "unverified")
+                    self.assertEqual(self.kinds(status), ["stale", "unverified"])
+                    self.assertEqual(status.health, "amber")
 
     def test_recently_active_project_not_stale(self) -> None:
         make_project(self.root)
         status = probe.probe_project(self.root)
-        self.assertEqual(status.attention, [])
-        self.assertEqual(status.health, "green")
+        self.assertEqual(self.kinds(status), ["unverified"])
+        self.assertEqual(status.health, "amber")
 
     def test_health_attention_round_trip(self) -> None:
         make_project(self.root)
