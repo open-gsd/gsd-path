@@ -159,7 +159,7 @@ See [UPDATE.md](UPDATE.md) for the full updating guide. Quick reference:
 ```bash
 node scripts/install.mjs --update              # global roots with existing install
 node scripts/install.mjs --update --local      # current project only
-npx gsd-path@latest --update                   # from npm, once published
+npx @opengsd/gsd-path@latest --update                   # from npm, once published
 ```
 
 Previous copies move to `disabled-gsd-skills` beside each root. The router may
@@ -466,6 +466,6 @@ node scripts/install.mjs --hooks-refresh --project /path/to/repo
 node scripts/install.mjs --hooks-refresh-full --project /path/to/repo
 
 # From npm (once the package is published to npm)
-npx gsd-path --all
-npx gsd-path@latest --update
+npx @opengsd/gsd-path --all
+npx @opengsd/gsd-path@latest --update
 ```

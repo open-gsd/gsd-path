@@ -9,10 +9,10 @@ import { parse } from 'yaml';
 const release = parse(fs.readFileSync(new URL('../.github/workflows/release.yml', import.meta.url), 'utf8'));
 const job = release.jobs.publish;
 
-function resolveVersion(event, requested, ref = 'v1.0.1') {
+function resolveVersion(event, requested, ref = 'v1.0.1', name = '@opengsd/gsd-path') {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'release-version-'));
   try {
-    const pkg = JSON.stringify({ name: 'gsd-path', version: '1.0.1' });
+    const pkg = JSON.stringify({ name, version: '1.0.1' });
     fs.writeFileSync(path.join(dir, 'package.json'), pkg);
     const output = path.join(dir, 'output');
     const result = spawnSync('bash', ['-e', '-o', 'pipefail', '-c', job.steps.find(step => step.id === 'version').run], {
@@ -66,6 +66,24 @@ test('version mismatch and invalid input fail before emitting release outputs', 
       assert.equal(result.output, '');
     }
   }
+});
+
+test('release rejects an unscoped or wrong-owner package before publication', () => {
+  for (const name of ['gsd-path', '@other/gsd-path']) {
+    for (const event of ['push', 'workflow_dispatch']) {
+      const result = resolveVersion(event, '1.0.1', 'v1.0.1', name);
+      assert.notEqual(result.status, 0);
+      assert.equal(result.output, '');
+    }
+  }
+});
+
+test('npm packs the organization-scoped package', () => {
+  const result = spawnSync('npm', ['pack', '--dry-run', '--json'], {
+    cwd: new URL('../', import.meta.url), encoding: 'utf8',
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(JSON.parse(result.stdout)[0].name, '@opengsd/gsd-path');
 });
 
 function assertFrozenPackage(steps, event) {

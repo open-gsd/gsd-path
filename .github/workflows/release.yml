@@ -49,6 +49,11 @@ jobs:
             echo "invalid semver version: $version" >&2
             exit 1
           fi
+          package_name="$(node -p "require('./package.json').name")"
+          if [[ "$package_name" != "@opengsd/gsd-path" ]]; then
+            echo "release package must be @opengsd/gsd-path, found $package_name" >&2
+            exit 1
+          fi
           package_version="$(node -p "require('./package.json').version")"
           if [[ "$version" != "$package_version" ]]; then
             echo "release version $version does not match package version $package_version" >&2
@@ -107,7 +112,7 @@ jobs:
           {
             echo "GSD Path $VERSION"
             echo
-            echo "Published to npm as \`gsd-path@$VERSION\`."
+            echo "Published to npm as \`@opengsd/gsd-path@$VERSION\`."
             echo
             echo "Trust evidence for this version is validated by \`npm run verify:release\`."
             echo "See [HOST-MATRIX.md](docs/trust-validation/HOST-MATRIX.md) for per-host receipts."

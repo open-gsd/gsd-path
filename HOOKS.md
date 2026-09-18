@@ -36,7 +36,7 @@ careful review; they block common accidental violations.
 ## Install
 
 ```bash
-npx gsd-path --claude --project /path/to/repo --hooks
+npx @opengsd/gsd-path --claude --project /path/to/repo --hooks
 # or from clone:
 node scripts/install.mjs --claude --project /path/to/repo --hooks
 ```
@@ -45,7 +45,7 @@ For a project that already has `AGENTS.md` and `WORKFLOW.md`, initialize only
 the guards and keep those contracts unchanged:
 
 ```bash
-npx gsd-path --hooks-init --claude --project /path/to/repo
+npx @opengsd/gsd-path --hooks-init --claude --project /path/to/repo
 ```
 
 `--hooks` requires `--project`. Valid existing native settings for explicitly
@@ -94,8 +94,8 @@ Windows provides one).
 ### Updating after package upgrade
 
 ```bash
-npx gsd-path --hooks-refresh --project /path/to/repo
-npx gsd-path --hooks-refresh-full --project /path/to/repo   # + settings/git hooks
+npx @opengsd/gsd-path --hooks-refresh --project /path/to/repo
+npx @opengsd/gsd-path --hooks-refresh-full --project /path/to/repo   # + settings/git hooks
 ```
 
 `--hooks-refresh-full` refreshes existing managed `.claude/settings.json`,

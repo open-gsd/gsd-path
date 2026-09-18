@@ -73,8 +73,8 @@ node scripts/install.mjs --all             # apply
 **npm** (no clone — once the package is published to npm):
 
 ```bash
-npx gsd-path --all --dry-run
-npx gsd-path --all
+npx @opengsd/gsd-path --all --dry-run
+npx @opengsd/gsd-path --all
 ```
 
 **New repo** (skills + project rules):
@@ -263,7 +263,7 @@ Full tree: [README.md](README.md#handoff-contract).
 | --- | --- |
 | Global skills | `node scripts/install.mjs --update` |
 | Project-local skills | `node scripts/install.mjs --update --local` |
-| From npm (once published) | `npx gsd-path@latest --update` |
+| From npm (once published) | `npx @opengsd/gsd-path@latest --update` |
 | Guard scripts | `node scripts/install.mjs --hooks-refresh --project PATH` |
 | `AGENTS.md` / `WORKFLOW.md` | Manual merge — installer refuses overwrite |
 | Health check | `node scripts/install.mjs --doctor [--project PATH]` — read-only; flags missing/stale skills, hook drift, and bad pipeline state |

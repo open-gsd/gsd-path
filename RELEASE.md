@@ -41,8 +41,9 @@ Details: [docs/trust-validation/TRUST-VALIDATION-SPEC.md](docs/trust-validation/
 
 ## Recording trust evidence
 
-Set the intended version in `package.json` and `package-lock.json` before
-freezing the candidate. Version changes invalidate existing candidate proof.
+Set the intended package name and version in `package.json` and
+`package-lock.json` before freezing the candidate. Changes to either invalidate
+existing candidate proof.
 Before publishing:
 
 1. Freeze a clean candidate on `main`:
@@ -84,6 +85,17 @@ current candidate proof before either publication path can pass `verify:release`
 
 ### First npm publication
 
+The npm package is `@opengsd/gsd-path`; `gsd-path` remains the executable name.
+The GitHub repository is `open-gsd/gsd-path` (a different namespace).
+The unscoped `gsd-path@1.0.0` was published by mistake. Do not delete or
+deprecate it, or configure its Trusted Publisher connection, without a separate
+owner decision. Configure publishing only for the scoped package below.
+
+The first corrected publication is prepared separately from the previously
+verified `v1.0.0` tag. That tag's evidence does not cover the package identity
+change. Any exception to frozen-candidate evidence requires explicit owner
+approval; the existing release gates remain in force.
+
 The GitHub release and npm package are separate. If the npm package does not
 exist yet, publish the verified release checkout interactively first:
 
@@ -124,17 +136,15 @@ publishes to npm, and creates a GitHub Release for the tag.
    and creates the GitHub Release. It does not depend on a bot-created tag
    triggering another workflow. An existing tag must point to this commit.
 
-Both triggers require the requested version to match `package.json`; the
-workflow never changes the frozen package version. Publish runs are serialized
-across tags and manual dispatches.
+Both triggers reject an unscoped or wrong-owner package name and require the
+requested version to match `package.json`; the workflow never changes the
+frozen package version. Publish runs are serialized across tags and manual
+dispatches.
 
 ### After publish
 
-Consumers can install from npm:
-
-```bash
-npx gsd-path@latest --update
-```
+Consumers can follow the [npm install instructions](README.md) or the
+[npm update instructions](UPDATE.md#from-npm).
 
 Update notices use `scripts/check_update.py`; until a version is on the registry,
 the helper stays silent (see [UPDATE.md](UPDATE.md)).

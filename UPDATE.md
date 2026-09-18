@@ -10,12 +10,12 @@ or change how it is installed.
 ## When to use what
 
 ```text
-Pulled new gsd-path / ran npx gsd-path@latest
+Pulled new gsd-path / ran npx @opengsd/gsd-path@latest
 └─ Skills feel stale or router shows old behavior?
    ├─ Global install     → install.mjs --update
    ├─ Project-local      → install.mjs --update --local  (from repo root)
    ├─ Project runtime    → install.mjs --update --project PATH  (refreshes .gsd-path/, keeps contracts)
-   └─ npm only           → npx gsd-path@latest --update
+   └─ npm only           → npx @opengsd/gsd-path@latest --update
 
 Installed with --hooks and upgraded guard scripts
 └─ install.mjs --hooks-refresh --project PATH
@@ -78,8 +78,8 @@ node scripts/install.mjs --update
 ### From npm
 
 ```bash
-npx gsd-path@latest --update --dry-run
-npx gsd-path@latest --update
+npx @opengsd/gsd-path@latest --update --dry-run
+npx @opengsd/gsd-path@latest --update
 ```
 
 ### Project-local only
@@ -188,7 +188,7 @@ Unrecognized or foreign `.project/` state is never auto-migrated — the router 
 | `--hooks-refresh` rejects an unmanaged guard | Move the foreign guard aside, then rerun refresh; use `--hooks-init` if guards are wanted |
 | `--hooks-refresh` rejects an unmanaged runtime file | Back up or merge that file, move it aside, then rerun refresh |
 | Undo skill update | Copy from `disabled-gsd-skills` next to skills root |
-| npm vs clone confusion | Pick one: `npx gsd-path@latest --update` **or** clone + `install.mjs --update` |
+| npm vs clone confusion | Pick one: `npx @opengsd/gsd-path@latest --update` **or** clone + `install.mjs --update` |
 | Router still shows update line | Run update; or ignore — notice is informational |
 
 Install issues (not updates): [QUICK.md](QUICK.md), [FULL.md](FULL.md), [DOCS.md](DOCS.md#help).

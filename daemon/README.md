@@ -269,7 +269,7 @@ one global op-lock — a second concurrent operation gets
   removed.
 
 Power users can always drive the plugin installer directly with
-`node scripts/install.mjs`, `python3 scripts/install.py`, or `npx gsd-path`
+`node scripts/install.mjs`, `python3 scripts/install.py`, or `npx @opengsd/gsd-path`
 from a checkout — the daemon is a convenience wrapper around the same
 installer.
 
