@@ -48,7 +48,6 @@ test('manual dispatch publishes in the same job after the release gate', () => {
   assert.ok(gate >= 0 && tag > gate && publish > tag);
   assert.equal(job.steps[tag].if, "github.event_name == 'workflow_dispatch'");
   assert.equal(job.steps[publish].if, undefined);
-  assert.equal(job.steps.find(step => step.name === 'Align package version'), undefined);
 });
 
 test('tag and manual versions resolve without changing the frozen package', () => {
@@ -68,3 +67,62 @@ test('version mismatch and invalid input fail before emitting release outputs', 
     }
   }
 });
+
+function assertFrozenPackage(steps, event) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'release-frozen-'));
+  try {
+    const frozen = new Map(['package.json', 'package-lock.json'].map(file => {
+      const bytes = JSON.stringify(JSON.parse(fs.readFileSync(new URL(`../${file}`, import.meta.url))));
+      fs.writeFileSync(path.join(dir, file), bytes);
+      fs.utimesSync(path.join(dir, file), 0, 0);
+      return [file, bytes];
+    }));
+    const version = JSON.parse(frozen.get('package.json')).version;
+    const run = command => {
+      const result = spawnSync('bash', ['--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', command], {
+        cwd: dir, encoding: 'utf8',
+        env: { ...process.env, TAG: `v${version}`, GIT_CONFIG_NOSYSTEM: '1',
+          GIT_CONFIG_GLOBAL: '/dev/null', GIT_AUTHOR_NAME: 'Release test',
+          GIT_AUTHOR_EMAIL: 'release@example.invalid', GIT_COMMITTER_NAME: 'Release test',
+          GIT_COMMITTER_EMAIL: 'release@example.invalid' },
+      });
+      assert.ifError(result.error);
+      assert.equal(result.status, 0, result.stderr);
+    };
+    run('git init -q && git add package.json package-lock.json && git commit -qm fixture');
+    for (const step of steps) {
+      if (step.if) {
+        assert.equal(step.if, "github.event_name == 'workflow_dispatch'");
+        if (event !== 'workflow_dispatch') continue;
+      }
+      assert.equal(typeof step.run, 'string');
+      run(`git() { if [[ "$1" == push ]]; then return 0; else command git "$@"; fi; }\n` +
+        step.run.replaceAll('${{ steps.version.outputs.version }}', version));
+      for (const [file, bytes] of frozen) {
+        assert.equal(fs.readFileSync(path.join(dir, file), 'utf8'), bytes, `${file} changed after release verification`);
+        assert.equal(fs.statSync(path.join(dir, file)).mtimeMs, 0, `${file} changed after release verification`);
+      }
+    }
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+const gateIndex = job.steps.findIndex(step => step.run === 'npm run verify:release');
+const publishIndex = job.steps.findIndex(step => step.run === 'npm publish --access public');
+const prepublication = job.steps.slice(gateIndex + 1, publishIndex);
+
+for (const event of ['push', 'workflow_dispatch']) {
+  test(`${event} preserves frozen package files between verification and publication`, () => {
+    assert.ok(gateIndex >= 0 && publishIndex > gateIndex);
+    assertFrozenPackage(prepublication, event);
+  });
+
+  test(`${event} detects version rewriting regardless of the step label`, () => {
+    const mutated = [...prepublication, {
+      name: 'Prepare publication',
+      run: 'npm version "${{ steps.version.outputs.version }}" --no-git-tag-version --allow-same-version',
+    }];
+    assert.throws(() => assertFrozenPackage(mutated, event), /package.json changed after release verification/);
+  });
+}
