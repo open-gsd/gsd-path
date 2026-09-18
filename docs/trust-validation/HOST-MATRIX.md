@@ -4,12 +4,14 @@
 is end-to-end trusted only when `npm run verify:release` finds a current passing
 full-milestone receipt for every host below.
 
-Release candidate `052475792bbe211f104d34a524c22db056bdee71` was frozen on
+The historical 1.0.0 candidate `052475792bbe211f104d34a524c22db056bdee71` was frozen on
 2026-09-15, after PRs #104, #106, #107, #108 and #110. Every host below holds a
 passing full-milestone receipt on that candidate, and
-`scripts/check_trust_evidence.py` validates all eleven.
+`scripts/check_trust_evidence.py` validated all eleven for that release.
+These receipts do not prove the current package version; see the
+[release contract](../../RELEASE.md#release-contract) for the required evidence.
 
-| Host | Install | Native guard installed | Full live milestone | Current posture |
+| Host | Install | Native guard installed | Full live milestone | Historical posture |
 |---|---|---|---|---|
 | Codex | automated | git-only tier: the `--ignore-user-config` harness run has no native hook, so Git hooks carry it | [codex.md](evidence/releases/1.0.0/codex.md) | **pass** on `0524757` |
 | Claude Code | automated | fail-closed project hook + Git hooks | [claude.md](evidence/releases/1.0.0/claude.md) | **pass** on `0524757` |
