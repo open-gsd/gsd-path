@@ -69,6 +69,13 @@ run all eleven host receipts against it, then seek the separate
 options, see the [assembly tool](evidence/releases/1.0.0/codex/release_receipt.py)
 usage docstring.
 
+Ordinary PR and `main` CI run automated tests, including the trust validator
+tests; they do not require refreshed release receipts. The manual **Release
+trust evidence** workflow validates a frozen candidate and its receipts. Both
+npm `prepublishOnly` and the Release workflow still require `verify:release`
+with current proof from all eleven hosts. Existing receipts remain evidence
+for their named candidate only.
+
 ### 1.0.0 receipts (2026-09-15)
 
 Frozen candidate: `052475792bbe211f104d34a524c22db056bdee71`. Harnesses were

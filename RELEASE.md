@@ -9,7 +9,7 @@ documented in [DOCS.md](DOCS.md); this file is for maintainers.
 | Workflow | Trigger | Gate | Purpose |
 | --- | --- | --- | --- |
 | [CI](.github/workflows/ci.yml) | Every push to `main` and every pull request | `npm run verify` on Node 18 and 20; `npm run test:daemon` | Offline disk contract, installer, guards, archive, and daemon package |
-| [Release trust](.github/workflows/release-trust.yml) | PR/push touching trust evidence, platforms, or host manifest; manual dispatch | `npm run verify:release` | Block contract or evidence drift before merge |
+| [Release trust](.github/workflows/release-trust.yml) | Every pull request and push to `main`; manual dispatch | PR/push: trust validator tests; manual: `npm run verify:release` | Test the proof validator during development; validate frozen-candidate receipts on demand |
 | [Dogfood](.github/workflows/dogfood.yml) | Weekly schedule or manual dispatch | Live host smoke | Opt-in live host invocation (requires API secrets) |
 | [Release](.github/workflows/release.yml) | Version tag `v*` or manual dispatch | `npm run verify:release`, then npm publish + GitHub Release | Ship a trusted version to npm |
 
@@ -17,7 +17,7 @@ Local equivalents:
 
 ```bash
 make verify           # same offline gate as CI
-make verify-release   # same trust gate as release-trust / release
+make verify-release   # frozen-candidate gate: manual release-trust / release
 make test-daemon      # daemon-only subset
 ```
 
@@ -58,8 +58,16 @@ Before bumping `package.json` or publishing:
    npm run verify:release
    ```
 
-4. Commit receipts and merge. The **Release trust** workflow re-runs the same
-   gate on the pull request.
+4. Commit receipts and merge. Run **Actions → Release trust evidence → Run
+   workflow** on the frozen candidate with its receipts to re-run the strict
+   gate before publication.
+
+Ordinary PRs and `main` pushes run automated verification, including the trust
+validator tests, without requiring refreshed release receipts. The
+`verify-release-evidence` check name remains active on every PR. Product and
+host contract changes can therefore merge before the next candidate is frozen.
+Passing PR checks does not establish release trust: all eleven hosts must have
+current candidate proof before either publication path can pass `verify:release`.
 
 ## Publishing
 
