@@ -78,7 +78,7 @@ Use the [router and phase invocation table](README.md#install-summary) for your 
 
 ### Requirements
 
-- **Node 18.17+** for `scripts/install.mjs` (recommended; also the npm `gsd-path` bin once the package is published to npm)
+- **Node 18.17+** for `scripts/install.mjs` (recommended; also the npm `gsd-path` bin)
 - **Python 3.9+** required for project installs, project refresh, and project-state
   doctor checks; optional for global-only Node installs. `scripts/install.py`
   mirrors global and `--local` install transactions and `--update`; it does not
@@ -159,7 +159,7 @@ See [UPDATE.md](UPDATE.md) for the full updating guide. Quick reference:
 ```bash
 node scripts/install.mjs --update              # global roots with existing install
 node scripts/install.mjs --update --local      # current project only
-npx @opengsd/gsd-path@latest --update                   # from npm, once published
+npx @opengsd/gsd-path@latest --update                   # from npm
 ```
 
 Previous copies move to `disabled-gsd-skills` beside each root. The router may
@@ -465,7 +465,7 @@ node scripts/install.mjs --update [--local]
 node scripts/install.mjs --hooks-refresh --project /path/to/repo
 node scripts/install.mjs --hooks-refresh-full --project /path/to/repo
 
-# From npm (once the package is published to npm)
+# From npm
 npx @opengsd/gsd-path --all
 npx @opengsd/gsd-path@latest --update
 ```

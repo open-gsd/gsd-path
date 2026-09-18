@@ -40,7 +40,7 @@ first (never writes files):
 node scripts/install.mjs --all --dry-run
 node scripts/install.mjs --all
 
-# From npm, no clone — once the package is published to npm
+# From npm, no clone required
 npx @opengsd/gsd-path --all --dry-run
 npx @opengsd/gsd-path --all
 ```

@@ -199,8 +199,9 @@ The daemon manages the gsd-path **skill plugin** itself (this is separate
 from `install`/`uninstall`, which manage the daemon): install, update, and
 uninstall, both globally (per-host skill roots) and per-project.
 
-**Source.** The npm package is unpublished, so the only working source is a
-git clone. The daemon keeps one at `~/.gsd-path/src`
+**Source.** The skills are also available through
+[`@opengsd/gsd-path` on npm](https://www.npmjs.com/package/@opengsd/gsd-path).
+The daemon's plugin manager uses a git clone, which it keeps at `~/.gsd-path/src`
 (`https://github.com/open-gsd/gsd-path.git`, override with the `plugin_repo`
 key in `daemon.json`) and runs its `scripts/install.py` for every
 install/update. `refresh_source` does `git fetch origin main` +
@@ -210,14 +211,10 @@ version from the clone's `package.json`). Offline or any failure falls back
 to the cached state and never raises. Every operation (argv, exit code,
 output tail) is appended to `~/.gsd-path/logs/plugin.log`.
 
-**Private repo.** `open-gsd/gsd-path` is currently private, so cloning needs
-GitHub credentials on the machine. `ensure_source` tries HTTPS first, then
-SSH (`git@github.com:open-gsd/gsd-path.git`) on failure. If neither works it
-fails with plain-English guidance: run `gh auth login`, add an SSH key to the
-GitHub account, or set `plugin_repo` to a token-embedded URL. Once the repo
-goes public (or publishes releases), no credentials are needed — and the
-source strategy can move from clone to release-archive download behind the
-same single function.
+**Repository access.** The default `open-gsd/gsd-path` repository is public.
+If you configure a private `plugin_repo`, cloning needs credentials on the
+machine. `ensure_source` tries HTTPS first, then SSH on failure. Use
+`gh auth login` or an SSH key for access to a private source.
 
 **CLI:**
 

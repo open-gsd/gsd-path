@@ -70,7 +70,7 @@ node scripts/install.mjs --all --dry-run   # preview — safe to run anytime
 node scripts/install.mjs --all             # apply
 ```
 
-**npm** (no clone — once the package is published to npm):
+**npm** (no clone required):
 
 ```bash
 npx @opengsd/gsd-path --all --dry-run
@@ -263,7 +263,7 @@ Full tree: [README.md](README.md#handoff-contract).
 | --- | --- |
 | Global skills | `node scripts/install.mjs --update` |
 | Project-local skills | `node scripts/install.mjs --update --local` |
-| From npm (once published) | `npx @opengsd/gsd-path@latest --update` |
+| From npm | `npx @opengsd/gsd-path@latest --update` |
 | Guard scripts | `node scripts/install.mjs --hooks-refresh --project PATH` |
 | `AGENTS.md` / `WORKFLOW.md` | Manual merge — installer refuses overwrite |
 | Health check | `node scripts/install.mjs --doctor [--project PATH]` — read-only; flags missing/stale skills, hook drift, and bad pipeline state |
