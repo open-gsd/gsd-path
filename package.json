@@ -1,6 +1,6 @@
 {
   "name": "@opengsd/gsd-path",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Disk-backed AI agent pipeline. Docs: DOCS.md (start here), QUICK.md, FULL.md, UPDATE.md",
   "license": "MIT",
   "repository": {
