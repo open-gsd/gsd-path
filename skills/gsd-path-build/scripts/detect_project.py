@@ -1439,7 +1439,7 @@ def write_state_anchored(
 
 
 def initialize(
-    repo: Path, template: Path, phase: Optional[str] = None
+    repo: Path, template: Path, phase: Optional[str] = None, *, require_git: bool = False
 ) -> dict:
     if phase is not None and phase not in {"inspect", "define"}:
         raise DetectError(f"initialize phase must be inspect or define: {phase}")
@@ -1458,6 +1458,13 @@ def initialize(
     if payload["verdict"] not in {"brownfield", "greenfield"}:
         payload["wrote_state"] = False
         return payload
+    if require_git:
+        git = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "--is-inside-work-tree"],
+            env=git_environment(), capture_output=True, text=True, check=False,
+        )
+        if git.returncode != 0 or git.stdout.strip() != "true":
+            return {**payload, "route": "setup-repository", "wrote_state": False}
     expected = "inspect" if payload["verdict"] == "brownfield" else "define"
     if phase is None:
         phase = expected
@@ -1491,6 +1498,7 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--repo", type=Path, required=True)
     result.add_argument("--template", type=Path)
     result.add_argument("--phase", choices=("inspect", "define"))
+    result.add_argument("--require-git", action="store_true")
     return result
 
 
@@ -1503,7 +1511,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             if arguments.template is None:
                 raise DetectError("initialize requires --template")
             payload = initialize(
-                arguments.repo, arguments.template, arguments.phase
+                arguments.repo, arguments.template, arguments.phase,
+                require_git=arguments.require_git
             )
             return emit(payload, 2 if payload.get("error") else 0)
         raise DetectError(f"unknown command: {arguments.command}")

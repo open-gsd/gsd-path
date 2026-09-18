@@ -64,16 +64,11 @@ disk contract).
 
 ### CI
 
-| Workflow | When | Command |
-| --- | --- | --- |
-| [ci.yml](.github/workflows/ci.yml) | Every push and pull request | `npm run verify` (Node 18 + 20) and `npm run test:daemon` |
-| [release-trust.yml](.github/workflows/release-trust.yml) | PR/push touching release evidence, host matrix summaries, `platforms/`, or host manifest; manual | `npm run verify:release` |
-| [dogfood.yml](.github/workflows/dogfood.yml) | Weekly or manual | Live host smoke (`tests/dogfood.py`) |
-| [release.yml](.github/workflows/release.yml) | Version tag `v*` or manual dispatch | `verify:release` → npm publish → GitHub Release |
+See [RELEASE.md — CI tiers](RELEASE.md#ci-tiers) for workflow triggers and gates.
 
-No `.env` file is loaded for the offline CI jobs. Dogfood and release publish
-need repository secrets (`ANTHROPIC_API_KEY` / `OPENAI_API_KEY` for dogfood;
-`NPM_TOKEN` for release). Maintainer steps: [RELEASE.md](RELEASE.md).
+No `.env` file is loaded for the offline CI jobs. Dogfood needs repository
+secrets (`ANTHROPIC_API_KEY` / `OPENAI_API_KEY`). Release authentication and
+maintainer steps: [RELEASE.md — Publishing](RELEASE.md#publishing).
 
 ## Environment variables
 
