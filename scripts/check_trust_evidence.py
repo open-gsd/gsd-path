@@ -13,9 +13,11 @@ from typing import Dict, FrozenSet, List, Mapping, NamedTuple, Sequence, Tuple
 try:
     from archive_milestone import (
         ArchiveError,
+        validate as validate_archive_transaction,
+    )
+    from integration import (
         require_generated_integration_commit,
         require_published_integration,
-        validate as validate_archive_transaction,
     )
     from isolation import (
         IsolationError,
@@ -26,9 +28,11 @@ try:
 except ImportError:
     from scripts.archive_milestone import (
         ArchiveError,
+        validate as validate_archive_transaction,
+    )
+    from scripts.integration import (
         require_generated_integration_commit,
         require_published_integration,
-        validate as validate_archive_transaction,
     )
     from scripts.isolation import (
         IsolationError,

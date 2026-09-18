@@ -3364,9 +3364,9 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
             return subprocess.CompletedProcess(arguments, 0, "{}", "")
 
         with mock.patch.object(integration, "run_command", side_effect=run):
-            archive_milestone.require_github_authentication()
+            integration.require_github_authentication()
             self.assertEqual(
-                archive_milestone.github_api_json("repos/open-gsd/demo/pulls"),
+                integration.github_api_json("repos/open-gsd/demo/pulls"),
                 {},
             )
 
@@ -3403,7 +3403,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
             "github_api_json",
             return_value=[[pull]],
         ):
-            result = archive_milestone.find_pull_request(
+            result = integration.find_pull_request(
                 "open-gsd/demo",
                 "gsd-path/M001",
                 "b" * 40,
@@ -3500,7 +3500,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                 "sha": ship_sha,
                 "repo": {"full_name": "open-gsd/demo"},
             },
-            "body": archive_milestone.PR_CREDIT_LINE,
+            "body": integration.PR_CREDIT_LINE,
         }
 
     def test_pull_request_integration_creates_pr_after_publishing_ship(self) -> None:
@@ -3573,7 +3573,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                     side_effect=github_api,
                 ),
             ):
-                result = archive_milestone.integrate(repo, "demo")
+                result = integration.integrate(repo, "demo")
 
             self.assertEqual(result["status"], "awaiting-merge")
             self.assertEqual(
@@ -3589,7 +3589,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
             self.assertIn("head=gsd-path/M001", post)
             body = next(argument for argument in post if argument.startswith("body="))
             self.assertTrue(
-                body.endswith(f"\n\n---\n{archive_milestone.PR_CREDIT_LINE}")
+                body.endswith(f"\n\n---\n{integration.PR_CREDIT_LINE}")
             )
 
     def test_pull_request_integration_waits_without_touching_main(self) -> None:
@@ -3614,7 +3614,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                     "sha": ship_sha,
                     "repo": {"full_name": "open-gsd/demo"},
                 },
-                "body": archive_milestone.PR_CREDIT_LINE,
+                "body": integration.PR_CREDIT_LINE,
             }
 
             with (
@@ -3629,7 +3629,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                     side_effect=self.github_api([open_pull]),
                 ),
             ):
-                result = archive_milestone.integrate(repo, "demo")
+                result = integration.integrate(repo, "demo")
 
             self.assertEqual(result["status"], "awaiting-merge")
             self.assertEqual(result["pull_request"], open_pull["html_url"])
@@ -3666,7 +3666,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                     "sha": ship_sha,
                     "repo": {"full_name": "open-gsd/demo"},
                 },
-                "body": archive_milestone.PR_CREDIT_LINE,
+                "body": integration.PR_CREDIT_LINE,
             }
             competing_pull = {
                 **canonical_pull,
@@ -3737,7 +3737,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                     archive_milestone.ArchiveError,
                     "multiple pull requests",
                 ):
-                    archive_milestone.integrate(repo, "demo")
+                    integration.integrate(repo, "demo")
 
             self.assertFalse(any("POST" in arguments for arguments in requests))
             self.assertNotEqual(
@@ -3766,7 +3766,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                     "sha": ship_sha,
                     "repo": {"full_name": "someone/demo"},
                 },
-                "body": archive_milestone.PR_CREDIT_LINE,
+                "body": integration.PR_CREDIT_LINE,
             }
 
             def github_api(*arguments: str) -> subprocess.CompletedProcess[str]:
@@ -3805,7 +3805,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                     archive_milestone.ArchiveError,
                     "head repository",
                 ):
-                    archive_milestone.integrate(repo, "demo")
+                    integration.integrate(repo, "demo")
 
             self.assertNotEqual(
                 self.git(remote, "rev-parse", "refs/heads/gsd-path/M001").returncode,
@@ -3833,7 +3833,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                     "sha": ship_sha,
                     "repo": {"full_name": "open-gsd/demo"},
                 },
-                "body": archive_milestone.PR_CREDIT_LINE,
+                "body": integration.PR_CREDIT_LINE,
             }
             requests = []
 
@@ -3902,7 +3902,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                     archive_milestone.ArchiveError,
                     "head is not the bound branch|closed without merging",
                 ):
-                    archive_milestone.integrate(repo, "demo")
+                    integration.integrate(repo, "demo")
 
             self.assertFalse(any("POST" in arguments for arguments in requests))
 
@@ -3987,13 +3987,13 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                     side_effect=github_api,
                 ),
             ):
-                result = archive_milestone.integrate(repo, "demo")
+                result = integration.integrate(repo, "demo")
 
             self.assertEqual(result["status"], "awaiting-merge")
             patch = next(arguments for arguments in requests if "PATCH" in arguments)
             body = next(argument for argument in patch if argument.startswith("body="))
             self.assertTrue(
-                body.endswith(f"\n\n---\n{archive_milestone.PR_CREDIT_LINE}")
+                body.endswith(f"\n\n---\n{integration.PR_CREDIT_LINE}")
             )
 
     def test_pull_request_integration_rejects_closed_pr_without_editing(self) -> None:
@@ -4053,7 +4053,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                     archive_milestone.ArchiveError,
                     "closed without merging",
                 ):
-                    archive_milestone.integrate(repo, "demo")
+                    integration.integrate(repo, "demo")
 
             self.assertFalse(any("PATCH" in arguments for arguments in requests))
 
@@ -4078,7 +4078,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                     "sha": ship_sha,
                     "repo": {"full_name": "open-gsd/demo"},
                 },
-                "body": archive_milestone.PR_CREDIT_LINE,
+                "body": integration.PR_CREDIT_LINE,
             }
 
             def github_api(*arguments: str) -> subprocess.CompletedProcess[str]:
@@ -4129,7 +4129,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                     archive_milestone.ArchiveError,
                     "auto-merge",
                 ):
-                    archive_milestone.integrate(repo, "demo")
+                    integration.integrate(repo, "demo")
 
             self.assertEqual(
                 self.git(remote, "rev-parse", "gsd-path/M001").stdout.strip(),
@@ -4174,7 +4174,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                     side_effect=self.github_api([pull]),
                 ),
             ):
-                result = archive_milestone.integrate(repo, "demo")
+                result = integration.integrate(repo, "demo")
 
             self.assertEqual(result["mode"], "pull-request")
             self.assertEqual(result["landing"], merge_sha)
@@ -4198,7 +4198,12 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                     side_effect=self.github_api([pull]),
                 ),
             ):
-                validated = archive_milestone.validate_integrated(repo, "demo")
+                validated = integration.validate_integrated(repo, "demo")
+                refs = self.git(repo, "show-ref").stdout
+                with mock.patch.object(integration, "refresh_origin", side_effect=AssertionError("status fetched")):
+                    observed = integration.validate_integrated(repo, "demo", refresh=False)
+                self.assertEqual(observed, validated)
+                self.assertEqual(self.git(repo, "show-ref").stdout, refs)
             self.assertEqual(validated["landing"], merge_sha)
 
     def test_validate_integrated_rejects_open_tagged_pull_request(self) -> None:
@@ -4226,7 +4231,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                 "--no-sign",
                 "-a",
                 "-m",
-                archive_milestone.pull_request_tag_message(
+                integration.pull_request_tag_message(
                     archive_name,
                     pull_url,
                     ship_sha,
@@ -4248,7 +4253,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                     "sha": ship_sha,
                     "repo": {"full_name": "open-gsd/demo"},
                 },
-                "body": archive_milestone.PR_CREDIT_LINE,
+                "body": integration.PR_CREDIT_LINE,
             }
 
             with (
@@ -4267,7 +4272,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                     archive_milestone.ArchiveError,
                     "not merged at the tagged landing",
                 ):
-                    archive_milestone.validate_integrated(repo, "demo")
+                    integration.validate_integrated(repo, "demo")
 
     def test_validate_integrated_refreshes_pull_request_main(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -4302,7 +4307,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                     side_effect=self.github_api([pull]),
                 ),
             ):
-                archive_milestone.integrate(repo, "demo")
+                integration.integrate(repo, "demo")
 
             self.git(remote, "update-ref", "refs/heads/main", baseline)
             self.assertEqual(
@@ -4325,7 +4330,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                     archive_milestone.ArchiveError,
                     "first-parent history",
                 ):
-                    archive_milestone.validate_integrated(repo, "demo")
+                    integration.validate_integrated(repo, "demo")
 
     def test_pull_request_integration_republishes_deleted_remote_tag(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -4359,7 +4364,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                     side_effect=self.github_api([pull]),
                 ),
             ):
-                archive_milestone.integrate(repo, "demo")
+                integration.integrate(repo, "demo")
 
             remote_tag = f"refs/tags/milestone/{archive_name}"
             tracking_tag = f"refs/remotes/origin/tags/milestone/{archive_name}"
@@ -4384,7 +4389,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                     archive_milestone.ArchiveError,
                     "missing published milestone tag",
                 ):
-                    archive_milestone.validate_integrated(repo, "demo")
+                    integration.validate_integrated(repo, "demo")
 
             with (
                 mock.patch.object(
@@ -4398,7 +4403,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                     side_effect=self.github_api([pull]),
                 ),
             ):
-                archive_milestone.integrate(repo, "demo")
+                integration.integrate(repo, "demo")
 
             self.assertEqual(
                 self.git(remote, "rev-parse", f"{remote_tag}^{{commit}}").stdout.strip(),
@@ -4460,7 +4465,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                     archive_milestone.ArchiveError,
                     "not merged by a GitHub merge action",
                 ):
-                    archive_milestone.integrate(repo, "demo")
+                    integration.integrate(repo, "demo")
 
             self.assertNotEqual(
                 self.git(remote, "show-ref", "--tags", "--quiet").returncode,
@@ -4546,7 +4551,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                     archive_milestone.ArchiveError,
                     "merge queue",
                 ):
-                    archive_milestone.integrate(repo, "demo")
+                    integration.integrate(repo, "demo")
 
             self.assertNotEqual(
                 self.git(remote, "show-ref", "--tags", "--quiet").returncode,
@@ -4632,7 +4637,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                     archive_milestone.ArchiveError,
                     "auto-merge",
                 ):
-                    archive_milestone.integrate(repo, "demo")
+                    integration.integrate(repo, "demo")
 
             self.assertNotEqual(
                 self.git(remote, "show-ref", "--tags", "--quiet").returncode,
@@ -4675,7 +4680,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                     archive_milestone.ArchiveError,
                     "human GitHub user",
                 ):
-                    archive_milestone.integrate(repo, "demo")
+                    integration.integrate(repo, "demo")
 
             self.assertNotEqual(
                 self.git(remote, "show-ref", "--tags", "--quiet").returncode,
@@ -4703,7 +4708,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                     return subprocess.CompletedProcess(
                         arguments,
                         0,
-                        json.dumps({**pull, "body": archive_milestone.PR_CREDIT_LINE}),
+                        json.dumps({**pull, "body": integration.PR_CREDIT_LINE}),
                         "",
                     )
                 return normal_api(*arguments)
@@ -4724,7 +4729,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                     archive_milestone.ArchiveError,
                     "must use a two-parent merge commit",
                 ):
-                    archive_milestone.integrate(repo, "demo")
+                    integration.integrate(repo, "demo")
 
             self.assertFalse(any("PATCH" in arguments for arguments in requests))
 
@@ -4999,7 +5004,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                 with self.assertRaisesRegex(
                     archive_milestone.ArchiveError, "push integration merge"
                 ):
-                    archive_milestone.integrate(repo, "demo")
+                    integration.integrate(repo, "demo")
 
             self.assertIsNotNone(advanced_main)
             self.assertNotEqual(
@@ -5691,6 +5696,31 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
 
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("missing published milestone tag", result.stderr)
+
+    def test_archive_validation_does_not_load_integration(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory) / "primary"
+            repo.mkdir()
+            self.make_publishable_bound_repo(repo, Path(temporary_directory) / "origin.git")
+            archive, ship = self.ship_canonical_bound(repo)
+            code = """
+import importlib.abc
+import sys
+
+class NoIntegration(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path, target=None):
+        if fullname.rsplit(".", 1)[-1] == "integration":
+            raise ModuleNotFoundError("archive validation loaded Integration", name=fullname)
+
+sys.meta_path.insert(0, NoIntegration())
+from scripts import archive_milestone
+raise SystemExit(archive_milestone.main(["validate", "--repo", sys.argv[1]]))
+"""
+            result = self.run_command(sys.executable, "-B", "-c", code, str(repo), cwd=PROJECT_ROOT)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(json.loads(result.stdout), {
+                "archive": f".project/archive/{archive}", "commit": ship,
+            })
 
     def test_validate_integrated_refreshes_direct_mode_milestone_tag(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

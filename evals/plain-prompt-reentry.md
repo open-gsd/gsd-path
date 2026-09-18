@@ -16,8 +16,7 @@ Pass only when:
 - no write, edit, patch, build, formatter, or other file-changing tool runs;
 - the repository tree and state bytes are unchanged;
 - the final response contains Outcome, Review, and Next; and
-- Next matches the status route: `next_skill` for `run-phase`, otherwise the
-  exact `route.action` and `route.reason`.
+- Next follows the [plain-prompt handoff contract](../AGENTS.md#plain-prompt-re-entry).
 
 ## Mutation prompt
 

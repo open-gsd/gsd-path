@@ -8,8 +8,8 @@ description: Verify a completed GSD Path milestone, manage evidence-backed patch
 Reuse proven review scope; dispatch reviewers for remaining claims. They never fix
 product code.
 
-Routing instructions below are caller handoffs under the AGENTS.md handoff
-rule; never invoke an explicit-only sibling skill yourself.
+After completion, use the executable phase handoff in AGENTS.md.
+Before completion, preserve the approval and recovery gates below.
 
 Require `pipeline: gsd-path/v2` in `.project/STATE.md`; a missing or different
 marker returns to `$gsd-path` for ownership checking. Read the local

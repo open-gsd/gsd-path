@@ -23,6 +23,14 @@ def runtime():
     return pipeline_state
 
 
+def checkpoint_runtime():
+    if __package__:
+        from scripts import state_checkpoint
+    else:
+        import state_checkpoint
+    return state_checkpoint
+
+
 def context(repo: Path, text: str | None = None) -> dict | None:
     state = runtime()
     current, loaded, _ = state.load_state(repo)
@@ -48,7 +56,7 @@ def context(repo: Path, text: str | None = None) -> dict | None:
     if recovery:
         if not state._is_ancestor(repo, recovery["base"], "HEAD"):
             raise state.PipelineStateError("build recovery base is not an ancestor of HEAD")
-        source = state._git_text_at(repo, recovery["base"], ".project/STATE.md")
+        source = checkpoint_runtime()._git_text_at(repo, recovery["base"], ".project/STATE.md")
         if source is None:
             raise state.PipelineStateError("build recovery base has no STATE.md")
         before = state._state_from_text(source)
@@ -145,12 +153,12 @@ def review_backup(repo: Path, recovery: dict) -> Path:
 def validate_review_backup(repo: Path, recovery: dict, directory: Path) -> None:
     state = runtime()
     if directory.exists():
-        state._tree_digest(directory)  # Reject symlinks and special files before reading.
+        checkpoint_runtime()._tree_digest(directory)  # Reject symlinks and special files before reading.
     expected = {}
     for path in state._run_git(repo, "ls-tree", "-r", "--name-only", "-z",
                                recovery["base"], "--", ".project/review").stdout.split("\0"):
         if path:
-            expected[str(Path(path).relative_to(".project/review"))] = state._git_text_at(repo, recovery["base"], path)
+            expected[str(Path(path).relative_to(".project/review"))] = checkpoint_runtime()._git_text_at(repo, recovery["base"], path)
     actual = {str(path.relative_to(directory)): path.read_text(encoding="utf-8")
               for path in directory.rglob("*") if path.is_file()} if directory.exists() else {}
     if actual != expected:
@@ -191,7 +199,7 @@ def validate_plan(repo: Path) -> None:
     if not review_backup(repo, recovery).is_dir():
         raise state.PipelineStateError("run prepare-build-recovery before planning")
     validate_review_backup(repo, recovery, review_backup(repo, recovery))
-    source = state._task_contracts_at(repo, recovery["base"], ".project/tasks")
+    source = checkpoint_runtime()._task_contracts_at(repo, recovery["base"], ".project/tasks")
     current = settled_tasks(repo)
     done = set()
     for _, (path, text) in source.items():
@@ -205,7 +213,7 @@ def validate_plan(repo: Path) -> None:
            for name, (_, fields) in current.items()):
         raise state.PipelineStateError("build recovery cannot manufacture landed tasks")
     if recovery["kind"] == "plan":
-        intent = state._git_text_at(repo, recovery["base"], ".project/intent/INTENT.md")
+        intent = checkpoint_runtime()._git_text_at(repo, recovery["base"], ".project/intent/INTENT.md")
         if state._read_real_file(repo / ".project/intent/INTENT.md", "INTENT.md") != intent:
             raise state.PipelineStateError("plan repair cannot change approved intent")
     unchanged = unchanged_waves(repo, recovery)
@@ -219,10 +227,10 @@ def unchanged_waves(repo: Path, recovery: dict) -> set[int]:
     """Reuse evidence only when its intent, wave contract, and task bytes match."""
     state = runtime()
     project = repo / ".project"
-    old_intent = state._git_text_at(repo, recovery["base"], ".project/intent/INTENT.md")
+    old_intent = checkpoint_runtime()._git_text_at(repo, recovery["base"], ".project/intent/INTENT.md")
     if state._read_real_file(project / "intent/INTENT.md", "INTENT.md") != old_intent:
         return set()
-    old_plan = state._git_text_at(repo, recovery["base"], ".project/plan/PLAN.md") or ""
+    old_plan = checkpoint_runtime()._git_text_at(repo, recovery["base"], ".project/plan/PLAN.md") or ""
     new_plan = state._read_real_file(project / "plan/PLAN.md", "PLAN.md")
 
     def sections(text):
@@ -235,7 +243,7 @@ def unchanged_waves(repo: Path, recovery: dict) -> set[int]:
     if ({k: v for k, v in old_sections.items() if not k.startswith("Wave ")}
             != {k: v for k, v in new_sections.items() if not k.startswith("Wave ")}):
         return set()
-    old_tasks = state._task_contracts_at(repo, recovery["base"], ".project/tasks")
+    old_tasks = checkpoint_runtime()._task_contracts_at(repo, recovery["base"], ".project/tasks")
     current = settled_tasks(repo)
     unchanged = set()
     for title, body in new_sections.items():
@@ -269,7 +277,7 @@ def inventory_checkpoint(repo: Path, head: str) -> bool:
     state = runtime()
     if state._run_git(repo, "show", "-s", "--format=%s", head).stdout.strip() != state.PLAN_APPROVAL_SUBJECT:
         return False
-    text = state._git_text_at(repo, head, ".project/STATE.md")
+    text = checkpoint_runtime()._git_text_at(repo, head, ".project/STATE.md")
     if text is None:
         return False
     approved = state._state_from_text(text)

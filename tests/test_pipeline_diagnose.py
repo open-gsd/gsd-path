@@ -9,14 +9,17 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from scripts import state_checkpoint
 from scripts import (
     archive_milestone,
+    integration,
     pipeline_diagnose,
     pipeline_git,
     pipeline_state,
     pipeline_undo,
 )
 
+from tests import test_archive_milestone as archive_tests
 from tests.test_pipeline_undo import write_plan_tasks
 from tests.test_task_briefs import PLAN_WAVE
 
@@ -75,6 +78,33 @@ def state_text(
 
 
 class PipelineDiagnoseTests(unittest.TestCase):
+    def test_shipped_diagnosis_reports_missing_proof_without_refreshing_refs(self) -> None:
+        fixture = archive_tests.ArchiveMilestoneTests()
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            repo = root / "primary"
+            repo.mkdir()
+            fixture.make_publishable_bound_repo(repo, root / "origin.git")
+            archive, _ = fixture.ship_canonical_bound(repo)
+            integrated = fixture.integrate(repo)
+            self.assertEqual(integrated.returncode, 0, integrated.stderr)
+            run_git(repo, "update-ref", "-d", f"refs/remotes/origin/tags/milestone/{archive}")
+            refs = run_git(repo, "show-ref").stdout
+            head = run_git(repo, "rev-parse", "HEAD").stdout
+            state = (repo / ".project/STATE.md").read_bytes()
+
+            for diagnose in (pipeline_diagnose.diagnose, diagnose_installed):
+                with self.subTest(entrypoint=diagnose.__name__):
+                    result = diagnose(repo)
+
+                    self.assertEqual(run_git(repo, "show-ref").stdout, refs)
+                    self.assertEqual(run_git(repo, "rev-parse", "HEAD").stdout, head)
+                    self.assertEqual((repo / ".project/STATE.md").read_bytes(), state)
+                    findings = [item for item in result["findings"] if item["id"] == "integration"]
+                    self.assertEqual(len(findings), 1)
+                    self.assertIn("missing published milestone tag", findings[0]["evidence"])
+                    self.assertEqual(findings[0]["retry"], "$gsd-path-ship")
+
     def test_promotion_retry_preserves_base_and_landing(self) -> None:
         base = "a" * 40
         landing = "b" * 40
@@ -188,7 +218,7 @@ class PipelineDiagnoseTests(unittest.TestCase):
                 encoding="utf-8",
             )
             write_plan_tasks(repo)
-            pipeline_state.checkpoint_approval(repo, "plan", parent)
+            state_checkpoint.checkpoint_approval(repo, "plan", parent)
             approved = run_git(repo, "rev-parse", "HEAD").stdout.strip()
             with mock.patch.object(
                 pipeline_undo,
@@ -408,7 +438,7 @@ class PipelineDiagnoseTests(unittest.TestCase):
             run_git(repo, "commit", "-m", "fixture: worktrees")
             verify = root / "verify"
             dirty = root / "dirty"
-            integrate = archive_milestone.integration_names(repo, "001-first")[1]
+            integrate = integration.integration_names(repo, "001-first")[1]
             run_git(
                 repo,
                 "worktree",
@@ -452,9 +482,9 @@ class PipelineDiagnoseTests(unittest.TestCase):
                 if item["evidence"].startswith("gsd-path-task/T001 @")
             )
             self.assertTrue(dirty_finding["retry"].startswith("NEEDS-USER:"))
-            integration = next(parts for parts in retries if "integrate" in parts)
-            self.assertEqual(Path(integration[1]).name, "archive_milestone.py")
-            self.assertEqual(integration[integration.index("--slug") + 1], "first")
+            integration_retry = next(parts for parts in retries if "integrate" in parts)
+            self.assertEqual(Path(integration_retry[1]).name, "archive_milestone.py")
+            self.assertEqual(integration_retry[integration_retry.index("--slug") + 1], "first")
 
             run_git(repo, "worktree", "remove", str(integrate))
             run_git(repo, "branch", "-D", "gsd-path-integrate/M001")

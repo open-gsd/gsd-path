@@ -163,8 +163,7 @@ Use this runtime even when coders used native child tools. It proves all tasks
 landed and wave reviews passed, writes the canonical build evidence, enters
 `ship/active`, and checkpoints. A blocked receipt stops completion. On a done
 receipt, report waves, task commits, fixed findings, and remaining risk; link the
-absolute final wave review. Return to an active router. On direct invocation,
-name `$gsd-path` as the explicit next skill and stop. Ship owns project Verify,
+absolute final wave review and use the executable phase handoff in AGENTS.md. Ship owns project Verify,
 final review, archive, and publication; do not repeat or enter them here.
 
 ## Milestone abandon

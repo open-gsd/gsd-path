@@ -24,10 +24,9 @@ When the invocation argument is exactly `status`, report and stop:
 1. Run `python3 <absolute-bundled-pipeline-state.py> status --repo
    <absolute-root>`. Treat the JSON as the only status authority. Do not
    initialize STATE.md, bind a branch, or create a repository from this mode.
-2. Present **Outcome** as `state.phase`/`state.status`, `route.action`,
-   `next_skill`, and the pending-answer count. **Review** links the JSON
-   `path` (STATE.md). **Next** names `next_skill` or the `route.reason` when
-   `route.action` is `block`, without invoking either.
+2. Present the returned `handoff.outcome`, `handoff.review`, and
+   `handoff.next` as **Outcome**, **Review**, and **Next**, plus the
+   pending-answer count. Use the host's invocation prefix.
 3. Do not run a phase contract, auto-advance, spawn agents, or apply undo.
 
 `$gsd-path status` (Codex) and `/gsd-path status` (other hosts) are the only
@@ -283,11 +282,9 @@ python3 <absolute-bundled-pipeline-state.py> transition \
   --event "build started"
 ```
 
-Report normal progress in three labeled lines: **Outcome** names the phase and
-completed work, **Review** links the newest canonical artifact using its
-resolved absolute path when one exists, and **Next** names the action the
-router is taking or the single action required from the user. Resolve the
-routed track root first: `.project/` for the active track or `.project/next/`
+Report normal progress through the executable phase handoff in AGENTS.md.
+Use `handoff.router_next` while this router owns continuation.
+Resolve the routed track root first: `.project/` for the active track or `.project/next/`
 for lookahead. If that track root's `research/DOCS-AUDIT.md` has `planned: no`
 rulings, add one alignment-queue line and offer once to route them through the
 bundled [plan contract](PLAN.md); declining does not block.

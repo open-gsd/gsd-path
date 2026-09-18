@@ -10,7 +10,10 @@ HTTP endpoint, a JSONL event history, desktop notifications, and a system
 tray icon.
 
 The daemon is strictly read-only against watched projects: file reads plus
-`git` read commands only. It never writes into a watched project.
+`git` read commands only. Completion checks may read the remote refs and, for
+pull-request integration, GitHub metadata. They never fetch or write refs.
+Unavailable or stale proof is shown as **Unverified**, with available phase
+and task facts retained. The daemon never writes into a watched project.
 
 ## Install (one command)
 
@@ -127,7 +130,8 @@ system blue where unsupported), light by default. Settings → Appearance
 switches between System, Light and Dark; the choice is kept in the browser, and
 the tray passes its own choice as `?theme=`. It is a pure **status board**: what each
 project has done, where it is now, where its roadmap goes next, and what it has
-cost. It shows no next steps, commands, or attention items.
+cost. The project page also shows the runtime handoff described under
+[/status schema](#status-schema).
 
 - **Toolbar**: OpenGSD Path mark and name, All / Active / Shipped filters with counts, a project
   search, Refresh (requests a project scan and reloads status), the last update
@@ -137,9 +141,9 @@ cost. It shows no next steps, commands, or attention items.
   dialog; Cancel or clicking outside it leaves the folder watched. Adding or
   removing a folder updates discovered projects immediately. Other open
   dashboards receive the current watched folders on their next status poll.
-- **Board**: one table row per project, blocked first, then in progress, then
-  shipped. Columns: project with health dot and path, route (one square per
-  milestone: done, current, ahead; red when blocked), current milestone, an
+- **Board**: one table row per project, blocked first, then in progress and
+  Unverified, then shipped. Columns: project with health dot and path, route
+  (one square per milestone: done, current, ahead; red when blocked), current milestone, an
   8-segment phase meter (inspect, define, research, decide, roadmap, plan,
   build, ship), tasks, cost and turns for the project, last activity, state.
   The health dot's tooltip gives the reason (for example `no activity for 21d`).
@@ -284,7 +288,12 @@ VERSION-stamp probes plus the update-check cache, never a git fetch; see
   (`[{number, slug, status, archive, duration_s, tokens}]` — `duration_s`
   and `tokens` are null placeholders for now), `next_milestone`, `git`
   (`{branch, head, dirty}`).
-- Runtime enrichment: `pending_answers`, `next_skill`.
+- Runtime enrichment: `pending_answers`, `next_skill`, `handoff`. The project
+  detail page displays the runtime handoff outcome and next action.
+- `workflow`: `{state, label, reason?}` is the shared browser/tray presentation.
+  State is `active`, `blocked`, `shipped`, or `unverified`. Only runtime
+  integration proof permits `shipped`; an archive path alone does not. Older
+  payloads without this field display **Unverified**.
 - Dashboard detail:
   - `reviews` — `[{file, kind, verdict, cycle, depth, note}]` parsed from
     `.project/review/*.md` (`kind` is `wave`, `final`, `gap`,

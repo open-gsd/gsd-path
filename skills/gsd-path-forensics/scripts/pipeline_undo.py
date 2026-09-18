@@ -27,18 +27,20 @@ def _load_pipeline_modules():
         import isolation
         import pipeline_git
         import pipeline_state
-        return archive_milestone, isolation, pipeline_git, pipeline_state
+        import state_checkpoint
+        return archive_milestone, isolation, pipeline_git, pipeline_state, state_checkpoint
     except ModuleNotFoundError as error:
         if error.name not in {
             "archive_milestone",
             "isolation",
             "pipeline_git",
             "pipeline_state",
+            "state_checkpoint",
         }:
             raise
     try:
-        from scripts import archive_milestone, isolation, pipeline_git, pipeline_state
-        return archive_milestone, isolation, pipeline_git, pipeline_state
+        from scripts import archive_milestone, isolation, pipeline_git, pipeline_state, state_checkpoint
+        return archive_milestone, isolation, pipeline_git, pipeline_state, state_checkpoint
     except ModuleNotFoundError as error:
         if error.name not in {
             "scripts",
@@ -46,6 +48,7 @@ def _load_pipeline_modules():
             "scripts.isolation",
             "scripts.pipeline_git",
             "scripts.pipeline_state",
+            "scripts.state_checkpoint",
         }:
             raise
         shared = Path(__file__).resolve().parents[2] / "gsd-path" / "scripts"
@@ -54,16 +57,17 @@ def _load_pipeline_modules():
         import isolation
         import pipeline_git
         import pipeline_state
-        return archive_milestone, isolation, pipeline_git, pipeline_state
+        import state_checkpoint
+        return archive_milestone, isolation, pipeline_git, pipeline_state, state_checkpoint
 
 
-archive_milestone, isolation, pipeline_git, pipeline_state = _load_pipeline_modules()
+archive_milestone, isolation, pipeline_git, pipeline_state, state_checkpoint = _load_pipeline_modules()
 ArchiveError = archive_milestone.ArchiveError
 IsolationError = isolation.IsolationError
 PLAN_APPROVAL_SUBJECT = pipeline_state.PLAN_APPROVAL_SUBJECT
 PipelineStateError = pipeline_state.PipelineStateError
-_activate_roadmap_milestone = pipeline_state._activate_roadmap_milestone
-_approval_details = pipeline_state._approval_details
+_activate_roadmap_milestone = state_checkpoint._activate_roadmap_milestone
+_approval_details = state_checkpoint._approval_details
 _commit_subject_body = pipeline_state._commit_subject_body
 _optional_rev = pipeline_state._optional_rev
 _render_transition = pipeline_state._render_transition

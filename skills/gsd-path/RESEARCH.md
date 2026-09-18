@@ -143,12 +143,9 @@ settled brownfield input.
    dimensions, and question count. Include `--project-dir .project/next` for
    lookahead. Require the returned state to be `research/done`. Report the
    outcome, link the resolved absolute `RESEARCH.md` path,
-   summarize the dispatched evidence files, and name the decide phase as next.
-   The decide phase reads the manifest; it must not infer dispatch state from
-   a glob or free-form log. When routed by an active
-   `$gsd-path`, return control to that router. When invoked directly, stop and
-   tell the user to explicitly invoke `$gsd-path`, which routes to decide; do
-   not invoke an explicit-only sibling skill yourself.
+   summarize the dispatched evidence files, and use the executable phase
+   handoff in AGENTS.md. The next phase reads the manifest rather than
+   inferring dispatch state from a glob or free-form log.
 
 ## Rules
 

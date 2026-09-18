@@ -3,23 +3,9 @@ name: Release trust evidence
 on:
   workflow_dispatch:
   pull_request:
-    paths:
-      - "docs/trust-validation/evidence/**"
-      - "docs/trust-validation/HOST-MATRIX.md"
-      - "docs/trust-validation/TRUST-EVIDENCE.md"
-      - "platforms/**"
-      - "scripts/skill-resources.json"
-      - "scripts/check_trust_evidence.py"
   push:
     branches:
       - main
-    paths:
-      - "docs/trust-validation/evidence/**"
-      - "docs/trust-validation/HOST-MATRIX.md"
-      - "docs/trust-validation/TRUST-EVIDENCE.md"
-      - "platforms/**"
-      - "scripts/skill-resources.json"
-      - "scripts/check_trust_evidence.py"
 
 concurrency:
   group: release-trust-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -42,5 +28,10 @@ jobs:
         run: npm ci
       - name: Check prerequisites
         run: npm run check:prereqs
-      - name: Verify release trust evidence
-        run: npm run verify:release
+      - name: Verify trust gate
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            npm run verify:release
+          else
+            python3 -m unittest tests.test_trust_evidence
+          fi

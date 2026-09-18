@@ -21,6 +21,7 @@ def _load_diagnose_modules():
         import archive_milestone
         import detect_project
         import discussion_records
+        import integration
         import isolation
         import pipeline_git
         import pipeline_state
@@ -28,6 +29,7 @@ def _load_diagnose_modules():
             archive_milestone,
             detect_project,
             discussion_records,
+            integration,
             isolation,
             pipeline_git,
             pipeline_state,
@@ -37,6 +39,7 @@ def _load_diagnose_modules():
             "archive_milestone",
             "detect_project",
             "discussion_records",
+            "integration",
             "isolation",
             "pipeline_git",
             "pipeline_state",
@@ -47,6 +50,7 @@ def _load_diagnose_modules():
             archive_milestone,
             detect_project,
             discussion_records,
+            integration,
             isolation,
             pipeline_git,
             pipeline_state,
@@ -55,6 +59,7 @@ def _load_diagnose_modules():
             archive_milestone,
             detect_project,
             discussion_records,
+            integration,
             isolation,
             pipeline_git,
             pipeline_state,
@@ -65,6 +70,7 @@ def _load_diagnose_modules():
             "scripts.archive_milestone",
             "scripts.detect_project",
             "scripts.discussion_records",
+            "scripts.integration",
             "scripts.isolation",
             "scripts.pipeline_git",
             "scripts.pipeline_state",
@@ -75,6 +81,7 @@ def _load_diagnose_modules():
         import archive_milestone
         import detect_project
         import discussion_records
+        import integration
         import isolation
         import pipeline_git
         import pipeline_state
@@ -82,6 +89,7 @@ def _load_diagnose_modules():
             archive_milestone,
             detect_project,
             discussion_records,
+            integration,
             isolation,
             pipeline_git,
             pipeline_state,
@@ -92,6 +100,7 @@ def _load_diagnose_modules():
     archive_milestone,
     detect_project,
     discussion_records,
+    integration,
     isolation,
     pipeline_git,
     pipeline_state,
@@ -477,8 +486,8 @@ def diagnose(repo: Path) -> dict[str, object]:
             else:
                 if state.get("phase") == "shipped" and state.get("milestone"):
                     try:
-                        archive_milestone.validate_integrated(
-                            resolved, str(state["milestone"])
+                        integration.validate_integrated(
+                            resolved, str(state["milestone"]), refresh=False
                         )
                     except archive_milestone.ArchiveError as error:
                         findings.append(
@@ -585,7 +594,7 @@ def diagnose(repo: Path) -> dict[str, object]:
                 expected_worktree = None
                 if archive:
                     expected_branch, expected_worktree = (
-                        archive_milestone.integration_names(
+                        integration.integration_names(
                             resolved,
                             Path(archive).name,
                         )

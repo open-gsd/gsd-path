@@ -149,9 +149,11 @@ advance past an unresolved required follow-up.
 
 Invoke the router explicitly to start or advance a phase. Once a project has an
 owned `.project/STATE.md`, a plain prompt such as “continue the project” answers
-read-only with the current handoff and names the next skill; it never advances
-a phase or edits state. Phase skills stop at their handoff; invoke the router
-again to continue.
+read-only with the current handoff and uses the runtime’s `handoff.next`; it
+never advances a phase or edits state. An active router continues across completed phases
+until required input, approval, or a block. A phase invoked directly stops at
+its handoff; invoke the router again to continue. Chat and the dashboard use
+the same executable phase handoff from the status runtime.
 The discussion sidecar is the exception: it can be invoked at any non-shipped
 phase and returns only a durable conversation record.
 

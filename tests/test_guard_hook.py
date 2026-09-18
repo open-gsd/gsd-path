@@ -13,6 +13,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import guard_hook
+from install import PROJECT_RUNTIME_SCRIPTS
 import status_runtime
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "guard_hook.py"
@@ -855,20 +856,7 @@ class GuardHookTests(unittest.TestCase):
             shutil.copy2(SCRIPT, managed / "guard_hook.py")
             shutil.copy2(SCRIPT.parent / "status_runtime.py", managed / "status_runtime.py")
             scripts = SCRIPT.parent
-            for name in (
-                "pipeline_state.py",
-                "check_handoffs.py",
-                "isolation.py",
-                "discussion_records.py",
-                "pipeline_git.py",
-                "archive_milestone.py",
-                "review_panel.py",
-                "_common.py",
-                "state_checkpoint.py",
-                "state_promote.py",
-                "discussion_validate.py",
-                "integration.py",
-            ):
+            for name in PROJECT_RUNTIME_SCRIPTS:
                 shutil.copy2(scripts / name, runtime / name)
             state = root / ".project" / "STATE.md"
             state.parent.mkdir()

@@ -7,15 +7,15 @@ struct TrayUITest {
         NSApp.setActivationPolicy(.accessory)
         let data = Data("""
         {"projects":[
-          {"root":"/sample/gsd","project":"GSD Path","milestone":"daemon","phase":"build","status":"active","branch":"gsd-path/M004","next_skill":"gsd-path-build","tasks_done":6,"tasks_total":9,"current_wave":2,
+          {"root":"/sample/gsd","project":"GSD Path","workflow":{"state":"active","label":"In build"},"milestone":"daemon","phase":"build","status":"active","branch":"gsd-path/M004","next_skill":"gsd-path-build","tasks_done":6,"tasks_total":9,"current_wave":2,
            "roadmap_milestones":[{"number":"M003","slug":"core","status":"shipped","archive":".project/archive/003-core","manifest":{"shipped":"2026-09-06","tasks_total":12}},{"number":"M004","slug":"daemon","status":"active","goal":"Native tray and dashboard for the daemon."},{"number":"M005","slug":"notify","status":"pending"}],
            "criteria":[{"id":"SC1","verdict":"met"},{"id":"SC2","verdict":"met"},{"id":"SC3","verdict":"not-met"}],
            "phase_log":[{"phase":"plan","date":"2026-09-09"},{"phase":"build","date":"2026-09-10"}],
            "spend":{"turns":90,"cost":26.1,"milestones":{"M003":{"turns":6,"tokens":1000,"cost":1.5},"M004":{"turns":84,"tokens":14100000,"cost":24.6}}}},
-          {"root":"/sample/atlas'&tab=usage","project":"Atlas API","milestone":"api-v2","phase":"ship","status":"blocked","branch":"gsd-path/M002","health":"red","attention":[{"kind":"blocked","label":"ship blocked","ref":null}],
+          {"root":"/sample/atlas'&tab=usage","project":"Atlas API","workflow":{"state":"blocked","label":"Blocked"},"milestone":"api-v2","phase":"ship","status":"blocked","branch":"gsd-path/M002","health":"red","attention":[{"kind":"blocked","label":"ship blocked","ref":null}],
            "next_milestone":{"milestone":"api-v3","phase":"define","status":"pending"}},
-          {"root":"/sample/notes","project":"Field Notes","milestone":"bootstrap","phase":"research","status":"active","branch":"gsd-path/M001"},
-          {"root":"/sample/done","project":"Done Thing","milestone":"graph","phase":"shipped","status":"shipped","archive":".project/archive/001-graph",
+          {"root":"/sample/notes","project":"Field Notes","workflow":{"state":"active","label":"In research"},"milestone":"bootstrap","phase":"research","status":"active","branch":"gsd-path/M001"},
+          {"root":"/sample/done","project":"Done Thing","workflow":{"state":"shipped","label":"Shipped"},"milestone":"graph","phase":"shipped","status":"shipped","archive":".project/archive/001-graph",
            "roadmap_milestones":[{"number":"M001","slug":"graph","status":"shipped","archive":".project/archive/001-graph","manifest":{"shipped":"2026-09-01","tasks_total":4}}]}
         ]}
         """.utf8)
@@ -104,6 +104,21 @@ struct TrayUITest {
             NSApp.activate(ignoringOtherApps: true)
             print("Preview PID: \(ProcessInfo.processInfo.processIdentifier)")
             NSApp.run()
+        }
+        let proofStates = Data("""
+        {"projects":[
+          {"root":"/closing","project":"Closing","phase":"ship","archive":".project/archive/001-first","workflow":{"state":"active","label":"In ship"}},
+          {"root":"/uncertain","project":"Uncertain","phase":"shipped","archive":".project/archive/001-first","workflow":{"state":"unverified","label":"Unverified"}},
+          {"root":"/legacy","project":"Legacy","phase":"shipped","archive":".project/archive/001-first"}
+        ]}
+        """.utf8)
+        vc.show(status: try JSONDecoder().decode(StatusResponse.self, from: proofStates))
+        let proofRows = descendants(vc.view).compactMap { $0 as? ProjectRowView }
+        require(proofRows.first { $0.name.stringValue == "Closing" }?.accessibilityLabel()?.contains("In ship") == true, "archive alone does not finish closing")
+        for name in ["Uncertain", "Legacy"] {
+            let row = proofRows.first { $0.name.stringValue == name }
+            require(row?.detail.stringValue.contains("Unverified") == true, "unavailable proof stays visibly Unverified")
+            require(row?.meter.segments.allSatisfy { $0 != .done } == true, "unverified completion does not fill phase meter")
         }
         vc.show(status: StatusResponse(projects: []))
         require(labels().contains { $0.contains("No projects") }, "empty state")

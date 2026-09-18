@@ -90,3 +90,7 @@ The dashboard browser test uses Orca's embedded browser and the real HTTP handle
 ```sh
 GSD_UI_TEST=1 python3 -m unittest discover -s tests -p test_daemon_board_ui.py
 ```
+
+The tray uses the daemon's `workflow` result for its current milestone label.
+Missing runtime proof or an older payload shows **Unverified** while keeping
+available phase and task details. An archive path alone does not show Shipped.

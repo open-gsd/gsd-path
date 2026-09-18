@@ -96,3 +96,26 @@ named surface carries a success criterion observable there and a PLAN.md
 Surface contract.
 _Avoid_: UI (unless you mean a screen only), frontend, interface (that is the
 task-to-task Interface contract)
+
+**Unverified**:
+Available workflow facts whose required validation evidence is unavailable or
+has not passed. They may be displayed, but do not establish that a milestone
+is Shipped.
+_Avoid_: failed, complete, shipped
+
+**Roadmap**:
+The ordered milestone scope, dependencies, status, and open questions for a
+program. It identifies which milestone is ready after its dependencies.
+_Avoid_: task list, wave plan
+
+
+**Approval checkpoint**:
+The durable record of an approved Roadmap or Plan, including its planning
+artifacts and phase transition. Normally a planning-only commit; when the
+workflow defers checkpointing, build records it.
+_Avoid_: task landing, ship commit, approval alone
+
+**Lookahead promotion**:
+The adoption of a prepared next-milestone planning track as the active
+milestone after validated Integration and binding its new bound branch.
+_Avoid_: task landing, phase transition (without naming the milestone change)

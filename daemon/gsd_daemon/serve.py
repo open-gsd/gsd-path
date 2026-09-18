@@ -427,10 +427,9 @@ async function loadActivity() {
 }
 
 /* ---- milestone stack: done / here / ahead from ROADMAP.md, STATE.md and next/STATE.md ---- */
-const STATE_RANK = {blocked: 0, active: 1, shipped: 2};
-const stateOf = p => p.status === "blocked" ? "blocked"
-  : (p.phase === "shipped" || p.status === "shipped" || p.archive) ? "shipped" : "active";
-const stateLabel = p => ({blocked: "Blocked", shipped: "Shipped"})[stateOf(p)] || ("In " + (p.phase || "progress"));
+const STATE_RANK = {blocked: 0, unverified: 1, active: 1, shipped: 2};
+const stateOf = p => p.workflow?.state || "unverified";
+const stateLabel = p => p.workflow?.label || "Unverified";
 const isDoneMilestone = m => m.status === "shipped" || m.status === "archived" || !!m.archive;
 function milestoneStack(p) {
   const rm = p.roadmap_milestones || [];
@@ -616,6 +615,7 @@ function projectPage(p) {
   return `<article class="project" data-root="${esc(p.root)}">
     <div class="phead"><h1><span class="dot ${healthDot(p)}" title="health ${esc(healthReason(p))}"></span> ${esc(p.project || p.root)}</h1><span class="mono">${esc(p.root)}</span></div>
     <dl class="facts">${facts.map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join("")}</dl>
+    ${p.handoff ? `<p class="runtime-handoff">${esc(p.handoff.outcome)} — ${esc(p.handoff.next)}</p>` : ""}
     ${p.vision ? `<p class="vision">${esc(p.vision)}</p>` : ""}
     <div class="cols"><section>
       <h2>Phase <span>${esc(p.phase || "no phase")}</span></h2>${phaseTrack(p)}${nowBox(p)}
