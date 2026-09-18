@@ -184,12 +184,9 @@ Open your agent in the project directory. Invoke the router explicitly.
 
 ### Initial greenfield repository (first milestone)
 
-With no `.project/STATE.md`, a `greenfield` classifier verdict routes to
-**define** immediately. The [DOCS.md FAQ](DOCS.md#faq) owns the exact
-classification rules.
-For an explicit request to create a new GitHub repository, the router first
-previews the repository and linked-worktree targets for approval as described
-in [README.md](README.md#the-flow).
+Follow the [startup and repository setup guidance](README.md#the-flow) first.
+Once setup is complete, a `greenfield` classifier verdict routes to **define**.
+The [DOCS.md FAQ](DOCS.md#faq) owns the exact classification rules.
 
 Define interviews across: problem, users, observable success, scope in,
 scope out (vetoes), constraints, risks, and surfaces. A surface is anything a

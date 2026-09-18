@@ -340,7 +340,8 @@ full-repo suite on a tiny edit outrank the phase brief.
   approval of the exact owner/name, visibility, default-checkout path,
   `gsd-path/M001` branch, and linked primary-worktree path. Before the
   external action produces an artifact, present those proposed targets as the
-  inline **Review** surface and mark them not yet created. Do not write a
+  inline **Review** surface using the active router's preview contract.
+  Do not write a
   preview file into the invocation directory or another repository. Run the
   bundled bootstrap helper's read-only `preview` command for this evidence.
 - After approval, the bootstrap helper persists the exact targets under the
