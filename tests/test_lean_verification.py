@@ -190,6 +190,8 @@ Walkthrough:
             "        self.assertEqual(output, 'hello\\n')\n"
         )
         git(root, "init", "-q", "-b", "gsd-path/M001")
+        # Finish automatic housekeeping before TemporaryDirectory removes Git objects.
+        git(root, "config", "gc.autoDetach", "false")
         git(root, "config", "user.email", "test@example.test")
         git(root, "config", "user.name", "Test")
         git(root, "add", ".")
