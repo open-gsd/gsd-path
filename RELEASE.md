@@ -143,7 +143,8 @@ the helper stays silent (see [UPDATE.md](UPDATE.md)).
 
 - Full live milestone runs on every host — recorded manually per release;
   validated by `verify:release`.
-- npm publish on every merge — only the Release workflow publishes, and only
-  after the trust gate passes.
+- npm publish on every merge — automated publishing uses the Release workflow
+  after the trust gate passes; see [First npm publication](#first-npm-publication)
+  for the initial manual publish.
 - Consumer-repository ship gates — see [HOOKS.md](HOOKS.md) for an optional
   `gsd-path-ship-gate` job template.
