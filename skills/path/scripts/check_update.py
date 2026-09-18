@@ -11,7 +11,7 @@ import time
 import urllib.request
 from pathlib import Path
 
-REGISTRY_URL = "https://registry.npmjs.org/gsd-path/latest"
+REGISTRY_URL = "https://registry.npmjs.org/@opengsd%2Fgsd-path/latest"
 CACHE_PATH = Path.home() / ".cache" / "gsd-path" / "update-check.json"
 CACHE_TTL_SECONDS = 24 * 3600
 NETWORK_TIMEOUT_SECONDS = 3
@@ -76,7 +76,7 @@ def notice():
     if is_newer(latest, installed):
         return (
             f"GSD Path {latest} is available (installed {installed}). "
-            "Update: npx gsd-path@latest --update "
+            "Update: npx @opengsd/gsd-path@latest --update "
             "(add --local for a project install)."
         )
     return None

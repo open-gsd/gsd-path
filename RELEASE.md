@@ -84,6 +84,8 @@ current candidate proof before either publication path can pass `verify:release`
 
 ### First npm publication
 
+The npm package is `@opengsd/gsd-path`; `gsd-path` remains the executable name.
+The GitHub repository is `open-gsd/gsd-path` (a different namespace).
 The GitHub release and npm package are separate. If the npm package does not
 exist yet, publish the verified release checkout interactively first:
 
@@ -133,7 +135,7 @@ across tags and manual dispatches.
 Consumers can install from npm:
 
 ```bash
-npx gsd-path@latest --update
+npx @opengsd/gsd-path@latest --update
 ```
 
 Update notices use `scripts/check_update.py`; until a version is on the registry,

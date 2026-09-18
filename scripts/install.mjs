@@ -3049,7 +3049,7 @@ function usage() {
     "              [--hooks] [--hooks-init] [--hooks-refresh] [--hooks-refresh-full] [target flags]\n\n" +
     "  First install:  gsd-path --all --dry-run && gsd-path --all\n" +
     "  New repo:       gsd-path --all --project /path/to/repo\n" +
-    "  Update skills:  gsd-path --update   (or npx gsd-path@latest --update)\n\n" +
+    "  Update skills:  gsd-path --update   (or npx @opengsd/gsd-path@latest --update)\n\n" +
     `targets: ${flags}\n` +
     "  --update              refresh existing installs in place; with --project also\n" +
     "                        refreshes .gsd-path/ and keeps AGENTS.md/WORKFLOW.md\n" +

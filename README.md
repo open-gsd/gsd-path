@@ -41,9 +41,9 @@ node scripts/install.mjs --update
 cd your-repo && node scripts/install.mjs --update --project "$(pwd)"   # also refresh .gsd-path/
 ```
 
-Interactive: `npx gsd-path` with no flags opens the OpenGSD wizard (pick hosts, scope, contracts, hooks; dry-run first)
+Interactive: `npx @opengsd/gsd-path` with no flags opens the OpenGSD wizard (pick hosts, scope, contracts, hooks; dry-run first)
 
-npm (once published to npm): `npx gsd-path --all` · Help: `node scripts/install.mjs --help`
+npm (once published to npm): `npx @opengsd/gsd-path --all` · Help: `node scripts/install.mjs --help`
 
 ## Skills
 

@@ -1,3 +1,4 @@
+import io
 import json
 import unittest
 from unittest import mock
@@ -30,7 +31,16 @@ class VersionComparisonTests(unittest.TestCase):
             ):
                 line = check_update.notice()
         self.assertIn("GSD Path 9.9.9 is available (installed 1.0.0)", line)
-        self.assertIn("npx gsd-path@latest --update", line)
+        self.assertIn("npx @opengsd/gsd-path@latest --update", line)
+
+    def test_fetches_version_from_organization_package(self):
+        with mock.patch.object(check_update.Path, "read_text", side_effect=OSError):
+            with mock.patch.object(check_update, "_write_cache"):
+                with mock.patch.object(check_update.urllib.request, "urlopen",
+                                       return_value=io.BytesIO(b'{"version":"1.2.3"}')) as fetch:
+                    self.assertEqual("1.2.3", check_update.latest_version())
+        self.assertEqual(fetch.call_args.args[0],
+                         "https://registry.npmjs.org/@opengsd%2Fgsd-path/latest")
 
     def test_cache_hit_avoids_network(self):
         cached = json.dumps({"checked_at": 10_000, "latest": "3.2.1"})

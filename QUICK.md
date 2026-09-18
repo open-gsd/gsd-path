@@ -41,8 +41,8 @@ node scripts/install.mjs --all --dry-run
 node scripts/install.mjs --all
 
 # From npm, no clone — once the package is published to npm
-npx gsd-path --all --dry-run
-npx gsd-path --all
+npx @opengsd/gsd-path --all --dry-run
+npx @opengsd/gsd-path --all
 ```
 
 Only hosts you use:
