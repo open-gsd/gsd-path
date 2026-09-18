@@ -311,9 +311,10 @@ an external import bundle, reviews hook coexistence, and hands off to the Path
 router through inspect and define. See **[MIGRATE.md](MIGRATE.md)**.
 
 **Brownfield vs greenfield?**
-The router runs the bundled `scripts/detect_project.py initialize --repo
-<absolute-root>` command, which classifies the project before it creates
-STATE.md for a brownfield or greenfield verdict. A recognized
+After the [startup prerequisites](README.md#the-flow) are met, the router
+classifies the project before it creates STATE.md for a brownfield or
+greenfield verdict. The exact initializer invocation belongs to the
+[phase workflow](WORKFLOW.md#phase-0--inspect-gsd-path-inspect). A recognized
 manifest or source file, qualifying tracked Git file, or qualifying Markdown
 document with a body is brownfield and routes to inspect. A title-only README,
 `LICENSE`/`COPYING`, `.gitignore`, or content only in ignored trees such as

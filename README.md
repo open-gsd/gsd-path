@@ -110,6 +110,16 @@ flowchart TD
     A -->|"program complete"| PC["stop"]
 ```
 
+Starting in an empty folder without Git leaves that folder unchanged until
+repository setup. The router asks whether to create a new GitHub repository or
+use an existing repository. For a new repository, approve the exact owner/name,
+visibility, default-checkout path, `gsd-path/M001` branch, and linked-worktree
+path before creation. The starting folder is proposed as the linked worktree,
+with a distinct default checkout beside it, so the agent keeps working where
+it started. Only an approved empty directory can be reused; nonempty folders
+and symlinks remain protected. Pipeline state is created after repository
+setup. See the [repository setup procedure](WORKFLOW.md#new-github-repository-creation).
+
 For an existing Git repository, initialization writes STATE.md first. Before
 entering inspect or define, the router fetches `origin/main`, creates or adopts
 `gsd-path/M001` there, and records the binding in state. Build only uses that

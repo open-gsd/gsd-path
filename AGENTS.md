@@ -69,7 +69,10 @@ full-repo suite on a tiny edit outrank the phase brief.
   needs verbal explanation is defective.
 - With no `.project/STATE.md`, route through the bundled
   `scripts/detect_project.py initialize --repo <absolute-root> --template
-  <absolute-state-template>` helper; do not classify from a directory listing
+  <absolute-state-template> --require-git` helper; `route: setup-repository`
+  leaves the invocation folder unchanged and routes to repository setup before
+  state creation or branch binding. Never delete the invocation folder or its
+  state to satisfy bootstrap path checks. Do not classify from a directory listing
   or conversation. Follow its JSON `verdict` and `route`. Reserve `classify`
   for read-only inspection; do not use it as a state-initialization preflight.
 - `.project/STATE.md` tracks phase position. Parse and validate it only with
@@ -344,7 +347,8 @@ full-repo suite on a tiny edit outrank the phase brief.
   approval of the exact owner/name, visibility, default-checkout path,
   `gsd-path/M001` branch, and linked primary-worktree path. Before the
   external action produces an artifact, present those proposed targets as the
-  inline **Review** surface and mark them not yet created. Do not write a
+  inline **Review** surface using the active router's preview contract.
+  Do not write a
   preview file into the invocation directory or another repository. Run the
   bundled bootstrap helper's read-only `preview` command for this evidence.
 - After approval, the bootstrap helper persists the exact targets under the
@@ -362,7 +366,8 @@ full-repo suite on a tiny edit outrank the phase brief.
   build-orchestrator owned.
 - Keep the cloned default checkout clean on the remote default branch. Run the
   pipeline from the linked GSD Path worktree; never initialize `.project/` in
-  the default checkout, reuse an existing branch or path, move an existing
+  the default checkout, reuse an existing branch or path (except an explicitly
+  approved empty linked-worktree folder via `--reuse-empty-worktree`), move an existing
   repository, or recover a partial GitHub creation without the exact approved
   journal and re-verification.
 

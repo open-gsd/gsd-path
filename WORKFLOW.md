@@ -119,7 +119,11 @@ gate. Resolve and preview the GitHub owner/name, visibility, normal default
 checkout, `gsd-path/M001` branch, and a distinct linked-worktree path.
 Create no repository, checkout, worktree, pipeline state, journal, or preview
 file until the user approves every target; present the pre-creation review
-inline from the bootstrap helper's read-only `preview` result.
+inline from the bootstrap helper's read-only `preview` result. An existing
+empty invocation folder may be the linked worktree with approved
+`--reuse-empty-worktree`; Git populates it in place. Keep the workspace journal
+outside that folder. Preserve nonempty folders and choose another target;
+never delete the invocation folder or its state to pass a preview.
 
 After approval, the bundled bootstrap helper writes an exact transaction
 journal under the approved workspace before mutation. Its `create` command
@@ -143,8 +147,9 @@ at `inspect/active|blocked`. **Output:**
 
 When STATE.md is absent, the router runs the bundled
 `scripts/detect_project.py initialize --repo <absolute-root> --template
-<absolute-state-template>` helper before asking anything and routes from its
-returned JSON. `brownfield` initializes `inspect/active` and routes here;
+<absolute-state-template> --require-git` helper before asking anything and routes from its
+returned JSON. `route: setup-repository` leaves a non-Git folder unchanged and
+asks for repository setup before creating state. `brownfield` initializes `inspect/active` and routes here;
 `greenfield` initializes `define/active` and skips to define; `orphan` blocks.
 Owned state routes by STATE.md without rerunning the helper. Reserve `classify`
 for read-only inspection; do not re-derive a verdict from a directory listing.

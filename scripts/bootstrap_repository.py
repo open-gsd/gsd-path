@@ -32,6 +32,7 @@ class BootstrapRequest:
     worktree: str
     branch: str
     description: Optional[str]
+    reuse_empty_worktree: bool = False
 
     @property
     def repository(self) -> str:
@@ -95,6 +96,8 @@ def request_from_arguments(arguments: argparse.Namespace) -> BootstrapRequest:
     if arguments.visibility not in {"public", "private", "internal"}:
         raise BootstrapError("visibility must be public, private, or internal")
 
+    if arguments.reuse_empty_worktree and arguments.worktree.is_symlink():
+        raise BootstrapError("linked worktree must not be a symlink")
     workspace = arguments.workspace.resolve()
     checkout = arguments.default_checkout.resolve()
     worktree = arguments.worktree.resolve()
@@ -116,6 +119,7 @@ def request_from_arguments(arguments: argparse.Namespace) -> BootstrapRequest:
         worktree=str(worktree),
         branch="gsd-path/M001",
         description=arguments.description,
+        reuse_empty_worktree=arguments.reuse_empty_worktree,
     )
 
 
@@ -148,7 +152,10 @@ def transaction_directory(request: BootstrapRequest, create: bool = False) -> Pa
 
 
 def request_payload(request: BootstrapRequest) -> dict:
-    return {"schema": "gsd-path/new-github/v1", **asdict(request)}
+    payload = {"schema": "gsd-path/new-github/v1", **asdict(request)}
+    if not request.reuse_empty_worktree:
+        del payload["reuse_empty_worktree"]
+    return payload
 
 
 def read_journal(request: BootstrapRequest) -> Optional[dict]:
@@ -272,6 +279,16 @@ def transaction_stages(request: BootstrapRequest) -> dict:
     }
 
 
+def reusable_empty_worktree(request: BootstrapRequest) -> bool:
+    path = request.worktree_path
+    return (
+        request.reuse_empty_worktree
+        and not path.is_symlink()
+        and path.is_dir()
+        and not any(path.iterdir())
+    )
+
+
 def preview(request: BootstrapRequest) -> dict:
     gh_authentication()
     stages = transaction_stages(request)
@@ -288,8 +305,12 @@ def preview(request: BootstrapRequest) -> dict:
         ("default checkout", request.checkout_path),
         ("linked worktree", request.worktree_path),
     ):
+        if path == request.worktree_path and reusable_empty_worktree(request):
+            continue
         if path.exists() or path.is_symlink():
-            raise BootstrapError(f"{label} path already exists: {path}")
+            raise BootstrapError(
+                f"{label} path already exists: {path}; preserve it and choose another path"
+            )
     return {**request_payload(request), "mode": "create", "stages": stages}
 
 
@@ -448,7 +469,7 @@ def allowed_partial_project_status(worktree: Path) -> bool:
 def create_or_verify_worktree(request: BootstrapRequest, base: str) -> None:
     checkout = request.checkout_path
     worktree = request.worktree_path
-    if not worktree.exists():
+    if not worktree.exists() or reusable_empty_worktree(request):
         branch_ref = f"refs/heads/{request.branch}"
         branch = run("git", "-C", str(checkout), "rev-parse", "--verify", branch_ref)
         if branch.returncode == 0:
@@ -680,6 +701,7 @@ def parser() -> argparse.ArgumentParser:
     argument_parser.add_argument("--default-checkout", type=Path, required=True)
     argument_parser.add_argument("--worktree", type=Path, required=True)
     argument_parser.add_argument("--description")
+    argument_parser.add_argument("--reuse-empty-worktree", action="store_true")
     argument_parser.add_argument("--state-template", type=Path)
     argument_parser.add_argument("--repository-template", type=Path)
     return argument_parser
