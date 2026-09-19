@@ -448,6 +448,8 @@ def product_commit_violations(entries, subject, body):
     if state is None:
         return []
     if shipped(state):
+        if is_integration_merge(subject):
+            return []
         completion = _completion_status(repo_root(), state, ".project")
         if completion["status"] == "verified":
             return []

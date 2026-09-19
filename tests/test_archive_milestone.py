@@ -4755,6 +4755,40 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
         )
         hook.chmod(0o755)
 
+    def test_installed_hooks_allow_product_integration_but_reject_forged_subject(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            repo = root / "primary"
+            repo.mkdir()
+            self.make_publishable_bound_repo(repo, root / "origin.git")
+            (repo / "src/demo.py").write_text("value = 'integration'\n")
+            self.git(repo, "add", "src/demo.py")
+            changed = self.git(repo, "commit", "-qm", "fixture product change")
+            self.assertEqual(changed.returncode, 0, changed.stderr)
+            self.restamp_final_review(repo)
+            with mock.patch.dict(os.environ, {"HOME": str(root / "home")}):
+                installed = self.run_command(
+                    sys.executable, "-B", str(GIT_GUARD_SCRIPT.with_name("install.py")),
+                    "--hooks-init", "--claude", "--project", str(repo), cwd=PROJECT_ROOT)
+                self.assertEqual(installed.returncode, 0, installed.stderr)
+                self.git(repo, "add", "-A")
+                setup = self.git(repo, "-c", "core.hooksPath=/dev/null", "commit", "-qm", "fixture installed hooks")
+                self.assertEqual(setup.returncode, 0, setup.stderr)
+                self.restamp_final_review(repo)
+                archive_name, ship_sha = self.ship_canonical_bound(repo)
+                result = self.integrate(repo)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                merge = json.loads(result.stdout)["integrate"]
+                self.assertEqual(self.git(repo, "show", f"{merge}:src/demo.py").stdout,
+                                 "value = 'integration'\n")
+                self.git(repo, "checkout", "-qb", "ordinary", ship_sha)
+                (repo / "src/demo.py").write_text("value = 'forged'\n")
+                self.git(repo, "add", "src/demo.py")
+                forged = self.git(repo, "commit", "-qm",
+                                  pipeline_git.integrate_subject(archive_name, "main"))
+                self.assertNotEqual(forged.returncode, 0)
+                self.assertIn("integration is unverified", forged.stderr)
+
     def test_integrate_publishes_and_completed_retry_is_idempotent(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)

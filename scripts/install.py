@@ -1078,16 +1078,6 @@ def _native_settings_mergers(
     return mergers
 
 
-def _is_runtime_version(destination: Path) -> bool:
-    if destination.is_symlink() or not destination.is_file():
-        return False
-    try:
-        value = destination.read_text(encoding="utf-8").strip()
-    except (OSError, UnicodeError):
-        return False
-    return value == "unknown" or re.fullmatch(r"[0-9]+(?:\.[0-9]+)+", value) is not None
-
-
 def _update_replacement(
     project: Path, destination: Path, hooks_dir: Optional[Path]
 ) -> Optional[Callable[[Path], bool]]:
@@ -1100,7 +1090,7 @@ def _update_replacement(
         return None  # Stable wiring and selection change only through explicit operations.
     directory = destination.parent
     if _same_path(directory, parent / "runtime"):
-        return _is_runtime_version if destination.name == "VERSION" else _is_managed_project_runtime
+        return _is_managed_project_runtime
     if _same_path(destination, parent / PROJECT_STATUS_LAUNCHER):
         return _is_managed_project_status_launcher
     if any(_same_path(destination, parent / name) for name in GUARD_SCRIPTS):
@@ -1670,9 +1660,7 @@ def _validate_hooks_refresh(
         )
     if runtime.is_dir():
         unexpected = [
-            entry.name for entry in runtime.iterdir()
-            if entry.name not in PROJECT_RUNTIME_SCRIPTS
-            and not (entry.name == "VERSION" and _is_runtime_version(entry))
+            entry.name for entry in runtime.iterdir() if entry.name not in PROJECT_RUNTIME_SCRIPTS
         ]
         if unexpected:
             raise InstallerError(
