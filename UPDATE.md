@@ -14,10 +14,10 @@ Pulled new gsd-path / ran npx @opengsd/gsd-path@latest
 └─ Skills feel stale or router shows old behavior?
    ├─ Global install     → install.mjs --update
    ├─ Project-local      → install.mjs --update --local  (from repo root)
-   ├─ Project runtime    → install.mjs --update --project PATH  (refreshes .gsd-path/, keeps contracts)
+   ├─ Project wiring     → install.mjs --update --project PATH  (keeps contracts and selected runtime)
    └─ npm only           → npx @opengsd/gsd-path@latest --update
 
-Installed with --hooks and upgraded guard scripts
+Installed with --hooks and need to refresh wiring
 └─ install.mjs --hooks-refresh --project PATH
    └─ Also refresh native settings / git hooks?
       → --hooks-refresh-full [--claude] [--codex] [--cursor]
@@ -40,7 +40,7 @@ AGENTS.md or WORKFLOW.md template changed upstream
 | Global skills (`~/.claude/skills`, …) | Yes | `--update` |
 | Project-local skills (`.cursor/skills`, …) | Yes | `--update --local` |
 | `.gsd-path/guard_hook.py`, `git_guard.py` | Yes | `--hooks-refresh` or `--update --project PATH` |
-| Declared runtime under `~/.gsd-path/runtimes/` | Explicit upgrade only | `--runtime-upgrade --project PATH`; restore exact bytes with `--runtime-restore` |
+| Project runtime | Explicit upgrade only | [Runtime lifecycle](DOCS.md#project-runtime-versions) |
 | Native hook settings + git hooks | Yes | `--hooks-refresh-full` (host flag creates missing config) |
 | Guards for an existing project | Yes | `--hooks-init` (preserves project contracts) |
 | `AGENTS.md`, `WORKFLOW.md` | **No** | Manual merge |
@@ -57,7 +57,8 @@ updates roll back all selected targets.
 An initial `--hooks` install merges valid native settings for explicitly selected Claude,
 Codex, or Cursor hosts; other existing project contract and guard files are refused.
 `--update --project PATH` keeps `AGENTS.md`, `WORKFLOW.md`, and `.claude/CLAUDE.md`
-and refreshes the managed `.gsd-path/` files, native settings, and git hooks.
+and refreshes managed hook wiring, native settings, and git hooks. For runtime
+changes or legacy installations, follow the [runtime lifecycle](DOCS.md#project-runtime-versions).
 Use `--hooks-init` to add guards to an existing project without changing its
 `AGENTS.md` or `WORKFLOW.md`. It inspects and merges native configs only for
 the selected hosts; configs for unselected hosts remain untouched.
@@ -120,16 +121,15 @@ You can update proactively with [commands above](#update-skills) without waiting
 
 ## Update the project runtime and guard hooks
 
-After any `--project` install, refresh the project status runtime with:
+For upgrades, exact-version restoration, or legacy migration, follow
+[Project runtime versions](DOCS.md#project-runtime-versions). To refresh hook wiring:
 
 ```bash
 node scripts/install.mjs --hooks-refresh --project /path/to/repo
 ```
 
-This refresh works for hookless project installs. It overwrites the managed
-project status runtime and also refreshes managed guard scripts when they are
-installed. Guard files must contain `gsd-path guard`; runtime files must
-contain `gsd-path project runtime`.
+This refresh retains the selected runtime and leaves hookless installs hookless.
+Guard files must contain `gsd-path guard`.
 
 Include existing native settings and git hooks, and create missing settings for
 explicitly selected hosts:
@@ -164,9 +164,8 @@ To adopt upstream template changes:
 1. Open new templates in the gsd-path repo or npm package
 2. `diff` against your project copies
 3. Merge manually
-4. Explicitly upgrade the project runtime with `--runtime-upgrade --project PATH`;
-   migrate legacy `.gsd-path/runtime/` first with `--runtime-migrate`. Use
-   `--hooks-refresh-full` when host hook wiring needs an explicit refresh.
+4. Follow the [runtime lifecycle](DOCS.md#project-runtime-versions) when adopting
+   runtime changes. Use `--hooks-refresh-full` when host wiring needs a refresh.
 5. Never delete active `.project/` milestone state
 
 An in-flight milestone whose `INTENT.md` or `ROADMAP.md` predates `Surfaces:`
@@ -188,7 +187,7 @@ Unrecognized or foreign `.project/` state is never auto-migrated — the router 
 | Skills still old | Restart session; confirm root with `--update --dry-run` |
 | Update rolled back | Read installer error; fix path overlap; retry |
 | `--hooks-refresh` rejects an unmanaged guard | Move the foreign guard aside, then rerun refresh; use `--hooks-init` if guards are wanted |
-| `--hooks-refresh` rejects an unmanaged runtime file | Back up or merge that file, move it aside, then rerun refresh |
+| Runtime missing, invalid, or legacy | Follow [runtime restoration or migration](DOCS.md#project-runtime-versions) |
 | Undo skill update | Copy from `disabled-gsd-skills` next to skills root |
 | npm vs clone confusion | Pick one: `npx @opengsd/gsd-path@latest --update` **or** clone + `install.mjs --update` |
 | Router still shows update line | Run update; or ignore — notice is informational |

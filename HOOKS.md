@@ -59,7 +59,7 @@ Native configs for unselected hosts are ignored.
 
 | File | Purpose |
 | --- | --- |
-| `.gsd-path/guard_hook.py` | Pre-tool-use guard (stdin JSON → exit 2 + denial JSON) |
+| `.gsd-path/guard_hook.py` | Pre-tool-use guard (stdin JSON → exit 2 + denial JSON; runtime resolution failures exit 2 with stderr) |
 | `.gsd-path/git_guard.py` | Commit and publication validator |
 | `.gsd-path/runtime.json` | Tracked selected runtime version and digest |
 | `~/.gsd-path/runtimes/<digest>/` | Immutable external pipeline helpers and guards |
@@ -269,6 +269,6 @@ not intercept subagent tools — treat coverage as orchestrator-level.
 | Tool denied editing archive | Pre-tool guard — use active paths, not archive |
 | Hook not running in Cursor | Run `--hooks-refresh-full --cursor --project /path/to/repo` |
 | `--hooks-refresh` rejects an unmanaged guard | Move the foreign guard aside, then rerun refresh; use `--hooks-init` if guards are wanted |
-| `--hooks-refresh` rejects an unmanaged runtime file | Back up or merge that file, move it aside, then rerun refresh |
+| Runtime missing, invalid, or legacy | Follow [runtime restoration or migration](DOCS.md#project-runtime-versions) |
 
 More: [DOCS.md](DOCS.md#help) · [UPDATE.md](UPDATE.md)

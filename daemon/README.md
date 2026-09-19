@@ -253,7 +253,9 @@ one global op-lock — a second concurrent operation gets
   mentioning gsd-path, plus `~/.cursor/agents/gsd-path.md`. Managed-name
   directories without that proof are skipped with a reason.
   `disabled-gsd-skills*` backup directories are never touched.
-- Project: project-local managed skill dirs; `.gsd-path/runtime/*.py` and
+- Project: project-local managed skill dirs; `.gsd-path/runtime.json` when it
+  declares the managed schema (shared runtime versions are retained); legacy
+  `.gsd-path/runtime/*.py` and
   `status_runtime.py` only when marker-matched; `guard_hook.py` /
   `git_guard.py` only when marker-matched; `AGENTS.md`, `WORKFLOW.md`, and
   `.claude/CLAUDE.md` only when byte-identical to the source template

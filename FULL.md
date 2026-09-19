@@ -131,8 +131,9 @@ Install shared rules into a repo (refuses if managed files already exist):
 node scripts/install.mjs --all --project /path/to/project
 ```
 
-Writes `AGENTS.md`, `WORKFLOW.md`, and `.gsd-path/runtime/`; with Claude, also
-`.claude/CLAUDE.md`.
+Writes the [project contracts](DOCS.md#installing); with Claude, also
+`.claude/CLAUDE.md`. See [project runtime versions](DOCS.md#project-runtime-versions)
+for runtime storage, restoration, and legacy migration.
 Merge upgrades manually — the installer will not overwrite existing contracts.
 
 ### Guard hooks (optional)

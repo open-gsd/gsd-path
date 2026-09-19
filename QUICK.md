@@ -64,11 +64,13 @@ cd /path/to/your/repo
 node scripts/install.mjs --all --project "$(pwd)"
 ```
 
-Installs `AGENTS.md`, `WORKFLOW.md`, and `.gsd-path/runtime/`
+Installs the [project contracts](DOCS.md#installing)
 (+ `.claude/CLAUDE.md` if Claude is selected).
 If those managed files already exist, a plain install **refuses and installs
-nothing** — use `--update --project PATH` to refresh skills and `.gsd-path/`
-while keeping your contracts, and merge project-contract changes by hand
+nothing** — see [project runtime versions](DOCS.md#project-runtime-versions)
+for legacy migration, then use `--update --project PATH` to refresh skills and
+hook wiring while keeping your contracts and selected runtime. Merge contract
+changes by hand
 ([UPDATE.md](UPDATE.md)).
 
 **Optional** archive/git guards:
