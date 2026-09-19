@@ -57,3 +57,26 @@ fixes within the approved design, not new model policy choices.
 Ponytail review reused the existing command record, blocked receipt, and panel
 resolver. No new storage format, model preset, or fallback was added. See the
 [gate verification evidence](model-selection-verification.md#gate-review-verification).
+
+## Final scoped correction: R4 and R5
+
+R4 completes the accepted R1 failure-isolation claim. Executable regressions
+confirmed that an unavailable contract-lens model stopped the adversarial lens,
+and an unavailable pinned model on an answered task stopped its answered
+sibling. Selection rejection is now caught before sidecar creation or question
+redispatch. Polling preserves the named rejection while eligible siblings
+finish; missing/rejected review lenses still block the review gate. The rejected
+question retains its answer and original attempt for a later valid retry.
+
+R5 completes the accepted R3 native-path claim. The native build and model-policy
+instructions now pass every known parent/canonical reviewer family to
+`review_panel.py resolve` before persisting membership, using the existing
+repeated `--exclude-family` argument. Per-child independence checks remain.
+Executable helper coverage demonstrates the old call selecting Claude plus
+Grok, its Claude child failing independence, the corrected call selecting only
+Grok, and explicit conflicting membership being rejected. This checks the
+helper protocol, not whether a live model follows the written instructions.
+
+Ponytail review kept the existing receipt and assignment lifecycle. This is the
+owner's final scoped fix round; no new adjacent claims were accepted or pursued.
+Evidence is in [final scoped verification](model-selection-verification.md#final-scoped-verification).

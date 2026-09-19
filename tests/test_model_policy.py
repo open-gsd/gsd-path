@@ -364,6 +364,84 @@ class DispatchPolicyTests(unittest.TestCase):
         self.assertEqual(roster['families'], ['grok'])
         self.assertEqual(set(result['families']), {'grok'})
 
+    def test_rejected_review_lens_does_not_stop_independent_lens(self):
+        from tests.test_dispatch_driver import DispatchDriverTests
+        fixture = DispatchDriverTests()
+        self.policy.unlink()
+        overrides = self.root / 'review-overrides.json'
+        rejected = 'review_wave_1_cycle_1_contract'
+        overrides.write_text(json.dumps({rejected: {'model': 'unavailable'}}))
+        fixture.fixture(self.root)
+        fixture.set_deep_review_with_skeptics(self.root)
+        self.assertEqual(fixture.round(self.root, '--wait', '60')['status'], 'done')
+        result = fixture.review(
+            self.root, '--wait', '60', '--model-capabilities', str(self.caps),
+            '--model-overrides', str(overrides), '--child-command',
+            shlex.join([sys.executable, str(self.root / 'fake_reviewer.py'), '{model_args}']))
+        self.assertEqual(set(result['lenses']), {'adversarial'}, result)
+        self.assertEqual(result['status'], 'blocked', result)
+        self.assertEqual([row['task_id'] for row in result['blocked']], [rejected])
+        self.assertIn('unavailable', result['blocked'][0]['reason'])
+        self.assertTrue((self.root / result['lenses']['adversarial']['path']).is_file())
+        self.assertFalse((dispatch_driver.records_root(self.root) / 'reviews' / rejected).exists())
+        self.assertFalse(any('contract' in branch for branch in fixture.branches(self.root)))
+        self.assertNotIn('checkpoint', result)
+
+    def test_rejected_answered_task_does_not_stop_answered_sibling(self):
+        from tests.test_dispatch_driver import DispatchDriverTests
+        fixture = DispatchDriverTests()
+        fixture.fixture(self.root)
+        task = next((self.root / '.project/tasks').glob('T002*.md'))
+        task.write_text(task.read_text().replace('id: T002', 'id: T002\nmodel: large', 1))
+        subprocess.run(['git', '-C', str(self.root), 'commit', '-qam', 'fixture distinct models'],
+                       check=True, capture_output=True)
+        command = shlex.join([sys.executable, str(self.root / 'fake_coder.py'),
+                              '{model_args}', '{effort_args}'])
+        first = fixture.round(self.root, '--wait', '60', '--model-capabilities', str(self.caps),
+                              '--child-command', command, mode='question')
+        self.assertEqual(len(first['questions']), 2, first)
+        for task_id in ('T001', 'T002'):
+            self.assertEqual(fixture.driver(self.root, 'answer', '--task-id', task_id,
+                                           '--answer', 'hello')['status'], 'answered')
+        records = dispatch_driver.records_root(self.root)
+        caps = json.loads(self.caps.read_text())
+        caps['model']['values'] = ['large']
+        changed_caps = records / 'capabilities.json'
+        changed_caps.write_text(json.dumps(caps))
+        result = fixture.round(self.root, '--wait', '60', '--model-capabilities', str(changed_caps),
+                               '--child-command', command)
+        self.assertEqual([row['task'] for row in result['landed']], ['T002'], result)
+        self.assertEqual(result['status'], 'blocked', result)
+        self.assertEqual([row['task_id'] for row in result['blocked']], ['T001'])
+        states = {state['task_id']: state for state in dispatch_driver.latest_states(records)}
+        self.assertEqual(states['T001']['attempt'], 1)
+        self.assertEqual(states['T001']['outcome'], 'question')
+        self.assertTrue(states['T001']['answered'])
+        self.assertEqual(states['T002']['attempt'], 2)
+        self.assertEqual(states['T002']['outcome'], 'landed')
+
+    def test_native_roster_filters_before_selection_and_rejects_named_conflicts(self):
+        from scripts import model_policy
+        plan = self.root / '.project/native-plan.md'
+        plan.write_text('- review_panel: detected\n')
+        command = [sys.executable, '-B', str(Path(__file__).parents[1] / 'scripts/review_panel.py'),
+                   'resolve', '--plan', str(plan), '--advertised', 'gpt-6,claude-opus,grok-4',
+                   '--parent-slug', 'gpt-6']
+        original = subprocess.run(command, capture_output=True, text=True, check=True)
+        old_roster = json.loads(original.stdout)['selected']
+        self.assertEqual([item['family'] for item in old_roster], ['claude', 'grok'])
+        with self.assertRaises(model_policy.PolicyError):
+            model_policy.validate_panel({'effective_model': old_roster[0]['slug']}, 'claude', ['claude'])
+        command += ['--exclude-family', 'claude', '--exclude-family', 'gpt']
+        corrected = subprocess.run(command, capture_output=True, text=True, check=True)
+        roster = json.loads(corrected.stdout)['selected']
+        self.assertEqual(roster, [{'family': 'grok', 'slug': 'grok-4'}])
+        model_policy.validate_panel({'effective_model': roster[0]['slug']}, 'grok', ['gpt', 'claude'])
+        plan.write_text('- review_panel: claude,grok\n')
+        explicit = subprocess.run(command, capture_output=True, text=True)
+        self.assertEqual(explicit.returncode, 2)
+        self.assertIn('independent family', json.loads(explicit.stdout)['error'])
+
     def test_capability_command_rejects_legacy_model_placeholder(self):
         self.options.child_command += ' -m {model}'
         with self.assertRaisesRegex(Exception, 'model.*placeholder'):

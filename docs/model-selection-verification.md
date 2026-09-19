@@ -144,3 +144,53 @@ The existing subprocess ResourceWarnings remain visible in that log.
 `python3 -B scripts/sync_skill_resources.py` completed with 401 resources and
 zero warnings; `--check` confirmed all 401 resources. `git diff --check` passed.
 No full repository test/lint suite, publication, or other gate phase ran.
+
+## Final scoped verification
+
+Starting HEAD: `9b8634584c55a3f6bda11786f9d1bc79c644adcf`. Scope: R4/R5,
+completing the already accepted R1/R3 claims. Product changes are limited to
+`scripts/dispatch_driver.py`; native contract changes are the canonical
+`build-native.md` and `model-policy.md` references. Generated resources were synced.
+
+RED command (two intended failures):
+
+```sh
+python3 -B -m unittest \
+  tests.test_model_policy.DispatchPolicyTests.test_rejected_review_lens_does_not_stop_independent_lens \
+  tests.test_model_policy.DispatchPolicyTests.test_rejected_answered_task_does_not_stop_answered_sibling
+```
+
+Both failed before correction: no adversarial lens was collected, and T002 did
+not land. Temporarily restoring the starting dispatch script after correction
+produced the same two assertion failures; fixed bytes were restored in `finally`.
+Logs: `.scratch/model-selection-review-round3/red.log` and `sabotage.log`.
+
+The native roster regression executes the real helper with both the old and
+corrected argument sets and checks the child independence validator. It uses
+no source-text assertions. No helper implementation change was needed for R5.
+
+Focused GREEN command after all fixes and resource sync:
+
+```sh
+python3 -B -m unittest \
+  tests.test_model_policy \
+  tests.test_dispatch_driver.DispatchDriverTests.test_review_deep_runs_both_lenses \
+  tests.test_dispatch_driver.DispatchDriverTests.test_review_resumes_only_missing_deep_lens \
+  tests.test_dispatch_driver.DispatchDriverTests.test_question_blocks_until_answered_then_redispatches_the_same_isolate \
+  tests.test_dispatch_driver.DispatchDriverTests.test_interrupted_redispatch_preserves_the_answer_for_retry \
+  tests.test_dispatch_driver.DispatchDriverTests.test_serial_rounds_reproduce_in_the_sidecar_and_unlock_dependents \
+  tests.test_dispatch_driver.DispatchDriverTests.test_panel_resumes_missing_family_and_pending_cleanup \
+  tests.test_dispatch_driver.DispatchDriverTests.test_skeptics_run_once_per_locator_and_fix_tasks_batches_what_stands
+```
+
+Result: **38 tests passed in 94.316 seconds**. Raw output is
+`.scratch/model-selection-review-round3/green.log`; existing subprocess
+ResourceWarnings are retained. The regressions prove collection of the valid
+adversarial lens without a rejected-lens isolate or passing checkpoint, and
+landing of the valid answered sibling while the rejected question keeps its
+original attempt and answer. Existing recovery and dependency checks passed.
+
+Resource sync reported zero warnings; `--check` confirmed 401 resources.
+`git diff --check` passed. No full repository suite or other gate phase ran.
+No accepted R4/R5 claim remains open. The owner review-round cap ends this
+scoped correction; no additional review/fix loop was started.

@@ -356,7 +356,11 @@ dispatch contract and perform steps 1–5 by hand.
      for `full` and `deep`. Inspect advertised model slugs and run
      `python3 <absolute review_panel.py> resolve --plan <absolute PLAN.md>
      --intent <absolute INTENT.md> --advertised <comma slugs>
-     --parent-slug <current model slug when known>` and `--charter
+     --parent-slug <current model slug when known>
+     --exclude-family <known canonical-reviewer family>`; repeat
+     `--exclude-family` for every known parent and canonical-reviewer family,
+     including all deep review lenses, before persisting the roster. Omit
+     unknown identities. Also pass `--charter
      <absolute .project/CHARTER.md>` when that file exists. `status: off`
      continues with no current-cycle panel artifact. For `skipped`,
      persist the helper's exact JSON stdout as

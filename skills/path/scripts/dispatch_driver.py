@@ -633,14 +633,23 @@ class Round:
     def settle(self) -> bool:
         """Classify every exited child. Returns True when a landing or redispatch changed the round."""
         changed = False
+        rejected = {item['task_id'] for item in self.receipt['blocked']
+                    if item.get('code') == 'model-selection'}
         for state in latest_states(self.root):
             if state.get("wave") != self.receipt["wave"]:
                 continue
             outcome = state.get("outcome")
             if outcome == "question":
                 if state.get("answered"):
+                    if state['task_id'] in rejected:
+                        continue
                     self.admit(str(state["task_id"]))
-                    self.launch(dict(state, answered=True))
+                    try:
+                        self.launch(dict(state, answered=True))
+                    except model_policy.PolicyError as error:
+                        self.receipt['blocked'].append({'task_id': state['task_id'], 'reason': str(error),
+                                                       'code': 'model-selection'})
+                        continue
                     update_state(state, outcome="redispatched")
                     changed = True
                 else:
@@ -892,7 +901,12 @@ def spawn_in_sidecar(root: Path, primary: Path, receipt: Dict[str, object], opti
                      command: Optional[str] = None) -> None:
     """Cut a verify sidecar at the state's base and start one child in it."""
     candidate = retain_selection(root, dict(state, worktree=str(primary)))
-    _, selection = selected_command(candidate, options, command or options.child_command)
+    try:
+        _, selection = selected_command(candidate, options, command or options.child_command)
+    except model_policy.PolicyError as error:
+        receipt['blocked'].append({'task_id': state['task_id'], 'reason': str(error),
+                                   'code': 'model-selection'})
+        return
     if selection is not None:
         state = dict(state, model_selection=selection)
     sidecar = isolation.isolate_verify(primary, str(state["base"]), name)
@@ -1049,7 +1063,8 @@ class Review:
 
     def settle(self, states: Dict[str, Dict[str, object]]) -> None:
         """Advance every lens and render the receipt from the records; settle is their only writer."""
-        self.receipt["in_flight"], self.receipt["blocked"], self.receipt["lenses"] = [], [], {}
+        rejected = [item for item in self.receipt['blocked'] if item.get('code') == 'model-selection']
+        self.receipt["in_flight"], self.receipt["blocked"], self.receipt["lenses"] = [], rejected, {}
         for key, state in states.items():
             if not advance(state, self.collect):
                 self.receipt["in_flight"].append(summary(state))
@@ -1129,7 +1144,10 @@ class Review:
                 states = self.current_states(list(lenses))
             while True:
                 self.settle(states)
-                if set(states) == set(lenses) and all(
+                settled = {state['task_id'] for state in states.values()}
+                settled.update(item['task_id'] for item in self.receipt['blocked']
+                               if item.get('code') == 'model-selection')
+                if settled == {self.lens_name(key) for key in lenses} and all(
                         state.get("outcome") in ("collected", "blocked") for state in states.values()):
                     self.conclude()
                     return self.receipt
@@ -1194,7 +1212,8 @@ class Children:
     def poll(self, states: Dict[str, Dict[str, object]], deadline: Optional[float]) -> bool:
         """Advance every child; True once all are terminal, False when the deadline passes first."""
         while True:
-            self.receipt["in_flight"], self.receipt["blocked"], self.receipt[self.results] = [], [], {}
+            rejected = [item for item in self.receipt['blocked'] if item.get('code') == 'model-selection']
+            self.receipt["in_flight"], self.receipt["blocked"], self.receipt[self.results] = [], rejected, {}
             for key, state in states.items():
                 if not advance(state, self.collect):
                     self.receipt["in_flight"].append(summary(state))

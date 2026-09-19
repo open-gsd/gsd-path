@@ -90,8 +90,11 @@ Resolve again before starting the replacement. A project-policy edit alone
 does not change an existing selection. Task-contract edits still require their
 legal pipeline path.
 
-For panel children, first resolve membership with `review_panel.py`; pass its
-selected model through `--panel-model`, and pass `--panel-family` plus
+For panel children, first resolve membership with `review_panel.py resolve`,
+passing `--parent-slug` when known and repeating `--exclude-family` for every
+known parent and canonical-reviewer family (including all deep review lenses).
+Apply these exclusions before persisting membership. Detected membership skips
+excluded families; explicitly named conflicts block. Pass its selected model through `--panel-model`, and pass `--panel-family` plus
 `--exclude-family` for known parent and
 canonical-reviewer families. Persist and reuse the panel roster. Policy cannot
 waive family independence or change canonical review authority. A changed
