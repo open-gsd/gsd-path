@@ -1,4 +1,4 @@
-# Qwen release validation blocked
+# Qwen release validation blocker history — resolved
 
 The third fresh fixture attempt violated the required native-child inspection contract. No native agent call appears before the orchestrator copied its own inspection output into runtime sidecars. It also attempted to move the installed .qwen directory after a helper failed. These results cannot count as passing proof.
 
@@ -57,7 +57,7 @@ Authorize backend retry (recommended: keeps all release gates intact)
 
 One fresh Qwen CLI attempt using the existing OpenRouter Claude Sonnet backend is authorized. Earlier failures remain invalid and retained.
 
-## Current blocker after authorized backend retry
+## Historical credit blocker after authorized backend retry
 
 Qwen confirmed model anthropic/claude-sonnet-5 in native session
 648dd34d-f981-4f50-9a26-34a0b35a959b. It invoked a native inspector, but
@@ -73,3 +73,12 @@ Raw evidence: /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0
 The current Qwen attempt remains incomplete and preserved. No further model
 retry is running. An OpenRouter balance/reservation change is required before
 resuming this same authorized session. No purchase or account change was made.
+
+## Resolution
+
+The owner added credits and authorized resuming the same fixture. It completed
+through native coder and reviewer dispatch, isolated Verify, archive, ship, and
+validated local-origin integration. Fresh parent contexts consumed persisted
+state; this was not another fresh fixture. Receipt validation and the external
+CLI oracle both exited 0. See [RUNS.md](RUNS.md#qwen-retry-resolution) and
+[the Qwen receipt](../qwen.md). Earlier failed observations remain invalid.

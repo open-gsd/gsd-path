@@ -1,0 +1,29 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "qwen",
+  "run_id": "a1597ea1-c79a-48a6-ad6f-1f8695747d51",
+  "result": "pass",
+  "step": "child-spawn",
+  "command": "agent",
+  "child_api": "agent",
+  "child_id": "build_T001",
+  "child_status": "completed",
+  "output": {
+    "child_id": "build_T001",
+    "status": "completed",
+    "child_api": "agent",
+    "run": "run-20260919T034800678388Z",
+    "tool_use": {
+      "id": "toolu_01AwwSemqKF52g5r1aipJQFb",
+      "input": {
+        "description": "build_T001",
+        "run_in_background": false
+      },
+      "prompt_sha256": "1360af820b75d47e73621b156d3154d4e5916470d2db3ff517a2e56df335edca"
+    },
+    "tool_result": {
+      "is_error": false,
+      "content": "Implemented `count.py` (--json flag, invalid-input handling) and added `test_count.py` (8 subprocess-based unittest cases, stdlib only). Verify `python3 test_count.py` ran 8 tests, all passed. Changed paths: `count.py`, `test_count.py`, and this task file's Log.\n\nRESULT: T001 ready"
+    }
+  }
+}

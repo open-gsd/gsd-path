@@ -1,0 +1,17 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "qwen",
+  "run_id": "a1597ea1-c79a-48a6-ad6f-1f8695747d51",
+  "result": "pass",
+  "step": "task-landing",
+  "command": "cd /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/qwen-sonnet/quick/repo && python3 .qwen/skills/gsd-path/scripts/dispatch_driver.py finish --repo \"$(pwd)\" --task-id T001 2>&1",
+  "output": "commit 7431cc40e5cc6d5ef158724328583bbeb3f797a8\nAuthor:     Feature Evaluation <evaluation@example.invalid>\nAuthorDate: Fri Sep 18 22:52:27 2026 -0500\nCommit:     Feature Evaluation <evaluation@example.invalid>\nCommitDate: Fri Sep 18 22:52:27 2026 -0500\n\n    T001: Add --json flag and invalid-input handling to count.py CLI\n    \n    Task: .project/tasks/T001-count-json-cli.md\n    Base: e11a63d3e55b9db81e051715e4a2fe36fb77ab52\n    Files:\n    - .project/tasks/T001-count-json-cli.md\n    - count.py\n    - test_count.py\n\n .project/tasks/T001-count-json-cli.md | 27 ++++++++++--\n count.py                              | 39 +++++++++++++++++-\n test_count.py                         | 77 +++++++++++++++++++++++++++++++++++\n 3 files changed, 138 insertions(+), 5 deletions(-)",
+  "fixture_bundle": "qwen/fixture.bundle",
+  "run_manifest": ".project/archive/001-count-json-cli/trust-run-manifest.json",
+  "fixture_base_commit": "e11a63d3e55b9db81e051715e4a2fe36fb77ab52",
+  "task_branch": "gsd-path-verify/task-t001-verify",
+  "task_worktree": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/qwen-sonnet/quick/repo.gsd-path/verify/task-t001-verify",
+  "landing_commit": "7431cc40e5cc6d5ef158724328583bbeb3f797a8",
+  "isolation_mode": "serial",
+  "isolation_note": "A one-task wave uses the helper's serial mode: the coder worked on the bound branch in the primary worktree at the recorded base, and the named branch and worktree are the isolated Task Verify sidecar created for this task and retired after landing."
+}
