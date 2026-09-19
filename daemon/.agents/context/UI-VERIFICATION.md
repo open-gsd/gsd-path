@@ -355,3 +355,196 @@ and accessibility names, appearance segment icons, fixed daemon row height,
 native hover colors). Sabotage: dropping the window update failed "open windows
 take the choice"; a teal hover failed "hover uses the native selection colors";
 both restored. Browser test passed; daemon suite passed after merging main (#96).
+
+## Dashboard install feedback and project versions — 2026-09-19
+
+Contract: install/update actions show pending and success/failure feedback;
+watched projects show their own runtime release independently of global skills.
+Older unstamped runtimes show `Unknown — update required`. Manual updates refresh
+the source first and report fetch failures instead of reinstalling stale code.
+
+Changed behavior and executable proof:
+- `serve.py`: `tests/test_daemon_board_ui.py::test_plugin_feedback_and_project_versions`
+  uses Orca's embedded browser and the real HTTP handler. It checks pending
+  feedback across rendering, disabled controls, an HTTP-200 partial installer
+  failure and its output, project update/version refresh, a quoted project path,
+  restored controls, and explicit global-only success feedback.
+- `plugin.py`: `tests/test_daemon_plugin.py::test_detect_project` checks runtime
+  version detection and uninstall cleanup; `test_updates_refresh_source_and_surface_fetch_failure`
+  checks that global/project source failures prevent installer execution.
+- `scripts/install.py` and `scripts/install.mjs`: the new project runtime version
+  tests check fresh install, dry-run preservation, update, and runtime refresh.
+  Both installers write `.gsd-path/runtime/VERSION` within their existing transactions.
+
+Reproduction commands (run from the repository root):
+```sh
+python3 -B -m unittest discover -s tests -p test_install.py -k project_runtime_version
+node --test --test-name-pattern='project runtime version' tests/install.test.mjs
+python3 -B -m unittest discover -s tests -p test_daemon_plugin.py -k test_detect_project
+python3 -B -m unittest discover -s tests -p test_daemon_plugin.py -k updates_refresh
+GSD_UI_TEST=1 python3 -B -m unittest discover -s tests -p test_daemon_board_ui.py -k plugin_feedback
+```
+
+RED / original-code sabotage: all five commands exited 1 with the implementation
+files restored from `ca60dd2`. Failures were missing runtime VERSION files,
+missing detected version, source failures reported as success, and absent
+project-version feedback. Installer/detection/source-failure tests were also
+observed failing before their fixes. The first browser baseline attempt had a
+case-sensitive wait mismatch; the corrected baseline above reproduced the bug.
+
+Feedback sabotage: removing the `payload.ok !== true` check made the browser
+command exit 1 because a partial failure displayed `Install complete` instead
+of `host install failed`. Restored the implementation afterward.
+
+GREEN after restoration: the five focused commands passed. Broader relevant
+checks passed: 133 Python installer tests, 128 Node installer tests, and all 42
+plugin tests. The four existing board-browser tests passed; the new plugin
+browser test passed separately after correcting explicit source-refresh behavior.
+`python3 -B scripts/sync_skill_resources.py --check` reported 401 resources;
+`git diff --check` passed.
+
+Scope: disposable test projects only. No live daemon deployment or update to the
+Sorvo project. The version stamp records the installed release; it does not
+prove that files were not edited later.
+
+### Local reinstall — 2026-09-19
+
+Ran `PYTHONPATH=daemon python3 -B -m gsd_daemon install` from this checkout.
+The daemon package was installed, its LaunchAgent restarted, and the native
+macOS toolbar was built and copied to `~/Applications/GSDPathTray.app`.
+Launched the installed toolbar with `open`.
+
+Live checks:
+- Installed `serve.py` and `plugin.py` match this checkout byte for byte.
+- `http://127.0.0.1:8765/health` returns `{"ok": true}`.
+- Opened `http://127.0.0.1:8765/#plugin` in Orca's browser; the live page renders
+  the runtime-version column and unknown-version guidance for watched projects.
+- Native app process is running. Removed Finder/resource-fork metadata left on
+  the copied bundle; `codesign --verify --deep --strict` then passed.
+- Toolbar self-test fails with `OFFLINE`. Decoding the real `/status` response
+  against its `StatusResponse` model reproduces: expected Bool at
+  `projects[2].git.dirty`, found an array. The HTTP endpoint itself returns 200.
+  Toolbar connection health remains blocked by this compatibility bug.
+- The optional Python tray-extra installation failed; the native Swift build
+  and install succeeded. No global skills or project runtimes were updated.
+
+### Toolbar Restart recovery — 2026-09-19
+
+Resolved the compatibility block above in `daemon/gsd_daemon/probe.py`.
+Project runtime status uses a changed-file list for `git.dirty`; the daemon's
+Dashboard/tray status contract uses a Boolean. Runtime enrichment now converts
+only list values to their nonempty Boolean, preserving Boolean and null values.
+The fix is at the shared daemon boundary; native Restart code is unchanged.
+
+Regression: `tests/test_daemon_probe.py::test_runtime_git_dirty_has_dashboard_boolean_shape`
+runs a project-local runtime subprocess and checks serialized probe output for
+empty/nonempty lists, true, false, and null.
+- RED: `python3 -B -m unittest discover -s tests -p test_daemon_probe.py -k runtime_git_dirty`
+  failed for both list cases before the fix.
+- GREEN: all 48 probe tests and all 15 server tests passed.
+- Sabotage: removing the list conversion made the focused command fail again;
+  restored it and reran the focused command successfully.
+
+Installed the daemon package from this checkout with its regular isolated build.
+An initial attempt without build isolation failed because the environment lacked
+`bdist_wheel`; the regular package build and install succeeded.
+A temporary native harness invoked the real DaemonRowView Restart NSButton with
+`performClick`, using the actual launchctl action and onRescan callback. Restart
+was already replacing the daemon before the fix (6867 -> 19330), but the installed
+self-test still returned OFFLINE. After installation, the same native button path
+replaced PID 19330 -> 25168, and the real Swift status client decoded 15 projects.
+The harness matched the app's five-second polling interval while the restarted
+HTTP listener became ready. The installed toolbar's `--self-test` then returned
+`OK`. This supersedes the prior toolbar connection block. No project state,
+global skills, or project-local runtime files were changed.
+
+### Completed milestone guard release — 2026-09-19
+
+The status runtime now verifies historical integration on an ordinary branch,
+including when the old bound branch has been retired and product files are dirty.
+It reuses archive and integration validation; the strict ship commands still
+require the bound branch and a clean worktree. A live published tag can prove
+publication without the integration helper's cached remote tag ref.
+
+`test_completed_milestone_releases_ordinary_work_only_with_proof` exercises
+`archive_milestone.py`, `discussion_validate.py`, `integration.py`,
+`pipeline_state.py`, `guard_hook.py`, and `git_guard.py` through real Git history,
+an installed project runtime, and a local bare remote. Missing tags and archive
+changes keep protection active. Git regressions also reject a shipped marker
+without integration proof and unfinished state whose bound branch was deleted.
+
+- RED: the three new regression cases failed on the old behavior.
+- GREEN: all three passed; 150 guard tests passed with one platform skip, and
+  all 17 `validate_integrated` cases passed. The initial combined run also had
+  a fixture setup failure (missing installer target); the corrected end-to-end
+  case passed separately.
+- Sabotage: forcing the old strict completion check reproduced the ordinary
+  branch mismatch. Restoring the implementation made the full end-to-end case
+  pass again.
+- Resource sync: 401 resources checked; no warnings; `git diff --check` passed.
+
+Refreshed Sorvo `report-dashboard` with `--hooks-refresh --project` from this
+source checkout. All 233 `.project` files retained their hashes. The installed
+guard allowed a simulated product Edit (exit 0) and denied a simulated archived
+manifest Edit (exit 2). Neither probe wrote a product or archive file. Completion
+proof names ship `3ca7e03a05a23b1908d36a10d0ab428b763dbf90`, integration merge
+`10b498b2f9ddb3778fd6c51c986113af7a677a61`, and published annotated tag
+`milestone/004-governed-subject-composition`. Pipeline routing still requires
+branch recovery before starting another milestone; ordinary product work no
+longer depends on that recovery.
+
+### Gate test evidence follow-up — 2026-09-19
+
+Target: `0d10ba543c1d852fd1475d23654e1513955b70d7`. No product failure
+was reproduced and no production source fix was needed.
+
+A temporary worktree-local fixture served the real daemon HTTP API and dashboard
+with PluginManager, a Git archive of this target initialized as a local source
+remote, and isolated HOME/config/runtime storage. Only project enumeration was
+stubbed; installer and Git commands executed real subprocesses. A release-file
+barrier held installer startup to observe pending controls without replacing its
+result. The in-app browser was unavailable, so the connected Chrome browser was
+used for the local page and its test tab was closed afterward.
+
+Observed through browser clicks and rendered output:
+- Project Install: disabled controls and “Installing project runtime”, then
+  “Install complete”; global and project versions both 1.1.0.
+- Committed a synthetic 1.1.1 manifest release to the disposable source remote.
+  Global Update fetched it and showed pending then success. Global skills became
+  1.1.1 while project runtime stayed 1.1.0, with Latest 1.1.1 shown separately.
+- Project Update fetched source and ran the real `--runtime-upgrade` command;
+  pending then success appeared and the project runtime became 1.1.1.
+- Real subprocess logs reported exit 0 for these installer operations.
+
+The isolated Python CLI lifecycle then changed only the fixture source version
+to 1.1.2. `install.py --update --claude --project` and `--hooks-refresh --project`
+preserved runtime.json byte-for-byte; `--runtime-upgrade --project` selected
+1.1.2. `python -m gsd_daemon plugin uninstall --project ... --yes` removed the
+managed declaration while preserving user files, .project notes, and the shared
+runtime. An initial harness invocation used unsupported `--confirm`; argparse
+rejected it without uninstalling. Using the actual `--yes` interface passed.
+
+Focused existing checks passed:
+- unittest test_runtime_lifecycle.py -k refresh_keeps_pin (1 test)
+- unittest test_daemon_probe.py -k runtime_git_dirty (1 test)
+- unittest test_daemon_plugin.py -k test_detect_project (1 test, including legacy
+  unstamped runtime detection)
+
+The test_git_guard Git fixture was also driven through real installer-generated
+hooks and actual git commit attempts. A shipped/done marker without archive proof
+and a plan-phase milestone whose bound branch had been deleted both blocked
+product commits with exit 1 and left HEAD unchanged.
+
+Isolation violation: the guard fixture's installer subprocess accidentally
+inherited the real HOME and used `--claude` without `--local`. It could therefore
+replace global Claude skills and populate the user runtime store outside this
+worktree. The global Claude VERSION was observed as 1.1.0 afterward; prior bytes
+were not captured, so the exact external delta is unknown. This violates the
+validation boundary. No outside rollback was attempted. Other live installer
+operations used the explicitly isolated environment described above.
+
+Native evidence remains the earlier real NSButton/launchctl/PID and Swift decoder
+proof recorded above, supplemented by the current executable dirty-list payload
+regression. No new native restart or deployment was performed in this gate.
+The previous failure-path evidence remains valid and was not replaced. No full
+suite, lint, formatter, static analysis, publication, or pipeline control ran.

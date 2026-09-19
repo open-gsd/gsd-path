@@ -414,7 +414,7 @@ def remove_interrupted_carry_copy(active_root: Path, archive: Path) -> None:
 
 
 def require_transaction_context(
-    project: Path, state: PipelineState, phases: Sequence[str]
+    project: Path, state: PipelineState, phases: Sequence[str], *, historical: bool = False
 ) -> None:
     phase = state.phase
     if phase not in phases:
@@ -434,7 +434,7 @@ def require_transaction_context(
     )
     if archive_milestone.is_unset(expected_branch):
         raise ArchiveError("STATE.md does not name a bound build branch")
-    if current_branch != expected_branch:
+    if current_branch != expected_branch and not historical:
         raise ArchiveError(
             f"current branch {current_branch!r} does not match STATE.branch {expected_branch!r}"
         )
@@ -451,7 +451,7 @@ def require_transaction_context(
         ),
         "inspect non-project worktree status",
     )
-    if non_project_status:
+    if non_project_status and not historical:
         raise ArchiveError("non-.project worktree changes block the archive transaction")
 
 

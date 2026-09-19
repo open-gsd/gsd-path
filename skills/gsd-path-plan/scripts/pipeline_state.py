@@ -618,7 +618,7 @@ def _completion_status(repo: Path, state: Mapping[str, object], project_dir: str
         import integration
     try:
         proof = integration.validate_integrated(
-            repo, str(state.get("milestone") or ""), refresh=False)
+            repo, str(state.get("milestone") or ""), refresh=False, historical=True)
     except (integration.ArchiveError, OSError) as error:
         return {"status": "unverified", "reason": str(error)}
     return {"status": "verified", "proof": proof}

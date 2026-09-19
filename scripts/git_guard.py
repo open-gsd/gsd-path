@@ -20,6 +20,7 @@ sys.dont_write_bytecode = True  # a hook must not leave __pycache__ in the workt
 try:
     from isolation import BOOKKEEPING_PREFIXES, NULL_SHA, _landing_state, task_frontmatter
     from pipeline_git import is_ship_subject, task_commit_body
+    from pipeline_state import _completion_status
 except ImportError as error:  # pragma: no cover - broken install
     print(
         f"gsd-path guard: pipeline runtime is missing ({error}); commit blocked; "
@@ -53,8 +54,8 @@ LANDING_HINT = (
     "land; bookkeeping commits may touch only .project/"
 )
 PRODUCT_HINT = (
-    "on unshipped pipeline lineage (HEAD descends from the bound gsd-path/M### "
-    f"branch) {LANDING_HINT}; findings during ship reopen through the patch plan"
+    f"while this worktree carries unfinished milestone state, {LANDING_HINT}; "
+    "findings during ship reopen through the patch plan"
 )
 PUBLICATION_HINT = (
     "unshipped milestone work reaches a remote only as its ship commit "
@@ -435,7 +436,7 @@ def repo_root():
 
 
 def product_commit_violations(entries, subject, body):
-    """Hold product changes on unshipped pipeline lineage to build landing commits."""
+    """Hold product changes until build landing or verified integration."""
     if is_ship_commit(subject):
         return []  # ship commits are held to .project/ by ship_contract_violations
     staged = sorted({path for _, old, new in entries for path in (old, new) if path})
@@ -446,11 +447,18 @@ def product_commit_violations(entries, subject, body):
     state = staged_frontmatter() if ".project/STATE.md" in staged else head_frontmatter()
     if state is None:
         return []
+    if shipped(state):
+        if is_integration_merge(subject):
+            return []
+        completion = _completion_status(repo_root(), state, ".project")
+        if completion["status"] == "verified":
+            return []
+        return [f"milestone integration is unverified: {completion.get('reason')}; {PRODUCT_HINT}"]
     phase = state.get("phase")
     if subject is None and phase == "build":
         return []  # pre-commit has no message; commit-msg checks the landing shape
     bound = unshipped_bound_branch(state)
-    if bound is None or not head_descends_from(f"refs/heads/{bound}"):
+    if bound is None:
         return []
     if phase != "build":
         return [f"product files are staged while STATE is {phase}; {PRODUCT_HINT}"]

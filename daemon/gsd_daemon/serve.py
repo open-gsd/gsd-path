@@ -243,6 +243,7 @@ const healthDot = p => ({red: "r", amber: "y", green: "g"})[healthOf(p)] || "g";
 
 let DATA = {schema: null, generated_at: null, projects: []};
 let PLUGIN = null;
+let PLUGIN_OP = null;
 let ONLINE = null;
 let CState = {view: "board", root: null, filter: "all", q: ""};
 let ACTIVITY = [];
@@ -279,21 +280,40 @@ function navigate(view) {
 async function loadPlugin() {
   try {
     const r = await fetch("/api/plugin/status");
-    if (r.ok) PLUGIN = await r.json();
-  } catch (e) { /* keep last good data */ }
+    if (!r.ok) return false;
+    PLUGIN = await r.json();
+    return !PLUGIN.error;
+  } catch (e) { return false; }
 }
 async function pluginOp(path, body) {
-  let payload = {};
+  if (PLUGIN_OP?.busy) return null;
+  const action = path.split("/").pop();
+  const label = {install: "Install", update: "Update", uninstall: "Uninstall"}[action];
+  const pending = {install: "Installing", update: "Updating", uninstall: "Uninstalling"}[action];
+  const target = body.scope === "project" ? "project runtime: " + body.root : "global skills";
+  PLUGIN_OP = {busy: true, message: pending + " " + target + "…", output: "", error: false};
+  render();
+  let payload = null;
   try {
     const r = await fetch(path, {method: "POST", headers: {"Content-Type": "application/json"},
                                  body: JSON.stringify(body)});
-    payload = await r.json().catch(() => ({}));
-    if (r.status === 409) { alert("Another plugin operation is in progress — try again shortly."); return null; }
-    if (!r.ok) { alert(payload.error || ("Request failed (" + r.status + ")")); return null; }
-  } catch (e) { alert("Request failed: " + e); return null; }
-  await loadPlugin();
-  render();
-  return payload;
+    payload = await r.json();
+    PLUGIN_OP.output = payload.stdout_tail || "";
+    if (r.status === 409) throw new Error("Another plugin operation is in progress — try again shortly.");
+    if (!r.ok || payload.ok !== true) throw new Error(payload.error
+      || (payload.errors || []).map(e => e.path + ": " + e.error).join("; ")
+      || ("Request failed (" + r.status + ")"));
+    PLUGIN_OP.message = label + " complete — " + target + "."
+      + (body.scope === "global" ? " Project runtimes were not changed; use each project's Update button below." : "");
+  } catch (e) {
+    PLUGIN_OP.error = true;
+    PLUGIN_OP.message = label + " failed — " + target + ": " + e.message;
+  } finally {
+    if (!await loadPlugin()) PLUGIN_OP.message += " Could not refresh installed versions. Reload to check.";
+    PLUGIN_OP.busy = false;
+    render();
+  }
+  return PLUGIN_OP.error ? null : payload;
 }
 async function uninstallPlan(body) {
   let payload = {};
@@ -637,10 +657,10 @@ function tabPlugin() {
   const installed = Object.entries(hosts).filter(([, d]) => d.installed);
   const versions = [...new Set(installed.map(([, d]) => d.version || "unknown"))];
   const banner = `<div class="box" style="margin:4px 0 14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-    <span>Installed: <b>${esc(versions.join(", ") || "not installed")}</b></span>
+    <span>Global skills: <b>${esc(versions.join(", ") || "not installed")}</b></span>
     <span class="dim">Latest: <b>${esc(latest || "unknown")}</b></span>
     ${PLUGIN.update_available ? '<span class="pill outdated">Update available</span>'
-      + "<button class='btn primary' onclick='pluginOp(&quot;/api/plugin/update&quot;, {scope:&quot;global&quot;})'>Update all</button>" : ""}
+      + "<button class='btn primary' onclick='pluginOp(&quot;/api/plugin/update&quot;, {scope:&quot;global&quot;})'>Update global skills</button>" : ""}
     <span style="margin-left:auto"></span>
     <button class="btn primary" onclick="pluginOp('/api/plugin/install', {scope:'global'})">Install for all detected hosts</button>
   </div>`;
@@ -665,8 +685,11 @@ function tabPlugin() {
       pr.hooks ? '<span class="pill active">hooks</span>' : "",
       (pr.local_skills || []).length ? `<span class="pill done">local: ${esc(pr.local_skills.join(", "))}</span>` : "",
     ].filter(Boolean).join(" ");
-    const root = JSON.stringify(pr.root);
-    return `<tr><td class="faint" style="word-break:break-all">${esc(pr.root)}</td><td>${pills}</td>
+    const root = esc(JSON.stringify(pr.root));
+    const version = pr.runtime_version && pr.runtime_version !== "unknown" ? pr.runtime_version : null;
+    const versionLabel = !pr.runtime ? "Not installed" : version || "Unknown — update required";
+    const update = version && latest && version !== latest ? `<div class="dim">Latest: ${esc(latest)}</div>` : "";
+    return `<tr><td class="faint" style="word-break:break-all">${esc(pr.root)}</td><td>${esc(versionLabel)}${update}</td><td>${pills}</td>
       <td style="white-space:nowrap">
         <button class="btn" onclick='pluginOp("/api/plugin/install", {scope:"project", root:${root}})'>Install</button>
         <button class="btn" onclick='pluginOp("/api/plugin/update", {scope:"project", root:${root}})'>Update</button>
@@ -674,9 +697,15 @@ function tabPlugin() {
       </td></tr>`;
   }).join("");
   const projectsBox = `<div class="box" style="margin-top:12px"><h4>Watched projects</h4>`
-    + (projects ? `<table class="tasks"><tr><th>Project root</th><th>Installed</th><th></th></tr>${projects}</table>`
+    + (projects ? `<table class="tasks"><tr><th>Project root</th><th>Runtime version</th><th>Installed</th><th></th></tr>${projects}</table>`
                 : '<p class="dim">No watched projects.</p>') + `</div>`;
-  return banner + hostsTable + projectsBox;
+  const feedback = PLUGIN_OP ? `<div id="plugin-feedback" class="box" role="${PLUGIN_OP.error ? "alert" : "status"}" aria-live="polite">
+    <strong>${esc(PLUGIN_OP.message)}</strong>
+    ${PLUGIN_OP.output ? `<details><summary>Installer output</summary><pre style="white-space:pre-wrap;overflow-wrap:anywhere">${esc(PLUGIN_OP.output)}</pre></details>` : ""}
+  </div>` : "";
+  return feedback + `<p class="dim">Global skills and project runtimes are installed separately. Update each project to refresh its local runtime and existing guards.</p>`
+    + `<fieldset class="plugin-controls" style="border:0;padding:0;margin:0;min-width:0" ${PLUGIN_OP?.busy ? "disabled" : ""}>`
+    + banner + hostsTable + projectsBox + `</fieldset>`;
 }
 const ICON = {
   mark: '<svg viewBox="0 0 18 18" fill="none" aria-hidden="true"><path d="M1.6 4 5.6 9 1.6 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M7 4 11 9 7 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.4 4 16.4 9 12.4 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',

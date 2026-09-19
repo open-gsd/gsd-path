@@ -121,6 +121,17 @@ You can update proactively with [commands above](#update-skills) without waiting
 
 ## Update the project runtime and guard hooks
 
+The Dashboard's **Plugin → Watched projects → Runtime version** column shows
+each project's installed runtime release. Global skill versions are separate;
+a global update does not update project runtimes. Use the project's **Update**
+button to refresh its runtime and existing guards. Install and update actions
+show progress, success or failure, and installer output.
+
+Older unstamped installs show **Unknown — update required**. For these legacy
+installs, follow the migration steps in
+[Project runtime versions](DOCS.md#project-runtime-versions) before using
+**Update**. Use `--doctor --project PATH` to check runtime files.
+
 For upgrades, exact-version restoration, or legacy migration, follow
 [Project runtime versions](DOCS.md#project-runtime-versions). To refresh hook wiring:
 

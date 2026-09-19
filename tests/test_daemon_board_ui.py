@@ -8,6 +8,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
 from unittest import mock
 from unittest.mock import Mock
@@ -116,6 +117,61 @@ class BoardUITests(unittest.TestCase):
         labels = json.loads(self.js("JSON.stringify(Object.fromEntries([...document.querySelectorAll('tr.prow')].map(row => [row.dataset.root, row.querySelector('.state').textContent])))"))
         self.assertEqual(labels, {'/Closing': 'In ship', '/Uncertain': 'Unverified',
                                   '/Complete': 'Shipped', '/Legacy': 'Unverified'})
+
+    def test_plugin_feedback_and_project_versions(self):
+        from gsd_daemon.plugin import PluginManager
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            project = root / "project's & folder"
+            runtime = project / ".gsd-path/runtime"
+            runtime.mkdir(parents=True)
+            (runtime / "pipeline_state.py").write_text("# gsd-path project runtime\n")
+            release = threading.Event()
+            self.addCleanup(release.set)
+            outcome = [False]
+            def runner(argv, cwd=None):
+                release.wait()
+                if outcome[0]:
+                    (runtime / "VERSION").write_text("1.1.0\n")
+                    return 0, "runtime refreshed", ""
+                return 2, "some hosts installed", "host install failed"
+            manager = PluginManager(home=root / "daemon", user_home=root / "home",
+                                    runner=runner, git_runner=lambda *a, **kw: (0, "", ""), environ={})
+            (manager.src_dir / ".git").mkdir(parents=True)
+            (manager.src_dir / "scripts").mkdir()
+            manager.install_py.write_text("# test installer boundary\n")
+            (manager.src_dir / "package.json").write_text('{"version":"1.1.0"}')
+            manager._write_cache("1.1.0")
+            watcher = Mock(config=Config(parents=[], session_dirs=[]),
+                           projects={str(project): ProjectStatus(root=str(project), project="Demo")})
+            watcher.poll_once.return_value = []
+            server, _ = serve_in_thread(watcher, port=0, plugin=manager)
+            self.addCleanup(server.server_close)
+            self.addCleanup(server.shutdown)
+            self.addCleanup(server.watcher_stop.set)
+            self.addCleanup(release.set)
+            self.page = self.orca("tab", "create", "--url",
+                f"http://127.0.0.1:{server.server_address[1]}/#plugin")["browserPageId"]
+            tab = next(t for t in self.orca("tab", "list")["tabs"] if t["browserPageId"] == self.page)
+            self.addCleanup(self.orca, "tab", "close", "--index", str(tab["index"]))
+            self.orca("wait", "--page", self.page, "--text", "WATCHED PROJECTS")
+            self.assertIn("Unknown — update required", self.js("document.body.innerText"))
+            self.js("[...document.querySelectorAll('button')].find(b => b.textContent === 'Install for all detected hosts').click()")
+            self.assertIn("Installing", self.js("document.querySelector('#plugin-feedback')?.textContent || ''"))
+            self.assertEqual(self.js("[...document.querySelectorAll('.plugin-controls button')].every(b => b.matches(':disabled'))"), "true")
+            self.js("render()")
+            self.assertIn("Installing", self.js("document.querySelector('#plugin-feedback').textContent"))
+            release.set()
+            self.orca("wait", "--page", self.page, "--selector", ".plugin-controls:not([disabled])")
+            self.assertIn("host install failed", self.js("document.querySelector('#plugin-feedback').textContent"))
+            self.assertIn("some hosts installed", self.js("document.querySelector('#plugin-feedback').textContent"))
+            outcome[0] = True
+            self.js("[...document.querySelectorAll('tr')].find(r => r.textContent.includes(\"project's & folder\")).querySelectorAll('button')[1].click()")
+            self.orca("wait", "--page", self.page, "--text", "Update complete")
+            self.assertIn("1.1.0", self.js("[...document.querySelectorAll('tr')].find(r => r.textContent.includes(\"project's & folder\")).textContent"))
+            self.assertEqual(self.js("[...document.querySelectorAll('.plugin-controls button')].some(b => b.matches(':disabled'))"), "false")
+            self.js("[...document.querySelectorAll('button')].find(b => b.textContent === 'Install for all detected hosts').click()")
+            self.orca("wait", "--page", self.page, "--text", "Project runtimes were not changed")
 
     def orca(self, *args):
         result = subprocess.run([os.environ.get("ORCA_CLI_COMMAND", "orca"), *args, "--json"],

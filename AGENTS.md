@@ -127,7 +127,10 @@ full-repo suite on a tiny edit outrank the phase brief.
   with `-B .gsd-path/status_runtime.py --repo <absolute-root>`
   before any requested repository mutation. Treat its JSON as the only route
   authority.
-  A plain change request does not authorize work outside the pipeline: make no
+  When `completion.status` is `verified` and `git.branch` is an ordinary
+  branch (not `gsd-path/M###`), requested product work may proceed normally.
+  Archives and pipeline control files remain protected. Otherwise,
+  a plain change request does not authorize work outside the pipeline: make no
   changes and report **Outcome**, link the returned `path` under **Review**, and
   under **Next** use `handoff.next`. An explicit request to leave
   or bypass the pipeline is a user ruling;

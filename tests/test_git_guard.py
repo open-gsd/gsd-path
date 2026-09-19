@@ -731,12 +731,20 @@ class GitGuardEndToEndTests(unittest.TestCase):
         result = self.run_guard("router: record final gap")
         self.assertEqual(0, result.returncode, result.stderr)
 
-    def test_shipped_lineage_is_ordinary_work(self):
+    def test_shipped_marker_without_integration_proof_stays_protected(self):
         self.enter_build(phase="shipped", status="done")
         self.git("checkout", "-q", "-b", "feature/x")  # like a branch cut from main
         self.stage_product_change()
         result = self.run_guard("feat(app): ordinary work after integration")
-        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(1, result.returncode, result.stderr)
+
+    def test_removing_bound_branch_does_not_release_unfinished_work(self):
+        self.enter_build(phase="plan")
+        self.git("checkout", "-q", "-b", "feature/manual")
+        self.git("branch", "-D", "gsd-path/M002")
+        self.stage_product_change()
+        result = self.run_guard("fix(app): manual change")
+        self.assertEqual(1, result.returncode, result.stderr)
 
     def test_closed_branch_refuses_new_work_even_after_state_rewrite(self):
         self.check_closed_branch_install([sys.executable, "-B", str(SCRIPT.with_name("install.py"))])

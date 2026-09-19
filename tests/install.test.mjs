@@ -1199,3 +1199,36 @@ test("doctor cli fails when a linked worktree hooks directory cannot be resolved
 
   assert.equal(status, 1);
 });
+
+test("project runtime version install update refresh", () => {
+  const project = path.join(root, "version-project");
+  const cliSource = path.join(root, "cli-source");
+  fs.mkdirSync(cliSource);
+  for (const name of ["scripts", "skills", "platforms", "AGENTS.md", "WORKFLOW.md", "package.json"]) {
+    fs.cpSync(path.join(REPO_ROOT, name), path.join(cliSource, name), { recursive: true });
+  }
+  const version = (value) => fs.writeFileSync(path.join(cliSource, "package.json"), JSON.stringify({ ...JSON.parse(fs.readFileSync(path.join(cliSource, "package.json"), "utf8")), version: value }));
+  const cli = (...args) => {
+    const result = spawnSync(process.execPath, [path.join(REPO_ROOT, "scripts/install.mjs"),
+      "--project", project, "--source-root", cliSource, "--no-color", ...args,
+    ], { encoding: "utf8", env: { ...process.env, CLAUDE_CONFIG_DIR: path.join(root, "claude") } });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+  };
+  version("9.9.9");
+  cli("--claude");
+  const stamp = path.join(project, ".gsd-path/runtime.json");
+  const installed = () => JSON.parse(fs.readFileSync(stamp, "utf8")).version;
+  assert.equal(installed(), "9.9.9");
+  version("10.0.0");
+  cli("--claude", "--update", "--dry-run");
+  assert.equal(installed(), "9.9.9");
+  cli("--claude", "--update");
+  assert.equal(installed(), "9.9.9");
+  cli("--runtime-upgrade");
+  assert.equal(installed(), "10.0.0");
+  version("10.1.0");
+  cli("--hooks-refresh");
+  assert.equal(installed(), "10.0.0");
+  cli("--runtime-upgrade");
+  assert.equal(installed(), "10.1.0");
+});
