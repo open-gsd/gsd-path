@@ -1811,6 +1811,7 @@ def prepared_transaction(
     repo: Path,
     phases: Sequence[str],
     must_be_uncommitted: bool = False,
+    *, historical: bool = False,
 ) -> tuple:
     project = repo.resolve()
     active_root = require_project_layout(project)
@@ -1819,7 +1820,7 @@ def prepared_transaction(
     state, _, loaded_state_path = strict_state(project)
     if loaded_state_path.resolve() != state_path.resolve():
         raise ArchiveError("strict STATE.md loader returned an unexpected path")
-    require_transaction_context(project, state, phases)
+    require_transaction_context(project, state, phases, historical=historical)
 
     configured = state.archive
     if configured is None:
@@ -1883,10 +1884,11 @@ def require_canonical_commit_body(
         raise ArchiveError(f"{label} commit body does not match required fields")
 
 
-def find_ship_commit(project: Path, archive_name: str) -> str:
+def find_ship_commit(project: Path, archive_name: str, *, historical: bool = False) -> str:
     expected_subject = ship_subject(archive_name)
     log = require_git_success(
-        run_git(project, "log", "--first-parent", "--format=%H%x00%s", "HEAD"),
+        run_git(project, "log", *([] if historical else ["--first-parent"]),
+                "--format=%H%x00%s", "HEAD"),
         "inspect HEAD history for the ship commit",
     )
     matches = []
@@ -1929,19 +1931,22 @@ def validate_shipped_roadmap(text: str, state: PipelineState, archive: str) -> N
         raise ArchiveError("ROADMAP.md must record Status: shipped and the exact Archive")
 
 
-def validate(repo: Path) -> dict:
+def validate(repo: Path, *, historical: bool = False) -> dict:
     project, _, state, configured, archive, archived_files, reviewed_head = prepared_transaction(
         repo,
         ("shipped",),
+        historical=historical,
     )
     if state.status != "done":
         raise ArchiveError("STATE.md is not shipped/done")
 
-    project_status = require_git_success(run_git(project, "status", "--porcelain"), "inspect worktree status")
+    project_status = require_git_success(
+        run_git(project, "status", "--porcelain", *(["--", ".project"] if historical else [])),
+        "inspect worktree status")
     if project_status:
         raise ArchiveError("ship transaction worktree is not clean")
 
-    ship_commit = find_ship_commit(project, archive.name)
+    ship_commit = find_ship_commit(project, archive.name, historical=historical)
 
     parents = require_git_success(
         run_git(project, "rev-list", "--parents", "-n", "1", ship_commit),

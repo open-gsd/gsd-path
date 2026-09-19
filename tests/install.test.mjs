@@ -1199,3 +1199,20 @@ test("doctor cli fails when a linked worktree hooks directory cannot be resolved
 
   assert.equal(status, 1);
 });
+
+test("project runtime version install update refresh", async () => {
+  const project = path.join(root, "version-project");
+  const plans = [installer.targetPlan("claude", path.join(root, "version-skills"))];
+  await runInstall(plans, { project });
+  const stamp = path.join(project, ".gsd-path/runtime/VERSION");
+  assert.equal(fs.readFileSync(stamp, "utf8").trim(), "9.9.9");
+  fs.writeFileSync(path.join(source, "package.json"), '{"version":"10.0.0"}');
+  await runInstall(plans, { project, update: true, dryRun: true });
+  assert.equal(fs.readFileSync(stamp, "utf8").trim(), "9.9.9");
+  await runInstall(plans, { project, update: true });
+  assert.equal(fs.readFileSync(stamp, "utf8").trim(), "10.0.0");
+  fs.writeFileSync(path.join(source, "package.json"), '{"version":"10.1.0"}');
+  const result = await installer.main(["--hooks-refresh", "--project", project, "--source-root", source, "--no-color"]);
+  assert.equal(result, 0);
+  assert.equal(fs.readFileSync(stamp, "utf8").trim(), "10.1.0");
+});

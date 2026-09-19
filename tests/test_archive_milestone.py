@@ -5169,6 +5169,61 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
             self.assertEqual(payload["integrate"], merge_sha)
             self.assertEqual(payload["tag"], f"milestone/{archive_name}")
 
+    def test_completed_milestone_releases_ordinary_work_only_with_proof(self):
+        from scripts import pipeline_state
+        from tests.test_guard_hook import guard_hook, run_guard
+
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            self.make_bound_repo(repo)
+            archive_name, ship_sha = self.ship_bound(repo)
+            merge_sha = self.integrate_bound(repo, archive_name, ship_sha)
+            self.assertEqual(pipeline_state.status_state(repo)["completion"]["status"], "verified")
+            self.git(repo, "checkout", "-q", "-b", "feature/ordinary", merge_sha)
+            self.git(repo, "branch", "-D", "gsd-path/M001")
+            self.git(repo, "update-ref", "-d", "refs/remotes/origin/gsd-path/M001")
+            installed = self.run_command(
+                sys.executable, "-B", str(GIT_GUARD_SCRIPT.with_name("install.py")),
+                "--hooks-init", "--claude", "--project", str(repo), cwd=PROJECT_ROOT)
+            self.assertEqual(installed.returncode, 0, installed.stderr)
+            (repo / "ordinary.txt").write_text("manual change\n")
+            self.git(repo, "add", "ordinary.txt")
+
+            def check(expected):
+                status = pipeline_state.status_state(repo)
+                self.assertEqual(status["completion"]["status"], expected, status["completion"])
+                with (mock.patch.object(guard_hook, "repository_root", return_value=repo),
+                      mock.patch.object(guard_hook, "__file__", str(repo / ".gsd-path" / "guard_hook.py"))):
+                    code, output, error = run_guard({"tool_name": "Edit", "tool_input": {
+                        "file_path": str(repo / "ordinary.txt")}})
+                self.assertEqual(code, 0 if expected == "verified" else 2, output + error)
+                result = self.run_command(sys.executable, "-B", str(GIT_GUARD_SCRIPT),
+                                          "pre-commit", cwd=repo)
+                self.assertEqual(result.returncode, 0 if expected == "verified" else 1,
+                                 result.stderr)
+
+            check("verified")
+            # The strict ship gate still requires its original branch and clean tree.
+            self.assertNotEqual(self.validate_integrated(repo).returncode, 0)
+            # Normal clones need not have the integration helper's cached tag ref.
+            remote = repo / "remote.git"
+            created = self.git(repo, "init", "--bare", "-q", str(remote))
+            self.assertEqual(created.returncode, 0, created.stderr)
+            self.git(repo, "remote", "add", "origin", str(remote))
+            published = self.git(repo, "-c", "core.hooksPath=/dev/null", "push", "origin",
+                                 f"{merge_sha}:refs/heads/main", f"refs/tags/milestone/{archive_name}")
+            self.assertEqual(published.returncode, 0, published.stderr)
+            self.git(repo, "update-ref", "-d", f"refs/remotes/origin/tags/milestone/{archive_name}")
+            check("verified")
+            tag = f"refs/tags/milestone/{archive_name}"
+            tag_object = self.git(repo, "rev-parse", tag).stdout.strip()
+            self.git(repo, "update-ref", "-d", tag)
+            check("unverified")
+            self.git(repo, "update-ref", tag, tag_object)
+            manifest = repo / ".project" / "archive" / archive_name / "MANIFEST.md"
+            manifest.write_text(manifest.read_text() + "\nmanual archive change\n")
+            check("unverified")
+
     def test_validate_integrated_rejects_duplicate_canonical_merges(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             repo = Path(temporary_directory)

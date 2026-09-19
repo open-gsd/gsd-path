@@ -117,6 +117,25 @@ class InstallerTests(unittest.TestCase):
             return install.status_runtime.runtime_home() / json.loads(pin.read_text())["digest"]
         return project / install.HOOKS_DIRECTORY / "runtime"
 
+    def test_project_runtime_version_install_update_refresh(self):
+        project = self.root / "version-project"
+        plans = [install.TargetPlan("claude", self.root / "version-skills")]
+        install.install(self.source, plans, project)
+        stamp = project / ".gsd-path/runtime.json"
+        self.assertEqual(json.loads(stamp.read_text())["version"], "9.9.9")
+        (self.source / "package.json").write_text('{"version":"10.0.0"}')
+        install.install(self.source, plans, project, update=True, dry_run=True)
+        self.assertEqual(json.loads(stamp.read_text())["version"], "9.9.9")
+        install.install(self.source, plans, project, update=True)
+        self.assertEqual(json.loads(stamp.read_text())["version"], "9.9.9")
+        install.runtime_store.operate(self.source, project, "upgrade")
+        self.assertEqual(json.loads(stamp.read_text())["version"], "10.0.0")
+        (self.source / "package.json").write_text('{"version":"10.1.0"}')
+        install.refresh_hooks(self.source, project, full=False)
+        self.assertEqual(json.loads(stamp.read_text())["version"], "10.0.0")
+        install.runtime_store.operate(self.source, project, "upgrade")
+        self.assertEqual(json.loads(stamp.read_text())["version"], "10.1.0")
+
     def tearDown(self):
         self.git_hooks_patch.stop()
         self.sync_patch.stop()

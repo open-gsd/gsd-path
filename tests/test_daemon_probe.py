@@ -407,6 +407,19 @@ class ProbeProjectTests(unittest.TestCase):
         self.assertEqual(status.next_skill, "gsd-path-ship")
         self.assertEqual(status.git["head"], "abc123")
 
+    def test_runtime_git_dirty_has_dashboard_boolean_shape(self) -> None:
+        make_project(self.root)
+        runtime = self.root / ".gsd-path/runtime"
+        runtime.mkdir(parents=True)
+        for dirty, expected in (([], False), ([".project/STATE.md"], True),
+                                (False, False), (True, True), (None, None)):
+            with self.subTest(dirty=dirty):
+                stub = RUNTIME_STUB.replace('"dirty": False', '"dirty": ' + repr(dirty))
+                (runtime / "pipeline_state.py").write_text(stub, encoding="utf-8")
+                status = probe.probe_project(self.root)
+                self.assertEqual(status.status_source, "runtime")
+                self.assertIs(status.to_dict()["git"]["dirty"], expected)
+
     def test_runtime_failure_falls_back(self) -> None:
         make_project(self.root)
         runtime_dir = self.root / ".gsd-path" / "runtime"

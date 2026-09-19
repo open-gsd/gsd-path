@@ -115,6 +115,12 @@ See [UPDATE.md](UPDATE.md).
 
 **`guard_hook.py`** (pre-tool-use):
 
+- direct product edits outside the routed build phase while milestone work
+  remains unfinished. After integration is verified, ordinary branches allow
+  product edits, including a dirty product worktree. The proof still checks
+  the shipped archive, canonical integration merge, annotated published tag,
+  and default-branch ancestry. Missing proof keeps protection active. Closed
+  milestone branches, archives, and pipeline control files remain protected.
 - non-read tool actions targeting archived paths or an existing ancestor of
   the archive tree; shell operands count an ancestor only for deletion or move
   commands
@@ -177,16 +183,16 @@ such as `rm -rf scratch` passes the archive check; other guard rules still apply
 
 - modifies, deletes, or renames away tracked archive paths
 - `ship:` commits (case-insensitive) staging paths outside `.project/`
-- on unshipped pipeline lineage (the committed `STATE.md` names a bound
-  `gsd-path/M###` branch that is not `shipped/done`, and HEAD descends from
-  it — the bound branch itself, `gsd-path-task/` branches, sidecars, and any
-  branch cut from them): commits staging paths outside `.project/` (or the
+- while committed `STATE.md` names unfinished milestone work, including
+  `shipped/done` without verified integration: commits staging paths outside `.project/` (or the
   guard's own `.gsd-path/` and native hook settings) unless the phase is
   `build` and they are landing commits as `isolation.py land` writes them —
   subject `<task id>: <task title>` matching the task file at `Base:`, a full
   base SHA HEAD descends from, the staged task file, only that task's declared
   `files:`, and a `Files:` list of exactly the staged paths. Outside build the
   reviewed HEAD is frozen; product fixes reopen through the patch plan
+- deleting the recorded branch or switching to another branch while carrying
+  unfinished state does not release product commit protection
 - pushes (to any remote) that move a `gsd-path/M###` ref anywhere but its
   strict ship commit, or delete it while it holds anything else; and pushes of
   any other ref whose commit carries a `STATE.md` that still owes a ship commit

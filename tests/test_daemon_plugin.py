@@ -145,9 +145,20 @@ class ArgvTests(unittest.TestCase):
     def test_update_project(self):
         self.manager.update_project("/tmp/proj", dry_run=True)
         argv = self.argv()
-        self.assertIn("--update", argv)
+        self.assertIn("--runtime-upgrade", argv)
         self.assertIn("--project", argv)
         self.assertIn("--dry-run", argv)
+
+    def test_updates_refresh_source_and_surface_fetch_failure(self):
+        for scope in ("global", "project"):
+            with self.subTest(scope=scope):
+                self.runner.calls.clear()
+                self.manager.git_runner = FakeRunner([(1, "", "source fetch failed")])
+                result = (self.manager.update_project("/tmp/proj") if scope == "project"
+                          else self.manager.update_global())
+                self.assertFalse(result["ok"])
+                self.assertIn("source fetch failed", result["error"])
+                self.assertEqual(self.runner.calls, [])
 
     def test_wrapper_result_shape_and_log(self):
         self.runner.responses = [(0, "line1\nline2\n", "")]
@@ -302,10 +313,17 @@ class DetectionTests(unittest.TestCase):
         self.assertTrue(result["hooks"])
         self.assertTrue(result["contracts"])
         self.assertIsNone(result["runtime_version"])
+        (runtime / "VERSION").write_text("1.1.0\n")
+        self.assertEqual(self.manager.detect_project(project)["runtime_version"], "1.1.0")
         (project / ".gsd-path/runtime.json").write_text(json.dumps({
             "schema": "gsd-path/runtime/v1", "version": "1.2.3", "digest": "a" * 64,
         }))
         self.assertEqual(self.manager.detect_project(project)["runtime_version"], "1.2.3")
+        plan = self.manager.plan_uninstall_project(project)
+        self.assertIn(str(runtime / "VERSION"), [entry["path"] for entry in plan["plan"]])
+        self.manager.apply_plan(plan, confirm=True)
+        self.assertIsNone(self.manager.detect_project(project)["runtime_version"])
+
 
     def test_check_update_uses_cache_offline(self):
         make_global_install(self.manager, "kimi", version="1.0.0")

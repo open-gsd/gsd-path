@@ -1232,7 +1232,9 @@ def find_integrate_commit(
     return merge_commit
 
 
-def validate_integrated(repo: Path, slug: str, *, refresh: bool = True) -> dict:
+def validate_integrated(
+    repo: Path, slug: str, *, refresh: bool = True, historical: bool = False
+) -> dict:
     project = repo.resolve()
     active_root = archive_milestone.require_project_layout(project)
     state, _, loaded_state_path = archive_milestone.strict_state(project)
@@ -1245,7 +1247,7 @@ def validate_integrated(repo: Path, slug: str, *, refresh: bool = True) -> dict:
         )
 
     # (a) The shipped transaction itself must still validate.
-    shipped = archive_milestone.validate(repo)
+    shipped = archive_milestone.validate(repo, historical=historical)
     configured = shipped["archive"]
     ship_commit = shipped["commit"]
     archive_name = PurePosixPath(configured).name
@@ -1350,6 +1352,10 @@ def validate_integrated(repo: Path, slug: str, *, refresh: bool = True) -> dict:
     contains = run_git(project, "merge-base", "--is-ancestor", merge_commit, remote_default)
     if contains.returncode != 0:
         raise ArchiveError(f"{remote_default} does not contain the integration merge")
+    if (historical
+            and run_git(project, "branch", "--show-current").stdout.strip() != bound_branch
+            and run_git(project, "merge-base", "--is-ancestor", merge_commit, "HEAD").returncode):
+        raise ArchiveError("HEAD does not contain the integration merge")
 
     # (e) The bound branch tip and annotated tag must be published on origin.
     require_published_integration(
@@ -1358,7 +1364,8 @@ def validate_integrated(repo: Path, slug: str, *, refresh: bool = True) -> dict:
         ship_commit,
         tag_name,
         merge_commit,
-        allow_missing_bound=state.integration == "pull-request",
+        allow_missing_bound=state.integration == "pull-request" or (historical and has_origin),
+        retired=historical,
     )
 
     result = {
@@ -1379,7 +1386,9 @@ def validate_integrated(repo: Path, slug: str, *, refresh: bool = True) -> dict:
         refs = [(f"refs/heads/{default_name}", result["base"]),
                 (f"refs/tags/{tag_name}", optional_ref(project, tag_ref))]
         if state.integration == "direct":
-            refs.append((f"refs/heads/{bound_branch}", ship_commit))
+            bound_ref = f"refs/heads/{bound_branch}"
+            if not historical or live_remote_ref(project, bound_ref) is not None:
+                refs.append((bound_ref, ship_commit))
         for ref, expected in refs:
             if live_remote_ref(project, ref) != expected:
                 raise ArchiveError(f"published {ref} differs from local integration evidence")
@@ -1395,6 +1404,7 @@ def require_published_integration(
     tag_name: str,
     merge_commit: str,
     allow_missing_bound: bool = False,
+    retired: bool = False,
 ) -> None:
     if allow_missing_bound:
         published_ship = live_remote_ref(project, f"refs/heads/{bound_branch}")
@@ -1418,7 +1428,7 @@ def require_published_integration(
 
     bound_ref = f"refs/remotes/origin/{bound_branch}"
     if run_git(project, "rev-parse", "--verify", "--quiet", bound_ref).returncode != 0:
-        if not allow_missing_bound:
+        if not retired:
             raise ArchiveError(f"missing published bound branch: origin/{bound_branch}")
     else:
         published_ship = archive_milestone.require_git_success(

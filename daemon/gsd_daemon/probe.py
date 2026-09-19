@@ -798,7 +798,9 @@ def probe_project(root: Union[str, Path], enrich: bool = True) -> ProjectStatus:
             status.handoff = handoff if isinstance(handoff, dict) else None
             runtime_git = payload.get("git")
             if isinstance(runtime_git, dict):
-                status.git = runtime_git
+                status.git = dict(runtime_git)
+                if isinstance(status.git.get("dirty"), list):
+                    status.git["dirty"] = bool(status.git["dirty"])
             status.status_source = "runtime"
     status.answers = _collect_answers(project_dir / "discuss" / "ANSWERS.md", runtime_pending)
     status.workflow = workflow_projection(payload)

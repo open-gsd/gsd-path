@@ -467,7 +467,7 @@ class PluginManager:
             "runtime": runtime,
             "contracts": contracts,
             "hooks": hooks,
-            "runtime_version": runtime_version,
+            "runtime_version": runtime_version if runtime_version is not None else (self._read_version_stamp(runtime_dir) if runtime else None),
         }
 
     @staticmethod
@@ -532,7 +532,9 @@ class PluginManager:
         return self._run_installer("install-global", tail)
 
     def update_global(self, dry_run: bool = False) -> dict:
-        self.refresh_source()
+        refresh = self.refresh_source(ttl_hours=0)
+        if not refresh["refreshed"]:
+            return {"ok": False, "error": refresh["error"], "stdout_tail": "", "argv": []}
         tail = ["--update"]
         if dry_run:
             tail.append("--dry-run")
@@ -556,8 +558,11 @@ class PluginManager:
         return self._run_installer("install-project", tail)
 
     def update_project(self, root, dry_run: bool = False) -> dict:
+        refresh = self.refresh_source(ttl_hours=0)
+        if not refresh["refreshed"]:
+            return {"ok": False, "error": refresh["error"], "stdout_tail": "", "argv": []}
         project = str(Path(os.path.abspath(os.path.expanduser(str(root)))))
-        tail = ["--update", "--project", project]
+        tail = ["--runtime-upgrade", "--project", project]
         if dry_run:
             tail.append("--dry-run")
         return self._run_installer("update-project", tail)
@@ -725,6 +730,12 @@ class PluginManager:
                     plan.append({"path": str(declaration), "kind": "file", "reason": "managed runtime declaration; shared runtime versions are retained"})
             except (OSError, ValueError):
                 skipped.append({"path": str(declaration), "reason": "invalid runtime declaration — kept"})
+
+        stamp = runtime_dir / "VERSION"
+        version = self._read_version_stamp(runtime_dir)
+        if not stamp.is_symlink() and (version == "unknown" or _parse_version(version) is not None):
+            plan.append({"path": str(stamp), "kind": "file",
+                         "reason": "project runtime version stamp"})
 
         launcher = project / HOOKS_DIRECTORY / PROJECT_STATUS_LAUNCHER
         if launcher.is_file():

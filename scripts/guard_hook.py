@@ -858,6 +858,10 @@ def enforce_pipeline_reentry(paths, working_directories):
         deny(REENTRY_FAILURE_REASON)
     route = status.get("route")
     state_data = status.get("state") if isinstance(status.get("state"), dict) else {}
+    completion = status.get("completion")
+    if (state_data.get("phase") == "shipped"
+            and isinstance(completion, dict) and completion.get("status") == "verified"):
+        return
     routed_build = (
         state_data.get("phase") == "build"
         and isinstance(route, dict)
