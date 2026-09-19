@@ -58,10 +58,13 @@ Having a key alone does not enable Jev. Do not put keys in commands or artifacts
    nor an independent review verdict. It cannot satisfy or waive a criterion,
    change a gate, select a route, or authorize publication.
 5. Keep the advisory JSON receipt in the assigned review artifact's notes or
-   evidence prose, outside fixed-format verdict fields. It includes the supplied
-   revision, SHA-256 of the exact canonical request, versioned model, and token
-   usage. Retain the selected input with that evidence if it is not already
-   reconstructible from cited sources. Keep all canonical verdicts and template
+   evidence prose, outside fixed-format verdict fields. An `ok` receipt includes
+   the supplied revision, SHA-256 of the exact canonical request, versioned model,
+   item IDs and answers, and token usage. An `unavailable` receipt includes the
+   reason and, only after request construction, the revision and request hash;
+   it has no model, answers, or usage. A `disabled` receipt contains only the
+   status and advisory marker. Retain the selected input with that evidence if it
+   is not already reconstructible from cited sources. Keep all canonical verdicts and template
    structure unchanged. Reuse the recorded advisory when its exact request and
    review revision remain unchanged; skip screening for a reused proven review.
 
