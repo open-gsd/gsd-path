@@ -54,6 +54,56 @@ class RuntimeLifecycleTests(unittest.TestCase):
             capture_output=True, text=True,
         )
 
+    def test_workflow_keeps_selected_subprocesses_and_imports(self):
+        source = self.root / "selected-source"
+        shutil.copytree(SOURCE / "scripts", source / "scripts", ignore=shutil.ignore_patterns("__pycache__"))
+        shutil.copy2(SOURCE / "package.json", source / "package.json")
+        isolation = source / "scripts/isolation.py"
+        isolation.write_text(isolation.read_text().replace("class IsolationError(RuntimeError):",
+                             "raise RuntimeError('selected isolation runtime')\n\nclass IsolationError(RuntimeError):"))
+        self.provision()
+        install.runtime_store.operate(source, self.repo, "upgrade")
+        before = self.pin()
+        for action, extra in (("prepare-task", ["--task-id", "T001", "--round-size", "1"]),
+                              ("prepare-final", [])):
+            with self.subTest(action=action):
+                result = subprocess.run(
+                    [sys.executable, "-B", str(SOURCE / "scripts/workflow_run.py"), action,
+                     "--repo", str(self.repo), "--expected-head", self.git("rev-parse", "HEAD"), *extra],
+                    cwd=self.repo, capture_output=True, text=True)
+                self.assertIn("selected isolation runtime", result.stderr)
+                self.assertEqual(self.pin(), before)
+        runtime = install.status_runtime.resolve_runtime(self.repo)
+        result = subprocess.run([sys.executable, "-B", str(runtime / "lean_verification.py"),
+                                 "--repo", str(self.repo), "--expected-head", self.git("rev-parse", "HEAD")],
+                                cwd=self.repo, capture_output=True, text=True)
+        self.assertIn("selected isolation runtime", result.stderr)
+
+    def test_native_guard_missing_runtime_blocks_protected_edit(self):
+        self.provision()
+        install.refresh_hooks(SOURCE, self.repo, True, selected=["claude"], initialize=True)
+        shutil.rmtree(install.status_runtime.resolve_runtime(self.repo))
+        payload = {"tool_name": "Write", "tool_input": {
+            "file_path": str(self.repo / ".project/archive/001-test/STATE.md"), "content": "changed"}}
+        for name, arguments, expected in (("guard_hook.py", [], 2), ("git_guard.py", ["pre-commit"], 1)):
+            with self.subTest(name=name):
+                result = subprocess.run([sys.executable, "-B", str(self.repo / ".gsd-path" / name), *arguments],
+                                        cwd=self.repo, input=json.dumps(payload), capture_output=True, text=True)
+                self.assertEqual(result.returncode, expected, result.stderr)
+                self.assertIn("--runtime-restore", result.stderr)
+
+    def test_install_launcher_bytes_with_windows_newlines(self):
+        original_open = Path.open
+        def windows_open(path, mode="r", *args, **kwargs):
+            if mode in ("x", "w"):
+                kwargs["newline"] = "\r\n"
+            return original_open(path, mode, *args, **kwargs)
+        with mock.patch.object(Path, "open", windows_open):
+            install.install(SOURCE, [], project=self.repo, hooks=True, migrate_legacy=False)
+        for name in install.GUARD_SCRIPTS:
+            self.assertEqual((self.repo / ".gsd-path" / name).read_bytes(),
+                             install.runtime_store.guard_launcher(name).encode("utf-8"))
+
     def test_install_keeps_runtime_outside_checkout(self):
         self.provision()
         self.assertTrue((self.repo / ".gsd-path/runtime.json").is_file())

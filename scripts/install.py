@@ -1292,7 +1292,7 @@ def _apply_project(
                 elif source_name:
                     replacement = (source_root / source_name).read_bytes()
                 else:
-                    replacement = content or ""
+                    replacement = (content or "").encode("utf-8")
                 _atomic_write(
                     destination, replacement, 0o755 if executable else mode
                 )
@@ -1308,9 +1308,9 @@ def _apply_project(
                         created = True
                         shutil.copyfileobj(source, output)
             else:
-                with destination.open("x", encoding="utf-8") as output:
+                with destination.open("xb") as output:
                     created = True
-                    output.write(content)
+                    output.write(content.encode("utf-8"))
             if executable:
                 destination.chmod(0o755)
             transaction.copied.append(destination)

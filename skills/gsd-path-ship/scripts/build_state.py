@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# gsd-path project runtime
 """Build task readiness, landing reconciliation, and the verify ledger."""
 
 from __future__ import annotations
@@ -7,6 +8,7 @@ import argparse
 import json
 import re
 import sys
+sys.dont_write_bytecode = True
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath

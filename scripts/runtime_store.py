@@ -20,6 +20,7 @@ RUNTIME_FILES = (
     "detect_project.py", "pipeline_diagnose.py", "pipeline_undo.py", "archive_milestone.py",
     "review_panel.py", "_common.py", "worktree_paths.py", "build_recovery.py",
     "state_checkpoint.py", "state_promote.py", "discussion_validate.py", "integration.py",
+    "build_state.py", "lean_verification.py", "check_docs_audit.py",
 )
 GUARDS = ("guard_hook.py", "git_guard.py")
 
@@ -33,7 +34,8 @@ def guard_launcher(name):
             "try:\n"
             f"    run_guard(Path(__file__).resolve().parent.parent, {name!r})\n"
             "except (OSError, ValueError) as error:\n"
-            "    print(str(error), file=sys.stderr)\n    raise SystemExit(1)\n")
+            "    print(str(error), file=sys.stderr)\n"
+            f"    raise SystemExit({2 if name == 'guard_hook.py' else 1})\n")
 
 
 def source_manifest(source):

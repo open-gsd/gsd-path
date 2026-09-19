@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# gsd-path project runtime
 """Gate a GSD Path docs audit (.project/research/DOCS-AUDIT.md) against its contract.
 
 Checks the rules the docs-audit contract states in prose: the header lines,
@@ -32,6 +33,7 @@ import json
 import re
 import subprocess
 import sys
+sys.dont_write_bytecode = True
 from datetime import date
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence

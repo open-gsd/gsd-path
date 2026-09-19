@@ -15,6 +15,9 @@ import argparse
 import json
 import re
 import sys
+
+# Runtime helpers must not modify their immutable installation.
+sys.dont_write_bytecode = True
 from pathlib import Path
 from typing import Iterable, Optional, Sequence
 
