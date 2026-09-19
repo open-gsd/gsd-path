@@ -32,6 +32,8 @@ Resolve sibling links against this role file's directory.
 
 ## Rules
 
+- When `GSD_PATH_JEV=1`, wave and final reviewers follow the optional
+  [Jev evidence screening procedure](jev-review.md) for uncovered criteria.
 - Review written expectations, not preferences or alternate designs.
 - Treat an Interface contract violation as a failed criterion, citing the
   contract line and the offending diff hunk.
