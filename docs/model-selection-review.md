@@ -42,3 +42,18 @@ budget instruction. The overrun is preserved. No second full review was run.
 4. **Leftover `{model}` placeholder passes through literally when capabilities are supplied.** `scripts/dispatch_driver.py:1343-1345` and `1371-1373` substitute `{model}` only without `--model-capabilities`. Scenario: `--child-command 'codex -m {model} {model_args}'` with capabilities; the child receives `-m {model} --model gpt-new`, and the conflict check at `scripts/model_policy.py:149-154` cannot see `-m`. Required: an opaque command must not contradict the explicit choice. Fix: in `selected_command`, block when capabilities are present and any argv element still contains `{model}`.
 
 **Uncertainty:** finding 1's plan-patch scenario assumes a task file edit reaches the retained worktree copy before redispatch; if the legal path always retires the isolate, the `panel --model` variant still reproduces.
+
+## Gate review corrections
+
+The assigned review phase reproduced and corrected R1–R3. These are contract
+fixes within the approved design, not new model policy choices.
+
+| Finding | Confirmed cause and correction |
+|---|---|
+| R1: one unsupported task prevents independent dispatch | Selection errors escaped the round preflight. Each rejected task now receives a named blocked receipt before isolation; it consumes no dispatch capacity or heavy-Verify slot. Eligible siblings still run and land. The round remains blocked while the rejected task is pending. |
+| R2: legacy retry adopts a later policy | Legacy attempts already persisted their command, but selection retention ignored it. Retries now retain that exact command when no model selection was recorded. Later policy and capability inputs do not migrate it. Explicit model/effort overrides require a new explicit assignment; unknown legacy controls are not inferred. |
+| R3: automatic panel detection selects the canonical family | Exclusions were computed after detection. The resolver now receives known parent and canonical reviewer families before choosing the roster. Detected membership skips them; explicitly named conflicts still block. |
+
+Ponytail review reused the existing command record, blocked receipt, and panel
+resolver. No new storage format, model preset, or fallback was added. See the
+[gate verification evidence](model-selection-verification.md#gate-review-verification).

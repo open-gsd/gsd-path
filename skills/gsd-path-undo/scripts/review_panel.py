@@ -214,6 +214,7 @@ def resolve_panel(
     advertised: Sequence[str],
     parent_family: Optional[str] = None,
     parent_slug: Optional[str] = None,
+    excluded_families: Sequence[str] = (),
 ) -> dict:
     inferred_parent = parent_family or (
         family_of_slug(parent_slug) if parent_slug else None
@@ -244,7 +245,12 @@ def resolve_panel(
             "named review_panel families are not advertised: " + ", ".join(missing)
         )
 
+    if config["mode"] == "named" and set(wanted) & set(excluded_families):
+        raise ReviewPanelError("named review_panel must use an independent family")
     for family in wanted:
+        if family in excluded_families:
+            skipped.append({"family": family, "reason": "excluded reviewer family"})
+            continue
         if family == inferred_parent:
             skipped.append({"family": family, "reason": "parent family"})
             continue
@@ -488,6 +494,7 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--advertised", default="")
     result.add_argument("--parent-family")
     result.add_argument("--parent-slug")
+    result.add_argument("--exclude-family", action="append", choices=KNOWN_FAMILIES, default=[])
     result.add_argument("--kind", choices=("plan", "wave"))
     result.add_argument("--inputs", default="")
     result.add_argument("--output", type=Path)
@@ -541,6 +548,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             split_csv(arguments.advertised),
             arguments.parent_family,
             arguments.parent_slug,
+            arguments.exclude_family,
         )
         return emit(resolved)
     except ReviewPanelError as error:

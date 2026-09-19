@@ -290,6 +290,80 @@ class DispatchPolicyTests(unittest.TestCase):
         self.assertEqual(state['slug'], 'gpt-new')
         self.assertEqual(received, ['--model', 'gpt-new'])
 
+    def test_rejected_task_does_not_stop_independent_sibling(self):
+        from tests.test_dispatch_driver import DispatchDriverTests
+        fixture = DispatchDriverTests()
+        fixture.fixture(self.root)
+        task = next((self.root / '.project/tasks').glob('T001*.md'))
+        task.write_text(task.read_text().replace('id: T001', 'id: T001\nmodel: unavailable', 1))
+        subprocess.run(['git', '-C', str(self.root), 'commit', '-qam', 'fixture task override'],
+                       check=True, capture_output=True)
+        result = fixture.round(
+            self.root, '--model-capabilities', str(self.caps),
+            '--child-command', shlex.join([sys.executable, str(self.root / 'fake_coder.py'),
+                                          '{model_args}', '{effort_args}']),
+            '--capacity', '1', '--wait', '60')
+        self.assertEqual([row['task'] for row in result['landed']], ['T002'], result)
+        self.assertEqual(result['status'], 'blocked', result)
+        self.assertTrue(any(row.get('task_id') == 'T001' and 'unavailable' in row['reason']
+                            for row in result['blocked']), result)
+        self.assertFalse((dispatch_driver.records_root(self.root) / 'T001').exists())
+        self.assertFalse(any('t001' in branch.lower() for branch in fixture.branches(self.root)))
+        task = next((self.root / '.project/tasks').glob('T001*.md'))
+        fields, _ = dispatch_driver.isolation.task_frontmatter(task.read_text())
+        self.assertEqual(fields['status'], 'pending')
+
+    def test_legacy_retry_does_not_adopt_new_policy(self):
+        self.policy.unlink()
+        self.options.model_capabilities = None
+        self.options.child_command = shlex.join([sys.executable, str(self.child), 'owner-argument'])
+        state, received = self.launch()
+        self.assertEqual(received, ['owner-argument'])
+        dispatch_driver.update_state(state, finished_at='completed', outcome='question')
+        self.policy.write_text(json.dumps({'roles': {'coder': {'model': 'large'}}}))
+        self.options.model_capabilities = self.caps
+        self.options.child_command = shlex.join([sys.executable, str(self.child), '{model_args}'])
+        _, received = self.launch()
+        self.assertEqual(received, ['owner-argument'])
+
+    def test_legacy_retry_rejects_explicit_selection_without_migration(self):
+        self.policy.unlink()
+        self.options.model_capabilities = None
+        self.options.child_command = shlex.join([sys.executable, str(self.child)])
+        state, _ = self.launch()
+        dispatch_driver.update_state(state, finished_at='completed', outcome='question')
+        self.options.model_capabilities = self.caps
+        self.options.model = 'large'
+        self.options.child_command += ' {model_args}'
+        with self.assertRaisesRegex(Exception, 'legacy.*assignment'):
+            self.launch()
+
+    def test_detected_panel_excludes_canonical_family_before_persisting(self):
+        from tests.test_dispatch_driver import DispatchDriverTests
+        fixture = DispatchDriverTests()
+        self.policy.unlink()
+        caps = json.loads(self.caps.read_text())
+        caps['model']['values'] = ['gpt-6-astra', 'claude-opus', 'grok-4']
+        self.caps.write_text(json.dumps(caps))
+        fixture.fixture(self.root)
+        fixture.set_panel(self.root, 'detected')
+        self.assertEqual(fixture.round(self.root, '--wait', '60')['status'], 'done')
+        review = fixture.review(
+            self.root, '--wait', '60', '--model', 'claude-opus',
+            '--model-capabilities', str(self.caps), '--child-command',
+            shlex.join([sys.executable, str(self.root / 'fake_reviewer.py'), '{model_args}']))
+        self.assertEqual(review['status'], 'pass', review)
+        result = fixture.panel(
+            self.root, '--wait', '60', '--parent-slug', 'gpt-6-astra',
+            '--model-capabilities', str(self.caps), '--child-command',
+            shlex.join([sys.executable, str(self.root / 'fake_panelist.py'), '{model_args}']),
+            advertised='gpt-6-astra,claude-opus,grok-4')
+        self.assertEqual(result['status'], 'pass', result)
+        roster = dispatch_driver.load_state(dispatch_driver.records_root(self.root)
+                                            / 'panels/wave-1-cycle-1/roster.json')
+        self.assertEqual(roster['families'], ['grok'])
+        self.assertEqual(set(result['families']), {'grok'})
+
     def test_capability_command_rejects_legacy_model_placeholder(self):
         self.options.child_command += ' -m {model}'
         with self.assertRaisesRegex(Exception, 'model.*placeholder'):

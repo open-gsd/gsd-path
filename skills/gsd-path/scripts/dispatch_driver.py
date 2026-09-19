@@ -275,6 +275,10 @@ def selected_command(state: Dict[str, object], options: argparse.Namespace, comm
             overrides[field] = value
     caps_path = getattr(options, 'model_capabilities', None)
     previous = state.get('model_selection')
+    if previous is None and state.get('command'):
+        if overrides:
+            raise model_policy.PolicyError('legacy assignment requires a new explicit assignment for model controls')
+        return list(state['command']), None
     if caps_path is None:
         if overrides or previous or model_policy.policy_path(primary, project_dir).exists():
             raise model_policy.PolicyError('model policy requires --model-capabilities for this dispatch')
@@ -307,6 +311,8 @@ def retain_selection(root: Path, state: Dict[str, object]) -> Dict[str, object]:
                 raise DriverStop('cannot redispatch while the previous child is active')
             if prior.get('model_selection'):
                 state['model_selection'] = prior['model_selection']
+            else:
+                state['command'] = prior['command']
     reassignment = task_dir / 'model-reassignment.json'
     if reassignment.exists():
         state['model_selection'] = load_state(reassignment)['selection']
@@ -759,18 +765,15 @@ class Round:
         heavy_busy = any(state.get("verify_heavy") for state in in_flight)
         capacity = self.options.capacity
         selected = []
+        rejected = {item["task_id"] for item in self.receipt["blocked"]
+                    if item.get("code") == "model-selection"}
         for task in ready["ready"]:
             if capacity is not None and len(in_flight) + len(selected) >= capacity:
                 break
             if task["wave"] != self.receipt["wave"]:
                 continue
-            if task["id"] in active_ids or (task["verify_heavy"] and heavy_busy):
+            if task["id"] in active_ids | rejected or (task["verify_heavy"] and heavy_busy):
                 continue
-            heavy_busy = heavy_busy or task["verify_heavy"]
-            selected.append(task)
-        if not selected:
-            return False
-        for task in selected:
             used = attempts_used(self.root, task["id"])
             if used >= self.options.max_attempts:
                 raise DriverStop(f"task {task['id']} reached the attempt limit ({self.options.max_attempts}) "
@@ -778,8 +781,17 @@ class Round:
             self.admit(task["id"])
             candidate = retain_selection(self.root, {'task_id': task['id'], 'task_file': task['task_file'],
                                                      'worktree': str(self.primary)})
-            _, selection = selected_command(candidate, self.options, self.options.child_command)
+            try:
+                _, selection = selected_command(candidate, self.options, self.options.child_command)
+            except model_policy.PolicyError as error:
+                self.receipt['blocked'].append({'task_id': task['id'], 'reason': str(error),
+                                                'code': 'model-selection'})
+                continue
             task['model_selection'] = selection
+            heavy_busy = heavy_busy or task['verify_heavy']
+            selected.append(task)
+        if not selected:
+            return False
         head = isolation.current_sha(self.primary)
         self.runner("lint-round", head)
         round_size = len(selected) + len(in_flight)
@@ -812,7 +824,8 @@ class Round:
             while True:
                 self.receipt["in_flight"] = []
                 changed = self.settle() or changed
-                if self.receipt["questions"] or self.receipt["blocked"]:
+                if self.receipt["questions"] or any(
+                        item.get("code") != "model-selection" for item in self.receipt["blocked"]):
                     self.receipt["status"] = "question" if self.receipt["questions"] else "blocked"
                     return self.receipt
                 # ready is expensive and its inputs only move when a landing or redispatch happened
@@ -822,7 +835,8 @@ class Round:
                 changed = False
                 live = self.in_flight_states()
                 if deadline is None or time.monotonic() >= deadline or not live:
-                    self.receipt["status"] = "in-flight" if live else "done"
+                    self.receipt["status"] = ("blocked" if self.receipt["blocked"]
+                                              else "in-flight" if live else "done")
                     return self.receipt
                 time.sleep(POLL_SECONDS)
         except STOP_ERRORS as error:
@@ -1298,6 +1312,12 @@ class Panel(Children):
             else:
                 if states:
                     raise DriverStop("panel records exist without a persisted roster")
+                excluded = {review_panel.family_of_slug(self.options.parent_slug or '')}
+                for canonical in latest_states(records_root(self.primary) / 'reviews'):
+                    if canonical.get('wave') == self.wave and canonical.get('cycle') == self.cycle:
+                        model = canonical.get('model_selection', {}).get('effective_model')
+                        if model:
+                            excluded.add(review_panel.family_of_slug(model))
                 arguments = ["resolve", "--plan", str(project / "plan/PLAN.md"),
                              "--intent", str(project / "intent/INTENT.md"),
                              "--advertised", self.options.advertised]
@@ -1305,6 +1325,8 @@ class Panel(Children):
                     arguments += ["--parent-slug", self.options.parent_slug]
                 if (project / "CHARTER.md").exists():
                     arguments += ["--charter", str(project / "CHARTER.md")]
+                for family in sorted(family for family in excluded if family):
+                    arguments += ['--exclude-family', family]
                 resolved = helper_json(self.receipt, "review_panel.py", *arguments, cwd=self.primary)
                 self.receipt["resolve"] = resolved
                 if resolved["status"] == "off":
@@ -1337,12 +1359,6 @@ class Panel(Children):
                 roster = {"families": [item["family"] for item in resolved["selected"]],
                           "slugs": {item["family"]: item["slug"] for item in resolved["selected"]},
                           "mode": resolved["mode"], "base": isolation.current_sha(self.primary)}
-                excluded = {review_panel.family_of_slug(self.options.parent_slug or '')}
-                for canonical in latest_states(records_root(self.primary) / 'reviews'):
-                    if canonical.get('wave') == self.wave and canonical.get('cycle') == self.cycle:
-                        model = canonical.get('model_selection', {}).get('effective_model')
-                        if model:
-                            excluded.add(review_panel.family_of_slug(model))
                 roster['excluded_families'] = sorted(family for family in excluded if family)
                 roster['selections'] = {}
                 for family in roster['families']:

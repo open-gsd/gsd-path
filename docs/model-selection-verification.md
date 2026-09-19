@@ -85,3 +85,62 @@ model identity hidden by a host remains unproven across fresh child sessions.
 Requested model: Claude Fable. The reviewer runs read-only with Read, Grep,
 and Glob; it cannot edit files or run tests. The [review and dispositions](model-selection-review.md) record its findings,
 reproductions, corrections, and verification limits.
+
+## Gate review verification
+
+Scope: R1–R3 only, starting at `06b99697278ca75c75a3d96e216d221fc943902a`.
+Canonical runtime changes are `scripts/dispatch_driver.py` and
+`scripts/review_panel.py`; their generated copies were synced. Regression tests
+are in `tests/test_model_policy.py`.
+
+### RED and removal sensitivity
+
+The original versions of both canonical scripts were restored after drafting
+corrections, and the following command produced four intended failures:
+
+```sh
+python3 -B -m unittest \
+  tests.test_model_policy.DispatchPolicyTests.test_rejected_task_does_not_stop_independent_sibling \
+  tests.test_model_policy.DispatchPolicyTests.test_legacy_retry_does_not_adopt_new_policy \
+  tests.test_model_policy.DispatchPolicyTests.test_legacy_retry_rejects_explicit_selection_without_migration \
+  tests.test_model_policy.DispatchPolicyTests.test_detected_panel_excludes_canonical_family_before_persisting
+```
+
+- R1: T002 did not land when T001 requested an unavailable model, even though
+  they were independent. The corrected fixture uses supported task frontmatter;
+  an earlier unsupported CLI-flag failure was discarded as invalid evidence.
+- R2: a legacy retry delivered `--model large` instead of its saved owner
+  argument, and an explicit model override was accepted without migration.
+- R3: the panel blocked on Claude instead of running the independent Grok child.
+
+This original-code restoration also tests sensitivity to removing the fixes.
+All four assertions failed, then the corrected sources were restored before
+GREEN. Raw output: `.scratch/model-selection-review/red.log` in this worktree.
+
+### GREEN
+
+One focused verification command after restoring all fixes:
+
+```sh
+python3 -B -m unittest \
+  tests.test_model_policy tests.test_review_panel \
+  tests.test_dispatch_driver.DispatchDriverTests.test_parallel_round_lands_both_tasks_and_retires_isolates \
+  tests.test_dispatch_driver.DispatchDriverTests.test_serial_rounds_reproduce_in_the_sidecar_and_unlock_dependents \
+  tests.test_dispatch_driver.DispatchDriverTests.test_question_blocks_until_answered_then_redispatches_the_same_isolate \
+  tests.test_dispatch_driver.DispatchDriverTests.test_round_stops_at_the_wave_boundary \
+  tests.test_dispatch_driver.DispatchDriverTests.test_review_refuses_verify_only_and_unlanded_waves \
+  tests.test_dispatch_driver.DispatchDriverTests.test_panel_named_family_runs_merges_and_checkpoints_with_the_review \
+  tests.test_dispatch_driver.DispatchDriverTests.test_panel_resumes_missing_family_and_pending_cleanup
+```
+
+Result: **60 tests passed in 71.198 seconds**. The new tests prove real sibling
+landing, a named blocked receipt, no rejected-task isolate, retained legacy
+child arguments, explicit-override rejection, and a persisted Grok-only panel
+roster with a GPT parent and Claude canonical reviewer. Existing focused tests
+cover dependency and wave gates, question resumes, explicit family validation,
+and panel recovery. Raw output: `.scratch/model-selection-review/green.log`.
+The existing subprocess ResourceWarnings remain visible in that log.
+
+`python3 -B scripts/sync_skill_resources.py` completed with 401 resources and
+zero warnings; `--check` confirmed all 401 resources. `git diff --check` passed.
+No full repository test/lint suite, publication, or other gate phase ran.
