@@ -37,7 +37,9 @@ its sidecar, copies it to the canonical path, retires the sidecar, and only
 after every lens settles concludes: a passing cycle with no panel is
 checkpointed; with a panel configured (`panel_required: true`) run `panel
 --wave <N> --cycle <C> --advertised <slugs> [--parent-slug <slug>]
---child-command '<owner command with {model}>'`, which resolves the panel,
+--child-command '<owner command>'`, using the
+[model-policy CLI contract](model-policy.md#cli-lifecycle). The panel command
+resolves membership,
 persists a skipped receipt or runs one panelist per family in its own
 sidecar, merges the family files, and makes the single on-pass checkpoint;
 `blocked` returns the `review_findings.py collect` grouping; when its
@@ -53,7 +55,9 @@ The driver never writes a `verify-only` file (`status: not-applicable`);
 approved artifacts or the user, record it with `answer --task-id <id>
 --answer '<answer> — <citation>'`, and call `round` again, which redispatches
 the retained isolate; `blocked` names the task, reason, and output and leaves
-the isolate in place — apply the recovery, retry, or plan-defect procedure in
+an existing isolate in place. A model-selection rejection before launch creates
+no isolate; follow the [model-policy contract](model-policy.md). For other
+blocks, apply the recovery, retry, or plan-defect procedure in
 steps 1–2 by hand, then call `round` again. The driver counts dispatches per
 task per milestone and stops at `--max-attempts` (default 2: the first
 dispatch plus this contract's one logged redispatch); owner token limits, when

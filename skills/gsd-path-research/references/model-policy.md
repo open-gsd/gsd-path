@@ -113,6 +113,9 @@ effort flags when using these slots; conflicting controls block dispatch.
 Commands with explicit policy choices must expose the corresponding slots,
 including when an explicit choice is `inherit`. Unconfigured legacy commands
 without a capability file retain their existing behavior.
+An existing legacy assignment with no recorded selection keeps its saved
+command across retries, even if project policy or capabilities are later added.
+It cannot use `reassign-model`; model controls require a new explicit assignment.
 
 Review and skeptic commands accept `--model` and `--effort` for that assignment.
 For distinct panel families or review lenses, pass `--model-overrides <json>`:
