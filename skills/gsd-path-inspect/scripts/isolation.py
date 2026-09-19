@@ -18,6 +18,9 @@ import re
 import stat
 import subprocess
 import sys
+
+# Runtime helpers must not modify their immutable installation.
+sys.dont_write_bytecode = True
 import tempfile
 from pathlib import Path, PurePosixPath
 from typing import Dict, Optional, Sequence, Set
@@ -33,6 +36,7 @@ try:
         task_commit_subject,
     )
     import _common
+    import worktree_paths
 except ImportError:  # pragma: no cover - package import used by tests
     from scripts.pipeline_git import (
         attest_commit_body,
@@ -44,6 +48,7 @@ except ImportError:  # pragma: no cover - package import used by tests
         task_commit_subject,
     )
     from scripts import _common
+    from scripts import worktree_paths
 
 
 TASK_BRANCH_PREFIX = "gsd-path-task/"
@@ -142,8 +147,11 @@ def common_git_dir(repo: Path) -> Path:
     return (repo / raw).resolve()
 
 
-def sidecar_root(primary: Path, kind: str, name: str) -> Path:
-    return primary.parent / f"{primary.name}.gsd-path" / kind / name
+def sidecar_root(primary: Path, kind: str, name: str, *, pin: bool = False) -> Path:
+    try:
+        return worktree_paths.worktree_path(primary, kind, name, pin=pin)
+    except (ValueError, OSError) as error:
+        raise IsolationError(str(error)) from error
 
 
 def validate_task_id(task_id: str) -> str:
@@ -553,7 +561,7 @@ def isolate_task(
             "worktree": str(primary),
         }
     branch = task_branch_name(task_id)
-    destination = sidecar_root(primary, "task", task_id)
+    destination = sidecar_root(primary, "task", task_id, pin=True)
     create_named_worktree(primary, branch, destination, resolved_base)
     return {
         "base": resolved_base,
@@ -589,7 +597,7 @@ def isolate_verify(primary: Path, base: str, name: str, historical_task: Optiona
             + ", ".join(product_dirt)
         )
     branch = verify_branch_name(name)
-    destination = sidecar_root(primary, "verify", name)
+    destination = sidecar_root(primary, "verify", name, pin=True)
     create_named_worktree(primary, branch, destination, resolved_base)
     return {
         "base": resolved_base,

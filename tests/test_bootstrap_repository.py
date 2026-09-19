@@ -144,12 +144,15 @@ class BootstrapRepositoryTests(unittest.TestCase):
             str(repository_template),
         )
 
-    def complete_bootstrap(self, root: Path, reuse_empty: bool = False):
+    def complete_bootstrap(self, root: Path, reuse_empty: bool = False, managed_primary: bool = False):
         workspace = root / "workspace"
         workspace.mkdir()
         binary, remotes = self.write_fake_gh(root)
         checkout = workspace / "demo"
         worktree = workspace / "demo-gsd-path"
+        if managed_primary:
+            worktree = root / "managed" / "demo" / "primary"
+            worktree.parent.mkdir(parents=True)
         repository_template = root / "repository.md"
         repository_template.write_text(
             "Kind: <kind>\nRemote: <remote>\nVisibility: <visibility>\n"
@@ -192,6 +195,16 @@ class BootstrapRepositoryTests(unittest.TestCase):
             self.git(checkout, "branch", "--show-current").stdout.strip(),
         )
         return workspace, checkout, worktree, remotes, environment, command
+
+    def test_create_with_explicit_managed_primary(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            workspace, checkout, worktree, _, _, _ = self.complete_bootstrap(root, managed_primary=True)
+            self.assertFalse(worktree.is_relative_to(workspace))
+            self.assertEqual(checkout.parent, workspace)
+            binding = (worktree / ".project/REPOSITORY.md").read_text()
+            self.assertIn(f"Primary worktree: {worktree.resolve()}", binding)
+            self.assertEqual(self.git(worktree, "rev-parse", "--git-common-dir").returncode, 0)
 
     def test_create_in_empty_invocation_folder_preserves_directory(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

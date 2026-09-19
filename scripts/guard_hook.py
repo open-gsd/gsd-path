@@ -1838,7 +1838,13 @@ def bundled_helper_invocation(command, tokens, working_directories, helpers=PIPE
         return False
     here = Path(__file__).resolve().parent
     runtime = here / "runtime"
-    if not runtime.exists():
+    if (here / "runtime.json").exists():
+        try:
+            from status_runtime import resolve_runtime
+            runtime = resolve_runtime(here.parent)
+        except (OSError, ValueError):
+            return False
+    elif not runtime.exists():
         runtime = here
     runtime = runtime.resolve()
     for base in working_directories or [os.getcwd()]:

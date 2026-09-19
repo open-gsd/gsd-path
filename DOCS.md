@@ -44,7 +44,8 @@ GSD Path has two install layers:
 
 1. **Skills** — router + phase skills for your AI host(s)
 2. **Project contracts** (optional) — `AGENTS.md`, `WORKFLOW.md`, and the
-   read-only `.gsd-path/runtime/` status engine in the repo
+   tracked runtime declaration and stable status/guard launchers; runtime code
+   lives outside the checkout under `~/.gsd-path/runtimes/`
 
 ### Decision tree
 
@@ -223,6 +224,40 @@ route through `NEEDS-ORCHESTRATOR` instead of guesses.
 **Quick lane:** ≤2 tasks, one wave, no open questions — may skip research/decide
 ([FULL.md](FULL.md)).
 
+### Worktree locations
+
+The primary worktree stays in the folder you opened. Serial task work stays
+there too. New parallel task worktrees, verify sidecars, and integration
+worktrees share this managed layout:
+
+```text
+~/.gsd-path/projects/<repository-id>/<workspace-id>/{task,verify,integrate}/<name>
+```
+
+Set `GSD_PATH_WORKTREE_ROOT` to another absolute directory before the first
+helper-owned allocation in a workspace. The root must be outside the project's
+own worktrees; an unrelated repository tracking your home folder is allowed.
+Repository and workspace IDs are full SHA-256 hashes of the
+resolved Git common directory and primary path, so separate clones and
+primary folders do not share a location.
+
+The first allocation pins the workspace location in
+`<git-common-dir>/gsd-path/workspaces/<workspace-id>.json`. Later environment
+changes do not move it. Existing sibling worktrees remain at their original
+paths and retain the same recovery and cleanup checks. These folders contain
+active work and evidence; they are not a disposable cache. Relocation needs
+a separate migration; do not edit placement records or move folders manually.
+
+New repository setup can also use an explicitly approved managed primary
+path through the existing `--worktree` option. Its parent must already exist
+for the read-only preview. An approved empty invocation folder is still
+reused in place. This choice does not move the default checkout.
+
+In the dashboard's **Watched folders**, add the managed root explicitly;
+watching its home-directory parent does not traverse hidden `.gsd-path`.
+Discovery follows Git's registered bound branches back to the primary and
+applies exclusions there, so task and verify copies do not displace it.
+
 ### Key artifacts
 
 | Path | Role |
@@ -340,3 +375,36 @@ initializer. After a milestone ships, the next one inspects again.
 | Installer flags | `node scripts/install.mjs --help` |
 
 [Workflow runner and observed token budgets](RUNTIME.md) documents canonical gate receipts, serial verification preparation, and host budget limits.
+
+
+## Project runtime versions
+
+`.gsd-path/runtime.json` pins an exact runtime by package version and content
+digest. The runtime is stored under `~/.gsd-path/runtimes/<digest>/`; generated
+implementation files are not copied into project worktrees. Track the declaration
+and stable `.gsd-path` launchers as project configuration. Task isolation, Verify
+sidecars and Integration checkouts inherit this configuration through Git.
+
+Skill/plugin updates and `--hooks-refresh` retain the selected runtime. Use
+`gsd-path --runtime-upgrade --project /absolute/project` to explicitly select
+the supplied package's runtime and its compatible status launcher. Review those
+configuration changes before committing them. Existing versions remain available
+for other projects and branches.
+
+A new machine needs the selected runtime installed before status and guards can
+run. `gsd-path --runtime-restore --project /absolute/project --source-root
+/path/to/matching/package` restores that exact version without changing project
+files. The supplied package must match both the version and digest; custom source
+builds may share a release version while having different digests. No command
+silently substitutes a newer runtime, and status/guards never install or download.
+
+For an old tracked `.gsd-path/runtime/`, run `gsd-path --runtime-migrate --project
+/absolute/project --dry-run`, then the same command without `--dry-run` and review
+the Git diff. Migration removes the generated files from the checkout and writes
+the declaration and stable wiring. It does not stage or commit. Resolve local
+runtime edits or unknown files first. Interrupted migration is recovered by the
+same explicit command; its journal lives outside the checkout.
+
+An ignore rule alone cannot migrate tracked runtime files. This runtime lifecycle
+covers runtime code and launch wiring; project-local skill copies, retained skill
+backups, and mixed user/host settings remain separately owned installation output.

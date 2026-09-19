@@ -3,6 +3,8 @@ name: gsd-path-inspect
 description: Inspect an existing codebase and its documentation to establish brownfield ground truth before intent is defined. Use only when the user explicitly invokes $gsd-path-inspect or an active $gsd-path router explicitly routes to this phase.
 ---
 
+Before executing project helpers, read [runtime selection](references/runtime-selection.md).
+
 # GSD Path Inspect Phase
 
 Establish ground truth about an existing project before intent is defined.

@@ -146,6 +146,16 @@ class WorktreeDedupTests(unittest.TestCase):
         results = discovery.scan([str(self.parent)])
         self.assertEqual(results, [str(other), str(main)])
 
+    def test_managed_sidecar_resolves_primary_outside_watched_root(self) -> None:
+        main, primary = self.make_repo_with_worktree()
+        self._git("branch", "-m", "gsd-path/M001", cwd=primary)
+        managed = self.parent / ".gsd-path" / "projects"
+        sidecar = managed / "repository" / "workspace" / "verify" / "review"
+        self._git("worktree", "add", "-b", "gsd-path-verify/review", str(sidecar), cwd=main)
+        self.assertEqual([Path(p).resolve() for p in discovery.scan([str(managed)])], [primary.resolve()])
+        self.assertEqual([Path(p).resolve() for p in discovery.scan([str(self.parent), str(managed)])], [primary.resolve()])
+        self.assertNotIn(primary.resolve(), [Path(p).resolve() for p in discovery.scan([str(managed)], excludes=[str(primary)])])
+
     def test_git_failure_treats_each_root_as_own_group(self) -> None:
         main, linked = self.make_repo_with_worktree()
         with mock.patch("subprocess.run", side_effect=OSError("git missing")):

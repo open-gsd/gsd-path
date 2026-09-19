@@ -124,3 +124,15 @@ _Avoid_: task landing, phase transition (without naming the milestone change)
 The rules for choosing a model and reasoning effort for pipeline sub-agent
 roles. Model choice does not change a role's authority.
 _Avoid_: review policy, model ranking
+
+**Project runtime**:
+The selected GSD Path execution version for a project's status, guards, and
+pipeline operations. It changes through an explicit project upgrade, not an
+installed skill or plugin update.
+_Avoid_: latest installed plugin, host runtime
+
+**Runtime declaration**:
+The version-controlled record identifying a project's selected Project runtime.
+Clones and named checkouts inherit this selection; setup, migration, or an
+explicit project upgrade establishes or changes it.
+_Avoid_: installed plugin version, local runtime cache

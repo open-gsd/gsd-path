@@ -454,13 +454,20 @@ class PluginManager:
             for name in GUARD_SCRIPTS
         )
         contracts = all((project / name).is_file() for name in CONTRACT_FILES)
+        runtime_version = None
+        try:
+            declaration = json.loads((project / HOOKS_DIRECTORY / "runtime.json").read_text())
+            if declaration.get("schema") == "gsd-path/runtime/v1":
+                runtime_version = declaration.get("version")
+        except (OSError, ValueError, AttributeError):
+            pass
         return {
             "root": str(project),
             "local_skills": local_skills,
             "runtime": runtime,
             "contracts": contracts,
             "hooks": hooks,
-            "runtime_version": None,
+            "runtime_version": runtime_version,
         }
 
     @staticmethod
@@ -709,6 +716,15 @@ class PluginManager:
                     "path": str(candidate),
                     "reason": "no gsd-path runtime marker — kept",
                 })
+
+        declaration = project / HOOKS_DIRECTORY / "runtime.json"
+        if declaration.is_file() and not declaration.is_symlink():
+            try:
+                data = json.loads(declaration.read_text())
+                if isinstance(data, dict) and data.get("schema") == "gsd-path/runtime/v1":
+                    plan.append({"path": str(declaration), "kind": "file", "reason": "managed runtime declaration; shared runtime versions are retained"})
+            except (OSError, ValueError):
+                skipped.append({"path": str(declaration), "reason": "invalid runtime declaration — kept"})
 
         launcher = project / HOOKS_DIRECTORY / PROJECT_STATUS_LAUNCHER
         if launcher.is_file():

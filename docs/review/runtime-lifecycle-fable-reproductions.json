@@ -1,0 +1,69 @@
+{
+  "1-bytecode": {
+    "helper_exit": 0,
+    "pycache": false,
+    "resolution": {
+      "code": 0,
+      "out": "/private/tmp/runtime-review-proof-q_bts_mr/home/.gsd-path/runtimes/000580199107d7d42afb228500803bbd18e8f8082af7382fc814f719a533cf1a",
+      "err": ""
+    }
+  },
+  "5-extra-key": {
+    "resolve": "/private/tmp/runtime-review-proof-q_bts_mr/home/.gsd-path/runtimes/000580199107d7d42afb228500803bbd18e8f8082af7382fc814f719a533cf1a",
+    "restore_error": "source does not match declared runtime 1.1.0 (000580199107d7d42afb228500803bbd18e8f8082af7382fc814f719a533cf1a); use its matching package"
+  },
+  "3-refresh": {
+    "before": {
+      "digest": "000580199107d7d42afb228500803bbd18e8f8082af7382fc814f719a533cf1a",
+      "schema": "gsd-path/runtime/v1",
+      "version": "1.1.0"
+    },
+    "output": [
+      "note: selected runtime retained; use --runtime-upgrade for an explicit upgrade"
+    ],
+    "after": {
+      "digest": "000580199107d7d42afb228500803bbd18e8f8082af7382fc814f719a533cf1a",
+      "schema": "gsd-path/runtime/v1",
+      "version": "1.1.0"
+    }
+  },
+  "6-contracts": [
+    "AGENTS.md",
+    "WORKFLOW.md",
+    ".claude/CLAUDE.md"
+  ],
+  "8-dry-run": {
+    "preview": [
+      ".gsd-path/runtime.json",
+      ".gsd-path/status_runtime.py"
+    ],
+    "actual_error": "not a managed GSD Path guard script: /tmp/runtime-review-proof-q_bts_mr/unsafe/.gsd-path/guard_hook.py"
+  },
+  "7-path-alias": {
+    "original": "/tmp/runtime-review-proof-q_bts_mr/legacy",
+    "resumed": "/private/tmp/runtime-review-proof-q_bts_mr/legacy",
+    "interrupted": {
+      "code": 77,
+      "out": "",
+      "err": ""
+    },
+    "resume": {
+      "code": 1,
+      "out": "",
+      "err": "error: invalid runtime migration journal: /private/tmp/runtime-review-proof-q_bts_mr/home/.gsd-path/runtime-migrations/a5d0c44ba5a261c33a160f95d8fdc86974df9d440cc5667c64aa99f3e55dacda.json"
+    }
+  },
+  "2-windows-emulation": {
+    "expected_bytes": "b'first\\nsecond\\n'",
+    "actual_bytes": "b'first\\r\\nsecond\\r\\n'",
+    "native_windows_run": false
+  },
+  "1-bytecode-standard-cache": {
+    "command": "python3 -X pycache_prefix= <runtime>/archive_milestone.py --help",
+    "helper_exit": 0,
+    "pycache": true,
+    "resolution_exit": 2,
+    "error": "Runtime 1.1.0 (000580199107d7d42afb228500803bbd18e8f8082af7382fc814f719a533cf1a) is unavailable or invalid at /private/tmp/runtime-review-proof-q_bts_mr/home/.gsd-path/runtimes/000580199107d7d42afb228500803bbd18e8f8082af7382fc814f719a533cf1a. Run gsd-path --runtime-restore --project <project-root> --source-root <matching-package-root> to restore this exact runtime. (unexpected runtime files)",
+    "note": "Apple Xcode Python defaults to an external bytecode cache. Empty pycache_prefix selects ordinary adjacent Python bytecode caching."
+  }
+}

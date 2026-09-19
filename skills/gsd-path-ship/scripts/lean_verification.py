@@ -1,3 +1,4 @@
+# gsd-path project runtime
 """Reuse complete review evidence without another model review."""
 
 import argparse
@@ -6,6 +7,7 @@ import json
 import re
 import subprocess
 import sys
+sys.dont_write_bytecode = True
 from pathlib import Path
 
 if __package__:

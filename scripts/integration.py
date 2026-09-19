@@ -2,6 +2,11 @@
 # gsd-path project runtime
 """Own milestone integration, publication, tags, and completion proof."""
 
+import sys
+
+# Runtime helpers must not modify their immutable installation.
+sys.dont_write_bytecode = True
+
 import json
 import re
 from pathlib import Path, PurePosixPath
@@ -21,6 +26,7 @@ try:
     from pipeline_state import PipelineState
     from isolation import publication_base
     import _common
+    import worktree_paths
 except ImportError:  # pragma: no cover - package import used by tests
     from scripts.pipeline_git import (
         bound_branch_name,
@@ -35,6 +41,7 @@ except ImportError:  # pragma: no cover - package import used by tests
     from scripts.pipeline_state import PipelineState
     from scripts.isolation import publication_base
     from scripts import _common
+    from scripts import worktree_paths
 
 
 if __package__:
@@ -156,10 +163,13 @@ def optional_ref(project: Path, ref: str) -> Optional[str]:
     return result.stdout.strip() if result.returncode == 0 else None
 
 
-def integration_names(project: Path, archive_name: str) -> tuple[str, Path]:
+def integration_names(project: Path, archive_name: str, *, pin: bool = False) -> tuple[str, Path]:
     identifier = milestone_id(milestone_number(archive_name))
     branch = f"gsd-path-integrate/{identifier}"
-    worktree = project.parent / f".{project.name}-gsd-path-integrate-{identifier}"
+    try:
+        worktree = worktree_paths.worktree_path(project, "integrate", identifier, pin=pin)
+    except (ValueError, OSError) as error:
+        raise ArchiveError(str(error)) from error
     return branch, worktree
 
 
@@ -1044,7 +1054,7 @@ def integrate(repo: Path, slug: str) -> dict:
             ship_commit,
         )
     publishable_bound_branch(project, bound_branch, ship_commit)
-    integration_branch, worktree = integration_names(project, archive_name)
+    integration_branch, worktree = integration_names(project, archive_name, pin=True)
     interrupted_worktree = registered_worktree(project, integration_branch)
     if (
         interrupted_worktree is not None

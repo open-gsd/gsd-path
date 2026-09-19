@@ -3,6 +3,8 @@ name: gsd-path-research
 description: Dispatch parallel researchers and collect cited GSD Path evidence about domain, stack, pitfalls, and comparable products. Use only when the user explicitly invokes $gsd-path-research or an active $gsd-path router explicitly routes to this phase.
 ---
 
+Before executing project helpers, read [runtime selection](references/runtime-selection.md).
+
 # GSD Path Research Phase
 
 Dispatch independent researchers and gate their evidence. Keep synthesis out

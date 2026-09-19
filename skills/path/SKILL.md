@@ -3,6 +3,8 @@ name: path
 description: Inspect .project/STATE.md, report GSD Path progress, and run the next valid phase. Use only when the user explicitly invokes $path or $gsd-path. The status argument reports state without advancing. Do not infer this skill from generic project, next-step, or resume requests.
 ---
 
+Before executing project helpers, read [runtime selection](references/runtime-selection.md).
+
 # GSD Path Router
 
 Determine the current pipeline phase, report it briefly, and run the next valid
@@ -11,11 +13,13 @@ Any text the user is expected to send back verbatim (a ruling, an approval
 command, a reply) goes in its own fenced code block, never a blockquote or
 inline prose, so it pastes cleanly.
 
-When the project's `.gsd-path/runtime/` exists, resolve bundled helper paths
-for `pipeline_state.py`, `pipeline_git.py`, `archive_milestone.py`,
-`promote_lookahead.py`, `discussion_records.py`, and `pipeline_diagnose.py`
-to that runtime. It is the guard-approved location on a closed milestone.
-Use the skill bundle only when no project-local runtime exists.
+When `.gsd-path/runtime.json` exists, run `python3 -B
+<absolute-project>/.gsd-path/status_runtime.py --repo <absolute-project>
+--runtime-path`. Use the returned verified directory for its bundled helpers.
+A missing or invalid selected runtime stops execution with its explicit restore
+action; never substitute the installed plugin's helpers. Legacy projects without
+a declaration may use `.gsd-path/runtime/`, or the skill bundle when that directory
+is absent. An explicit `--runtime-migrate` produces the reviewed migration diff.
 
 ## Status-only mode
 
@@ -66,7 +70,12 @@ GitHub repository and no owned `.project/STATE.md` is active for that request.
    Derive `gsd-path/M001` as the branch. The default checkout is
    `<resolved-workspace>/<repo-name>`; propose the distinct sibling
    `<resolved-workspace>/<repo-name>-gsd-path` as the linked worktree. When
-   starting in an empty non-Git folder, propose that existing folder as the
+   the user prefers a managed primary, offer an explicit path below
+   `~/.gsd-path/projects/` (or `GSD_PATH_WORKTREE_ROOT`) instead. Pass the
+   approved absolute path through `--worktree`; its parent must already exist
+   for preview. Keep this choice separate from helper-owned task, verify, and
+   integration placement. Never relocate an existing primary.
+   When starting in an empty non-Git folder, propose that existing folder as the
    linked worktree with `--reuse-empty-worktree`, and a distinct absent default
    checkout beside it. Use the parent as workspace so the journal stays outside
    the worktree. Preserve the invocation folder and all its contents; never

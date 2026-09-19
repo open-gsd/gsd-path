@@ -59,9 +59,10 @@ Native configs for unselected hosts are ignored.
 
 | File | Purpose |
 | --- | --- |
-| `.gsd-path/guard_hook.py` | Pre-tool-use guard (stdin JSON → exit 2 + denial JSON) |
+| `.gsd-path/guard_hook.py` | Pre-tool-use guard (stdin JSON → exit 2 + denial JSON; runtime resolution failures exit 2 with stderr) |
 | `.gsd-path/git_guard.py` | Commit and publication validator |
-| `.gsd-path/runtime/` | Project-local pipeline helpers, including the read-only status engine |
+| `.gsd-path/runtime.json` | Tracked selected runtime version and digest |
+| `~/.gsd-path/runtimes/<digest>/` | Immutable external pipeline helpers and guards |
 | `.git/hooks/pre-commit` | Runs `git_guard.py` before commit |
 | `.git/hooks/commit-msg` | Runs `git_guard.py` with commit message |
 | `.git/hooks/pre-push` | Runs `git_guard.py` on every pushed ref update |
@@ -137,7 +138,7 @@ See [UPDATE.md](UPDATE.md).
 - shell commands that reference the archive unless the whole command is a
   recognized standalone read or a single-command invocation of the bundled
   `pipeline_state.py` / `archive_milestone.py` helper, resolved to a regular file
-  inside the guard-owned `.gsd-path/runtime/` directory (beside `guard_hook.py`
+  inside the verified runtime selected by `.gsd-path/runtime.json` (legacy projects use `.gsd-path/runtime/` beside `guard_hook.py`
   in the repository layout), using exactly `python` or `python3` with optional
   `-B`; non-empty supplied tool working directories are authoritative. Empty
   strings, including list items, are treated as absent: nested payloads inherit
@@ -268,6 +269,6 @@ not intercept subagent tools — treat coverage as orchestrator-level.
 | Tool denied editing archive | Pre-tool guard — use active paths, not archive |
 | Hook not running in Cursor | Run `--hooks-refresh-full --cursor --project /path/to/repo` |
 | `--hooks-refresh` rejects an unmanaged guard | Move the foreign guard aside, then rerun refresh; use `--hooks-init` if guards are wanted |
-| `--hooks-refresh` rejects an unmanaged runtime file | Back up or merge that file, move it aside, then rerun refresh |
+| Runtime missing, invalid, or legacy | Follow [runtime restoration or migration](DOCS.md#project-runtime-versions) |
 
 More: [DOCS.md](DOCS.md#help) · [UPDATE.md](UPDATE.md)

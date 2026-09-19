@@ -3,6 +3,8 @@ name: gsd-path-forensics
 description: Use only when the user explicitly invokes $gsd-path-forensics. Read-only diagnosis of a stuck GSD Path pipeline. Runs existing helpers and names the exact retry command; never mutates state, git, or artifacts.
 ---
 
+Before executing project helpers, read [runtime selection](references/runtime-selection.md).
+
 # GSD Path Forensics
 
 One invocation = one read-only diagnosis. The bundled
@@ -12,11 +14,13 @@ re-derive stuckness from a directory listing or `git status` prose.
 This skill never advances a phase gate, never edits `.project/`, and never
 runs git mutations.
 
-When the project's `.gsd-path/runtime/` exists, resolve bundled helper paths
-for `pipeline_state.py`, `pipeline_git.py`, `archive_milestone.py`,
-`promote_lookahead.py`, `discussion_records.py`, and `pipeline_diagnose.py`
-to that runtime. It is the guard-approved location on a closed milestone.
-Use the skill bundle only when no project-local runtime exists.
+When `.gsd-path/runtime.json` exists, run `python3 -B
+<absolute-project>/.gsd-path/status_runtime.py --repo <absolute-project>
+--runtime-path`. Use the returned verified directory for its bundled helpers.
+A missing or invalid selected runtime stops execution with its explicit restore
+action; never substitute the installed plugin's helpers. Legacy projects without
+a declaration may use `.gsd-path/runtime/`, or the skill bundle when that directory
+is absent. An explicit `--runtime-migrate` produces the reviewed migration diff.
 
 ## Process
 

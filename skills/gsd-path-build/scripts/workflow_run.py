@@ -4,6 +4,7 @@
 import argparse
 import hashlib
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -28,9 +29,10 @@ def run_workflow(repo: Path, action: str, project_dir: str, expected_head: str =
     steps = []
     outputs = {}
     scripts = Path(__file__).resolve().parent
+    helpers = scripts
 
     def step(script, *arguments, raw=False):
-        command = [sys.executable, "-B", str(scripts / script), *arguments]
+        command = [sys.executable, "-B", str(helpers / script), *arguments]
         completed = subprocess.run(command, cwd=repo, capture_output=True, text=True)
         receipt = {"script": script, "command": command, "exit_code": completed.returncode,
                    "stdout": completed.stdout, "stderr": completed.stderr}
@@ -49,6 +51,15 @@ def run_workflow(repo: Path, action: str, project_dir: str, expected_head: str =
 
     common = ["--repo", str(repo), "--project-dir", project_dir]
     try:
+        if os.path.lexists(repo / ".gsd-path/runtime.json"):
+            resolved = subprocess.run(
+                [sys.executable, "-B", str(repo / ".gsd-path/status_runtime.py"),
+                 "--repo", str(repo), "--runtime-path"],
+                cwd=repo, capture_output=True, text=True)
+            if resolved.returncode:
+                sys.stderr.write(resolved.stderr)
+                raise StepFailed(resolved.stderr.strip())
+            helpers = Path(resolved.stdout.strip())
         if action == "route":
             step("pipeline_state.py", "route", *common)
         elif action == "prepare-inspect":

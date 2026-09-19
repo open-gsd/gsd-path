@@ -7,6 +7,9 @@ import json
 import re
 import subprocess
 import sys
+
+# Runtime helpers must not modify their immutable installation.
+sys.dont_write_bytecode = True
 from pathlib import Path, PurePosixPath
 from typing import Dict, List, Optional, Sequence, Set, Tuple
 

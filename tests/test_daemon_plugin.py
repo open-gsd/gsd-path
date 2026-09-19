@@ -302,6 +302,10 @@ class DetectionTests(unittest.TestCase):
         self.assertTrue(result["hooks"])
         self.assertTrue(result["contracts"])
         self.assertIsNone(result["runtime_version"])
+        (project / ".gsd-path/runtime.json").write_text(json.dumps({
+            "schema": "gsd-path/runtime/v1", "version": "1.2.3", "digest": "a" * 64,
+        }))
+        self.assertEqual(self.manager.detect_project(project)["runtime_version"], "1.2.3")
 
     def test_check_update_uses_cache_offline(self):
         make_global_install(self.manager, "kimi", version="1.0.0")
@@ -376,6 +380,10 @@ class UninstallPlanTests(unittest.TestCase):
         launcher.write_text(f"# {STATUS_MARKER}\n", encoding="utf-8")
         guard = project / ".gsd-path" / "guard_hook.py"
         guard.write_text(f"# {GUARD_MARKER}\n", encoding="utf-8")
+        declaration = project / ".gsd-path/runtime.json"
+        declaration.write_text(json.dumps({
+            "schema": "gsd-path/runtime/v1", "version": "1.2.3", "digest": "a" * 64,
+        }))
         # template-identical AGENTS.md -> planned; modified WORKFLOW.md -> kept
         (project / "AGENTS.md").write_bytes((self.src / "AGENTS.md").read_bytes())
         (project / "WORKFLOW.md").write_text("user edits\n", encoding="utf-8")
@@ -383,7 +391,7 @@ class UninstallPlanTests(unittest.TestCase):
         (project / ".claude" / "CLAUDE.md").write_text(CLAUDE_BRIDGE, encoding="utf-8")
         plan = self.manager.plan_uninstall_project(project)
         paths = [entry["path"] for entry in plan["plan"]]
-        for expected in (managed, launcher, guard, project / "AGENTS.md",
+        for expected in (managed, launcher, guard, declaration, project / "AGENTS.md",
                          project / ".claude" / "CLAUDE.md"):
             self.assertIn(str(expected), paths)
         skipped = {entry["path"]: entry["reason"] for entry in plan["skipped"]}

@@ -186,6 +186,7 @@ class DetectProjectTests(unittest.TestCase):
                 ".cursor/agents/gsd-path.md": "# Agent\n\nInstalled agent.\n",
                 ".gsd-path/guard_hook.py": "print('managed')\n",
                 ".gsd-path/git_guard.py": "print('managed')\n",
+                ".gsd-path/runtime.json": '{"schema":"gsd-path/runtime/v1","version":"1.2.3","digest":"abc"}\n',
                 ".codex/skills/gsd-path-define/SKILL.md": "# Skill\n\nRules.\n",
                 ".codex/skills/gsd-path-define/helper.py": "print('managed')\n",
                 ".claude/skills/gsd-path-extra/helper.py": "print('managed')\n",

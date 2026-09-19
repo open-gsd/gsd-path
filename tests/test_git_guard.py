@@ -751,6 +751,11 @@ class GitGuardEndToEndTests(unittest.TestCase):
             capture_output=True, text=True,
         )
         self.assertEqual(0, installed.returncode, installed.stderr)
+        runtime = Path(subprocess.check_output(
+            [sys.executable, "-B", str(hooks / "status_runtime.py"),
+             "--repo", str(self.repo), "--runtime-path"],
+            text=True,
+        ).strip())
         # Fixture history includes deliberate out-of-band STATE rewrites.
         self.git("config", "core.hooksPath", "/dev/null")
         self.enter_build()
@@ -765,7 +770,7 @@ class GitGuardEndToEndTests(unittest.TestCase):
         self.git("update-ref", "refs/remotes/origin/main", base)
         self.git("checkout", "-q", "gsd-path/M002")
         selected = subprocess.run(
-            [sys.executable, "-B", str(hooks / "runtime/promote_lookahead.py"), "select-base",
+            [sys.executable, "-B", str(runtime / "promote_lookahead.py"), "select-base",
              "--repo", str(self.repo), "--base", base, "--remote-default", "origin/main"],
             capture_output=True, text=True,
         )
@@ -824,11 +829,11 @@ class GitGuardEndToEndTests(unittest.TestCase):
                 "git ls-tree HEAD",
                 "git show-ref --head",
                 "git merge-base HEAD HEAD",
-                f"python3 -B {hooks}/runtime/promote_lookahead.py select-base --repo {self.repo}",
+                f"python3 -B {runtime}/promote_lookahead.py select-base --repo {self.repo}",
                 f"python3 -B {hooks}/status_runtime.py --repo {self.repo}",
-                f"python3 -B {hooks}/runtime/pipeline_diagnose.py diagnose --repo {self.repo}",
-                f"python3 -B {hooks}/runtime/archive_milestone.py validate-integrated --repo {self.repo}",
-                f"python3 -B {hooks}/runtime/pipeline_git.py bind-next --repo {self.repo}",
+                f"python3 -B {runtime}/pipeline_diagnose.py diagnose --repo {self.repo}",
+                f"python3 -B {runtime}/archive_milestone.py validate-integrated --repo {self.repo}",
+                f"python3 -B {runtime}/pipeline_git.py bind-next --repo {self.repo}",
             ):
                 result = subprocess.run(
                     [sys.executable, str(hooks / "guard_hook.py")], cwd=self.repo,
@@ -902,8 +907,8 @@ class GitGuardEndToEndTests(unittest.TestCase):
 
                     ("python3 -c 'print(1)'", self.repo, 2),
                     ("git switch feature/next", self.repo, 2),
-                    (f"python3 -B {hooks}/runtime/discussion_records.py pending --repo {self.repo}", self.repo, 0 if guard.parent == hooks else 2),
-                    (f"python3 -B {hooks}/runtime/discussion_records.py dispose --repo {self.repo}", self.repo, 2),
+                    (f"python3 -B {runtime}/discussion_records.py pending --repo {self.repo}", self.repo, 0),
+                    (f"python3 -B {runtime}/discussion_records.py dispose --repo {self.repo}", self.repo, 2),
                 ):
                     for supplied in (True, False):
                         with self.subTest(guard=guard, command=command, cwd=cwd, supplied=supplied):

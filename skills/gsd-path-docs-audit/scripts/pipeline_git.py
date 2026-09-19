@@ -17,6 +17,9 @@ import re
 import stat
 import subprocess
 import sys
+
+# Runtime helpers must not modify their immutable installation.
+sys.dont_write_bytecode = True
 from pathlib import Path
 from typing import Optional, Sequence
 

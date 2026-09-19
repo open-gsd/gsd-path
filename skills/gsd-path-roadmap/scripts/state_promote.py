@@ -4,6 +4,11 @@
 
 from __future__ import annotations
 
+import sys
+
+# Runtime helpers must not modify their immutable installation.
+sys.dont_write_bytecode = True
+
 import json
 import re
 import shutil

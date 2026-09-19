@@ -3,6 +3,11 @@
 """Interpret Roadmap text for selection, approval, promotion and milestone close."""
 from __future__ import annotations
 
+import sys
+
+# Runtime helpers must not modify their immutable installation.
+sys.dont_write_bytecode = True
+
 import re
 from typing import Optional
 
