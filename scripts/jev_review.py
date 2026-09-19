@@ -80,6 +80,7 @@ def checked_response(response, identifiers):
                 or not probability(answer.get("confidence"))
                 or not isinstance(probabilities, dict) or set(probabilities) != set(OPTIONS)
                 or not all(probability(value) for value in probabilities.values())
+                or abs(math.fsum(probabilities.values()) - 1.0) > sys.float_info.epsilon
                 or probabilities[choice] != max(probabilities.values())):
             raise ValueError("invalid_response")
         checked[identifier] = {"type": "choice", "choice": choice,

@@ -45,6 +45,8 @@ Coverage mapping: `scripts/jev_review.py` and its four generated copies are exer
 
 ## Sources
 
+Normalization follow-up: R1 is fixed at the shared response boundary and in all generated helpers. The focused Jev suite now passes 10 tests; the new CLI/HTTP regression failed on the original implementation and again during restored-original sabotage. Full proof and the floating-point allowance derivation are in the [R1 disposition](jev-fable-review-disposition.md#r1-probability-normalization). No live inference or semantic evaluation was added.
+
 - [Research](jev-integration.md)
 - [Official HTTP contract](https://docs.typesafe.ai/api)
 - [Models and limits](https://docs.typesafe.ai/models)

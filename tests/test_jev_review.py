@@ -196,6 +196,33 @@ class JevReviewTests(unittest.TestCase):
                 self.assertEqual((result["status"], result.get("reason")), ("unavailable", "invalid_response"))
                 self.assertNotIn("answers", result)
 
+    def test_probability_distributions_must_be_normalized(self):
+        scripts = [ROOT / "scripts/jev_review.py"] + [
+            ROOT / "skills" / skill / "scripts/jev_review.py"
+            for skill in ("gsd-path", "gsd-path-build", "gsd-path-ship", "path")]
+        for script in scripts:
+            for values, valid in [((0, 0, 0, 0), False),
+                                  ((0.4, 0.3, 0.1, 0.1), False),
+                                  ((0.4, 0.3, 0.2, 0.2), False),
+                                  ((0.5, 0.5, sys.float_info.epsilon, sys.float_info.epsilon), False),
+                                  ((0.4, 0.3, 0.2, 0.1), True),
+                                  ((0.7, 0.2, 0.1, 0), True)]:
+                with self.subTest(script=script.relative_to(ROOT), values=values):
+                    self.response["answers"]["AC-1"]["probabilities"] = dict(zip(OPTIONS, values))
+                    result = self.run_cli(script=script)
+                    self.assertEqual(result["reviewed_head"], INPUT["reviewed_head"])
+                    body = self.requests[-1][1]
+                    digest = hashlib.sha256(json.dumps(
+                        body, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+                    self.assertEqual(result["request_sha256"], digest)
+                    if valid:
+                        self.assertEqual(result["status"], "ok")
+                        self.assertEqual(result["answers"], self.response["answers"])
+                    else:
+                        self.assertEqual((result["status"], result.get("reason")),
+                                         ("unavailable", "invalid_response"))
+                        self.assertNotIn("answers", result)
+
 
 if __name__ == "__main__":
     unittest.main()
