@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 from typing import Dict, Iterable, List, Optional, Tuple
 
 from .probe import is_project_root
+from .gitinfo import _git
 
 SKIP_DIRS = {".git", "node_modules", ".venv", "__pycache__"}
 
@@ -14,7 +16,9 @@ def _normalized(paths: Iterable[str]) -> List[str]:
 
 
 def _is_excluded(path: str, excludes: List[str]) -> bool:
+    path = os.path.realpath(path)
     for excluded in excludes:
+        excluded = os.path.realpath(excluded)
         if path == excluded or path.startswith(excluded + os.sep):
             return True
     return False
@@ -42,7 +46,26 @@ def _git_common_dir(root: str) -> Optional[str]:
 
 
 def _dedupe_rank(root: str) -> Tuple[int, int, str]:
-    return (0 if os.path.isdir(os.path.join(root, ".git")) else 1, len(root), root)
+    branch = _git(root, "branch", "--show-current") or ""
+    rank = 0 if re.fullmatch(r"gsd-path/M\d{3,}", branch) else 1
+    if rank and not os.path.isdir(os.path.join(root, ".git")):
+        rank = 2
+    return (rank, len(root), root)
+
+
+def _bound_worktrees(root: str) -> List[str]:
+    records = _git(root, "worktree", "list", "--porcelain", "-z") or ""
+    found = []
+    for record in records.split("\0\0"):
+        fields = record.split("\0")
+        if not any(re.fullmatch(r"branch refs/heads/gsd-path/M\d{3,}", field) for field in fields):
+            continue
+        for field in fields:
+            if field.startswith("worktree "):
+                path = field.removeprefix("worktree ")
+                if is_project_root(path):
+                    found.append(path)
+    return found
 
 
 def _dedupe_worktrees(roots: List[str]) -> List[str]:
@@ -59,6 +82,8 @@ def scan(parents: Iterable[str], excludes: Iterable[str] = (), max_depth: int = 
         if _is_excluded(parent, excluded) or not os.path.isdir(parent):
             continue
         _walk(parent, 0, max_depth, excluded, found)
+    for root in list(found):
+        found.extend(path for path in _bound_worktrees(root) if not _is_excluded(path, excluded))
     return sorted(_dedupe_worktrees(found))
 
 

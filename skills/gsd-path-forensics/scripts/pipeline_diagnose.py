@@ -12,6 +12,9 @@ import argparse
 import json
 import shlex
 import sys
+
+# Runtime helpers must not modify their immutable installation.
+sys.dont_write_bytecode = True
 from pathlib import Path
 from typing import Callable, Optional, Sequence
 

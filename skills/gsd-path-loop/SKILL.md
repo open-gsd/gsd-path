@@ -3,6 +3,8 @@ name: gsd-path-loop
 description: Use only when the user explicitly invokes $gsd-path-loop. Runs one bounded loop pass from a LOOP.md spec — gate checks, independent verification, one fix worker, telemetry. Autonomy lives in the external scheduler that invokes this skill; the skill never schedules itself.
 ---
 
+Before executing project helpers, read [runtime selection](references/runtime-selection.md).
+
 # GSD Path Loop
 
 One invocation = one bounded pass. The bundled deterministic helper

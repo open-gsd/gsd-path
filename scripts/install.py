@@ -3,6 +3,7 @@
 
 import argparse
 import errno
+import hashlib
 import json
 import os
 import re
@@ -17,9 +18,11 @@ from typing import Callable, Iterable, List, Mapping, Optional, Sequence, Tuple,
 sys.dont_write_bytecode = True
 
 try:
-    from . import sync_skill_resources
+    from . import sync_skill_resources, runtime_store, status_runtime
 except ImportError:  # Direct execution from scripts/.
     import sync_skill_resources  # type: ignore
+    import runtime_store
+    import status_runtime
 
 
 def skill_names_for_manifest(manifest: Mapping) -> Tuple[str, ...]:
@@ -46,27 +49,7 @@ CLAUDE_BRIDGE = "@../AGENTS.md\n@../WORKFLOW.md\n"
 HOOKS_DIRECTORY = ".gsd-path"
 GUARD_SCRIPTS = ("guard_hook.py", "git_guard.py")
 GUARD_MARKER = "gsd-path guard"
-PROJECT_RUNTIME_SCRIPTS = (
-    "pipeline_state.py",
-    "roadmap.py",
-    "check_handoffs.py",
-    "check_task_briefs.py",
-    "isolation.py",
-    "discussion_records.py",
-    "pipeline_git.py",
-    "promote_lookahead.py",
-    "detect_project.py",
-    "pipeline_diagnose.py",
-    "pipeline_undo.py",
-    "archive_milestone.py",
-    "review_panel.py",
-    "_common.py",
-    "build_recovery.py",
-    "state_checkpoint.py",
-    "state_promote.py",
-    "discussion_validate.py",
-    "integration.py",
-)
+PROJECT_RUNTIME_SCRIPTS = runtime_store.RUNTIME_FILES
 PROJECT_RUNTIME_MARKER = "gsd-path project runtime"
 PROJECT_STATUS_LAUNCHER = "status_runtime.py"
 PROJECT_STATUS_MARKER = "gsd-path project status launcher"
@@ -888,10 +871,15 @@ def _create_install_lock(lock: Path) -> None:
         raise
 
 
+def _install_lock_path(root: Path) -> Path:
+    identity = hashlib.sha256(os.fsencode(root.resolve())).hexdigest()
+    return Path.home() / ".gsd-path" / "install-locks" / identity / INSTALL_LOCK_NAME
+
+
 def _acquire_install_locks(roots: Iterable[Path]) -> Tuple[List[Path], List[Path]]:
     locks: List[Path] = []
     for root in roots:
-        candidate = root.parent / INSTALL_LOCK_NAME
+        candidate = _install_lock_path(root)
         if not any(_same_path(candidate, existing) for existing in locks):
             locks.append(candidate)
     locks.sort(key=lambda candidate: os.path.normcase(os.fspath(candidate)))
@@ -1030,15 +1018,7 @@ def _project_destinations(
             False,
         ),
     ]
-    destinations.extend(
-        (
-            project / HOOKS_DIRECTORY / "runtime" / name,
-            f"scripts/{name}",
-            None,
-            False,
-        )
-        for name in PROJECT_RUNTIME_SCRIPTS
-    )
+    destinations.append((project / HOOKS_DIRECTORY / "runtime.json", None, "", False))
     if "claude" in selected:
         destinations.append(
             (project / ".claude" / "CLAUDE.md", None, CLAUDE_BRIDGE, False)
@@ -1046,7 +1026,7 @@ def _project_destinations(
     if hooks:
         for name in GUARD_SCRIPTS:
             destinations.append(
-                (project / HOOKS_DIRECTORY / name, f"scripts/{name}", None, False)
+                (project / HOOKS_DIRECTORY / name, None, runtime_store.guard_launcher(name), False)
             )
         if "claude" in selected:
             destinations.append(
@@ -1106,6 +1086,8 @@ def _update_replacement(
     the managed-file check for a replaceable destination, or None for a
     kept one."""
     parent = project / HOOKS_DIRECTORY
+    if (parent / "runtime.json").is_file() and destination.parent == parent:
+        return None  # Stable wiring and selection change only through explicit operations.
     directory = destination.parent
     if _same_path(directory, parent / "runtime"):
         return _is_managed_project_runtime
@@ -1246,6 +1228,10 @@ def _validate_project(
         source = source_root / source_name
         if source.is_symlink() or not source.is_file():
             raise InstallerError(f"missing project contract: {source}")
+    try:
+        runtime_store.prepare(source_root, project, dry_run=True)
+    except (OSError, ValueError) as error:
+        raise InstallerError(str(error)) from error
     mergers = _native_settings_mergers(project, selected, hooks)
     for destination, _, _, _ in _project_destinations(
         project, selected, hooks, interpreter, hooks_dir
@@ -1280,11 +1266,17 @@ def _apply_project(
     hooks_dir: Optional[Path],
     update: bool = False,
 ) -> None:
+    try:
+        pin = runtime_store.prepare(source_root, project)
+    except (OSError, ValueError) as error:
+        raise InstallerError(str(error)) from error
     _create_directory(project, transaction.created_directories)
     mergers = _native_settings_mergers(project, selected, hooks)
     for destination, source_name, content, executable in _project_destinations(
         project, selected, hooks, interpreter, hooks_dir
     ):
+        if destination.name == "runtime.json" and destination.parent == project / HOOKS_DIRECTORY:
+            content = runtime_store.pin_text(pin)
         _create_directory(destination.parent, transaction.created_directories)
         merge = mergers.get(destination)
         if _lexists(destination) and not destination.is_symlink():
@@ -1642,7 +1634,7 @@ def _validate_hooks_refresh(
         project / HOOKS_DIRECTORY / "runtime", "project runtime directory"
     )
     refresh_guards = _refreshes_guards(project, full, initialize)
-    runtime_exists = any(
+    runtime_exists = (project / HOOKS_DIRECTORY / "runtime.json").is_file() or any(
         _lexists(project / HOOKS_DIRECTORY / "runtime" / name)
         for name in PROJECT_RUNTIME_SCRIPTS
     )
@@ -1733,162 +1725,63 @@ def _validate_hooks_refresh(
                     )
 
 
-def _refresh_hooks_unlocked(
-    source_root: Path,
-    project: Path,
-    full: bool,
-    dry_run: bool = False,
-    selected: Sequence[str] = (),
-    initialize: bool = False,
-) -> List[str]:
-    """Refreshed project-relative paths; "note:"-prefixed entries are
-    user-facing notes rather than refreshed files."""
-    hooks_dir = _git_hooks_directory(project) if full else None
-    interpreter: Optional[str] = None
-    if not dry_run:
-        if full:
-            interpreter, hooks_dir = _required_hook_runtime(
-                project,
-                "--hooks-init" if initialize else "--hooks-refresh-full",
-                selected,
-            )
-        else:
-            interpreter = _required_python_runtime("--hooks-refresh", selected)
-    _validate_hooks_refresh(
-        source_root, project, full, hooks_dir, selected, initialize
-    )
-    refreshed: List[str] = []
-    refresh_guards = _refreshes_guards(project, full, initialize)
-    runtime = project / HOOKS_DIRECTORY / "runtime"
-    if not dry_run:
-        runtime.parent.mkdir(parents=True, exist_ok=True)
-        staging = Path(tempfile.mkdtemp(prefix=".runtime-stage-", dir=runtime.parent))
-        previous = staging.with_name(staging.name + "-previous")
-        moved_previous = False
-        published_runtime = False
-        launcher = runtime.parent / PROJECT_STATUS_LAUNCHER
-        launcher_original = launcher.read_bytes() if _lexists(launcher) else None
-        launcher_mode = (
-            launcher.stat().st_mode & 0o777 if launcher_original is not None else None
-        )
-        guard_originals: List[Tuple[Path, Optional[bytes], Optional[int]]] = []
-        try:
-            for name in PROJECT_RUNTIME_SCRIPTS:
-                shutil.copy2(source_root / "scripts" / name, staging / name)
-            _atomic_copy(source_root / "scripts" / PROJECT_STATUS_LAUNCHER, launcher)
-            if _lexists(runtime):
-                os.replace(runtime, previous)
-                moved_previous = True
-            os.replace(staging, runtime)
-            published_runtime = True
-            if refresh_guards:
-                for name in GUARD_SCRIPTS:
-                    destination = project / HOOKS_DIRECTORY / name
-                    original = destination.read_bytes() if _lexists(destination) else None
-                    mode = (
-                        destination.stat().st_mode & 0o777
-                        if original is not None
-                        else None
-                    )
-                    guard_originals.append((destination, original, mode))
-                    _atomic_copy(source_root / "scripts" / name, destination)
-            if moved_previous:
-                _remove_path(previous)
-        except BaseException as error:
-            for destination, original, mode in reversed(guard_originals):
-                if original is None:
-                    _remove_path(destination)
-                else:
-                    _atomic_write(destination, original, mode)
-            if launcher_original is None:
-                _remove_path(launcher)
-            else:
-                _atomic_write(launcher, launcher_original, launcher_mode)
-            if published_runtime and _lexists(runtime):
-                _remove_path(runtime)
-            if not _lexists(runtime) and moved_previous and _lexists(previous):
-                os.replace(previous, runtime)
-            if isinstance(error, Exception):
-                raise InstallerError(
-                    f"project runtime refresh failed: {error}"
-                ) from error
-            raise
-        finally:
-            _remove_path(staging)
-    for name in PROJECT_RUNTIME_SCRIPTS:
-        refreshed.append(_describe_project_path(project, runtime / name))
-    refreshed.append(
-        _describe_project_path(
-            project, project / HOOKS_DIRECTORY / PROJECT_STATUS_LAUNCHER
-        )
-    )
-    if refresh_guards:
-        for name in GUARD_SCRIPTS:
-            destination = project / HOOKS_DIRECTORY / name
-            refreshed.append(_describe_project_path(project, destination))
-    if full:
-        for target, settings, merge, generated in (
-            (
-                "claude",
-                project / ".claude" / "settings.json",
-                _merged_claude_settings,
-                claude_hooks_settings,
-            ),
-            (
-                "codex",
-                project / ".codex" / "hooks.json",
-                _merged_codex_settings,
-                codex_hooks_settings,
-            ),
-            (
-                "cursor",
-                project / ".cursor" / "hooks.json",
-                _merged_cursor_settings,
-                cursor_hooks_settings,
-            ),
-        ):
-            if initialize and target not in selected:
-                continue
-            exists = _lexists(settings)
-            if exists or target in selected:
-                if not dry_run:
-                    settings.parent.mkdir(parents=True, exist_ok=True)
-                    content = (
-                        merge(settings, interpreter)
-                        if exists
-                        else generated(interpreter)
-                    )
-                    _atomic_write(settings, content)
-                refreshed.append(_describe_project_path(project, settings))
-        if hooks_dir is not None:
-            for hook_name, generator in GIT_HOOKS:
-                hook_path = hooks_dir / hook_name
-                if not dry_run:
-                    content = generator(interpreter)
-                    hook_path.parent.mkdir(parents=True, exist_ok=True)
-                    _atomic_write(hook_path, content, mode=0o755)
-                refreshed.append(_describe_project_path(project, hook_path))
-    return refreshed
-
-
 def refresh_hooks(
-    source_root: Path,
-    project: Path,
-    full: bool,
-    dry_run: bool = False,
-    selected: Sequence[str] = (),
-    initialize: bool = False,
+    source_root: Path, project: Path, full: bool, dry_run: bool = False,
+    selected: Sequence[str] = (), initialize: bool = False,
 ) -> List[str]:
-    if dry_run:
-        return _refresh_hooks_unlocked(
-            source_root, project, full, True, selected, initialize
-        )
     _validate_directory_destination(project, "project path")
+    if full and not dry_run:
+        _required_hook_runtime(project, "--hooks-init" if initialize else "--hooks-refresh-full", selected)
+    pinned = os.path.lexists(project / HOOKS_DIRECTORY / "runtime.json")
+    if os.path.lexists(project / HOOKS_DIRECTORY / "runtime"):
+        raise InstallerError("legacy runtime requires --runtime-migrate before refresh")
+    if pinned:
+        try:
+            status_runtime.resolve_runtime(project)
+        except (OSError, ValueError) as error:
+            raise InstallerError(str(error)) from error
+        _validate_hooks_refresh(source_root, project, full, _git_hooks_directory(project) if full else None, selected, initialize)
+        if not dry_run:
+            _required_python_runtime("--hooks-refresh", selected)
+    elif not initialize and not _has_legacy_project_contracts(source_root, project):
+        _validate_hooks_refresh(source_root, project, full, _git_hooks_directory(project) if full else None, selected, initialize)
+        raise InstallerError(f"no managed GSD Path hooks or runtime found in project: {project}")
+    if dry_run:
+        if pinned:
+            return ["note: selected runtime retained; use --runtime-upgrade for an explicit upgrade"]
+        _validate_hooks_refresh(source_root, project, full,
+                                _git_hooks_directory(project) if full else None, selected, True)
+        runtime_store.prepare(source_root, project, dry_run=True)
+        return [".gsd-path/runtime.json", ".gsd-path/status_runtime.py"]
     locks, created = _acquire_install_locks([project / HOOKS_DIRECTORY])
     try:
-        return _refresh_hooks_unlocked(
-            source_root, project, full, False, selected, initialize
-        )
+        if not pinned:
+            interpreter = _required_python_runtime("--hooks-init", selected)
+            hooks_dir = _git_hooks_directory(project) if full else None
+            _validate_hooks_refresh(source_root, project, full, hooks_dir, selected, True)
+            transaction = ProjectTransaction()
+            try:
+                _apply_project(source_root, project, selected, full, transaction, interpreter, hooks_dir, update=True)
+            except BaseException:
+                _rollback_project(transaction)
+                raise
+            return [".gsd-path/runtime.json", ".gsd-path/status_runtime.py"]
+        if not full and not _has_managed_guard_wiring(project):
+            return ["note: selected runtime retained; use --runtime-upgrade for an explicit upgrade"]
+        interpreter = _required_python_runtime("--hooks-refresh", selected)
+        hooks_dir = _git_hooks_directory(project) if full else None
+        refresh_targets = list(selected)
+        if full and not initialize:
+            for target, relative in (("claude", ".claude/settings.json"), ("codex", ".codex/hooks.json"), ("cursor", ".cursor/hooks.json")):
+                if (project / relative).exists() and target not in refresh_targets:
+                    refresh_targets.append(target)
+        transaction = ProjectTransaction()
+        try:
+            _apply_project(source_root, project, refresh_targets, True, transaction, interpreter, hooks_dir, update=True)
+        except BaseException:
+            _rollback_project(transaction)
+            raise
+        return ["note: selected runtime retained; stable hooks initialized/refreshed"]
     finally:
         _release_install_locks(locks, created)
 
@@ -2037,6 +1930,11 @@ def _read_package_version(manifest: Path) -> Optional[str]:
 
 def _validated_project_state(source_root: Path, project: Path) -> dict:
     validator = source_root / "scripts" / "pipeline_state.py"
+    if (project / HOOKS_DIRECTORY / "runtime.json").exists():
+        try:
+            validator = status_runtime.resolve_runtime(project) / "pipeline_state.py"
+        except (OSError, ValueError) as error:
+            raise InstallerError(str(error)) from error
     if validator.is_symlink() or not validator.is_file():
         raise InstallerError(f"canonical state validator is unavailable: {validator}")
     interpreter = _required_python_runtime("--doctor")
@@ -2074,6 +1972,11 @@ def _validated_project_state(source_root: Path, project: Path) -> dict:
 def _validate_project_runtime_status(source_root: Path, project: Path) -> None:
     interpreter = _required_python_runtime("--doctor")
     runtime = source_root / "scripts" / "pipeline_state.py"
+    if (project / HOOKS_DIRECTORY / "runtime.json").exists():
+        try:
+            runtime = status_runtime.resolve_runtime(project) / "pipeline_state.py"
+        except (OSError, ValueError) as error:
+            raise InstallerError(f"runtime changed during doctor validation: {error}") from error
     environment = os.environ.copy()
     environment["GIT_OPTIONAL_LOCKS"] = "0"
     try:
@@ -2099,6 +2002,13 @@ def _validate_project_runtime_status(source_root: Path, project: Path) -> None:
 
 
 def _project_runtime_matches(source_root: Path, project: Path) -> bool:
+    if (project / HOOKS_DIRECTORY / "runtime.json").exists():
+        try:
+            root = status_runtime.resolve_runtime(project)
+            launcher = project / HOOKS_DIRECTORY / PROJECT_STATUS_LAUNCHER
+            return not launcher.is_symlink() and launcher.read_bytes() == (root / PROJECT_STATUS_LAUNCHER).read_bytes()
+        except (OSError, ValueError):
+            return False
     pairs = [
         (
             project / HOOKS_DIRECTORY / PROJECT_STATUS_LAUNCHER,
@@ -2370,7 +2280,15 @@ def doctor(
                     "project: .claude/CLAUDE.md exists but is not the managed bridge",
                 )
 
+    pinned = os.path.lexists(project / HOOKS_DIRECTORY / "runtime.json")
     runtime = project / HOOKS_DIRECTORY / "runtime"
+    if pinned:
+        try:
+            runtime = status_runtime.resolve_runtime(project)
+            push("ok", f"project: selected runtime {status_runtime.declaration(project)['version']}")
+        except (OSError, ValueError) as error:
+            push("fail", str(error))
+            return findings
     launcher = project / HOOKS_DIRECTORY / PROJECT_STATUS_LAUNCHER
     runtime_current = True
     if launcher.is_symlink():
@@ -2382,7 +2300,7 @@ def doctor(
     else:
         launcher_content = read_project_file(launcher, "project: status launcher")
         launcher_source = read_project_file(
-            source_root / "scripts" / PROJECT_STATUS_LAUNCHER,
+            (runtime if pinned else source_root / "scripts") / PROJECT_STATUS_LAUNCHER,
             "package: status launcher",
         )
         if launcher_content is None or launcher_source is None:
@@ -2423,7 +2341,7 @@ def doctor(
                 runtime_current = False
                 continue
             source = read_project_file(
-                source_root / "scripts" / name, f"package: runtime {name}"
+                (runtime if pinned else source_root / "scripts") / name, f"package: runtime {name}"
             )
             if source is None:
                 runtime_current = False
@@ -2494,6 +2412,8 @@ def doctor(
             source = read_project_file(
                 source_root / "scripts" / name, f"package: guard {name}"
             )
+            if pinned:
+                source = runtime_store.guard_launcher(name).encode()
             if source is None:
                 continue
             if GUARD_MARKER.encode() not in content:
@@ -2853,12 +2773,16 @@ def parser() -> argparse.ArgumentParser:
     for target in TARGETS:
         argument_parser.add_argument(f"--{target}", action="store_true")
         argument_parser.add_argument(f"--{target}-root", type=Path)
+    argument_parser.add_argument("--adapter-request", action="store_true", help=argparse.SUPPRESS)
     argument_parser.add_argument("--all", action="store_true", dest="all_targets")
     argument_parser.add_argument("--update", action="store_true")
     argument_parser.add_argument("--local", action="store_true")
     argument_parser.add_argument("--dry-run", action="store_true")
     argument_parser.add_argument("--project", type=Path)
     argument_parser.add_argument("--doctor", action="store_true")
+    runtime_actions = argument_parser.add_mutually_exclusive_group()
+    for action in ("restore", "upgrade", "migrate"):
+        runtime_actions.add_argument(f"--runtime-{action}", action="store_true")
     argument_parser.add_argument("--hooks", action="store_true")
     argument_parser.add_argument("--hooks-init", action="store_true")
     argument_parser.add_argument("--hooks-refresh", action="store_true")
@@ -2875,10 +2799,51 @@ def parser() -> argparse.ArgumentParser:
 def main(argv: Optional[Sequence[str]] = None) -> int:
     argument_parser = parser()
     arguments = argument_parser.parse_args(argv)
+    if arguments.adapter_request:
+        try:
+            request = json.load(sys.stdin)
+            source = Path(request["source"])
+            project = Path(request["project"])
+            action = request["action"]
+            if action == "install":
+                plans = [TargetPlan(p["name"], Path(p["root"])) for p in request["plans"]]
+                result = install(source, plans, project=project, dry_run=request["dryRun"],
+                                 hooks=request["hooks"], migrate_legacy=request["migrateLegacy"],
+                                 update=request["update"])
+            elif action == "refresh":
+                result = refresh_hooks(source, project, request["full"], request["dryRun"],
+                                       request["selected"], request["initialize"])
+            elif action == "doctor":
+                result = doctor(source, request["targets"], lambda target: Path(request["roots"][target]), project)
+            else:
+                raise InstallerError("unknown installer adapter action")
+            print(json.dumps(result))
+            return 0
+        except (InstallerError, OSError, ValueError, KeyError) as error:
+            print(str(error), file=sys.stderr)
+            return 1
     source_root = absolute_path(arguments.source_root)
     project = (
         absolute_path(arguments.project) if arguments.project is not None else None
     )
+    runtime_action = next((action for action in ("restore", "upgrade", "migrate")
+                           if getattr(arguments, "runtime_" + action)), None)
+    if runtime_action:
+        if project is None:
+            argument_parser.error(f"--runtime-{runtime_action} requires --project")
+        try:
+            _validate_project_git_root(project)
+            locks, created = ([], []) if arguments.dry_run else _acquire_install_locks([project / HOOKS_DIRECTORY])
+            try:
+                pin = runtime_store.operate(source_root, project, runtime_action, dry_run=arguments.dry_run)
+            finally:
+                _release_install_locks(locks, created)
+            print(f"runtime: {runtime_action} {pin['version']} ({pin['digest']})"
+                  + (" (dry run)" if arguments.dry_run else ""))
+            return 0
+        except (InstallerError, OSError, ValueError) as error:
+            print(f"error: {error}", file=sys.stderr)
+            return 1
     if arguments.doctor:
         named = [target for target in TARGETS if getattr(arguments, target)]
         selected = named if named and not arguments.all_targets else list(TARGETS)

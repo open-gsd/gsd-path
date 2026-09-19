@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Launch the project status runtime across an atomic refresh handoff."""
 
+import argparse
+import hashlib
 import errno
 import json
 import os
@@ -72,8 +74,85 @@ def install_lock_active(lock: Path) -> bool:
     return current_identity == identity
 
 
+RUNTIME_SCHEMA = "gsd-path/runtime/v1"
+
+
+def runtime_home() -> Path:
+    return Path.home() / ".gsd-path" / "runtimes"
+
+
+def declaration(repo: Path) -> dict:
+    path = repo / ".gsd-path" / "runtime.json"
+    if path.is_symlink() or path.parent.is_symlink():
+        raise ValueError(f"unsafe runtime declaration: {path}")
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if (not isinstance(data, dict) or data.get("schema") != RUNTIME_SCHEMA
+            or not isinstance(data.get("version"), str)
+            or not isinstance(data.get("digest"), str)
+            or len(data["digest"]) != 64
+            or any(c not in "0123456789abcdef" for c in data["digest"])):
+        raise ValueError(f"invalid runtime declaration: {path}")
+    return data
+
+
+def manifest_digest(manifest: dict) -> str:
+    return hashlib.sha256(json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
+def validate_runtime(data: dict) -> Path:
+    root = runtime_home() / data["digest"]
+    hint = (f"Runtime {data['version']} ({data['digest']}) is unavailable or invalid at {root}. "
+            "Run gsd-path --runtime-restore --project <project-root> "
+            "--source-root <matching-package-root> to restore this exact runtime.")
+    try:
+        if any(p.is_symlink() for p in (root, root.parent, root.parent.parent)):
+            raise ValueError("symlinked runtime storage")
+        manifest_path = root / "manifest.json"
+        if manifest_path.is_symlink():
+            raise ValueError("symlinked manifest")
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        if (not isinstance(manifest, dict) or manifest_digest(manifest) != data["digest"]
+                or manifest.get("version") != data["version"]):
+            raise ValueError("manifest identity mismatch")
+        files = manifest.get("files")
+        if not isinstance(files, dict) or "pipeline_state.py" not in files:
+            raise ValueError("invalid runtime file inventory")
+        for name, expected in files.items():
+            if Path(name).name != name or not name.endswith(".py"):
+                raise ValueError("invalid runtime file name")
+            path = root / name
+            if path.is_symlink() or hashlib.sha256(path.read_bytes()).hexdigest() != expected:
+                raise ValueError(f"runtime file changed: {name}")
+        if set(p.name for p in root.iterdir()) != set(files) | {"manifest.json"}:
+            raise ValueError("unexpected runtime files")
+    except (OSError, ValueError, TypeError) as error:
+        raise ValueError(hint + f" ({error})") from error
+    return root
+
+
+def resolve_runtime(repo: Path) -> Path:
+    return validate_runtime(declaration(repo))
+
+
+def run_guard(repo: Path, name: str) -> None:
+    # Keep the guard's project identity while executing verified external bytes.
+    root = resolve_runtime(repo)
+    sys.dont_write_bytecode = True
+    sys.path.insert(0, str(root))
+    code = compile((root / name).read_bytes(), str(root / name), "exec")
+    exec(code, {"__name__": "__main__", "__file__": str(repo / ".gsd-path" / name)})
+
+
 def launch(repo: Path) -> int:
     parent = repo / ".gsd-path"
+    if os.path.lexists(parent / "runtime.json"):
+        try:
+            runtime = resolve_runtime(repo) / "pipeline_state.py"
+        except (OSError, ValueError) as error:
+            print(str(error), file=sys.stderr)
+            return 2
+        return subprocess.call([sys.executable, "-B", str(runtime), "status", "--repo", str(repo)],
+                               env={**os.environ, "GIT_OPTIONAL_LOCKS": "0"})
     runtime = parent / "runtime" / "pipeline_state.py"
     lock = repo / ".gsd-path-install-lock"
     command = [sys.executable, "-B", str(runtime), "status", "--repo", str(repo)]
@@ -108,14 +187,21 @@ def launch(repo: Path) -> int:
 
 
 def main(argv: Sequence[str] = sys.argv[1:]) -> int:
-    if len(argv) != 2 or argv[0] != "--repo":
-        print("usage: status_runtime.py --repo <absolute-root>", file=sys.stderr)
-        return 2
-    repo = Path(argv[1])
-    if not repo.is_absolute():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--repo", required=True, type=Path)
+    parser.add_argument("--runtime-path", action="store_true")
+    args = parser.parse_args(argv)
+    if not args.repo.is_absolute():
         print("GSD Path status repository must be absolute", file=sys.stderr)
         return 2
-    return launch(repo.resolve())
+    if args.runtime_path:
+        try:
+            print(resolve_runtime(args.repo.resolve()))
+            return 0
+        except (OSError, ValueError) as error:
+            print(str(error), file=sys.stderr)
+            return 2
+    return launch(args.repo.resolve())
 
 
 if __name__ == "__main__":

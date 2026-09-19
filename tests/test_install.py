@@ -22,6 +22,11 @@ class InstallerTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary.name)
+        isolated_home = self.root / "home"
+        isolated_home.mkdir()
+        home_patch = mock.patch.dict(os.environ, {"HOME": str(isolated_home)})
+        home_patch.start()
+        self.addCleanup(home_patch.stop)
         self.source = self.root / "source"
         (self.source / "skills").mkdir(parents=True)
         shutil.copy2(PROJECT_ROOT / "AGENTS.md", self.source / "AGENTS.md")
@@ -105,6 +110,12 @@ class InstallerTests(unittest.TestCase):
             install, "_resolve_git_hooks_path", side_effect=self.resolve_test_hooks_path
         )
         self.git_hooks_patch.start()
+
+    def runtime_root(self, project):
+        pin = project / install.HOOKS_DIRECTORY / "runtime.json"
+        if pin.exists():
+            return install.status_runtime.runtime_home() / json.loads(pin.read_text())["digest"]
+        return project / install.HOOKS_DIRECTORY / "runtime"
 
     def tearDown(self):
         self.git_hooks_patch.stop()
@@ -243,7 +254,7 @@ class InstallerTests(unittest.TestCase):
 
     def test_project_runtime_dependency_set_imports(self):
         project = self.root / "runtime-project"
-        runtime = project / install.HOOKS_DIRECTORY / "runtime"
+        runtime = self.runtime_root(project)
         runtime.mkdir(parents=True)
         manifest = json.loads((PROJECT_ROOT / "scripts/skill-resources.json").read_text())
         for name in install.PROJECT_RUNTIME_SCRIPTS:
@@ -1083,7 +1094,7 @@ class InstallerTests(unittest.TestCase):
         )
         for name in install.PROJECT_RUNTIME_SCRIPTS:
             self.assertTrue(
-                (project / install.HOOKS_DIRECTORY / "runtime" / name).is_file()
+                (self.runtime_root(project) / name).is_file()
             )
 
         second_target = self.root / "claude-2" / "skills"
@@ -1129,7 +1140,7 @@ class InstallerTests(unittest.TestCase):
             ]
         )
         self.assertEqual(0, status, error)
-        runtime = project / install.HOOKS_DIRECTORY / "runtime" / "pipeline_state.py"
+        runtime = self.runtime_root(project) / "pipeline_state.py"
         before = runtime.read_bytes()
         install.sync_skill_resources.mismatches.return_value = [
             "stale generated resource: skills/gsd-path-build/scripts/pipeline_state.py"
@@ -1343,7 +1354,7 @@ class InstallerTests(unittest.TestCase):
         existing = target / "gsd-path-old"
         existing.mkdir(parents=True)
         (existing / "marker").write_text("old\n", encoding="utf-8")
-        (target.parent / ".gsd-path-install-lock").mkdir()
+        (install._install_lock_path(target)).mkdir(parents=True)
 
         with self.assertRaisesRegex(install.InstallerError, "already in progress"):
             install.install(self.source, [install.TargetPlan("claude", target)])
@@ -1356,7 +1367,7 @@ class InstallerTests(unittest.TestCase):
 
     def test_install_lock_publishes_live_owner(self):
         target = self.root / "live-owner" / "skills"
-        lock = target.parent / install.INSTALL_LOCK_NAME
+        lock = install._install_lock_path(target)
         original = install._apply_target
         owner = {}
 
@@ -1378,7 +1389,7 @@ class InstallerTests(unittest.TestCase):
 
     def test_install_recovers_stale_owned_lock(self):
         target = self.root / "stale-owner" / "skills"
-        lock = target.parent / install.INSTALL_LOCK_NAME
+        lock = install._install_lock_path(target)
         lock.mkdir(parents=True)
         (lock / install.INSTALL_LOCK_OWNER).write_text(
             json.dumps(
@@ -1400,16 +1411,10 @@ class InstallerTests(unittest.TestCase):
         parent = self.root / "concurrent-stale-owner"
         first_target = parent / "first-skills"
         second_target = parent / "second-skills"
-        lock = parent / install.INSTALL_LOCK_NAME
+        lock = install._install_lock_path(first_target)
         lock.mkdir(parents=True)
         (lock / install.INSTALL_LOCK_OWNER).write_text(
-            json.dumps(
-                {
-                    "schema": install.INSTALL_LOCK_SCHEMA,
-                    "pid": os.getpid(),
-                    "identity": "reused-pid",
-                }
-            ),
+            json.dumps({"schema": install.INSTALL_LOCK_SCHEMA, "pid": os.getpid(), "identity": "reused-pid"}),
             encoding="utf-8",
         )
         original_rename = Path.rename
@@ -1437,12 +1442,12 @@ class InstallerTests(unittest.TestCase):
         self.assertTrue((second_target / install.SKILL_NAMES[0]).is_dir())
         self.assertFalse(lock.exists())
         self.assertEqual(
-            [], list(parent.glob(f"{install.INSTALL_LOCK_NAME}.stale-*"))
+            [], list(lock.parent.glob(f"{lock.name}.stale-*"))
         )
 
     def test_install_reclaims_an_orphaned_stale_quarantine(self):
         target = self.root / "orphaned-quarantine" / "skills"
-        lock = target.parent / install.INSTALL_LOCK_NAME
+        lock = install._install_lock_path(target)
         quarantine = lock.with_name(f"{lock.name}.stale")
         quarantine.mkdir(parents=True)
         (quarantine / install.INSTALL_LOCK_OWNER).write_text(
@@ -1463,8 +1468,8 @@ class InstallerTests(unittest.TestCase):
 
     def test_install_reclaims_a_unique_orphaned_stale_quarantine(self):
         target = self.root / "unique-orphaned-quarantine" / "skills"
-        lock = target.parent / install.INSTALL_LOCK_NAME
-        staging = target.parent / ".install-lock-stage-abandoned"
+        lock = install._install_lock_path(target)
+        staging = lock.parent / ".install-lock-stage-abandoned"
         quarantine = lock.with_name(f"{lock.name}.stale-{staging.name}")
         owner = json.dumps(
             {
@@ -1487,7 +1492,7 @@ class InstallerTests(unittest.TestCase):
 
     def test_stale_lock_recovery_preserves_a_replacement_owner(self):
         target = self.root / "raced-stale-owner" / "skills"
-        lock = target.parent / install.INSTALL_LOCK_NAME
+        lock = install._install_lock_path(target)
         lock.mkdir(parents=True)
         owner_path = lock / install.INSTALL_LOCK_OWNER
         owner_path.write_text(
@@ -1500,7 +1505,7 @@ class InstallerTests(unittest.TestCase):
             ),
             encoding="utf-8",
         )
-        displaced = target.parent / "displaced-stale-lock"
+        displaced = lock.parent / "displaced-stale-lock"
         original_rename = Path.rename
         raced = False
 
@@ -1509,7 +1514,7 @@ class InstallerTests(unittest.TestCase):
             if candidate == lock and not raced:
                 raced = True
                 original_rename(candidate, displaced)
-                lock.mkdir()
+                lock.mkdir(parents=True)
                 owner_path.write_text(
                     json.dumps(
                         {
@@ -1535,7 +1540,7 @@ class InstallerTests(unittest.TestCase):
 
     def test_lost_stale_lock_race_removes_only_the_quarantine(self):
         target = self.root / "lost-stale-owner" / "skills"
-        lock = target.parent / install.INSTALL_LOCK_NAME
+        lock = install._install_lock_path(target)
         lock.mkdir(parents=True)
         owner_path = lock / install.INSTALL_LOCK_OWNER
         owner_path.write_text(
@@ -1555,7 +1560,7 @@ class InstallerTests(unittest.TestCase):
             nonlocal raced
             if candidate.name.startswith(".install-lock-stage-") and not raced:
                 raced = True
-                lock.mkdir()
+                lock.mkdir(parents=True)
                 owner_path.write_text(
                     json.dumps(
                         {
@@ -1665,7 +1670,7 @@ class InstallerTests(unittest.TestCase):
             self.assertTrue((project / install.HOOKS_DIRECTORY / name).is_file())
         for name in install.PROJECT_RUNTIME_SCRIPTS:
             self.assertTrue(
-                (project / install.HOOKS_DIRECTORY / "runtime" / name).is_file()
+                (self.runtime_root(project) / name).is_file()
             )
         self.assertTrue((project / ".claude" / "settings.json").is_file())
         self.assertTrue((project / ".git" / "hooks" / "pre-commit").is_file())
@@ -1705,7 +1710,7 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(0, status, error)
         for name in install.GUARD_SCRIPTS:
             self.assertEqual(
-                f"# {name}\n{install.GUARD_MARKER}\n",
+                install.runtime_store.guard_launcher(name),
                 (project / install.HOOKS_DIRECTORY / name).read_text(encoding="utf-8"),
             )
         settings = json.loads(
@@ -2050,7 +2055,7 @@ class InstallerTests(unittest.TestCase):
             (project / ".claude" / "settings.json").read_text(encoding="utf-8"),
         )
 
-    def test_update_keeps_project_contracts_and_refreshes_the_managed_runtime(self):
+    def test_update_keeps_project_contracts_and_selected_runtime(self):
         project = self.root / "update-project"
         (project / ".git").mkdir(parents=True)
         target = self.root / "claude" / "skills"
@@ -2059,15 +2064,14 @@ class InstallerTests(unittest.TestCase):
         (project / "AGENTS.md").write_text("edited contract\n", encoding="utf-8")
         (project / ".claude" / "CLAUDE.md").write_text("edited bridge\n", encoding="utf-8")
         runtime_file = (
-            project
-            / install.HOOKS_DIRECTORY
-            / "runtime"
+            self.runtime_root(project)
             / install.PROJECT_RUNTIME_SCRIPTS[0]
         )
         guard_file = project / install.HOOKS_DIRECTORY / install.GUARD_SCRIPTS[0]
-        stale_runtime = f"# stale\n{install.PROJECT_RUNTIME_MARKER}\n"
-        runtime_file.write_text(stale_runtime, encoding="utf-8")
-        guard_file.write_text(f"# stale\n{install.GUARD_MARKER}\n", encoding="utf-8")
+        stale_runtime = runtime_file.read_text(encoding="utf-8")
+        original_guard = guard_file.read_text(encoding="utf-8")
+        original_pin = (project / ".gsd-path/runtime.json").read_bytes()
+        (self.source / "scripts" / runtime_file.name).write_text(f"# newer\n{install.PROJECT_RUNTIME_MARKER}\n", encoding="utf-8")
         settings_path = project / ".claude" / "settings.json"
         settings = json.loads(settings_path.read_text(encoding="utf-8"))
         settings["userSetting"] = True
@@ -2079,7 +2083,7 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(0, status, error)
         self.assertRegex(
             output,
-            r"project: would refresh .*; kept AGENTS\.md, WORKFLOW\.md, \.claude/CLAUDE\.md",
+            r"project: would refresh .*; kept AGENTS\.md, WORKFLOW\.md, .*\.claude/CLAUDE\.md",
         )
         self.assertEqual(stale_runtime, runtime_file.read_text(encoding="utf-8"))
 
@@ -2089,7 +2093,7 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(0, status, error)
         self.assertRegex(
             output,
-            r"project: refreshed .*; kept AGENTS\.md, WORKFLOW\.md, \.claude/CLAUDE\.md\n",
+            r"project: refreshed .*; kept AGENTS\.md, WORKFLOW\.md, .*\.claude/CLAUDE\.md.*\n",
         )
         self.assertEqual(
             "edited contract\n", (project / "AGENTS.md").read_text(encoding="utf-8")
@@ -2099,17 +2103,14 @@ class InstallerTests(unittest.TestCase):
             (project / ".claude" / "CLAUDE.md").read_text(encoding="utf-8"),
         )
         self.assertEqual(
-            (self.source / "scripts" / install.PROJECT_RUNTIME_SCRIPTS[0]).read_text(
-                encoding="utf-8"
-            ),
+            stale_runtime,
             runtime_file.read_text(encoding="utf-8"),
         )
         self.assertEqual(
-            (self.source / "scripts" / install.GUARD_SCRIPTS[0]).read_text(
-                encoding="utf-8"
-            ),
+            original_guard,
             guard_file.read_text(encoding="utf-8"),
         )
+        self.assertEqual(original_pin, (project / ".gsd-path/runtime.json").read_bytes())
         merged = json.loads(settings_path.read_text(encoding="utf-8"))
         self.assertTrue(merged["userSetting"])
         self.assertEqual(1, len(merged["hooks"]["PreToolUse"]))
@@ -2126,15 +2127,13 @@ class InstallerTests(unittest.TestCase):
         status, _, error = self.run_main(arguments)
         self.assertEqual(0, status, error)
         runtime_file = (
-            project
-            / install.HOOKS_DIRECTORY
-            / "runtime"
+            self.runtime_root(project)
             / install.PROJECT_RUNTIME_SCRIPTS[0]
         )
         runtime_file.write_text("foreign\n", encoding="utf-8")
         status, _, error = self.run_main([*arguments, "--update"])
         self.assertEqual(1, status)
-        self.assertIn("not a managed GSD Path project file", error)
+        self.assertIn("runtime file changed", error)
         self.assertEqual("foreign\n", runtime_file.read_text(encoding="utf-8"))
 
     def test_hooks_dry_run_lists_files_without_writing(self):
@@ -2150,7 +2149,7 @@ class InstallerTests(unittest.TestCase):
         self.assertFalse(target.exists())
         self.assertFalse((project / install.HOOKS_DIRECTORY).exists())
 
-    def test_hooks_refresh_updates_managed_guard_scripts(self):
+    def test_explicit_upgrade_updates_external_guard_scripts(self):
         project = self.root / "project"
         (project / ".git").mkdir(parents=True)
         target = self.root / "claude" / "skills"
@@ -2163,7 +2162,7 @@ class InstallerTests(unittest.TestCase):
         )
         status, output, error = self.run_main(
             [
-                "--hooks-refresh",
+                "--runtime-upgrade",
                 "--project",
                 str(project),
                 "--source-root",
@@ -2173,16 +2172,14 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(0, status, error)
         self.assertIn(
             "guard v2",
-            (project / install.HOOKS_DIRECTORY / "guard_hook.py").read_text(
+            (self.runtime_root(project) / "guard_hook.py").read_text(
                 encoding="utf-8"
             ),
         )
         self.assertIn(
             "runtime v2",
             (
-                project
-                / install.HOOKS_DIRECTORY
-                / "runtime"
+                self.runtime_root(project)
                 / "pipeline_state.py"
             ).read_text(encoding="utf-8"),
         )
@@ -2218,7 +2215,7 @@ class InstallerTests(unittest.TestCase):
 
         self.assertEqual(0, status, error)
         self.assertTrue(
-            (project / install.HOOKS_DIRECTORY / "runtime" / "pipeline_state.py").is_file()
+            (self.runtime_root(project) / "pipeline_state.py").is_file()
         )
         self.assertFalse((project / install.HOOKS_DIRECTORY / "guard_hook.py").exists())
 
@@ -2260,9 +2257,9 @@ class InstallerTests(unittest.TestCase):
             ["--claude", "--claude-root", str(target), "--source-root", str(self.source), "--project", str(project)]
         )
         self.assertEqual(0, status, error)
-        runtime = project / install.HOOKS_DIRECTORY / "runtime" / "pipeline_state.py"
+        runtime = self.runtime_root(project) / "pipeline_state.py"
         before = runtime.read_bytes()
-        (project / install.INSTALL_LOCK_NAME).mkdir()
+        (install._install_lock_path(project / install.HOOKS_DIRECTORY)).mkdir(parents=True)
 
         status, _, error = self.run_main(
             ["--hooks-refresh", "--project", str(project), "--source-root", str(self.source)]
@@ -2276,7 +2273,7 @@ class InstallerTests(unittest.TestCase):
         project = self.root / "locked-install-project"
         target = self.root / "locked-install-claude" / "skills"
         project.mkdir()
-        (project / ".gsd-path-install-lock").mkdir()
+        (install._install_lock_path(project / install.HOOKS_DIRECTORY)).mkdir(parents=True)
 
         status, _, error = self.run_main(
             [
@@ -2295,19 +2292,19 @@ class InstallerTests(unittest.TestCase):
         self.assertFalse((project / "AGENTS.md").exists())
         self.assertFalse(target.exists())
 
-    def test_runtime_refresh_restores_prior_set_after_copy_failure(self):
+    def test_runtime_upgrade_preserves_prior_set_after_copy_failure(self):
         project = self.root / "transactional-runtime-project"
         target = self.root / "transactional-claude" / "skills"
         status, _, error = self.run_main(
             ["--claude", "--claude-root", str(target), "--source-root", str(self.source), "--project", str(project)]
         )
         self.assertEqual(0, status, error)
-        runtime = project / install.HOOKS_DIRECTORY / "runtime"
+        runtime = self.runtime_root(project)
         before = {name: (runtime / name).read_bytes() for name in install.PROJECT_RUNTIME_SCRIPTS}
         (self.source / "scripts" / "pipeline_state.py").write_text(
             f"# changed\n{install.PROJECT_RUNTIME_MARKER}\n", encoding="utf-8"
         )
-        original_copy = shutil.copy2
+        original_copy = shutil.copyfile
         copies = 0
 
         def failing_copy(source, destination):
@@ -2317,9 +2314,9 @@ class InstallerTests(unittest.TestCase):
                 raise OSError("injected runtime copy failure")
             return original_copy(source, destination)
 
-        with mock.patch.object(install.shutil, "copy2", side_effect=failing_copy):
+        with mock.patch.object(install.runtime_store.shutil, "copyfile", side_effect=failing_copy):
             status, _, _ = self.run_main(
-                ["--hooks-refresh", "--project", str(project), "--source-root", str(self.source)]
+                ["--runtime-upgrade", "--project", str(project), "--source-root", str(self.source)]
             )
 
         self.assertEqual(1, status)
@@ -2332,7 +2329,7 @@ class InstallerTests(unittest.TestCase):
             ["--claude", "--claude-root", str(target), "--source-root", str(self.source), "--project", str(project)]
         )
         self.assertEqual(0, status, error)
-        extra = project / install.HOOKS_DIRECTORY / "runtime" / "site_policy.py"
+        extra = self.runtime_root(project) / "site_policy.py"
         extra.write_text("keep\n", encoding="utf-8")
 
         status, _, error = self.run_main(
@@ -2340,7 +2337,7 @@ class InstallerTests(unittest.TestCase):
         )
 
         self.assertEqual(1, status)
-        self.assertIn("unexpected project runtime entries", error)
+        self.assertIn("unexpected runtime files", error)
         self.assertEqual("keep\n", extra.read_text(encoding="utf-8"))
 
     def test_guard_failure_rolls_back_runtime_and_guards(self):
@@ -2349,7 +2346,7 @@ class InstallerTests(unittest.TestCase):
         target = self.root / "guard-runtime-claude" / "skills"
         status, _, error = self.run_main(self.hooks_arguments(project, target))
         self.assertEqual(0, status, error)
-        runtime = project / install.HOOKS_DIRECTORY / "runtime"
+        runtime = self.runtime_root(project)
         shutil.rmtree(runtime)
         guard = project / install.HOOKS_DIRECTORY / "guard_hook.py"
         before = guard.read_bytes()
@@ -2372,7 +2369,7 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(before, guard.read_bytes())
         self.assertFalse(runtime.exists())
 
-    def test_hooks_refresh_updates_runtime_without_optional_guards(self):
+    def test_explicit_upgrade_updates_runtime_without_optional_guards(self):
         project = self.root / "hookless-project"
         target = self.root / "claude" / "skills"
         status, _, error = self.run_main(
@@ -2393,7 +2390,7 @@ class InstallerTests(unittest.TestCase):
 
         status, _, error = self.run_main(
             [
-                "--hooks-refresh",
+                "--runtime-upgrade",
                 "--project",
                 str(project),
                 "--source-root",
@@ -2405,9 +2402,7 @@ class InstallerTests(unittest.TestCase):
         self.assertIn(
             "runtime v2",
             (
-                project
-                / install.HOOKS_DIRECTORY
-                / "runtime"
+                self.runtime_root(project)
                 / "pipeline_state.py"
             ).read_text(encoding="utf-8"),
         )
@@ -2429,7 +2424,7 @@ class InstallerTests(unittest.TestCase):
             ]
         )
         self.assertEqual(0, status, error)
-        runtime = project / install.HOOKS_DIRECTORY / "runtime" / "pipeline_state.py"
+        runtime = self.runtime_root(project) / "pipeline_state.py"
         before = runtime.read_bytes()
         (self.source / "scripts" / "pipeline_state.py").write_text(
             f"# runtime v2\n{install.PROJECT_RUNTIME_MARKER}\n", encoding="utf-8"
@@ -2476,9 +2471,7 @@ class InstallerTests(unittest.TestCase):
         target = self.root / "claude" / "skills"
         self.run_main(self.hooks_arguments(project, target))
         runtime = (
-            project
-            / install.HOOKS_DIRECTORY
-            / "runtime"
+            self.runtime_root(project)
             / "pipeline_state.py"
         )
         runtime.write_text("custom\n", encoding="utf-8")
@@ -2494,7 +2487,7 @@ class InstallerTests(unittest.TestCase):
         )
 
         self.assertEqual(1, status)
-        self.assertIn("not a managed GSD Path project runtime", error)
+        self.assertIn("runtime file changed", error)
         self.assertEqual("custom\n", runtime.read_text(encoding="utf-8"))
 
     def test_hooks_refresh_reports_an_unreadable_project_runtime(self):
@@ -2503,19 +2496,17 @@ class InstallerTests(unittest.TestCase):
         target = self.root / "unreadable-runtime-claude" / "skills"
         self.run_main(self.hooks_arguments(project, target))
         runtime = (
-            project
-            / install.HOOKS_DIRECTORY
-            / "runtime"
+            self.runtime_root(project)
             / "pipeline_state.py"
         )
-        original_read_text = Path.read_text
+        original_read_text = Path.read_bytes
 
         def unreadable(candidate, *args, **kwargs):
             if candidate == runtime:
                 raise PermissionError("injected unreadable runtime")
             return original_read_text(candidate, *args, **kwargs)
 
-        with mock.patch.object(Path, "read_text", new=unreadable):
+        with mock.patch.object(Path, "read_bytes", new=unreadable):
             status, _, error = self.run_main(
                 [
                     "--hooks-refresh",
@@ -2527,7 +2518,7 @@ class InstallerTests(unittest.TestCase):
             )
 
         self.assertEqual(1, status)
-        self.assertIn("cannot read project runtime", error)
+        self.assertIn("unreadable runtime", error)
         self.assertNotIn("Traceback", error)
 
     def test_hooks_refresh_rejects_symlinked_project_runtime(self):
@@ -2536,9 +2527,7 @@ class InstallerTests(unittest.TestCase):
         target = self.root / "claude" / "skills"
         self.run_main(self.hooks_arguments(project, target))
         runtime = (
-            project
-            / install.HOOKS_DIRECTORY
-            / "runtime"
+            self.runtime_root(project)
             / "pipeline_state.py"
         )
         outside = self.root / "outside-runtime.py"
@@ -2556,7 +2545,7 @@ class InstallerTests(unittest.TestCase):
         )
 
         self.assertEqual(1, status)
-        self.assertIn("refusing to refresh a symlink", error)
+        self.assertIn("runtime file changed", error)
         self.assertTrue(runtime.is_symlink())
         self.assertIn(
             install.PROJECT_RUNTIME_MARKER,
@@ -2568,7 +2557,7 @@ class InstallerTests(unittest.TestCase):
         outside = self.root / "outside-runtime"
         (project / install.HOOKS_DIRECTORY).mkdir(parents=True)
         outside.mkdir()
-        (project / install.HOOKS_DIRECTORY / "runtime").symlink_to(
+        (self.runtime_root(project)).symlink_to(
             outside, target_is_directory=True
         )
         target = self.root / "claude" / "skills"
@@ -2623,7 +2612,7 @@ class InstallerTests(unittest.TestCase):
         target = self.root / "claude" / "skills"
         status, _, error = self.run_main(self.hooks_arguments(project, target))
         self.assertEqual(0, status, error)
-        runtime = project / install.HOOKS_DIRECTORY / "runtime"
+        runtime = self.runtime_root(project)
         outside = self.root / "outside-refresh-runtime"
         runtime.replace(outside)
         runtime.symlink_to(outside, target_is_directory=True)
@@ -2703,7 +2692,7 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(0, status, error)
         self.assertIn("exists but is not the managed bridge", output)
 
-        runtime_script = project / install.HOOKS_DIRECTORY / "runtime" / "pipeline_state.py"
+        runtime_script = self.runtime_root(project) / "pipeline_state.py"
         original_runtime = runtime_script.read_bytes()
         doctor_side_effect = project / "doctor-runtime-executed"
         runtime_script.write_text(
@@ -2714,7 +2703,7 @@ class InstallerTests(unittest.TestCase):
         )
         status, _, error = self.run_main(arguments)
         self.assertEqual(1, status)
-        self.assertIn("project runtime status was not executed", error)
+        self.assertIn("runtime file changed", error)
         self.assertFalse(doctor_side_effect.exists())
         runtime_script.write_bytes(original_runtime)
 
@@ -2965,7 +2954,7 @@ class InstallerTests(unittest.TestCase):
             )
         )
 
-    def test_doctor_reports_missing_canonical_runtime_source(self):
+    def test_doctor_uses_pinned_runtime_without_current_source(self):
         project = self.root / "doctor-missing-source"
         target = self.root / "doctor-missing-source-claude" / "skills"
         status, _, error = self.run_main(
@@ -2976,7 +2965,7 @@ class InstallerTests(unittest.TestCase):
 
         findings = install.doctor(self.source, [], lambda _target: Path(), project)
 
-        self.assertTrue(
+        self.assertFalse(
             any(
                 finding["level"] == "fail"
                 and "package: runtime pipeline_state.py cannot be read" in finding["text"]
@@ -3101,7 +3090,7 @@ class InstallerTests(unittest.TestCase):
     def test_doctor_entrypoint_does_not_write_import_bytecode(self):
         entrypoint = self.root / "doctor-entrypoint"
         entrypoint.mkdir()
-        for name in ("install.py", "sync_skill_resources.py", "skill-resources.json"):
+        for name in ("install.py", "runtime_store.py", "status_runtime.py", "sync_skill_resources.py", "skill-resources.json"):
             shutil.copy2(PROJECT_ROOT / "scripts" / name, entrypoint / name)
         environment = os.environ.copy()
         environment.pop("PYTHONDONTWRITEBYTECODE", None)

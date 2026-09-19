@@ -7,6 +7,9 @@ import json
 import os
 import shutil
 import sys
+
+# Runtime helpers must not modify their immutable installation.
+sys.dont_write_bytecode = True
 from contextlib import contextmanager
 from datetime import date
 from pathlib import Path

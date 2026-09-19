@@ -38,6 +38,7 @@
     "plugin.json",
     "scripts/install.mjs",
     "scripts/install.py",
+    "scripts/runtime_store.py",
     "scripts/migrate_core.py",
     "scripts/core_hook_gate.py",
     "scripts/core_hook_settings.py",
@@ -45,6 +46,7 @@
     "scripts/wizard.mjs",
     "scripts/skill-resources.json",
     "scripts/_common.py",
+    "scripts/worktree_paths.py",
     "scripts/build_recovery.py",
     "scripts/state_checkpoint.py",
     "scripts/roadmap.py",
@@ -94,6 +96,7 @@
   ],
   "phase_resources": {
     "gsd-path-build": [
+      "references/runtime-selection.md",
       "references/build-recovery.md",
       "references/build-native.md",
       "references/build-abandon.md",
@@ -112,22 +115,26 @@
       "templates/skeptic.md"
     ],
     "gsd-path-discuss": [
+      "references/runtime-selection.md",
       "templates/answers.md",
       "templates/dialogue.md"
     ],
     "gsd-path-docs-audit": [
+      "references/runtime-selection.md",
       "references/dispatch.md",
       "references/model-policy.md",
       "references/docs-auditor.md",
       "templates/docs-audit.md"
     ],
     "gsd-path-define": [
+      "references/runtime-selection.md",
       "references/build-recovery.md",
       "templates/charter.md",
       "templates/intent.md",
       "templates/state.md"
     ],
     "gsd-path-inspect": [
+      "references/runtime-selection.md",
       "references/codebase-mapper.md",
       "references/dispatch.md",
       "references/model-policy.md",
@@ -136,12 +143,18 @@
       "templates/docs-audit.md",
       "templates/state.md"
     ],
-    "gsd-path-forensics": [],
-    "gsd-path-migrate": [],
+    "gsd-path-forensics": [
+      "references/runtime-selection.md"
+    ],
+    "gsd-path-migrate": [
+      "references/runtime-selection.md"
+    ],
     "gsd-path-loop": [
+      "references/runtime-selection.md",
       "templates/loop.md"
     ],
     "gsd-path-plan": [
+      "references/runtime-selection.md",
       "references/build-recovery.md",
       "references/dispatch.md",
       "references/model-policy.md",
@@ -152,6 +165,7 @@
       "templates/task.md"
     ],
     "gsd-path-research": [
+      "references/runtime-selection.md",
       "references/dispatch.md",
       "references/model-policy.md",
       "references/researcher.md",
@@ -159,12 +173,14 @@
       "templates/research-handoff.md"
     ],
     "gsd-path-roadmap": [
+      "references/runtime-selection.md",
       "references/dispatch.md",
       "references/model-policy.md",
       "references/roadmapper.md",
       "templates/roadmap.md"
     ],
     "gsd-path-ship": [
+      "references/runtime-selection.md",
       "references/dispatch.md",
       "references/model-policy.md",
       "references/reviewer.md",
@@ -180,14 +196,31 @@
       "templates/wave-review.md"
     ],
     "gsd-path-decide": [
+      "references/runtime-selection.md",
       "references/dispatch.md",
       "references/model-policy.md",
       "references/decider.md",
       "templates/synthesis.md"
     ],
-    "gsd-path-undo": []
+    "gsd-path-undo": [
+      "references/runtime-selection.md"
+    ]
   },
   "script_targets": [
+    ["scripts/worktree_paths.py", "skills/gsd-path/scripts/worktree_paths.py"],
+    ["scripts/worktree_paths.py", "skills/gsd-path-build/scripts/worktree_paths.py"],
+    ["scripts/worktree_paths.py", "skills/gsd-path-decide/scripts/worktree_paths.py"],
+    ["scripts/worktree_paths.py", "skills/gsd-path-define/scripts/worktree_paths.py"],
+    ["scripts/worktree_paths.py", "skills/gsd-path-discuss/scripts/worktree_paths.py"],
+    ["scripts/worktree_paths.py", "skills/gsd-path-docs-audit/scripts/worktree_paths.py"],
+    ["scripts/worktree_paths.py", "skills/gsd-path-forensics/scripts/worktree_paths.py"],
+    ["scripts/worktree_paths.py", "skills/gsd-path-inspect/scripts/worktree_paths.py"],
+    ["scripts/worktree_paths.py", "skills/gsd-path-loop/scripts/worktree_paths.py"],
+    ["scripts/worktree_paths.py", "skills/gsd-path-plan/scripts/worktree_paths.py"],
+    ["scripts/worktree_paths.py", "skills/gsd-path-research/scripts/worktree_paths.py"],
+    ["scripts/worktree_paths.py", "skills/gsd-path-roadmap/scripts/worktree_paths.py"],
+    ["scripts/worktree_paths.py", "skills/gsd-path-ship/scripts/worktree_paths.py"],
+    ["scripts/worktree_paths.py", "skills/gsd-path-undo/scripts/worktree_paths.py"],
     ["scripts/migrate_core.py", "skills/gsd-path-migrate/scripts/migrate_core.py"],
     ["scripts/core_hook_gate.py", "skills/gsd-path-migrate/scripts/core_hook_gate.py"],
     ["scripts/core_hook_settings.py", "skills/gsd-path-migrate/scripts/core_hook_settings.py"],

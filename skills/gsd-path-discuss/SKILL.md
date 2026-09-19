@@ -3,6 +3,8 @@ name: gsd-path-discuss
 description: Hold an explicit, evidence-grounded discussion about an active GSD Path milestone from any phase, preserve the verbatim dialogue and answer records under .project/discuss/, use local code and existing artifacts before focused research, challenge unsupported assumptions, and identify the phase owner for follow-up. Use only when the user explicitly invokes $gsd-path-discuss to ask questions, explore a decision, request a progress explanation, or close a discussion without advancing the pipeline.
 ---
 
+Before executing project helpers, read [runtime selection](references/runtime-selection.md).
+
 # GSD Path Discussion
 
 Use this skill as an interruptible sidecar to the active GSD Path pipeline. Keep

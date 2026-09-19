@@ -3,6 +3,8 @@ name: gsd-path-plan
 description: Create and validate dependency-ordered GSD Path build waves and complete task contracts. Use only when the user explicitly invokes $gsd-path-plan or an active $gsd-path router explicitly routes to this phase.
 ---
 
+Before executing project helpers, read [runtime selection](references/runtime-selection.md).
+
 # GSD Path Planning Phase
 
 Dispatch one planner, gate its artifacts, and obtain the single approval that

@@ -3,6 +3,7 @@
 // Dependency-free; requires Node >= 18.17.
 
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -28,6 +29,7 @@ export const PROJECT_RUNTIME_SCRIPTS = [
   "archive_milestone.py",
   "review_panel.py",
   "_common.py",
+  "worktree_paths.py",
   "build_recovery.py",
   "state_checkpoint.py",
   "state_promote.py",
@@ -40,52 +42,6 @@ export const PROJECT_STATUS_MARKER = "gsd-path project status launcher";
 const INSTALL_LOCK_NAME = ".gsd-path-install-lock";
 const INSTALL_LOCK_OWNER = "owner.json";
 const INSTALL_LOCK_SCHEMA = "gsd-path/install-lock/v2";
-const PROJECT_CONTRACTS = [
-  ["AGENTS.md", "## Plain-prompt re-entry"],
-  ["WORKFLOW.md", "### Plain-prompt re-entry"],
-];
-const STATUS_ACTIONS = new Set([
-  "bind-initial",
-  "block",
-  "resume-checkpoint",
-  "resume-next-handoff",
-  "resume-promotion",
-  "resume-shipment",
-  "resume-undo",
-  "run-phase",
-  "validate-integrated",
-  "wait",
-]);
-const STATUS_PHASES = new Set(["inspect", "define", "research", "decide", "roadmap", "plan", "build", "ship", "shipped"]);
-const STATUS_VALUES = new Set(["active", "done", "blocked"]);
-const STATUS_STATE_FIELDS = [
-  "archive",
-  "branch",
-  "integration",
-  "integration_default",
-  "integration_source",
-  "milestone",
-  "phase",
-  "pipeline",
-  "project",
-  "status",
-];
-const STATUS_INTEGRATION_MODES = new Set(["direct", "pull-request"]);
-const STATUS_INTEGRATION_SOURCES = new Set(["default", "milestone"]);
-const STATUS_TRANSITIONS = new Map([
-  ["inspect", new Set(["inspect", "define"])],
-  ["define", new Set(["define", "research", "plan"])],
-  ["research", new Set(["research", "decide"])],
-  ["decide", new Set(["decide", "roadmap", "plan"])],
-  ["roadmap", new Set(["roadmap", "define"])],
-  ["plan", new Set(["plan", "build"])],
-  ["build", new Set(["build"])],
-  ["ship", new Set(["ship", "plan"])],
-  ["shipped", new Set(["ship"])],
-]);
-const STATUS_SLUG = /^[a-z0-9][a-z0-9-]*$/;
-const STATUS_BRANCH = /^gsd-path\/M(\d{3,})$/;
-const STATUS_ARCHIVE = /^\.project\/archive\/(\d{3,})-([a-z0-9][a-z0-9-]*)\/?$/;
 export const CLAUDE_MATCHER = ".*";
 // The managed PreToolUse guard entry, as an object.
 export function claudeGuardEntry(interpreter) {
@@ -236,21 +192,7 @@ export function resolveGitHooksPath(project) {
   return path.resolve(project, hooksPath);
 }
 
-function gitHooksDirectory(project) {
-  return gitHooksLocation(project).directory;
-}
 
-function gitHooksLocation(project) {
-  const dotGit = path.join(project, ".git");
-  if (!lexists(dotGit)) return { directory: null, resolved: false };
-  const resolved = hooks.resolveGitHooksPath(project);
-  if (resolved !== null) return { directory: resolved, resolved: true };
-  // Fallback when git is not runnable: only a plain .git directory is safe.
-  return {
-    directory: isDirectory(dotGit) ? path.join(dotGit, "hooks") : null,
-    resolved: false,
-  };
-}
 
 function requiredPythonRuntime(command, selected = []) {
   const targetSuffix = selected.length ? ` for selected hosts: ${selected.join(", ")}` : "";
@@ -263,18 +205,6 @@ function requiredPythonRuntime(command, selected = []) {
   return interpreter;
 }
 
-function requiredHookRuntime(project, command, selected = []) {
-  const targetSuffix = selected.length ? ` for selected hosts: ${selected.join(", ")}` : "";
-  const interpreter = requiredPythonRuntime(command, selected);
-  const location = gitHooksLocation(project);
-  if (!location.resolved) {
-    throw new InstallerError(
-      `${command} requires an initialized Git repository with a resolvable hooks ` +
-        `directory${targetSuffix}`
-    );
-  }
-  return { interpreter, hooksDir: location.directory };
-}
 const HOST_NOTES = {
   opencode:
     "note: OpenCode stable discovers the skills but has no documented hard " +
@@ -475,6 +405,11 @@ function isOwnedRouterAlias(skillDir) {
   }
 }
 
+function isManagedProjectRuntime(destination) {
+  if (!isFile(destination)) return false;
+  return fs.readFileSync(destination, "utf8").includes(PROJECT_RUNTIME_MARKER);
+}
+
 function isManagedInstallEntry(root, name) {
   if (!isManagedName(name)) return false;
   if (!Object.hasOwn(ROUTER_ALIASES, name.toLowerCase())) return true;
@@ -578,19 +513,6 @@ function samePath(left, right) {
   return comparisonPath(left) === comparisonPath(right);
 }
 
-function validateProjectGitRoot(project) {
-  let probe = project;
-  while (!lexists(probe)) probe = path.dirname(probe);
-  const result = spawnSync("git", ["rev-parse", "--show-toplevel"], {
-    cwd: probe,
-    encoding: "utf8",
-    env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
-  });
-  const topLevel = result.status === 0 ? result.stdout.trim() : "";
-  if (topLevel && !samePath(topLevel, project)) {
-    throw new InstallerError(`project path is not the Git worktree root: ${project}`);
-  }
-}
 
 function validateDirectoryDestination(candidate, label) {
   if (lexists(candidate)) {
@@ -1051,10 +973,15 @@ function createInstallLock(lock) {
   }
 }
 
+export function installLockPath(root) {
+  const identity = createHash("sha256").update(resolveNonStrict(root)).digest("hex");
+  return path.join(os.homedir(), ".gsd-path", "install-locks", identity, INSTALL_LOCK_NAME);
+}
+
 function acquireInstallLocks(roots) {
   const locks = [];
   for (const root of roots) {
-    const candidate = path.join(path.dirname(root), INSTALL_LOCK_NAME);
+    const candidate = installLockPath(root);
     if (!locks.some((lock) => samePath(lock, candidate))) locks.push(candidate);
   }
   locks.sort();
@@ -1178,821 +1105,11 @@ function rollbackTarget(transaction) {
 // Each entry: [destination, sourceName, literalContent, executable].
 // hooksDir is the pre-resolved git hooks directory (or null); resolving it
 // once per run avoids repeated `git rev-parse` spawns.
-function projectDestinations(project, selected, hooksEnabled, interpreter, hooksDir) {
-  const includeClaude = selected.includes("claude");
-  const destinations = [
-    [path.join(project, "AGENTS.md"), "AGENTS.md", null, false],
-    [path.join(project, "WORKFLOW.md"), "WORKFLOW.md", null, false],
-    [
-      path.join(project, HOOKS_DIRECTORY, PROJECT_STATUS_LAUNCHER),
-      path.join("scripts", PROJECT_STATUS_LAUNCHER),
-      null,
-      false,
-    ],
-  ];
-  for (const name of PROJECT_RUNTIME_SCRIPTS) {
-    destinations.push([
-      path.join(project, HOOKS_DIRECTORY, "runtime", name),
-      path.join("scripts", name),
-      null,
-      false,
-    ]);
-  }
-  if (includeClaude) {
-    destinations.push([path.join(project, ".claude", "CLAUDE.md"), null, CLAUDE_BRIDGE, false]);
-  }
-  if (hooksEnabled) {
-    for (const name of GUARD_SCRIPTS) {
-      destinations.push([
-        path.join(project, HOOKS_DIRECTORY, name),
-        path.join("scripts", name),
-        null,
-        false,
-      ]);
-    }
-    if (includeClaude) {
-      destinations.push([
-        path.join(project, ".claude", "settings.json"),
-        null,
-        claudeHooksSettings(interpreter),
-        false,
-      ]);
-    }
-    if (selected.includes("codex")) {
-      destinations.push([
-        path.join(project, ".codex", "hooks.json"),
-        null,
-        codexHooksSettings(interpreter),
-        false,
-      ]);
-    }
-    if (selected.includes("cursor")) {
-      destinations.push([
-        path.join(project, ".cursor", "hooks.json"),
-        null,
-        cursorHooksSettings(interpreter),
-        false,
-      ]);
-    }
-    if (hooksDir !== null) {
-      for (const [hookName, generator] of GIT_HOOKS) {
-        destinations.push([path.join(hooksDir, hookName), null, generator(interpreter), true]);
-      }
-    }
-  }
-  return destinations;
-}
-
-function nativeSettingsMergers(project, selected, hooksEnabled) {
-  const mergers = new Map();
-  if (!hooksEnabled) return mergers;
-  if (selected.includes("claude")) {
-    mergers.set(path.join(project, ".claude", "settings.json"), mergedClaudeSettings);
-  }
-  if (selected.includes("codex")) {
-    mergers.set(path.join(project, ".codex", "hooks.json"), mergedCodexSettings);
-  }
-  if (selected.includes("cursor")) {
-    mergers.set(path.join(project, ".cursor", "hooks.json"), mergedCursorSettings);
-  }
-  return mergers;
-}
-
-// --update replaces managed runtime, guard, and git hook files in place and
-// keeps everything else (AGENTS.md, WORKFLOW.md, CLAUDE.md). Returns the
-// managed-file check for a replaceable destination, or null for a kept one.
-function updateReplacement(project, destination, hooksDir) {
-  const parent = path.join(project, HOOKS_DIRECTORY);
-  const directory = path.dirname(destination);
-  if (samePath(directory, path.join(parent, "runtime"))) return isManagedProjectRuntime;
-  if (samePath(destination, path.join(parent, PROJECT_STATUS_LAUNCHER))) {
-    return isManagedProjectStatusLauncher;
-  }
-  if (GUARD_SCRIPTS.some((name) => samePath(destination, path.join(parent, name)))) {
-    return isManagedGuardScript;
-  }
-  if (hooksDir !== null && samePath(directory, hooksDir)) return isManagedGitHook;
-  return null;
-}
-
-function describeProjectPath(project, destination) {
-  const relative = path.relative(project, destination);
-  if (relative.startsWith("..") || path.isAbsolute(relative)) {
-    return destination.split(path.sep).join("/");
-  }
-  return relative.split(path.sep).join("/");
-}
-
-function projectFiles(project, selected, hooksEnabled, interpreter, hooksDir) {
-  return projectDestinations(project, selected, hooksEnabled, interpreter, hooksDir)
-    .map(([destination]) => describeProjectPath(project, destination))
-    .join(", ");
-}
-
-function projectResult(project, selected, hooksEnabled, interpreter, hooksDir, update, dryRun) {
-  if (!update) {
-    const files = projectFiles(project, selected, hooksEnabled, interpreter, hooksDir);
-    return `project: ${dryRun ? "would copy" : "copied"} ${files} to ${project}`;
-  }
-  const mergers = nativeSettingsMergers(project, selected, hooksEnabled);
-  const refreshed = [];
-  const kept = [];
-  for (const [destination] of projectDestinations(project, selected, hooksEnabled, interpreter, hooksDir)) {
-    const replaceable =
-      mergers.has(destination) || updateReplacement(project, destination, hooksDir) !== null;
-    (lexists(destination) && !replaceable ? kept : refreshed).push(describeProjectPath(project, destination));
-  }
-  let line = `project: ${dryRun ? "would refresh" : "refreshed"} ${refreshed.join(", ")} in ${project}`;
-  if (kept.length) line += `; kept ${kept.join(", ")}`;
-  return line;
-}
-
-function existingContractError(destination) {
-  return new InstallerError(
-    `project contract already exists: ${destination} — the installer never ` +
-      "overwrites project files. Run --update --project PATH to refresh managed " +
-      "runtime files; merge template changes manually (see UPDATE.md)."
-  );
-}
-
-function validateProject(sourceRoot, project, selected, hooksEnabled, reservedRoots, interpreter, hooksDir, update = false) {
-  const includeClaude = selected.includes("claude");
-  validateDirectoryDestination(project, "project path");
-  validateProjectGitRoot(project);
-  validateDirectoryDestination(
-    path.join(project, HOOKS_DIRECTORY),
-    "project runtime parent directory"
-  );
-  validateDirectoryDestination(
-    path.join(project, HOOKS_DIRECTORY, "runtime"),
-    "project runtime directory"
-  );
-  const projectDirectories = [];
-  if (includeClaude) projectDirectories.push(["Claude", path.join(project, ".claude")]);
-  if (hooksEnabled && selected.includes("codex")) {
-    projectDirectories.push(["Codex", path.join(project, ".codex")]);
-  }
-  if (hooksEnabled && selected.includes("cursor")) {
-    projectDirectories.push(["Cursor", path.join(project, ".cursor")]);
-  }
-  for (const [label, directory] of projectDirectories) {
-    if (lexists(directory) && (isSymlink(directory) || !isDirectory(directory))) {
-      throw new InstallerError(`unsafe ${label} project directory: ${directory}`);
-    }
-  }
-  const sources = [
-    "AGENTS.md",
-    "WORKFLOW.md",
-    path.join("scripts", PROJECT_STATUS_LAUNCHER),
-    ...PROJECT_RUNTIME_SCRIPTS.map((name) => path.join("scripts", name)),
-  ];
-  if (hooksEnabled) {
-    sources.push(...GUARD_SCRIPTS.map((name) => path.join("scripts", name)));
-  }
-  for (const sourceName of sources) {
-    const source = path.join(sourceRoot, sourceName);
-    if (isSymlink(source) || !isFile(source)) {
-      throw new InstallerError(`missing project contract: ${source}`);
-    }
-  }
-  const mergers = nativeSettingsMergers(project, selected, hooksEnabled);
-  for (const [destination] of projectDestinations(project, selected, hooksEnabled, interpreter, hooksDir)) {
-    if (lexists(destination)) {
-      const merge = mergers.get(destination);
-      const managed = update ? updateReplacement(project, destination, hooksDir) : null;
-      if (isSymlink(destination) || (merge === undefined && !update)) {
-        throw existingContractError(destination);
-      }
-      if (merge !== undefined) {
-        merge(destination, interpreter);
-      } else if (managed !== null && !managed(destination)) {
-        throw new InstallerError(`not a managed GSD Path project file: ${destination}`);
-      }
-    }
-    for (const [label, root] of reservedRoots) {
-      if (pathsOverlap(destination, root)) {
-        throw new InstallerError(`project contract overlaps ${label}: ${destination}, ${root}`);
-      }
-    }
-  }
-}
-
-function applyProject(sourceRoot, project, selected, hooksEnabled, transaction, interpreter, hooksDir, update = false) {
-  createDirectory(project, transaction.createdDirectories);
-  const mergers = nativeSettingsMergers(project, selected, hooksEnabled);
-  for (const [destination, sourceName, literal, executable] of projectDestinations(
-    project,
-    selected,
-    hooksEnabled,
-    interpreter,
-    hooksDir
-  )) {
-    createDirectory(path.dirname(destination), transaction.createdDirectories);
-    const merge = mergers.get(destination);
-    const content = sourceName
-      ? fs.readFileSync(path.join(sourceRoot, sourceName))
-      : Buffer.from(literal, "utf8");
-    if (lexists(destination) && !isSymlink(destination)) {
-      const replaceable = update && updateReplacement(project, destination, hooksDir) !== null;
-      if (merge !== undefined || replaceable) {
-        const original = fs.readFileSync(destination);
-        const mode = fs.statSync(destination).mode & 0o777;
-        const replacement = merge !== undefined ? merge(destination, interpreter) : content;
-        writeFileAtomic(destination, replacement, executable ? 0o755 : mode);
-        transaction.replaced.push({ destination, original, mode });
-        continue;
-      }
-      if (update) continue;
-    }
-    let fd = null;
-    try {
-      fd = fs.openSync(destination, "wx");
-      fs.writeSync(fd, content);
-      if (executable) fs.fchmodSync(fd, 0o755);
-      fs.closeSync(fd);
-      fd = null;
-      transaction.copied.push(destination);
-    } catch (error) {
-      if (fd !== null) fs.closeSync(fd);
-      if (error && error.code === "EEXIST") {
-        throw existingContractError(destination);
-      }
-      removePath(destination);
-      throw error;
-    }
-  }
-}
-
-function rollbackProject(transaction) {
-  for (const { destination, original, mode } of [...transaction.replaced].reverse()) {
-    writeFileAtomic(destination, original, mode);
-  }
-  for (const destination of [...transaction.copied].reverse()) {
-    removePath(destination);
-  }
-  removeEmptyDirectories(transaction.createdDirectories);
-}
-
-function managedFileContains(destination, marker, label) {
-  if (!isFile(destination)) return false;
-  try {
-    return fs.readFileSync(destination, "utf8").includes(marker);
-  } catch {
-    throw new InstallerError(`cannot read ${label}: ${destination}`);
-  }
-}
-
-function isManagedGuardScript(destination) {
-  return managedFileContains(destination, GUARD_MARKER, "guard script");
-}
-
-function isManagedProjectRuntime(destination) {
-  return managedFileContains(destination, PROJECT_RUNTIME_MARKER, "project runtime");
-}
-
-function isManagedProjectStatusLauncher(destination) {
-  return managedFileContains(
-    destination,
-    PROJECT_STATUS_MARKER,
-    "project status launcher"
-  );
-}
-
-function isManagedGitHook(destination) {
-  if (!isFile(destination)) return false;
-  return isManagedGitHookContent(fs.readFileSync(destination, "utf8"));
-}
-
-function isManagedGitHookContent(text) {
-  return text.includes(GUARD_MARKER) && text.includes("git_guard.py");
-}
-
-function isManagedHookSettings(destination) {
-  if (!isFile(destination)) return false;
-  try {
-    return hasManagedHookSettings(parsedManagedSettings(destination));
-  } catch {
-    return false;
-  }
-}
-
-function hasManagedGuardWiring(project) {
-  const settings = [
-    path.join(project, ".claude", "settings.json"),
-    path.join(project, ".codex", "hooks.json"),
-    path.join(project, ".cursor", "hooks.json"),
-  ];
-  if (settings.some(isManagedHookSettings)) return true;
-  const hooksDir = gitHooksDirectory(project);
-  return (
-    hooksDir !== null &&
-    GIT_HOOK_NAMES.some((name) => isManagedGitHook(path.join(hooksDir, name)))
-  );
-}
-
-function atomicTemporary(destination) {
-  const directory = fs.mkdtempSync(
-    path.join(path.dirname(destination), `.${path.basename(destination)}.gsd-path-tmp-`)
-  );
-  return { directory, temporary: path.join(directory, "value") };
-}
-
-function writeFileAtomic(destination, content, mode) {
-  const { directory, temporary } = atomicTemporary(destination);
-  try {
-    fs.writeFileSync(temporary, content, { flag: "wx" });
-    if (mode !== undefined) {
-      fs.chmodSync(temporary, mode);
-    } else if (isFile(destination) && !isSymlink(destination)) {
-      fs.chmodSync(temporary, fs.statSync(destination).mode & 0o777);
-    }
-    fs.renameSync(temporary, destination);
-  } finally {
-    removePath(directory);
-  }
-}
-
-function copyFileAtomic(source, destination) {
-  const { directory, temporary } = atomicTemporary(destination);
-  try {
-    fs.copyFileSync(source, temporary, fs.constants.COPYFILE_EXCL);
-    fs.renameSync(temporary, destination);
-  } finally {
-    removePath(directory);
-  }
-}
-
-// A PreToolUse entry is ours when one of its commands runs the guard hook.
-function isGuardCommand(command) {
-  const normalized = command.replaceAll("\\", "/");
-  const match = /^(?:python3|python)\s+(?:"([^"\r\n]+)"|'([^'\r\n]+)'|(\S+))$/.exec(
-    normalized
-  );
-  if (match === null) return false;
-  const script = match[1] || match[2] || match[3];
-  const managedScript = `${HOOKS_DIRECTORY}/guard_hook.py`;
-  return script === managedScript || script.endsWith(`/${managedScript}`);
-}
-
-function isManagedCommandHook(hook) {
-  return Boolean(
-    hook &&
-      typeof hook === "object" &&
-      !Array.isArray(hook) &&
-      typeof hook.command === "string" &&
-      isGuardCommand(hook.command)
-  );
-}
-
-function isManagedHookEntry(entry) {
-  return Boolean(
-    entry &&
-      typeof entry === "object" &&
-      !Array.isArray(entry) &&
-      Array.isArray(entry.hooks) &&
-      entry.hooks.some(isManagedCommandHook)
-  );
-}
-
-function isManagedDirectHookEntry(entry) {
-  return isManagedCommandHook(entry);
-}
-
-function hasManagedHookSettings(parsed) {
-  const hooks = parsed.hooks;
-  if (hooks === null || typeof hooks !== "object" || Array.isArray(hooks)) return false;
-  const nested = hooks.PreToolUse;
-  const direct = hooks.preToolUse;
-  return (
-    (Array.isArray(nested) && nested.some(isManagedHookEntry)) ||
-    (Array.isArray(direct) && direct.some(isManagedDirectHookEntry))
-  );
-}
-
-function parsedManagedSettings(settings) {
-  let parsed;
-  try {
-    parsed = JSON.parse(fs.readFileSync(settings, "utf8"));
-  } catch {
-    throw new InstallerError(`managed hook settings file is not valid JSON: ${settings}`);
-  }
-  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new InstallerError(`managed hook settings file is not a JSON object: ${settings}`);
-  }
-  return parsed;
-}
-
-function mergedHookSettings(settings, eventName, managedEntry, isManagedEntry) {
-  const parsed = parsedManagedSettings(settings);
-  const hooksObject =
-    parsed.hooks && typeof parsed.hooks === "object" && !Array.isArray(parsed.hooks)
-      ? parsed.hooks
-      : {};
-  const existing = Array.isArray(hooksObject[eventName]) ? hooksObject[eventName] : [];
-  const merged = [];
-  let replaced = false;
-  for (const entry of existing) {
-    if (isManagedEntry(entry)) {
-      if (!replaced) {
-        merged.push(managedEntry);
-        replaced = true;
-      }
-    } else {
-      merged.push(entry);
-    }
-  }
-  if (!replaced) merged.push(managedEntry);
-  hooksObject[eventName] = merged;
-  parsed.hooks = hooksObject;
-  return JSON.stringify(parsed, null, 2) + "\n";
-}
-
-function mergedNestedHookSettings(settings, managedEntry) {
-  const parsed = parsedManagedSettings(settings);
-  const hooksObject =
-    parsed.hooks && typeof parsed.hooks === "object" && !Array.isArray(parsed.hooks)
-      ? parsed.hooks
-      : {};
-  const existing = Array.isArray(hooksObject.PreToolUse) ? hooksObject.PreToolUse : [];
-  const merged = [];
-  let replaced = false;
-  for (const entry of existing) {
-    if (!isManagedHookEntry(entry)) {
-      merged.push(entry);
-      continue;
-    }
-    const unrelatedHooks = entry.hooks.filter((hook) => !isManagedCommandHook(hook));
-    if (!replaced) {
-      merged.push(managedEntry);
-      replaced = true;
-    }
-    if (unrelatedHooks.length > 0) {
-      merged.push({ ...entry, hooks: unrelatedHooks });
-    }
-  }
-  if (!replaced) merged.push(managedEntry);
-  hooksObject.PreToolUse = merged;
-  parsed.hooks = hooksObject;
-  return JSON.stringify(parsed, null, 2) + "\n";
-}
-
-function mergedClaudeSettings(settings, interpreter) {
-  return mergedNestedHookSettings(settings, claudeGuardEntry(interpreter));
-}
-
-function mergedCodexSettings(settings, interpreter) {
-  const managedEntry = JSON.parse(codexHooksSettings(interpreter)).hooks.PreToolUse[0];
-  return mergedNestedHookSettings(settings, managedEntry);
-}
-
-function mergedCursorSettings(settings, interpreter) {
-  const managedEntry = JSON.parse(cursorHooksSettings(interpreter)).hooks.preToolUse[0];
-  return mergedHookSettings(settings, "preToolUse", managedEntry, isManagedDirectHookEntry);
-}
-
-function refreshesGuards(project, full, initialize) {
-  return (
-    full ||
-    initialize ||
-    hasManagedGuardWiring(project) ||
-    GUARD_SCRIPTS.some((name) => lexists(path.join(project, HOOKS_DIRECTORY, name)))
-  );
-}
-
-function contractSection(content, heading) {
-  const normalized = content.replaceAll("\r\n", "\n");
-  const startPattern = new RegExp(`^${heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "m");
-  const startMatch = startPattern.exec(normalized);
-  if (startMatch === null) return null;
-  const depth = heading.indexOf(" ");
-  const afterHeading = normalized.indexOf("\n", startMatch.index);
-  const bodyStart = afterHeading === -1 ? normalized.length : afterHeading + 1;
-  const nextHeading = new RegExp(`^#{1,${depth}}\\s`, "m").exec(normalized.slice(bodyStart));
-  const end = nextHeading === null ? normalized.length : bodyStart + nextHeading.index;
-  return normalized.slice(startMatch.index, end).trimEnd();
-}
-
-function hasLegacyProjectContracts(sourceRoot, project) {
-  return PROJECT_CONTRACTS.every(([name, heading]) => {
-    const candidate = path.join(project, name);
-    const source = path.join(sourceRoot, name);
-    if (
-      isSymlink(candidate) ||
-      !isFile(candidate) ||
-      isSymlink(source) ||
-      !isFile(source)
-    ) return false;
-    const installed = contractSection(fs.readFileSync(candidate, "utf8"), heading);
-    const canonical = contractSection(fs.readFileSync(source, "utf8"), heading);
-    return installed !== null && installed === canonical;
-  });
-}
-
-function validateHooksRefresh(sourceRoot, project, full, hooksDir, selected, initialize = false) {
-  validateDirectoryDestination(project, "project path");
-  validateProjectGitRoot(project);
-  validateDirectoryDestination(
-    path.join(project, HOOKS_DIRECTORY),
-    "guard hooks directory"
-  );
-  validateDirectoryDestination(
-    path.join(project, HOOKS_DIRECTORY, "runtime"),
-    "project runtime directory"
-  );
-  const refreshGuards = refreshesGuards(project, full, initialize);
-  const runtimeExists = PROJECT_RUNTIME_SCRIPTS.some((name) =>
-    lexists(path.join(project, HOOKS_DIRECTORY, "runtime", name))
-  );
-  if (
-    !initialize &&
-    !refreshGuards &&
-    !runtimeExists &&
-    !hasLegacyProjectContracts(sourceRoot, project)
-  ) {
-    throw new InstallerError(
-      `no managed GSD Path hooks or runtime found in project: ${project}`
-    );
-  }
-  const runtime = path.join(project, HOOKS_DIRECTORY, "runtime");
-  const launcher = path.join(project, HOOKS_DIRECTORY, PROJECT_STATUS_LAUNCHER);
-  const launcherSource = path.join(sourceRoot, "scripts", PROJECT_STATUS_LAUNCHER);
-  if (isSymlink(launcher) || (lexists(launcher) && !isManagedProjectStatusLauncher(launcher))) {
-    throw new InstallerError(`not a managed GSD Path status launcher: ${launcher}`);
-  }
-  if (isSymlink(launcherSource) || !isFile(launcherSource)) {
-    throw new InstallerError(`missing project status launcher source: ${launcherSource}`);
-  }
-  if (isDirectory(runtime)) {
-    const unexpected = fs
-      .readdirSync(runtime)
-      .filter((name) => !PROJECT_RUNTIME_SCRIPTS.includes(name));
-    if (unexpected.length) {
-      throw new InstallerError(`unexpected project runtime entries: ${unexpected.join(", ")}`);
-    }
-  }
-  if (refreshGuards) {
-    for (const name of GUARD_SCRIPTS) {
-      const destination = path.join(project, HOOKS_DIRECTORY, name);
-      const exists = lexists(destination);
-      if (isSymlink(destination)) {
-        throw new InstallerError(`refusing to refresh a symlink: ${destination}`);
-      }
-      if (exists && !isManagedGuardScript(destination)) {
-        throw new InstallerError(`not a managed GSD Path guard script: ${destination}`);
-      }
-      const source = path.join(sourceRoot, "scripts", name);
-      if (isSymlink(source) || !isFile(source)) {
-        throw new InstallerError(`missing guard script source: ${source}`);
-      }
-    }
-  }
-  for (const name of PROJECT_RUNTIME_SCRIPTS) {
-    const destination = path.join(project, HOOKS_DIRECTORY, "runtime", name);
-    if (isSymlink(destination)) {
-      throw new InstallerError(`refusing to refresh a symlink: ${destination}`);
-    }
-    if (lexists(destination) && !isManagedProjectRuntime(destination)) {
-      throw new InstallerError(`not a managed GSD Path project runtime: ${destination}`);
-    }
-    const source = path.join(sourceRoot, "scripts", name);
-    if (isSymlink(source) || !isFile(source)) {
-      throw new InstallerError(`missing project runtime source: ${source}`);
-    }
-  }
-  if (full) {
-    for (const [target, label, settings] of [
-      ["claude", "Claude", path.join(project, ".claude", "settings.json")],
-      ["codex", "Codex", path.join(project, ".codex", "hooks.json")],
-      ["cursor", "Cursor", path.join(project, ".cursor", "hooks.json")],
-    ]) {
-      const exists = lexists(settings);
-      if (initialize && !selected.includes(target)) continue;
-      if (!exists && !selected.includes(target)) continue;
-      validateDirectoryDestination(
-        path.dirname(settings),
-        `unsafe ${label} project directory`
-      );
-      if (isSymlink(settings)) {
-        throw new InstallerError(`refusing to refresh a symlink: ${settings}`);
-      }
-      if (exists) {
-        const parsed = parsedManagedSettings(settings);
-        if (!selected.includes(target) && !hasManagedHookSettings(parsed)) {
-          throw new InstallerError(`not a managed GSD Path hook settings file: ${settings}`);
-        }
-      }
-    }
-    if (hooksDir !== null) {
-      for (const hookName of GIT_HOOK_NAMES) {
-        const hookPath = path.join(hooksDir, hookName);
-        if (isSymlink(hookPath)) {
-          throw new InstallerError(`refusing to refresh a symlink: ${hookPath}`);
-        }
-        if (lexists(hookPath) && !isManagedGitHook(hookPath)) {
-          throw new InstallerError(`not a managed GSD Path git hook: ${hookPath}`);
-        }
-      }
-    }
-  }
-}
-
-function publishProjectRuntime(sourceRoot, project, refreshGuards) {
-  const parent = path.join(project, HOOKS_DIRECTORY);
-  const runtime = path.join(parent, "runtime");
-  fs.mkdirSync(parent, { recursive: true });
-  const staging = fs.mkdtempSync(path.join(parent, ".runtime-stage-"));
-  const previous = `${staging}-previous`;
-  let movedPrevious = false;
-  let publishedRuntime = false;
-  const launcher = path.join(parent, PROJECT_STATUS_LAUNCHER);
-  const launcherOriginal = lexists(launcher) ? fs.readFileSync(launcher) : null;
-  const launcherMode = launcherOriginal === null ? undefined : fs.statSync(launcher).mode & 0o777;
-  const guardOriginals = [];
-  try {
-    for (const name of PROJECT_RUNTIME_SCRIPTS) {
-      hooks.copyRuntimeFile(
-        path.join(sourceRoot, "scripts", name),
-        path.join(staging, name)
-      );
-    }
-    copyFileAtomic(path.join(sourceRoot, "scripts", PROJECT_STATUS_LAUNCHER), launcher);
-    if (lexists(runtime)) {
-      fs.renameSync(runtime, previous);
-      movedPrevious = true;
-    }
-    fs.renameSync(staging, runtime);
-    publishedRuntime = true;
-    if (refreshGuards) {
-      for (const name of GUARD_SCRIPTS) {
-        const destination = path.join(parent, name);
-        const original = lexists(destination) ? fs.readFileSync(destination) : null;
-        const mode =
-          original === null ? undefined : fs.statSync(destination).mode & 0o777;
-        guardOriginals.push([destination, original, mode]);
-        hooks.copyGuardFile(path.join(sourceRoot, "scripts", name), destination);
-      }
-    }
-    if (movedPrevious) removePath(previous);
-  } catch (error) {
-    for (const [destination, original, mode] of guardOriginals.reverse()) {
-      if (original === null) removePath(destination);
-      else writeFileAtomic(destination, original, mode);
-    }
-    if (launcherOriginal === null) removePath(launcher);
-    else writeFileAtomic(launcher, launcherOriginal, launcherMode);
-    if (publishedRuntime && lexists(runtime)) removePath(runtime);
-    if (!lexists(runtime) && movedPrevious && lexists(previous)) {
-      fs.renameSync(previous, runtime);
-    }
-    throw new InstallerError(`project runtime refresh failed: ${error.message}`);
-  } finally {
-    removePath(staging);
-  }
-}
-
-// Returns refreshed project-relative paths; entries prefixed "note:" are
-// user-facing notes rather than refreshed files.
-function refreshHooksUnlocked(sourceRoot, project, full, dryRun, selected, initialize) {
-  let hooksDir = full ? gitHooksDirectory(project) : null;
-  let interpreter = null;
-  if (!dryRun) {
-    if (full) {
-      ({ interpreter, hooksDir } = requiredHookRuntime(
-        project,
-        initialize ? "--hooks-init" : "--hooks-refresh-full",
-        selected
-      ));
-    } else {
-      interpreter = requiredPythonRuntime("--hooks-refresh", selected);
-    }
-  }
-  validateHooksRefresh(sourceRoot, project, full, hooksDir, selected, initialize);
-  const refreshed = [];
-  const refreshGuards = refreshesGuards(project, full, initialize);
-  if (!dryRun) publishProjectRuntime(sourceRoot, project, refreshGuards);
-  for (const name of PROJECT_RUNTIME_SCRIPTS) {
-    refreshed.push(
-      describeProjectPath(project, path.join(project, HOOKS_DIRECTORY, "runtime", name))
-    );
-  }
-  refreshed.push(
-    describeProjectPath(
-      project,
-      path.join(project, HOOKS_DIRECTORY, PROJECT_STATUS_LAUNCHER)
-    )
-  );
-  if (refreshGuards) {
-    for (const name of GUARD_SCRIPTS) {
-      const destination = path.join(project, HOOKS_DIRECTORY, name);
-      refreshed.push(describeProjectPath(project, destination));
-    }
-  }
-  if (full) {
-    for (const [target, settings, merge, generated] of [
-      [
-        "claude",
-        path.join(project, ".claude", "settings.json"),
-        mergedClaudeSettings,
-        claudeHooksSettings,
-      ],
-      [
-        "codex",
-        path.join(project, ".codex", "hooks.json"),
-        mergedCodexSettings,
-        codexHooksSettings,
-      ],
-      [
-        "cursor",
-        path.join(project, ".cursor", "hooks.json"),
-        mergedCursorSettings,
-        cursorHooksSettings,
-      ],
-    ]) {
-      if (initialize && !selected.includes(target)) continue;
-      const exists = lexists(settings);
-      if (exists || selected.includes(target)) {
-        if (!dryRun) {
-          fs.mkdirSync(path.dirname(settings), { recursive: true });
-          const content = exists ? merge(settings, interpreter) : generated(interpreter);
-          writeFileAtomic(settings, content);
-        }
-        refreshed.push(describeProjectPath(project, settings));
-      }
-    }
-    if (hooksDir !== null) {
-      for (const [hookName, generator] of GIT_HOOKS) {
-        const hookPath = path.join(hooksDir, hookName);
-        if (!dryRun) {
-          const content = generator(interpreter);
-          fs.mkdirSync(path.dirname(hookPath), { recursive: true });
-          writeFileAtomic(hookPath, content, 0o755);
-        }
-        refreshed.push(describeProjectPath(project, hookPath));
-      }
-    }
-  }
-  return refreshed;
-}
-
 function refreshHooks(sourceRoot, project, full, dryRun, selected = [], initialize = false) {
-  if (dryRun) {
-    return refreshHooksUnlocked(sourceRoot, project, full, true, selected, initialize);
-  }
-  validateDirectoryDestination(project, "project path");
-  const ownership = acquireInstallLocks([path.join(project, HOOKS_DIRECTORY)]);
-  try {
-    return refreshHooksUnlocked(sourceRoot, project, full, false, selected, initialize);
-  } finally {
-    releaseInstallLocks(ownership.locks, ownership.createdDirectories);
-  }
+  return hooks.projectAdapter(sourceRoot, project, "refresh", { full, dryRun, selected, initialize });
 }
 
 const STATE_SCHEMA = "gsd-path/state/v1";
-
-function validatedProjectState(sourceRoot, project) {
-  const validator = path.join(sourceRoot, "scripts", "pipeline_state.py");
-  if (isSymlink(validator) || !isFile(validator)) {
-    throw new InstallerError(`canonical state validator is unavailable: ${validator}`);
-  }
-  const interpreter = effectiveInterpreter();
-  if (interpreter === null) {
-    throw new InstallerError("canonical state validation requires a working Python interpreter");
-  }
-  const result = spawnSync(
-    interpreter,
-    ["-B", validator, "validate", "--repo", project],
-    { cwd: project, encoding: "utf8" }
-  );
-  if (result.error || result.status !== 0) {
-    const detail =
-      result.error?.message ||
-      (result.stderr || "").trim() ||
-      (result.stdout || "").trim() ||
-      "unknown failure";
-    throw new InstallerError(`canonical state validation failed: ${detail}`);
-  }
-  let payload;
-  try {
-    payload = JSON.parse(result.stdout);
-  } catch {
-    throw new InstallerError("canonical state validator returned invalid JSON");
-  }
-  if (!payload || typeof payload !== "object") {
-    throw new InstallerError("canonical state validator returned an invalid payload");
-  }
-  const state = payload.state;
-  if (
-    payload.schema !== STATE_SCHEMA ||
-    payload.status !== "valid" ||
-    !state ||
-    typeof state !== "object" ||
-    typeof state.phase !== "string" ||
-    typeof state.status !== "string"
-  ) {
-    throw new InstallerError("canonical state validator returned an invalid payload");
-  }
-  return state;
-}
 
 function hasManagedInstall(root) {
   return (
@@ -2001,190 +1118,16 @@ function hasManagedInstall(root) {
   );
 }
 
-function validateProjectRuntimeStatus(sourceRoot, project) {
-  const interpreter = requiredPythonRuntime("--doctor");
-  const runtime = path.join(sourceRoot, "scripts", "pipeline_state.py");
-  const result = spawnSync(
-    interpreter,
-    ["-B", runtime, "status", "--repo", project],
-    {
-      cwd: project,
-      encoding: "utf8",
-      env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
-    }
-  );
-  if (result.error || result.status !== 0) {
-    const detail = result.error?.message || result.stderr?.trim() || result.stdout?.trim() || "unknown failure";
-    throw new InstallerError(`project runtime status failed: ${detail}`);
-  }
-  let payload;
-  try {
-    payload = JSON.parse(result.stdout);
-  } catch {
-    throw new InstallerError("project runtime status returned invalid JSON");
-  }
-  if (!validStatusPayload(payload, project)) {
-    throw new InstallerError("project runtime status returned an invalid payload");
-  }
-}
-
-function projectRuntimeMatches(sourceRoot, project) {
-  const pairs = [
-    [
-      path.join(project, HOOKS_DIRECTORY, PROJECT_STATUS_LAUNCHER),
-      path.join(sourceRoot, "scripts", PROJECT_STATUS_LAUNCHER),
-    ],
-    ...PROJECT_RUNTIME_SCRIPTS.map((name) => [
-      path.join(project, HOOKS_DIRECTORY, "runtime", name),
-      path.join(sourceRoot, "scripts", name),
-    ]),
-  ];
-  try {
-    return pairs.every(
-      ([destination, source]) =>
-        !isSymlink(destination) &&
-        isFile(destination) &&
-        fs.readFileSync(destination).equals(fs.readFileSync(source))
-    );
-  } catch {
-    return false;
-  }
-}
-
-function validStatusPayload(payload, project) {
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return false;
-  const state = payload.state;
-  const route = payload.route;
-  if (
-    payload.schema !== "gsd-path/status/v1" ||
-    payload.advance !== false ||
-    !state ||
-    typeof state !== "object" ||
-    !validStatusState(state) ||
-    !route ||
-    typeof route !== "object" ||
-    !STATUS_ACTIONS.has(route.action) ||
-    typeof route.reason !== "string" ||
-    !route.reason ||
-    typeof payload.path !== "string" ||
-    !path.isAbsolute(payload.path) ||
-    !samePath(payload.path, path.join(project, ".project", "STATE.md"))
-  ) {
-    return false;
-  }
-  let expectedNextSkill = null;
-  if (route.action === "run-phase") {
-    if (
-      typeof route.phase !== "string" ||
-      !STATUS_TRANSITIONS.get(state.phase).has(route.phase) ||
-      state.branch === null
-    ) return false;
-    expectedNextSkill = `gsd-path-${route.phase}`;
-  } else if (Object.hasOwn(route, "phase")) {
-    return false;
-  } else if (route.action === "bind-initial") {
-    return (
-      state.branch === null &&
-      typeof route.branch === "string" &&
-      validStatusBranch(route.branch) !== null &&
-      payload.next_skill === "gsd-path"
-    );
-  } else if (route.action === "resume-undo") {
-    expectedNextSkill = "gsd-path-undo";
-  } else if (route.action !== "wait") {
-    expectedNextSkill = "gsd-path";
-  }
-  if (state.branch === null) return false;
-  if (route.action === "validate-integrated" && !(state.phase === "shipped" && state.status === "done")) return false;
-  if (route.action === "wait" && !(state.phase === "plan" && state.status === "done")) return false;
-  return payload.next_skill === expectedNextSkill;
-}
-
-function validStatusState(state) {
-  if (Object.keys(state).sort().join("\0") !== STATUS_STATE_FIELDS.join("\0")) return false;
-  const archiveMatch = typeof state.archive === "string" ? STATUS_ARCHIVE.exec(state.archive) : null;
-  if (
-    state.pipeline !== "gsd-path/v2" ||
-    typeof state.project !== "string" ||
-    !STATUS_SLUG.test(state.project) ||
-    !(state.milestone === null || typeof state.milestone === "string" && STATUS_SLUG.test(state.milestone)) ||
-    !STATUS_PHASES.has(state.phase) ||
-    !STATUS_VALUES.has(state.status) ||
-    !STATUS_INTEGRATION_MODES.has(state.integration_default) ||
-    !STATUS_INTEGRATION_MODES.has(state.integration) ||
-    !STATUS_INTEGRATION_SOURCES.has(state.integration_source) ||
-    (state.integration_source === "default" &&
-      state.integration !== state.integration_default) ||
-    !(state.branch === null || validStatusBranch(state.branch) !== null) ||
-    !(state.archive === null || archiveMatch)
-  ) return false;
-  if (state.phase === "shipped" && (state.status !== "done" || state.archive === null)) return false;
-  if (
-    state.archive !== null &&
-    state.phase !== "build" &&
-    state.phase !== "ship" &&
-    state.phase !== "shipped"
-  ) return false;
-  if ((state.phase === "ship" || state.phase === "shipped") && state.branch === null) return false;
-  if (archiveMatch) {
-    const branchMatch = validStatusBranch(state.branch);
-    return state.milestone === archiveMatch[2] && branchMatch !== null && Number(branchMatch[1]) === Number(archiveMatch[1]);
-  }
-  return true;
-}
-
-function validStatusBranch(value) {
-  if (typeof value !== "string") return null;
-  const match = STATUS_BRANCH.exec(value);
-  return match !== null && Number(match[1]) >= 1 ? match : null;
-}
-
-function isExecutable(candidate) {
-  try {
-    return (fs.statSync(candidate).mode & 0o111) !== 0;
-  } catch {
-    return false;
-  }
-}
-
-function nativeGuardContract(target, project) {
-  if (target === "claude") {
-    return {
-      settings: path.join(project, ".claude", "settings.json"),
-      event: "PreToolUse",
-      entry: claudeGuardEntry,
-    };
-  }
-  if (target === "codex") {
-    return {
-      settings: path.join(project, ".codex", "hooks.json"),
-      event: "PreToolUse",
-      entry: codexGuardEntry,
-    };
-  }
-  if (target === "cursor") {
-    return {
-      settings: path.join(project, ".cursor", "hooks.json"),
-      event: "preToolUse",
-      entry: cursorGuardEntry,
-    };
-  }
-  return null;
-}
-
 // Read-only health check: host installs, project contracts, guard hooks,
 // and pipeline state. Never writes.
 export function doctor(sourceRoot, { targets, rootFor, project = null }) {
+  if (project !== null) {
+    return hooks.projectAdapter(sourceRoot, project, "doctor", {
+      targets, roots: Object.fromEntries(targets.map(target => [target, rootFor(target)])),
+    });
+  }
   const findings = [];
   const push = (level, text) => findings.push({ level, text });
-  function readProjectFile(candidate, label) {
-    try {
-      return fs.readFileSync(candidate);
-    } catch (error) {
-      push("fail", `${label} cannot be read: ${error.message}`);
-      return null;
-    }
-  }
   const version = readPackageVersion(path.join(sourceRoot, "package.json"));
   if (version === null) push("fail", "package: version cannot be read");
 
@@ -2230,314 +1173,6 @@ export function doctor(sourceRoot, { targets, rootFor, project = null }) {
     }
   }
 
-  if (project === null) return findings;
-
-  for (const [name, heading] of PROJECT_CONTRACTS) {
-    const contract = path.join(project, name);
-    if (isSymlink(contract)) {
-      push("fail", `project: contract ${name} is a symlink`);
-      continue;
-    }
-    if (!isFile(contract)) {
-      push("fail", `project: missing contract ${name} — run --project "${project}"`);
-      continue;
-    }
-    const content = readProjectFile(contract, `project: ${name}`);
-    if (content === null) continue;
-    const canonical = readProjectFile(
-      path.join(sourceRoot, name),
-      `package: ${name}`
-    );
-    if (canonical === null) continue;
-    const installedSection = contractSection(content.toString("utf8"), heading);
-    const canonicalSection = contractSection(canonical.toString("utf8"), heading);
-    if (installedSection !== null && installedSection === canonicalSection) {
-      push("ok", `project: ${name} present`);
-    } else {
-      push("fail", `project: ${name} lacks plain-prompt re-entry — merge the current contract`);
-    }
-  }
-  const bridge = path.join(project, ".claude", "CLAUDE.md");
-  if (!isFile(bridge)) {
-    push("note", "project: no .claude/CLAUDE.md bridge (only written for --claude installs)");
-  } else {
-    const bridgeContent = readProjectFile(bridge, "project: .claude/CLAUDE.md");
-    if (bridgeContent !== null) {
-      if (bridgeContent.toString("utf8") === CLAUDE_BRIDGE) {
-        push("ok", "project: .claude/CLAUDE.md bridge present");
-      } else {
-        push("note", "project: .claude/CLAUDE.md exists but is not the managed bridge");
-      }
-    }
-  }
-
-  const runtime = path.join(project, HOOKS_DIRECTORY, "runtime");
-  const launcher = path.join(project, HOOKS_DIRECTORY, PROJECT_STATUS_LAUNCHER);
-  let runtimeCurrent = true;
-  if (isSymlink(launcher)) {
-    push("fail", "project: status launcher is a symlink");
-    runtimeCurrent = false;
-  } else if (!isFile(launcher)) {
-    push("fail", "project: missing status launcher");
-    runtimeCurrent = false;
-  } else {
-    const launcherContent = readProjectFile(launcher, "project: status launcher");
-    const launcherSource = readProjectFile(
-      path.join(sourceRoot, "scripts", PROJECT_STATUS_LAUNCHER),
-      "package: status launcher"
-    );
-    if (launcherContent === null || launcherSource === null) {
-      runtimeCurrent = false;
-    } else {
-      if (!launcherContent.toString("utf8").includes(PROJECT_STATUS_MARKER)) {
-        push("warn", "project: status launcher is not managed");
-        runtimeCurrent = false;
-      } else if (!launcherContent.equals(launcherSource)) {
-        push(
-          "warn",
-          "project: status launcher is stale — refresh it with the project contracts"
-        );
-        runtimeCurrent = false;
-      } else {
-        push("ok", "project: status launcher current");
-      }
-    }
-  }
-  let runtimeSafe = true;
-  try {
-    validateDirectoryDestination(
-      path.join(project, HOOKS_DIRECTORY),
-      "project runtime parent directory"
-    );
-    validateDirectoryDestination(runtime, "project runtime directory");
-  } catch (error) {
-    if (!(error instanceof InstallerError)) throw error;
-    push("fail", `project: unsafe runtime — ${error.message}`);
-    runtimeSafe = false;
-    runtimeCurrent = false;
-  }
-  if (runtimeSafe) {
-    for (const name of PROJECT_RUNTIME_SCRIPTS) {
-      const destination = path.join(runtime, name);
-      if (isSymlink(destination)) {
-        push("fail", `project: runtime ${name} is a symlink`);
-        runtimeCurrent = false;
-        continue;
-      }
-      if (!isFile(destination)) {
-        push("fail", `project: missing runtime ${name}`);
-        runtimeCurrent = false;
-        continue;
-      }
-      const content = readProjectFile(destination, `project: runtime ${name}`);
-      if (content === null) {
-        runtimeCurrent = false;
-        continue;
-      }
-      const source = readProjectFile(
-        path.join(sourceRoot, "scripts", name),
-        `package: runtime ${name}`
-      );
-      if (source === null) {
-        runtimeCurrent = false;
-        continue;
-      }
-      if (!content.toString("utf8").includes(PROJECT_RUNTIME_MARKER)) {
-        push("warn", `project: runtime ${name} is not managed`);
-        runtimeCurrent = false;
-      } else if (!content.equals(source)) {
-        push("warn", `project: runtime ${name} is stale — refresh it with the project contracts`);
-        runtimeCurrent = false;
-      } else {
-        push("ok", `project: runtime ${name} current`);
-      }
-    }
-  }
-
-  let guardInstalled = GUARD_SCRIPTS.some((name) =>
-    lexists(path.join(project, HOOKS_DIRECTORY, name))
-  );
-  const nativeWiredTargets = new Set();
-  for (const target of targets) {
-    const contract = nativeGuardContract(target, project);
-    if (
-      contract !== null &&
-      (isSymlink(contract.settings) || isManagedHookSettings(contract.settings))
-    ) {
-      nativeWiredTargets.add(target);
-    }
-  }
-  let guardWired = nativeWiredTargets.size > 0;
-  const unreadableGitHooks = new Map();
-  if (lexists(path.join(project, ".git"))) {
-    const hooksDir = gitHooksDirectory(project);
-    if (hooksDir !== null) {
-      for (const name of GIT_HOOK_NAMES) {
-        const hookPath = path.join(hooksDir, name);
-        if (!lexists(hookPath)) continue;
-        if (isSymlink(hookPath)) {
-          guardWired = true;
-          continue;
-        }
-        try {
-          const managed = isManagedGitHookContent(fs.readFileSync(hookPath, "utf8"));
-          guardWired = managed || guardWired;
-        } catch (error) {
-          unreadableGitHooks.set(hookPath, error.message);
-        }
-      }
-    }
-  }
-  for (const [hookPath, error] of unreadableGitHooks) {
-    const label = describeProjectPath(project, hookPath);
-    push("fail", `hooks: ${label} cannot be read: ${error}`);
-  }
-  guardInstalled = guardInstalled || guardWired;
-  if (!guardInstalled) {
-    push("note", "hooks: guard hooks not installed (opt in with --hooks; see HOOKS.md)");
-  } else {
-    for (const name of GUARD_SCRIPTS) {
-      const destination = path.join(project, HOOKS_DIRECTORY, name);
-      if (isSymlink(destination)) {
-        push("fail", `hooks: ${HOOKS_DIRECTORY}/${name} is a symlink`);
-        continue;
-      }
-      if (!isFile(destination)) {
-        push("fail", `hooks: missing ${HOOKS_DIRECTORY}/${name} — run --hooks-refresh`);
-        continue;
-      }
-      const content = readProjectFile(destination, `hooks: ${HOOKS_DIRECTORY}/${name}`);
-      if (content === null) continue;
-      const source = readProjectFile(
-        path.join(sourceRoot, "scripts", name),
-        `package: guard ${name}`
-      );
-      if (source === null) continue;
-      if (!content.toString("utf8").includes(GUARD_MARKER)) {
-        push("warn", `hooks: ${HOOKS_DIRECTORY}/${name} is not a managed guard script`);
-      } else if (!content.equals(source)) {
-        push("warn", `hooks: ${HOOKS_DIRECTORY}/${name} is stale — run --hooks-refresh`);
-      } else {
-        push("ok", `hooks: ${HOOKS_DIRECTORY}/${name} current`);
-      }
-    }
-    for (const target of targets) {
-      if (!installedTargets.has(target) && !nativeWiredTargets.has(target)) continue;
-      const contract = nativeGuardContract(target, project);
-      if (contract === null) {
-        if (MANIFEST.hosts[target]?.guard_tier !== "git-only") {
-          push("fail", `hooks: ${target} declares a native guard without a health contract`);
-        }
-        continue;
-      }
-      if (isSymlink(contract.settings)) {
-        push("fail", `hooks: ${target} native guard wiring is a symlink`);
-        continue;
-      }
-      if (!isFile(contract.settings)) {
-        push("fail", `hooks: ${target} native guard wiring is missing — run --hooks-refresh-full`);
-        continue;
-      }
-      let current = false;
-      try {
-        const parsed = JSON.parse(fs.readFileSync(contract.settings, "utf8"));
-        const entries =
-          parsed && typeof parsed === "object" && parsed.hooks
-            ? parsed.hooks[contract.event]
-            : null;
-        const variants = INTERPRETER_CANDIDATES.map((candidate) =>
-          JSON.stringify(contract.entry(candidate))
-        );
-        current =
-          Array.isArray(entries) &&
-          entries.some((entry) => variants.includes(JSON.stringify(entry)));
-      } catch {
-        current = false;
-      }
-      if (current) {
-        push("ok", `hooks: ${target} native guard wiring present`);
-      } else {
-        push("fail", `hooks: ${target} native guard wiring is stale — run --hooks-refresh-full`);
-      }
-    }
-    const dotGit = path.join(project, ".git");
-    if (lexists(dotGit)) {
-      const hooksDir = gitHooksDirectory(project);
-      if (hooksDir === null) {
-        push(
-          "fail",
-          "hooks: cannot resolve the git hooks directory (is git runnable?); git hooks unverified"
-        );
-      } else {
-        const custom = !samePath(hooksDir, path.join(dotGit, "hooks"));
-        let missingFromCustom = false;
-        for (const [hookName, generator] of GIT_HOOKS) {
-          const hookPath = path.join(hooksDir, hookName);
-          const label = describeProjectPath(project, hookPath);
-          if (unreadableGitHooks.has(hookPath)) {
-            continue;
-          }
-          if (!lexists(hookPath)) {
-            push(
-              "fail",
-              `hooks: ${hookName} is missing from the effective git hooks directory ` +
-                `${hooksDir} — run --hooks-refresh-full`
-            );
-            if (custom) missingFromCustom = true;
-          } else if (isSymlink(hookPath)) {
-            push("fail", `hooks: ${label} is a symlink`);
-          } else {
-            const hookContent = readProjectFile(hookPath, `hooks: ${label}`);
-            if (hookContent === null) continue;
-            const hookText = hookContent.toString("utf8");
-            if (!isManagedGitHookContent(hookText)) {
-              push("warn", `hooks: ${label} is not a managed GSD Path git hook`);
-            } else if (
-              !INTERPRETER_CANDIDATES.some(
-                (candidate) => hookText === generator(candidate)
-              )
-            ) {
-              push("warn", `hooks: ${label} is stale — run --hooks-refresh-full`);
-            } else if (!isExecutable(hookPath)) {
-              push("warn", `hooks: ${label} is not executable — run --hooks-refresh-full`);
-            } else {
-              push("ok", `hooks: ${label} wired`);
-            }
-          }
-        }
-        if (missingFromCustom) {
-          push(
-            "warn",
-            `hooks: core.hooksPath points this repository at ${hooksDir}, ` +
-              "but the guard hooks are not wired there"
-          );
-        }
-      }
-    }
-  }
-
-  const stateFile = path.join(project, ".project", "STATE.md");
-  if (!isDirectory(path.join(project, ".project"))) {
-    push("note", "state: no .project/ pipeline state (nothing started yet)");
-  } else if (!isFile(stateFile)) {
-    push("warn", "state: .project/ exists but STATE.md is missing");
-  } else {
-    try {
-      const state = hooks.validatedProjectState(sourceRoot, project);
-      if (!runtimeCurrent) {
-        throw new InstallerError(
-          "project runtime status was not executed because the installed runtime is not current"
-        );
-      }
-      validateProjectRuntimeStatus(sourceRoot, project);
-      if (!projectRuntimeMatches(sourceRoot, project)) {
-        throw new InstallerError("project runtime changed during doctor validation");
-      }
-      push("ok", `state: ${state.phase}/${state.status}`);
-    } catch (error) {
-      push("fail", `state: ${messageOf(error)}`);
-    }
-  }
   return findings;
 }
 
@@ -2686,15 +1321,25 @@ export const hooks = {
   rename: fs.renameSync.bind(fs),
   renameInstallLock: fs.renameSync.bind(fs),
   renameInstallStage: fs.renameSync.bind(fs),
-  validatedProjectState,
   processIdentity,
   reserveDirectory,
   reserveFile,
   detectPythonInterpreter,
   resolveGitHooksPath,
-  copyRuntimeFile: fs.copyFileSync.bind(fs),
-  copyGuardFile: copyFileAtomic,
+  projectAdapter,
 };
+
+// Project installation already requires Python; keep runtime lifecycle ownership there.
+function projectAdapter(source, project, action, payload = {}, env = process.env) {
+  const interpreter = requiredPythonRuntime("project runtime");
+  const result = spawnSync(interpreter, ["-B", path.join(SCRIPT_DIRECTORY, "install.py"), "--adapter-request"], {
+    input: JSON.stringify({ source, project, action, ...payload }), encoding: "utf8", env: { ...process.env, ...env },
+  });
+  if (result.error || result.status !== 0) {
+    throw new InstallerError(result.stderr?.trim() || result.error?.message || "project runtime operation failed");
+  }
+  return JSON.parse(result.stdout);
+}
 
 export async function install(sourceRoot, plans, options = {}) {
   const {
@@ -2709,14 +1354,13 @@ export async function install(sourceRoot, plans, options = {}) {
   if (hooksEnabled && project === null) {
     throw new InstallerError("--hooks requires --project");
   }
-  const selected = plans.map((plan) => plan.name);
-  let interpreter = "python3";
-  let hooksDir = null;
-  if (project !== null && !hooksEnabled && !dryRun) {
-    interpreter = requiredPythonRuntime("--project", selected);
-  } else if (hooksEnabled) {
-    ({ interpreter, hooksDir } = requiredHookRuntime(project, "--hooks", selected));
+  if (project !== null) {
+    return hooks.projectAdapter(sourceRoot, project, "install", {
+      plans: plans.map(({ name, root }) => ({ name, root })), dryRun,
+      hooks: hooksEnabled, migrateLegacy, update,
+    }, env);
   }
+  const selected = plans.map((plan) => plan.name);
   const progress = async (text) => {
     if (onProgress) onProgress(text);
     await tick();
@@ -2791,21 +1435,6 @@ export async function install(sourceRoot, plans, options = {}) {
     }
   }
 
-  if (project !== null) {
-    validateDirectoryDestination(project, "project path");
-    if (dryRun) {
-      validateProject(
-        sourceRoot,
-        project,
-        selected,
-        hooksEnabled,
-        [...mutationRoots, ...plannedBackups],
-        interpreter,
-        hooksDir,
-        update
-      );
-    }
-  }
 
   const results = [];
   const staging = fs.mkdtempSync(path.join(os.tmpdir(), "gsd-path-install-"));
@@ -2832,32 +1461,15 @@ export async function install(sourceRoot, plans, options = {}) {
         const suffix = count ? `; would back up ${count} entries` : "";
         results.push(installResult(plan, true, update) + suffix);
       }
-      if (project !== null) {
-        results.push(projectResult(project, selected, hooksEnabled, interpreter, hooksDir, update, true));
-      }
       appendHostNotes(results, selected);
       return results;
     }
 
     const lockRoots = deployments.map((plan) => plan.root);
     if (legacyRoot !== null && isDirectory(legacyRoot)) lockRoots.push(legacyRoot);
-    if (project !== null) lockRoots.push(path.join(project, HOOKS_DIRECTORY));
     const ownership = acquireInstallLocks(lockRoots);
     const targetTransactions = [];
-    const projectTransaction = { createdDirectories: [], copied: [], replaced: [] };
     try {
-      if (project !== null) {
-        validateProject(
-          sourceRoot,
-          project,
-          selected,
-          hooksEnabled,
-          [...mutationRoots, ...plannedBackups],
-          interpreter,
-          hooksDir,
-          update
-        );
-      }
       if (legacyRoot !== null && isDirectory(legacyRoot)) {
         await progress("Backing up legacy Codex skills");
         const legacyTransaction = {
@@ -2895,28 +1507,8 @@ export async function install(sourceRoot, plans, options = {}) {
           );
         }
       }
-      if (project !== null) {
-        await progress("Writing project contracts");
-        const resultLine = projectResult(project, selected, hooksEnabled, interpreter, hooksDir, update, false);
-        applyProject(
-          sourceRoot,
-          project,
-          selected,
-          hooksEnabled,
-          projectTransaction,
-          interpreter,
-          hooksDir,
-          update
-        );
-        results.push(resultLine);
-      }
     } catch (error) {
       const rollbackErrors = [];
-      try {
-        rollbackProject(projectTransaction);
-      } catch (rollbackError) {
-        rollbackErrors.push(messageOf(rollbackError));
-      }
       for (const transaction of [...targetTransactions].reverse()) {
         try {
           rollbackTarget(transaction);
@@ -2970,6 +1562,9 @@ export function parseCli(argv) {
     doctor: { type: "boolean", default: false },
     hooks: { type: "boolean", default: false },
     "hooks-init": { type: "boolean", default: false },
+    "runtime-restore": { type: "boolean", default: false },
+    "runtime-upgrade": { type: "boolean", default: false },
+    "runtime-migrate": { type: "boolean", default: false },
     "hooks-refresh": { type: "boolean", default: false },
     "hooks-refresh-full": { type: "boolean", default: false },
     "source-root": { type: "string" },
@@ -3052,13 +1647,16 @@ function usage() {
     "  Update skills:  gsd-path --update   (or npx @opengsd/gsd-path@latest --update)\n\n" +
     `targets: ${flags}\n` +
     "  --update              refresh existing installs in place; with --project also\n" +
-    "                        refreshes .gsd-path/ and keeps AGENTS.md/WORKFLOW.md\n" +
+    "                        keeps its selected runtime and project contracts\n" +
     "  --local               install into this project's per-host skill dirs\n" +
     "  --project PATH        write project contracts and status runtime; requires Python 3.9+\n" +
     "  --doctor              read-only health check of installs, hooks, and state\n" +
     "  --hooks               with --project: install guard hooks (see HOOKS.md)\n" +
     "  --hooks-init          add guards to an existing project without changing its contracts\n" +
-    "  --hooks-refresh       with --project: overwrite managed .gsd-path scripts\n" +
+    "  --runtime-restore     restore the exact declared runtime from --source-root\n" +
+    "  --runtime-upgrade     explicitly select the supplied package runtime\n" +
+    "  --runtime-migrate     migrate a tracked legacy runtime for review\n" +
+    "  --hooks-refresh       validate the selected runtime; keep its version\n" +
     "  --hooks-refresh-full  refresh native settings/git hooks; target flags create missing configs\n" +
     "  --dry-run             preview without writing\n" +
     "  each target also accepts --<target>-root PATH to override its skills root"
@@ -3097,6 +1695,12 @@ export async function main(argv, env = process.env) {
     : path.resolve(SCRIPT_DIRECTORY, "..");
   const project =
     values.project !== undefined ? absolutePath(values.project) : null;
+  if (["runtime-restore", "runtime-upgrade", "runtime-migrate"].some(name => values[name])) {
+    const interpreter = requiredPythonRuntime("project runtime");
+    const result = spawnSync(interpreter, ["-B", path.join(SCRIPT_DIRECTORY, "install.py"),
+      ...argv.filter(arg => arg !== "--no-color")], { stdio: "inherit", env });
+    return result.status ?? 1;
+  }
   const local = values.local;
   const rootFor = (target) => {
     const override = values[`${target}-root`];

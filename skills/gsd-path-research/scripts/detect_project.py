@@ -34,6 +34,9 @@ import re
 import stat
 import subprocess
 import sys
+
+# Runtime helpers must not modify their immutable installation.
+sys.dont_write_bytecode = True
 from datetime import date
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Iterable, NamedTuple, Optional, Sequence

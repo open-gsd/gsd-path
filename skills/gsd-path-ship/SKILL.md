@@ -3,6 +3,8 @@ name: gsd-path-ship
 description: Verify a completed GSD Path milestone, manage evidence-backed patch decisions, request final shipping approval, and archive the validated result. Use only when the user explicitly invokes $gsd-path-ship or an active $gsd-path router or build orchestrator explicitly routes to this phase.
 ---
 
+Before executing project helpers, read [runtime selection](references/runtime-selection.md).
+
 # GSD Path Ship Phase
 
 Reuse proven review scope; dispatch reviewers for remaining claims. They never fix
@@ -174,8 +176,9 @@ so the position is unchanged. Then:
 
 ## Archive transaction
 
-Resolve the project's guard-owned `.gsd-path/runtime/archive_milestone.py` and
-`.gsd-path/runtime/pipeline_state.py` to absolute paths for `prepare`,
+Resolve the declared runtime with `python3 -B
+<project>/.gsd-path/status_runtime.py --repo <project> --runtime-path`; use
+`archive_milestone.py` and `pipeline_state.py` from that verified directory for `prepare`,
 `render-manifest`, `preflight`, `record-shipment`, `validate`, `integrate`, and
 `validate-integrated`. Invoke them with `python3`; the files need not be
 executable. Skill-bundle copies are not the guard's trust anchor, even when
@@ -364,27 +367,35 @@ Run this recovery setup from a separate checkout, outside the closed primary
 worktree's guard.
 
 1. Create separate disposable trust and validation checkouts from the same
-   published origin and `STATE.branch`. This separation is required because a
-   managed runtime refresh may dirty a checkout when `.gsd-path/` is tracked,
+   published origin and `STATE.branch`. This separation is required because an
+   explicit runtime upgrade changes the trust checkout's declaration and launcher,
    while archive validation requires a clean checkout. Never use the primary
    worktree for either role.
-2. From the trusted fixed GSD Path checkout, preview and then refresh only the
+2. From the trusted fixed GSD Path checkout, preview and then explicitly upgrade only the
    disposable trust checkout's managed trust anchor:
 
    ```bash
-   node <trusted-gsd-path>/scripts/install.mjs --hooks-refresh --dry-run --project <trust-root>
-   node <trusted-gsd-path>/scripts/install.mjs --hooks-refresh --project <trust-root>
+   node <trusted-gsd-path>/scripts/install.mjs --runtime-upgrade --dry-run --project <trust-root>
+   node <trusted-gsd-path>/scripts/install.mjs --runtime-upgrade --project <trust-root>
    ```
 
-   Continue only when the preview names managed `.gsd-path/` runtime or guard
-   files and no `.project/` path. The installer owns the atomic refresh and
-   refuses unmanaged or unsafe runtime entries.
-3. Use only the refreshed project-local trust anchor to refresh publication
+   Confirm that the preview identifies the intended fixed version and digest.
+   Upgrade changes only the disposable trust project's declaration and compatible
+   launcher. For a legacy trust checkout with no declaration, use the explicit
+   `--runtime-migrate` preview and migration first. Resolve the upgraded runtime:
+
+   ```bash
+   python3 -B <trust-root>/.gsd-path/status_runtime.py --repo <trust-root> --runtime-path
+   ```
+
+   Use the returned absolute directory as `<verified-runtime>` below. Stop on any
+   error; do not substitute the validation checkout's older selected runtime.
+3. Use only this verified upgraded runtime to refresh publication
    refs in the clean validation checkout and validate its integrated milestone:
 
    ```bash
-   python3 <trust-root>/.gsd-path/runtime/archive_milestone.py refresh-origin --repo <validation-root>
-   python3 <trust-root>/.gsd-path/runtime/archive_milestone.py validate-integrated --repo <validation-root> --slug <STATE.milestone>
+   python3 -B <verified-runtime>/archive_milestone.py refresh-origin --repo <validation-root>
+   python3 -B <verified-runtime>/archive_milestone.py validate-integrated --repo <validation-root> --slug <STATE.milestone>
    ```
 
 4. A pass restores the normal shipped handoff without another commit or

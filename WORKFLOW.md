@@ -97,8 +97,11 @@ unpublished work; it never invents `git reset`.
 
 <!-- gsd-path/plain-prompt-reentry/v1 -->
 
-Project installs include the router's read-only status engine at
-`.gsd-path/runtime/` and its stable launcher at `.gsd-path/status_runtime.py`.
+Project installs record the selected runtime in `.gsd-path/runtime.json` and
+keep a stable launcher at `.gsd-path/status_runtime.py`. Runtime implementation
+lives under `~/.gsd-path/runtimes/`; clones and named checkouts inherit the
+declaration. Missing versions require explicit restoration, not a download
+during status or guard execution.
 On any turn that did not explicitly invoke a GSD Path
 skill, an owned `.project/STATE.md` activates re-entry. Informational prompts
 finish read-only and end with the current **Outcome** / **Review** / **Next**

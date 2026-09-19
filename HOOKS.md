@@ -61,7 +61,8 @@ Native configs for unselected hosts are ignored.
 | --- | --- |
 | `.gsd-path/guard_hook.py` | Pre-tool-use guard (stdin JSON → exit 2 + denial JSON) |
 | `.gsd-path/git_guard.py` | Commit and publication validator |
-| `.gsd-path/runtime/` | Project-local pipeline helpers, including the read-only status engine |
+| `.gsd-path/runtime.json` | Tracked selected runtime version and digest |
+| `~/.gsd-path/runtimes/<digest>/` | Immutable external pipeline helpers and guards |
 | `.git/hooks/pre-commit` | Runs `git_guard.py` before commit |
 | `.git/hooks/commit-msg` | Runs `git_guard.py` with commit message |
 | `.git/hooks/pre-push` | Runs `git_guard.py` on every pushed ref update |
@@ -137,7 +138,7 @@ See [UPDATE.md](UPDATE.md).
 - shell commands that reference the archive unless the whole command is a
   recognized standalone read or a single-command invocation of the bundled
   `pipeline_state.py` / `archive_milestone.py` helper, resolved to a regular file
-  inside the guard-owned `.gsd-path/runtime/` directory (beside `guard_hook.py`
+  inside the verified runtime selected by `.gsd-path/runtime.json` (legacy projects use `.gsd-path/runtime/` beside `guard_hook.py`
   in the repository layout), using exactly `python` or `python3` with optional
   `-B`; non-empty supplied tool working directories are authoritative. Empty
   strings, including list items, are treated as absent: nested payloads inherit

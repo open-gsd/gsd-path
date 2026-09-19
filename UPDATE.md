@@ -40,7 +40,7 @@ AGENTS.md or WORKFLOW.md template changed upstream
 | Global skills (`~/.claude/skills`, …) | Yes | `--update` |
 | Project-local skills (`.cursor/skills`, …) | Yes | `--update --local` |
 | `.gsd-path/guard_hook.py`, `git_guard.py` | Yes | `--hooks-refresh` or `--update --project PATH` |
-| `.gsd-path/runtime/*.py` | Yes | `--hooks-refresh` or `--update --project PATH` |
+| Declared runtime under `~/.gsd-path/runtimes/` | Explicit upgrade only | `--runtime-upgrade --project PATH`; restore exact bytes with `--runtime-restore` |
 | Native hook settings + git hooks | Yes | `--hooks-refresh-full` (host flag creates missing config) |
 | Guards for an existing project | Yes | `--hooks-init` (preserves project contracts) |
 | `AGENTS.md`, `WORKFLOW.md` | **No** | Manual merge |
@@ -164,7 +164,9 @@ To adopt upstream template changes:
 1. Open new templates in the gsd-path repo or npm package
 2. `diff` against your project copies
 3. Merge manually
-4. Refresh or initialize hooks to install the matching `.gsd-path/runtime/`
+4. Explicitly upgrade the project runtime with `--runtime-upgrade --project PATH`;
+   migrate legacy `.gsd-path/runtime/` first with `--runtime-migrate`. Use
+   `--hooks-refresh-full` when host hook wiring needs an explicit refresh.
 5. Never delete active `.project/` milestone state
 
 An in-flight milestone whose `INTENT.md` or `ROADMAP.md` predates `Surfaces:`

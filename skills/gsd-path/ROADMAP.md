@@ -3,6 +3,8 @@ name: gsd-path-roadmap
 description: Slice an approved GSD Path program charter into a dependency-ordered roadmap of independently shippable milestones. Use only when the user explicitly invokes $gsd-path-roadmap or an active $gsd-path router explicitly routes to this phase.
 ---
 
+Before executing project helpers, read [runtime selection](references/runtime-selection.md).
+
 # GSD Path Roadmap Phase
 
 Dispatch one roadmapper, gate its roadmap, and obtain the single approval that

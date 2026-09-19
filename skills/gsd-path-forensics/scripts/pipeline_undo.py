@@ -17,6 +17,9 @@ import os
 import re
 import shutil
 import sys
+
+# Runtime helpers must not modify their immutable installation.
+sys.dont_write_bytecode = True
 import tempfile
 from pathlib import Path, PurePosixPath
 from typing import Optional, Sequence
