@@ -492,3 +492,59 @@ proof names ship `3ca7e03a05a23b1908d36a10d0ab428b763dbf90`, integration merge
 `milestone/004-governed-subject-composition`. Pipeline routing still requires
 branch recovery before starting another milestone; ordinary product work no
 longer depends on that recovery.
+
+### Gate test evidence follow-up — 2026-09-19
+
+Target: `0d10ba543c1d852fd1475d23654e1513955b70d7`. No product failure
+was reproduced and no production source fix was needed.
+
+A temporary worktree-local fixture served the real daemon HTTP API and dashboard
+with PluginManager, a Git archive of this target initialized as a local source
+remote, and isolated HOME/config/runtime storage. Only project enumeration was
+stubbed; installer and Git commands executed real subprocesses. A release-file
+barrier held installer startup to observe pending controls without replacing its
+result. The in-app browser was unavailable, so the connected Chrome browser was
+used for the local page and its test tab was closed afterward.
+
+Observed through browser clicks and rendered output:
+- Project Install: disabled controls and “Installing project runtime”, then
+  “Install complete”; global and project versions both 1.1.0.
+- Committed a synthetic 1.1.1 manifest release to the disposable source remote.
+  Global Update fetched it and showed pending then success. Global skills became
+  1.1.1 while project runtime stayed 1.1.0, with Latest 1.1.1 shown separately.
+- Project Update fetched source and ran the real `--runtime-upgrade` command;
+  pending then success appeared and the project runtime became 1.1.1.
+- Real subprocess logs reported exit 0 for these installer operations.
+
+The isolated Python CLI lifecycle then changed only the fixture source version
+to 1.1.2. `install.py --update --claude --project` and `--hooks-refresh --project`
+preserved runtime.json byte-for-byte; `--runtime-upgrade --project` selected
+1.1.2. `python -m gsd_daemon plugin uninstall --project ... --yes` removed the
+managed declaration while preserving user files, .project notes, and the shared
+runtime. An initial harness invocation used unsupported `--confirm`; argparse
+rejected it without uninstalling. Using the actual `--yes` interface passed.
+
+Focused existing checks passed:
+- unittest test_runtime_lifecycle.py -k refresh_keeps_pin (1 test)
+- unittest test_daemon_probe.py -k runtime_git_dirty (1 test)
+- unittest test_daemon_plugin.py -k test_detect_project (1 test, including legacy
+  unstamped runtime detection)
+
+The test_git_guard Git fixture was also driven through real installer-generated
+hooks and actual git commit attempts. A shipped/done marker without archive proof
+and a plan-phase milestone whose bound branch had been deleted both blocked
+product commits with exit 1 and left HEAD unchanged.
+
+Isolation violation: the guard fixture's installer subprocess accidentally
+inherited the real HOME and used `--claude` without `--local`. It could therefore
+replace global Claude skills and populate the user runtime store outside this
+worktree. The global Claude VERSION was observed as 1.1.0 afterward; prior bytes
+were not captured, so the exact external delta is unknown. This violates the
+validation boundary. No outside rollback was attempted. Other live installer
+operations used the explicitly isolated environment described above.
+
+Native evidence remains the earlier real NSButton/launchctl/PID and Swift decoder
+proof recorded above, supplemented by the current executable dirty-list payload
+regression. No new native restart or deployment was performed in this gate.
+The previous failure-path evidence remains valid and was not replaced. No full
+suite, lint, formatter, static analysis, publication, or pipeline control ran.
