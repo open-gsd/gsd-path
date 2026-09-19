@@ -190,7 +190,9 @@ such as `rm -rf scratch` passes the archive check; other guard rules still apply
   subject `<task id>: <task title>` matching the task file at `Base:`, a full
   base SHA HEAD descends from, the staged task file, only that task's declared
   `files:`, and a `Files:` list of exactly the staged paths. Outside build the
-  reviewed HEAD is frozen; product fixes reopen through the patch plan
+  reviewed HEAD is frozen; product fixes reopen through the patch plan.
+  The validated integration merge is allowed to complete before publication
+  proof exists; an ordinary commit with an integration subject is not exempt
 - deleting the recorded branch or switching to another branch while carrying
   unfinished state does not release product commit protection
 - pushes (to any remote) that move a `gsd-path/M###` ref anywhere but its

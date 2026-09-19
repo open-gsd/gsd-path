@@ -204,11 +204,16 @@ uninstall, both globally (per-host skill roots) and per-project.
 The daemon's plugin manager uses a git clone, which it keeps at `~/.gsd-path/src`
 (`https://github.com/open-gsd/gsd-path.git`, override with the `plugin_repo`
 key in `daemon.json`) and runs its `scripts/install.py` for every
-install/update. `refresh_source` does `git fetch origin main` +
+install/update. Background source refresh does `git fetch origin main` +
 `git pull --ff-only` at most once per 24h, cached in
 `~/.gsd-path/update-check.json` (last-fetch timestamp + last-known latest
-version from the clone's `package.json`). Offline or any failure falls back
-to the cached state and never raises. Every operation (argv, exit code,
+version from the clone's `package.json`). Background refresh failures retain
+the cached state. Explicit global and project updates bypass this cache period
+and stop with an error if source refresh fails; the installer does not run.
+Project updates invoke `--runtime-upgrade`; see
+[project runtime versions](../DOCS.md#project-runtime-versions) for version
+selection and legacy migration, and [Dashboard feedback](../UPDATE.md#update-the-project-runtime-and-guard-hooks)
+for the displayed controls and results. Every installer operation (argv, exit code,
 output tail) is appended to `~/.gsd-path/logs/plugin.log`.
 
 **Repository access.** The default `open-gsd/gsd-path` repository is public.
@@ -226,7 +231,7 @@ gsd-path-daemon plugin update [--global | --project PATH] [--dry-run]
 gsd-path-daemon plugin uninstall (--global [--host H ...] | --project PATH) [--dry-run] [--yes]
 ```
 
-`plugin status` and the update check work offline from VERSION stamps and
+`plugin status` and the update check work offline from runtime declarations, legacy VERSION stamps, and
 the cache — they never clone. Uninstall without `--yes` prints the removal
 plan and stops; `--yes` is required to apply anything.
 
@@ -238,7 +243,9 @@ one global op-lock — a second concurrent operation gets
   (`{latest, update_available, hosts}`) built cheaply from VERSION probes
   and the cache only — no git fetch.
 - `GET /api/plugin/status` — full detection: global hosts plus
-  `projects: [...]` for every watched root.
+  `projects: [...]` for every watched root. Each project's `runtime_version`
+  comes from its runtime declaration, falling back to legacy
+  `.gsd-path/runtime/VERSION`; unstamped runtimes report `null`.
 - `POST /api/plugin/install` — `{scope: "global"|"project", hosts?, root?,
   local_hosts?, hooks?, dry_run?}` → `{ok, argv, stdout_tail, error}`.
 - `POST /api/plugin/update` — `{scope, root?, dry_run?}`.
@@ -255,7 +262,8 @@ one global op-lock — a second concurrent operation gets
   `disabled-gsd-skills*` backup directories are never touched.
 - Project: project-local managed skill dirs; `.gsd-path/runtime.json` when it
   declares the managed schema (shared runtime versions are retained); legacy
-  `.gsd-path/runtime/*.py` and
+  `.gsd-path/runtime/VERSION` when it contains a recognized version or `unknown`
+  and is not a symlink; legacy `.gsd-path/runtime/*.py` and
   `status_runtime.py` only when marker-matched; `guard_hook.py` /
   `git_guard.py` only when marker-matched; `AGENTS.md`, `WORKFLOW.md`, and
   `.claude/CLAUDE.md` only when byte-identical to the source template
@@ -286,7 +294,8 @@ VERSION-stamp probes plus the update-check cache, never a git fetch; see
   `tasks_total`, `current_wave`, `waves`, `roadmap_milestones`
   (`[{number, slug, status, archive, duration_s, tokens}]` — `duration_s`
   and `tokens` are null placeholders for now), `next_milestone`, `git`
-  (`{branch, head, dirty}`).
+  (`{branch, head, dirty}`). `dirty` is Boolean or null; runtime changed-file
+  lists become `false` when empty and `true` when nonempty.
 - Runtime enrichment: `pending_answers`, `next_skill`, `handoff`. The project
   detail page displays the runtime handoff outcome and next action.
 - `workflow`: `{state, label, reason?}` is the shared browser/tray presentation.
