@@ -1,0 +1,44 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "cursor",
+  "run_id": "35f40208-968c-4847-ad0d-737bf834c205",
+  "result": "pass",
+  "step": "child-spawn",
+  "command": "Task",
+  "child_api": "Task",
+  "child_id": "build_t001",
+  "child_status": "completed",
+  "output": {
+    "child_id": "build_t001",
+    "status": "completed",
+    "child_api": "Task",
+    "run": "run-20260919T021301019744Z",
+    "session_id": "35f40208-968c-4847-ad0d-737bf834c205",
+    "tool_key": "taskToolCall",
+    "tool_use": {
+      "id": "tool_61ae1c67-f174-4c4d-affe-1fbfec11f3b",
+      "input": {
+        "description": "build_t001",
+        "subagentType": {
+          "custom": {
+            "name": "gsd-path"
+          }
+        },
+        "model": "composer-2.5",
+        "agentId": "939b8bd7-8dbe-4bb6-9843-9244f25b39d3",
+        "attachments": [],
+        "mode": "TASK_MODE_UNSPECIFIED",
+        "respondingToMessageIds": [],
+        "environment": "SUBAGENT_EXECUTION_ENVIRONMENT_UNSPECIFIED",
+        "machine": {
+          "sameMachine": {}
+        }
+      },
+      "prompt_sha256": "c2cc7fc84c53096de352b5480ab20ece21e1f33805d23ac73ac276947830d718"
+    },
+    "tool_result": {
+      "is_error": false,
+      "content": "{\"success\": {\"conversationSteps\": [{\"assistantMessage\": {\"text\": \"I'll read the coder brief and task contract first, then implement the CLI changes in the declared files only.\\nImplementing `count.py` with argparse and adding subprocess tests.\\nVerify passed. Appending the implementation result to the task log.\\nT001: Extended `count.py` with argparse (`--json`, optional signed count); added subprocess CLI tests. Verify: 9 tests, OK (exit 0).\\n\\nChanged: `count.py`, `tests/test_count_cli.py`, `.project/tasks/T001-count-json-cli.md` (Log)\\n\\nRESULT: T001 ready\"}}], \"agentId\": \"33cc68d2-8913-4e9f-9f3d-0b550ec66d75\", \"isBackground\": false, \"durationMs\": \"27016\", \"backgroundReason\": \"SUBAGENT_BACKGROUND_REASON_UNSPECIFIED\"}}"
+    }
+  }
+}

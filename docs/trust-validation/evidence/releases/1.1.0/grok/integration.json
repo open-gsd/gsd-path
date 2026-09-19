@@ -1,0 +1,17 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "grok",
+  "run_id": "01a0b769-0e5e-7af3-8fdb-a36fcd648f8e",
+  "result": "pass",
+  "step": "integration",
+  "command": "python3 /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/grok-rerun/plugin/tests/evaluate_codex.py activity --arm /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/grok-rerun/quick --category implementation -- python3 /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/grok-rerun/quick/repo/.gsd-path/runtime/archive_milestone.py integrate --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/grok-rerun/quick/repo --slug count-json-cli > /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/grok-rerun/quick/repo/.git/gsd-path-evidence/integration.json",
+  "output": "{\"archive\": \".project/archive/001-count-json-cli\", \"base\": \"6ed48158842aa30e5699525568465d0b052f6d99\", \"commit\": \"88f87613f531c8dbcc7253299e79473087311e43\", \"integrate\": \"6ed48158842aa30e5699525568465d0b052f6d99\", \"landing\": \"6ed48158842aa30e5699525568465d0b052f6d99\", \"mode\": \"direct\", \"tag\": \"milestone/001-count-json-cli\"}\n",
+  "fixture_bundle": "grok/fixture.bundle",
+  "run_manifest": ".project/archive/001-count-json-cli/trust-run-manifest.json",
+  "ship_commit": "88f87613f531c8dbcc7253299e79473087311e43",
+  "bound_branch": "gsd-path/M001",
+  "default_branch": "main",
+  "pre_integration_default_commit": "2547cef154336e7103e704c542dc471678dd791b",
+  "integration_commit": "6ed48158842aa30e5699525568465d0b052f6d99",
+  "milestone_tag": "milestone/001-count-json-cli"
+}

@@ -1,0 +1,17 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "antigravity",
+  "run_id": "da06f041-4863-4104-8175-735fc36624a3",
+  "result": "pass",
+  "step": "integration",
+  "command": "python3 .gsd-path/runtime/archive_milestone.py integrate --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/antigravity-rerun/quick/repo --slug widget-counter | tee .git/gsd-path-evidence/integration.json",
+  "output": "{\"archive\": \".project/archive/001-widget-counter\", \"base\": \"b727c4327201ce48cdb8872e22f0f76895e3a795\", \"commit\": \"2ce96c25342ef167e8f4fb2d0416b16ba5b4c0ae\", \"integrate\": \"b727c4327201ce48cdb8872e22f0f76895e3a795\", \"landing\": \"b727c4327201ce48cdb8872e22f0f76895e3a795\", \"mode\": \"direct\", \"tag\": \"milestone/001-widget-counter\"}\n",
+  "fixture_bundle": "antigravity/fixture.bundle",
+  "run_manifest": ".project/archive/001-widget-counter/trust-run-manifest.json",
+  "ship_commit": "2ce96c25342ef167e8f4fb2d0416b16ba5b4c0ae",
+  "bound_branch": "gsd-path/M001",
+  "default_branch": "main",
+  "pre_integration_default_commit": "f32258e53b346fed88dd0d78be7cdc2125303712",
+  "integration_commit": "b727c4327201ce48cdb8872e22f0f76895e3a795",
+  "milestone_tag": "milestone/001-widget-counter"
+}

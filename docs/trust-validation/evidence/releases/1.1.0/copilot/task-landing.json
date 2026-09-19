@@ -1,0 +1,17 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "copilot",
+  "run_id": "a534979c-9470-47e2-aefc-7f08ea0b96c5",
+  "result": "pass",
+  "step": "task-landing",
+  "command": "cd /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/copilot-rerun/quick/repo\npython3 -B .github/skills/gsd-path/scripts/dispatch_driver.py finish --repo \"$(pwd)\" --task-id T001 2>&1",
+  "output": "commit 5a5a34daf271f024db75bbd6948ccb924acb3e3a\nAuthor:     Feature Evaluation <evaluation@example.invalid>\nAuthorDate: Fri Sep 18 18:37:11 2026 -0500\nCommit:     Feature Evaluation <evaluation@example.invalid>\nCommitDate: Fri Sep 18 18:37:11 2026 -0500\n\n    T001: Add --json output and invalid-input validation to count.py, with real-CLI tests\n    \n    Task: .project/tasks/T001-json-output-and-validation.md\n    Base: 2fcfb64aad6887bcdf07f6be978b9b9262836e71\n    Files:\n    - .project/tasks/T001-json-output-and-validation.md\n    - count.py\n    - tests/test_count_cli.py\n\n .project/tasks/T001-json-output-and-validation.md | 22 ++++++--\n count.py                                          | 22 +++++++-\n tests/test_count_cli.py                           | 65 +++++++++++++++++++++++\n 3 files changed, 104 insertions(+), 5 deletions(-)",
+  "fixture_bundle": "copilot/fixture.bundle",
+  "run_manifest": ".project/archive/001-count-json-output/trust-run-manifest.json",
+  "fixture_base_commit": "2fcfb64aad6887bcdf07f6be978b9b9262836e71",
+  "task_branch": "gsd-path-verify/task-t001-verify",
+  "task_worktree": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/copilot-rerun/quick/repo.gsd-path/verify/task-t001-verify",
+  "landing_commit": "5a5a34daf271f024db75bbd6948ccb924acb3e3a",
+  "isolation_mode": "serial",
+  "isolation_note": "A one-task wave uses the helper's serial mode: the coder worked on the bound branch in the primary worktree at the recorded base, and the named branch and worktree are the isolated Task Verify sidecar created for this task and retired after landing."
+}

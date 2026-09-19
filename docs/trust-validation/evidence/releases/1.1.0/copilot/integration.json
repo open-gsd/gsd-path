@@ -1,0 +1,17 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "copilot",
+  "run_id": "a534979c-9470-47e2-aefc-7f08ea0b96c5",
+  "result": "pass",
+  "step": "integration",
+  "command": "cd /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/copilot-rerun/quick/repo\npython3 -B .github/skills/gsd-path/scripts/archive_milestone.py integrate --repo \"$(pwd)\" --slug count-json-output 2>&1 | tee .git/gsd-path-evidence/integration.json",
+  "output": "{\"archive\": \".project/archive/001-count-json-output\", \"base\": \"1955026730f1c0cdff1c7e5dabd01e48b9494541\", \"commit\": \"508498a284f32ad3ac62974a2fca8039a1fc0fc3\", \"integrate\": \"1955026730f1c0cdff1c7e5dabd01e48b9494541\", \"landing\": \"1955026730f1c0cdff1c7e5dabd01e48b9494541\", \"mode\": \"direct\", \"tag\": \"milestone/001-count-json-output\"}\n",
+  "fixture_bundle": "copilot/fixture.bundle",
+  "run_manifest": ".project/archive/001-count-json-output/trust-run-manifest.json",
+  "ship_commit": "508498a284f32ad3ac62974a2fca8039a1fc0fc3",
+  "bound_branch": "gsd-path/M001",
+  "default_branch": "main",
+  "pre_integration_default_commit": "f4eecc1fab66773ed7d61680065c2bfe4f295404",
+  "integration_commit": "1955026730f1c0cdff1c7e5dabd01e48b9494541",
+  "milestone_tag": "milestone/001-count-json-output"
+}

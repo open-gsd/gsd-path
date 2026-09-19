@@ -1,0 +1,17 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "antigravity",
+  "run_id": "da06f041-4863-4104-8175-735fc36624a3",
+  "result": "pass",
+  "step": "task-landing",
+  "command": "python3 /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/antigravity-rerun/quick/repo/.agents/skills/gsd-path/scripts/dispatch_driver.py finish --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/antigravity-rerun/quick/repo --task-id T001",
+  "output": "commit 9a555a1dca1be91d8837a6e70a63abcdedf05acd\nAuthor:     Feature Evaluation <evaluation@example.invalid>\nAuthorDate: Fri Sep 18 21:08:20 2026 -0500\nCommit:     Feature Evaluation <evaluation@example.invalid>\nCommitDate: Fri Sep 18 21:08:20 2026 -0500\n\n    T001: implement widget counter CLI and real-CLI test suite\n    \n    Task: .project/tasks/T001-widget-counter.md\n    Base: 1905c3c12e67e8d15e0a3c3c2374f245ae6fb487\n    Files:\n    - .project/tasks/T001-widget-counter.md\n    - count.py\n    - test_count.py\n\n .project/tasks/T001-widget-counter.md |  15 +++-\n count.py                              |  43 ++++++++++-\n test_count.py                         | 130 ++++++++++++++++++++++++++++++++++\n 3 files changed, 183 insertions(+), 5 deletions(-)",
+  "fixture_bundle": "antigravity/fixture.bundle",
+  "run_manifest": ".project/archive/001-widget-counter/trust-run-manifest.json",
+  "fixture_base_commit": "1905c3c12e67e8d15e0a3c3c2374f245ae6fb487",
+  "task_branch": "gsd-path-verify/task-t001-verify",
+  "task_worktree": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/antigravity-rerun/quick/repo.gsd-path/verify/task-t001-verify",
+  "landing_commit": "9a555a1dca1be91d8837a6e70a63abcdedf05acd",
+  "isolation_mode": "serial",
+  "isolation_note": "A one-task wave uses the helper's serial mode: the coder worked on the bound branch in the primary worktree at the recorded base, and the named branch and worktree are the isolated Task Verify sidecar created for this task and retired after landing."
+}

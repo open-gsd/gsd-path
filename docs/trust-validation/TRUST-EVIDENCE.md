@@ -1,5 +1,8 @@
 # GSD Path — Trust Evidence Log
 
+Current release evidence: [1.1.0 candidate](#release-evidence-2026-09-18--110).
+Earlier sections remain historical observations.
+
 **Date:** 2026-08-05 (reconciled 2026-08-11 — dispatch-smoke rows downgraded; see notes)  
 **Executor:** Cursor agent session (automated + CLI where noted)  
 **Test repo:** `/tmp/gsd-trust-evidence-25642`  
@@ -248,3 +251,25 @@ attempts are kept beside each harness with the reason in the directory name.
 
 Publication remains a separate owner decision. These receipts do not by
 themselves authorize a version tag, a registry publish, or a visibility change.
+
+---
+
+## Release evidence (2026-09-18 — 1.1.0)
+
+Candidate: `af0b082964510c471798826d7e2e05617d8d6dc3`, frozen from main after
+PRs #124 and #125. All eleven hosts have validated current-candidate receipts
+under `evidence/releases/1.1.0/` and pass the external counter CLI oracle.
+See [HOST-MATRIX.md](HOST-MATRIX.md) for each receipt.
+
+Each receipt binds a native child to the landed task, isolated Task Verify,
+review, committed archive, local-origin integration, and Git guard results.
+Claude Code and Cursor also passed their installed native guard probes.
+Qwen used its native CLI with the authorized OpenRouter Claude Sonnet backend;
+credit failures were resolved before continuing the same fixture. Antigravity
+used an independent final reviewer after review reuse was rejected.
+
+[Run notes](evidence/releases/1.1.0/notes/RUNS.md) preserve failed attempts and
+separate them from passing proof. No product or host contract changed after
+the candidate. The complete `verify:release` gate is required before publication.
+The owner authorized completing and publishing 1.1.0; receipts themselves do
+not grant publication authority.

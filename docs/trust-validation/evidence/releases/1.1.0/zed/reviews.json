@@ -1,0 +1,11 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "zed",
+  "run_id": "run-20260919T022432997644Z",
+  "result": "pass",
+  "step": "reviews",
+  "command": "/Applications/Xcode.app/Contents/Developer/usr/bin/python3 -B .agents/skills/gsd-path/scripts/workflow_run.py prepare-final --repo \"$(pwd)\" --expected-head 588730ca8729ecfcceb8239d5a09a2838bc6072d > .git/gsd-path-evidence/prepare-final-repeat.json 2>&1; echo \"exit=$?\"; wc -l .project/build/verify-ledger.jsonl; shasum .project/build/verify-ledger.jsonl .project/review/FINAL.md .project/review/final-gap-1.md; git --no-optional-locks status --porcelain",
+  "output": "# Review \u2014 wave 1, cycle 1\n\nReviewed HEAD: 5a98403125ca3b609a7aba7fcb91a97876ab19a5\nReview scope: final\n\nWave verdict: pass\n# Final Review \u2014 reused full wave\n\nReviewed HEAD: 588730ca8729ecfcceb8239d5a09a2838bc6072d\nOverall verdict: pass\nSource review: .project/review/wave-1.cycle1.md\nSource commit: 5a98403125ca3b609a7aba7fcb91a97876ab19a5",
+  "wave_review_artifact": ".project/archive/001-count-py-cli-hardening/review/wave-1.cycle1.md",
+  "final_review_artifact": ".project/archive/001-count-py-cli-hardening/review/FINAL.md"
+}

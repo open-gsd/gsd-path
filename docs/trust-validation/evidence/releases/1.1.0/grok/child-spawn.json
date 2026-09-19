@@ -1,0 +1,60 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "grok",
+  "run_id": "01a0b769-0e5e-7af3-8fdb-a36fcd648f8e",
+  "result": "pass",
+  "step": "child-spawn",
+  "command": "spawn_subagent",
+  "child_api": "spawn_subagent",
+  "child_id": "build_t001",
+  "child_status": "completed",
+  "output": {
+    "child_id": "build_t001",
+    "status": "completed",
+    "child_api": "spawn_subagent",
+    "session_id": "01a0b769-0e5e-7af3-8fdb-a36fcd648f8e",
+    "transcript": {
+      "session_dir": "/Users/jeremymcspadden/.grok/sessions/%2FUsers%2Fjeremymcspadden%2Forca%2Fevaluations%2Fgsd-path-release-1.1.0-af0b082%2Fgrok-rerun%2Fquick%2Frepo/01a0b769-0e5e-7af3-8fdb-a36fcd648f8e",
+      "child_session_dir": "/Users/jeremymcspadden/.grok/sessions/%2FUsers%2Fjeremymcspadden%2Forca%2Fevaluations%2Fgsd-path-release-1.1.0-af0b082%2Fgrok-rerun%2Fquick%2Frepo/01a0b77b-dbe6-7761-a4e1-d407cb8b0786",
+      "reported_completions": [
+        "01a0b76c-c964-7811-861d-439c0d355090",
+        "01a0b780-0f30-7670-ba4f-a9b65001fe62",
+        "01a0b76c-c964-7811-861d-43a35fd82cfc",
+        "01a0b77b-dbe6-7761-a4e1-d407cb8b0786"
+      ]
+    },
+    "session_store": {
+      "session_dir": "/Users/jeremymcspadden/.grok/sessions/%2FUsers%2Fjeremymcspadden%2Forca%2Fevaluations%2Fgsd-path-release-1.1.0-af0b082%2Fgrok-rerun%2Fquick%2Frepo/01a0b769-0e5e-7af3-8fdb-a36fcd648f8e",
+      "child_session_dir": "/Users/jeremymcspadden/.grok/sessions/%2FUsers%2Fjeremymcspadden%2Forca%2Fevaluations%2Fgsd-path-release-1.1.0-af0b082%2Fgrok-rerun%2Fquick%2Frepo/01a0b77b-dbe6-7761-a4e1-d407cb8b0786",
+      "reported_completions": [
+        "01a0b76c-c964-7811-861d-439c0d355090",
+        "01a0b780-0f30-7670-ba4f-a9b65001fe62",
+        "01a0b76c-c964-7811-861d-43a35fd82cfc",
+        "01a0b77b-dbe6-7761-a4e1-d407cb8b0786"
+      ]
+    },
+    "run": "run-20260919T022106174531Z",
+    "tool_call_id": "call-877c80a6-2aba-4db6-8d8a-faead4b94ab1-88",
+    "spawn_input": {
+      "description": "build_t001",
+      "subagent_type": "general-purpose",
+      "isolation": "none",
+      "cwd": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/grok-rerun/quick/repo",
+      "background": true
+    },
+    "prompt_sha256": "a869804333fab6b3dc6efe062f9bfe4da0851e6143566046d1529e4fc76ce801",
+    "spawn_output": "Subagent started in background.\nsubagent_id: 01a0b77b-dbe6-7761-a4e1-d407cb8b0786\ntype: general-purpose\ndescription: build_t001\n\nWhen you need its result, use get_command_or_subagent_output with task_ids=[\"01a0b77b-dbe6-7761-a4e1-d407cb8b0786\"] and a positive timeout_ms.\n\nDo not only poll the child. Continue unfinished parent work now.",
+    "subagent_id": "01a0b77b-dbe6-7761-a4e1-d407cb8b0786",
+    "completion": {
+      "tool_call_id": "call-8513949e-5dcf-4f1f-a79c-3359c383166f-90",
+      "task_id": "01a0b77b-dbe6-7761-a4e1-d407cb8b0786",
+      "command": "[subagent:general-purpose] build_t001",
+      "status": "completed",
+      "exit_code": 0,
+      "started": "2026-09-19T02:25:42Z",
+      "ended": "2026-09-19T02:27:55Z",
+      "duration_secs": 132.935,
+      "output": "T001 ready. Verify `python3 -m unittest test_count.py` passed (10 tests, OK).\n\nChanged paths:\n- `count.py`\n- `test_count.py`\n- `.project/tasks/T001-count-json-cli.md` (Log only)\n\nRESULT: T001 ready\n\n<subagent_meta>id=01a0b77b-dbe6-7761-a4e1-d407cb8b0786, type=general-purpose, tool_calls=16, turns=1, duration_ms=132935</subagent_meta>\n\n<subagent_result>\nsubagent_id: 01a0b77b-dbe6-7761-a4e1-d407cb8b0786\nsubagent_type: general-purpose\nTo continue this subagent's conversation, use resume_from=\"01a0b77b-dbe6-7761-a4e1-d407cb8b0786\".\n</subagent_result>"
+    }
+  }
+}

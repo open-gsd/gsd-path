@@ -1,0 +1,11 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "qwen",
+  "run_id": "a1597ea1-c79a-48a6-ad6f-1f8695747d51",
+  "result": "pass",
+  "step": "reviews",
+  "command": "git status --porcelain=v1; echo \"---STATE---\"; cat .project/STATE.md; echo \"---prepare-final-first.json exists---\"; ls -la .git/gsd-path-evidence/",
+  "output": "# Review \u2014 wave 1, cycle 1\n\nReviewed HEAD: d1527722e535d06dd8a848b9fe16cb4c30dc3a54\nReview scope: final\n\nWave verdict: pass\n# Final Review \u2014 reused full wave\n\nReviewed HEAD: ceaae05df0006ead90945946fb2384dcbf22749e\nOverall verdict: pass\nSource review: .project/review/wave-1.cycle1.md\nSource commit: d1527722e535d06dd8a848b9fe16cb4c30dc3a54",
+  "wave_review_artifact": ".project/archive/001-count-json-cli/review/wave-1.cycle1.md",
+  "final_review_artifact": ".project/archive/001-count-json-cli/review/FINAL.md"
+}

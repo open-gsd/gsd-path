@@ -1,0 +1,11 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "grok",
+  "run_id": "01a0b769-0e5e-7af3-8fdb-a36fcd648f8e",
+  "result": "pass",
+  "step": "reviews",
+  "command": "python3 /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/grok-rerun/plugin/tests/evaluate_codex.py activity --arm /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/grok-rerun/quick --category verification -- python3 - <<'PY'\nfrom hashlib import sha256\nfrom pathlib import Path\nimport json\nledger = Path(\"/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/grok-rerun/quick/repo/.project/build/verify-ledger.jsonl\")\ndata = ledger.read_bytes()\nprint(\"ledger_bytes\", len(data))\nprint(\"ledger_lines\", data.count(b\"\\n\"))\nprint(\"ledger_sha256\", sha256(data).hexdigest())\nprint(\"sha256_unchanged\", sha256(data).hexdigest() == \"d5a45654907e25116c89a0a865e285772c8433835cb44e09c07b88145d202b20\")\nreceipt = json.loads(Path(\"/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/grok-rerun/quick/repo/.git/gsd-path-evidence/prepare-final-repeat.json\").read_text())\nlean = [s[\"result\"] for s in receipt[\"steps\"] if s.get(\"script\") == \"lean_verification.py\"][0]\nprint(\"status\", receipt.get(\"status\"), lean.get(\"status\"))\nprint(\"final.reused\", lean[\"final\"].get(\"reused\"))\nprint(\"verification.reused\", lean[\"verification\"].get(\"reused\"))\nprint(\"verification.passed\", lean[\"verification\"].get(\"passed\"))\nprint(\"verification.keys\", sorted(lean[\"verification\"].keys()))\nprint(\"execution.exit_code\", lean[\"verification\"].get(\"execution\", {}).get(\"exit_code\"))\nprint(\"collection\" in lean[\"verification\"])\nPY",
+  "output": "# Review \u2014 wave 1, cycle 1\n\nReviewed HEAD: 67debb64bba49709c205198cc3a996b07bdaedd5\nReview scope: final\n\nWave verdict: pass\n# Final Review \u2014 reused full wave\n\nReviewed HEAD: e13e83470489b11fe9e00ac447c790ff2cc0029c\nOverall verdict: pass\nSource review: .project/review/wave-1.cycle1.md\nSource commit: 67debb64bba49709c205198cc3a996b07bdaedd5",
+  "wave_review_artifact": ".project/archive/001-count-json-cli/review/wave-1.cycle1.md",
+  "final_review_artifact": ".project/archive/001-count-json-cli/review/FINAL.md"
+}

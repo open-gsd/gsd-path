@@ -1,0 +1,11 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "antigravity",
+  "run_id": "da06f041-4863-4104-8175-735fc36624a3",
+  "result": "pass",
+  "step": "task-verify",
+  "command": "python3 test_count.py",
+  "output": "{\"command\": \"python3 test_count.py\", \"commit\": \"9a555a1dca1be91d8837a6e70a63abcdedf05acd\", \"execution\": {\"evidence\": \"/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/antigravity-rerun/quick/repo/.git/gsd-path/dispatch/gsd-path-M001/T001/manual-2026-09-19T020819+0000/verify.json\", \"exit_code\": 0, \"location\": \"sidecar gsd-path-verify/task-t001-verify\", \"stderr\": \".............\\n----------------------------------------------------------------------\\nRan 13 tests in 0.326s\\n\\nOK\\n\", \"stdout\": \"\", \"worktree\": \"/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/antigravity-rerun/quick/repo\"}, \"recorded_at\": \"2026-09-19T02:08:21+00:00\", \"result\": \"pass\", \"schema\": \"gsd-path/verify-ledger/v2\"}\n{\"command\": \"python3 -m unittest discover -s . -p \\\"test_*.py\\\"\", \"commit\": \"0ef4a03228e71be9f864ed4b3b2ac8a8044b5633\", \"execution\": {\"branch\": \"gsd-path-verify/project-verify\", \"exit_code\": 0, \"stderr\": \".............\\n----------------------------------------------------------------------\\nRan 13 tests in 0.298s\\n\\nOK\\n\", \"stdout\": \"\", \"worktree\": \"/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/antigravity-rerun/quick/repo.gsd-path/verify/project-verify\"}, \"recorded_at\": \"2026-09-19T02:19:35+00:00\", \"result\": \"pass\", \"schema\": \"gsd-path/verify-ledger/v2\"}\n",
+  "verify_artifact": ".project/archive/001-widget-counter/build/verify-ledger.jsonl",
+  "verify_exit_code": 0
+}

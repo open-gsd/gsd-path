@@ -1,0 +1,17 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "qwen",
+  "run_id": "a1597ea1-c79a-48a6-ad6f-1f8695747d51",
+  "result": "pass",
+  "step": "integration",
+  "command": "cd /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/qwen-sonnet/quick/repo && python3 -B .gsd-path/runtime/archive_milestone.py integrate --repo \"$(pwd)\" --slug count-json-cli > .git/gsd-path-evidence/integration.json 2>&1; echo \"exit:$?\"; cat .git/gsd-path-evidence/integration.json",
+  "output": "{\"archive\": \".project/archive/001-count-json-cli\", \"base\": \"ce89d360ea2237704e5df403fe43483999149bf9\", \"commit\": \"8249744589f93bb7eda87f160473d01f714c3a40\", \"integrate\": \"ce89d360ea2237704e5df403fe43483999149bf9\", \"landing\": \"ce89d360ea2237704e5df403fe43483999149bf9\", \"mode\": \"direct\", \"tag\": \"milestone/001-count-json-cli\"}\n",
+  "fixture_bundle": "qwen/fixture.bundle",
+  "run_manifest": ".project/archive/001-count-json-cli/trust-run-manifest.json",
+  "ship_commit": "8249744589f93bb7eda87f160473d01f714c3a40",
+  "bound_branch": "gsd-path/M001",
+  "default_branch": "main",
+  "pre_integration_default_commit": "319776a95f62047c803b2ba9ee334fdc54e8e3c7",
+  "integration_commit": "ce89d360ea2237704e5df403fe43483999149bf9",
+  "milestone_tag": "milestone/001-count-json-cli"
+}

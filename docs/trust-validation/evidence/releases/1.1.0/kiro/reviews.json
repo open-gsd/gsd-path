@@ -1,0 +1,11 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "kiro",
+  "run_id": "9693c9a4-40ad-4411-a996-ee202d183368",
+  "result": "pass",
+  "step": "reviews",
+  "command": "python3 -B .kiro/skills/gsd-path-ship/scripts/workflow_run.py prepare-final \\\n  --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/kiro-rerun-2/quick/repo \\\n  --expected-head 7225933e33263226a123c05e686808ae6d9c2031 > .git/gsd-path-evidence/prepare-final-repeat.json 2> .git/gsd-path-evidence/prepare-final-repeat.stderr\necho \"exit=$?\"\necho \"---stderr---\"; cat .git/gsd-path-evidence/prepare-final-repeat.stderr\necho \"---ledger line count + sha AFTER repeat---\"; wc -l < .project/build/verify-ledger.jsonl; shasum -a 256 .project/build/verify-ledger.jsonl 2>&1\necho \"---FINAL/gap sha AFTER---\"; shasum -a 256 .project/review/FINAL.md .project/review/final-gap-1.md 2>&1\necho \"---repeat JSON---\"; cat .git/gsd-path-evidence/prepare-final-repeat.json",
+  "output": "# Review \u2014 wave 1, cycle 2\n\nReviewed HEAD: 735b21f9c64bd5111f8ca407e89cdb9504f0dcc8\nReview scope: final\n\nWave verdict: pass\n# Final Review \u2014 reused full wave\n\nReviewed HEAD: 7225933e33263226a123c05e686808ae6d9c2031\nOverall verdict: pass\nSource review: .project/review/wave-1.cycle2.md\nSource commit: 735b21f9c64bd5111f8ca407e89cdb9504f0dcc8",
+  "wave_review_artifact": ".project/archive/001-count-json-cli/review/wave-1.cycle2.md",
+  "final_review_artifact": ".project/archive/001-count-json-cli/review/FINAL.md"
+}

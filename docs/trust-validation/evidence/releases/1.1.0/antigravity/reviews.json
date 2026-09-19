@@ -1,0 +1,11 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "antigravity",
+  "run_id": "da06f041-4863-4104-8175-735fc36624a3",
+  "result": "pass",
+  "step": "reviews",
+  "command": "python3 /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/antigravity-rerun/quick/repo/.agents/skills/gsd-path/scripts/workflow_run.py prepare-final --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/antigravity-rerun/quick/repo --expected-head 0ef4a03228e71be9f864ed4b3b2ac8a8044b5633 | tee /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/antigravity-rerun/quick/repo/.git/gsd-path-evidence/prepare-final-repeat.json",
+  "output": "# Review \u2014 wave 1, cycle 1\n\nReviewed HEAD: 9a555a1dca1be91d8837a6e70a63abcdedf05acd\nReview scope: final\n\nWave verdict: pass\n# Final Review \u2014 count.py widget counter CLI\n\nReviewed HEAD: 0ef4a03228e71be9f864ed4b3b2ac8a8044b5633\nOverall verdict: pass\n\n## Success criteria",
+  "wave_review_artifact": ".project/archive/001-widget-counter/review/wave-1.cycle1.md",
+  "final_review_artifact": ".project/archive/001-widget-counter/review/FINAL.md"
+}

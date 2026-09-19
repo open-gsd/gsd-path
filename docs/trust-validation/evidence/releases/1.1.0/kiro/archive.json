@@ -1,0 +1,11 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "kiro",
+  "run_id": "9693c9a4-40ad-4411-a996-ee202d183368",
+  "result": "pass",
+  "step": "archive",
+  "command": "python3 -B .gsd-path/runtime/archive_milestone.py validate \\\n  --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/kiro-rerun-2/quick/repo > .git/gsd-path-evidence/archive-validation.json 2> .git/gsd-path-evidence/archive-validation.stderr\necho \"exit=$?\"\necho \"---stderr---\"; cat .git/gsd-path-evidence/archive-validation.stderr\necho \"---validation JSON---\"; cat .git/gsd-path-evidence/archive-validation.json",
+  "output": "{\"archive\": \".project/archive/001-count-json-cli\", \"commit\": \"bd59ca5059f7a516163de33696d3f089650214f5\"}\n",
+  "archive_path": ".project/archive/001-count-json-cli",
+  "validation_exit_code": 0
+}

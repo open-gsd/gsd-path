@@ -1,0 +1,11 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "copilot",
+  "run_id": "a534979c-9470-47e2-aefc-7f08ea0b96c5",
+  "result": "pass",
+  "step": "reviews",
+  "command": "cd /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/copilot-rerun/quick/repo\npython3 -B .github/skills/gsd-path/scripts/workflow_run.py prepare-final --repo \"$(pwd)\" --expected-head c30751e0403aeef213ab535c8e097bc8db27f3c4 2>&1 | tee .git/gsd-path-evidence/prepare-final-repeat.json",
+  "output": "# Review \u2014 wave 1, cycle 1\n\nWave verdict: pass\nCycle: 1\nDepth: full\nTasks reviewed: 1\n# Final Review \u2014 reused full wave\n\nReviewed HEAD: c30751e0403aeef213ab535c8e097bc8db27f3c4\nOverall verdict: pass\nSource review: .project/review/wave-1.cycle1.md\nSource commit: 35ab5f1eb5c718f7ff474f4131e934a212813967",
+  "wave_review_artifact": ".project/archive/001-count-json-output/review/wave-1.cycle1.md",
+  "final_review_artifact": ".project/archive/001-count-json-output/review/FINAL.md"
+}

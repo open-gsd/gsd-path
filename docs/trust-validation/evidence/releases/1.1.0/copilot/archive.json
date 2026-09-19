@@ -1,0 +1,11 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "copilot",
+  "run_id": "a534979c-9470-47e2-aefc-7f08ea0b96c5",
+  "result": "pass",
+  "step": "archive",
+  "command": "cd /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/copilot-rerun/quick/repo\npython3 -B .github/skills/gsd-path/scripts/archive_milestone.py validate --repo \"$(pwd)\" 2>&1 | tee .git/gsd-path-evidence/archive-validation.json",
+  "output": "{\"archive\": \".project/archive/001-count-json-output\", \"commit\": \"508498a284f32ad3ac62974a2fca8039a1fc0fc3\"}\n",
+  "archive_path": ".project/archive/001-count-json-output",
+  "validation_exit_code": 0
+}

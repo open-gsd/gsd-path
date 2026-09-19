@@ -1,0 +1,11 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "cursor",
+  "run_id": "35f40208-968c-4847-ad0d-737bf834c205",
+  "result": "pass",
+  "step": "reviews",
+  "command": "python3 <<'PY'\nimport hashlib, json, subprocess, pathlib\nrepo = pathlib.Path('/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/cursor-rerun-2/quick/repo')\nhead = '8ab4c8704071ed0027184ad6b1db10a28877ff07'\nledger = repo / '.project/build/verify-ledger.jsonl'\nbefore_bytes = ledger.read_bytes()\nbefore_sha = hashlib.sha256(before_bytes).hexdigest()\nbefore_lines = [ln for ln in before_bytes.decode().splitlines() if ln.strip()]\nscript = repo / '.cursor/skills/gsd-path/scripts/workflow_run.py'\nproc = subprocess.run(\n    ['python3', '-B', str(script), 'prepare-final', '--repo', str(repo), '--expected-head', head],\n    capture_output=True, text=True, check=True,\n)\npayload = json.loads(proc.stdout)\nafter_bytes = ledger.read_bytes()\nafter_sha = hashlib.sha256(after_bytes).hexdigest()\nafter_lines = [ln for ln in after_bytes.decode().splitlines() if ln.strip()]\nlean = payload['steps'][-1]['result']\nout = repo / '.git/gsd-path-evidence/prepare-final-repeat.json'\nout.parent.mkdir(parents=True, exist_ok=True)\nout.write_text(json.dumps(payload, indent=2) + '\\n')\nproof = {\n    'head': head,\n    'ledger_before_sha256': before_sha,\n    'ledger_after_sha256': after_sha,\n    'ledger_unchanged': before_sha == after_sha,\n    'ledger_entries_before': len(before_lines),\n    'ledger_entries_after': len(after_lines),\n    'verification_reused': lean['verification'].get('reused'),\n    'final_reused': lean['final'].get('reused'),\n    'prepare_status': payload.get('status'),\n}\nprint(json.dumps(proof, indent=2))\nPY",
+  "output": "# Review \u2014 wave 1, cycle 1\n\nReviewed HEAD: 23974c86cff74672da8c3313932479d97f33d834\nReview scope: final\n\nWave verdict: pass\n# Final Review \u2014 reused full wave\n\nReviewed HEAD: 8ab4c8704071ed0027184ad6b1db10a28877ff07\nOverall verdict: pass\nSource review: .project/review/wave-1.cycle1.md\nSource commit: 23974c86cff74672da8c3313932479d97f33d834",
+  "wave_review_artifact": ".project/archive/001-count-json-cli/review/wave-1.cycle1.md",
+  "final_review_artifact": ".project/archive/001-count-json-cli/review/FINAL.md"
+}

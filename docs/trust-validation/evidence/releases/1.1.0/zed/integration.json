@@ -1,0 +1,17 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "zed",
+  "run_id": "run-20260919T022432997644Z",
+  "result": "pass",
+  "step": "integration",
+  "command": "python3 .gsd-path/runtime/archive_milestone.py integrate --repo \"/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/zed/quick/repo\" --slug count-py-cli-hardening > .git/gsd-path-evidence/integration.json 2>&1; echo \"exit: $?\"; cat .git/gsd-path-evidence/integration.json",
+  "output": "{\"archive\": \".project/archive/001-count-py-cli-hardening\", \"base\": \"efe108430d18637960bec4f5767fd29c35ad301c\", \"commit\": \"38567d854826d568fedc9158b675f235b49b3147\", \"integrate\": \"efe108430d18637960bec4f5767fd29c35ad301c\", \"landing\": \"efe108430d18637960bec4f5767fd29c35ad301c\", \"mode\": \"direct\", \"tag\": \"milestone/001-count-py-cli-hardening\"}\n",
+  "fixture_bundle": "zed/fixture.bundle",
+  "run_manifest": ".project/archive/001-count-py-cli-hardening/trust-run-manifest.json",
+  "ship_commit": "38567d854826d568fedc9158b675f235b49b3147",
+  "bound_branch": "gsd-path/M001",
+  "default_branch": "main",
+  "pre_integration_default_commit": "b09bb91619e922af3b038dd0957c8dfc1c9fea12",
+  "integration_commit": "efe108430d18637960bec4f5767fd29c35ad301c",
+  "milestone_tag": "milestone/001-count-py-cli-hardening"
+}

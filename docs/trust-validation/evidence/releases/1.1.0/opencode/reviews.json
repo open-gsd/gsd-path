@@ -1,0 +1,11 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "opencode",
+  "run_id": "ses_f4920b5f1ffenVrhE7IY4BoqUl",
+  "result": "pass",
+  "step": "reviews",
+  "command": "cp /tmp/prepare-final-repeat.json /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/opencode-rerun/quick/repo/.git/gsd-path-evidence/prepare-final-repeat.json && python3 -c \"import json; json.load(open('/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/opencode-rerun/quick/repo/.git/gsd-path-evidence/prepare-final-repeat.json')); print('valid JSON saved')\" && wc -l < /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/opencode-rerun/quick/repo/.project/build/verify-ledger.jsonl && shasum -a 256 /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/opencode-rerun/quick/repo/.project/build/verify-ledger.jsonl /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/opencode-rerun/quick/repo/.project/review/final-gap-1.md /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/opencode-rerun/quick/repo/.project/review/FINAL.md",
+  "output": "# Review \u2014 wave 1, cycle 1\n\nReviewed HEAD: 99fa1efeb8f0160c3d505ba43ee1532fd42c7387\nReview scope: final\n\nWave verdict: pass\n# Final Review \u2014 reused full wave\n\nReviewed HEAD: cadf8a0ed878e122a0d8f681ee70de00acf4c2cb\nOverall verdict: pass\nSource review: .project/review/wave-1.cycle1.md\nSource commit: 99fa1efeb8f0160c3d505ba43ee1532fd42c7387",
+  "wave_review_artifact": ".project/archive/001-count-json-cli/review/wave-1.cycle1.md",
+  "final_review_artifact": ".project/archive/001-count-json-cli/review/FINAL.md"
+}

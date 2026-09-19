@@ -1,0 +1,17 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "kimi",
+  "run_id": "session_57557689-4363-4ca0-83a0-9f25e55fdfd0",
+  "result": "pass",
+  "step": "task-landing",
+  "command": "REPO=/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/kimi/quick/repo; python3 \"$REPO/.kimi-code/skills/gsd-path/scripts/dispatch_driver.py\" finish --repo \"$REPO\" --task-id T001 2>&1 | tail -40",
+  "output": "commit a2b06b63d20cfa747162965e3fa0ba1a19a49422\nAuthor:     Feature Evaluation <evaluation@example.invalid>\nAuthorDate: Fri Sep 18 18:28:24 2026 -0500\nCommit:     Feature Evaluation <evaluation@example.invalid>\nCommitDate: Fri Sep 18 18:28:24 2026 -0500\n\n    T001: Extend count.py with --json, signed-int validation, and real-CLI tests\n    \n    Task: .project/tasks/T001-count-json-cli.md\n    Base: f215bc8b2770f3d061da08916be93d5b71c1e399\n    Files:\n    - .project/tasks/T001-count-json-cli.md\n    - count.py\n    - test_count.py\n\n .project/tasks/T001-count-json-cli.md | 31 ++++++++++++++++++---\n count.py                              | 30 +++++++++++++++++++--\n test_count.py                         | 51 +++++++++++++++++++++++++++++++++++\n 3 files changed, 107 insertions(+), 5 deletions(-)",
+  "fixture_bundle": "kimi/fixture.bundle",
+  "run_manifest": ".project/archive/001-count-json/trust-run-manifest.json",
+  "fixture_base_commit": "f215bc8b2770f3d061da08916be93d5b71c1e399",
+  "task_branch": "gsd-path-verify/task-t001-verify",
+  "task_worktree": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/kimi/quick/repo.gsd-path/verify/task-t001-verify",
+  "landing_commit": "a2b06b63d20cfa747162965e3fa0ba1a19a49422",
+  "isolation_mode": "serial",
+  "isolation_note": "A one-task wave uses the helper's serial mode: the coder worked on the bound branch in the primary worktree at the recorded base, and the named branch and worktree are the isolated Task Verify sidecar created for this task and retired after landing."
+}

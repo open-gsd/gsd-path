@@ -1,0 +1,14 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "kiro",
+  "run_id": "9693c9a4-40ad-4411-a996-ee202d183368",
+  "result": "pass",
+  "step": "install",
+  "command": "node /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/kiro-rerun-2/plugin/scripts/install.mjs --kiro --local --project /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/kiro-rerun-2/quick/repo --hooks --no-color",
+  "output": "\u2726 GSD Path installer v1.1.0\n  project install into /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/kiro-rerun-2/quick/repo\n\n  \u2713 kiro: installed 16 skills to /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/kiro-rerun-2/quick/repo/.kiro/skills\n  \u2713 project: copied AGENTS.md, WORKFLOW.md, .gsd-path/status_runtime.py, .gsd-path/runtime/pipeline_state.py, .gsd-path/runtime/roadmap.py, .gsd-path/runtime/check_handoffs.py, .gsd-path/runtime/check_task_briefs.py, .gsd-path/runtime/isolation.py, .gsd-path/runtime/discussion_records.py, .gsd-path/runtime/pipeline_git.py, .gsd-path/runtime/promote_lookahead.py, .gsd-path/runtime/detect_project.py, .gsd-path/runtime/pipeline_diagnose.py, .gsd-path/runtime/pipeline_undo.py, .gsd-path/runtime/archive_milestone.py, .gsd-path/runtime/review_panel.py, .gsd-path/runtime/_common.py, .gsd-path/runtime/build_recovery.py, .gsd-path/runtime/state_checkpoint.py, .gsd-path/runtime/state_promote.py, .gsd-path/runtime/discussion_validate.py, .gsd-path/runtime/integration.py, .gsd-path/guard_hook.py, .gsd-path/git_guard.py, .git/hooks/pre-commit, .git/hooks/commit-msg, .git/hooks/pre-push to /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/kiro-rerun-2/quick/repo\n  ! Kiro discovers /gsd-path but has no documented hard explicit-only skill switch; invoke the skill explicitly.\n\n  Done. Restart active agent sessions, then invoke the router explicitly.",
+  "host_version": "kiro-cli 2.21.2",
+  "install_root": ".kiro/skills",
+  "candidate": "af0b082964510c471798826d7e2e05617d8d6dc3",
+  "package_version": "1.1.0",
+  "exit_code": 0
+}

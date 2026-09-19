@@ -1,0 +1,11 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "zed",
+  "run_id": "run-20260919T022432997644Z",
+  "result": "pass",
+  "step": "task-verify",
+  "command": "python3 test_count.py",
+  "output": "{\"command\": \"python3 test_count.py\", \"commit\": \"5a98403125ca3b609a7aba7fcb91a97876ab19a5\", \"execution\": {\"evidence\": \"/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/zed/quick/repo/.git/gsd-path/dispatch/gsd-path-M001/T001/manual-2026-09-19T021011+0000/verify.json\", \"exit_code\": 0, \"location\": \"sidecar gsd-path-verify/task-t001-verify\", \"stderr\": \"..........\\n----------------------------------------------------------------------\\nRan 10 tests in 0.159s\\n\\nOK\\n\", \"stdout\": \"\", \"worktree\": \"/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/zed/quick/repo\"}, \"recorded_at\": \"2026-09-19T02:10:12+00:00\", \"result\": \"pass\", \"schema\": \"gsd-path/verify-ledger/v2\"}\n{\"command\": \"python3 -m unittest test_count -v\", \"commit\": \"588730ca8729ecfcceb8239d5a09a2838bc6072d\", \"execution\": {\"branch\": \"gsd-path-verify/project-verify\", \"exit_code\": 0, \"stderr\": \"test_invalid_non_integer_count (test_count.TestCountCli) ... ok\\ntest_json_after_count (test_count.TestCountCli) ... ok\\ntest_json_before_count (test_count.TestCountCli) ... ok\\ntest_json_no_count (test_count.TestCountCli) ... ok\\ntest_negative_count (test_count.TestCountCli) ... ok\\ntest_no_args_defaults_to_zero (test_count.TestCountCli) ... ok\\ntest_positive_count (test_count.TestCountCli) ... ok\\ntest_too_many_positional_args (test_count.TestCountCli) ... ok\\ntest_unrecognized_flag (test_count.TestCountCli) ... ok\\ntest_zero_count (test_count.TestCountCli) ... ok\\n\\n----------------------------------------------------------------------\\nRan 10 tests in 0.169s\\n\\nOK\\n\", \"stdout\": \"\", \"worktree\": \"/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/zed/quick/repo.gsd-path/verify/project-verify\"}, \"recorded_at\": \"2026-09-19T02:22:52+00:00\", \"result\": \"pass\", \"schema\": \"gsd-path/verify-ledger/v2\"}\n",
+  "verify_artifact": ".project/archive/001-count-py-cli-hardening/build/verify-ledger.jsonl",
+  "verify_exit_code": 0
+}

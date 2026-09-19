@@ -1,0 +1,17 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "zed",
+  "run_id": "run-20260919T022432997644Z",
+  "result": "pass",
+  "step": "task-landing",
+  "command": "python3 -B .agents/skills/gsd-path/scripts/dispatch_driver.py finish --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/zed/quick/repo --task-id T001",
+  "output": "commit 5a98403125ca3b609a7aba7fcb91a97876ab19a5\nAuthor:     Feature Evaluation <evaluation@example.invalid>\nAuthorDate: Fri Sep 18 21:10:11 2026 -0500\nCommit:     Feature Evaluation <evaluation@example.invalid>\nCommitDate: Fri Sep 18 21:10:11 2026 -0500\n\n    T001: Harden count.py CLI (--json, validation) with real-CLI tests\n    \n    Task: .project/tasks/T001-harden-count-cli.md\n    Base: 063af9a8e5af41a7c431340342de2966b7443f30\n    Files:\n    - .project/tasks/T001-harden-count-cli.md\n    - count.py\n    - test_count.py\n\n .project/tasks/T001-harden-count-cli.md | 27 ++++++++++--\n count.py                                | 46 +++++++++++++++++++-\n test_count.py                           | 74 +++++++++++++++++++++++++++++++++\n 3 files changed, 142 insertions(+), 5 deletions(-)",
+  "fixture_bundle": "zed/fixture.bundle",
+  "run_manifest": ".project/archive/001-count-py-cli-hardening/trust-run-manifest.json",
+  "fixture_base_commit": "063af9a8e5af41a7c431340342de2966b7443f30",
+  "task_branch": "gsd-path-verify/task-t001-verify",
+  "task_worktree": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/zed/quick/repo.gsd-path/verify/task-t001-verify",
+  "landing_commit": "5a98403125ca3b609a7aba7fcb91a97876ab19a5",
+  "isolation_mode": "serial",
+  "isolation_note": "A one-task wave uses the helper's serial mode: the coder worked on the bound branch in the primary worktree at the recorded base, and the named branch and worktree are the isolated Task Verify sidecar created for this task and retired after landing."
+}
