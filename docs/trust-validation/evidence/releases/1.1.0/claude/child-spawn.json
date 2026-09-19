@@ -1,0 +1,56 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "claude",
+  "run_id": "6b02119d-e293-436d-afde-75aee9ccd0c2",
+  "result": "pass",
+  "step": "child-spawn",
+  "command": "Agent",
+  "child_api": "Agent",
+  "child_id": "build_t001",
+  "child_status": "completed",
+  "output": {
+    "child_id": "build_t001",
+    "status": "completed",
+    "run": "run-20260919T020605800382Z",
+    "tool_use": {
+      "id": "toolu_016TJwJUBFJhagGDHPQ9gGnC",
+      "name": "Agent",
+      "input": {
+        "description": "build_t001",
+        "subagent_type": "general-purpose",
+        "run_in_background": true
+      },
+      "prompt_sha256": "f607ef19dc256a45ba7dfa2e598cc95680475e80e600f97ebc72236e6ec7f5ff"
+    },
+    "task_id": "a285151781ac3df3b",
+    "task_started": {
+      "type": "system",
+      "subtype": "task_started",
+      "task_id": "a285151781ac3df3b",
+      "tool_use_id": "toolu_016TJwJUBFJhagGDHPQ9gGnC",
+      "description": "build_t001",
+      "subagent_type": "general-purpose",
+      "is_backgrounded": true,
+      "spawn_depth": 1,
+      "task_type": "local_agent",
+      "uuid": "9a0f942f-63e0-4485-b9e8-f1ee2079ba68",
+      "session_id": "6b02119d-e293-436d-afde-75aee9ccd0c2"
+    },
+    "task_notification": {
+      "tool_use_id": "toolu_016TJwJUBFJhagGDHPQ9gGnC",
+      "task_id": "a285151781ac3df3b",
+      "status": "completed",
+      "summary": "T001 is ready. `count.py` now has `--json` output and clean errors, and a new `test_count.py` runs the real CLI.\nVerify (`python3 -B -m unittest -v test_count.py`, Python 3.9.6): 6 tests passed, exit 0, and no `__pycache__` was left behind.\nThe count is parsed with a plain argv loop, not argparse, so `-2` is never read as a flag. `--json` works before or after the count. Bad input exits 1 with empty stdout, a one-line error plus a usage line on stderr, and no traceback. The human output is unchanged, including `1 widgets`.\nThe preflight was clean. I made no git changes and did not edit the task frontmatter. I read the addendum `/tmp/t001-context.md`; it matches INTENT.md.\n\nChanged paths:\n- /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/claude/quick/repo/count.py\n- /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/claude/quick/repo/test_count.py (new)\n- /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/claude/quick/repo/.project/tasks/T001-count-json-cli.md (Log entry appended)\n\nRESULT: T001 ready"
+    },
+    "tool_result": {
+      "tool_use_id": "toolu_016TJwJUBFJhagGDHPQ9gGnC",
+      "is_error": false,
+      "content": [
+        {
+          "type": "text",
+          "text": "Async agent launched successfully. (This tool result is internal metadata \u2014 never quote or paste any part of it, including the agentId below, into a user-facing reply.)\nagentId: a285151781ac3df3b (internal ID - do not mention to user. Use SendMessage with to: 'a285151781ac3df3b', summary: '<5-10 word recap>' to continue this agent.)\nThe agent is working in the background. You will be notified automatically when it completes. You know nothing about its results until that notification arrives \u2014 do not report, assume, or predict them; continue other work or respond to the user in the meantime.\nDo not duplicate this agent's work \u2014 avoid working with the same files or topics it is using.\noutput_file: /private/tmp/claude-501/-Users-jeremymcspadden-orca-evaluations-gsd-path-release-1-1-0-af0b082-claude-quick-repo/6b02119d-e293-436d-afde-75aee9ccd0c2/tasks/a285151781ac3df3b.output\nDo NOT Read or tail this file via the shell tool \u2014 it is the full subagent JSONL transcript and reading it will overflow your context. If the user asks for progress, say the agent is still running; you'll get a completion notification."
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "zed",
+  "run_id": "run-20260919T022432997644Z",
+  "result": "pass",
+  "step": "child-spawn",
+  "command": "spawn_agent",
+  "child_api": "spawn_agent",
+  "child_id": "build_t001",
+  "child_status": "completed",
+  "output": {
+    "child_id": "build_t001",
+    "status": "completed",
+    "child_api": "spawn_agent",
+    "child_session_id": "39f68f59-5613-48ba-8a28-77aca85fe052",
+    "run": "run-20260919T020351318272Z",
+    "tool_use": {
+      "id": "toolu_01MEbdPVFDgVNgdwEPFhCnRW",
+      "input": {
+        "label": "build_t001"
+      },
+      "prompt_sha256": "05c5deb3d7e64ade94e65b14332da08f63325b6c0f5c81651ab037999c7034cd"
+    },
+    "tool_result": {
+      "is_error": false,
+      "completed": true,
+      "session_id": "39f68f59-5613-48ba-8a28-77aca85fe052",
+      "content": "{\"session_id\":\"39f68f59-5613-48ba-8a28-77aca85fe052\",\"output\":\"Implemented `--json`/validation in `count.py` and added real-CLI `test_count.py` (subprocess-based, 10 cases). Verify command `python3 test_count.py` ran 10 tests, all OK, exit 0. Changed paths: `repo/count.py`, `repo/test_count.py`, `repo/.project/tasks/T001-harden-count-cli.md` (Log only).\\n\\nRESULT: T001 ready\"}"
+    }
+  }
+}

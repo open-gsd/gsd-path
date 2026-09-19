@@ -1,0 +1,17 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "kiro",
+  "run_id": "9693c9a4-40ad-4411-a996-ee202d183368",
+  "result": "pass",
+  "step": "task-landing",
+  "command": "python3 -B .kiro/skills/gsd-path-build/scripts/dispatch_driver.py finish \\\n  --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/kiro-rerun-2/quick/repo \\\n  --task-id T001 2>&1",
+  "output": "commit fe52fd8e4704af90ae2816ae6dd40a997bd5b6ea\nAuthor:     Feature Evaluation <evaluation@example.invalid>\nAuthorDate: Fri Sep 18 21:47:20 2026 -0500\nCommit:     Feature Evaluation <evaluation@example.invalid>\nCommitDate: Fri Sep 18 21:47:20 2026 -0500\n\n    T001: Rewrite count.py into a signed-integer + --json CLI with useful error handling and add real-CLI tests\n    \n    Task: .project/tasks/T001-count-json-cli.md\n    Base: 5869e5b033d0959cbace43d05d90419cb11c1c22\n    Files:\n    - .project/tasks/T001-count-json-cli.md\n    - count.py\n    - test_count_cli.py\n\n .project/tasks/T001-count-json-cli.md | 25 +++++++--\n count.py                              | 46 +++++++++++++++-\n test_count_cli.py                     | 98 +++++++++++++++++++++++++++++++++++\n 3 files changed, 164 insertions(+), 5 deletions(-)",
+  "fixture_bundle": "kiro/fixture.bundle",
+  "run_manifest": ".project/archive/001-count-json-cli/trust-run-manifest.json",
+  "fixture_base_commit": "5869e5b033d0959cbace43d05d90419cb11c1c22",
+  "task_branch": "gsd-path-verify/task-t001-verify",
+  "task_worktree": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/kiro-rerun-2/quick/repo.gsd-path/verify/task-t001-verify",
+  "landing_commit": "fe52fd8e4704af90ae2816ae6dd40a997bd5b6ea",
+  "isolation_mode": "serial",
+  "isolation_note": "A one-task wave uses the helper's serial mode: the coder worked on the bound branch in the primary worktree at the recorded base, and the named branch and worktree are the isolated Task Verify sidecar created for this task and retired after landing."
+}

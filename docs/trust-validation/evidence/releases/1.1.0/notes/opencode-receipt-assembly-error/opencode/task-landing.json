@@ -1,0 +1,17 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "opencode",
+  "run_id": "ses_f4939157dffesSZVjs2mZ3y58G",
+  "result": "pass",
+  "step": "task-landing",
+  "command": "python3 /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/opencode/plugin/tests/evaluate_codex.py activity --arm /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/opencode/quick --category verification -- python3 -B .opencode/skills/gsd-path/scripts/dispatch_driver.py finish --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/opencode/quick/repo --task-id T001 2>&1 | tail -6",
+  "output": "commit 6f244f026dbff12ca1f046a01f655eb9ed0fa6b3\nAuthor:     Feature Evaluation <evaluation@example.invalid>\nAuthorDate: Fri Sep 18 18:21:26 2026 -0500\nCommit:     Feature Evaluation <evaluation@example.invalid>\nCommitDate: Fri Sep 18 18:21:26 2026 -0500\n\n    T001: Extend count.py with signed counts, --json mode, validated input, and real-CLI tests\n    \n    Task: .project/tasks/T001-count-cli-json-behavior.md\n    Base: c9a96c6a51389160f25af6dfae6572e270e7da86\n    Files:\n    - .project/tasks/T001-count-cli-json-behavior.md\n    - count.py\n    - tests/test_count_cli.py\n\n .project/tasks/T001-count-cli-json-behavior.md | 30 ++++++++++--\n count.py                                       | 46 ++++++++++++++++++-\n tests/test_count_cli.py                        | 63 ++++++++++++++++++++++++++\n 3 files changed, 132 insertions(+), 7 deletions(-)",
+  "fixture_bundle": "opencode/fixture.bundle",
+  "run_manifest": ".project/archive/001-count-cli-json/trust-run-manifest.json",
+  "fixture_base_commit": "c9a96c6a51389160f25af6dfae6572e270e7da86",
+  "task_branch": "gsd-path/M001",
+  "task_worktree": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/opencode/quick/repo.gsd-path/verify/task-t001-verify",
+  "landing_commit": "6f244f026dbff12ca1f046a01f655eb9ed0fa6b3",
+  "isolation_mode": "serial",
+  "isolation_note": "A one-task wave uses the helper's serial mode: the coder worked on the bound branch in the primary worktree at the recorded base, and the named branch and worktree are the isolated Task Verify sidecar created for this task and retired after landing."
+}

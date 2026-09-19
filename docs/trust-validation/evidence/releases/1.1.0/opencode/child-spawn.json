@@ -1,0 +1,45 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "opencode",
+  "run_id": "ses_f4920b5f1ffenVrhE7IY4BoqUl",
+  "result": "pass",
+  "step": "child-spawn",
+  "command": "Task",
+  "child_api": "Task",
+  "child_id": "build_T001",
+  "child_status": "completed",
+  "output": {
+    "child_id": "build_T001",
+    "status": "completed",
+    "child_api": "Task",
+    "run": "run-20260919T020721462076Z",
+    "parent_session": "ses_f4920b5f1ffenVrhE7IY4BoqUl",
+    "call_id": "call_1f1c838959a640b89453eb83",
+    "task_state": "completed",
+    "child_session": "ses_f4893685affeh94S7KBiF717ww",
+    "input": {
+      "description": "build_T001",
+      "subagent_type": "general"
+    },
+    "prompt_sha256": "7f8b12e88518d08be2eb8f3f0ecfc912933481f85d8d67533f2266cd678fadcd",
+    "output": "<task id=\"ses_f4893685affeh94S7KBiF717ww\" state=\"completed\">\n<task_result>\nready \u2014 changed `count.py` and `test_count.py` (plus the append-only Log entry in `.project/tasks/T001-count-json-cli.md`); Verify `python3 test_count.py` passed (12/12 OK, and `python3 -m unittest -v test_count.py` also 12/12 OK).\n\nRESULT: T001 ready\n</task_result>\n</task>",
+    "metadata": {
+      "parentSessionId": "ses_f4920b5f1ffenVrhE7IY4BoqUl",
+      "sessionId": "ses_f4893685affeh94S7KBiF717ww",
+      "model": {
+        "modelID": "glm-5.3",
+        "providerID": "zai-coding-plan"
+      },
+      "truncated": false
+    },
+    "session_row": {
+      "id": "ses_f4893685affeh94S7KBiF717ww",
+      "parent_id": "ses_f4920b5f1ffenVrhE7IY4BoqUl",
+      "title": "build_T001 (@general subagent)",
+      "agent": "general",
+      "model": "{\"id\":\"glm-5.3\",\"providerID\":\"zai-coding-plan\",\"variant\":\"default\"}",
+      "time_created": 1789783742373,
+      "time_updated": 1789783810056
+    }
+  }
+}

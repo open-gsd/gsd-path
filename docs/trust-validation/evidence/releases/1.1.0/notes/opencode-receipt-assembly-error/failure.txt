@@ -1,0 +1,12 @@
+Traceback (most recent call last):
+  File "/Users/jeremymcspadden/orca/workspaces/gsd-path/release-1-1-0-evidence/docs/trust-validation/evidence/releases/1.0.0/codex/release_receipt.py", line 401, in <module>
+    raise SystemExit(main())
+  File "/Users/jeremymcspadden/orca/workspaces/gsd-path/release-1-1-0-evidence/docs/trust-validation/evidence/releases/1.0.0/codex/release_receipt.py", line 397, in main
+    return phase_manifest(a) if a.phase == "manifest" else phase_receipt(a)
+  File "/Users/jeremymcspadden/orca/workspaces/gsd-path/release-1-1-0-evidence/docs/trust-validation/evidence/releases/1.0.0/codex/release_receipt.py", line 368, in phase_receipt
+    cte._validate_receipt(receipt, HOST, version, GUARD_TIER, [CHILD_API], manifest["candidate"])
+  File "/Users/jeremymcspadden/orca/workspaces/gsd-path/release-1-1-0-evidence/scripts/check_trust_evidence.py", line 826, in _validate_receipt
+    artifacts, identity = _validate_evidence_details(
+  File "/Users/jeremymcspadden/orca/workspaces/gsd-path/release-1-1-0-evidence/scripts/check_trust_evidence.py", line 733, in _validate_evidence_details
+    raise EvidenceError(f"{path}: task worktree was not retired")
+scripts.check_trust_evidence.EvidenceError: /Users/jeremymcspadden/orca/workspaces/gsd-path/release-1-1-0-evidence/docs/trust-validation/evidence/releases/1.1.0/opencode.md: task worktree was not retired

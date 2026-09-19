@@ -1,0 +1,44 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "antigravity",
+  "run_id": "da06f041-4863-4104-8175-735fc36624a3",
+  "result": "pass",
+  "step": "child-spawn",
+  "command": "invoke_subagent",
+  "child_api": "invoke_subagent",
+  "child_id": "build_t001",
+  "child_status": "completed",
+  "output": {
+    "child_id": "build_t001",
+    "status": "completed",
+    "child_api": "invoke_subagent",
+    "child_conversation_id": "20c7a1ec-3ac8-41f4-b047-2dd7cc3e7ba9",
+    "spawn": {
+      "run": "run-20260919T020351316063Z",
+      "step_index": 228,
+      "subagent": {
+        "type_name": "self",
+        "role": "build_t001",
+        "conversation_id": "20c7a1ec-3ac8-41f4-b047-2dd7cc3e7ba9",
+        "log_uri": "file:///Users/jeremymcspadden/.gemini/antigravity-cli/brain/20c7a1ec-3ac8-41f4-b047-2dd7cc3e7ba9/.system_generated/logs/transcript.jsonl"
+      }
+    },
+    "listing": {
+      "run": "run-20260919T022850977096Z",
+      "step_index": 421,
+      "entry": {
+        "role": "build_t001",
+        "type": "self",
+        "conversationId": "20c7a1ec-3ac8-41f4-b047-2dd7cc3e7ba9",
+        "transcript": "file:///Users/jeremymcspadden/.gemini/antigravity-cli/brain/20c7a1ec-3ac8-41f4-b047-2dd7cc3e7ba9/.system_generated/logs/transcript.jsonl",
+        "state": "idle"
+      }
+    },
+    "transcript": {
+      "path": "/Users/jeremymcspadden/.gemini/antigravity-cli/brain/20c7a1ec-3ac8-41f4-b047-2dd7cc3e7ba9/.system_generated/logs/transcript.jsonl",
+      "steps": 42,
+      "last_type": "PLANNER_RESPONSE",
+      "final_content": "Task: [T001](file:///Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/antigravity-rerun/quick/repo/.project/tasks/T001-widget-counter.md)\nStatus: ready\nVerify: `python3 test_count.py` (13 tests passed, exit code 0)\nChanged files:\n- [count.py](file:///Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/antigravity-rerun/quick/repo/count.py)\n- [test_count.py](file:///Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/antigravity-rerun/quick/repo/test_count.py)\n- [.project/tasks/T001-widget-counter.md](file:///Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/antigravity-rerun/quick/repo/.project/tasks/T001-widget-counter.md)\n\nRESULT: T001 ready"
+    }
+  }
+}

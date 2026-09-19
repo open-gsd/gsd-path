@@ -1,0 +1,11 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "kimi",
+  "run_id": "session_57557689-4363-4ca0-83a0-9f25e55fdfd0",
+  "result": "pass",
+  "step": "reviews",
+  "command": "REPO=/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/kimi/quick/repo; python3 \"$REPO/.kimi-code/skills/gsd-path/scripts/workflow_run.py\" prepare-final --repo \"$REPO\" --expected-head dd0897b8c690ddcb9fa6dbb3115dc979badd2ae2 > \"$REPO/.git/gsd-path-evidence/prepare-final-repeat.json\"; echo \"exit=$?\"; python3 -c \"\nimport json\nd=json.load(open('$REPO/.git/gsd-path-evidence/prepare-final-repeat.json'))\nprint('status:', d['status'])\nfor s in d['steps']:\n    r=s.get('result') or {}\n    if s['script']=='lean_verification.py':\n        print('final:', json.dumps(r['final']))\n        print('verification.reused:', r['verification']['reused'], 'passed:', r['verification']['passed'])\n        print('next:', r['next'])\n\"; wc -l \"$REPO/.project/build/verify-ledger.jsonl\"; shasum -a 256 \"$REPO/.project/build/verify-ledger.jsonl\"; diff /tmp/ledger-before.jsonl \"$REPO/.project/build/verify-ledger.jsonl\" && echo \"LEDGER IDENTICAL\"",
+  "output": "# Review \u2014 wave 1, cycle 1\n\nReviewed HEAD: a2b06b63d20cfa747162965e3fa0ba1a19a49422\nReview scope: final\n\nWave verdict: pass\n# Final Review \u2014 reused full wave\n\nReviewed HEAD: dd0897b8c690ddcb9fa6dbb3115dc979badd2ae2\nOverall verdict: pass\nSource review: .project/review/wave-1.cycle1.md\nSource commit: a2b06b63d20cfa747162965e3fa0ba1a19a49422",
+  "wave_review_artifact": ".project/archive/001-count-json/review/wave-1.cycle1.md",
+  "final_review_artifact": ".project/archive/001-count-json/review/FINAL.md"
+}

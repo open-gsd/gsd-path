@@ -1,0 +1,11 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "kimi",
+  "run_id": "session_57557689-4363-4ca0-83a0-9f25e55fdfd0",
+  "result": "pass",
+  "step": "task-verify",
+  "command": "python3 test_count.py -v",
+  "output": "{\"command\": \"python3 test_count.py -v\", \"commit\": \"a2b06b63d20cfa747162965e3fa0ba1a19a49422\", \"execution\": {\"evidence\": \"/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/kimi/quick/repo/.git/gsd-path/dispatch/gsd-path-M001/T001/manual-2026-09-18T232824+0000/verify.json\", \"exit_code\": 0, \"location\": \"sidecar gsd-path-verify/task-t001-verify\", \"stderr\": \"test_default_prints_zero_widgets (__main__.CountCliTests) ... ok\\ntest_invalid_input_errors_without_traceback (__main__.CountCliTests) ... ok\\ntest_json_default (__main__.CountCliTests) ... ok\\ntest_json_flag_before_or_after_count (__main__.CountCliTests) ... ok\\ntest_signed_integer_counts (__main__.CountCliTests) ... ok\\n\\n----------------------------------------------------------------------\\nRan 5 tests in 0.116s\\n\\nOK\\n\", \"stdout\": \"\", \"worktree\": \"/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/kimi/quick/repo\"}, \"recorded_at\": \"2026-09-18T23:28:25+00:00\", \"result\": \"pass\", \"schema\": \"gsd-path/verify-ledger/v2\"}\n{\"command\": \"python3 -m unittest discover -v\", \"commit\": \"dd0897b8c690ddcb9fa6dbb3115dc979badd2ae2\", \"execution\": {\"branch\": \"gsd-path-verify/project-verify\", \"exit_code\": 0, \"stderr\": \"test_default_prints_zero_widgets (test_count.CountCliTests) ... ok\\ntest_invalid_input_errors_without_traceback (test_count.CountCliTests) ... ok\\ntest_json_default (test_count.CountCliTests) ... ok\\ntest_json_flag_before_or_after_count (test_count.CountCliTests) ... ok\\ntest_signed_integer_counts (test_count.CountCliTests) ... ok\\n\\n----------------------------------------------------------------------\\nRan 5 tests in 0.113s\\n\\nOK\\n\", \"stdout\": \"\", \"worktree\": \"/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/kimi/quick/repo.gsd-path/verify/project-verify\"}, \"recorded_at\": \"2026-09-18T23:39:27+00:00\", \"result\": \"pass\", \"schema\": \"gsd-path/verify-ledger/v2\"}\n",
+  "verify_artifact": ".project/archive/001-count-json/build/verify-ledger.jsonl",
+  "verify_exit_code": 0
+}

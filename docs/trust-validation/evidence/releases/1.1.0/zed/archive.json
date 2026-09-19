@@ -1,0 +1,11 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "zed",
+  "run_id": "run-20260919T022432997644Z",
+  "result": "pass",
+  "step": "archive",
+  "command": "git rev-parse HEAD; echo \"---\"; mkdir -p .git/gsd-path-evidence; python3 .gsd-path/runtime/archive_milestone.py validate --repo \"/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/zed/quick/repo\" > .git/gsd-path-evidence/archive-validation.json 2>&1; cat .git/gsd-path-evidence/archive-validation.json",
+  "output": "{\"archive\": \".project/archive/001-count-py-cli-hardening\", \"commit\": \"38567d854826d568fedc9158b675f235b49b3147\"}\n",
+  "archive_path": ".project/archive/001-count-py-cli-hardening",
+  "validation_exit_code": 0
+}

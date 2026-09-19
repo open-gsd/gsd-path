@@ -1,0 +1,44 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "kimi",
+  "run_id": "session_57557689-4363-4ca0-83a0-9f25e55fdfd0",
+  "result": "pass",
+  "step": "child-spawn",
+  "command": "Agent",
+  "child_api": "Agent",
+  "child_id": "build_T001",
+  "child_status": "completed",
+  "output": {
+    "child_id": "build_T001",
+    "status": "completed",
+    "child_api": "Agent",
+    "run": "run-20260918T232325651226Z",
+    "session_id": "session_57557689-4363-4ca0-83a0-9f25e55fdfd0",
+    "tool_call": {
+      "id": "tool_g3dvfPNWAkKBahzloJuu9z7Z",
+      "input": {
+        "description": "build_T001",
+        "subagent_type": "coder"
+      },
+      "prompt_sha256": "a3c37f7f3e941ab00d394d5abc229945d0f4cde7dcf6aab96389319dd994ceba"
+    },
+    "tool_result": {
+      "agent_id": "agent-2",
+      "actual_subagent_type": "coder",
+      "status": "completed",
+      "stop_reason": "completed",
+      "content": "agent_id: agent-2\nactual_subagent_type: coder\nstatus: completed\nstop_reason: completed\n\n[summary]\nready\n\nImplemented T001: `count.py` now supports a position-independent `--json` flag (exact `{\"widgets\": <n>}` output), signed-integer counts, and clean stderr/nonzero-exit errors without tracebacks \u2014 preserving the `{n} widgets` format and silent 0 default. Added `test_count.py` with 5 real-CLI subprocess tests covering SC1\u2013SC5; self-check `python3 test_count.py -v` passes (5 tests OK), plus manual confirmation of all six acceptance criteria.\n\nChanged paths: `count.py`, `test_count.py`, `.project/tasks/T001-count-json-cli.md` (Log append only).\n\nresume_hint: Continue with Agent(resume=\"agent-2\", prompt=\"...\"). Use agent_id only; do not set subagent_type. The subagent retains its prior context; redo any unfinished tool call if its result was lost."
+    },
+    "session_store": {
+      "state": "session_57557689-4363-4ca0-83a0-9f25e55fdfd0",
+      "type": "sub",
+      "labels": {
+        "parentAgentId": "main",
+        "profileName": "coder"
+      },
+      "turn_ended_reasons": [
+        "completed"
+      ]
+    }
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "copilot",
+  "run_id": "a534979c-9470-47e2-aefc-7f08ea0b96c5",
+  "result": "pass",
+  "step": "child-spawn",
+  "command": "task",
+  "child_api": "task",
+  "child_id": "build_T001",
+  "child_status": "completed",
+  "output": {
+    "child_id": "build_T001",
+    "status": "completed",
+    "child_api": "task",
+    "source": "session-state/a534979c-9470-47e2-aefc-7f08ea0b96c5",
+    "matched_argument": "description",
+    "agent_id": "334ceb7f-6a74-47a0-b42b-aafb3afeeecf",
+    "tool_call": {
+      "toolCallId": "toolu_01SzdTYuLg9sq6qsUCGuHJok",
+      "arguments": {
+        "agent_type": "general-purpose",
+        "description": "build_T001",
+        "name": "build_T001"
+      },
+      "prompt_sha256": "69d181fe45c2382e2db8d6ed04b06e0672117892dc83be52501ca4403d069a2f"
+    },
+    "started": {
+      "agentName": "general-purpose",
+      "model": "gpt-5.4"
+    },
+    "completed": {
+      "agentName": "general-purpose",
+      "model": "gpt-5.4",
+      "durationMs": 36466,
+      "totalTokens": 211876,
+      "totalToolCalls": 11
+    },
+    "tool_result": {
+      "success": true,
+      "content": "T001 ready \u2014 Verify `python3 -m unittest tests/test_count_cli.py -v`: all 5 tests passed (`Ran 5 tests in 0.138s`, `OK`).\nDiff: `count.py` now uses `argparse` for optional signed count + `--json`, emits exact JSON via `json.dumps`, preserves plain text, and fails invalid input with parser stderr/no traceback.\nChanged: `count.py`; `tests/test_count_cli.py`; `.project/tasks/T001-json-output-and-validation.md` (Log only).\nRESULT: T001 ready"
+    }
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "codex",
+  "run_id": "01a0b769-0df2-7502-b14a-04e26c3b8675",
+  "result": "pass",
+  "step": "child-spawn",
+  "command": "collaboration.spawn_agent",
+  "child_api": "collaboration.spawn_agent",
+  "child_id": "build_t001",
+  "child_status": "completed",
+  "output": {
+    "child_id": "build_t001",
+    "status": "completed",
+    "spawn_call": {
+      "call_id": "call_SSCru9nInHx7MWBYudEZoSw6",
+      "name": "spawn_agent",
+      "namespace": "collaboration",
+      "arguments": {
+        "task_name": "build_t001",
+        "fork_turns": "none"
+      }
+    },
+    "spawn_output": "{\"task_name\":\"/root/build_t001\"}",
+    "list_agents_states": [
+      {
+        "agent_name": "/root/build_t001",
+        "agent_status": {
+          "completed": "T001 ready. Verify: `python3 -B tests/test_count.py -v` passed all 5 tests; `git diff --check` passed.\nChanged: `count.py`, `tests/test_count.py`, `.project/tasks/T001-count-json-cli.md` (Log only).\nRESULT: T001 ready"
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "kiro",
+  "run_id": "9693c9a4-40ad-4411-a996-ee202d183368",
+  "result": "pass",
+  "step": "integration",
+  "command": "python3 -B .gsd-path/runtime/archive_milestone.py integrate \\\n  --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/kiro-rerun-2/quick/repo \\\n  --slug count-json-cli > .git/gsd-path-evidence/integration.json 2> .git/gsd-path-evidence/integration.stderr\necho \"exit=$?\"\necho \"---stderr---\"; cat .git/gsd-path-evidence/integration.stderr\necho \"---integration JSON---\"; cat .git/gsd-path-evidence/integration.json",
+  "output": "{\"archive\": \".project/archive/001-count-json-cli\", \"base\": \"c5d53a71ec96eb81cffb3d2475d317ac4fd62092\", \"commit\": \"bd59ca5059f7a516163de33696d3f089650214f5\", \"integrate\": \"c5d53a71ec96eb81cffb3d2475d317ac4fd62092\", \"landing\": \"c5d53a71ec96eb81cffb3d2475d317ac4fd62092\", \"mode\": \"direct\", \"tag\": \"milestone/001-count-json-cli\"}\n",
+  "fixture_bundle": "kiro/fixture.bundle",
+  "run_manifest": ".project/archive/001-count-json-cli/trust-run-manifest.json",
+  "ship_commit": "bd59ca5059f7a516163de33696d3f089650214f5",
+  "bound_branch": "gsd-path/M001",
+  "default_branch": "main",
+  "pre_integration_default_commit": "989af972a9203055ca642d241e801ec69abc52ce",
+  "integration_commit": "c5d53a71ec96eb81cffb3d2475d317ac4fd62092",
+  "milestone_tag": "milestone/001-count-json-cli"
+}

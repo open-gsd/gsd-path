@@ -1,0 +1,11 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "opencode",
+  "run_id": "ses_f4939157dffesSZVjs2mZ3y58G",
+  "result": "pass",
+  "step": "reviews",
+  "command": "python3 /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/opencode/plugin/tests/evaluate_codex.py activity --arm /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/opencode/quick --category implementation -- python3 -B .gsd-path/runtime/isolation.py retire --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/opencode/quick/repo --worktree /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/opencode/quick/repo.gsd-path/verify/wave-1-cycle-1 --branch gsd-path-verify/wave-1-cycle-1 && python3 /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/opencode/plugin/tests/evaluate_codex.py activity --arm /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/opencode/quick --category verification -- python3 -B .gsd-path/runtime/check_handoffs.py wave --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/opencode/quick/repo --project-dir .project --review .project/review/wave-1.cycle1.md",
+  "output": "# Review \u2014 wave 1, cycle 1\n\nReviewed HEAD: 6f244f026dbff12ca1f046a01f655eb9ed0fa6b3\nReview scope: final\n\nWave verdict: pass\n# Final Review \u2014 reused full wave\n\nReviewed HEAD: e3a9605e9001e7e62c52ab082e40d3ac904378a2\nOverall verdict: pass\nSource review: .project/review/wave-1.cycle1.md\nSource commit: 6f244f026dbff12ca1f046a01f655eb9ed0fa6b3",
+  "wave_review_artifact": ".project/archive/001-count-cli-json/review/wave-1.cycle1.md",
+  "final_review_artifact": ".project/archive/001-count-cli-json/review/FINAL.md"
+}

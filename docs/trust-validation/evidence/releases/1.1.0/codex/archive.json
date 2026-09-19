@@ -1,0 +1,11 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "codex",
+  "run_id": "01a0b769-0df2-7502-b14a-04e26c3b8675",
+  "result": "pass",
+  "step": "archive",
+  "command": "/bin/zsh -lc 'python3 /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/codex-rerun/plugin/tests/evaluate_codex.py activity --arm /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/codex-rerun/quick --category verification -- python3 /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/codex-rerun/quick/repo/.gsd-path/runtime/archive_milestone.py validate --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.1.0-af0b082/codex-rerun/quick/repo > .git/gsd-path-evidence/archive-validation.json'",
+  "output": "{\"archive\": \".project/archive/001-count-json-cli\", \"commit\": \"cf959ff4c80cc4824dcf397f1a379441e91a7f0f\"}\n",
+  "archive_path": ".project/archive/001-count-json-cli",
+  "validation_exit_code": 0
+}
