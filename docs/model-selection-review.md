@@ -80,3 +80,22 @@ helper protocol, not whether a live model follows the written instructions.
 Ponytail review kept the existing receipt and assignment lifecycle. This is the
 owner's final scoped fix round; no new adjacent claims were accepted or pursued.
 Evidence is in [final scoped verification](model-selection-verification.md#final-scoped-verification).
+
+## Owner-authorized additional cycle: R6
+
+The owner authorized one additional cycle beyond the three-round cap, limited
+to R6. The supported-driver regression reproduced the failure: reject the
+contract lens, collect the adversarial lens, correct the override outside the
+product tree, and resume the same cycle. The collected artifact alone caused
+the clean-primary check to reject recovery.
+
+Missing-lens dispatch now permits only canonical artifacts from collected
+current-cycle assignments whose recorded base, path, and validated content
+hash still match. Other changes remain blocked. The existing HEAD/base and
+isolation checks are unchanged. The valid sibling is reused without another
+attempt. Ponytail review kept the existing collection evidence and added no
+new persistence or recovery mechanism.
+
+See [R6 verification](model-selection-verification.md#r6-recovery-verification).
+Publication and CI remain owned by the outer executor; this phase does not
+start another review cycle or merge the work.

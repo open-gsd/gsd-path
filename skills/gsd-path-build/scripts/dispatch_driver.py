@@ -980,9 +980,21 @@ class Review:
         return wave_tasks(self.primary, self.project_dir, self.wave, self.receipt)
 
     def dispatch(self, lenses: Dict[str, str], depth: str, base: Optional[str] = None) -> None:
-        dirty = sorted(isolation.uncommitted_paths(self.primary))
-        if dirty:  # the review base must include every bookkeeping change
-            raise DriverStop("review collection base requires a clean primary", paths=dirty)
+        dirty = isolation.uncommitted_paths(self.primary)
+        if base is not None:
+            paths = review_findings.review_paths(self.primary / self.project_dir, self.wave, self.cycle, depth)
+            for key, state in self.current_states(list(paths)).items():
+                if state.get('outcome') != 'collected':
+                    continue
+                path = paths[key]
+                relative = path.relative_to(self.primary).as_posix()
+                if (state.get('base') != base or state.get('relative') != relative
+                        or not path.is_file()
+                        or hashlib.sha256(path.read_bytes()).hexdigest() != state.get('validated_sha256')):
+                    raise DriverStop('canonical review artifact changed after collection', path=relative)
+                dirty.discard(relative)
+        if dirty:
+            raise DriverStop("review collection base requires a clean primary", paths=sorted(dirty))
         tasks = self.wave_tasks()
         plan_text = (self.primary / self.project_dir / "plan/PLAN.md").read_text(encoding="utf-8")
         intent = (self.primary / self.project_dir / "intent/INTENT.md").read_text(encoding="utf-8")

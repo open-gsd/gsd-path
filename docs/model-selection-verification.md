@@ -194,3 +194,46 @@ Resource sync reported zero warnings; `--check` confirmed 401 resources.
 `git diff --check` passed. No full repository suite or other gate phase ran.
 No accepted R4/R5 claim remains open. The owner review-round cap ends this
 scoped correction; no additional review/fix loop was started.
+
+## R6 recovery verification
+
+Starting HEAD: `10d41e2b428efe7a5864d23dd1e6bcef75c51bf5`. The owner explicitly
+authorized this additional cycle for R6 only. Canonical runtime change:
+`scripts/dispatch_driver.py`, synchronized to its generated copies. The existing
+regression in `tests/test_model_policy.py` now continues through model correction
+and same-cycle recovery.
+
+RED and removal-sabotage command:
+
+```sh
+python3 -B -m unittest tests.test_model_policy.DispatchPolicyTests.test_rejected_review_lens_does_not_stop_independent_lens
+```
+
+Before the fix, recovery returned `blocked` because the collected adversarial
+artifact made the primary dirty. Temporarily restoring the starting dispatch
+script reproduced that same assertion failure; fixed bytes were restored in
+`finally`. Logs: `.scratch/model-selection-review-r6/red.log` and `sabotage.log`.
+
+Focused GREEN command after all changes and resource sync:
+
+```sh
+python3 -B -m unittest \
+  tests.test_model_policy.DispatchPolicyTests.test_rejected_review_lens_does_not_stop_independent_lens \
+  tests.test_dispatch_driver.DispatchDriverTests.test_review_resumes_only_missing_deep_lens \
+  tests.test_dispatch_driver.DispatchDriverTests.test_review_recovers_validated_collection_after_interruption \
+  tests.test_dispatch_driver.DispatchDriverTests.test_review_rejects_changed_inputs_after_pass \
+  tests.test_dispatch_driver.DispatchDriverTests.test_review_rejects_changed_or_missing_collected_artifact
+```
+
+The extended regression checks altered collected content, an unrelated file,
+and an uncollected review file all block before the missing assignment gets a
+record. After restoring valid inputs, both lenses pass at the original base,
+the existing sibling's record and artifact bytes remain unchanged, each lens
+has one attempt, and temporary isolation branches are retired.
+
+Result: **5 tests passed in 43.044 seconds**. Raw output:
+`.scratch/model-selection-review-r6/green.log`. Existing subprocess
+ResourceWarnings remain in the log. Resource sync completed without warnings;
+`--check` confirmed all 401 resources, and `git diff --check` passed. No full
+repository suite or other gate phase ran. R6 is resolved within the authorized
+additional cycle; PR delivery remains with the outer executor.

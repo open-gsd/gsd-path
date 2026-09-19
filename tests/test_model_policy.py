@@ -386,6 +386,39 @@ class DispatchPolicyTests(unittest.TestCase):
         self.assertFalse((dispatch_driver.records_root(self.root) / 'reviews' / rejected).exists())
         self.assertFalse(any('contract' in branch for branch in fixture.branches(self.root)))
         self.assertNotIn('checkpoint', result)
+        records = dispatch_driver.records_root(self.root) / 'reviews'
+        saved = dispatch_driver.latest_states(records)[0]
+        saved_bytes = Path(saved['_path']).read_bytes()
+        artifact = self.root / saved['relative']
+        original = artifact.read_bytes()
+        corrected = records / 'corrected-overrides.json'
+        corrected.write_text(json.dumps({rejected: {'model': 'small'}}))
+        arguments = ('--wait', '60', '--model-capabilities', str(self.caps),
+                     '--model-overrides', str(corrected), '--child-command',
+                     shlex.join([sys.executable, str(self.root / 'fake_reviewer.py'), '{model_args}']))
+        for path, content in (
+                (artifact, original + b'\nChanged after collection\n'),
+                (self.root / 'unrelated.txt', b'unrelated change'),
+                (self.root / '.project/review/wave-1.cycle1.contract.md', b'uncollected review')):
+            with self.subTest(rejected_path=path.name):
+                path.write_bytes(content)
+                blocked = fixture.review(self.root, *arguments)
+                self.assertEqual(blocked['status'], 'blocked', blocked)
+                self.assertFalse((records / rejected).exists())
+                self.assertEqual(Path(saved['_path']).read_bytes(), saved_bytes)
+                if path == artifact:
+                    path.write_bytes(original)
+                else:
+                    path.unlink()
+        resumed = fixture.review(self.root, *arguments)
+        self.assertEqual(resumed['status'], 'pass', resumed)
+        self.assertEqual(set(resumed['lenses']), {'contract', 'adversarial'})
+        self.assertEqual(Path(saved['_path']).read_bytes(), saved_bytes)
+        self.assertEqual(artifact.read_bytes(), original)
+        states = dispatch_driver.latest_states(records)
+        self.assertEqual({state['base'] for state in states}, {saved['base']})
+        self.assertEqual({state['attempt'] for state in states}, {1})
+        self.assertEqual(fixture.branches(self.root), ['gsd-path/M001'])
 
     def test_rejected_answered_task_does_not_stop_answered_sibling(self):
         from tests.test_dispatch_driver import DispatchDriverTests
