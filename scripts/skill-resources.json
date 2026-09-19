@@ -63,6 +63,7 @@
     "scripts/check_task_briefs.py",
     "scripts/model_policy.py",
     "scripts/review_panel.py",
+    "scripts/jev_review.py",
     "scripts/review_findings.py",
     "scripts/check_update.py",
     "scripts/guard_hook.py",
@@ -104,6 +105,7 @@
       "references/dispatch.md",
       "references/model-policy.md",
       "references/reviewer.md",
+      "references/jev-review.md",
       "references/reviewer-wave.md",
       "references/reviewer-skeptic.md",
       "references/reviewer-final.md",
@@ -184,6 +186,7 @@
       "references/dispatch.md",
       "references/model-policy.md",
       "references/reviewer.md",
+      "references/jev-review.md",
       "references/reviewer-wave.md",
       "references/reviewer-skeptic.md",
       "references/reviewer-final.md",
@@ -207,6 +210,9 @@
     ]
   },
   "script_targets": [
+    ["scripts/jev_review.py", "skills/gsd-path/scripts/jev_review.py"],
+    ["scripts/jev_review.py", "skills/gsd-path-build/scripts/jev_review.py"],
+    ["scripts/jev_review.py", "skills/gsd-path-ship/scripts/jev_review.py"],
     ["scripts/worktree_paths.py", "skills/gsd-path/scripts/worktree_paths.py"],
     ["scripts/worktree_paths.py", "skills/gsd-path-build/scripts/worktree_paths.py"],
     ["scripts/worktree_paths.py", "skills/gsd-path-decide/scripts/worktree_paths.py"],

@@ -1,0 +1,12 @@
+{
+  "base": "8f83b7a3fcb56c1cde9bc61cf6f0dfe61a8811e5",
+  "model_requested": "fable",
+  "review_directory": "/var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/jev-fable-review-ajo361n9",
+  "inputs_sha256": {
+    "scripts/jev_review.py": "7786539db60e120f19a1d257618b08eb073847f09f96fbef5dae39567c908409",
+    "tests/test_jev_review.py": "d00b58d232c98af9623efc0e89428523fd13cbc081f4383c897c6e61ea6c0edb",
+    "skills/gsd-path/references/reviewer.md": "86d14df9bf9ea0adf740c354bb647d04996a6cfad03a76ffa9951cf544c1fc71",
+    "skills/gsd-path/references/jev-review.md": "09d1b60525c210b9b7aecc87d9103261f31ee1b5d82aa2b9de0d2473b97edcd8",
+    "docs/research/jev-implementation-plan.md": "c4d0669504d448008ec700810043834f642cac3a8f06a6a3c40601472fc9a5d0"
+  }
+}
