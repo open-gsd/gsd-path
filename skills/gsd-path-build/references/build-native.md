@@ -351,7 +351,7 @@ dispatch contract and perform steps 1–5 by hand.
      against that evidence and the diff; anything it cannot
      confirm from them is a finding, not a pass. Never spawn a review panel
      at `verify-only`.
-   - After the canonical inherit reviewer (or orchestrator-written
+   - After the canonical reviewer (or orchestrator-written
      `verify-only` file) is collected, run the optional review panel only
      for `full` and `deep`. Inspect advertised model slugs and run
      `python3 <absolute review_panel.py> resolve --plan <absolute PLAN.md>
@@ -368,16 +368,16 @@ dispatch contract and perform steps 1–5 by hand.
      the reviewer role in wave-panel mode, the wave-panel template, and the
      exact helper-returned model slug when the host advertises model
      selection. On `deep`, each panel brief is the adversarial lens only.
-     Never override the model on the canonical reviewer. Each child stages
+     Resolve model choices through the dispatch model-policy contract. Each child stages
      its family file in its own verify sidecar from `isolate-verify`
      (`--name wave-<N>-cycle-<C>-panel-<family>`); the parent validates
      those files and runs `python3 <absolute review_panel.py> merge --kind
      wave --wave <N> --cycle <C> --inputs <family files> --output
      <absolute .project/review/wave-N.cycleC.panel.md> --mode
-     <detected|named>`. The inherit reviewer remains the only Wave verdict.
+     <detected|named>`. The canonical reviewer remains the only Wave verdict.
      Do not average panel findings into that verdict or auto-create fix
      tasks from preference findings.
-   - After the canonical inherit reviewer file (and each deep lens file) is
+   - After the canonical reviewer file (and each deep lens file) is
      on the primary path, run
      `python3 <absolute check_handoffs.py> wave --repo <absolute primary>
      --review <canonical wave-review path>`. A non-zero exit is a blocked

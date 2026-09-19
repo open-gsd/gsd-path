@@ -8,6 +8,8 @@ agent: null         # orchestrator-owned: set at dispatch
 base: null          # orchestrator-owned: clean layer SHA for isolated Verify
 worktree: null      # orchestrator-owned: isolated task worktree while active
 task_branch: null   # orchestrator-owned: gsd-path-task/<id> while parallel; null when serial
+# Optional explicit dispatch overrides: model: <advertised slug|inherit>
+# effort: <advertised effort|inherit>
 files:              # every file this task may touch — dispatch checks overlap
   - <path>
 ---

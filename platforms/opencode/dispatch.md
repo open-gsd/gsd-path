@@ -28,10 +28,10 @@ Apply this contract whenever a GSD Path skill delegates work:
   source of truth.
 - Resolve the phase's linked role brief to an absolute path. Include that path
   in the prompt and require the child to read it before acting.
-- Tier hints: when the host advertises model or reasoning-effort selection,
-  request `heavy` for `plan`, `plan_patch`, `decide`, and `roadmap`, and
-  `light` for `inspect_docs` and `docs_audit`; when it offers no such
-  selection, do not override the model except on a review-panel child, which receives the exact slug from `scripts/review_panel.py resolve`. Host isolation: none. The child's working directory is the exact absolute root GSD Path supplied; a host SHA checkout or extra worktree is a contract failure.
+- Model selection: before every child launch or continuation, follow
+  [the model-policy contract](model-policy.md) and apply its recorded
+  native arguments. It owns defaults, project settings, task overrides,
+  capability failures, and reassignment. Host isolation: none. Use the exact GSD Path supplied root; create no extra checkout.
 - Give every child a self-contained prompt with
   absolute repository, input, template, and output paths plus its bounded
   responsibility. A coder prompt also names its isolated linked-worktree root;

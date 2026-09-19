@@ -253,7 +253,7 @@ full-repo suite on a tiny edit outrank the phase brief.
   orchestrator.
 - Reviewers verify and block; they never fix. A block names the criterion,
   observed result, evidence location, and concrete fix direction. An optional
-  review panel is advisory: the inherit reviewer remains the only wave
+  review panel is advisory: the canonical reviewer remains the only wave
   pass/fail, and panel findings never average or auto-replan. Same-model
   agreement is not independent verification: matching verdicts from one
   model family count as a single evidence path. Independence comes from

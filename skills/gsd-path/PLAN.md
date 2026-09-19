@@ -214,8 +214,8 @@ as stated in Lookahead mode.
      statuses do not load this template. For each selected family, spawn one independent child
      with logical task name `review_plan_panel_<family>`, the reviewer role
      in plan-panel mode, the plan-panel template, and the exact helper-returned
-     model slug when the host advertises model selection. Never override the
-     model on the planner. Each child stages its family file under a
+     model slug through the dispatch model-policy contract. Planner choices
+     use that same contract. Each child stages its family file under a
      disposable root; the parent validates and copies those files, removes
      any stale `<track>/review/PLAN-PANEL.skipped.json`, then runs
      `python3 <absolute review_panel.py> merge --kind plan --inputs <family
