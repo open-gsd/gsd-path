@@ -59,6 +59,7 @@
     "scripts/check_handoffs.py",
     "scripts/check_docs_audit.py",
     "scripts/check_task_briefs.py",
+    "scripts/model_policy.py",
     "scripts/review_panel.py",
     "scripts/review_findings.py",
     "scripts/check_update.py",
@@ -98,6 +99,7 @@
       "references/build-abandon.md",
       "references/coder.md",
       "references/dispatch.md",
+      "references/model-policy.md",
       "references/reviewer.md",
       "references/reviewer-wave.md",
       "references/reviewer-skeptic.md",
@@ -115,6 +117,7 @@
     ],
     "gsd-path-docs-audit": [
       "references/dispatch.md",
+      "references/model-policy.md",
       "references/docs-auditor.md",
       "templates/docs-audit.md"
     ],
@@ -127,6 +130,7 @@
     "gsd-path-inspect": [
       "references/codebase-mapper.md",
       "references/dispatch.md",
+      "references/model-policy.md",
       "references/docs-auditor.md",
       "templates/codebase.md",
       "templates/docs-audit.md",
@@ -140,6 +144,7 @@
     "gsd-path-plan": [
       "references/build-recovery.md",
       "references/dispatch.md",
+      "references/model-policy.md",
       "references/planner.md",
       "templates/patch-findings.md",
       "templates/plan.md",
@@ -148,17 +153,20 @@
     ],
     "gsd-path-research": [
       "references/dispatch.md",
+      "references/model-policy.md",
       "references/researcher.md",
       "templates/evidence.md",
       "templates/research-handoff.md"
     ],
     "gsd-path-roadmap": [
       "references/dispatch.md",
+      "references/model-policy.md",
       "references/roadmapper.md",
       "templates/roadmap.md"
     ],
     "gsd-path-ship": [
       "references/dispatch.md",
+      "references/model-policy.md",
       "references/reviewer.md",
       "references/reviewer-wave.md",
       "references/reviewer-skeptic.md",
@@ -173,6 +181,7 @@
     ],
     "gsd-path-decide": [
       "references/dispatch.md",
+      "references/model-policy.md",
       "references/decider.md",
       "templates/synthesis.md"
     ],
@@ -399,7 +408,40 @@
     ["scripts/roadmap.py", "skills/gsd-path-research/scripts/roadmap.py"],
     ["scripts/roadmap.py", "skills/gsd-path-roadmap/scripts/roadmap.py"],
     ["scripts/roadmap.py", "skills/gsd-path-ship/scripts/roadmap.py"],
-    ["scripts/roadmap.py", "skills/gsd-path/scripts/roadmap.py"]
+    ["scripts/roadmap.py", "skills/gsd-path/scripts/roadmap.py"],
+    ["scripts/model_policy.py", "skills/gsd-path/scripts/model_policy.py"],
+    ["scripts/model_policy.py", "skills/gsd-path-build/scripts/model_policy.py"],
+    ["scripts/model_policy.py", "skills/gsd-path-decide/scripts/model_policy.py"],
+    ["scripts/loop_run.py", "skills/gsd-path-decide/scripts/loop_run.py"],
+    ["scripts/model_policy.py", "skills/gsd-path-define/scripts/model_policy.py"],
+    ["scripts/loop_run.py", "skills/gsd-path-define/scripts/loop_run.py"],
+    ["scripts/model_policy.py", "skills/gsd-path-discuss/scripts/model_policy.py"],
+    ["scripts/loop_run.py", "skills/gsd-path-discuss/scripts/loop_run.py"],
+    ["scripts/review_panel.py", "skills/gsd-path-discuss/scripts/review_panel.py"],
+    ["scripts/model_policy.py", "skills/gsd-path-docs-audit/scripts/model_policy.py"],
+    ["scripts/loop_run.py", "skills/gsd-path-docs-audit/scripts/loop_run.py"],
+    ["scripts/model_policy.py", "skills/gsd-path-forensics/scripts/model_policy.py"],
+    ["scripts/loop_run.py", "skills/gsd-path-forensics/scripts/loop_run.py"],
+    ["scripts/review_panel.py", "skills/gsd-path-forensics/scripts/review_panel.py"],
+    ["scripts/model_policy.py", "skills/gsd-path-inspect/scripts/model_policy.py"],
+    ["scripts/loop_run.py", "skills/gsd-path-inspect/scripts/loop_run.py"],
+    ["scripts/model_policy.py", "skills/gsd-path-loop/scripts/model_policy.py"],
+    ["scripts/review_panel.py", "skills/gsd-path-loop/scripts/review_panel.py"],
+    ["scripts/model_policy.py", "skills/gsd-path-migrate/scripts/model_policy.py"],
+    ["scripts/_common.py", "skills/gsd-path-migrate/scripts/_common.py"],
+    ["scripts/loop_run.py", "skills/gsd-path-migrate/scripts/loop_run.py"],
+    ["scripts/review_panel.py", "skills/gsd-path-migrate/scripts/review_panel.py"],
+    ["scripts/model_policy.py", "skills/gsd-path-plan/scripts/model_policy.py"],
+    ["scripts/loop_run.py", "skills/gsd-path-plan/scripts/loop_run.py"],
+    ["scripts/model_policy.py", "skills/gsd-path-research/scripts/model_policy.py"],
+    ["scripts/loop_run.py", "skills/gsd-path-research/scripts/loop_run.py"],
+    ["scripts/model_policy.py", "skills/gsd-path-roadmap/scripts/model_policy.py"],
+    ["scripts/loop_run.py", "skills/gsd-path-roadmap/scripts/loop_run.py"],
+    ["scripts/model_policy.py", "skills/gsd-path-ship/scripts/model_policy.py"],
+    ["scripts/loop_run.py", "skills/gsd-path-ship/scripts/loop_run.py"],
+    ["scripts/model_policy.py", "skills/gsd-path-undo/scripts/model_policy.py"],
+    ["scripts/loop_run.py", "skills/gsd-path-undo/scripts/loop_run.py"],
+    ["scripts/review_panel.py", "skills/gsd-path-undo/scripts/review_panel.py"]
   ],
   "phase_contract_targets": [
     ["skills/gsd-path-build/SKILL.md", "skills/gsd-path/BUILD.md"],

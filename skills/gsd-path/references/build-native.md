@@ -37,7 +37,9 @@ its sidecar, copies it to the canonical path, retires the sidecar, and only
 after every lens settles concludes: a passing cycle with no panel is
 checkpointed; with a panel configured (`panel_required: true`) run `panel
 --wave <N> --cycle <C> --advertised <slugs> [--parent-slug <slug>]
---child-command '<owner command with {model}>'`, which resolves the panel,
+--child-command '<owner command>'`, using the
+[model-policy CLI contract](model-policy.md#cli-lifecycle). The panel command
+resolves membership,
 persists a skipped receipt or runs one panelist per family in its own
 sidecar, merges the family files, and makes the single on-pass checkpoint;
 `blocked` returns the `review_findings.py collect` grouping; when its
@@ -53,7 +55,9 @@ The driver never writes a `verify-only` file (`status: not-applicable`);
 approved artifacts or the user, record it with `answer --task-id <id>
 --answer '<answer> — <citation>'`, and call `round` again, which redispatches
 the retained isolate; `blocked` names the task, reason, and output and leaves
-the isolate in place — apply the recovery, retry, or plan-defect procedure in
+an existing isolate in place. A model-selection rejection before launch creates
+no isolate; follow the [model-policy contract](model-policy.md). For other
+blocks, apply the recovery, retry, or plan-defect procedure in
 steps 1–2 by hand, then call `round` again. The driver counts dispatches per
 task per milestone and stops at `--max-attempts` (default 2: the first
 dispatch plus this contract's one logged redispatch); owner token limits, when
@@ -351,12 +355,16 @@ dispatch contract and perform steps 1–5 by hand.
      against that evidence and the diff; anything it cannot
      confirm from them is a finding, not a pass. Never spawn a review panel
      at `verify-only`.
-   - After the canonical inherit reviewer (or orchestrator-written
+   - After the canonical reviewer (or orchestrator-written
      `verify-only` file) is collected, run the optional review panel only
      for `full` and `deep`. Inspect advertised model slugs and run
      `python3 <absolute review_panel.py> resolve --plan <absolute PLAN.md>
      --intent <absolute INTENT.md> --advertised <comma slugs>
-     --parent-slug <current model slug when known>` and `--charter
+     --parent-slug <current model slug when known>
+     --exclude-family <known canonical-reviewer family>`; repeat
+     `--exclude-family` for every known parent and canonical-reviewer family,
+     including all deep review lenses, before persisting the roster. Omit
+     unknown identities. Also pass `--charter
      <absolute .project/CHARTER.md>` when that file exists. `status: off`
      continues with no current-cycle panel artifact. For `skipped`,
      persist the helper's exact JSON stdout as
@@ -368,16 +376,16 @@ dispatch contract and perform steps 1–5 by hand.
      the reviewer role in wave-panel mode, the wave-panel template, and the
      exact helper-returned model slug when the host advertises model
      selection. On `deep`, each panel brief is the adversarial lens only.
-     Never override the model on the canonical reviewer. Each child stages
+     Resolve model choices through the dispatch model-policy contract. Each child stages
      its family file in its own verify sidecar from `isolate-verify`
      (`--name wave-<N>-cycle-<C>-panel-<family>`); the parent validates
      those files and runs `python3 <absolute review_panel.py> merge --kind
      wave --wave <N> --cycle <C> --inputs <family files> --output
      <absolute .project/review/wave-N.cycleC.panel.md> --mode
-     <detected|named>`. The inherit reviewer remains the only Wave verdict.
+     <detected|named>`. The canonical reviewer remains the only Wave verdict.
      Do not average panel findings into that verdict or auto-create fix
      tasks from preference findings.
-   - After the canonical inherit reviewer file (and each deep lens file) is
+   - After the canonical reviewer file (and each deep lens file) is
      on the primary path, run
      `python3 <absolute check_handoffs.py> wave --repo <absolute primary>
      --review <canonical wave-review path>`. A non-zero exit is a blocked

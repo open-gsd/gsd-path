@@ -85,6 +85,9 @@ Add `--local` when checking project-local skills, from that project directory.
 See [QUICK.md](QUICK.md) for the first-run checklist and [HOOKS.md](HOOKS.md)
 for optional Git and host guard hooks.
 
+For project-owned model and effort choices, see the
+[dispatch model policy](skills/gsd-path/references/model-policy.md).
+
 ## Dashboard and menu-bar toolbar
 
 The optional **OpenGSD Path monitor** shows your projects without opening each

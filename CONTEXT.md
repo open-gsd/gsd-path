@@ -119,3 +119,8 @@ _Avoid_: task landing, ship commit, approval alone
 The adoption of a prepared next-milestone planning track as the active
 milestone after validated Integration and binding its new bound branch.
 _Avoid_: task landing, phase transition (without naming the milestone change)
+
+**Dispatch model policy**:
+The rules for choosing a model and reasoning effort for pipeline sub-agent
+roles. Model choice does not change a role's authority.
+_Avoid_: review policy, model ranking

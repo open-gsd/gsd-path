@@ -74,8 +74,9 @@ skeptic attempts under `skeptics/`.
 
 The child command is owner-supplied shell words. The driver runs it with the
 isolated worktree as its working directory and the self-contained brief on
-stdin; the owner's flags decide the child's permissions and model. Verified
-templates: `claude -p --output-format json <owner permission flags>` and
+stdin; the owner's flags decide the child's permissions. Model and effort
+controls follow the [dispatch model policy](skills/gsd-path/references/model-policy.md#cli-lifecycle).
+Verified templates: `claude -p --output-format json <owner permission flags>` and
 `codex exec --json <owner sandbox flags>`. A coder child ends its final message with
 `RESULT: <task id> ready|blocked`; no line means blocked. A Log delta whose
 first entry after the last recorded `Orchestrator answer:` leads with
@@ -83,8 +84,9 @@ first entry after the last recorded `Orchestrator answer:` leads with
 a timeout or nonzero exit is a failure even if the child wrote a question.
 Canonical reviewer children instead return the `Wave verdict:` line in their
 validated review artifact; they do not need a `RESULT:` line.
-Panel children write family findings without a Wave verdict. The panel command
-replaces literal `{model}` in its child command with the resolved family slug.
+Panel children write family findings without a Wave verdict. The `{model}`
+command example above is the legacy form; capability-based commands use the
+argument slots defined in the dispatch model policy.
 `--wave` is required and pins the parent-selected wave, including on resumed
 calls. In `round`, an unfinished earlier wave blocks dispatch before the bookkeeping
 checkpoint. Child completion is recorded in `exit.json`; the parent alone
@@ -93,6 +95,9 @@ For `review`, `panel`, and `skeptics`, when the child process is gone and `finis
 unset, the driver rereads that attempt's state and exit receipt before
 collecting the result or blocking with
 `child wrapper exited without recording a result`.
+Review starts from a clean base. A same-cycle retry may dispatch a missing lens
+at that unchanged base while verified, already-collected review artifacts remain
+uncommitted. Altered artifacts or unrelated changes block recovery.
 `--wait`, `--child-timeout`, and `--capacity` (concurrent children) have
 no defaults. `--max-attempts` defaults to 2 dispatches per task per milestone,
 the build contract's one logged redispatch after the first attempt; question

@@ -27,10 +27,10 @@ Apply this contract whenever a GSD Path skill delegates work:
   a colliding target.
 - Resolve the phase's linked role brief to an absolute path. Include that path
   in the prompt and require the agent to read it before acting.
-- Tier hints: when the host advertises model or reasoning-effort selection,
-  request `heavy` for `plan`, `plan_patch`, `decide`, and `roadmap`, and
-  `light` for `inspect_docs` and `docs_audit`; when it offers no such
-  selection, do not override the model except on a review-panel child, which receives the exact slug from `scripts/review_panel.py resolve`. Do not ask Claude Code to create
+- Model selection: before every child launch or continuation, follow
+  [the model-policy contract](model-policy.md) and apply its recorded
+  native arguments. It owns defaults, project settings, task overrides,
+  capability failures, and reassignment. Do not ask Claude Code to create
   another worktree: GSD Path supplies the exact repository or
   linked-worktree root in the brief, and the child must work only there.
   Host isolation: none.

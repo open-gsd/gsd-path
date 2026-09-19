@@ -1,6 +1,6 @@
 # Panel — wave <N>, cycle <C>
 
-<!-- Written by one review-panel child. Advisory only: the inherit reviewer
+<!-- Written by one review-panel child. Advisory only: the canonical reviewer
      owns Wave verdict. Kind criterion may be presented to the user when
      Severity is high; preference stays a warning. -->
 

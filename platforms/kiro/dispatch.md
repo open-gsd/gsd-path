@@ -23,12 +23,10 @@ Apply this contract whenever a GSD Path skill delegates work:
   self-contained brief. Disk artifacts remain the source of truth.
 - Resolve the phase's linked role brief to an absolute path. Include that path
   in the prompt and require the subagent to read it before acting.
-- Tier hints: when the host advertises model or reasoning-effort selection,
-  request `heavy` for `plan`, `plan_patch`, `decide`, and `roadmap`, and
-  `light` for `inspect_docs` and `docs_audit`; when it offers no such
-  selection, do not override the model except on a review-panel child, which receives the exact slug from `scripts/review_panel.py resolve`. Set the child working directory to the
-  exact repository or linked-worktree root supplied by GSD Path; do not ask
-  Kiro or the child to create another worktree. Host isolation: none.
+- Model selection: before every child launch or continuation, follow
+  [the model-policy contract](model-policy.md) and apply its recorded
+  native arguments. It owns defaults, project settings, task overrides,
+  capability failures, and reassignment. Host isolation: none. Use the exact GSD Path supplied root; create no extra checkout.
 - Give every child a self-contained prompt with absolute input, template, and
   output paths plus its bounded responsibility. A coder prompt also names its
   isolated linked-worktree root; no child may infer the primary worktree.

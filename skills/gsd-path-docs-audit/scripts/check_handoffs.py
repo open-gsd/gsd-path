@@ -131,6 +131,9 @@ def _strict_frontmatter(text: str, label: str) -> Dict[str, object]:
     while index < len(lines):
         line = lines[index]
         if line == "---":
+            for field in ('model', 'effort'):
+                if field in values and (not isinstance(values[field], str) or not values[field].strip()):
+                    raise HandoffError(f'{label}: {field} must be a nonempty scalar or inherit')
             return values
         if not line.strip() or line.lstrip().startswith("#"):
             index += 1

@@ -31,7 +31,7 @@ from typing import BinaryIO, Callable, Dict, List, Optional
 
 try:
     from scripts import (_common, archive_milestone, build_state, discussion_validate, isolation,
-                         pipeline_state, review_findings, review_panel, workflow_run, task_context)
+                         pipeline_state, review_findings, review_panel, workflow_run, task_context, model_policy)
     from scripts import check_handoffs as contracts
 except ImportError:  # bundled copy inside a skill's scripts directory
     import _common
@@ -45,6 +45,7 @@ except ImportError:  # bundled copy inside a skill's scripts directory
     import review_findings
     import review_panel
     import workflow_run
+    import model_policy
 
 if os.name == "nt":
     import msvcrt
@@ -71,7 +72,7 @@ class DriverStop(RuntimeError):
 
 STOP_ERRORS = (DriverStop, isolation.IsolationError, build_state.BuildStateError,
                contracts.HandoffError, review_findings.ReviewFindingsError,
-               pipeline_state.PipelineStateError, archive_milestone.ArchiveError)
+               pipeline_state.PipelineStateError, archive_milestone.ArchiveError, model_policy.PolicyError)
 RECOVERY_BLOCKED = "recovery blocked"
 # The stops the build contract answers with build/blocked when the round raises them (steps 1 and 2);
 # the same stops from review, panel, or skeptics stay with the parent.
@@ -251,10 +252,81 @@ def brief_text(state: Dict[str, object], role_brief: Path, task_template: Path) 
     return "\n".join(lines) + "\n"
 
 
+def selected_command(state: Dict[str, object], options: argparse.Namespace, command: str):
+    """Shared selection for every CLI child; legacy unconfigured commands remain unchanged."""
+    primary = Path(getattr(options, 'repo', state['worktree']))
+    project_dir = getattr(options, 'project_dir', '.project')
+    overrides = (model_policy.task_settings(Path(str(state['worktree'])) / str(state['task_file']))
+                 if state.get('task_file') else {})
+    for field in model_policy.FIELDS:
+        value = getattr(options, field, None)
+        if value is not None:
+            if field in overrides and overrides[field] != value:
+                raise model_policy.PolicyError('dispatch choice conflicts with the task contract')
+            overrides[field] = value
+    overrides_path = getattr(options, 'model_overrides', None)
+    if overrides_path:
+        assignments = model_policy.read_json(overrides_path)
+        for assignment, values in assignments.items():
+            model_policy.settings(values, f'assignment {assignment}')
+        for field, value in assignments.get(str(state['task_id']), {}).items():
+            if field in overrides and overrides[field] != value:
+                raise model_policy.PolicyError('assignment overrides conflict with explicit task/dispatch settings')
+            overrides[field] = value
+    caps_path = getattr(options, 'model_capabilities', None)
+    previous = state.get('model_selection')
+    if previous is None and state.get('command'):
+        if overrides:
+            raise model_policy.PolicyError('legacy assignment requires a new explicit assignment for model controls')
+        return list(state['command']), None
+    if caps_path is None:
+        if overrides or previous or model_policy.policy_path(primary, project_dir).exists():
+            raise model_policy.PolicyError('model policy requires --model-capabilities for this dispatch')
+        return shlex.split(command), None
+    caps = model_policy.read_json(caps_path)
+    action = getattr(options, 'action', 'round')
+    role = {'round': 'coder', 'review': 'reviewer', 'panel': 'review_panel',
+            'skeptics': 'skeptic'}.get(action, action)
+    if state.get('family'):
+        role = 'review_panel'
+    selection = model_policy.resolve(primary, project_dir, role, caps, overrides, previous)
+    if state.get('family'):
+        if selection['selected']['model'] == 'inherit' and selection['sources']['model'] == 'default':
+            # The panel roster owns the default model, not parent inheritance.
+            selection = model_policy.resolve(primary, project_dir, role, caps,
+                                              dict(overrides, model=state['slug']), previous)
+        model_policy.validate_panel(selection, state['family'], state.get('excluded_families', []))
+        state['slug'] = selection['selected']['model']
+    return model_policy.command_args(shlex.split(command), selection), selection
+
+
+def retain_selection(root: Path, state: Dict[str, object]) -> Dict[str, object]:
+    state = dict(state)
+    task_dir = root / str(state['task_id'])
+    if not state.get('model_selection'):
+        attempts = sorted(task_dir.glob('attempt-*/state.json'), key=lambda path: attempt_number(path.parent))
+        if attempts:
+            prior = read_attempt(attempts[-1])
+            if child_running(prior):
+                raise DriverStop('cannot redispatch while the previous child is active')
+            if prior.get('model_selection'):
+                state['model_selection'] = prior['model_selection']
+            else:
+                state['command'] = prior['command']
+    reassignment = task_dir / 'model-reassignment.json'
+    if reassignment.exists():
+        state['model_selection'] = load_state(reassignment)['selection']
+    return state
+
+
 def spawn(root: Path, state: Dict[str, object], options: argparse.Namespace,
           brief: Callable[[Dict[str, object]], str], command: Optional[str] = None) -> Dict[str, object]:
     """Create the next attempt record, write the brief the callback builds, and start the wrapper."""
+    if child_running(state):
+        raise DriverStop('cannot redispatch while the previous child is active')
+    state = retain_selection(root, state)
     task_dir = root / str(state["task_id"])
+    argv, selection = selected_command(state, options, command or options.child_command)
     attempt = max((attempt_number(path) for path in task_dir.glob("attempt-*")), default=0) + 1
     attempt_dir = task_dir / f"attempt-{attempt}"
     attempt_dir.mkdir(parents=True)
@@ -262,7 +334,9 @@ def spawn(root: Path, state: Dict[str, object], options: argparse.Namespace,
              "usage_recorded")
     state = {key: value for key, value in state.items()
              if not key.startswith("_") and key not in stale}
-    state.update({"attempt": attempt, "command": shlex.split(command or options.child_command),
+    if selection is not None:
+        state['model_selection'] = selection
+    state.update({"attempt": attempt, "command": argv,
                   "child_timeout": options.child_timeout, "outcome": None,
                   "dispatched_at": now(), "origin": "question" if state.get("answered") else "dispatch"})
     state_path = attempt_dir / "state.json"
@@ -397,7 +471,8 @@ def finish_task(primary: Path, state: Dict[str, object]) -> Dict[str, object]:
 
 def summary(state: Dict[str, object]) -> Dict[str, object]:
     return {key: state.get(key) for key in
-            ("task_id", "attempt", "mode", "worktree", "wave", "cycle", "verify_heavy", "dispatched_at")}
+            ("task_id", "attempt", "mode", "worktree", "wave", "cycle", "verify_heavy", "dispatched_at",
+             "model_selection")}
 
 
 def recover_report(primary: Path, project_dir: str, receipt: Dict[str, object]) -> Dict[str, object]:
@@ -558,14 +633,23 @@ class Round:
     def settle(self) -> bool:
         """Classify every exited child. Returns True when a landing or redispatch changed the round."""
         changed = False
+        rejected = {item['task_id'] for item in self.receipt['blocked']
+                    if item.get('code') == 'model-selection'}
         for state in latest_states(self.root):
             if state.get("wave") != self.receipt["wave"]:
                 continue
             outcome = state.get("outcome")
             if outcome == "question":
                 if state.get("answered"):
+                    if state['task_id'] in rejected:
+                        continue
                     self.admit(str(state["task_id"]))
-                    self.launch(dict(state, answered=True))
+                    try:
+                        self.launch(dict(state, answered=True))
+                    except model_policy.PolicyError as error:
+                        self.receipt['blocked'].append({'task_id': state['task_id'], 'reason': str(error),
+                                                       'code': 'model-selection'})
+                        continue
                     update_state(state, outcome="redispatched")
                     changed = True
                 else:
@@ -690,23 +774,33 @@ class Round:
         heavy_busy = any(state.get("verify_heavy") for state in in_flight)
         capacity = self.options.capacity
         selected = []
+        rejected = {item["task_id"] for item in self.receipt["blocked"]
+                    if item.get("code") == "model-selection"}
         for task in ready["ready"]:
             if capacity is not None and len(in_flight) + len(selected) >= capacity:
                 break
             if task["wave"] != self.receipt["wave"]:
                 continue
-            if task["id"] in active_ids or (task["verify_heavy"] and heavy_busy):
+            if task["id"] in active_ids | rejected or (task["verify_heavy"] and heavy_busy):
                 continue
-            heavy_busy = heavy_busy or task["verify_heavy"]
-            selected.append(task)
-        if not selected:
-            return False
-        for task in selected:
             used = attempts_used(self.root, task["id"])
             if used >= self.options.max_attempts:
                 raise DriverStop(f"task {task['id']} reached the attempt limit ({self.options.max_attempts}) "
                                  "for this milestone; a person must rule", task=task["id"], attempts=used)
             self.admit(task["id"])
+            candidate = retain_selection(self.root, {'task_id': task['id'], 'task_file': task['task_file'],
+                                                     'worktree': str(self.primary)})
+            try:
+                _, selection = selected_command(candidate, self.options, self.options.child_command)
+            except model_policy.PolicyError as error:
+                self.receipt['blocked'].append({'task_id': task['id'], 'reason': str(error),
+                                                'code': 'model-selection'})
+                continue
+            task['model_selection'] = selection
+            heavy_busy = heavy_busy or task['verify_heavy']
+            selected.append(task)
+        if not selected:
+            return False
         head = isolation.current_sha(self.primary)
         self.runner("lint-round", head)
         round_size = len(selected) + len(in_flight)
@@ -721,7 +815,8 @@ class Round:
                          "files": task["files"], "wave": task["wave"],
                          "verify_heavy": task["verify_heavy"], "base": head, "worktree": str(worktree),
                          "task_branch": isolate["task_branch"], "mode": isolate["mode"],
-                         "sidecar": sidecar, "answered": False})
+                         "sidecar": sidecar, "answered": False,
+                         "model_selection": task['model_selection']})
         return False
 
     def runner(self, action: str, head: str, task_id: Optional[str] = None,
@@ -738,7 +833,8 @@ class Round:
             while True:
                 self.receipt["in_flight"] = []
                 changed = self.settle() or changed
-                if self.receipt["questions"] or self.receipt["blocked"]:
+                if self.receipt["questions"] or any(
+                        item.get("code") != "model-selection" for item in self.receipt["blocked"]):
                     self.receipt["status"] = "question" if self.receipt["questions"] else "blocked"
                     return self.receipt
                 # ready is expensive and its inputs only move when a landing or redispatch happened
@@ -748,7 +844,8 @@ class Round:
                 changed = False
                 live = self.in_flight_states()
                 if deadline is None or time.monotonic() >= deadline or not live:
-                    self.receipt["status"] = "in-flight" if live else "done"
+                    self.receipt["status"] = ("blocked" if self.receipt["blocked"]
+                                              else "in-flight" if live else "done")
                     return self.receipt
                 time.sleep(POLL_SECONDS)
         except STOP_ERRORS as error:
@@ -803,6 +900,15 @@ def spawn_in_sidecar(root: Path, primary: Path, receipt: Dict[str, object], opti
                      name: str, state: Dict[str, object], brief: Callable[[Dict[str, object]], str],
                      command: Optional[str] = None) -> None:
     """Cut a verify sidecar at the state's base and start one child in it."""
+    candidate = retain_selection(root, dict(state, worktree=str(primary)))
+    try:
+        _, selection = selected_command(candidate, options, command or options.child_command)
+    except model_policy.PolicyError as error:
+        receipt['blocked'].append({'task_id': state['task_id'], 'reason': str(error),
+                                   'code': 'model-selection'})
+        return
+    if selection is not None:
+        state = dict(state, model_selection=selection)
     sidecar = isolation.isolate_verify(primary, str(state["base"]), name)
     receipt["steps"].append({"script": "isolation.py isolate-verify", "result": sidecar})
     spawn(root, dict(state, worktree=str(sidecar["worktree"]), branch=str(sidecar["branch"])), options, brief,
@@ -874,9 +980,21 @@ class Review:
         return wave_tasks(self.primary, self.project_dir, self.wave, self.receipt)
 
     def dispatch(self, lenses: Dict[str, str], depth: str, base: Optional[str] = None) -> None:
-        dirty = sorted(isolation.uncommitted_paths(self.primary))
-        if dirty:  # the review base must include every bookkeeping change
-            raise DriverStop("review collection base requires a clean primary", paths=dirty)
+        dirty = isolation.uncommitted_paths(self.primary)
+        if base is not None:
+            paths = review_findings.review_paths(self.primary / self.project_dir, self.wave, self.cycle, depth)
+            for key, state in self.current_states(list(paths)).items():
+                if state.get('outcome') != 'collected':
+                    continue
+                path = paths[key]
+                relative = path.relative_to(self.primary).as_posix()
+                if (state.get('base') != base or state.get('relative') != relative
+                        or not path.is_file()
+                        or hashlib.sha256(path.read_bytes()).hexdigest() != state.get('validated_sha256')):
+                    raise DriverStop('canonical review artifact changed after collection', path=relative)
+                dirty.discard(relative)
+        if dirty:
+            raise DriverStop("review collection base requires a clean primary", paths=sorted(dirty))
         tasks = self.wave_tasks()
         plan_text = (self.primary / self.project_dir / "plan/PLAN.md").read_text(encoding="utf-8")
         intent = (self.primary / self.project_dir / "intent/INTENT.md").read_text(encoding="utf-8")
@@ -957,7 +1075,8 @@ class Review:
 
     def settle(self, states: Dict[str, Dict[str, object]]) -> None:
         """Advance every lens and render the receipt from the records; settle is their only writer."""
-        self.receipt["in_flight"], self.receipt["blocked"], self.receipt["lenses"] = [], [], {}
+        rejected = [item for item in self.receipt['blocked'] if item.get('code') == 'model-selection']
+        self.receipt["in_flight"], self.receipt["blocked"], self.receipt["lenses"] = [], rejected, {}
         for key, state in states.items():
             if not advance(state, self.collect):
                 self.receipt["in_flight"].append(summary(state))
@@ -1037,7 +1156,10 @@ class Review:
                 states = self.current_states(list(lenses))
             while True:
                 self.settle(states)
-                if set(states) == set(lenses) and all(
+                settled = {state['task_id'] for state in states.values()}
+                settled.update(item['task_id'] for item in self.receipt['blocked']
+                               if item.get('code') == 'model-selection')
+                if settled == {self.lens_name(key) for key in lenses} and all(
                         state.get("outcome") in ("collected", "blocked") for state in states.values()):
                     self.conclude()
                     return self.receipt
@@ -1102,7 +1224,8 @@ class Children:
     def poll(self, states: Dict[str, Dict[str, object]], deadline: Optional[float]) -> bool:
         """Advance every child; True once all are terminal, False when the deadline passes first."""
         while True:
-            self.receipt["in_flight"], self.receipt["blocked"], self.receipt[self.results] = [], [], {}
+            rejected = [item for item in self.receipt['blocked'] if item.get('code') == 'model-selection']
+            self.receipt["in_flight"], self.receipt["blocked"], self.receipt[self.results] = [], rejected, {}
             for key, state in states.items():
                 if not advance(state, self.collect):
                     self.receipt["in_flight"].append(summary(state))
@@ -1220,6 +1343,12 @@ class Panel(Children):
             else:
                 if states:
                     raise DriverStop("panel records exist without a persisted roster")
+                excluded = {review_panel.family_of_slug(self.options.parent_slug or '')}
+                for canonical in latest_states(records_root(self.primary) / 'reviews'):
+                    if canonical.get('wave') == self.wave and canonical.get('cycle') == self.cycle:
+                        model = canonical.get('model_selection', {}).get('effective_model')
+                        if model:
+                            excluded.add(review_panel.family_of_slug(model))
                 arguments = ["resolve", "--plan", str(project / "plan/PLAN.md"),
                              "--intent", str(project / "intent/INTENT.md"),
                              "--advertised", self.options.advertised]
@@ -1227,6 +1356,8 @@ class Panel(Children):
                     arguments += ["--parent-slug", self.options.parent_slug]
                 if (project / "CHARTER.md").exists():
                     arguments += ["--charter", str(project / "CHARTER.md")]
+                for family in sorted(family for family in excluded if family):
+                    arguments += ['--exclude-family', family]
                 resolved = helper_json(self.receipt, "review_panel.py", *arguments, cwd=self.primary)
                 self.receipt["resolve"] = resolved
                 if resolved["status"] == "off":
@@ -1259,6 +1390,21 @@ class Panel(Children):
                 roster = {"families": [item["family"] for item in resolved["selected"]],
                           "slugs": {item["family"]: item["slug"] for item in resolved["selected"]},
                           "mode": resolved["mode"], "base": isolation.current_sha(self.primary)}
+                roster['excluded_families'] = sorted(family for family in excluded if family)
+                roster['selections'] = {}
+                for family in roster['families']:
+                    candidate = {'task_id': self.family_name(family), 'family': family,
+                                 'slug': roster['slugs'][family], 'worktree': str(self.primary),
+                                 'excluded_families': roster['excluded_families']}
+                    command = self.options.child_command
+                    if not getattr(self.options, 'model_capabilities', None):
+                        command = command.replace('{model}', candidate['slug'])
+                    _, selection = selected_command(candidate, self.options, command)
+                    model_policy.validate_panel(selection or {'effective_model': candidate['slug']},
+                                                family, roster['excluded_families'])
+                    if selection is not None:
+                        roster['selections'][family] = selection
+                        roster['slugs'][family] = candidate['slug']
                 save_state(roster_path, roster)
             self.receipt["mode"] = roster["mode"]
             if set(states) - set(roster["families"]) or any(
@@ -1275,10 +1421,16 @@ class Panel(Children):
                     state = {"task_id": self.family_name(family), "family": family, "slug": slug,
                              "wave": self.wave, "cycle": self.cycle, "base": base, "mode": roster["mode"],
                              "relative": self.relative(family)}
+                    if roster.get('selections', {}).get(family):
+                        state['model_selection'] = roster['selections'][family]
+                    state['excluded_families'] = roster.get('excluded_families', [])
+                    command = self.options.child_command
+                    if not getattr(self.options, 'model_capabilities', None):
+                        command = command.replace('{model}', slug)
                     spawn_in_sidecar(self.root, self.primary, self.receipt, self.options,
                                      f"wave-{self.wave}-cycle-{self.cycle}-panel-{family}", state,
                                      lambda fresh: self.brief(fresh, tasks, depth, review),
-                                     command=self.options.child_command.replace("{model}", slug))
+                                     command=command)
                 states = self.states()
             if not self.poll(states, deadline):
                 return self.receipt
@@ -1656,6 +1808,43 @@ def answer(primary: Path, task_id: str, text: str) -> Dict[str, object]:
             "next": "run `round` to redispatch the retained isolate"}
 
 
+def reassign_model(root: Path, task_id: str, options: argparse.Namespace) -> Dict[str, object]:
+    states = [state for state in latest_states(root) if state['task_id'] == task_id]
+    if not states:
+        raise DriverStop('assignment has no recorded attempt')
+    state = states[0]
+    if child_running(state) or state.get('finished_at') is None:
+        raise DriverStop('cannot reassign an active or unproven child; reconcile its lifecycle first')
+    if state.get('family') or state.get('outcome') in ('landed', 'collected'):
+        raise DriverStop('completed work or a pinned panel roster requires a new legal review/task assignment')
+    if not options.ruling or not options.ruling.strip() or not options.model_capabilities:
+        raise DriverStop('reassignment requires an owner ruling and advertised capabilities')
+    old = state.get('model_selection')
+    if old is None:
+        raise DriverStop('legacy assignment has no proven model selection to reassign')
+    path = root / task_id / 'model-reassignment.json'
+    history = load_state(path).get('history', []) if path.exists() else []
+    if path.exists():
+        old = load_state(path)['selection']
+    changes = {field: getattr(options, field) for field in model_policy.FIELDS
+               if getattr(options, field) is not None}
+    if not changes:
+        raise DriverStop('reassignment requires an explicit model or effort')
+    task = (model_policy.task_settings(Path(state['worktree']) / state['task_file'])
+            if state.get('task_file') else {})
+    if any(field in task and task[field] != value for field, value in changes.items()):
+        raise DriverStop('reassignment conflicts with the approved task contract')
+    selection = model_policy.resolve(options.repo, options.project_dir, old['role'],
+                                     model_policy.read_json(options.model_capabilities),
+                                     dict(old['selected'], **changes))
+    for field in model_policy.FIELDS:
+        if field not in changes:
+            selection['sources'][field] = old['sources'][field]
+    save_state(path, {'selection': selection, 'history': [*history, {
+        'selection': old, 'ruling': options.ruling, 'attempt': state['attempt']} ]})
+    return {'status': 'reassigned', 'task': task_id, 'selection': selection, 'record': str(path)}
+
+
 def require_files(parser: argparse.ArgumentParser, arguments: argparse.Namespace, *names: str) -> None:
     for name in names:
         value = getattr(arguments, name)
@@ -1708,6 +1897,13 @@ def main(argv=None) -> int:
     cycle_child.add_argument("--wait", type=float, help="seconds to keep polling before returning")
     cycle_child.add_argument("--child-timeout", type=float, help="per-child wall clock in seconds")
     cycle_child.add_argument("--role-brief", type=Path, default=default_resource("references/reviewer.md"))
+    for child in (round_parser, cycle_child):
+        child.add_argument('--model-capabilities', type=Path,
+                           help='advertised model/effort controls; required with project model policy')
+    cycle_child.add_argument('--model', help='explicit model override for this review assignment')
+    cycle_child.add_argument('--effort', help='explicit effort override for this review assignment')
+    cycle_child.add_argument('--model-overrides', type=Path,
+                             help='JSON mapping logical assignment names to explicit model/effort overrides')
     review_parser = commands.add_parser("review", parents=[cycle_child],
                                         help="run one wave review cycle at full or deep depth")
     review_parser.add_argument("--repair-evidence", type=Path,
@@ -1741,6 +1937,14 @@ def main(argv=None) -> int:
     answer_parser.add_argument("--answer", required=True)
     status_parser = commands.add_parser("status", help="list dispatch records")
     status_parser.add_argument("--repo", type=Path, required=True)
+    model_parser = commands.add_parser('reassign-model', help='record an explicit model reassignment')
+    model_parser.add_argument('--repo', type=Path, required=True)
+    model_parser.add_argument('--project-dir', default='.project')
+    model_parser.add_argument('--task-id', required=True)
+    model_parser.add_argument('--model-capabilities', type=Path, required=True)
+    model_parser.add_argument('--model')
+    model_parser.add_argument('--effort')
+    model_parser.add_argument('--ruling', required=True)
     child_parser = commands.add_parser("_child", help=argparse.SUPPRESS)
     child_parser.add_argument("--state", type=Path, required=True)
     arguments = parser.parse_args(argv)
@@ -1797,6 +2001,11 @@ def main(argv=None) -> int:
             result = {**current.receipt, "status": "landed" if current.receipt["landed"] else "blocked"}
         elif arguments.action == "answer":
             result = answer(primary, arguments.task_id, arguments.answer)
+        elif arguments.action == 'reassign-model':
+            roots = [records_root(primary), *(records_root(primary) / name
+                      for name in ('reviews', 'panels', 'skeptics'))]
+            root = next((root for root in roots if (root / arguments.task_id).is_dir()), roots[0])
+            result = reassign_model(root, arguments.task_id, arguments)
         else:
             result = {"status": "ok", "dispatches": [
                 {key: value for key, value in state.items() if key not in ("_path", "command")}

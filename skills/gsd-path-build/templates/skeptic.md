@@ -1,7 +1,7 @@
 # Skeptic — wave <N>, cycle <C>
 
 <!-- Written by one finding-skeptic child. Advisory to fix-task batching
-     only: the inherit reviewer owns Wave verdict. -->
+     only: the canonical reviewer owns Wave verdict. -->
 
 - Criterion: <the failed criterion, verbatim from the lens file>
 - Criterion locator: <t001_ac2 | t001_files | sc3>
