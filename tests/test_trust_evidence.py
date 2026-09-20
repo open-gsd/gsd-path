@@ -539,6 +539,87 @@ class TrustEvidenceTests(unittest.TestCase):
         self.git("add", "-A")
         self.git("commit", "-qm", "trust evidence")
 
+    def release_change(self, path, content="changed\n"):
+        target = self.repo / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding="utf-8")
+        self.commit_receipts()
+        self.candidate = self.git("rev-parse", "HEAD").stdout.strip()
+
+    def test_release_scope_skips_live_runs_for_non_host_changes(self):
+        self.git("tag", "v1.2.2")
+        for path in ("README.md", "docs/guide.md", "tests/test_example.py",
+                     ".github/workflows/release.yml", "daemon/gsd_daemon/serve.py",
+                     "scripts/update_release_docs.mjs", "scripts/check_trust_evidence.py"):
+            with self.subTest(path=path):
+                self.release_change(path)
+                result = check_trust_evidence.validate_repository(self.repo)
+                self.assertEqual([], result["hosts"])
+                self.assertEqual("v1.2.2", result["baseline"])
+
+    def test_release_scope_accepts_version_only_package_change(self):
+        self.git("tag", "v1.2.2")
+        self.release_change("package.json", json.dumps({"version": "1.2.4"}))
+        self.assertEqual([], check_trust_evidence.validate_repository(self.repo)["hosts"])
+        self.release_change("package.json", json.dumps({"version": "1.2.4", "scripts": {"test": "false"}}))
+        with self.assertRaisesRegex(check_trust_evidence.EvidenceError, "missing.*alpha, beta"):
+            check_trust_evidence.validate_repository(self.repo)
+
+    def test_release_scope_requires_only_changed_host(self):
+        self.git("tag", "v1.2.2")
+        self.release_change("platforms/alpha/dispatch.md")
+        with self.assertRaisesRegex(check_trust_evidence.EvidenceError, "missing host evidence: alpha$"):
+            check_trust_evidence.validate_repository(self.repo)
+        self.receipt("alpha")
+        self.commit_receipts()
+        self.assertEqual(["alpha"], check_trust_evidence.validate_repository(self.repo)["hosts"])
+
+    def test_release_scope_lockfile_exempts_only_package_version(self):
+        lock = {"version": "1.2.2", "packages": {"": {"version": "1.2.2"},
+                "node_modules/example": {"version": "1.0.0"}}}
+        self.release_change("package-lock.json", json.dumps(lock))
+        self.git("tag", "v1.2.2")
+        lock["version"] = lock["packages"][""]["version"] = "1.2.3"
+        self.release_change("package-lock.json", json.dumps(lock))
+        self.assertEqual([], check_trust_evidence.validate_repository(self.repo)["hosts"])
+        lock["packages"]["node_modules/example"]["version"] = "2.0.0"
+        self.release_change("package-lock.json", json.dumps(lock))
+        with self.assertRaisesRegex(check_trust_evidence.EvidenceError, "missing.*alpha, beta"):
+            check_trust_evidence.validate_repository(self.repo)
+
+    def test_release_scope_shared_adapter_requires_all_hosts(self):
+        self.git("tag", "v1.2.2")
+        self.release_change("platforms/shared-agents/dispatch.md")
+        with self.assertRaisesRegex(check_trust_evidence.EvidenceError, "missing.*alpha, beta"):
+            check_trust_evidence.validate_repository(self.repo)
+
+    def test_release_scope_new_lockfile_requires_all_hosts(self):
+        self.git("tag", "v1.2.2")
+        self.release_change("package-lock.json", json.dumps({"version": "1.2.3"}))
+        with self.assertRaisesRegex(check_trust_evidence.EvidenceError, "missing.*alpha, beta"):
+            check_trust_evidence.validate_repository(self.repo)
+
+    def test_release_scope_current_tag_does_not_hide_shared_changes(self):
+        self.git("tag", "v1.2.2")
+        self.release_change("skills/gsd-path/SKILL.md")
+        self.git("tag", "v1.2.3")
+        with self.assertRaisesRegex(check_trust_evidence.EvidenceError, "missing.*alpha, beta"):
+            check_trust_evidence.validate_repository(self.repo)
+
+    def test_release_scope_unknown_changes_require_all_hosts(self):
+        self.git("tag", "v1.2.2")
+        self.release_change("new-runtime.py")
+        with self.assertRaisesRegex(check_trust_evidence.EvidenceError, "missing.*alpha, beta"):
+            check_trust_evidence.validate_repository(self.repo)
+
+    def test_release_scope_rename_cannot_hide_shared_contract_deletion(self):
+        self.release_change("WORKFLOW.md")
+        self.git("tag", "v1.2.2")
+        self.git("mv", "WORKFLOW.md", "README.md")
+        self.commit_receipts()
+        with self.assertRaisesRegex(check_trust_evidence.EvidenceError, "missing.*alpha, beta"):
+            check_trust_evidence.validate_repository(self.repo)
+
     @mock.patch.dict(
         "os.environ",
         {

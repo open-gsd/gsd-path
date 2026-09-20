@@ -2,7 +2,8 @@
 
 This evaluation compares GSD Path with a direct Codex implementation of the
 same widget-counter requirements. It measures one fixture, not global
-optimality. It is separate from the all-host release gate.
+optimality. It is separate from the
+[release gate](TRUST-VALIDATION-SPEC.md#release-contract).
 
 Commit the candidate first. Use a new evaluation directory outside the source
 repository. Preparation makes separate local bare remotes and checkouts from
@@ -57,8 +58,8 @@ Product correctness, measurement completeness, and pipeline trust are separate.
 A zero CLI exit is not proof of a milestone or child dispatch. To validate a
 Codex milestone receipt, pass `report --receipt /absolute/codex.md`; the runner
 uses the existing receipt validator against the pinned candidate and manifest.
-That is fixture-level proof only. Release trust still requires current tracked
-receipts for every declared host through `npm run verify:release`.
+That is fixture-level proof only. See the
+[release contract](TRUST-VALIDATION-SPEC.md#release-contract) for release trust.
 
 ## Verification changes in this candidate
 

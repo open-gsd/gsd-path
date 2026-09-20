@@ -1,8 +1,8 @@
 # Trust validation
 
-Validation workstream for every host declared in the installer manifest. A
-host remains release-blocking until its current versioned live milestone
-receipt passes the shared evidence validator.
+Validation workstream for every host declared in the installer manifest.
+The [release contract](TRUST-VALIDATION-SPEC.md#release-contract) defines
+automated checks and when live host receipts are required.
 
 **Start here:** [TRUST-VALIDATION-SPEC.md](TRUST-VALIDATION-SPEC.md)  
 **Manual runs:** [TRUST-EVIDENCE.md](TRUST-EVIDENCE.md)  
