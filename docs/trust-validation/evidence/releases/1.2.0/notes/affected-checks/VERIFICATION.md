@@ -38,3 +38,14 @@ in ../READINESS.md; this report does not relabel the failed command as passing.
 
 The OpenCode retry3 identity-binding blocker remains independent of this gate
 optimization. The new gate does not waive it or create a passing receipt.
+
+## Clean-checkout acceptance
+
+At7b5ffe6, the actual --plan CLI exited0 in10.939seconds, validated six host
+receipts, and selected exactlyClaude/OpenCode as required runs. The strict CLI
+exited1 in10.954seconds for their explicit blocked results. Neither command
+called a live host. Raw stdout/stderr and exact commands are in the adjacent
+`affected-plan-result.json` and `affected-strict-result.json` files.
+
+The feature is verified; release1.2.0 remains blocked. No additional live run,
+version bump, push, tag, or publication followed this check.

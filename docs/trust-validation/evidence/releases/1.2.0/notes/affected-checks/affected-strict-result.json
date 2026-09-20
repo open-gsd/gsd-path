@@ -1,0 +1,14 @@
+{
+  "command": [
+    "python3",
+    "-B",
+    "scripts/check_trust_evidence.py",
+    "--repo",
+    "."
+  ],
+  "exit_code": 1,
+  "elapsed_seconds": 10.954,
+  "stdout": "",
+  "stderr": "error: missing host evidence: claude, opencode; claude: /Users/jeremymcspadden/orca/workspaces/gsd-path/release-gate/docs/trust-validation/evidence/releases/1.2.0/claude.md: verdict must be 'pass', found 'blocked'; opencode: /Users/jeremymcspadden/orca/workspaces/gsd-path/release-gate/docs/trust-validation/evidence/releases/1.2.0/opencode.md: verdict must be 'pass', found 'blocked'\n",
+  "source_head": "7b5ffe6cb634dd4c5641cbad019cecba4d9c16d1"
+}
