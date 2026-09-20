@@ -87,8 +87,14 @@ test("every copied Python helper imports from its own bundle", (context) => {
   const targets = [...new Set(resourceManifest().script_targets.map(([, target]) => target))];
 
   for (const target of targets) {
-    execFileSync("python3", [path.join(projectRoot, target), "--help"], {
-      cwd: scratch,
+    const isGitGuard = path.basename(target) === "git_guard.py";
+    const cwd = isGitGuard ? mkdtempSync(path.join(scratch, "git-guard-")) : scratch;
+    if (isGitGuard) {
+      // Hooks need a repository and use hook arguments, not --help.
+      execFileSync("git", ["init", "--quiet", "--initial-branch=main", cwd]);
+    }
+    execFileSync("python3", [path.join(projectRoot, target), isGitGuard ? "pre-commit" : "--help"], {
+      cwd,
       encoding: "utf8",
       env: { ...process.env, PYTHONNOUSERSITE: "1", PYTHONPATH: "" },
       stdio: "pipe",
