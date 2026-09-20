@@ -1,0 +1,30 @@
+{
+  "host": "opencode",
+  "command": [
+    "opencode",
+    "run",
+    "--format",
+    "json",
+    "--auto",
+    "--pure"
+  ],
+  "exit_code": 0,
+  "started_at": "2026-09-20T18:52:51.051516+00:00",
+  "elapsed_seconds": 244.30396870799999,
+  "head": "02242d3d7b901db917fad9d9b84c3e836a541853",
+  "session_id": "ses_f3fd601acffe701EzafyVZ6DiB",
+  "final_message": "Stopped at the prepared archive as instructed \u2014 before `render-manifest`/`preflight`/`record-shipment`/commit. No active children; no publication; HEAD unchanged at `02242d3d7b901db917fad9d9b84c3e836a541853` on `gsd-path/M001`.\n\n## Outcome\n\n**Build \u2192 ship \u2192 prepared archive (canonical sequence, all helper-owned):**\n\n1. **Collection** (sidecar `gsd-path-verify/wave-1-cycle-1`, base `d05823a8\u2026`): `isolation.py collect-artifact` \u2192 6873 bytes, sha256 `67f58d1eba24370a356c468fcd1343f046c334b500090019f14c5de2593ca010` \u2192 primary `.project/review/wave-1.cycle1.md`; then `retire` \u2192 `{\"retired\": true, \"reason\": \"removed\"}`. Parent made no edits.\n2. **Panel**: `review_panel.py resolve \u2026 --kind wave --wave 1 --cycle 1` \u2192 `{\"status\": \"off\", \"reason\": \"review_panel is off\"}` \u2014 no panel artifact required.\n3. **Wave gate**: `check_handoffs.py wave --review .project/review/wave-1.cycle1.md` \u2192 `{\"wave\": 1, \"cycle\": 1, \"verdict\": \"pass\", \"owned\": [\"SC1\"\u2026\"SC6\"]}` exit 0.\n4. **Checkpoint (once)**: `isolation.py checkpoint --expected-head d05823a88c8e2b7c12308299cdd2b48b4dc7a313 --subject 'build: wave 1 review passed'` \u2192 commit `f446fbc71f3f0246a7e3962a83fd937e530a0037` (review + verify-ledger).\n5. **Completion**: `dispatch_driver.py complete` \u2192 `status: done`; T001 `proven-landed` at `d05823a8\u2026`; STATE \u2192 `ship/active`; checkpoint `build: complete milestone` \u2192 commit `02242d3d7b901db917fad9d9b84c3e836a541853`.\n6. **prepare-final (run 1)** at HEAD `02242d3d\u2026`: pending discussions none; project Verify **executed once** in sidecar `gsd-path-verify/project-verify` \u2014 exit 0, `Ran 9 tests \u2026 OK`; `final-gap-1.md` collected (535 B, sha `8040967b\u2026`); **final reuse: `\"reused\": true`** \u2014 FINAL.md generated as a view of `.project/review/wave-1.cycle1.md` (final scope SC1\u2013SC6, explicit). No `review-final` requested \u2192 no scenario failure.\n7. **Final gate**: `check_handoffs.py final` \u2192 `{\"verdict\": \"pass\", \"criteria\": [SC1\u2013SC6], \"gaps\": [1]}` exit 0. Step-7 log-only transition applied: `final gate passed; shipping approval pending` (position unchanged `ship/active`).\n8. **prepare-final (run 2, exact same HEAD)** \u2014 reuse proof: `verification.reused: true`, `final.reused: true`; ledger unchanged before/after: **2646 bytes, sha256 `e85f1cb045b167a390bcb73c23e5b364b4bb100cb2ad16c8eedae62d0bafb7ed`, 2 entries**.\n9. **Archive prepare ONLY**: `archive_milestone.py prepare --slug count-cli` \u2192 `{\"archive\": \".project/archive/001-count-cli\", \"carried_forward\": 0}`. STATE.archive persisted; artifacts moved (build, intent, plan, research, review, tasks). **Stopped** \u2014 no MANIFEST.md rendered, no preflight, no record-shipment, no ship commit.\n\n## Review\n\n- Prepared archive: `/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry3/quick/repo/.project/archive/001-count-cli/`\n- Reused FINAL view: `/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry3/quick/repo/.project/review/FINAL.md` (in archive: `.project/archive/001-count-cli/review/FINAL.md`)\n- State: `/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry3/quick/repo/.project/STATE.md`\n\n## Next\n\nEvaluator adds the guard/trust manifest via the official assembler against prepared archive `.project/archive/001-count-cli` (transaction identity persisted in STATE.archive); the next native context resumes the ship transaction at `render-manifest` from HEAD `02242d3d7b901db917fad9d9b84c3e836a541853`.",
+  "usage": {
+    "tokens": {
+      "total": 105579,
+      "input": 502,
+      "output": 1153,
+      "reasoning": 244,
+      "cache": {
+        "write": 0,
+        "read": 103680
+      }
+    },
+    "cost": 0
+  }
+}

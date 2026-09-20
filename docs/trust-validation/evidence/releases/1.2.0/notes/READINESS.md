@@ -16,10 +16,10 @@ Qwen, Kiro, and Zed are excluded from required evaluations by the owner. Their i
 | Kimi | Fresh retry2 receipt, oracle6/6, both reuse checks pass; maximum native session17,497 output tokens | None; previous overrun retained in history |
 | Grok | Fresh retry3 receipt, oracle6/6, both reuse checks pass; maximum native session14,229 output tokens | None; recovered invocation errors preserved |
 | Claude | Previous structural receipt valid, full-wave reuse failed | Fresh retry2 active |
-| Copilot | Previous structural receipt valid, prior budget/protocol failures | Fresh retry4 completing review/reuse and receipt |
-| OpenCode | Retry2 local result passed but shipment used an older global helper | Fresh retry3 pinned-helper run; inspection/Define/Plan pass |
+| Copilot | Fresh retry4 receipt, oracle6/6, both reuse checks pass; maximum native session21,937 output tokens | None; recovered path error and diagnosis-order deviation disclosed |
+| OpenCode | Retry3 coder/review/oracle/reuse passed; receipt binding failed | Task agent build_T001 differs from native child build_t001; stopped before shipment |
 
-Five of eight hosts now prove all requested scenario claims. A structural receipt alone does not prove a failed reuse, budget, or candidate-provenance claim. The aggregate gate will run after the remaining current receipts are complete and checkpointed. Recovered nonmutating invocation errors remain disclosed; they are not erased or described as flawless execution. See [Antigravity proof](antigravity-passed/scenario-proof.json), [Kimi observations](../kimi/observations.md), [Grok run notes](../grok/run-notes.md), and [OpenCode provenance failure](opencode-history/retry2/BLOCKER.md).
+Six of eight hosts now prove all requested scenario claims. A structural receipt alone does not prove a failed reuse, budget, or candidate-provenance claim. The aggregate gate will run after the remaining current receipts are complete and checkpointed. Recovered nonmutating invocation errors remain disclosed; they are not erased or described as flawless execution. See [Antigravity proof](antigravity-passed/scenario-proof.json), [Kimi observations](../kimi/observations.md), [Grok run notes](../grok/run-notes.md), and [OpenCode provenance failure](opencode-history/retry2/BLOCKER.md).
 
 ## Release-cycle repair
 
@@ -41,4 +41,20 @@ Original 1.3.0 evidence was not relabeled. All failed 1.2.0 fixtures and native 
 
 ## Continued evaluation
 
-Owner ruling, verbatim: "run till all pass". The previous round stop is lifted; no new approval is needed for diagnosed native retries. See [active acceptance and attempt record](RUN-UNTIL-PASS.md). Codex, Cursor, Antigravity, Kimi, and Grok now prove all requested scenario claims. Claude, Copilot, and OpenCode continue for their remaining claims. Historical failures remain; a recovered gate rejection is not silently removed.
+Owner ruling, verbatim: "run till all pass". The previous round stop is lifted; no new approval is needed for diagnosed native retries. See [active acceptance and attempt record](RUN-UNTIL-PASS.md). Codex, Cursor, Antigravity, Kimi, Grok, and Copilot now prove all requested scenario claims. Claude continues for its remaining claims. OpenCode is stopped at a documented identity-binding conflict; see [retry3 blocker](opencode-history/retry3/BLOCKED.md). Historical failures remain; a recovered gate rejection is not silently removed.
+
+## Faster routine releases
+
+Owner ruling, verbatim: "Yes — use affected checks (recommended)".
+Routine releases reuse validated live receipts when that host's runtime and
+integration inputs are unchanged. Original candidates and versions stay intact.
+Only missing, invalid, or stale hosts need new runs. Shared runtime changes
+invalidate every host they affect. Qwen/Kiro/Zed remain excluded. The full
+matrix is manual. Current Claude/OpenCode attempts may finish; no new full
+fixture retry is planned if they fail.
+
+The release workflow now runs its explicit offline gate once and skips npm
+lifecycle scripts in the subsequent publish step. Local npm publication keeps
+its prepublishOnly gate. The real offline publish fixture detected two runs
+before the fix and one after; restored-original sabotage reproduced the failure.
+Affected-evidence validation passed: receipt suite53/53, restored focused checks8/8, release workflow checks18/18, and restored-original failures reproduced. See [verification and raw logs](affected-checks/VERIFICATION.md). This is not release approval.

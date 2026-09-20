@@ -112,7 +112,8 @@ jobs:
           fi
 
       - name: Publish to npm
-        run: npm publish --access public --provenance
+        # verify:release already passed; do not repeat it through prepublishOnly.
+        run: npm publish --access public --provenance --ignore-scripts
 
       - name: Sync release documentation to main
         env:

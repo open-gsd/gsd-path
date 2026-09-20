@@ -30,38 +30,55 @@ owns the release gate, live-check scope, and receipt requirements.
 
 ## Recording trust evidence
 
-Set the intended package name and version in `package.json` and
-`package-lock.json` before freezing the candidate. Changes to either invalidate
-existing candidate proof.
-Prepare the version locally, run verification, and collect required evidence
-before merging the candidate. The publication workflow never increments or
-pushes a package version. A failed publication attempt keeps the same candidate
-version for the retry.
-When the [live-check scope](docs/trust-validation/TRUST-VALIDATION-SPEC.md#live-check-scope)
-requires host receipts, complete these steps before publishing:
+Keep the intended version in `package.json` and `package-lock.json` while
+verification runs. A failed attempt keeps that version for its retry. The
+publication workflow never increments or pushes a package version. A version-only
+change does not invalidate live evidence; package identity, dependencies, and
+other package changes do.
 
-1. Freeze a clean candidate on `main`:
+1. From a clean checkout, inspect which hosts need new evidence:
+
+   ```bash
+   python3 -B scripts/check_trust_evidence.py --repo . --plan
+   ```
+
+   The report names accepted receipt paths and original candidates, plus
+   `required_runs` and their reasons. It validates existing evidence without
+   invoking any model. Historical receipts stay in their original directories.
+
+2. Prepare and run only the missing or stale hosts:
 
    ```bash
    bash scripts/prepare_release_evidence.sh --candidate .
    ```
 
-2. Run each required host harness from the prepared directories (see
-   [HOST-MATRIX.md](docs/trust-validation/HOST-MATRIX.md)).
-   Qwen, Kiro, and Zed are excluded from release evaluations because their
-   live runs require API credits. They remain supported by the installers and
-   offline tests. The preparation script and validator select the same eight
-   evaluation hosts.
+   Run the prepared harnesses as described in [HOST-MATRIX.md](docs/trust-validation/HOST-MATRIX.md).
+   Qwen, Kiro, and Zed remain excluded from live release evaluations; their
+   installer support and offline tests remain. A host-specific change requires
+   that host. Shared runtime changes require all affected hosts. An unchanged
+   validated host requires no new live run.
 
-3. Validate the required set locally:
+3. Commit new receipts, then validate the clean checkout:
 
    ```bash
    npm run verify:release
    ```
 
-4. Commit receipts and merge. Run **Actions → Release trust evidence → Run
-   workflow** on the frozen candidate with its receipts to re-run the strict
-   gate before publication.
+   The publication workflow runs this gate once before tagging or publishing.
+   Its publish step skips npm lifecycle scripts to avoid duplicating the gate.
+   Local `npm publish` retains `prepublishOnly` verification.
+
+A full matrix is an explicit manual action:
+
+```bash
+bash scripts/prepare_release_evidence.sh --candidate . --full
+```
+
+After those runs, `python3 -B scripts/check_trust_evidence.py --repo . --full`
+requires receipts under the current package version. Routine releases use the
+default affected checks. The **Release trust evidence** workflow is available
+for an additional manual gate when needed; it is not an extra required rehearsal
+before the publication workflow's identical gate.
 
 Ordinary PRs and `main` pushes run automated verification, including the trust
 validator tests, without requiring refreshed release receipts. The

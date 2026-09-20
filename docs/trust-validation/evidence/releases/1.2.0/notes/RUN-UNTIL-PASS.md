@@ -15,3 +15,10 @@ Antigravity retry3 inspection completed, but native parent usage11,170 plus chil
 Continuation checkpoint: Grok retry2 preserved a final-reuse rejection caused by an evaluator surface-name mismatch; retry3 uses the exact canonical name. Copilot retry3 preserved a 31,849-token correction context; retry4 splits each inspection assignment and collection. Antigravity retry4 passed inspection after resuming the original native children; setup/mapper/docs groups used 4,241/10,126/12,145 output tokens. Persistent native input keeps later child-dispatch parents alive. OpenCode retry2 passed task landing and full wave review; closed inspect/define/plan/build/wave contexts used 23,918/10,504/16,927/24,117/27,004 generated tokens (output plus separate reasoning counters, including children). These are progress receipts, not release approval.
 
 Antigravity retry4 is now complete: receipt validates with native child/landing/archive/integration and Git guard proof, independent oracle6/6, full-wave and repeated verification reuse, exactly2 ledger entries, maximum native parent+children output16,553. Earlier Antigravity failures remain in history. OpenCode retry2 is preserved as failed candidate provenance: shipment invoked an older global archive helper despite local candidate installation; no accepted receipt issued. Retry3 pins literal local helper paths and has passed native inspection within23,419 generated tokens.
+
+Latest owner correction: "Yes — use affected checks (recommended)". Finish the
+current native attempts, then use validated receipts and affected checks for
+routine releases. Do not start another full fixture retry after a current failure.
+Copilot retry4 now passes receipt, oracle6/6, full-wave and repeated verification
+reuse; maximum native context21,937 output tokens. Its recovered path error and
+delayed diagnosis are disclosed in copilot/SCENARIO-OBSERVATIONS.md.

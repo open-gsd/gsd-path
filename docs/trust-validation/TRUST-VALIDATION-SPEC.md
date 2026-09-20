@@ -11,15 +11,15 @@ interactive entry point.
 Every release is trusted only when:
 
 1. `npm run verify` passes.
-2. Every affected host has one current full-milestone receipt and structured,
-   tracked per-step evidence under `evidence/releases/<package-version>/`.
-   Each receipt must identify a distinct host run, landing commit, ship commit,
-   and integration commit.
-3. `npm run verify:release` determines the affected hosts, accepts required
-   receipts, and proves that only trust evidence, its summaries, or the
-   release-evaluation policy files listed below changed
-   after their tested candidate SHA. With no affected hosts, automated checks
-   suffice; the validator reports an empty host list, not a live-test pass.
+2. Every evaluation host has validated full-milestone evidence. Receipts keep
+   their original package version and candidate SHA under
+   `evidence/releases/<original-package-version>/`. Each host must identify a
+   distinct run, landing commit, ship commit, and integration commit.
+3. `npm run verify:release` validates those receipts and compares each tested
+   candidate with HEAD. Reuse is allowed only when that host's runtime and
+   integration inputs are unchanged. Missing, invalid, or stale evidence
+   requires a fresh run. A current-version receipt takes precedence; a failed
+   current receipt cannot be hidden by an older pass.
 
 ### Live-check scope
 
@@ -30,10 +30,16 @@ offline contract tests remain. Exclusion is not a live-test pass; historical
 receipts and failed attempts remain unchanged. The preparation script uses the
 same host selection as the validator and does not prepare these three hosts.
 
-`scripts/check_trust_evidence.py` compares HEAD with the nearest reachable
-`v<semver>` tag, excluding the current package version's tag. This prevents a
-new release tag from hiding its own changes. Without a prior tag or with
-shallow history, every release evaluation host requires evidence.
+`scripts/check_trust_evidence.py --plan` reports `required_runs`, reasons,
+accepted receipt paths, original versions, and original candidate SHAs. The
+preparation script prepares only those required hosts. It never launches a
+host or spends model credits itself.
+
+Each receipt candidate must be a proven ancestor of HEAD. The comparison below
+is applied separately to each candidate, so evidence from independent host
+runs can be combined. Missing history cannot prove reuse. The nearest prior
+release tag remains an informational change summary, not a substitute for a
+validated receipt. No tag alone exempts a host with missing evidence.
 
 | Changed files | Required live checks |
 |---|---|
@@ -47,19 +53,20 @@ Added and deleted paths count, including both sides of renames. No old receipt
 is relabeled as current evidence. Required receipts retain all existing
 candidate, native-child, task, review, archive, integration, and guard checks.
 
-Release 1.2.0 includes shared pipeline changes, so all eight release evaluation
-hosts require current live evidence.
+Release 1.2.0 includes shared pipeline changes, so all eight evaluation hosts
+need evidence that covers those changes. Subsequent documentation, version-only,
+and release-policy changes can reuse it. Never rewrite a receipt's candidate
+SHA or package version to claim a fresh run.
 
-Changing evaluation policy does not change the installed candidate being
-tested. The following files may change after the candidate without discarding
-its receipts: `scripts/check_trust_evidence.py`,
-`scripts/prepare_release_evidence.sh`, `tests/test_trust_evidence.py`, this
-specification, and `RELEASE.md`. Automated verification still applies. Runtime,
-installer, dispatch, skill, package, and other product changes still invalidate
-the candidate proof. No receipt candidate SHA may be rewritten to bypass this.
+A full matrix is manual: `bash scripts/prepare_release_evidence.sh --full`
+prepares every evaluation host, regardless of reusable receipts. To require
+receipts filed under the current version, validate with
+`python3 -B scripts/check_trust_evidence.py --repo . --full`.
 
-`npm publish` runs this gate through the package's `prepublishOnly` lifecycle.
-The release-trust workflow provides the same check on demand before publishing.
+Local `npm publish` runs the release gate through `prepublishOnly`. The release
+workflow runs the gate explicitly once, then publishes with `--ignore-scripts`
+to avoid running the same complete verification a second time. The
+release-trust workflow also provides the gate on demand.
 
 Missing credentials, an unavailable required host, or required evidence marked
 partial or unverifiable blocks release. It never becomes an implicit pass.
@@ -71,7 +78,7 @@ partial or unverifiable blocks release. It never becomes an implicit pass.
 | Unit and integration tests | Install, state routing, handoff validation, isolation, recovery, guards, archive, integration | `npm run verify` |
 | Lightweight live smoke | Real host invocation and a bounded artifact | `.github/workflows/dogfood.yml` |
 | Full live milestone | Real child dispatch, build, review, archive, merge, and tag on one host | release receipt |
-| Release reconciliation | Affected hosts passed at one candidate and later changes are evidence-only | `npm run verify:release` |
+| Release reconciliation | Every host has validated evidence covering its unchanged runtime inputs | `npm run verify:release` |
 
 Simulated full-cycle tests are strong evidence for the deterministic disk and
 Git contract. They do not replace real child-agent execution.

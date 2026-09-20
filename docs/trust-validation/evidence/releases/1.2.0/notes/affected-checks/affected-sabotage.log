@@ -1,0 +1,32 @@
+EF
+======================================================================
+ERROR: test_reuses_original_receipts_after_version_and_docs_change (tests.test_trust_evidence.TrustEvidenceTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/jeremymcspadden/orca/workspaces/gsd-path/release-gate/tests/test_trust_evidence.py", line 557, in test_reuses_original_receipts_after_version_and_docs_change
+    result = check_trust_evidence.validate_repository(self.repo)
+  File "/Users/jeremymcspadden/orca/workspaces/gsd-path/release-gate/scripts/check_trust_evidence.py", line 944, in validate_repository
+    raise EvidenceError(f"missing host evidence: {', '.join(missing)}")
+scripts.check_trust_evidence.EvidenceError: missing host evidence: alpha, beta
+
+======================================================================
+FAIL: test_prepare_release_selects_only_stale_host (tests.test_trust_evidence.TrustEvidenceTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/jeremymcspadden/orca/workspaces/gsd-path/release-gate/tests/test_trust_evidence.py", line 675, in test_prepare_release_selects_only_stale_host
+    self.prepare_release(affected=True)
+  File "/Users/jeremymcspadden/orca/workspaces/gsd-path/release-gate/tests/test_trust_evidence.py", line 716, in prepare_release
+    self.assertEqual(["alpha"] if affected and not full else ["alpha", "beta"],
+AssertionError: Lists differ: ['alpha'] != ['alpha', 'beta']
+
+Second list contains 1 additional elements.
+First extra element 1:
+'beta'
+
+- ['alpha']
++ ['alpha', 'beta']
+
+----------------------------------------------------------------------
+Ran 2 tests in 17.789s
+
+FAILED (failures=1, errors=1)

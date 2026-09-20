@@ -17,7 +17,7 @@ guard_tier: git-only
 
 # Live milestone evidence — copilot
 
-Full quick-lane milestone run by the pinned candidate on a fresh fixture; evaluator-driven owner gates. Run directory: `/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/copilot-retry2`.
+Full quick-lane milestone run by the pinned candidate on a fresh fixture; evaluator-driven owner gates. Run directory: `/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/copilot-retry4`.
 
 ## Environment
 
@@ -25,7 +25,7 @@ Full quick-lane milestone run by the pinned candidate on a fresh fixture; evalua
 Run 'copilot update' to check for updates.
 - Operator: Release evaluator
 - Date: 2026-09-20
-- Fixture repository: /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/copilot-retry2/quick/repo
+- Fixture repository: /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/copilot-retry4/quick/repo
 - Child-agent API used: task (description build_t001)
 
 ## Evidence
@@ -43,6 +43,10 @@ Run 'copilot update' to check for updates.
 
 Fixture Git bundle: copilot/fixture.bundle (all refs, including origin/main and the annotated milestone tag).
 
-## Scenario qualification
+## Scenario and budget evidence
 
-The structural receipt validates, but the complete scenario **failed** the no-repeat execution, helper-failure handling, and30,000-output-token session contracts. See [SCENARIO-FAILURES.md](copilot/SCENARIO-FAILURES.md), [usage.json](copilot/usage.json), and [independent oracle](copilot/widget-oracle.json). Do not interpret this receipt as a clean scenario pass.
+- Independent oracle: copilot/widget-oracle.json (six checks passed).
+- Native budget: copilot/usage.json (18 sessions, maximum21,937 output tokens including children).
+- Review and verification reuse: copilot/final-ready-before-repeat.json, copilot/final-ready-after-repeat.json, copilot/recovery-and-reuse.json.
+- Disclosed recovered path error and diagnosis-ordering deviation: copilot/SCENARIO-OBSERVATIONS.md and copilot/review-path-negative.json. No claim of flawless protocol compliance.
+- Actual native task branch/worktree: copilot/coder-provenance.json.

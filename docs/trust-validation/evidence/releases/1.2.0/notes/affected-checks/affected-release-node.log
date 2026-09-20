@@ -1,0 +1,26 @@
+✔ pull_request runs trust validator tests without requiring release receipts (314.554583ms)
+✔ push runs trust validator tests without requiring release receipts (221.518042ms)
+✔ manual frozen-candidate validation rejects stale receipts (246.732042ms)
+✔ npm publication and release workflow retain the strict blocking gate (414.363083ms)
+✔ release uses GitHub-hosted OIDC with a supported Node version and no npm token (0.904292ms)
+✔ manual dispatch publishes in the same job after the release gate (0.140125ms)
+✔ tag and manual versions resolve without changing the frozen package (394.969917ms)
+✔ manual dispatch without an explicit version resolves from package.json (266.079ms)
+✔ version mismatch and invalid input fail before emitting release outputs (383.070084ms)
+✔ release rejects an unscoped or wrong-owner package before publication (288.125416ms)
+✔ npm packs the organization-scoped package (1407.909709ms)
+✔ push preserves frozen package files between verification and publication (469.25825ms)
+✔ push detects version rewriting regardless of the step label (709.551834ms)
+✔ workflow_dispatch preserves frozen package files between verification and publication (440.880584ms)
+✔ workflow_dispatch detects version rewriting regardless of the step label (581.47525ms)
+✔ failed manual release retries preserve candidate files and Git history before verification (576.883583ms)
+✔ release publish runs verification once through the actual npm lifecycle (780.9805ms)
+✔ ordinary local npm publish still runs prepublishOnly verification (1015.738792ms)
+ℹ tests 18
+ℹ suites 0
+ℹ pass 18
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 7478.993917

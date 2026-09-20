@@ -1,0 +1,39 @@
+EEEE
+======================================================================
+ERROR: test_reuses_original_receipts_after_version_and_docs_change (tests.test_trust_evidence.TrustEvidenceTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/jeremymcspadden/orca/workspaces/gsd-path/release-gate/tests/test_trust_evidence.py", line 557, in test_reuses_original_receipts_after_version_and_docs_change
+    result = check_trust_evidence.validate_repository(self.repo)
+  File "/Users/jeremymcspadden/orca/workspaces/gsd-path/release-gate/scripts/check_trust_evidence.py", line 944, in validate_repository
+    raise EvidenceError(f"missing host evidence: {', '.join(missing)}")
+scripts.check_trust_evidence.EvidenceError: missing host evidence: alpha, beta
+
+======================================================================
+ERROR: test_plan_requires_only_host_with_stale_receipt (tests.test_trust_evidence.TrustEvidenceTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/jeremymcspadden/orca/workspaces/gsd-path/release-gate/tests/test_trust_evidence.py", line 569, in test_plan_requires_only_host_with_stale_receipt
+    result = check_trust_evidence.validate_repository(self.repo, plan=True)
+TypeError: validate_repository() got an unexpected keyword argument 'plan'
+
+======================================================================
+ERROR: test_plan_cannot_reuse_corrupt_historical_receipt (tests.test_trust_evidence.TrustEvidenceTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/jeremymcspadden/orca/workspaces/gsd-path/release-gate/tests/test_trust_evidence.py", line 582, in test_plan_cannot_reuse_corrupt_historical_receipt
+    result = check_trust_evidence.validate_repository(self.repo, plan=True)
+TypeError: validate_repository() got an unexpected keyword argument 'plan'
+
+======================================================================
+ERROR: test_full_matrix_requires_current_version_receipts (tests.test_trust_evidence.TrustEvidenceTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/jeremymcspadden/orca/workspaces/gsd-path/release-gate/tests/test_trust_evidence.py", line 591, in test_full_matrix_requires_current_version_receipts
+    result = check_trust_evidence.validate_repository(self.repo, plan=True, full=True)
+TypeError: validate_repository() got an unexpected keyword argument 'plan'
+
+----------------------------------------------------------------------
+Ran 4 tests in 33.747s
+
+FAILED (errors=4)

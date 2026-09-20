@@ -53,7 +53,7 @@
       "pass": true,
       "exit_code": 1,
       "stdout": "",
-      "stderr": "invalid input: expected signed integer, got: invalid\n"
+      "stderr": "error: invalid integer: invalid\n"
     }
   ]
 }

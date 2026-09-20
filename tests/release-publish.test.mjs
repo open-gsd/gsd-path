@@ -44,7 +44,7 @@ test('manual dispatch publishes in the same job after the release gate', () => {
   assert.equal(release.jobs.tag, undefined);
   const gate = job.steps.findIndex(step => step.run === 'npm run verify:release');
   const tag = job.steps.findIndex(step => step.name === 'Create release tag');
-  const publish = job.steps.findIndex(step => step.run === 'npm publish --access public --provenance');
+  const publish = job.steps.findIndex(step => step.name === 'Publish to npm');
   assert.ok(gate >= 0 && tag > gate && publish > tag);
   assert.equal(job.steps[tag].if, "github.event_name == 'workflow_dispatch'");
   assert.equal(job.steps[publish].if, undefined);
@@ -143,7 +143,7 @@ function assertFrozenPackage(steps, event) {
 }
 
 const gateIndex = job.steps.findIndex(step => step.run === 'npm run verify:release');
-const publishIndex = job.steps.findIndex(step => step.run === 'npm publish --access public --provenance');
+const publishIndex = job.steps.findIndex(step => step.name === 'Publish to npm');
 const prepublication = job.steps.slice(gateIndex + 1, publishIndex);
 
 for (const event of ['push', 'workflow_dispatch']) {
@@ -195,4 +195,48 @@ export -f git
       assert.equal(fs.existsSync(path.join(dir, 'mutations')), false, 'push, tag, or publication before verification');
     }
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+function publishFixture(command, failGate = false) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'release-lifecycle-'));
+  try {
+    const scripts = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url))).scripts;
+    fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({
+      name: 'release-lifecycle-fixture', version: '1.0.0',
+      scripts: { prepublishOnly: scripts.prepublishOnly, 'verify:release': 'node gate.cjs' },
+    }));
+    fs.writeFileSync(path.join(dir, 'gate.cjs'),
+      "require('node:fs').appendFileSync('gate.log', 'verified\\n'); process.exit(Number(process.env.GATE_EXIT));\n");
+    const result = spawnSync('bash', ['--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', command], {
+      cwd: dir, encoding: 'utf8',
+      env: { ...process.env, GATE_EXIT: failGate ? '23' : '0',
+        npm_config_dry_run: 'true', npm_config_offline: 'true',
+        npm_config_registry: 'http://127.0.0.1:9', npm_config_ignore_scripts: 'false',
+        npm_config_cache: path.join(dir, 'cache'),
+        npm_config_userconfig: path.join(dir, 'user.npmrc'),
+        npm_config_globalconfig: path.join(dir, 'global.npmrc') },
+    });
+    assert.ifError(result.error);
+    return { ...result, checks: fs.existsSync(path.join(dir, 'gate.log'))
+      ? fs.readFileSync(path.join(dir, 'gate.log'), 'utf8').trim().split('\n') : [] };
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+}
+
+test('release publish runs verification once through the actual npm lifecycle', () => {
+  const command = `${job.steps[gateIndex].run}\n${job.steps[publishIndex].run} --dry-run --offline --provenance=false`;
+  const result = publishFixture(command);
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(result.checks, ['verified'], 'prepublishOnly must not duplicate the explicit release gate');
+  assert.match(result.stdout, /\+ release-lifecycle-fixture@1\.0\.0/);
+
+  const blocked = publishFixture(command, true);
+  assert.equal(blocked.status, 23, blocked.stderr);
+  assert.deepEqual(blocked.checks, ['verified']);
+  assert.doesNotMatch(blocked.stdout, /\+ release-lifecycle-fixture@/);
+});
+
+test('ordinary local npm publish still runs prepublishOnly verification', () => {
+  const result = publishFixture('npm publish --dry-run --offline --provenance=false');
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(result.checks, ['verified']);
 });
