@@ -128,6 +128,42 @@ class ProjectFilesTests(unittest.TestCase):
         self.assertEqual(self.js("document.querySelector('[data-search]').value"), '')
         self.assertEqual(self.js("document.querySelectorAll('.prow').length"), '1')
 
+    @unittest.skipUnless(os.environ.get('GSD_UI_TEST'), 'requires Orca browser')
+    def test_browser_relative_link_preserves_selected_revision(self):
+        from tests.test_daemon_board_ui import BoardUITests
+        target = self.root / '.project/linked.md'
+        target.write_text('# Historical destination\n')
+        self.git('add', '.')
+        self.git('commit', '-m', 'Add destination')
+        self.state.write_text('# Linked source\n\n[Destination](linked.md)\n')
+        self.git('commit', '-am', 'Link destination')
+        revision = self.git('rev-parse', 'HEAD').strip()
+        target.write_text('# Working destination\n')
+        self.orca = BoardUITests.orca.__get__(self)
+        self.js = BoardUITests.js.__get__(self)
+        self.page = self.orca('tab', 'create', '--url', f'http://127.0.0.1:{self.port}/')['browserPageId']
+        tab = next(t for t in self.orca('tab', 'list')['tabs'] if t.get('browserPageId') == self.page)
+        self.addCleanup(self.orca, 'tab', 'close', '--index', str(tab['index']))
+        self.orca('wait', '--page', self.page, '--selector', '.pname')
+        self.js("document.querySelector('.pname').click();document.querySelector('[data-open-file]').click()")
+        self.orca('wait', '--page', self.page, '--selector', '.document h1')
+        self.js(f"document.querySelector('[data-file-revision]').value='{revision}';document.querySelector('[data-file-revision]').dispatchEvent(new Event('change',{{bubbles:true}}))")
+        self.orca('wait', '--page', self.page, '--selector', '.document a')
+        self.assertEqual(self.js("document.querySelector('[data-file-revision]').value"), revision)
+        self.js("document.querySelector('[data-document-link]').click()")
+        self.orca('wait', '--page', self.page, '--text', 'Historical destination')
+        self.assertIn(revision, self.js('location.hash'))
+        self.assertEqual(self.js("document.querySelector('[data-file-revision]').value"), revision)
+        self.assertIn(revision[:7], self.js("document.querySelector('[data-file-revision]').selectedOptions[0].textContent"))
+        self.orca('reload', '--page', self.page)
+        self.orca('wait', '--page', self.page, '--text', 'Historical destination')
+        self.assertEqual(self.js("document.querySelector('[data-file-revision]').value"), revision)
+        self.assertEqual(self.js(f"document.querySelectorAll('[data-file-revision] option[value=\"{revision}\"]').length"), '1')
+        self.js("document.querySelector('[data-file-revision]').value='';document.querySelector('[data-file-revision]').dispatchEvent(new Event('change',{bubbles:true}))")
+        self.orca('wait', '--page', self.page, '--text', 'Working destination')
+        self.assertEqual(self.js("document.querySelector('[data-file-revision]').value"), '')
+        self.assertEqual(self.js("document.querySelector('[data-file-revision]').selectedOptions[0].textContent"), 'Working tree')
+
     def test_full_records_and_missing_coverage(self):
         build = self.root / '.project/build'
         build.mkdir()
