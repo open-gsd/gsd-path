@@ -85,8 +85,6 @@ test('npm publication and release workflow retain the strict blocking gate', () 
   assert.ok(gate, 'release must verify before publishing');
   assert.equal(gate.if, undefined);
   assert.equal(gate['continue-on-error'], undefined);
-  const bump = job.steps.find(step => step.id === 'bump');
-  assert.ok(bump, 'release must support auto bump on manual dispatch');
   const docs = job.steps.slice(0, publishIndex).find(step => step.name === 'Update release documentation');
   assert.ok(docs, 'release must refresh changelog and README before publishing');
   const pack = job.steps.slice(0, publishIndex).find(step => step.name === 'Verify npm package packs cleanly');

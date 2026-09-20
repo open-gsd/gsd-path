@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Prepare fresh quick-lane evaluation harnesses for every manifest host.
+# Prepare fresh quick-lane evaluation harnesses for release evaluation hosts.
 #
 # Usage:
 #   bash scripts/prepare_release_evidence.sh \
@@ -52,11 +52,15 @@ if [[ "$CANDIDATE" != "$HEAD_SHA" ]]; then
   exit 1
 fi
 
-HOSTS="$(python3 - <<'PY'
+HOSTS="$(python3 - "$ROOT" <<'PY'
 import json
+import sys
 from pathlib import Path
-hosts = json.loads(Path("scripts/skill-resources.json").read_text())["hosts"]
-print(" ".join(hosts))
+root = Path(sys.argv[1])
+sys.path.insert(0, str(root / "scripts"))
+from check_trust_evidence import evaluation_hosts
+hosts = json.loads((root / "scripts/skill-resources.json").read_text())["hosts"]
+print(" ".join(evaluation_hosts(hosts)))
 PY
 )"
 

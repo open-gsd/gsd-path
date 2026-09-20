@@ -33,6 +33,10 @@ owns the release gate, live-check scope, and receipt requirements.
 Set the intended package name and version in `package.json` and
 `package-lock.json` before freezing the candidate. Changes to either invalidate
 existing candidate proof.
+Prepare the version locally, run verification, and collect required evidence
+before merging the candidate. The publication workflow never increments or
+pushes a package version. A failed publication attempt keeps the same candidate
+version for the retry.
 When the [live-check scope](docs/trust-validation/TRUST-VALIDATION-SPEC.md#live-check-scope)
 requires host receipts, complete these steps before publishing:
 
@@ -44,6 +48,10 @@ requires host receipts, complete these steps before publishing:
 
 2. Run each required host harness from the prepared directories (see
    [HOST-MATRIX.md](docs/trust-validation/HOST-MATRIX.md)).
+   Qwen, Kiro, and Zed are excluded from release evaluations because their
+   live runs require API credits. They remain supported by the installers and
+   offline tests. The preparation script and validator select the same eight
+   evaluation hosts.
 
 3. Validate the required set locally:
 
@@ -123,23 +131,21 @@ back to `main`, and creates a GitHub Release for the tag.
 ### Option B — manual dispatch
 
 1. Open **Actions → Release → Run workflow** on the release commit.
-2. Either:
-   - leave **version** empty and choose a **bump** level (`auto`, `major`,
-     `minor`, or `patch`) to compute the next semver from conventional commits
-     since the previous `v*` tag, commit the bump to `main`, and publish; or
-   - enter an explicit semver **version** (for example `1.2.0`) that already
-     matches `package.json`.
-3. The same job verifies the release, creates `vX.Y.Z`, publishes to npm, and
-   creates the GitHub Release. An existing tag must point to this commit.
+2. Leave **version** empty to use the prepared `package.json` version, or enter
+   that same version explicitly. A mismatch fails without changing files.
+3. The job verifies the frozen release and package before creating `vX.Y.Z`,
+   publishing to npm, or syncing documentation to `main`. An existing tag must
+   point to this commit. Failure before verification creates no version commit,
+   push, tag, npm publication, or GitHub release.
 
-Auto bump rules:
+Local candidate preparation uses these bump rules:
 
 | Signal since previous tag | Next version |
 | --- | --- |
 | `BREAKING CHANGE` or `type!:` commit | major (`1.1.0` → `2.0.0`) |
 | `feat:` commit | minor (`1.1.0` → `1.2.0`) |
 | `fix:` / `perf:` commit | patch (`1.1.0` → `1.1.1`) |
-| `bump: major` / `minor` / `patch` input | forced increment |
+| `--bump major` / `minor` / `patch` | selected increment when preparing a new version |
 
 Preview locally:
 
@@ -148,10 +154,15 @@ node scripts/bump_version.mjs --bump auto --dry-run
 npm run release:bump -- --dry-run
 ```
 
-Tag pushes still require `package.json` to match the tag before dispatch; only
-manual dispatch may auto bump. Between `verify:release` and `npm publish`, the
-workflow never rewrites the frozen package version. Publish runs are serialized
-across tags and manual dispatches.
+Apply a new candidate version locally with `npm run release:bump`. If the
+package version is already ahead of the latest release tag, the helper reuses
+that pending version, including on a retry; it does not compound an unpublished
+bump. `--from` is an explicit override for intentionally preparing another
+version. Neither the helper nor its preview pushes to `main`.
+
+Tag pushes require `package.json` to match the tag before dispatch. Both
+publication paths keep the verified package version unchanged through
+`npm publish`. Publish runs are serialized across tags and manual dispatches.
 
 ### Release notes automation
 

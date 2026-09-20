@@ -1,4 +1,5 @@
 import json
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -574,6 +575,62 @@ class TrustEvidenceTests(unittest.TestCase):
         self.commit_receipts()
         self.assertEqual(["alpha"], check_trust_evidence.validate_repository(self.repo)["hosts"])
 
+    def add_api_hosts(self):
+        path = self.repo / "scripts/skill-resources.json"
+        manifest = json.loads(path.read_text())
+        for host in ("qwen", "kiro", "zed"):
+            manifest["hosts"][host] = {
+                "local_root": f".{host}/skills", "guard_tier": "git-only",
+                "child_apis": [f"{host}.spawn"],
+            }
+        self.release_change("scripts/skill-resources.json", json.dumps(manifest))
+        return list(manifest["hosts"])
+
+    def test_release_excludes_api_hosts_but_keeps_install_contracts(self):
+        self.add_api_hosts()
+        self.receipt("alpha")
+        self.receipt("beta")
+        self.commit_receipts()
+        result = check_trust_evidence.validate_repository(self.repo)
+        self.assertEqual(["alpha", "beta"], result["hosts"])
+        manifest = json.loads((self.repo / "scripts/skill-resources.json").read_text())
+        self.assertTrue({"qwen", "kiro", "zed"}.issubset(manifest["hosts"]))
+
+    def test_excluded_host_changes_do_not_select_other_hosts(self):
+        self.add_api_hosts()
+        self.git("tag", "v1.2.2")
+        for host in ("qwen", "kiro", "zed"):
+            with self.subTest(host=host):
+                self.release_change(f"platforms/{host}/dispatch.md")
+                self.assertEqual([], check_trust_evidence.validate_repository(self.repo)["hosts"])
+        self.release_change("platforms/unknown/dispatch.md")
+        with self.assertRaisesRegex(check_trust_evidence.EvidenceError, "missing.*alpha, beta$"):
+            check_trust_evidence.validate_repository(self.repo)
+
+    def test_prepare_release_uses_same_evaluation_hosts(self):
+        self.add_api_hosts()
+        manifest = (self.repo / "scripts/skill-resources.json").read_text()
+        source = Path(__file__).resolve().parents[1]
+        shutil.copytree(source / "scripts", self.repo / "scripts", dirs_exist_ok=True)
+        (self.repo / "scripts/skill-resources.json").write_text(manifest)
+        (self.repo / "tests").mkdir()
+        # Preparation is the external boundary; never install or invoke paid hosts.
+        (self.repo / "tests/evaluate_host.py").write_text(
+            "import sys\nfrom pathlib import Path\n"
+            "with Path('prepared-hosts.txt').open('a') as out:\n"
+            "    out.write(sys.argv[sys.argv.index('--host') + 1] + '\\n')\n"
+        )
+        self.git("add", "-A")
+        self.git("commit", "-qm", "prepare fixture")
+        result = subprocess.run(
+            ["bash", str(self.repo / "scripts/prepare_release_evidence.sh"),
+             "--candidate", self.git("rev-parse", "HEAD").stdout.strip(),
+             "--output-base", str(self.repo.parent / "prepared")],
+            cwd=self.repo, text=True, capture_output=True,
+        )
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(["alpha", "beta"], (self.repo / "prepared-hosts.txt").read_text().splitlines())
+
     def test_release_scope_lockfile_exempts_only_package_version(self):
         lock = {"version": "1.2.2", "packages": {"": {"version": "1.2.2"},
                 "node_modules/example": {"version": "1.0.0"}}}
@@ -1075,15 +1132,17 @@ class TrustEvidenceTests(unittest.TestCase):
         with self.assertRaisesRegex(check_trust_evidence.EvidenceError, "non-evidence"):
             check_trust_evidence.validate_repository(self.repo)
 
-    def test_rejects_active_validation_spec_change_after_candidate(self):
+    def test_accepts_evaluation_policy_changes_after_candidate(self):
         self.receipt("alpha")
         self.receipt("beta")
-        spec = self.repo / "docs" / "trust-validation" / "TRUST-VALIDATION-SPEC.md"
-        spec.write_text("changed release contract\n", encoding="utf-8")
+        for name in ("scripts/check_trust_evidence.py", "scripts/prepare_release_evidence.sh",
+                     "tests/test_trust_evidence.py", "RELEASE.md",
+                     "docs/trust-validation/TRUST-VALIDATION-SPEC.md"):
+            path = self.repo / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("changed evaluation policy\n", encoding="utf-8")
         self.commit_receipts()
-
-        with self.assertRaisesRegex(check_trust_evidence.EvidenceError, "non-evidence"):
-            check_trust_evidence.validate_repository(self.repo)
+        self.assertEqual(["alpha", "beta"], check_trust_evidence.validate_repository(self.repo)["hosts"])
 
 
 if __name__ == "__main__":

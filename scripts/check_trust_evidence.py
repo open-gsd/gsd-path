@@ -121,6 +121,16 @@ SUMMARY_PATHS = frozenset(
         "docs/trust-validation/TRUST-EVIDENCE.md",
     }
 )
+EXCLUDED_EVALUATION_HOSTS = frozenset({"qwen", "kiro", "zed"})
+EVALUATION_POLICY_PATHS = frozenset(
+    {
+        "scripts/check_trust_evidence.py",
+        "scripts/prepare_release_evidence.sh",
+        "tests/test_trust_evidence.py",
+        "docs/trust-validation/TRUST-VALIDATION-SPEC.md",
+        "RELEASE.md",
+    }
+)
 WORKTREE_RECORD_KEYS = frozenset(
     {"worktree", "HEAD", "branch", "bare", "detached", "locked", "prunable"}
 )
@@ -851,8 +861,15 @@ def _require_current_tracked_evidence(
         )
 
 
+def evaluation_hosts(hosts: Sequence[str]) -> List[str]:
+    """Keep installer support separate from maintainer-funded live evaluation."""
+    return [host for host in hosts if host not in EXCLUDED_EVALUATION_HOSTS]
+
+
 def release_scope(repo: Path, version: str, hosts: Sequence[str]) -> Mapping:
     """Select live checks from the previous reachable release; unknowns fail closed."""
+    declared_hosts = frozenset(hosts)
+    hosts = evaluation_hosts(hosts)
     tags = [tag for tag in _git(repo, "tag", "--merged", "HEAD", "--list", "v*").splitlines()
             if tag != f"v{version}" and re.fullmatch(r"v\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?", tag)]
     if not tags or _git(repo, "rev-parse", "--is-shallow-repository") == "true":
@@ -889,7 +906,9 @@ def release_scope(repo: Path, version: str, hosts: Sequence[str]) -> Mapping:
                   and path not in {"AGENTS.md", "WORKFLOW.md"})):
             continue
         parts = PurePosixPath(path).parts
-        if len(parts) > 2 and parts[0] == "platforms" and parts[1] in hosts:
+        if len(parts) > 2 and parts[0] == "platforms" and parts[1] in declared_hosts:
+            if parts[1] not in hosts:
+                continue
             required.add(parts[1])
         else:
             required.update(hosts)
@@ -981,7 +1000,9 @@ def validate_repository(repo: Path) -> Mapping:
     disallowed = [
         path
         for path in changed
-        if not path.startswith(evidence_prefix) and path not in SUMMARY_PATHS
+        if not path.startswith(evidence_prefix)
+        and path not in SUMMARY_PATHS
+        and path not in EVALUATION_POLICY_PATHS
     ]
     if disallowed:
         raise EvidenceError(

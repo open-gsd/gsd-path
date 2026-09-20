@@ -113,21 +113,6 @@ function compareVersions(left, right) {
   return a.patch - b.patch;
 }
 
-function baseVersion(explicitFrom) {
-  const packageVersion = readPackageVersion();
-  const tag = latestTag();
-  const taggedVersion = tag ? tag.slice(1) : null;
-
-  if (explicitFrom) {
-    return explicitFrom;
-  }
-
-  if (taggedVersion && compareVersions(packageVersion, taggedVersion) > 0) {
-    return packageVersion;
-  }
-
-  return taggedVersion ?? packageVersion;
-}
 
 function commitsSinceTag(tag) {
   const range = tag ? `${tag}..HEAD` : "HEAD";
@@ -230,9 +215,12 @@ function applyVersion(version) {
 function main() {
   const options = parseArgs(process.argv.slice(2));
   const tag = latestTag();
-  const from = baseVersion(options.from);
-  const commits = commitsSinceTag(tag);
-  const result = nextVersion({ from, bump: options.bump, commits });
+  const packageVersion = readPackageVersion();
+  const from = options.from ?? (tag ? tag.slice(1) : packageVersion);
+  const pending = !options.from && tag && compareVersions(packageVersion, from) > 0;
+  const result = pending
+    ? { level: "pending", current: from, next: packageVersion }
+    : nextVersion({ from, bump: options.bump, commits: commitsSinceTag(tag) });
 
   if (compareVersions(result.next, result.current) <= 0) {
     throw new Error(`requested bump would not advance version beyond ${result.current}`);

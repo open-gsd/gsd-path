@@ -42,12 +42,10 @@ test('release uses GitHub-hosted OIDC with a supported Node version and no npm t
 test('manual dispatch publishes in the same job after the release gate', () => {
   assert.equal(job.if, undefined);
   assert.equal(release.jobs.tag, undefined);
-  const bump = job.steps.findIndex(step => step.id === 'bump');
   const gate = job.steps.findIndex(step => step.run === 'npm run verify:release');
   const tag = job.steps.findIndex(step => step.name === 'Create release tag');
   const publish = job.steps.findIndex(step => step.run === 'npm publish --access public --provenance');
-  assert.ok(bump >= 0 && gate > bump && tag > gate && publish > tag);
-  assert.equal(job.steps[bump].if, "github.event_name == 'workflow_dispatch' && inputs.version == ''");
+  assert.ok(gate >= 0 && tag > gate && publish > tag);
   assert.equal(job.steps[tag].if, "github.event_name == 'workflow_dispatch'");
   assert.equal(job.steps[publish].if, undefined);
 });
@@ -162,3 +160,39 @@ for (const event of ['push', 'workflow_dispatch']) {
     assert.throws(() => assertFrozenPackage(mutated, event), /package.json changed after release verification/);
   });
 }
+
+
+test('failed manual release retries preserve candidate files and Git history before verification', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'release-retry-'));
+  try {
+    fs.mkdirSync(path.join(dir, 'scripts'));
+    fs.copyFileSync(new URL('../scripts/bump_version.mjs', import.meta.url), path.join(dir, 'scripts/bump_version.mjs'));
+    const pkg = JSON.stringify({ name: '@opengsd/gsd-path', version: '1.2.0' });
+    fs.writeFileSync(path.join(dir, 'package.json'), pkg);
+    fs.writeFileSync(path.join(dir, 'package-lock.json'), JSON.stringify({ name: '@opengsd/gsd-path', version: '1.2.0', lockfileVersion: 3, packages: { '': { name: '@opengsd/gsd-path', version: '1.2.0' } } }));
+    const env = { ...process.env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null',
+      GIT_AUTHOR_NAME: 'Release test', GIT_AUTHOR_EMAIL: 'release@example.invalid',
+      GIT_COMMITTER_NAME: 'Release test', GIT_COMMITTER_EMAIL: 'release@example.invalid',
+      GITHUB_EVENT_NAME: 'workflow_dispatch', GITHUB_REF_NAME: 'main', RELEASE_VERSION: '',
+      RELEASE_BUMP: 'auto', GITHUB_OUTPUT: path.join(dir, 'output') };
+    const run = command => spawnSync('bash', ['-e', '-o', 'pipefail', '-c', command], { cwd: dir, encoding: 'utf8', env });
+    assert.equal(run('git init -q && git add package.json && git commit -qm fixture && git tag v1.1.0 && git commit --allow-empty -qm "feat: pending candidate"').status, 0);
+    const head = run('git rev-parse HEAD').stdout;
+    const lock = fs.readFileSync(path.join(dir, 'package-lock.json'), 'utf8');
+    const prefix = job.steps.slice(0, job.steps.findIndex(step => step.run === 'npm run verify:release') + 1)
+      .filter(step => step.run).map(step => step.run).join('\n');
+    const boundary = `npm() { if [[ "$*" == "run verify:release" ]]; then return 23; elif [[ "$1" == version ]]; then command npm "$@"; elif [[ "$1" == publish ]]; then echo "npm $*" >> mutations; else return 0; fi; }
+export -f npm
+git() { if [[ "$1" == push || "$1" == tag ]]; then echo "$*" >> mutations; return 0; else command git "$@"; fi; }
+export -f git
+`;
+    for (const attempt of [1, 2]) {
+      const result = run(boundary + prefix);
+      assert.equal(result.status, 23, result.stderr);
+      assert.equal(fs.readFileSync(path.join(dir, 'package.json'), 'utf8'), pkg, `attempt ${attempt} changed candidate`);
+      assert.equal(fs.readFileSync(path.join(dir, 'package-lock.json'), 'utf8'), lock, `attempt ${attempt} changed lockfile`);
+      assert.equal(run('git rev-parse HEAD').stdout, head, `attempt ${attempt} committed before verification`);
+      assert.equal(fs.existsSync(path.join(dir, 'mutations')), false, 'push, tag, or publication before verification');
+    }
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
