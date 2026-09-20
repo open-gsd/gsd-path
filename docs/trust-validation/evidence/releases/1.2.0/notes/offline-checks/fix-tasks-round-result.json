@@ -1,0 +1,286 @@
+{
+  "blocked": [],
+  "dispatched": [
+    {
+      "attempt": 1,
+      "cycle": null,
+      "dispatched_at": "2026-09-20T16:40:23+00:00",
+      "mode": "parallel",
+      "model_selection": null,
+      "task_id": "T003",
+      "verify_heavy": false,
+      "wave": 2,
+      "worktree": "/Users/jeremymcspadden/.gsd-path/projects/29a220ea089794ff8a873ffeda10ee5c8d42af39dda647c29b655265810c19af/6b707e8812c5ab684e2ab03a9cf4f6a33f2968dfdb30e01989349ee4fe4b4cf5/task/T003"
+    },
+    {
+      "attempt": 1,
+      "cycle": null,
+      "dispatched_at": "2026-09-20T16:40:23+00:00",
+      "mode": "parallel",
+      "model_selection": null,
+      "task_id": "T004",
+      "verify_heavy": false,
+      "wave": 2,
+      "worktree": "/Users/jeremymcspadden/.gsd-path/projects/29a220ea089794ff8a873ffeda10ee5c8d42af39dda647c29b655265810c19af/6b707e8812c5ab684e2ab03a9cf4f6a33f2968dfdb30e01989349ee4fe4b4cf5/task/T004"
+    }
+  ],
+  "in_flight": [],
+  "landed": [
+    {
+      "commit": "097e6deb728ec33a8e8a1f3a29d6e8e94282af71",
+      "ledger": true,
+      "mode": "parallel",
+      "task": "T003",
+      "verify": {
+        "evidence": "/private/var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpl1dk4v78/repo/.git/gsd-path/dispatch/gsd-path-M001/T003/attempt-1/verify.json",
+        "exit_code": 0,
+        "location": "isolate gsd-path-task/T003",
+        "stderr": "",
+        "stdout": "hello\n",
+        "worktree": "/Users/jeremymcspadden/.gsd-path/projects/29a220ea089794ff8a873ffeda10ee5c8d42af39dda647c29b655265810c19af/6b707e8812c5ab684e2ab03a9cf4f6a33f2968dfdb30e01989349ee4fe4b4cf5/task/T003"
+      }
+    },
+    {
+      "commit": "42975779b6608fd3cd513c4978be455fcf1ca225",
+      "ledger": false,
+      "mode": "parallel",
+      "task": "T004",
+      "verify": {
+        "evidence": "/private/var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpl1dk4v78/repo/.git/gsd-path/dispatch/gsd-path-M001/T004/attempt-1/verify.json",
+        "exit_code": 0,
+        "location": "isolate gsd-path-task/T004",
+        "stderr": "",
+        "stdout": "hello\n",
+        "worktree": "/Users/jeremymcspadden/.gsd-path/projects/29a220ea089794ff8a873ffeda10ee5c8d42af39dda647c29b655265810c19af/6b707e8812c5ab684e2ab03a9cf4f6a33f2968dfdb30e01989349ee4fe4b4cf5/task/T004"
+      }
+    }
+  ],
+  "questions": [],
+  "status": "done",
+  "steps": [
+    {
+      "result": {
+        "bound_branch": "gsd-path/M001",
+        "tasks": [
+          {
+            "base": "f6007ce87ea2abf07887b913f959090244523da5",
+            "commit": "e2d6ac7c422a0aee33631bb5b09e308ee0e899b7",
+            "rejected": [],
+            "status": "done",
+            "task": ".project/tasks/T001-demo.md",
+            "task_branch": null,
+            "task_id": "T001",
+            "verdict": "recovered",
+            "worktree": null
+          },
+          {
+            "base": "f6007ce87ea2abf07887b913f959090244523da5",
+            "commit": "96f43f141c4f47c71b47d16e074a2cc8ce191e90",
+            "rejected": [],
+            "status": "done",
+            "task": ".project/tasks/T002-demo.md",
+            "task_branch": null,
+            "task_id": "T002",
+            "verdict": "recovered",
+            "worktree": null
+          },
+          {
+            "reason": "pending task has no retained isolate",
+            "rejected": [],
+            "status": "pending",
+            "task": ".project/tasks/T003-fix-wave-1-cycle-1.md",
+            "task_branch": null,
+            "task_id": "T003",
+            "verdict": "none",
+            "worktree": null
+          },
+          {
+            "reason": "pending task has no retained isolate",
+            "rejected": [],
+            "status": "pending",
+            "task": ".project/tasks/T004-fix-wave-1-cycle-1.md",
+            "task_branch": null,
+            "task_id": "T004",
+            "verdict": "none",
+            "worktree": null
+          }
+        ],
+        "verdict": "ok"
+      },
+      "script": "isolation.py recover"
+    },
+    {
+      "result": {
+        "branch": "gsd-path/M001",
+        "command": "ready",
+        "current_wave": 2,
+        "head": "562002b18daaa11efe67dc6dca18fc84104fe79f",
+        "ready": [
+          {
+            "deps": [
+              "T001"
+            ],
+            "files": [
+              "src/app.py"
+            ],
+            "id": "T003",
+            "model_selection": null,
+            "status": "pending",
+            "task_file": ".project/tasks/T003-fix-wave-1-cycle-1.md",
+            "title": "Fix wave 1 cycle 1 review findings in T001",
+            "verify_heavy": false,
+            "wave": 2
+          },
+          {
+            "deps": [
+              "T002"
+            ],
+            "files": [
+              "tests/test_app.py"
+            ],
+            "id": "T004",
+            "model_selection": null,
+            "status": "pending",
+            "task_file": ".project/tasks/T004-fix-wave-1-cycle-1.md",
+            "title": "Fix wave 1 cycle 1 review findings in T002",
+            "verify_heavy": false,
+            "wave": 2
+          }
+        ]
+      },
+      "script": "build_state.py ready"
+    },
+    {
+      "command": [
+        "/Applications/Xcode.app/Contents/Developer/usr/bin/python3",
+        "-B",
+        "/Users/jeremymcspadden/orca/workspaces/gsd-path/release-gate/scripts/check_task_briefs.py",
+        "--repo",
+        "/private/var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpl1dk4v78/repo",
+        "--base",
+        "562002b18daaa11efe67dc6dca18fc84104fe79f",
+        "--tasks-dir",
+        ".project/tasks"
+      ],
+      "exit_code": 0,
+      "result": {
+        "base": "562002b18daaa11efe67dc6dca18fc84104fe79f",
+        "checked": 8,
+        "tasks": 4
+      },
+      "script": "check_task_briefs.py",
+      "stderr": "",
+      "stdout": "{\"base\": \"562002b18daaa11efe67dc6dca18fc84104fe79f\", \"checked\": 8, \"tasks\": 4}\n"
+    },
+    {
+      "command": [
+        "/Applications/Xcode.app/Contents/Developer/usr/bin/python3",
+        "-B",
+        "/Users/jeremymcspadden/orca/workspaces/gsd-path/release-gate/scripts/check_handoffs.py",
+        "plan",
+        "--repo",
+        "/private/var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpl1dk4v78/repo",
+        "--project-dir",
+        ".project"
+      ],
+      "exit_code": 0,
+      "result": {
+        "criteria": [
+          "SC1",
+          "SC2"
+        ],
+        "phase": "plan",
+        "rows": 2,
+        "surfaces": {},
+        "tasks": 4,
+        "waves": [
+          1,
+          2
+        ]
+      },
+      "script": "check_handoffs.py",
+      "stderr": "",
+      "stdout": "{\"criteria\": [\"SC1\", \"SC2\"], \"phase\": \"plan\", \"rows\": 2, \"surfaces\": {}, \"tasks\": 4, \"waves\": [1, 2]}\n"
+    },
+    {
+      "command": [
+        "/Applications/Xcode.app/Contents/Developer/usr/bin/python3",
+        "-B",
+        "/Users/jeremymcspadden/orca/workspaces/gsd-path/release-gate/scripts/isolation.py",
+        "isolate-task",
+        "--repo",
+        "/private/var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpl1dk4v78/repo",
+        "--base",
+        "562002b18daaa11efe67dc6dca18fc84104fe79f",
+        "--task-id",
+        "T003",
+        "--round-size",
+        "2"
+      ],
+      "exit_code": 0,
+      "result": {
+        "base": "562002b18daaa11efe67dc6dca18fc84104fe79f",
+        "bound_branch": "gsd-path/M001",
+        "detached": false,
+        "kind": "task",
+        "mode": "parallel",
+        "task_branch": "gsd-path-task/T003",
+        "worktree": "/Users/jeremymcspadden/.gsd-path/projects/29a220ea089794ff8a873ffeda10ee5c8d42af39dda647c29b655265810c19af/6b707e8812c5ab684e2ab03a9cf4f6a33f2968dfdb30e01989349ee4fe4b4cf5/task/T003"
+      },
+      "script": "isolation.py",
+      "stderr": "",
+      "stdout": "{\"base\": \"562002b18daaa11efe67dc6dca18fc84104fe79f\", \"bound_branch\": \"gsd-path/M001\", \"detached\": false, \"kind\": \"task\", \"mode\": \"parallel\", \"task_branch\": \"gsd-path-task/T003\", \"worktree\": \"/Users/jeremymcspadden/.gsd-path/projects/29a220ea089794ff8a873ffeda10ee5c8d42af39dda647c29b655265810c19af/6b707e8812c5ab684e2ab03a9cf4f6a33f2968dfdb30e01989349ee4fe4b4cf5/task/T003\"}\n"
+    },
+    {
+      "command": [
+        "/Applications/Xcode.app/Contents/Developer/usr/bin/python3",
+        "-B",
+        "/Users/jeremymcspadden/orca/workspaces/gsd-path/release-gate/scripts/isolation.py",
+        "isolate-task",
+        "--repo",
+        "/private/var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpl1dk4v78/repo",
+        "--base",
+        "562002b18daaa11efe67dc6dca18fc84104fe79f",
+        "--task-id",
+        "T004",
+        "--round-size",
+        "2"
+      ],
+      "exit_code": 0,
+      "result": {
+        "base": "562002b18daaa11efe67dc6dca18fc84104fe79f",
+        "bound_branch": "gsd-path/M001",
+        "detached": false,
+        "kind": "task",
+        "mode": "parallel",
+        "task_branch": "gsd-path-task/T004",
+        "worktree": "/Users/jeremymcspadden/.gsd-path/projects/29a220ea089794ff8a873ffeda10ee5c8d42af39dda647c29b655265810c19af/6b707e8812c5ab684e2ab03a9cf4f6a33f2968dfdb30e01989349ee4fe4b4cf5/task/T004"
+      },
+      "script": "isolation.py",
+      "stderr": "",
+      "stdout": "{\"base\": \"562002b18daaa11efe67dc6dca18fc84104fe79f\", \"bound_branch\": \"gsd-path/M001\", \"detached\": false, \"kind\": \"task\", \"mode\": \"parallel\", \"task_branch\": \"gsd-path-task/T004\", \"worktree\": \"/Users/jeremymcspadden/.gsd-path/projects/29a220ea089794ff8a873ffeda10ee5c8d42af39dda647c29b655265810c19af/6b707e8812c5ab684e2ab03a9cf4f6a33f2968dfdb30e01989349ee4fe4b4cf5/task/T004\"}\n"
+    },
+    {
+      "result": {
+        "branch": "gsd-path/M001",
+        "command": "ready",
+        "current_wave": null,
+        "head": "42975779b6608fd3cd513c4978be455fcf1ca225",
+        "ready": []
+      },
+      "script": "build_state.py ready"
+    },
+    {
+      "result": {
+        "commit": "85639d2dacf97ef69a48f24a0dcf4479d4d0d7de",
+        "paths": [
+          ".project/build/verify-ledger.jsonl"
+        ],
+        "status": "committed",
+        "subject": "build: record dispatch bookkeeping"
+      },
+      "script": "isolation.py checkpoint"
+    }
+  ],
+  "wave": 2
+}

@@ -1,0 +1,37 @@
+{
+  "status": "blocked",
+  "candidate": "f36f24aed82ac0019d082c7e31b8a4342d8e03f1",
+  "fixture": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry2/quick/repo",
+  "source_events": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry2/quick/run-20260920T163514340609Z/events.jsonl",
+  "recorded_task_branch": "gsd-path-verify/task-t001-verify",
+  "observed_verify_branch": "gsd-path-verify/verify-T001",
+  "responsibility": "Evaluator supplied incorrect manifest --task-branch before shipment. No passing receipt may be issued. Archive remains immutable.",
+  "ship_commit": "bd5aaab8cc2ac4ad0b4a6d50e37cc5a035416397",
+  "integration_commit": "6ab38718a1cc8ed2a12376e80ddbd4f6d5bd9f9d",
+  "native_events": [
+    {
+      "elapsed_seconds": 63.807871958,
+      "raw": "{\"event\":\"step_update\",\"step_update\":{\"conversation_id\":\"d2f6c02b-f03b-420a-8f58-05d1629d3502\",\"step_index\":46,\"state\":\"DONE\",\"step_type\":\"tool\",\"tool_name\":\"run_command\",\"duration_seconds\":0.142596,\"tool_info\":{\"name\":\"run_command\",\"parameters\":{\"CommandLine\":\"python3 /Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334/isolation.py isolate-verify --help\"},\"output\":\"usage: isolation.py isolate-verify [-h] --repo REPO --base BASE --name NAME\\r\\n                                   [--historical-task HISTORICAL_TASK]\\r\\n\\r\\noptional arguments:\\r\\n  -h, --help            show this help message and exit\\r\\n  --repo REPO\\r\\n  --base BASE\\r\\n  --name NAME\\r\\n  --historical-task HISTORICAL_TASK\\r\\n\"}}}"
+    },
+    {
+      "elapsed_seconds": 71.67799695800001,
+      "raw": "{\"event\":\"step_update\",\"step_update\":{\"conversation_id\":\"d2f6c02b-f03b-420a-8f58-05d1629d3502\",\"step_index\":52,\"state\":\"DONE\",\"step_type\":\"tool\",\"tool_name\":\"run_command\",\"duration_seconds\":0.555305,\"tool_info\":{\"name\":\"run_command\",\"parameters\":{\"CommandLine\":\"python3 /Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334/isolation.py isolate-verify --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry2/quick/repo --base b1ab7da2d5356e3226c0b8e8ec97ec9827370d69 --name verify-T001\"},\"output\":\"{\\\"base\\\": \\\"b1ab7da2d5356e3226c0b8e8ec97ec9827370d69\\\", \\\"bound_branch\\\": \\\"gsd-path/M001\\\", \\\"branch\\\": \\\"gsd-path-verify/verify-T001\\\", \\\"detached\\\": false, \\\"kind\\\": \\\"verify\\\", \\\"mode\\\": \\\"sidecar\\\", \\\"worktree\\\": \\\"/Users/jeremymcspadden/.gsd-path/projects/38892dfb6c12f40d750027047afb637417b2ff0d672533a2000a6bacca289f29/5f8312783de19abab227965d7d14978fbd1981fc36e1e9b61e1299d802a7c0d4/verify/verify-T001\\\"}\\r\\n\"}}}"
+    },
+    {
+      "elapsed_seconds": 172.664292333,
+      "raw": "{\"event\":\"step_update\",\"step_update\":{\"conversation_id\":\"d2f6c02b-f03b-420a-8f58-05d1629d3502\",\"step_index\":103,\"state\":\"DONE\",\"step_type\":\"tool\",\"tool_name\":\"run_command\",\"duration_seconds\":0.149774,\"tool_info\":{\"name\":\"run_command\",\"parameters\":{\"CommandLine\":\"python3 /Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334/isolation.py retire --help\"},\"output\":\"usage: isolation.py retire [-h] --repo REPO [--worktree WORKTREE]\\r\\n                           [--branch BRANCH] [--force]\\r\\n                           [--landed-commit LANDED_COMMIT]\\r\\n                           [--task-file TASK_FILE]\\r\\n\\r\\noptional arguments:\\r\\n  -h, --help            show this help message and exit\\r\\n  --repo REPO\\r\\n  --worktree WORKTREE\\r\\n  --branch BRANCH\\r\\n  --force\\r\\n  --landed-commit LANDED_COMMIT\\r\\n  --task-file TASK_FILE\\r\\n\"}}}"
+    },
+    {
+      "elapsed_seconds": 175.56922774999998,
+      "raw": "{\"event\":\"step_update\",\"step_update\":{\"conversation_id\":\"d2f6c02b-f03b-420a-8f58-05d1629d3502\",\"step_index\":105,\"state\":\"DONE\",\"step_type\":\"tool\",\"tool_name\":\"run_command\",\"duration_seconds\":0.634898,\"tool_info\":{\"name\":\"run_command\",\"parameters\":{\"CommandLine\":\"python3 /Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334/isolation.py retire --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry2/quick/repo --worktree /Users/jeremymcspadden/.gsd-path/projects/38892dfb6c12f40d750027047afb637417b2ff0d672533a2000a6bacca289f29/5f8312783de19abab227965d7d14978fbd1981fc36e1e9b61e1299d802a7c0d4/verify/verify-T001 --branch gsd-path-verify/verify-T001\"},\"output\":\"worktree is dirty; pass --force only from the retry-retirement path\\r\\n\"}}}"
+    },
+    {
+      "elapsed_seconds": 179.334951792,
+      "raw": "{\"event\":\"step_update\",\"step_update\":{\"conversation_id\":\"d2f6c02b-f03b-420a-8f58-05d1629d3502\",\"step_index\":109,\"state\":\"DONE\",\"step_type\":\"tool\",\"tool_name\":\"run_command\",\"duration_seconds\":0.114194,\"tool_info\":{\"name\":\"run_command\",\"parameters\":{\"CommandLine\":\"git -C /Users/jeremymcspadden/.gsd-path/projects/38892dfb6c12f40d750027047afb637417b2ff0d672533a2000a6bacca289f29/5f8312783de19abab227965d7d14978fbd1981fc36e1e9b61e1299d802a7c0d4/verify/verify-T001 checkout -- count.py \\u0026\\u0026 rm -f /Users/jeremymcspadden/.gsd-path/projects/38892dfb6c12f40d750027047afb637417b2ff0d672533a2000a6bacca289f29/5f8312783de19abab227965d7d14978fbd1981fc36e1e9b61e1299d802a7c0d4/verify/verify-T001/test_count.py\"}}}}"
+    },
+    {
+      "elapsed_seconds": 181.638236792,
+      "raw": "{\"event\":\"step_update\",\"step_update\":{\"conversation_id\":\"d2f6c02b-f03b-420a-8f58-05d1629d3502\",\"step_index\":111,\"state\":\"DONE\",\"step_type\":\"tool\",\"tool_name\":\"run_command\",\"duration_seconds\":0.382114,\"tool_info\":{\"name\":\"run_command\",\"parameters\":{\"CommandLine\":\"python3 /Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334/isolation.py retire --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry2/quick/repo --worktree /Users/jeremymcspadden/.gsd-path/projects/38892dfb6c12f40d750027047afb637417b2ff0d672533a2000a6bacca289f29/5f8312783de19abab227965d7d14978fbd1981fc36e1e9b61e1299d802a7c0d4/verify/verify-T001 --branch gsd-path-verify/verify-T001\"},\"output\":\"{\\\"bound_branch\\\": \\\"gsd-path/M001\\\", \\\"branch\\\": \\\"gsd-path-verify/verify-T001\\\", \\\"reason\\\": \\\"removed\\\", \\\"retired\\\": true, \\\"worktree\\\": \\\"/Users/jeremymcspadden/.gsd-path/projects/38892dfb6c12f40d750027047afb637417b2ff0d672533a2000a6bacca289f29/5f8312783de19abab227965d7d14978fbd1981fc36e1e9b61e1299d802a7c0d4/verify/verify-T001\\\"}\\r\\n\"}}}"
+    }
+  ]
+}

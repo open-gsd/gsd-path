@@ -1,0 +1,30 @@
+{
+  "policy": {
+    "task_output_warning": 4000,
+    "native_session_output_limit": 30000
+  },
+  "parent_sessions": {
+    "01a0bf82-7c7b-7012-9e99-334d54dc3419": {
+      "input_tokens": 3021161,
+      "cached_input_tokens": 2924032,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 12983,
+      "reasoning_output_tokens": 1000
+    },
+    "01a0bf8e-81f8-79f0-950a-5abd02c95070": {
+      "input_tokens": 2914282,
+      "cached_input_tokens": 2814720,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 9100,
+      "reasoning_output_tokens": 675
+    },
+    "01a0bf99-81cc-70d2-8d20-efb0e96933c1": {
+      "input_tokens": 3316346,
+      "cached_input_tokens": 3224576,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 7790,
+      "reasoning_output_tokens": 836
+    }
+  },
+  "all_parent_sessions_within_limit": true
+}

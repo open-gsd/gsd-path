@@ -1,0 +1,79 @@
+[
+  {
+    "run": "run-20260920T161601562362Z",
+    "session_id": "15816c7b-f580-4e1b-9b70-883addc53e7d",
+    "usage": {
+      "input_tokens": 358949,
+      "output_tokens": 44423,
+      "thinking_tokens": 27918,
+      "cache_read_tokens": 5295485,
+      "total_tokens": 403372
+    }
+  },
+  {
+    "run": "run-20260920T162319360967Z",
+    "session_id": "99376bee-6dd7-4295-b98b-bcf5ddb5760a",
+    "usage": {
+      "input_tokens": 157179,
+      "output_tokens": 20210,
+      "thinking_tokens": 13790,
+      "cache_read_tokens": 1116697,
+      "total_tokens": 177389
+    }
+  },
+  {
+    "run": "run-20260920T162632346916Z",
+    "session_id": "fc6acc31-1356-43be-abf9-bc1cbe0abf3b",
+    "usage": {
+      "input_tokens": 503300,
+      "output_tokens": 58718,
+      "thinking_tokens": 35195,
+      "cache_read_tokens": 11237744,
+      "total_tokens": 562018
+    }
+  },
+  {
+    "run": "run-20260920T163514340609Z",
+    "session_id": "d2f6c02b-f03b-420a-8f58-05d1629d3502",
+    "usage": {
+      "input_tokens": 323985,
+      "output_tokens": 14168,
+      "thinking_tokens": 0,
+      "cache_read_tokens": 3147615,
+      "total_tokens": 338153
+    }
+  },
+  {
+    "run": "run-20260920T164031841325Z",
+    "session_id": "f6176994-16e2-4228-965f-b1a60c360415",
+    "usage": {
+      "input_tokens": 473362,
+      "output_tokens": 26138,
+      "thinking_tokens": 0,
+      "cache_read_tokens": 8442553,
+      "total_tokens": 499500
+    }
+  },
+  {
+    "run": "run-20260920T164722109407Z",
+    "session_id": "e87ef078-7d04-444b-8689-b23e2d40b058",
+    "usage": {
+      "input_tokens": 150360,
+      "output_tokens": 5242,
+      "thinking_tokens": 0,
+      "cache_read_tokens": 751031,
+      "total_tokens": 155602
+    }
+  },
+  {
+    "run": "run-20260920T165017311536Z",
+    "session_id": "9607e8d5-8709-4145-a9ba-50c5bc290e0a",
+    "usage": {
+      "input_tokens": 111442,
+      "output_tokens": 5759,
+      "thinking_tokens": 0,
+      "cache_read_tokens": 418636,
+      "total_tokens": 117201
+    }
+  }
+]

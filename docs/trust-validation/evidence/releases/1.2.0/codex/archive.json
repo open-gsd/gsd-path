@@ -1,0 +1,11 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "codex",
+  "run_id": "codex-1.2.0-f36f24a-20260920",
+  "result": "pass",
+  "step": "archive",
+  "command": "/bin/zsh -lc 'python3 /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/codex/plugin/tests/evaluate_codex.py activity --arm /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/codex/quick --category verification -- python3 -B /Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334/archive_milestone.py validate --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/codex/quick/repo'",
+  "output": "{\"archive\": \".project/archive/001-widget-counter-cli\", \"commit\": \"4909bb2f191184ea62dc73a8f1f455b87cb339af\"}\n",
+  "archive_path": ".project/archive/001-widget-counter-cli",
+  "validation_exit_code": 0
+}

@@ -1,0 +1,44 @@
+{
+  "turns": [
+    {
+      "run": "run-20260920T154958810651Z",
+      "session": "1b665a9f-0bee-4989-89fe-709e6dabbf92",
+      "output_tokens": 23842
+    },
+    {
+      "run": "run-20260920T155856364110Z",
+      "session": "8180fe81-5d9e-4fef-9578-4c070a865633",
+      "output_tokens": 13943
+    },
+    {
+      "run": "run-20260920T160355461278Z",
+      "session": "271660ff-b049-479c-8dab-dc3eeb4a4349",
+      "output_tokens": 15801
+    },
+    {
+      "run": "run-20260920T161105013124Z",
+      "session": "c5649c1d-c64b-4bbc-b7ed-37e95c0d3e8f",
+      "output_tokens": 29787
+    },
+    {
+      "run": "run-20260920T162843518143Z",
+      "session": "77b277cc-4719-4431-aea8-edabbecfb992",
+      "output_tokens": 5715
+    },
+    {
+      "run": "run-20260920T163133661899Z",
+      "session": "77b277cc-4719-4431-aea8-edabbecfb992",
+      "output_tokens": 9090
+    }
+  ],
+  "native_session_output_totals": {
+    "1b665a9f-0bee-4989-89fe-709e6dabbf92": 23842,
+    "8180fe81-5d9e-4fef-9578-4c070a865633": 13943,
+    "271660ff-b049-479c-8dab-dc3eeb4a4349": 15801,
+    "c5649c1d-c64b-4bbc-b7ed-37e95c0d3e8f": 29787,
+    "77b277cc-4719-4431-aea8-edabbecfb992": 14805
+  },
+  "per_task_warning": 4000,
+  "session_limit": 30000,
+  "per_child_output_tokens": "unavailable; do not infer from subagent total tokens"
+}

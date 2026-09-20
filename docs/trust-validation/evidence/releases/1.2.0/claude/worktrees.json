@@ -1,0 +1,11 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "claude",
+  "run_id": "271660ff-b049-479c-8dab-dc3eeb4a4349",
+  "result": "pass",
+  "step": "worktrees",
+  "command": "git worktree list --porcelain",
+  "output": "worktree /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/claude/quick/repo\nHEAD c3ce42f2d2c005c2a166ba4b356f496c91170545\nbranch refs/heads/gsd-path/M001\n",
+  "primary_worktree": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/claude/quick/repo",
+  "integration_worktree": "/Users/jeremymcspadden/.gsd-path/projects/cfbac0988050ea7d94fb2b14f5ce7105cb89a18a13f2b807a9eea56336653280/e5f917710eb2245182db90108e0e3457c3f05de863757b84dafa27507f050c0a/integrate/M001"
+}

@@ -1,0 +1,14 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "cursor",
+  "run_id": "cursor-1.2.0-f36f24a",
+  "result": "pass",
+  "step": "install",
+  "command": "node /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/cursor/plugin/scripts/install.mjs --cursor --local --project /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/cursor/quick/repo --hooks --no-color",
+  "output": "\u2726 GSD Path installer v1.2.0\n  project install into /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/cursor/quick/repo\n\n  \u2713 cursor: installed 16 skills to /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/cursor/quick/repo/.cursor/skills and custom subagent to /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/cursor/quick/repo/.cursor/agents/gsd-path.md\n  \u2713 project: copied AGENTS.md, WORKFLOW.md, .gsd-path/status_runtime.py, .gsd-path/runtime.json, .gsd-path/guard_hook.py, .gsd-path/git_guard.py, .cursor/hooks.json, .git/hooks/pre-commit, .git/hooks/commit-msg, .git/hooks/pre-push to /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/cursor/quick/repo\n\n  Done. Restart active agent sessions, then invoke the router explicitly.",
+  "host_version": "2026.09.18-9a7762b",
+  "install_root": ".cursor/skills",
+  "candidate": "f36f24aed82ac0019d082c7e31b8a4342d8e03f1",
+  "package_version": "1.2.0",
+  "exit_code": 0
+}
