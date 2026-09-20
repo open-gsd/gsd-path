@@ -1,0 +1,57 @@
+[
+  {
+    "path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/run-20260920T213654464699Z/events.jsonl",
+    "sha256": "71f5ca649941370e680277ed1c913ba7b5fb479c40eac2eb2746e337c47ef536",
+    "bytes": 350944
+  },
+  {
+    "path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/run-20260920T214127045794Z/events.jsonl",
+    "sha256": "b24167ac86162b227d0e68992c06f5873ac1570fd146df451f935eac408103b1",
+    "bytes": 240901
+  },
+  {
+    "path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/run-20260920T214633183700Z/events.jsonl",
+    "sha256": "dadad045c7857c256f4f03875e873609db935375c72b0d94b8e707cb8923ba14",
+    "bytes": 301255
+  },
+  {
+    "path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/run-20260920T215025289787Z/events.jsonl",
+    "sha256": "bc0dd5c9cb6831692f907698da6d907d3e144ce35a7fa0386eb4ee66def14d5d",
+    "bytes": 301945
+  },
+  {
+    "path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/run-20260920T215346231916Z/events.jsonl",
+    "sha256": "6e703c40dcfe3d2610f24e252be4dde7f6bc961c9ae8a54fb43d779cbe95ab23",
+    "bytes": 147750
+  },
+  {
+    "path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/run-20260920T215928854653Z/events.jsonl",
+    "sha256": "4a21942a46fbe6ea62be58c94eed8cf9d0a583b6a49cba3a6c1925351b461fa6",
+    "bytes": 120298
+  },
+  {
+    "path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/run-20260920T221001342087Z/events.jsonl",
+    "sha256": "57ca95ad6ac0c8e9606b641d3510695f5e2636034006d25fad5e180dcb5ef057",
+    "bytes": 38075
+  },
+  {
+    "path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/run-20260920T221304036389Z/events.jsonl",
+    "sha256": "f406ea7fd4c8ee130ab15616c853effe582a1962b2eed88395651fbf7c22a7f9",
+    "bytes": 317766
+  },
+  {
+    "path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/run-20260920T221959339415Z/events.jsonl",
+    "sha256": "997abb7dd352b9abe62f581b44d3197b577bcf2dfd8496c315b002ccb6a6b7c3",
+    "bytes": 31240
+  },
+  {
+    "path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/run-20260920T222440964922Z/events.jsonl",
+    "sha256": "7f9a06bf9bdfb26cac77586c586836cefab53f3cbb304c04afdb0ad7a80097ee",
+    "bytes": 214507
+  },
+  {
+    "path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/run-20260920T222916252783Z/events.jsonl",
+    "sha256": "d19cc1dc16b52b0dccffaaf534834b284eb8ae3fcd75d8514c3a2f8fedcad615",
+    "bytes": 111355
+  }
+]

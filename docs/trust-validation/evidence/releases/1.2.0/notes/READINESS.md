@@ -1,6 +1,6 @@
 # 1.2.0 release-readiness audit
 
-Status: **NOT READY — OpenCode correction active; seven hosts accepted**. Release target remains **1.2.0**. No external release, tag, push, or npm publication was performed.
+Status: **Eight host receipts accepted; clean-checkpoint aggregate validation pending**. Release target remains **1.2.0**. No external release, tag, push, or npm publication was performed.
 
 Candidate: `f36f24aed82ac0019d082c7e31b8a4342d8e03f1`. This is the local release-cycle correction over main `45466c40e57c6cc0d7acd099e880d1644b33f5ee`. Remote main was rechecked with `git ls-remote origin refs/heads/main` at audit closeout and still matches that SHA. These receipts do not claim that unchanged remote main is ready.
 
@@ -17,9 +17,9 @@ Qwen, Kiro, and Zed are excluded from required evaluations by the owner. Their i
 | Grok | Fresh retry3 receipt, oracle6/6, both reuse checks pass; maximum native session14,229 output tokens | None; recovered invocation errors preserved |
 | Claude | Existing-fixture cycle2 recovery accepted: receipt/oracle6/6/both reuse checks/local integration pass; corrected review20,945 aggregate tokens | None; original32,066 overrun and recovered invocation negatives preserved |
 | Copilot | Fresh retry4 receipt, oracle6/6, both reuse checks pass; maximum native session21,937 output tokens | None; recovered path error and diagnosis-order deviation disclosed |
-| OpenCode | Retry3 coder/review/oracle/reuse passed; receipt binding failed | Task agent build_T001 differs from native child build_t001; stopped before shipment |
+| OpenCode | Retry4 receipt, oracle6/6, both reuse checks and local integration pass; maximum accepted context19,939 generated tokens | None; original identity failure, canceled recovery and invocation errors preserved |
 
-Seven of eight hosts now prove all requested scenario claims. Claude recovered through canonical review cycle2; see [correction evidence](claude-recovery-cycle2.md). The earlier aggregate result below is historical; a new aggregate gate will run after OpenCode finishes. A structural receipt alone does not prove a failed reuse, budget, or candidate-provenance claim. The clean-checkout aggregate audit at7b5ffe6 validated these six receipts in10.939seconds without live host calls. It selected only Claude and OpenCode as required runs. The strict publication gate exited1 for those two explicit blocked results. See [affected plan](affected-checks/affected-plan-result.json) and [strict gate](affected-checks/affected-strict-result.json). Recovered nonmutating invocation errors remain disclosed; they are not erased or described as flawless execution. See [Antigravity proof](antigravity-passed/scenario-proof.json), [Kimi observations](../kimi/observations.md), [Grok run notes](../grok/run-notes.md), and [OpenCode provenance failure](opencode-history/retry2/BLOCKER.md).
+All eight hosts now prove the requested scenario claims. Claude recovered through canonical review cycle2; see [correction evidence](claude-recovery-cycle2.md). OpenCode corrected the task identity and completed a policy-resolved replacement child; see [accepted lineage and recovery notes](../opencode/run-notes.md). The earlier aggregate result below is historical; a new aggregate gate will run on the clean evidence checkpoint. A structural receipt alone does not prove a failed reuse, budget, or candidate-provenance claim. The clean-checkout aggregate audit at7b5ffe6 validated these six receipts in10.939seconds without live host calls. It selected only Claude and OpenCode as required runs. The strict publication gate exited1 for those two explicit blocked results. See [affected plan](affected-checks/affected-plan-result.json) and [strict gate](affected-checks/affected-strict-result.json). Recovered nonmutating invocation errors remain disclosed; they are not erased or described as flawless execution. See [Antigravity proof](antigravity-passed/scenario-proof.json), [Kimi observations](../kimi/observations.md), [Grok run notes](../grok/run-notes.md), and [OpenCode provenance failure](opencode-history/retry2/BLOCKER.md).
 
 ## Release-cycle repair
 
@@ -39,7 +39,7 @@ The initial failure remains at `/Users/jeremymcspadden/orca/evaluations/gsd-path
 
 Original 1.3.0 evidence was not relabeled. All failed 1.2.0 fixtures and native logs remain under `/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/`. The Antigravity archived manifest remains unchanged; its capture error is attributed to the evaluator. No API-billed Qwen/Kiro/Zed evaluations were restarted.
 
-## Continued evaluation
+## Earlier evaluation rounds
 
 Owner ruling, verbatim: "run till all pass". The previous round stop is lifted; no new approval is needed for diagnosed native retries. See [active acceptance and attempt record](RUN-UNTIL-PASS.md). Codex, Cursor, Antigravity, Kimi, Grok, and Copilot now prove all requested scenario claims. Claude stopped after its native review used32,066 aggregate output tokens; see [budget failure and partial proof](claude-retry2-blocked.md). OpenCode stopped at a documented identity-binding conflict; see [retry3 blocker](opencode-history/retry3/BLOCKED.md). Historical failures remain; a recovered gate rejection is not silently removed.
 
@@ -50,9 +50,9 @@ Routine releases reuse validated live receipts when that host's runtime and
 integration inputs are unchanged. Original candidates and versions stay intact.
 Only missing, invalid, or stale hosts need new runs. Shared runtime changes
 invalidate every host they affect. Qwen/Kiro/Zed remain excluded. The full
-matrix is manual. Current Claude/OpenCode attempts are stopped with their failures preserved. Root
-stopped further full-fixture retries in response to the owner's cost and time
-constraint. No additional live run is planned in this round.
+matrix is manual. The earlier round stopped Claude/OpenCode with their failures preserved. The
+later owner ruling "fix them" authorized only those two corrections, described
+below. The other six accepted hosts were not rerun.
 
 The release workflow now runs its explicit offline gate once and skips npm
 lifecycle scripts in the subsequent publish step. Local npm publication keeps
@@ -69,8 +69,22 @@ failed/superseded. Receipt validation, oracle6/6, full-wave final reuse, same-HE
 verification reuse, local shipment and integration all passed. This did not
 rerun setup or build and did not modify product code or the receipt validator.
 
-OpenCode retry4 is the only remaining live run. Its old completed build cannot
-be undone to the task by the existing helper, so retry3 stays intact and a fresh
-fixture is used. Actual activation now records build_t001; the same name is
-required for the actual native child, with a check before review. Six previously
-accepted host receipts remain unchanged; package stays1.2.0.
+OpenCode retry4 is complete. Its old completed build could not be undone to the
+task by the existing helper, so retry3 stays intact. Activation, landed task
+metadata and accepted native child all use build_t001. The replacement coder
+reviewed and adopted the existing patch after model-policy resolution; isolated
+and project verification each passed 9 tests. Native review passed all 6 criteria
+and 8 CLI walkthroughs. Full-wave final reuse and repeated same-HEAD verification
+reuse passed with an unchanged 2-entry ledger. Strict host receipt validation,
+oracle6/6, archive, shipment and local integration passed.
+
+The original coder plus canceled permission-stalled recovery has 21,504 recorded
+generated tokens plus an unknown unfinished tail. It is superseded and is not a
+budget pass. The accepted replacement used 6,010 tokens, review 12,192, and the
+maximum accepted context was 19,939. All 9 accepted contexts stay within the
+existing 30,000-token session limit. The accepted runtime's 63 checked helpers
+match the frozen candidate. Invocation errors and the delayed diagnosis during
+review preparation remain disclosed in [OpenCode run notes](../opencode/run-notes.md).
+
+Six previously accepted host receipts remain unchanged; package stays 1.2.0.
+These two corrections changed evidence only, with no product or validator edits.

@@ -1,0 +1,14 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "opencode",
+  "run_id": "opencode-1.2.0-f36f24a-retry4",
+  "result": "pass",
+  "step": "install",
+  "command": "node /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/plugin/scripts/install.mjs --opencode --local --project /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/repo --hooks --no-color",
+  "output": "\u2726 GSD Path installer v1.2.0\n  project install into /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/repo\n\n  \u2713 opencode: installed 16 skills to /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/repo/.opencode/skills\n  \u2713 project: copied AGENTS.md, WORKFLOW.md, .gsd-path/status_runtime.py, .gsd-path/runtime.json, .gsd-path/guard_hook.py, .gsd-path/git_guard.py, .git/hooks/pre-commit, .git/hooks/commit-msg, .git/hooks/pre-push to /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/repo\n  ! OpenCode stable discovers the skills but has no documented hard explicit-only switch; OpenCode v2 honors opencode/autoinvoke=\"false\" and /gsd-path.\n\n  Done. Restart active agent sessions, then invoke the router explicitly.",
+  "host_version": "1.18.25",
+  "install_root": ".opencode/skills",
+  "candidate": "f36f24aed82ac0019d082c7e31b8a4342d8e03f1",
+  "package_version": "1.2.0",
+  "exit_code": 0
+}

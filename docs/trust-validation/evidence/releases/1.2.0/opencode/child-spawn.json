@@ -1,0 +1,45 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "opencode",
+  "run_id": "opencode-1.2.0-f36f24a-retry4",
+  "result": "pass",
+  "step": "child-spawn",
+  "command": "Task",
+  "child_api": "Task",
+  "child_id": "build_t001",
+  "child_status": "completed",
+  "output": {
+    "child_id": "build_t001",
+    "status": "completed",
+    "child_api": "Task",
+    "run": "run-20260920T221001342087Z",
+    "parent_session": "ses_f3f2180c5ffet7nswg6lKp3njW",
+    "call_id": "call_51ae4fa48c5748aa84c5edbb",
+    "task_state": "completed",
+    "child_session": "ses_f3f20a175ffeS16bu9ErKFHSMU",
+    "input": {
+      "description": "build_t001",
+      "subagent_type": "general"
+    },
+    "prompt_sha256": "9ee28b82f8781a4950d7bc98d29aba0a2d536bed03445dffb90f99281ab42fa7",
+    "output": "<task id=\"ses_f3f20a175ffeS16bu9ErKFHSMU\" state=\"completed\">\n<task_result>\n**Verdict**: confirm/adopt \u2014 no contract defect.\n\n**Log append** (made, `.project/tasks/T001-harden-count-cli.md` Log section):\n```\n- 2026-09-20 \u2014 coder build_t001 (fresh native task, host opencode, resolved\n  policy model/effort inherit per .git/gsd-path/model-selection/build_t001.json):\n  independently re-read the owned patch at base\n  d8ee4662e391e765ea344cc254f306c2add93d69 \u2014 count.py and test_count.py\n  satisfy AC1\u2013AC6 and owned SC1\u2013SC6 within Approach constraints (stdlib\n  only; edits confined to frontmatter files). Confirm/adopt; Verify evidence\n  remains the recorded 9-tests-PASS Log entry above \u2014 not re-run, not\n  re-claimed. No code changes.\n```\n\n**Files touched**: `.project/tasks/T001-harden-count-cli.md` (Log append only).\n\n**Contract-defect detail**: none.\n\nRESULT: build_t001 ready\n</task_result>\n</task>",
+    "metadata": {
+      "parentSessionId": "ses_f3f2180c5ffet7nswg6lKp3njW",
+      "sessionId": "ses_f3f20a175ffeS16bu9ErKFHSMU",
+      "model": {
+        "modelID": "glm-5.3",
+        "providerID": "zai-coding-plan"
+      },
+      "truncated": false
+    },
+    "session_row": {
+      "id": "ses_f3f20a175ffeS16bu9ErKFHSMU",
+      "parent_id": "ses_f3f2180c5ffet7nswg6lKp3njW",
+      "title": "build_t001 (@general subagent)",
+      "agent": "general",
+      "model": "{\"id\":\"glm-5.3\",\"providerID\":\"zai-coding-plan\",\"variant\":\"default\"}",
+      "time_created": 1789942259338,
+      "time_updated": 1789942298391
+    }
+  }
+}

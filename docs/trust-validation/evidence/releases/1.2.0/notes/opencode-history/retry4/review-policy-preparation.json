@@ -1,0 +1,206 @@
+[
+  {
+    "source": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/run-20260920T221304036389Z/events.jsonl",
+    "line": 49,
+    "event": {
+      "type": "tool_use",
+      "timestamp": 1789942515664,
+      "sessionID": "ses_f3f1eb700ffeh4VIS1uvOZHuHW",
+      "part": {
+        "type": "tool",
+        "tool": "bash",
+        "callID": "call_68e696df2a2548b2b60062a1",
+        "state": {
+          "status": "completed",
+          "input": {
+            "command": "rg -n \"add_parser|add_argument|def main|choices=\" /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/repo/.opencode/skills/gsd-path/scripts/model_policy.py"
+          },
+          "output": "251:def main(argv=None):\n253:    parser.add_argument('action', choices=('resolve', 'release', 'reassign'))\n254:    parser.add_argument('--repo', type=Path, required=True)\n255:    parser.add_argument('--project-dir', default='.project')\n256:    parser.add_argument('--scope', required=True, help='milestone, track and review cycle identity')\n257:    parser.add_argument('--assignment', required=True)\n258:    parser.add_argument('--role', required=True)\n259:    parser.add_argument('--record', type=Path, required=True)\n260:    parser.add_argument('--capabilities', type=Path)\n261:    parser.add_argument('--task', type=Path)\n262:    parser.add_argument('--model')\n263:    parser.add_argument('--effort')\n264:    parser.add_argument('--ruling')\n265:    parser.add_argument('--terminal-result')\n266:    parser.add_argument('--panel-family')\n267:    parser.add_argument('--panel-model', help='default model from the panel roster; policy may override it')\n268:    parser.add_argument('--exclude-family', action='append', default=[])\n",
+          "metadata": {
+            "output": "251:def main(argv=None):\n253:    parser.add_argument('action', choices=('resolve', 'release', 'reassign'))\n254:    parser.add_argument('--repo', type=Path, required=True)\n255:    parser.add_argument('--project-dir', default='.project')\n256:    parser.add_argument('--scope', required=True, help='milestone, track and review cycle identity')\n257:    parser.add_argument('--assignment', required=True)\n258:    parser.add_argument('--role', required=True)\n259:    parser.add_argument('--record', type=Path, required=True)\n260:    parser.add_argument('--capabilities', type=Path)\n261:    parser.add_argument('--task', type=Path)\n262:    parser.add_argument('--model')\n263:    parser.add_argument('--effort')\n264:    parser.add_argument('--ruling')\n265:    parser.add_argument('--terminal-result')\n266:    parser.add_argument('--panel-family')\n267:    parser.add_argument('--panel-model', help='default model from the panel roster; policy may override it')\n268:    parser.add_argument('--exclude-family', action='append', default=[])\n",
+            "exit": 0,
+            "truncated": false
+          },
+          "title": "rg -n \"add_parser|add_argument|def main|choices=\" /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/repo/.opencode/skills/gsd-path/scripts/model_policy.py",
+          "time": {
+            "start": 1789942515660,
+            "end": 1789942515662
+          }
+        },
+        "id": "prt_0c0e347a8001omOQ1OAB9UkxG1",
+        "sessionID": "ses_f3f1eb700ffeh4VIS1uvOZHuHW",
+        "messageID": "msg_0c0e31b73001wBpGOKd8wXIRVx"
+      }
+    }
+  },
+  {
+    "source": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/run-20260920T221304036389Z/events.jsonl",
+    "line": 78,
+    "event": {
+      "type": "tool_use",
+      "timestamp": 1789942602437,
+      "sessionID": "ses_f3f1eb700ffeh4VIS1uvOZHuHW",
+      "part": {
+        "type": "tool",
+        "tool": "bash",
+        "callID": "call_2fda71801b0847a09f42ae8b",
+        "state": {
+          "status": "completed",
+          "input": {
+            "command": "sed -n 88,110p /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/repo/.opencode/skills/gsd-path/scripts/dispatch_driver.py; rg -n \"scope\" /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/repo/.opencode/skills/gsd-path/scripts/model_policy.py | head -20"
+          },
+          "output": "\n\n# --- dispatch records ------------------------------------------------------\n\n\ndef milestone_slug(primary: Path) -> str:\n    \"\"\"The bound branch as a path segment; every record and ledger is scoped to one milestone.\"\"\"\n    return isolation.require_bound(primary).replace(\"/\", \"-\")\n\n\ndef records_root(primary: Path) -> Path:\n    return pipeline_state._build_recovery().records_root(primary)\n\n\ndef budget_ledger(primary: Path) -> Path:\n    return isolation.common_git_dir(primary) / \"gsd-path\" / \"budget\" / f\"{milestone_slug(primary)}.json\"\n\n\ndef attempts_used(root: Path, task_id: str) -> int:\n    \"\"\"Dispatches of this task in this milestone, excluding question redispatches.\"\"\"\n    return sum(1 for path in (root / task_id).glob(\"attempt-*/state.json\")\n               if load_state(path).get(\"origin\") == \"dispatch\")\n\n203:                    'scope': args.scope, 'assignment': args.assignment, 'role': args.role}\n256:    parser.add_argument('--scope', required=True, help='milestone, track and review cycle identity')\n",
+          "metadata": {
+            "output": "\n\n# --- dispatch records ------------------------------------------------------\n\n\ndef milestone_slug(primary: Path) -> str:\n    \"\"\"The bound branch as a path segment; every record and ledger is scoped to one milestone.\"\"\"\n    return isolation.require_bound(primary).replace(\"/\", \"-\")\n\n\ndef records_root(primary: Path) -> Path:\n    return pipeline_state._build_recovery().records_root(primary)\n\n\ndef budget_ledger(primary: Path) -> Path:\n    return isolation.common_git_dir(primary) / \"gsd-path\" / \"budget\" / f\"{milestone_slug(primary)}.json\"\n\n\ndef attempts_used(root: Path, task_id: str) -> int:\n    \"\"\"Dispatches of this task in this milestone, excluding question redispatches.\"\"\"\n    return sum(1 for path in (root / task_id).glob(\"attempt-*/state.json\")\n               if load_state(path).get(\"origin\") == \"dispatch\")\n\n203:                    'scope': args.scope, 'assignment': args.assignment, 'role': args.role}\n256:    parser.add_argument('--scope', required=True, help='milestone, track and review cycle identity')\n",
+            "exit": 0,
+            "truncated": false
+          },
+          "title": "sed -n 88,110p /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/repo/.opencode/skills/gsd-path/scripts/dispatch_driver.py; rg -n \"scope\" /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/repo/.opencode/skills/gsd-path/scripts/model_policy.py | head -20",
+          "time": {
+            "start": 1789942602429,
+            "end": 1789942602433
+          }
+        },
+        "id": "prt_0c0e49a670014Jmq7yV5EaJZeT",
+        "sessionID": "ses_f3f1eb700ffeh4VIS1uvOZHuHW",
+        "messageID": "msg_0c0e470ed001Ry39gfKUkQ6KCL"
+      }
+    }
+  },
+  {
+    "source": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/run-20260920T221304036389Z/events.jsonl",
+    "line": 81,
+    "event": {
+      "type": "tool_use",
+      "timestamp": 1789942611482,
+      "sessionID": "ses_f3f1eb700ffeh4VIS1uvOZHuHW",
+      "part": {
+        "type": "tool",
+        "tool": "bash",
+        "callID": "call_9d5dfc44c26d4f37bfc6ee25",
+        "state": {
+          "status": "completed",
+          "input": {
+            "command": "python3 -B .opencode/skills/gsd-path/scripts/model_policy.py resolve --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/repo --scope count-cli/active/build/wave-1/cycle-1 --assignment review_wave_1_cycle_1 --role reviewer --record /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/repo/.git/gsd-path/model-selection/review_wave_1_cycle_1.json"
+          },
+          "output": "{\"status\": \"blocked\", \"reason\": \"capabilities are required\"}\n",
+          "metadata": {
+            "output": "{\"status\": \"blocked\", \"reason\": \"capabilities are required\"}\n",
+            "exit": 1,
+            "truncated": false
+          },
+          "title": "python3 -B .opencode/skills/gsd-path/scripts/model_policy.py resolve --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/repo --scope count-cli/active/build/wave-1/cycle-1 --assignment review_wave_1_cycle_1 --role reviewer --record /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/repo/.git/gsd-path/model-selection/review_wave_1_cycle_1.json",
+          "time": {
+            "start": 1789942611476,
+            "end": 1789942611481
+          }
+        },
+        "id": "prt_0c0e4bdca001Z1v4SErOB8Y5H0",
+        "sessionID": "ses_f3f1eb700ffeh4VIS1uvOZHuHW",
+        "messageID": "msg_0c0e49b46001Tx17NlK2su7fsn"
+      }
+    }
+  },
+  {
+    "source": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/run-20260920T221304036389Z/events.jsonl",
+    "line": 86,
+    "event": {
+      "type": "tool_use",
+      "timestamp": 1789942628495,
+      "sessionID": "ses_f3f1eb700ffeh4VIS1uvOZHuHW",
+      "part": {
+        "type": "tool",
+        "tool": "bash",
+        "callID": "call_b4f1cd0ff1944468918e3971",
+        "state": {
+          "status": "completed",
+          "input": {
+            "command": "rg -n \"capabilities are required|def resolve|no_capabilities|capabilities\" /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/repo/.opencode/skills/gsd-path/scripts/model_policy.py | head -25; ls /Users/jeremymcspadden/.gsd-path/ 2>/dev/null; find /Users/jeremymcspadden/.gsd-path -maxdepth 2 -name \"*capabilit*\" 2>/dev/null; find /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/repo/.git/gsd-path -name \"*capabilit*\" 2>/dev/null"
+          },
+          "output": "74:def resolve(repo, project_dir, role, capabilities, overrides, previous=None):\n76:    caps = object_value(capabilities, 'capabilities')\n121:        spec = object_value(caps.get(field, {}), f'capabilities.{field}')\n211:            if args.capabilities is None:\n212:                raise PolicyError('capabilities are required')\n215:            caps = read_json(args.capabilities)\n260:    parser.add_argument('--capabilities', type=Path)\nbackups\ndaemon.json\nhistory.jsonl\ninstall-locks\nlogs\nprojects\nruntimes\nsessions-index.json\nsrc\nupdate-check.json\nvenv\n",
+          "metadata": {
+            "output": "74:def resolve(repo, project_dir, role, capabilities, overrides, previous=None):\n76:    caps = object_value(capabilities, 'capabilities')\n121:        spec = object_value(caps.get(field, {}), f'capabilities.{field}')\n211:            if args.capabilities is None:\n212:                raise PolicyError('capabilities are required')\n215:            caps = read_json(args.capabilities)\n260:    parser.add_argument('--capabilities', type=Path)\nbackups\ndaemon.json\nhistory.jsonl\ninstall-locks\nlogs\nprojects\nruntimes\nsessions-index.json\nsrc\nupdate-check.json\nvenv\n",
+            "exit": 0,
+            "truncated": false
+          },
+          "title": "rg -n \"capabilities are required|def resolve|no_capabilities|capabilities\" /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/repo/.opencode/skills/gsd-path/scripts/model_policy.py | head -25; ls /Users/jeremymcspadden/.gsd-path/ 2>/dev/null; find /Users/jeremymcspadden/.gsd-path -maxdepth 2 -name \"*capabilit*\" 2>/dev/null; find /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/repo/.git/gsd-path -name \"*capabilit*\" 2>/dev/null",
+          "time": {
+            "start": 1789942628394,
+            "end": 1789942628493
+          }
+        },
+        "id": "prt_0c0e50009001TYo18T4biUhf6b",
+        "sessionID": "ses_f3f1eb700ffeh4VIS1uvOZHuHW",
+        "messageID": "msg_0c0e4c00e001BCt1j1JqzOeO2E"
+      }
+    }
+  },
+  {
+    "source": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/run-20260920T221304036389Z/events.jsonl",
+    "line": 89,
+    "event": {
+      "type": "tool_use",
+      "timestamp": 1789942631269,
+      "sessionID": "ses_f3f1eb700ffeh4VIS1uvOZHuHW",
+      "part": {
+        "type": "tool",
+        "tool": "bash",
+        "callID": "call_2f234d13580c4466847120ee",
+        "state": {
+          "status": "completed",
+          "input": {
+            "command": "sed -n 195,250p /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/repo/.opencode/skills/gsd-path/scripts/model_policy.py"
+          },
+          "output": "\n\ndef native_record(args):\n    \"\"\"The parent owns lifecycle; release requires its recorded terminal-result receipt.\"\"\"\n    record = args.record.resolve()\n    with log_lock({'log': str(record)}):\n        data = read_json(record) if record.exists() else None\n        identity = {'repo': str(args.repo.resolve()), 'project_dir': args.project_dir,\n                    'scope': args.scope, 'assignment': args.assignment, 'role': args.role}\n        if data is not None and data.get('identity') != identity:\n            raise PolicyError('record belongs to another assignment or milestone/track/cycle')\n        if args.action == 'release':\n            if data is None or not args.terminal_result:\n                raise PolicyError('release requires an existing record and terminal-result evidence')\n            data.update(active=False, terminal_result=args.terminal_result)\n        else:\n            if args.capabilities is None:\n                raise PolicyError('capabilities are required')\n            if args.action == 'reassign' and (data is None or data['active'] or not args.ruling):\n                raise PolicyError('reassign requires an inactive assignment and an explicit owner ruling')\n            caps = read_json(args.capabilities)\n            overrides = task_settings(args.task) if args.task else {}\n            for field in FIELDS:\n                value = getattr(args, field)\n                if value is not None:\n                    if field in overrides and overrides[field] != value:\n                        raise PolicyError('reassignment conflicts with the approved task contract')\n                    overrides[field] = value\n            if data and args.action == 'reassign':\n                changed_fields = set(overrides)\n                overrides = dict(data['selection']['selected'], **overrides)\n            previous = data['selection'] if data and args.action == 'resolve' else None\n            selection = resolve(args.repo, args.project_dir, args.role, caps, overrides, previous)\n            if data and args.action == 'reassign':\n                for field in FIELDS:\n                    if field not in changed_fields:\n                        selection['sources'][field] = data['selection']['sources'][field]\n            if (args.panel_family and selection['sources']['model'] == 'default'\n                    and selection['selected']['model'] == 'inherit' and args.panel_model):\n                selection = resolve(args.repo, args.project_dir, args.role, caps,\n                                    dict(overrides, model=args.panel_model), previous)\n            for field in FIELDS:\n                if selection['selected'][field] != 'inherit' and not caps.get(field, {}).get('field'):\n                    raise PolicyError(f'host does not advertise a native field for {field}')\n            if args.panel_family:\n                validate_panel(selection, args.panel_family, args.exclude_family)\n            history = data.get('history', []) if data else []\n            if data and args.action == 'reassign':\n                history = [*history, {'selection': data['selection'], 'ruling': args.ruling,\n                                     'terminal_result': data.get('terminal_result')}]\n            data = {'identity': identity, 'selection': selection, 'history': history,\n                    'active': args.action == 'resolve'}\n        atomic_write(record, json.dumps(data, indent=2, sort_keys=True) + '\\n')\n        return {'status': 'ready', **data}\n\n\n",
+          "metadata": {
+            "output": "\n\ndef native_record(args):\n    \"\"\"The parent owns lifecycle; release requires its recorded terminal-result receipt.\"\"\"\n    record = args.record.resolve()\n    with log_lock({'log': str(record)}):\n        data = read_json(record) if record.exists() else None\n        identity = {'repo': str(args.repo.resolve()), 'project_dir': args.project_dir,\n                    'scope': args.scope, 'assignment': args.assignment, 'role': args.role}\n        if data is not None and data.get('identity') != identity:\n            raise PolicyError('record belongs to another assignment or milestone/track/cycle')\n        if args.action == 'release':\n            if data is None or not args.terminal_result:\n                raise PolicyError('release requires an existing record and terminal-result evidence')\n            data.update(active=False, terminal_result=args.terminal_result)\n        else:\n            if args.capabilities is None:\n                raise PolicyError('capabilities are required')\n            if args.action == 'reassign' and (data is None or data['active'] or not args.ruling):\n                raise PolicyError('reassign requires an inactive assignment and an explicit owner ruling')\n            caps = read_json(args.capabilities)\n            overrides = task_settings(args.task) if args.task else {}\n            for field in FIELDS:\n                value = getattr(args, field)\n                if value is not None:\n                    if field in overrides and overrides[field] != value:\n                        raise PolicyError('reassignment conflicts with the approved task contract')\n                    overrides[field] = value\n            if data and args.action == 'reassign':\n                changed_fields = set(overrides)\n                overrides = dict(data['selection']['selected'], **overrides)\n            previous = data['selection'] if data and args.action == 'resolve' else None\n            selection = resolve(args.repo, args.project_dir, args.role, caps, overrides, previous)\n            if data and args.action == 'reassign':\n                for field in FIELDS:\n                    if field not in changed_fields:\n                        selection['sources'][field] = data['selection']['sources'][field]\n            if (args.panel_family and selection['sources']['model'] == 'default'\n                    and selection['selected']['model'] == 'inherit' and args.panel_model):\n                selection = resolve(args.repo, args.project_dir, args.role, caps,\n                                    dict(overrides, model=args.panel_model), previous)\n            for field in FIELDS:\n                if selection['selected'][field] != 'inherit' and not caps.get(field, {}).get('field'):\n                    raise PolicyError(f'host does not advertise a native field for {field}')\n            if args.panel_family:\n                validate_panel(selection, args.panel_family, args.exclude_family)\n            history = data.get('history', []) if data else []\n            if data and args.action == 'reassign':\n                history = [*history, {'selection': data['selection'], 'ruling': args.ruling,\n                                     'terminal_result': data.get('terminal_result')}]\n            data = {'identity': identity, 'selection': selection, 'history': history,\n                    'active': args.action == 'resolve'}\n        atomic_write(record, json.dumps(data, indent=2, sort_keys=True) + '\\n')\n        return {'status': 'ready', **data}\n\n\n",
+            "exit": 0,
+            "truncated": false
+          },
+          "title": "sed -n 195,250p /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/repo/.opencode/skills/gsd-path/scripts/model_policy.py",
+          "time": {
+            "start": 1789942631261,
+            "end": 1789942631266
+          }
+        },
+        "id": "prt_0c0e50b46001Kqaz7hde3sfcOA",
+        "sessionID": "ses_f3f1eb700ffeh4VIS1uvOZHuHW",
+        "messageID": "msg_0c0e50155001G3otcsgctmTwXW"
+      }
+    }
+  },
+  {
+    "source": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/run-20260920T221304036389Z/events.jsonl",
+    "line": 103,
+    "event": {
+      "type": "tool_use",
+      "timestamp": 1789942665823,
+      "sessionID": "ses_f3f1eb700ffeh4VIS1uvOZHuHW",
+      "part": {
+        "type": "tool",
+        "tool": "bash",
+        "callID": "call_51e3c5695277484cb55c6178",
+        "state": {
+          "status": "completed",
+          "input": {
+            "command": "python3 -B .opencode/skills/gsd-path/scripts/model_policy.py resolve --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/repo --scope count-cli/active/build/wave-1/cycle-1 --assignment review_wave_1_cycle_1 --role reviewer --record /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/repo/.git/gsd-path/model-selection/review_wave_1_cycle_1.json --capabilities /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/opencode/opencode-capabilities.json"
+          },
+          "output": "{\"active\": true, \"history\": [], \"identity\": {\"assignment\": \"review_wave_1_cycle_1\", \"project_dir\": \".project\", \"repo\": \"/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/repo\", \"role\": \"reviewer\", \"scope\": \"count-cli/active/build/wave-1/cycle-1\"}, \"selection\": {\"cli\": {\"effort\": [], \"model\": []}, \"controls\": {\"effort\": [], \"model\": []}, \"effective_model\": null, \"host\": \"opencode\", \"identity_evidence\": \"requested controls; host execution is recorded by the dispatcher\", \"native\": {}, \"policy_hash\": \"0eecdfeb02075c6a7cd09c421d3e3634c94de76ef9e47733008b6b306143a31f\", \"role\": \"reviewer\", \"schema\": \"gsd-path/model-selection/v1\", \"selected\": {\"effort\": \"inherit\", \"model\": \"inherit\"}, \"sources\": {\"effort\": \"default\", \"model\": \"default\"}}, \"status\": \"ready\"}\n",
+          "metadata": {
+            "output": "{\"active\": true, \"history\": [], \"identity\": {\"assignment\": \"review_wave_1_cycle_1\", \"project_dir\": \".project\", \"repo\": \"/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/repo\", \"role\": \"reviewer\", \"scope\": \"count-cli/active/build/wave-1/cycle-1\"}, \"selection\": {\"cli\": {\"effort\": [], \"model\": []}, \"controls\": {\"effort\": [], \"model\": []}, \"effective_model\": null, \"host\": \"opencode\", \"identity_evidence\": \"requested controls; host execution is recorded by the dispatcher\", \"native\": {}, \"policy_hash\": \"0eecdfeb02075c6a7cd09c421d3e3634c94de76ef9e47733008b6b306143a31f\", \"role\": \"reviewer\", \"schema\": \"gsd-path/model-selection/v1\", \"selected\": {\"effort\": \"inherit\", \"model\": \"inherit\"}, \"sources\": {\"effort\": \"default\", \"model\": \"default\"}}, \"status\": \"ready\"}\n",
+            "exit": 0,
+            "truncated": false
+          },
+          "title": "python3 -B .opencode/skills/gsd-path/scripts/model_policy.py resolve --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/repo --scope count-cli/active/build/wave-1/cycle-1 --assignment review_wave_1_cycle_1 --role reviewer --record /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/repo/.git/gsd-path/model-selection/review_wave_1_cycle_1.json --capabilities /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/opencode/opencode-capabilities.json",
+          "time": {
+            "start": 1789942665817,
+            "end": 1789942665822
+          }
+        },
+        "id": "prt_0c0e591e6001MxBX2JU52H3Pns",
+        "sessionID": "ses_f3f1eb700ffeh4VIS1uvOZHuHW",
+        "messageID": "msg_0c0e57b1c001B46meAD1w2wDvJ"
+      }
+    }
+  }
+]

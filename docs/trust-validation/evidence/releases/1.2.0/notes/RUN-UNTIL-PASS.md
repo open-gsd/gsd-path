@@ -35,3 +35,11 @@ completed canonical cycle2 recovery on its existing landed task:20,945 aggregate
 review tokens, valid receipt, oracle6/6, both reuse claims and local integration.
 Original32,066 remains failed/superseded. OpenCode retry4 is active, with corrected
 build_t001 activation and early identity checks; retry3 remains unchanged.
+
+OpenCode retry4 completed: exact build_t001 identity, policy-resolved replacement
+coder, isolated/project 9 tests, native review SC1-SC6, oracle6/6, both reuse checks,
+archive/local integration and strict host receipt all pass. Maximum accepted
+context 19,939 generated tokens. Original coder plus canceled recovery remains
+superseded with 21,504 recorded tokens plus unknown tail, not a budget pass.
+All eight individual receipts are accepted; root aggregate validation follows
+on a clean checkpoint. No other hosts were rerun and no release was published.

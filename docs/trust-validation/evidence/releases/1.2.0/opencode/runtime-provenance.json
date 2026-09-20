@@ -1,0 +1,501 @@
+{
+  "candidate": "f36f24aed82ac0019d082c7e31b8a4342d8e03f1",
+  "runtime_digest": "7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334",
+  "helper_hashes": [
+    {
+      "path": "/Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334/_common.py",
+      "candidate_path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/plugin/scripts/_common.py",
+      "sha256": "7224ad1c9fc2b1cf34acef7261aa4ca845eec368509c24789a46d28341c8a710",
+      "matches_candidate": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334/archive_milestone.py",
+      "candidate_path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/plugin/scripts/archive_milestone.py",
+      "sha256": "4de4da2d541cbeb27ae662b0bb091760c87259c40e60ea5c909c4fac3c7d195c",
+      "matches_candidate": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334/build_recovery.py",
+      "candidate_path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/plugin/scripts/build_recovery.py",
+      "sha256": "d48a9d22b583e268a9665e1a01834382e1ad7b804fedf28e5dfb3a148d6163e0",
+      "matches_candidate": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334/build_state.py",
+      "candidate_path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/plugin/scripts/build_state.py",
+      "sha256": "eb08bf60aca2719d899a979074c056abeb7e907dd47450cd2d57ad0a1f1bced7",
+      "matches_candidate": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334/check_docs_audit.py",
+      "candidate_path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/plugin/scripts/check_docs_audit.py",
+      "sha256": "6309021080c7ae8a080d73def29ef3deb58973e7062c053f95046b633f50acf7",
+      "matches_candidate": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334/check_handoffs.py",
+      "candidate_path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/plugin/scripts/check_handoffs.py",
+      "sha256": "9f7b8121ed6820041e2e44390cff073f90d1b02baf1aca4614ae7e546af63f8a",
+      "matches_candidate": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334/check_task_briefs.py",
+      "candidate_path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/plugin/scripts/check_task_briefs.py",
+      "sha256": "b01b088753a2d09e0799e628e34423bdd84f0b2acc9c787b2a015855a03c7f4f",
+      "matches_candidate": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334/detect_project.py",
+      "candidate_path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/plugin/scripts/detect_project.py",
+      "sha256": "f99206f817e963b855aa9f3f3b687671ee52cc29abe25f906caa9d8d0942e1be",
+      "matches_candidate": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334/discussion_records.py",
+      "candidate_path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/plugin/scripts/discussion_records.py",
+      "sha256": "1d74897eccd69a7be1d279686d26eab2c3ca61cbffb1905285c3c5041214614e",
+      "matches_candidate": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334/discussion_validate.py",
+      "candidate_path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/plugin/scripts/discussion_validate.py",
+      "sha256": "af6eee22198e63d953d5eb2cddf907e2f5df13ebd42d916290bb8f3fb068cae1",
+      "matches_candidate": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334/git_guard.py",
+      "candidate_path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/plugin/scripts/git_guard.py",
+      "sha256": "20329ea4137cfd4dc42e3089f06ab4ab6fae90faf3dcc04347f1563c8da91bdb",
+      "matches_candidate": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334/guard_hook.py",
+      "candidate_path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/plugin/scripts/guard_hook.py",
+      "sha256": "c94ea1a04ce7640b9a122e5d1e7910043e07606df5ee3f9999c0a11e6237929e",
+      "matches_candidate": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334/integration.py",
+      "candidate_path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/plugin/scripts/integration.py",
+      "sha256": "6e470f996b82dcb5496a9ab493e730ee3686b4d25cc845132e7653ee8f5c1896",
+      "matches_candidate": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334/isolation.py",
+      "candidate_path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/plugin/scripts/isolation.py",
+      "sha256": "b65a3877ca5c5963ff28063571017440ac11a850a67b1a3fb5cd8d41e5445747",
+      "matches_candidate": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334/lean_verification.py",
+      "candidate_path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/plugin/scripts/lean_verification.py",
+      "sha256": "1f257ba374e23f0dccaecddea994d9d4e7dddd46e971126315a6764a289e5603",
+      "matches_candidate": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334/loop_run.py",
+      "candidate_path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/plugin/scripts/loop_run.py",
+      "sha256": "9eda38c8e8927efbaa8a7ac9b255a80cf65fee796ac1a6aa71b36320380f8246",
+      "matches_candidate": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334/model_policy.py",
+      "candidate_path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/plugin/scripts/model_policy.py",
+      "sha256": "f6eed5e1ca7a8998a62675d20967a4627fb51e4bca8348452f77fb91c197a0a1",
+      "matches_candidate": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334/path_config.py",
+      "candidate_path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/plugin/scripts/path_config.py",
+      "sha256": "8f05ffc1ed45b3fa565aa89667422ab64846bbfb0baf18b2548e1d9a3a9e5464",
+      "matches_candidate": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334/pipeline_diagnose.py",
+      "candidate_path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/plugin/scripts/pipeline_diagnose.py",
+      "sha256": "3a0f5ec4e0f568c58346bf2f079958f17224e9db4daa5b9731f56ac982910d01",
+      "matches_candidate": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334/pipeline_git.py",
+      "candidate_path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/plugin/scripts/pipeline_git.py",
+      "sha256": "7f9eb6c8eac17ef93182e396f596e773b813c822cfc49f3e0d830a8562c03750",
+      "matches_candidate": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334/pipeline_state.py",
+      "candidate_path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/plugin/scripts/pipeline_state.py",
+      "sha256": "4282b9d398bc4b1c233671d73c9edd1e6039262fbc239b4876183328001445a7",
+      "matches_candidate": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334/pipeline_undo.py",
+      "candidate_path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/plugin/scripts/pipeline_undo.py",
+      "sha256": "968c08fdabb25557cb0318e4d203d96095256b56e64fdcbdf4185d376e85e90f",
+      "matches_candidate": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334/promote_lookahead.py",
+      "candidate_path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/plugin/scripts/promote_lookahead.py",
+      "sha256": "0eec936b988a83e176ec899857ab00788815c3b67dfc9dc61be7542d5d35aeb1",
+      "matches_candidate": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334/review_panel.py",
+      "candidate_path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/plugin/scripts/review_panel.py",
+      "sha256": "29e90704a450e5641b7cb2baf32ba012178cd474e00793123b97abf186eb402b",
+      "matches_candidate": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334/roadmap.py",
+      "candidate_path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/plugin/scripts/roadmap.py",
+      "sha256": "bb0c3c455c2df4e07838486a8b70763d6928a0581aa86fcdedadf8c8ca26a356",
+      "matches_candidate": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334/state_checkpoint.py",
+      "candidate_path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/plugin/scripts/state_checkpoint.py",
+      "sha256": "7afbe10471c6aa9c53097a08ff744b5100f9627a5b018159a26a7984387f0df5",
+      "matches_candidate": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334/state_promote.py",
+      "candidate_path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/plugin/scripts/state_promote.py",
+      "sha256": "16fbef14bdf4ca1a7c587a0d45015bc9a179a3d56faee0fa6c4bb9038f1ca9ea",
+      "matches_candidate": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334/status_runtime.py",
+      "candidate_path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/plugin/scripts/status_runtime.py",
+      "sha256": "7b3e9d9c69e5d9b9eb5ccd2cabf5121e405d6a17ca013bc12ed6e5a8f5baae2b",
+      "matches_candidate": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334/worktree_paths.py",
+      "candidate_path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/plugin/scripts/worktree_paths.py",
+      "sha256": "e6586e2d5019e5965d27d1c9a66e8eed06649cee088076d52eddb222d3ef1250",
+      "matches_candidate": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/repo/.opencode/skills/gsd-path/scripts/_common.py",
+      "candidate_path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/plugin/scripts/_common.py",
+      "sha256": "7224ad1c9fc2b1cf34acef7261aa4ca845eec368509c24789a46d28341c8a710",
+      "matches_candidate": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/repo/.opencode/skills/gsd-path/scripts/archive_milestone.py",
+      "candidate_path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/plugin/scripts/archive_milestone.py",
+      "sha256": "4de4da2d541cbeb27ae662b0bb091760c87259c40e60ea5c909c4fac3c7d195c",
+      "matches_candidate": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/repo/.opencode/skills/gsd-path/scripts/bootstrap_repository.py",
+      "candidate_path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/plugin/scripts/bootstrap_repository.py",
+      "sha256": "89b8c8c603d163f31668c3a19bb9686a3041168baacb70f0bb0d1a7673cd5de0",
+      "matches_candidate": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/repo/.opencode/skills/gsd-path/scripts/build_recovery.py",
+      "candidate_path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/plugin/scripts/build_recovery.py",
+      "sha256": "d48a9d22b583e268a9665e1a01834382e1ad7b804fedf28e5dfb3a148d6163e0",
+      "matches_candidate": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/repo/.opencode/skills/gsd-path/scripts/build_state.py",
+      "candidate_path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/plugin/scripts/build_state.py",
+      "sha256": "eb08bf60aca2719d899a979074c056abeb7e907dd47450cd2d57ad0a1f1bced7",
+      "matches_candidate": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/repo/.opencode/skills/gsd-path/scripts/check_docs_audit.py",
+      "candidate_path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/plugin/scripts/check_docs_audit.py",
+      "sha256": "6309021080c7ae8a080d73def29ef3deb58973e7062c053f95046b633f50acf7",
+      "matches_candidate": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/repo/.opencode/skills/gsd-path/scripts/check_handoffs.py",
+      "candidate_path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/plugin/scripts/check_handoffs.py",
+      "sha256": "9f7b8121ed6820041e2e44390cff073f90d1b02baf1aca4614ae7e546af63f8a",
+      "matches_candidate": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/repo/.opencode/skills/gsd-path/scripts/check_task_briefs.py",
+      "candidate_path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/plugin/scripts/check_task_briefs.py",
+      "sha256": "b01b088753a2d09e0799e628e34423bdd84f0b2acc9c787b2a015855a03c7f4f",
+      "matches_candidate": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/repo/.opencode/skills/gsd-path/scripts/check_update.py",
+      "candidate_path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/plugin/scripts/check_update.py",
+      "sha256": "10f81e51c68aedc913584c7e5b3935fd13ddb4b5a7d8dc98a9a0de525df82ad2",
+      "matches_candidate": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/repo/.opencode/skills/gsd-path/scripts/detect_project.py",
+      "candidate_path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/plugin/scripts/detect_project.py",
+      "sha256": "f99206f817e963b855aa9f3f3b687671ee52cc29abe25f906caa9d8d0942e1be",
+      "matches_candidate": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/repo/.opencode/skills/gsd-path/scripts/discussion_records.py",
+      "candidate_path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/plugin/scripts/discussion_records.py",
+      "sha256": "1d74897eccd69a7be1d279686d26eab2c3ca61cbffb1905285c3c5041214614e",
+      "matches_candidate": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/repo/.opencode/skills/gsd-path/scripts/discussion_validate.py",
+      "candidate_path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/plugin/scripts/discussion_validate.py",
+      "sha256": "af6eee22198e63d953d5eb2cddf907e2f5df13ebd42d916290bb8f3fb068cae1",
+      "matches_candidate": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/repo/.opencode/skills/gsd-path/scripts/dispatch_driver.py",
+      "candidate_path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/plugin/scripts/dispatch_driver.py",
+      "sha256": "9335f3e3286dd9655de02174f07c7dcf73bc52a8cbc148b57b180ed9332bb6dc",
+      "matches_candidate": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/repo/.opencode/skills/gsd-path/scripts/git_guard.py",
+      "candidate_path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/plugin/scripts/git_guard.py",
+      "sha256": "20329ea4137cfd4dc42e3089f06ab4ab6fae90faf3dcc04347f1563c8da91bdb",
+      "matches_candidate": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/repo/.opencode/skills/gsd-path/scripts/integration.py",
+      "candidate_path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/plugin/scripts/integration.py",
+      "sha256": "6e470f996b82dcb5496a9ab493e730ee3686b4d25cc845132e7653ee8f5c1896",
+      "matches_candidate": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/repo/.opencode/skills/gsd-path/scripts/isolation.py",
+      "candidate_path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/plugin/scripts/isolation.py",
+      "sha256": "b65a3877ca5c5963ff28063571017440ac11a850a67b1a3fb5cd8d41e5445747",
+      "matches_candidate": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/repo/.opencode/skills/gsd-path/scripts/jev_review.py",
+      "candidate_path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/plugin/scripts/jev_review.py",
+      "sha256": "f23668ff1fd6ab1b64230dca17a1406398fa088dc2f8668c05a7edce311dc8a7",
+      "matches_candidate": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/repo/.opencode/skills/gsd-path/scripts/lean_verification.py",
+      "candidate_path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/plugin/scripts/lean_verification.py",
+      "sha256": "1f257ba374e23f0dccaecddea994d9d4e7dddd46e971126315a6764a289e5603",
+      "matches_candidate": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/repo/.opencode/skills/gsd-path/scripts/loop_run.py",
+      "candidate_path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/plugin/scripts/loop_run.py",
+      "sha256": "9eda38c8e8927efbaa8a7ac9b255a80cf65fee796ac1a6aa71b36320380f8246",
+      "matches_candidate": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/repo/.opencode/skills/gsd-path/scripts/model_policy.py",
+      "candidate_path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/plugin/scripts/model_policy.py",
+      "sha256": "f6eed5e1ca7a8998a62675d20967a4627fb51e4bca8348452f77fb91c197a0a1",
+      "matches_candidate": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/repo/.opencode/skills/gsd-path/scripts/path_config.py",
+      "candidate_path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/plugin/scripts/path_config.py",
+      "sha256": "8f05ffc1ed45b3fa565aa89667422ab64846bbfb0baf18b2548e1d9a3a9e5464",
+      "matches_candidate": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/repo/.opencode/skills/gsd-path/scripts/pipeline_git.py",
+      "candidate_path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/plugin/scripts/pipeline_git.py",
+      "sha256": "7f9eb6c8eac17ef93182e396f596e773b813c822cfc49f3e0d830a8562c03750",
+      "matches_candidate": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/repo/.opencode/skills/gsd-path/scripts/pipeline_state.py",
+      "candidate_path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/plugin/scripts/pipeline_state.py",
+      "sha256": "4282b9d398bc4b1c233671d73c9edd1e6039262fbc239b4876183328001445a7",
+      "matches_candidate": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/repo/.opencode/skills/gsd-path/scripts/promote_lookahead.py",
+      "candidate_path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/plugin/scripts/promote_lookahead.py",
+      "sha256": "0eec936b988a83e176ec899857ab00788815c3b67dfc9dc61be7542d5d35aeb1",
+      "matches_candidate": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/repo/.opencode/skills/gsd-path/scripts/review_findings.py",
+      "candidate_path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/plugin/scripts/review_findings.py",
+      "sha256": "42f920e4c5f43918e077ec4da140390d17063174cdf57f0b8ea64e1647ef0d56",
+      "matches_candidate": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/repo/.opencode/skills/gsd-path/scripts/review_panel.py",
+      "candidate_path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/plugin/scripts/review_panel.py",
+      "sha256": "29e90704a450e5641b7cb2baf32ba012178cd474e00793123b97abf186eb402b",
+      "matches_candidate": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/repo/.opencode/skills/gsd-path/scripts/roadmap.py",
+      "candidate_path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/plugin/scripts/roadmap.py",
+      "sha256": "bb0c3c455c2df4e07838486a8b70763d6928a0581aa86fcdedadf8c8ca26a356",
+      "matches_candidate": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/repo/.opencode/skills/gsd-path/scripts/state_checkpoint.py",
+      "candidate_path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/plugin/scripts/state_checkpoint.py",
+      "sha256": "7afbe10471c6aa9c53097a08ff744b5100f9627a5b018159a26a7984387f0df5",
+      "matches_candidate": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/repo/.opencode/skills/gsd-path/scripts/state_promote.py",
+      "candidate_path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/plugin/scripts/state_promote.py",
+      "sha256": "16fbef14bdf4ca1a7c587a0d45015bc9a179a3d56faee0fa6c4bb9038f1ca9ea",
+      "matches_candidate": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/repo/.opencode/skills/gsd-path/scripts/status_runtime.py",
+      "candidate_path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/plugin/scripts/status_runtime.py",
+      "sha256": "7b3e9d9c69e5d9b9eb5ccd2cabf5121e405d6a17ca013bc12ed6e5a8f5baae2b",
+      "matches_candidate": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/repo/.opencode/skills/gsd-path/scripts/task_context.py",
+      "candidate_path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/plugin/scripts/task_context.py",
+      "sha256": "2d6f7d922065b3e60f684d2da76089756831cf0bcaf2d7be41b93962baf2e6bd",
+      "matches_candidate": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/repo/.opencode/skills/gsd-path/scripts/token_budget.py",
+      "candidate_path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/plugin/scripts/token_budget.py",
+      "sha256": "498952bf995232ce88225c3e5ba83ec8921997931cc41d8235af35c7dc621b50",
+      "matches_candidate": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/repo/.opencode/skills/gsd-path/scripts/workflow_run.py",
+      "candidate_path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/plugin/scripts/workflow_run.py",
+      "sha256": "e098a5d193eb2ff8c9b44f96c5005c98b4eb394519df3f559878e5c0a630d805",
+      "matches_candidate": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/repo/.opencode/skills/gsd-path/scripts/worktree_paths.py",
+      "candidate_path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/plugin/scripts/worktree_paths.py",
+      "sha256": "e6586e2d5019e5965d27d1c9a66e8eed06649cee088076d52eddb222d3ef1250",
+      "matches_candidate": true
+    }
+  ],
+  "all_hashed_helpers_match": true,
+  "native_tool_calls_audited": 286,
+  "global_skill_tool_or_resource_calls": [],
+  "native_session_directories": [
+    [
+      "ses_f3f0fe052ffe3WFQQNyJ0J55Z4",
+      null,
+      "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/repo",
+      2655,
+      3446
+    ],
+    [
+      "ses_f3f1414b5ffeTwH5T5a0KCdrXl",
+      null,
+      "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/repo",
+      3151,
+      4038
+    ],
+    [
+      "ses_f3f175bb7ffeq2VAQ3VkEgdLbw",
+      "ses_f3f185d2affenBemGsKrh9tsg0",
+      "/Users/jeremymcspadden/.gsd-path/projects/de463e5c6408acdb20334ffd3d918adc61b68e9445d32eb06bb0e41ec79a100a/54588c8439d6a3a26ee6e3a13977c6adc7f486272fffae9c7569d7d3e133fe45/verify/wave-1-cycle-1",
+      4521,
+      2008
+    ],
+    [
+      "ses_f3f185d2affenBemGsKrh9tsg0",
+      null,
+      "/Users/jeremymcspadden/.gsd-path/projects/de463e5c6408acdb20334ffd3d918adc61b68e9445d32eb06bb0e41ec79a100a/54588c8439d6a3a26ee6e3a13977c6adc7f486272fffae9c7569d7d3e133fe45/verify/wave-1-cycle-1",
+      2216,
+      3447
+    ],
+    [
+      "ses_f3f1eb700ffeh4VIS1uvOZHuHW",
+      null,
+      "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/repo",
+      7083,
+      10446
+    ],
+    [
+      "ses_f3f20a175ffeS16bu9ErKFHSMU",
+      "ses_f3f2180c5ffet7nswg6lKp3njW",
+      "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/repo",
+      1068,
+      1299
+    ],
+    [
+      "ses_f3f2180c5ffet7nswg6lKp3njW",
+      null,
+      "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/repo",
+      2107,
+      1536
+    ],
+    [
+      "ses_f3f2b26b2ffeSLib95TqVDjQNx",
+      null,
+      "/Users/jeremymcspadden/orca/workspaces/gsd-path/release-gate",
+      2653,
+      3923
+    ],
+    [
+      "ses_f3f2e9f03ffexjo8nwW6uSruiN",
+      "ses_f3f3060c5ffeCipwGk2UY5OssM",
+      "/Users/jeremymcspadden/orca/workspaces/gsd-path/release-gate",
+      1499,
+      3009
+    ],
+    [
+      "ses_f3f3060c5ffeCipwGk2UY5OssM",
+      null,
+      "/Users/jeremymcspadden/orca/workspaces/gsd-path/release-gate",
+      5656,
+      4764
+    ],
+    [
+      "ses_f3f337207ffeq3VR8huxYkl01n",
+      null,
+      "/Users/jeremymcspadden/orca/workspaces/gsd-path/release-gate",
+      5390,
+      6706
+    ],
+    [
+      "ses_f3f36fcd4ffe6AoMVPj10Mhy3M",
+      null,
+      "/Users/jeremymcspadden/orca/workspaces/gsd-path/release-gate",
+      6356,
+      9805
+    ],
+    [
+      "ses_f3f3ba4a1ffeH7IMun0a9WHcQa",
+      null,
+      "/Users/jeremymcspadden/orca/workspaces/gsd-path/release-gate",
+      6136,
+      10508
+    ],
+    [
+      "ses_f3f3e67caffeCR3CAsGSx1Ucth",
+      "ses_f3f3fd0d9ffe7FPzwHZcNqk9rJ",
+      "/Users/jeremymcspadden/orca/workspaces/gsd-path/release-gate",
+      2093,
+      1958
+    ],
+    [
+      "ses_f3f3e67faffeazP4WL2HlBAIMY",
+      "ses_f3f3fd0d9ffe7FPzwHZcNqk9rJ",
+      "/Users/jeremymcspadden/orca/workspaces/gsd-path/release-gate",
+      2467,
+      572
+    ],
+    [
+      "ses_f3f3fd0d9ffe7FPzwHZcNqk9rJ",
+      null,
+      "/Users/jeremymcspadden/orca/workspaces/gsd-path/release-gate",
+      7769,
+      5080
+    ]
+  ]
+}
