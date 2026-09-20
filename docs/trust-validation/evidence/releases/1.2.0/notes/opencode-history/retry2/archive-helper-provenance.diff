@@ -1,0 +1,82 @@
+--- /Users/jeremymcspadden/.config/opencode/skills/gsd-path/scripts/archive_milestone.py
++++ /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry2/quick/repo/.opencode/skills/gsd-path/scripts/archive_milestone.py
+@@ -16,6 +16,9 @@
+ import shutil
+ import subprocess
+ import sys
++
++# Runtime helpers must not modify their immutable installation.
++sys.dont_write_bytecode = True
+ from contextlib import contextmanager
+ from datetime import date
+ from pathlib import Path, PurePosixPath
+@@ -1743,6 +1746,12 @@
+     carried_forward = pending_ruling_count(archived_audit)
+     # Persistent project metadata ships but never archives with a milestone.
+     allowed = {"STATE.md", "REPOSITORY.md", "archive", "LESSONS.md", "next"}
++    for name in ("config.json", "model-policy.json"):
++        path = active_root / name
++        if path.exists() or path.is_symlink():
++            if path.is_symlink() or not path.is_file() or path.stat().st_nlink != 1:
++                raise ArchiveError(f"project settings must be a regular unlinked file: {path}")
++            allowed.add(name)
+     if (active_root / "CHARTER.md").is_file():
+         # Program flow: these persist at the .project/ top level.
+         allowed |= {"CHARTER.md", "ROADMAP.md", "SYNTHESIS.md"}
+@@ -1808,6 +1817,7 @@
+     repo: Path,
+     phases: Sequence[str],
+     must_be_uncommitted: bool = False,
++    *, historical: bool = False,
+ ) -> tuple:
+     project = repo.resolve()
+     active_root = require_project_layout(project)
+@@ -1816,7 +1826,7 @@
+     state, _, loaded_state_path = strict_state(project)
+     if loaded_state_path.resolve() != state_path.resolve():
+         raise ArchiveError("strict STATE.md loader returned an unexpected path")
+-    require_transaction_context(project, state, phases)
++    require_transaction_context(project, state, phases, historical=historical)
+ 
+     configured = state.archive
+     if configured is None:
+@@ -1880,10 +1890,11 @@
+         raise ArchiveError(f"{label} commit body does not match required fields")
+ 
+ 
+-def find_ship_commit(project: Path, archive_name: str) -> str:
++def find_ship_commit(project: Path, archive_name: str, *, historical: bool = False) -> str:
+     expected_subject = ship_subject(archive_name)
+     log = require_git_success(
+-        run_git(project, "log", "--first-parent", "--format=%H%x00%s", "HEAD"),
++        run_git(project, "log", *([] if historical else ["--first-parent"]),
++                "--format=%H%x00%s", "HEAD"),
+         "inspect HEAD history for the ship commit",
+     )
+     matches = []
+@@ -1926,19 +1937,22 @@
+         raise ArchiveError("ROADMAP.md must record Status: shipped and the exact Archive")
+ 
+ 
+-def validate(repo: Path) -> dict:
++def validate(repo: Path, *, historical: bool = False) -> dict:
+     project, _, state, configured, archive, archived_files, reviewed_head = prepared_transaction(
+         repo,
+         ("shipped",),
++        historical=historical,
+     )
+     if state.status != "done":
+         raise ArchiveError("STATE.md is not shipped/done")
+ 
+-    project_status = require_git_success(run_git(project, "status", "--porcelain"), "inspect worktree status")
++    project_status = require_git_success(
++        run_git(project, "status", "--porcelain", *(["--", ".project"] if historical else [])),
++        "inspect worktree status")
+     if project_status:
+         raise ArchiveError("ship transaction worktree is not clean")
+ 
+-    ship_commit = find_ship_commit(project, archive.name)
++    ship_commit = find_ship_commit(project, archive.name, historical=historical)
+ 
+     parents = require_git_success(
+         run_git(project, "rev-list", "--parents", "-n", "1", ship_commit),

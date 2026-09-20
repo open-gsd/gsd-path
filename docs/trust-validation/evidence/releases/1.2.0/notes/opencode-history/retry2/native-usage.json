@@ -1,0 +1,99 @@
+{
+  "method": "Native OpenCode SQLite session counters, recursively include children. output+reasoning are separate counters; count both conservatively.",
+  "session_ceiling": 30000,
+  "authority": "Owner session budget",
+  "groups": [
+    {
+      "stage": "inspect",
+      "members": [
+        {
+          "id": "ses_f401f3710ffeDRau7jmEDH9lvp",
+          "output_tokens": 7226,
+          "reasoning_tokens": 4149
+        },
+        {
+          "id": "ses_f401daee1ffeuLo3PvXrzIcHq5",
+          "output_tokens": 2740,
+          "reasoning_tokens": 991
+        },
+        {
+          "id": "ses_f401daeadffeEZcmAB0V6Pv6S1",
+          "output_tokens": 3790,
+          "reasoning_tokens": 5022
+        }
+      ],
+      "total_generated": 23918,
+      "pass": true
+    },
+    {
+      "stage": "define",
+      "members": [
+        {
+          "id": "ses_f4019719fffe1aLRj4KwRf0LCY",
+          "output_tokens": 3526,
+          "reasoning_tokens": 6978
+        }
+      ],
+      "total_generated": 10504,
+      "pass": true
+    },
+    {
+      "stage": "plan",
+      "members": [
+        {
+          "id": "ses_f40148b10ffeNPNAN6lollEqwG",
+          "output_tokens": 7058,
+          "reasoning_tokens": 9869
+        }
+      ],
+      "total_generated": 16927,
+      "pass": true
+    },
+    {
+      "stage": "build",
+      "members": [
+        {
+          "id": "ses_f400d33c3ffeW7F6G7IctMAp3a",
+          "output_tokens": 7847,
+          "reasoning_tokens": 9378
+        },
+        {
+          "id": "ses_f4009f9d7ffeC38ArElqySa5lc",
+          "output_tokens": 2057,
+          "reasoning_tokens": 4835
+        }
+      ],
+      "total_generated": 24117,
+      "pass": true
+    },
+    {
+      "stage": "wave",
+      "members": [
+        {
+          "id": "ses_f40058b84ffeqpGu6LvEMfediN",
+          "output_tokens": 9577,
+          "reasoning_tokens": 9817
+        },
+        {
+          "id": "ses_f4001b48affecziSqQWG2pC9gA",
+          "output_tokens": 4391,
+          "reasoning_tokens": 3219
+        }
+      ],
+      "total_generated": 27004,
+      "pass": true
+    },
+    {
+      "stage": "final-reuse-archive-prepare",
+      "members": [
+        {
+          "id": "ses_f3ffe4b5affeostsVw4SomGc24",
+          "output_tokens": 2839,
+          "reasoning_tokens": 3957
+        }
+      ],
+      "total_generated": 6796,
+      "pass": true
+    }
+  ]
+}

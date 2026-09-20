@@ -1,0 +1,9 @@
+{
+  "status": "failed-candidate-provenance",
+  "global_helper": "/Users/jeremymcspadden/.config/opencode/skills/gsd-path/scripts/archive_milestone.py",
+  "global_sha256": "bd8869fe99c6134597135f00c8d94da9096c2586e79970ba218c30374e03943f",
+  "pinned_helper": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry2/quick/repo/.opencode/skills/gsd-path/scripts/archive_milestone.py",
+  "pinned_sha256": "4de4da2d541cbeb27ae662b0bb091760c87259c40e60ea5c909c4fac3c7d195c",
+  "native_ship_result": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry2/ship-result.json",
+  "scope": "Ship native parent invoked older global archive helper; do not count completed local integration as frozen candidate end-to-end proof."
+}

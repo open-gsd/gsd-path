@@ -1,0 +1,14 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "antigravity",
+  "run_id": "2065a5fd-d1d4-49f3-9ba4-2bf8fe752e6e",
+  "result": "pass",
+  "step": "install",
+  "command": "node /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/plugin/scripts/install.mjs --antigravity --local --project /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/quick/repo --hooks --no-color",
+  "output": "\u2726 GSD Path installer v1.2.0\n  project install into /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/quick/repo\n\n  \u2713 antigravity: installed 16 shared skills to /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/quick/repo/.agents/skills\n  \u2713 project: copied AGENTS.md, WORKFLOW.md, .gsd-path/status_runtime.py, .gsd-path/runtime.json, .gsd-path/guard_hook.py, .gsd-path/git_guard.py, .git/hooks/pre-commit, .git/hooks/commit-msg, .git/hooks/pre-push to /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/quick/repo\n  ! Antigravity discovers /gsd-path but has no documented hard explicit-only skill switch; invoke the skill explicitly.\n\n  Done. Restart active agent sessions, then invoke the router explicitly.",
+  "host_version": "1.2.7",
+  "install_root": ".agents/skills",
+  "candidate": "f36f24aed82ac0019d082c7e31b8a4342d8e03f1",
+  "package_version": "1.2.0",
+  "exit_code": 0
+}

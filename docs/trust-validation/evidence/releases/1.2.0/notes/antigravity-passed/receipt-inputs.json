@@ -1,0 +1,19 @@
+{
+  "fixture": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/quick/repo",
+  "repo": "/Users/jeremymcspadden/orca/workspaces/gsd-path/release-gate",
+  "transcript": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4",
+  "install-json": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/quick/install.json",
+  "install-command": "node /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/plugin/scripts/install.mjs --antigravity --local --project /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/quick/repo --hooks --no-color",
+  "router-command": "/gsd-path",
+  "landing-command": "PYTHONPATH=/Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334 python3 -B .agents/skills/gsd-path-build/scripts/dispatch_driver.py finish --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/quick/repo --task-id T001",
+  "task-worktree": "/Users/jeremymcspadden/.gsd-path/projects/0c831df73ded9bc7cf8eef5426a9e10b28398d197427778e813b3be65bd9f123/ad92a29c3dba7b70b3679815c77e922de9e8b673a11fed31d9a16d70f6843cbb/verify/task-t001-verify",
+  "review-command": "Antigravity invoke_subagent: review_wave_1_cycle_1; native child fd316feb-2872-4d5e-9da2-5e818cf96e0d",
+  "archive-command": "python3 /Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334/archive_milestone.py validate --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/quick/repo",
+  "archive-output": "{\"archive\": \".project/archive/001-count-cli\", \"commit\": \"ee44cfb501f771bca463a42735c3f4b3f7437961\"}\r\n",
+  "integrate-command": "python3 /Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334/archive_milestone.py integrate --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/quick/repo --slug count-cli",
+  "integrate-output": "{\"archive\": \".project/archive/001-count-cli\", \"base\": \"fb930faf10b05590b3fbebe196eefdfd91a4f40b\", \"commit\": \"ee44cfb501f771bca463a42735c3f4b3f7437961\", \"integrate\": \"fb930faf10b05590b3fbebe196eefdfd91a4f40b\", \"landing\": \"fb930faf10b05590b3fbebe196eefdfd91a4f40b\", \"mode\": \"direct\", \"tag\": \"milestone/001-count-cli\"}\r\n",
+  "integration-worktree": "/Users/jeremymcspadden/.gsd-path/projects/0c831df73ded9bc7cf8eef5426a9e10b28398d197427778e813b3be65bd9f123/ad92a29c3dba7b70b3679815c77e922de9e8b673a11fed31d9a16d70f6843cbb/integrate/M001",
+  "run-dir": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4",
+  "operator": "Release evaluation",
+  "isolation-mode": "serial"
+}

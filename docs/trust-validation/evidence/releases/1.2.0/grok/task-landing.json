@@ -1,0 +1,17 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "grok",
+  "run_id": "grok-1.2.0-f36f24a-retry3",
+  "result": "pass",
+  "step": "task-landing",
+  "command": "REPO=/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/grok-retry3/quick/repo\ngit -C \"$REPO\" status --porcelain\necho '---DIFFSTAT---'\ngit -C \"$REPO\" diff --stat\necho '---FINISH---'\nSKILL=/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/grok-retry3/quick/repo/.grok/skills/gsd-path\npython3 -B \"$SKILL/scripts/dispatch_driver.py\" finish --repo \"$REPO\" --task-id T001",
+  "output": "commit 8d0e03a257d396654520715c683da3a3f6d7aaff\nAuthor:     Feature Evaluation <evaluation@example.invalid>\nAuthorDate: Sun Sep 20 13:16:22 2026 -0500\nCommit:     Feature Evaluation <evaluation@example.invalid>\nCommitDate: Sun Sep 20 13:16:22 2026 -0500\n\n    T001: Extend count.py CLI with JSON, errors, and subprocess tests\n    \n    Task: .project/tasks/T001-widget-count-cli.md\n    Base: b849238db334da30af62b346ada951b18026da33\n    Files:\n    - .project/tasks/T001-widget-count-cli.md\n    - count.py\n    - test_count.py\n\n .project/tasks/T001-widget-count-cli.md | 20 +++++++++--\n count.py                                | 48 +++++++++++++++++++++++++--\n test_count.py                           | 59 +++++++++++++++++++++++++++++++++\n 3 files changed, 122 insertions(+), 5 deletions(-)",
+  "fixture_bundle": "grok/fixture.bundle",
+  "run_manifest": ".project/archive/001-widget-count-cli/trust-run-manifest.json",
+  "fixture_base_commit": "b849238db334da30af62b346ada951b18026da33",
+  "task_branch": "gsd-path-verify/task-t001-verify",
+  "task_worktree": "/Users/jeremymcspadden/.gsd-path/projects/c0686bff33ffc28907dac3212a446c1c196b74c918841f60dc1c2f9052ca2fdf/7196de6c9b44d816d047189ee42a912aa3b4cd361664d76a930194a43fbc445b/verify/task-t001-verify",
+  "landing_commit": "8d0e03a257d396654520715c683da3a3f6d7aaff",
+  "isolation_mode": "serial",
+  "isolation_note": "A one-task wave uses the helper's serial mode: the coder worked on the bound branch in the primary worktree at the recorded base, and the named branch and worktree are the isolated Task Verify sidecar created for this task and retired after landing."
+}

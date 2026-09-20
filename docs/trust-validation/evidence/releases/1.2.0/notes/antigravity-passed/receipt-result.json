@@ -1,0 +1,20 @@
+{
+  "receipt": "/Users/jeremymcspadden/orca/workspaces/gsd-path/release-gate/docs/trust-validation/evidence/releases/1.2.0/antigravity.md",
+  "steps": [
+    "archive",
+    "child-spawn",
+    "guards",
+    "install",
+    "integration",
+    "reviews",
+    "router",
+    "task-landing",
+    "task-verify",
+    "worktrees"
+  ],
+  "bundle": "/Users/jeremymcspadden/orca/workspaces/gsd-path/release-gate/docs/trust-validation/evidence/releases/1.2.0/antigravity/fixture.bundle",
+  "validated": true,
+  "ship_commit": "ee44cfb501f771bca463a42735c3f4b3f7437961",
+  "integration_commit": "fb930faf10b05590b3fbebe196eefdfd91a4f40b",
+  "tag": "milestone/001-count-cli"
+}

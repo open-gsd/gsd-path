@@ -51,9 +51,9 @@
         "invalid"
       ],
       "pass": true,
-      "exit_code": 2,
+      "exit_code": 1,
       "stdout": "",
-      "stderr": "error: invalid count 'invalid'; usage: python3 count.py [--json] [count]\n"
+      "stderr": "error: invalid count 'invalid' \u2014 expected a signed integer\n"
     }
   ]
 }

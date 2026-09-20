@@ -1,0 +1,39 @@
+{
+  "candidate": "f36f24aed82ac0019d082c7e31b8a4342d8e03f1",
+  "host": "antigravity",
+  "run_root": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4",
+  "prepare_final": [
+    {
+      "command": "python3 /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/quick/repo/.agents/skills/gsd-path/scripts/workflow_run.py prepare-final --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/quick/repo --expected-head 0709aadc8ba2aa7cb7037424109a2ea2014d65de",
+      "native_events": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/quick/run-20260920T181823991475Z/events.jsonl",
+      "final": {
+        "path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/quick/repo/.project/review/FINAL.md",
+        "reused": true,
+        "reviewed_head": "0709aadc8ba2aa7cb7037424109a2ea2014d65de",
+        "source": ".project/review/wave-1.cycle1.md",
+        "source_commit": "63882ff13966a9c9f2ec007a460eb476dfc43881"
+      },
+      "verification_reused": false,
+      "verification_passed": true,
+      "verification_exit_code": 0
+    },
+    {
+      "command": "python3 /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/quick/repo/.agents/skills/gsd-path/scripts/workflow_run.py prepare-final --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/quick/repo --expected-head 0709aadc8ba2aa7cb7037424109a2ea2014d65de",
+      "native_events": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/quick/run-20260920T181823991475Z/events.jsonl",
+      "final": {
+        "path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/quick/repo/.project/review/FINAL.md",
+        "reused": true,
+        "reviewed_head": "0709aadc8ba2aa7cb7037424109a2ea2014d65de",
+        "source": ".project/review/wave-1.cycle1.md",
+        "source_commit": "63882ff13966a9c9f2ec007a460eb476dfc43881"
+      },
+      "verification_reused": true,
+      "verification_passed": true,
+      "verification_exit_code": 0
+    }
+  ],
+  "ledger_entries": 2,
+  "ledger_sha256": "040e3be2a4a9b6b87b70b5ae441b2b22b33a56e4b6dfb89956a8276e4a79d3c2",
+  "budget_max_output": 16553,
+  "helper_provenance": "Native commands used candidate-local .agents/skills and declared immutable runtime7651c214; original child identities retained across inspection resumes."
+}

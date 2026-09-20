@@ -1,0 +1,22 @@
+# Grok 1.2.0 live evidence
+
+Passing fixture: /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/grok-retry3.
+Candidate f36f24aed82ac0019d082c7e31b8a4342d8e03f1; package1.2.0; Grok1.0.34 (3736acbc8658), --effort low recorded in every native invocation. Installed defaults were not edited.
+
+Receipt validation passed; independent widget oracle passed all six cases. Ship0d9678ed81066300b6f54513d7600b1e96b538d0; integration7192dc81872e560dee3d7587f8ec0fcd23e6e55d; annotated milestone/001-widget-count-cli. Native final summary loosely called the integration SHA the tag object; the actual annotated tag ref is preserved separately in fixture.bundle and provenance-audit.json. No external publication.
+
+Native coder build_t001 completed as01a0c007-d411-7770-84f7-0098b3de6ef3 in parent01a0c005-71fd-73f3-9392-695ae7db76dd. Isolated task Verify passed4 unittest methods with multiple CLI cases. Native prepare-task returned gsd-path-verify/task-t001-verify and the exact path now recorded in task-sidecar-proof.json and the receipt. No assumed branch/path naming.
+
+Full-wave reviewer review_wave_1_cycle_1 completed as01a0c00c-1743-7f70-a890-d8f273c7e962. Wave gate passed all fiveSC. Review scope final and Surface CLI match the plan exactly. At final-ready79e968d13f1f1c12177de4efaa7358064e45b3a5, prepare-final reused the full wave and ran project Verify once (4 tests pass). Same-HEAD repeat reused final and project Verify, with ledger2lines/1932bytes and SHA256af06fe9f0672817262ac60a45223ec8ef83a7e1f4464f4f129edeb7c6c27216a unchanged. No review_final child was dispatched in this passing fixture; generated final views were not hand-edited.
+
+This was a recovered run, not an error-free transcript. The coder's signed-integer test failure was fixed by the coder before isolated Verify. Pending-plan review removed duplicated unittest execution from the human-facing walkthrough while retaining SC5/AC5 test coverage. Wave collection initially used the wrong branch and was rejected; the first diagnosis invocation omitted its required subcommand; an absolute review path was rejected by the canonical gate. Corrected native invocations succeeded, with no manual state/artifact/sidecar repairs. The next fresh phase began with exact canonical diagnosis (status ok) before advancement. All original failed commands remain in quick/run-20260920T181726142646Z/events.jsonl and native-shell-evidence.json.
+
+Native parent session output totals (resumed turns grouped by actual session ID): inspection12048; definition4032; planning7592+2176=9768; build10054; wave review14229; final/archive4726; ship2621. Maximum14229 is below the owner's30000 ceiling. These are host-reported session totals, not inferred per-task counts;4000/task was treated as a warning, never an admission ceiling. Every child completed before its parent exited.
+
+Candidate provenance: no native tool input referenced globally installed ~/.grok/skills; consumed resources use this fixture's local install or runtime7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334. All29 comparable runtime Python files match the pinned candidate byte-for-byte (runtime-provenance.json). Final ship helpers used literal candidate runtime paths. Git-only host tier: fresh committed-archive probes from the same-candidate guard-source passed; native guards are correctly not applicable.
+
+Child-binding scope: child-binding-input/quick/run-20260920T181257166487Z is a symlink to the ENTIRE UNEDITED actual coder run. This avoids the Grok binder's last-session attribution bug across parent contexts. Manifest/receipt used that view only for native child binding; run-dir and raw evidence remain the full grok-retry3 directory. No events were filtered or relabeled.
+
+Earlier failures remain intact at sibling grok/ and grok-retry2/. The first has inspection/build budget breaches and interrupted reviewer recovery failure. Retry2 has the evaluator's mistaken Markdown surface normalization that prevented required full-wave reuse; its native final reviewer finished before that attempt was stopped. Neither is reused as passing evidence.
+
+Proof files in the passing fixture: receipt-validation.json, receipt-arguments.json, manifest-result.json, task-sidecar-proof.json, native-shell-evidence.json, runtime-provenance.json, provenance-audit.json, product.json, product-result.json, and all quick/run-*/ raw logs. Bundle refs equal fixture refs; native coder parent/child IDs and manifest/receipt branch/worktree values were checked against actual native outputs.

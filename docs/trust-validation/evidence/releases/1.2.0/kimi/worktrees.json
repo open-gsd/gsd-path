@@ -1,11 +1,11 @@
 {
   "schema": "gsd-path/live-step-evidence/v1",
   "host": "kimi",
-  "run_id": "session_aa85468f-e730-488f-afae-532258ad4e63",
+  "run_id": "session_f81310ea-670d-44e9-a82d-494e7b1d0b97",
   "result": "pass",
   "step": "worktrees",
   "command": "git worktree list --porcelain",
-  "output": "worktree /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/kimi/quick/repo\nHEAD acae8341cd80c7e9bf45aaf22abe1829b6b209bf\nbranch refs/heads/gsd-path/M001\n",
-  "primary_worktree": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/kimi/quick/repo",
-  "integration_worktree": "/Users/jeremymcspadden/.gsd-path/projects/ca842e30d0db69f1390addb9145013f09c1e57b9184572c293b2bbc705beb557/d715131cb14824f97b3da310f7dfcbcefd97766109c99b9071e416d210a8252d/integrate/M001"
+  "output": "worktree /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/kimi-retry2/quick/repo\nHEAD 67708c5529aa2ff7632f57b406a9f258993cb838\nbranch refs/heads/gsd-path/M001\n",
+  "primary_worktree": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/kimi-retry2/quick/repo",
+  "integration_worktree": "/Users/jeremymcspadden/.gsd-path/projects/7ed9aaae7f8a274b6af8dfd581b9922782d7bcdd7a49b9afa1bb171017199a3c/f5d5436aef712184c3a8a61ec3e3c41347170dddf7df6035ea234e43e4b3f963/integrate/M001"
 }

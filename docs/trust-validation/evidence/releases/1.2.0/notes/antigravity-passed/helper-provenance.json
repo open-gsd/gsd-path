@@ -1,0 +1,213 @@
+{
+  "candidate": "f36f24aed82ac0019d082c7e31b8a4342d8e03f1",
+  "host": "antigravity",
+  "method": "Extract absolute runtime/helper script paths from DONE native run_command events and compare existing files to frozen candidate canonical scripts. Missing invocation paths preserved separately; they executed no helper.",
+  "helpers": [
+    {
+      "path": "/Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334/archive_milestone.py",
+      "canonical": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/plugin/scripts/archive_milestone.py",
+      "sha256": "4de4da2d541cbeb27ae662b0bb091760c87259c40e60ea5c909c4fac3c7d195c",
+      "candidate_bytes_match": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334/detect_project.py",
+      "canonical": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/plugin/scripts/detect_project.py",
+      "sha256": "f99206f817e963b855aa9f3f3b687671ee52cc29abe25f906caa9d8d0942e1be",
+      "candidate_bytes_match": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334/isolation.py",
+      "canonical": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/plugin/scripts/isolation.py",
+      "sha256": "b65a3877ca5c5963ff28063571017440ac11a850a67b1a3fb5cd8d41e5445747",
+      "candidate_bytes_match": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334/path_config.py",
+      "canonical": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/plugin/scripts/path_config.py",
+      "sha256": "8f05ffc1ed45b3fa565aa89667422ab64846bbfb0baf18b2548e1d9a3a9e5464",
+      "candidate_bytes_match": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334/pipeline_git.py",
+      "canonical": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/plugin/scripts/pipeline_git.py",
+      "sha256": "7f9eb6c8eac17ef93182e396f596e773b813c822cfc49f3e0d830a8562c03750",
+      "candidate_bytes_match": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334/pipeline_state.py",
+      "canonical": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/plugin/scripts/pipeline_state.py",
+      "sha256": "4282b9d398bc4b1c233671d73c9edd1e6039262fbc239b4876183328001445a7",
+      "candidate_bytes_match": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/quick/repo/.agents/skills/gsd-path-build/scripts/check_handoffs.py",
+      "canonical": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/plugin/scripts/check_handoffs.py",
+      "sha256": "9f7b8121ed6820041e2e44390cff073f90d1b02baf1aca4614ae7e546af63f8a",
+      "candidate_bytes_match": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/quick/repo/.agents/skills/gsd-path-build/scripts/isolation.py",
+      "canonical": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/plugin/scripts/isolation.py",
+      "sha256": "b65a3877ca5c5963ff28063571017440ac11a850a67b1a3fb5cd8d41e5445747",
+      "candidate_bytes_match": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/quick/repo/.agents/skills/gsd-path-inspect/scripts/workflow_run.py",
+      "canonical": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/plugin/scripts/workflow_run.py",
+      "sha256": "e098a5d193eb2ff8c9b44f96c5005c98b4eb394519df3f559878e5c0a630d805",
+      "candidate_bytes_match": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/quick/repo/.agents/skills/gsd-path/scripts/check_handoffs.py",
+      "canonical": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/plugin/scripts/check_handoffs.py",
+      "sha256": "9f7b8121ed6820041e2e44390cff073f90d1b02baf1aca4614ae7e546af63f8a",
+      "candidate_bytes_match": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/quick/repo/.agents/skills/gsd-path/scripts/dispatch_driver.py",
+      "canonical": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/plugin/scripts/dispatch_driver.py",
+      "sha256": "9335f3e3286dd9655de02174f07c7dcf73bc52a8cbc148b57b180ed9332bb6dc",
+      "candidate_bytes_match": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/quick/repo/.agents/skills/gsd-path/scripts/model_policy.py",
+      "canonical": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/plugin/scripts/model_policy.py",
+      "sha256": "f6eed5e1ca7a8998a62675d20967a4627fb51e4bca8348452f77fb91c197a0a1",
+      "candidate_bytes_match": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/quick/repo/.agents/skills/gsd-path/scripts/pipeline_state.py",
+      "canonical": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/plugin/scripts/pipeline_state.py",
+      "sha256": "4282b9d398bc4b1c233671d73c9edd1e6039262fbc239b4876183328001445a7",
+      "candidate_bytes_match": true
+    },
+    {
+      "path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/quick/repo/.agents/skills/gsd-path/scripts/workflow_run.py",
+      "canonical": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/plugin/scripts/workflow_run.py",
+      "sha256": "e098a5d193eb2ff8c9b44f96c5005c98b4eb394519df3f559878e5c0a630d805",
+      "candidate_bytes_match": true
+    }
+  ],
+  "missing_invocation_paths": [
+    {
+      "path": "/Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334/scripts/dispatch_driver.py",
+      "evidence": {
+        "command": "python3 -B /Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334/scripts/dispatch_driver.py finish --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/quick/repo --task-id T001",
+        "output": "/Applications/Xcode.app/Contents/Developer/usr/bin/python3: can't open file '/Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334/scripts/dispatch_driver.py': [Errno 2] No such file or directory\r\n",
+        "events": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/quick/run-20260920T181131101016Z/events.jsonl"
+      }
+    },
+    {
+      "path": "/Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334/scripts/pipeline_state.py",
+      "evidence": {
+        "command": "python3 /Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334/scripts/pipeline_state.py validate --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/quick/repo",
+        "output": "/Applications/Xcode.app/Contents/Developer/usr/bin/python3: can't open file '/Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334/scripts/pipeline_state.py': [Errno 2] No such file or directory\r\n",
+        "events": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/quick/run-20260920T180528995976Z/events.jsonl"
+      }
+    },
+    {
+      "path": "/Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334/workflow_run.py",
+      "evidence": {
+        "command": "python3 /Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334/workflow_run.py --help",
+        "output": "/Applications/Xcode.app/Contents/Developer/usr/bin/python3: can't open file '/Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334/workflow_run.py': [Errno 2] No such file or directory\r\n",
+        "events": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/quick/run-20260920T180058184254Z/events.jsonl"
+      }
+    },
+    {
+      "path": "/skills/gsd-path-build/scripts/dispatch_driver.py",
+      "evidence": {
+        "command": "python3 .agents/skills/gsd-path-build/scripts/dispatch_driver.py --help",
+        "output": "usage: dispatch_driver.py [-h]\r\n                          {round,review,panel,skeptics,fix-tasks,complete,finish,answer,status,reassign-model,_child}\r\n                          ...\r\n\r\nDeterministic dispatch driver for one build wave. Composes the canonical\r\nhelpers in the build contract's order: recover, ready, brief lint, task\r\nisolation, child dispatch, Verify, landing, verify ledger, retire. Every\r\naction re-derives its state from Git, the task files, and the dispatch records\r\nunder the Git common directory, so a call may be repeated after a crash or a\r\ntool timeout. The driver never edits task frontmatter, commits, or creates a\r\ncheckout itself: isolation.py and build_state.py own those. Children are\r\nspawned through an owner-supplied command that reads the brief on stdin; the\r\nowner therefore owns the child's permission posture.\r\n\r\npositional arguments:\r\n  {round,review,panel,skeptics,fix-tasks,complete,finish,answer,status,reassign-model,_child}\r\n    round               settle, land, and dispatch the current wave\r\n    review              run one wave review cycle at full or deep depth\r\n    panel               run the optional review panel for a collected wave\r\n                        review\r\n    skeptics            run one finding skeptic per needs-skeptic locator\r\n    fix-tasks           write one fix task per findings batch of a blocked\r\n                        cycle\r\n    complete            prove every wave landed and passed review, record\r\n                        landing evidence, enter ship\r\n    finish              verify, land, record, and retire one in-progress task\r\n                        whose coder has returned\r\n    answer              record an orchestrator answer for a question\r\n    status              list dispatch records\r\n    reassign-model      record an explicit model reassignment\r\n    _child              ==SUPPRESS==\r\n\r\noptional arguments:\r\n  -h, --help            show this help message and exit\r\n",
+        "events": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/quick/run-20260920T181317240264Z/events.jsonl"
+      }
+    },
+    {
+      "path": "/skills/gsd-path-build/scripts/isolation.py",
+      "evidence": {
+        "command": "python3 .agents/skills/gsd-path-build/scripts/isolation.py --help",
+        "output": "usage: isolation.py [-h]\r\n                    {isolate-task,activate-task,deactivate-task,isolate-verify,land,attest,adopt-rebase,recover,collect-artifact,checkpoint,retire}\r\n                    ...\r\n\r\nNamed checkouts for task isolation, verify sidecars, and task landing. The\r\norchestrator calls this helper instead of inventing git worktree, commit, or\r\ncherry-pick commands. Every checkout this module creates is a named branch; it\r\nnever detaches HEAD.\r\n\r\npositional arguments:\r\n  {isolate-task,activate-task,deactivate-task,isolate-verify,land,attest,adopt-rebase,recover,collect-artifact,checkpoint,retire}\r\n    isolate-task        create or reuse a named task checkout\r\n    activate-task       record one helper-owned task dispatch\r\n    deactivate-task     revoke one helper-owned task dispatch\r\n    isolate-verify      create a named verify sidecar\r\n    land                commit a task onto the bound branch\r\n    attest              record an owner ruling that a done task's work is\r\n                        already on the branch\r\n    adopt-rebase        record an owner ruling adopting every done task's\r\n                        rebased landing\r\n    recover             prove landed task commits from git; read-only\r\n    collect-artifact    atomically collect one verified sidecar artifact\r\n    checkpoint          commit allowlisted pipeline bookkeeping\r\n    retire              remove a named sidecar checkout\r\n\r\noptional arguments:\r\n  -h, --help            show this help message and exit\r\n",
+        "events": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/quick/run-20260920T181317240264Z/events.jsonl"
+      }
+    },
+    {
+      "path": "/skills/gsd-path-build/scripts/workflow_run.py",
+      "evidence": {
+        "command": "python3 .agents/skills/gsd-path-build/scripts/workflow_run.py prepare-task --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/quick/repo --task-id T001 --round-size 1 --expected-head 2f415d2557819784c5dbbd5502c2a64da9579ef0",
+        "output": "{\"status\": \"complete\", \"steps\": [{\"command\": [\"/Applications/Xcode.app/Contents/Developer/usr/bin/python3\", \"-B\", \"/Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334/isolation.py\", \"isolate-task\", \"--repo\", \"/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/quick/repo\", \"--base\", \"2f415d2557819784c5dbbd5502c2a64da9579ef0\", \"--task-id\", \"T001\", \"--round-size\", \"1\"], \"exit_code\": 0, \"result\": {\"base\": \"2f415d2557819784c5dbbd5502c2a64da9579ef0\", \"bound_branch\": \"gsd-path/M001\", \"detached\": false, \"kind\": \"task\", \"mode\": \"serial\", \"task_branch\": null, \"worktree\": \"/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/quick/repo\"}, \"script\": \"isolation.py\", \"stderr\": \"\", \"stdout\": \"{\\\"base\\\": \\\"2f415d2557819784c5dbbd5502c2a64da9579ef0\\\", \\\"bound_branch\\\": \\\"gsd-path/M001\\\", \\\"detached\\\": false, \\\"kind\\\": \\\"task\\\", \\\"mode\\\": \\\"serial\\\", \\\"task_branch\\\": null, \\\"worktree\\\": \\\"/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/quick/repo\\\"}\\n\"}, {\"command\": [\"/Applications/Xcode.app/Contents/Developer/usr/bin/python3\", \"-B\", \"/Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334/isolation.py\", \"isolate-verify\", \"--repo\", \"/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/quick/repo\", \"--base\", \"2f415d2557819784c5dbbd5502c2a64da9579ef0\", \"--name\", \"task-t001-verify\"], \"exit_code\": 0, \"result\": {\"base\": \"2f415d2557819784c5dbbd5502c2a64da9579ef0\", \"bound_branch\": \"gsd-path/M001\", \"branch\": \"gsd-path-verify/task-t001-verify\", \"detached\": false, \"kind\": \"verify\", \"mode\": \"sidecar\", \"worktree\": \"/Users/jeremymcspadden/.gsd-path/projects/0c831df73ded9bc7cf8eef5426a9e10b28398d197427778e813b3be65bd9f123/ad92a29c3dba7b70b3679815c77e922de9e8b673a11fed31d9a16d70f6843cbb/verify/task-t001-verify\"}, \"script\": \"isolation.py\", \"stderr\": \"\", \"stdout\": \"{\\\"base\\\": \\\"2f415d2557819784c5dbbd5502c2a64da9579ef0\\\", \\\"bound_branch\\\": \\\"gsd-path/M001\\\", \\\"branch\\\": \\\"gsd-path-verify/task-t001-verify\\\", \\\"detached\\\": false, \\\"kind\\\": \\\"verify\\\", \\\"mode\\\": \\\"sidecar\\\", \\\"worktree\\\": \\\"/Users/jeremymcspadden/.gsd-path/projects/0c831df73ded9bc7cf8eef5426a9e10b28398d197427778e813b3be65bd9f123/ad92a29c3dba7b70b3679815c77e922de9e8b673a11fed31d9a16d70f6843cbb/verify/task-t001-verify\\\"}\\n\"}]}\r\n",
+        "events": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/quick/run-20260920T180528995976Z/events.jsonl"
+      }
+    },
+    {
+      "path": "/skills/gsd-path-define/scripts/check_handoffs.py",
+      "evidence": {
+        "command": "python3 .agents/skills/gsd-path-define/scripts/check_handoffs.py define --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/quick/repo",
+        "output": "usage: check_handoffs.py [-h] --repo REPO [--project-dir PROJECT_DIR]\r\n                         [--review REVIEW]\r\n                         {research,decide,roadmap,patch,plan,wave,final}\r\ncheck_handoffs.py: error: argument phase: invalid choice: 'define' (choose from 'research', 'decide', 'roadmap', 'patch', 'plan', 'wave', 'final')\r\n",
+        "events": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/quick/run-20260920T180242976595Z/events.jsonl"
+      }
+    },
+    {
+      "path": "/skills/gsd-path-define/scripts/pipeline_state.py",
+      "evidence": {
+        "command": "python3 .agents/skills/gsd-path-define/scripts/pipeline_state.py transition --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/quick/repo --expect-phase define --expect-status active --expect-milestone null --expect-branch gsd-path/M001 --expect-archive null --set-phase define --set-status done --set-milestone count-cli --event \"milestone intent approved\"",
+        "output": "{\"path\": \"/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/quick/repo/.project/STATE.md\", \"previous\": {\"archive\": null, \"branch\": \"gsd-path/M001\", \"integration\": \"direct\", \"integration_default\": \"direct\", \"integration_source\": \"default\", \"milestone\": null, \"phase\": \"define\", \"pipeline\": \"gsd-path/v2\", \"project\": \"repo\", \"status\": \"active\"}, \"schema\": \"gsd-path/state/v1\", \"state\": {\"archive\": null, \"branch\": \"gsd-path/M001\", \"integration\": \"direct\", \"integration_default\": \"direct\", \"integration_source\": \"default\", \"milestone\": \"count-cli\", \"phase\": \"define\", \"pipeline\": \"gsd-path/v2\", \"project\": \"repo\", \"status\": \"done\"}, \"status\": \"transitioned\"}\r\n",
+        "events": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/quick/run-20260920T180242976595Z/events.jsonl"
+      }
+    },
+    {
+      "path": "/skills/gsd-path-plan/scripts/check_handoffs.py",
+      "evidence": {
+        "command": "python3 .agents/skills/gsd-path-plan/scripts/check_handoffs.py plan --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/quick/repo",
+        "output": "{\"criteria\": [\"SC1\", \"SC2\", \"SC3\", \"SC4\", \"SC5\"], \"phase\": \"plan\", \"rows\": 5, \"surfaces\": {\"CLI\": \"T001\"}, \"tasks\": 1, \"waves\": [1]}\r\n",
+        "events": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/quick/run-20260920T180242976595Z/events.jsonl"
+      }
+    },
+    {
+      "path": "/skills/gsd-path-plan/scripts/pipeline_state.py",
+      "evidence": {
+        "command": "python3 .agents/skills/gsd-path-plan/scripts/pipeline_state.py status --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/quick/repo",
+        "output": "{\"advance\": false, \"completion\": {\"status\": \"not-shipped\"}, \"git\": {\"ancestor_of_origin_main\": true, \"branch\": \"gsd-path/M001\", \"dirty\": [\".project/STATE.md\", \".project/intent/INTENT.md\", \".project/plan/PLAN.md\", \".project/research/DOCS-AUDIT.md\", \".project/research/SYNTHESIS.md\", \".project/research/evidence-codebase.md\", \".project/tasks/T001-count-cli.md\"], \"head\": \"5d8286f187bc022e2d0e44c771aa6455523f0238\", \"origin_branch\": null, \"origin_main\": \"5d8286f187bc022e2d0e44c771aa6455523f0238\", \"published\": false, \"subject\": \"fixture: install pinned candidate\"}, \"handoff\": {\"next\": \"Invoke $gsd-path to continue with plan.\", \"outcome\": \"plan/active\", \"phase_next\": \"Invoke $gsd-path to continue with plan.\", \"review\": \"/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/quick/repo/.project/STATE.md\", \"router_next\": \"Continue with plan; honor its input and approval gates.\"}, \"journals\": {\"abandon\": null, \"bind_next\": null, \"checkpoint\": null, \"collect_artifact\": null, \"promotion\": null, \"shipment\": null, \"undo\": null}, \"lookahead\": false, \"next_skill\": \"gsd-path-plan\", \"path\": \"/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/quick/repo/.project/STATE.md\", \"pending_answers\": [], \"pending_error\": null, \"route\": {\"action\": \"run-phase\", \"phase\": \"plan\", \"reason\": \"state is plan/active\"}, \"schema\": \"gsd-path/status/v1\", \"state\": {\"archive\": null, \"branch\": \"gsd-path/M001\", \"integration\": \"direct\", \"integration_default\": \"direct\", \"integration_source\": \"default\", \"milestone\": \"count-cli\", \"phase\": \"plan\", \"pipeline\": \"gsd-path/v2\", \"project\": \"repo\", \"status\": \"active\"}}\r\n",
+        "events": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/quick/run-20260920T180242976595Z/events.jsonl"
+      }
+    },
+    {
+      "path": "/skills/gsd-path-plan/scripts/review_panel.py",
+      "evidence": {
+        "command": "python3 .agents/skills/gsd-path-plan/scripts/review_panel.py validate-plan --plan /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/quick/repo/.project/plan/PLAN.md",
+        "output": "{\r\n  \"families\": [],\r\n  \"mode\": \"off\",\r\n  \"source\": \"plan\"\r\n}\r\n",
+        "events": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/quick/run-20260920T180242976595Z/events.jsonl"
+      }
+    },
+    {
+      "path": "/skills/gsd-path-plan/scripts/workflow_run.py",
+      "evidence": {
+        "command": "python3 .agents/skills/gsd-path-plan/scripts/workflow_run.py gate-plan --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/quick/repo",
+        "output": "{\"status\": \"complete\", \"steps\": [{\"command\": [\"/Applications/Xcode.app/Contents/Developer/usr/bin/python3\", \"-B\", \"/Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334/discussion_records.py\", \"pending\", \"--repo\", \"/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/quick/repo\"], \"exit_code\": 0, \"result\": {\"pending\": []}, \"script\": \"discussion_records.py\", \"stderr\": \"\", \"stdout\": \"{\\\"pending\\\": []}\\n\"}, {\"command\": [\"/Applications/Xcode.app/Contents/Developer/usr/bin/python3\", \"-B\", \"/Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334/check_handoffs.py\", \"plan\", \"--repo\", \"/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/quick/repo\", \"--project-dir\", \".project\"], \"exit_code\": 0, \"result\": {\"criteria\": [\"SC1\", \"SC2\", \"SC3\", \"SC4\", \"SC5\"], \"phase\": \"plan\", \"rows\": 5, \"surfaces\": {\"CLI\": \"T001\"}, \"tasks\": 1, \"waves\": [1]}, \"script\": \"check_handoffs.py\", \"stderr\": \"\", \"stdout\": \"{\\\"criteria\\\": [\\\"SC1\\\", \\\"SC2\\\", \\\"SC3\\\", \\\"SC4\\\", \\\"SC5\\\"], \\\"phase\\\": \\\"plan\\\", \\\"rows\\\": 5, \\\"surfaces\\\": {\\\"CLI\\\": \\\"T001\\\"}, \\\"tasks\\\": 1, \\\"waves\\\": [1]}\\n\"}, {\"command\": [\"/Applications/Xcode.app/Contents/Developer/usr/bin/python3\", \"-B\", \"/Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334/check_task_briefs.py\", \"--repo\", \"/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/quick/repo\", \"--base\", \"5d8286f187bc022e2d0e44c771aa6455523f0238\", \"--tasks-dir\", \".project/tasks\"], \"exit_code\": 0, \"result\": {\"base\": \"5d8286f187bc022e2d0e44c771aa6455523f0238\", \"checked\": 2, \"tasks\": 1}, \"script\": \"check_task_briefs.py\", \"stderr\": \"\", \"stdout\": \"{\\\"base\\\": \\\"5d8286f187bc022e2d0e44c771aa6455523f0238\\\", \\\"checked\\\": 2, \\\"tasks\\\": 1}\\n\"}, {\"command\": [\"/Applications/Xcode.app/Contents/Developer/usr/bin/python3\", \"-B\", \"/Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334/review_panel.py\", \"validate-plan\", \"--plan\", \"/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/quick/repo/.project/plan/PLAN.md\", \"--intent\", \"/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/quick/repo/.project/intent/INTENT.md\"], \"exit_code\": 0, \"result\": {\"families\": [], \"mode\": \"off\", \"source\": \"plan\"}, \"script\": \"review_panel.py\", \"stderr\": \"\", \"stdout\": \"{\\n  \\\"families\\\": [],\\n  \\\"mode\\\": \\\"off\\\",\\n  \\\"source\\\": \\\"plan\\\"\\n}\\n\"}]}\r\n",
+        "events": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/quick/run-20260920T180413084653Z/events.jsonl"
+      }
+    },
+    {
+      "path": "/skills/gsd-path/scripts/check_docs_audit.py",
+      "evidence": {
+        "command": "python3 -B .agents/skills/gsd-path/scripts/check_docs_audit.py --repo /Users/jeremymcspadden/.gsd-path/projects/0c831df73ded9bc7cf8eef5426a9e10b28398d197427778e813b3be65bd9f123/ad92a29c3dba7b70b3679815c77e922de9e8b673a11fed31d9a16d70f6843cbb/verify/inspect-docs --inventory /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/gsd-path-inspect-jngmx77d/inventory.txt",
+        "output": "{\"alignment\": false, \"audit\": \".project/research/DOCS-AUDIT.md\", \"claims\": 0, \"descriptive\": [\"AGENTS.md\", \"README.md\", \"WORKFLOW.md\"], \"docs\": [], \"queue\": 0, \"rulings\": 0, \"verdicts\": {\"aspirational\": 0, \"stale\": 0, \"unverifiable\": 0, \"verified\": 0}}\r\n",
+        "events": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/quick/run-20260920T175325010258Z/events.jsonl"
+      }
+    },
+    {
+      "path": "/skills/gsd-path/scripts/pipeline_state.py",
+      "evidence": {
+        "command": "python3 .agents/skills/gsd-path/scripts/pipeline_state.py status --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/quick/repo",
+        "output": "{\"advance\": false, \"completion\": {\"status\": \"not-shipped\"}, \"git\": {\"ancestor_of_origin_main\": true, \"branch\": \"gsd-path/M001\", \"dirty\": [\".project/STATE.md\", \".project/intent/INTENT.md\", \".project/research/DOCS-AUDIT.md\", \".project/research/evidence-codebase.md\"], \"head\": \"5d8286f187bc022e2d0e44c771aa6455523f0238\", \"origin_branch\": null, \"origin_main\": \"5d8286f187bc022e2d0e44c771aa6455523f0238\", \"published\": false, \"subject\": \"fixture: install pinned candidate\"}, \"handoff\": {\"next\": \"Invoke $gsd-path to continue with define.\", \"outcome\": \"define/active\", \"phase_next\": \"Invoke $gsd-path to continue with define.\", \"review\": \"/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/quick/repo/.project/STATE.md\", \"router_next\": \"Continue with define; honor its input and approval gates.\"}, \"journals\": {\"abandon\": null, \"bind_next\": null, \"checkpoint\": null, \"collect_artifact\": null, \"promotion\": null, \"shipment\": null, \"undo\": null}, \"lookahead\": false, \"next_skill\": \"gsd-path-define\", \"path\": \"/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/quick/repo/.project/STATE.md\", \"pending_answers\": [], \"pending_error\": null, \"route\": {\"action\": \"run-phase\", \"phase\": \"define\", \"reason\": \"state is define/active\"}, \"schema\": \"gsd-path/status/v1\", \"state\": {\"archive\": null, \"branch\": \"gsd-path/M001\", \"integration\": \"direct\", \"integration_default\": \"direct\", \"integration_source\": \"default\", \"milestone\": null, \"phase\": \"define\", \"pipeline\": \"gsd-path/v2\", \"project\": \"repo\", \"status\": \"active\"}}\r\n",
+        "events": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/quick/run-20260920T180242976595Z/events.jsonl"
+      }
+    },
+    {
+      "path": "/skills/gsd-path/scripts/workflow_run.py",
+      "evidence": {
+        "command": "python3 .agents/skills/gsd-path/scripts/workflow_run.py route --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/quick/repo",
+        "output": "{\"status\": \"complete\", \"steps\": [{\"command\": [\"/Applications/Xcode.app/Contents/Developer/usr/bin/python3\", \"-B\", \"/Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334/pipeline_state.py\", \"route\", \"--repo\", \"/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/quick/repo\", \"--project-dir\", \".project\"], \"exit_code\": 0, \"result\": {\"route\": {\"action\": \"run-phase\", \"phase\": \"build\", \"reason\": \"approved plan and branch binding are ready\"}, \"schema\": \"gsd-path/route/v1\", \"state\": {\"archive\": null, \"branch\": \"gsd-path/M001\", \"integration\": \"direct\", \"integration_default\": \"direct\", \"integration_source\": \"default\", \"milestone\": \"count-cli\", \"phase\": \"plan\", \"pipeline\": \"gsd-path/v2\", \"project\": \"repo\", \"status\": \"done\"}}, \"script\": \"pipeline_state.py\", \"stderr\": \"\", \"stdout\": \"{\\\"route\\\": {\\\"action\\\": \\\"run-phase\\\", \\\"phase\\\": \\\"build\\\", \\\"reason\\\": \\\"approved plan and branch binding are ready\\\"}, \\\"schema\\\": \\\"gsd-path/route/v1\\\", \\\"state\\\": {\\\"archive\\\": null, \\\"branch\\\": \\\"gsd-path/M001\\\", \\\"integration\\\": \\\"direct\\\", \\\"integration_default\\\": \\\"direct\\\", \\\"integration_source\\\": \\\"default\\\", \\\"milestone\\\": \\\"count-cli\\\", \\\"phase\\\": \\\"plan\\\", \\\"pipeline\\\": \\\"gsd-path/v2\\\", \\\"project\\\": \\\"repo\\\", \\\"status\\\": \\\"done\\\"}}\\n\"}]}\r\n",
+        "events": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/quick/run-20260920T180528995976Z/events.jsonl"
+      }
+    }
+  ]
+}

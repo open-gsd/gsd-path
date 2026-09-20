@@ -1,0 +1,54 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "grok",
+  "run_id": "grok-1.2.0-f36f24a-retry3",
+  "result": "pass",
+  "step": "child-spawn",
+  "command": "spawn_subagent",
+  "child_api": "spawn_subagent",
+  "child_id": "build_t001",
+  "child_status": "completed",
+  "output": {
+    "child_id": "build_t001",
+    "status": "completed",
+    "child_api": "spawn_subagent",
+    "session_id": "01a0c005-71fd-73f3-9392-695ae7db76dd",
+    "transcript": {
+      "session_dir": "/Users/jeremymcspadden/.grok/sessions/%2FUsers%2Fjeremymcspadden%2Forca%2Fevaluations%2Fgsd-path-release-1.2.0-f36f24a%2Fgrok-retry3%2Fquick%2Frepo/01a0c005-71fd-73f3-9392-695ae7db76dd",
+      "child_session_dir": "/Users/jeremymcspadden/.grok/sessions/%2FUsers%2Fjeremymcspadden%2Forca%2Fevaluations%2Fgsd-path-release-1.2.0-f36f24a%2Fgrok-retry3%2Fquick%2Frepo/01a0c007-d411-7770-84f7-0098b3de6ef3",
+      "reported_completions": [
+        "01a0c007-d411-7770-84f7-0098b3de6ef3"
+      ]
+    },
+    "session_store": {
+      "session_dir": "/Users/jeremymcspadden/.grok/sessions/%2FUsers%2Fjeremymcspadden%2Forca%2Fevaluations%2Fgsd-path-release-1.2.0-f36f24a%2Fgrok-retry3%2Fquick%2Frepo/01a0c005-71fd-73f3-9392-695ae7db76dd",
+      "child_session_dir": "/Users/jeremymcspadden/.grok/sessions/%2FUsers%2Fjeremymcspadden%2Forca%2Fevaluations%2Fgsd-path-release-1.2.0-f36f24a%2Fgrok-retry3%2Fquick%2Frepo/01a0c007-d411-7770-84f7-0098b3de6ef3",
+      "reported_completions": [
+        "01a0c007-d411-7770-84f7-0098b3de6ef3"
+      ]
+    },
+    "run": "run-20260920T181257166487Z",
+    "tool_call_id": "call-ceeb4a85-a3ba-4f55-886d-b93fb2b7a08a-24",
+    "spawn_input": {
+      "description": "build_t001",
+      "subagent_type": "general-purpose",
+      "isolation": "none",
+      "cwd": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/grok-retry3/quick/repo",
+      "background": true
+    },
+    "prompt_sha256": "cbf314f4e76292aeaa1ba6635ca1d63def0ae36f2d4e9f18336f07e2253d537c",
+    "spawn_output": "Subagent started in background.\nsubagent_id: 01a0c007-d411-7770-84f7-0098b3de6ef3\ntype: general-purpose\ndescription: build_t001\n\nWhen you need its result, use get_command_or_subagent_output with task_ids=[\"01a0c007-d411-7770-84f7-0098b3de6ef3\"] and a positive timeout_ms.",
+    "subagent_id": "01a0c007-d411-7770-84f7-0098b3de6ef3",
+    "completion": {
+      "tool_call_id": "call-8717c733-4af2-4c06-9642-c36c291beaf7-25",
+      "task_id": "01a0c007-d411-7770-84f7-0098b3de6ef3",
+      "command": "[subagent:general-purpose] build_t001",
+      "status": "completed",
+      "exit_code": 0,
+      "started": "2026-09-20T18:15:33Z",
+      "ended": "2026-09-20T18:16:14Z",
+      "duration_secs": 40.551,
+      "output": "T001 ready. Verify: `python3 -m unittest test_count.py -v` OK (4 tests).\n\nChanged paths:\n- count.py\n- test_count.py\n- .project/tasks/T001-widget-count-cli.md (Log only)\n\nRESULT: T001 ready\n\n<subagent_meta>id=01a0c007-d411-7770-84f7-0098b3de6ef3, type=general-purpose, tool_calls=11, turns=1, duration_ms=40551</subagent_meta>\n\n<subagent_result>\nsubagent_id: 01a0c007-d411-7770-84f7-0098b3de6ef3\nsubagent_type: general-purpose\nTo continue this subagent's conversation, use resume_from=\"01a0c007-d411-7770-84f7-0098b3de6ef3\".\n</subagent_result>"
+    }
+  }
+}

@@ -17,14 +17,14 @@ guard_tier: git-only
 
 # Live milestone evidence — kimi
 
-Full quick-lane milestone run by the pinned candidate on a fresh fixture; evaluator-driven owner gates. Run directory: `/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/kimi`.
+Full quick-lane milestone run by the pinned candidate on a fresh fixture; evaluator-driven owner gates. Run directory: `/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/kimi-retry2`.
 
 ## Environment
 
 - Host and CLI version: 0.43.0
 - Operator: release evidence evaluator
 - Date: 2026-09-20
-- Fixture repository: /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/kimi/quick/repo
+- Fixture repository: /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/kimi-retry2/quick/repo
 - Child-agent API used: Agent (description build_t001)
 
 ## Evidence

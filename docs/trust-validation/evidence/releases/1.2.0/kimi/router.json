@@ -1,7 +1,7 @@
 {
   "schema": "gsd-path/live-step-evidence/v1",
   "host": "kimi",
-  "run_id": "session_aa85468f-e730-488f-afae-532258ad4e63",
+  "run_id": "session_f81310ea-670d-44e9-a82d-494e7b1d0b97",
   "result": "pass",
   "step": "router",
   "command": "/gsd-path",

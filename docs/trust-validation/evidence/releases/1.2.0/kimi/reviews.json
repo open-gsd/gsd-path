@@ -1,11 +1,11 @@
 {
   "schema": "gsd-path/live-step-evidence/v1",
   "host": "kimi",
-  "run_id": "session_aa85468f-e730-488f-afae-532258ad4e63",
+  "run_id": "session_f81310ea-670d-44e9-a82d-494e7b1d0b97",
   "result": "pass",
   "step": "reviews",
-  "command": "python3 -B /Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334/check_handoffs.py wave --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/kimi/quick/repo --review .project/review/wave-1.cycle1.md",
-  "output": "# Review \u2014 wave 1, cycle 1\n\nReviewed HEAD: 2f6b274e3d64856309537476c702f81f99d267fe\nReview scope: final\n\nWave verdict: pass\n# Final Review \u2014 reused full wave\n\nReviewed HEAD: 1a9b3dc2887b77a02127e153be6f87fc2daa40c0\nOverall verdict: pass\nSource review: .project/review/wave-1.cycle1.md\nSource commit: 2f6b274e3d64856309537476c702f81f99d267fe",
+  "command": "python3 -B /Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334/check_handoffs.py wave --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/kimi-retry2/quick/repo --review .project/review/wave-1.cycle1.md",
+  "output": "# Review \u2014 wave 1, cycle 1\n\nReviewed HEAD: 4d7a7cc0bae41fc4351e801bdea9ea50e0be26c7\nReview scope: final\nWave verdict: pass\nCycle: 1\n# Final Review \u2014 reused full wave\n\nReviewed HEAD: aa08f5778cec33b487f40c04a6509f6febbd8d66\nOverall verdict: pass\nSource review: .project/review/wave-1.cycle1.md\nSource commit: 4d7a7cc0bae41fc4351e801bdea9ea50e0be26c7",
   "wave_review_artifact": ".project/archive/001-count-cli-json/review/wave-1.cycle1.md",
   "final_review_artifact": ".project/archive/001-count-cli-json/review/FINAL.md"
 }

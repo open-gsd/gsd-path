@@ -1,0 +1,17 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "grok",
+  "run_id": "grok-1.2.0-f36f24a-retry3",
+  "result": "pass",
+  "step": "integration",
+  "command": "python3 /Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334/archive_milestone.py validate-integrated --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/grok-retry3/quick/repo --slug widget-count-cli",
+  "output": "{\"archive\": \".project/archive/001-widget-count-cli\", \"base\": \"7192dc81872e560dee3d7587f8ec0fcd23e6e55d\", \"commit\": \"0d9678ed81066300b6f54513d7600b1e96b538d0\", \"integrate\": \"7192dc81872e560dee3d7587f8ec0fcd23e6e55d\", \"landing\": \"7192dc81872e560dee3d7587f8ec0fcd23e6e55d\", \"mode\": \"direct\", \"tag\": \"milestone/001-widget-count-cli\"}\n",
+  "fixture_bundle": "grok/fixture.bundle",
+  "run_manifest": ".project/archive/001-widget-count-cli/trust-run-manifest.json",
+  "ship_commit": "0d9678ed81066300b6f54513d7600b1e96b538d0",
+  "bound_branch": "gsd-path/M001",
+  "default_branch": "main",
+  "pre_integration_default_commit": "8670ba0af94a1921fbd8317f5c57f9d53ebff9f6",
+  "integration_commit": "7192dc81872e560dee3d7587f8ec0fcd23e6e55d",
+  "milestone_tag": "milestone/001-widget-count-cli"
+}
