@@ -1,0 +1,44 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "cursor",
+  "run_id": "cursor-1.2.0-f36f24a",
+  "result": "pass",
+  "step": "child-spawn",
+  "command": "Task",
+  "child_api": "Task",
+  "child_id": "build_T001",
+  "child_status": "completed",
+  "output": {
+    "child_id": "build_T001",
+    "status": "completed",
+    "child_api": "Task",
+    "run": "run-20260920T160526627984Z",
+    "session_id": "1f61bd6a-72f9-4bad-a78d-5a7189271a37",
+    "tool_key": "taskToolCall",
+    "tool_use": {
+      "id": "tool_44d8d865-1aa6-4bf7-b129-707b5a3e7da",
+      "input": {
+        "description": "build_T001",
+        "subagentType": {
+          "custom": {
+            "name": "gsd-path"
+          }
+        },
+        "model": "composer-2.5",
+        "agentId": "f2329d86-3f93-4b09-bdcd-57f2ef08205b",
+        "attachments": [],
+        "mode": "TASK_MODE_UNSPECIFIED",
+        "respondingToMessageIds": [],
+        "environment": "SUBAGENT_EXECUTION_ENVIRONMENT_UNSPECIFIED",
+        "machine": {
+          "sameMachine": {}
+        }
+      },
+      "prompt_sha256": "f4e7a141f82226085f9f3353a842c48af94a9d6c76f22985d76f2267d649d7b6"
+    },
+    "tool_result": {
+      "is_error": false,
+      "content": "{\"success\": {\"conversationSteps\": [{\"assistantMessage\": {\"text\": \"Reading the role brief, task contract, and current code before implementing T001.\\nImplementing `count.py` and subprocess-based CLI tests.\\nUpdating JSON output to match the intent's exact format (space after colon).\\nAppending verify results to the task Log.\\nT001: extended `count.py` with argparse for `--json` (either order), signed-integer parsing, and stderr on invalid input; added subprocess CLI tests in `tests/test_count_cli.py`.\\n\\n**Changed:** `count.py`, `tests/test_count_cli.py`, `.project/tasks/T001-count-cli-and-tests.md` (Log)\\n\\n**Verify:** `python3 -m unittest tests/test_count_cli.py` \\u2014 OK (6 tests)\\n\\nRESULT: T001 ready\"}}], \"agentId\": \"a829efce-3d82-497b-8989-8d1cb55e03e3\", \"isBackground\": false, \"durationMs\": \"32000\", \"backgroundReason\": \"SUBAGENT_BACKGROUND_REASON_UNSPECIFIED\"}}"
+    }
+  }
+}

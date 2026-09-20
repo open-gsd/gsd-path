@@ -1,0 +1,11 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "opencode",
+  "run_id": "ses_f40c6f1d5ffe6BbQyVS5T0fdDr",
+  "result": "pass",
+  "step": "reviews",
+  "command": "OpenCode task: review_wave_1_cycle_1",
+  "output": "# Review \u2014 wave 1, cycle 1\n\nReviewed HEAD: d1c0efd9387ee5539abc8fd769ecbac7616b20a9\nReview scope: final\n\nWave verdict: pass\n# Final Review \u2014 reused full wave\n\nReviewed HEAD: a526632db744ceac62b0b9d2882d2d5ad8a13b2d\nOverall verdict: pass\nSource review: .project/review/wave-1.cycle1.md\nSource commit: d1c0efd9387ee5539abc8fd769ecbac7616b20a9",
+  "wave_review_artifact": ".project/archive/001-count-cli-json/review/wave-1.cycle1.md",
+  "final_review_artifact": ".project/archive/001-count-cli-json/review/FINAL.md"
+}

@@ -1,0 +1,143 @@
+{
+  "source": "OpenCode read-only SQLite cumulative session counters, recursive descendants; output + reasoning are exclusive",
+  "session_limit": 30000,
+  "task_warning": 4000,
+  "runs": [
+    {
+      "run": "run-20260920T181950713703Z",
+      "parent": "ses_f3ff43ae9ffectWmNCC2bhPURN",
+      "sessions": [
+        [
+          "ses_f3ff263c7ffe2cNFDzxZA80zg5",
+          "ses_f3ff43ae9ffectWmNCC2bhPURN",
+          1766,
+          2029
+        ],
+        [
+          "ses_f3ff263e3fferEhxKMmwzdOuYF",
+          "ses_f3ff43ae9ffectWmNCC2bhPURN",
+          7095,
+          2139
+        ],
+        [
+          "ses_f3ff43ae9ffectWmNCC2bhPURN",
+          null,
+          5702,
+          4688
+        ]
+      ],
+      "generated_total": 23419,
+      "within_session_limit": true
+    },
+    {
+      "run": "run-20260920T182614867789Z",
+      "parent": "ses_f3fee5ee4ffe2NGmMvoEREz0No",
+      "sessions": [
+        [
+          "ses_f3fee5ee4ffe2NGmMvoEREz0No",
+          null,
+          4155,
+          7224
+        ]
+      ],
+      "generated_total": 11379,
+      "within_session_limit": true
+    },
+    {
+      "run": "run-20260920T182928094459Z",
+      "parent": "ses_f3feb6bc4ffeqcSQwSBpmIVp5g",
+      "sessions": [
+        [
+          "ses_f3feb6bc4ffeqcSQwSBpmIVp5g",
+          null,
+          5047,
+          5321
+        ]
+      ],
+      "generated_total": 10368,
+      "within_session_limit": true
+    },
+    {
+      "run": "run-20260920T183703928685Z",
+      "parent": "ses_f3fe477b6ffe2TUbnW6sGw8CGm",
+      "sessions": [
+        [
+          "ses_f3fe477b6ffe2TUbnW6sGw8CGm",
+          null,
+          3719,
+          3997
+        ]
+      ],
+      "generated_total": 7716,
+      "within_session_limit": true
+    },
+    {
+      "run": "run-20260920T183931685672Z",
+      "parent": "ses_f3fe23686ffeaRmOn8iOCp4n0q",
+      "sessions": [
+        [
+          "ses_f3fe087a3ffeRMv71z3Lf4fNaj",
+          "ses_f3fe23686ffeaRmOn8iOCp4n0q",
+          1408,
+          2528
+        ],
+        [
+          "ses_f3fe23686ffeaRmOn8iOCp4n0q",
+          null,
+          5361,
+          4505
+        ]
+      ],
+      "generated_total": 13802,
+      "within_session_limit": true
+    },
+    {
+      "run": "run-20260920T184337821071Z",
+      "parent": "ses_f3fde75a9ffev44VGz2KlINirf",
+      "sessions": [
+        [
+          "ses_f3fde75a9ffev44VGz2KlINirf",
+          null,
+          5045,
+          6148
+        ]
+      ],
+      "generated_total": 11193,
+      "within_session_limit": true
+    },
+    {
+      "run": "run-20260920T184713582252Z",
+      "parent": "ses_f3fdb2a6effe4T93scRId5C7ta",
+      "sessions": [
+        [
+          "ses_f3fd83264ffebCndcU2m9NNya2",
+          "ses_f3fdb2a6effe4T93scRId5C7ta",
+          4492,
+          2116
+        ],
+        [
+          "ses_f3fdb2a6effe4T93scRId5C7ta",
+          null,
+          4190,
+          13998
+        ]
+      ],
+      "generated_total": 24796,
+      "within_session_limit": true
+    },
+    {
+      "run": "run-20260920T185251050884Z",
+      "parent": "ses_f3fd601acffe701EzafyVZ6DiB",
+      "sessions": [
+        [
+          "ses_f3fd601acffe701EzafyVZ6DiB",
+          null,
+          6845,
+          9160
+        ]
+      ],
+      "generated_total": 16005,
+      "within_session_limit": true
+    }
+  ]
+}

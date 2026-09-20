@@ -1,0 +1,11 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "cursor",
+  "run_id": "cursor-1.3.0-45466c4-final",
+  "result": "pass",
+  "step": "reviews",
+  "command": "SIDECAR=/Users/jeremymcspadden/.gsd-path/projects/e269aede3ed5ea636f3d4c43298feacc55032e84f6ad67acf69973a303192497/921773c7d025a91e9764b5a2875d90dde7e66cc27293d07c6b9ecb7f630d4e17/verify/review-wave-1-cycle-1\nREPO=/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.3.0-45466c4/cursor-final/quick/repo\npython3 /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.3.0-45466c4/cursor-final/plugin/tests/evaluate_codex.py activity --arm /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.3.0-45466c4/cursor-final/quick --category verification -- bash -lc \"cd '$SIDECAR' && python3 -B /Users/jeremymcspadden/.gsd-path/runtimes/36cf1845fbc977caa9893dda7eda1ea56469b8d33e6f255f0c23251eb1f0beb6/check_handoffs.py wave --repo '$SIDECAR' --project-dir .project --review .project/review/wave-1.cycle1.md\"",
+  "output": "# Review \u2014 wave 1, cycle 1\n\nReviewed HEAD: 592447f22f5ff89de0f046d673681aadd998a88d\nReview scope: final\n\nWave verdict: pass\n# Final Review \u2014 reused full wave\n\nReviewed HEAD: 0fe0e6fccd713ddd328b29fda22b2f74e591257f\nOverall verdict: pass\nSource review: .project/review/wave-1.cycle1.md\nSource commit: 592447f22f5ff89de0f046d673681aadd998a88d",
+  "wave_review_artifact": ".project/archive/001-widget-count-cli/review/wave-1.cycle1.md",
+  "final_review_artifact": ".project/archive/001-widget-count-cli/review/FINAL.md"
+}

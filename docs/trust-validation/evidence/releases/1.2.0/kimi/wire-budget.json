@@ -1,0 +1,215 @@
+{
+  "schema": "kimi-wire-budget/v1",
+  "run": "retry2",
+  "method": "Sum usage.record.usage.output per native session directory across all agents/main and agent-* wire.jsonl, including resumed turns. Do not sum duplicate context event usage.",
+  "task_warning": 4000,
+  "session_limit": 30000,
+  "authority": "Owner: 4000 task warning,30000 native session aggregate hard limit",
+  "sessions": [
+    {
+      "session_id": "session_8e882eaf-d7c8-4e21-8bb5-1e3aaa7ae87c",
+      "agents": {
+        "main": 14027
+      },
+      "aggregate": 14027,
+      "wire_files": [
+        {
+          "path": "/Users/jeremymcspadden/.kimi-code/sessions/wd_repo_f5d5436aef71/session_8e882eaf-d7c8-4e21-8bb5-1e3aaa7ae87c/agents/main/wire.jsonl",
+          "sha256": "cf73e179574b21f5e235dacfc195d65bc53cd518516c43c8e3dd396c9b6d11ae"
+        }
+      ]
+    },
+    {
+      "session_id": "session_db14df91-ab37-44b4-8f16-70f5bba620af",
+      "agents": {
+        "agent-0": 13046,
+        "main": 4451
+      },
+      "aggregate": 17497,
+      "wire_files": [
+        {
+          "path": "/Users/jeremymcspadden/.kimi-code/sessions/wd_repo_f5d5436aef71/session_db14df91-ab37-44b4-8f16-70f5bba620af/agents/agent-0/wire.jsonl",
+          "sha256": "e582284a2ae12309b7e78316a8936cbe689c7ba5a637bab3e94e1cd1e7c59328"
+        },
+        {
+          "path": "/Users/jeremymcspadden/.kimi-code/sessions/wd_repo_f5d5436aef71/session_db14df91-ab37-44b4-8f16-70f5bba620af/agents/main/wire.jsonl",
+          "sha256": "df84b0fcfe60c799998324be7e2593f33d053a3b7df8169c938cf577c2403eca"
+        }
+      ]
+    },
+    {
+      "session_id": "session_1e059264-10bd-4d6d-ba33-d106e5db9b79",
+      "agents": {
+        "main": 2700
+      },
+      "aggregate": 2700,
+      "wire_files": [
+        {
+          "path": "/Users/jeremymcspadden/.kimi-code/sessions/wd_repo_f5d5436aef71/session_1e059264-10bd-4d6d-ba33-d106e5db9b79/agents/main/wire.jsonl",
+          "sha256": "b88434a4832c53e3e5fdb1a06fe44879489a9547a804fd8d3d99fb3238066ef5"
+        }
+      ]
+    },
+    {
+      "session_id": "session_8faff3aa-1cb6-4b2e-b53f-e20800cb0252",
+      "agents": {
+        "main": 587
+      },
+      "aggregate": 587,
+      "wire_files": [
+        {
+          "path": "/Users/jeremymcspadden/.kimi-code/sessions/wd_repo_f5d5436aef71/session_8faff3aa-1cb6-4b2e-b53f-e20800cb0252/agents/main/wire.jsonl",
+          "sha256": "81cdf2871d095001a0331e9ed4084882008d41b687832d824e28998ff7db41ee"
+        }
+      ]
+    },
+    {
+      "session_id": "session_1043ec4e-f0f7-4ef2-842b-72ef8c54b395",
+      "agents": {
+        "main": 2012
+      },
+      "aggregate": 2012,
+      "wire_files": [
+        {
+          "path": "/Users/jeremymcspadden/.kimi-code/sessions/wd_repo_f5d5436aef71/session_1043ec4e-f0f7-4ef2-842b-72ef8c54b395/agents/main/wire.jsonl",
+          "sha256": "53384b737624231afa832c179647ada7e8f5e7dcdede702a5ce7374c1cef11ab"
+        }
+      ]
+    },
+    {
+      "session_id": "session_c4217fb4-74d2-4b23-ae5a-2c50ec7992f3",
+      "agents": {
+        "main": 1745
+      },
+      "aggregate": 1745,
+      "wire_files": [
+        {
+          "path": "/Users/jeremymcspadden/.kimi-code/sessions/wd_repo_f5d5436aef71/session_c4217fb4-74d2-4b23-ae5a-2c50ec7992f3/agents/main/wire.jsonl",
+          "sha256": "f7da044a669396aded356469d942401346d0114d20ec6de0b05b3411cebd19e9"
+        }
+      ]
+    },
+    {
+      "session_id": "session_f81310ea-670d-44e9-a82d-494e7b1d0b97",
+      "agents": {
+        "agent-0": 2602,
+        "main": 2751
+      },
+      "aggregate": 5353,
+      "wire_files": [
+        {
+          "path": "/Users/jeremymcspadden/.kimi-code/sessions/wd_repo_f5d5436aef71/session_f81310ea-670d-44e9-a82d-494e7b1d0b97/agents/agent-0/wire.jsonl",
+          "sha256": "97946422a0358f7c682ca18fa8b81e9c43ba378c75af2e86d31526a8296ed0ea"
+        },
+        {
+          "path": "/Users/jeremymcspadden/.kimi-code/sessions/wd_repo_f5d5436aef71/session_f81310ea-670d-44e9-a82d-494e7b1d0b97/agents/main/wire.jsonl",
+          "sha256": "fe6e6476137de65075cabc87accdf44a77fa18af5e14dfec7af93e080a034b26"
+        }
+      ]
+    },
+    {
+      "session_id": "session_b804d8e2-a5df-465b-a8ab-228b0729152e",
+      "agents": {
+        "main": 3074
+      },
+      "aggregate": 3074,
+      "wire_files": [
+        {
+          "path": "/Users/jeremymcspadden/.kimi-code/sessions/wd_repo_f5d5436aef71/session_b804d8e2-a5df-465b-a8ab-228b0729152e/agents/main/wire.jsonl",
+          "sha256": "86044e6c29258c94469c7c596076df0c9d72515c1415660f3c036bbb444f78be"
+        }
+      ]
+    },
+    {
+      "session_id": "session_c2af90d6-2d82-437c-9014-9fc4d80e9e3c",
+      "agents": {
+        "agent-0": 9043,
+        "main": 5129
+      },
+      "aggregate": 14172,
+      "wire_files": [
+        {
+          "path": "/Users/jeremymcspadden/.kimi-code/sessions/wd_repo_f5d5436aef71/session_c2af90d6-2d82-437c-9014-9fc4d80e9e3c/agents/agent-0/wire.jsonl",
+          "sha256": "c9d842e94d884b16bb9a25b9b9d8f1fb7bc2d4af029432666de17d70d93b6440"
+        },
+        {
+          "path": "/Users/jeremymcspadden/.kimi-code/sessions/wd_repo_f5d5436aef71/session_c2af90d6-2d82-437c-9014-9fc4d80e9e3c/agents/main/wire.jsonl",
+          "sha256": "4549b3fc96a2edf87873fc3fe166d4fd1e1481ceeb4bd22693b743f80b9bfc5d"
+        }
+      ]
+    },
+    {
+      "session_id": "session_5e28c3d8-d04e-4ca5-97d0-58f4332af684",
+      "agents": {
+        "main": 3399
+      },
+      "aggregate": 3399,
+      "wire_files": [
+        {
+          "path": "/Users/jeremymcspadden/.kimi-code/sessions/wd_repo_f5d5436aef71/session_5e28c3d8-d04e-4ca5-97d0-58f4332af684/agents/main/wire.jsonl",
+          "sha256": "d1a2e91d9d50c6c6952fa0c8c3827e1e6f099b444d4bb048790d4fddebec6d32"
+        }
+      ]
+    },
+    {
+      "session_id": "session_db7f6734-f7d8-4576-9c94-d02dcddb9c4e",
+      "agents": {
+        "main": 2304
+      },
+      "aggregate": 2304,
+      "wire_files": [
+        {
+          "path": "/Users/jeremymcspadden/.kimi-code/sessions/wd_repo_f5d5436aef71/session_db7f6734-f7d8-4576-9c94-d02dcddb9c4e/agents/main/wire.jsonl",
+          "sha256": "8bad4dc975b05054b9c179b0ad461168e4d05c29985e29c09798c095fd5af685"
+        }
+      ]
+    },
+    {
+      "session_id": "session_2749310b-d8ff-41df-a61e-c21529155d80",
+      "agents": {
+        "main": 8000
+      },
+      "aggregate": 8000,
+      "wire_files": [
+        {
+          "path": "/Users/jeremymcspadden/.kimi-code/sessions/wd_repo_f5d5436aef71/session_2749310b-d8ff-41df-a61e-c21529155d80/agents/main/wire.jsonl",
+          "sha256": "3e6cb3ee8f94ca1cade5bc3c2c6b43ad916fffca9c7bc07581f472669c0ec4bb"
+        }
+      ]
+    },
+    {
+      "session_id": "session_e227f762-d4c1-40da-9a1b-8aaff11272c6",
+      "agents": {
+        "main": 5657
+      },
+      "aggregate": 5657,
+      "wire_files": [
+        {
+          "path": "/Users/jeremymcspadden/.kimi-code/sessions/wd_repo_f5d5436aef71/session_e227f762-d4c1-40da-9a1b-8aaff11272c6/agents/main/wire.jsonl",
+          "sha256": "792ab1a52f087a79fbed5cc98986fa99710b416ee9f37b968135b15a08a6a36a"
+        }
+      ]
+    },
+    {
+      "session_id": "session_1d37ae39-7732-418a-bfef-d14e113c5922",
+      "agents": {
+        "agent-0": 6759,
+        "main": 6348
+      },
+      "aggregate": 13107,
+      "wire_files": [
+        {
+          "path": "/Users/jeremymcspadden/.kimi-code/sessions/wd_repo_f5d5436aef71/session_1d37ae39-7732-418a-bfef-d14e113c5922/agents/agent-0/wire.jsonl",
+          "sha256": "60e02f1a4186ad1883e31568ce82b094ab06a1fdd6c594042ecbe7e9a3f69ce2"
+        },
+        {
+          "path": "/Users/jeremymcspadden/.kimi-code/sessions/wd_repo_f5d5436aef71/session_1d37ae39-7732-418a-bfef-d14e113c5922/agents/main/wire.jsonl",
+          "sha256": "c9f7f429193dff822465f626e54cecee5431de59db244f9d2c9f4816d5139b63"
+        }
+      ]
+    }
+  ],
+  "maximum_session_output": 17497,
+  "verdict": "pass",
+  "historical_overrun": "Original fixture kimi remains preserved; session628bcc2b aggregate32951 failed30k and is not relabeled."
+}

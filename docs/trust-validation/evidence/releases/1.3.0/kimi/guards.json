@@ -1,0 +1,13 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "kimi",
+  "run_id": "session_6f733941-44b5-45d0-b7b9-16f28277a61f",
+  "result": "pass",
+  "step": "guards",
+  "command": "release_receipt.py manifest (git hook check in disposable clone)",
+  "output": "{\n  \"checked_repository\": \"/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.3.0-45466c4/guard-source\",\n  \"checked_archive\": \".project/archive/001-guard-probe\",\n  \"steps\": [\n    {\n      \"step\": \"stage and commit a modification to committed .project/archive/001-guard-probe/notes.md\",\n      \"exit_code\": 1,\n      \"stderr\": \"gsd-path guard blocked the commit:\\n  M .project/archive/001-guard-probe/notes.md: committed archives are read-only; unstage it with git restore --staged -- .project/archive/001-guard-probe/notes.md\",\n      \"blocked\": true\n    },\n    {\n      \"step\": \"commit outside archive\",\n      \"exit_code\": 0,\n      \"stderr\": \"\"\n    }\n  ],\n  \"guard_sha256\": {\n    \"fixture\": \"336408f2ed40cbf9e5938f0693a08a229f7eb03fd13ee1d2769bdf81b3543520\",\n    \"checked_repository\": \"336408f2ed40cbf9e5938f0693a08a229f7eb03fd13ee1d2769bdf81b3543520\"\n  },\n  \"pre_commit_hook_sha256\": {\n    \"fixture\": \"8ca6f829bef985637ceda19544f359d96e8ddb5dbf482b182895be7b926b79af\",\n    \"checked_repository\": \"8ca6f829bef985637ceda19544f359d96e8ddb5dbf482b182895be7b926b79af\"\n  },\n  \"hash_mismatches\": [],\n  \"fixture_hook_executable\": {\n    \"pre-commit\": true,\n    \"commit-msg\": true\n  },\n  \"checked_commit\": \"8f16b6cb2b0d8ff661edafd39c1b3e84e2aed502\",\n  \"git_hooks\": \"pass\"\n}",
+  "guard_artifact": ".project/archive/001-widget-count-cli/guards.json",
+  "declared_tier": "git-only",
+  "native_guard": "not-applicable",
+  "git_hooks": "pass"
+}

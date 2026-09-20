@@ -1,0 +1,44 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "kimi",
+  "run_id": "session_f81310ea-670d-44e9-a82d-494e7b1d0b97",
+  "result": "pass",
+  "step": "child-spawn",
+  "command": "Agent",
+  "child_api": "Agent",
+  "child_id": "build_t001",
+  "child_status": "completed",
+  "output": {
+    "child_id": "build_t001",
+    "status": "completed",
+    "child_api": "Agent",
+    "run": "run-20260920T180354296315Z",
+    "session_id": "session_f81310ea-670d-44e9-a82d-494e7b1d0b97",
+    "tool_call": {
+      "id": "tool_krFmMYXmvCxZWja3ErBrq5Je",
+      "input": {
+        "description": "build_t001",
+        "subagent_type": "coder"
+      },
+      "prompt_sha256": "aed70cb61ccc26f3ee6150cc29b99071b8087d608f421ac5e0e6395fbe60ee7c"
+    },
+    "tool_result": {
+      "agent_id": "agent-0",
+      "actual_subagent_type": "coder",
+      "status": "completed",
+      "stop_reason": "completed",
+      "content": "agent_id: agent-0\nactual_subagent_type: coder\nstatus: completed\nstop_reason: completed\n\n[summary]\nTask T001 complete. Implemented `--json` (any position) and validation in `count.py`; added 8 real-CLI subprocess tests in `test_count.py`; appended Log entry.\n\nChanged paths:\n- count.py\n- test_count.py\n- .project/tasks/T001-json-flag-and-validation.md (Log section only)\n\nVerify: `python3 -B -m unittest -v test_count.py` \u2192 exit 0, 8 tests OK. No deviations; no git operations; no other files touched.\n\nRESULT: T001 ready\n\nresume_hint: Continue with Agent(resume=\"agent-0\", prompt=\"...\"). Use agent_id only; do not set subagent_type. The subagent retains its prior context; redo any unfinished tool call if its result was lost."
+    },
+    "session_store": {
+      "state": "session_f81310ea-670d-44e9-a82d-494e7b1d0b97",
+      "type": "sub",
+      "labels": {
+        "parentAgentId": "main",
+        "profileName": "coder"
+      },
+      "turn_ended_reasons": [
+        "completed"
+      ]
+    }
+  }
+}

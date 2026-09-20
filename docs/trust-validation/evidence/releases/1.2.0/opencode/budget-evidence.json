@@ -1,0 +1,167 @@
+{
+  "schema": "evaluator/native-budget-evidence/v1",
+  "source": "OpenCode SQLite cumulative tokens_output + tokens_reasoning, recursive native children; distinct counters",
+  "task_warning": 4000,
+  "session_limit": 30000,
+  "accepted_phase_contexts": [
+    {
+      "run": "run-20260920T213654464699Z",
+      "parent": "ses_f3f3fd0d9ffe7FPzwHZcNqk9rJ",
+      "sessions": [
+        [
+          "ses_f3f3e67caffeCR3CAsGSx1Ucth",
+          "ses_f3f3fd0d9ffe7FPzwHZcNqk9rJ",
+          2093,
+          1958
+        ],
+        [
+          "ses_f3f3e67faffeazP4WL2HlBAIMY",
+          "ses_f3f3fd0d9ffe7FPzwHZcNqk9rJ",
+          2467,
+          572
+        ],
+        [
+          "ses_f3f3fd0d9ffe7FPzwHZcNqk9rJ",
+          null,
+          7769,
+          5080
+        ]
+      ],
+      "generated_total": 19939,
+      "within_session_limit": true
+    },
+    {
+      "run": "run-20260920T214127045794Z",
+      "parent": "ses_f3f3ba4a1ffeH7IMun0a9WHcQa",
+      "sessions": [
+        [
+          "ses_f3f3ba4a1ffeH7IMun0a9WHcQa",
+          null,
+          6136,
+          10508
+        ]
+      ],
+      "generated_total": 16644,
+      "within_session_limit": true
+    },
+    {
+      "run": "run-20260920T214633183700Z",
+      "parent": "ses_f3f36fcd4ffe6AoMVPj10Mhy3M",
+      "sessions": [
+        [
+          "ses_f3f36fcd4ffe6AoMVPj10Mhy3M",
+          null,
+          6356,
+          9805
+        ]
+      ],
+      "generated_total": 16161,
+      "within_session_limit": true
+    },
+    {
+      "run": "run-20260920T215025289787Z",
+      "parent": "ses_f3f337207ffeq3VR8huxYkl01n",
+      "sessions": [
+        [
+          "ses_f3f337207ffeq3VR8huxYkl01n",
+          null,
+          5390,
+          6706
+        ]
+      ],
+      "generated_total": 12096,
+      "within_session_limit": true
+    },
+    {
+      "run": "run-20260920T221001342087Z",
+      "parent": "ses_f3f2180c5ffet7nswg6lKp3njW",
+      "sessions": [
+        [
+          "ses_f3f20a175ffeS16bu9ErKFHSMU",
+          "ses_f3f2180c5ffet7nswg6lKp3njW",
+          1068,
+          1299
+        ],
+        [
+          "ses_f3f2180c5ffet7nswg6lKp3njW",
+          null,
+          2107,
+          1536
+        ]
+      ],
+      "generated_total": 6010,
+      "within_session_limit": true
+    },
+    {
+      "run": "run-20260920T221304036389Z",
+      "parent": "ses_f3f1eb700ffeh4VIS1uvOZHuHW",
+      "sessions": [
+        [
+          "ses_f3f1eb700ffeh4VIS1uvOZHuHW",
+          null,
+          7083,
+          10446
+        ]
+      ],
+      "generated_total": 17529,
+      "within_session_limit": true
+    },
+    {
+      "run": "run-20260920T221959339415Z",
+      "parent": "ses_f3f185d2affenBemGsKrh9tsg0",
+      "sessions": [
+        [
+          "ses_f3f175bb7ffeq2VAQ3VkEgdLbw",
+          "ses_f3f185d2affenBemGsKrh9tsg0",
+          4521,
+          2008
+        ],
+        [
+          "ses_f3f185d2affenBemGsKrh9tsg0",
+          null,
+          2216,
+          3447
+        ]
+      ],
+      "generated_total": 12192,
+      "within_session_limit": true
+    },
+    {
+      "run": "run-20260920T222440964922Z",
+      "parent": "ses_f3f1414b5ffeTwH5T5a0KCdrXl",
+      "sessions": [
+        [
+          "ses_f3f1414b5ffeTwH5T5a0KCdrXl",
+          null,
+          3151,
+          4038
+        ]
+      ],
+      "generated_total": 7189,
+      "within_session_limit": true
+    },
+    {
+      "run": "run-20260920T222916252783Z",
+      "parent": "ses_f3f0fe052ffe3WFQQNyJ0J55Z4",
+      "sessions": [
+        [
+          "ses_f3f0fe052ffe3WFQQNyJ0J55Z4",
+          null,
+          2655,
+          3446
+        ]
+      ],
+      "generated_total": 6101,
+      "within_session_limit": true
+    }
+  ],
+  "accepted_maximum_generated": 19939,
+  "accepted_contexts_within_limit": true,
+  "superseded_original_coder_generated": 14928,
+  "superseded_canceled_recovery_recorded_generated": 6576,
+  "superseded_connected_group_recorded_generated": 21504,
+  "superseded_connected_group_tail": "unknown provider usage for two unfinished messages; not a budget pass",
+  "replacement_context_is_distinct": true,
+  "replacement_parent": "ses_f3f2180c5ffet7nswg6lKp3njW",
+  "replacement_child": "ses_f3f20a175ffeS16bu9ErKFHSMU"
+}

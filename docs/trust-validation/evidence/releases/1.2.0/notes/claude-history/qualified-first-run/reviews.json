@@ -1,0 +1,11 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "claude",
+  "run_id": "271660ff-b049-479c-8dab-dc3eeb4a4349",
+  "result": "pass",
+  "step": "reviews",
+  "command": "echo \"HEAD=$(git rev-parse HEAD)\" && shasum -a 256 .project/build/verify-ledger.jsonl && wc -l < .project/build/verify-ledger.jsonl && git status --porcelain && python3 -B /Users/jeremymcspadden/.claude/skills/gsd-path-ship/scripts/check_handoffs.py final --repo \"$PWD\"; echo \"EXIT=$?\"",
+  "output": "# Review \u2014 wave 1, cycle 1\n\nReviewed HEAD: 6edec27070bb3b54f72fc888978dc4b5f8227ecb\nReview scope: final\n\nWave verdict: pass\n# Final Review \u2014 count.py CLI\n\nReviewed HEAD: a4f5ff270ab49c76662370d93923a4a0f6dcc167\nOverall verdict: pass\n\n## Success criteria",
+  "wave_review_artifact": ".project/archive/001-count-cli/review/wave-1.cycle1.md",
+  "final_review_artifact": ".project/archive/001-count-cli/review/FINAL.md"
+}

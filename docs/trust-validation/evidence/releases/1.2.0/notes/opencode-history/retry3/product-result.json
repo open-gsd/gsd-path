@@ -1,0 +1,11 @@
+{
+  "command": [
+    "python3",
+    "-B",
+    "tests/widget_acceptance.py",
+    "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry3/quick/repo"
+  ],
+  "exit_code": 0,
+  "stdout": "{\n  \"verdict\": \"pass\",\n  \"checks\": [\n    {\n      \"arguments\": [],\n      \"pass\": true,\n      \"exit_code\": 0,\n      \"stdout\": \"0 widgets\\n\",\n      \"stderr\": \"\"\n    },\n    {\n      \"arguments\": [\n        \"3\"\n      ],\n      \"pass\": true,\n      \"exit_code\": 0,\n      \"stdout\": \"3 widgets\\n\",\n      \"stderr\": \"\"\n    },\n    {\n      \"arguments\": [\n        \"--json\"\n      ],\n      \"pass\": true,\n      \"exit_code\": 0,\n      \"stdout\": \"{\\\"widgets\\\": 0}\\n\",\n      \"stderr\": \"\"\n    },\n    {\n      \"arguments\": [\n        \"3\",\n        \"--json\"\n      ],\n      \"pass\": true,\n      \"exit_code\": 0,\n      \"stdout\": \"{\\\"widgets\\\": 3}\\n\",\n      \"stderr\": \"\"\n    },\n    {\n      \"arguments\": [\n        \"--json\",\n        \"-2\"\n      ],\n      \"pass\": true,\n      \"exit_code\": 0,\n      \"stdout\": \"{\\\"widgets\\\": -2}\\n\",\n      \"stderr\": \"\"\n    },\n    {\n      \"arguments\": [\n        \"invalid\"\n      ],\n      \"pass\": true,\n      \"exit_code\": 2,\n      \"stdout\": \"\",\n      \"stderr\": \"usage: count.py [-h] [--json] [count]\\ncount.py: error: argument count: invalid int value: 'invalid'\\n\"\n    }\n  ]\n}\n",
+  "stderr": ""
+}

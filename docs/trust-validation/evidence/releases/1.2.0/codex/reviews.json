@@ -1,0 +1,11 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "codex",
+  "run_id": "codex-1.2.0-f36f24a-20260920",
+  "result": "pass",
+  "step": "reviews",
+  "command": "/bin/zsh -lc 'python3 -B /Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334/check_handoffs.py wave --repo /Users/jeremymcspadden/.gsd-path/projects/71f432065ae431b534dd6ed7a17c52377120048a85a15b8e459fb560ea6d2ce6/5cce75f8455c33d289a25fdcfde9f4c7e7d0d979def3191bcbb7aa1fe9ac243e/verify/wave-1-cycle-1 --review .project/review/wave-1.cycle1.md'",
+  "output": "# Review \u2014 wave 1, cycle 1\n\nReviewed HEAD: e9fac885a481d33880318bbcf2252c4778328526\nReview scope: final\nWave verdict: pass\nCycle: 1\n# Final Review \u2014 reused full wave\n\nReviewed HEAD: ffac0968dbd09e4c9c5ac546e91ff5885ea38efc\nOverall verdict: pass\nSource review: .project/review/wave-1.cycle1.md\nSource commit: e9fac885a481d33880318bbcf2252c4778328526",
+  "wave_review_artifact": ".project/archive/001-widget-counter-cli/review/wave-1.cycle1.md",
+  "final_review_artifact": ".project/archive/001-widget-counter-cli/review/FINAL.md"
+}

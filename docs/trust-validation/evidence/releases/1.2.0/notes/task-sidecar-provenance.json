@@ -1,0 +1,51 @@
+[
+  {
+    "host": "codex",
+    "native_proof": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/codex/quick/run-20260920T160301906548Z/events.jsonl:71",
+    "call": null,
+    "actual_branch": "gsd-path-verify/task-t001-verify",
+    "actual_worktree": "/Users/jeremymcspadden/.gsd-path/projects/71f432065ae431b534dd6ed7a17c52377120048a85a15b8e459fb560ea6d2ce6/5cce75f8455c33d289a25fdcfde9f4c7e7d0d979def3191bcbb7aa1fe9ac243e/verify/task-t001-verify",
+    "branch_and_path_exact_match": true,
+    "verified_by": "host_codex"
+  },
+  {
+    "host": "copilot",
+    "native_proof": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/copilot-retry2/quick/run-20260920T163407767931Z/events.jsonl:4761",
+    "call": null,
+    "actual_branch": "gsd-path-verify/task-t001-verify",
+    "actual_worktree": "/Users/jeremymcspadden/.gsd-path/projects/a57e2bac1d669a78554f85c10c971804061243a1b25a1394059610b2ccfc3737/f9d89d7f41a3317a6490597980a16054fc26d787acc451e7a9f07f5ec1639d9e/verify/task-t001-verify",
+    "branch_and_path_exact_match": true,
+    "verified_by": "host_codex"
+  },
+  {
+    "host": "cursor",
+    "native_proof": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/cursor/quick/run-20260920T160526627984Z/events.jsonl:252",
+    "call": "tool_f5ee3c49-7910-472f-86a9-15f9f7c57c2",
+    "actual_branch": "gsd-path-verify/task-t001-verify",
+    "actual_worktree": "/Users/jeremymcspadden/.gsd-path/projects/d711ed8d617704507500c2c83f61c53115aa523a0078940d5129cf57e99cd344/a1747eed9561d22a2bac0cf494f3e27f37e1101d51f8e1a8ad31685887415232/verify/task-t001-verify",
+    "branch_and_path_exact_match": true,
+    "verified_by": "host_cursor"
+  },
+  {
+    "host": "claude",
+    "native_proof": [
+      {
+        "run": "run-20260920T160355461278Z",
+        "snippet": "7831b8ed5bb1298570e9deb074aa\", \"bound_branch\": \"gsd-path/M001\", \"branch\": \"gsd-path-verify/task-t001-verify\", \"detached\": false, \"kind\": \"verify\", \"mode\": \"sidecar\", \"worktree\": \"/Users/jeremymcspadden/.gsd-path/projects/cfbac0988050ea7d94fb2b14f5ce7105cb89a18a13f2b807a9eea56336653280/e5f917710eb2245182db90108e0e3457c3f05de863757b84dafa27507f050c0a/verify/task-t001-verify\"}, \"script\": \"isolation.py\", \"stderr\": \"\", \"stdout\": \"{\\\"base\\\": \\\"e8573845"
+      }
+    ],
+    "branch_and_path_exact_match": true,
+    "verified_by": "host_claude"
+  },
+  {
+    "host": "kimi",
+    "native_proof": [
+      {
+        "run": "run-20260920T161226369913Z",
+        "snippet": "a70137ba07b2321b67883bccc586\", \"bound_branch\": \"gsd-path/M001\", \"branch\": \"gsd-path-verify/task-t001-verify\", \"detached\": false, \"kind\": \"verify\", \"mode\": \"sidecar\", \"worktree\": \"/Users/jeremymcspadden/.gsd-path/projects/ca842e30d0db69f1390addb9145013f09c1e57b9184572c293b2bbc705beb557/d715131cb14824f97b3da310f7dfcbcefd97766109c99b9071e416d210a8252d/verify/task-t001-verify\"}, \"script\": \"isolation.py\", \"stderr\": \"\", \"stdout\": \"{\\\"base\\\": \\\"4ffa0b65"
+      }
+    ],
+    "branch_and_path_exact_match": true,
+    "verified_by": "host_claude"
+  }
+]

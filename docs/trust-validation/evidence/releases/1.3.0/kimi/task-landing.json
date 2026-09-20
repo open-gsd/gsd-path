@@ -1,0 +1,17 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "kimi",
+  "run_id": "session_6f733941-44b5-45d0-b7b9-16f28277a61f",
+  "result": "pass",
+  "step": "task-landing",
+  "command": "python3 /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.3.0-45466c4/kimi/plugin/tests/evaluate_codex.py activity --arm /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.3.0-45466c4/kimi/quick --category implementation -- python3 -B /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.3.0-45466c4/kimi/quick/repo/.kimi-code/skills/gsd-path/scripts/dispatch_driver.py finish --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.3.0-45466c4/kimi/quick/repo --task-id T001 > /tmp/gsd-path-eval-kimi-quick/finish-T001.json 2>&1; echo \"exit=$?\"; python3 -c \"\nimport json\nd=json.load(open('/tmp/gsd-path-eval-kimi-quick/finish-T001.json'))\nprint(json.dumps(d, indent=1)[:4000])\n\"",
+  "output": "commit bd9a42bf70b2599908840f1ff776b8893bbbbc40\nAuthor:     Feature Evaluation <evaluation@example.invalid>\nAuthorDate: Sun Sep 20 10:04:19 2026 -0500\nCommit:     Feature Evaluation <evaluation@example.invalid>\nCommitDate: Sun Sep 20 10:04:19 2026 -0500\n\n    T001: Extend count.py with signed counts, --json, and useful errors, with real-CLI tests\n    \n    Task: .project/tasks/T001-count-json-cli.md\n    Base: e8be1871b397513b08d91770db6a189d49dd3a41\n    Files:\n    - .project/tasks/T001-count-json-cli.md\n    - count.py\n    - tests/test_count_cli.py\n\n .project/tasks/T001-count-json-cli.md | 21 ++++++++++++---\n count.py                              | 33 +++++++++++++++++++++--\n tests/test_count_cli.py               | 51 +++++++++++++++++++++++++++++++++++\n 3 files changed, 100 insertions(+), 5 deletions(-)",
+  "fixture_bundle": "kimi/fixture.bundle",
+  "run_manifest": ".project/archive/001-widget-count-cli/trust-run-manifest.json",
+  "fixture_base_commit": "e8be1871b397513b08d91770db6a189d49dd3a41",
+  "task_branch": "gsd-path-verify/task-t001-verify",
+  "task_worktree": "/Users/jeremymcspadden/.gsd-path/projects/95c1b5a5c5073e048cf8f8517301f3529131ed5a4c5286222dd6690d267ccce3/e8c3d69d4725cb37c74bf801770e90e6463c3d9c59584bab7a6fa4301d05b016/verify/task-t001-verify",
+  "landing_commit": "bd9a42bf70b2599908840f1ff776b8893bbbbc40",
+  "isolation_mode": "serial",
+  "isolation_note": "A one-task wave uses the helper's serial mode: the coder worked on the bound branch in the primary worktree at the recorded base, and the named branch and worktree are the isolated Task Verify sidecar created for this task and retired after landing."
+}

@@ -1,0 +1,78 @@
+[
+  {
+    "session": "session_10381099-c479-4d04-9c92-2e3e8c5ceb25",
+    "agent_output": [
+      {
+        "agent": "main",
+        "output": 21222
+      }
+    ],
+    "total_agent_output": 21222
+  },
+  {
+    "session": "session_3254a469-33eb-47bd-84bc-a04f53d06340",
+    "agent_output": [
+      {
+        "agent": "agent-0",
+        "output": 6257
+      },
+      {
+        "agent": "agent-1",
+        "output": 6255
+      },
+      {
+        "agent": "main",
+        "output": 15100
+      }
+    ],
+    "total_agent_output": 27612
+  },
+  {
+    "session": "session_3b7a2d9e-ee85-4508-8283-bd1d002ae84b",
+    "agent_output": [
+      {
+        "agent": "main",
+        "output": 19044
+      }
+    ],
+    "total_agent_output": 19044
+  },
+  {
+    "session": "session_628bcc2b-f2d1-43d8-a8f2-ae38abbee77c",
+    "agent_output": [
+      {
+        "agent": "agent-0",
+        "output": 8551
+      },
+      {
+        "agent": "main",
+        "output": 24400
+      }
+    ],
+    "total_agent_output": 32951
+  },
+  {
+    "session": "session_aa85468f-e730-488f-afae-532258ad4e63",
+    "agent_output": [
+      {
+        "agent": "agent-0",
+        "output": 2451
+      },
+      {
+        "agent": "main",
+        "output": 22812
+      }
+    ],
+    "total_agent_output": 25263
+  },
+  {
+    "session": "session_b034455f-389f-4605-8545-7fe9e4fb48ae",
+    "agent_output": [
+      {
+        "agent": "main",
+        "output": 5720
+      }
+    ],
+    "total_agent_output": 5720
+  }
+]

@@ -1,0 +1,46 @@
+{
+  "method": "Decode gen_metadata protobuf path1/4/3; calibrated against parent CLI usage on low-effort current and old high-effort session. Paths1/17/2 duplicate same usage, not counted twice.",
+  "native_sessions": [
+    {
+      "conversation_id": "827aed88-fcae-4bff-9a2f-39156e3b529c",
+      "generations": 39,
+      "decoded_gen_metadata_1_4": {
+        "2": 181344,
+        "3": 11170,
+        "5": 1382787,
+        "10": 11170
+      }
+    },
+    {
+      "conversation_id": "a42bc06a-f767-45e9-aac5-36bc4446dc2a",
+      "generations": 36,
+      "decoded_gen_metadata_1_4": {
+        "2": 213840,
+        "3": 11083,
+        "5": 1060979,
+        "10": 11083
+      }
+    },
+    {
+      "conversation_id": "0f5800f4-cf99-45c7-8173-f83170f3b686",
+      "generations": 28,
+      "decoded_gen_metadata_1_4": {
+        "2": 210404,
+        "3": 8149,
+        "5": 1067013,
+        "10": 8149
+      }
+    },
+    {
+      "conversation_id": "15816c7b-f580-4e1b-9b70-883addc53e7d",
+      "generations": 76,
+      "decoded_gen_metadata_1_4": {
+        "2": 358949,
+        "3": 44423,
+        "5": 5295485,
+        "10": 16505
+      }
+    }
+  ],
+  "aggregate_output_tokens": 30402
+}

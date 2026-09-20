@@ -1,4 +1,5 @@
 import json
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -546,6 +547,62 @@ class TrustEvidenceTests(unittest.TestCase):
         self.commit_receipts()
         self.candidate = self.git("rev-parse", "HEAD").stdout.strip()
 
+    def test_reuses_original_receipts_after_version_and_docs_change(self):
+        self.receipt("alpha")
+        self.receipt("beta")
+        self.commit_receipts()
+        original = self.candidate
+        self.release_change("package.json", json.dumps({"version": "1.2.4"}))
+        self.release_change("README.md")
+        result = check_trust_evidence.validate_repository(self.repo)
+        self.assertEqual([], result["required_runs"])
+        self.assertEqual(["alpha", "beta"], result["reused_hosts"])
+        self.assertEqual(original, result["receipts"]["alpha"]["candidate"])
+        self.assertEqual("1.2.3", result["receipts"]["alpha"]["version"])
+        self.assertFalse((self.repo / "docs/trust-validation/evidence/releases/1.2.4").exists())
+
+    def test_plan_requires_only_host_with_stale_receipt(self):
+        self.receipt("alpha")
+        self.receipt("beta")
+        self.commit_receipts()
+        self.release_change("platforms/alpha/dispatch.md")
+        result = check_trust_evidence.validate_repository(self.repo, plan=True)
+        self.assertEqual(["alpha"], result["required_runs"])
+        self.assertEqual(["beta"], list(result["receipts"]))
+        with self.assertRaisesRegex(check_trust_evidence.EvidenceError, "alpha.*non-evidence"):
+            check_trust_evidence.validate_repository(self.repo)
+        self.release_change("skills/gsd-path/SKILL.md")
+        self.assertEqual(["alpha", "beta"], check_trust_evidence.validate_repository(self.repo, plan=True)["required_runs"])
+
+    def test_plan_cannot_reuse_corrupt_historical_receipt(self):
+        self.receipt("alpha", child_spawn="unverifiable")
+        self.receipt("beta")
+        self.commit_receipts()
+        self.release_change("package.json", json.dumps({"version": "1.2.4"}))
+        result = check_trust_evidence.validate_repository(self.repo, plan=True)
+        self.assertEqual(["alpha"], result["required_runs"])
+        self.assertIn("child_spawn", result["reasons"]["alpha"])
+        current = self.repo / "docs/trust-validation/evidence/releases/1.2.4/beta.md"
+        current.parent.mkdir()
+        current.write_text("failed current attempt\n")
+        self.commit_receipts()
+        result = check_trust_evidence.validate_repository(self.repo, plan=True)
+        self.assertEqual(["alpha", "beta"], result["required_runs"])
+        self.assertIn("missing frontmatter", result["reasons"]["beta"])
+
+    def test_full_matrix_requires_current_version_receipts(self):
+        self.receipt("alpha")
+        self.receipt("beta")
+        self.commit_receipts()
+        self.release_change("package.json", json.dumps({"version": "1.2.4"}))
+        result = check_trust_evidence.validate_repository(self.repo, plan=True, full=True)
+        self.assertEqual(["alpha", "beta"], result["required_runs"])
+
+    def scope(self):
+        version = json.loads((self.repo / "package.json").read_text())["version"]
+        hosts = list(json.loads((self.repo / "scripts/skill-resources.json").read_text())["hosts"])
+        return check_trust_evidence.release_scope(self.repo, version, hosts)
+
     def test_release_scope_skips_live_runs_for_non_host_changes(self):
         self.git("tag", "v1.2.2")
         for path in ("README.md", "docs/guide.md", "tests/test_example.py",
@@ -553,26 +610,111 @@ class TrustEvidenceTests(unittest.TestCase):
                      "scripts/update_release_docs.mjs", "scripts/check_trust_evidence.py"):
             with self.subTest(path=path):
                 self.release_change(path)
-                result = check_trust_evidence.validate_repository(self.repo)
+                result = check_trust_evidence.release_scope(self.repo, "1.2.3", ["alpha", "beta"])
                 self.assertEqual([], result["hosts"])
                 self.assertEqual("v1.2.2", result["baseline"])
 
     def test_release_scope_accepts_version_only_package_change(self):
         self.git("tag", "v1.2.2")
         self.release_change("package.json", json.dumps({"version": "1.2.4"}))
-        self.assertEqual([], check_trust_evidence.validate_repository(self.repo)["hosts"])
+        self.assertEqual([], self.scope()["hosts"])
         self.release_change("package.json", json.dumps({"version": "1.2.4", "scripts": {"test": "false"}}))
         with self.assertRaisesRegex(check_trust_evidence.EvidenceError, "missing.*alpha, beta"):
             check_trust_evidence.validate_repository(self.repo)
 
     def test_release_scope_requires_only_changed_host(self):
+        self.receipt("beta")
+        self.commit_receipts()
         self.git("tag", "v1.2.2")
         self.release_change("platforms/alpha/dispatch.md")
         with self.assertRaisesRegex(check_trust_evidence.EvidenceError, "missing host evidence: alpha$"):
             check_trust_evidence.validate_repository(self.repo)
         self.receipt("alpha")
         self.commit_receipts()
-        self.assertEqual(["alpha"], check_trust_evidence.validate_repository(self.repo)["hosts"])
+        result = check_trust_evidence.validate_repository(self.repo)
+        self.assertEqual([], result["required_runs"])
+        self.assertIsNone(result["candidate"])  # Independent host candidates are valid.
+        self.assertEqual(["alpha"], self.scope()["hosts"])
+
+    def add_api_hosts(self):
+        path = self.repo / "scripts/skill-resources.json"
+        manifest = json.loads(path.read_text())
+        for host in ("qwen", "kiro", "zed"):
+            manifest["hosts"][host] = {
+                "local_root": f".{host}/skills", "guard_tier": "git-only",
+                "child_apis": [f"{host}.spawn"],
+            }
+        self.release_change("scripts/skill-resources.json", json.dumps(manifest))
+        return list(manifest["hosts"])
+
+    def test_release_excludes_api_hosts_but_keeps_install_contracts(self):
+        self.add_api_hosts()
+        self.receipt("alpha")
+        self.receipt("beta")
+        self.commit_receipts()
+        result = check_trust_evidence.validate_repository(self.repo)
+        self.assertEqual(["alpha", "beta"], result["hosts"])
+        manifest = json.loads((self.repo / "scripts/skill-resources.json").read_text())
+        self.assertTrue({"qwen", "kiro", "zed"}.issubset(manifest["hosts"]))
+
+    def test_excluded_host_changes_do_not_select_other_hosts(self):
+        self.add_api_hosts()
+        self.git("tag", "v1.2.2")
+        for host in ("qwen", "kiro", "zed"):
+            with self.subTest(host=host):
+                self.release_change(f"platforms/{host}/dispatch.md")
+                self.assertEqual([], self.scope()["hosts"])
+        self.release_change("platforms/unknown/dispatch.md")
+        with self.assertRaisesRegex(check_trust_evidence.EvidenceError, "missing.*alpha, beta$"):
+            check_trust_evidence.validate_repository(self.repo)
+
+    def test_prepare_release_uses_same_evaluation_hosts(self):
+        self.prepare_release()
+
+    def test_prepare_release_selects_only_stale_host(self):
+        self.prepare_release(affected=True)
+
+    def test_prepare_release_full_matrix_is_explicit(self):
+        self.prepare_release(affected=True, full=True)
+
+    def test_prepare_release_does_nothing_when_receipts_are_valid(self):
+        self.prepare_release(unchanged=True)
+
+    def prepare_release(self, affected=False, full=False, unchanged=False):
+        self.add_api_hosts()
+        manifest = (self.repo / "scripts/skill-resources.json").read_text()
+        source = Path(__file__).resolve().parents[1]
+        shutil.copytree(source / "scripts", self.repo / "scripts", dirs_exist_ok=True)
+        (self.repo / "scripts/skill-resources.json").write_text(manifest)
+        (self.repo / "tests").mkdir()
+        # Preparation is the external boundary; never install or invoke paid hosts.
+        (self.repo / "tests/evaluate_host.py").write_text(
+            "import sys\nfrom pathlib import Path\n"
+            "with Path('prepared-hosts.txt').open('a') as out:\n"
+            "    out.write(sys.argv[sys.argv.index('--host') + 1] + '\\n')\n"
+        )
+        self.git("add", "-A")
+        self.git("commit", "-qm", "prepare fixture")
+        self.candidate = self.git("rev-parse", "HEAD").stdout.strip()
+        if affected or unchanged:
+            self.receipt("alpha")
+            self.receipt("beta")
+            self.commit_receipts()
+            if affected:
+                self.release_change("platforms/alpha/dispatch.md")
+        result = subprocess.run(
+            ["bash", str(self.repo / "scripts/prepare_release_evidence.sh"),
+             "--candidate", self.git("rev-parse", "HEAD").stdout.strip(),
+             "--output-base", str(self.repo.parent / "prepared"), *(["--full"] if full else [])],
+            cwd=self.repo, text=True, capture_output=True,
+        )
+        self.assertEqual(0, result.returncode, result.stderr)
+        if unchanged:
+            self.assertFalse((self.repo / "prepared-hosts.txt").exists())
+            self.assertIn("no new runs needed", result.stdout)
+        else:
+            self.assertEqual(["alpha"] if affected and not full else ["alpha", "beta"],
+                             (self.repo / "prepared-hosts.txt").read_text().splitlines())
 
     def test_release_scope_lockfile_exempts_only_package_version(self):
         lock = {"version": "1.2.2", "packages": {"": {"version": "1.2.2"},
@@ -581,7 +723,7 @@ class TrustEvidenceTests(unittest.TestCase):
         self.git("tag", "v1.2.2")
         lock["version"] = lock["packages"][""]["version"] = "1.2.3"
         self.release_change("package-lock.json", json.dumps(lock))
-        self.assertEqual([], check_trust_evidence.validate_repository(self.repo)["hosts"])
+        self.assertEqual([], self.scope()["hosts"])
         lock["packages"]["node_modules/example"]["version"] = "2.0.0"
         self.release_change("package-lock.json", json.dumps(lock))
         with self.assertRaisesRegex(check_trust_evidence.EvidenceError, "missing.*alpha, beta"):
@@ -1075,15 +1217,17 @@ class TrustEvidenceTests(unittest.TestCase):
         with self.assertRaisesRegex(check_trust_evidence.EvidenceError, "non-evidence"):
             check_trust_evidence.validate_repository(self.repo)
 
-    def test_rejects_active_validation_spec_change_after_candidate(self):
+    def test_accepts_evaluation_policy_changes_after_candidate(self):
         self.receipt("alpha")
         self.receipt("beta")
-        spec = self.repo / "docs" / "trust-validation" / "TRUST-VALIDATION-SPEC.md"
-        spec.write_text("changed release contract\n", encoding="utf-8")
+        for name in ("scripts/check_trust_evidence.py", "scripts/prepare_release_evidence.sh",
+                     "tests/test_trust_evidence.py", "RELEASE.md",
+                     "docs/trust-validation/TRUST-VALIDATION-SPEC.md"):
+            path = self.repo / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("changed evaluation policy\n", encoding="utf-8")
         self.commit_receipts()
-
-        with self.assertRaisesRegex(check_trust_evidence.EvidenceError, "non-evidence"):
-            check_trust_evidence.validate_repository(self.repo)
+        self.assertEqual(["alpha", "beta"], check_trust_evidence.validate_repository(self.repo)["hosts"])
 
 
 if __name__ == "__main__":

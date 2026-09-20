@@ -1,0 +1,17 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "claude",
+  "run_id": "9f2d46ba-1309-4041-ab46-1daac41ff94e",
+  "result": "pass",
+  "step": "task-landing",
+  "command": "SK=\"$PWD/.claude/skills/gsd-path\" && python3 -B $SK/scripts/dispatch_driver.py finish --repo \"$PWD\" --task-id T001",
+  "output": "commit 0cd8bde85bdce9e83732bbf2792b737beac92a0d\nAuthor:     Feature Evaluation <evaluation@example.invalid>\nAuthorDate: Sun Sep 20 09:51:14 2026 -0500\nCommit:     Feature Evaluation <evaluation@example.invalid>\nCommitDate: Sun Sep 20 09:51:14 2026 -0500\n\n    T001: Extend count.py with signed counts, --json in either position, and usage-bearing errors\n    \n    Task: .project/tasks/T001-count-cli.md\n    Base: a927f1cffa93094ff89f8db801f48b13e876e458\n    Files:\n    - .project/tasks/T001-count-cli.md\n    - count.py\n    - test_count.py\n\n .project/tasks/T001-count-cli.md | 29 ++++++++++++--\n count.py                         | 22 +++++++++--\n test_count.py                    | 85 ++++++++++++++++++++++++++++++++++++++++\n 3 files changed, 130 insertions(+), 6 deletions(-)",
+  "fixture_bundle": "claude/fixture.bundle",
+  "run_manifest": ".project/archive/001-count-cli/trust-run-manifest.json",
+  "fixture_base_commit": "a927f1cffa93094ff89f8db801f48b13e876e458",
+  "task_branch": "gsd-path-verify/task-t001-verify",
+  "task_worktree": "/Users/jeremymcspadden/.gsd-path/projects/1abe4e0d08f4d0b3ce87f6d4a7044acdf9cf5015e439a332909b150cb55a463c/5829a719504e601576ec6c77440d4fdac365e2c42499644a211ff910c4e0cd4e/verify/task-t001-verify",
+  "landing_commit": "0cd8bde85bdce9e83732bbf2792b737beac92a0d",
+  "isolation_mode": "serial",
+  "isolation_note": "A one-task wave uses the helper's serial mode: the coder worked on the bound branch in the primary worktree at the recorded base, and the named branch and worktree are the isolated Task Verify sidecar created for this task and retired after landing."
+}

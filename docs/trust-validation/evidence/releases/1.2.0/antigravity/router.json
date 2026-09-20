@@ -1,0 +1,11 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "antigravity",
+  "run_id": "2065a5fd-d1d4-49f3-9ba4-2bf8fe752e6e",
+  "result": "pass",
+  "step": "router",
+  "command": "/gsd-path",
+  "output": "---\npipeline: gsd-path/v2\nproject: repo\nmilestone: count-cli\nphase: shipped\n                    # inspect only for brownfield; greenfield starts at define\n                    # roadmap only in program flow (CHARTER.md exists)\nstatus: done\nbranch: gsd-path/M001\n                    # the router rebinds before any next-milestone file change\n                    # the bound branch is never main; ship integrates it there\narchive: .project/archive/001-count-cli\nintegration_default: direct # direct | pull-request; project setting\nintegration: direct # current milestone; may override the default before build\nintegration_source: default # default | milestone; preserves override provenance\n---\n\n# Project State\n\nOne file, always current. The router reads this first; every phase updates\nit on completion. If this file and the artifacts disagree, the artifacts win\n\u2014 fix this file.\n\n## Log\n\n<!-- append one line per transition: date, phase, event -->\n- 2026-09-20 \u2014 inspect \u2014 project initialized\n- 2026-09-20 \u2014 inspect \u2014 router bound initial milestone\n- 2026-09-20 \u2014 inspect \u2014 inspection artifacts passed\n- 2026-09-20 \u2014 define \u2014 definition started\n- 2026-09-20 \u2014 define \u2014 milestone intent approved\n- 2026-09-20 \u2014 plan \u2014 planning started\n- 2026-09-20 \u2014 plan \u2014 plan approved\n- 2026-09-20 \u2014 build \u2014 build started\n- 2026-09-20 \u2014 ship \u2014 build done; final review pending\n- 2026-09-20 \u2014 shipped \u2014 archive preflight passed; shipment recorded\n",
+  "state_artifact": ".project/STATE.md",
+  "state_phase": "shipped"
+}

@@ -1,0 +1,11 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "copilot",
+  "run_id": "copilot-retry4-1.2.0-f36f24a-20260920",
+  "result": "pass",
+  "step": "reviews",
+  "command": "RT=/Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334\nREPO=/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/copilot-retry4/quick/repo\npython3 -B \"$RT/check_handoffs.py\" wave --repo \"$REPO\" --review .project/review/wave-1.cycle1.md 2>&1\necho \"exit: $?\"",
+  "output": "# Review \u2014 wave 1, cycle 1\n\nWave verdict: pass\nCycle: 1\nDepth: full\nReviewed HEAD: dac0e945c09f8f9065d08da8825cbbc798dc9b3e\n# Final Review \u2014 reused full wave\n\nReviewed HEAD: 7e018b3b8dc0375e15f3d7f2278027ab6adbf6b9\nOverall verdict: pass\nSource review: .project/review/wave-1.cycle1.md\nSource commit: dac0e945c09f8f9065d08da8825cbbc798dc9b3e",
+  "wave_review_artifact": ".project/archive/001-count-cli/review/wave-1.cycle1.md",
+  "final_review_artifact": ".project/archive/001-count-cli/review/FINAL.md"
+}

@@ -1,0 +1,35 @@
+{
+  "landing": {
+    "run": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/claude-retry2/quick/run-20260920T185113013151Z/events.jsonl",
+    "command": "python3 -B /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/claude-retry2/quick/repo/.claude/skills/gsd-path/scripts/dispatch_driver.py finish --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/claude-retry2/quick/repo --task-id T001",
+    "tool_use_id": "toolu_01BnEwtrJLT1tfhGiMxBjZCB",
+    "output": "{\"blocked\": [], \"dispatched\": [], \"in_flight\": [], \"landed\": [{\"commit\": \"426bd9f0447406d0a96d97815908cb277c3fa194\", \"ledger\": true, \"mode\": \"serial\", \"task\": \"T001\", \"verify\": {\"evidence\": \"/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/claude-retry2/quick/repo/.git/gsd-path/dispatch/gsd-path-M001/T001/manual-2026-09-20T185420+0000/verify.json\", \"exit_code\": 0, \"location\": \"sidecar gsd-path-verify/task-t001-verify\", \"stderr\": \"test_json_mode_rejects_non_integer_without_partial_json (__main__.BadArgument) ... ok\\ntest_text_mode_rejects_non_integer (__main__.BadArgument) ... ok\\ntest_json_default_is_single_object_with_integer_zero (__main__.JsonOutput) ... ok\\ntest_json_flag_before_and_after_count_agree (__main__.JsonOutput) ... ok\\ntest_json_output_carries_no_human_text_line (__main__.JsonOutput) ... ok\\ntest_negative_count (__main__.TextOutput) ... ok\\ntest_no_argument_prints_zero_widgets (__main__.TextOutput) ... ok\\ntest_positive_count (__main__.TextOutput) ... ok\\n\\n----------------------------------------------------------------------\\nRan 8 tests in 0.227s\\n\\nOK\\n\", \"stdout\": \"\", \"worktree\": \"/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/claude-retry2/quick/repo\"}}], \"questions\": [], \"status\": \"landed\", \"steps\": [{\"result\": {\"bound_branch\": \"gsd-path/M001\", \"tasks\": [{\"base\": \"eb0cc8fc866e068b14721b288a2a6be263728c22\", \"rejected\": [], \"status\": \"in-progress\", \"task\": \".project/tasks/T001-json-output-and-guarded-parse.md\", \"task_branch\": null, \"task_id\": \"T001\", \"verdict\": \"resume\", \"worktree\": {\"branch\": \"gsd-path/M001\", \"clean\": false, \"path\": \"/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/claude-retry2/quick/repo\"}}], \"verdict\": \"ok\"}, \"script\": \"isolation.py recover\"}], \"wave\": null}",
+    "is_error": false
+  },
+  "review": {
+    "run": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/claude-retry2/quick/run-20260920T214548128754Z/events.jsonl",
+    "command": "python3 -B .claude/skills/gsd-path/scripts/dispatch_driver.py review --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/claude-retry2/quick/repo --wave 1 --cycle 2 --child-command 'env -u CLAUDECODE claude -p --dangerously-skip-permissions --output-format stream-json --verbose {effort_args}' --model-capabilities /tmp/claude-retry2-review2-capabilities.json --effort medium --wait 0 2>&1 | tail -40; echo \"EXIT:${PIPESTATUS[0]}\"",
+    "tool_use_id": "toolu_01LRjQDPC7hZCxbnqKGgEVkG",
+    "output": "{\"base\": \"f50e83c69c7dedaece13f67e657249e2f7a281dc\", \"blocked\": [], \"checkpoint\": \"655bc512801b8facb11d529a1b80b68943bd22b8\", \"cycle\": 2, \"depth\": \"full\", \"in_flight\": [], \"lenses\": {\"canonical\": {\"owned\": [\"SC1\", \"SC2\", \"SC3\", \"SC4\", \"SC5\", \"SC6\"], \"path\": \".project/review/wave-1.cycle2.md\", \"verdict\": \"pass\"}}, \"panel_required\": false, \"status\": \"pass\", \"steps\": [{\"result\": {\"base\": \"f50e83c69c7dedaece13f67e657249e2f7a281dc\", \"branch\": \"gsd-path-verify/wave-1-cycle-2\", \"bytes\": 15618, \"destination\": \".project/review/wave-1.cycle2.md\", \"previous_sha256\": null, \"replaced\": false, \"sha256\": \"ed98dd873db2b05c2b2ad6b6d5d154fc97a0b3817913da767aa0fea782d86860\", \"source\": \".project/review/wave-1.cycle2.md\"}, \"script\": \"isolation.py collect-artifact\"}, {\"result\": {\"commit\": \"655bc512801b8facb11d529a1b80b68943bd22b8\", \"paths\": [\".project/review/wave-1.cycle2.md\"], \"status\": \"committed\", \"subject\": \"build: record wave 1 cycle 2 review\"}, \"script\": \"isolation.py checkpoint\"}], \"wave\": 1}\nEXIT:",
+    "is_error": false
+  },
+  "archive": {
+    "run": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/claude-retry2/quick/run-20260920T214913526122Z/events.jsonl",
+    "command": "python3 -B /Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334/archive_milestone.py validate --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/claude-retry2/quick/repo",
+    "tool_use_id": "toolu_01KqBUVg1nTTQmiHE8ZEbQQe",
+    "output": "{\"archive\": \".project/archive/001-count-cli-json\", \"commit\": \"a0ea41d4e5c6215511480b51d888ce1a25cba307\"}",
+    "is_error": false
+  },
+  "integration": {
+    "run": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/claude-retry2/quick/run-20260920T214913526122Z/events.jsonl",
+    "command": "python3 -B /Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334/archive_milestone.py validate-integrated --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/claude-retry2/quick/repo --slug count-cli-json",
+    "tool_use_id": "toolu_01TsQaTqDp3gABThHdmEnNeg",
+    "output": "{\"archive\": \".project/archive/001-count-cli-json\", \"base\": \"4182eade3a40a5648190be102e5a51531dad43ae\", \"commit\": \"a0ea41d4e5c6215511480b51d888ce1a25cba307\", \"integrate\": \"4182eade3a40a5648190be102e5a51531dad43ae\", \"landing\": \"4182eade3a40a5648190be102e5a51531dad43ae\", \"mode\": \"direct\", \"tag\": \"milestone/001-count-cli-json\"}",
+    "is_error": false
+  },
+  "path_derivation": {
+    "integration_worktree": "/Users/jeremymcspadden/.gsd-path/projects/53f74c795783e5ab4fdc8ad19e257ab1c8e6a52f0dc178cfaafc57c1fc2d9a7f/36f1fcaca5131fc1b4fc2b0301ef8de0329f297be7c6c690e955c441d7a7526e/integrate/M001",
+    "task_worktree": "/Users/jeremymcspadden/.gsd-path/projects/53f74c795783e5ab4fdc8ad19e257ab1c8e6a52f0dc178cfaafc57c1fc2d9a7f/36f1fcaca5131fc1b4fc2b0301ef8de0329f297be7c6c690e955c441d7a7526e/verify/task-t001-verify",
+    "method": "Pinned integration.integration_names(pin=False) and worktree_paths.worktree_path(pin=False), using retained primary workspace pin; task branch also observed in native finish receipt location."
+  }
+}

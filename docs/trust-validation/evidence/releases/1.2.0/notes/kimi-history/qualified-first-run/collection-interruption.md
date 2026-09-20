@@ -1,0 +1,1 @@
+Fresh collection parent interrupted by evaluator after static-read overhead. Final flushed output proves canonical collect-artifact completed successfully before interruption; no child existed in this turn. Review now at canonical primary path, sidecar clean. Next native context uses exact known helper commands; never recollect or edit artifact.

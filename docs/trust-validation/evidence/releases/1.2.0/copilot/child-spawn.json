@@ -1,0 +1,43 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "copilot",
+  "run_id": "copilot-retry4-1.2.0-f36f24a-20260920",
+  "result": "pass",
+  "step": "child-spawn",
+  "command": "task",
+  "child_api": "task",
+  "child_id": "build_t001",
+  "child_status": "completed",
+  "output": {
+    "child_id": "build_t001",
+    "status": "completed",
+    "child_api": "task",
+    "source": "session-state/7f87d819-badb-42d2-92f5-5dfed6afcf07",
+    "matched_argument": "description",
+    "agent_id": "98e3b476-d74f-420e-b47d-7cc054699889",
+    "tool_call": {
+      "toolCallId": "toolu_01CPAiz9JH4CMbpYZRKNgzRr",
+      "arguments": {
+        "agent_type": "general-purpose",
+        "name": "build_t001",
+        "description": "build_t001"
+      },
+      "prompt_sha256": "7b9b4fd401c10262e2edaddde31c09f970f79fd2ba7c63fd696fca75f5fc09ff"
+    },
+    "started": {
+      "agentName": "general-purpose",
+      "model": "gpt-5.4"
+    },
+    "completed": {
+      "agentName": "general-purpose",
+      "model": "gpt-5.4",
+      "durationMs": 27357,
+      "totalTokens": 195282,
+      "totalToolCalls": 12
+    },
+    "tool_result": {
+      "success": true,
+      "content": "T001 ready \u2014 wrote `count.py` and `test_count.py`; appended the Log entry in `.project/tasks/T001-count-cli.md`.\nVerify passed: `python3 -m unittest test_count.py -v`\nTail output: `Ran 5 tests in 0.271s` / `OK`\nChanged: `count.py`, `test_count.py`, `.project/tasks/T001-count-cli.md`\nRESULT: T001 ready"
+    }
+  }
+}

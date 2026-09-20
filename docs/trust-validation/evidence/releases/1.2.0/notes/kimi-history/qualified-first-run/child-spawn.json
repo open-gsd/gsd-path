@@ -1,0 +1,44 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "kimi",
+  "run_id": "session_aa85468f-e730-488f-afae-532258ad4e63",
+  "result": "pass",
+  "step": "child-spawn",
+  "command": "Agent",
+  "child_api": "Agent",
+  "child_id": "build_t001",
+  "child_status": "completed",
+  "output": {
+    "child_id": "build_t001",
+    "status": "completed",
+    "child_api": "Agent",
+    "run": "run-20260920T161226369913Z",
+    "session_id": "session_aa85468f-e730-488f-afae-532258ad4e63",
+    "tool_call": {
+      "id": "tool_5NZPU8SjqstfNEyAMCDVCDfS",
+      "input": {
+        "description": "build_t001",
+        "subagent_type": "coder"
+      },
+      "prompt_sha256": "94501fe06041f883016b6354b2b04ba712956adad488de6fdb166ebf911acef9"
+    },
+    "tool_result": {
+      "agent_id": "agent-0",
+      "actual_subagent_type": "coder",
+      "status": "completed",
+      "stop_reason": "completed",
+      "content": "agent_id: agent-0\nactual_subagent_type: coder\nstatus: completed\nstop_reason: completed\n\n[summary]\nready\n\nFiles changed:\n- `count.py` \u2014 `--json` in either position, signed-int count (default 0), stderr usage error + exit 2 on invalid input\n- `test_count.py` \u2014 new; 5 real-CLI subprocess tests covering SC1\u2013SC5\n- `.project/tasks/T001-count-cli-json.md` \u2014 Log append only\n\nLocal Verify: `python3 -m unittest test_count.py -v` \u2014 Ran 5 tests, OK.\n\nRESULT: T001 ready\n\nresume_hint: Continue with Agent(resume=\"agent-0\", prompt=\"...\"). Use agent_id only; do not set subagent_type. The subagent retains its prior context; redo any unfinished tool call if its result was lost."
+    },
+    "session_store": {
+      "state": "session_aa85468f-e730-488f-afae-532258ad4e63",
+      "type": "sub",
+      "labels": {
+        "parentAgentId": "main",
+        "profileName": "coder"
+      },
+      "turn_ended_reasons": [
+        "completed"
+      ]
+    }
+  }
+}

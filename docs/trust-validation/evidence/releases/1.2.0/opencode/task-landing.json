@@ -1,0 +1,17 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "opencode",
+  "run_id": "opencode-1.2.0-f36f24a-retry4",
+  "result": "pass",
+  "step": "task-landing",
+  "command": "python3 -B .opencode/skills/gsd-path/scripts/dispatch_driver.py finish --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry4/quick/repo --task-id T001",
+  "output": "commit 53096ee11c7226d4cacf98efd78756996145eb86\nAuthor:     Feature Evaluation <evaluation@example.invalid>\nAuthorDate: Sun Sep 20 17:13:54 2026 -0500\nCommit:     Feature Evaluation <evaluation@example.invalid>\nCommitDate: Sun Sep 20 17:13:54 2026 -0500\n\n    T001: Harden count.py CLI contract with --json mode, useful errors, and real subprocess tests\n    \n    Task: .project/tasks/T001-harden-count-cli.md\n    Base: d8ee4662e391e765ea344cc254f306c2add93d69\n    Files:\n    - .project/tasks/T001-harden-count-cli.md\n    - count.py\n    - test_count.py\n\n .project/tasks/T001-harden-count-cli.md | 43 +++++++++++++++---\n count.py                                | 33 ++++++++++++--\n test_count.py                           | 79 +++++++++++++++++++++++++++++++++\n 3 files changed, 147 insertions(+), 8 deletions(-)",
+  "fixture_bundle": "opencode/fixture.bundle",
+  "run_manifest": ".project/archive/001-count-cli/trust-run-manifest.json",
+  "fixture_base_commit": "d8ee4662e391e765ea344cc254f306c2add93d69",
+  "task_branch": "gsd-path-verify/task-t001-verify",
+  "task_worktree": "/Users/jeremymcspadden/.gsd-path/projects/de463e5c6408acdb20334ffd3d918adc61b68e9445d32eb06bb0e41ec79a100a/54588c8439d6a3a26ee6e3a13977c6adc7f486272fffae9c7569d7d3e133fe45/verify/task-t001-verify",
+  "landing_commit": "53096ee11c7226d4cacf98efd78756996145eb86",
+  "isolation_mode": "serial",
+  "isolation_note": "A one-task wave uses the helper's serial mode: the coder worked on the bound branch in the primary worktree at the recorded base, and the named branch and worktree are the isolated Task Verify sidecar created for this task and retired after landing."
+}

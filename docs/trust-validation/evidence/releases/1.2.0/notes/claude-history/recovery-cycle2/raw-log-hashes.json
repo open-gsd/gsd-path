@@ -1,0 +1,22 @@
+{
+  "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/claude-retry2/native-review-cycle2/exit.json": {
+    "bytes": 89,
+    "sha256": "c6dedb94c485989dc16a3772fd7be526791acc9f450876d13d3f3abd2f8200e0"
+  },
+  "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/claude-retry2/native-review-cycle2/state.json": {
+    "bytes": 1809,
+    "sha256": "30b2951e53e5a48fb0e8eb2cbddb0bad910f889457198679d94a6a084eb2e3f6"
+  },
+  "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/claude-retry2/native-review-cycle2/stdout": {
+    "bytes": 311094,
+    "sha256": "eda9a0e34a8ac164321756a7079c2c1df002c80a0989091715b5ce9b4d8dd814"
+  },
+  "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/claude-retry2/native-review-cycle2/stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/claude-retry2/native-review-cycle2/brief.md": {
+    "bytes": 2885,
+    "sha256": "2e40dabf6d04e3e1b58bcd559c722dff2d652b0d3dbbc051475d21a5e1301a7c"
+  }
+}

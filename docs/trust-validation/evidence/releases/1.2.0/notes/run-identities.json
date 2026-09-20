@@ -1,0 +1,43 @@
+{
+  "runs": [
+    {
+      "host": "claude",
+      "native_run_id": "271660ff-b049-479c-8dab-dc3eeb4a4349",
+      "task_landing": "87aec0bef81d25583f96cf38a621554272a74d3f",
+      "ship_commit": "c3ce42f2d2c005c2a166ba4b356f496c91170545",
+      "integration_commit": "4b51971092ac61017c484e1df38afc8ac2598310"
+    },
+    {
+      "host": "codex",
+      "native_run_id": "codex-1.2.0-f36f24a-20260920",
+      "task_landing": "e9fac885a481d33880318bbcf2252c4778328526",
+      "ship_commit": "4909bb2f191184ea62dc73a8f1f455b87cb339af",
+      "integration_commit": "34694c572e2188821055bf76c9009c49ea65bd90"
+    },
+    {
+      "host": "copilot",
+      "native_run_id": "copilot-retry2-1.2.0-f36f24a-20260920",
+      "task_landing": "a649b1ffda475bb6c02998a4bb5becf2eeca4284",
+      "ship_commit": "4ea606e2c4b2b6e668fc0eced77e8525aa7d1372",
+      "integration_commit": "ef739a35fcf852b105c44d830654e838d9c44769"
+    },
+    {
+      "host": "cursor",
+      "native_run_id": "cursor-1.2.0-f36f24a",
+      "task_landing": "669cf6528275ab63757dfb8401f452e608dd456c",
+      "ship_commit": "2fb1a3d835ce50b5b6d2a0de3289a0f22b4d114f",
+      "integration_commit": "ae83257ef39863568423792e40d89d1f562f394d"
+    },
+    {
+      "host": "kimi",
+      "native_run_id": "session_aa85468f-e730-488f-afae-532258ad4e63",
+      "task_landing": "589612444e821dcfe8ce4b3e74042f882c8e0916",
+      "ship_commit": "acae8341cd80c7e9bf45aaf22abe1829b6b209bf",
+      "integration_commit": "3db4622883c5a7e6706e856acd7be8a0e89a39c9"
+    }
+  ],
+  "distinct_native_run_ids": 5,
+  "distinct_task_landings": 5,
+  "distinct_ship_commits": 5,
+  "distinct_integrations": 5
+}

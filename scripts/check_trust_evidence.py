@@ -115,12 +115,7 @@ STEP_EXACT_FIELDS = {
     "task-verify": {"verify_exit_code": 0},
     "archive": {"validation_exit_code": 0},
 }
-SUMMARY_PATHS = frozenset(
-    {
-        "docs/trust-validation/HOST-MATRIX.md",
-        "docs/trust-validation/TRUST-EVIDENCE.md",
-    }
-)
+EXCLUDED_EVALUATION_HOSTS = frozenset({"qwen", "kiro", "zed"})
 WORKTREE_RECORD_KEYS = frozenset(
     {"worktree", "HEAD", "branch", "bare", "detached", "locked", "prunable"}
 )
@@ -851,14 +846,26 @@ def _require_current_tracked_evidence(
         )
 
 
+def evaluation_hosts(hosts: Sequence[str]) -> List[str]:
+    """Keep installer support separate from maintainer-funded live evaluation."""
+    return [host for host in hosts if host not in EXCLUDED_EVALUATION_HOSTS]
+
+
 def release_scope(repo: Path, version: str, hosts: Sequence[str]) -> Mapping:
     """Select live checks from the previous reachable release; unknowns fail closed."""
     tags = [tag for tag in _git(repo, "tag", "--merged", "HEAD", "--list", "v*").splitlines()
             if tag != f"v{version}" and re.fullmatch(r"v\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?", tag)]
     if not tags or _git(repo, "rev-parse", "--is-shallow-repository") == "true":
-        return {"baseline": None, "hosts": list(hosts), "live_changes": ["no complete release baseline"]}
+        return {"baseline": None, "hosts": evaluation_hosts(hosts), "live_changes": ["no complete release baseline"]}
     matches = [argument for tag in tags for argument in ("--match", tag)]
     baseline = _git(repo, "describe", "--tags", "--abbrev=0", *matches, "HEAD")
+    return changed_host_scope(repo, baseline, hosts)
+
+
+def changed_host_scope(repo: Path, baseline: str, hosts: Sequence[str]) -> Mapping:
+    """Classify changes from a release tag or an individual receipt candidate."""
+    declared_hosts = frozenset(hosts)
+    hosts = evaluation_hosts(hosts)
     # Disable rename detection so moving a contract into docs cannot hide deletion.
     paths = _git(repo, "diff", "--no-renames", "--name-only", "-z", baseline, "HEAD").split("\0")
     required = set()
@@ -889,7 +896,9 @@ def release_scope(repo: Path, version: str, hosts: Sequence[str]) -> Mapping:
                   and path not in {"AGENTS.md", "WORKFLOW.md"})):
             continue
         parts = PurePosixPath(path).parts
-        if len(parts) > 2 and parts[0] == "platforms" and parts[1] in hosts:
+        if len(parts) > 2 and parts[0] == "platforms" and parts[1] in declared_hosts:
+            if parts[1] not in hosts:
+                continue
             required.add(parts[1])
         else:
             required.update(hosts)
@@ -898,7 +907,28 @@ def release_scope(repo: Path, version: str, hosts: Sequence[str]) -> Mapping:
             "live_changes": live_changes}
 
 
-def validate_repository(repo: Path) -> Mapping:
+def _validated_host_receipt(repo: Path, receipt: Path, host: str,
+                            contract: Mapping, hosts: Sequence[str]) -> Tuple[Mapping, EvidenceIdentity]:
+    child_apis = contract.get("child_apis")
+    if (not isinstance(child_apis, list) or not child_apis
+            or any(not isinstance(api, str) or not api.strip() for api in child_apis)):
+        raise EvidenceError(f"host manifest child_apis must be non-empty: {host}")
+    version = receipt.parent.name
+    candidate, artifacts, identity = _validate_receipt(
+        receipt, host, version, contract.get("guard_tier", ""), child_apis)
+    _git(repo, "merge-base", "--is-ancestor", candidate, "HEAD")
+    changed = frozenset(_git(repo, "diff", "--no-renames", "--name-only", candidate, "HEAD").splitlines())
+    for path in (receipt, *artifacts):
+        _require_current_tracked_evidence(repo, path, changed)
+    scope = changed_host_scope(repo, candidate, hosts)
+    if host in scope["hosts"]:
+        raise EvidenceError("non-evidence changes follow the tested candidate: "
+                            + ", ".join(scope["live_changes"]))
+    return {"path": receipt.relative_to(repo).as_posix(), "version": version,
+            "candidate": candidate}, identity
+
+
+def validate_repository(repo: Path, *, plan: bool = False, full: bool = False) -> Mapping:
     repo = repo.resolve()
     if _git(repo, "status", "--porcelain", "--untracked-files=all"):
         raise EvidenceError("release evidence requires a clean worktree")
@@ -907,99 +937,69 @@ def validate_repository(repo: Path) -> Mapping:
     host_contracts = manifest.get("hosts", {})
     if not isinstance(host_contracts, dict):
         raise EvidenceError("host manifest must contain a hosts object")
-    hosts = list(host_contracts)
+    hosts = evaluation_hosts(list(host_contracts))
     version = package.get("version")
     if not hosts:
         raise EvidenceError("host manifest is empty")
     if not isinstance(version, str) or not re.fullmatch(r"[0-9A-Za-z.+-]+", version):
         raise EvidenceError("package version is missing or invalid")
-    scope = release_scope(repo, version, hosts)
-    hosts = scope["hosts"]
-    if not hosts:
-        return {**scope, "candidate": None, "version": version}
-    evidence_root = (
-        repo / "docs" / "trust-validation" / "evidence" / "releases" / version
-    )
-    missing = [host for host in hosts if not (evidence_root / f"{host}.md").is_file()]
-    if missing:
-        raise EvidenceError(f"missing host evidence: {', '.join(missing)}")
+    scope = release_scope(repo, version, list(host_contracts))
+    releases = repo / "docs" / "trust-validation" / "evidence" / "releases"
+    evidence_root = releases / version
     extra = sorted(path.stem for path in evidence_root.glob("*.md") if path.stem not in host_contracts)
     if extra:
         raise EvidenceError(f"unexpected host evidence: {', '.join(extra)}")
-
-    candidate = ""
-    evidence_paths: List[Path] = []
-    run_owners: Dict[str, str] = {}
-    landing_owners: Dict[str, str] = {}
-    ship_owners: Dict[str, str] = {}
-    integration_owners: Dict[str, str] = {}
+    receipts = {}
+    reasons = {}
+    owners = {label: {} for label in ("run_id", "landing commit", "ship commit", "integration commit")}
     for host in hosts:
         contract = host_contracts[host]
         if not isinstance(contract, dict):
             raise EvidenceError(f"host manifest entry must be an object: {host}")
-        child_apis = contract.get("child_apis")
-        if (
-            not isinstance(child_apis, list)
-            or not child_apis
-            or any(not isinstance(api, str) or not api.strip() for api in child_apis)
-        ):
-            raise EvidenceError(f"host manifest child_apis must be non-empty: {host}")
-        receipt = evidence_root / f"{host}.md"
-        candidate, artifacts, identity = _validate_receipt(
-            receipt,
-            host,
-            version,
-            contract.get("guard_tier", ""),
-            child_apis,
-            candidate,
-        )
-        previous_host = run_owners.get(identity.run_id)
-        if previous_host is not None:
-            raise EvidenceError(
-                f"hosts {previous_host} and {host} share one live run_id"
-            )
-        run_owners[identity.run_id] = host
-        for label, commit, owners in (
-            ("landing commit", identity.landing_commit, landing_owners),
-            ("ship commit", identity.ship_commit, ship_owners),
-            ("integration commit", identity.integration_commit, integration_owners),
-        ):
-            previous_host = owners.get(commit)
-            if previous_host is not None:
-                raise EvidenceError(
-                    f"hosts {previous_host} and {host} share one {label}"
-                )
-            owners[commit] = host
-        evidence_paths.extend((receipt, *artifacts))
-    _git(repo, "merge-base", "--is-ancestor", candidate, "HEAD")
-    changed = frozenset(
-        _git(repo, "diff", "--name-only", f"{candidate}..HEAD").splitlines()
-    )
-    for path in evidence_paths:
-        _require_current_tracked_evidence(repo, path, changed)
-    evidence_prefix = f"docs/trust-validation/evidence/releases/{version}/"
-    disallowed = [
-        path
-        for path in changed
-        if not path.startswith(evidence_prefix) and path not in SUMMARY_PATHS
-    ]
-    if disallowed:
-        raise EvidenceError(
-            "non-evidence changes follow the tested candidate: " + ", ".join(disallowed)
-        )
-    return {**scope, "candidate": candidate, "version": version}
+        current = evidence_root / f"{host}.md"
+        # A current receipt is authoritative: never hide a failed new run with an old pass.
+        candidates = [current] if current.exists() or full else sorted(releases.glob(f"*/{host}.md"), reverse=True)
+        errors = []
+        for receipt in candidates:
+            try:
+                record, identity = _validated_host_receipt(repo, receipt, host, contract, list(host_contracts))
+            except EvidenceError as error:
+                errors.append(str(error))
+                continue
+            for label, value in (("run_id", identity.run_id), ("landing commit", identity.landing_commit),
+                                 ("ship commit", identity.ship_commit), ("integration commit", identity.integration_commit)):
+                previous_host = owners[label].get(value)
+                if previous_host is not None:
+                    raise EvidenceError(f"hosts {previous_host} and {host} share one {label}")
+                owners[label][value] = host
+            receipts[host] = record
+            break
+        if host not in receipts:
+            reasons[host] = "; ".join(errors) or "missing host evidence"
+    required = [host for host in hosts if host not in receipts]
+    if required and not plan:
+        details = "; ".join(f"{host}: {reasons[host]}" for host in required if reasons[host] != "missing host evidence")
+        raise EvidenceError(f"missing host evidence: {', '.join(required)}" + (f"; {details}" if details else ""))
+    candidates = {record["candidate"] for record in receipts.values()}
+    return {**scope, "hosts": hosts, "affected_hosts": scope["hosts"],
+            "candidate": next(iter(candidates)) if len(candidates) == 1 else None,
+            "version": version, "receipts": receipts, "required_runs": required,
+            "reused_hosts": [host for host, record in receipts.items() if record["version"] != version],
+            "reasons": reasons}
 
 
 def parser() -> argparse.ArgumentParser:
     argument_parser = argparse.ArgumentParser(description=__doc__)
     argument_parser.add_argument("--repo", type=Path, default=Path.cwd())
+    argument_parser.add_argument("--plan", action="store_true", help="report required runs without failing for missing or stale receipts")
+    argument_parser.add_argument("--full", action="store_true", help="require receipts under the current package version")
     return argument_parser
 
 
 def main(argv: Sequence[str] = None) -> int:
     arguments = parser().parse_args(argv)
     try:
-        result = validate_repository(arguments.repo)
+        result = validate_repository(arguments.repo, plan=arguments.plan, full=arguments.full)
     except EvidenceError as error:
         print(f"error: {error}", file=sys.stderr)
         return 1

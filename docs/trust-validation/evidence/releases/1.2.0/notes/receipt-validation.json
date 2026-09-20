@@ -1,0 +1,37 @@
+{
+  "candidate": "f36f24aed82ac0019d082c7e31b8a4342d8e03f1",
+  "receipts": [
+    {
+      "host": "codex",
+      "status": "structurally-valid"
+    },
+    {
+      "host": "claude",
+      "status": "structurally-valid"
+    },
+    {
+      "host": "grok",
+      "status": "missing"
+    },
+    {
+      "host": "opencode",
+      "status": "missing"
+    },
+    {
+      "host": "copilot",
+      "status": "structurally-valid"
+    },
+    {
+      "host": "antigravity",
+      "status": "missing"
+    },
+    {
+      "host": "cursor",
+      "status": "structurally-valid"
+    },
+    {
+      "host": "kimi",
+      "status": "structurally-valid"
+    }
+  ]
+}

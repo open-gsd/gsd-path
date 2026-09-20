@@ -1,0 +1,11 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "claude",
+  "run_id": "9f2d46ba-1309-4041-ab46-1daac41ff94e",
+  "result": "pass",
+  "step": "task-verify",
+  "command": "python3 test_count.py",
+  "output": "{\"command\": \"python3 test_count.py\", \"commit\": \"0cd8bde85bdce9e83732bbf2792b737beac92a0d\", \"execution\": {\"evidence\": \"/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.3.0-45466c4/claude/quick/repo/.git/gsd-path/dispatch/gsd-path-M001/T001/manual-2026-09-20T145114+0000/verify.json\", \"exit_code\": 0, \"location\": \"sidecar gsd-path-verify/task-t001-verify\", \"stderr\": \"........\\n----------------------------------------------------------------------\\nRan 8 tests in 0.459s\\n\\nOK\\n\", \"stdout\": \"\", \"worktree\": \"/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.3.0-45466c4/claude/quick/repo\"}, \"recorded_at\": \"2026-09-20T14:51:15+00:00\", \"result\": \"pass\", \"schema\": \"gsd-path/verify-ledger/v2\"}\n{\"command\": \"python3 -m unittest discover -s . -p 'test_*.py' -v\", \"commit\": \"24fe04d0ec9504d5fc1f1c340a3ec9300dd4a845\", \"execution\": {\"branch\": \"gsd-path-verify/project-verify\", \"exit_code\": 0, \"stderr\": \"test_more_than_one_count (test_count.InvalidInput) ... ok\\ntest_non_integer_count (test_count.InvalidInput) ... ok\\ntest_unknown_flag (test_count.InvalidInput) ... ok\\ntest_json_flag_after_count (test_count.JsonOutput)\\nAC4 ... ok\\ntest_json_flag_alone_defaults_to_zero (test_count.JsonOutput)\\nAC3 ... ok\\ntest_json_flag_before_count (test_count.JsonOutput)\\nAC4 ... ok\\ntest_bare_invocation_prints_zero_widgets (test_count.TextOutput)\\nAC1 ... ok\\ntest_signed_integers_print_that_count (test_count.TextOutput)\\nAC2 ... ok\\n\\n----------------------------------------------------------------------\\nRan 8 tests in 0.773s\\n\\nOK\\n\", \"stdout\": \"\", \"worktree\": \"/Users/jeremymcspadden/.gsd-path/projects/1abe4e0d08f4d0b3ce87f6d4a7044acdf9cf5015e439a332909b150cb55a463c/5829a719504e601576ec6c77440d4fdac365e2c42499644a211ff910c4e0cd4e/verify/project-verify\"}, \"recorded_at\": \"2026-09-20T14:58:57+00:00\", \"result\": \"pass\", \"schema\": \"gsd-path/verify-ledger/v2\"}\n",
+  "verify_artifact": ".project/archive/001-count-cli/build/verify-ledger.jsonl",
+  "verify_exit_code": 0
+}

@@ -1,0 +1,33 @@
+{
+  "command": [
+    "python3",
+    "-B",
+    "/Users/jeremymcspadden/orca/workspaces/gsd-path/release-gate/docs/trust-validation/evidence/releases/1.0.0/codex/release_receipt.py",
+    "--host",
+    "opencode",
+    "manifest",
+    "--fixture",
+    "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry3/quick/repo",
+    "--repo",
+    "/Users/jeremymcspadden/orca/workspaces/gsd-path/release-gate",
+    "--run-id",
+    "opencode-1.2.0-f36f24a-retry3",
+    "--candidate",
+    "f36f24aed82ac0019d082c7e31b8a4342d8e03f1",
+    "--host-version",
+    "1.18.25",
+    "--task-branch",
+    "gsd-path-verify/task-t001-verify",
+    "--transcript",
+    "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry3",
+    "--package-version",
+    "1.2.0",
+    "--committed-archive-repo",
+    "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/guard-source",
+    "--committed-archive",
+    ".project/archive/001-guard-probe"
+  ],
+  "exit_code": 1,
+  "stdout": "",
+  "stderr": "the task file records agent 'build_T001' but no completed child was dispatched under that label (no completed task child with description 'build_T001' in /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry3). The host broke the dispatch contract; rerun its build so the dispatched label and the task agent field match. Do not override this: the receipt validator cross-checks them.\n"
+}

@@ -1,0 +1,173 @@
+{
+  "schema": "claude-native-budget-recovery/v1",
+  "candidate": "f36f24aed82ac0019d082c7e31b8a4342d8e03f1",
+  "authority": "Owner:4000 output/task warning;30000 aggregate per native parent context including children and resumed continuations",
+  "method": "Deduplicate assistant message.id per native session JSONL, use maximum output_tokens per message, sum parent plus subagents. Cross-check terminal result.modelUsage[*].outputTokens; top-level result.usage.output_tokens is parent-only. Direct driver CLI child uses a separate native directory; sum it with its launch parent explicitly.",
+  "superseded_failed_context": {
+    "session_id": "5bfb8f0f-a227-4dd7-8636-26c6a8c9d6f7",
+    "files": {
+      "/Users/jeremymcspadden/.claude/projects/-Users-jeremymcspadden-orca-evaluations-gsd-path-release-1-2-0-f36f24a-claude-retry2-quick-repo/5bfb8f0f-a227-4dd7-8636-26c6a8c9d6f7.jsonl": 6231,
+      "/Users/jeremymcspadden/.claude/projects/-Users-jeremymcspadden-orca-evaluations-gsd-path-release-1-2-0-f36f24a-claude-retry2-quick-repo/5bfb8f0f-a227-4dd7-8636-26c6a8c9d6f7/subagents/agent-a6ae87439f4052289.jsonl": 25835
+    },
+    "aggregate": 32066,
+    "file_sha256": {
+      "/Users/jeremymcspadden/.claude/projects/-Users-jeremymcspadden-orca-evaluations-gsd-path-release-1-2-0-f36f24a-claude-retry2-quick-repo/5bfb8f0f-a227-4dd7-8636-26c6a8c9d6f7.jsonl": "b5aa6660cbb7b6b097ec276389b80d4555d9847d45d02c64c3d66d1e9ef6bb0b",
+      "/Users/jeremymcspadden/.claude/projects/-Users-jeremymcspadden-orca-evaluations-gsd-path-release-1-2-0-f36f24a-claude-retry2-quick-repo/5bfb8f0f-a227-4dd7-8636-26c6a8c9d6f7/subagents/agent-a6ae87439f4052289.jsonl": "1b6a2873f5a1e9049fb46a058bfb3754c00bf09be1e81ecad62400c5a14bd1da"
+    }
+  },
+  "superseded_reason": "32066 exceeds30000; original cycle1 is retained history only, never accepted review evidence",
+  "accepted_retained_contexts": [
+    {
+      "session_id": "2a4d0b66-86f2-4a8d-b422-3ec511f899f1",
+      "files": {
+        "/Users/jeremymcspadden/.claude/projects/-Users-jeremymcspadden-orca-evaluations-gsd-path-release-1-2-0-f36f24a-claude-retry2-quick-repo/2a4d0b66-86f2-4a8d-b422-3ec511f899f1.jsonl": 3385
+      },
+      "aggregate": 3385,
+      "file_sha256": {
+        "/Users/jeremymcspadden/.claude/projects/-Users-jeremymcspadden-orca-evaluations-gsd-path-release-1-2-0-f36f24a-claude-retry2-quick-repo/2a4d0b66-86f2-4a8d-b422-3ec511f899f1.jsonl": "d4f6fadaf7f48bab1aaa1bc48fd568ef19855885b2cc7af1873d54b54dd1edcf"
+      },
+      "accepted_phase": "retained completed pre-review context"
+    },
+    {
+      "session_id": "a41ef256-b9d1-4ae2-8dce-3f286cf83037",
+      "files": {
+        "/Users/jeremymcspadden/.claude/projects/-Users-jeremymcspadden-orca-evaluations-gsd-path-release-1-2-0-f36f24a-claude-retry2-quick-repo/a41ef256-b9d1-4ae2-8dce-3f286cf83037.jsonl": 15348
+      },
+      "aggregate": 15348,
+      "file_sha256": {
+        "/Users/jeremymcspadden/.claude/projects/-Users-jeremymcspadden-orca-evaluations-gsd-path-release-1-2-0-f36f24a-claude-retry2-quick-repo/a41ef256-b9d1-4ae2-8dce-3f286cf83037.jsonl": "6b39d9ed7486e584e0a929209d2d810f9c188216399c53f2c630badce4affe78"
+      },
+      "accepted_phase": "retained completed pre-review context"
+    },
+    {
+      "session_id": "f742693a-3c37-466b-a7df-492cafb8183b",
+      "files": {
+        "/Users/jeremymcspadden/.claude/projects/-Users-jeremymcspadden-orca-evaluations-gsd-path-release-1-2-0-f36f24a-claude-retry2-quick-repo/f742693a-3c37-466b-a7df-492cafb8183b.jsonl": 3525
+      },
+      "aggregate": 3525,
+      "file_sha256": {
+        "/Users/jeremymcspadden/.claude/projects/-Users-jeremymcspadden-orca-evaluations-gsd-path-release-1-2-0-f36f24a-claude-retry2-quick-repo/f742693a-3c37-466b-a7df-492cafb8183b.jsonl": "1af8ad101b192f69cad0dba974b51b7951709dbbc619326594739c66ba2f05c3"
+      },
+      "accepted_phase": "retained completed pre-review context"
+    },
+    {
+      "session_id": "b5627f8a-3c74-4064-aa69-7d477b67e7c7",
+      "files": {
+        "/Users/jeremymcspadden/.claude/projects/-Users-jeremymcspadden-orca-evaluations-gsd-path-release-1-2-0-f36f24a-claude-retry2-quick-repo/b5627f8a-3c74-4064-aa69-7d477b67e7c7.jsonl": 9549,
+        "/Users/jeremymcspadden/.claude/projects/-Users-jeremymcspadden-orca-evaluations-gsd-path-release-1-2-0-f36f24a-claude-retry2-quick-repo/b5627f8a-3c74-4064-aa69-7d477b67e7c7/subagents/agent-adf313b0fbce75094.jsonl": 4859
+      },
+      "aggregate": 14408,
+      "file_sha256": {
+        "/Users/jeremymcspadden/.claude/projects/-Users-jeremymcspadden-orca-evaluations-gsd-path-release-1-2-0-f36f24a-claude-retry2-quick-repo/b5627f8a-3c74-4064-aa69-7d477b67e7c7.jsonl": "e50cabba16553946d6a7f25395fc8f91e27ac08e4ead48b5ace4da8f4b87554f",
+        "/Users/jeremymcspadden/.claude/projects/-Users-jeremymcspadden-orca-evaluations-gsd-path-release-1-2-0-f36f24a-claude-retry2-quick-repo/b5627f8a-3c74-4064-aa69-7d477b67e7c7/subagents/agent-adf313b0fbce75094.jsonl": "caf5d66c34acea884694e0b056086af70330eceb00db37254b063acd2de40a60"
+      },
+      "accepted_phase": "retained completed pre-review context"
+    },
+    {
+      "session_id": "8bfb5639-edc7-4926-b0fc-40cea7e557dd",
+      "files": {
+        "/Users/jeremymcspadden/.claude/projects/-Users-jeremymcspadden-orca-evaluations-gsd-path-release-1-2-0-f36f24a-claude-retry2-quick-repo/8bfb5639-edc7-4926-b0fc-40cea7e557dd.jsonl": 7669
+      },
+      "aggregate": 7669,
+      "file_sha256": {
+        "/Users/jeremymcspadden/.claude/projects/-Users-jeremymcspadden-orca-evaluations-gsd-path-release-1-2-0-f36f24a-claude-retry2-quick-repo/8bfb5639-edc7-4926-b0fc-40cea7e557dd.jsonl": "f87e6d4bd8d5a4c763b6c00196e09f736880a8626213fec947460f7dc642a8fd"
+      },
+      "accepted_phase": "retained completed pre-review context"
+    },
+    {
+      "session_id": "bc252c6b-3498-4f11-bf2e-8d990a6f9e4c",
+      "files": {
+        "/Users/jeremymcspadden/.claude/projects/-Users-jeremymcspadden-orca-evaluations-gsd-path-release-1-2-0-f36f24a-claude-retry2-quick-repo/bc252c6b-3498-4f11-bf2e-8d990a6f9e4c.jsonl": 4353,
+        "/Users/jeremymcspadden/.claude/projects/-Users-jeremymcspadden-orca-evaluations-gsd-path-release-1-2-0-f36f24a-claude-retry2-quick-repo/bc252c6b-3498-4f11-bf2e-8d990a6f9e4c/subagents/agent-af55a146045a77daa.jsonl": 9446
+      },
+      "aggregate": 13799,
+      "file_sha256": {
+        "/Users/jeremymcspadden/.claude/projects/-Users-jeremymcspadden-orca-evaluations-gsd-path-release-1-2-0-f36f24a-claude-retry2-quick-repo/bc252c6b-3498-4f11-bf2e-8d990a6f9e4c.jsonl": "4c12e40f1bea64e6779fa287c385882af830ed8202921ef68bfa80ccc9b5aa69",
+        "/Users/jeremymcspadden/.claude/projects/-Users-jeremymcspadden-orca-evaluations-gsd-path-release-1-2-0-f36f24a-claude-retry2-quick-repo/bc252c6b-3498-4f11-bf2e-8d990a6f9e4c/subagents/agent-af55a146045a77daa.jsonl": "b32f1e74e78fda57d92b477d02b2a1ebb2637ea9777ae5afa21ad74d3d124e39"
+      },
+      "accepted_phase": "retained completed pre-review context"
+    },
+    {
+      "session_id": "8600a971-d8b7-4084-8d04-b17c151ac882",
+      "files": {
+        "/Users/jeremymcspadden/.claude/projects/-Users-jeremymcspadden-orca-evaluations-gsd-path-release-1-2-0-f36f24a-claude-retry2-quick-repo/8600a971-d8b7-4084-8d04-b17c151ac882.jsonl": 3580,
+        "/Users/jeremymcspadden/.claude/projects/-Users-jeremymcspadden-orca-evaluations-gsd-path-release-1-2-0-f36f24a-claude-retry2-quick-repo/8600a971-d8b7-4084-8d04-b17c151ac882/subagents/agent-a2eb17632895ace17.jsonl": 18546
+      },
+      "aggregate": 22126,
+      "file_sha256": {
+        "/Users/jeremymcspadden/.claude/projects/-Users-jeremymcspadden-orca-evaluations-gsd-path-release-1-2-0-f36f24a-claude-retry2-quick-repo/8600a971-d8b7-4084-8d04-b17c151ac882.jsonl": "b9a01872c56c2710bca8292f8a9adcd8f2d4e3ff19c6179a5d14be6a919e931e",
+        "/Users/jeremymcspadden/.claude/projects/-Users-jeremymcspadden-orca-evaluations-gsd-path-release-1-2-0-f36f24a-claude-retry2-quick-repo/8600a971-d8b7-4084-8d04-b17c151ac882/subagents/agent-a2eb17632895ace17.jsonl": "5f13bad3e9a359758e6b1821fbd4c9a71b9c68c447e6154faaecd8390643325a"
+      },
+      "accepted_phase": "retained completed pre-review context"
+    }
+  ],
+  "accepted_recovery_contexts": [
+    {
+      "session_id": "7d74e63b-73bb-4e76-bed2-327e235fdf3a",
+      "files": {
+        "/Users/jeremymcspadden/.claude/projects/-Users-jeremymcspadden-orca-evaluations-gsd-path-release-1-2-0-f36f24a-claude-retry2-quick-repo/7d74e63b-73bb-4e76-bed2-327e235fdf3a.jsonl": 3256
+      },
+      "aggregate": 3256,
+      "file_sha256": {
+        "/Users/jeremymcspadden/.claude/projects/-Users-jeremymcspadden-orca-evaluations-gsd-path-release-1-2-0-f36f24a-claude-retry2-quick-repo/7d74e63b-73bb-4e76-bed2-327e235fdf3a.jsonl": "2d7447e9e4a76dfd3a5c336eb03ad4da7a4b54684651e08ab38a5470a5927e9b"
+      },
+      "accepted_phase": "review2 launch parent"
+    },
+    {
+      "session_id": "824cd1b8-6514-4ade-87c5-462a525d8279",
+      "files": {
+        "/Users/jeremymcspadden/.claude/projects/-Users-jeremymcspadden--gsd-path-projects-53f74c795783e5ab4fdc8ad19e257ab1c8e6a52f0dc178cfaafc57c1fc2d9a7f-36f1fcaca5131fc1b4fc2b0301ef8de0329f297be7c6c690e955c441d7a7526e-verify-wave-1-cycle-2/824cd1b8-6514-4ade-87c5-462a525d8279.jsonl": 17689
+      },
+      "aggregate": 17689,
+      "file_sha256": {
+        "/Users/jeremymcspadden/.claude/projects/-Users-jeremymcspadden--gsd-path-projects-53f74c795783e5ab4fdc8ad19e257ab1c8e6a52f0dc178cfaafc57c1fc2d9a7f-36f1fcaca5131fc1b4fc2b0301ef8de0329f297be7c6c690e955c441d7a7526e-verify-wave-1-cycle-2/824cd1b8-6514-4ade-87c5-462a525d8279.jsonl": "323074854fa7e821e2324afad4100173bcb5f5c72a468726db61c36b1475371d"
+      },
+      "accepted_phase": "review2 direct native CLI child"
+    },
+    {
+      "session_id": "2b09f639-9572-4024-b21b-11dc012938fd",
+      "files": {
+        "/Users/jeremymcspadden/.claude/projects/-Users-jeremymcspadden-orca-evaluations-gsd-path-release-1-2-0-f36f24a-claude-retry2-quick-repo/2b09f639-9572-4024-b21b-11dc012938fd.jsonl": 2722
+      },
+      "aggregate": 2722,
+      "file_sha256": {
+        "/Users/jeremymcspadden/.claude/projects/-Users-jeremymcspadden-orca-evaluations-gsd-path-release-1-2-0-f36f24a-claude-retry2-quick-repo/2b09f639-9572-4024-b21b-11dc012938fd.jsonl": "05cb5f2be2b954cc9a6f4f6ded817d11104781809a51c65fe35b1555425ca4b7"
+      },
+      "accepted_phase": "review collection plus both final reuse checks"
+    },
+    {
+      "session_id": "550433d4-5a08-471d-b564-9d21deb88da7",
+      "files": {
+        "/Users/jeremymcspadden/.claude/projects/-Users-jeremymcspadden-orca-evaluations-gsd-path-release-1-2-0-f36f24a-claude-retry2-quick-repo/550433d4-5a08-471d-b564-9d21deb88da7.jsonl": 461
+      },
+      "aggregate": 461,
+      "file_sha256": {
+        "/Users/jeremymcspadden/.claude/projects/-Users-jeremymcspadden-orca-evaluations-gsd-path-release-1-2-0-f36f24a-claude-retry2-quick-repo/550433d4-5a08-471d-b564-9d21deb88da7.jsonl": "c2aaceb00cf038da2ce46fef030c61e5ce64b331cc8ff83769caa8bd909d521a"
+      },
+      "accepted_phase": "archive preparation"
+    },
+    {
+      "session_id": "a5c21453-900f-4a2f-87dc-b0c7b5ad5dcb",
+      "files": {
+        "/Users/jeremymcspadden/.claude/projects/-Users-jeremymcspadden-orca-evaluations-gsd-path-release-1-2-0-f36f24a-claude-retry2-quick-repo/a5c21453-900f-4a2f-87dc-b0c7b5ad5dcb.jsonl": 6332
+      },
+      "aggregate": 6332,
+      "file_sha256": {
+        "/Users/jeremymcspadden/.claude/projects/-Users-jeremymcspadden-orca-evaluations-gsd-path-release-1-2-0-f36f24a-claude-retry2-quick-repo/a5c21453-900f-4a2f-87dc-b0c7b5ad5dcb.jsonl": "b4ac1307d8a07375e6fda118bb915343ce4d1e3b11ef7a9f09a8ad4dfc76b7f4"
+      },
+      "accepted_phase": "ship integration plus resumed delayed diagnosis"
+    }
+  ],
+  "review2_parent_plus_direct_child": 20945,
+  "accepted_contexts_within_session_limit": true,
+  "warning_threshold": 4000,
+  "warning_contexts": [
+    "a41ef256-b9d1-4ae2-8dce-3f286cf83037",
+    "b5627f8a-3c74-4064-aa69-7d477b67e7c7",
+    "8bfb5639-edc7-4926-b0fc-40cea7e557dd",
+    "bc252c6b-3498-4f11-bf2e-8d990a6f9e4c",
+    "8600a971-d8b7-4084-8d04-b17c151ac882",
+    "824cd1b8-6514-4ade-87c5-462a525d8279",
+    "a5c21453-900f-4a2f-87dc-b0c7b5ad5dcb"
+  ]
+}

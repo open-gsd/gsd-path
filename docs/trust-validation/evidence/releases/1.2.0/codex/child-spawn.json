@@ -1,0 +1,33 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "codex",
+  "run_id": "codex-1.2.0-f36f24a-20260920",
+  "result": "pass",
+  "step": "child-spawn",
+  "command": "collaboration.spawn_agent",
+  "child_api": "collaboration.spawn_agent",
+  "child_id": "build_t001",
+  "child_status": "completed",
+  "output": {
+    "child_id": "build_t001",
+    "status": "completed",
+    "spawn_call": {
+      "call_id": "call_5q4TcOVBPtcSydVN1fuw4xeu",
+      "name": "spawn_agent",
+      "namespace": "collaboration",
+      "arguments": {
+        "task_name": "build_t001",
+        "fork_turns": "none"
+      }
+    },
+    "spawn_output": "{\"task_name\":\"/root/build_t001\"}",
+    "list_agents_states": [
+      {
+        "agent_name": "/root/build_t001",
+        "agent_status": {
+          "completed": "T001 ready. Verify passed: `python3 -B tests/test_count.py` (4 tests); `git diff --check` passed.\nChanged: `count.py`, `tests/test_count.py`, `.project/tasks/T001-extend-widget-counter.md` (Log only).\nNative identity: `build_t001`; CODEX_SESSION_ID: `01a0bf8e-81f8-79f0-950a-5abd02c95070`.\nRESULT: T001 ready"
+        }
+      }
+    ]
+  }
+}

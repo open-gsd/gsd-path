@@ -1,0 +1,11 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "copilot",
+  "run_id": "copilot-retry2-1.2.0-f36f24a-20260920",
+  "result": "pass",
+  "step": "worktrees",
+  "command": "git worktree list --porcelain",
+  "output": "worktree /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/copilot-retry2/quick/repo\nHEAD 4ea606e2c4b2b6e668fc0eced77e8525aa7d1372\nbranch refs/heads/gsd-path/M001\n",
+  "primary_worktree": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/copilot-retry2/quick/repo",
+  "integration_worktree": "/Users/jeremymcspadden/.gsd-path/projects/a57e2bac1d669a78554f85c10c971804061243a1b25a1394059610b2ccfc3737/f9d89d7f41a3317a6490597980a16054fc26d787acc451e7a9f07f5ec1639d9e/integrate/M001"
+}

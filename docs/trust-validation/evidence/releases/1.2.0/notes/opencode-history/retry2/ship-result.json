@@ -1,0 +1,30 @@
+{
+  "host": "opencode",
+  "command": [
+    "opencode",
+    "run",
+    "--format",
+    "json",
+    "--auto",
+    "--pure"
+  ],
+  "exit_code": 0,
+  "started_at": "2026-09-20T18:13:17.755986+00:00",
+  "elapsed_seconds": 128.835132333,
+  "head": "f0c8774ccf3b366a0c48bf6da81005795a804ddb",
+  "session_id": "ses_f3ffa35d4ffe4ECK1C3rhNYclv",
+  "final_message": "Ship transaction complete and integration proven. Stopped before any next-milestone action, per directive.\n\n**Outcome** \u2014 M001 `count-cli` shipped via the canonical transaction, all gates helper-owned, no reruns:\n- `prepare` (reused `.project/archive/001-count-cli`, carried_forward 0) \u2192 `render-manifest` \u2192 `preflight` \u2192 `record-shipment` (`shipped/done`)\n- Ship commit `f0c8774` \u2014 `ship: M001 \u2014 count-cli`, exact `Archive:`/`Reviewed-HEAD: ac229d0` body, `.project/`-only scope verified from staged list, committed via `git commit -F`\n- `validate` \u2192 PASS (raw JSON in tool log)\n- `integrate` (direct, local bare origin) \u2192 `--no-ff` landing `0ddfdb7` on main, annotated tag `milestone/001-count-cli`\n- `validate-integrated` \u2192 PASS (raw JSON in tool log); status helper confirms `verified`, `published: true`, clean worktree on `gsd-path/M001` at the ship commit\n\n**Review** \u2014 [`/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry2/quick/repo/.project/archive/001-count-cli/MANIFEST.md`](/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/opencode-retry2/quick/repo/.project/archive/001-count-cli/MANIFEST.md)\n\n**Next** \u2014 None. Integration is proven and no new milestone was started; a later `$gsd-path` invocation owns any next-milestone binding.",
+  "usage": {
+    "tokens": {
+      "total": 65740,
+      "input": 1168,
+      "output": 378,
+      "reasoning": 258,
+      "cache": {
+        "write": 0,
+        "read": 63936
+      }
+    },
+    "cost": 0
+  }
+}

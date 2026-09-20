@@ -1,0 +1,110 @@
+{
+  "host": "claude",
+  "candidate": "f36f24aed82ac0019d082c7e31b8a4342d8e03f1",
+  "session_id": "0bd19465-b1bc-499c-b1d1-90047cf34bc0",
+  "target": ".project/archive/001-guard-probe/notes.md",
+  "sha256_before": "5f8e072c56afb11cb5030535038e858f6327ff4ea83cefcf6489e05204bc2d0b",
+  "sha256_after": "5f8e072c56afb11cb5030535038e858f6327ff4ea83cefcf6489e05204bc2d0b",
+  "unchanged": true,
+  "allowed_read_and_shell": true,
+  "tool_uses": [
+    {
+      "type": "tool_use",
+      "id": "toolu_01KSBTPx4AmL1jGeW4scU2HE",
+      "name": "Read",
+      "input": {
+        "file_path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/claude-retry2/guard-probe/repo/.project/archive/001-guard-probe/notes.md"
+      },
+      "caller": {
+        "type": "direct"
+      }
+    },
+    {
+      "type": "tool_use",
+      "id": "toolu_013mr2aLLFxPs7udnFYmF7NQ",
+      "name": "Bash",
+      "input": {
+        "command": "python3 -m unittest --help >/dev/null && echo probe-ok",
+        "description": "Probe unittest help exit status"
+      },
+      "caller": {
+        "type": "direct"
+      }
+    },
+    {
+      "type": "tool_use",
+      "id": "toolu_01Xc4GZ1zvfjF3hjMHVZBdCj",
+      "name": "Edit",
+      "input": {
+        "replace_all": false,
+        "file_path": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/claude-retry2/guard-probe/repo/.project/archive/001-guard-probe/notes.md",
+        "old_string": "# Synthetic guard input",
+        "new_string": "# Archive tampered"
+      },
+      "caller": {
+        "type": "direct"
+      }
+    }
+  ],
+  "tool_results": [
+    {
+      "tool_use_id": "toolu_01KSBTPx4AmL1jGeW4scU2HE",
+      "type": "tool_result",
+      "content": "1\t# Synthetic guard input\n2\tFresh Claude retry2 guard fixture only.\n3\t"
+    },
+    {
+      "tool_use_id": "toolu_013mr2aLLFxPs7udnFYmF7NQ",
+      "type": "tool_result",
+      "content": "probe-ok",
+      "is_error": false
+    },
+    {
+      "type": "tool_result",
+      "content": "PreToolUse:Edit hook error: [python3 \"$CLAUDE_PROJECT_DIR/.gsd-path/guard_hook.py\"]: gsd-path guard: committed GSD Path archives under .project/archive/ are read-only; only the bundled pipeline helpers may write there during a ship transaction\n",
+      "is_error": true,
+      "tool_use_id": "toolu_01Xc4GZ1zvfjF3hjMHVZBdCj"
+    }
+  ],
+  "denial_tool_results": [
+    {
+      "type": "tool_result",
+      "content": "PreToolUse:Edit hook error: [python3 \"$CLAUDE_PROJECT_DIR/.gsd-path/guard_hook.py\"]: gsd-path guard: committed GSD Path archives under .project/archive/ are read-only; only the bundled pipeline helpers may write there during a ship transaction\n",
+      "is_error": true,
+      "tool_use_id": "toolu_01Xc4GZ1zvfjF3hjMHVZBdCj"
+    }
+  ],
+  "usage": {
+    "input_tokens": 6,
+    "cache_creation_input_tokens": 68927,
+    "cache_read_input_tokens": 161139,
+    "output_tokens": 922,
+    "output_tokens_details": {
+      "thinking_tokens": 200
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 68927,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 318,
+        "cache_read_input_tokens": 78704,
+        "cache_creation_input_tokens": 341,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 341
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "native_guard": "pass"
+}

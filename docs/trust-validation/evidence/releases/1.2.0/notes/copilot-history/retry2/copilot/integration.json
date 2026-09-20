@@ -1,0 +1,17 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "copilot",
+  "run_id": "copilot-retry2-1.2.0-f36f24a-20260920",
+  "result": "pass",
+  "step": "integration",
+  "command": "RT=/Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334\nREPO=/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/copilot-retry2/quick/repo\npython3 -B \"$RT/archive_milestone.py\" integrate --repo \"$REPO\" --slug 001-count-json-cli",
+  "output": "{\"archive\": \".project/archive/001-001-count-json-cli\", \"base\": \"ef739a35fcf852b105c44d830654e838d9c44769\", \"commit\": \"4ea606e2c4b2b6e668fc0eced77e8525aa7d1372\", \"integrate\": \"ef739a35fcf852b105c44d830654e838d9c44769\", \"landing\": \"ef739a35fcf852b105c44d830654e838d9c44769\", \"mode\": \"direct\", \"tag\": \"milestone/001-001-count-json-cli\"}\n<shellId: 11 completed with exit code 0>",
+  "fixture_bundle": "copilot/fixture.bundle",
+  "run_manifest": ".project/archive/001-001-count-json-cli/trust-run-manifest.json",
+  "ship_commit": "4ea606e2c4b2b6e668fc0eced77e8525aa7d1372",
+  "bound_branch": "gsd-path/M001",
+  "default_branch": "main",
+  "pre_integration_default_commit": "7f975f584ae88bf263a6821958f2adbca4694263",
+  "integration_commit": "ef739a35fcf852b105c44d830654e838d9c44769",
+  "milestone_tag": "milestone/001-001-count-json-cli"
+}

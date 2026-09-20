@@ -1,0 +1,11 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "grok",
+  "run_id": "grok-1.2.0-f36f24a-retry3",
+  "result": "pass",
+  "step": "task-verify",
+  "command": "python3 -m unittest test_count.py -v",
+  "output": "{\"command\": \"python3 -m unittest test_count.py -v\", \"commit\": \"8d0e03a257d396654520715c683da3a3f6d7aaff\", \"execution\": {\"evidence\": \"/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/grok-retry3/quick/repo/.git/gsd-path/dispatch/gsd-path-M001/T001/manual-2026-09-20T181621+0000/verify.json\", \"exit_code\": 0, \"location\": \"sidecar gsd-path-verify/task-t001-verify\", \"stderr\": \"test_invalid_input_useful_stderr (test_count.TestCountCLI) ... ok\\ntest_json_before_or_after_optional_count (test_count.TestCountCLI) ... ok\\ntest_no_args_prints_zero_widgets (test_count.TestCountCLI) ... ok\\ntest_signed_integer_prints_count_widgets (test_count.TestCountCLI) ... ok\\n\\n----------------------------------------------------------------------\\nRan 4 tests in 0.203s\\n\\nOK\\n\", \"stdout\": \"\", \"worktree\": \"/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/grok-retry3/quick/repo\"}, \"recorded_at\": \"2026-09-20T18:16:22+00:00\", \"result\": \"pass\", \"schema\": \"gsd-path/verify-ledger/v2\"}\n{\"command\": \"python3 -m unittest discover -s . -p 'test_*.py' -v\", \"commit\": \"79e968d13f1f1c12177de4efaa7358064e45b3a5\", \"execution\": {\"branch\": \"gsd-path-verify/project-verify\", \"exit_code\": 0, \"stderr\": \"test_invalid_input_useful_stderr (test_count.TestCountCLI) ... ok\\ntest_json_before_or_after_optional_count (test_count.TestCountCLI) ... ok\\ntest_no_args_prints_zero_widgets (test_count.TestCountCLI) ... ok\\ntest_signed_integer_prints_count_widgets (test_count.TestCountCLI) ... ok\\n\\n----------------------------------------------------------------------\\nRan 4 tests in 0.243s\\n\\nOK\\n\", \"stdout\": \"\", \"worktree\": \"/Users/jeremymcspadden/.gsd-path/projects/c0686bff33ffc28907dac3212a446c1c196b74c918841f60dc1c2f9052ca2fdf/7196de6c9b44d816d047189ee42a912aa3b4cd361664d76a930194a43fbc445b/verify/project-verify\"}, \"recorded_at\": \"2026-09-20T18:25:45+00:00\", \"result\": \"pass\", \"schema\": \"gsd-path/verify-ledger/v2\"}\n",
+  "verify_artifact": ".project/archive/001-widget-count-cli/build/verify-ledger.jsonl",
+  "verify_exit_code": 0
+}

@@ -4,6 +4,9 @@
 [release contract](TRUST-VALIDATION-SPEC.md#release-contract) for release trust
 and required live-check scope.
 
+The historical results below do not define the current required host set;
+see [Live-check scope](TRUST-VALIDATION-SPEC.md#live-check-scope).
+
 Release 1.1.0 uses frozen candidate `af0b082964510c471798826d7e2e05617d8d6dc3`
 from main on 2026-09-18, after PRs #124 and #125. Every host below has a
 validated full-milestone receipt and a passing external CLI acceptance check.

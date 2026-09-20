@@ -1,0 +1,148 @@
+{
+  "method": "Sum native gen_metadata protobuf field1/field4/field3 output including thinking; unique original parent+child conversation IDs; cumulative resumed usage counted once. Calibrated against CLI result usage.",
+  "session_ceiling": 30000,
+  "authority": "Owner instructions",
+  "groups": [
+    {
+      "members": [
+        {
+          "conversation_id": "4c9b696a-e9d5-4475-a5f2-e9f76573420a",
+          "output_tokens": 4241,
+          "metadata_rows": 20
+        }
+      ],
+      "total_output_tokens": 4241,
+      "pass": true
+    },
+    {
+      "members": [
+        {
+          "conversation_id": "9789f160-b5ad-4db2-8ce9-bc6f5c6464b5",
+          "output_tokens": 5112,
+          "metadata_rows": 30
+        },
+        {
+          "conversation_id": "e499d980-321a-45ec-ba59-877194868c7b",
+          "output_tokens": 5014,
+          "metadata_rows": 24
+        }
+      ],
+      "total_output_tokens": 10126,
+      "pass": true
+    },
+    {
+      "members": [
+        {
+          "conversation_id": "ba48c51e-fd43-4f1b-9df0-fee838cdbffe",
+          "output_tokens": 6565,
+          "metadata_rows": 45
+        },
+        {
+          "conversation_id": "4e3ee2aa-b382-4f07-8c46-2c34fa2c3b35",
+          "output_tokens": 5580,
+          "metadata_rows": 25
+        }
+      ],
+      "total_output_tokens": 12145,
+      "pass": true
+    },
+    {
+      "stage": "collect-define",
+      "members": [
+        {
+          "conversation_id": "f21b75f3-3ad5-44cb-8b4d-6ee79a25e31a",
+          "output_tokens": 5155
+        }
+      ],
+      "total_output_tokens": 5155,
+      "pass": true
+    },
+    {
+      "stage": "plan-including-resume",
+      "members": [
+        {
+          "conversation_id": "bd85dd6e-aabe-4310-a1bf-ca5413e702e8",
+          "output_tokens": 12631
+        }
+      ],
+      "total_output_tokens": 12631,
+      "pass": true
+    },
+    {
+      "stage": "prepare-build",
+      "members": [
+        {
+          "conversation_id": "321f4219-9a73-4e07-974d-4d8d7757c616",
+          "output_tokens": 5819
+        }
+      ],
+      "total_output_tokens": 5819,
+      "pass": true
+    },
+    {
+      "stage": "native-coder",
+      "members": [
+        {
+          "conversation_id": "2065a5fd-d1d4-49f3-9ba4-2bf8fe752e6e",
+          "output_tokens": 4820
+        },
+        {
+          "conversation_id": "55d81b04-4113-4954-bf67-131df20d88f7",
+          "output_tokens": 3131
+        }
+      ],
+      "total_output_tokens": 7951,
+      "pass": true
+    },
+    {
+      "stage": "finish-task",
+      "members": [
+        {
+          "conversation_id": "c058abc3-c879-41eb-a1f1-cb4587a8513e",
+          "output_tokens": 2603
+        }
+      ],
+      "total_output_tokens": 2603,
+      "pass": true
+    },
+    {
+      "stage": "wave",
+      "members": [
+        {
+          "conversation_id": "f5a68248-516c-432f-83e4-40e0cf37463e",
+          "output_tokens": 12291
+        },
+        {
+          "conversation_id": "fd316feb-2872-4d5e-9da2-5e818cf96e0d",
+          "output_tokens": 4262
+        }
+      ],
+      "total_output_tokens": 16553,
+      "pass": true
+    },
+    {
+      "stage": "final-reuse-archive-prepare",
+      "members": [
+        {
+          "conversation_id": "fb55d80e-9802-4522-b8ab-c2656ebe1537",
+          "output_tokens": 10611
+        }
+      ],
+      "total_output_tokens": 10611,
+      "pass": true,
+      "source": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/reuse-result.json"
+    },
+    {
+      "stage": "ship-integrate",
+      "members": [
+        {
+          "conversation_id": "c53b4872-2484-480c-a4f3-d7b98cccc640",
+          "output_tokens": 3551
+        }
+      ],
+      "total_output_tokens": 3551,
+      "pass": true,
+      "source": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity-retry4/ship-result.json"
+    }
+  ]
+}

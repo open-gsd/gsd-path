@@ -1,0 +1,17 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "cursor",
+  "run_id": "cursor-1.2.0-f36f24a",
+  "result": "pass",
+  "step": "integration",
+  "command": "python3 /Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334/archive_milestone.py validate-integrated --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/cursor/quick/repo --slug repo",
+  "output": "{\"archive\": \".project/archive/001-repo\", \"base\": \"ae83257ef39863568423792e40d89d1f562f394d\", \"commit\": \"2fb1a3d835ce50b5b6d2a0de3289a0f22b4d114f\", \"integrate\": \"ae83257ef39863568423792e40d89d1f562f394d\", \"landing\": \"ae83257ef39863568423792e40d89d1f562f394d\", \"mode\": \"direct\", \"tag\": \"milestone/001-repo\"}\n",
+  "fixture_bundle": "cursor/fixture.bundle",
+  "run_manifest": ".project/archive/001-repo/trust-run-manifest.json",
+  "ship_commit": "2fb1a3d835ce50b5b6d2a0de3289a0f22b4d114f",
+  "bound_branch": "gsd-path/M001",
+  "default_branch": "main",
+  "pre_integration_default_commit": "180a3aeca7e39db424b4787d242fefaabaf14fb4",
+  "integration_commit": "ae83257ef39863568423792e40d89d1f562f394d",
+  "milestone_tag": "milestone/001-repo"
+}

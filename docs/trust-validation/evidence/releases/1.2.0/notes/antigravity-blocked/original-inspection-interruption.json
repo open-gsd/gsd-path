@@ -1,0 +1,14 @@
+{
+  "status": "incomplete",
+  "session_id": "c784beba-c4a1-4982-8f14-8aa4a2522e05",
+  "owner_session_output_limit": 30000,
+  "reported_usage": {
+    "input_tokens": 209763,
+    "output_tokens": 34747,
+    "thinking_tokens": 27784,
+    "cache_read_tokens": 1642279,
+    "total_tokens": 244510
+  },
+  "native_result": "### Native Inspection Children Status\n\nListing active native subagents:\n\n- **`inspect_codebase`**\n  - **Conversation ID**: `668029c4-2b51-48d1-a4e2-adfe59a72c36`\n  - **State**: `idle`\n  - **Transcript**: [transcript.jsonl](file:///Users/jeremymcspadden/.gemini/antigravity-cli/brain/668029c4-2b51-48d1-a4e2-adfe59a72c36/.system_generated/logs/transcript.jsonl)\n  - **Worktree**: `/Users/jeremymcspadden/.gsd-path/projects/9484f69b9e7303d363648a27a2578e30d95e9634e9325bf7d18263b83ceaf4e8/e5678aab75fa4b942316be6eaf8dedd7fce694d680dac57763bd2ae326e52973/verify/inspect-codebase`\n  - **Status**: Not finished. Halted after encountering an error reading `.project/STATE.md` (`stat .../.project/STATE.md: no such file or directory`) prior to the server restart. The target output artifact [`.project/research/evidence-codebase.md`](file:///Users/jeremymcspadden/.gsd-path/projects/9484f69b9e7303d363648a27a2578e30d95e9634e9325bf7d18263b83ceaf4e8/e5678aab75fa4b942316be6eaf8dedd7fce694d680dac57763bd2ae326e52973/verify/inspect-codebase/.project/research/evidence-codebase.md) has not been written.\n\n- **`inspect_docs`**\n  - **Conversation ID**: `592780b3-786c-4395-aea2-b51492ad5ed3`\n  - **State**: `idle`\n  - **Transcript**: [transcript.jsonl](file:///Users/jeremymcspadden/.gemini/antigravity-cli/brain/592780b3-786c-4395-aea2-b51492ad5ed3/.system_generated/logs/transcript.jsonl)\n  - **Worktree**: `/Users/jeremymcspadden/.gsd-path/projects/9484f69b9e7303d363648a27a2578e30d95e9634e9325bf7d18263b83ceaf4e8/e5678aab75fa4b942316be6eaf8dedd7fce694d680dac57763bd2ae326e52973/verify/inspect-docs`\n  - **Status**: Not finished. Stopped after examining git history and `check_docs_audit.py` prior to the server restart. The target output artifact [`.project/research/DOCS-AUDIT.md`](file:///Users/jeremymcspadden/.gsd-path/projects/9484f69b9e7303d363648a27a2578e30d95e9634e9325bf7d18263b83ceaf4e8/e5678aab75fa4b942316be6eaf8dedd7fce694d680dac57763bd2ae326e52973/verify/inspect-docs/.project/research/DOCS-AUDIT.md) has not been written.\n\nNeither child has completed its assignment, no replacements have been spawned, and no artifacts have been modified. Stopping here for evaluator instruction.\n",
+  "evidence": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/antigravity/quick/run-20260920T155400418130Z"
+}

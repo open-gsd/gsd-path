@@ -1,0 +1,395 @@
+
+> @opengsd/gsd-path@1.2.0 verify
+> npm test && npm run test:python && python3 scripts/sync_skill_resources.py --check
+
+
+> @opengsd/gsd-path@1.2.0 test
+> node --test tests/*.test.mjs
+
+✔ detectBumpLevel maps conventional commits to semver increments (2.276667ms)
+✔ detectBumpLevel ignores merge commits and non-release work (0.265333ms)
+✔ nextVersion increments major, minor, and patch from the base version (1.190958ms)
+✔ candidate preparation retries reuse an unpublished version (1824.758ms)
+✔ Node and Python installers share target ownership locks (1465.315417ms)
+✔ project adapter receives install options and doctor roots (29.091209ms)
+✔ Node CLI installs and explicitly restores an external project runtime (2291.23775ms)
+✔ default path resolution (33.235083ms)
+✔ interpreter probe rejects unsupported Python (334.745208ms)
+✔ skill names are derived from resource manifest (26.770625ms)
+✔ discussion skill is installed and invocable (128.99125ms)
+✔ install refuses to replace an unrelated path skill (92.092666ms)
+✔ install refuses path alias with invalid version (338.39575ms)
+✔ install replaces a pre-stamp path alias with the managed runtime (165.079625ms)
+✔ install replaces an owned path router alias (117.051542ms)
+✔ path is a short slash name for the router (338.675458ms)
+✔ v2 canonical skills are installed without aliases (121.320209ms)
+✔ local root resolution (53.395292ms)
+✔ all platform transforms (640.990167ms)
+✔ staging from the real repo applies the real platform adapter to every skill (465.208041ms)
+✔ all targets install with shared codex+zed root (1204.870625ms)
+
+  ✦ GSD Path installer v1.2.0
+  global install · dry run
+
+✔ install reports progress events (153.41175ms)
+  ✓ codex: would install 16 shared skills to /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/gsd-path-test-oKUkWr/real-codex/skills
+
+  Dry run — nothing was written.
+
+✔ codex dry run validates the resolved shared profile from the real repository (238.112542ms)
+✔ shared agent hosts use one deployment and back up existing entries (231.934916ms)
+✔ unrelated targets cannot share or overlap roots (62.803916ms)
+✔ non-shared host cannot write the standard shared root (26.738625ms)
+✔ cursor subagent installed and existing copy backed up (155.415334ms)
+✔ existing managed entries backed up and unrelated preserved (145.54675ms)
+✔ codex migrates legacy root and preserves unrelated entries (133.001542ms)
+✔ migrateLegacy false skips the legacy root entirely (169.242209ms)
+✔ dry run makes no destination changes (930.441584ms)
+✔ dry run reports the registered skill count (77.396083ms)
+✔ stale sync fails before mutation (33.257375ms)
+✔ real mismatches detects a stale generated resource (842.458125ms)
+✔ target root must not overlap source (45.044542ms)
+✔ backup root cannot overlap another target (40.969208ms)
+✔ multi-target failure rolls back prior target and backup (178.8425ms)
+✔ failure after backup move still restores original (177.577542ms)
+✔ install collision does not remove a concurrent destination (107.270959ms)
+✔ active target owner prevents backup mutation (97.068667ms)
+✔ install lock publishes a live owner (156.485625ms)
+✔ install recovers a stale owned lock (150.240083ms)
+✔ concurrent stale recovery keeps each quarantine owned (409.0515ms)
+✔ install reclaims an orphaned stale quarantine (140.434375ms)
+✔ install reclaims a unique orphaned stale quarantine (144.180708ms)
+✔ stale lock recovery preserves a replacement owner (171.587084ms)
+✔ lost stale lock race removes only the quarantine (133.898333ms)
+
+  ✦ GSD Path installer v1.2.0
+  project install into /private/var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/gsd-path-test-KzenAZ/update-project
+
+✔ failure restores cursor subagent (204.14225ms)
+✔ staging stamps the installed VERSION from package.json (109.732ms)
+✔ detectInstalls finds only roots with managed entries (31.750208ms)
+  ✓ claude: installed 16 skills to /private/var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/gsd-path-test-KzenAZ/update-project/.claude/skills
+
+  Done. Restart active agent sessions, then invoke the router explicitly.
+
+
+  ✦ GSD Path installer v1.2.0
+  project update in /private/var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/gsd-path-test-KzenAZ/update-project
+
+  ✓ claude: updated 16 skills to /private/var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/gsd-path-test-KzenAZ/update-project/.claude/skills
+  ✓ claude: backed up 16 entries to /private/var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/gsd-path-test-KzenAZ/update-project/.claude/disabled-gsd-skills
+
+  Updated. Previous copies are in each root's disabled-gsd-skills backup.
+
+
+  ✦ GSD Path installer v1.2.0
+  project update in /private/var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/gsd-path-test-ccfo73/empty-project
+
+  ✗ no existing GSD Path skills found to update (this project); run an install first, e.g. --all --local
+✔ update refreshes only detected local installs (234.176459ms)
+✔ update with nothing installed fails cleanly (35.19325ms)
+✔ cli parses target flags and requires a selection (36.0705ms)
+✔ hooks require a project (32.694042ms)
+✔ cli loads from an install path containing spaces (116.683375ms)
+✔ doctor reports missing package version (28.475917ms)
+✔ doctor reports an unreadable skills root (27.944042ms)
+✔ doctor flags stale versions and incomplete installs (102.174917ms)
+
+  ✦ GSD Path installer v1.2.0
+  doctor · global installs
+
+  ✓ claude: 16 skills at /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/gsd-path-test-EkKIyY/claude/skills (v9.9.9)
+
+  Healthy.
+
+
+  ✦ GSD Path installer v1.2.0
+  doctor · global installs
+
+  ✗ claude: incomplete install at /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/gsd-path-test-EkKIyY/claude/skills — missing gsd-path-plan
+
+  1 problem found.
+
+
+  ✦ GSD Path installer v1.2.0
+  doctor · global installs · /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/gsd-path-test-5MAgWI/unresolved-worktree
+
+  ! claude: not installed (/var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/gsd-path-test-5MAgWI/uninstalled-claude/skills)
+  ! project: no .claude/CLAUDE.md bridge (only written for --claude installs)
+  ✓ hooks: .gsd-path/guard_hook.py current
+  ✓ hooks: .gsd-path/git_guard.py current
+  ✗ project: AGENTS.md lacks plain-prompt re-entry — merge the current contract
+  ✗ project: WORKFLOW.md lacks plain-prompt re-entry — merge the current contract
+  ✗ project: missing status launcher
+  ✗ project: missing runtime pipeline_state.py
+  ✗ project: missing runtime roadmap.py
+  ✗ project: missing runtime check_handoffs.py
+  ✗ project: missing runtime check_task_briefs.py
+  ✗ project: missing runtime isolation.py
+  ✗ project: missing runtime discussion_records.py
+  ✗ project: missing runtime pipeline_git.py
+  ✗ project: missing runtime promote_lookahead.py
+  ✗ project: missing runtime detect_project.py
+  ✗ project: missing runtime pipeline_diagnose.py
+  ✗ project: missing runtime pipeline_undo.py
+  ✗ project: missing runtime archive_milestone.py
+  ✗ project: missing runtime review_panel.py
+  ✗ project: missing runtime _common.py
+  ✗ project: missing runtime worktree_paths.py
+  ✗ project: missing runtime build_recovery.py
+  ✗ project: missing runtime state_checkpoint.py
+  ✗ project: missing runtime state_promote.py
+  ✗ project: missing runtime discussion_validate.py
+  ✗ project: missing runtime integration.py
+  ✗ project: missing runtime build_state.py
+  ✗ project: missing runtime lean_verification.py
+  ✗ project: missing runtime check_docs_audit.py
+  ✗ project: missing runtime path_config.py
+  ✗ project: missing runtime model_policy.py
+  ✗ project: missing runtime loop_run.py
+  ✗ hooks: cannot resolve the git hooks directory (is git runnable?); git hooks unverified
+  ! state: no .project/ pipeline state (nothing started yet)
+
+  30 problems found.
+
+✔ doctor cli exits zero when healthy and nonzero on problems (99.133916ms)
+✔ doctor cli fails when a linked worktree hooks directory cannot be resolved (385.679458ms)
+✔ project runtime version install update refresh (5274.25825ms)
+✔ npm package includes the pipeline helpers (3316.546875ms)
+✔ packed Python installer starts with only packaged files (2485.144958ms)
+✔ every copied Python helper imports from its own bundle (25490.764042ms)
+✔ plugin manifest conforms to the Agent Plugins specification (1405.066875ms)
+✔ npm package file policy is owned by the resource manifest (48.983042ms)
+✔ npm verification graph includes every local suite (48.661667ms)
+✔ pull_request runs trust validator tests without requiring release receipts (331.7395ms)
+✔ push runs trust validator tests without requiring release receipts (370.476375ms)
+✔ manual frozen-candidate validation rejects stale receipts (413.584833ms)
+✔ npm publication and release workflow retain the strict blocking gate (566.1735ms)
+✔ release uses GitHub-hosted OIDC with a supported Node version and no npm token (2.062042ms)
+✔ manual dispatch publishes in the same job after the release gate (0.246291ms)
+✔ tag and manual versions resolve without changing the frozen package (643.385708ms)
+✔ manual dispatch without an explicit version resolves from package.json (567.857209ms)
+✔ version mismatch and invalid input fail before emitting release outputs (598.4485ms)
+✔ release rejects an unscoped or wrong-owner package before publication (333.157958ms)
+✔ npm packs the organization-scoped package (2173.06ms)
+✔ push preserves frozen package files between verification and publication (659.825ms)
+✔ push detects version rewriting regardless of the step label (1014.706042ms)
+✔ workflow_dispatch preserves frozen package files between verification and publication (668.784417ms)
+✔ workflow_dispatch detects version rewriting regardless of the step label (1111.583625ms)
+✔ failed manual release retries preserve candidate files and Git history before verification (1088.110417ms)
+✔ update_release_docs writes changelog and README release section (1130.146917ms)
+✔ README contains release documentation markers (0.679459ms)
+✔ package manifest includes CHANGELOG.md (0.507458ms)
+✔ wizard builds an --all install argv (5.637708ms)
+✔ wizard builds a per-host local dry run (2.088375ms)
+✔ wizard offers update when installs exist and honors quit (0.464541ms)
+✔ wizard cancels on q (0.224625ms)
+✔ banner carries the OpenGSD wordmark (0.079667ms)
+ℹ tests 91
+ℹ suites 0
+ℹ pass 91
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 33072.578666
+
+> @opengsd/gsd-path@1.2.0 test:python
+> python3 -m unittest discover -s tests
+
+...................................................................................................................................................................................................................................................................sssss...............................installing gsd-path-daemon — platform darwin, home /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp3kxxq55g/home
+[1/5] Create isolated virtualenv
+  $ /Applications/Xcode.app/Contents/Developer/usr/bin/python3 -m venv /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp3kxxq55g/home/.gsd-path/venv
+[2/5] Install gsd-path-daemon into the virtualenv
+  $ /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp3kxxq55g/home/.gsd-path/venv/bin/pip install --upgrade /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp3kxxq55g/repo/daemon
+[3/5] Install the tray extra (pystray + Pillow)
+  $ /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp3kxxq55g/home/.gsd-path/venv/bin/pip install --upgrade /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp3kxxq55g/repo/daemon[tray]
+[4/5] Register the LaunchAgent (autostart)
+  write /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp3kxxq55g/home/Library/LaunchAgents/org.gsd-path.daemon.plist
+  $ launchctl bootout gui/501/org.gsd-path.daemon
+  $ launchctl bootstrap gui/501 /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp3kxxq55g/home/Library/LaunchAgents/org.gsd-path.daemon.plist
+  warning: launchctl bootstrap failed; falling back to launchctl load
+  $ launchctl load -w /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp3kxxq55g/home/Library/LaunchAgents/org.gsd-path.daemon.plist
+[5/5] Build and register the native tray app
+  $ bash /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp3kxxq55g/repo/daemon/macos/build.sh
+  $ ditto -rsrc /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp3kxxq55g/repo/daemon/macos/build/GSDPathTray.app /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp3kxxq55g/home/Applications/GSDPathTray.app
+  $ osascript -e tell application "System Events" to delete login item "GSDPathTray"
+  $ osascript -e tell application "System Events" to make login item at end with properties {path:"/var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp3kxxq55g/home/Applications/GSDPathTray.app", hidden:false}
+install complete
+installing gsd-path-daemon — platform darwin, home /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp1it9uh5l/home
+[1/5] Create isolated virtualenv
+  $ /Applications/Xcode.app/Contents/Developer/usr/bin/python3 -m venv /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp1it9uh5l/home/.gsd-path/venv
+[2/5] Install gsd-path-daemon into the virtualenv
+  $ /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp1it9uh5l/home/.gsd-path/venv/bin/pip install --upgrade /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp1it9uh5l/repo/daemon
+[3/5] Install the tray extra (pystray + Pillow)
+  $ /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp1it9uh5l/home/.gsd-path/venv/bin/pip install --upgrade /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp1it9uh5l/repo/daemon[tray]
+[4/5] Register the LaunchAgent (autostart)
+  write /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp1it9uh5l/home/Library/LaunchAgents/org.gsd-path.daemon.plist
+  $ launchctl bootout gui/501/org.gsd-path.daemon
+  $ launchctl bootstrap gui/501 /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp1it9uh5l/home/Library/LaunchAgents/org.gsd-path.daemon.plist
+[5/5] Build and register the native tray app
+  $ bash /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp1it9uh5l/repo/daemon/macos/build.sh
+  $ ditto -rsrc /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp1it9uh5l/repo/daemon/macos/build/GSDPathTray.app /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp1it9uh5l/home/Applications/GSDPathTray.app
+  $ osascript -e tell application "System Events" to delete login item "GSDPathTray"
+  $ osascript -e tell application "System Events" to make login item at end with properties {path:"/var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp1it9uh5l/home/Applications/GSDPathTray.app", hidden:false}
+install complete
+installing gsd-path-daemon — platform darwin, home /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp1it9uh5l/home
+[1/5] Create isolated virtualenv
+  $ /Applications/Xcode.app/Contents/Developer/usr/bin/python3 -m venv /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp1it9uh5l/home/.gsd-path/venv
+[2/5] Install gsd-path-daemon into the virtualenv
+  $ /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp1it9uh5l/home/.gsd-path/venv/bin/pip install --upgrade /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp1it9uh5l/repo/daemon
+[3/5] Install the tray extra (pystray + Pillow)
+  $ /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp1it9uh5l/home/.gsd-path/venv/bin/pip install --upgrade /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp1it9uh5l/repo/daemon[tray]
+[4/5] Register the LaunchAgent (autostart)
+  write /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp1it9uh5l/home/Library/LaunchAgents/org.gsd-path.daemon.plist
+  $ launchctl bootout gui/501/org.gsd-path.daemon
+  $ launchctl bootstrap gui/501 /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp1it9uh5l/home/Library/LaunchAgents/org.gsd-path.daemon.plist
+[5/5] Build and register the native tray app
+  $ bash /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp1it9uh5l/repo/daemon/macos/build.sh
+  $ ditto -rsrc /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp1it9uh5l/repo/daemon/macos/build/GSDPathTray.app /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp1it9uh5l/home/Applications/GSDPathTray.app
+  $ osascript -e tell application "System Events" to delete login item "GSDPathTray"
+  $ osascript -e tell application "System Events" to make login item at end with properties {path:"/var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp1it9uh5l/home/Applications/GSDPathTray.app", hidden:false}
+install complete
+installing gsd-path-daemon — platform darwin, home /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp5qml9eui/home
+[1/2] Create isolated virtualenv
+  $ /Applications/Xcode.app/Contents/Developer/usr/bin/python3 -m venv /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp5qml9eui/home/.gsd-path/venv
+[2/2] Install gsd-path-daemon into the virtualenv
+  $ /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp5qml9eui/home/.gsd-path/venv/bin/pip install --upgrade /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp5qml9eui/repo/daemon
+autostart skipped (--no-autostart)
+tray app skipped (--no-tray)
+install complete
+installing gsd-path-daemon — platform darwin, home /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpwvpfckmo/home
+[1/5] Create isolated virtualenv
+  $ /Applications/Xcode.app/Contents/Developer/usr/bin/python3 -m venv /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpwvpfckmo/home/.gsd-path/venv
+[2/5] Install gsd-path-daemon into the virtualenv
+  $ /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpwvpfckmo/home/.gsd-path/venv/bin/pip install --upgrade /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpwvpfckmo/repo/daemon
+[3/5] Install the tray extra (pystray + Pillow)
+  $ /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpwvpfckmo/home/.gsd-path/venv/bin/pip install --upgrade /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpwvpfckmo/repo/daemon[tray]
+[4/5] Register the LaunchAgent (autostart)
+  write /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpwvpfckmo/home/Library/LaunchAgents/org.gsd-path.daemon.plist
+  $ launchctl bootout gui/501/org.gsd-path.daemon
+  $ launchctl bootstrap gui/501 /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpwvpfckmo/home/Library/LaunchAgents/org.gsd-path.daemon.plist
+[5/5] Build and register the native tray app
+  $ bash /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpwvpfckmo/repo/daemon/macos/build.sh
+  $ ditto -rsrc /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpwvpfckmo/repo/daemon/macos/build/GSDPathTray.app /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpwvpfckmo/home/Applications/GSDPathTray.app
+  $ osascript -e tell application "System Events" to delete login item "GSDPathTray"
+  $ osascript -e tell application "System Events" to make login item at end with properties {path:"/var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpwvpfckmo/home/Applications/GSDPathTray.app", hidden:false}
+install complete
+uninstalling gsd-path-daemon — platform darwin, home /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpwvpfckmo/home
+[1/3] Unload and remove the LaunchAgent
+...............s............................................................................................ss.....s...............................................................................................................................................................................F........./Applications/Xcode.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/subprocess.py:1052: ResourceWarning: subprocess 51183 is still running
+  _warn("subprocess %s is still running" % self.pid,
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Applications/Xcode.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/subprocess.py:1052: ResourceWarning: subprocess 51214 is still running
+  _warn("subprocess %s is still running" % self.pid,
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+......../Applications/Xcode.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/subprocess.py:1052: ResourceWarning: subprocess 71632 is still running
+  _warn("subprocess %s is still running" % self.pid,
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Applications/Xcode.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/subprocess.py:1052: ResourceWarning: subprocess 71914 is still running
+  _warn("subprocess %s is still running" % self.pid,
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Applications/Xcode.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/subprocess.py:1052: ResourceWarning: subprocess 74690 is still running
+  _warn("subprocess %s is still running" % self.pid,
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Applications/Xcode.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/subprocess.py:1052: ResourceWarning: subprocess 74717 is still running
+  _warn("subprocess %s is still running" % self.pid,
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+.........../Applications/Xcode.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/subprocess.py:1052: ResourceWarning: subprocess 2412 is still running
+  _warn("subprocess %s is still running" % self.pid,
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Applications/Xcode.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/subprocess.py:1052: ResourceWarning: subprocess 2565 is still running
+  _warn("subprocess %s is still running" % self.pid,
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+......................................................rm '.project/STATE.md'
+....Deleted branch gsd-path/M002 (was 74554a6).
+.......................................................................................................s.......................................................................................usage: python3 -m unittest [-h] --repo REPO [--project-dir PROJECT_DIR]
+                           [--review REVIEW]
+                           {research,decide,roadmap,patch,plan,wave,final}
+python3 -m unittest: error: argument --project-dir: --project-dir must be a relative path, found absolute: /abs/path
+.usage: python3 -m unittest [-h] --repo REPO [--project-dir PROJECT_DIR]
+                           [--review REVIEW]
+                           {research,decide,roadmap,patch,plan,wave,final}
+python3 -m unittest: error: argument --project-dir: --project-dir must not contain '..', found: ../x
+..................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................
+======================================================================
+FAIL: test_fix_tasks_resumes_after_only_first_batch_was_written (test_dispatch_driver.DispatchDriverTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/jeremymcspadden/orca/workspaces/gsd-path/release-gate/tests/test_dispatch_driver.py", line 1110, in test_fix_tasks_resumes_after_only_first_batch_was_written
+    self.assertEqual(self.round(root, "--wait", "60", wave=2)["status"], "done")
+AssertionError: 'blocked' != 'done'
+- blocked
++ done
+
+
+----------------------------------------------------------------------
+Ran 1747 tests in 2424.292s
+
+FAILED (failures=1, skipped=10)
+  $ launchctl bootout gui/501/org.gsd-path.daemon
+  remove /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpwvpfckmo/home/Library/LaunchAgents/org.gsd-path.daemon.plist
+[2/3] Remove the tray-app login item
+  $ osascript -e tell application "System Events" to delete login item "GSDPathTray"
+[3/3] Remove the copied tray app
+  already absent: /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpwvpfckmo/home/Applications/GSDPathTray.app
+note: the virtualenv at /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpwvpfckmo/home/.gsd-path/venv was kept; delete it manually to remove the daemon completely
+uninstall complete
+installing gsd-path-daemon — platform linux, home /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpx06xg7vb/home
+[1/4] Create isolated virtualenv
+  $ /Applications/Xcode.app/Contents/Developer/usr/bin/python3 -m venv /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpx06xg7vb/home/.gsd-path/venv
+[2/4] Install gsd-path-daemon into the virtualenv
+  $ /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpx06xg7vb/home/.gsd-path/venv/bin/pip install --upgrade /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpx06xg7vb/repo/daemon
+[3/4] Install the tray extra (pystray + Pillow)
+  $ /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpx06xg7vb/home/.gsd-path/venv/bin/pip install --upgrade /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpx06xg7vb/repo/daemon[tray]
+[4/4] Install the systemd user service (autostart, best-effort)
+  write /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpx06xg7vb/home/systemd/gsd-path-daemon.service
+  $ systemctl --user daemon-reload
+  $ systemctl --user enable --now gsd-path-daemon.service
+install complete
+uninstalling gsd-path-daemon — platform linux, home /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpx06xg7vb/home
+[1/1] Disable and remove the systemd user service
+  $ systemctl --user disable --now gsd-path-daemon.service
+  remove /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpx06xg7vb/home/systemd/gsd-path-daemon.service
+  $ systemctl --user daemon-reload
+note: the virtualenv at /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpx06xg7vb/home/.gsd-path/venv was kept; delete it manually to remove the daemon completely
+uninstall complete
+installing gsd-path-daemon — platform darwin, home /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpnfo_sns9/home
+[1/5] Create isolated virtualenv
+  $ /Applications/Xcode.app/Contents/Developer/usr/bin/python3 -m venv /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpnfo_sns9/home/.gsd-path/venv
+[2/5] Install gsd-path-daemon into the virtualenv
+  $ /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpnfo_sns9/home/.gsd-path/venv/bin/pip install --upgrade /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpnfo_sns9/repo/daemon
+[3/5] Install the tray extra (pystray + Pillow)
+  $ /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpnfo_sns9/home/.gsd-path/venv/bin/pip install --upgrade /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpnfo_sns9/repo/daemon[tray]
+[4/5] Register the LaunchAgent (autostart)
+  write /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpnfo_sns9/home/Library/LaunchAgents/org.gsd-path.daemon.plist
+  $ launchctl bootout gui/501/org.gsd-path.daemon
+  $ launchctl bootstrap gui/501 /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpnfo_sns9/home/Library/LaunchAgents/org.gsd-path.daemon.plist
+[5/5] Build and register the native tray app
+  $ bash /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpnfo_sns9/repo/daemon/macos/build.sh
+  $ ditto -rsrc /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpnfo_sns9/repo/daemon/macos/build/GSDPathTray.app /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpnfo_sns9/home/Applications/GSDPathTray.app
+  $ osascript -e tell application "System Events" to delete login item "GSDPathTray"
+  $ osascript -e tell application "System Events" to make login item at end with properties {path:"/var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpnfo_sns9/home/Applications/GSDPathTray.app", hidden:false}
+install complete
+installing gsd-path-daemon — platform win32, home /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmprflk4kpy/home
+[1/4] Create isolated virtualenv
+  $ /Applications/Xcode.app/Contents/Developer/usr/bin/python3 -m venv /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmprflk4kpy/home/.gsd-path/venv
+[2/4] Install gsd-path-daemon into the virtualenv
+  $ /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmprflk4kpy/home/.gsd-path/venv/Scripts/pip.exe install --upgrade /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmprflk4kpy/repo/daemon
+[3/4] Install the tray extra (pystray + Pillow)
+  $ /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmprflk4kpy/home/.gsd-path/venv/Scripts/pip.exe install --upgrade /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmprflk4kpy/repo/daemon[tray]
+[4/4] Create the Startup-folder shortcut (autostart)
+  $ powershell -NoProfile -ExecutionPolicy Bypass -Command $s = (New-Object -COM WScript.Shell).CreateShortcut('/var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmprflk4kpy/home/startup/gsd-path-daemon.lnk'); $s.TargetPath = '/var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmprflk4kpy/home/.gsd-path/venv/Scripts/pythonw.exe'; $s.Arguments = '-m gsd_daemon tray --serve'; $s.WorkingDirectory = '/var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmprflk4kpy/home/.gsd-path/venv/Scripts'; $s.Save()
+install complete
+uninstalling gsd-path-daemon — platform win32, home /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmprflk4kpy/home
+[1/1] Remove the Startup-folder shortcut
+  already absent: /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmprflk4kpy/home/startup/gsd-path-daemon.lnk
+note: the virtualenv at /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmprflk4kpy/home/.gsd-path/venv was kept; delete it manually to remove the daemon completely
+uninstall complete
+uninstalling gsd-path-daemon — platform win32, home /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmprflk4kpy/home
+[1/1] Remove the Startup-folder shortcut
+  remove /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmprflk4kpy/home/startup/gsd-path-daemon.lnk
+note: the virtualenv at /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmprflk4kpy/home/.gsd-path/venv was kept; delete it manually to remove the daemon completely
+uninstall complete
+{"criteria": ["SC1", "SC2"], "phase": "plan", "rows": 2, "surfaces": {}, "tasks": 2, "waves": [1]}
+{"dispatched": ["domain"], "phase": "research", "questions": 1, "skipped": ["pitfalls", "similar", "stack"]}

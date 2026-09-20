@@ -1,0 +1,32 @@
+{
+  "verdict": "pass",
+  "native_run": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/kimi-retry2/quick/run-20260920T180127420870Z/events.jsonl",
+  "manifest_task_branch": "gsd-path-verify/task-t001-verify",
+  "observed": {
+    "command": [
+      "/Applications/Xcode.app/Contents/Developer/usr/bin/python3",
+      "-B",
+      "/Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334/isolation.py",
+      "isolate-verify",
+      "--repo",
+      "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/kimi-retry2/quick/repo",
+      "--base",
+      "53947472fc1f76e589317a3bad93ae3404a495b3",
+      "--name",
+      "task-t001-verify"
+    ],
+    "exit_code": 0,
+    "result": {
+      "base": "53947472fc1f76e589317a3bad93ae3404a495b3",
+      "bound_branch": "gsd-path/M001",
+      "branch": "gsd-path-verify/task-t001-verify",
+      "detached": false,
+      "kind": "verify",
+      "mode": "sidecar",
+      "worktree": "/Users/jeremymcspadden/.gsd-path/projects/7ed9aaae7f8a274b6af8dfd581b9922782d7bcdd7a49b9afa1bb171017199a3c/f5d5436aef712184c3a8a61ec3e3c41347170dddf7df6035ea234e43e4b3f963/verify/task-t001-verify"
+    },
+    "script": "isolation.py",
+    "stderr": "",
+    "stdout": "{\"base\": \"53947472fc1f76e589317a3bad93ae3404a495b3\", \"bound_branch\": \"gsd-path/M001\", \"branch\": \"gsd-path-verify/task-t001-verify\", \"detached\": false, \"kind\": \"verify\", \"mode\": \"sidecar\", \"worktree\": \"/Users/jeremymcspadden/.gsd-path/projects/7ed9aaae7f8a274b6af8dfd581b9922782d7bcdd7a49b9afa1bb171017199a3c/f5d5436aef712184c3a8a61ec3e3c41347170dddf7df6035ea234e43e4b3f963/verify/task-t001-verify\"}\n"
+  }
+}

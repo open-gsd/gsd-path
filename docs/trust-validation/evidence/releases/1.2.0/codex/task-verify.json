@@ -1,0 +1,11 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "codex",
+  "run_id": "codex-1.2.0-f36f24a-20260920",
+  "result": "pass",
+  "step": "task-verify",
+  "command": "python3 -B tests/test_count.py",
+  "output": "{\"command\": \"python3 -B tests/test_count.py\", \"commit\": \"e9fac885a481d33880318bbcf2252c4778328526\", \"execution\": {\"evidence\": \"/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/codex/quick/repo/.git/gsd-path/dispatch/gsd-path-M001/T001/manual-2026-09-20T160750+0000/verify.json\", \"exit_code\": 0, \"location\": \"sidecar gsd-path-verify/task-t001-verify\", \"stderr\": \"....\\n----------------------------------------------------------------------\\nRan 4 tests in 1.716s\\n\\nOK\\n\", \"stdout\": \"\", \"worktree\": \"/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/codex/quick/repo\"}, \"recorded_at\": \"2026-09-20T16:07:52+00:00\", \"result\": \"pass\", \"schema\": \"gsd-path/verify-ledger/v2\"}\n{\"command\": \"python3 -B -m unittest discover -s tests -p 'test_*.py' -v\", \"commit\": \"ffac0968dbd09e4c9c5ac546e91ff5885ea38efc\", \"execution\": {\"branch\": \"gsd-path-verify/project-verify\", \"exit_code\": 0, \"stderr\": \"test_default_text (test_count.CountCLITests) ... ok\\ntest_invalid_arguments (test_count.CountCLITests) ... ok\\ntest_json_default_and_argument_orders (test_count.CountCLITests) ... ok\\ntest_signed_text (test_count.CountCLITests) ... ok\\n\\n----------------------------------------------------------------------\\nRan 4 tests in 0.871s\\n\\nOK\\n\", \"stdout\": \"\", \"worktree\": \"/Users/jeremymcspadden/.gsd-path/projects/71f432065ae431b534dd6ed7a17c52377120048a85a15b8e459fb560ea6d2ce6/5cce75f8455c33d289a25fdcfde9f4c7e7d0d979def3191bcbb7aa1fe9ac243e/verify/project-verify\"}, \"recorded_at\": \"2026-09-20T16:15:57+00:00\", \"result\": \"pass\", \"schema\": \"gsd-path/verify-ledger/v2\"}\n",
+  "verify_artifact": ".project/archive/001-widget-counter-cli/build/verify-ledger.jsonl",
+  "verify_exit_code": 0
+}

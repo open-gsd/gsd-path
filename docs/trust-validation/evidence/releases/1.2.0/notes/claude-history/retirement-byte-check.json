@@ -1,0 +1,87 @@
+{
+  "verdict": "identical",
+  "receipt_sha256": "07afd60e5d89aaaa77543e3c3038e63d6204a727b490771342ef8ba7b338918a",
+  "files": [
+    {
+      "path": "archive.json",
+      "sha256": "29a2f22a87aadf382bafbeb9fe8d24fc232430d9325d6e8dd4ba2e5e9cd5574c",
+      "history": "notes/claude-history/qualified-first-run/archive.json"
+    },
+    {
+      "path": "task-landing.json",
+      "sha256": "4e0aa0e7c2e1690c3a0fea935f09f4968a404015574ad2247324d6fa1f20f9f6",
+      "history": "notes/claude-history/qualified-first-run/task-landing.json"
+    },
+    {
+      "path": "child-spawn.json",
+      "sha256": "f64005ab502675a5ec2595cbc659a2562cd08d183fafd6a053dac66835248abc",
+      "history": "notes/claude-history/qualified-first-run/child-spawn.json"
+    },
+    {
+      "path": "reviews.json",
+      "sha256": "a02ebbc3b4b3246b3791998c46cf2bb313862d0960bcb5c46b17b0bdaff8bc61",
+      "history": "notes/claude-history/qualified-first-run/reviews.json"
+    },
+    {
+      "path": "guards.json",
+      "sha256": "575b10bf5e6b9f165b52bd7d74515256a2bf2ddb6aa8214a804dbd127c2681d8",
+      "history": "notes/claude-history/qualified-first-run/guards.json"
+    },
+    {
+      "path": "negative-events.json",
+      "sha256": "0a3d57f54af4ffccb6ed082fee029d51b5d847ae258f05fd95ed0829464ed9f8",
+      "history": "notes/claude-history/qualified-first-run/negative-events.json"
+    },
+    {
+      "path": "oracle.json",
+      "sha256": "ff98f147612ab61d7a89e0832f94e62ce6b11dad23ca2c2af85e5bd8ecbbeded",
+      "history": "notes/claude-history/qualified-first-run/oracle.json"
+    },
+    {
+      "path": "task-verify.json",
+      "sha256": "454f8660570f590316ad93ee7a75754e52a0c8d6de28d5f32ecf6228703d7c66",
+      "history": "notes/claude-history/qualified-first-run/task-verify.json"
+    },
+    {
+      "path": "validator-output.json",
+      "sha256": "4133ba33d82d57b15f908e1dfe2f6a039171b5f3f8478054a461ddfba3592fa1",
+      "history": "notes/claude-history/qualified-first-run/validator-output.json"
+    },
+    {
+      "path": "worktrees.json",
+      "sha256": "7d97bd2c44bd55c85f2de565608efcec6c1ccecd225616abe0ff0bc061288ef6",
+      "history": "notes/claude-history/qualified-first-run/worktrees.json"
+    },
+    {
+      "path": "budgets.json",
+      "sha256": "20344455a633cfd7873f2a154dc629a8ea0b72e27d7db755946fe4b2f36de72c",
+      "history": "notes/claude-history/qualified-first-run/budgets.json"
+    },
+    {
+      "path": "router.json",
+      "sha256": "9a74a184a4879c70b71573c5d7d298b0a46d6d5afb2182d74e9d41250d3b5856",
+      "history": "notes/claude-history/qualified-first-run/router.json"
+    },
+    {
+      "path": "integration.json",
+      "sha256": "d4970a4c40868f2e4e1e7c0690b73917b206ee08f9aead19b1e2e2e822a5e3e2",
+      "history": "notes/claude-history/qualified-first-run/integration.json"
+    },
+    {
+      "path": "observations.md",
+      "sha256": "96fa151c752476a09a4d86a32b4760abfb860d6b4084e47af940c6386915ddf4",
+      "history": "notes/claude-history/qualified-first-run/observations.md"
+    },
+    {
+      "path": "fixture.bundle",
+      "sha256": "90df847c947ffb44c316150a12aa19859e13a7bb5209dae134f985648afcf8ea",
+      "history": "notes/claude-history/qualified-first-run/fixture.bundle"
+    },
+    {
+      "path": "install.json",
+      "sha256": "03cc30f97f5b8b6545cde37b4aa6ff0a985dc59932ea913ad86d8026de68c09b",
+      "history": "notes/claude-history/qualified-first-run/install.json"
+    }
+  ],
+  "count": 16
+}

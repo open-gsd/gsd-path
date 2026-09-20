@@ -1,0 +1,167 @@
+{
+  "schema": "claude-native-budget/v1",
+  "host": "claude",
+  "candidate": "f36f24aed82ac0019d082c7e31b8a4342d8e03f1",
+  "package": "1.2.0",
+  "verdict": "blocked",
+  "authority": "Owner4000 output/task warning;30000 output/native session aggregate hardlimit includingparent,children,resumes",
+  "method": "Deduplicate assistant message.id per native session JSONL, use maximum output_tokens per message, sum parent plus subagents. Cross-check terminal result.modelUsage[*].outputTokens; top-level result.usage.output_tokens is parent-only.",
+  "session_limit": 30000,
+  "sessions": [
+    {
+      "session_id": "2a4d0b66-86f2-4a8d-b422-3ec511f899f1",
+      "files": {
+        "/Users/jeremymcspadden/.claude/projects/-Users-jeremymcspadden-orca-evaluations-gsd-path-release-1-2-0-f36f24a-claude-retry2-quick-repo/2a4d0b66-86f2-4a8d-b422-3ec511f899f1.jsonl": 3385
+      },
+      "aggregate": 3385,
+      "file_sha256": {
+        "/Users/jeremymcspadden/.claude/projects/-Users-jeremymcspadden-orca-evaluations-gsd-path-release-1-2-0-f36f24a-claude-retry2-quick-repo/2a4d0b66-86f2-4a8d-b422-3ec511f899f1.jsonl": "d4f6fadaf7f48bab1aaa1bc48fd568ef19855885b2cc7af1873d54b54dd1edcf"
+      }
+    },
+    {
+      "session_id": "a41ef256-b9d1-4ae2-8dce-3f286cf83037",
+      "files": {
+        "/Users/jeremymcspadden/.claude/projects/-Users-jeremymcspadden-orca-evaluations-gsd-path-release-1-2-0-f36f24a-claude-retry2-quick-repo/a41ef256-b9d1-4ae2-8dce-3f286cf83037.jsonl": 15348
+      },
+      "aggregate": 15348,
+      "file_sha256": {
+        "/Users/jeremymcspadden/.claude/projects/-Users-jeremymcspadden-orca-evaluations-gsd-path-release-1-2-0-f36f24a-claude-retry2-quick-repo/a41ef256-b9d1-4ae2-8dce-3f286cf83037.jsonl": "6b39d9ed7486e584e0a929209d2d810f9c188216399c53f2c630badce4affe78"
+      }
+    },
+    {
+      "session_id": "f742693a-3c37-466b-a7df-492cafb8183b",
+      "files": {
+        "/Users/jeremymcspadden/.claude/projects/-Users-jeremymcspadden-orca-evaluations-gsd-path-release-1-2-0-f36f24a-claude-retry2-quick-repo/f742693a-3c37-466b-a7df-492cafb8183b.jsonl": 3525
+      },
+      "aggregate": 3525,
+      "file_sha256": {
+        "/Users/jeremymcspadden/.claude/projects/-Users-jeremymcspadden-orca-evaluations-gsd-path-release-1-2-0-f36f24a-claude-retry2-quick-repo/f742693a-3c37-466b-a7df-492cafb8183b.jsonl": "1af8ad101b192f69cad0dba974b51b7951709dbbc619326594739c66ba2f05c3"
+      }
+    },
+    {
+      "session_id": "b5627f8a-3c74-4064-aa69-7d477b67e7c7",
+      "files": {
+        "/Users/jeremymcspadden/.claude/projects/-Users-jeremymcspadden-orca-evaluations-gsd-path-release-1-2-0-f36f24a-claude-retry2-quick-repo/b5627f8a-3c74-4064-aa69-7d477b67e7c7.jsonl": 9549,
+        "/Users/jeremymcspadden/.claude/projects/-Users-jeremymcspadden-orca-evaluations-gsd-path-release-1-2-0-f36f24a-claude-retry2-quick-repo/b5627f8a-3c74-4064-aa69-7d477b67e7c7/subagents/agent-adf313b0fbce75094.jsonl": 4859
+      },
+      "aggregate": 14408,
+      "file_sha256": {
+        "/Users/jeremymcspadden/.claude/projects/-Users-jeremymcspadden-orca-evaluations-gsd-path-release-1-2-0-f36f24a-claude-retry2-quick-repo/b5627f8a-3c74-4064-aa69-7d477b67e7c7.jsonl": "e50cabba16553946d6a7f25395fc8f91e27ac08e4ead48b5ace4da8f4b87554f",
+        "/Users/jeremymcspadden/.claude/projects/-Users-jeremymcspadden-orca-evaluations-gsd-path-release-1-2-0-f36f24a-claude-retry2-quick-repo/b5627f8a-3c74-4064-aa69-7d477b67e7c7/subagents/agent-adf313b0fbce75094.jsonl": "caf5d66c34acea884694e0b056086af70330eceb00db37254b063acd2de40a60"
+      }
+    },
+    {
+      "session_id": "8bfb5639-edc7-4926-b0fc-40cea7e557dd",
+      "files": {
+        "/Users/jeremymcspadden/.claude/projects/-Users-jeremymcspadden-orca-evaluations-gsd-path-release-1-2-0-f36f24a-claude-retry2-quick-repo/8bfb5639-edc7-4926-b0fc-40cea7e557dd.jsonl": 7669
+      },
+      "aggregate": 7669,
+      "file_sha256": {
+        "/Users/jeremymcspadden/.claude/projects/-Users-jeremymcspadden-orca-evaluations-gsd-path-release-1-2-0-f36f24a-claude-retry2-quick-repo/8bfb5639-edc7-4926-b0fc-40cea7e557dd.jsonl": "f87e6d4bd8d5a4c763b6c00196e09f736880a8626213fec947460f7dc642a8fd"
+      }
+    },
+    {
+      "session_id": "bc252c6b-3498-4f11-bf2e-8d990a6f9e4c",
+      "files": {
+        "/Users/jeremymcspadden/.claude/projects/-Users-jeremymcspadden-orca-evaluations-gsd-path-release-1-2-0-f36f24a-claude-retry2-quick-repo/bc252c6b-3498-4f11-bf2e-8d990a6f9e4c.jsonl": 4353,
+        "/Users/jeremymcspadden/.claude/projects/-Users-jeremymcspadden-orca-evaluations-gsd-path-release-1-2-0-f36f24a-claude-retry2-quick-repo/bc252c6b-3498-4f11-bf2e-8d990a6f9e4c/subagents/agent-af55a146045a77daa.jsonl": 9446
+      },
+      "aggregate": 13799,
+      "file_sha256": {
+        "/Users/jeremymcspadden/.claude/projects/-Users-jeremymcspadden-orca-evaluations-gsd-path-release-1-2-0-f36f24a-claude-retry2-quick-repo/bc252c6b-3498-4f11-bf2e-8d990a6f9e4c.jsonl": "4c12e40f1bea64e6779fa287c385882af830ed8202921ef68bfa80ccc9b5aa69",
+        "/Users/jeremymcspadden/.claude/projects/-Users-jeremymcspadden-orca-evaluations-gsd-path-release-1-2-0-f36f24a-claude-retry2-quick-repo/bc252c6b-3498-4f11-bf2e-8d990a6f9e4c/subagents/agent-af55a146045a77daa.jsonl": "b32f1e74e78fda57d92b477d02b2a1ebb2637ea9777ae5afa21ad74d3d124e39"
+      }
+    },
+    {
+      "session_id": "5bfb8f0f-a227-4dd7-8636-26c6a8c9d6f7",
+      "files": {
+        "/Users/jeremymcspadden/.claude/projects/-Users-jeremymcspadden-orca-evaluations-gsd-path-release-1-2-0-f36f24a-claude-retry2-quick-repo/5bfb8f0f-a227-4dd7-8636-26c6a8c9d6f7.jsonl": 6231,
+        "/Users/jeremymcspadden/.claude/projects/-Users-jeremymcspadden-orca-evaluations-gsd-path-release-1-2-0-f36f24a-claude-retry2-quick-repo/5bfb8f0f-a227-4dd7-8636-26c6a8c9d6f7/subagents/agent-a6ae87439f4052289.jsonl": 25835
+      },
+      "aggregate": 32066,
+      "file_sha256": {
+        "/Users/jeremymcspadden/.claude/projects/-Users-jeremymcspadden-orca-evaluations-gsd-path-release-1-2-0-f36f24a-claude-retry2-quick-repo/5bfb8f0f-a227-4dd7-8636-26c6a8c9d6f7.jsonl": "b5aa6660cbb7b6b097ec276389b80d4555d9847d45d02c64c3d66d1e9ef6bb0b",
+        "/Users/jeremymcspadden/.claude/projects/-Users-jeremymcspadden-orca-evaluations-gsd-path-release-1-2-0-f36f24a-claude-retry2-quick-repo/5bfb8f0f-a227-4dd7-8636-26c6a8c9d6f7/subagents/agent-a6ae87439f4052289.jsonl": "1b6a2873f5a1e9049fb46a058bfb3754c00bf09be1e81ecad62400c5a14bd1da"
+      }
+    },
+    {
+      "session_id": "8600a971-d8b7-4084-8d04-b17c151ac882",
+      "files": {
+        "/Users/jeremymcspadden/.claude/projects/-Users-jeremymcspadden-orca-evaluations-gsd-path-release-1-2-0-f36f24a-claude-retry2-quick-repo/8600a971-d8b7-4084-8d04-b17c151ac882.jsonl": 3580,
+        "/Users/jeremymcspadden/.claude/projects/-Users-jeremymcspadden-orca-evaluations-gsd-path-release-1-2-0-f36f24a-claude-retry2-quick-repo/8600a971-d8b7-4084-8d04-b17c151ac882/subagents/agent-a2eb17632895ace17.jsonl": 18546
+      },
+      "aggregate": 22126,
+      "file_sha256": {
+        "/Users/jeremymcspadden/.claude/projects/-Users-jeremymcspadden-orca-evaluations-gsd-path-release-1-2-0-f36f24a-claude-retry2-quick-repo/8600a971-d8b7-4084-8d04-b17c151ac882.jsonl": "b9a01872c56c2710bca8292f8a9adcd8f2d4e3ff19c6179a5d14be6a919e931e",
+        "/Users/jeremymcspadden/.claude/projects/-Users-jeremymcspadden-orca-evaluations-gsd-path-release-1-2-0-f36f24a-claude-retry2-quick-repo/8600a971-d8b7-4084-8d04-b17c151ac882/subagents/agent-a2eb17632895ace17.jsonl": "5f13bad3e9a359758e6b1821fbd4c9a71b9c68c447e6154faaecd8390643325a"
+      }
+    }
+  ],
+  "completed_run_counters": [
+    {
+      "run": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/claude-retry2/quick/run-20260920T183321068551Z",
+      "session_id": "f742693a-3c37-466b-a7df-492cafb8183b",
+      "parent_output": 3525,
+      "aggregate_output": 3525,
+      "reported_cost_usd": 1.2012465
+    },
+    {
+      "run": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/claude-retry2/quick/run-20260920T183529224100Z",
+      "session_id": "8600a971-d8b7-4084-8d04-b17c151ac882",
+      "parent_output": 3580,
+      "aggregate_output": 22126,
+      "reported_cost_usd": 2.7437477500000003
+    },
+    {
+      "run": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/claude-retry2/quick/run-20260920T183531194236Z",
+      "session_id": "bc252c6b-3498-4f11-bf2e-8d990a6f9e4c",
+      "parent_output": 4353,
+      "aggregate_output": 13913,
+      "reported_cost_usd": 2.4632707499999995
+    },
+    {
+      "run": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/claude-retry2/quick/run-20260920T184114769568Z",
+      "session_id": "8bfb5639-edc7-4926-b0fc-40cea7e557dd",
+      "parent_output": 7669,
+      "aggregate_output": 7669,
+      "reported_cost_usd": 1.529461
+    },
+    {
+      "run": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/claude-retry2/quick/run-20260920T184502269795Z",
+      "session_id": "2a4d0b66-86f2-4a8d-b422-3ec511f899f1",
+      "parent_output": 3385,
+      "aggregate_output": 3385,
+      "reported_cost_usd": 1.1138255
+    },
+    {
+      "run": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/claude-retry2/quick/run-20260920T184627096147Z",
+      "session_id": "a41ef256-b9d1-4ae2-8dce-3f286cf83037",
+      "parent_output": 15348,
+      "aggregate_output": 15348,
+      "reported_cost_usd": 2.230986
+    },
+    {
+      "run": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/claude-retry2/quick/run-20260920T185113013151Z",
+      "session_id": "b5627f8a-3c74-4064-aa69-7d477b67e7c7",
+      "parent_output": 9549,
+      "aggregate_output": 14408,
+      "reported_cost_usd": 3.470466749999999
+    },
+    {
+      "run": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/claude-retry2/quick/run-20260920T185544703152Z",
+      "session_id": "5bfb8f0f-a227-4dd7-8636-26c6a8c9d6f7",
+      "parent_output": 6231,
+      "aggregate_output": 32066,
+      "reported_cost_usd": 3.9335972499999996
+    }
+  ],
+  "failed_session": "5bfb8f0f-a227-4dd7-8636-26c6a8c9d6f7",
+  "failed_session_output": 32066,
+  "failed_session_parent_output": 6231,
+  "failed_session_child_output": 25835,
+  "over_limit": 2066,
+  "child_finished": true,
+  "parent_finished": true,
+  "interrupted": false,
+  "total_reported_pipeline_cost_usd": 18.686601499999995
+}

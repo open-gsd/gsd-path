@@ -1,0 +1,161 @@
+...................................................................................................................................................................................................................................................................sssss...............................installing gsd-path-daemon — platform darwin, home /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp5fe6pztf/home
+[1/5] Create isolated virtualenv
+  $ /Applications/Xcode.app/Contents/Developer/usr/bin/python3 -m venv /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp5fe6pztf/home/.gsd-path/venv
+[2/5] Install gsd-path-daemon into the virtualenv
+  $ /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp5fe6pztf/home/.gsd-path/venv/bin/pip install --upgrade /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp5fe6pztf/repo/daemon
+[3/5] Install the tray extra (pystray + Pillow)
+  $ /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp5fe6pztf/home/.gsd-path/venv/bin/pip install --upgrade /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp5fe6pztf/repo/daemon[tray]
+[4/5] Register the LaunchAgent (autostart)
+  write /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp5fe6pztf/home/Library/LaunchAgents/org.gsd-path.daemon.plist
+  $ launchctl bootout gui/501/org.gsd-path.daemon
+  $ launchctl bootstrap gui/501 /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp5fe6pztf/home/Library/LaunchAgents/org.gsd-path.daemon.plist
+  warning: launchctl bootstrap failed; falling back to launchctl load
+  $ launchctl load -w /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp5fe6pztf/home/Library/LaunchAgents/org.gsd-path.daemon.plist
+[5/5] Build and register the native tray app
+  $ bash /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp5fe6pztf/repo/daemon/macos/build.sh
+  $ ditto -rsrc /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp5fe6pztf/repo/daemon/macos/build/GSDPathTray.app /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp5fe6pztf/home/Applications/GSDPathTray.app
+  $ osascript -e tell application "System Events" to delete login item "GSDPathTray"
+  $ osascript -e tell application "System Events" to make login item at end with properties {path:"/var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp5fe6pztf/home/Applications/GSDPathTray.app", hidden:false}
+install complete
+installing gsd-path-daemon — platform darwin, home /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp_x8jma7r/home
+[1/5] Create isolated virtualenv
+  $ /Applications/Xcode.app/Contents/Developer/usr/bin/python3 -m venv /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp_x8jma7r/home/.gsd-path/venv
+[2/5] Install gsd-path-daemon into the virtualenv
+  $ /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp_x8jma7r/home/.gsd-path/venv/bin/pip install --upgrade /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp_x8jma7r/repo/daemon
+[3/5] Install the tray extra (pystray + Pillow)
+  $ /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp_x8jma7r/home/.gsd-path/venv/bin/pip install --upgrade /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp_x8jma7r/repo/daemon[tray]
+[4/5] Register the LaunchAgent (autostart)
+  write /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp_x8jma7r/home/Library/LaunchAgents/org.gsd-path.daemon.plist
+  $ launchctl bootout gui/501/org.gsd-path.daemon
+  $ launchctl bootstrap gui/501 /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp_x8jma7r/home/Library/LaunchAgents/org.gsd-path.daemon.plist
+[5/5] Build and register the native tray app
+  $ bash /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp_x8jma7r/repo/daemon/macos/build.sh
+  $ ditto -rsrc /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp_x8jma7r/repo/daemon/macos/build/GSDPathTray.app /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp_x8jma7r/home/Applications/GSDPathTray.app
+  $ osascript -e tell application "System Events" to delete login item "GSDPathTray"
+  $ osascript -e tell application "System Events" to make login item at end with properties {path:"/var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp_x8jma7r/home/Applications/GSDPathTray.app", hidden:false}
+install complete
+installing gsd-path-daemon — platform darwin, home /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp_x8jma7r/home
+[1/5] Create isolated virtualenv
+  $ /Applications/Xcode.app/Contents/Developer/usr/bin/python3 -m venv /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp_x8jma7r/home/.gsd-path/venv
+[2/5] Install gsd-path-daemon into the virtualenv
+  $ /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp_x8jma7r/home/.gsd-path/venv/bin/pip install --upgrade /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp_x8jma7r/repo/daemon
+[3/5] Install the tray extra (pystray + Pillow)
+  $ /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp_x8jma7r/home/.gsd-path/venv/bin/pip install --upgrade /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp_x8jma7r/repo/daemon[tray]
+[4/5] Register the LaunchAgent (autostart)
+  write /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp_x8jma7r/home/Library/LaunchAgents/org.gsd-path.daemon.plist
+  $ launchctl bootout gui/501/org.gsd-path.daemon
+  $ launchctl bootstrap gui/501 /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp_x8jma7r/home/Library/LaunchAgents/org.gsd-path.daemon.plist
+[5/5] Build and register the native tray app
+  $ bash /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp_x8jma7r/repo/daemon/macos/build.sh
+  $ ditto -rsrc /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp_x8jma7r/repo/daemon/macos/build/GSDPathTray.app /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp_x8jma7r/home/Applications/GSDPathTray.app
+  $ osascript -e tell application "System Events" to delete login item "GSDPathTray"
+  $ osascript -e tell application "System Events" to make login item at end with properties {path:"/var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp_x8jma7r/home/Applications/GSDPathTray.app", hidden:false}
+install complete
+installing gsd-path-daemon — platform darwin, home /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpl2dndezz/home
+[1/2] Create isolated virtualenv
+  $ /Applications/Xcode.app/Contents/Developer/usr/bin/python3 -m venv /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpl2dndezz/home/.gsd-path/venv
+[2/2] Install gsd-path-daemon into the virtualenv
+  $ /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpl2dndezz/home/.gsd-path/venv/bin/pip install --upgrade /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpl2dndezz/repo/daemon
+autostart skipped (--no-autostart)
+tray app skipped (--no-tray)
+install complete
+installing gsd-path-daemon — platform darwin, home /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpj_cb_je4/home
+[1/5] Create isolated virtualenv
+  $ /Applications/Xcode.app/Contents/Developer/usr/bin/python3 -m venv /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpj_cb_je4/home/.gsd-path/venv
+[2/5] Install gsd-path-daemon into the virtualenv
+  $ /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpj_cb_je4/home/.gsd-path/venv/bin/pip install --upgrade /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpj_cb_je4/repo/daemon
+[3/5] Install the tray extra (pystray + Pillow)
+  $ /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpj_cb_je4/home/.gsd-path/venv/bin/pip install --upgrade /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpj_cb_je4/repo/daemon[tray]
+[4/5] Register the LaunchAgent (autostart)
+  write /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpj_cb_je4/home/Library/LaunchAgents/org.gsd-path.daemon.plist
+  $ launchctl bootout gui/501/org.gsd-path.daemon
+  $ launchctl bootstrap gui/501 /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpj_cb_je4/home/Library/LaunchAgents/org.gsd-path.daemon.plist
+[5/5] Build and register the native tray app
+  $ bash /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpj_cb_je4/repo/daemon/macos/build.sh
+  $ ditto -rsrc /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpj_cb_je4/repo/daemon/macos/build/GSDPathTray.app /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpj_cb_je4/home/Applications/GSDPathTray.app
+  $ osascript -e tell application "System Events" to delete login item "GSDPathTray"
+  $ osascript -e tell application "System Events" to make login item at end with properties {path:"/var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpj_cb_je4/home/Applications/GSDPathTray.app", hidden:false}
+install complete
+uninstalling gsd-path-daemon — platform darwin, home /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpj_cb_je4/home
+[1/3] Unload and remove the LaunchAgent
+...............s............................................................................................ss.....s..................................................................................................................................................................................................................................................................rm '.project/STATE.md'
+....Deleted branch gsd-path/M002 (was b551ed8).
+.......................................................................................................s.......................................................................................usage: diagnostic-suite.py [-h] --repo REPO [--project-dir PROJECT_DIR]
+                           [--review REVIEW]
+                           {research,decide,roadmap,patch,plan,wave,final}
+diagnostic-suite.py: error: argument --project-dir: --project-dir must be a relative path, found absolute: /abs/path
+.usage: diagnostic-suite.py [-h] --repo REPO [--project-dir PROJECT_DIR]
+                           [--review REVIEW]
+                           {research,decide,roadmap,patch,plan,wave,final}
+diagnostic-suite.py: error: argument --project-dir: --project-dir must not contain '..', found: ../x
+..................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................
+----------------------------------------------------------------------
+Ran 1747 tests in 2037.205s
+
+OK (skipped=10)
+  $ launchctl bootout gui/501/org.gsd-path.daemon
+  remove /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpj_cb_je4/home/Library/LaunchAgents/org.gsd-path.daemon.plist
+[2/3] Remove the tray-app login item
+  $ osascript -e tell application "System Events" to delete login item "GSDPathTray"
+[3/3] Remove the copied tray app
+  already absent: /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpj_cb_je4/home/Applications/GSDPathTray.app
+note: the virtualenv at /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpj_cb_je4/home/.gsd-path/venv was kept; delete it manually to remove the daemon completely
+uninstall complete
+installing gsd-path-daemon — platform linux, home /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpoqg90r_w/home
+[1/4] Create isolated virtualenv
+  $ /Applications/Xcode.app/Contents/Developer/usr/bin/python3 -m venv /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpoqg90r_w/home/.gsd-path/venv
+[2/4] Install gsd-path-daemon into the virtualenv
+  $ /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpoqg90r_w/home/.gsd-path/venv/bin/pip install --upgrade /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpoqg90r_w/repo/daemon
+[3/4] Install the tray extra (pystray + Pillow)
+  $ /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpoqg90r_w/home/.gsd-path/venv/bin/pip install --upgrade /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpoqg90r_w/repo/daemon[tray]
+[4/4] Install the systemd user service (autostart, best-effort)
+  write /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpoqg90r_w/home/systemd/gsd-path-daemon.service
+  $ systemctl --user daemon-reload
+  $ systemctl --user enable --now gsd-path-daemon.service
+install complete
+uninstalling gsd-path-daemon — platform linux, home /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpoqg90r_w/home
+[1/1] Disable and remove the systemd user service
+  $ systemctl --user disable --now gsd-path-daemon.service
+  remove /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpoqg90r_w/home/systemd/gsd-path-daemon.service
+  $ systemctl --user daemon-reload
+note: the virtualenv at /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpoqg90r_w/home/.gsd-path/venv was kept; delete it manually to remove the daemon completely
+uninstall complete
+installing gsd-path-daemon — platform darwin, home /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpqo9p9gjp/home
+[1/5] Create isolated virtualenv
+  $ /Applications/Xcode.app/Contents/Developer/usr/bin/python3 -m venv /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpqo9p9gjp/home/.gsd-path/venv
+[2/5] Install gsd-path-daemon into the virtualenv
+  $ /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpqo9p9gjp/home/.gsd-path/venv/bin/pip install --upgrade /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpqo9p9gjp/repo/daemon
+[3/5] Install the tray extra (pystray + Pillow)
+  $ /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpqo9p9gjp/home/.gsd-path/venv/bin/pip install --upgrade /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpqo9p9gjp/repo/daemon[tray]
+[4/5] Register the LaunchAgent (autostart)
+  write /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpqo9p9gjp/home/Library/LaunchAgents/org.gsd-path.daemon.plist
+  $ launchctl bootout gui/501/org.gsd-path.daemon
+  $ launchctl bootstrap gui/501 /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpqo9p9gjp/home/Library/LaunchAgents/org.gsd-path.daemon.plist
+[5/5] Build and register the native tray app
+  $ bash /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpqo9p9gjp/repo/daemon/macos/build.sh
+  $ ditto -rsrc /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpqo9p9gjp/repo/daemon/macos/build/GSDPathTray.app /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpqo9p9gjp/home/Applications/GSDPathTray.app
+  $ osascript -e tell application "System Events" to delete login item "GSDPathTray"
+  $ osascript -e tell application "System Events" to make login item at end with properties {path:"/var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmpqo9p9gjp/home/Applications/GSDPathTray.app", hidden:false}
+install complete
+installing gsd-path-daemon — platform win32, home /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp9neb_8__/home
+[1/4] Create isolated virtualenv
+  $ /Applications/Xcode.app/Contents/Developer/usr/bin/python3 -m venv /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp9neb_8__/home/.gsd-path/venv
+[2/4] Install gsd-path-daemon into the virtualenv
+  $ /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp9neb_8__/home/.gsd-path/venv/Scripts/pip.exe install --upgrade /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp9neb_8__/repo/daemon
+[3/4] Install the tray extra (pystray + Pillow)
+  $ /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp9neb_8__/home/.gsd-path/venv/Scripts/pip.exe install --upgrade /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp9neb_8__/repo/daemon[tray]
+[4/4] Create the Startup-folder shortcut (autostart)
+  $ powershell -NoProfile -ExecutionPolicy Bypass -Command $s = (New-Object -COM WScript.Shell).CreateShortcut('/var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp9neb_8__/home/startup/gsd-path-daemon.lnk'); $s.TargetPath = '/var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp9neb_8__/home/.gsd-path/venv/Scripts/pythonw.exe'; $s.Arguments = '-m gsd_daemon tray --serve'; $s.WorkingDirectory = '/var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp9neb_8__/home/.gsd-path/venv/Scripts'; $s.Save()
+install complete
+uninstalling gsd-path-daemon — platform win32, home /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp9neb_8__/home
+[1/1] Remove the Startup-folder shortcut
+  already absent: /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp9neb_8__/home/startup/gsd-path-daemon.lnk
+note: the virtualenv at /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp9neb_8__/home/.gsd-path/venv was kept; delete it manually to remove the daemon completely
+uninstall complete
+uninstalling gsd-path-daemon — platform win32, home /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp9neb_8__/home
+[1/1] Remove the Startup-folder shortcut
+  remove /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp9neb_8__/home/startup/gsd-path-daemon.lnk
+note: the virtualenv at /var/folders/ts/yrrr1_453qz_str8lsryw04m0000gn/T/tmp9neb_8__/home/.gsd-path/venv was kept; delete it manually to remove the daemon completely
+uninstall complete
+{"criteria": ["SC1", "SC2"], "phase": "plan", "rows": 2, "surfaces": {}, "tasks": 2, "waves": [1]}
+{"dispatched": ["domain"], "phase": "research", "questions": 1, "skipped": ["pitfalls", "similar", "stack"]}

@@ -1,0 +1,11 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "antigravity",
+  "run_id": "2065a5fd-d1d4-49f3-9ba4-2bf8fe752e6e",
+  "result": "pass",
+  "step": "reviews",
+  "command": "Antigravity invoke_subagent: review_wave_1_cycle_1; native child fd316feb-2872-4d5e-9da2-5e818cf96e0d",
+  "output": "# Review \u2014 wave 1, cycle 1\n\nReviewed HEAD: 63882ff13966a9c9f2ec007a460eb476dfc43881\nReview scope: final\n\nWave verdict: pass\n# Final Review \u2014 reused full wave\n\nReviewed HEAD: 0709aadc8ba2aa7cb7037424109a2ea2014d65de\nOverall verdict: pass\nSource review: .project/review/wave-1.cycle1.md\nSource commit: 63882ff13966a9c9f2ec007a460eb476dfc43881",
+  "wave_review_artifact": ".project/archive/001-count-cli/review/wave-1.cycle1.md",
+  "final_review_artifact": ".project/archive/001-count-cli/review/FINAL.md"
+}

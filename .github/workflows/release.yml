@@ -6,7 +6,7 @@ name: Release
 #
 # Triggers:
 #   1. Push a version tag: git tag v1.0.1 && git push origin v1.0.1
-#   2. Manual dispatch: auto bump (major/minor/patch) or explicit version, then publish
+#   2. Manual dispatch: verify and publish the prepared package version
 
 on:
   push:
@@ -15,19 +15,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Explicit semver (optional; omit to auto bump from conventional commits)"
+        description: "Prepared semver (optional; defaults to package.json)"
         required: false
         type: string
-      bump:
-        description: "Semver increment when version is omitted"
-        required: true
-        default: auto
-        type: choice
-        options:
-          - auto
-          - major
-          - minor
-          - patch
 
 permissions:
   contents: write
@@ -49,21 +39,6 @@ jobs:
         with:
           node-version: "24"
           registry-url: https://registry.npmjs.org
-
-      - name: Auto bump package version
-        if: github.event_name == 'workflow_dispatch' && inputs.version == ''
-        id: bump
-        env:
-          RELEASE_BUMP: ${{ inputs.bump }}
-        run: |
-          set -euo pipefail
-          node scripts/bump_version.mjs --bump "$RELEASE_BUMP" --github-output "$GITHUB_OUTPUT"
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add package.json package-lock.json
-          version="$(node -p "require('./package.json').version")"
-          git commit -m "chore(release): bump version to v${version}"
-          git push origin HEAD:main
 
       - name: Resolve release version
         id: version
@@ -137,7 +112,8 @@ jobs:
           fi
 
       - name: Publish to npm
-        run: npm publish --access public --provenance
+        # verify:release already passed; do not repeat it through prepublishOnly.
+        run: npm publish --access public --provenance --ignore-scripts
 
       - name: Sync release documentation to main
         env:

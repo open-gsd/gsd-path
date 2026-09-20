@@ -61,7 +61,7 @@ For the separate opt-in release-evidence driver, see the usage and limitations i
 | `tests/test_sync_skill_resources.py` | unittest | generated resources, manifest-owned links, and dispatch branches |
 | `tests/test_task_briefs.py` | unittest | task frontmatter, recorded bases, ownership, commit evidence, and verify scope |
 | `tests/test_wizard_tty.py` | unittest | no-flag CLI opens the wizard on a real PTY and hands off to the installer |
-| `tests/test_trust_evidence.py` | unittest | all-host release receipts, candidate ancestry, pass fields, and evidence-only follow-up diff |
+| `tests/test_trust_evidence.py` | unittest | release receipts, candidate ancestry, pass fields, and receipt reuse under the [live-check scope](TRUST-VALIDATION-SPEC.md#live-check-scope) |
 | `tests/dogfood.py` | script (`--host <declared-host>`) | **Live** host run: Claude/Codex have headless adapters; every other declared host routes explicitly to the manual full-evidence template instead of being silently omitted |
 
 **Note:** `scripts/install.py` is covered by `tests/test_install.py`, including

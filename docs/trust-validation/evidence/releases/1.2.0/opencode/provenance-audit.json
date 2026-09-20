@@ -1,0 +1,40 @@
+{
+  "receipt_validated": true,
+  "child_identity_match": true,
+  "accepted_policy_ready_native_child": "ses_f3f20a175ffeS16bu9ErKFHSMU",
+  "original_product_author_child": "ses_f3f2e9f03ffexjo8nwW6uSruiN",
+  "archive_task_agent": "build_t001",
+  "manifest_child_id": "build_t001",
+  "actual_native_verify_sidecar": {
+    "base": "d8ee4662e391e765ea344cc254f306c2add93d69",
+    "bound_branch": "gsd-path/M001",
+    "branch": "gsd-path-verify/task-t001-verify",
+    "detached": false,
+    "kind": "verify",
+    "mode": "sidecar",
+    "worktree": "/Users/jeremymcspadden/.gsd-path/projects/de463e5c6408acdb20334ffd3d918adc61b68e9445d32eb06bb0e41ec79a100a/54588c8439d6a3a26ee6e3a13977c6adc7f486272fffae9c7569d7d3e133fe45/verify/task-t001-verify"
+  },
+  "all_fixture_refs_in_bundle": true,
+  "fixture_refs": [
+    "29dd1cff88fae67faacdf9283b058e8604b5fb40 refs/heads/gsd-path/M001",
+    "29dd1cff88fae67faacdf9283b058e8604b5fb40 refs/remotes/origin/gsd-path/M001",
+    "5dc63fe9894529ca4de157472e03f421694827ad refs/remotes/origin/tags/milestone/001-count-cli",
+    "5dc63fe9894529ca4de157472e03f421694827ad refs/tags/milestone/001-count-cli",
+    "85998c18bb2673e0b4b596164a7845865d2aa4e1 refs/remotes/origin/HEAD",
+    "85998c18bb2673e0b4b596164a7845865d2aa4e1 refs/remotes/origin/main",
+    "b34e7110bf307e6b6d4ccc82413b64f966a8faa3 refs/heads/main"
+  ],
+  "bundle_refs": [
+    "29dd1cff88fae67faacdf9283b058e8604b5fb40 HEAD",
+    "29dd1cff88fae67faacdf9283b058e8604b5fb40 refs/heads/gsd-path/M001",
+    "29dd1cff88fae67faacdf9283b058e8604b5fb40 refs/remotes/origin/gsd-path/M001",
+    "5dc63fe9894529ca4de157472e03f421694827ad refs/remotes/origin/tags/milestone/001-count-cli",
+    "5dc63fe9894529ca4de157472e03f421694827ad refs/tags/milestone/001-count-cli",
+    "85998c18bb2673e0b4b596164a7845865d2aa4e1 refs/remotes/origin/HEAD",
+    "85998c18bb2673e0b4b596164a7845865d2aa4e1 refs/remotes/origin/main",
+    "b34e7110bf307e6b6d4ccc82413b64f966a8faa3 refs/heads/main"
+  ],
+  "ship": "29dd1cff88fae67faacdf9283b058e8604b5fb40",
+  "integration": "85998c18bb2673e0b4b596164a7845865d2aa4e1",
+  "receipt_task_sidecar_exactly_matches_native_prepare": true
+}

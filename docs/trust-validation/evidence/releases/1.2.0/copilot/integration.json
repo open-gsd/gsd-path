@@ -1,0 +1,17 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "copilot",
+  "run_id": "copilot-retry4-1.2.0-f36f24a-20260920",
+  "result": "pass",
+  "step": "integration",
+  "command": "cd /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/copilot-retry4/quick/repo\nRUNTIME=\"/Users/jeremymcspadden/.gsd-path/runtimes/7651c2147fa0e398eda0d7de3fc64bcbbb55139a4f145f03fe8c896f9c91f334\"\nREPO=\"$(pwd)\"\npython3 \"$RUNTIME/archive_milestone.py\" integrate --repo \"$REPO\" --slug count-cli\necho \"EXIT=$?\"",
+  "output": "{\"archive\": \".project/archive/001-count-cli\", \"base\": \"4234fbea457b8b9d452b748dc03847fa7e239d82\", \"commit\": \"65fc8d5dc9bae4c9e269e704480de09cd922709d\", \"integrate\": \"4234fbea457b8b9d452b748dc03847fa7e239d82\", \"landing\": \"4234fbea457b8b9d452b748dc03847fa7e239d82\", \"mode\": \"direct\", \"tag\": \"milestone/001-count-cli\"}\nEXIT=0\n<shellId: 18 completed with exit code 0>",
+  "fixture_bundle": "copilot/fixture.bundle",
+  "run_manifest": ".project/archive/001-count-cli/trust-run-manifest.json",
+  "ship_commit": "65fc8d5dc9bae4c9e269e704480de09cd922709d",
+  "bound_branch": "gsd-path/M001",
+  "default_branch": "main",
+  "pre_integration_default_commit": "1cf7b285666263da8f08a7c69b0d8e0a9916fa83",
+  "integration_commit": "4234fbea457b8b9d452b748dc03847fa7e239d82",
+  "milestone_tag": "milestone/001-count-cli"
+}
