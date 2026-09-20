@@ -16,11 +16,15 @@ Support means the installer and dispatch contract exist. See the
 proof and each host's guard tier.
 
 <!-- release-docs -->
-**Latest npm release:** [@opengsd/gsd-path@1.1.0](https://www.npmjs.com/package/@opengsd/gsd-path/v/1.1.0) — [release notes](CHANGELOG.md#110---2026-09-18)
+**Latest npm release:** [@opengsd/gsd-path@1.2.0](https://www.npmjs.com/package/@opengsd/gsd-path/v/1.2.0) — [release notes](CHANGELOG.md#120---2026-09-20)
 
 **Recent highlights**
-- Scoped npm publication as `@opengsd/gsd-path` with trusted publishing
-- Host trust matrix and release evidence validation
+- add Path settings and project history dashboard
+- add optional Jev evidence screening
+- store worktrees and pinned runtimes outside project checkouts
+- centralize sub-agent model selection policy
+- reuse unchanged host receipts for releases
+
 <!-- /release-docs -->
 
 ## Documentation
