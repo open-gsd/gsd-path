@@ -22,3 +22,10 @@ routine releases. Do not start another full fixture retry after a current failur
 Copilot retry4 now passes receipt, oracle6/6, full-wave and repeated verification
 reuse; maximum native context21,937 output tokens. Its recovered path error and
 delayed diagnosis are disclosed in copilot/SCENARIO-OBSERVATIONS.md.
+
+Current round ended with six accepted hosts. Claude retry2 exceeded its session
+budget (32,066 aggregate output tokens); OpenCode retry3 failed exact child/task
+identity binding. Both current host reports explicitly say blocked so older
+structural passes cannot hide the failures. Their source histories preserve all
+prior bytes. No further native runs or full fixtures were started. The affected
+release gate and duplicate-verification fix are checkpointed at112fe67.

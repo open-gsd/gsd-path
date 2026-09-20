@@ -1,6 +1,6 @@
 # 1.2.0 release-readiness audit
 
-Status: **NOT READY — continued evaluation active**. Release target remains **1.2.0**. No external release, tag, push, or npm publication was performed.
+Status: **NOT READY — Claude and OpenCode blocked**. Release target remains **1.2.0**. No external release, tag, push, or npm publication was performed.
 
 Candidate: `f36f24aed82ac0019d082c7e31b8a4342d8e03f1`. This is the local release-cycle correction over main `45466c40e57c6cc0d7acd099e880d1644b33f5ee`. Remote main was rechecked with `git ls-remote origin refs/heads/main` at audit closeout and still matches that SHA. These receipts do not claim that unchanged remote main is ready.
 
@@ -15,11 +15,11 @@ Qwen, Kiro, and Zed are excluded from required evaluations by the owner. Their i
 | Antigravity | Fresh retry4 receipt, oracle6/6, both reuse checks pass; maximum native session16,553 output tokens | None; inspection resumes and invocation errors preserved |
 | Kimi | Fresh retry2 receipt, oracle6/6, both reuse checks pass; maximum native session17,497 output tokens | None; previous overrun retained in history |
 | Grok | Fresh retry3 receipt, oracle6/6, both reuse checks pass; maximum native session14,229 output tokens | None; recovered invocation errors preserved |
-| Claude | Previous structural receipt valid, full-wave reuse failed | Fresh retry2 active |
+| Claude | Retry2 native review exceeded session budget (32,066 aggregate output tokens at completion) | Budget failure preserved; no accepted receipt |
 | Copilot | Fresh retry4 receipt, oracle6/6, both reuse checks pass; maximum native session21,937 output tokens | None; recovered path error and diagnosis-order deviation disclosed |
 | OpenCode | Retry3 coder/review/oracle/reuse passed; receipt binding failed | Task agent build_T001 differs from native child build_t001; stopped before shipment |
 
-Six of eight hosts now prove all requested scenario claims. A structural receipt alone does not prove a failed reuse, budget, or candidate-provenance claim. The aggregate gate will run after the remaining current receipts are complete and checkpointed. Recovered nonmutating invocation errors remain disclosed; they are not erased or described as flawless execution. See [Antigravity proof](antigravity-passed/scenario-proof.json), [Kimi observations](../kimi/observations.md), [Grok run notes](../grok/run-notes.md), and [OpenCode provenance failure](opencode-history/retry2/BLOCKER.md).
+Six of eight hosts now prove all requested scenario claims. A structural receipt alone does not prove a failed reuse, budget, or candidate-provenance claim. The aggregate gate will run after current failed-result reports and proof are checkpointed. Recovered nonmutating invocation errors remain disclosed; they are not erased or described as flawless execution. See [Antigravity proof](antigravity-passed/scenario-proof.json), [Kimi observations](../kimi/observations.md), [Grok run notes](../grok/run-notes.md), and [OpenCode provenance failure](opencode-history/retry2/BLOCKER.md).
 
 ## Release-cycle repair
 
@@ -41,7 +41,7 @@ Original 1.3.0 evidence was not relabeled. All failed 1.2.0 fixtures and native 
 
 ## Continued evaluation
 
-Owner ruling, verbatim: "run till all pass". The previous round stop is lifted; no new approval is needed for diagnosed native retries. See [active acceptance and attempt record](RUN-UNTIL-PASS.md). Codex, Cursor, Antigravity, Kimi, Grok, and Copilot now prove all requested scenario claims. Claude continues for its remaining claims. OpenCode is stopped at a documented identity-binding conflict; see [retry3 blocker](opencode-history/retry3/BLOCKED.md). Historical failures remain; a recovered gate rejection is not silently removed.
+Owner ruling, verbatim: "run till all pass". The previous round stop is lifted; no new approval is needed for diagnosed native retries. See [active acceptance and attempt record](RUN-UNTIL-PASS.md). Codex, Cursor, Antigravity, Kimi, Grok, and Copilot now prove all requested scenario claims. Claude stopped after its native review used32,066 aggregate output tokens; see [budget failure and partial proof](claude-retry2-blocked.md). OpenCode stopped at a documented identity-binding conflict; see [retry3 blocker](opencode-history/retry3/BLOCKED.md). Historical failures remain; a recovered gate rejection is not silently removed.
 
 ## Faster routine releases
 
@@ -50,8 +50,9 @@ Routine releases reuse validated live receipts when that host's runtime and
 integration inputs are unchanged. Original candidates and versions stay intact.
 Only missing, invalid, or stale hosts need new runs. Shared runtime changes
 invalidate every host they affect. Qwen/Kiro/Zed remain excluded. The full
-matrix is manual. Current Claude/OpenCode attempts may finish; no new full
-fixture retry is planned if they fail.
+matrix is manual. Current Claude/OpenCode attempts are stopped with their failures preserved. Root
+stopped further full-fixture retries in response to the owner's cost and time
+constraint. No additional live run is planned in this round.
 
 The release workflow now runs its explicit offline gate once and skips npm
 lifecycle scripts in the subsequent publish step. Local npm publication keeps
