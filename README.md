@@ -32,6 +32,33 @@ proof and each host's guard tier.
 | [RELEASE.md](RELEASE.md) | Maintainer CI and npm release cycle |
 | [GUIDE.md](GUIDE.md) | Pointer to the guides above |
 
+## What's new — September 19, 2026
+
+These changes are merged into the source checkout; npm installs use the latest
+published release.
+
+- **Dashboard settings and history:** edit Path settings, browse project files
+  and Git versions, and load full recorded evidence. See the
+  [dashboard guide](daemon/README.md#project-history-and-files).
+- **Model and effort policy:** set user, project, host, and task choices through
+  one resolver. Recorded assignments stay pinned; unsupported explicit choices
+  stop the affected dispatch. See the
+  [model policy](skills/gsd-path/references/model-policy.md).
+- **External worktrees and pinned runtimes:** new parallel task, verification,
+  and integration worktrees live outside project checkouts. Projects pin runtime
+  versions by content digest, with explicit upgrade, restore, and legacy migration
+  commands. See
+  [worktree locations](DOCS.md#worktree-locations) and
+  [runtime versions](DOCS.md#project-runtime-versions).
+- **Clearer project updates:** the dashboard shows project runtime versions and
+  update results. After verified integration, ordinary branches can resume
+  product work while archived milestones remain protected. See
+  [update guidance](UPDATE.md#update-the-project-runtime-and-guard-hooks).
+- **Optional Jev screening:** reviewers can request advisory checks of selected
+  criteria and evidence. It is disabled by default and never replaces recorded
+  verification or review gates. See
+  [Jev screening](skills/gsd-path/references/jev-review.md).
+
 ## Install from npm
 
 Requires **Node.js 18.17+** for the npm installer and **Python 3.9+** for
@@ -109,14 +136,31 @@ phase progress, task counts, last activity, and available usage data. Use the
 [dashboard controls](daemon/README.md#dashboard) to filter or search projects,
 switch between Board and Milestones, refresh status, and manage settings.
 
-![OpenGSD Path dashboard showing sample projects, phase progress, and toolbar controls](docs/images/dashboard-board.png)
+![OpenGSD Path project board showing sample projects, status filters, milestone progress, tasks, and usage](docs/images/dashboard-board.png)
 
 Click a project to see its milestone roadmap, tasks, success criteria, review
 results, verification history, and activity. Usage includes tokens and turns
 from supported host session logs; cost estimates require model prices in the
 daemon configuration.
 
-![Project dashboard showing milestone progress, criteria, tasks, and usage with sample data](docs/images/dashboard-project.png)
+![Project dashboard showing the history viewer link, milestone progress, expandable evidence, and usage with sample data](docs/images/dashboard-project.png)
+
+*Dashboard screenshots captured from the current source on September 19, 2026,
+using the repository's sample projects.*
+
+Open **History & files** to browse project files and archived milestones,
+preview Markdown, or read a file at a selected Git commit. Relative document
+links keep that selected version. **Records & sources → Load full records**
+loads recorded usage, verification, activity, and indexed host turns on demand,
+with coverage details that make missing or invalid data visible.
+
+Open **Settings → Path settings** to change user defaults or project overrides
+for shipping mode, model and effort choices, and future review panels. Each
+setting shows its source and any lock reason; changes are saved explicitly.
+
+The **Plugin** settings page shows each watched project's runtime version and
+provides an explicit **Update** action with progress and failure details.
+Updating global skills does not update a project's pinned runtime.
 
 ### macOS menu bar
 
