@@ -561,7 +561,14 @@ def render_state(template: Path, request: BootstrapRequest) -> str:
     )
     if "<slug>" in content or "branch: null" in content:
         raise BootstrapError("state template placeholders were not fully replaced")
-    return content
+    try:
+        from .path_config import initial_state
+    except ImportError:
+        from path_config import initial_state
+    try:
+        return initial_state(content)
+    except (OSError, ValueError, RuntimeError) as error:
+        raise BootstrapError(str(error)) from error
 
 
 def render_binding(

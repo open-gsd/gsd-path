@@ -112,12 +112,13 @@ the charter instead of the single-milestone checklist:
 4. **Constraints** — program-level stack, budget, deadline, integrations.
 5. **Program success criteria** — observable when the last milestone ships.
 6. **Review panel** — optional durable default (`off` | `detected` | named
-   families). Default `off`. This value persists on CHARTER.md; later
+   families). Use the configured future preference unless the user chooses
+   otherwise (see Output contract). This value persists on CHARTER.md; later
    milestone INTENT files copy it and may override.
 
 Read the local [charter template](templates/charter.md), write the approval
-draft to `.project/CHARTER.md` including `Review panel:` (default `off`;
-never invent `detected` or a named list), and run the same playback-approval
+draft to `.project/CHARTER.md` including the configured or explicitly chosen
+`Review panel:` value, and run the same playback-approval
 loop as the standard Process. On approval, retain the reviewed
 `Review panel:` value on CHARTER.md, run `pipeline_state.py transition` with
 expected `define/active`, milestone/branch/archive all at their exact current
@@ -146,7 +147,7 @@ State ownership. There is no re-interview of charter or roadmap scope:
    Risks and Open questions from the entry (tagged `RESEARCH`/`NEEDS-USER`),
    `Lane: milestone`, `Surfaces:` copied verbatim from the entry, and
    `Review panel:` copied from CHARTER.md (default
-   `off` when CHARTER omits it). The confirmation may override the copied
+   the configured preference when CHARTER omits it). The confirmation may override the copied
    panel value; do not invent `detected` or a named list. When brownfield,
    fill `## Current state` from the map, record doc-vs-code rulings as in
    Brownfield mode, and add protected existing behavior under Scope out.
@@ -273,9 +274,12 @@ question. The rules change for every primary mode:
 ## Output contract
 
 At approval, retain the already reviewed `Lane:` value and its one-line reason.
-Retain `Review panel:` as reviewed: the CHARTER copy or the user's override
-in milestone/lookahead mode, the CHARTER value in program mode, or `off`
-when the user did not choose a panel and no CHARTER default exists.
+Before presenting an approval draft without a CHARTER or explicit panel choice,
+read `settings.review_panel.value` from the selected runtime's `path_config.py
+show --repo <absolute-root>` (bundle for legacy projects; off for older selected
+runtimes without config support). Include that preference in the draft.
+Retain `Review panel:` as reviewed: the CHARTER copy, the explicit user choice,
+or the configured future preference. Quick lane keeps the panel off.
 
 After approval, finalize `.project/intent/INTENT.md` and run
 `pipeline_state.py transition` with expected `define/active`, the exact

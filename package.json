@@ -42,6 +42,7 @@
     "scripts/check_handoffs.py",
     "scripts/check_docs_audit.py",
     "scripts/check_task_briefs.py",
+    "scripts/path_config.py",
     "scripts/model_policy.py",
     "scripts/review_panel.py",
     "scripts/jev_review.py",

@@ -127,10 +127,17 @@ a global update does not update project runtimes. Use the project's **Update**
 button to refresh its runtime and existing guards. Install and update actions
 show progress, success or failure, and installer output.
 
-Older unstamped installs show **Unknown — update required**. For these legacy
-installs, follow the migration steps in
-[Project runtime versions](DOCS.md#project-runtime-versions) before using
-**Update**. Use `--doctor --project PATH` to check runtime files.
+If the daemon's plugin source checkout has local changes, project Update uses
+that local build and says so in its result. It does not pull remote changes over
+local edits. Clean source checkouts still refresh before a project update.
+
+Older unstamped installs show **Unknown — version metadata unavailable**.
+This does not establish that their runtime is outdated or broken. **Update**
+uses the guarded migration for legacy runtime directories and an upgrade for
+version-pinned runtimes. Migration leaves a reviewable Git diff and refuses
+modified or unknown runtime files; the dashboard shows the failure reason.
+See [Project runtime versions](DOCS.md#project-runtime-versions) for manual
+migration and preview commands. Use `--doctor --project PATH` to check runtime files.
 
 For upgrades, exact-version restoration, or legacy migration, follow
 [Project runtime versions](DOCS.md#project-runtime-versions). To refresh hook wiring:

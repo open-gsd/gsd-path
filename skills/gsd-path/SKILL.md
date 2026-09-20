@@ -1,9 +1,14 @@
 ---
 name: gsd-path
-description: Inspect .project/STATE.md, report GSD Path progress, and run the next valid phase. Use only when the user explicitly invokes $gsd-path. The status argument reports state without advancing. Do not infer this skill from generic project, next-step, or resume requests.
+description: Inspect .project/STATE.md, report GSD Path progress, and run the next valid phase. Use only when the user explicitly invokes $gsd-path. The status argument reports state without advancing; config views or edits settings without advancing. Do not infer this skill from generic project, next-step, or resume requests.
 ---
 
 Before executing project helpers, read [runtime selection](references/runtime-selection.md).
+
+## Configuration mode
+
+When the first argument is `config`, read [Path settings](references/config.md)
+and complete that request without initializing state or advancing a phase.
 
 # GSD Path Router
 
@@ -160,8 +165,8 @@ selects a milestone branch.
 
 ## Integration choice
 
-New state starts with `integration_default: direct`, `integration: direct`, and
-`integration_source: default`.
+New state uses the user shipping default (built-in: `direct`) for
+`integration_default` and `integration`, with `integration_source: default`.
 When the user asks to change closeout behavior before build, use the state
 helper; never edit these fields by hand:
 

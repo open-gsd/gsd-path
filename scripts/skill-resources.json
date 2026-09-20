@@ -61,6 +61,7 @@
     "scripts/check_handoffs.py",
     "scripts/check_docs_audit.py",
     "scripts/check_task_briefs.py",
+    "scripts/path_config.py",
     "scripts/model_policy.py",
     "scripts/review_panel.py",
     "scripts/jev_review.py",
@@ -210,6 +211,8 @@
     ]
   },
   "script_targets": [
+    ["scripts/status_runtime.py", "skills/gsd-path/scripts/status_runtime.py"],
+    ["scripts/git_guard.py", "skills/gsd-path/scripts/git_guard.py"],
     ["scripts/jev_review.py", "skills/gsd-path/scripts/jev_review.py"],
     ["scripts/jev_review.py", "skills/gsd-path-build/scripts/jev_review.py"],
     ["scripts/jev_review.py", "skills/gsd-path-ship/scripts/jev_review.py"],
@@ -480,7 +483,22 @@
     ["scripts/loop_run.py", "skills/gsd-path-ship/scripts/loop_run.py"],
     ["scripts/model_policy.py", "skills/gsd-path-undo/scripts/model_policy.py"],
     ["scripts/loop_run.py", "skills/gsd-path-undo/scripts/loop_run.py"],
-    ["scripts/review_panel.py", "skills/gsd-path-undo/scripts/review_panel.py"]
+    ["scripts/review_panel.py", "skills/gsd-path-undo/scripts/review_panel.py"],
+    ["scripts/path_config.py", "skills/gsd-path-build/scripts/path_config.py"],
+    ["scripts/path_config.py", "skills/gsd-path-decide/scripts/path_config.py"],
+    ["scripts/path_config.py", "skills/gsd-path-define/scripts/path_config.py"],
+    ["scripts/path_config.py", "skills/gsd-path-discuss/scripts/path_config.py"],
+    ["scripts/path_config.py", "skills/gsd-path-docs-audit/scripts/path_config.py"],
+    ["scripts/path_config.py", "skills/gsd-path-forensics/scripts/path_config.py"],
+    ["scripts/path_config.py", "skills/gsd-path-inspect/scripts/path_config.py"],
+    ["scripts/path_config.py", "skills/gsd-path-loop/scripts/path_config.py"],
+    ["scripts/path_config.py", "skills/gsd-path-migrate/scripts/path_config.py"],
+    ["scripts/path_config.py", "skills/gsd-path-plan/scripts/path_config.py"],
+    ["scripts/path_config.py", "skills/gsd-path-research/scripts/path_config.py"],
+    ["scripts/path_config.py", "skills/gsd-path-roadmap/scripts/path_config.py"],
+    ["scripts/path_config.py", "skills/gsd-path-ship/scripts/path_config.py"],
+    ["scripts/path_config.py", "skills/gsd-path-undo/scripts/path_config.py"],
+    ["scripts/path_config.py", "skills/gsd-path/scripts/path_config.py"]
   ],
   "phase_contract_targets": [
     ["skills/gsd-path-build/SKILL.md", "skills/gsd-path/BUILD.md"],

@@ -62,7 +62,9 @@ VERIFY_LEDGER_PATH = _common.VERIFY_LEDGER_PATH
 LANDED_VERDICTS = frozenset({"recovered", "attested"})
 # Orchestrator bookkeeping that may stay uncommitted in the primary while a
 # parallel task lands; the next `.project` checkpoint commits it.
-BOOKKEEPING_PATHS = DISCUSSION_PATHS | {VERIFY_LEDGER_PATH}
+BOOKKEEPING_PATHS = DISCUSSION_PATHS | {
+    VERIFY_LEDGER_PATH, ".project/config.json", ".project/model-policy.json",
+}
 # Bookkeeping path prefixes: pipeline records plus the guard's own install
 # artifacts. git_guard and the post-adoption proof share this one definition.
 BOOKKEEPING_PREFIXES = (

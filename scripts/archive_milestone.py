@@ -1746,6 +1746,12 @@ def require_clean_active_root(active_root: Path, archive: Path) -> None:
     carried_forward = pending_ruling_count(archived_audit)
     # Persistent project metadata ships but never archives with a milestone.
     allowed = {"STATE.md", "REPOSITORY.md", "archive", "LESSONS.md", "next"}
+    for name in ("config.json", "model-policy.json"):
+        path = active_root / name
+        if path.exists() or path.is_symlink():
+            if path.is_symlink() or not path.is_file() or path.stat().st_nlink != 1:
+                raise ArchiveError(f"project settings must be a regular unlinked file: {path}")
+            allowed.add(name)
     if (active_root / "CHARTER.md").is_file():
         # Program flow: these persist at the .project/ top level.
         allowed |= {"CHARTER.md", "ROADMAP.md", "SYNTHESIS.md"}

@@ -8,6 +8,7 @@ version = "0.1.0"
 description = "Progress-monitoring daemon and tray app for GSD Path projects"
 readme = "README.md"
 requires-python = ">=3.9"
+dependencies = ["markdown-it-py"]
 license = { text = "MIT" }
 
 [project.optional-dependencies]

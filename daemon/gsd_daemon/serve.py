@@ -10,6 +10,11 @@ from typing import List, Optional, Tuple
 from .history import append_event, resolve_history_path
 from .model import aggregate
 from .plugin import PluginManager
+from .path_settings import configure
+from .project_files import FileAccessError, request_files
+from .project_data import project_records
+from .dashboard_records import RECORDS_CSS, RECORDS_JS
+from .dashboard_layout import LAYOUT_CSS, LAYOUT_JS
 from .probe import utc_now_iso
 from .watcher import Watcher
 
@@ -89,30 +94,30 @@ DASHBOARD_PAGE = r"""<!doctype html>
   /* Toolbar: title, filters and search on the board; back and project switcher on a project. */
   html { overscroll-behavior: none; }
   .stage { min-height: 100dvh; }
-  .topbar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 8px 16px; background: var(--chrome); border-bottom: 1px solid var(--line); }
+  .topbar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 4px 16px; background: var(--chrome); border-bottom: 1px solid var(--line); }
   .brand { display: flex; gap: 8px; align-items: center; padding: 0; border: 0; background: none; font-size: 13.5px; font-weight: 650; cursor: pointer; white-space: nowrap; }
   .brand svg { width: 18px; height: 18px; flex: none; }
   .settings-menu summary svg, .search svg { width: 16px; height: 16px; flex: none; }
   .segc { display: flex; padding: 2px; border-radius: 7px; background: var(--seg); }
   .segc button { padding: 3px 12px; border: 0; border-radius: 5px; background: none; font-size: 12.5px; color: var(--dim); cursor: pointer; white-space: nowrap; }
   .segc button[aria-pressed="true"] { background: var(--card); color: var(--text); font-weight: 600; box-shadow: var(--shadow); }
-  .segc button span { color: var(--faint); margin-left: 4px; font-weight: 400; }
-  .search { margin-left: auto; display: flex; align-items: center; gap: 6px; height: 28px; width: 220px; padding: 0 8px; border-radius: 7px; background: var(--card); box-shadow: inset 0 0 0 1px var(--line); color: var(--faint); }
+  .segc button span { color: var(--faint); margin-left: 4px; font-weight: 400; font-variant-numeric: tabular-nums; }
+  .search { margin-left: auto; display: flex; align-items: center; gap: 6px; height: 40px; width: 220px; padding: 0 8px; border-radius: 7px; background: var(--card); box-shadow: inset 0 0 0 1px var(--line); color: var(--faint); }
   .search input { border: 0; outline: 0; background: transparent; width: 100%; min-width: 0; font-size: 13px; color: var(--text); }
   .search:focus-within { box-shadow: inset 0 0 0 1px var(--accent-fill), 0 0 0 3px var(--accent-soft); }
   .back { display: flex; align-items: center; gap: 2px; padding: 4px 8px; border: 0; border-radius: 6px; background: none; color: var(--dim); cursor: pointer; white-space: nowrap; }
   .back:hover { background: var(--seg); color: var(--text); }
   .switcher { min-width: 0; max-width: 40vw; padding: 3px 6px; border: 0; border-radius: 6px; background: transparent; font-weight: 650; font-size: 13.5px; cursor: pointer; }
   .switcher:hover { background: var(--seg); }
-  .connection { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--dim); white-space: nowrap; }
+  .connection { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--dim); white-space: nowrap; font-variant-numeric: tabular-nums; }
   .topbar .spacer { margin-left: auto; }
   .settings-menu { position: relative; }
-  .settings-menu summary { display: grid; place-items: center; width: 30px; height: 28px; border-radius: 6px; color: var(--dim); cursor: pointer; list-style: none; }
+  .settings-menu summary { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 6px; color: var(--dim); cursor: pointer; list-style: none; }
   .settings-menu summary::-webkit-details-marker { display: none; }
   .settings-menu summary:hover, .settings-menu[open] summary { background: var(--seg); color: var(--text); }
-  .settings-menu nav { position: absolute; right: 0; top: calc(100% + 4px); z-index: 10; display: grid; padding: 4px; background: var(--card); border-radius: 8px; box-shadow: 0 8px 24px rgb(26 29 34 / .14), var(--shadow); white-space: nowrap; }
+  .settings-menu nav { position: absolute; right: 0; top: calc(100% + 4px); z-index: 10; display: grid; padding: 4px; background: var(--card); border-radius: 9px; box-shadow: 0 8px 24px rgb(26 29 34 / .14), var(--shadow); white-space: nowrap; }
   .settings-menu .btn { text-align: left; border: 0; border-radius: 5px; }
-  .settings-menu .btn:hover { background: var(--accent-fill); color: var(--accent-fg); }
+  .settings-menu .btn:hover { background: var(--hover); color: var(--text); }
   .appearance { display: grid; gap: 4px; padding: 6px 8px 4px; margin-top: 4px; border-top: 1px solid var(--line); font-size: 11.5px; color: var(--faint); }
   .stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); margin: 0; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--card); }
   .stats div { padding: 6px 10px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); margin: 0 -1px -1px 0; }
@@ -206,6 +211,36 @@ DASHBOARD_PAGE = r"""<!doctype html>
   /* Settings views */
   .settings { width: 100%; max-width: 1000px; margin: 0 auto; padding: 24px 24px 40px; }
   .settings h2 { font-size: 16px; font-weight: 600; margin-bottom: 16px; }
+  .path-config { display: grid; gap: 16px; }
+  .path-config h2 { margin-bottom: 0; }
+  .path-config h2, .path-config h3 { text-wrap: balance; }
+  .path-config p { text-wrap: pretty; }
+  .path-config h3 + p { margin: 4px 0 12px; }
+  .path-config .config-row + .config-row { margin-top: 12px; }
+  .path-config label { display: grid; gap: 5px; }
+  .path-config input, .path-config select { background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; min-width: 0; }
+  .path-config .config-row { display: flex; gap: 8px; align-items: end; flex-wrap: wrap; }
+  .path-config .config-row label { flex: 1; min-width: 0; }
+  .path-config .config-source { overflow-wrap: anywhere; font-size: 12px; margin-top: 6px; }
+  /* Match the skill's 40px desktop / 44px touch targets without overlapping hit areas. */
+  .topbar button, .topbar select, .path-config button, .path-config input, .path-config select {
+    min-height: 40px; min-width: 40px;
+  }
+  .path-config summary { min-height: 40px; align-content: center; cursor: pointer; color: var(--dim); }
+  .path-config summary:hover { color: var(--text); }
+  .path-config .btn:not(:disabled):hover, .topbar .btn:not(:disabled):hover { background: var(--hover); }
+  .path-config .btn:not(:disabled):active, .topbar .btn:not(:disabled):active { background: var(--seg); }
+  .path-config .btn.primary:not(:disabled):hover { background: var(--accent-fill); filter: brightness(.95); }
+  .path-config .btn.primary:not(:disabled):active { background: var(--accent-fill); filter: brightness(.9); }
+  @media (max-width: 760px) {
+    .path-config .config-row label { flex-basis: 100%; }
+  }
+  @media (pointer: coarse) {
+    .topbar button, .topbar select, .path-config button, .path-config input, .path-config select, .path-config summary { min-height: 44px; min-width: 44px; }
+    .settings-menu summary { width: 44px; height: 44px; }
+    .search { height: 44px; }
+  }
+  .path-config button:disabled, .path-config input:disabled, .path-config select:disabled { opacity: .6; cursor: not-allowed; }
   .box { background: var(--card); border-radius: 14px; box-shadow: var(--shadow); padding: 16px; }
   .box h4 { font-size: 11px; text-transform: uppercase; letter-spacing: .6px; color: var(--faint); margin-bottom: 8px; }
   table.tasks { width: 100%; border-collapse: collapse; font-size: 12.5px; }
@@ -223,6 +258,8 @@ DASHBOARD_PAGE = r"""<!doctype html>
   .browse-row:hover { background: var(--sunken); }
   .browse-row .proj { margin-left: auto; font-size: 10.5px; color: var(--run); }
 
+__RECORDS_CSS__
+__LAYOUT_CSS__
 </style>
 </head>
 <body>
@@ -247,6 +284,67 @@ let PLUGIN_OP = null;
 let ONLINE = null;
 let CState = {view: "board", root: null, filter: "all", q: ""};
 let ACTIVITY = [];
+const CFG = {root: '', data: null, drafts: {}, busy: false, error: '', message: '', role: 'coder', host: '', field: 'model'};
+const configScope = () => CFG.root ? {scope:'project', root:CFG.root} : {scope:'user'};
+const configModelKey = () => 'models.' + (CFG.host ? 'hosts.' + CFG.host : 'roles') + '.' + CFG.role + '.' + CFG.field;
+async function loadConfig() {
+  const root = CFG.root;
+  CFG.data = null; CFG.error = ''; CFG.message = ''; CFG.drafts = {};
+  render();
+  try {
+    const response = await fetch('/api/path-config?' + new URLSearchParams(configScope()));
+    const data = await response.json();
+    if (root !== CFG.root) return;
+    if (!response.ok) throw new Error(data.error || 'Cannot load settings.');
+    CFG.data = data;
+  } catch (error) { if (root === CFG.root) CFG.error = error.message; }
+  render();
+}
+async function saveConfig(key, reset=false) {
+  if (CFG.busy) return;
+  const value = document.querySelector('[data-config-key="' + key + '"]')?.value;
+  CFG.busy = true; CFG.error = ''; CFG.message = ''; render();
+  try {
+    const response = await fetch('/api/path-config', {method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({...configScope(), action:reset ? 'reset' : 'set', key, value})});
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Cannot save settings.');
+    CFG.data = data; delete CFG.drafts[key]; CFG.message = 'Saved. ' + (key === 'integration'
+      ? (CFG.root ? 'Project shipping default updated.' : 'Applies to newly initialized projects.')
+      : key === 'review_panel' ? 'Applies when preparing future review approvals.' : 'Applies to new assignments; running assignments keep their selection.');
+  } catch (error) { CFG.error = error.message; }
+  CFG.busy = false; render();
+}
+function pathConfigPage() {
+  const data = CFG.data, disabled = CFG.busy || data?.locked;
+  const options = (values, current) => values.map(([value, label]) => `<option value="${esc(value)}" ${value === current ? 'selected' : ''}>${esc(label)}</option>`).join('');
+  const scope = `<label>Settings for<select data-config-scope ${CFG.busy ? 'disabled' : ''}>${options([['','User defaults'], ...(DATA.projects || []).map(p => [p.root, p.project || p.root])], CFG.root)}</select></label>`;
+  const feedback = `<p role="${CFG.error ? 'alert' : 'status'}">${esc(CFG.error || CFG.message || (CFG.busy ? 'Saving…' : ''))}</p>`;
+  if (!data) return scope + feedback + (CFG.error ? '' : '<p class="dim">Loading settings…</p>');
+  const setting = (key, label, choices, note) => {
+    const item = data.settings[key], locked = disabled || item.locked;
+    const value = CFG.drafts[key] ?? item.value;
+    const control = choices ? `<select data-config-key="${key}" ${locked ? 'disabled' : ''}>${options(choices.map(v => [v, v === 'pull-request' ? 'Pull request' : 'Direct integration']), value)}</select>`
+      : `<input data-config-key="${key}" value="${esc(value)}" ${locked ? 'disabled' : ''} list="panel-options">`;
+    return `<section class="box"><div class="config-row"><label>${label}${control}</label><button class="btn primary" data-save-config="${key}" ${locked ? 'disabled' : ''}>Save</button>${key !== 'integration' || !CFG.root ? `<button class="btn" data-reset-config="${key}" ${locked ? 'disabled' : ''}>Reset</button>` : ''}</div>
+      <p class="dim config-source">${esc(item.locked || note)}</p><p class="dim config-source">Source: ${esc(item.source)}</p>
+      ${key === 'integration' && CFG.root ? `<p class="dim">Current milestone: ${esc(item.current)} (${esc(item.current_source)})</p>` : ''}</section>`;
+  };
+  const modelKey = configModelKey(), item = data.models[modelKey];
+  const modelValue = CFG.drafts[modelKey] ?? item?.value ?? 'inherit';
+  return scope + feedback + (data.locked ? `<p role="status">${esc(data.locked)}</p>` : '')
+    + setting('integration', 'Shipping mode', ['direct','pull-request'], CFG.root ? 'Changes the project default; explicit milestone overrides are retained.' : 'Used when a new project is initialized.')
+    + setting('review_panel', 'Review panel preference', null, 'off, detected, or comma-separated model families. Quick lane keeps panels off.')
+    + `<datalist id="panel-options"><option value="off"><option value="detected"></datalist>`
+    + (data.approved_review_panel ? `<p class="dim">Recorded review panel: ${esc(data.approved_review_panel.value)} (${esc(data.approved_review_panel.source)}). Approved review contracts keep their values.</p>` : '')
+    + `<section class="box"><h3>Agent models and effort</h3><p class="dim">Use an exact value advertised by your host, or inherit. Unsupported values stop dispatch. Reset removes this scope's override.</p>
+      <div class="config-row"><label>Role<select data-model-choice="role">${options(data.roles.map(v => [v,v.replaceAll('_',' ')]), CFG.role)}</select></label>
+      <label>Host<select data-model-choice="host">${options([['','All hosts'], ...data.hosts.map(v => [v,v])], CFG.host)}</select></label>
+      <label>Setting<select data-model-choice="field">${options([['model','Model'],['effort','Effort']], CFG.field)}</select></label></div>
+      <div class="config-row"><label>Value<input data-config-key="${modelKey}" value="${esc(modelValue)}" ${disabled ? 'disabled' : ''}></label><button class="btn primary" data-save-config="${modelKey}" ${disabled ? 'disabled' : ''}>Save</button><button class="btn" data-reset-config="${modelKey}" ${disabled ? 'disabled' : ''}>Reset</button></div>
+      <p class="dim config-source">Source: ${esc(item?.source || 'No override at this level; role, user, and host defaults apply.')}</p>
+      <details><summary>Configured values and sources</summary>${Object.entries(data.models).map(([key, entry]) => `<p class="config-source"><strong>${esc(key)}</strong>: ${esc(entry.value)} · ${esc(entry.source)}</p>`).join('') || '<p class="dim">No model overrides.</p>'}</details></section>`;
+}
 /* Appearance: light unless chosen otherwise. The tray passes its choice as ?theme=. */
 const THEMES = ["system", "light", "dark"];
 let THEME = (() => {
@@ -268,6 +366,7 @@ applyTheme();
 
 function setHash() {
   if (CState.view === "project" && CState.root) history.replaceState(null, "", "#" + new URLSearchParams({project: CState.root}));
+  else if (CState.view === 'files' && CState.root) history.replaceState(null, '', '#' + new URLSearchParams({project:CState.root, file:FILES.path, ...(FILES.revision?{revision:FILES.revision}:{})}));
   else if (CState.view === "board") history.replaceState(null, "", location.pathname);
   else history.replaceState(null, "", "#" + CState.view);
 }
@@ -276,6 +375,7 @@ function navigate(view) {
   CState.view = view;
   setHash(); render();
   if (view === "plugin") loadPlugin().then(render);
+  if (view === "config") loadConfig();
 }
 async function loadPlugin() {
   try {
@@ -309,6 +409,7 @@ async function pluginOp(path, body) {
     PLUGIN_OP.error = true;
     PLUGIN_OP.message = label + " failed — " + target + ": " + e.message;
   } finally {
+    if (payload?.source_notice) PLUGIN_OP.message += " " + payload.source_notice;
     if (!await loadPlugin()) PLUGIN_OP.message += " Could not refresh installed versions. Reload to check.";
     PLUGIN_OP.busy = false;
     render();
@@ -493,18 +594,12 @@ function phaseMeter(p) {
   return `<span class="meter ${stateOf(p)}" role="img" aria-label="${esc(p.phase || "no phase")}">${PHASES.map((ph, k) => `<i class="${k < i ? "done" : k === i ? "now" : ""}" title="${ph}"></i>`).join("")}</span>`;
 }
 function boardRow(p) {
-  const st = stateOf(p), {cur} = milestoneStack(p), sp = p.spend || {};
-  const tail = String(p.root || "").split("/").slice(-2).join("/");
-  return `<tr class="prow ${st}" data-root="${esc(p.root)}">
-    <td><button class="pname" data-root="${esc(p.root)}" aria-label="Open ${esc(p.project || p.root)}"><span class="dot ${healthDot(p)}" title="health ${esc(healthReason(p))}"></span><span>${esc(p.project || p.root)}</span></button><div class="ppath">${esc(tail)}</div></td>
-    <td>${routeMarks(p)}</td>
-    <td class="msl"><span class="mono">${esc(cur.number)}</span>${esc(cur.slug)}</td>
-    <td>${phaseMeter(p)}<span class="phlabel">${esc(p.phase || "no phase")}</span></td>
-    <td class="n">${p.tasks_total ? `${p.tasks_done || 0}/${p.tasks_total}` : DASH}</td>
-    <td class="n">${sp.turns && sp.cost != null ? money(sp.cost) : DASH}</td>
-    <td class="n">${sp.turns ? int(sp.turns) : DASH}</td>
-    <td class="n">${ago(p.last_activity_iso)}</td>
-    <td><span class="state ${st}">${esc(stateLabel(p))}</span></td></tr>`;
+  const st=stateOf(p), {cur}=milestoneStack(p), sp=p.spend||{};
+  const tail=String(p.root||'').split('/').slice(-2).join('/');
+  const reasons=(p.attention||[]).map(a=>a.label).filter(Boolean).join(' · ');
+  return `<tr class="prow ${st}" data-root="${esc(p.root)}"><td><button class="pname" data-root="${esc(p.root)}" aria-label="Open ${esc(p.project||p.root)}"><span class="dot ${healthDot(p)}" title="health ${esc(healthReason(p))}"></span><span>${esc(p.project||p.root)}</span></button><div class="ppath">${esc(tail)}</div></td>
+    <td><div class="milestone-name"><span class="mono dim">${esc(cur.number)}</span> ${esc(cur.slug)}</div><div class="milestone-phase">${phaseMeter(p)}<span class="phlabel">${esc(p.phase||'No phase recorded')}</span></div></td>
+    <td><span class="state ${st}">${esc(stateLabel(p))}</span>${reasons?`<p class="health-note">${esc(reasons)}</p>`:''}<div class="ago">${ago(p.last_activity_iso)}</div></td><td class="n">${p.tasks_total?`${p.tasks_done||0}/${p.tasks_total}`:DASH}</td><td class="n">${sp.turns&&sp.cost!=null?money(sp.cost):DASH}<div class="ago">${sp.turns?int(sp.turns)+' turns':'No matched sessions'}</div></td></tr>`;
 }
 const TASK_GLYPH = {done: "✓", failed: "✗"};
 function waveRows(p) {
@@ -633,15 +728,15 @@ function projectPage(p) {
                  ...(p.integration ? [["Integration", p.integration]] : []),
                  ["Updated", ago(p.last_activity_iso)], ["Cost", sp && sp.turns ? money(sp.cost) : "—"], ["Turns", sp && sp.turns ? int(sp.turns) : "—"]];
   return `<article class="project" data-root="${esc(p.root)}">
-    <div class="phead"><h1><span class="dot ${healthDot(p)}" title="health ${esc(healthReason(p))}"></span> ${esc(p.project || p.root)}</h1><span class="mono">${esc(p.root)}</span></div>
+    <div class="project-tools">${sourceLink('.project/STATE.md','History & files')}</div><div class="phead"><h1><span class="dot ${healthDot(p)}" title="health ${esc(healthReason(p))}"></span> ${esc(p.project || p.root)}</h1><span class="mono">${esc(p.root)}</span></div>
     <dl class="facts">${facts.map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join("")}</dl>
     ${p.handoff ? `<p class="runtime-handoff">${esc(p.handoff.outcome)} — ${esc(p.handoff.next)}</p>` : ""}
     ${p.vision ? `<p class="vision">${esc(p.vision)}</p>` : ""}
     <div class="cols"><section>
       <h2>Phase <span>${esc(p.phase || "no phase")}</span></h2>${phaseTrack(p)}${nowBox(p)}
-      ${criteriaTable(p)}
+      ${foldProject('criteria','Success criteria',criteriaTable(p))}
       <h2>Milestones</h2>${milestoneTable(p)}
-      ${taskTable(p)}${reviewTable(p)}${ledgerTable(p)}
+      ${foldProject('tasks','Tasks and files',taskTable(p))}${foldProject('reviews','Reviews',reviewTable(p))}${foldProject('verification','Recent verification',ledgerTable(p))}
     </section><section>
       ${usageColumn(p)}
       ${activityTable(p)}
@@ -687,7 +782,7 @@ function tabPlugin() {
     ].filter(Boolean).join(" ");
     const root = esc(JSON.stringify(pr.root));
     const version = pr.runtime_version && pr.runtime_version !== "unknown" ? pr.runtime_version : null;
-    const versionLabel = !pr.runtime ? "Not installed" : version || "Unknown — update required";
+    const versionLabel = !pr.runtime ? "Not installed" : version || "Unknown — version metadata unavailable";
     const update = version && latest && version !== latest ? `<div class="dim">Latest: ${esc(latest)}</div>` : "";
     return `<tr><td class="faint" style="word-break:break-all">${esc(pr.root)}</td><td>${esc(versionLabel)}${update}</td><td>${pills}</td>
       <td style="white-space:nowrap">
@@ -709,44 +804,39 @@ function tabPlugin() {
 }
 const ICON = {
   mark: '<svg viewBox="0 0 18 18" fill="none" aria-hidden="true"><path d="M1.6 4 5.6 9 1.6 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M7 4 11 9 7 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.4 4 16.4 9 12.4 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-  gear: '<svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="2.2" stroke="currentColor" stroke-width="1.4"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>',
+  settings: '<svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 4h3m4 0h5M2 12h7m4 0h1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="7" cy="4" r="2" stroke="currentColor" stroke-width="1.5"/><circle cx="11" cy="12" r="2" stroke="currentColor" stroke-width="1.5"/></svg>',
   search: '<svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.5"/><path d="m10.5 10.5 3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>',
 };
+__RECORDS_JS__
+__LAYOUT_JS__
 function render() {
   const stage = document.getElementById("stage");
   const previousKey = stage.dataset.readingKey;
   const settingsOpen = !!stage.querySelector('.settings-menu[open]');
+  const expanded = [...stage.querySelectorAll('details[open][data-section]')].map(e=>e.dataset.section);
+  const sidebarScroll = stage.querySelector('.file-list')?.scrollTop || 0;
   const pageScroll = [window.scrollX, window.scrollY];
   const focusIndex = [...stage.querySelectorAll('button, summary, select, input, [tabindex]')].indexOf(document.activeElement);
-  const caret = document.activeElement && document.activeElement.matches("[data-search]") ? document.activeElement.selectionStart : null;
+  const caret = document.activeElement && document.activeElement.matches("[data-search], [data-file-search]") ? document.activeElement.selectionStart : null;
   const projects = (DATA.projects || []).slice().sort((a, b) =>
     STATE_RANK[stateOf(a)] - STATE_RANK[stateOf(b)] || String(a.project || a.root).localeCompare(String(b.project || b.root)));
   const shipped = projects.filter(p => stateOf(p) === "shipped").length;
   const connection = ONLINE === null ? "Connecting…" : ONLINE ? (DATA.generated_at ? "Updated " + esc(shortT(DATA.generated_at)) : "Connected") : "Offline · showing last update";
-  const settings = `<details class="settings-menu"><summary aria-label="Settings" title="Settings">${ICON.gear}</summary><nav aria-label="Settings"><button class="btn" data-nav="plugin">Plugin</button><button class="btn" data-nav="folders">Watched folders</button><div class="appearance" role="group" aria-label="Appearance">Appearance<div class="segc">${THEMES.map(t => `<button data-theme-choice="${t}" aria-pressed="${THEME === t}">${t[0].toUpperCase() + t.slice(1)}</button>`).join("")}</div></div></nav></details>`;
+  const settings = `<details class="settings-menu"><summary aria-label="Settings" title="Settings">${ICON.settings}</summary><nav aria-label="Settings"><button class="btn" data-nav="config">Path settings</button><button class="btn" data-nav="plugin">Plugin</button><button class="btn" data-nav="folders">Watched folders</button><div class="appearance" role="group" aria-label="Appearance">Appearance<div class="segc">${THEMES.map(t => `<button data-theme-choice="${t}" aria-pressed="${THEME === t}">${t[0].toUpperCase() + t.slice(1)}</button>`).join("")}</div></div></nav></details>`;
   const status = `<button class="btn" data-action="refresh" aria-label="Refresh dashboard">Refresh</button><span class="connection" role="status"><span class="dot ${ONLINE === null ? "" : ONLINE ? "g" : "r"}"></span>${connection}</span>`;
-  const current = CState.view === "project" ? projects.find(p => p.root === CState.root) : null;
+  const current = ["project","files"].includes(CState.view) ? projects.find(p => p.root === CState.root) : null;
   let header, body;
   if (current) {
     header = `<header class="topbar"><button class="back" data-nav="board" aria-label="Back to projects">‹ Projects</button><select class="switcher" data-switch aria-label="Project">${projects.map(q => `<option value="${esc(q.root)}"${q.root === current.root ? " selected" : ""}>${esc(q.project || q.root)}</option>`).join("")}</select><span class="spacer"></span>${status}${settings}</header>`;
-    body = `<main class="page">${projectPage(current)}</main>`;
+    body = `<main class="page">${CState.view==='files'?filesPage(current):projectPage(current)+projectRecords(current)}</main>`;
   } else {
-    const filters = [["all", "All", projects.length], ["active", "Active", projects.length - shipped], ["shipped", "Shipped", shipped]]
-      .map(([k, label, n]) => `<button data-filter="${k}" aria-pressed="${CState.filter === k}">${label}<span>${n}</span></button>`).join("");
-    const onBoard = !["plugin", "folders"].includes(CState.view);
-    header = `<header class="topbar"><button class="brand" data-nav="board" aria-label="OpenGSD Path projects">${ICON.mark}OpenGSD Path</button>${onBoard ? `<div class="segc" role="group" aria-label="Show projects">${filters}</div><label class="search">${ICON.search}<input type="search" data-search placeholder="Filter projects" aria-label="Filter projects" value="${esc(CState.q)}"></label>` : `<span class="spacer"></span>`}${status}${settings}</header>`;
-    if (CState.view === "plugin") body = `<main class="settings"><h2>Plugin</h2>${tabPlugin()}</main>`;
-    else if (CState.view === "folders") body = `<main class="settings"><h2>Watched folders</h2><p class="dim">Projects inside these folders appear automatically.</p>${(DAEMON.parents || []).map((path, i) => `<div class="folder-row"><span>${esc(path)}</span><button class="btn danger" data-remove-parent="${i}">Stop watching</button></div>`).join("")}<p style="margin-top:16px"><button class="btn" data-action="add-folder">Add folder…</button></p></main>`;
+    header = `<header class="topbar"><button class="brand" data-nav="board" aria-label="OpenGSD Path projects">${ICON.mark}OpenGSD Path</button><nav class="topnav" aria-label="Main"><button data-nav="board" aria-current="${CState.view==='board'?'page':'false'}">Projects</button><button data-nav="config" aria-current="${['config','folders','plugin'].includes(CState.view)?'page':'false'}">Settings</button></nav><span class="spacer"></span>${status}${settings}</header>`;
+    if (CState.view === "plugin") body = settingsFrame('Plugin',tabPlugin());
+    else if (CState.view === 'config') body = settingsFrame('Path settings',pathConfigPage(),true);
+    else if (CState.view === "folders") body = settingsFrame('Watched folders', `<p class="dim">Projects inside these folders appear automatically.</p>${(DAEMON.parents || []).map((path, i) => `<div class="folder-row"><span>${esc(path)}</span><button class="btn danger" data-remove-parent="${i}">Stop watching</button></div>`).join("")}<p style="margin-top:16px"><button class="btn" data-action="add-folder">Add folder…</button></p>`);
     else {
       if (CState.view === "project" && ONLINE !== null) { CState.view = "board"; CState.root = null; setHash(); }
-      const q = CState.q.trim().toLowerCase();
-      const shown = projects.filter(p => (CState.filter === "all" || (CState.filter === "shipped") === (stateOf(p) === "shipped"))
-        && String(p.project || p.root).toLowerCase().includes(q));
-      const empty = ONLINE === null ? "Loading projects…" : !ONLINE && !projects.length ? "Cannot load projects. Check the daemon connection."
-        : !projects.length ? "No projects yet. Add a watched folder to get started." : "No projects match this filter.";
-      body = `<main class="board" aria-label="Status board">${shown.length
-        ? `<table class="grid"><thead><tr><th>Project</th><th>Route</th><th>Milestone</th><th>Phase</th><th class="n">Tasks</th><th class="n">Cost</th><th class="n">Turns</th><th class="n">Updated</th><th>State</th></tr></thead><tbody>${shown.map(boardRow).join("")}</tbody></table>`
-        : `<div class="empty">${empty}</div>`}</main>`;
+      body = boardPage(projects);
     }
   }
   const readingKey = JSON.stringify([CState.view, CState.root]);
@@ -754,11 +844,13 @@ function render() {
   stage.dataset.readingKey = readingKey;
   if (previousKey === readingKey) {
     stage.querySelector('.settings-menu').open = settingsOpen;
+    stage.querySelectorAll('details[data-section]').forEach(e=>{e.open=expanded.includes(e.dataset.section);});
+    if(stage.querySelector('.file-list'))stage.querySelector('.file-list').scrollTop=sidebarScroll;
     window.scrollTo(...pageScroll);
     const target = focusIndex >= 0 ? stage.querySelectorAll('button, summary, select, input, [tabindex]')[focusIndex] : null;
     if (target) {
       target.focus({preventScroll: true});
-      if (caret != null && target.matches("[data-search]")) target.setSelectionRange(caret, caret);
+      if (caret != null && target.matches("[data-search], [data-file-search]")) target.setSelectionRange(caret, caret);
     }
   }
 }
@@ -771,21 +863,29 @@ document.getElementById("stage").addEventListener("click", event => {
   else if (b.dataset.root) openProject(b.dataset.root);
   else if (b.dataset.action === "refresh") refresh(true);
   else if (b.dataset.action === "add-folder") addParent();
+  else if (b.dataset.saveConfig) saveConfig(b.dataset.saveConfig);
+  else if (b.dataset.resetConfig) saveConfig(b.dataset.resetConfig, true);
   else if (b.dataset.removeParent != null) removeParent(DAEMON.parents[Number(b.dataset.removeParent)]);
 });
 document.getElementById("stage").addEventListener("input", event => {
   if (event.target.matches("[data-search]")) { CState.q = event.target.value; render(); }
+  if (event.target.dataset.configKey) CFG.drafts[event.target.dataset.configKey] = event.target.value;
 });
 document.getElementById("stage").addEventListener("change", event => {
   if (event.target.matches("[data-switch]")) openProject(event.target.value);
+  if (event.target.matches('[data-config-scope]')) { CFG.root = event.target.value; loadConfig(); }
+  if (event.target.dataset.modelChoice) { CFG[event.target.dataset.modelChoice] = event.target.value; render(); }
 });
 function applyHash() {
   const h = location.hash.slice(1);
-  if (h === "plugin" || h === "folders") {
+  if (h === "plugin" || h === "folders" || h === "config") {
     CState.view = h;
     if (h === "plugin") loadPlugin().then(render);
+    if (h === 'config') loadConfig();
   } else {
-    CState.root = new URLSearchParams(h).get("project") || null;
+    const params=new URLSearchParams(h);
+    CState.root = params.get("project") || null;
+    if(CState.root && params.has('file')) { openFiles(CState.root,params.get('file'),params.get('revision')||'',false); return; }
     CState.view = CState.root ? "project" : "board";
   }
   render();
@@ -863,6 +963,12 @@ class _Handler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         path = self.path.split("?", 1)[0]
+        if path == '/api/path-config':
+            self._path_config(False)
+            return
+        if path in ("/api/project-files", "/api/project-data"):
+            self._project_files()
+            return
         if path == "/health":
             self._respond(200, "application/json", json.dumps({"ok": True}))
             return
@@ -896,6 +1002,9 @@ class _Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         path = self.path.split("?", 1)[0]
+        if path == '/api/path-config':
+            self._path_config(True)
+            return
         if path == "/api/refresh":
             try:
                 self.scan(scan_sessions=False)
@@ -944,6 +1053,57 @@ class _Handler(BaseHTTPRequestHandler):
         finally:
             _PLUGIN_OP_LOCK.release()
         self._respond(code, "application/json", json.dumps(payload, indent=2, sort_keys=True))
+
+    def _project_files(self):
+        port = self.server.server_address[1]
+        host = self.headers.get('Host')
+        if host not in (f'127.0.0.1:{port}', f'localhost:{port}') or self.headers.get('Origin') not in (None, f'http://{host}') or self.headers.get('Sec-Fetch-Site') == 'cross-site':
+            self._respond(403, 'application/json', json.dumps({'error': 'Same-origin project file requests only.'}))
+            return
+        try:
+            query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query, keep_blank_values=True)
+            if any(len(values) != 1 for values in query.values()):
+                raise FileAccessError('File query fields cannot repeat.')
+            request = {key: values[0] for key, values in query.items()}
+            if self.path.split('?', 1)[0] == '/api/project-data':
+                if set(request) != {'root'}:
+                    raise FileAccessError('Project data requires only a root field.')
+                payload = project_records(self.watcher, request['root'])
+            else:
+                payload = request_files(self.watcher.projects, request)
+            code = 200
+        except FileAccessError as error:
+            code, payload = error.code, {'error': str(error), 'status': error.status}
+        except (OSError, ValueError) as error:
+            code, payload = 400, {'error': str(error), 'status': 'failed'}
+        self._respond(code, 'application/json', json.dumps(payload))
+
+    def _path_config(self, write):
+        port = self.server.server_address[1]
+        host = self.headers.get('Host')
+        if host not in (f'127.0.0.1:{port}', f'localhost:{port}') or (
+            self.headers.get('Origin') not in (None, f'http://{host}')
+        ):
+            self._respond(403, 'application/json', json.dumps({'error': 'Same-origin settings requests only.'}))
+            return
+        try:
+            if write:
+                if self.headers.get_content_type() != 'application/json':
+                    raise ValueError('settings writes require application/json')
+                length = int(self.headers.get('Content-Length', '0'))
+                if length <= 0:
+                    raise ValueError('settings writes require a JSON body')
+                request = json.loads(self.rfile.read(length))
+            else:
+                query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+                if any(len(values) != 1 for values in query.values()):
+                    raise ValueError('settings query fields cannot repeat')
+                request = {key: values[0] for key, values in query.items()}
+            payload = configure(self.plugin, self.watcher.projects, request, write)
+            code = 200
+        except (ValueError, OSError) as error:
+            code, payload = 400, {'error': str(error)}
+        self._respond(code, 'application/json', json.dumps(payload))
 
     def _parents_op(self) -> None:
         try:
@@ -1058,7 +1218,7 @@ class _Handler(BaseHTTPRequestHandler):
             "parents": list(config.parents),
             "poll_seconds": config.poll_seconds,
         }
-        return DASHBOARD_PAGE.replace("__DAEMON_JSON__", json.dumps(daemon))
+        return DASHBOARD_PAGE.replace("__DAEMON_JSON__", json.dumps(daemon)).replace("__RECORDS_CSS__", RECORDS_CSS).replace("__RECORDS_JS__", RECORDS_JS).replace("__LAYOUT_CSS__", LAYOUT_CSS).replace("__LAYOUT_JS__", LAYOUT_JS)
 
 
 def serve(watcher: Watcher, port: int = DEFAULT_PORT,

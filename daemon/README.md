@@ -9,11 +9,13 @@ bundled runtime status, and surfaces everything through a CLI, a localhost
 HTTP endpoint, a JSONL event history, desktop notifications, and a system
 tray icon.
 
-The daemon is strictly read-only against watched projects: file reads plus
+Background monitoring is read-only against watched projects: file reads plus
 `git` read commands only. Completion checks may read the remote refs and, for
 pull-request integration, GitHub metadata. They never fetch or write refs.
 Unavailable or stale proof is shown as **Unverified**, with available phase
-and task facts retained. The daemon never writes into a watched project.
+and task facts retained. Explicit **Settings → Path settings** saves are the
+exception: they invoke the selected runtime's validated config helper and cannot
+advance pipeline phases.
 
 ## Install (one command)
 
@@ -74,7 +76,8 @@ Check status:
 
 ## Install (manual)
 
-Core (CLI, watcher, HTTP server) — stdlib only, Python 3.9+:
+Core (CLI, watcher, HTTP server), Python 3.9+. The package installs
+`markdown-it-py` for safe Markdown previews:
 
 ```bash
 pip install ./daemon
@@ -191,7 +194,25 @@ cost. The project page also shows the runtime handoff described under
 return to the board. Refresh preserves page scroll, the open Settings menu and
 focus. Connection status changes to Offline after a failed status request; the
 last received data remains visible with an explicit offline label. The
-dashboard does not execute pipeline commands.
+dashboard advances no pipeline phases; explicit Path settings saves use the
+configuration helper described below.
+
+## Path settings
+
+Open **Settings → Path settings** (`#config`) to edit user defaults or a watched
+project's shipping mode, future review-panel preference, and model/effort choices.
+Sources and lock reasons are shown. Save changes individually; Reset removes that
+scope's override. Watched folders and appearance retain their existing controls.
+
+User defaults require the daemon's plugin source checkout; project settings need
+an updated selected runtime. Missing support shows an update message. Settings
+never fetch, install, or upgrade automatically.
+
+`GET /api/path-config?scope=user` (or `scope=project&root=<watched-root>`) reads
+settings. Same-origin JSON `POST /api/path-config` accepts `scope`, project `root`,
+`action` (`set` or `reset`), `key`, and string `value` for set. Unknown fields and
+unwatched project roots are rejected. See [Path settings](../skills/gsd-path/references/config.md)
+for supported keys, precedence, and when changes apply.
 
 ## Plugin lifecycle
 
@@ -208,9 +229,12 @@ install/update. Background source refresh does `git fetch origin main` +
 `git pull --ff-only` at most once per 24h, cached in
 `~/.gsd-path/update-check.json` (last-fetch timestamp + last-known latest
 version from the clone's `package.json`). Background refresh failures retain
-the cached state. Explicit global and project updates bypass this cache period
-and stop with an error if source refresh fails; the installer does not run.
-Project updates invoke `--runtime-upgrade`; see
+the cached state. Explicit global updates and project updates from a clean source
+checkout bypass this cache period and stop if source refresh fails. When the
+source checkout has local changes, project Update uses that local build without
+fetching or merging and displays a source notice. It never discards those edits.
+Project updates invoke `--runtime-upgrade`, or `--runtime-migrate` for legacy
+runtime directories; see
 [project runtime versions](../DOCS.md#project-runtime-versions) for version
 selection and legacy migration, and [Dashboard feedback](../UPDATE.md#update-the-project-runtime-and-guard-hooks)
 for the displayed controls and results. Every installer operation (argv, exit code,
@@ -394,3 +418,37 @@ Create a shortcut in `shell:startup` (Win+R → `shell:startup`) with target:
 
 or run `gsd-path-daemon.exe tray --serve` from a PowerShell scheduled task at
 logon.
+
+## Project history and files
+
+Open a project and choose **History & files**. The viewer lists Git-tracked and
+non-ignored repository files plus `.project` records, including archived
+milestones. UTF-8 text is shown in full. Markdown has Preview and Raw views;
+HTML is escaped and images are represented by their alt text, without loading
+remote resources. Relative document links open within the same project.
+
+The Version selector and Git history show committed versions of the selected
+path. Working tree shows current contents. Uncommitted older contents are not
+retained, and history does not follow renames. Binary files, symlinks, hard
+links, `.git` internals, and paths outside watched projects are rejected.
+Secure working-tree reads currently require POSIX directory descriptors;
+unsupported platforms report that limitation instead of using an unsafe fallback.
+
+**Records & sources → Load full records** loads the full recorded pipeline
+usage, verification ledger, daemon activity, and indexed host turns on demand.
+Data coverage distinguishes available files, loaded records, invalid JSONL
+lines, missing files, and unverified runtime state. Host turns are the records
+currently indexed from Codex and Claude Code logs, not a guarantee that every
+host log was parsed. The regular status snapshot still uses recent-record
+windows; full records and files are fetched separately.
+
+Read-only endpoints, restricted to watched roots and same-origin local requests:
+
+- `GET /api/project-files?root=...&action=list`
+- `GET /api/project-files?root=...&action=read&path=...` (optional full commit `revision`)
+- `GET /api/project-files?root=...&action=history&path=...`
+- `GET /api/project-data?root=...`
+
+The Board and Milestones views use real watched-project state. Project detail
+keeps its existing facts and usage tables, with tasks and evidence in expandable
+sections. Settings groups Path settings, watched folders, and plugin management.

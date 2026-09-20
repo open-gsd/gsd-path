@@ -100,6 +100,11 @@ rule; never invoke an explicit-only sibling skill yourself.
 checkpoint `.project/` records uses this helper. Record the exact full HEAD
 before the first metadata change in that checkpoint, then run:
 
+Explicit configuration edits in `.project/config.json` and
+`.project/model-policy.json` are expected bookkeeping. Include them in the next
+normal checkpoint before a clean dispatch base; they may remain pending while
+an already dispatched task lands. Existing model selections stay pinned.
+
 ```text
 python3 <absolute isolation.py> checkpoint \
   --repo <absolute primary> \

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# gsd-path project runtime
 """Resolve explicit sub-agent model choices without model reasoning."""
 
 import argparse
@@ -6,6 +7,7 @@ import hashlib
 import json
 import re
 import sys
+sys.dont_write_bytecode = True
 from pathlib import Path
 
 try:
@@ -89,6 +91,14 @@ def resolve(repo, project_dir, role, capabilities, overrides, previous=None):
             raise PolicyError('recorded inherited model no longer matches the advertised identity')
     else:
         policy = load_policy(repo, project_dir)
+        try:
+            from .path_config import user_defaults
+        except ImportError:
+            from path_config import user_defaults
+        try:
+            defaults = user_defaults().get('models', {})
+        except (OSError, ValueError, RuntimeError) as error:
+            raise PolicyError(str(error)) from error
         selected = dict.fromkeys(FIELDS, 'inherit')
         sources = dict.fromkeys(FIELDS, 'default')
         tier = 'heavy' if role in HEAVY else 'light' if role in LIGHT else None
@@ -97,13 +107,15 @@ def resolve(repo, project_dir, role, capabilities, overrides, previous=None):
         if hint in caps.get('effort', {}).get('values', []):
             selected['effort'] = hint
         for label, group in (
+            (f'user.roles.{role}', defaults.get('roles', {}).get(role, {})),
+            (f'user.hosts.{host}.{role}', defaults.get('hosts', {}).get(host, {}).get(role, {})),
             (f'roles.{role}', policy.get('roles', {}).get(role, {})),
             (f'hosts.{host}.{role}', policy.get('hosts', {}).get(host, {}).get(role, {})),
             ('task', settings(overrides, 'task')),
         ):
             for field, value in group.items():
                 selected[field], sources[field] = value, label
-        policy_hash = hashlib.sha256(json.dumps(policy, sort_keys=True).encode()).hexdigest()
+        policy_hash = hashlib.sha256(json.dumps({'user': defaults, 'project': policy}, sort_keys=True).encode()).hexdigest()
     native, cli, controls = {}, {}, {}
     for field, value in selected.items():
         spec = object_value(caps.get(field, {}), f'capabilities.{field}')

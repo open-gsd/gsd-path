@@ -1203,7 +1203,14 @@ def filled_state_template(template: str, slug: str, phase: str) -> str:
     text = text.replace("YYYY-MM-DD — <phase> — project initialized", stamp)
     if "<slug>" in text or "YYYY-MM-DD" in text:
         raise DetectError("state template placeholder remains")
-    return text
+    try:
+        from .path_config import initial_state
+    except ImportError:
+        from path_config import initial_state
+    try:
+        return initial_state(text)
+    except (OSError, ValueError, RuntimeError) as error:
+        raise DetectError(str(error)) from error
 
 
 def write_all(descriptor: int, payload: bytes) -> None:
