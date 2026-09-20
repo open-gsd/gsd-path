@@ -1,6 +1,6 @@
 # 1.2.0 release-readiness audit
 
-Status: **NOT READY — Claude and OpenCode blocked**. Release target remains **1.2.0**. No external release, tag, push, or npm publication was performed.
+Status: **NOT READY — OpenCode correction active; seven hosts accepted**. Release target remains **1.2.0**. No external release, tag, push, or npm publication was performed.
 
 Candidate: `f36f24aed82ac0019d082c7e31b8a4342d8e03f1`. This is the local release-cycle correction over main `45466c40e57c6cc0d7acd099e880d1644b33f5ee`. Remote main was rechecked with `git ls-remote origin refs/heads/main` at audit closeout and still matches that SHA. These receipts do not claim that unchanged remote main is ready.
 
@@ -15,11 +15,11 @@ Qwen, Kiro, and Zed are excluded from required evaluations by the owner. Their i
 | Antigravity | Fresh retry4 receipt, oracle6/6, both reuse checks pass; maximum native session16,553 output tokens | None; inspection resumes and invocation errors preserved |
 | Kimi | Fresh retry2 receipt, oracle6/6, both reuse checks pass; maximum native session17,497 output tokens | None; previous overrun retained in history |
 | Grok | Fresh retry3 receipt, oracle6/6, both reuse checks pass; maximum native session14,229 output tokens | None; recovered invocation errors preserved |
-| Claude | Retry2 native review exceeded session budget (32,066 aggregate output tokens at completion) | Budget failure preserved; no accepted receipt |
+| Claude | Existing-fixture cycle2 recovery accepted: receipt/oracle6/6/both reuse checks/local integration pass; corrected review20,945 aggregate tokens | None; original32,066 overrun and recovered invocation negatives preserved |
 | Copilot | Fresh retry4 receipt, oracle6/6, both reuse checks pass; maximum native session21,937 output tokens | None; recovered path error and diagnosis-order deviation disclosed |
 | OpenCode | Retry3 coder/review/oracle/reuse passed; receipt binding failed | Task agent build_T001 differs from native child build_t001; stopped before shipment |
 
-Six of eight hosts now prove all requested scenario claims. A structural receipt alone does not prove a failed reuse, budget, or candidate-provenance claim. The clean-checkout aggregate audit at7b5ffe6 validated these six receipts in10.939seconds without live host calls. It selected only Claude and OpenCode as required runs. The strict publication gate exited1 for those two explicit blocked results. See [affected plan](affected-checks/affected-plan-result.json) and [strict gate](affected-checks/affected-strict-result.json). Recovered nonmutating invocation errors remain disclosed; they are not erased or described as flawless execution. See [Antigravity proof](antigravity-passed/scenario-proof.json), [Kimi observations](../kimi/observations.md), [Grok run notes](../grok/run-notes.md), and [OpenCode provenance failure](opencode-history/retry2/BLOCKER.md).
+Seven of eight hosts now prove all requested scenario claims. Claude recovered through canonical review cycle2; see [correction evidence](claude-recovery-cycle2.md). The earlier aggregate result below is historical; a new aggregate gate will run after OpenCode finishes. A structural receipt alone does not prove a failed reuse, budget, or candidate-provenance claim. The clean-checkout aggregate audit at7b5ffe6 validated these six receipts in10.939seconds without live host calls. It selected only Claude and OpenCode as required runs. The strict publication gate exited1 for those two explicit blocked results. See [affected plan](affected-checks/affected-plan-result.json) and [strict gate](affected-checks/affected-strict-result.json). Recovered nonmutating invocation errors remain disclosed; they are not erased or described as flawless execution. See [Antigravity proof](antigravity-passed/scenario-proof.json), [Kimi observations](../kimi/observations.md), [Grok run notes](../grok/run-notes.md), and [OpenCode provenance failure](opencode-history/retry2/BLOCKER.md).
 
 ## Release-cycle repair
 
@@ -59,3 +59,18 @@ lifecycle scripts in the subsequent publish step. Local npm publication keeps
 its prepublishOnly gate. The real offline publish fixture detected two runs
 before the fix and one after; restored-original sabotage reproduced the failure.
 Affected-evidence validation passed: receipt suite53/53, restored focused checks8/8, release workflow checks18/18, and restored-original failures reproduced. See [verification and raw logs](affected-checks/VERIFICATION.md). This is not release approval.
+
+## Owner-authorized blocker correction
+
+Owner ruling: "fix them". Claude reused its valid installation, inspection,
+definition, plan, task and landing; canonical review cycle2 replaced the failed
+review. Accepted review parent+child used20,945 tokens; the32,066 context remains
+failed/superseded. Receipt validation, oracle6/6, full-wave final reuse, same-HEAD
+verification reuse, local shipment and integration all passed. This did not
+rerun setup or build and did not modify product code or the receipt validator.
+
+OpenCode retry4 is the only remaining live run. Its old completed build cannot
+be undone to the task by the existing helper, so retry3 stays intact and a fresh
+fixture is used. Actual activation now records build_t001; the same name is
+required for the actual native child, with a check before review. Six previously
+accepted host receipts remain unchanged; package stays1.2.0.

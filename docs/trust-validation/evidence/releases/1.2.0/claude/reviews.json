@@ -1,0 +1,11 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "claude",
+  "run_id": "b5627f8a-3c74-4064-aa69-7d477b67e7c7",
+  "result": "pass",
+  "step": "reviews",
+  "command": "python3 -B .claude/skills/gsd-path/scripts/dispatch_driver.py review --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/claude-retry2/quick/repo --wave 1 --cycle 2 --child-command 'env -u CLAUDECODE claude -p --dangerously-skip-permissions --output-format stream-json --verbose {effort_args}' --model-capabilities /tmp/claude-retry2-review2-capabilities.json --effort medium --wait 0 2>&1 | tail -40; echo \"EXIT:${PIPESTATUS[0]}\"",
+  "output": "# Review \u2014 wave 1, cycle 2\n\nReviewed HEAD: f50e83c69c7dedaece13f67e657249e2f7a281dc\nReview scope: final\n\nWave verdict: pass\n# Final Review \u2014 reused full wave\n\nReviewed HEAD: 49e92866f539ae62e917c54612bac69dd872245d\nOverall verdict: pass\nSource review: .project/review/wave-1.cycle2.md\nSource commit: f50e83c69c7dedaece13f67e657249e2f7a281dc",
+  "wave_review_artifact": ".project/archive/001-count-cli-json/review/wave-1.cycle2.md",
+  "final_review_artifact": ".project/archive/001-count-cli-json/review/FINAL.md"
+}

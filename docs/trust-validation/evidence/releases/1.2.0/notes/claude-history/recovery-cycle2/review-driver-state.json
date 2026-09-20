@@ -1,0 +1,74 @@
+{
+  "attempt": 1,
+  "base": "f50e83c69c7dedaece13f67e657249e2f7a281dc",
+  "branch": "gsd-path-verify/wave-1-cycle-2",
+  "child_timeout": null,
+  "cleanup_complete": true,
+  "cleanup_error": null,
+  "cleanup_pending": false,
+  "command": [
+    "env",
+    "-u",
+    "CLAUDECODE",
+    "claude",
+    "-p",
+    "--dangerously-skip-permissions",
+    "--output-format",
+    "stream-json",
+    "--verbose",
+    "--effort",
+    "medium"
+  ],
+  "cycle": 2,
+  "dispatched_at": "2026-09-20T21:41:17+00:00",
+  "lens": null,
+  "model_selection": {
+    "cli": {
+      "effort": [
+        "--effort",
+        "medium"
+      ],
+      "model": []
+    },
+    "controls": {
+      "effort": [
+        "--effort",
+        "{value}"
+      ],
+      "model": []
+    },
+    "effective_model": null,
+    "host": "claude",
+    "identity_evidence": "requested controls; host execution is recorded by the dispatcher",
+    "native": {},
+    "policy_hash": "0eecdfeb02075c6a7cd09c421d3e3634c94de76ef9e47733008b6b306143a31f",
+    "role": "reviewer",
+    "schema": "gsd-path/model-selection/v1",
+    "selected": {
+      "effort": "medium",
+      "model": "inherit"
+    },
+    "sources": {
+      "effort": "task",
+      "model": "default"
+    }
+  },
+  "origin": "dispatch",
+  "outcome": "collected",
+  "owned": [
+    "SC1",
+    "SC2",
+    "SC3",
+    "SC4",
+    "SC5",
+    "SC6"
+  ],
+  "pid": 79690,
+  "relative": ".project/review/wave-1.cycle2.md",
+  "task_id": "review_wave_1_cycle_2",
+  "validated": true,
+  "validated_sha256": "ed98dd873db2b05c2b2ad6b6d5d154fc97a0b3817913da767aa0fea782d86860",
+  "verdict": "pass",
+  "wave": 1,
+  "worktree": "/Users/jeremymcspadden/.gsd-path/projects/53f74c795783e5ab4fdc8ad19e257ab1c8e6a52f0dc178cfaafc57c1fc2d9a7f/36f1fcaca5131fc1b4fc2b0301ef8de0329f297be7c6c690e955c441d7a7526e/verify/wave-1-cycle-2"
+}

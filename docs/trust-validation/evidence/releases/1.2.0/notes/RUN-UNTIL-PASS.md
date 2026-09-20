@@ -29,3 +29,9 @@ identity binding. Both current host reports explicitly say blocked so older
 structural passes cannot hide the failures. Their source histories preserve all
 prior bytes. No further native runs or full fixtures were started. The affected
 release gate and duplicate-verification fix are checkpointed at112fe67.
+
+Owner then said "fix them", authorizing the two affected corrections. Claude
+completed canonical cycle2 recovery on its existing landed task:20,945 aggregate
+review tokens, valid receipt, oracle6/6, both reuse claims and local integration.
+Original32,066 remains failed/superseded. OpenCode retry4 is active, with corrected
+build_t001 activation and early identity checks; retry3 remains unchanged.
