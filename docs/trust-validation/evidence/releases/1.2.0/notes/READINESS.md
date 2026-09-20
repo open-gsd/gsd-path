@@ -1,8 +1,8 @@
 # 1.2.0 release-readiness audit
 
-Status: **Eight host receipts accepted; clean-checkpoint aggregate validation pending**. Release target remains **1.2.0**. No external release, tag, push, or npm publication was performed.
+Status: **PASS — all eight required host receipts validated; zero live runs required**. Release target remains **1.2.0**. No external release, tag, push, or npm publication was performed.
 
-Candidate: `f36f24aed82ac0019d082c7e31b8a4342d8e03f1`. This is the local release-cycle correction over main `45466c40e57c6cc0d7acd099e880d1644b33f5ee`. Remote main was rechecked with `git ls-remote origin refs/heads/main` at audit closeout and still matches that SHA. These receipts do not claim that unchanged remote main is ready.
+Candidate: `f36f24aed82ac0019d082c7e31b8a4342d8e03f1`. This is the local release-cycle correction over main `45466c40e57c6cc0d7acd099e880d1644b33f5ee`. At the earlier audit closeout, `git ls-remote origin refs/heads/main` matched that SHA; this correction did not update remote main. These receipts do not claim that unchanged remote main is ready.
 
 ## Required live hosts
 
@@ -19,7 +19,7 @@ Qwen, Kiro, and Zed are excluded from required evaluations by the owner. Their i
 | Copilot | Fresh retry4 receipt, oracle6/6, both reuse checks pass; maximum native session21,937 output tokens | None; recovered path error and diagnosis-order deviation disclosed |
 | OpenCode | Retry4 receipt, oracle6/6, both reuse checks and local integration pass; maximum accepted context19,939 generated tokens | None; original identity failure, canceled recovery and invocation errors preserved |
 
-All eight hosts now prove the requested scenario claims. Claude recovered through canonical review cycle2; see [correction evidence](claude-recovery-cycle2.md). OpenCode corrected the task identity and completed a policy-resolved replacement child; see [accepted lineage and recovery notes](../opencode/run-notes.md). The earlier aggregate result below is historical; a new aggregate gate will run on the clean evidence checkpoint. A structural receipt alone does not prove a failed reuse, budget, or candidate-provenance claim. The clean-checkout aggregate audit at7b5ffe6 validated these six receipts in10.939seconds without live host calls. It selected only Claude and OpenCode as required runs. The strict publication gate exited1 for those two explicit blocked results. See [affected plan](affected-checks/affected-plan-result.json) and [strict gate](affected-checks/affected-strict-result.json). Recovered nonmutating invocation errors remain disclosed; they are not erased or described as flawless execution. See [Antigravity proof](antigravity-passed/scenario-proof.json), [Kimi observations](../kimi/observations.md), [Grok run notes](../grok/run-notes.md), and [OpenCode provenance failure](opencode-history/retry2/BLOCKER.md).
+All eight hosts now prove the requested scenario claims. Claude recovered through canonical review cycle2; see [correction evidence](claude-recovery-cycle2.md). OpenCode corrected the task identity and completed a policy-resolved replacement child; see [accepted lineage and recovery notes](../opencode/run-notes.md). The final strict aggregate gate passed at clean checkpoint `7c4543f54b70de97708bdbc53269976495caa514` in 14.399 seconds: all eight receipts validated, `required_runs: []`, no reasons. See [exact command, output and timing](affected-checks/receipt-gate-all-pass.json). This check launched no native host sessions. The earlier blocked aggregate results below remain historical. A structural receipt alone does not prove a failed reuse, budget, or candidate-provenance claim. The clean-checkout aggregate audit at7b5ffe6 validated these six receipts in10.939seconds without live host calls. It selected only Claude and OpenCode as required runs. The strict publication gate exited1 for those two explicit blocked results. See [affected plan](affected-checks/affected-plan-result.json) and [strict gate](affected-checks/affected-strict-result.json). Recovered nonmutating invocation errors remain disclosed; they are not erased or described as flawless execution. See [Antigravity proof](antigravity-passed/scenario-proof.json), [Kimi observations](../kimi/observations.md), [Grok run notes](../grok/run-notes.md), and [OpenCode provenance failure](opencode-history/retry2/BLOCKER.md).
 
 ## Release-cycle repair
 
@@ -88,3 +88,13 @@ review preparation remain disclosed in [OpenCode run notes](../opencode/run-note
 
 Six previously accepted host receipts remain unchanged; package stays 1.2.0.
 These two corrections changed evidence only, with no product or validator edits.
+
+## Final checkpoint
+
+Both requested blockers are corrected. The strict aggregate command was
+`python3 -B scripts/check_trust_evidence.py --repo .` and exited 0 on the clean
+evidence checkpoint above. The six other accepted hosts and both 1.2.0 version
+fields were checked unchanged. Only evidence and its closeout notes changed in
+this correction. The follow-up commit records this result; it changes no product
+code or receipts. No full-repository suite was repeated for these evidence-only
+changes. The earlier offline results and initial transient failure remain above.

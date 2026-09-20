@@ -43,3 +43,8 @@ context 19,939 generated tokens. Original coder plus canceled recovery remains
 superseded with 21,504 recorded tokens plus unknown tail, not a budget pass.
 All eight individual receipts are accepted; root aggregate validation follows
 on a clean checkpoint. No other hosts were rerun and no release was published.
+
+Final strict aggregate gate PASS at clean checkpoint 7c4543f54b70de97708bdbc53269976495caa514:
+all 8 required receipts validated in 14.399 seconds, required_runs=[], no live calls.
+Exact output: affected-checks/receipt-gate-all-pass.json. Corrections are complete;
+source package remains 1.2.0 and no external release was published.
