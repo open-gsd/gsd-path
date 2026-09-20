@@ -33,8 +33,12 @@ The workflow consumes the prepared version and verifies before tagging or publis
 - Initial `npm run verify`: failed after 1,747 Python tests with one failure and ten skips. `DispatchDriverTests.test_fix_tasks_resumes_after_only_first_batch_was_written` returned blocked instead of done.
 - That test passed on isolated recheck (19.238 seconds). The complete Python recheck completed 1,747 tests successfully (ten skipped), including that test, with process exit 0. The diagnostic wrapper only captured the actual result after the tested call returned; its source is preserved under offline-checks. The initial failure did not reproduce; its cause remains unresolved. No speculative product fix was made.
 
-The initial failure remains at `/Users/jeremymcspadden/orca/evaluations/gsd-path-release-cycle-f36f24a/verify.log`; recheck output and captured actual dispatch result are in that same directory. No failed command is described as passing. The 459-resource synchronization check also passed. The strict receipt gate at evidence checkpoint `a7cc490` correctly failed on missing Grok, OpenCode, Antigravity, and Kimi evidence.
+The initial failure remains at `/Users/jeremymcspadden/orca/evaluations/gsd-path-release-cycle-f36f24a/verify.log`; recheck output and captured actual dispatch result are in that same directory. No failed command is described as passing. The 459-resource synchronization check also passed. The strict receipt gate at checkpoint `a7cc490` failed on four missing hosts. After Kimi completed, the gate at clean checkpoint `2492d5a` exited 1 with `missing host evidence: grok, opencode, antigravity`. See [final gate output](offline-checks/receipt-gate-closeout.log).
 
 ## Preserved attempts
 
 Original 1.3.0 evidence was not relabeled. All failed 1.2.0 fixtures and native logs remain under `/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.2.0-f36f24a/`. The Antigravity archived manifest remains unchanged; its capture error is attributed to the evaluator. No API-billed Qwen/Kiro/Zed evaluations were restarted.
+
+## Next owner ruling
+
+No native host runs remain active. Grok reached the owner's three-round recovery limit. The pending continuation question covers a fresh Grok reviewer after canonical sidecar cleanup and a fresh OpenCode fixture. Antigravity also needs a new valid run because its evaluator-created manifest error is in an immutable shipped archive. No further native attempts were started automatically. Copilot and Kimi budget/protocol failures remain visible even though their structural receipts validate.
