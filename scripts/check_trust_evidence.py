@@ -851,6 +851,53 @@ def _require_current_tracked_evidence(
         )
 
 
+def release_scope(repo: Path, version: str, hosts: Sequence[str]) -> Mapping:
+    """Select live checks from the previous reachable release; unknowns fail closed."""
+    tags = [tag for tag in _git(repo, "tag", "--merged", "HEAD", "--list", "v*").splitlines()
+            if tag != f"v{version}" and re.fullmatch(r"v\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?", tag)]
+    if not tags or _git(repo, "rev-parse", "--is-shallow-repository") == "true":
+        return {"baseline": None, "hosts": list(hosts), "live_changes": ["no complete release baseline"]}
+    matches = [argument for tag in tags for argument in ("--match", tag)]
+    baseline = _git(repo, "describe", "--tags", "--abbrev=0", *matches, "HEAD")
+    # Disable rename detection so moving a contract into docs cannot hide deletion.
+    paths = _git(repo, "diff", "--no-renames", "--name-only", "-z", baseline, "HEAD").split("\0")
+    required = set()
+    live_changes = []
+    release_tools = {
+        "scripts/bump_version.mjs", "scripts/update_release_docs.mjs",
+        "scripts/prepare_release_evidence.sh", "scripts/check_trust_evidence.py",
+    }
+    for path in filter(None, paths):
+        if path in {"package.json", "package-lock.json"}:
+            # Only version fields are exempt; dependency and packaging changes are shared.
+            if not (repo / path).is_file() or not _git(repo, "ls-tree", "--name-only", baseline, "--", path):
+                required.update(hosts)
+                live_changes.append(path)
+                continue
+            previous = json.loads(_git(repo, "show", f"{baseline}:{path}"))
+            current = _read_json(repo / path)
+            for document in (previous, current):
+                document.pop("version", None)
+                root_package = document.get("packages", {}).get("") if path == "package-lock.json" else None
+                if isinstance(root_package, dict):
+                    root_package.pop("version", None)
+            if previous == current:
+                continue
+        elif (path.startswith(("docs/", "tests/", ".github/", "daemon/"))
+              or path in release_tools
+              or ("/" not in path and path.endswith(".md")
+                  and path not in {"AGENTS.md", "WORKFLOW.md"})):
+            continue
+        parts = PurePosixPath(path).parts
+        if len(parts) > 2 and parts[0] == "platforms" and parts[1] in hosts:
+            required.add(parts[1])
+        else:
+            required.update(hosts)
+        live_changes.append(path)
+    return {"baseline": baseline, "hosts": [host for host in hosts if host in required],
+            "live_changes": live_changes}
+
+
 def validate_repository(repo: Path) -> Mapping:
     repo = repo.resolve()
     if _git(repo, "status", "--porcelain", "--untracked-files=all"):
@@ -866,13 +913,17 @@ def validate_repository(repo: Path) -> Mapping:
         raise EvidenceError("host manifest is empty")
     if not isinstance(version, str) or not re.fullmatch(r"[0-9A-Za-z.+-]+", version):
         raise EvidenceError("package version is missing or invalid")
+    scope = release_scope(repo, version, hosts)
+    hosts = scope["hosts"]
+    if not hosts:
+        return {**scope, "candidate": None, "version": version}
     evidence_root = (
         repo / "docs" / "trust-validation" / "evidence" / "releases" / version
     )
     missing = [host for host in hosts if not (evidence_root / f"{host}.md").is_file()]
     if missing:
         raise EvidenceError(f"missing host evidence: {', '.join(missing)}")
-    extra = sorted(path.stem for path in evidence_root.glob("*.md") if path.stem not in hosts)
+    extra = sorted(path.stem for path in evidence_root.glob("*.md") if path.stem not in host_contracts)
     if extra:
         raise EvidenceError(f"unexpected host evidence: {', '.join(extra)}")
 
@@ -936,7 +987,7 @@ def validate_repository(repo: Path) -> Mapping:
         raise EvidenceError(
             "non-evidence changes follow the tested candidate: " + ", ".join(disallowed)
         )
-    return {"candidate": candidate, "hosts": hosts, "version": version}
+    return {**scope, "candidate": candidate, "version": version}
 
 
 def parser() -> argparse.ArgumentParser:
