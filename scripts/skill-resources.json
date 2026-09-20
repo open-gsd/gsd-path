@@ -83,6 +83,7 @@
     "scripts/pipeline_undo.py",
     "scripts/pipeline_diagnose.py",
     "README.md",
+    "CHANGELOG.md",
     "MIGRATE.md",
     "RUNTIME.md",
     "DOCS.md",

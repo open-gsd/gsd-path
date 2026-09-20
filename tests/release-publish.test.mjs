@@ -44,7 +44,7 @@ test('manual dispatch publishes in the same job after the release gate', () => {
   assert.equal(release.jobs.tag, undefined);
   const gate = job.steps.findIndex(step => step.run === 'npm run verify:release');
   const tag = job.steps.findIndex(step => step.name === 'Create release tag');
-  const publish = job.steps.findIndex(step => step.run === 'npm publish --access public');
+  const publish = job.steps.findIndex(step => step.run === 'npm publish --access public --provenance');
   assert.ok(gate >= 0 && tag > gate && publish > tag);
   assert.equal(job.steps[tag].if, "github.event_name == 'workflow_dispatch'");
   assert.equal(job.steps[publish].if, undefined);
@@ -95,6 +95,16 @@ function assertFrozenPackage(steps, event) {
       fs.utimesSync(path.join(dir, file), 0, 0);
       return [file, bytes];
     }));
+    fs.mkdirSync(path.join(dir, 'scripts'), { recursive: true });
+    fs.copyFileSync(
+      new URL('../scripts/update_release_docs.mjs', import.meta.url),
+      path.join(dir, 'scripts/update_release_docs.mjs')
+    );
+    fs.writeFileSync(
+      path.join(dir, 'README.md'),
+      '# Fixture\n\n<!-- release-docs -->\nold\n<!-- /release-docs -->\n'
+    );
+    fs.writeFileSync(path.join(dir, 'CHANGELOG.md'), '# Changelog\n\n');
     const version = JSON.parse(frozen.get('package.json')).version;
     const run = command => {
       const result = spawnSync('bash', ['--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', command], {
@@ -127,7 +137,7 @@ function assertFrozenPackage(steps, event) {
 }
 
 const gateIndex = job.steps.findIndex(step => step.run === 'npm run verify:release');
-const publishIndex = job.steps.findIndex(step => step.run === 'npm publish --access public');
+const publishIndex = job.steps.findIndex(step => step.run === 'npm publish --access public --provenance');
 const prepublication = job.steps.slice(gateIndex + 1, publishIndex);
 
 for (const event of ['push', 'workflow_dispatch']) {

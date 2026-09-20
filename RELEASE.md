@@ -11,7 +11,7 @@ documented in [DOCS.md](DOCS.md); this file is for maintainers.
 | [CI](.github/workflows/ci.yml) | Every push to `main` and every pull request | `npm run verify` on Node 18 and 20; `npm run test:daemon` | Offline disk contract, installer, guards, archive, and daemon package |
 | [Release trust](.github/workflows/release-trust.yml) | Every pull request and push to `main`; manual dispatch | PR/push: trust validator tests; manual: `npm run verify:release` | Test the proof validator during development; validate frozen-candidate receipts on demand |
 | [Dogfood](.github/workflows/dogfood.yml) | Weekly schedule or manual dispatch | Live host smoke | Opt-in live host invocation (requires API secrets) |
-| [Release](.github/workflows/release.yml) | Version tag `v*` or manual dispatch | `npm run verify:release`, then npm publish + GitHub Release | Ship a trusted version to npm |
+| [Release](.github/workflows/release.yml) | Version tag `v*` or manual dispatch | `npm run verify:release`, update `CHANGELOG.md` + README release section, `npm pack --dry-run`, npm publish with provenance + GitHub Release | Ship a trusted version to npm |
 
 Local equivalents:
 
@@ -126,7 +126,9 @@ git push origin v1.0.1
 ```
 
 The [Release](.github/workflows/release.yml) workflow runs `verify:release`,
-publishes to npm, and creates a GitHub Release for the tag.
+refreshes `CHANGELOG.md` and the README release section from git history,
+dry-runs `npm pack`, publishes to npm with provenance, syncs the release docs
+back to `main`, and creates a GitHub Release for the tag.
 
 ### Option B — manual dispatch
 
@@ -140,6 +142,24 @@ Both triggers reject an unscoped or wrong-owner package name and require the
 requested version to match `package.json`; the workflow never changes the
 frozen package version. Publish runs are serialized across tags and manual
 dispatches.
+
+### Release notes automation
+
+`scripts/update_release_docs.mjs` categorizes commits since the previous
+`v*` tag and updates:
+
+- `CHANGELOG.md` — Keep a Changelog format, prepended per release
+- `README.md` — the `<!-- release-docs -->` block with the latest npm version
+  and recent highlights
+
+Preview locally before tagging:
+
+```bash
+node scripts/update_release_docs.mjs --version 1.2.0 --dry-run
+```
+
+The Release workflow runs the same updater before publish, includes the docs in
+the npm tarball, and commits any changes back to `main` after publication.
 
 ### After publish
 

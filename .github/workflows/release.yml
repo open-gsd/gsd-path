@@ -2,6 +2,7 @@ name: Release
 
 # Publishes to npm and creates a GitHub Release after the trust-evidence gate.
 # Requires npm Trusted Publishing for open-gsd/gsd-path, workflow release.yml.
+# Updates CHANGELOG.md and the README release section, then syncs them to main.
 #
 # Triggers:
 #   1. Push a version tag: git tag v1.0.1 && git push origin v1.0.1
@@ -80,6 +81,14 @@ jobs:
       - name: Verify release gate
         run: npm run verify:release
 
+      - name: Update release documentation
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: node scripts/update_release_docs.mjs --version "$VERSION"
+
+      - name: Verify npm package packs cleanly
+        run: npm pack --dry-run --json > /tmp/npm-pack.json
+
       - name: Create release tag
         if: github.event_name == 'workflow_dispatch'
         env:
@@ -99,7 +108,33 @@ jobs:
           fi
 
       - name: Publish to npm
-        run: npm publish --access public
+        run: npm publish --access public --provenance
+
+      - name: Sync release documentation to main
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- CHANGELOG.md README.md; then
+            echo "No release documentation changes to sync"
+            exit 0
+          fi
+          cp CHANGELOG.md README.md /tmp/
+          git fetch origin main
+          git checkout main
+          git pull --ff-only origin main
+          cp /tmp/CHANGELOG.md /tmp/README.md .
+          git add CHANGELOG.md README.md
+          if git diff --cached --quiet; then
+            echo "Release documentation already present on main"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "docs: update release notes for v${VERSION}"
+          git push origin main
+          git checkout "$TAG"
 
       - name: Create GitHub Release
         env:
@@ -110,9 +145,7 @@ jobs:
           set -euo pipefail
           notes_file="$(mktemp)"
           {
-            echo "GSD Path $VERSION"
-            echo
-            echo "Published to npm as \`@opengsd/gsd-path@$VERSION\`."
+            node scripts/update_release_docs.mjs --version "$VERSION" --notes-only
             echo
             echo "Trust evidence for this version is validated by \`npm run verify:release\`."
             echo "See [HOST-MATRIX.md](docs/trust-validation/HOST-MATRIX.md) for per-host receipts."

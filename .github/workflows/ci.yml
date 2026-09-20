@@ -31,6 +31,9 @@ jobs:
         run: npm run check:prereqs
       - name: Verify (offline gate)
         run: npm run verify
+      - name: Verify npm package packs cleanly
+        if: matrix.node-version == '20'
+        run: npm pack --dry-run --json > /dev/null
 
   daemon:
     runs-on: ubuntu-latest

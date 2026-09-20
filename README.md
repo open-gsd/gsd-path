@@ -15,6 +15,14 @@ Support means the installer and dispatch contract exist. See the
 [host trust matrix](https://github.com/open-gsd/gsd-path/blob/main/docs/trust-validation/HOST-MATRIX.md) for live milestone
 proof and each host's guard tier.
 
+<!-- release-docs -->
+**Latest npm release:** [@opengsd/gsd-path@1.1.0](https://www.npmjs.com/package/@opengsd/gsd-path/v/1.1.0) — [release notes](CHANGELOG.md#110---2026-09-18)
+
+**Recent highlights**
+- Scoped npm publication as `@opengsd/gsd-path` with trusted publishing
+- Host trust matrix and release evidence validation
+<!-- /release-docs -->
+
 ## Documentation
 
 **Start at [DOCS.md](DOCS.md)** — install, use, understand, and update in one hub.
@@ -29,6 +37,7 @@ proof and each host's guard tier.
 | [HOOKS.md](HOOKS.md) | Optional archive/git guard hooks |
 | [Jev screening](skills/gsd-path/references/jev-review.md) | Optional evidence screening; disabled by default, no SDK required |
 | [daemon/README.md](daemon/README.md) | Dashboard, menu-bar app, and monitoring setup |
+| [CHANGELOG.md](CHANGELOG.md) | Published release notes |
 | [RELEASE.md](RELEASE.md) | Maintainer CI and npm release cycle |
 | [GUIDE.md](GUIDE.md) | Pointer to the guides above |
 
