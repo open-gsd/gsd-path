@@ -103,11 +103,12 @@ class ServeTests(unittest.TestCase):
         cls._env = mock.patch.dict("os.environ", {"GSD_DAEMON_HISTORY": str(cls.history)})
         cls._env.start()
         cls.addClassCleanup(cls._env.stop)
-        watcher = Watcher(Config(parents=[str(parent)]))
+        watcher = Watcher(Config(parents=[str(parent)], history=False))
         cls.server = serve(watcher, port=0)
         cls.port = cls.server.server_address[1]
         cls.thread = threading.Thread(target=cls.server.serve_forever, daemon=True)
         cls.thread.start()
+        cls.addClassCleanup(cls.server.watcher_stop.set)
         cls.addClassCleanup(cls.server.server_close)
         cls.addClassCleanup(cls.server.shutdown)
 
@@ -158,8 +159,9 @@ class ServeTests(unittest.TestCase):
         status, content_type, body = self.get("/activity")
         self.assertEqual(status, 200)
         payload = json.loads(body)
-        self.assertEqual(len(payload["events"]), 1)
-        self.assertEqual(payload["events"][0]["type"], "phase-changed")
+        events = [event for event in payload["events"] if event.get("type") == "phase-changed"]
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["detail"], "plan -> build")
 
     def test_dashboard_html(self) -> None:
         status, content_type, body = self.get("/")

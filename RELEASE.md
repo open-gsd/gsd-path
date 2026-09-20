@@ -11,7 +11,7 @@ documented in [DOCS.md](DOCS.md); this file is for maintainers.
 | [CI](.github/workflows/ci.yml) | Every push to `main` and every pull request | `npm run verify` on Node 18 and 20; `npm run test:daemon` | Offline disk contract, installer, guards, archive, and daemon package |
 | [Release trust](.github/workflows/release-trust.yml) | Every pull request and push to `main`; manual dispatch | PR/push: trust validator tests; manual: `npm run verify:release` | Test the proof validator during development; validate frozen-candidate receipts on demand |
 | [Dogfood](.github/workflows/dogfood.yml) | Weekly schedule or manual dispatch | Live host smoke | Opt-in live host invocation (requires API secrets) |
-| [Release](.github/workflows/release.yml) | Version tag `v*` or manual dispatch | `npm run verify:release`, then npm publish + GitHub Release | Ship a trusted version to npm |
+| [Release](.github/workflows/release.yml) | Version tag `v*` or manual dispatch | `npm run verify:release`, update `CHANGELOG.md` + README release section, `npm pack --dry-run`, npm publish with provenance + GitHub Release | Ship a trusted version to npm |
 
 Local equivalents:
 
@@ -126,20 +126,60 @@ git push origin v1.0.1
 ```
 
 The [Release](.github/workflows/release.yml) workflow runs `verify:release`,
-publishes to npm, and creates a GitHub Release for the tag.
+refreshes `CHANGELOG.md` and the README release section from git history,
+dry-runs `npm pack`, publishes to npm with provenance, syncs the release docs
+back to `main`, and creates a GitHub Release for the tag.
 
 ### Option B — manual dispatch
 
 1. Open **Actions → Release → Run workflow** on the release commit.
-2. Enter the semver version (for example `1.0.1`).
-3. The same job verifies the release, creates `v1.0.1`, publishes to npm,
-   and creates the GitHub Release. It does not depend on a bot-created tag
-   triggering another workflow. An existing tag must point to this commit.
+2. Either:
+   - leave **version** empty and choose a **bump** level (`auto`, `major`,
+     `minor`, or `patch`) to compute the next semver from conventional commits
+     since the previous `v*` tag, commit the bump to `main`, and publish; or
+   - enter an explicit semver **version** (for example `1.2.0`) that already
+     matches `package.json`.
+3. The same job verifies the release, creates `vX.Y.Z`, publishes to npm, and
+   creates the GitHub Release. An existing tag must point to this commit.
 
-Both triggers reject an unscoped or wrong-owner package name and require the
-requested version to match `package.json`; the workflow never changes the
-frozen package version. Publish runs are serialized across tags and manual
-dispatches.
+Auto bump rules:
+
+| Signal since previous tag | Next version |
+| --- | --- |
+| `BREAKING CHANGE` or `type!:` commit | major (`1.1.0` → `2.0.0`) |
+| `feat:` commit | minor (`1.1.0` → `1.2.0`) |
+| `fix:` / `perf:` commit | patch (`1.1.0` → `1.1.1`) |
+| `bump: major` / `minor` / `patch` input | forced increment |
+
+Preview locally:
+
+```bash
+node scripts/bump_version.mjs --bump auto --dry-run
+npm run release:bump -- --dry-run
+```
+
+Tag pushes still require `package.json` to match the tag before dispatch; only
+manual dispatch may auto bump. Between `verify:release` and `npm publish`, the
+workflow never rewrites the frozen package version. Publish runs are serialized
+across tags and manual dispatches.
+
+### Release notes automation
+
+`scripts/update_release_docs.mjs` categorizes commits since the previous
+`v*` tag and updates:
+
+- `CHANGELOG.md` — Keep a Changelog format, prepended per release
+- `README.md` — the `<!-- release-docs -->` block with the latest npm version
+  and recent highlights
+
+Preview locally before tagging:
+
+```bash
+node scripts/update_release_docs.mjs --version 1.2.0 --dry-run
+```
+
+The Release workflow runs the same updater before publish, includes the docs in
+the npm tarball, and commits any changes back to `main` after publication.
 
 ### After publish
 

@@ -79,13 +79,19 @@ test('npm publication and release workflow retain the strict blocking gate', () 
 
   const job = workflow('release').jobs.publish;
   assert.equal(job['continue-on-error'], undefined);
-  const publishIndex = job.steps.findIndex(step => step.run === 'npm publish --access public');
+  const publishIndex = job.steps.findIndex(step => step.run === 'npm publish --access public --provenance');
   assert.ok(publishIndex >= 0);
   const gate = job.steps.slice(0, publishIndex).find(step => step.run === 'npm run verify:release');
   assert.ok(gate, 'release must verify before publishing');
   assert.equal(gate.if, undefined);
   assert.equal(gate['continue-on-error'], undefined);
-  const release = execute(`${gate.run}\nnpm publish --access public`, 'push');
+  const bump = job.steps.find(step => step.id === 'bump');
+  assert.ok(bump, 'release must support auto bump on manual dispatch');
+  const docs = job.steps.slice(0, publishIndex).find(step => step.name === 'Update release documentation');
+  assert.ok(docs, 'release must refresh changelog and README before publishing');
+  const pack = job.steps.slice(0, publishIndex).find(step => step.name === 'Verify npm package packs cleanly');
+  assert.ok(pack, 'release must dry-run npm pack before publishing');
+  const release = execute(`${gate.run}\nnpm publish --access public --provenance`, 'push');
   assert.equal(release.status, 23);
   assert.deepEqual(release.calls, [['npm', 'run', 'verify:release']]);
 });
