@@ -25,26 +25,16 @@ See [TEST_ENVIRONMENT.md](TEST_ENVIRONMENT.md) for prerequisites and troubleshoo
 
 ## Release contract
 
-A version is releasable only when:
-
-1. `npm run verify` passes (automated in CI on every PR).
-2. Every host declared in `scripts/skill-resources.json` has a current
-   full-milestone receipt under
-   `docs/trust-validation/evidence/releases/<version>/`.
-3. `npm run verify:release` proves that only trust evidence or its summaries
-   changed after the tested candidate SHA.
-
-The package's `prepublishOnly` script runs `verify:release`, so a local
-`npm publish` cannot bypass the gate.
-
-Details: [docs/trust-validation/TRUST-VALIDATION-SPEC.md](docs/trust-validation/TRUST-VALIDATION-SPEC.md).
+The [Trust Validation Spec](docs/trust-validation/TRUST-VALIDATION-SPEC.md#release-contract)
+owns the release gate, live-check scope, and receipt requirements.
 
 ## Recording trust evidence
 
 Set the intended package name and version in `package.json` and
 `package-lock.json` before freezing the candidate. Changes to either invalidate
 existing candidate proof.
-Before publishing:
+When the [live-check scope](docs/trust-validation/TRUST-VALIDATION-SPEC.md#live-check-scope)
+requires host receipts, complete these steps before publishing:
 
 1. Freeze a clean candidate on `main`:
 
@@ -52,10 +42,10 @@ Before publishing:
    bash scripts/prepare_release_evidence.sh --candidate .
    ```
 
-2. Run each host harness from the prepared directories (see
+2. Run each required host harness from the prepared directories (see
    [HOST-MATRIX.md](docs/trust-validation/HOST-MATRIX.md)).
 
-3. Validate the full set locally:
+3. Validate the required set locally:
 
    ```bash
    npm run verify:release
@@ -69,8 +59,8 @@ Ordinary PRs and `main` pushes run automated verification, including the trust
 validator tests, without requiring refreshed release receipts. The
 `verify-release-evidence` check name remains active on every PR. Product and
 host contract changes can therefore merge before the next candidate is frozen.
-Passing PR checks does not establish release trust: all eleven hosts must have
-current candidate proof before either publication path can pass `verify:release`.
+Passing PR checks does not establish release trust. Both publication paths
+must pass the [release contract](#release-contract).
 
 ## Publishing
 
@@ -191,8 +181,8 @@ the helper stays silent (see [UPDATE.md](UPDATE.md)).
 
 ## What CI does not automate
 
-- Full live milestone runs on every host — recorded manually per release;
-  validated by `verify:release`.
+- Full live milestone runs — record required receipts manually according to
+  the [release contract](#release-contract).
 - npm publish on every merge — automated publishing uses the Release workflow
   after the trust gate passes; see [First npm publication](#first-npm-publication)
   for the initial manual publish.

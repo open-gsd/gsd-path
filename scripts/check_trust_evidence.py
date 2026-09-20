@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate release evidence for every supported GSD Path host."""
+"""Validate release evidence for affected GSD Path hosts."""
 
 import argparse
 import json

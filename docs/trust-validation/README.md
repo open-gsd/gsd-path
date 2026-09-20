@@ -1,11 +1,8 @@
 # Trust validation
 
 Validation workstream for every host declared in the installer manifest.
-Every release runs automated checks. Live milestone receipts are required
-for hosts affected by changes since the previous reachable release tag.
-Shared workflow changes require all hosts; documentation, release tooling,
-tests, and daemon-only changes do not require new host runs. An affected host
-remains release-blocking until its current versioned receipt passes validation.
+The [release contract](TRUST-VALIDATION-SPEC.md#release-contract) defines
+automated checks and when live host receipts are required.
 
 **Start here:** [TRUST-VALIDATION-SPEC.md](TRUST-VALIDATION-SPEC.md)  
 **Manual runs:** [TRUST-EVIDENCE.md](TRUST-EVIDENCE.md)  

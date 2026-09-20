@@ -1,8 +1,8 @@
 # Host trust matrix
 
-`supported` means the installer and static dispatch contract exist. A release
-is end-to-end trusted only when `npm run verify:release` finds a current passing
-full-milestone receipt for every host below.
+`supported` means the installer and static dispatch contract exist. See the
+[release contract](TRUST-VALIDATION-SPEC.md#release-contract) for release trust
+and required live-check scope.
 
 Release 1.1.0 uses frozen candidate `af0b082964510c471798826d7e2e05617d8d6dc3`
 from main on 2026-09-18, after PRs #124 and #125. Every host below has a
@@ -72,21 +72,13 @@ plus an instruction to propose doc-vs-code rulings without writing them.
 
 ## Release procedure (from the 2026-09-06 Codex receipt run)
 
-`npm run verify:release` accepts only host receipts as `.md` files at the root
-of `evidence/releases/<version>/`; other notes live under `notes/`. Every
-receipt must name one frozen candidate, and only evidence files plus this
-matrix and TRUST-EVIDENCE.md may change after that candidate. So the order
-is: merge every code and documentation change first, freeze the candidate,
-run all eleven host receipts against it, then publish only with owner authorization. For receipt assembly
-options, see the [assembly tool](evidence/releases/1.0.0/codex/release_receipt.py)
+Follow [Recording trust evidence](../../RELEASE.md#recording-trust-evidence)
+and the [receipt format](LIVE-EVIDENCE-TEMPLATE.md). Keep non-receipt notes
+under `evidence/releases/<version>/notes/`. For receipt assembly options,
+see the [assembly tool](evidence/releases/1.0.0/codex/release_receipt.py)
 usage docstring.
 
-Ordinary PR and `main` CI run automated tests, including the trust validator
-tests; they do not require refreshed release receipts. The manual **Release
-trust evidence** workflow validates a frozen candidate and its receipts. Both
-npm `prepublishOnly` and the Release workflow still require `verify:release`
-with current proof from all eleven hosts. Existing receipts remain evidence
-for their named candidate only.
+See [CI tiers](../../RELEASE.md#ci-tiers) for development and release checks.
 
 ### 1.0.0 receipts (2026-09-15)
 

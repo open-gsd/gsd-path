@@ -39,6 +39,9 @@ Added and deleted paths count, including both sides of renames. No old receipt
 is relabeled as current evidence. Required receipts retain all existing
 candidate, native-child, task, review, archive, integration, and guard checks.
 
+Release 1.2.0 includes shared pipeline changes, so every declared host still
+requires current live evidence.
+
 `npm publish` runs this gate through the package's `prepublishOnly` lifecycle.
 The release-trust workflow provides the same check on demand before publishing.
 
