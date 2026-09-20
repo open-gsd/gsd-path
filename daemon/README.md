@@ -13,9 +13,9 @@ Background monitoring is read-only against watched projects: file reads plus
 `git` read commands only. Completion checks may read the remote refs and, for
 pull-request integration, GitHub metadata. They never fetch or write refs.
 Unavailable or stale proof is shown as **Unverified**, with available phase
-and task facts retained. Explicit **Settings → Path settings** saves are the
-exception: they invoke the selected runtime's validated config helper and cannot
-advance pipeline phases.
+and task facts retained. Explicit [Path settings](#path-settings) saves and
+[plugin lifecycle](#plugin-lifecycle) actions can write project configuration
+or installation files. They cannot advance pipeline phases.
 
 ## Install (one command)
 
@@ -125,8 +125,8 @@ gsd-path-daemon plugin <status|install|update|uninstall>          # manage the s
 
 The native dashboard window fills the display's usable area on first open
 (later sizes are kept) and the green button can take it into macOS full screen.
-The board and project page use the full window width; prose (vision, notes)
-stays at a readable line length.
+The board and project page adapt to the window within a centered content area;
+prose (vision, notes) stays at a readable line length.
 
 The dashboard uses graphite neutrals with the macOS accent color (CSS `AccentColor`,
 system blue where unsupported), light by default. Settings → Appearance
@@ -136,20 +136,24 @@ project has done, where it is now, where its roadmap goes next, and what it has
 cost. The project page also shows the runtime handoff described under
 [/status schema](#status-schema).
 
-- **Toolbar**: OpenGSD Path mark and name, All / Active / Shipped filters with counts, a project
-  search, Refresh (requests a project scan and reloads status), the last update
-  time, and the Settings menu (Plugin, Watched folders).
+- **Toolbar**: OpenGSD Path mark and name, Projects and Settings navigation,
+  Refresh (requests a project scan and reloads status), the last update time,
+  and the Settings menu (Path settings, Plugin, Watched folders, Appearance).
+- **Project controls**: Board / Milestones view switcher; All / In progress /
+  Blocked / Shipped / Unverified filters with counts; and search by project
+  name, path, or milestone.
 - **Watched folders**: Add folder opens a picker; click a folder or `..` to
   navigate, then select the current folder. Stop watching opens a confirmation
   dialog; Cancel or clicking outside it leaves the folder watched. Adding or
   removing a folder updates discovered projects immediately. Other open
   dashboards receive the current watched folders on their next status poll.
 - **Board**: one table row per project, blocked first, then in progress and
-  Unverified, then shipped. Columns: project with health dot and path, route
-  (one square per milestone: done, current, ahead; red when blocked), current milestone, an
-  8-segment phase meter (inspect, define, research, decide, roadmap, plan,
-  build, ship), tasks, cost and turns for the project, last activity, state.
-  The health dot's tooltip gives the reason (for example `no activity for 21d`).
+  Unverified, then shipped. Columns: Project, Current milestone, Status, Tasks,
+  and Usage. These include the project path, phase progress, state and health
+  reason, last activity, cost, and turns.
+- **Milestones**: each project shows Shipped, Current / latest, and Planned
+  milestone columns, with explicit messages when earlier or later records are
+  absent.
 - **Project page** (click a row, or the tray's `#project=<root>` deep link): the
   toolbar becomes Back and a project switcher. The page shows a facts strip
   (state, health with its reason, milestone, branch, head, integration mode,
@@ -425,10 +429,13 @@ Open a project and choose **History & files**. The viewer lists Git-tracked and
 non-ignored repository files plus `.project` records, including archived
 milestones. UTF-8 text is shown in full. Markdown has Preview and Raw views;
 HTML is escaped and images are represented by their alt text, without loading
-remote resources. Relative document links open within the same project.
+remote resources. Relative document links open within the same project and
+preserve the selected commit when viewing historical contents.
 
-The Version selector and Git history show committed versions of the selected
-path. Working tree shows current contents. Uncommitted older contents are not
+Git history lists commits that changed the selected path. The Version selector
+also retains a selected commit reached through a relative link when that commit
+is absent from the path's history. Working tree shows current contents.
+Uncommitted older contents are not
 retained, and history does not follow renames. Binary files, symlinks, hard
 links, `.git` internals, and paths outside watched projects are rejected.
 Secure working-tree reads currently require POSIX directory descriptors;

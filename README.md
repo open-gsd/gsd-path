@@ -106,8 +106,8 @@ The monitor is a separate install from the npm skills package.
 
 The project board shows blocked, active, and shipped work, with milestone and
 phase progress, task counts, last activity, and available usage data. Use the
-top toolbar to filter or search projects, refresh status, and open Settings for
-watched folders, plugin management, and appearance.
+[dashboard controls](daemon/README.md#dashboard) to filter or search projects,
+switch between Board and Milestones, refresh status, and manage settings.
 
 ![OpenGSD Path dashboard showing sample projects, phase progress, and toolbar controls](docs/images/dashboard-board.png)
 
