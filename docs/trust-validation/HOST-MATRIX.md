@@ -4,11 +4,8 @@
 [release contract](TRUST-VALIDATION-SPEC.md#release-contract) for release trust
 and required live-check scope.
 
-Current release evaluations exclude Qwen, Kiro, and Zed because their live
-runs require API credits. Installer support and offline contract tests remain.
-Their historical results below are preserved; exclusion does not establish
-current live evidence. The other eight hosts remain subject to affected-host
-release checks.
+The historical results below do not define the current required host set;
+see [Live-check scope](TRUST-VALIDATION-SPEC.md#live-check-scope).
 
 Release 1.1.0 uses frozen candidate `af0b082964510c471798826d7e2e05617d8d6dc3`
 from main on 2026-09-18, after PRs #124 and #125. Every host below has a

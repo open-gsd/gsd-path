@@ -104,7 +104,7 @@ APIs that can prove real dispatch for each host. Current status is recorded in
 
 | Gap | Required closure |
 |---|---|
-| Full live milestone evidence is missing for affected hosts | Record one passing current receipt per affected host |
+| Required evidence is missing, invalid, or stale | Record a passing receipt for each host in the validator's `required_runs`; see [Live-check scope](#live-check-scope) |
 | Native guards are installed automatically only for Claude, Codex, and Cursor; Codex requires manual project and hook trust | Activate and validate Codex through `/hooks`; add host-native adapters where official APIs support them, otherwise retain an explicit lower tier |
 | A required host is unavailable to the maintainer | Keep the release gate blocked until access or maintainer-reviewed evidence exists |
 | Live host APIs can change independently of this repo | Keep lightweight dogfood scheduled where credentials exist and re-record full evidence for pipeline-contract releases |

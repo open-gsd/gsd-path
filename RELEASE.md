@@ -53,10 +53,8 @@ other package changes do.
    ```
 
    Run the prepared harnesses as described in [HOST-MATRIX.md](docs/trust-validation/HOST-MATRIX.md).
-   Qwen, Kiro, and Zed remain excluded from live release evaluations; their
-   installer support and offline tests remain. A host-specific change requires
-   that host. Shared runtime changes require all affected hosts. An unchanged
-   validated host requires no new live run.
+   The [live-check scope](docs/trust-validation/TRUST-VALIDATION-SPEC.md#live-check-scope)
+   defines host exclusions and when existing receipts can be reused.
 
 3. Commit new receipts, then validate the clean checkout:
 

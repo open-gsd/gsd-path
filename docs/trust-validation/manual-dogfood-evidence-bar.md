@@ -1,8 +1,8 @@
 # GSD Path — Historical Manual & Dogfood Evidence Bar
 
 > Historical three-host smoke checklist from 2026-08-05. It does not satisfy
-> the current release contract. For every manifest host and a full live
-> milestone, use
+> the current release contract. For the required host scope and full live
+> milestone evidence, use
 > [LIVE-EVIDENCE-TEMPLATE.md](LIVE-EVIDENCE-TEMPLATE.md) and
 > [TRUST-VALIDATION-SPEC.md](TRUST-VALIDATION-SPEC.md).
 
