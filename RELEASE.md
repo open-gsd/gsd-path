@@ -133,15 +133,35 @@ back to `main`, and creates a GitHub Release for the tag.
 ### Option B — manual dispatch
 
 1. Open **Actions → Release → Run workflow** on the release commit.
-2. Enter the semver version (for example `1.0.1`).
-3. The same job verifies the release, creates `v1.0.1`, publishes to npm,
-   and creates the GitHub Release. It does not depend on a bot-created tag
-   triggering another workflow. An existing tag must point to this commit.
+2. Either:
+   - leave **version** empty and choose a **bump** level (`auto`, `major`,
+     `minor`, or `patch`) to compute the next semver from conventional commits
+     since the previous `v*` tag, commit the bump to `main`, and publish; or
+   - enter an explicit semver **version** (for example `1.2.0`) that already
+     matches `package.json`.
+3. The same job verifies the release, creates `vX.Y.Z`, publishes to npm, and
+   creates the GitHub Release. An existing tag must point to this commit.
 
-Both triggers reject an unscoped or wrong-owner package name and require the
-requested version to match `package.json`; the workflow never changes the
-frozen package version. Publish runs are serialized across tags and manual
-dispatches.
+Auto bump rules:
+
+| Signal since previous tag | Next version |
+| --- | --- |
+| `BREAKING CHANGE` or `type!:` commit | major (`1.1.0` → `2.0.0`) |
+| `feat:` commit | minor (`1.1.0` → `1.2.0`) |
+| `fix:` / `perf:` commit | patch (`1.1.0` → `1.1.1`) |
+| `bump: major` / `minor` / `patch` input | forced increment |
+
+Preview locally:
+
+```bash
+node scripts/bump_version.mjs --bump auto --dry-run
+npm run release:bump -- --dry-run
+```
+
+Tag pushes still require `package.json` to match the tag before dispatch; only
+manual dispatch may auto bump. Between `verify:release` and `npm publish`, the
+workflow never rewrites the frozen package version. Publish runs are serialized
+across tags and manual dispatches.
 
 ### Release notes automation
 

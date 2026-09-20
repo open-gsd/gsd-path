@@ -9,15 +9,15 @@ import { parse } from 'yaml';
 const release = parse(fs.readFileSync(new URL('../.github/workflows/release.yml', import.meta.url), 'utf8'));
 const job = release.jobs.publish;
 
-function resolveVersion(event, requested, ref = 'v1.0.1', name = '@opengsd/gsd-path') {
+function resolveVersion(event, requested, ref = 'v1.0.1', name = '@opengsd/gsd-path', packageVersion = '1.0.1') {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'release-version-'));
   try {
-    const pkg = JSON.stringify({ name, version: '1.0.1' });
+    const pkg = JSON.stringify({ name, version: packageVersion });
     fs.writeFileSync(path.join(dir, 'package.json'), pkg);
     const output = path.join(dir, 'output');
     const result = spawnSync('bash', ['-e', '-o', 'pipefail', '-c', job.steps.find(step => step.id === 'version').run], {
       cwd: dir, encoding: 'utf8',
-      env: { ...process.env, GITHUB_EVENT_NAME: event, RELEASE_VERSION: requested,
+      env: { ...process.env, GITHUB_EVENT_NAME: event, RELEASE_VERSION: requested ?? '',
         GITHUB_REF_NAME: ref, GITHUB_OUTPUT: output },
     });
     assert.ifError(result.error);
@@ -42,10 +42,12 @@ test('release uses GitHub-hosted OIDC with a supported Node version and no npm t
 test('manual dispatch publishes in the same job after the release gate', () => {
   assert.equal(job.if, undefined);
   assert.equal(release.jobs.tag, undefined);
+  const bump = job.steps.findIndex(step => step.id === 'bump');
   const gate = job.steps.findIndex(step => step.run === 'npm run verify:release');
   const tag = job.steps.findIndex(step => step.name === 'Create release tag');
   const publish = job.steps.findIndex(step => step.run === 'npm publish --access public --provenance');
-  assert.ok(gate >= 0 && tag > gate && publish > tag);
+  assert.ok(bump >= 0 && gate > bump && tag > gate && publish > tag);
+  assert.equal(job.steps[bump].if, "github.event_name == 'workflow_dispatch' && inputs.version == ''");
   assert.equal(job.steps[tag].if, "github.event_name == 'workflow_dispatch'");
   assert.equal(job.steps[publish].if, undefined);
 });
@@ -56,6 +58,12 @@ test('tag and manual versions resolve without changing the frozen package', () =
     assert.equal(result.status, 0, result.stderr);
     assert.equal(result.output, 'version=1.0.1\ntag=v1.0.1\n');
   }
+});
+
+test('manual dispatch without an explicit version resolves from package.json', () => {
+  const result = resolveVersion('workflow_dispatch', '', 'main', '@opengsd/gsd-path', '1.2.0');
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.output, 'version=1.2.0\ntag=v1.2.0\n');
 });
 
 test('version mismatch and invalid input fail before emitting release outputs', () => {

@@ -93,6 +93,7 @@
     "verify": "npm test && npm run test:python && python3 scripts/sync_skill_resources.py --check",
     "verify:release": "npm run verify && python3 scripts/check_trust_evidence.py --repo .",
     "release:docs": "node scripts/update_release_docs.mjs",
+    "release:bump": "node scripts/bump_version.mjs --bump auto",
     "prepublishOnly": "npm run verify:release"
   },
   "devDependencies": {
