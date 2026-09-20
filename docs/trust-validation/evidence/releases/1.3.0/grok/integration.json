@@ -1,0 +1,17 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "grok",
+  "run_id": "01a0bf38-faf0-7030-a25f-0b1bc56f5f28",
+  "result": "pass",
+  "step": "integration",
+  "command": "OUT=/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.3.0-45466c4/grok\nREPO=/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.3.0-45466c4/grok/quick/repo\nRUNTIME=/Users/jeremymcspadden/.gsd-path/runtimes/36cf1845fbc977caa9893dda7eda1ea56469b8d33e6f255f0c23251eb1f0beb6\npython3 -B \"$RUNTIME/archive_milestone.py\" integrate --repo \"$REPO\" --slug count-cli > \"$OUT/integrate.stdout\" 2> \"$OUT/integrate.stderr\"\necho INTEGRATE_EXIT:$?\necho '---INTEGRATE STDOUT---'\ncat \"$OUT/integrate.stdout\"\necho '---INTEGRATE STDERR---'\ncat \"$OUT/integrate.stderr\"",
+  "output": "{\"archive\": \".project/archive/001-count-cli\", \"base\": \"8e6e9bc96068511007a6c9b0a0b289346dc2b1d2\", \"commit\": \"af790a0cee65905482b48d5b7ad12aee965e53fd\", \"integrate\": \"8e6e9bc96068511007a6c9b0a0b289346dc2b1d2\", \"landing\": \"8e6e9bc96068511007a6c9b0a0b289346dc2b1d2\", \"mode\": \"direct\", \"tag\": \"milestone/001-count-cli\"}\n",
+  "fixture_bundle": "grok/fixture.bundle",
+  "run_manifest": ".project/archive/001-count-cli/trust-run-manifest.json",
+  "ship_commit": "af790a0cee65905482b48d5b7ad12aee965e53fd",
+  "bound_branch": "gsd-path/M001",
+  "default_branch": "main",
+  "pre_integration_default_commit": "5cc83e91e986641f228472ac0cb5d3ea9f4d8fc2",
+  "integration_commit": "8e6e9bc96068511007a6c9b0a0b289346dc2b1d2",
+  "milestone_tag": "milestone/001-count-cli"
+}

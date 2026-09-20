@@ -1,0 +1,11 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "grok",
+  "run_id": "01a0bf38-faf0-7030-a25f-0b1bc56f5f28",
+  "result": "pass",
+  "step": "reviews",
+  "command": "Grok spawn_subagent: review_wave_1_cycle_1",
+  "output": "# Review \u2014 wave 1, cycle 1\n\nReviewed HEAD: d78d3b72422245401e452808776d02a2252e69f0\nReview scope: final\nWave verdict: pass\nCycle: 1\n# Final Review \u2014 reused full wave\n\nReviewed HEAD: c2819d8dd183b697072982c5c5cf6600dc33db89\nOverall verdict: pass\nSource review: .project/review/wave-1.cycle1.md\nSource commit: d78d3b72422245401e452808776d02a2252e69f0",
+  "wave_review_artifact": ".project/archive/001-count-cli/review/wave-1.cycle1.md",
+  "final_review_artifact": ".project/archive/001-count-cli/review/FINAL.md"
+}

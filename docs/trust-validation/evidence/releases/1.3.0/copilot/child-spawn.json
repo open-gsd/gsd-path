@@ -1,0 +1,43 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "copilot",
+  "run_id": "2ae5541b-cfab-4111-a4ad-934382c841c5",
+  "result": "pass",
+  "step": "child-spawn",
+  "command": "task",
+  "child_api": "task",
+  "child_id": "build_T001",
+  "child_status": "completed",
+  "output": {
+    "child_id": "build_T001",
+    "status": "completed",
+    "child_api": "task",
+    "source": "session-state/2ae5541b-cfab-4111-a4ad-934382c841c5",
+    "matched_argument": "name",
+    "agent_id": "69a21046-da67-488a-8f8c-4a3c368c2036",
+    "tool_call": {
+      "toolCallId": "toolu_01JCxL92irFV3qAAVJS6F9Up",
+      "arguments": {
+        "agent_type": "general-purpose",
+        "description": "Coder implements T001",
+        "name": "build_T001"
+      },
+      "prompt_sha256": "45ee0be373736bfab0d3187f077909d3dfe1f6b85d7a84cb69c4d0ff89b4beb9"
+    },
+    "started": {
+      "agentName": "general-purpose",
+      "model": "gpt-5.4"
+    },
+    "completed": {
+      "agentName": "general-purpose",
+      "model": "gpt-5.4",
+      "durationMs": 20190,
+      "totalTokens": 126579,
+      "totalToolCalls": 6
+    },
+    "tool_result": {
+      "success": true,
+      "content": "ready\n\nUpdated `count.py` to support optional `--json` in either position, default to `0`, emit JSON via `json.dumps({\"widgets\": n})`, and handle invalid input with a clear stderr error plus non-zero exit. Added real subprocess-based `unittest` coverage in `tests/test_count.py` for plain mode, positive/negative integers, JSON default, both JSON argument orders, and invalid input. Appended the task Log entry.\n\nVerify passed: `python3 tests/test_count.py -v`"
+    }
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "claude",
+  "run_id": "9f2d46ba-1309-4041-ab46-1daac41ff94e",
+  "result": "pass",
+  "step": "reviews",
+  "command": "RT=/Users/jeremymcspadden/.gsd-path/runtimes/36cf1845fbc977caa9893dda7eda1ea56469b8d33e6f255f0c23251eb1f0beb6 && python3 -B $RT/check_handoffs.py wave --repo \"$PWD\" --review .project/review/wave-1.cycle1.md; echo \"rc=$?\"",
+  "output": "# Review \u2014 wave 1, cycle 1\n\nReviewed HEAD: 9b6462e5078bcd63a6e701cf5c679698db72f552\nReview scope: final\n\nWave verdict: pass\n# Final Review \u2014 reused full wave\n\nReviewed HEAD: 24fe04d0ec9504d5fc1f1c340a3ec9300dd4a845\nOverall verdict: pass\nSource review: .project/review/wave-1.cycle1.md\nSource commit: 9b6462e5078bcd63a6e701cf5c679698db72f552",
+  "wave_review_artifact": ".project/archive/001-count-cli/review/wave-1.cycle1.md",
+  "final_review_artifact": ".project/archive/001-count-cli/review/FINAL.md"
+}

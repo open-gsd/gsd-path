@@ -1,0 +1,11 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "grok",
+  "run_id": "01a0bf38-faf0-7030-a25f-0b1bc56f5f28",
+  "result": "pass",
+  "step": "task-verify",
+  "command": "python3 test_count.py",
+  "output": "{\"command\": \"python3 test_count.py\", \"commit\": \"d78d3b72422245401e452808776d02a2252e69f0\", \"execution\": {\"evidence\": \"/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.3.0-45466c4/grok/quick/repo/.git/gsd-path/dispatch/gsd-path-M001/T001/manual-2026-09-20T145401+0000/verify.json\", \"exit_code\": 0, \"location\": \"sidecar gsd-path-verify/task-t001-verify\", \"stderr\": \".........\\n----------------------------------------------------------------------\\nRan 9 tests in 0.359s\\n\\nOK\\n\", \"stdout\": \"\", \"worktree\": \"/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.3.0-45466c4/grok/quick/repo\"}, \"recorded_at\": \"2026-09-20T14:54:03+00:00\", \"result\": \"pass\", \"schema\": \"gsd-path/verify-ledger/v2\"}\n{\"command\": \"python3 test_count.py && python3 count.py && python3 count.py --json\", \"commit\": \"c2819d8dd183b697072982c5c5cf6600dc33db89\", \"execution\": {\"branch\": \"gsd-path-verify/project-verify\", \"exit_code\": 0, \"stderr\": \".........\\n----------------------------------------------------------------------\\nRan 9 tests in 0.196s\\n\\nOK\\n\", \"stdout\": \"0 widgets\\n{\\\"widgets\\\": 0}\\n\", \"worktree\": \"/Users/jeremymcspadden/.gsd-path/projects/579c18462fba18d6c22c3e8f29e7cd08af52d45ae8863f826898f008650edc81/76174c6f7618b9f88aab2b30523cbc7bd71fd9b201b9e65b79dd7ea7a42e26b7/verify/project-verify\"}, \"recorded_at\": \"2026-09-20T15:04:05+00:00\", \"result\": \"pass\", \"schema\": \"gsd-path/verify-ledger/v2\"}\n",
+  "verify_artifact": ".project/archive/001-count-cli/build/verify-ledger.jsonl",
+  "verify_exit_code": 0
+}

@@ -1,0 +1,20 @@
+{
+  "receipt": "/Users/jeremymcspadden/orca/workspaces/gsd-path/release-gate/docs/trust-validation/evidence/releases/1.3.0/claude.md",
+  "steps": [
+    "archive",
+    "child-spawn",
+    "guards",
+    "install",
+    "integration",
+    "reviews",
+    "router",
+    "task-landing",
+    "task-verify",
+    "worktrees"
+  ],
+  "bundle": "/Users/jeremymcspadden/orca/workspaces/gsd-path/release-gate/docs/trust-validation/evidence/releases/1.3.0/claude/fixture.bundle",
+  "validated": true,
+  "ship_commit": "ea51e44af772504c4db5769f92d517a0f5650827",
+  "integration_commit": "8b8e7ed42aacb6c113da3bc972261dcd20e59682",
+  "tag": "milestone/001-count-cli"
+}

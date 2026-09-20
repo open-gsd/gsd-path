@@ -1,0 +1,11 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "copilot",
+  "run_id": "2ae5541b-cfab-4111-a4ad-934382c841c5",
+  "result": "pass",
+  "step": "reviews",
+  "command": "Copilot task: review_final",
+  "output": "# Review \u2014 wave 1, cycle 1\n\nReviewed HEAD: 26ad9f6c07b582d05dd0fab9adacbc10009d84ce\nReview scope: final\n\nWave verdict: pass\n# Final Review \u2014 count-json-cli\n\nReviewed HEAD: 2b3b816710ec2ac7391aaf5246579545087d12a2\nOverall verdict: pass\n\n## Success criteria",
+  "wave_review_artifact": ".project/archive/001-count-json-cli/review/wave-1.cycle1.md",
+  "final_review_artifact": ".project/archive/001-count-json-cli/review/FINAL.md"
+}

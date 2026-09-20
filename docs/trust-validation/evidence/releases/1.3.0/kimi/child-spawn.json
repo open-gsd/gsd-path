@@ -1,0 +1,44 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "kimi",
+  "run_id": "session_6f733941-44b5-45d0-b7b9-16f28277a61f",
+  "result": "pass",
+  "step": "child-spawn",
+  "command": "Agent",
+  "child_api": "Agent",
+  "child_id": "build_T001",
+  "child_status": "completed",
+  "output": {
+    "child_id": "build_T001",
+    "status": "completed",
+    "child_api": "Agent",
+    "run": "run-20260920T145406264127Z",
+    "session_id": "session_6f733941-44b5-45d0-b7b9-16f28277a61f",
+    "tool_call": {
+      "id": "tool_UmtrUxGdhi8wVxziM3OSx4hP",
+      "input": {
+        "description": "build_T001",
+        "subagent_type": "coder"
+      },
+      "prompt_sha256": "b55aacb155f30541ae42995cfd17f95f8f15173d60ed9d25e76e76d46fd25953"
+    },
+    "tool_result": {
+      "agent_id": "agent-2",
+      "actual_subagent_type": "coder",
+      "status": "completed",
+      "stop_reason": "completed",
+      "content": "agent_id: agent-2\nactual_subagent_type: coder\nstatus: completed\nstop_reason: completed\n\n[summary]\nStatus: **ready**\n\nPaths changed:\n- `count.py` \u2014 rewritten: manual stdlib arg parse, `--json` either position, signed ints (`-3` not treated as flag), invalid input \u2192 stderr naming value + usage, exit 2, no traceback.\n- `tests/test_count_cli.py` \u2014 new: unittest real-CLI subprocess tests via `sys.executable`, runs standalone.\n- `.project/tasks/T001-count-json-cli.md` \u2014 Log entry appended only.\n\nEvidence per AC (Verify `python3 tests/test_count_cli.py` \u2192 4 tests, OK):\n- AC1: `python3 count.py` \u2192 stdout exactly `0 widgets\\n`, exit 0.\n- AC2: `7` \u2192 `7 widgets\\n`, `-3` \u2192 `-3 widgets\\n`, both exit 0.\n- AC3: `--json` \u2192 `{\"widgets\": 0}\\n`; `--json 4` and `4 --json` \u2192 `{\"widgets\": 4}\\n`, exit 0.\n- AC4: `abc` \u2192 exit 2, stdout empty, stderr `error: invalid count 'abc'; usage: count.py [--json] [count]`, no `Traceback`.\n- AC5: tests execute count.py as a real subprocess and cover AC1\u2013AC4; Verify passed.\n\nRESULT: T001 ready\n\nresume_hint: Continue with Agent(resume=\"agent-2\", prompt=\"...\"). Use agent_id only; do not set subagent_type. The subagent retains its prior context; redo any unfinished tool call if its result was lost."
+    },
+    "session_store": {
+      "state": "session_6f733941-44b5-45d0-b7b9-16f28277a61f",
+      "type": "sub",
+      "labels": {
+        "parentAgentId": "main",
+        "profileName": "coder"
+      },
+      "turn_ended_reasons": [
+        "completed"
+      ]
+    }
+  }
+}
