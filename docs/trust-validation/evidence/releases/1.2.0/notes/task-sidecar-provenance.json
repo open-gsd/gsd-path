@@ -36,5 +36,16 @@
     ],
     "branch_and_path_exact_match": true,
     "verified_by": "host_claude"
+  },
+  {
+    "host": "kimi",
+    "native_proof": [
+      {
+        "run": "run-20260920T161226369913Z",
+        "snippet": "a70137ba07b2321b67883bccc586\", \"bound_branch\": \"gsd-path/M001\", \"branch\": \"gsd-path-verify/task-t001-verify\", \"detached\": false, \"kind\": \"verify\", \"mode\": \"sidecar\", \"worktree\": \"/Users/jeremymcspadden/.gsd-path/projects/ca842e30d0db69f1390addb9145013f09c1e57b9184572c293b2bbc705beb557/d715131cb14824f97b3da310f7dfcbcefd97766109c99b9071e416d210a8252d/verify/task-t001-verify\"}, \"script\": \"isolation.py\", \"stderr\": \"\", \"stdout\": \"{\\\"base\\\": \\\"4ffa0b65"
+      }
+    ],
+    "branch_and_path_exact_match": true,
+    "verified_by": "host_claude"
   }
 ]

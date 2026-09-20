@@ -1,0 +1,20 @@
+{
+  "receipt": "/Users/jeremymcspadden/orca/workspaces/gsd-path/release-gate/docs/trust-validation/evidence/releases/1.2.0/kimi.md",
+  "steps": [
+    "archive",
+    "child-spawn",
+    "guards",
+    "install",
+    "integration",
+    "reviews",
+    "router",
+    "task-landing",
+    "task-verify",
+    "worktrees"
+  ],
+  "bundle": "/Users/jeremymcspadden/orca/workspaces/gsd-path/release-gate/docs/trust-validation/evidence/releases/1.2.0/kimi/fixture.bundle",
+  "validated": true,
+  "ship_commit": "acae8341cd80c7e9bf45aaf22abe1829b6b209bf",
+  "integration_commit": "3db4622883c5a7e6706e856acd7be8a0e89a39c9",
+  "tag": "milestone/001-count-cli-json"
+}

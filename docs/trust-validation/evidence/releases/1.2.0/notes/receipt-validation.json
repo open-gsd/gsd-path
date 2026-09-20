@@ -31,7 +31,7 @@
     },
     {
       "host": "kimi",
-      "status": "missing"
+      "status": "structurally-valid"
     }
   ]
 }
