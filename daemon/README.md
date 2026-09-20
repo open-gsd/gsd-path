@@ -9,11 +9,13 @@ bundled runtime status, and surfaces everything through a CLI, a localhost
 HTTP endpoint, a JSONL event history, desktop notifications, and a system
 tray icon.
 
-The daemon is strictly read-only against watched projects: file reads plus
+Background monitoring is read-only against watched projects: file reads plus
 `git` read commands only. Completion checks may read the remote refs and, for
 pull-request integration, GitHub metadata. They never fetch or write refs.
 Unavailable or stale proof is shown as **Unverified**, with available phase
-and task facts retained. The daemon never writes into a watched project.
+and task facts retained. Explicit [Path settings](#path-settings) saves and
+[plugin lifecycle](#plugin-lifecycle) actions can write project configuration
+or installation files. They cannot advance pipeline phases.
 
 ## Install (one command)
 
@@ -74,7 +76,8 @@ Check status:
 
 ## Install (manual)
 
-Core (CLI, watcher, HTTP server) — stdlib only, Python 3.9+:
+Core (CLI, watcher, HTTP server), Python 3.9+. The package installs
+`markdown-it-py` for safe Markdown previews:
 
 ```bash
 pip install ./daemon
@@ -122,8 +125,8 @@ gsd-path-daemon plugin <status|install|update|uninstall>          # manage the s
 
 The native dashboard window fills the display's usable area on first open
 (later sizes are kept) and the green button can take it into macOS full screen.
-The board and project page use the full window width; prose (vision, notes)
-stays at a readable line length.
+The board and project page adapt to the window within a centered content area;
+prose (vision, notes) stays at a readable line length.
 
 The dashboard uses graphite neutrals with the macOS accent color (CSS `AccentColor`,
 system blue where unsupported), light by default. Settings → Appearance
@@ -133,20 +136,24 @@ project has done, where it is now, where its roadmap goes next, and what it has
 cost. The project page also shows the runtime handoff described under
 [/status schema](#status-schema).
 
-- **Toolbar**: OpenGSD Path mark and name, All / Active / Shipped filters with counts, a project
-  search, Refresh (requests a project scan and reloads status), the last update
-  time, and the Settings menu (Plugin, Watched folders).
+- **Toolbar**: OpenGSD Path mark and name, Projects and Settings navigation,
+  Refresh (requests a project scan and reloads status), the last update time,
+  and the Settings menu (Path settings, Plugin, Watched folders, Appearance).
+- **Project controls**: Board / Milestones view switcher; All / In progress /
+  Blocked / Shipped / Unverified filters with counts; and search by project
+  name, path, or milestone.
 - **Watched folders**: Add folder opens a picker; click a folder or `..` to
   navigate, then select the current folder. Stop watching opens a confirmation
   dialog; Cancel or clicking outside it leaves the folder watched. Adding or
   removing a folder updates discovered projects immediately. Other open
   dashboards receive the current watched folders on their next status poll.
 - **Board**: one table row per project, blocked first, then in progress and
-  Unverified, then shipped. Columns: project with health dot and path, route
-  (one square per milestone: done, current, ahead; red when blocked), current milestone, an
-  8-segment phase meter (inspect, define, research, decide, roadmap, plan,
-  build, ship), tasks, cost and turns for the project, last activity, state.
-  The health dot's tooltip gives the reason (for example `no activity for 21d`).
+  Unverified, then shipped. Columns: Project, Current milestone, Status, Tasks,
+  and Usage. These include the project path, phase progress, state and health
+  reason, last activity, cost, and turns.
+- **Milestones**: each project shows Shipped, Current / latest, and Planned
+  milestone columns, with explicit messages when earlier or later records are
+  absent.
 - **Project page** (click a row, or the tray's `#project=<root>` deep link): the
   toolbar becomes Back and a project switcher. The page shows a facts strip
   (state, health with its reason, milestone, branch, head, integration mode,
@@ -191,7 +198,25 @@ cost. The project page also shows the runtime handoff described under
 return to the board. Refresh preserves page scroll, the open Settings menu and
 focus. Connection status changes to Offline after a failed status request; the
 last received data remains visible with an explicit offline label. The
-dashboard does not execute pipeline commands.
+dashboard advances no pipeline phases; explicit Path settings saves use the
+configuration helper described below.
+
+## Path settings
+
+Open **Settings → Path settings** (`#config`) to edit user defaults or a watched
+project's shipping mode, future review-panel preference, and model/effort choices.
+Sources and lock reasons are shown. Save changes individually; Reset removes that
+scope's override. Watched folders and appearance retain their existing controls.
+
+User defaults require the daemon's plugin source checkout; project settings need
+an updated selected runtime. Missing support shows an update message. Settings
+never fetch, install, or upgrade automatically.
+
+`GET /api/path-config?scope=user` (or `scope=project&root=<watched-root>`) reads
+settings. Same-origin JSON `POST /api/path-config` accepts `scope`, project `root`,
+`action` (`set` or `reset`), `key`, and string `value` for set. Unknown fields and
+unwatched project roots are rejected. See [Path settings](../skills/gsd-path/references/config.md)
+for supported keys, precedence, and when changes apply.
 
 ## Plugin lifecycle
 
@@ -208,9 +233,12 @@ install/update. Background source refresh does `git fetch origin main` +
 `git pull --ff-only` at most once per 24h, cached in
 `~/.gsd-path/update-check.json` (last-fetch timestamp + last-known latest
 version from the clone's `package.json`). Background refresh failures retain
-the cached state. Explicit global and project updates bypass this cache period
-and stop with an error if source refresh fails; the installer does not run.
-Project updates invoke `--runtime-upgrade`; see
+the cached state. Explicit global updates and project updates from a clean source
+checkout bypass this cache period and stop if source refresh fails. When the
+source checkout has local changes, project Update uses that local build without
+fetching or merging and displays a source notice. It never discards those edits.
+Project updates invoke `--runtime-upgrade`, or `--runtime-migrate` for legacy
+runtime directories; see
 [project runtime versions](../DOCS.md#project-runtime-versions) for version
 selection and legacy migration, and [Dashboard feedback](../UPDATE.md#update-the-project-runtime-and-guard-hooks)
 for the displayed controls and results. Every installer operation (argv, exit code,
@@ -394,3 +422,40 @@ Create a shortcut in `shell:startup` (Win+R → `shell:startup`) with target:
 
 or run `gsd-path-daemon.exe tray --serve` from a PowerShell scheduled task at
 logon.
+
+## Project history and files
+
+Open a project and choose **History & files**. The viewer lists Git-tracked and
+non-ignored repository files plus `.project` records, including archived
+milestones. UTF-8 text is shown in full. Markdown has Preview and Raw views;
+HTML is escaped and images are represented by their alt text, without loading
+remote resources. Relative document links open within the same project and
+preserve the selected commit when viewing historical contents.
+
+Git history lists commits that changed the selected path. The Version selector
+also retains a selected commit reached through a relative link when that commit
+is absent from the path's history. Working tree shows current contents.
+Uncommitted older contents are not
+retained, and history does not follow renames. Binary files, symlinks, hard
+links, `.git` internals, and paths outside watched projects are rejected.
+Secure working-tree reads currently require POSIX directory descriptors;
+unsupported platforms report that limitation instead of using an unsafe fallback.
+
+**Records & sources → Load full records** loads the full recorded pipeline
+usage, verification ledger, daemon activity, and indexed host turns on demand.
+Data coverage distinguishes available files, loaded records, invalid JSONL
+lines, missing files, and unverified runtime state. Host turns are the records
+currently indexed from Codex and Claude Code logs, not a guarantee that every
+host log was parsed. The regular status snapshot still uses recent-record
+windows; full records and files are fetched separately.
+
+Read-only endpoints, restricted to watched roots and same-origin local requests:
+
+- `GET /api/project-files?root=...&action=list`
+- `GET /api/project-files?root=...&action=read&path=...` (optional full commit `revision`)
+- `GET /api/project-files?root=...&action=history&path=...`
+- `GET /api/project-data?root=...`
+
+The Board and Milestones views use real watched-project state. Project detail
+keeps its existing facts and usage tables, with tasks and evidence in expandable
+sections. Settings groups Path settings, watched folders, and plugin management.

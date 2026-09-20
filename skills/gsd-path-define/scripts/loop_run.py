@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# gsd-path project runtime
 """Deterministic gates for a GSD Path LOOP.md loop spec.
 
 The loop skill (a model) reads the prose sections of a LOOP.md; this helper
@@ -23,6 +24,7 @@ import os
 import re
 import subprocess
 import sys
+sys.dont_write_bytecode = True
 import time
 import uuid
 from contextlib import contextmanager

@@ -155,7 +155,8 @@ class BoardUITests(unittest.TestCase):
             tab = next(t for t in self.orca("tab", "list")["tabs"] if t["browserPageId"] == self.page)
             self.addCleanup(self.orca, "tab", "close", "--index", str(tab["index"]))
             self.orca("wait", "--page", self.page, "--text", "WATCHED PROJECTS")
-            self.assertIn("Unknown — update required", self.js("document.body.innerText"))
+            self.assertIn("Unknown — version metadata unavailable", self.js("document.body.innerText"))
+            self.assertNotIn("Unknown — update required", self.js("document.body.innerText"))
             self.js("[...document.querySelectorAll('button')].find(b => b.textContent === 'Install for all detected hosts').click()")
             self.assertIn("Installing", self.js("document.querySelector('#plugin-feedback')?.textContent || ''"))
             self.assertEqual(self.js("[...document.querySelectorAll('.plugin-controls button')].every(b => b.matches(':disabled'))"), "true")
@@ -254,24 +255,31 @@ class BoardUITests(unittest.TestCase):
         # Board: one table row per project; blocked first, then active, then shipped.
         names = "[...document.querySelectorAll('.prow .pname span:last-child')].map(b=>b.textContent).join('|')"
         self.assertEqual(self.js(names), "Atlas API|Field Notes|GSD Path|Done Thing")
-        self.assertEqual(self.js("[...document.querySelectorAll('.topbar > .segc button')].map(b=>b.textContent+(b.getAttribute('aria-pressed')==='true'?'*':'')).join('|')"),
-                         "All4*|Active3|Shipped1")
+        self.assertEqual(self.js("[...document.querySelectorAll('.board-filters .segc button')].map(b=>b.textContent+(b.getAttribute('aria-pressed')==='true'?'*':'')).join('|')"),
+                         "All4*|In progress2|Blocked1|Shipped1|Unverified0")
         gsd_row = "document.querySelector('.prow[data-root=\"/sample/gsd\"]')"
-        self.assertEqual(self.js(f"{gsd_row}.querySelector('.route').getAttribute('aria-label')"), "M003 ✓  M004 ●  M005 ○")
-        self.assertEqual(self.js(f"[...{gsd_row}.querySelectorAll('.route i')].map(i=>i.className).join('|')"), "done|now|ahead")
-        self.assertEqual(self.js(f"[...{gsd_row}.cells].slice(2).map(c=>c.textContent.trim()).join('|')"),
-                         "M004daemon|build|6/9|$26.10|90|—|In build")
+        for expected in ('M004', 'daemon', 'build'):
+            self.assertIn(expected, self.js(f"{gsd_row}.cells[1].textContent"))
+        self.assertIn('6/9', self.js(f"{gsd_row}.cells[3].textContent"))
+        self.assertIn('$26.10', self.js(f"{gsd_row}.cells[4].textContent"))
+        self.assertIn('90', self.js(f"{gsd_row}.cells[4].textContent"))
         self.assertEqual(self.js(f"[...{gsd_row}.querySelectorAll('.meter i')].map(i=>i.className[0]||'-').join('')"), "ddddddn-")
         self.assertEqual(self.js(f"{gsd_row}.querySelector('.dot').title"), "health amber · no activity for 2d")
         atlas_row = "document.querySelector('.prow.blocked')"
-        self.assertEqual(self.js(f"{atlas_row}.querySelector('.route').getAttribute('aria-label')"), "M002 ■  next ○")
         self.assertEqual(self.js(f"{atlas_row}.querySelector('.meter.blocked i.now').title"), "ship")
         self.assertEqual(self.js("document.querySelector('.prow.shipped .state').textContent"), "Shipped")
         self.assertEqual(self.js("document.querySelectorAll('.prow.shipped .meter i.done').length"), '8')
-        # No next steps, commands or attention copy anywhere on the board.
+        # Block reasons are visible, with no pipeline execution controls.
         board = self.js("document.querySelector('.board').innerText")
-        for gone in ("gsd-path-build", "forensics", "Copy", "Next step", "ship blocked", "Needs you"):
+        for gone in ("gsd-path-build", "forensics", "Copy", "Next step", "Needs you"):
             self.assertNotIn(gone, board)
+        self.assertIn('ship blocked', board)
+        self.js("document.querySelector('[data-layout=milestones]').click()")
+        self.assertEqual(self.js("document.querySelectorAll('.timeline-row').length"), '4')
+        timeline = self.js("document.querySelector('.milestone-timeline').innerText")
+        for expected in ('M003', 'M004', 'M005', 'api-v3', 'Desktop notifications.'):
+            self.assertIn(expected, timeline)
+        self.js("document.querySelector('[data-layout=board]').click()")
         # Filters and search narrow the table; the search field keeps focus through polling.
         self.js("document.querySelector('[data-filter=shipped]').click()")
         self.assertEqual(self.js(names), "Done Thing")
@@ -296,6 +304,7 @@ class BoardUITests(unittest.TestCase):
                          "done:M003|now:M004|ahead:M005")
         self.assertEqual(self.js(f"[...{page}.querySelectorAll('.phases div')].map(d=>(d.className||'-')+':'+d.title).join('|')"),
                          "done:inspect|done:define · 2026-09-09|done:research|done:decide|done:roadmap|done:plan · 2026-09-09|now:build · 2026-09-10|-:ship")
+        self.js("document.querySelectorAll('.project-fold').forEach(d=>d.querySelector('summary').click())")
         text = self.js(f"{page}.innerText")
         for expected in ("core", "daemon", "notify", "M004 daemon · build · wave 2", "6 of 9 tasks · entered build 2026-09-10 · 5h 0m",
                          "✓ wave 1 parsers", "● wave 2 watcher", "○ wave 3 tray",

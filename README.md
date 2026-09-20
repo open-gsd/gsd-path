@@ -89,19 +89,25 @@ for optional Git and host guard hooks.
 For project-owned model and effort choices, see the
 [dispatch model policy](skills/gsd-path/references/model-policy.md).
 
+Use `$path config` (Codex) or `/path config` to view and change user defaults or
+project settings. Dashboard users can open **Settings → Path settings** for the
+same shipping, model/effort, and future review-panel controls. See
+[Path settings](skills/gsd-path/references/config.md) for precedence and locks.
+
 ## Dashboard and menu-bar toolbar
 
 The optional **OpenGSD Path monitor** shows your projects without opening each
 project's `.project/` files. It watches the folders you choose and reads project
-state; it does not run pipeline commands or advance phase gates.
+state without advancing phase gates. Explicit Path settings saves use the
+validated configuration helper; background monitoring remains read-only.
 The monitor is a separate install from the npm skills package.
 
 ### Dashboard
 
 The project board shows blocked, active, and shipped work, with milestone and
 phase progress, task counts, last activity, and available usage data. Use the
-top toolbar to filter or search projects, refresh status, and open Settings for
-watched folders, plugin management, and appearance.
+[dashboard controls](daemon/README.md#dashboard) to filter or search projects,
+switch between Board and Milestones, refresh status, and manage settings.
 
 ![OpenGSD Path dashboard showing sample projects, phase progress, and toolbar controls](docs/images/dashboard-board.png)
 

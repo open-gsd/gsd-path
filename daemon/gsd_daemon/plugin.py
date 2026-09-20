@@ -558,14 +558,26 @@ class PluginManager:
         return self._run_installer("install-project", tail)
 
     def update_project(self, root, dry_run: bool = False) -> dict:
-        refresh = self.refresh_source(ttl_hours=0)
-        if not refresh["refreshed"]:
-            return {"ok": False, "error": refresh["error"], "stdout_tail": "", "argv": []}
+        local_source = False
+        if (self.src_dir / ".git").exists():
+            rc, changed, error = self.git_runner(["git", "-C", str(self.src_dir), "status", "--porcelain"])
+            if rc:
+                return {"ok": False, "error": error or "Cannot inspect plugin source changes.", "stdout_tail": "", "argv": []}
+            local_source = bool(changed.strip())
+        if not local_source:
+            refresh = self.refresh_source(ttl_hours=0)
+            if not refresh["refreshed"]:
+                return {"ok": False, "error": refresh["error"], "stdout_tail": "", "argv": []}
         project = str(Path(os.path.abspath(os.path.expanduser(str(root)))))
-        tail = ["--runtime-upgrade", "--project", project]
+        runtime_root = Path(project) / HOOKS_DIRECTORY
+        legacy = not os.path.lexists(runtime_root / "runtime.json") and os.path.lexists(runtime_root / "runtime")
+        tail = ["--runtime-migrate" if legacy else "--runtime-upgrade", "--project", project]
         if dry_run:
             tail.append("--dry-run")
-        return self._run_installer("update-project", tail)
+        result = self._run_installer("update-project", tail)
+        if local_source:
+            result["source_notice"] = f"Using local plugin source at {self.src_dir}; remote refresh skipped to preserve local changes."
+        return result
 
     def _log_op(self, op: str, argv: Sequence[str], rc: int,
                 stdout: str, stderr: str) -> None:

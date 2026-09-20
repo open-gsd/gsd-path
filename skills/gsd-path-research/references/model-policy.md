@@ -7,8 +7,11 @@ effort decisions; apply its output instead of choosing again in prose.
 ## Project choices
 
 Use `<repo>/.project/model-policy.json`, including when the active track is
-`.project/next`. Configuration is project-owned. It is not phase status.
-No file is required to retain existing behavior.
+`.project/next`. This file owns project overrides. It is not phase status.
+No file is required to retain existing behavior. `path config` can also set user
+defaults in `~/.gsd-path/config.json` under `models`. Project common roles override
+user host and common roles. Within each scope, host roles override common roles.
+Task overrides still win, and recorded assignments stay pinned.
 
 ```json
 {

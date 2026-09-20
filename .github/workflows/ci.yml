@@ -39,5 +39,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Install daemon dependencies
+        run: python3 -m pip install ./daemon
       - name: Daemon package tests
         run: npm run test:daemon

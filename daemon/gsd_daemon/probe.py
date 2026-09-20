@@ -533,7 +533,7 @@ def parse_usage(path: Union[str, Path]) -> Optional[dict]:
         ],
         "by_task": [
             {"task": slot["task"], "model": slot["model"], "tokens": int(slot["tokens"])}
-            for slot in sorted(tasks.values(), key=lambda item: -item["tokens"])[:10]
+            for slot in sorted(tasks.values(), key=lambda item: -item["tokens"])
         ],
     }
 

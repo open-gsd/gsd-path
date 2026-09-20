@@ -741,12 +741,12 @@ class UsageParsingTests(unittest.TestCase):
         self.assertEqual(usage["by_task"][1], {"task": "T002", "model": "claude-opus-4.5",
                                                "tokens": 3000})
 
-    def test_parse_usage_by_task_top_ten(self) -> None:
+    def test_parse_usage_by_task_complete(self) -> None:
         lines = [json.dumps({"task": f"T{i:03d}", "tokens_in": i, "tokens_out": 0})
                  for i in range(15)]
         self.path.write_text("\n".join(lines) + "\n", encoding="utf-8")
         usage = probe.parse_usage(self.path)
-        self.assertEqual(len(usage["by_task"]), 10)
+        self.assertEqual(len(usage["by_task"]), 15)
         self.assertEqual(usage["by_task"][0]["task"], "T014")
 
     def test_parse_usage_missing(self) -> None:

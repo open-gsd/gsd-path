@@ -21,6 +21,7 @@ RUNTIME_FILES = (
     "review_panel.py", "_common.py", "worktree_paths.py", "build_recovery.py",
     "state_checkpoint.py", "state_promote.py", "discussion_validate.py", "integration.py",
     "build_state.py", "lean_verification.py", "check_docs_audit.py",
+    "path_config.py", "model_policy.py", "loop_run.py",
 )
 GUARDS = ("guard_hook.py", "git_guard.py")
 

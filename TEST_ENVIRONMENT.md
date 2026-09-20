@@ -171,3 +171,16 @@ Detailed per-file mapping: [`docs/trust-validation/automated-test-inventory.md`]
 | GitHub repo secrets (above keys) | Scheduled/manual dogfood workflow |
 | Orca embedded browser | `GSD_UI_TEST` dashboard acceptance |
 | `swiftc` (macOS) | Native tray app build during daemon install tests |
+
+For dashboard file/history changes, install the daemon package so Markdown
+rendering is exercised, then run its API and browser acceptance checks:
+
+```sh
+python3 -m pip install ./daemon
+GSD_UI_TEST=1 python3 -B -m unittest tests.test_daemon_project_files tests.test_daemon_board_ui tests.test_daemon_path_config
+```
+
+The file-viewer tests use temporary Git repositories and the real HTTP handler.
+`GSD_UI_TEST=1` requires the running Orca embedded browser. Without
+`markdown-it-py`, the renderer test is skipped and the viewer exposes raw text
+with a preview warning; that does not prove the installed Markdown preview.
