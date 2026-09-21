@@ -67,11 +67,8 @@ node scripts/install.mjs --all --project "$(pwd)"
 Installs the [project contracts](DOCS.md#installing)
 (+ `.claude/CLAUDE.md` if Claude is selected).
 If those managed files already exist, a plain install **refuses and installs
-nothing** — see [project runtime versions](DOCS.md#project-runtime-versions)
-for legacy migration, then use `--update --project PATH` to refresh skills and
-hook wiring while keeping your contracts and selected runtime. Merge contract
-changes by hand
-([UPDATE.md](UPDATE.md)).
+nothing** — use [the update guide](UPDATE.md) for existing installations,
+including [legacy runtime migration during upgrades](UPDATE.md#legacy-project-runtime).
 
 **Optional** archive/git guards:
 

@@ -405,6 +405,10 @@ the declaration and stable wiring. It does not stage or commit. Resolve local
 runtime edits or unknown files first. Interrupted migration is recovered by the
 same explicit command; its journal lives outside the checkout.
 
+To migrate and then update skills and project wiring in one invocation, follow
+[Legacy project runtime](UPDATE.md#legacy-project-runtime) for wizard consent,
+unattended commands, dry-run scope, and recovery after an update failure.
+
 An ignore rule alone cannot migrate tracked runtime files. This runtime lifecycle
 covers runtime code and launch wiring; project-local skill copies, retained skill
 backups, and mixed user/host settings remain separately owned installation output.

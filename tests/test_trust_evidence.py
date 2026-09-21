@@ -574,6 +574,34 @@ class TrustEvidenceTests(unittest.TestCase):
         self.release_change("skills/gsd-path/SKILL.md")
         self.assertEqual(["alpha", "beta"], check_trust_evidence.validate_repository(self.repo, plan=True)["required_runs"])
 
+    def test_installer_changes_reuse_valid_workflow_receipts(self):
+        self.receipt("alpha")
+        self.receipt("beta")
+        self.commit_receipts()
+        original = self.candidate
+        for path in ("scripts/install.mjs", "scripts/install.py",
+                     "scripts/wizard.mjs", "scripts/runtime_store.py"):
+            with self.subTest(path=path):
+                self.release_change(path)
+                result = check_trust_evidence.validate_repository(self.repo, plan=True)
+                self.assertEqual([], result["required_runs"])
+                self.assertEqual(original, result["receipts"]["alpha"]["candidate"])
+        self.release_change("platforms/alpha/dispatch.md")
+        self.assertEqual(["alpha"], check_trust_evidence.validate_repository(
+            self.repo, plan=True)["required_runs"])
+        self.release_change("scripts/pipeline_state.py")
+        self.assertEqual(["alpha", "beta"], check_trust_evidence.validate_repository(
+            self.repo, plan=True)["required_runs"])
+
+    def test_installer_change_does_not_excuse_invalid_or_missing_receipts(self):
+        self.receipt("alpha", child_spawn="unverifiable")
+        self.commit_receipts()
+        self.release_change("scripts/install.mjs")
+        result = check_trust_evidence.validate_repository(self.repo, plan=True)
+        self.assertEqual(["alpha", "beta"], result["required_runs"])
+        self.assertIn("child_spawn", result["reasons"]["alpha"])
+        self.assertEqual("missing host evidence", result["reasons"]["beta"])
+
     def test_plan_cannot_reuse_corrupt_historical_receipt(self):
         self.receipt("alpha", child_spawn="unverifiable")
         self.receipt("beta")

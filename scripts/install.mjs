@@ -1655,7 +1655,7 @@ function usage() {
     "  --hooks-init          add guards to an existing project without changing its contracts\n" +
     "  --runtime-restore     restore the exact declared runtime from --source-root\n" +
     "  --runtime-upgrade     explicitly select the supplied package runtime\n" +
-    "  --runtime-migrate     migrate a tracked legacy runtime for review\n" +
+    "  --runtime-migrate     migrate a tracked legacy runtime for review; add --update to continue upgrading\n" +
     "  --hooks-refresh       validate the selected runtime; keep its version\n" +
     "  --hooks-refresh-full  refresh native settings/git hooks; target flags create missing configs\n" +
     "  --dry-run             preview without writing\n" +
@@ -1684,6 +1684,8 @@ export async function main(argv, env = process.env) {
       colored: !process.env.NO_COLOR,
       version: packageVersion(),
       targets: TARGETS,
+      legacyRuntime: lexists(path.join(process.cwd(), ".gsd-path", "runtime")) &&
+        !lexists(path.join(process.cwd(), ".gsd-path", "runtime.json")),
       installed: (target, local) =>
         hasManagedInstall(local ? localRoot(target, process.cwd()) : defaultRoot(target, env)),
     });
@@ -1695,7 +1697,12 @@ export async function main(argv, env = process.env) {
     : path.resolve(SCRIPT_DIRECTORY, "..");
   const project =
     values.project !== undefined ? absolutePath(values.project) : null;
-  if (["runtime-restore", "runtime-upgrade", "runtime-migrate"].some(name => values[name])) {
+  const migrateAndUpdate = values["runtime-migrate"] && values.update;
+  if (migrateAndUpdate && (project === null || values["runtime-restore"] || values["runtime-upgrade"] || values.doctor || values["hooks-init"] || values["hooks-refresh"] || values["hooks-refresh-full"])) {
+    ui.error("--runtime-migrate --update requires --project and cannot be combined with another runtime, doctor, or hook operation");
+    return 2;
+  }
+  if (!migrateAndUpdate && ["runtime-restore", "runtime-upgrade", "runtime-migrate"].some(name => values[name])) {
     const interpreter = requiredPythonRuntime("project runtime");
     const result = spawnSync(interpreter, ["-B", path.join(SCRIPT_DIRECTORY, "install.py"),
       ...argv.filter(arg => arg !== "--no-color")], { stdio: "inherit", env });
@@ -1799,6 +1806,21 @@ export async function main(argv, env = process.env) {
     }
   } else {
     plans = selected.map((target) => targetPlan(target, rootFor(target)));
+  }
+  if (migrateAndUpdate) {
+    const interpreter = requiredPythonRuntime("project runtime");
+    const migration = spawnSync(interpreter, ["-B", path.join(SCRIPT_DIRECTORY, "install.py"),
+      "--runtime-migrate", "--project", project, "--source-root", sourceRoot,
+      ...(values["dry-run"] ? ["--dry-run"] : [])], { stdio: "inherit", env });
+    if (migration.error || migration.status !== 0) {
+      if (migration.error) ui.error(migration.error.message);
+      return migration.status ?? 1;
+    }
+    if (values["dry-run"]) {
+      ui.result("Migration preview only; nothing was written. Run without --dry-run to migrate, then validate and apply the update.");
+      return 0;
+    }
+    ui.result("Migration completed. Review the unstaged Git diff. Updating skills and wiring next; an update failure will retain the completed migration.");
   }
   const spin = ui.spinner("Preparing");
   try {

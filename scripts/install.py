@@ -2641,17 +2641,16 @@ def install(
 
     if project is not None:
         _validate_directory_destination(project, "project path")
-        if dry_run:
-            _validate_project(
-                source_root,
-                project,
-                selected,
-                hooks,
-                [*mutation_roots, *planned_backups],
-                interpreter,
-                hooks_dir,
-                update,
-            )
+        _validate_project(
+            source_root,
+            project,
+            selected,
+            hooks,
+            [*mutation_roots, *planned_backups],
+            interpreter,
+            hooks_dir,
+            update,
+        )
 
     results = []
     with tempfile.TemporaryDirectory(prefix="gsd-path-install-") as temporary:

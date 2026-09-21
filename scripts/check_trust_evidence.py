@@ -874,6 +874,12 @@ def changed_host_scope(repo: Path, baseline: str, hosts: Sequence[str]) -> Mappi
         "scripts/bump_version.mjs", "scripts/update_release_docs.mjs",
         "scripts/prepare_release_evidence.sh", "scripts/check_trust_evidence.py",
     }
+    # Installer execution is covered by offline lifecycle and installed-guard
+    # tests. Installed skills, adapters and runtime payloads still need live proof.
+    installer_tools = {
+        "scripts/install.mjs", "scripts/install.py",
+        "scripts/wizard.mjs", "scripts/runtime_store.py",
+    }
     for path in filter(None, paths):
         if path in {"package.json", "package-lock.json"}:
             # Only version fields are exempt; dependency and packaging changes are shared.
@@ -892,6 +898,7 @@ def changed_host_scope(repo: Path, baseline: str, hosts: Sequence[str]) -> Mappi
                 continue
         elif (path.startswith(("docs/", "tests/", ".github/", "daemon/"))
               or path in release_tools
+              or path in installer_tools
               or ("/" not in path and path.endswith(".md")
                   and path not in {"AGENTS.md", "WORKFLOW.md"})):
             continue

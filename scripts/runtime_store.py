@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import shlex
 import tempfile
 from contextlib import contextmanager
 
@@ -135,7 +136,9 @@ def prepare(source, project, *, dry_run=False):
         status_runtime.validate_runtime(pin)
         return pin
     if os.path.lexists(project / ".gsd-path/runtime"):
-        raise ValueError("legacy project runtime requires --runtime-migrate --project PATH; migration produces a reviewable Git diff")
+        raise ValueError("legacy project runtime requires explicit migration before updating; run: "
+                         f"npx @opengsd/gsd-path@latest --runtime-migrate --project {shlex.quote(str(project.resolve()))}; "
+                         "then retry the update. Migration produces a reviewable Git diff")
     return publish(source, dry_run=dry_run)
 
 

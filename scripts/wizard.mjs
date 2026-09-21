@@ -125,7 +125,7 @@ const confirm = (io, theme, title, yes = "Yes", no = "No") =>
 
 // Pure: runs the question flow and returns install.mjs argv (or null if cancelled).
 // `installed(target, local)` reports whether a managed install already exists for that host in that scope.
-export async function wizard({ input, output, colored = true, version = "", cwd = process.cwd(), installed = () => false, targets }) {
+export async function wizard({ input, output, colored = true, version = "", cwd = process.cwd(), installed = () => false, legacyRuntime = false, targets }) {
   const theme = makeTheme(colored);
   const keys = keyReader(input);
   const io = { keys, output };
@@ -147,8 +147,13 @@ export async function wizard({ input, output, colored = true, version = "", cwd 
       hostItems.some((item) => item.checked && hosts.includes(item.value)) &&
       (await confirm(io, theme, "Existing installs found. What do you want to do?", "Update in place", "Fresh install"));
 
-    const project = await confirm(io, theme, "Write AGENTS.md + WORKFLOW.md contracts into this repo?", `Yes — ${cwd}`, "Not now");
+    const project = await confirm(io, theme, update ? "Refresh this project's wiring (keep its contracts and selected runtime)?" : "Write AGENTS.md + WORKFLOW.md contracts into this repo?", `Yes — ${cwd}`, "Not now");
     const hooks = project && (await confirm(io, theme, "Install guard hooks (archive immutability, ship-commit purity)?"));
+    const migrate = project && update && legacyRuntime;
+    if (migrate) {
+      output.write(`\n  This project uses the old runtime layout. Migration moves managed runtime files\n  outside the repo and leaves an unstaged Git diff for review. Local edits are preserved.\n`);
+      if (!(await confirm(io, theme, "Migrate this project before updating?", "Migrate and continue upgrade", "Cancel"))) return null;
+    }
 
     const argv = [];
     if (hosts.length === targets.length) argv.push("--all");
@@ -157,6 +162,7 @@ export async function wizard({ input, output, colored = true, version = "", cwd 
     if (local) argv.push("--local");
     if (project) argv.push("--project", cwd);
     if (hooks) argv.push("--hooks");
+    if (migrate) argv.push("--runtime-migrate");
 
     output.write(`\n  ${theme.dim("Equivalent command:")}\n  ${theme.accent("$")} gsd-path ${argv.join(" ")}\n`);
     const go = await select(io, theme, "Ready?", [
