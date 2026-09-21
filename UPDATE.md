@@ -119,9 +119,10 @@ if the update fails, the completed migration remains as an unstaged Git diff.
 Review it with `git status --short` and `git diff` in the project.
 
 Migration is needed once per project. For later updates, omit `--runtime-migrate`.
-Normal updates keep the selected runtime; use `--runtime-upgrade --project PATH`
-to explicitly change it. Without migration consent, legacy project updates stop
-before writing files and print the exact migration command.
+For runtime selection after migration, see
+[Project runtime versions](DOCS.md#project-runtime-versions).
+Without migration consent, legacy project updates stop before writing files and
+print the exact migration command.
 
 ### After updating
 
