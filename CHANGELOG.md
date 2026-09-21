@@ -66,3 +66,22 @@ are documented here. Format follows [Keep a Changelog](https://keepachangelog.co
 - Restore same-cycle recovery after partial review completion
 - Isolate assignment rejections and align native panel exclusions
 - Fix dispatch isolation, legacy pinning, and independent panel selection
+
+## [1.3.0] - 2026-09-21
+
+### Added
+- migrate legacy runtimes during upgrades
+
+### Changed
+- Clarify receipt reuse and consolidate release policy guidance
+- Clarify legacy upgrade guidance and verify syntax
+- update release notes for v1.2.0
+
+### Fixed
+- validate installer changes without live host reruns
+- preserve closed review cycles in host recovery
+- clarify owner gates and accept serial task release evidence
+
+### Other
+- Clarify reviewer ownership; live verification remains pending
+- Reject unretired verification worktrees and branches in release evidence
