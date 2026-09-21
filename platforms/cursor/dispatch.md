@@ -56,3 +56,14 @@ The parent owns lifecycle: wait for terminal completion, enforce timeout and
 cancellation, transfer staged outputs from disposable roots, clean up every
 child and temporary root before the phase gate, and never let a child delegate
 another GSD Path child. A timeout or cancellation is a blocked result.
+
+The reviewer owns the review artifact, including corrections after completion.
+The parent must not edit staged or collected reviews, including `Surface`,
+`Check`, `Observed`, verdicts, or `Reviewed HEAD`, to make validation pass.
+If validation rejects a review, preserve the rejected artifact and return the
+exact validation error to the reviewer through the continuation path above,
+with the complete brief, original recorded review base, template, and output
+path. Only the reviewer may correct its output from the recorded evidence;
+missing evidence remains blocked, never invented. Validate the returned output
+before collection. If the reviewer cannot complete the correction, report the
+block; parent lifecycle ownership never grants review-authoring authority.
