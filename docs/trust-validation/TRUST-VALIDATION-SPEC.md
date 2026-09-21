@@ -16,8 +16,9 @@ Every release is trusted only when:
    `evidence/releases/<original-package-version>/`. Each host must identify a
    distinct run, landing commit, ship commit, and integration commit.
 3. `npm run verify:release` validates those receipts and compares each tested
-   candidate with HEAD. Reuse is allowed only when that host's runtime and
-   integration inputs are unchanged. Missing, invalid, or stale evidence
+   candidate with HEAD. Reuse is allowed when that host's workflow inputs are
+   unchanged under the classification below. Installer tooling is verified by
+   offline tests instead of repeating agent workflows. Missing, invalid, or stale evidence
    requires a fresh run. A current-version receipt takes precedence; a failed
    current receipt cannot be hidden by an older pass.
 
@@ -44,6 +45,7 @@ validated receipt. No tag alone exempts a host with missing evidence.
 | Changed files | Required live checks |
 |---|---|
 | `platforms/<declared-host>/` | That host if included in release evaluations; multiple host changes combine |
+| `scripts/install.mjs`, `scripts/install.py`, `scripts/wizard.mjs`, `scripts/runtime_store.py` | None; offline installer lifecycle, migration, rollback, runtime pinning, and installed-guard tests apply |
 | Shared adapters, skills, runtime scripts, `AGENTS.md`, `WORKFLOW.md`, or unclassified paths | Every release evaluation host |
 | `docs/`, other root Markdown, `tests/`, `.github/`, `daemon/` | None |
 | `scripts/bump_version.mjs`, `scripts/update_release_docs.mjs`, `scripts/prepare_release_evidence.sh`, `scripts/check_trust_evidence.py` | None; automated verification still applies |
@@ -52,6 +54,13 @@ validated receipt. No tag alone exempts a host with missing evidence.
 Added and deleted paths count, including both sides of renames. No old receipt
 is relabeled as current evidence. Required receipts retain all existing
 candidate, native-child, task, review, archive, integration, and guard checks.
+
+Installer tooling runs during installation, update, and migration; a complete
+agent milestone does not replace tests of those operations. This category does
+not exempt the files it installs: changes to skills, host adapters, guard
+implementations, runtime payloads, the host manifest, or package contents still
+use their own live-check classification. Mixed changes combine requirements.
+`npm run verify` remains required and includes the installer and guard suites.
 
 Release 1.2.0 includes shared pipeline changes, so all eight evaluation hosts
 need evidence that covers those changes. Subsequent documentation, version-only,

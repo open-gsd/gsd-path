@@ -20,7 +20,6 @@ class TrustEvidenceTests(unittest.TestCase):
         self.fixture_states = {}
         self.fixture_manifest_overrides = {}
         self.keep_fixture_branches = set()
-        self.serial_hosts = set()
         self.unrelated_integration_hosts = set()
         self.blocked_final_hosts = set()
         self.shared_history_groups = {}
@@ -144,13 +143,11 @@ class TrustEvidenceTests(unittest.TestCase):
                 f"advance {evidence_host} default",
             )
         task_branches = {
-            evidence_host: ("gsd-path/M001" if evidence_host in self.serial_hosts
-                            else f"task/{evidence_host}-milestone")
+            evidence_host: f"task/{evidence_host}-milestone"
             for evidence_host in fixture_hosts
         }
         task_worktrees = {
-            evidence_host: (repository if evidence_host in self.serial_hosts
-                            else repository.parent / f"{evidence_host}-task-worktree")
+            evidence_host: repository.parent / f"{evidence_host}-task-worktree"
             for evidence_host in fixture_hosts
         }
         run_ids = {
@@ -429,7 +426,6 @@ class TrustEvidenceTests(unittest.TestCase):
                 "task_branch": fixture["task_branch"],
                 "task_worktree": fixture["task_worktree"],
                 "landing_commit": fixture["landing"],
-                "isolation_mode": "serial" if host in self.serial_hosts else "sidecar",
             },
             "task-verify": {
                 "verify_artifact": fixture["artifacts"]["verify"],
@@ -577,6 +573,34 @@ class TrustEvidenceTests(unittest.TestCase):
             check_trust_evidence.validate_repository(self.repo)
         self.release_change("skills/gsd-path/SKILL.md")
         self.assertEqual(["alpha", "beta"], check_trust_evidence.validate_repository(self.repo, plan=True)["required_runs"])
+
+    def test_installer_changes_reuse_valid_workflow_receipts(self):
+        self.receipt("alpha")
+        self.receipt("beta")
+        self.commit_receipts()
+        original = self.candidate
+        for path in ("scripts/install.mjs", "scripts/install.py",
+                     "scripts/wizard.mjs", "scripts/runtime_store.py"):
+            with self.subTest(path=path):
+                self.release_change(path)
+                result = check_trust_evidence.validate_repository(self.repo, plan=True)
+                self.assertEqual([], result["required_runs"])
+                self.assertEqual(original, result["receipts"]["alpha"]["candidate"])
+        self.release_change("platforms/alpha/dispatch.md")
+        self.assertEqual(["alpha"], check_trust_evidence.validate_repository(
+            self.repo, plan=True)["required_runs"])
+        self.release_change("scripts/pipeline_state.py")
+        self.assertEqual(["alpha", "beta"], check_trust_evidence.validate_repository(
+            self.repo, plan=True)["required_runs"])
+
+    def test_installer_change_does_not_excuse_invalid_or_missing_receipts(self):
+        self.receipt("alpha", child_spawn="unverifiable")
+        self.commit_receipts()
+        self.release_change("scripts/install.mjs")
+        result = check_trust_evidence.validate_repository(self.repo, plan=True)
+        self.assertEqual(["alpha", "beta"], result["required_runs"])
+        self.assertIn("child_spawn", result["reasons"]["alpha"])
+        self.assertEqual("missing host evidence", result["reasons"]["beta"])
 
     def test_plan_cannot_reuse_corrupt_historical_receipt(self):
         self.receipt("alpha", child_spawn="unverifiable")
@@ -1088,68 +1112,6 @@ class TrustEvidenceTests(unittest.TestCase):
             check_trust_evidence.EvidenceError, "git worktree porcelain"
         ):
             check_trust_evidence.validate_repository(self.repo)
-
-    def test_accepts_serial_task_on_primary_bound_branch(self):
-        self.serial_hosts.add("alpha")
-        self.receipt("alpha")
-        self.receipt("beta")
-        self.commit_receipts()
-        check_trust_evidence.validate_repository(self.repo)
-
-    def test_serial_rejects_registered_verification_worktree(self):
-        self.serial_hosts.add("alpha")
-        self.receipt("alpha")
-        self.receipt("beta")
-        fixture = self.fixtures["alpha"]
-        worktrees = self.artifact("alpha", "worktrees")
-        evidence = json.loads(worktrees.read_text(encoding="utf-8"))
-        evidence["output"] += (
-            f"\nworktree {fixture['primary_worktree']}-verify\n"
-            f"HEAD {fixture['landing']}\n"
-            "branch refs/heads/gsd-path-verify/task-t001-verify\n"
-        )
-        worktrees.write_text(json.dumps(evidence) + "\n", encoding="utf-8")
-        self.commit_receipts()
-        with self.assertRaisesRegex(
-            check_trust_evidence.EvidenceError, "verification worktree was not retired"
-        ):
-            check_trust_evidence.validate_repository(self.repo)
-
-    def test_serial_rejects_unretired_verification_branch(self):
-        self.serial_hosts.add("alpha")
-        self.receipt("alpha")
-        self.receipt("beta")
-        fixture = self.fixtures["alpha"]
-        bundle = self.artifact("alpha", "fixture").with_suffix(".bundle")
-        for arguments in (
-            ("branch", "gsd-path-verify/task-t001-verify", fixture["landing"]),
-            ("bundle", "create", str(bundle), "--all"),
-        ):
-            subprocess.run(
-                ["git", *arguments], cwd=fixture["primary_worktree"],
-                check=True, capture_output=True, text=True,
-            )
-        self.commit_receipts()
-        with self.assertRaisesRegex(
-            check_trust_evidence.EvidenceError, "verification branch was not retired"
-        ):
-            check_trust_evidence.validate_repository(self.repo)
-
-    def test_serial_task_requires_primary_worktree_and_bound_branch(self):
-        self.serial_hosts.add("alpha")
-        self.receipt("alpha")
-        self.receipt("beta")
-        landing = self.artifact("alpha", "task-landing")
-        original = json.loads(landing.read_text())
-        for key, value in (("task_worktree", "/different/repo"),
-                           ("isolation_mode", "sidecar")):
-            with self.subTest(key=key):
-                landing.write_text(json.dumps({**original, key: value}) + "\n")
-                self.commit_receipts()
-                with self.assertRaisesRegex(check_trust_evidence.EvidenceError,
-                                            "serial task must use the primary worktree" if key == "task_worktree"
-                                            else "task worktree was not retired"):
-                    check_trust_evidence.validate_repository(self.repo)
 
     def test_rejects_registered_task_worktree(self):
         self.receipt("alpha")

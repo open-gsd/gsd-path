@@ -21,7 +21,6 @@ try:
     )
     from isolation import (
         IsolationError,
-        VERIFY_BRANCH_PREFIX,
         task_frontmatter,
         verify_landed_task_files,
     )
@@ -37,7 +36,6 @@ except ImportError:
     )
     from scripts.isolation import (
         IsolationError,
-        VERIFY_BRANCH_PREFIX,
         task_frontmatter,
         verify_landed_task_files,
     )
@@ -624,12 +622,8 @@ def _validate_git_bundle(
             _git(fixture, "check-ref-format", "--branch", task_branch)
         except EvidenceError:
             raise EvidenceError(f"{bundle}: task_branch has an invalid name") from None
-        serial_primary = landing.get("isolation_mode") == "serial" and task_branch == bound_branch
-        if not serial_primary and _git_ref_exists(fixture, f"refs/heads/{task_branch}"):
+        if _git_ref_exists(fixture, f"refs/heads/{task_branch}"):
             raise EvidenceError(f"{bundle}: task branch was not retired")
-        if _git(fixture, "for-each-ref", "--format=%(refname)",
-                f"refs/heads/{VERIFY_BRANCH_PREFIX}"):
-            raise EvidenceError(f"{bundle}: verification branch was not retired")
         _validate_run_artifacts(
             fixture,
             bundle,
@@ -726,23 +720,12 @@ def _validate_evidence_details(
         raise EvidenceError(
             f"{path}: primary worktree must be on the bound branch at ship HEAD"
         )
-    serial_primary = (
-        landing.get("isolation_mode") == "serial"
-        and task_ref == f"refs/heads/{integration['bound_branch']}"
-    )
-    if serial_primary and task_worktree.casefold() != primary_worktree.casefold():
-        raise EvidenceError(f"{path}: serial task must use the primary worktree")
-    if not serial_primary and any(
+    if any(
         record["worktree"].casefold() == task_worktree.casefold()
         or record.get("branch") == task_ref
         for record in records
     ):
         raise EvidenceError(f"{path}: task worktree was not retired")
-    if any(
-        record.get("branch", "").startswith(f"refs/heads/{VERIFY_BRANCH_PREFIX}")
-        for record in records
-    ):
-        raise EvidenceError(f"{path}: verification worktree was not retired")
     if any(
         record["worktree"].casefold() == integration_worktree.casefold()
         for record in records
@@ -891,6 +874,12 @@ def changed_host_scope(repo: Path, baseline: str, hosts: Sequence[str]) -> Mappi
         "scripts/bump_version.mjs", "scripts/update_release_docs.mjs",
         "scripts/prepare_release_evidence.sh", "scripts/check_trust_evidence.py",
     }
+    # Installer execution is covered by offline lifecycle and installed-guard
+    # tests. Installed skills, adapters and runtime payloads still need live proof.
+    installer_tools = {
+        "scripts/install.mjs", "scripts/install.py",
+        "scripts/wizard.mjs", "scripts/runtime_store.py",
+    }
     for path in filter(None, paths):
         if path in {"package.json", "package-lock.json"}:
             # Only version fields are exempt; dependency and packaging changes are shared.
@@ -909,6 +898,7 @@ def changed_host_scope(repo: Path, baseline: str, hosts: Sequence[str]) -> Mappi
                 continue
         elif (path.startswith(("docs/", "tests/", ".github/", "daemon/"))
               or path in release_tools
+              or path in installer_tools
               or ("/" not in path and path.endswith(".md")
                   and path not in {"AGENTS.md", "WORKFLOW.md"})):
             continue

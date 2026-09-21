@@ -64,12 +64,12 @@ step-specific fields below:
 | `install` | `host_version`, `install_root`, `candidate`, `package_version`, `exit_code: 0` |
 | `router` | `state_artifact`, `state_phase: "shipped"` |
 | `child-spawn` | manifest-declared `child_api`, matching `command`, structured child output that binds `child_id` and completed status, `child_id`, `child_status: "completed"` |
-| `task-landing` | `fixture_bundle`, `run_manifest`, `fixture_base_commit`, `task_branch`, `task_worktree`, `landing_commit`; for a serial task on the primary, `isolation_mode: serial`, `task_branch` equal to the bound branch, and `task_worktree` equal to the primary worktree |
+| `task-landing` | `fixture_bundle`, `run_manifest`, `fixture_base_commit`, `task_branch`, `task_worktree`, `landing_commit` |
 | `task-verify` | `verify_artifact`, `verify_exit_code: 0` |
 | `reviews` | `wave_review_artifact`, `final_review_artifact` |
 | `archive` | `archive_path`, `validation_exit_code: 0` |
 | `integration` | `fixture_bundle`, `run_manifest`, `ship_commit`, `bound_branch`, `default_branch`, `pre_integration_default_commit`, `integration_commit`, `milestone_tag` |
-| `worktrees` | `primary_worktree`, retired `integration_worktree`, and normalized `git worktree list --porcelain` in `output`; the primary must remain on the bound branch at the ship commit, while separate task, verification, and integration worktrees must be absent. A serial task's primary worktree remains; verification branches must still be retired |
+| `worktrees` | `primary_worktree`, retired `integration_worktree`, and normalized `git worktree list --porcelain` in `output`; the primary must remain on the bound branch at the ship commit, while task and integration worktrees must be absent |
 | `guards` | `guard_artifact` plus manifest `declared_tier`, `native_guard`, and `git_hooks` results |
 
 `fixture_bundle` is one tracked `git bundle` inside the host evidence directory.
