@@ -21,6 +21,7 @@ try:
     )
     from isolation import (
         IsolationError,
+        VERIFY_BRANCH_PREFIX,
         task_frontmatter,
         verify_landed_task_files,
     )
@@ -36,6 +37,7 @@ except ImportError:
     )
     from scripts.isolation import (
         IsolationError,
+        VERIFY_BRANCH_PREFIX,
         task_frontmatter,
         verify_landed_task_files,
     )
@@ -625,6 +627,9 @@ def _validate_git_bundle(
         serial_primary = landing.get("isolation_mode") == "serial" and task_branch == bound_branch
         if not serial_primary and _git_ref_exists(fixture, f"refs/heads/{task_branch}"):
             raise EvidenceError(f"{bundle}: task branch was not retired")
+        if _git(fixture, "for-each-ref", "--format=%(refname)",
+                f"refs/heads/{VERIFY_BRANCH_PREFIX}"):
+            raise EvidenceError(f"{bundle}: verification branch was not retired")
         _validate_run_artifacts(
             fixture,
             bundle,
@@ -733,6 +738,11 @@ def _validate_evidence_details(
         for record in records
     ):
         raise EvidenceError(f"{path}: task worktree was not retired")
+    if any(
+        record.get("branch", "").startswith(f"refs/heads/{VERIFY_BRANCH_PREFIX}")
+        for record in records
+    ):
+        raise EvidenceError(f"{path}: verification worktree was not retired")
     if any(
         record["worktree"].casefold() == integration_worktree.casefold()
         for record in records

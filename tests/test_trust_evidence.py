@@ -1096,6 +1096,45 @@ class TrustEvidenceTests(unittest.TestCase):
         self.commit_receipts()
         check_trust_evidence.validate_repository(self.repo)
 
+    def test_serial_rejects_registered_verification_worktree(self):
+        self.serial_hosts.add("alpha")
+        self.receipt("alpha")
+        self.receipt("beta")
+        fixture = self.fixtures["alpha"]
+        worktrees = self.artifact("alpha", "worktrees")
+        evidence = json.loads(worktrees.read_text(encoding="utf-8"))
+        evidence["output"] += (
+            f"\nworktree {fixture['primary_worktree']}-verify\n"
+            f"HEAD {fixture['landing']}\n"
+            "branch refs/heads/gsd-path-verify/task-t001-verify\n"
+        )
+        worktrees.write_text(json.dumps(evidence) + "\n", encoding="utf-8")
+        self.commit_receipts()
+        with self.assertRaisesRegex(
+            check_trust_evidence.EvidenceError, "verification worktree was not retired"
+        ):
+            check_trust_evidence.validate_repository(self.repo)
+
+    def test_serial_rejects_unretired_verification_branch(self):
+        self.serial_hosts.add("alpha")
+        self.receipt("alpha")
+        self.receipt("beta")
+        fixture = self.fixtures["alpha"]
+        bundle = self.artifact("alpha", "fixture").with_suffix(".bundle")
+        for arguments in (
+            ("branch", "gsd-path-verify/task-t001-verify", fixture["landing"]),
+            ("bundle", "create", str(bundle), "--all"),
+        ):
+            subprocess.run(
+                ["git", *arguments], cwd=fixture["primary_worktree"],
+                check=True, capture_output=True, text=True,
+            )
+        self.commit_receipts()
+        with self.assertRaisesRegex(
+            check_trust_evidence.EvidenceError, "verification branch was not retired"
+        ):
+            check_trust_evidence.validate_repository(self.repo)
+
     def test_serial_task_requires_primary_worktree_and_bound_branch(self):
         self.serial_hosts.add("alpha")
         self.receipt("alpha")
