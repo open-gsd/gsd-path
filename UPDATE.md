@@ -98,6 +98,31 @@ node scripts/install.mjs --update --claude --cursor
 
 `--update` only refreshes hosts that **already have** GSD Path installed.
 
+### Legacy project runtime
+
+The interactive npm installer detects the old `.gsd-path/runtime/` layout when
+you choose to update project wiring. Choose **Migrate and continue upgrade** to
+migrate first, then update skills and wiring. Cancelling leaves the installation
+unchanged. Migration preserves locally modified files by stopping for you to
+resolve them; it never stages or commits changes.
+
+For unattended upgrades, migration requires explicit consent:
+
+```bash
+npx @opengsd/gsd-path@latest --update --runtime-migrate --project "/absolute/project" --dry-run
+npx @opengsd/gsd-path@latest --update --runtime-migrate --project "/absolute/project"
+```
+
+The combined dry run previews migration only and writes nothing. The real command
+migrates, then validates and applies the update. These are separate operations:
+if the update fails, the completed migration remains as an unstaged Git diff.
+Review it with `git status --short` and `git diff` in the project.
+
+Migration is needed once per project. For later updates, omit `--runtime-migrate`.
+Normal updates keep the selected runtime; use `--runtime-upgrade --project PATH`
+to explicitly change it. Without migration consent, legacy project updates stop
+before writing files and print the exact migration command.
+
 ### After updating
 
 1. Restart your agent session (hosts reload skills on session start).

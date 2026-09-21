@@ -247,6 +247,132 @@ class RuntimeLifecycleTests(unittest.TestCase):
         self.assertEqual(changed.read_bytes(), before)
         self.assertFalse((runtime.parent / "runtime.json").exists())
 
+    def legacy_update_fixture(self):
+        runtime = self.repo / ".gsd-path/runtime"
+        runtime.mkdir(parents=True)
+        for name in install.PROJECT_RUNTIME_SCRIPTS:
+            shutil.copy2(SOURCE / "scripts" / name, runtime / name)
+        shutil.copy2(SOURCE / "scripts/status_runtime.py", runtime.parent / "status_runtime.py")
+        self.git("add", ".")
+        self.git("commit", "-m", "legacy runtime")
+        return runtime
+
+    def test_legacy_update_preflight_never_acquires_locks(self):
+        self.legacy_update_fixture()
+        with mock.patch.object(install, "_acquire_install_locks", side_effect=AssertionError("write attempted")):
+            with self.assertRaises(install.InstallerError) as error:
+                install.install(SOURCE, [], project=self.repo, update=True, migrate_legacy=False)
+        self.assertIn(str(self.repo), str(error.exception))
+        self.assertIn("--runtime-migrate", str(error.exception))
+        self.assertNotIn("rolled back", str(error.exception))
+        self.assertEqual(self.git("status", "--porcelain"), "")
+
+    def test_node_migrate_and_update_then_repeat_preserves_pin(self):
+        runtime = self.legacy_update_fixture()
+        skills = self.home / ".claude/skills"
+        install.install(SOURCE, [install.TargetPlan("claude", skills)], migrate_legacy=False)
+        args = ["node", str(SOURCE / "scripts/install.mjs"), "--update", "--claude",
+                "--claude-root", str(skills), "--project", str(self.repo), "--hooks"]
+        version = skills / "gsd-path/VERSION"
+        version.write_text("0.0.1\n")
+        refused = subprocess.run(args, capture_output=True, text=True)
+        self.assertNotEqual(refused.returncode, 0)
+        self.assertIn(str(self.repo), refused.stdout + refused.stderr)
+        self.assertNotIn("rolled back", refused.stdout + refused.stderr)
+        self.assertEqual(version.read_text(), "0.0.1\n")
+        edited = runtime / "pipeline_state.py"
+        original = edited.read_bytes()
+        edited.write_bytes(original + b"\n# user edit\n")
+        blocked = subprocess.run([*args, "--runtime-migrate"], capture_output=True, text=True)
+        self.assertNotEqual(blocked.returncode, 0)
+        self.assertIn("locally modified", blocked.stdout + blocked.stderr)
+        self.assertEqual(edited.read_bytes(), original + b"\n# user edit\n")
+        self.assertEqual(version.read_text(), "0.0.1\n")
+        edited.write_bytes(original)
+        preview = subprocess.run([*args, "--runtime-migrate", "--dry-run"], capture_output=True, text=True)
+        self.assertEqual(preview.returncode, 0, preview.stderr)
+        self.assertEqual(self.git("status", "--porcelain"), "")
+        self.assertTrue(runtime.exists())
+        self.assertEqual(version.read_text(), "0.0.1\n")
+        self.assertFalse((self.home / ".gsd-path/runtimes").exists())
+        result = subprocess.run([*args, "--runtime-migrate"], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("Updated.", result.stdout)
+        self.assertEqual(version.read_text().strip(), json.loads((SOURCE / "package.json").read_text())["version"])
+        self.assertFalse(runtime.exists())
+        self.assertTrue((skills.parent / "disabled-gsd-skills").exists())
+        self.assertTrue((self.repo / ".claude/settings.json").exists())
+        guard = subprocess.run([sys.executable, "-B", str(self.repo / ".gsd-path/git_guard.py"), "pre-commit"],
+                               cwd=self.repo, capture_output=True, text=True)
+        self.assertEqual(guard.returncode, 0, guard.stderr)
+        pin = self.pin()
+        repeated = subprocess.run(args, capture_output=True, text=True)
+        self.assertEqual(repeated.returncode, 0, repeated.stderr)
+        self.assertEqual(self.pin(), pin)
+        self.assertFalse(runtime.exists())
+        self.assertEqual(self.git("diff", "--cached", "--name-only"), "")
+
+    def test_node_update_failure_retains_completed_migration(self):
+        runtime = self.legacy_update_fixture()
+        skills = self.home / ".claude/skills"
+        install.install(SOURCE, [install.TargetPlan("claude", skills)], migrate_legacy=False)
+        (self.repo / ".claude").write_text("user file prevents project wiring\n")
+        result = subprocess.run(["node", str(SOURCE / "scripts/install.mjs"), "--update", "--runtime-migrate",
+                                 "--claude", "--claude-root", str(skills), "--project", str(self.repo)],
+                                capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Migration completed", result.stdout)
+        self.assertIn("unsafe Claude project directory", result.stdout + result.stderr)
+        self.assertFalse(runtime.exists())
+        self.assertTrue(self.pin()["digest"])
+        self.assertEqual(self.git("diff", "--cached", "--name-only"), "")
+        self.assertFalse((skills.parent / "disabled-gsd-skills").exists())
+
+    def test_node_migration_update_rejects_missing_project_and_conflicting_modes(self):
+        self.legacy_update_fixture()
+        cases = [[], *(["--project", str(self.repo), mode] for mode in
+                       ("--runtime-upgrade", "--runtime-restore", "--doctor", "--hooks-init",
+                        "--hooks-refresh", "--hooks-refresh-full"))]
+        for extra in cases:
+            with self.subTest(extra=extra):
+                result = subprocess.run(["node", str(SOURCE / "scripts/install.mjs"), "--update",
+                                         "--runtime-migrate", *extra], capture_output=True, text=True)
+                self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+                self.assertIn("requires --project", result.stdout + result.stderr)
+        self.assertEqual(self.git("status", "--porcelain"), "")
+        self.assertFalse((self.home / ".gsd-path/runtimes").exists())
+
+    def test_node_interactive_upgrade_detects_legacy_runtime(self):
+        runtime = self.legacy_update_fixture()
+        skills = self.home / ".claude/skills"
+        install.install(SOURCE, [install.TargetPlan("claude", skills)], migrate_legacy=False)
+        # Simulate terminal capabilities; drive the real main(), wizard, and installer.
+        script = f"""
+import {{ main }} from {json.dumps((SOURCE / 'scripts/install.mjs').as_uri())};
+Object.defineProperty(process.stdin, 'isTTY', {{value: true}});
+Object.defineProperty(process.stdout, 'isTTY', {{value: true}});
+process.stdin.setRawMode = () => {{}};
+process.exitCode = await main([]);
+"""
+        environment = {key: value for key, value in os.environ.items() if key not in {
+            "CLAUDE_CONFIG_DIR", "GROK_HOME", "OPENCODE_CONFIG_DIR", "OPENCODE_CONFIG",
+            "XDG_CONFIG_HOME", "COPILOT_HOME", "QWEN_HOME", "KIRO_HOME", "KIMI_CODE_HOME", "CODEX_HOME"}}
+        declined = subprocess.run(["node", "--input-type=module", "-e", script], cwd=self.repo,
+                                  env=environment, input="\r\r\r\r\x1b[B\r\x1b[B\r", capture_output=True, text=True)
+        self.assertEqual(declined.returncode, 0, declined.stdout + declined.stderr)
+        self.assertTrue(runtime.exists())
+        self.assertEqual(self.git("status", "--porcelain"), "")
+        self.assertFalse((skills.parent / "disabled-gsd-skills").exists())
+        self.assertFalse((self.home / ".gsd-path/runtimes").exists())
+        # global, selected Claude, update, project, no hooks, consent, install
+        result = subprocess.run(["node", "--input-type=module", "-e", script], cwd=self.repo,
+                                env=environment, input="\r\r\r\r\x1b[B\r\r\r", capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("Migrate and continue upgrade", result.stdout)
+        self.assertIn("Updated.", result.stdout)
+        self.assertFalse(runtime.exists())
+        self.assertTrue((skills.parent / "disabled-gsd-skills").exists())
+
     def test_corrupt_runtime_can_be_explicitly_restored(self):
         self.provision()
         runtime = self.home / ".gsd-path/runtimes" / self.pin()["digest"]

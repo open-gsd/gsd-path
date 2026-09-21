@@ -48,6 +48,24 @@ test("wizard cancels on q", async () => {
   assert.match(text, /Cancelled/);
 });
 
+test("legacy update asks for migration and carries explicit consent", async () => {
+  const { argv, text } = await run(
+    ["enter", "enter", "enter", "enter", "down", "enter", "enter", "enter"],
+    { installed: (target) => target === "codex", legacyRuntime: true }
+  );
+  assert.deepEqual(argv, ["--codex", "--update", "--project", "/repo", "--runtime-migrate"]);
+  assert.match(text, /Migrate and continue upgrade/);
+  assert.match(text, /Git diff/);
+});
+
+test("declining legacy migration cancels before installation", async () => {
+  const { argv } = await run(
+    ["enter", "enter", "enter", "enter", "down", "enter", "down", "enter", "enter"],
+    { installed: (target) => target === "codex", legacyRuntime: true }
+  );
+  assert.equal(argv, null);
+});
+
 test("banner carries the OpenGSD wordmark", () => {
   assert.match(banner(makeTheme(false), "1.0.0"), /██/);
   assert.match(banner(makeTheme(false), "1.0.0"), /installer v1\.0\.0/);
