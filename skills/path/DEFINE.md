@@ -281,7 +281,9 @@ runtimes without config support). Include that preference in the draft.
 Retain `Review panel:` as reviewed: the CHARTER copy, the explicit user choice,
 or the configured future preference. Quick lane keeps the panel off.
 
-After approval, finalize `.project/intent/INTENT.md` and run
+Stop after presenting the intent draft. Resume only when the owner replies
+with approval of that draft; the initial request is scope, not this approval.
+After that reply, finalize `.project/intent/INTENT.md` and run
 `pipeline_state.py transition` with expected `define/active`, the exact
 current milestone/branch/archive values, event `milestone intent approved`,
 `--set-phase define --set-status done --set-milestone <milestone slug>`, and

@@ -622,7 +622,8 @@ def _validate_git_bundle(
             _git(fixture, "check-ref-format", "--branch", task_branch)
         except EvidenceError:
             raise EvidenceError(f"{bundle}: task_branch has an invalid name") from None
-        if _git_ref_exists(fixture, f"refs/heads/{task_branch}"):
+        serial_primary = landing.get("isolation_mode") == "serial" and task_branch == bound_branch
+        if not serial_primary and _git_ref_exists(fixture, f"refs/heads/{task_branch}"):
             raise EvidenceError(f"{bundle}: task branch was not retired")
         _validate_run_artifacts(
             fixture,
@@ -720,7 +721,13 @@ def _validate_evidence_details(
         raise EvidenceError(
             f"{path}: primary worktree must be on the bound branch at ship HEAD"
         )
-    if any(
+    serial_primary = (
+        landing.get("isolation_mode") == "serial"
+        and task_ref == f"refs/heads/{integration['bound_branch']}"
+    )
+    if serial_primary and task_worktree.casefold() != primary_worktree.casefold():
+        raise EvidenceError(f"{path}: serial task must use the primary worktree")
+    if not serial_primary and any(
         record["worktree"].casefold() == task_worktree.casefold()
         or record.get("branch") == task_ref
         for record in records

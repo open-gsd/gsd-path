@@ -323,9 +323,13 @@ report. Ignore any failure and never block or retry — the check is advisory
 and must not delay routing.
 
 Auto-advance after a non-interactive phase completes unless blocked or waiting
-on `NEEDS-USER`. Planning owns the single build-approval gate; never ask a
-second time. One user-driven exception to normal routing: at a program milestone
-boundary — `inspect/active` or `define/active` with no approved INTENT.md for
+on `NEEDS-USER`. At an owner approval gate, first write and link the artifact,
+then stop for the owner's reply. A feature request, evaluation scenario, or
+instruction to complete the workflow supplies scope; it does not approve an
+artifact written later. Record approval only from the owner's reply to that
+review surface. Planning owns the single build-approval gate; after that
+approval, enter build without asking again. One user-driven exception to normal
+routing: at a program milestone boundary — `inspect/active` or `define/active` with no approved INTENT.md for
 the next milestone — a user request to re-scope the remaining `pending`
 entries routes to the bundled [roadmap contract](ROADMAP.md) in re-slice mode.
 

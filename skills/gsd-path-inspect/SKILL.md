@@ -51,6 +51,12 @@ same milestone; a later milestone's `inspect/active` is a new scan.
 
 ## Process
 
+Choose one inspection flow below. Once `prepare-inspect` succeeds, its
+`finish-inspect` command owns gates, collection, retirement, and completion.
+Keep both sidecars intact until that command returns success.
+
+### Initial inspection
+
 For an initial `inspect/active` inspection on the `.project` track, with neither output
 artifact present and a clean Git product at the recorded HEAD, run the bundled
 `python3 <absolute workflow_run.py> prepare-inspect --repo <absolute root>
@@ -70,11 +76,17 @@ template as in step 3. After that review passes, run the bundled
 --mapper-reviewed`. This runs the docs gate, checks the audit baseline,
 collects and retires both sidecars, checks pending discussion, and records
 `inspect/done` through the canonical transition. Do not repeat those operations.
-Present step 4's ground truth and use step 5's caller handoff. A failure uses
-step 3's failure contract and the returned step evidence; do not blindly rerun
-the completion command or repeat already proven steps.
-Prior evidence, lookahead, or a dirty/non-Git product uses steps 1–2 below.
-Preparation never changes phase state; neither command dispatches agents.
+On success, go directly to step 4's ground truth and step 5's caller handoff.
+On failure, print the helper stderr, run the bundled `pipeline_diagnose.py
+diagnose --repo <absolute root>`, report the failed artifact, and stop. Keep
+state and sidecars at the failed checkpoint; do not substitute a manual state
+transition or switch to the re-inspection flow. Preparation never changes phase
+state; neither command dispatches agents.
+
+### Re-inspection and lookahead
+
+Use steps 1–3 only when prior evidence, lookahead, or a dirty/non-Git product
+prevents initial preparation. A successful `prepare-inspect` excludes this flow.
 
 1. Before creating or changing `.project/` Markdown, freeze the helper's exact
    stdout from `python3 <absolute check_docs_audit.py> --repo <absolute root>
