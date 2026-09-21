@@ -36,12 +36,9 @@ publication workflow never increments or pushes a package version. A version-onl
 change does not invalidate live evidence; package identity, dependencies, and
 other package changes do.
 
-Installer-only releases reuse valid workflow receipts. The offline gate tests
-installation, migration, rollback, runtime pinning, and installed guards; it
-does not require eight agent milestones to test an installer change. Changes
-to the installed skills, host adapters, or workflow runtime still select live
-checks through the release policy. Always inspect the plan below before
-starting any live evaluations.
+For installer-only releases and mixed changes, follow the
+[live-check scope](docs/trust-validation/TRUST-VALIDATION-SPEC.md#live-check-scope).
+Inspect the plan below before starting any live evaluations.
 
 1. From a clean checkout, inspect which hosts need new evidence:
 

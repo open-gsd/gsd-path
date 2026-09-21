@@ -87,7 +87,7 @@ partial or unverifiable blocks release. It never becomes an implicit pass.
 | Unit and integration tests | Install, state routing, handoff validation, isolation, recovery, guards, archive, integration | `npm run verify` |
 | Lightweight live smoke | Real host invocation and a bounded artifact | `.github/workflows/dogfood.yml` |
 | Full live milestone | Real child dispatch, build, review, archive, merge, and tag on one host | release receipt |
-| Release reconciliation | Every host has validated evidence covering its unchanged runtime inputs | `npm run verify:release` |
+| Release reconciliation | Every evaluation host has validated evidence reusable under [Live-check scope](#live-check-scope) | `npm run verify:release` |
 
 Simulated full-cycle tests are strong evidence for the deterministic disk and
 Git contract. They do not replace real child-agent execution.
