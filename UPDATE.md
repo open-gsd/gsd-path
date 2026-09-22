@@ -103,8 +103,10 @@ node scripts/install.mjs --update --claude --cursor
 The interactive npm installer detects the old `.gsd-path/runtime/` layout when
 you choose to update project wiring. Choose **Migrate and continue upgrade** to
 migrate first, then update skills and wiring. Cancelling leaves the installation
-unchanged. Migration preserves locally modified files by stopping for you to
-resolve them; it never stages or commits changes.
+unchanged. Migration stops for modified tracked files. When an untracked old
+runtime file differs from the current package, it saves the original outside
+the repo and prints the backup path before removing the legacy layout. It never
+stages or commits changes.
 
 For unattended upgrades, migration requires explicit consent:
 

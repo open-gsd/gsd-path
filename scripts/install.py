@@ -2839,6 +2839,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 _release_install_locks(locks, created)
             print(f"runtime: {runtime_action} {pin['version']} ({pin['digest']})"
                   + (" (dry run)" if arguments.dry_run else ""))
+            if pin.get("backup"):
+                print(f"legacy runtime backup: {pin['backup']}")
             return 0
         except (InstallerError, OSError, ValueError) as error:
             print(f"error: {error}", file=sys.stderr)
