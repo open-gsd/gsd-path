@@ -1117,6 +1117,7 @@ test("cli loads from an install path containing spaces", () => {
   });
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /project contracts and status runtime; requires Python 3\.9\+/);
+  assert.match(result.stdout, /--runtime-migrate\s+migrate a legacy runtime for review/);
 });
 
 test("doctor reports missing package version", () => {
