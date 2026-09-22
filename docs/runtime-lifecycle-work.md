@@ -13,9 +13,10 @@ guards never install, download, or select another version.
 
 Existing projects use an explicit, reviewable migration. The migration removes
 legacy runtime implementations, writes the declaration and stable launchers, and
-leaves the Git index unchanged for review. It refuses modified or unknown runtime
-files. Its external journal supports interruption recovery and refuses to
-overwrite later edits. No live consuming project was migrated by this change.
+leaves the Git index unchanged for review. For current migration safety and
+backup behavior, see [Project runtime versions](../DOCS.md#project-runtime-versions).
+Its external journal supports interruption recovery and refuses to overwrite
+later edits. No live consuming project was migrated by this change.
 
 ## Implementation
 

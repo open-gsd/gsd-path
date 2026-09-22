@@ -103,10 +103,8 @@ node scripts/install.mjs --update --claude --cursor
 The interactive npm installer detects the old `.gsd-path/runtime/` layout when
 you choose to update project wiring. Choose **Migrate and continue upgrade** to
 migrate first, then update skills and wiring. Cancelling leaves the installation
-unchanged. Migration stops for modified tracked files and unknown files. It
-preserves differing untracked managed files for review; see
-[Project runtime versions](DOCS.md#project-runtime-versions) for backup details.
-It never stages or commits changes.
+unchanged. See [Project runtime versions](DOCS.md#project-runtime-versions)
+for migration safety checks and backups. Migration never stages or commits changes.
 
 For unattended upgrades, migration requires explicit consent:
 
@@ -162,8 +160,8 @@ local edits. Clean source checkouts still refresh before a project update.
 Older unstamped installs show **Unknown — version metadata unavailable**.
 This does not establish that their runtime is outdated or broken. **Update**
 uses the guarded migration for legacy runtime directories and an upgrade for
-version-pinned runtimes. Migration leaves a reviewable Git diff and refuses
-modified tracked or unknown runtime files; the dashboard shows the failure reason.
+version-pinned runtimes. Migration leaves a reviewable Git diff; the dashboard
+shows the failure reason when it stops.
 See [Project runtime versions](DOCS.md#project-runtime-versions) for manual
 migration and preview commands. Use `--doctor --project PATH` to check runtime files.
 
