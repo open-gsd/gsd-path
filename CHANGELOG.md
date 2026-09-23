@@ -85,3 +85,16 @@ are documented here. Format follows [Keep a Changelog](https://keepachangelog.co
 ### Other
 - Clarify reviewer ownership; live verification remains pending
 - Reject unretired verification worktrees and branches in release evidence
+
+## [1.3.1] - 2026-09-22
+
+### Changed
+- Clarify legacy runtime backup guidance
+- Consolidate legacy runtime migration guidance
+- prepare 1.3.1 patch candidate
+- Clarify legacy runtime migration documentation
+- update release notes for v1.3.0
+
+### Fixed
+- describe untracked legacy migration in help
+- preserve older untracked runtimes during migration

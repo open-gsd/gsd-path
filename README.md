@@ -16,14 +16,14 @@ Support means the installer and dispatch contract exist. See the
 proof and each host's guard tier.
 
 <!-- release-docs -->
-**Latest npm release:** [@opengsd/gsd-path@1.3.0](https://www.npmjs.com/package/@opengsd/gsd-path/v/1.3.0) — [release notes](CHANGELOG.md#130---2026-09-21)
+**Latest npm release:** [@opengsd/gsd-path@1.3.1](https://www.npmjs.com/package/@opengsd/gsd-path/v/1.3.1) — [release notes](CHANGELOG.md#131---2026-09-22)
 
 **Recent highlights**
-- migrate legacy runtimes during upgrades
-- validate installer changes without live host reruns
-- preserve closed review cycles in host recovery
-- clarify owner gates and accept serial task release evidence
-- Clarify receipt reuse and consolidate release policy guidance
+- describe untracked legacy migration in help
+- preserve older untracked runtimes during migration
+- Clarify legacy runtime backup guidance
+- Consolidate legacy runtime migration guidance
+- prepare 1.3.1 patch candidate
 
 <!-- /release-docs -->
 
