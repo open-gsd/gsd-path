@@ -398,12 +398,15 @@ files. The supplied package must match both the version and digest; custom sourc
 builds may share a release version while having different digests. No command
 silently substitutes a newer runtime, and status/guards never install or download.
 
-For an old tracked `.gsd-path/runtime/`, run `gsd-path --runtime-migrate --project
+For an old `.gsd-path/runtime/`, run `gsd-path --runtime-migrate --project
 /absolute/project --dry-run`, then the same command without `--dry-run` and review
 the Git diff. Migration removes the generated files from the checkout and writes
 the declaration and stable wiring. It does not stage or commit. Resolve local
-runtime edits or unknown files first. Interrupted migration is recovered by the
-same explicit command; its journal lives outside the checkout.
+edits to tracked runtime files or unknown files first. When untracked managed
+files differ from the supplied package, migration saves those files' original
+bytes under `~/.gsd-path/runtime-migrations/backups/` and prints the backup
+directory for review. Interrupted migration is recovered by the same explicit
+command; its journal lives outside the checkout.
 
 To migrate and then update skills and project wiring in one invocation, follow
 [Legacy project runtime](UPDATE.md#legacy-project-runtime) for wizard consent,

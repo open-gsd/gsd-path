@@ -235,6 +235,7 @@ def operate(source, project, action, *, dry_run=False):
         raise ValueError("legacy runtime contains unknown files; preserve and resolve them before migration")
     managed = entries + [project / ".gsd-path/status_runtime.py"]
     managed += [project / ".gsd-path" / n for n in GUARDS if (project / ".gsd-path" / n).exists()]
+    divergent = []
     for path in managed:
         if path.is_symlink() or not path.is_file():
             raise ValueError(f"unsafe migration file: {path}")
@@ -249,7 +250,7 @@ def operate(source, project, action, *, dry_run=False):
             if clean.stdout:
                 raise ValueError(f"locally modified migration file: {path}")
         elif path.read_bytes() != (source / "scripts" / path.name).read_bytes():
-            raise ValueError(f"untracked migration file differs from source: {path}")
+            divergent.append(path)
     pin = publish(source, dry_run=dry_run)
     if dry_run:
         return pin
@@ -257,6 +258,17 @@ def operate(source, project, action, *, dry_run=False):
     declaration = project / ".gsd-path/runtime.json"
     if os.path.lexists(declaration):
         raise ValueError("runtime declaration already exists; refusing legacy migration")
+    backup = None
+    if divergent:
+        backup_root = migration_journal(project).parent / "backups"
+        if backup_root.is_symlink():
+            raise ValueError(f"unsafe runtime migration backup directory: {backup_root}")
+        backup_root.mkdir(parents=True, exist_ok=True)
+        backup = Path(tempfile.mkdtemp(prefix="legacy-", dir=backup_root))
+        for path in divergent:
+            saved = backup / path.relative_to(project / ".gsd-path")
+            saved.parent.mkdir(parents=True, exist_ok=True)
+            saved.write_bytes(originals[path])
     updates = {project / ".gsd-path/status_runtime.py": (source / "scripts/status_runtime.py").read_bytes(),
                declaration: pin_text(pin).encode()}
     updates.update({p: None for p in entries})
@@ -278,4 +290,4 @@ def operate(source, project, action, *, dry_run=False):
         recover_migration(project)
         raise
     journal.unlink()
-    return pin
+    return {**pin, "backup": str(backup)} if backup else pin

@@ -247,6 +247,25 @@ class RuntimeLifecycleTests(unittest.TestCase):
         self.assertEqual(changed.read_bytes(), before)
         self.assertFalse((runtime.parent / "runtime.json").exists())
 
+    def test_untracked_older_runtime_migrates_and_preserves_original(self):
+        runtime = self.repo / ".gsd-path/runtime"
+        runtime.mkdir(parents=True)
+        for name in install.PROJECT_RUNTIME_SCRIPTS:
+            shutil.copy2(SOURCE / "scripts" / name, runtime / name)
+        shutil.copy2(SOURCE / "scripts/status_runtime.py", runtime.parent / "status_runtime.py")
+        older = runtime / "isolation.py"
+        original = older.read_bytes() + b"\n# older installed version\n"
+        older.write_bytes(original)
+
+        result = self.runtime_command("--runtime-migrate")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(runtime.exists())
+        backups = list((self.home / ".gsd-path/runtime-migrations/backups").glob("*/runtime/isolation.py"))
+        self.assertEqual(len(backups), 1)
+        self.assertEqual(backups[0].read_bytes(), original)
+        self.assertIn(str(backups[0].parents[1]), result.stdout)
+        self.assertTrue(self.pin()["digest"])
+
     def legacy_update_fixture(self):
         runtime = self.repo / ".gsd-path/runtime"
         runtime.mkdir(parents=True)

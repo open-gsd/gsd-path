@@ -1655,7 +1655,7 @@ function usage() {
     "  --hooks-init          add guards to an existing project without changing its contracts\n" +
     "  --runtime-restore     restore the exact declared runtime from --source-root\n" +
     "  --runtime-upgrade     explicitly select the supplied package runtime\n" +
-    "  --runtime-migrate     migrate a tracked legacy runtime for review; add --update to continue upgrading\n" +
+    "  --runtime-migrate     migrate a legacy runtime for review; add --update to continue upgrading\n" +
     "  --hooks-refresh       validate the selected runtime; keep its version\n" +
     "  --hooks-refresh-full  refresh native settings/git hooks; target flags create missing configs\n" +
     "  --dry-run             preview without writing\n" +
