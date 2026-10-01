@@ -1,8 +1,8 @@
 """In-process pinned-runtime reload test (run via subprocess from test_dispatch_driver).
 
-The file name does not match ``test*.py`` on purpose. The test reloads the
-runtime helper modules from a temporary copy, so suite discovery must not run
-it in the shared test process.
+The leading underscore keeps unittest discovery from running this module in
+the shared test process. The test reloads runtime helper modules from a
+temporary copy and must run in an isolated subprocess.
 """
 
 import importlib
