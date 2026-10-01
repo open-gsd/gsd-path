@@ -467,15 +467,13 @@ def completed_field(lines: Sequence[str], field: str, artifact: str) -> str:
 
 
 def completed_bullet_field(lines: Sequence[str], field: str, artifact: str) -> str:
-    pattern = re.compile(rf"^- \*\*{re.escape(field)}\*\*:\s*(.*)$")
-    values = []
-    for line in lines:
-        match = pattern.fullmatch(line)
-        if match:
-            values.append(match.group(1).strip().strip("`"))
-    if len(values) != 1 or not values[0] or archive_milestone.contains_placeholder(values[0]):
+    matches = _common.find_review_bullet_field_values(lines, field)
+    if len(matches) != 1:
         raise ArchiveError(f"{artifact} requires one completed {field} field")
-    return values[0]
+    value = matches[0].strip().strip("`")
+    if not value or archive_milestone.contains_placeholder(value):
+        raise ArchiveError(f"{artifact} requires one completed {field} field")
+    return value
 
 
 def section_lines(lines: Sequence[str], heading: str, artifact: str) -> Sequence[str]:
@@ -565,15 +563,15 @@ def parse_final_review(archive: Path) -> tuple:
     for position, (heading_index, _, criterion) in enumerate(headings):
         section_start = heading_index + 1
         section_end = headings[position + 1][0] if position + 1 < len(headings) else criteria_end
+        section = lines[section_start:section_end]
         values = {}
-        for line in lines[section_start:section_end]:
-            match = re.fullmatch(r"- \*\*(Verdict|Check|Observed|Reference|Finding|Fix direction)\*\*:\s*(.*)", line)
-            if not match:
-                continue
-            key, value = match.groups()
-            if key in values:
+        for key in expected_fields:
+            matches = _common.find_review_bullet_field_values(section, key)
+            if len(matches) > 1:
                 raise ArchiveError(f"FINAL.md repeats {key} for {criterion}")
-            values[key] = value.strip().strip("`")
+            if len(matches) != 1:
+                raise ArchiveError(f"FINAL.md criterion is incomplete: {criterion}")
+            values[key] = matches[0].strip().strip("`")
         surface_values = [
             line.removeprefix("- **Surface**:").strip().strip("`")
             for line in lines[section_start:section_end]

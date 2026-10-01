@@ -513,7 +513,7 @@ def _field(block: str, field: str) -> str:
 
 
 def _raw_source_field(block: str, field: str, source: str) -> str:
-    matches = re.findall(rf"(?m)^- \*\*{re.escape(field)}\*\*:\s*(.*)$", block)
+    matches = _common.find_review_bullet_field_values(block.splitlines(), field)
     if not matches:
         raise HandoffError(f"{source} is missing {field}")
     if len(matches) != 1:

@@ -65,6 +65,49 @@ VERIFY_RESULTS = ("pass", "fail")
 VERIFY_LEDGER_SCHEMA = "gsd-path/verify-ledger/v2"
 VERIFY_BLOCK_PATTERN = re.compile(r"```bash[ \t]*\n(?P<block>.*?)```", re.DOTALL)
 
+REVIEW_BULLET_HEADING_PATTERN = re.compile(r"^#{2,3} ")
+REVIEW_BULLET_FIELD_LABEL_PATTERN = re.compile(r"^- \*\*[^*]+\*\*:")
+
+
+def review_bullet_field_label_pattern(field: str) -> re.Pattern[str]:
+    return re.compile(rf"^- \*\*{re.escape(field)}\*\*:[ \t]*(.*)$")
+
+
+def _review_bullet_field_value(lines: Sequence[str], index: int, inline: str) -> str:
+    if inline:
+        return inline
+    collected: list[str] = []
+    for line in lines[index + 1 :]:
+        if REVIEW_BULLET_FIELD_LABEL_PATTERN.match(line) or REVIEW_BULLET_HEADING_PATTERN.match(
+            line
+        ):
+            break
+        if line and not line[0].isspace():
+            break
+        stripped = line.strip()
+        if stripped:
+            collected.append(stripped)
+    return "\n".join(collected)
+
+
+def find_review_bullet_field_values(lines: Sequence[str], field: str) -> list[str]:
+    pattern = review_bullet_field_label_pattern(field)
+    values: list[str] = []
+    for index, line in enumerate(lines):
+        match = pattern.fullmatch(line)
+        if match is None:
+            continue
+        values.append(_review_bullet_field_value(lines, index, match.group(1)))
+    return values
+
+
+def parse_review_bullet_field(lines: Sequence[str], field: str) -> str:
+    """Parse one `- **Field**:` review bullet, including indented continuations."""
+    values = find_review_bullet_field_values(lines, field)
+    if len(values) != 1:
+        raise ValueError(field)
+    return values[0]
+
 
 # Sample paths the pipeline must commit. A product rule such as an unanchored
 # `build/` would otherwise drop them silently from every commit.

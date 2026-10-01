@@ -1,5 +1,6 @@
 import contextlib
 import io
+import re
 import subprocess
 import sys
 import tempfile
@@ -2194,6 +2195,37 @@ Waves checked: 1
             result = check_handoffs.validate_final(root)
 
             self.assertEqual(result["verdict"], "pass")
+
+    def test_final_accepts_multiline_observed_sub_bullets(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_state(root, "ship", "active")
+            self.write_intent_criteria(root, surfaces="Demo web app")
+            self.write_plan_coverage(root, surface_contract=SURFACE_CONTRACT)
+            self.write_final_review(root, surface="Demo web app")
+            final_path = root / ".project/review/FINAL.md"
+            text = final_path.read_text(encoding="utf-8")
+            text = text.replace(
+                "- **Observed**: hello",
+                """- **Observed**:
+  - Both deactivations notified.
+  - In the DB, rows stayed listed.""",
+                1,
+            )
+            final_path.write_text(text, encoding="utf-8")
+
+            result = check_handoffs.validate_final(root)
+
+            self.assertEqual(result["verdict"], "pass")
+            block = re.search(
+                r"### SC1 — The demo command prints hello\.(.*)(?=### SC2)",
+                text,
+                re.DOTALL,
+            )
+            self.assertIsNotNone(block)
+            observed = check_handoffs._raw_source_field(block.group(1), "Observed", "FINAL.md SC1")
+            self.assertIn("Both deactivations notified.", observed)
+            self.assertIn("In the DB, rows stayed listed.", observed)
 
     def test_final_rejects_a_surface_criterion_without_a_walked_check(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

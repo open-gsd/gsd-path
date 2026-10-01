@@ -2937,6 +2937,31 @@ Waves checked: 1
                     self.assertNotEqual(rejected.returncode, 0)
                     self.assertIn("surface Observed", rejected.stderr)
 
+    def test_parse_final_review_accepts_multiline_observed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            archive = self.prepare_archive(repo)
+            final = archive / "review/FINAL.md"
+            text = final.read_text(encoding="utf-8")
+            text = text.replace(
+                "- **Observed**: focused tests passed",
+                """- **Observed**:
+  - Both deactivations notified.
+  - In the DB, rows stayed listed.""",
+                1,
+            )
+            final.write_text(text, encoding="utf-8")
+
+            reviewed_head, criteria = discussion_validate.parse_final_review(archive)
+
+            self.assertTrue(reviewed_head)
+            self.assertEqual(len(criteria), 1)
+            sc1_lines = text.split("### SC1 — demo works", 1)[1].splitlines()
+            observed = discussion_validate.completed_bullet_field(sc1_lines, "Observed", "FINAL.md")
+            self.assertIn("Both deactivations notified.", observed)
+            self.assertIn("In the DB, rows stayed listed.", observed)
+
     def test_preflight_rejects_a_gap_heading_risk_mismatch(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             repo = Path(temporary_directory)
