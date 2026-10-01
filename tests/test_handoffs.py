@@ -1350,6 +1350,20 @@ The task implements the demo.
                         str(failure.exception),
                     )
 
+    def test_surfaces_splits_only_on_top_level_commas(self) -> None:
+        text = (
+            "Surfaces: HTTP API (/api/v1 — revizie complete, ticket revizii list), "
+            "Filament back office (ticket view)\n"
+        )
+        surfaces = check_handoffs._surfaces(text, "INTENT.md")
+        self.assertEqual(
+            surfaces,
+            [
+                "HTTP API (/api/v1 — revizie complete, ticket revizii list)",
+                "Filament back office (ticket view)",
+            ],
+        )
+
     def test_plan_rejects_an_empty_surface_list(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

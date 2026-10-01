@@ -644,6 +644,42 @@ def _success_criteria(intent: str) -> Dict[str, str]:
     return {f"SC{number}": text for number, text in items.items()}
 
 
+def _split_top_level_commas(value: str) -> List[str]:
+    """Split on commas outside parentheses, brackets, and simple quoted strings."""
+
+    parts: List[str] = []
+    start = 0
+    depth_paren = 0
+    depth_bracket = 0
+    quote: Optional[str] = None
+    index = 0
+    while index < len(value):
+        character = value[index]
+        if quote is not None:
+            if character == quote:
+                quote = None
+            index += 1
+            continue
+        if character in {"'", '"'}:
+            quote = character
+            index += 1
+            continue
+        if character == "(":
+            depth_paren += 1
+        elif character == ")":
+            depth_paren = max(0, depth_paren - 1)
+        elif character == "[":
+            depth_bracket += 1
+        elif character == "]":
+            depth_bracket = max(0, depth_bracket - 1)
+        elif character == "," and depth_paren == 0 and depth_bracket == 0:
+            parts.append(value[start:index])
+            start = index + 1
+        index += 1
+    parts.append(value[start:])
+    return parts
+
+
 def _surfaces(text: str, label: str) -> List[str]:
     """Human-facing surfaces one milestone delivers; empty when `none`."""
 
@@ -660,7 +696,7 @@ def _surfaces(text: str, label: str) -> List[str]:
     _non_placeholder(value, f"{label} Surfaces")
     named: List[str] = []
     seen = set()
-    for item in value.split(","):
+    for item in _split_top_level_commas(value):
         if not item.strip():
             continue
         surface = _unquoted(item)
