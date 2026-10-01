@@ -406,6 +406,19 @@ class DetectProjectTests(unittest.TestCase):
             payload = self.classify(repo)
             self.assertEqual(payload["verdict"], "greenfield")
 
+    def test_empty_project_directory_tree_does_not_orphan(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            (
+                repo
+                / ".project"
+                / "plan"
+                / "build-recovery-abc123"
+                / "review"
+            ).mkdir(parents=True)
+            payload = self.classify(repo)
+            self.assertEqual(payload["verdict"], "greenfield")
+
     @unittest.skipUnless(
         ANCHORED_STATE_CREATE_AVAILABLE,
         "anchored state creation is unavailable",

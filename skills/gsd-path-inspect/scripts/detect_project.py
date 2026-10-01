@@ -1011,6 +1011,28 @@ def ignored_junk(directory: Path, name: str, status: os.stat_result) -> bool:
     return result.returncode == 0
 
 
+def project_has_evidence_files(project: Path, root: Path) -> bool:
+    project_status = lstat_evidence(project, missing_ok=True)
+    if project_status is None:
+        return False
+    if is_link_like(project, project_status) or not stat.S_ISDIR(project_status.st_mode):
+        return stat.S_ISREG(project_status.st_mode)
+    for dirpath, _dirnames, filenames in os.walk(
+        project,
+        followlinks=False,
+        onerror=raise_walk_error,
+    ):
+        current = Path(dirpath)
+        for name in filenames:
+            path = current / name
+            status = lstat_evidence(path, missing_ok=False)
+            if ignored_junk(current, name, status):
+                continue
+            if not is_link_like(path, status) and stat.S_ISREG(status.st_mode):
+                return True
+    return False
+
+
 def project_path_inventory(
     project: Path, root: Path
 ) -> tuple[tuple[str, ...], tuple[str, ...]]:
@@ -1146,6 +1168,8 @@ def classify(repo: Path) -> dict:
     project = root / ".project"
     state = project / "STATE.md"
     orphan_paths, unsafe_paths = project_path_inventory(project, root)
+    if orphan_paths and not unsafe_paths and not project_has_evidence_files(project, root):
+        orphan_paths = ()
     temporary_state_status = lstat_evidence(
         project / STATE_TEMP_NAME,
         missing_ok=True,
