@@ -913,6 +913,38 @@ The task implements the demo.
 
             self.assertEqual(result["surfaces"], {surface: "T001"})
 
+    def test_plan_preserves_commas_inside_parentheses_in_surface_names(self) -> None:
+        surface_a = "HTTP API (/api/v1 — revizie complete, ticket revizii list)"
+        surface_b = "Filament back office (ticket view revizie actions, Revizii board)"
+        surfaces = f"{surface_a}, {surface_b}"
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_plan_handoff(root)
+            self.write_intent_criteria(root, surfaces=surfaces)
+            contract = (
+                "## Surface contract\n\n"
+                f"### {surface_a} — T001\n\n"
+                "Criteria: SC1\n"
+                "Entry: `/api/v1`\n"
+                "States: ready\n"
+                "Walkthrough:\n"
+                "1. Call the API.\n\n"
+                f"### {surface_b} — T002\n\n"
+                "Criteria: SC2\n"
+                "Entry: `/admin`\n"
+                "States: ready\n"
+                "Walkthrough:\n"
+                "1. Open the board.\n"
+            )
+            self.write_plan_coverage(root, surface_contract=contract)
+
+            result = check_handoffs.validate_plan(root)
+
+            self.assertEqual(
+                result["surfaces"],
+                {surface_a: "T001", surface_b: "T002"},
+            )
+
     def test_plan_accepts_typed_interface_and_rejects_unfilled_body(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

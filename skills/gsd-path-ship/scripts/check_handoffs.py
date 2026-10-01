@@ -644,6 +644,31 @@ def _success_criteria(intent: str) -> Dict[str, str]:
     return {f"SC{number}": text for number, text in items.items()}
 
 
+def _split_top_level_commas(value: str) -> List[str]:
+    """Split a comma-separated list without breaking nested () or []."""
+
+    parts: List[str] = []
+    depth_paren = 0
+    depth_bracket = 0
+    start = 0
+    for index, char in enumerate(value):
+        if char == "(":
+            depth_paren += 1
+        elif char == ")":
+            if depth_paren:
+                depth_paren -= 1
+        elif char == "[":
+            depth_bracket += 1
+        elif char == "]":
+            if depth_bracket:
+                depth_bracket -= 1
+        elif char == "," and depth_paren == 0 and depth_bracket == 0:
+            parts.append(value[start:index])
+            start = index + 1
+    parts.append(value[start:])
+    return parts
+
+
 def _surfaces(text: str, label: str) -> List[str]:
     """Human-facing surfaces one milestone delivers; empty when `none`."""
 
@@ -660,7 +685,7 @@ def _surfaces(text: str, label: str) -> List[str]:
     _non_placeholder(value, f"{label} Surfaces")
     named: List[str] = []
     seen = set()
-    for item in value.split(","):
+    for item in _split_top_level_commas(value):
         if not item.strip():
             continue
         surface = _unquoted(item)
