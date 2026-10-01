@@ -10,10 +10,11 @@
      with actual values, otherwise omit them:
 Reviewed HEAD: <full review commit SHA>
 Review scope: final
-     In each surface SC block also include Surface, Check, and Observed fields
-     using the final-review format. Surface holds exactly the surface name from
-     PLAN.md's Surface contract; put walkthrough detail in Check and Observed.
-     Record the actual walkthrough evidence once. -->
+     In each surface SC block keep the mandatory `- ✅` / `- ❌` evidence line
+     (the wave gate requires it). Also include Surface, Check, and Observed
+     fields using the final-review format. Surface holds exactly the surface name
+     from PLAN.md's Surface contract; put walkthrough detail in Check and Observed.
+     The `- ✅` line may summarize Observed; do not omit it. -->
 
 Wave verdict: <pass | blocked — blocked if any task fails>
 Cycle: <C>
@@ -51,6 +52,10 @@ Contract violations (blocking):
 - ✅ <evidence: verify output / file:line checked>
 - ❌ <criterion> — found: <what exists instead, file:line>
   fix: <concrete direction a coder can execute without re-investigating>
+<!-- Quick-lane final scope (Review scope: final): add after the evidence line:
+- **Surface**: <surface name from PLAN.md>
+- **Check**: `<walkthrough command>`
+- **Observed**: <what was seen> -->
 
 ## Fixed since last cycle
 
