@@ -1,5 +1,5 @@
 # gsd-path project runtime
-"""Guard a blocked build's return to Define or Plan using its committed base."""
+"""Guard return to Define or Plan using a committed recovery base."""
 
 from __future__ import annotations
 
@@ -17,7 +17,9 @@ EVENTS = {
     "define": "build intent corrections requested",
     "plan": "build plan repair requested",
 }
+PLAN_INTENT_EVENT = "plan intent corrections requested"
 MARKER = "build recovery: "
+RECOVERY_KEYS = frozenset({"base", "branch", "kind", "source"})
 
 
 def runtime():
@@ -36,6 +38,34 @@ def checkpoint_runtime():
     return state_checkpoint
 
 
+def _parse_recovery_record(value: object) -> dict:
+    if (
+        not isinstance(value, dict)
+        or not {"base", "branch", "kind"}.issubset(value)
+        or not set(value).issubset(RECOVERY_KEYS)
+        or not isinstance(value["base"], str)
+        or not re.fullmatch(r"[0-9a-f]{40}", value["base"])
+    ):
+        raise runtime().PipelineStateError("invalid build recovery record")
+    source = value.get("source", "build")
+    if source not in {"build", "plan"}:
+        raise runtime().PipelineStateError("invalid build recovery record")
+    if source == "plan":
+        if value["kind"] != "define":
+            raise runtime().PipelineStateError("invalid build recovery record")
+    elif value["kind"] not in EVENTS:
+        raise runtime().PipelineStateError("invalid build recovery record")
+    return {**value, "source": source}
+
+
+def _recovery_base_proves_milestone(before, current, source: str) -> bool:
+    if before.branch != current.branch or before.milestone != current.milestone:
+        return False
+    if source == "plan":
+        return (before.phase, before.status) in {("plan", "active"), ("plan", "blocked")}
+    return (before.phase, before.status) == ("build", "blocked")
+
+
 def context(repo: Path, text: str | None = None) -> dict | None:
     state = runtime()
     try:
@@ -52,26 +82,24 @@ def context(repo: Path, text: str | None = None) -> dict | None:
         event = line.split(" — ", 2)[-1]
         if event.startswith(MARKER):
             try:
-                value = json.loads(event[len(MARKER):])
+                value = _parse_recovery_record(json.loads(event[len(MARKER):]))
             except ValueError as error:
                 raise state.PipelineStateError("invalid build recovery record") from error
-            if (not isinstance(value, dict) or set(value) != {"base", "branch", "kind"}
-                    or value["kind"] not in EVENTS
-                    or not isinstance(value["base"], str)
-                    or not re.fullmatch(r"[0-9a-f]{40}", value["base"])):
-                raise state.PipelineStateError("invalid build recovery record")
             recovery = {**value, "active": True} if value["branch"] == current.branch else None
-        elif event == "build started" and recovery:
-            recovery["active"] = False
+        elif recovery and recovery.get("active"):
+            source = recovery.get("source", "build")
+            if source == "build" and event == "build started":
+                recovery["active"] = False
+            elif source == "plan" and event == "plan approved":
+                recovery["active"] = False
     if recovery:
         if not state._is_ancestor(repo, recovery["base"], "HEAD"):
             raise state.PipelineStateError("build recovery base is not an ancestor of HEAD")
-        source = checkpoint_runtime()._git_text_at(repo, recovery["base"], ".project/STATE.md")
-        if source is None:
+        base_text = checkpoint_runtime()._git_text_at(repo, recovery["base"], ".project/STATE.md")
+        if base_text is None:
             raise state.PipelineStateError("build recovery base has no STATE.md")
-        before = state._state_from_text(source)
-        if ((before.phase, before.status) != ("build", "blocked")
-                or before.branch != current.branch or before.milestone != current.milestone):
+        before = state._state_from_text(base_text)
+        if not _recovery_base_proves_milestone(before, current, recovery.get("source", "build")):
             raise state.PipelineStateError("build recovery base does not prove this blocked milestone")
     return recovery
 
@@ -113,18 +141,20 @@ def settled_tasks(repo: Path) -> dict[str, tuple[str, dict]]:
     return tasks
 
 
-def begin(repo: Path, before, after, event: str) -> dict:
+def _begin_common(repo: Path, before, event: str) -> str:
     state = runtime()
-    if (before.phase, before.status) != ("build", "blocked") or after.phase not in EVENTS:
-        raise state.PipelineStateError("build recovery requires build/blocked")
-    if event != EVENTS[after.phase]:
-        raise state.PipelineStateError(f"state transition requires event: {EVENTS[after.phase]}")
     if before.archive is not None or before.branch != state._current_branch(repo):
         raise state.PipelineStateError("build recovery requires the active bound branch")
     if state._worktree_changes(repo):
         raise state.PipelineStateError("checkpoint the blocked build before recovery")
     if any(state.transaction_journals(repo).values()):
         raise state.PipelineStateError("finish pending transactions before build recovery")
+    state._read_real_file(repo / ".project/intent/INTENT.md", "INTENT.md")
+    return state._run_git(repo, "rev-parse", "HEAD").stdout.strip()
+
+
+def _settle_build_dispatch(repo: Path) -> None:
+    state = runtime()
     records = records_root(repo)
     for directory in {path.parent.parent for path in records.rglob("attempt-*/state.json")}:
         latest = max(directory.glob("attempt-*/state.json"), key=lambda path: int(path.parent.name.split("-")[1]))
@@ -133,19 +163,49 @@ def begin(repo: Path, before, after, event: str) -> dict:
                 or (record.get("worktree") and record.get("branch") and not record.get("cleanup_complete"))
                 or record.get("outcome") not in {"landed", "collected", "blocked", "resolved", "redispatched"}):
             raise state.PipelineStateError(f"settle dispatch records before recovery: {latest}")
-    tasks = settled_tasks(repo)
-    state._read_real_file(repo / ".project/plan/PLAN.md", "PLAN.md")
-    state._read_real_file(repo / ".project/intent/INTENT.md", "INTENT.md")
-    base = state._run_git(repo, "rev-parse", "HEAD").stdout.strip()
+
+
+def _verify_done_tasks(repo: Path, tasks: dict[str, tuple[str, dict]], base: str) -> None:
+    state = runtime()
     done = [repo / ".project/tasks" / name for name, (_, fields) in tasks.items()
             if fields["status"] == "done"]
-    if done:
-        if __package__:
-            from scripts.isolation import verify_landed_task_files
-        else:
-            from isolation import verify_landed_task_files
-        verify_landed_task_files(repo, done, ".project/tasks", base)
-    return {"kind": after.phase, "base": base, "branch": before.branch}
+    if not done:
+        return
+    if __package__:
+        from scripts.isolation import verify_landed_task_files
+    else:
+        from isolation import verify_landed_task_files
+    verify_landed_task_files(repo, done, ".project/tasks", base)
+
+
+def begin(repo: Path, before, after, event: str) -> dict:
+    state = runtime()
+    if (before.phase, before.status) == ("build", "blocked") and after.phase in EVENTS:
+        if event != EVENTS[after.phase]:
+            raise state.PipelineStateError(f"state transition requires event: {EVENTS[after.phase]}")
+        _settle_build_dispatch(repo)
+        tasks = settled_tasks(repo)
+        state._read_real_file(repo / ".project/plan/PLAN.md", "PLAN.md")
+        base = _begin_common(repo, before, event)
+        _verify_done_tasks(repo, tasks, base)
+        return {"kind": after.phase, "base": base, "branch": before.branch, "source": "build"}
+    if (
+        before.phase == "plan"
+        and before.status in {"active", "blocked"}
+        and (after.phase, after.status) == ("define", "active")
+    ):
+        if event != PLAN_INTENT_EVENT:
+            raise state.PipelineStateError(f"state transition requires event: {PLAN_INTENT_EVENT}")
+        state._read_real_file(repo / ".project/plan/PLAN.md", "PLAN.md")
+        tasks_dir = repo / ".project/tasks"
+        tasks = settled_tasks(repo) if tasks_dir.is_dir() and any(
+            path.is_file() and not state._common.is_ignored_junk(path)
+            for path in tasks_dir.iterdir()
+        ) else {}
+        base = _begin_common(repo, before, event)
+        _verify_done_tasks(repo, tasks, base)
+        return {"kind": "define", "base": base, "branch": before.branch, "source": "plan"}
+    raise state.PipelineStateError("build recovery requires build/blocked")
 
 
 def records_root(repo: Path) -> Path:
