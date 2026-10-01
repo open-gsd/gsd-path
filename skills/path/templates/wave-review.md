@@ -45,9 +45,14 @@ Contract violations (blocking):
 <!-- One heading per INTENT.md success criterion owned by a task in this
      wave, ending `: pass` or `: fail`. `scripts/check_handoffs.py wave
      --review <this file>` gates the SC id set and verdicts. Omit this
-     section when no task in the wave owns an SC. -->
+     section when no task in the wave owns an SC.
+     Copy the criterion text from INTENT.md `## Success criteria` exactly as
+     `_success_criteria` stores it: indented continuation lines join with a
+     single space and keep their leading `- ` markers; the gate compares
+     heading text with `_normalize_ws` only (no paraphrase or stripped
+     sub-bullets). -->
 
-### SC1 — <criterion>: <pass | fail>
+### SC1 — <criterion as stored by the gate>: <pass | fail>
 - ✅ <evidence: verify output / file:line checked>
 - ❌ <criterion> — found: <what exists instead, file:line>
   fix: <concrete direction a coder can execute without re-investigating>

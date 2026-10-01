@@ -23,8 +23,12 @@ tasks in this wave as the rubric. For each task:
    concrete fix direction for each failure.
 
 Then check each INTENT.md success criterion owned by a task in this wave
-against that same isolated product. Copy the criterion verbatim from
-INTENT.md. Mark `pass` or `fail` with evidence; a failed owned SC blocks
+against that same isolated product. In each `### SCn —` heading, copy the
+criterion text exactly as `check_handoffs._success_criteria` stores it from
+INTENT.md `## Success criteria`: indented continuation lines are joined
+with a single space and keep their `- ` list markers in the compared text;
+only whitespace is normalized at the gate. Do not paraphrase or drop
+sub-bullets. Mark `pass` or `fail` with evidence; a failed owned SC blocks
 the wave. Omit the Intent coverage section when no task in the wave owns
 an SC. When INTENT.md `## Edge coverage` or `## Prohibitions` has rows for
 an owned SC, judge it against those rulings too: cite each `held-out` edge

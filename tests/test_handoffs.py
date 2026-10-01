@@ -1885,6 +1885,55 @@ Tasks reviewed: 2
                 ):
                     validate()
 
+    def test_reviews_bind_intent_criterion_with_sub_bullet_continuations(self) -> None:
+        joined = (
+            "At a store with a due review: - The board lists the store. "
+            "- The dashboard shows a badge."
+        )
+        for phase in ("wave", "final"):
+            with self.subTest(phase=phase), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                self.write_plan_handoff(root)
+                if phase == "wave":
+                    relative = self.write_wave_review(root)
+                    validate = lambda: check_handoffs.validate_wave(root, review=relative)
+                else:
+                    self.write_state(root, "ship", "active")
+                    self.write_final_review(root)
+                    relative = ".project/review/FINAL.md"
+                    validate = lambda: check_handoffs.validate_final(root)
+                intent = root / ".project/intent/INTENT.md"
+                intent.write_bytes(
+                    intent.read_text(encoding="utf-8")
+                    .replace(
+                        "1. The demo command prints hello.",
+                        "1. At a store with a due review:\n"
+                        "   - The board lists the store.\n"
+                        "   - The dashboard shows a badge.",
+                    )
+                    .encode("utf-8")
+                )
+                review = root / relative
+                original = review.read_text(encoding="utf-8")
+                review.write_bytes(
+                    original.replace(
+                        "### SC1 — The demo command prints hello.",
+                        f"### SC1 — {joined}",
+                    ).encode("utf-8")
+                )
+                self.assertEqual(validate()["verdict"], "pass")
+                review.write_bytes(
+                    original.replace(
+                        "### SC1 — The demo command prints hello.",
+                        "### SC1 — At a store with a due review: The board lists the store. "
+                        "The dashboard shows a badge.",
+                    ).encode("utf-8")
+                )
+                with self.assertRaisesRegex(
+                    check_handoffs.HandoffError, "SC1 heading text differs from INTENT.md"
+                ):
+                    validate()
+
     def test_wave_checks_evidence_after_exact_quoted_task_criterion(self) -> None:
         for verdict, marker in (("pass", "✅"), ("fail", "❌")):
             with self.subTest(verdict=verdict), tempfile.TemporaryDirectory() as directory:

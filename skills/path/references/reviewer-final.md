@@ -1,8 +1,13 @@
 ## Final integration mode
 
 Use only final-review.md. Treat INTENT.md success criteria as the rubric.
-Exercise the running system and record `met`, `not-met`, or `unverifiable`
-with checked command output or a precise file reference. When PLAN.md carries
+Each `### SCn —` heading must match the criterion text as
+`check_handoffs._success_criteria` stores it from INTENT.md `## Success
+criteria`: indented continuation lines join with a single space and keep
+their `- ` list markers; the gate compares titles with `_normalize_ws`
+only. Exercise the running system and record `met`, `not-met`, or
+`unverifiable` with checked command output or a precise file reference.
+When PLAN.md carries
 a `## Surface contract`, every criterion it lists under a surface is checked
 by performing that surface's Walkthrough from its Entry in the supplied
 sidecar: `Surface` names that surface, Check names what was performed,

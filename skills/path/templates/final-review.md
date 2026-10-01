@@ -21,7 +21,12 @@ Overall verdict: <pass | blocked>
 
 ## Success criteria
 
-### SC1 — <criterion copied verbatim from INTENT.md>
+<!-- Each `### SCn —` title must match INTENT.md `## Success criteria` as
+     `_success_criteria` stores it: continuation lines join with a single
+     space and keep `- ` sub-bullet markers; comparison uses `_normalize_ws`
+     only. -->
+
+### SC1 — <criterion as stored by the gate>
 
 - **Verdict**: <met | not-met | unverifiable>
 - **Surface**: <exactly the surface name PLAN.md's Surface contract lists this criterion under, with no detail after it; omit the whole field for any other criterion>
