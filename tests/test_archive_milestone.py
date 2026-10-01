@@ -571,7 +571,7 @@ refuted
             self.assertEqual(after_commit.returncode, 0, after_commit.stderr)
             self.assertEqual(json.loads(after_commit.stdout)["archive"], result["archive"])
 
-    def test_prepare_rejects_branch_archive_sequence_mismatch_without_mutation(self) -> None:
+    def test_prepare_allows_missing_lower_archive_gap(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             repo = Path(temporary_directory)
             self.make_repo(repo)
@@ -579,7 +579,72 @@ refuted
             self.assertEqual(switched.returncode, 0, switched.stderr)
             state = repo / ".project" / "STATE.md"
             state.write_bytes(
-                state.read_text(encoding="utf-8").replace("branch: gsd-path/M001", "branch: gsd-path/M002").encode("utf-8")
+                state.read_text(encoding="utf-8")
+                .replace("branch: gsd-path/M001", "branch: gsd-path/M002")
+                .encode("utf-8")
+            )
+
+            prepare = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "prepare",
+                "--repo",
+                str(repo),
+                "--slug",
+                "demo",
+                cwd=PROJECT_ROOT,
+            )
+
+            self.assertEqual(prepare.returncode, 0, prepare.stderr)
+            result = json.loads(prepare.stdout)
+            self.assertEqual(result["archive"], ".project/archive/002-demo")
+            archive_root = repo / ".project" / "archive"
+            self.assertEqual(sorted(path.name for path in archive_root.iterdir()), ["002-demo"])
+
+    def test_prepare_allows_gap_between_existing_archives(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            archive_root = repo / ".project" / "archive"
+            archive_root.mkdir(parents=True, exist_ok=True)
+            (archive_root / "003-earlier").mkdir()
+            switched = self.git(repo, "switch", "-q", "-c", "gsd-path/M005")
+            self.assertEqual(switched.returncode, 0, switched.stderr)
+            state = repo / ".project" / "STATE.md"
+            state.write_bytes(
+                state.read_text(encoding="utf-8")
+                .replace("branch: gsd-path/M001", "branch: gsd-path/M005")
+                .encode("utf-8")
+            )
+
+            prepare = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "prepare",
+                "--repo",
+                str(repo),
+                "--slug",
+                "demo",
+                cwd=PROJECT_ROOT,
+            )
+
+            self.assertEqual(prepare.returncode, 0, prepare.stderr)
+            self.assertEqual(json.loads(prepare.stdout)["archive"], ".project/archive/005-demo")
+
+    def test_prepare_rejects_later_archive_without_mutation(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            archive_root = repo / ".project" / "archive"
+            archive_root.mkdir(parents=True, exist_ok=True)
+            (archive_root / "003-later").mkdir()
+            switched = self.git(repo, "switch", "-q", "-c", "gsd-path/M002")
+            self.assertEqual(switched.returncode, 0, switched.stderr)
+            state = repo / ".project" / "STATE.md"
+            state.write_bytes(
+                state.read_text(encoding="utf-8")
+                .replace("branch: gsd-path/M001", "branch: gsd-path/M002")
+                .encode("utf-8")
             )
             before = self.snapshot_worktree(repo)
 
@@ -595,7 +660,39 @@ refuted
             )
 
             self.assertNotEqual(prepare.returncode, 0)
-            self.assertIn("archive sequence", prepare.stderr)
+            self.assertIn("later=[3]", prepare.stderr)
+            self.assertEqual(self.snapshot_worktree(repo), before)
+
+    def test_prepare_rejects_existing_current_archive_before_persistence(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            archive_root = repo / ".project" / "archive"
+            archive_root.mkdir(parents=True, exist_ok=True)
+            (archive_root / "002-existing").mkdir()
+            switched = self.git(repo, "switch", "-q", "-c", "gsd-path/M002")
+            self.assertEqual(switched.returncode, 0, switched.stderr)
+            state = repo / ".project" / "STATE.md"
+            state.write_bytes(
+                state.read_text(encoding="utf-8")
+                .replace("branch: gsd-path/M001", "branch: gsd-path/M002")
+                .encode("utf-8")
+            )
+            before = self.snapshot_worktree(repo)
+
+            prepare = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "prepare",
+                "--repo",
+                str(repo),
+                "--slug",
+                "demo",
+                cwd=PROJECT_ROOT,
+            )
+
+            self.assertNotEqual(prepare.returncode, 0)
+            self.assertIn("archive sequence 002 already exists before persistence", prepare.stderr)
             self.assertEqual(self.snapshot_worktree(repo), before)
 
     def test_prepare_rejects_stale_final_review_without_mutation(self) -> None:
