@@ -178,6 +178,10 @@ def _restore_source_runtime() -> None:
         archive_milestone = sys.modules["archive_milestone"]
         review_findings = sys.modules["review_findings"]
         model_policy = sys.modules["model_policy"]
+        for name in _RUNTIME_DEPENDENT_MODULES:
+            module = sys.modules.get(name)
+            if module is not None:
+                importlib.reload(module)
     else:
         import scripts
 
@@ -187,6 +191,7 @@ def _restore_source_runtime() -> None:
             module = sys.modules.get(f"scripts.{name}")
             if module is not None:
                 importlib.reload(module)
+    _refresh_stop_errors()
 
 
 def _activate_pinned_runtime(repo: Path) -> None:
