@@ -500,6 +500,32 @@ refuted
                 snapshot[relative.as_posix()] = ("file", path.read_bytes())
         return snapshot
 
+    def test_frontmatter_value_keeps_hash_inside_task_titles(self) -> None:
+        task = textwrap.dedent(
+            """---
+id: T001
+title: Make completion store-wide (#212)
+wave: 1   # inline comment
+---"""
+        )
+        self.assertEqual(
+            archive_milestone.frontmatter_value(task, "title"),
+            "Make completion store-wide (#212)",
+        )
+        self.assertEqual(
+            archive_milestone.frontmatter_value(task, "wave"),
+            "1",
+        )
+        quoted = '---\ntitle: "Add endpoint (#213)"\n---'
+        self.assertEqual(
+            archive_milestone.frontmatter_value(quoted, "title"),
+            "Add endpoint (#213)",
+        )
+        self.assertEqual(
+            archive_milestone.frontmatter_value(task, "title"),
+            isolation.task_frontmatter(task)[0]["title"],
+        )
+
     def test_prepare_is_idempotent_and_validate_requires_ship_commit(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             repo = Path(temporary_directory)
