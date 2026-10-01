@@ -586,14 +586,11 @@ def resolved_archive_target(
     expected_number = milestone_number(branch)
     configured = parsed_state.archive
     entries = archive_sequence_entries(project)
-    missing_prior = [
-        number for number in range(1, expected_number) if number not in entries
-    ]
     later = sorted(number for number in entries if number > expected_number)
-    if missing_prior or later:
+    if later:
         raise ArchiveError(
             f"archive sequence does not match bound branch {branch}: "
-            f"missing={missing_prior}, later={later}"
+            f"later={later}"
         )
 
     if configured is not None:

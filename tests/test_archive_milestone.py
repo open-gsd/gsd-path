@@ -17,6 +17,7 @@ from scripts import (
     integration,
     isolation,
     pipeline_git,
+    pipeline_state,
     review_panel,
 )
 from tests._platform import requires_symlink
@@ -597,7 +598,7 @@ wave: 1   # inline comment
             self.assertEqual(after_commit.returncode, 0, after_commit.stderr)
             self.assertEqual(json.loads(after_commit.stdout)["archive"], result["archive"])
 
-    def test_prepare_rejects_branch_archive_sequence_mismatch_without_mutation(self) -> None:
+    def test_prepare_allows_archive_sequence_gap_without_mutation(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             repo = Path(temporary_directory)
             self.make_repo(repo)
@@ -607,6 +608,31 @@ wave: 1   # inline comment
             state.write_bytes(
                 state.read_text(encoding="utf-8").replace("branch: gsd-path/M001", "branch: gsd-path/M002").encode("utf-8")
             )
+            prepare = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "prepare",
+                "--repo",
+                str(repo),
+                "--slug",
+                "demo",
+                cwd=PROJECT_ROOT,
+            )
+
+            self.assertEqual(prepare.returncode, 0, prepare.stderr)
+            self.assertEqual(json.loads(prepare.stdout)["archive"], ".project/archive/002-demo")
+
+    def test_prepare_rejects_later_archive_sequence_without_mutation(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            switched = self.git(repo, "switch", "-q", "-c", "gsd-path/M002")
+            self.assertEqual(switched.returncode, 0, switched.stderr)
+            state = repo / ".project" / "STATE.md"
+            state.write_bytes(
+                state.read_text(encoding="utf-8").replace("branch: gsd-path/M001", "branch: gsd-path/M002").encode("utf-8")
+            )
+            (repo / ".project" / "archive" / "003-future").mkdir(parents=True)
             before = self.snapshot_worktree(repo)
 
             prepare = self.run_command(
@@ -621,8 +647,78 @@ wave: 1   # inline comment
             )
 
             self.assertNotEqual(prepare.returncode, 0)
-            self.assertIn("archive sequence", prepare.stderr)
+            self.assertIn("later=[3]", prepare.stderr)
             self.assertEqual(self.snapshot_worktree(repo), before)
+
+    def _minimal_archive_project(self, repo: Path) -> Path:
+        project = repo / ".project"
+        project.mkdir(parents=True)
+        (project / "archive").mkdir()
+        (project / "STATE.md").write_bytes(
+            b"---\npipeline: gsd-path/v2\nbranch: gsd-path/M002\narchive: null\n---\n"
+        )
+        return project
+
+    def test_resolved_archive_target_allows_gap_with_persisted_archive(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            project = self._minimal_archive_project(repo)
+            archive = project / "archive" / "002-demo"
+            archive.mkdir(parents=True)
+            parsed = pipeline_state.PipelineState(
+                pipeline="gsd-path/v2",
+                project="demo",
+                milestone="demo",
+                phase="ship",
+                status="active",
+                branch="gsd-path/M002",
+                archive=".project/archive/002-demo",
+                integration_default="direct",
+                integration="direct",
+                integration_source="default",
+            )
+            target = archive_milestone.resolved_archive_target(repo, "demo", parsed)
+            self.assertEqual(target, archive)
+
+    def test_resolved_archive_target_rejects_later_archive(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            project = self._minimal_archive_project(repo)
+            (project / "archive" / "003-future").mkdir(parents=True)
+            parsed = pipeline_state.PipelineState(
+                pipeline="gsd-path/v2",
+                project="demo",
+                milestone="demo",
+                phase="ship",
+                status="active",
+                branch="gsd-path/M002",
+                archive=None,
+                integration_default="direct",
+                integration="direct",
+                integration_source="default",
+            )
+            with self.assertRaisesRegex(archive_milestone.ArchiveError, r"later=\[3\]"):
+                archive_milestone.resolved_archive_target(repo, "demo", parsed)
+
+    def test_resolved_archive_target_rejects_archive_collision(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            project = self._minimal_archive_project(repo)
+            (project / "archive" / "002-other").mkdir(parents=True)
+            parsed = pipeline_state.PipelineState(
+                pipeline="gsd-path/v2",
+                project="demo",
+                milestone="demo",
+                phase="ship",
+                status="active",
+                branch="gsd-path/M002",
+                archive=".project/archive/002-demo",
+                integration_default="direct",
+                integration="direct",
+                integration_source="default",
+            )
+            with self.assertRaisesRegex(archive_milestone.ArchiveError, "collides with 002-other"):
+                archive_milestone.resolved_archive_target(repo, "demo", parsed)
 
     def test_prepare_rejects_stale_final_review_without_mutation(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
