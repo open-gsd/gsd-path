@@ -426,10 +426,10 @@ def frontmatter_value(content: str, key: str) -> Optional[str]:
     for line in lines[1:]:
         if line == "---":
             break
-        match = re.match(rf"^{re.escape(key)}:\s*([^#]*?)\s*(?:#.*)?$", line)
+        match = re.match(rf"^{re.escape(key)}:(.*)$", line)
         if match:
-            value = match.group(1).strip().strip('"').strip("'")
-            return value
+            value = _common.strip_yaml_comment(match.group(1))
+            return value.strip().strip('"').strip("'")
     return None
 
 
