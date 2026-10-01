@@ -268,6 +268,70 @@ def git_visible_entries(directory: Path) -> set:
     return {path.split("/", 1)[0] for path in result.stdout.split("\0") if path}
 
 
+RUNTIME_PIN_PATH = ".gsd-path/runtime.json"
+RUNTIME_PIN_ALLOWANCE = (
+    "only runtime-pin commits (.gsd-path/runtime.json) may follow the reviewed HEAD"
+)
+
+
+def reviewed_head_covers(repo: Path, reviewed: str, head: str) -> bool:
+    """True when a review of `reviewed` still covers `head`.
+
+    That is the same commit, or `reviewed` is an ancestor of `head` and every
+    commit on the first-parent path in ``reviewed..head`` is a non-merge commit
+    whose only change is ``.gsd-path/runtime.json``. An empty commit does not
+    qualify. Any other path, any merge commit, an unresolvable SHA, or a
+    non-ancestor returns False.
+    """
+    if not reviewed or not head:
+        return False
+    resolved_repo = Path(repo)
+    resolved: List[str] = []
+    for value in (reviewed, head):
+        result = run_git(
+            resolved_repo, "rev-parse", "--verify", "--quiet", f"{value}^{{commit}}"
+        )
+        if result.returncode != 0 or not result.stdout.strip():
+            return False
+        resolved.append(result.stdout.strip())
+    reviewed_sha, head_sha = resolved
+    if reviewed_sha == head_sha:
+        return True
+    if (
+        run_git(resolved_repo, "merge-base", "--is-ancestor", reviewed_sha, head_sha).returncode
+        != 0
+    ):
+        return False
+    listing = run_git(
+        resolved_repo,
+        "rev-list",
+        "--first-parent",
+        "--parents",
+        f"{reviewed_sha}..{head_sha}",
+    )
+    if listing.returncode != 0:
+        return False
+    for line in listing.stdout.splitlines():
+        fields = line.split()
+        if len(fields) != 2:
+            return False
+        commit_sha, parent_sha = fields[0], fields[1]
+        changed = run_git(
+            resolved_repo,
+            "diff",
+            "--name-only",
+            "--no-renames",
+            "--no-ext-diff",
+            parent_sha,
+            commit_sha,
+        )
+        if changed.returncode != 0:
+            return False
+        if {path for path in changed.stdout.splitlines() if path} != {RUNTIME_PIN_PATH}:
+            return False
+    return True
+
+
 def atomic_replace(path: Path, temporary_path: Path, content: str) -> None:
     temporary_path.parent.mkdir(parents=True, exist_ok=True)
     descriptor = None

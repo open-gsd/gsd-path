@@ -420,8 +420,13 @@ def _archive_metadata_error(
         if final_review.exists() or gap_reviews:
             reviewed_head, _ = archive_milestone.parse_final_review(archive_path)
             archive_milestone.validate_gap_reviews(archive_path, reviewed_head)
-            if reviewed_head != _optional_rev(repo, "HEAD"):
-                return "archive undo final review does not match current HEAD"
+            if not archive_milestone.reviewed_head_covers(
+                repo, reviewed_head, _optional_rev(repo, "HEAD")
+            ):
+                return (
+                    "archive undo final review does not match current HEAD; "
+                    f"{archive_milestone._common.RUNTIME_PIN_ALLOWANCE}"
+                )
             expected_inventory.add("review/FINAL.md")
             expected_inventory.update(
                 path.relative_to(archive_path).as_posix() for path in gap_reviews
