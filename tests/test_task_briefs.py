@@ -353,6 +353,57 @@ class TaskBriefTests(unittest.TestCase):
             self.assertIn("T003", stderr)
             self.assertIn("src/missing.py", stderr)
 
+    def test_grep_pattern_without_extension_is_not_a_verify_path(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.init_repo(root)
+            self.write(root, "README.md", "# Version policy\n")
+            self.write_happy_tasks(root)
+            self.write_task(
+                root, "T003", contract="- None",
+                context="The task checks the README.",
+                verify="grep -q 'app/version-policy' README.md",
+            )
+            base = self.commit(root)
+
+            exit_code, _stdout, stderr = self.lint(root, base)
+
+            self.assertEqual(exit_code, 0, stderr)
+
+    def test_backticked_route_segment_without_extension_is_not_a_path(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.init_repo(root)
+            self.write_happy_tasks(root)
+            self.write_task(
+                root, "T003", contract="- None",
+                context="The handler lives under `api/v1` for routing.",
+            )
+            base = self.commit(root)
+
+            exit_code, _stdout, stderr = self.lint(root, base)
+
+            self.assertEqual(exit_code, 0, stderr)
+
+    def test_uncommitted_review_artifact_in_context_is_allowed(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.init_repo(root)
+            base = self.commit(root)
+            self.write(
+                root,
+                ".project/review/wave-1.cycle1.md",
+                "# Review — wave 1, cycle 1\n\nWave verdict: pass\n",
+            )
+            self.write_task(
+                root, "T001", contract="- None",
+                context="Address findings in `.project/review/wave-1.cycle1.md`.",
+            )
+
+            exit_code, _stdout, stderr = self.lint(root, base)
+
+            self.assertEqual(exit_code, 0, stderr)
+
     def test_backticked_url_route_in_prose_is_not_a_path(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
