@@ -6517,5 +6517,15 @@ Tasks reviewed: 1
             self.assertEqual(reason_lines, ["Reason: stop this milestone now"])
 
 
+class FrontmatterValueTests(unittest.TestCase):
+    def test_title_may_contain_hash_without_truncation(self) -> None:
+        content = "---\ntitle: Fix (#212)\nid: T001\n---\n"
+        self.assertEqual(archive_milestone.frontmatter_value(content, "title"), "Fix (#212)")
+
+    def test_trailing_comment_still_stripped_from_unquoted_scalar(self) -> None:
+        content = "---\ntitle: Fix ship # note\n---\n"
+        self.assertEqual(archive_milestone.frontmatter_value(content, "title"), "Fix ship")
+
+
 if __name__ == "__main__":
     unittest.main()

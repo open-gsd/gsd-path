@@ -426,11 +426,30 @@ def frontmatter_value(content: str, key: str) -> Optional[str]:
     for line in lines[1:]:
         if line == "---":
             break
-        match = re.match(rf"^{re.escape(key)}:\s*([^#]*?)\s*(?:#.*)?$", line)
-        if match:
-            value = match.group(1).strip().strip('"').strip("'")
-            return value
+        prefix = f"{key}:"
+        if not line.startswith(prefix):
+            continue
+        return _scalar_frontmatter_value(line[len(prefix):])
     return None
+
+
+def _scalar_frontmatter_value(raw: str) -> str:
+    value = raw.strip()
+    if value.startswith('"'):
+        try:
+            decoded = json.loads(value)
+        except json.JSONDecodeError as error:
+            raise ArchiveError("frontmatter value is malformed") from error
+        if not isinstance(decoded, str):
+            raise ArchiveError("frontmatter value is malformed")
+        return decoded
+    if value.startswith("'"):
+        quoted = re.fullmatch(r"'((?:[^']|'')*)'", value)
+        if quoted is None:
+            raise ArchiveError("frontmatter value is malformed")
+        return quoted.group(1).replace("''", "'")
+    value = re.sub(r"[ \t]+#.*$", "", value).rstrip()
+    return value.strip().strip('"').strip("'")
 
 
 def set_frontmatter_value(content: str, key: str, value: str) -> str:
