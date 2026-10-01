@@ -16,6 +16,9 @@ PINNED_MARKER = "gsd-path-pinned-runtime-marker-209"
 
 
 class DispatchPinnedRuntimeInProcessTests(unittest.TestCase):
+    def tearDown(self) -> None:
+        dispatch_driver._restore_source_runtime()
+
     def test_activate_pinned_runtime_reloads_scripts_isolation(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             repo = Path(temp)
