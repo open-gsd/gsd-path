@@ -106,7 +106,7 @@ class TaskBriefTests(unittest.TestCase):
         contract: str = CONTRACT,
         context: str = "The task extends `src/app.py` and adds `tests/test_new.py`.",
         approach: str = "- Keep `tests/test_app.py` green.",
-        verify: str = "python3 tests/test_app.py\nbash ./scripts/check.sh tests/test_app.py",
+        verify: str = "python3 tests/test_app.py && ./scripts/check.sh tests/test_app.py",
         slug: Optional[str] = None,
     ) -> None:
         files_block = "\n".join(f"  - {entry}" for entry in files)
@@ -682,6 +682,33 @@ class TaskBriefTests(unittest.TestCase):
         self.assertIsNone(error)
         self.assertIsNotNone(fields)
         self.assertEqual(fields["title"], "Don't regress")
+
+    def test_verify_rejects_commands_the_host_guard_refuses(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.init_repo(root)
+            base = self.commit(root)
+            denied = (
+                "P=/opt/php/bin/php && $P /usr/bin/composer install",
+                "PYTHONDONTWRITEBYTECODE=1 python3 -m pytest && PYTHONDONTWRITEBYTECODE=1 python3 -m unittest",
+                "mv 'report file.xlsx' exports/",
+            )
+            tasks_dir = root / ".project/tasks"
+            for verify in denied:
+                with self.subTest(verify=verify):
+                    self.write_task(
+                        root,
+                        "T001",
+                        contract="- None",
+                        context="Run guarded verify.",
+                        verify=verify,
+                    )
+                    with self.assertRaises(check_task_briefs.BriefError) as failure:
+                        check_task_briefs.validate_task_briefs(root, base)
+                    message = str(failure.exception)
+                    self.assertIn("host guard", message)
+                    for path in tasks_dir.glob("*.md"):
+                        path.unlink()
 
     def test_unresolvable_base_fails(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

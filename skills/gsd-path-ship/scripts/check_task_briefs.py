@@ -407,8 +407,9 @@ def _lint_task(
         if block is None or not block.group("block").strip():
             problems.append("## Verify must contain a non-empty fenced bash block")
         else:
+            verify_script = block.group("block").removesuffix("\n")
             for token in _verify_tokens(
-                block.group("block"),
+                verify_script,
                 repo=repo,
                 git_root=git_root,
                 base=base,
@@ -422,6 +423,12 @@ def _lint_task(
                     and not _base_exists(git_root, base, token)
                 ):
                     problems.append(f"## Verify names a path missing at the layer base: {token}")
+            denial = _common.verify_shell_denial(verify_script, git_root)
+            if denial is not None:
+                problems.append(
+                    "## Verify command is denied by the host guard: "
+                    + denial.replace("\n", " ")
+                )
 
     contract = None
     contract_body = sections.get("Interface contract")

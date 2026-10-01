@@ -176,6 +176,23 @@ def task_verify_command(task_text: str) -> str:
     return block.group("block").removesuffix("\n") if block else ""
 
 
+def verify_shell_denial(script: str, repo_root: Path) -> Optional[str]:
+    """Return why the host guard would refuse ``script`` from ``repo_root``, or None."""
+    trimmed = script.strip()
+    if not trimmed:
+        return "shell command is empty"
+    if __package__:
+        from . import guard_hook
+    else:
+        import guard_hook  # type: ignore[import-not-found]
+    directory = str(repo_root.resolve())
+    try:
+        reason = guard_hook.command_denial(trimmed, [directory])
+    except ValueError as error:
+        return str(error)
+    return reason
+
+
 def latest_verify_entry(entries: list, command: str, commit: str,
                         repo: Optional[str] = None) -> Optional[dict]:
     """Rows are keyed by (command, repo, commit); a row without `repo` is a coordinator row."""
