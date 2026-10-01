@@ -89,6 +89,12 @@ _RUNTIME_ACTIVATION_ORDER = (
     "review_findings",
     "model_policy",
 )
+_RUNTIME_DEPENDENT_MODULES = (
+    "discussion_validate",
+    "state_checkpoint",
+    "lean_verification",
+    "integration",
+)
 RECOVERY_BLOCKED = "recovery blocked"
 # The stops the build contract answers with build/blocked when the round raises them (steps 1 and 2);
 # the same stops from review, panel, or skeptics stay with the parent.
@@ -143,6 +149,48 @@ def _reload_pinned_modules(runtime_root: Path) -> None:
         archive_milestone = scripts.archive_milestone
         review_findings = scripts.review_findings
         model_policy = scripts.model_policy
+    _refresh_stop_errors()
+
+
+def _canonical_runtime_root() -> Path:
+    return Path(__file__).resolve().parent
+
+
+def _restore_source_runtime() -> None:
+    """Point imports back at the repository scripts/ tree after a pinned override."""
+
+    runtime_root = _canonical_runtime_root()
+    global isolation, build_state, task_context, contracts, pipeline_state
+    global archive_milestone, review_findings, model_policy
+    if _bundled_helpers():
+        path = str(runtime_root)
+        sys.path[:] = [entry for entry in sys.path if entry != path]
+        sys.path.insert(0, path)
+        for name in _RUNTIME_ACTIVATION_ORDER:
+            module = sys.modules.get(name)
+            if module is not None:
+                importlib.reload(module)
+        isolation = sys.modules["isolation"]
+        build_state = sys.modules["build_state"]
+        task_context = sys.modules["task_context"]
+        contracts = sys.modules["check_handoffs"]
+        pipeline_state = sys.modules["pipeline_state"]
+        archive_milestone = sys.modules["archive_milestone"]
+        review_findings = sys.modules["review_findings"]
+        model_policy = sys.modules["model_policy"]
+        for name in _RUNTIME_DEPENDENT_MODULES:
+            module = sys.modules.get(name)
+            if module is not None:
+                importlib.reload(module)
+    else:
+        import scripts
+
+        scripts.__path__ = [str(runtime_root)]
+        _reload_pinned_modules(runtime_root)
+        for name in _RUNTIME_DEPENDENT_MODULES:
+            module = sys.modules.get(f"scripts.{name}")
+            if module is not None:
+                importlib.reload(module)
     _refresh_stop_errors()
 
 
