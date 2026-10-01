@@ -56,6 +56,21 @@ WAVE_REVIEW_NAME = re.compile(
     r"wave-(?P<wave>[1-9]\d*)\.cycle(?P<cycle>[1-9]\d*)"
     r"(?:\.(?P<lens>contract|adversarial))?\.md$"
 )
+VALID_REVIEW_DEPTHS = frozenset({"full", "deep", "verify-only"})
+
+
+def _max_wave_cycle(root: Path, project_dir: str, wave: int) -> int:
+    review_dir = root / PurePosixPath(project_dir) / "review"
+    if not review_dir.is_dir():
+        return 0
+    maximum = 0
+    for path in review_dir.iterdir():
+        named = WAVE_REVIEW_NAME.fullmatch(path.name)
+        if named and int(named.group("wave")) == wave:
+            maximum = max(maximum, int(named.group("cycle")))
+    return maximum
+
+
 WAVE_SC_HEADING = re.compile(r"^### (SC[1-9]\d*) — (.+)$")
 WAVE_TASK_HEADING = re.compile(
     r"^## (?P<task>T\d{3}) — (?P<title>.+): (?P<verdict>pass|fail)$"
@@ -1814,10 +1829,23 @@ def validate_plan(
                 + ", ".join(unowned)
             )
     project_verify = _normalize_ws(_line_value(plan, "Project verify:"))
+    if project_verify:
+        denial = _common.verify_shell_denial(project_verify, root)
+        if denial is not None:
+            raise HandoffError(
+                "Project verify is denied by the host guard: "
+                + denial.replace("\n", " ")
+            )
     for task_id, text in tasks.items():
         command = _verify_command(text)
         if not command:
             continue
+        denial = _common.verify_shell_denial(command, root)
+        if denial is not None:
+            raise HandoffError(
+                f"{task_id} Verify is denied by the host guard: "
+                + denial.replace("\n", " ")
+            )
         if command == project_verify:
             named = any(
                 project_verify in _normalize_ws(criteria[sc_id])
@@ -1901,17 +1929,27 @@ def validate_wave_evidence(
             assigned[task_id].add(criterion)
     owned = _owned_by_wave(tasks, assigned, wave)
     text = _read(root, review_path.as_posix())
+    is_last_cycle = cycle >= _max_wave_cycle(root, project_dir, wave)
     if _line_value(text, "Cycle:") != str(cycle):
         raise HandoffError(f"{name} Cycle field does not match its filename")
-    if _line_value(text, "Depth:") != expected_depth:
+    recorded_depth = _line_value(text, "Depth:")
+    if recorded_depth not in VALID_REVIEW_DEPTHS:
+        raise HandoffError(f"{name} Depth does not match PLAN.md")
+    if is_last_cycle and recorded_depth != expected_depth:
         raise HandoffError(f"{name} Depth does not match PLAN.md")
     lens_fields = re.findall(r"(?m)^Lens:[ \t]*(\S.*?)[ \t]*$", text)
     if lens is None and lens_fields:
         raise HandoffError(f"{name} must not declare a review lens")
     if lens is not None and lens_fields != [lens]:
         raise HandoffError(f"{name} Lens field does not match its filename")
+    overall = _line_value(text, "Wave verdict:")
+    if overall not in {"pass", "blocked"}:
+        raise HandoffError(f"{name} Wave verdict is invalid")
     reviewed = _line_value(text, "Tasks reviewed:")
-    if not reviewed.isdigit() or int(reviewed) != len(expected_tasks):
+    enforce_plan_tasks = is_last_cycle and overall != "blocked"
+    if not reviewed.isdigit() or int(reviewed) < 1:
+        raise HandoffError(f"{name} Tasks reviewed does not match Wave {wave}")
+    if enforce_plan_tasks and int(reviewed) != len(expected_tasks):
         raise HandoffError(f"{name} Tasks reviewed does not match Wave {wave}")
 
     lines = text.splitlines()
@@ -1920,11 +1958,25 @@ def validate_wave_evidence(
         match = WAVE_TASK_HEADING.fullmatch(line)
         if match:
             task_headings.append((index, match))
+    if len(task_headings) != int(reviewed):
+        raise HandoffError(f"{name} Tasks reviewed does not match Wave {wave}")
     reviewed_tasks = [match.group("task") for _, match in task_headings]
-    if reviewed_tasks != expected_tasks:
-        raise HandoffError(
-            f"{name} must review exactly {', '.join(expected_tasks)} in plan order"
-        )
+    if enforce_plan_tasks:
+        if reviewed_tasks != expected_tasks:
+            raise HandoffError(
+                f"{name} must review exactly {', '.join(expected_tasks)} in plan order"
+            )
+    else:
+        unknown = [task_id for task_id in reviewed_tasks if task_id not in expected_tasks]
+        if unknown:
+            raise HandoffError(
+                f"{name} must review exactly {', '.join(expected_tasks)} in plan order"
+            )
+        plan_order = [task_id for task_id in expected_tasks if task_id in reviewed_tasks]
+        if reviewed_tasks != plan_order:
+            raise HandoffError(
+                f"{name} must review exactly {', '.join(expected_tasks)} in plan order"
+            )
     task_verdicts = []
     for heading_index, heading in task_headings:
         task_id = heading.group("task")
@@ -1953,9 +2005,16 @@ def validate_wave_evidence(
             _non_placeholder(item, f"{name} task {task_id} {verdict} evidence")
         task_verdicts.append(verdict)
 
-    overall = _line_value(text, "Wave verdict:")
-    if overall not in {"pass", "blocked"}:
-        raise HandoffError(f"{name} Wave verdict is invalid")
+    if not is_last_cycle:
+        return {
+            "phase": "wave",
+            "wave": wave,
+            "cycle": cycle,
+            "owned": owned if owned else [],
+            "review": review,
+            "verdict": overall,
+        }
+
     if overall == "pass" and "fail" in task_verdicts:
         raise HandoffError(f"{name} Wave verdict is pass while a task failed")
     try:
