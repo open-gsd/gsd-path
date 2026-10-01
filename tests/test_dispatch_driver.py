@@ -1609,7 +1609,7 @@ class DispatchPinnedRuntimeTests(unittest.TestCase):
     def test_activate_pinned_runtime_reloads_scripts_isolation(self) -> None:
         completed = subprocess.run(
             [sys.executable, "-B", "-m", "unittest", "-q",
-             "tests.test_dispatch_pinned_runtime_inprocess"],
+             "tests.pinned_runtime_inprocess_case"],
             cwd=PROJECT_ROOT,
             capture_output=True,
             text=True,
