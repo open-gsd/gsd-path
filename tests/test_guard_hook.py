@@ -2128,5 +2128,98 @@ class GuardHookTests(unittest.TestCase):
         self.assertEqual(json.loads(result.stdout)["permissionDecision"], "deny")
 
 
+CLOSED_MILESTONE_REASON = (
+    "closed milestone gsd-path/M003 accepts no new work; finish integration "
+    "through ship, then use the router's next-milestone handoff"
+)
+
+
+class ClosedMilestoneGuardTests(unittest.TestCase):
+    def setUp(self):
+        self._temporary = tempfile.TemporaryDirectory()
+        self.repo = Path(self._temporary.name) / "repo"
+        self.repo.mkdir()
+        subprocess.run(
+            ["git", "init", "-q", "-b", "gsd-path/M003"], cwd=self.repo, check=True
+        )
+        (self.repo / ".project").mkdir()
+        (self.repo / ".project" / "STATE.md").write_text(
+            "pipeline: gsd-path/v2\nproject: demo\nmilestone: demo\n"
+            "phase: shipped\nstatus: done\nbranch: gsd-path/M003\n"
+            "archive: .project/archive/003-demo\n",
+            encoding="utf-8",
+        )
+        (self.repo / "app.py").write_text("app\n", encoding="utf-8")
+        subprocess.run(["git", "add", "-A"], cwd=self.repo, check=True)
+        subprocess.run(
+            ["git", "commit", "-qm", "ship: M003 — demo"], cwd=self.repo, check=True
+        )
+        self.memory = Path(self._temporary.name) / "memory"
+        self.memory.mkdir()
+        self.closed = mock.patch.object(
+            guard_hook,
+            "closed_milestone_reason",
+            side_effect=lambda repo=None: CLOSED_MILESTONE_REASON,
+        )
+        self.closed.start()
+        self.repository_root = mock.patch.object(
+            guard_hook, "repository_root", return_value=self.repo.resolve()
+        )
+        self.repository_root.start()
+
+    def tearDown(self):
+        self.repository_root.stop()
+        self.closed.stop()
+        self._temporary.cleanup()
+
+    def bash(self, command, cwd=None):
+        return {
+            "tool_name": "Bash",
+            "tool_input": {"command": command},
+            "cwd": str(cwd or self.repo),
+        }
+
+    def test_closed_milestone_allows_read_only_git_and_fetch(self):
+        for command in (
+            "git fetch origin main",
+            "git fetch upstream",
+            "git rev-parse origin/main",
+            "git ls-remote --heads origin main",
+            "git status --short",
+        ):
+            with self.subTest(command=command):
+                status, _, error = run_guard(self.bash(command))
+                self.assertEqual(status, 0, error)
+
+    def test_closed_milestone_allows_out_of_repo_work(self):
+        scratch = self.memory / "handoff.txt"
+        for command in (
+            f"printf 'archive .project/archive/003-demo' > {scratch.as_posix()}",
+            "glab api projects",
+            "true",
+        ):
+            with self.subTest(command=command):
+                status, _, error = run_guard(self.bash(command))
+                self.assertEqual(status, 0, error)
+
+    def test_closed_milestone_allows_helper_piped_to_tail(self):
+        helper = (
+            f"python3 -B {(SCRIPT.parent / 'archive_milestone.py').as_posix()} "
+            f"validate-integrated --repo {self.repo.as_posix()}"
+        )
+        status, _, error = run_guard(self.bash(f"{helper} | tail -n 5"))
+        self.assertEqual(status, 0, error)
+
+    def test_closed_milestone_still_denies_in_repo_product_writes(self):
+        for command in (
+            "echo new > app.py",
+            "git branch feature/new",
+        ):
+            with self.subTest(command=command):
+                status, _, error = run_guard(self.bash(command))
+                self.assertEqual(status, 2, error)
+                self.assertIn("closed milestone", error)
+
+
 if __name__ == "__main__":
     unittest.main()

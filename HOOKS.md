@@ -11,7 +11,7 @@ Optional enforcement for pipeline invariants prompt contracts cannot guarantee:
 
 Closed branches still allow read-only Git inspection (`status`, `log`, `diff`, plain
 `cat-file` reads of one object, branch and worktree listing) and the router handoff helpers, including
-`git fetch origin`, SHA resolution, and next-base selection. Branch switching remains
+`git fetch` (any remote or refspec), SHA resolution, and next-base selection. Branch switching remains
 router-owned. The [ship contract](skills/gsd-path-ship/SKILL.md) owns integration
 conflict handling and published-validation recovery.
 

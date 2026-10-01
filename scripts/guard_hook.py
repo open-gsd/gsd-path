@@ -909,8 +909,11 @@ def pipeline_target_kinds(targets):
 
 
 def closed_target_reason(targets):
+    if not targets:
+        return None
+    repo = repository_root()
     for path, working_directories in targets:
-        for target in dict.fromkeys(target_paths(path, working_directories, repository_root())):
+        for target in dict.fromkeys(target_paths(path, working_directories, repo)):
             directory = target if target.is_dir() and not is_link_like(target) else target.parent
             while not directory.exists() and directory != directory.parent:
                 directory = directory.parent
@@ -918,10 +921,17 @@ def closed_target_reason(targets):
                 ["git", "-C", str(directory), "rev-parse", "--show-toplevel"],
                 capture_output=True, encoding="utf-8", errors="replace",
             )
-            if root.returncode == 0:
-                reason = closed_milestone_reason(Path(root.stdout.strip()))
-                if reason:
-                    return reason
+            if root.returncode != 0:
+                continue
+            repo_root = Path(root.stdout.strip())
+            reason = closed_milestone_reason(repo_root)
+            if not reason:
+                continue
+            control_roots = repository_control_roots(repo_root)
+            kind = target_kind(path, working_directories, repo_root, control_roots)
+            if kind == "external":
+                continue
+            return reason
     return None
 
 
@@ -1421,9 +1431,67 @@ def shell_assignment_values(tokens):
     return values
 
 
-def unresolved_archive_expansion(command, tokens, working_directories):
-    expanded = expand_environment_parameters(command, shell_assignment_values(tokens))
-    return ARCHIVE_REFERENCE.search(expanded) is not None
+def archive_write_context(command, tokens, working_directories):
+    """Whether a shell command may write into or through an archive path."""
+    if any(working_directory_in_archive(path) for path in working_directories):
+        return True
+    assignments = shell_assignment_values(tokens)
+    write_targets = [
+        (target, directories)
+        for target, directories in shell_write_targets(tokens, working_directories)
+    ]
+    external_writes_only = False
+    if write_targets:
+        repo = repository_root()
+        external_writes_only = True
+        for path, directories in write_targets:
+            for target in dict.fromkeys(target_paths(path, directories, repo)):
+                directory = (
+                    target if target.is_dir() and not is_link_like(target) else target.parent
+                )
+                while not directory.exists() and directory != directory.parent:
+                    directory = directory.parent
+                root = subprocess.run(
+                    ["git", "-C", str(directory), "rev-parse", "--show-toplevel"],
+                    capture_output=True, encoding="utf-8", errors="replace",
+                )
+                if root.returncode != 0:
+                    external_writes_only = False
+                    break
+                repo_root = Path(root.stdout.strip())
+                control_roots = repository_control_roots(repo_root)
+                if target_kind(path, directories, repo_root, control_roots) != "external":
+                    external_writes_only = False
+                    break
+            if not external_writes_only:
+                break
+    if not external_writes_only and command_references_archive(tokens, working_directories):
+        return True
+    for target, directories in write_targets:
+        expanded = expand_environment_parameters(target, assignments)
+        if ARCHIVE_REFERENCE.search(expanded) or path_in_archive(target, directories):
+            return True
+    if write_targets:
+        classified = pipeline_target_kinds(write_targets)
+        if classified is None or not all(
+            kind == "external" for _, kind in classified[2]
+        ):
+            if ARCHIVE_REFERENCE.search(command):
+                return True
+    destructive_segments = [
+        segment
+        for segment in command_segments(tokens)
+        if command_can_destroy_files(command_invocation(segment))
+    ]
+    if destructive_segments:
+        if write_targets:
+            classified = pipeline_target_kinds(write_targets)
+            if classified is not None and all(
+                kind == "external" for _, kind in classified[2]
+            ):
+                return False
+        return ARCHIVE_REFERENCE.search(command) is not None
+    return False
 
 
 def substitution_end(command, start):
@@ -2028,6 +2096,16 @@ def bundled_helper_invocation(command, tokens, working_directories, helpers=PIPE
 
 def archive_command_is_read_only(command, tokens, archive_context=False, git_commands=ARCHIVE_READ_GIT_COMMANDS):
     if archive_context and AMBIGUOUS_SHELL_SYNTAX.search(command):
+        segments = list(command_segments(tokens))
+        if len(segments) > 1 and "|" in command and not re.search(
+            r"(?:^|[\s;])&&|[;&](?!\s*$)", command
+        ):
+            return all(
+                archive_command_is_read_only(
+                    shlex.join(segment), segment, archive_context, git_commands
+                )
+                for segment in segments
+            )
         return False
     if not archive_context:
         return True
@@ -2146,6 +2224,18 @@ def destructive_shell_invocations(tokens):
             yield from destructive_shell_invocations(wrapped)
 
 
+def closed_git_fetch(tokens):
+    """Whether a Git fetch call only updates remote-tracking refs."""
+    parsed = git_command(tokens)
+    if parsed is None:
+        return False
+    subcommand, arguments, _ = parsed
+    return subcommand == "fetch" and not any(
+        argument in {"--upload-pack", "--exec"} or argument.startswith("--upload-pack=")
+        for argument in arguments
+    )
+
+
 def closed_git_listing(tokens):
     """Whether a Git call uses only the allowed object-read or listing forms."""
     if len(tokens) < 2 or tokens[0] != "git":
@@ -2169,12 +2259,115 @@ def closed_git_listing(tokens):
     return not positionals
 
 
+def closed_milestone_reason_for_directories(directories):
+    for directory in directories:
+        result = subprocess.run(
+            ["git", "-C", directory, "rev-parse", "--show-toplevel", "--absolute-git-dir"],
+            capture_output=True, encoding="utf-8", errors="replace",
+        )
+        if result.returncode:
+            continue
+        root, _git_dir = result.stdout.splitlines()
+        reason = closed_milestone_reason(Path(root))
+        if reason:
+            return reason
+    return None
+
+
+def closed_milestone_scope_for_segment(segment, directories, helpers):
+    """Return a closed-milestone denial when this segment touches the bound worktree."""
+    metadata_closed = None
+    git = git_command(segment)
+    if git is not None:
+        subcommand, arguments, options = git
+        if options:
+            metadata_closed = metadata_closed or closed_milestone_reason(repository_root())
+        else:
+            metadata_closed = closed_milestone_reason_for_directories(directories)
+    assignments = shell_assignment_values(segment)
+    write_targets = []
+    for target, segment_directories in shell_write_targets(segment, directories):
+        expanded = expand_environment_parameters(target, assignments)
+        if expanded and expanded not in {"/dev/null", "NUL"}:
+            write_targets.append((expanded, segment_directories))
+    if write_targets:
+        return closed_target_reason(write_targets)
+    closed = metadata_closed
+    if git is None:
+        closed = closed or closed_non_git_scope(segment, directories)
+    if not closed:
+        return None
+    if closed_segment_allowed_on_milestone(segment, directories, helpers):
+        return None
+    return closed
+
+
+def closed_non_git_scope(segment, directories):
+    reason = closed_milestone_reason_for_directories(directories)
+    if not reason:
+        return None
+    invocation = command_invocation(segment)
+    if invocation is None:
+        return reason
+    executable, _ = invocation
+    if executable in {"python", "python3", "py", "node", "ruby"}:
+        return reason
+    plain = segment[:next((i for i, token in enumerate(segment) if is_redirection(token)), len(segment))]
+    if executable in ARCHIVE_READ_COMMANDS or archive_command_is_read_only(
+        shlex.join(plain), plain, True, CLOSED_READ_GIT_COMMANDS
+    ):
+        return None
+    return None
+
+
+def closed_segment_allowed_on_milestone(segment, directories, helpers):
+    invocation = command_invocation(segment)
+    if invocation is None:
+        return False
+    executable, _ = invocation
+    if executable in DIRECTORY_CHANGE_COMMANDS:
+        return True
+    plain = segment[:next((i for i, token in enumerate(segment) if is_redirection(token)), len(segment))]
+    if bundled_helper_invocation(shlex.join(plain), plain, directories, helpers):
+        return True
+    parsed = git_command(plain)
+    if parsed is not None:
+        subcommand, arguments, _ = parsed
+        checked = ["git", subcommand, *arguments]
+        if closed_git_fetch(checked) or closed_git_listing(checked):
+            return True
+        return archive_command_is_read_only(
+            shlex.join(checked), checked, True, CLOSED_READ_GIT_COMMANDS
+        )
+    if executable in {"echo", "printf"}:
+        return True
+    return archive_command_is_read_only(
+        shlex.join(plain), plain, True, CLOSED_READ_GIT_COMMANDS
+    )
+
+
 def closed_shell_execution_reason(command, tokens, working_directories):
     helpers = PIPELINE_HELPERS | {"pipeline_git.py", "status_runtime.py", "promote_lookahead.py", "pipeline_diagnose.py"}
     rest = tokens[3:] if tokens[1:2] == ["-B"] else tokens[2:]
     if rest[:1] == ["pending"]:
         helpers = helpers | {"discussion_records.py"}
-    if bundled_helper_invocation(command, tokens, working_directories, helpers):
+    segments = list(command_segments(tokens))
+    if len(segments) == 1 and bundled_helper_invocation(command, tokens, working_directories, helpers):
+        return None
+    if (
+        len(segments) > 1
+        and "|" in command
+        and not re.search(r"(?:^|[\s;])&&|[;&](?!\s*$)", command)
+        and segments[0]
+        and bundled_helper_invocation(
+            shlex.join(segments[0]), segments[0], working_directories, helpers
+        )
+        and all(
+            command_invocation(segment) is not None
+            and command_invocation(segment)[0] in ARCHIVE_READ_COMMANDS
+            for segment in segments[1:]
+        )
+    ):
         return None
     for segment, directories in segment_directories(tokens, working_directories):
         wrapped = wrapped_command_tokens(segment)
@@ -2183,38 +2376,10 @@ def closed_shell_execution_reason(command, tokens, working_directories):
             if reason:
                 return reason
             continue
-        metadata_closed = None
-        git = git_command(segment)
-        checked_segment = segment
-        if git is not None:
-            subcommand, arguments, options = git
-            checked_segment = ["git", subcommand, *arguments]
-            if options:
-                roots = []
-                for directory in directories:
-                    result = subprocess.run(
-                        ["git", *options, "rev-parse", "--show-toplevel", "--absolute-git-dir"],
-                        cwd=directory, capture_output=True, encoding="utf-8", errors="replace",
-                    )
-                    if result.returncode:
-                        raise ValueError("git target repository cannot be resolved")
-                    root, metadata = result.stdout.splitlines()
-                    roots.append(root)
-                    metadata_closed = metadata_closed or closed_milestone_reason(Path(metadata))
-                directories = roots
-        closed = metadata_closed or closed_target_reason([(".", directories)])
+        closed = closed_milestone_scope_for_segment(segment, directories, helpers)
         if not closed:
             continue
-        invocation = command_invocation(segment)
-        if invocation is None:
-            continue
-        executable, _ = invocation
-        if executable in DIRECTORY_CHANGE_COMMANDS or checked_segment == ["git", "fetch", "origin"]:
-            continue
-        plain = checked_segment[:next((i for i, token in enumerate(checked_segment) if is_redirection(token)), len(checked_segment))]
-        if executable in {"echo", "printf"} or closed_git_listing(plain) or archive_command_is_read_only(
-            shlex.join(plain), plain, True, CLOSED_READ_GIT_COMMANDS
-        ):
+        if closed_segment_allowed_on_milestone(segment, directories, helpers):
             continue
         return closed
     return None
@@ -2251,12 +2416,7 @@ def command_denial(command, working_directories, allow_destructive=True):
             reason = command_denial(inner, working_directories, allow_destructive=False)
             if reason is not None:
                 return reason
-        archive_context = (
-            any(working_directory_in_archive(path) for path in working_directories)
-            or bool(ARCHIVE_REFERENCE.search(outer))
-            or command_references_archive(tokens, working_directories)
-            or unresolved_archive_expansion(outer, tokens, working_directories)
-        )
+        archive_context = archive_write_context(outer, tokens, working_directories)
         if not archive_command_is_read_only(command, tokens, archive_context) and not (
             archive_context and bundled_helper_invocation(command, tokens, working_directories)
         ):
