@@ -11,6 +11,6 @@ State: ship/blocked
 ### P001 — <short finding title>
 
 - **Source**: `.project/review/FINAL.md`
-- **Locator**: `<SC number or gap risk row>`
-- **Evidence**: <observed result copied from the source review>
-- **Fix direction**: <concrete direction for the patch task>
+- **Locator**: <copy the full `Risk: ...` line from a gap review, or the `SC<n>` id from `FINAL.md`>
+- **Evidence**: <copy the gap review's `Found` or `FINAL.md`'s `Finding` field verbatim>
+- **Fix direction**: <copy the source's `Fix direction` field verbatim>

@@ -553,10 +553,16 @@ def _heading_block(text: str, heading: re.Match[str]) -> str:
 def _source_repair_fields(source: str, text: str, locator: str) -> Tuple[str, str]:
     if source.endswith("FINAL.md"):
         if not CRITERION_LOCATOR_PATTERN.fullmatch(locator):
-            raise HandoffError(f"{source} locator must name an SC criterion")
+            raise HandoffError(
+                f"{source} locator must be an SC<n> id; copy the id from a "
+                "criterion heading"
+            )
         heading = re.search(rf"(?m)^### {re.escape(locator)} — .+$", text)
         if not heading:
-            raise HandoffError(f"{source} does not contain locator {locator}")
+            raise HandoffError(
+                f"{source} has no criterion heading for locator {locator}; "
+                "copy an SC<n> id from a heading"
+            )
         block = _heading_block(text, heading)
         verdict = _source_field(block, "Verdict", source)
         if verdict not in {"not-met", "unverifiable"}:
@@ -564,8 +570,13 @@ def _source_repair_fields(source: str, text: str, locator: str) -> Tuple[str, st
         evidence = _source_field(block, "Finding", source)
         fix_direction = _source_field(block, "Fix direction", source)
     else:
-        if not locator.startswith("Risk: ") or locator not in text.splitlines():
-            raise HandoffError(f"{source} does not contain locator {locator}")
+        risk_lines = [line for line in text.splitlines() if line.startswith("Risk: ")]
+        if not locator.startswith("Risk: ") or locator not in risk_lines:
+            candidates = ", ".join(repr(line) for line in risk_lines) or "none found"
+            raise HandoffError(
+                f"{source} locator must equal a full 'Risk: ...' line from the "
+                f"gap review; copy one of {candidates}"
+            )
         block = _section(text, "Finding")
         evidence = _source_field(block, "Found", source)
         fix_direction = _source_field(block, "Fix direction", source)
@@ -2340,10 +2351,15 @@ def validate_patch_findings(
             source, source_text, locator
         )
         if evidence != source_evidence:
-            raise HandoffError(f"{source} locator {locator} evidence does not match its source")
+            evidence_field = "Finding" if source.endswith("FINAL.md") else "Found"
+            raise HandoffError(
+                f"{source} locator {locator} Evidence must equal the source's "
+                f"{evidence_field} field; copy it verbatim: {source_evidence!r}"
+            )
         if fix_direction != source_fix_direction:
             raise HandoffError(
-                f"{source} locator {locator} fix direction does not match its source"
+                f"{source} locator {locator} Fix direction must equal the source's "
+                f"Fix direction field; copy it verbatim: {source_fix_direction!r}"
             )
         sources.append(source)
 

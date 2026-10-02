@@ -159,7 +159,12 @@ so the position is unchanged. Then:
    then stop and do not invent a patch finding. A `not-met`,
    `unverifiable`, or blocked gap with valid evidence sets `ship/blocked`,
    writes `.project/review/PATCH-FINDINGS.md` from the patch-findings template,
-   and runs `python3 <absolute check_handoffs.py> patch --repo <absolute repo
+   copying the full `Risk: ...` line into each gap finding's Locator, its
+   `Found` field into Evidence, and its `Fix direction` field verbatim. For a
+   `FINAL.md` finding, use its `SC<n>` id as Locator and copy its `Finding` and
+   `Fix direction` fields verbatim. The patch validator requires these source
+   field values to match exactly; do not shorten or paraphrase them. Run
+   `python3 <absolute check_handoffs.py> patch --repo <absolute repo
    root>`. Present the blocked outcome, link the resolved absolute
    PATCH-FINDINGS.md path, and state that patch planning is next. The manifest
    contains exactly those FINAL.md and gap rows. When routed by an active

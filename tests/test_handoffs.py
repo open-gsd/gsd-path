@@ -599,6 +599,60 @@ State: ship/blocked
             self.assertEqual(result["findings"], ["P001", "P002"])
             self.assertEqual(result["reviewed_head"], RESEARCH_HEAD)
 
+    def test_patch_findings_explain_the_full_gap_locator_requirement(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_state(root, "ship", "blocked")
+            self.write_review_sources(root)
+            self.write_patch_findings(root)
+            patch = root / ".project/review/PATCH-FINDINGS.md"
+            patch.write_bytes(
+                patch.read_text(encoding="utf-8").replace(
+                    "`Risk: project Verify`", "`project Verify`", 1
+                ).encode("utf-8"),
+            )
+
+            with self.assertRaises(check_handoffs.HandoffError) as failure:
+                check_handoffs.validate_patch_findings(root)
+
+            message = str(failure.exception)
+            self.assertIn("full 'Risk: ...' line", message)
+            self.assertIn("Risk: project Verify", message)
+
+    def test_patch_findings_explain_exact_gap_fields_for_evidence_and_fix_direction(self) -> None:
+        source_values = {
+            "Evidence": (
+                "The project Verify risk is blocked.",
+                "The verification is blocked.",
+            ),
+            "Fix direction": (
+                "Run project Verify at the reviewed HEAD and fix the failure.",
+                "Rerun the verification.",
+            ),
+        }
+        for field, (expected, paraphrase) in source_values.items():
+            with self.subTest(field=field), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                self.write_state(root, "ship", "blocked")
+                self.write_review_sources(root)
+                self.write_patch_findings(root)
+                patch = root / ".project/review/PATCH-FINDINGS.md"
+                patch.write_bytes(
+                    patch.read_text(encoding="utf-8").replace(
+                        f"- **{field}**: {expected}",
+                        f"- **{field}**: {paraphrase}",
+                        1,
+                    ).encode("utf-8"),
+                )
+
+                with self.assertRaises(check_handoffs.HandoffError) as failure:
+                    check_handoffs.validate_patch_findings(root)
+
+                message = str(failure.exception)
+                self.assertIn(f"{field} must equal the source's", message)
+                self.assertIn("copy it verbatim", message)
+                self.assertIn(expected, message)
+
     def test_patch_findings_reject_a_source_with_a_different_reviewed_head(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
