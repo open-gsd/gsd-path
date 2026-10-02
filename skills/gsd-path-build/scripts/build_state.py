@@ -24,7 +24,7 @@ if __package__:
     )
     from .pipeline_git import task_commit_subject
     from .pipeline_state import PipelineStateError, load_state
-    from . import _common
+    from . import _common, check_handoffs
 else:
     try:
         from check_task_briefs import _frontmatter, _sections
@@ -37,6 +37,7 @@ else:
         from pipeline_git import task_commit_subject
         from pipeline_state import PipelineStateError, load_state
         import _common
+        import check_handoffs
     except ImportError:  # pragma: no cover - package imports used by tests
         from scripts.check_task_briefs import _frontmatter, _sections
         from scripts.isolation import (
@@ -47,7 +48,7 @@ else:
         )
         from scripts.pipeline_git import task_commit_subject
         from scripts.pipeline_state import PipelineStateError, load_state
-        from scripts import _common
+        from scripts import _common, check_handoffs
 
 
 DEFAULT_PROJECT_DIR = ".project"
@@ -57,6 +58,10 @@ FULL_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 # recover verdicts that count as landed, mapped to their evidence classification.
 LANDED_VERDICTS = {"recovered": "proven-landed", "attested": "attested"}
 WAVE_HEADING_RE = re.compile(r"(?m)^## Wave (?P<wave>\d+)\b.*$")
+REVIEW_VERDICT_RE = re.compile(
+    r"(?m)^Wave verdict:\s*(?P<verdict>pass|blocked)\s*(?:<!--.*?-->)?\s*$"
+)
+REVIEW_FINDINGS_HEADING = "Review findings"
 VERIFY_HEAVY_RE = re.compile(r"(?m)^Heavy:\s*(?P<value>yes|no)\s*(?:<!--.*-->)?\s*$")
 VALID_TASK_STATUSES = {"pending", "in-progress", "done", "failed", "blocked"}
 VERIFY_RESULTS = _common.VERIFY_RESULTS
@@ -88,6 +93,7 @@ class Task:
     task_file: str
     verify_heavy: bool
     repo: str = ""
+    review_findings: bool = False
 
 
 @dataclass(frozen=True)
@@ -241,6 +247,7 @@ def _parse_task(path: Path, relative_path: str, task_file: Optional[str] = None)
         task_file=task_file or relative_path,
         verify_heavy=_verify_heavy(text, label),
         repo=str(fields.get("repo") or ""),
+        review_findings=REVIEW_FINDINGS_HEADING in _sections(text),
     )
 
 
@@ -485,6 +492,36 @@ def _overlap(left: Task, right: Task) -> List[str]:
     return sorted(set(left.files) & set(right.files))
 
 
+def _blocked_wave_reviews(project: Project) -> Dict[int, int]:
+    """Return waves whose highest canonical review cycle has a blocked lens."""
+
+    review_dir = project.tasks_dir.parent / "review"
+    if review_dir.is_symlink() or not review_dir.is_dir():
+        return {}
+
+    latest: Dict[int, int] = {}
+    verdicts: Dict[Tuple[int, int], List[str]] = {}
+    for path in sorted(review_dir.iterdir()):
+        named = check_handoffs.WAVE_REVIEW_NAME.fullmatch(path.name)
+        if named is None or path.is_symlink() or not path.is_file():
+            continue
+        wave, cycle = int(named.group("wave")), int(named.group("cycle"))
+        latest[wave] = max(latest.get(wave, 0), cycle)
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        verdict = REVIEW_VERDICT_RE.search(text)
+        if verdict is not None:
+            verdicts.setdefault((wave, cycle), []).append(verdict.group("verdict"))
+
+    return {
+        wave: cycle
+        for wave, cycle in latest.items()
+        if "blocked" in verdicts.get((wave, cycle), [])
+    }
+
+
 def ready(repo: str, project_dir: str = DEFAULT_PROJECT_DIR, *,
           allow_done: bool = False) -> Dict[str, object]:
     """Return task readiness, optionally accepting build/done for completion checks."""
@@ -494,6 +531,39 @@ def ready(repo: str, project_dir: str = DEFAULT_PROJECT_DIR, *,
     by_id = {task.task_id: task for task in project.tasks}
     unfinished_waves = sorted({task.wave for task in project.tasks if task.status != "done"})
     current_wave = unfinished_waves[0] if unfinished_waves else None
+    blocked_reviews = _blocked_wave_reviews(project)
+    blocked_wave = min(
+        (
+            wave
+            for wave in blocked_reviews
+            if (current_wave is None or wave < current_wave)
+            and any(task.wave == wave for task in project.tasks)
+            and all(task.status == "done" for task in project.tasks if task.wave == wave)
+        ),
+        default=None,
+    )
+    repair_for_wave: Optional[int] = None
+    blocked_review: Optional[Dict[str, object]] = None
+    if blocked_wave is not None:
+        source_ids = {task.task_id for task in project.tasks if task.wave == blocked_wave}
+        repairs = [
+            task
+            for task in project.tasks
+            if task.status != "done"
+            and task.wave > blocked_wave
+            and task.review_findings
+            and source_ids.intersection(task.deps)
+        ]
+        if repairs:
+            repair_for_wave = blocked_wave
+            current_wave = min(task.wave for task in repairs)
+        else:
+            current_wave = blocked_wave
+            blocked_review = {
+                "wave": blocked_wave,
+                "cycle": blocked_reviews[blocked_wave],
+                "waiting_waves": unfinished_waves,
+            }
     active = [task for task in project.tasks if task.status == "in-progress"]
     if current_wave is not None and any(task.wave != current_wave for task in active):
         task = next(task for task in active if task.wave != current_wave)
@@ -536,7 +606,7 @@ def ready(repo: str, project_dir: str = DEFAULT_PROJECT_DIR, *,
                 )
 
     wave_active = any(task.wave == current_wave for task in active)
-    if current_wave is not None and not selectable and not wave_active:
+    if current_wave is not None and blocked_review is None and not selectable and not wave_active:
         stalled = [
             {
                 "id": task.task_id,
@@ -556,11 +626,17 @@ def ready(repo: str, project_dir: str = DEFAULT_PROJECT_DIR, *,
             {"wave": current_wave, "tasks": stalled},
         )
 
+    typed: Dict[str, object] = {}
+    if repair_for_wave is not None:
+        typed["repair_for_wave"] = repair_for_wave
+    if blocked_review is not None:
+        typed["blocked_review"] = blocked_review
     return {
         "command": "ready",
         "branch": project.branch,
         "head": project.head,
         "current_wave": current_wave,
+        **typed,
         "ready": [
             {
                 "id": task.task_id,

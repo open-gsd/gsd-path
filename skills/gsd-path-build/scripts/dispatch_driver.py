@@ -1083,6 +1083,24 @@ class Round:
         ready = build_state.ready(str(self.primary), self.project_dir)
         self.receipt["steps"].append({"script": "build_state.py ready", "result": ready})
         wave = ready["current_wave"]
+        blocked_review = ready.get("blocked_review")
+        if blocked_review:
+            waiting_waves = blocked_review["waiting_waves"]
+            if self.receipt["wave"] in waiting_waves:
+                raise DriverStop(
+                    f"wave {self.receipt['wave']} has unfinished tasks but wave "
+                    f"{blocked_review['wave']} review cycle {blocked_review['cycle']} "
+                    "is blocked; it must pass before dispatch")
+            self.checkpoint_bookkeeping()
+            return not in_flight
+        repair_for_wave = ready.get("repair_for_wave")
+        if repair_for_wave is not None and self.receipt["wave"] != wave:
+            if self.receipt["wave"] > repair_for_wave:
+                raise DriverStop(
+                    f"wave {self.receipt['wave']} is waiting on blocked wave {repair_for_wave}; "
+                    f"dispatch repair wave {wave} first")
+            self.checkpoint_bookkeeping()
+            return not in_flight
         if wave is not None and wave < self.receipt["wave"]:
             raise DriverStop(f"wave {wave} is still unfinished; run round --wave {wave} first")
         self.checkpoint_bookkeeping()

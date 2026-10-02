@@ -11,7 +11,7 @@ import tempfile
 import textwrap
 import time
 import unittest
-from contextlib import contextmanager, redirect_stdout
+from contextlib import ExitStack, contextmanager, redirect_stdout
 from pathlib import Path
 from typing import Iterator
 from unittest import mock
@@ -273,6 +273,122 @@ class DispatchDriverTests(unittest.TestCase):
 
     def branches(self, root: Path) -> list:
         return run_git(root, "for-each-ref", "--format=%(refname:short)", "refs/heads/").stdout.split()
+
+    def bare_round(self, wave: int) -> dispatch_driver.Round:
+        current = dispatch_driver.Round.__new__(dispatch_driver.Round)
+        current.primary = self.root
+        current.options = argparse.Namespace(
+            project_dir=".project",
+            wave=wave,
+            capacity=None,
+            max_attempts=3,
+            child_command="fixture",
+        )
+        current.project_dir = ".project"
+        current.root = self.root
+        current.proven = {}
+        current.budgeted = False
+        current.receipt = {
+            "status": None,
+            "wave": wave,
+            "landed": [],
+            "dispatched": [],
+            "in_flight": [],
+            "questions": [],
+            "blocked": [],
+            "steps": [],
+        }
+        return current
+
+    def test_dispatch_blocks_requested_original_wave_while_repair_is_pending(self) -> None:
+        current = self.bare_round(2)
+        ready = {
+            "current_wave": 4,
+            "repair_for_wave": 1,
+            "ready": [],
+        }
+        with ExitStack() as patches:
+            patches.enter_context(
+                mock.patch.object(dispatch_driver.build_state, "ready", return_value=ready)
+            )
+            patches.enter_context(mock.patch.object(current, "in_flight_states", return_value=[]))
+            checkpoint = patches.enter_context(
+                mock.patch.object(current, "checkpoint_bookkeeping")
+            )
+            with self.assertRaises(dispatch_driver.DriverStop) as raised:
+                current.dispatch_ready()
+
+        self.assertIn("waiting on blocked wave 1", str(raised.exception))
+        checkpoint.assert_not_called()
+
+    def test_dispatch_accepts_and_launches_selected_repair_wave(self) -> None:
+        current = self.bare_round(4)
+        ready = {
+            "current_wave": 4,
+            "repair_for_wave": 1,
+            "ready": [{
+                "id": "T003",
+                "title": "Repair finding",
+                "wave": 4,
+                "status": "pending",
+                "deps": ["T001"],
+                "files": ["src/t003.py"],
+                "task_file": ".project/tasks/T003-fix.md",
+                "verify_heavy": False,
+            }],
+        }
+
+        def run_step(action, *args):
+            if action == "prepare-task":
+                return [{"result": {
+                    "worktree": str(self.root / "repair-worktree"),
+                    "task_branch": "gsd-path-task/T003",
+                    "mode": "parallel",
+                }}]
+            return []
+
+        with ExitStack() as patches:
+            patches.enter_context(
+                mock.patch.object(dispatch_driver.build_state, "ready", return_value=ready)
+            )
+            patches.enter_context(mock.patch.object(current, "in_flight_states", return_value=[]))
+            patches.enter_context(mock.patch.object(current, "checkpoint_bookkeeping"))
+            patches.enter_context(mock.patch.object(current, "admit"))
+            patches.enter_context(mock.patch.object(dispatch_driver, "attempts_used", return_value=0))
+            patches.enter_context(mock.patch.object(dispatch_driver, "retain_selection", return_value={}))
+            patches.enter_context(
+                mock.patch.object(dispatch_driver, "selected_command", return_value=({}, {"model": "fixture"}))
+            )
+            patches.enter_context(
+                mock.patch.object(dispatch_driver.isolation, "current_sha", return_value="a" * 40)
+            )
+            patches.enter_context(mock.patch.object(current, "runner", side_effect=run_step))
+            patches.enter_context(mock.patch.object(dispatch_driver.isolation, "activate_task"))
+            launch = patches.enter_context(mock.patch.object(current, "launch"))
+            current.dispatch_ready()
+
+        self.assertEqual(launch.call_args.args[0]["task_id"], "T003")
+        self.assertEqual(launch.call_args.args[0]["wave"], 4)
+
+    def test_completed_repair_round_stops_cleanly_while_original_wave_waits(self) -> None:
+        current = self.bare_round(4)
+        ready = {
+            "current_wave": 1,
+            "blocked_review": {"wave": 1, "cycle": 1, "waiting_waves": [2]},
+            "ready": [],
+        }
+        with ExitStack() as patches:
+            patches.enter_context(
+                mock.patch.object(dispatch_driver.build_state, "ready", return_value=ready)
+            )
+            patches.enter_context(mock.patch.object(current, "in_flight_states", return_value=[]))
+            checkpoint = patches.enter_context(
+                mock.patch.object(current, "checkpoint_bookkeeping")
+            )
+            result = current.dispatch_ready()
+
+        self.assertTrue(result)
+        checkpoint.assert_called_once()
 
     def test_mutating_commands_refuse_a_held_repository_lock(self) -> None:
         root = self.root

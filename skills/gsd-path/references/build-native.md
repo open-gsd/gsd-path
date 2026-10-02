@@ -136,6 +136,13 @@ dispatch contract and perform steps 1–5 by hand.
    even while unrelated tasks still run, so rerun `ready` after each landing.
    A `NEEDS-ORCHESTRATOR` block stays unselectable until its `Orchestrator
    answer` is recorded in the task Log and the task is back to `pending`.
+   An all-done wave whose latest canonical review cycle has any blocked lens
+   gates later waves: `ready` selects unfinished later tasks with a `## Review
+   findings` section that depend on it, sets `current_wave` to the earliest
+   repair wave, and adds `repair_for_wave` with the source wave. When no such
+   repair remains, `ready` returns no tasks and adds `blocked_review` (`wave`,
+   `cycle`, `waiting_waves`); a later passing canonical review cycle releases
+   the waiting waves.
    Its typed errors are the recovery rule:
    - `task-recovery-required`: for each listed failed or blocked task run
      `python3 <absolute build_state.py> reconcile --repo <absolute primary>
