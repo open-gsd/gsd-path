@@ -17,6 +17,7 @@ import os
 import re
 import shutil
 import sys
+from datetime import date
 
 # Runtime helpers must not modify their immutable installation.
 sys.dont_write_bytecode = True
@@ -106,6 +107,16 @@ KINDS = ("checkpoint", "task", "member-task", "uncommitted-archive", "lookahead"
 PROMOTION_PREFIX = "router: promote lookahead milestone "
 ABANDON_PREFIX = "build: abandon milestone "
 INTEGRATE_PREFIX = "integrate: "
+SHIP_LOG_ONLY_LINE = re.compile(
+    r"- (?P<date>\d{4}-\d{2}-\d{2}) — ship — (?P<event>[^\r\n]+)\n\Z"
+)
+SHIPMENT_RECORD_LINE = re.compile(
+    r"- (?P<date>\d{4}-\d{2}-\d{2}) — shipped — (?P<event>[^\r\n]+)\n\Z"
+)
+SHIPMENT_EVENTS = {
+    "archive preflight passed; shipment recorded",
+    "archive preflight passed; shipment recorded; program complete",
+}
 
 
 class UndoError(RuntimeError):
@@ -375,6 +386,80 @@ def pending_transaction(repo: Path) -> Optional[dict[str, object]]:
         raise UndoError(str(error)) from error
 
 
+def _valid_state_event_line(line: str, phase: str) -> bool:
+    pattern = SHIP_LOG_ONLY_LINE if phase == "ship" else SHIPMENT_RECORD_LINE
+    match = pattern.fullmatch(line)
+    if match is None:
+        return False
+    try:
+        event_date = date.fromisoformat(match.group("date"))
+    except ValueError:
+        return False
+    event = match.group("event")
+    return event_date.isoformat() == match.group("date") and event == " ".join(event.split())
+
+
+def _owned_ship_log_events(
+    prepared_state: str,
+    current_state: str,
+    phase: object,
+    status: object,
+) -> Optional[str]:
+    """Return only ship log lines appended around a helper-owned archive event.
+
+    The prepared text must remain byte-for-byte unchanged. For shipped/done,
+    record-shipment changes only phase and status before appending its one
+    generated shipment event, so validate that exact prefix and event shape.
+    """
+    if (phase, status) == ("ship", "active"):
+        if current_state == prepared_state:
+            return ""
+        if not current_state.startswith(prepared_state):
+            return None
+        suffix = current_state[len(prepared_state):]
+        separator = "" if prepared_state.endswith("\n") else "\n"
+        if separator:
+            if not suffix.startswith(separator):
+                return None
+            suffix = suffix[len(separator):]
+        lines = suffix.splitlines(keepends=True)
+        if not lines or "".join(lines) != suffix:
+            return None
+        if not all(_valid_state_event_line(line, "ship") for line in lines):
+            return None
+        return separator + suffix
+
+    if (phase, status) != ("shipped", "done"):
+        return None
+    try:
+        shipped_prefix = pipeline_state._set_frontmatter(
+            prepared_state,
+            {"phase": "shipped", "status": "done"},
+        )
+    except PipelineStateError:
+        return None
+    if not current_state.startswith(shipped_prefix):
+        return None
+    suffix = current_state[len(shipped_prefix):]
+    separator = "" if shipped_prefix.endswith("\n") else "\n"
+    if separator:
+        if not suffix.startswith(separator):
+            return None
+        suffix = suffix[len(separator):]
+    lines = suffix.splitlines(keepends=True)
+    if not lines or "".join(lines) != suffix:
+        return None
+    shipment_event = lines[-1]
+    if not _valid_state_event_line(shipment_event, "shipped"):
+        return None
+    if SHIPMENT_RECORD_LINE.fullmatch(shipment_event).group("event") not in SHIPMENT_EVENTS:
+        return None
+    ship_events = lines[:-1]
+    if not all(_valid_state_event_line(line, "ship") for line in ship_events):
+        return None
+    return separator + "".join(ship_events) if ship_events else ""
+
+
 def _archive_metadata_error(
     repo: Path,
     state_fields: dict[str, object],
@@ -481,10 +566,14 @@ def _archive_metadata_error(
         "archive",
         configured,
     )
-    current_state = (repo / ".project" / "STATE.md").read_text(encoding="utf-8")
+    current_state = (repo / ".project" / "STATE.md").read_bytes().decode("utf-8")
     phase = state_fields.get("phase")
     status = state_fields.get("status")
+    ship_events = _owned_ship_log_events(prepared_state, current_state, phase, status)
     if (phase, status) == ("ship", "active"):
+        if ship_events is None:
+            return "archive undo found unowned STATE.md changes"
+        prepared_state += ship_events
         if current_state != prepared_state:
             return "archive undo found unowned STATE.md changes"
         if ".project/ROADMAP.md" in dirty:
@@ -492,14 +581,13 @@ def _archive_metadata_error(
         return None
     if (phase, status) != ("shipped", "done"):
         return "archive undo requires ship/active or shipped/done"
+    if ship_events is None:
+        return "archive undo found unowned shipment STATE.md changes"
+    prepared_state += ship_events
 
     prepared = _state_from_text(prepared_state, "prepared archive STATE.md")
-    events = (
-        "archive preflight passed; shipment recorded",
-        "archive preflight passed; shipment recorded; program complete",
-    )
     rendered_states = []
-    for event in events:
+    for event in SHIPMENT_EVENTS:
         try:
             _, _, rendered = _render_transition(
                 prepared,

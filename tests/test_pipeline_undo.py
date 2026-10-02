@@ -53,6 +53,61 @@ def init_repo(root: Path, branch: str = "gsd-path/M001") -> Path:
     return repo
 
 
+SHIP_LOG_EVENT = (
+    "- 2026-10-02 — ship — final gate passed; shipping approval pending\n"
+)
+SECOND_SHIP_LOG_EVENT = (
+    "- 2026-10-02 — ship — final gate re-run; shipping approval pending\n"
+)
+
+
+def prepare_uncommitted_archive(
+    repo: Path,
+    ship_events: tuple[str, ...] = (),
+    *,
+    shipped: bool = False,
+    edit_prepared_prefix: bool = False,
+    no_terminal_newline: bool = False,
+) -> tuple[str, str, str]:
+    project = repo / ".project"
+    intent = project / "intent"
+    intent.mkdir(parents=True)
+    head_state = state_text(phase="ship", status="active")
+    if no_terminal_newline:
+        head_state = head_state.rstrip("\n")
+    state_path = project / "STATE.md"
+    state_path.write_bytes(head_state.encode("utf-8"))
+    (intent / "INTENT.md").write_bytes("# Intent — first\n".encode("utf-8"))
+    run_git(repo, "add", ".project")
+    run_git(repo, "commit", "-m", "fixture: ship active")
+    head = run_git(repo, "rev-parse", "HEAD").stdout.strip()
+
+    archive = ".project/archive/001-first"
+    archived_intent = repo / archive / "intent" / "INTENT.md"
+    archived_intent.parent.mkdir(parents=True)
+    (intent / "INTENT.md").replace(archived_intent)
+    intent.rmdir()
+    prepared_state = archive_milestone.set_frontmatter_value(
+        head_state,
+        "archive",
+        archive,
+    )
+    if edit_prepared_prefix:
+        prepared_state = prepared_state.replace(
+            "# Project State",
+            "# User-edited Project State",
+            1,
+        )
+    state_path.write_bytes((prepared_state + "".join(ship_events)).encode("utf-8"))
+    if shipped:
+        pipeline_state.record_shipment(
+            repo,
+            archive,
+            "archive preflight passed; shipment recorded",
+        )
+    return head, archive, head_state
+
+
 def task_text() -> str:
     return (
         "---\n"
@@ -511,6 +566,158 @@ Waves checked: 1
 
             self.assertTrue((intent / "INTENT.md").is_file())
             self.assertFalse(archive_root.exists())
+
+    def test_uncommitted_archive_accepts_complete_ship_log_events(self) -> None:
+        event_sets = (
+            (),
+            (SHIP_LOG_EVENT,),
+            (SHIP_LOG_EVENT, SECOND_SHIP_LOG_EVENT),
+        )
+        for shipped in (False, True):
+            for events in event_sets:
+                with self.subTest(shipped=shipped, events=events), tempfile.TemporaryDirectory() as tmp:
+                    repo = init_repo(Path(tmp))
+                    head, archive, head_state = prepare_uncommitted_archive(
+                        repo,
+                        events,
+                        shipped=shipped,
+                    )
+
+                    previewed = pipeline_undo.preview(repo)
+
+                    self.assertEqual(previewed["target"]["kind"], "uncommitted-archive")
+                    self.assertEqual(previewed["target"]["head"], head)
+                    applied = pipeline_undo.apply_undo(
+                        repo,
+                        "uncommitted-archive",
+                        head,
+                    )
+
+                    self.assertEqual(applied["status"], "applied")
+                    self.assertEqual(
+                        (repo / ".project" / "STATE.md").read_text(encoding="utf-8"),
+                        head_state,
+                    )
+                    self.assertTrue((repo / ".project" / "intent" / "INTENT.md").is_file())
+                    self.assertFalse((repo / archive).exists())
+                    self.assertEqual(run_git(repo, "status", "--porcelain").stdout, "")
+
+    def test_uncommitted_archive_accepts_shipment_without_added_ship_event_without_final_newline(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = init_repo(Path(tmp))
+            head, archive, head_state = prepare_uncommitted_archive(
+                repo,
+                shipped=True,
+                no_terminal_newline=True,
+            )
+
+            previewed = pipeline_undo.preview(repo)
+
+            self.assertEqual(previewed["target"]["kind"], "uncommitted-archive")
+            applied = pipeline_undo.apply_undo(
+                repo,
+                "uncommitted-archive",
+                head,
+            )
+
+            self.assertEqual(applied["status"], "applied")
+            self.assertEqual(
+                (repo / ".project" / "STATE.md").read_text(encoding="utf-8"),
+                head_state,
+            )
+            self.assertFalse((repo / archive).exists())
+
+    def test_uncommitted_archive_rejects_unowned_state_suffixes_without_mutation(self) -> None:
+        invalid_events = {
+            "invalid_date": "- 2026-02-30 — ship — final gate passed\n",
+            "other_phase": "- 2026-10-02 — build — final gate passed\n",
+            "stray_text": "unowned state text\n",
+            "crlf": "- 2026-10-02 — ship — final gate passed\r\n",
+            "unnormalized_event": "- 2026-10-02 — ship —  final gate passed  \n",
+        }
+        for shipped in (False, True):
+            for case, event in invalid_events.items():
+                with self.subTest(shipped=shipped, case=case), tempfile.TemporaryDirectory() as tmp:
+                    repo = init_repo(Path(tmp))
+                    head, archive, _ = prepare_uncommitted_archive(
+                        repo,
+                        (event,),
+                        shipped=shipped,
+                    )
+                    state_path = repo / ".project" / "STATE.md"
+                    if shipped and case == "crlf":
+                        current = state_path.read_bytes()
+                        state_path.write_bytes(
+                            current.replace(
+                                event.replace("\r\n", "\n").encode("utf-8"),
+                                event.encode("utf-8"),
+                                1,
+                            )
+                        )
+                    state_before = state_path.read_bytes()
+
+                    previewed = pipeline_undo.preview(repo)
+
+                    self.assertIsNone(previewed["target"]["kind"])
+                    self.assertTrue(
+                        any("STATE.md changes" in item for item in previewed["target"]["blocked"]),
+                        previewed["target"]["blocked"],
+                    )
+                    with self.assertRaisesRegex(pipeline_undo.UndoError, "STATE.md changes"):
+                        pipeline_undo.apply_undo(repo, "uncommitted-archive", head)
+                    self.assertEqual(state_path.read_bytes(), state_before)
+                    self.assertTrue((repo / archive / "intent" / "INTENT.md").is_file())
+                    self.assertFalse((repo / ".project" / "intent" / "INTENT.md").exists())
+
+        for shipped in (False, True):
+            with self.subTest(shipped=shipped, case="unterminated"), tempfile.TemporaryDirectory() as tmp:
+                repo = init_repo(Path(tmp))
+                head, archive, _ = prepare_uncommitted_archive(
+                    repo,
+                    () if shipped else (SHIP_LOG_EVENT.rstrip("\n"),),
+                    shipped=shipped,
+                )
+                state_path = repo / ".project" / "STATE.md"
+                if shipped:
+                    with state_path.open("ab") as state_file:
+                        state_file.write(SHIP_LOG_EVENT.rstrip("\n").encode("utf-8"))
+                state_before = state_path.read_bytes()
+
+                previewed = pipeline_undo.preview(repo)
+
+                self.assertIsNone(previewed["target"]["kind"])
+                self.assertTrue(
+                    any("STATE.md changes" in item for item in previewed["target"]["blocked"]),
+                    previewed["target"]["blocked"],
+                )
+                with self.assertRaisesRegex(pipeline_undo.UndoError, "STATE.md changes"):
+                    pipeline_undo.apply_undo(repo, "uncommitted-archive", head)
+                self.assertEqual(state_path.read_bytes(), state_before)
+                self.assertTrue((repo / archive / "intent" / "INTENT.md").is_file())
+
+        for shipped in (False, True):
+            with self.subTest(shipped=shipped, case="prepared_prefix_edit"), tempfile.TemporaryDirectory() as tmp:
+                repo = init_repo(Path(tmp))
+                head, archive, _ = prepare_uncommitted_archive(
+                    repo,
+                    (SHIP_LOG_EVENT,),
+                    shipped=shipped,
+                    edit_prepared_prefix=True,
+                )
+                state_path = repo / ".project" / "STATE.md"
+                state_before = state_path.read_bytes()
+
+                previewed = pipeline_undo.preview(repo)
+
+                self.assertIsNone(previewed["target"]["kind"])
+                self.assertTrue(
+                    any("STATE.md changes" in item for item in previewed["target"]["blocked"]),
+                    previewed["target"]["blocked"],
+                )
+                with self.assertRaisesRegex(pipeline_undo.UndoError, "STATE.md changes"):
+                    pipeline_undo.apply_undo(repo, "uncommitted-archive", head)
+                self.assertEqual(state_path.read_bytes(), state_before)
+                self.assertTrue((repo / archive / "intent" / "INTENT.md").is_file())
 
     def test_uncommitted_archive_blocks_unowned_project_edits(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
