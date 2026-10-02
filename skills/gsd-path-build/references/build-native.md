@@ -24,6 +24,14 @@ python3 <absolute dispatch_driver.py> round --repo <absolute primary> --wave <N>
   [--child-timeout <owner seconds>]
 ```
 
+Use the absolute `dispatch_driver.py` from the active installed
+`gsd-path-build` skill when orchestrating a consuming project's build; that
+copy resolves role briefs and templates from its own skill bundle. The
+repository or npm package also supports the top-level `scripts/dispatch_driver.py`:
+when a default is not beside that script, it resolves from the shipped
+`skills/gsd-path` bundle. Explicit `--role-brief`, `--task-template`, and
+`--template` paths override those defaults and must name existing files.
+
 `round` owns the entry transition described in Preconditions and branch
 binding, checkpointed as `build: start milestone`, and sets `build/blocked`
 on a dependency deadlock or a blocked
