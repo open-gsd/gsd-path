@@ -77,7 +77,9 @@
     "skills/",
     "platforms/",
     "AGENTS.md",
-    "WORKFLOW.md"
+    "WORKFLOW.md",
+    "!**/__pycache__/**",
+    "!**/*.pyc"
   ],
   "engines": {
     "node": ">=18.17"

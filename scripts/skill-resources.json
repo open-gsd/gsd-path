@@ -97,7 +97,9 @@
     "skills/",
     "platforms/",
     "AGENTS.md",
-    "WORKFLOW.md"
+    "WORKFLOW.md",
+    "!**/__pycache__/**",
+    "!**/*.pyc"
   ],
   "phase_resources": {
     "gsd-path-build": [

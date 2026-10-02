@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync, execSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -56,6 +56,11 @@ test("npm package includes the pipeline helpers", () => {
   const [{ files }] = JSON.parse(output);
   const packagedPaths = new Set(files.map((entry) => entry.path));
   const manifest = resourceManifest();
+  const forbiddenPaths = [...packagedPaths].filter(
+    (entry) => entry.split("/").includes("__pycache__") || entry.endsWith(".pyc")
+  );
+
+  assert.deepEqual(forbiddenPaths, []);
 
   for (const helper of [
     "bootstrap_repository.py",
@@ -77,6 +82,61 @@ test("npm package includes the pipeline helpers", () => {
   for (const [, target] of manifest.script_targets) {
     assert.ok(packagedPaths.has(target), `missing packaged helper: ${target}`);
   }
+});
+
+test("npm tarball excludes ignored cache contents and Python bytecode beneath whitelisted skills", (context) => {
+  const scratch = mkdtempSync(path.join(tmpdir(), "gsd-path-package-bytecode-"));
+  const destination = path.join(scratch, "dist");
+  mkdirSync(destination);
+  context.after(() => rmSync(scratch, { recursive: true, force: true }));
+
+  const packageJson = JSON.parse(readFileSync(path.join(projectRoot, "package.json"), "utf8"));
+  assert.ok(packageJson.files.includes("skills/"));
+  writeFileSync(
+    path.join(scratch, "package.json"),
+    `${JSON.stringify({ name: packageJson.name, version: packageJson.version, files: packageJson.files }, null, 2)}\n`
+  );
+  writeFileSync(
+    path.join(scratch, ".gitignore"),
+    `${readFileSync(path.join(projectRoot, ".gitignore"), "utf8")}*.pyc\n`
+  );
+
+  const skillRoot = "skills/gsd-path-build";
+  const ordinaryFile = `${skillRoot}/SKILL.md`;
+  const ignoredArtifacts = [
+    `${skillRoot}/__pycache__/publisher.cpython-312.pyc`,
+    `${skillRoot}/__pycache__/publisher-cache-sentinel.txt`,
+    `${skillRoot}/references/__pycache__/nested.cpython-312.pyc`,
+    `${skillRoot}/scripts/publisher-helper.pyc`,
+  ];
+  for (const relativePath of [ordinaryFile, ...ignoredArtifacts]) {
+    const absolutePath = path.join(scratch, relativePath);
+    mkdirSync(path.dirname(absolutePath), { recursive: true });
+    writeFileSync(absolutePath, "fixture");
+  }
+
+  execFileSync("git", ["init", "--quiet", "--initial-branch=main"], { cwd: scratch });
+  const ignoredPaths = execFileSync("git", ["check-ignore", ...ignoredArtifacts], {
+    cwd: scratch,
+    encoding: "utf8",
+  }).trim().split(/\r?\n/);
+  assert.deepEqual(ignoredPaths, ignoredArtifacts);
+
+  const output = npm(
+    ["pack", "--ignore-scripts", "--json", "--pack-destination", destination],
+    { cwd: scratch, encoding: "utf8" }
+  );
+  const [{ filename }] = JSON.parse(output);
+  const entries = execFileSync("tar", ["-tzf", filename], {
+    cwd: destination,
+    encoding: "utf8",
+  }).trim().split(/\r?\n/);
+  const packagedPaths = entries.map((entry) => entry.replace(/^package\//, ""));
+  assert.ok(packagedPaths.includes(ordinaryFile));
+  assert.deepEqual(
+    packagedPaths.filter((entry) => entry.split("/").includes("__pycache__") || entry.endsWith(".pyc")),
+    []
+  );
 });
 
 test("packed Python installer starts with only packaged files", (context) => {
