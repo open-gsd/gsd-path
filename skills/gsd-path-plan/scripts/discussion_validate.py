@@ -1115,6 +1115,12 @@ def review_cycle_counts(archive: Path) -> Sequence[int]:
                 )
 
         last_cycle = max(cycles)
+        for cycle, verdicts in wave_verdicts.items():
+            if cycle != last_cycle and "blocked" not in verdicts:
+                raise ArchiveError(
+                    f"superseded review cycle {cycle} for wave {wave} "
+                    "must include a blocked Wave verdict"
+                )
         if any(verdict != "pass" for verdict in wave_verdicts[last_cycle]):
             raise ArchiveError(f"last review cycle for wave {wave} did not pass")
         if any(task_verdict != "pass" for task_verdict in task_verdicts[last_cycle]):
