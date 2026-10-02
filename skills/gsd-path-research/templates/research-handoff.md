@@ -21,5 +21,13 @@ Intent: `.project/intent/INTENT.md`
 ## Question assignments
 
 <!-- Copy every [RESEARCH] question from INTENT.md exactly once. Use `- none`
-     only when INTENT.md has no [RESEARCH] questions. -->
+     only when INTENT.md has no [RESEARCH] questions. The question is a
+     CommonMark code span: choose a fence length not used by a backtick run in
+     the question (a longer fence is usually easiest), with one space of
+     padding on each side. For example:
+     - `` [RESEARCH] Does `Widget` match the pinned `sample.json` fixture? `` → `domain`
+     A question that ends in a backtick also needs padding, as in:
+     - `` [RESEARCH] Does the label end with `Widget`?` `` → `domain`
+     After removing the fence and CommonMark padding, the text must equal the
+     INTENT question exactly. -->
 - `[RESEARCH] <question copied from INTENT.md>` → `domain`
