@@ -206,6 +206,7 @@ ARCHIVE_READ_COMMANDS = frozenset(
         "tail",
         "grep",
         "rg",
+        "sed",
         "ls",
         "stat",
         "wc",
@@ -240,10 +241,6 @@ SUBSTITUTION_PLACEHOLDER_SYNTAX = re.compile(
     r"\$\{" + SUBSTITUTION_PLACEHOLDER + r"(\d+)\}"
 )
 LINE_CONTINUATION = re.compile(r"(?<!\\)((?:\\\\)*)\\\r?\n")
-HEREDOC_PATTERN = re.compile(
-    r"<<(?P<dash>-?)\s*(?:'(?P<single>[^']+)'|\"(?P<double>[^\"]+)\""
-    r"|\\?(?P<bare>[A-Za-z_][A-Za-z0-9_]*))"
-)
 SHELL_WRITE_REDIRECTION_CHARS = frozenset("<>&|")
 SHELL_PARAMETER_SYNTAX = re.compile(
     r"\$(?:[A-Za-z_][A-Za-z0-9_]*|[0-9]+|[-*@#?$!]|\{[^}\r\n]+\})"
@@ -306,6 +303,8 @@ MISSING_COMMAND_STRING_REASON = "{executable} {option} lacks a command string"
 UNVALIDATED_EXECUTION_REASONS = {
     ".": SCRIPT_FILE_REASON,
     "source": SCRIPT_FILE_REASON,
+    "readonly": "readonly changes shell assignment behavior the guard cannot validate; "
+    "avoid readonly declarations",
     "start": "start launches a detached process the guard cannot inspect; run the program directly",
     "setenv": ENV_BUILTIN_REASON,
     "unsetenv": ENV_BUILTIN_REASON,
@@ -370,6 +369,26 @@ SHELL_WRITE_COMMANDS = DESTRUCTIVE_SHELL_COMMANDS | frozenset(
     }
 )
 IN_PLACE_EDITORS = frozenset({"perl", "sed"})
+SED_SAFE_OPTIONS = frozenset(
+    {
+        "--debug",
+        "--help",
+        "--null-data",
+        "--posix",
+        "--quiet",
+        "--regexp-extended",
+        "--sandbox",
+        "--separate",
+        "--silent",
+        "--unbuffered",
+        "--version",
+        "-E",
+        "-n",
+        "-r",
+        "-s",
+        "-u",
+    }
+)
 FIND_EXECUTION_ACTIONS = frozenset({"-exec", "-execdir", "-ok", "-okdir"})
 SHELL_CONTROL_WORDS = frozenset(
     {
@@ -1213,19 +1232,16 @@ def literal_destructive_operand(operand):
     return literal
 
 
-def command_references_archive(tokens, working_directories):
-    for segment, directories in segment_directories(tokens, working_directories):
-        invocation = command_invocation(segment)
-        ancestors = command_can_destroy_files(invocation)
-        operands = segment
-        if ancestors:
-            operands = [literal_destructive_operand(operand) for operand in invocation[1]]
-        if any(path_in_archive(operand, directories, ancestors) for operand in operands):
-            return True
-        wrapped = wrapped_command_tokens(segment, expand_parameters=False)
-        if wrapped is not None and command_references_archive(wrapped, directories):
-            return True
-    return False
+def segment_references_archive(segment, directories, assignments=None):
+    invocation = command_invocation(segment)
+    ancestors = command_can_destroy_files(invocation)
+    operands = [expand_environment_parameters(token, assignments) for token in segment]
+    if ancestors:
+        resolved = command_invocation(operands)
+        operands = [literal_destructive_operand(operand) for operand in resolved[1]]
+    if any(path_in_archive(operand, directories, ancestors) for operand in operands):
+        return True
+    return unresolved_archive_expansion(" ".join(segment), assignments)
 
 
 def copy_destinations(arguments, directories, assignments=None):
@@ -1296,37 +1312,222 @@ def copy_destinations(arguments, directories, assignments=None):
                         yield str(output / entry.relative_to(source_path))
 
 
+def sed_delimited_end(script, index, delimiter):
+    while index < len(script):
+        if script[index] == "\\":
+            index += 2
+        elif script[index] == delimiter:
+            return index + 1
+        else:
+            index += 1
+    return None
+
+
+def sed_address_end(script, index):
+    if index >= len(script):
+        return index
+    if script[index].isdigit():
+        while index < len(script) and script[index].isdigit():
+            index += 1
+        if index < len(script) and script[index] == "~":
+            index += 1
+            while index < len(script) and script[index].isdigit():
+                index += 1
+    elif script[index] == "$":
+        index += 1
+    elif script[index] == "/":
+        end = sed_delimited_end(script, index + 1, "/")
+        return len(script) if end is None else end
+    elif script[index] == "\\" and index + 1 < len(script):
+        end = sed_delimited_end(script, index + 2, script[index + 1])
+        return len(script) if end is None else end
+    return index
+
+
+def sed_script_is_read_only(script):
+    """Accept only sed scripts whose commands cannot write or execute."""
+    # Sed blocks require recursively validating their nested command grammar;
+    # reject them until that grammar is modeled explicitly.
+    safe_commands = frozenset("aAcCdDgGhHiIlLnNpPqQrstTxv=:")
+    index = 0
+    while index < len(script):
+        while index < len(script) and (script[index].isspace() or script[index] == ";"):
+            index += 1
+        if index >= len(script):
+            break
+        address_start = index
+        index = sed_address_end(script, index)
+        if index < len(script) and script[index] == ",":
+            index = sed_address_end(script, index + 1)
+        if index > address_start and index < len(script) and script[index] == "!":
+            index += 1
+        while index < len(script) and script[index].isspace():
+            index += 1
+        if index >= len(script):
+            break
+        command = script[index]
+        index += 1
+        if command in {"w", "W", "e"}:
+            return False
+        if command == "#":
+            newline = script.find("\n", index)
+            index = len(script) if newline < 0 else newline + 1
+            continue
+        if command == "s":
+            if index >= len(script):
+                return False
+            delimiter = script[index]
+            index = sed_delimited_end(script, index + 1, delimiter)
+            if index is None:
+                return False
+            index = sed_delimited_end(script, index, delimiter)
+            if index is None:
+                return False
+            end = index
+            while end < len(script) and script[end] not in ";\n":
+                end += 1
+            if any(flag in "wWe" for flag in script[index:end]):
+                return False
+            index = end
+            continue
+        if command == "y":
+            if index >= len(script):
+                return False
+            delimiter = script[index]
+            index = sed_delimited_end(script, index + 1, delimiter)
+            if index is None:
+                return False
+            index = sed_delimited_end(script, index, delimiter)
+            if index is None:
+                return False
+            continue
+        if command not in safe_commands:
+            return False
+        while index < len(script) and script[index] not in ";\n":
+            index += 1
+    return True
+
+
+def sed_arguments(arguments):
+    """Return (in_place, input_files, script_is_read_only) for sed arguments."""
+    in_place = False
+    scripts = []
+    inputs = []
+    script_seen = False
+    scripts_are_literal = True
+    index = 0
+    while index < len(arguments):
+        argument = arguments[index]
+        index += 1
+        if argument == "--":
+            positional = arguments[index:]
+            if not script_seen and positional:
+                scripts.append(positional[0])
+                positional = positional[1:]
+                script_seen = True
+            inputs.extend(positional)
+            break
+        if argument in {"-e", "--expression"}:
+            if index >= len(arguments):
+                return in_place, inputs, False
+            scripts.append(arguments[index])
+            script_seen = True
+            index += 1
+            continue
+        if argument == "-f" or argument == "--file":
+            if index >= len(arguments):
+                return in_place, inputs, False
+            script_seen = True
+            scripts_are_literal = False
+            index += 1
+            continue
+        if argument.startswith("--expression="):
+            scripts.append(argument.split("=", 1)[1])
+            script_seen = True
+            continue
+        if argument.startswith("--file="):
+            script_seen = True
+            scripts_are_literal = False
+            continue
+        if argument == "--in-place" or argument.startswith("--in-place="):
+            in_place = True
+            continue
+        if argument.startswith("--"):
+            if argument not in SED_SAFE_OPTIONS:
+                scripts_are_literal = False
+            continue
+        if argument.startswith("-") and argument != "-":
+            options = argument[1:]
+            cursor = 0
+            while cursor < len(options):
+                option = options[cursor]
+                cursor += 1
+                if option == "i":
+                    in_place = True
+                    break
+                if option == "e":
+                    if cursor < len(options):
+                        scripts.append(options[cursor:])
+                        script_seen = True
+                    elif index < len(arguments):
+                        scripts.append(arguments[index])
+                        script_seen = True
+                        index += 1
+                    else:
+                        return in_place, inputs, False
+                    break
+                if option not in "nErsu":
+                    scripts_are_literal = False
+            continue
+        if not script_seen:
+            scripts.append(argument)
+            script_seen = True
+        else:
+            inputs.append(argument)
+    if not scripts or not scripts_are_literal:
+        return in_place, inputs, False
+    return in_place, inputs, all(sed_script_is_read_only(script) for script in scripts)
+
+
 def shell_write_targets(tokens, working_directories, assignments=None):
-    """Yield (target, directories) for every path a shell command may write."""
-    assignments = {**(assignments or {}), **shell_assignment_values(tokens)}
-    for segment, directories in segment_directories(tokens, working_directories):
+    """Yield (target, directories, variables) for every path a shell command may write."""
+    for segment, directories, segment_assignments, _ in shell_segment_contexts(
+        tokens, working_directories, assignments
+    ):
         for index, token in enumerate(segment[:-1]):
             if ">" not in token or not set(token) <= SHELL_WRITE_REDIRECTION_CHARS:
                 continue
             target = segment[index + 1]
             if token.endswith("&") and (target.isdigit() or target == "-"):
                 continue
-            yield target, directories
+            yield target, directories, segment_assignments
         wrapped = wrapped_command_tokens(segment)
         if wrapped is not None:
-            yield from shell_write_targets(wrapped, directories, assignments)
+            yield from shell_write_targets(wrapped, directories, segment_assignments)
             continue
         invocation = command_invocation(segment)
         if invocation is None:
             continue
         command, arguments = invocation
+        command = command.removesuffix(".exe")
+        if command == "sed":
+            in_place, inputs, _ = sed_arguments(arguments)
+            if in_place:
+                for target in inputs:
+                    yield target, directories, segment_assignments
+            continue
         in_place = command in IN_PLACE_EDITORS and (
             has_short_option(arguments, "i")
             or any(argument.startswith("--in-place") for argument in arguments)
         )
-        if command.removesuffix(".exe") == "cp":
-            for destination in copy_destinations(arguments, directories, assignments):
-                yield destination, directories
+        if command == "cp":
+            for destination in copy_destinations(arguments, directories, segment_assignments):
+                yield destination, directories, segment_assignments
             continue
-        if command.removesuffix(".exe") in SHELL_WRITE_COMMANDS or in_place:
+        if command in SHELL_WRITE_COMMANDS or in_place:
             for argument in arguments:
                 if argument and not argument.startswith("-"):
-                    yield argument, directories
+                    yield argument, directories, segment_assignments
 
 
 def shell_write_needs_build_phase_gate(targets):
@@ -1361,9 +1562,8 @@ def shell_write_needs_build_phase_gate(targets):
 
 
 def protected_shell_write_reason(tokens, working_directories):
-    assignments = shell_assignment_values(tokens)
     targets = []
-    for target, directories in shell_write_targets(tokens, working_directories):
+    for target, directories, assignments in shell_write_targets(tokens, working_directories):
         expanded = expand_environment_parameters(target, assignments)
         if SHELL_PARAMETER_SYNTAX.search(expanded) or CMD_PARAMETER_SYNTAX.search(
             expanded
@@ -1392,7 +1592,9 @@ def environment_parameter_value(match, assignments):
     name = match.group(1) or match.group(2)
     if name.startswith(SUBSTITUTION_PLACEHOLDER):
         return match.group(0)  # command substitution output is never resolved
-    return assignments.get(name, os.environ.get(name, ""))
+    if name in assignments:
+        return assignments[name]
+    return os.environ.get(name, match.group(0))
 
 
 def expand_environment_parameters(command, assignments=None):
@@ -1405,24 +1607,115 @@ def expand_environment_parameters(command, assignments=None):
     return CMD_PARAMETER_SYNTAX.sub(substitute, expanded)
 
 
-def shell_assignment_values(tokens):
-    values = {}
-    for segment in command_segments(tokens):
-        variable_command = segment[0].casefold() in VARIABLE_COMMANDS
+def shell_segment_flow(tokens):
+    """Return whether each segment is conditional or runs in a subshell."""
+    flows = []
+    segment = []
+    conditional = False
+    subshell_depth = 0
+    control_depth = 0
+    separators = set("|;&()\n\r")
+    for token in tokens:
+        if token and set(token) <= separators:
+            if segment:
+                flows.append(
+                    (conditional or control_depth > 0, subshell_depth > 0 or token in {"|", "&"})
+                )
+                segment = []
+            if token == "(":
+                subshell_depth += 1
+                conditional = True
+            elif token == ")":
+                subshell_depth = max(0, subshell_depth - 1)
+                conditional = False
+            elif token in {"&&", "||", "|", "&"}:
+                conditional = True
+            else:
+                conditional = False
+            continue
+        word = token.casefold()
+        if not segment and word in SHELL_CONTROL_WORDS:
+            if word in {"if", "while", "until", "for", "select", "case", "coproc"}:
+                control_depth += 1
+            elif word in {"fi", "done", "esac"}:
+                control_depth = max(0, control_depth - 1)
+            if word in {"then", "else", "elif", "do", "in"}:
+                conditional = True
+            continue
+        segment.append(token)
+    if segment:
+        flows.append((conditional or control_depth > 0, subshell_depth > 0))
+    return flows
+
+
+def shell_assignment_changes(segment, values):
+    """Return variables changed by a persistent assignment or variable builtin."""
+    index = 0
+    prefix = []
+    while index < len(segment) and SHELL_ASSIGNMENT_PATTERN.match(segment[index]):
+        prefix.append(segment[index])
+        index += 1
+    executable = segment[index].casefold() if index < len(segment) else None
+    updates = {}
+    removes = set()
+    if executable is None:
+        assignments = prefix
+    elif executable in {"export", "declare", "typeset"}:
+        assignments = [*prefix, *segment[index + 1 :]]
+    else:
+        assignments = []
+    for assignment in assignments:
+        if SHELL_ASSIGNMENT_PATTERN.match(assignment):
+            name, value = assignment.split("=", 1)
+            updates[name] = expand_environment_parameters(value, {**values, **updates})
+    if executable == "unset":
+        removes = {
+            name for name in segment[index + 1 :] if not name.startswith("-")
+        }
+    return updates, removes
+
+
+def shell_assignment_contexts(tokens, initial=None):
+    """Return the persistent shell variables visible before each segment."""
+    values = dict(initial or {})
+    contexts = []
+    segments = list(command_segments(tokens))
+    flows = shell_segment_flow(tokens)
+    if len(segments) != len(flows):
+        raise ValueError("shell command segments cannot be aligned")
+    for segment, (conditional, subshell) in zip(segments, flows):
+        contexts.append(dict(values))
+        updates, removes = shell_assignment_changes(segment, values)
+        if subshell:
+            continue
+        for name in removes:
+            if conditional:
+                values[name] = f"${name}"
+            else:
+                values.pop(name, None)
+        for name, value in updates.items():
+            values[name] = f"${name}" if conditional else value
+    return contexts, values
+
+
+def shell_segment_contexts(tokens, working_directories, initial=None):
+    """Yield each segment with its working directory and prior shell variables."""
+    contexts, _ = shell_assignment_contexts(tokens, initial)
+    segments = list(segment_directories(tokens, working_directories))
+    if len(segments) != len(contexts):
+        raise ValueError("shell command segments cannot be aligned")
+    for (segment, directories), assignments in zip(segments, contexts):
+        prefix = {}
         for token in segment:
             if not SHELL_ASSIGNMENT_PATTERN.match(token):
-                if variable_command:
-                    continue
                 break
             name, value = token.split("=", 1)
-            if name in values:
-                raise ValueError(f"shell variable {name} is reassigned; split the commands")
-            values[name] = expand_environment_parameters(value, values)
-    return values
+            prefix[name] = expand_environment_parameters(value, assignments)
+        yield segment, directories, assignments, prefix
 
 
-def unresolved_archive_expansion(command, tokens, working_directories):
-    expanded = expand_environment_parameters(command, shell_assignment_values(tokens))
+def unresolved_archive_expansion(command, assignments=None):
+    expanded = expand_environment_parameters(command, assignments)
     return ARCHIVE_REFERENCE.search(expanded) is not None
 
 
@@ -1451,32 +1744,194 @@ def substitution_end(command, start):
     raise ValueError("command substitution $( is not closed")
 
 
+def heredoc_requests(line):
+    """Find literal here-document delimiters, excluding here-strings and quotes."""
+    requests = []
+    quote = None
+    index = 0
+    while index < len(line):
+        character = line[index]
+        if quote:
+            if character == "\\" and quote == '"':
+                index += 2
+                continue
+            if character == quote:
+                quote = None
+            index += 1
+            continue
+        if character == "\\":
+            index += 2
+            continue
+        if character == "#" and (
+            index == 0
+            or line[index - 1].isspace()
+            or line[index - 1] in ";|&()<>"
+        ):
+            break
+        if character in "'\"":
+            quote = character
+            index += 1
+            continue
+        if line.startswith("$(", index):
+            index = substitution_end(line, index + 2) + 1
+            continue
+        if character == "`":
+            end = index + 1
+            while end < len(line) and line[end] != "`":
+                end += 2 if line[end] == "\\" else 1
+            index = min(end + 1, len(line))
+            continue
+        if line.startswith("<<<", index):
+            index += 3
+            continue
+        if not line.startswith("<<", index):
+            index += 1
+            continue
+        cursor = index + 2
+        strip_tabs = cursor < len(line) and line[cursor] == "-"
+        if strip_tabs:
+            cursor += 1
+        while cursor < len(line) and line[cursor] in " \t":
+            cursor += 1
+        delimiter = []
+        delimiter_quote = None
+        quoted = False
+        while cursor < len(line):
+            value = line[cursor]
+            if delimiter_quote:
+                if value == delimiter_quote:
+                    delimiter_quote = None
+                else:
+                    delimiter.append(value)
+                cursor += 1
+                continue
+            if value in "'\"":
+                delimiter_quote = value
+                quoted = True
+                cursor += 1
+                continue
+            if value == "\\" and cursor + 1 < len(line):
+                quoted = True
+                delimiter.append(line[cursor + 1])
+                cursor += 2
+                continue
+            if value.isspace() or value in ";|&()<>":
+                break
+            delimiter.append(value)
+            cursor += 1
+        if not delimiter:
+            raise ValueError("here-document delimiter cannot be validated")
+        requests.append(("".join(delimiter), strip_tabs, quoted))
+        index = cursor
+    return requests
+
+
+def heredoc_modes(command):
+    """Mark here-document bodies as data or shell-expanded input."""
+    lines = command.splitlines(keepends=True)
+    modes = ["shell"] * len(command)
+    offsets = []
+    offset = 0
+    for line in lines:
+        offsets.append(offset)
+        offset += len(line)
+    line_index = 0
+    while line_index < len(lines):
+        requests = heredoc_requests(lines[line_index].rstrip("\r\n"))
+        line_index += 1
+        for delimiter, strip_tabs, quoted in requests:
+            found = False
+            while line_index < len(lines):
+                line = lines[line_index]
+                content = line.rstrip("\r\n")
+                if strip_tabs:
+                    content = content.lstrip("\t")
+                start = offsets[line_index]
+                stop = start + len(line)
+                mode = "literal" if quoted or content == delimiter else "heredoc"
+                modes[start:stop] = [mode] * (stop - start)
+                line_index += 1
+                if content == delimiter:
+                    found = True
+                    break
+            if not found:
+                raise ValueError(f"here-document {delimiter} is not terminated")
+    return modes
+
+
 def split_command_substitutions(command):
-    """Replace every $(...) and `...` with a placeholder; return (outer, inner)."""
-    if "@(" in command:
-        raise ValueError(
-            "@( expansion cannot be validated; write the list as literal arguments"
-        )
-    if "$(" not in command and "`" not in command:
-        return command, []
-    outer, inner, index = [], [], 0
+    """Replace executable substitutions, leaving quoted text as shell data."""
+    modes = heredoc_modes(command)
+    outer, inner, index, quote = [], [], 0, None
     while index < len(command):
+        mode = modes[index]
+        character = command[index]
+        if mode == "literal":
+            outer.append(character)
+            index += 1
+            continue
+        if mode == "heredoc":
+            if character == "\\" and index + 1 < len(command) and command[index + 1] in "\\$`":
+                outer.append(command[index : index + 2])
+                index += 2
+                continue
+            if command.startswith("$(", index):
+                end = substitution_end(command, index + 2)
+                inner.append(command[index + 2 : end])
+            elif character == "`":
+                end = index + 1
+                while end < len(command) and command[end] != "`":
+                    end += 2 if command[end] == "\\" else 1
+                if end >= len(command):
+                    raise ValueError("backtick command substitution is not closed")
+                inner.append(command[index + 1 : end])
+            elif command.startswith("@(", index):
+                raise ValueError(
+                    "@( expansion cannot be validated; write the list as literal arguments"
+                )
+            else:
+                outer.append(character)
+                index += 1
+                continue
+            outer.append(f"${{{SUBSTITUTION_PLACEHOLDER}{len(inner) - 1}}}")
+            index = end + 1
+            continue
+        if quote == "'":
+            outer.append(character)
+            if character == "'":
+                quote = None
+            index += 1
+            continue
+        if character == "\\":
+            outer.append(command[index : index + 2])
+            index += 2
+            continue
+        if quote is None and character == "'":
+            quote = character
+            outer.append(character)
+            index += 1
+            continue
+        if character == '"':
+            quote = None if quote == '"' else '"'
+            outer.append(character)
+            index += 1
+            continue
         if command.startswith("$(", index):
             end = substitution_end(command, index + 2)
             inner.append(command[index + 2 : end])
-        elif command[index] == "`":
+        elif character == "`":
             end = index + 1
             while end < len(command) and command[end] != "`":
                 end += 2 if command[end] == "\\" else 1
             if end >= len(command):
                 raise ValueError("backtick command substitution is not closed")
             inner.append(command[index + 1 : end])
-        elif command[index] == "\\":
-            outer.append(command[index : index + 2])
-            index += 2
-            continue
+        elif command.startswith("@(", index):
+            raise ValueError(
+                "@( expansion cannot be validated; write the list as literal arguments"
+            )
         else:
-            outer.append(command[index])
+            outer.append(character)
             index += 1
             continue
         outer.append(f"${{{SUBSTITUTION_PLACEHOLDER}{len(inner) - 1}}}")
@@ -1497,11 +1952,8 @@ def strip_heredoc_bodies(command):
         line = lines[index]
         kept.append(line)
         index += 1
-        for match in HEREDOC_PATTERN.finditer(line):
-            delimiter = (
-                match.group("single") or match.group("double") or match.group("bare")
-            )
-            strip = "\t\r" if match.group("dash") else "\r"
+        for delimiter, strip_tabs, _ in heredoc_requests(line):
+            strip = "\t\r" if strip_tabs else "\r"
             while index < len(lines) and lines[index].strip(strip) != delimiter:
                 index += 1
             if index >= len(lines):
@@ -1688,19 +2140,60 @@ def command_invocation(segment):
     return executable, arguments
 
 
-def git_command(segment):
+def git_command(segment, assignments=None):
     invocation = command_invocation(segment)
     if invocation is None:
         return None
     executable, arguments = invocation
     if executable not in {"git", "git.exe"}:
         return None
-    for argument in arguments:
-        if SHELL_PARAMETER_SYNTAX.search(argument):
-            raise ValueError(
-                f"git argument {argument} cannot be resolved by the guard; pass a "
-                "literal value (for commit messages use -F <file>)"
-            )
+    resolved_arguments = []
+    argument_index = 0
+    while argument_index < len(arguments):
+        argument = arguments[argument_index]
+        attached_directory = argument.startswith("-C") and len(argument) > 2
+        if argument == "-C" and argument_index + 1 < len(arguments):
+            argument_index += 1
+            directory = arguments[argument_index]
+            expanded = expand_environment_parameters(directory, assignments)
+            if SHELL_PARAMETER_SYNTAX.search(expanded) or CMD_PARAMETER_SYNTAX.search(expanded):
+                raise ValueError(
+                    f"git argument {directory} cannot be resolved by the guard; "
+                    "pass a literal path"
+                )
+            if (
+                (SHELL_PARAMETER_SYNTAX.search(directory) or CMD_PARAMETER_SYNTAX.search(directory))
+                and any(character.isspace() or character in "*?[]" for character in expanded)
+            ):
+                raise ValueError(
+                    f"git -C path {directory} may split or glob; pass a literal path"
+                )
+            resolved_arguments.extend((argument, expanded))
+        elif attached_directory:
+            directory = argument[2:]
+            expanded = expand_environment_parameters(directory, assignments)
+            if SHELL_PARAMETER_SYNTAX.search(expanded) or CMD_PARAMETER_SYNTAX.search(expanded):
+                raise ValueError(
+                    f"git argument {directory} cannot be resolved by the guard; "
+                    "pass a literal path"
+                )
+            if (
+                (SHELL_PARAMETER_SYNTAX.search(directory) or CMD_PARAMETER_SYNTAX.search(directory))
+                and any(character.isspace() or character in "*?[]" for character in expanded)
+            ):
+                raise ValueError(
+                    f"git -C path {directory} may split or glob; pass a literal path"
+                )
+            resolved_arguments.append(f"-C{expanded}")
+        else:
+            if SHELL_PARAMETER_SYNTAX.search(argument) or CMD_PARAMETER_SYNTAX.search(argument):
+                raise ValueError(
+                    f"git argument {argument} cannot be resolved by the guard; pass a "
+                    "literal value (for commit messages use -F <file>)"
+                )
+            resolved_arguments.append(expand_environment_parameters(argument, assignments))
+        argument_index += 1
+    arguments = resolved_arguments
     index = 0
     git_options = []
     while index < len(arguments) and arguments[index].startswith("-"):
@@ -1841,14 +2334,18 @@ def update_ref_deletes(arguments):
     )
 
 
-def destructive_git_reason(tokens, resolved_aliases=frozenset()):
-    for segment in command_segments(tokens):
+def destructive_git_reason(
+    tokens, resolved_aliases=frozenset(), initial_assignments=None
+):
+    segments = list(command_segments(tokens))
+    contexts, _ = shell_assignment_contexts(tokens, initial_assignments)
+    for segment, assignments in zip(segments, contexts):
         wrapped = wrapped_command_tokens(segment)
         if wrapped is not None:
-            reason = destructive_git_reason(wrapped, resolved_aliases)
+            reason = destructive_git_reason(wrapped, resolved_aliases, assignments)
             if reason is not None:
                 return reason
-        invocation = git_command(segment)
+        invocation = git_command(segment, assignments)
         if invocation is None:
             continue
         command, arguments, git_options = invocation
@@ -1873,6 +2370,7 @@ def destructive_git_reason(tokens, resolved_aliases=frozenset()):
             reason = destructive_git_reason(
                 ["git", *git_options, *shell_tokens(alias), *arguments],
                 resolved_aliases | {command},
+                assignments,
             )
             if reason is not None:
                 return reason
@@ -2026,28 +2524,45 @@ def bundled_helper_invocation(command, tokens, working_directories, helpers=PIPE
     return False
 
 
-def archive_command_is_read_only(command, tokens, archive_context=False, git_commands=ARCHIVE_READ_GIT_COMMANDS):
+def archive_command_is_read_only(
+    command, tokens, archive_context=False, git_commands=ARCHIVE_READ_GIT_COMMANDS
+):
     if archive_context and AMBIGUOUS_SHELL_SYNTAX.search(command):
         return False
     if not archive_context:
         return True
-    executable = tokens[0].replace("\\", "/").rsplit("/", 1)[-1].casefold()
+    invocation = command_invocation(tokens)
+    if invocation is None:
+        return True
+    executable, arguments = invocation
+    executable = executable.removesuffix(".exe")
+    if executable in DIRECTORY_CHANGE_COMMANDS:
+        return True
+    if executable in {"export", "declare", "typeset", "unset"}:
+        return True
     denied_options = ARCHIVE_READ_EXECUTION_OPTIONS.get(executable, ())
     if any(
         token == option or token.startswith(f"{option}=")
-        for token in tokens[1:]
+        for token in arguments
         for option in denied_options
     ):
         return False
+    if executable == "sed":
+        in_place, _inputs, script_is_read_only = sed_arguments(arguments)
+        return not in_place and script_is_read_only
     if executable in ARCHIVE_READ_COMMANDS:
         return True
-    if executable != "git" or len(tokens) < 2:
+    if executable != "git":
         return False
-    if tokens[1].casefold() not in git_commands:
+    git = git_command(tokens)
+    if git is None:
+        return False
+    subcommand, git_arguments, _options = git
+    if subcommand not in git_commands:
         return False
     return not any(
         token in GIT_READ_WRITE_OPTIONS or token.startswith("--output=")
-        for token in tokens[2:]
+        for token in git_arguments
     )
 
 
@@ -2169,22 +2684,28 @@ def closed_git_listing(tokens):
     return not positionals
 
 
-def closed_shell_execution_reason(command, tokens, working_directories):
+def closed_shell_execution_reason(
+    command, tokens, working_directories, initial_assignments=None
+):
     helpers = PIPELINE_HELPERS | {"pipeline_git.py", "status_runtime.py", "promote_lookahead.py", "pipeline_diagnose.py"}
     rest = tokens[3:] if tokens[1:2] == ["-B"] else tokens[2:]
     if rest[:1] == ["pending"]:
         helpers = helpers | {"discussion_records.py"}
     if bundled_helper_invocation(command, tokens, working_directories, helpers):
         return None
-    for segment, directories in segment_directories(tokens, working_directories):
+    for segment, directories, assignments, _prefix in shell_segment_contexts(
+        tokens, working_directories, initial_assignments
+    ):
         wrapped = wrapped_command_tokens(segment)
         if wrapped is not None:
-            reason = closed_shell_execution_reason(shlex.join(wrapped), wrapped, directories)
+            reason = closed_shell_execution_reason(
+                shlex.join(wrapped), wrapped, directories, assignments
+            )
             if reason:
                 return reason
             continue
         metadata_closed = None
-        git = git_command(segment)
+        git = git_command(segment, assignments)
         checked_segment = segment
         if git is not None:
             subcommand, arguments, options = git
@@ -2223,6 +2744,7 @@ def closed_shell_execution_reason(command, tokens, working_directories):
 def command_denial(command, working_directories, allow_destructive=True):
     """Return why a shell command is denied, or None when it may run."""
     working_directories = working_directories or [os.getcwd()]
+    command = re.sub(r"(?i:(\.project)\\(archive))", r"\1/\2", command)
     outer, substitutions = split_command_substitutions(command)
     try:
         tokens = shell_tokens(outer)
@@ -2231,6 +2753,7 @@ def command_denial(command, working_directories, allow_destructive=True):
             for interpreter in ("python3", "python", "py -3")
         ):
             return None
+        bundled_helper = bundled_helper_invocation(command, tokens, working_directories)
         destructive = list(destructive_shell_invocations(tokens))
         if destructive and (
             not allow_destructive
@@ -2251,16 +2774,28 @@ def command_denial(command, working_directories, allow_destructive=True):
             reason = command_denial(inner, working_directories, allow_destructive=False)
             if reason is not None:
                 return reason
-        archive_context = (
-            any(working_directory_in_archive(path) for path in working_directories)
-            or bool(ARCHIVE_REFERENCE.search(outer))
-            or command_references_archive(tokens, working_directories)
-            or unresolved_archive_expansion(outer, tokens, working_directories)
-        )
-        if not archive_command_is_read_only(command, tokens, archive_context) and not (
-            archive_context and bundled_helper_invocation(command, tokens, working_directories)
+        for segment, directories, assignments, prefix in shell_segment_contexts(
+            tokens, working_directories
         ):
-            return ARCHIVE_REASON
+            resolved_segment = [
+                expand_environment_parameters(token, assignments) for token in segment
+            ]
+            archive_context = (
+                any(working_directory_in_archive(path) for path in directories)
+                or segment_references_archive(segment, directories, assignments)
+                or any(
+                    ARCHIVE_REFERENCE.search(value)
+                    or path_in_archive(value, directories, ancestors=False)
+                    for value in prefix.values()
+                )
+            )
+            if not archive_command_is_read_only(
+                shlex.join(resolved_segment), resolved_segment, archive_context
+            ) and not (
+                archive_context
+                and bundled_helper
+            ):
+                return ARCHIVE_REASON
         reason = destructive_git_reason(tokens) or protected_shell_write_reason(
             tokens, working_directories
         )

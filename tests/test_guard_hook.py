@@ -1168,6 +1168,16 @@ class GuardHookTests(unittest.TestCase):
             }
         )
 
+    def test_allows_read_only_sed_from_archive(self):
+        self.assert_allowed(
+            {
+                "tool_name": "Bash",
+                "tool_input": {
+                    "command": "sed -n '1,5p' .project/archive/001-mvp/review/x.md"
+                },
+            }
+        )
+
     def test_denies_destructive_git_commands(self):
         for command in (
             "git reset --hard HEAD~2",
@@ -1199,6 +1209,7 @@ class GuardHookTests(unittest.TestCase):
         for command in (
             "Remove-Item -Recurse .project/archive/001-mvp",
             r"Move-Item README.md .project\archive\001-mvp\README.md",
+            r"ls .Project\Archive && Copy-Item README.md .project\ARCHIVE\001-mvp\README.md",
             "Copy-Item README.md .project/archive/001-mvp/README.md",
             "Rename-Item .project/archive/001-mvp/OLD.md NEW.md",
             "Set-Content .project/archive/001-mvp/NOTE.md broken",
@@ -1217,13 +1228,27 @@ class GuardHookTests(unittest.TestCase):
     def test_denies_unproven_archive_shell_commands(self):
         for command in (
             "sed -i 's/a/b/' .project/archive/001-mvp/NOTE.md",
+            "sed -n 'w /tmp/side-effect' .project/archive/001-mvp/NOTE.md",
+            "sed -n 's/a/b/e' .project/archive/001-mvp/NOTE.md",
+            "sed -n 's/a/b/w /tmp/side-effect' .project/archive/001-mvp/NOTE.md",
+            "sed -n '1{s/^/ /e}' .project/archive/001-mvp/NOTE.md",
+            "readonly P=.project/archive/001-mvp; export P=/tmp; sed -i 's/a/b/' \"$P/NOTE.md\"",
             "python3 -c 'write()' .project/archive/001-mvp/NOTE.md",
             "cat .project/archive/001-mvp/NOTE.md > /tmp/note.md",
+            "ls .project/archive/001-mvp && echo broken > .project/archive/001-mvp/NOTE.md",
         ):
             with self.subTest(command=command):
                 self.assert_denied(
                     {"tool_name": "Bash", "tool_input": {"command": command}}
                 )
+
+    def test_rejects_readonly_assignment_state_before_protected_write(self):
+        self.assert_denied(
+            self.bash(
+                'readonly P=.project/STATE.md; export P=/tmp/NOTE.md; '
+                'sed -i s/a/b/ "$P"'
+            )
+        )
 
     def test_denies_archive_mutation_from_archive_working_directory(self):
         for key in ("working_directory", "workdir", "cwd"):
@@ -1975,6 +2000,98 @@ class GuardHookTests(unittest.TestCase):
         ):
             with self.subTest(command=command):
                 self.assert_allowed(self.bash(command))
+
+    def test_allows_issue_327_read_only_shell_cases(self):
+        repository = shlex.quote(str(Path.cwd()))
+        for command in (
+            "ls .project .project/archive && echo done",
+            'IFS=\'|\' read a b <<<"$ev"',
+            "python3 - <<'PY'\nvalue = \"`literal text`\"\nprint(value)\nPY",
+            "D=/x; D=/y; python3 $D/a.py",
+            "sed -i 's/…`a`$/…`b`/' notes.md",
+        ):
+            with self.subTest(command=command):
+                self.assert_allowed(self.bash(command))
+        self.assert_allowed(
+            {
+                "tool_name": "Bash",
+                "tool_input": {
+                    "command": f"cd {repository} && grep -c '^- \\*\\*Check\\*\\*' .project/review/final-gap-*.md",
+                    "working_directory": ".project/archive/001-mvp",
+                },
+            }
+        )
+
+    def test_resolves_literal_assignment_for_git_c(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            repository = Path(temporary) / "target-repo"
+            subprocess.run(["git", "init", "-q", str(repository)], check=True)
+            command = f"W={shlex.quote(str(repository))}; git -C $W status --short"
+            self.assert_allowed(self.bash(command))
+            quoted = f"W={shlex.quote(str(repository))}; git -C \"$W\" status --short"
+            self.assert_allowed(self.bash(quoted))
+            exported = f"export W={shlex.quote(str(repository))}; git -C $W status --short"
+            self.assert_allowed(self.bash(exported))
+            for name in ("target repo", "target[name]"):
+                literal_repository = Path(temporary) / name
+                subprocess.run(["git", "init", "-q", str(literal_repository)], check=True)
+                literal = f"git -C {shlex.quote(str(literal_repository))} status --short"
+                self.assert_allowed(self.bash(literal))
+            archive_cwd = Path(temporary) / ".project" / "archive" / "001-mvp"
+            archive_cwd.mkdir(parents=True)
+            self.assert_allowed(
+                {
+                    "tool_name": "Bash",
+                    "tool_input": {
+                        "command": command,
+                        "working_directory": str(archive_cwd),
+                    },
+                }
+            )
+
+    def test_denies_word_split_git_subcommands_from_variables(self):
+        for command in (
+            "G='reset --hard'; git $G HEAD~1",
+            "G='clean -fd'; git $G",
+            "G='restore .'; git $G",
+            "W='/tmp/target repo'; git -C $W status --short",
+            "W='/tmp/target[repo]'; git -C $W status --short",
+        ):
+            with self.subTest(command=command):
+                self.assert_denied(self.bash(command))
+
+    def test_assignment_state_is_segment_local_and_last_value_wins(self):
+        self.assert_denied(
+            self.bash('P=.project/archive; echo x > "$P/NOTE.md"; P=/tmp')
+        )
+        self.assert_allowed(
+            self.bash('P=/tmp; echo x > "$P/NOTE.md"; P=.project/archive')
+        )
+
+    def test_conditional_and_subshell_assignments_do_not_change_archive_context(self):
+        for command in (
+            "P=.project/archive/001-mvp; false && P=/tmp; sed -i 's/a/b/' \"$P/NOTE.md\"",
+            "P=.project/archive/001-mvp; true || P=/tmp; sed -i 's/a/b/' \"$P/NOTE.md\"",
+            "P=.project/archive/001-mvp; (P=/tmp); sed -i 's/a/b/' \"$P/NOTE.md\"",
+        ):
+            with self.subTest(command=command):
+                self.assert_denied(self.bash(command))
+
+    def test_ignores_quoted_but_checks_expanded_heredoc_substitutions(self):
+        self.assert_allowed(
+            self.bash("python3 - <<'PY'\nvalue = `literal text`\nPY")
+        )
+        self.assert_denied(
+            self.bash(
+                "python3 - <<EOF\n$(rm -rf .project/archive/001-mvp)\nEOF"
+            )
+        )
+        self.assert_denied(
+            self.bash(
+                "echo ok # <<'EOF'\n$(printf changed > .project/archive/001-test/OUT.md)\nEOF"
+            )
+        )
+        self.assert_denied(self.bash("RT=$(cmd); cd $RT"))
 
     def test_denials_name_the_shell_construct(self):
         for command, construct in (
