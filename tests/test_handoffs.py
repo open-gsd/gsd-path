@@ -172,6 +172,47 @@ Intent: `{project_dir}/intent/INTENT.md`
         )
         self.write_evidence(root, "domain", project_dir)
 
+    def write_dimension_assignment_case(
+        self,
+        root: Path,
+        assignment_rows,
+        dispatched_dimensions=("stack", "pitfalls"),
+        questions=("Which approach is viable?",),
+    ) -> None:
+        self.write_state(root, "research", "active")
+        question_text = "".join(f"- [RESEARCH] {question}\n" for question in questions)
+        self.write_intent(root, question_text)
+
+        dispatch_rows = []
+        for dimension in check_handoffs.STANDARD_DIMENSIONS:
+            if dimension in dispatched_dimensions:
+                dispatch_rows.append(
+                    f"- `{dimension}` — dispatched → `.project/research/evidence-{dimension}.md` — assigned question"
+                )
+            else:
+                dispatch_rows.append(
+                    f"- `{dimension}` — skipped → none — no question needs this dimension"
+                )
+        handoff = "\n".join(
+            [
+                "# Research Handoff",
+                "",
+                "Phase: research",
+                "Status: complete",
+                "Intent: `.project/intent/INTENT.md`",
+                "",
+                "## Dispatch",
+                *dispatch_rows,
+                "",
+                "## Question assignments",
+                *assignment_rows,
+                "",
+            ]
+        )
+        self.write(root, ".project/research/RESEARCH.md", handoff)
+        for dimension in dispatched_dimensions:
+            self.write_evidence(root, dimension, questions=questions)
+
     def write_custom_only_research_handoff(self, root: Path) -> None:
         self.write(
             root,
@@ -257,6 +298,88 @@ Intent: `.project/intent/INTENT.md`
             self.assertEqual(result["phase"], "research")
             self.assertEqual(result["dispatched"], ["domain"])
             self.assertEqual(result["skipped"], ["pitfalls", "similar", "stack"])
+
+    def test_research_question_can_target_multiple_dispatched_dimensions(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_dimension_assignment_case(
+                root,
+                ("- `[RESEARCH] Which approach is viable?` → `stack`, `pitfalls`",),
+            )
+
+            result = check_handoffs.validate_research(root)
+
+            self.assertEqual(result["dispatched"], ["pitfalls", "stack"])
+            self.assertEqual(result["questions"], 1)
+            for dimension in ("stack", "pitfalls"):
+                evidence = (root / f".project/research/evidence-{dimension}.md").read_text(
+                    encoding="utf-8"
+                )
+                self.assertIn("Questions assigned: Which approach is viable?", evidence)
+
+    def test_research_multi_dimension_assignment_requires_each_evidence_file(self) -> None:
+        for dimension in ("stack", "pitfalls"):
+            with self.subTest(dimension=dimension), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                self.write_dimension_assignment_case(
+                    root,
+                    ("- `[RESEARCH] Which approach is viable?` → `stack`, `pitfalls`",),
+                )
+                (root / f".project/research/evidence-{dimension}.md").unlink()
+
+                with self.assertRaisesRegex(check_handoffs.HandoffError, dimension):
+                    check_handoffs.validate_research(root)
+
+    def test_research_multi_dimension_assignments_reject_invalid_rows(self) -> None:
+        question_row = "- `[RESEARCH] Which approach is viable?` → `stack`, `pitfalls`"
+        cases = (
+            (
+                "repeated target",
+                ("- `[RESEARCH] Which approach is viable?` → `stack`, `stack`",),
+                "repeats a target in a question assignment",
+            ),
+            (
+                "undispatched target",
+                ("- `[RESEARCH] Which approach is viable?` → `domain`",),
+                "every assigned question must target a dispatched dimension",
+            ),
+            (
+                "repeated question row",
+                (question_row, question_row),
+                "repeats a question assignment",
+            ),
+            (
+                "mixed none and question row",
+                ("- none", question_row),
+                "mixes none with question assignments",
+            ),
+            (
+                "unformatted comma-separated targets",
+                ("- `[RESEARCH] Which approach is viable?` → `stack`, pitfalls",),
+                "malformed question assignment",
+            ),
+        )
+        for name, assignment_rows, error in cases:
+            with self.subTest(case=name), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                self.write_dimension_assignment_case(root, assignment_rows)
+
+                with self.assertRaisesRegex(check_handoffs.HandoffError, error):
+                    check_handoffs.validate_research(root)
+
+    def test_each_dispatched_dimension_still_needs_an_assigned_question(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_dimension_assignment_case(
+                root,
+                ("- `[RESEARCH] Which approach is viable?` → `stack`",),
+            )
+
+            with self.assertRaisesRegex(
+                check_handoffs.HandoffError,
+                "dispatched pitfalls has no assigned research question",
+            ):
+                check_handoffs.validate_research(root)
 
     def test_research_can_skip_every_settled_dimension(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

@@ -33,7 +33,10 @@ DISPATCH_PATTERN = re.compile(
     r"^- `(?P<dimension>[^`]+)` — (?P<status>dispatched|skipped) "
     r"→ (?P<output>[^—]+) — (?P<reason>.+)$"
 )
-QUESTION_PATTERN = re.compile(r"^- `\[RESEARCH\] (?P<question>[^`]+)` → `(?P<dimension>[^`]+)`$")
+QUESTION_PATTERN = re.compile(
+    r"^- `\[RESEARCH\] (?P<question>[^`]+)` → "
+    r"(?P<dimensions>`[^`,\s]+`(?:,\s*`[^`,\s]+`)*)$"
+)
 FINDING_PATTERN = re.compile(r"^### (?P<id>P\d{3}) — (?P<title>.+)$")
 CRITERION_LOCATOR_PATTERN = re.compile(r"^SC[1-9]\d*$")
 COMMENT_PATTERN = re.compile(r"<!--.*?-->", re.DOTALL)
@@ -393,7 +396,7 @@ def _research_questions(intent: str) -> List[str]:
     ]
 
 
-def _research_assignments(section: str) -> List[Tuple[str, str]]:
+def _research_assignments(section: str) -> List[Tuple[str, List[str]]]:
     assignments = []
     lines = [line.strip() for line in section.splitlines() if line.strip()]
     if lines == ["- none"]:
@@ -404,7 +407,10 @@ def _research_assignments(section: str) -> List[Tuple[str, str]]:
         match = QUESTION_PATTERN.fullmatch(line)
         if match is None:
             raise HandoffError("RESEARCH.md has a malformed question assignment")
-        assignments.append((match.group("question").strip(), match.group("dimension")))
+        dimensions = re.findall(r"`([^`]+)`", match.group("dimensions"))
+        if len(dimensions) != len(set(dimensions)):
+            raise HandoffError("RESEARCH.md repeats a target in a question assignment")
+        assignments.append((match.group("question").strip(), dimensions))
     return assignments
 
 
@@ -478,19 +484,23 @@ def validate_research_artifacts(
 
     assignments = _research_assignments(_section(handoff, "Question assignments"))
     questions = _research_questions(intent)
-    assigned_questions = [question for question, _dimension in assignments]
-    if sorted(assigned_questions) != sorted(questions):
-        raise HandoffError("RESEARCH.md question assignments do not match the intent source")
+    assigned_questions = [question for question, _dimensions in assignments]
     if len(assigned_questions) != len(set(assigned_questions)):
         raise HandoffError("RESEARCH.md repeats a question assignment")
+    if sorted(assigned_questions) != sorted(questions):
+        raise HandoffError("RESEARCH.md question assignments do not match the intent source")
     dispatched_set = set(dispatched)
-    if any(dimension not in dispatched_set for _question, dimension in assignments):
+    if any(
+        dimension not in dispatched_set
+        for _question, assigned_dimensions in assignments
+        for dimension in assigned_dimensions
+    ):
         raise HandoffError("every assigned question must target a dispatched dimension")
     for dimension in dispatched:
         dimension_questions = [
             question
-            for question, assigned_dimension in assignments
-            if assigned_dimension == dimension
+            for question, assigned_dimensions in assignments
+            if dimension in assigned_dimensions
         ]
         if not dimension_questions:
             raise HandoffError(f"dispatched {dimension} has no assigned research question")

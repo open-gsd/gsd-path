@@ -84,6 +84,17 @@ settled brownfield input.
    template before dispatch. Record every standard dimension exactly once as
    `dispatched` or `skipped` with a reason, and assign every research question
    to at least one dispatched dimension. No question may remain unassigned.
+   Copy each question to exactly one `Question assignments` row. Assign one or
+   more dispatched dimension slugs there, each in its own code span and
+   separated by commas, as in:
+
+   ```md
+   - `[RESEARCH] Which approach is viable?` → `stack`, `pitfalls`
+   ```
+
+   List a dimension only once per row. Every dispatched dimension must own at
+   least one question, and its evidence file must answer every question
+   assigned to it. Use `- none` only when there are no research questions.
 2. Decide which standard dimensions have work: dispatch a dimension only when
    it has at least one assigned `RESEARCH` question from INTENT.md or
    CHARTER.md. Unsettled choices and risks need that source question before
