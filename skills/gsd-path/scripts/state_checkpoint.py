@@ -18,14 +18,14 @@ from pathlib import Path, PurePosixPath
 from typing import Mapping, Optional, Sequence
 
 if __package__:
-    from .isolation import IsolationError, checkpoint as isolation_checkpoint, require_commit, require_full_sha, PROJECT_ENTRIES
+    from .isolation import IsolationError, checkpoint as isolation_checkpoint, PROJECT_ENTRIES
 else:
     try:
-        from isolation import IsolationError, checkpoint as isolation_checkpoint, require_commit, require_full_sha, PROJECT_ENTRIES
+        from isolation import IsolationError, checkpoint as isolation_checkpoint, PROJECT_ENTRIES
     except ModuleNotFoundError as error:  # pragma: no cover - package imports used by tests
         if error.name != "isolation":
             raise
-        from scripts.isolation import IsolationError, checkpoint as isolation_checkpoint, require_commit, require_full_sha, PROJECT_ENTRIES
+        from scripts.isolation import IsolationError, checkpoint as isolation_checkpoint, PROJECT_ENTRIES
 
 
 if __package__:
@@ -444,14 +444,14 @@ def _validate_plan_briefs(repo: Path, kind: str, project_dir: str) -> None:
         # Pre-Git approval defers base-dependent checks to build.
         return
     if __package__:
-        from .check_task_briefs import BriefError, _member_bases, validate_task_briefs
+        from .check_task_briefs import BriefError, _member_bases, plan_validation_bases, validate_task_briefs
     else:
         try:
-            from check_task_briefs import BriefError, _member_bases, validate_task_briefs
+            from check_task_briefs import BriefError, _member_bases, plan_validation_bases, validate_task_briefs
         except ModuleNotFoundError as error:  # pragma: no cover - package imports
             if error.name != "check_task_briefs":
                 raise
-            from scripts.check_task_briefs import BriefError, _member_bases, validate_task_briefs
+            from scripts.check_task_briefs import BriefError, _member_bases, plan_validation_bases, validate_task_briefs
     if __package__:
         from . import check_handoffs
     else:
@@ -462,35 +462,10 @@ def _validate_plan_briefs(repo: Path, kind: str, project_dir: str) -> None:
                 raise
             from scripts import check_handoffs
     try:
-        tasks, dependency_files = check_handoffs.plan_brief_inputs(repo, project_dir)
-        landed_bases = {}
         member_base = _member_bases(repo)
-        for task_id, text in tasks.items():
-            if check_handoffs._task_scalar(text, task_id, "status") != "done":
-                continue
-            agent = check_handoffs._task_scalar(text, task_id, "agent")
-            if agent in {"", "null"}:
-                raise BriefError(f"{task_id} landed task has no recorded agent")
-            member = check_handoffs._strict_frontmatter(text, task_id).get("repo")
-            base_repo = repo
-            if member is not None:
-                located = member_base(member) if isinstance(member, str) and member else None
-                if located is None:
-                    raise BriefError(f"repo: names no member in MEMBERS.md: {member}")
-                base_repo = located[0]
-            recorded_base = check_handoffs._task_scalar(text, task_id, "base")
-            recorded_full = require_full_sha(recorded_base)
-            try:
-                if member is not None:
-                    try:
-                        landed_bases[task_id] = require_commit(repo, recorded_full)
-                    except IsolationError:
-                        landed_bases[task_id] = require_commit(base_repo, recorded_full)
-                else:
-                    landed_bases[task_id] = require_commit(base_repo, recorded_full)
-            except IsolationError as error:
-                raise BriefError(f"{task_id} landed task has invalid historical base: {error}") from error
-            dependency_files[task_id] = set()
+        tasks, dependency_files, landed_bases = plan_validation_bases(
+            repo, project_dir, member_base, initial=True
+        )
         validate_task_briefs(
             repo, head.stdout.strip(), f"{project_dir}/tasks",
             dependency_files=dependency_files, landed_bases=landed_bases,

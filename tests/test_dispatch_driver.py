@@ -1247,6 +1247,28 @@ class DispatchDriverTests(unittest.TestCase):
         self.assertEqual([item["task"] for item in again["landed"]], ["T003"])
         self.assertIn("status: done", (root / receipt["created"][0]["path"]).read_text(encoding="utf-8"))
 
+    def test_fix_tasks_lint_explicitly_selects_its_plan_track(self) -> None:
+        self.fixture(self.root)
+        self.assertEqual(self.round(self.root, "--wait", "60")["status"], "done")
+        self.assertEqual(self.review(self.root, "--wait", "60", verdict="blocked")["status"], "blocked")
+        calls = []
+        run = subprocess.run
+
+        def record_lint(command, *args, **kwargs):
+            if any(Path(str(part)).name == "check_task_briefs.py" for part in command):
+                calls.append(command)
+            return run(command, *args, **kwargs)
+
+        options = argparse.Namespace(project_dir=".project", wave=1, cycle=1)
+        with mock.patch.object(dispatch_driver.subprocess, "run", side_effect=record_lint):
+            receipt = dispatch_driver.fix_tasks(self.root, options)
+        self.assertEqual(receipt["status"], "created", receipt)
+        self.assertEqual(len(calls), 1, calls)
+        self.assertIn("--project-dir", calls[0])
+        self.assertEqual(calls[0][calls[0].index("--project-dir") + 1], options.project_dir)
+        lint_steps = [step for step in receipt["steps"] if step["script"] == "check_task_briefs.py"]
+        self.assertEqual([step["exit_code"] for step in lint_steps], [0])
+
     def test_fix_tasks_resumes_after_only_first_batch_was_written(self) -> None:
         root = self.root
         self.fixture(root)

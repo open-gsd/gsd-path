@@ -1521,11 +1521,12 @@ def _validate_task_graph(
 
 
 def plan_brief_inputs(
-    root: Path, project_dir: str = DEFAULT_PROJECT_DIR
+    root: Path, project_dir: str = DEFAULT_PROJECT_DIR, *, initial: bool = True
 ) -> Tuple[Dict[str, str], Dict[str, Set[str]]]:
+    """Validate the plan graph, requiring clean unlanded tasks only at approval."""
     tasks = _task_texts(root, project_dir)
     wave_depths, _ = _plan_waves(_read(root, f"{project_dir}/plan/PLAN.md"))
-    return tasks, _validate_task_graph(wave_depths, tasks, initial=True)
+    return tasks, _validate_task_graph(wave_depths, tasks, initial=initial)
 
 
 def _intent_path(project_dir: str) -> str:

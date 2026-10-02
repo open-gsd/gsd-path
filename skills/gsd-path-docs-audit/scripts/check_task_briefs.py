@@ -441,9 +441,9 @@ def validate_task_briefs(
 ) -> Dict[str, object]:
     """Lint task briefs using the caller's validation bases.
 
-    Dispatch uses the layer base without overrides. Plan approval supplies
-    transitive dependency files for pending tasks and resolved historical bases
-    for landed tasks, whose immutable briefs must survive later file changes.
+    Plain lint uses the layer base without overrides. Plan approval and dispatch
+    supply transitive dependency files for unlanded tasks and resolved historical
+    bases for landed tasks, whose immutable briefs must survive later file changes.
     The caller validates the task graph and landed metadata before supplying
     these mappings; landed tasks receive no dependency-file allowance.
     """
@@ -485,13 +485,14 @@ def validate_task_briefs(
     return {"base": resolved_base, "checked": checked, "tasks": len(task_files)}
 
 
-def validate_plan_task_briefs(
-    root: Path,
-    base: str,
-    project_dir: str = ".project",
-    tasks_dir: Optional[str] = None,
-) -> Dict[str, object]:
-    """Plan gate validation with dependency files and landed historical bases."""
+def plan_validation_bases(
+    root: Path, project_dir: str, member_base=None, *, initial: bool = True,
+) -> Tuple[Dict[str, str], Dict[str, Set[str]], Dict[str, str]]:
+    """Share dependency files and landed historical bases across approval and dispatch.
+
+    Approval requires unlanded tasks to start clean. Dispatch may run beside
+    in-flight tasks, while retaining the same graph and path checks.
+    """
     if __package__:
         from . import check_handoffs
         from .isolation import IsolationError, require_commit, require_full_sha
@@ -504,35 +505,55 @@ def validate_plan_task_briefs(
                 raise
             from scripts import check_handoffs
             from scripts.isolation import IsolationError, require_commit, require_full_sha
-    tasks, dependency_files = check_handoffs.plan_brief_inputs(root, project_dir)
-    landed_bases: Dict[str, str] = {}
-    member_base = _member_bases(root)
-    for task_id, text in tasks.items():
-        if check_handoffs._task_scalar(text, task_id, "status") != "done":
-            continue
-        agent = check_handoffs._task_scalar(text, task_id, "agent")
-        if agent in {"", "null"}:
-            raise BriefError(f"{task_id} landed task has no recorded agent")
-        member = check_handoffs._strict_frontmatter(text, task_id).get("repo")
-        base_repo = root
-        if member is not None:
-            located = member_base(member) if isinstance(member, str) and member else None
-            if located is None:
-                raise BriefError(f"repo: names no member in MEMBERS.md: {member}")
-            base_repo = located[0]
-        recorded_base = check_handoffs._task_scalar(text, task_id, "base")
-        recorded_full = require_full_sha(recorded_base)
-        try:
+    if member_base is None:
+        member_base = _member_bases(root)
+    try:
+        tasks, dependency_files = check_handoffs.plan_brief_inputs(
+            root, project_dir, initial=initial
+        )
+        landed_bases: Dict[str, str] = {}
+        for task_id, text in tasks.items():
+            if check_handoffs._task_scalar(text, task_id, "status") != "done":
+                continue
+            agent = check_handoffs._task_scalar(text, task_id, "agent")
+            if agent in {"", "null"}:
+                raise BriefError(f"{task_id} landed task has no recorded agent")
+            member = check_handoffs._strict_frontmatter(text, task_id).get("repo")
+            base_repo = root
             if member is not None:
-                try:
-                    landed_bases[task_id] = require_commit(root, recorded_full)
-                except IsolationError:
+                located = member_base(member) if isinstance(member, str) and member else None
+                if located is None:
+                    raise BriefError(f"repo: names no member in MEMBERS.md: {member}")
+                base_repo = located[0]
+            recorded_base = check_handoffs._task_scalar(text, task_id, "base")
+            try:
+                recorded_full = require_full_sha(recorded_base)
+                if member is not None:
+                    try:
+                        landed_bases[task_id] = require_commit(root, recorded_full)
+                    except IsolationError:
+                        landed_bases[task_id] = require_commit(base_repo, recorded_full)
+                else:
                     landed_bases[task_id] = require_commit(base_repo, recorded_full)
-            else:
-                landed_bases[task_id] = require_commit(base_repo, recorded_full)
-        except IsolationError as error:
-            raise BriefError(f"{task_id} landed task has invalid historical base: {error}") from error
-        dependency_files[task_id] = set()
+            except IsolationError as error:
+                raise BriefError(f"{task_id} landed task has invalid historical base: {error}") from error
+            dependency_files[task_id] = set()
+    except check_handoffs.HandoffError as error:
+        raise BriefError(str(error)) from error
+    return tasks, dependency_files, landed_bases
+
+
+def validate_plan_task_briefs(
+    root: Path,
+    base: str,
+    project_dir: str = ".project",
+    tasks_dir: Optional[str] = None,
+) -> Dict[str, object]:
+    """Dispatch lint with dependency files and landed historical bases."""
+    member_base = _member_bases(root)
+    _, dependency_files, landed_bases = plan_validation_bases(
+        root, project_dir, member_base, initial=False
+    )
     resolved_tasks_dir = tasks_dir or f"{project_dir}/tasks"
     return validate_task_briefs(
         root,
@@ -577,8 +598,8 @@ def parser() -> argparse.ArgumentParser:
     argument_parser.add_argument(
         "--project-dir",
         default=None,
-        help="when set, apply plan-approval dependency files and landed-task bases "
-        "(same rules as state_checkpoint plan approval)",
+        help="apply plan dependency files and landed-task bases for this track "
+        "(inferred from --tasks-dir when its sibling plan/PLAN.md exists)",
     )
     return argument_parser
 
@@ -586,16 +607,24 @@ def parser() -> argparse.ArgumentParser:
 def main(argv: Optional[Sequence[str]] = None) -> int:
     arguments = parser().parse_args(argv)
     try:
-        if arguments.project_dir is not None:
+        root = arguments.repo.resolve()
+        project_dir = arguments.project_dir
+        if project_dir is None:
+            tasks_path = PurePosixPath(arguments.tasks_dir)
+            if tasks_path.name == "tasks" and len(tasks_path.parts) > 1:
+                track = tasks_path.parent.as_posix()
+                if (root / track / "plan/PLAN.md").is_file():
+                    project_dir = track
+        if project_dir is not None:
             result = validate_plan_task_briefs(
-                arguments.repo.resolve(),
+                root,
                 arguments.base,
-                arguments.project_dir,
+                project_dir,
                 None if arguments.tasks_dir == DEFAULT_TASKS_DIR else arguments.tasks_dir,
             )
         else:
             result = validate_task_briefs(
-                arguments.repo.resolve(), arguments.base, arguments.tasks_dir
+                root, arguments.base, arguments.tasks_dir
             )
     except BriefError as error:
         print(f"task brief validation failed: {error}", file=sys.stderr)

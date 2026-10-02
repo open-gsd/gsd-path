@@ -2088,7 +2088,8 @@ Heavy: {'yes' if heavy else 'no'}
         receipt["plan_wave"] = fix_wave
         lint = subprocess.run([sys.executable, "-B", str(Path(__file__).resolve().parent / "check_task_briefs.py"),
                                "--repo", str(primary), "--base", isolation.current_sha(primary),
-                               "--tasks-dir", f"{options.project_dir}/tasks"], capture_output=True, encoding="utf-8", errors="replace")
+                               "--tasks-dir", f"{options.project_dir}/tasks",
+                               "--project-dir", options.project_dir], capture_output=True, encoding="utf-8", errors="replace")
         receipt["steps"].append({"script": "check_task_briefs.py", "exit_code": lint.returncode,
                                  "stdout": lint.stdout, "stderr": lint.stderr})
         if lint.returncode:

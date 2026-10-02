@@ -196,7 +196,7 @@ dispatch contract and perform steps 1–5 by hand.
    a later round unlocked by fresh landings records the later HEAD — and
    lint every ready task's brief with the bundled
    `scripts/check_task_briefs.py --repo <absolute repo root> --base <recorded
-   base>` and re-check Intent coverage with
+   base> --project-dir <routed project dir>` and re-check Intent coverage with
    `python3 <absolute check_handoffs.py> plan --repo <absolute repo root>`
    before creating any worktree; a lint or coverage failure is a documented plan
    defect — repair it against INTENT.md and SYNTHESIS.md, then re-establish
