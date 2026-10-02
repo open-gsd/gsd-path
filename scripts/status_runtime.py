@@ -6,6 +6,7 @@ import hashlib
 import errno
 import json
 import os
+import stat
 import subprocess
 import sys
 import time
@@ -151,7 +152,17 @@ def validate_runtime(data: dict) -> Path:
             path = root / name
             if path.is_symlink() or hashlib.sha256(path.read_bytes()).hexdigest() != expected:
                 raise ValueError(f"runtime file changed: {name}")
-        if set(p.name for p in root.iterdir()) != set(files) | {"manifest.json"}:
+        runtime_entries = set()
+        for path in root.iterdir():
+            if path.name == "__pycache__":
+                if not stat.S_ISDIR(path.lstat().st_mode):
+                    raise ValueError("unexpected runtime files")
+                for cached in path.iterdir():
+                    if cached.suffix != ".pyc" or not stat.S_ISREG(cached.lstat().st_mode):
+                        raise ValueError("unexpected runtime files")
+                continue
+            runtime_entries.add(path.name)
+        if runtime_entries != set(files) | {"manifest.json"}:
             raise ValueError("unexpected runtime files")
     except (OSError, ValueError, TypeError) as error:
         raise ValueError(hint + f" ({error})") from error
@@ -167,8 +178,13 @@ def run_guard(repo: Path, name: str) -> None:
     root = resolve_runtime(repo)
     sys.dont_write_bytecode = True
     sys.path.insert(0, str(root))
-    code = compile((root / name).read_bytes(), str(root / name), "exec")
-    exec(code, {"__name__": "__main__", "__file__": str(repo / ".gsd-path" / name)})
+    previous_pycache_prefix = sys.pycache_prefix
+    sys.pycache_prefix = str(root / "manifest.json")
+    try:
+        code = compile((root / name).read_bytes(), str(root / name), "exec")
+        exec(code, {"__name__": "__main__", "__file__": str(repo / ".gsd-path" / name)})
+    finally:
+        sys.pycache_prefix = previous_pycache_prefix
 
 
 def launch(repo: Path) -> int:
@@ -179,7 +195,9 @@ def launch(repo: Path) -> int:
         except (OSError, ValueError) as error:
             print(str(error), file=sys.stderr)
             return 2
-        return subprocess.call([sys.executable, "-B", str(runtime), "status", "--repo", str(repo)],
+        return subprocess.call([sys.executable, "-B", "-X",
+                                f"pycache_prefix={runtime.parent / 'manifest.json'}",
+                                str(runtime), "status", "--repo", str(repo)],
                                env={**os.environ, "GIT_OPTIONAL_LOCKS": "0"})
     runtime = parent / "runtime" / "pipeline_state.py"
     lock = repo / ".gsd-path-install-lock"

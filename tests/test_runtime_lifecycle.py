@@ -1,6 +1,8 @@
 """Behavioral contract for pinned runtime storage outside Git checkouts."""
 import json
+import importlib.util
 import os
+import py_compile
 import re
 import shlex
 from pathlib import Path
@@ -47,6 +49,22 @@ class RuntimeLifecycleTests(unittest.TestCase):
 
     def pin(self):
         return json.loads((self.repo / ".gsd-path/runtime.json").read_text(encoding="utf-8"))
+
+    def poison_runtime_cache(self, runtime, module):
+        source = runtime / f"{module}.py"
+        cache = Path(importlib.util.cache_from_source(str(source)))
+        cache.parent.mkdir(exist_ok=True)
+        marker = self.root / f"{module}-cache-was-loaded"
+        poison_source = self.root / f"poisoned-{module}.py"
+        body = f"from pathlib import Path\nPath({str(marker)!r}).write_text('poison loaded')\n".encode()
+        source_size = source.stat().st_size
+        self.assertLess(len(body), source_size)
+        body += b"#" + b"x" * (source_size - len(body) - 1)
+        poison_source.write_bytes(body)
+        timestamp = source.stat().st_mtime
+        os.utime(poison_source, (timestamp, timestamp))
+        py_compile.compile(str(poison_source), cfile=str(cache), doraise=True)
+        return cache, marker
 
     def runtime_command(self, option, source=SOURCE):
         return subprocess.run(
@@ -110,6 +128,138 @@ class RuntimeLifecycleTests(unittest.TestCase):
         self.assertTrue((self.repo / ".gsd-path/runtime.json").is_file())
         self.assertFalse((self.repo / ".gsd-path/runtime").exists())
         self.assertTrue((self.home / ".gsd-path/runtimes" / self.pin()["digest"] / "pipeline_state.py").is_file())
+
+    def test_pinned_runtime_accepts_python_cache_directory(self):
+        self.provision()
+        runtime = install.status_runtime.resolve_runtime(self.repo)
+        cache = runtime / "__pycache__"
+        cache.mkdir()
+        bytecode = cache / "x.cpython-314.pyc"
+        bytecode.write_bytes(b"incidental Python bytecode cache")
+
+        self.assertEqual(install.status_runtime.resolve_runtime(self.repo), runtime)
+
+        bytecode.unlink()
+        self.assertEqual(install.status_runtime.resolve_runtime(self.repo), runtime)
+
+    def test_pinned_runtime_rejects_unexpected_cache_entries(self):
+        self.provision()
+        runtime = install.status_runtime.resolve_runtime(self.repo)
+        cache = runtime / "__pycache__"
+        cache.mkdir()
+
+        extra = cache / "notes.txt"
+        extra.write_bytes(b"not bytecode")
+        with self.assertRaisesRegex(ValueError, "unexpected runtime files"):
+            install.status_runtime.resolve_runtime(self.repo)
+        extra.unlink()
+
+        nested = cache / "nested.pyc"
+        nested.mkdir()
+        with self.assertRaisesRegex(ValueError, "unexpected runtime files"):
+            install.status_runtime.resolve_runtime(self.repo)
+        nested.rmdir()
+
+        extra = runtime / "site_policy.py"
+        extra.write_bytes(b"unmanifested runtime file")
+        with self.assertRaisesRegex(ValueError, "unexpected runtime files"):
+            install.status_runtime.resolve_runtime(self.repo)
+
+    @requires_symlink
+    def test_pinned_runtime_rejects_symlinked_cache_paths(self):
+        self.provision()
+        runtime = install.status_runtime.resolve_runtime(self.repo)
+        cache = runtime / "__pycache__"
+        cache.mkdir()
+        target = self.root / "external.pyc"
+        target.write_bytes(b"external bytecode")
+        (cache / "x.cpython-314.pyc").symlink_to(target)
+        with self.assertRaisesRegex(ValueError, "unexpected runtime files"):
+            install.status_runtime.resolve_runtime(self.repo)
+
+        (cache / "x.cpython-314.pyc").unlink()
+        cache.rmdir()
+        real_cache = self.root / "real-cache"
+        real_cache.mkdir()
+        cache.symlink_to(real_cache, target_is_directory=True)
+        with self.assertRaisesRegex(ValueError, "unexpected runtime files"):
+            install.status_runtime.resolve_runtime(self.repo)
+
+    def test_status_launch_ignores_timestamp_valid_runtime_bytecode_cache(self):
+        self.provision()
+        runtime = install.status_runtime.resolve_runtime(self.repo)
+        cache, marker = self.poison_runtime_cache(runtime, "_common")
+        poisoned = cache.read_bytes()
+
+        result = subprocess.run(
+            [sys.executable, "-B", str(self.repo / ".gsd-path/status_runtime.py"),
+             "--repo", str(self.repo)],
+            cwd=self.repo, capture_output=True, encoding="utf-8", errors="replace",
+        )
+
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("project directory must be real", result.stderr)
+        self.assertFalse(marker.exists())
+        self.assertEqual(cache.read_bytes(), poisoned)
+
+    def test_run_guard_ignores_timestamp_valid_runtime_bytecode_cache(self):
+        self.provision()
+        install.refresh_hooks(SOURCE, self.repo, True, selected=["claude"], initialize=True)
+        runtime = install.status_runtime.resolve_runtime(self.repo)
+        cache, marker = self.poison_runtime_cache(runtime, "_common")
+        poisoned = cache.read_bytes()
+
+        result = subprocess.run(
+            [sys.executable, "-B", str(self.repo / ".gsd-path/git_guard.py")],
+            cwd=self.repo, capture_output=True, encoding="utf-8", errors="replace",
+        )
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertFalse(marker.exists())
+        self.assertEqual(cache.read_bytes(), poisoned)
+
+    def test_run_guard_restores_python_cache_prefix_on_success_and_failure(self):
+        self.provision()
+        code = """
+import builtins
+import sys
+from pathlib import Path
+from scripts import install
+
+repo = Path(sys.argv[1])
+before = sys.pycache_prefix
+sys.argv = [str(repo / '.gsd-path/git_guard.py')]
+try:
+    install.status_runtime.run_guard(repo, 'git_guard.py')
+except SystemExit as error:
+    if error.code not in (None, 0):
+        raise
+if sys.pycache_prefix != before:
+    raise SystemExit('cache prefix was not restored after success')
+
+original_exec = builtins.exec
+def fail_exec(*args, **kwargs):
+    raise RuntimeError('injected exec failure')
+builtins.exec = fail_exec
+try:
+    try:
+        install.status_runtime.run_guard(repo, 'git_guard.py')
+    except RuntimeError as error:
+        if str(error) != 'injected exec failure':
+            raise
+    else:
+        raise SystemExit('injected exec failure did not occur')
+finally:
+    builtins.exec = original_exec
+if sys.pycache_prefix != before:
+    raise SystemExit('cache prefix was not restored after failure')
+"""
+        result = subprocess.run(
+            [sys.executable, "-B", "-c", code, str(self.repo)], cwd=SOURCE,
+            capture_output=True, encoding="utf-8", errors="replace",
+        )
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_fresh_named_checkout_resolves_without_writes(self):
         self.provision()
