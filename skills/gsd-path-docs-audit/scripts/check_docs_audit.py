@@ -8,6 +8,10 @@ with testable claims where every claim row carries a valid type, a valid
 verdict, and real evidence, a `## Descriptive docs` list for claimless docs,
 the two sets disjoint and together equal to the frozen inventory, and a
 remediation queue with one classified row per non-verified claim.
+Queue numbers are unique, positive and strictly increasing, not necessarily
+contiguous. With `--prior-audit`, persisting rows keep their number and new
+rows use a number above every prior queue number and User rulings Queue #.
+Numbers stay bound to their original (doc, claim); never reuse a retired one.
 `## User rulings` is fixed-format durable memory. Pass the pre-rewrite audit
 with `--prior-audit FILE`; every prior row, including its Planned value, must
 remain an exact ordered prefix.
@@ -94,6 +98,12 @@ def _table_rows(body: str, width: int, label: str) -> List[List[str]]:
         raise AuditError(f"{label}: missing table")
     header, *rows = rows
     return rows
+
+
+def _remediation_queue_rows(body: str, label: str, required: bool = False) -> List[List[str]]:
+    if not required and "|" not in body:
+        return []
+    return _table_rows(body, 6, label)
 
 
 def _not_placeholder(value: str, label: str) -> None:
@@ -247,6 +257,63 @@ def _check_carried(
             raise AuditError(f"{label}: doc or evidence changed since the prior audit: {', '.join(moved)}")
 
 
+def _queue_number(number: str, label: str) -> int:
+    if not re.fullmatch(r"[1-9][0-9]*", number):
+        raise AuditError(f"{label}: queue numbers must be positive integers")
+    return int(number)
+
+
+def _check_queue_number_history(
+    queue: Sequence[Sequence[str]],
+    prior_sections: Dict[str, str],
+) -> None:
+    if "Remediation queue" not in prior_sections:
+        raise AuditError("prior audit is missing section: ## Remediation queue")
+    if "User rulings" not in prior_sections:
+        raise AuditError("prior audit is missing section: ## User rulings")
+
+    prior_queue = _remediation_queue_rows(
+        prior_sections["Remediation queue"], "Prior remediation queue"
+    )
+    prior_items_by_number: Dict[int, tuple] = {}
+    prior_numbers_by_item: Dict[tuple, int] = {}
+    for number, doc, claim, *_ in prior_queue:
+        numeric_number = _queue_number(number, "Prior remediation queue")
+        identity = (doc, claim)
+        prior_items_by_number[numeric_number] = identity
+        prior_numbers_by_item[identity] = numeric_number
+
+    prior_rulings = _user_rulings(
+        prior_sections["User rulings"], "Prior user rulings"
+    )
+    prior_ruling_numbers = {int(row[0]) for row in prior_rulings}
+    prior_max = max(
+        [*prior_items_by_number, *prior_ruling_numbers],
+        default=0,
+    )
+
+    for number, doc, claim, *_ in queue:
+        numeric_number = _queue_number(number, "Remediation queue")
+        identity = (doc, claim)
+        prior_number = prior_numbers_by_item.get(identity)
+        if numeric_number in prior_ruling_numbers and prior_items_by_number.get(numeric_number) != identity:
+            raise AuditError(
+                f"Remediation queue #{number}: Queue # {number} is already retired by a prior "
+                "User rulings row for a different item; give new items a number above every "
+                "prior queue number and User rulings Queue #"
+            )
+        if prior_number is not None and numeric_number != prior_number:
+            raise AuditError(
+                f"Remediation queue #{number}: persisting item must keep its prior queue "
+                f"number #{prior_number}"
+            )
+        if prior_number is None and numeric_number <= prior_max:
+            raise AuditError(
+                f"Remediation queue #{number}: new items must use a number above every prior "
+                f"queue number and User rulings Queue # (maximum {prior_max})"
+            )
+
+
 def validate(
     repo: Path,
     audit_relative: str,
@@ -354,7 +421,9 @@ def validate(
 
     queue_body = sections["Remediation queue"]
     non_verified = sum(tallies[verdict] for verdict in VERDICTS if verdict != "verified")
-    queue = _table_rows(queue_body, 6, "Remediation queue") if non_verified or "|" in queue_body else []
+    queue = _remediation_queue_rows(
+        queue_body, "Remediation queue", required=bool(non_verified)
+    )
     expected_queue = sorted(
         (doc, claim["claim"], claim["verdict"])
         for doc, claims in docs.items()
@@ -371,9 +440,13 @@ def validate(
         _not_placeholder(action, f"Remediation queue #{number}: action")
     if len(queue) != non_verified:
         raise AuditError(f"Remediation queue has {len(queue)} rows for {non_verified} non-verified claims")
-    numbers = [row[0] for row in queue]
-    if numbers != [str(number) for number in range(1, len(queue) + 1)]:
-        raise AuditError("Remediation queue numbers must be contiguous and ordered from 1")
+    numbers = [_queue_number(row[0], "Remediation queue") for row in queue]
+    if any(later <= earlier for earlier, later in zip(numbers, numbers[1:])):
+        raise AuditError(
+            "Remediation queue numbers must be unique and strictly increasing"
+        )
+    if prior_sections is not None:
+        _check_queue_number_history(queue, prior_sections)
     actual_queue = sorted((doc, claim, verdict) for _, doc, claim, verdict, _, _ in queue)
     if actual_queue != expected_queue:
         raise AuditError(

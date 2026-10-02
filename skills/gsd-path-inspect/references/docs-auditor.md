@@ -59,6 +59,11 @@ actually does. Read-only: change nothing outside your single output file.
 5. **Classify remediation** for every non-verified claim: `fix-doc`,
    `fix-code`, or `NEEDS-USER` when the right side of the conflict is not
    yours to decide.
+   Number queue rows with unique, strictly increasing positive integers; they
+   need not be contiguous. A row that persists from the prior audit keeps its
+   number. A new row takes a number greater than every prior queue number and
+   every `## User rulings` Queue #. Never reuse a retired number: a ruling
+   stays bound to the item it was made for.
 
 ## Rules
 

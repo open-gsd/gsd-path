@@ -62,7 +62,11 @@ Worst drift: <one sentence — the most misleading claim found>
 ## Remediation queue
 
 <!-- Every non-verified claim, classified. The user rules on this queue;
-     the auditor never fixes anything. -->
+     the auditor never fixes anything.
+     Numbers are unique and strictly increasing, not necessarily contiguous.
+     A persisting row keeps its number; a new row takes a number above every
+     prior queue number and every User rulings Queue #. Never reuse a retired
+     number: a ruling stays bound to the item it was made for. -->
 
 | # | Doc | Claim | Verdict | Class | Suggested action |
 |---|-----|-------|---------|-------|------------------|

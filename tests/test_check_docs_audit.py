@@ -57,6 +57,51 @@ def with_rulings(text: str, *rows: str) -> str:
     return text.replace(RULING_HEADER, RULING_HEADER + "".join(row + "\n" for row in rows))
 
 
+def numbered_audit(items, ruling_numbers=(), queue_note=None):
+    docs = {"README.md": [("baseline claim", "verified")]}
+    for _, doc, claim, verdict in items:
+        docs.setdefault(doc, []).append((claim, verdict))
+
+    tallies = {"verified": 0, "stale": 0, "aspirational": 0, "unverifiable": 0}
+    lines = [
+        "# Docs Audit",
+        "",
+        "Repo root: /repo",
+        "Audited: 2026-08-21",
+        "Audited HEAD: none",
+        "Alignment mode: no",
+        "",
+    ]
+    for doc, claims in docs.items():
+        lines += [f"## Doc: {doc}", "", "| Claim | Type | Verdict | Evidence |", "|-------|------|---------|----------|"]
+        for claim, verdict in claims:
+            tallies[verdict] += 1
+            lines.append(f"| {claim} | feature | {verdict} | {doc}:1 |")
+        lines.append("")
+
+    lines += ["## Summary", "", "| Verdict | Count |", "|---------|-------|"]
+    lines += [f"| {verdict} | {count} |" for verdict, count in tallies.items()]
+    descriptive = [doc for doc in ("README.md", "CONTRIBUTING.md") if doc not in docs]
+    lines += [f"| descriptive docs (no testable claims) | {len(descriptive)} |", "", "## Descriptive docs", ""]
+    lines += [f"- {doc}" for doc in descriptive]
+
+    lines += ["", "## User rulings", "", RULING_HEADER.rstrip()]
+    for number in ruling_numbers:
+        lines.append(f'| {number} | fix-doc | "ok" | T001 |')
+
+    lines += ["", "## Remediation queue", ""]
+    if queue_note is None:
+        lines += [
+            "| # | Doc | Claim | Verdict | Class | Suggested action |",
+            "|---|-----|-------|---------|-------|------------------|",
+        ]
+        for number, doc, claim, verdict in items:
+            lines.append(f"| {number} | {doc} | {claim} | {verdict} | fix-doc | edit |")
+    elif queue_note:
+        lines.append(queue_note)
+    return "\n".join(lines) + "\n"
+
+
 class CheckDocsAuditTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
@@ -327,7 +372,15 @@ class CheckDocsAuditTests(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("Remediation queue has 0 rows for 1", err)
 
-    def test_remediation_queue_rows_bind_exact_claims_with_contiguous_numbers(self):
+    def check_numbered_audit(self, items, ruling_numbers=(), prior=None):
+        self.write(numbered_audit(items, ruling_numbers))
+        args = []
+        if prior is not None:
+            self.write(prior, "prior-audit.txt")
+            args += ["--prior-audit", str(self.repo / "prior-audit.txt")]
+        return self.run_gate(*args)
+
+    def test_remediation_queue_rows_bind_exact_claims(self):
         audit = AUDIT.format(verified=1).replace(
             '| "`--json` prints JSON" | feature | stale | `app 3 --json` → `3`, no json in `app.py` (`grep json app.py \\| wc -l` → 0) |',
             '| "`--json` prints JSON" | feature | stale | `app 3 --json` → `3`, no json in `app.py` (`grep json app.py \\| wc -l` → 0) |\n'
@@ -340,18 +393,121 @@ class CheckDocsAuditTests(unittest.TestCase):
         )
         self.write(duplicate)
 
-        code, _, err = self.run_gate()
+        code, _, error = self.run_gate()
 
-        self.assertEqual(code, 1)
-        self.assertIn("bind each non-verified", err)
+        self.assertEqual(1, code)
+        self.assertIn("bind each non-verified", error)
 
-        non_contiguous = audit.replace(
-            '| 1 | README.md | "`--json` prints JSON" | stale | fix-doc | drop the flag from README |',
-            '| 2 | README.md | "`--json` prints JSON" | stale | fix-doc | drop the flag from README |\n'
-            '| 3 | README.md | "Output is colored" | aspirational | fix-doc | document status |',
+    def test_remediation_queue_numbers_may_be_sparse_and_must_increase(self):
+        code, _, error = self.check_numbered_audit(
+            (
+                (3, "README.md", "first stale claim", "stale"),
+                (8, "README.md", "second stale claim", "aspirational"),
+            )
         )
-        self.write(non_contiguous)
-        self.assertIn("contiguous", self.run_gate()[2])
+        self.assertEqual(0, code, error)
+
+        invalid_sequences = (
+            ((3, "README.md", "first stale claim", "stale"), (3, "README.md", "second stale claim", "aspirational")),
+            ((8, "README.md", "first stale claim", "stale"), (4, "README.md", "second stale claim", "aspirational")),
+        )
+        for items in invalid_sequences:
+            with self.subTest(items=items):
+                code, _, error = self.check_numbered_audit(items)
+                self.assertEqual(1, code)
+                self.assertIn("unique and strictly increasing", error)
+
+        code, _, error = self.check_numbered_audit(((0, "README.md", "first stale claim", "stale"),))
+        self.assertEqual(1, code)
+        self.assertIn("positive integers", error)
+
+    def test_persisting_queue_item_keeps_its_prior_number(self):
+        prior = numbered_audit(((4, "README.md", "old claim", "stale"),), (4,))
+        code, _, error = self.check_numbered_audit(
+            (
+                (4, "README.md", "old claim", "stale"),
+                (5, "CONTRIBUTING.md", "new claim", "stale"),
+            ),
+            (4,),
+            prior,
+        )
+        self.assertEqual(0, code, error)
+
+        code, _, error = self.check_numbered_audit(
+            ((6, "README.md", "old claim", "stale"),), (4,), prior
+        )
+        self.assertEqual(1, code)
+        self.assertIn("persisting item must keep its prior queue number #4", error)
+
+    def test_new_queue_items_are_allocated_above_all_prior_numbers(self):
+        prior_queue_max = numbered_audit(
+            (
+                (2, "README.md", "old claim", "stale"),
+                (9, "CONTRIBUTING.md", "retired queue claim", "stale"),
+            ),
+            (2,),
+        )
+        code, _, error = self.check_numbered_audit(
+            (
+                (2, "README.md", "old claim", "stale"),
+                (10, "CONTRIBUTING.md", "new claim", "stale"),
+            ),
+            (2,),
+            prior_queue_max,
+        )
+        self.assertEqual(0, code, error)
+
+        code, _, error = self.check_numbered_audit(
+            (
+                (2, "README.md", "old claim", "stale"),
+                (8, "CONTRIBUTING.md", "new claim", "stale"),
+            ),
+            (2,),
+            prior_queue_max,
+        )
+        self.assertEqual(1, code)
+        self.assertIn("above every prior queue number and User rulings Queue #", error)
+
+        prior_ruling_max = numbered_audit(
+            ((2, "README.md", "old claim", "stale"),), (2, 9)
+        )
+        code, _, error = self.check_numbered_audit(
+            (
+                (2, "README.md", "old claim", "stale"),
+                (10, "CONTRIBUTING.md", "new claim", "stale"),
+            ),
+            (2, 9),
+            prior_ruling_max,
+        )
+        self.assertEqual(0, code, error)
+
+    def test_retired_ruled_numbers_cannot_be_reused_for_a_new_claim(self):
+        prior = numbered_audit(((2, "README.md", "current claim", "stale"),), (2, 7))
+        code, _, error = self.check_numbered_audit(
+            (
+                (2, "README.md", "current claim", "stale"),
+                (7, "CONTRIBUTING.md", "new claim", "stale"),
+            ),
+            (2, 7),
+            prior,
+        )
+        self.assertEqual(1, code)
+        self.assertIn("Queue # 7 is already retired", error)
+
+    def test_empty_table_free_prior_queue_allows_new_items_above_ruling_maximum(self):
+        for queue_note in ("", "No remediation needed."):
+            with self.subTest(queue_note=queue_note):
+                prior = numbered_audit((), (12,), queue_note=queue_note)
+                code, _, error = self.check_numbered_audit(
+                    ((13, "README.md", "new claim", "stale"),), (12,), prior
+                )
+                self.assertEqual(0, code, error)
+
+                code, _, error = self.check_numbered_audit(
+                    ((12, "README.md", "new claim", "stale"),), (12,), prior
+                )
+                self.assertEqual(1, code)
+                self.assertIn("Queue # 12 is already retired", error)
 
     def test_invalid_verdict_type_or_class(self):
         self.write(AUDIT.format(verified=1).replace("| command | verified |", "| vibe | verified |"))
