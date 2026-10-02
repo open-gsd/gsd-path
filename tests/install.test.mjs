@@ -1263,6 +1263,97 @@ test("doctor cli fails when a linked worktree hooks directory cannot be resolved
   assert.equal(status, 1);
 });
 
+test("CLI updates owned router aliases with prerelease and build stamps", () => {
+  const cli = path.join(REPO_ROOT, "scripts/install.mjs");
+  const cliSource = path.join(root, "cli-source");
+  fs.mkdirSync(cliSource);
+  for (const name of ["scripts", "skills", "platforms", "AGENTS.md", "WORKFLOW.md", "package.json"]) {
+    fs.cpSync(path.join(REPO_ROOT, name), path.join(cliSource, name), { recursive: true });
+  }
+  const versions = [
+    "1.5.0-rc.1",
+    "1.4.0-local.1",
+    "1.4.0+build.5",
+    "1.5.0-rc.1+build.5",
+  ];
+  const canonicalContent = path.join(cliSource, "skills", "gsd-path", "references", "runtime-selection.md");
+  const aliasContent = path.join(cliSource, "skills", "path", "references", "runtime-selection.md");
+  const originalContent = fs.readFileSync(canonicalContent, "utf8");
+
+  for (const version of versions) {
+    const target = path.join(root, `host-${version}`, "skills");
+    const alias = path.join(target, "path");
+    const packageJson = path.join(cliSource, "package.json");
+    const setVersion = (value) => fs.writeFileSync(packageJson, JSON.stringify({ version: value }));
+    const run = (...args) => spawnSync(process.execPath, [cli, "--claude", "--claude-root", target,
+      "--source-root", cliSource, "--no-color", ...args], { encoding: "utf8", env });
+    const setContent = (marker) => {
+      const content = `${originalContent}\n${marker}\n`;
+      for (const skill of fs.readdirSync(path.join(cliSource, "skills"))) {
+        const generated = path.join(cliSource, "skills", skill, "references", "runtime-selection.md");
+        if (fs.existsSync(generated)) fs.writeFileSync(generated, content);
+      }
+      assert.ok(fs.existsSync(aliasContent));
+    };
+    const installedVersion = () => fs.readFileSync(path.join(alias, "VERSION"), "utf8").trim();
+    const assertSuccess = (result) => assert.equal(result.status, 0, result.stdout + result.stderr);
+
+    setVersion(version);
+    const sameVersionMarker = `same-version update from ${version}`;
+    const numericMarker = `numeric release update from ${version}`;
+    setContent(`first install ${version}`);
+    assertSuccess(run());
+    assert.equal(installedVersion(), version);
+
+    setContent(sameVersionMarker);
+    assertSuccess(run("--update"));
+    assert.equal(installedVersion(), version);
+    assert.equal(
+      fs.readFileSync(path.join(alias, "references", "runtime-selection.md"), "utf8"),
+      `${originalContent}\n${sameVersionMarker}\n`
+    );
+
+    setVersion("1.6.0");
+    setContent(numericMarker);
+    assertSuccess(run("--update"));
+    assert.equal(installedVersion(), "1.6.0");
+    assert.equal(
+      fs.readFileSync(path.join(alias, "references", "runtime-selection.md"), "utf8"),
+      `${originalContent}\n${numericMarker}\n`
+    );
+  }
+});
+
+test("CLI refuses router aliases without a managed runtime or valid version stamp", () => {
+  const cli = path.join(REPO_ROOT, "scripts/install.mjs");
+  const cliSource = path.join(root, "cli-source");
+  fs.mkdirSync(cliSource);
+  for (const name of ["scripts", "skills", "platforms", "AGENTS.md", "WORKFLOW.md", "package.json"]) {
+    fs.cpSync(path.join(REPO_ROOT, name), path.join(cliSource, name), { recursive: true });
+  }
+  const invalidStamps = ["local", "1.4.0-", "1.4.0-rc..1", "1.4.0+build..5", "1.4.0+build+again"];
+  const candidates = [
+    { name: "missing-runtime", version: "1.4.0-rc.1", runtime: false },
+    ...invalidStamps.map((version) => ({ name: version, version, runtime: true })),
+  ];
+
+  for (const candidate of candidates) {
+    const target = path.join(root, `collision-${candidate.name}`, "skills");
+    const alias = path.join(target, "path");
+    fs.mkdirSync(path.join(alias, "scripts"), { recursive: true });
+    fs.writeFileSync(path.join(alias, "SKILL.md"), "user-owned skill\n");
+    fs.writeFileSync(path.join(alias, "VERSION"), `${candidate.version}\n`);
+    if (candidate.runtime) {
+      fs.writeFileSync(path.join(alias, "scripts", "pipeline_state.py"), "# unrelated runtime\n");
+    }
+    const result = spawnSync(process.execPath, [cli, "--claude", "--claude-root", target,
+      "--source-root", cliSource, "--no-color"], { encoding: "utf8", env });
+    assert.notEqual(result.status, 0, `${candidate.name} should be refused`);
+    assert.match(result.stderr, /refusing to replace unrelated skill/);
+    assert.equal(fs.readFileSync(path.join(alias, "SKILL.md"), "utf8"), "user-owned skill\n");
+  }
+});
+
 test("project runtime version install update refresh", () => {
   const project = path.join(root, "version-project");
   const cliSource = path.join(root, "cli-source");

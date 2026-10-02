@@ -387,7 +387,9 @@ function isOwnedRouterAlias(skillDir) {
   const versionFile = path.join(skillDir, "VERSION");
   if (!isFile(versionFile)) return isManagedProjectRuntime(runtime); // installs before alias version stamping
   try {
-    return /^[0-9]+(?:\.[0-9]+)+$/.test(fs.readFileSync(versionFile, "utf8").trim());
+    return /^[0-9]+(?:\.[0-9]+)+(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/.test(
+      fs.readFileSync(versionFile, "utf8").trim()
+    );
   } catch {
     return false;
   }

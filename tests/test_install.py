@@ -479,12 +479,136 @@ class InstallerTests(unittest.TestCase):
         foreign = target / "path"
         (foreign / "scripts").mkdir(parents=True)
         (foreign / "scripts" / "pipeline_state.py").touch()
-        for version in ("", "release", "1..0", "1.0.beta", "1.0\nforeign"):
+        for version in (
+            "",
+            "release",
+            "v1.0.0",
+            "1..0",
+            "1.0.beta",
+            "1.0\nforeign",
+            "1.0.0-",
+            "1.0.0-rc..1",
+            "1.0.0+",
+            "1.0.0++build",
+            "1.0.0-rc+build+again",
+        ):
             with self.subTest(version=version):
                 (foreign / "VERSION").write_bytes(version.encode("utf-8"))
                 with self.assertRaisesRegex(install.InstallerError, "unrelated skill"):
                     install.install(self.source, [install.TargetPlan("grok", target)])
                 self.assertEqual(version, (foreign / "VERSION").read_text(encoding="utf-8"))
+
+    def test_cli_update_recognizes_prerelease_and_build_stamped_router_aliases(self):
+        previous = Path.cwd()
+        cases = (
+            "1.5.0-rc.1",
+            "1.4.0-local.1",
+            "1.4.0+build.5",
+            "1.4.0-rc.1+build.5",
+        )
+        try:
+            for version in cases:
+                with self.subTest(version=version):
+                    project = self.root / version.replace("+", "-").replace(".", "_")
+                    project.mkdir()
+                    os.chdir(project)
+                    (self.source / "package.json").write_text(
+                        json.dumps({"version": version}) + "\n", encoding="utf-8"
+                    )
+                    status, _, error = self.run_main(
+                        [
+                            "--grok",
+                            "--grok-root",
+                            str(project / "skills"),
+                            "--source-root",
+                            str(self.source),
+                        ]
+                    )
+                    self.assertEqual(0, status, error)
+
+                    installed = project / "skills" / "path"
+                    canonical = project / "skills" / "gsd-path"
+                    stamp = installed / "VERSION"
+                    self.assertEqual(version, stamp.read_text(encoding="utf-8").strip())
+
+                    source_alias_guide = self.source / "skills" / "path" / "guide.md"
+                    installed_alias_guide = installed / "guide.md"
+                    same_version_content = f"alias refresh for {version}\n"
+                    source_alias_guide.write_text(
+                        same_version_content, encoding="utf-8"
+                    )
+                    source_skill = self.source / "skills" / "gsd-path" / "SKILL.md"
+                    source_skill.write_text(
+                        f"---\nname: gsd-path\ndescription: updated {version}\n---\nupdated\n",
+                        encoding="utf-8",
+                    )
+                    status, output, error = self.run_main(
+                        [
+                            "--grok",
+                            "--grok-root",
+                            str(project / "skills"),
+                            "--source-root",
+                            str(self.source),
+                            "--update",
+                        ]
+                    )
+                    self.assertEqual(0, status, error)
+                    self.assertIn("updated", output)
+                    self.assertEqual(version, stamp.read_text(encoding="utf-8").strip())
+                    self.assertIn(
+                        "description: updated",
+                        (canonical / "SKILL.md").read_text(encoding="utf-8"),
+                    )
+                    self.assertEqual(
+                        same_version_content,
+                        installed_alias_guide.read_text(encoding="utf-8"),
+                    )
+
+                    release = version.split("-", 1)[0].split("+", 1)[0]
+                    release_content = f"release refresh from {version} to {release}\n"
+                    source_alias_guide.write_text(release_content, encoding="utf-8")
+                    (self.source / "package.json").write_text(
+                        json.dumps({"version": release}) + "\n", encoding="utf-8"
+                    )
+                    source_skill.write_text(
+                        f"---\nname: gsd-path\ndescription: release {release}\n---\nrelease\n",
+                        encoding="utf-8",
+                    )
+                    status, output, error = self.run_main(
+                        [
+                            "--grok",
+                            "--grok-root",
+                            str(project / "skills"),
+                            "--source-root",
+                            str(self.source),
+                            "--update",
+                        ]
+                    )
+                    self.assertEqual(0, status, error)
+                    self.assertIn("updated", output)
+                    self.assertEqual(release, stamp.read_text(encoding="utf-8").strip())
+                    self.assertIn(
+                        "description: release",
+                        (canonical / "SKILL.md").read_text(encoding="utf-8"),
+                    )
+                    self.assertEqual(
+                        release_content,
+                        installed_alias_guide.read_text(encoding="utf-8"),
+                    )
+        finally:
+            os.chdir(previous)
+
+    def test_install_refuses_version_stamped_path_alias_without_runtime(self):
+        target = self.root / "missing-runtime-path" / "skills"
+        foreign = target / "path"
+        foreign.mkdir(parents=True)
+        original = "foreign skill content\n"
+        (foreign / "SKILL.md").write_text(original, encoding="utf-8")
+        (foreign / "VERSION").write_text("1.5.0-rc.1\n", encoding="utf-8")
+
+        with self.assertRaisesRegex(install.InstallerError, "unrelated skill"):
+            install.install(self.source, [install.TargetPlan("grok", target)])
+        self.assertEqual(original, (foreign / "SKILL.md").read_text(encoding="utf-8"))
 
     def test_install_replaces_a_pre_stamp_path_alias_with_the_managed_runtime(self):
         target = self.root / "pre-stamp-path" / "skills"

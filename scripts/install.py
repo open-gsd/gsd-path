@@ -656,7 +656,15 @@ def _is_owned_router_alias(skill_dir: Path) -> bool:
         version = version_file.read_text(encoding="utf-8").strip()
     except (OSError, UnicodeError):
         return False
-    return re.fullmatch(r"[0-9]+(?:\.[0-9]+)+", version) is not None
+    return (
+        re.fullmatch(
+            r"[0-9]+(?:\.[0-9]+)+"
+            r"(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?"
+            r"(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?",
+            version,
+        )
+        is not None
+    )
 
 
 def _is_managed_install_entry(root: Path, name: str) -> bool:
