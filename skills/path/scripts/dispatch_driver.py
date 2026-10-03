@@ -20,6 +20,7 @@ import importlib
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -914,6 +915,26 @@ class Round:
             verdict = task["verdict"]
             if verdict in ("recovered", "attested"):
                 self.proven[str(task.get("task_id"))] = str(task.get("commit"))
+            if (verdict == "reconcile" and task.get("status") == "in-progress"
+                    and task.get("task_branch") is None):
+                task_id = str(task.get("task_id"))
+                verify_name = f"task-{task_id.lower()}-verify"
+                verify_path = isolation.sidecar_root(self.primary, "verify", verify_name)
+                verify_branch = isolation.verify_branch_name(verify_name)
+                diagnose = shlex.join([
+                    sys.executable,
+                    "-B",
+                    str(Path(__file__).with_name("pipeline_diagnose.py")),
+                    "diagnose",
+                    "--repo",
+                    str(self.primary),
+                ])
+                raise DriverStop(
+                    f"task {task_id} needs recovery: {task.get('reason')}; inspect Verify "
+                    f"sidecar {verify_path} ({verify_branch}) before resetting it to pending; "
+                    f"inventory it with `{diagnose}`",
+                    recover=task,
+                )
             if verdict == "recovered" and task.get("member") and task.get("task_id") not in retired_members:
                 isolation.retire_member_task(self.primary, str(task["member"]), str(task["task_id"]))
             if verdict == "recovered" and worktree and worktree["clean"] and task.get("task_branch"):
@@ -928,12 +949,22 @@ class Round:
     # settle exited children ---------------------------------------------
 
     def isolate_live(self, state: Dict[str, object]) -> bool:
-        """True while the isolate still holds the task as in-progress; the parent's recovery clears it."""
+        """Keep blocked attempts reportable until the corresponding task is reset."""
         task_path = Path(str(state["worktree"])) / str(state["task_file"])
         if not task_path.is_file():
             return False
         fields, _ = isolation.task_frontmatter(task_path.read_text(encoding="utf-8"))
-        return fields is not None and fields.get("status") == "in-progress"
+        if fields is None:
+            return False
+        if fields.get("status") == "in-progress":
+            return True
+        return (
+            state.get("mode") == "serial"
+            and fields.get("status") == "blocked"
+            and fields.get("id") == state.get("task_id")
+            and fields.get("base") == state.get("base")
+            and fields.get("task_branch") == "null"
+        )
 
     def settle(self) -> bool:
         """Classify every exited child. Returns True when a landing or redispatch changed the round."""
@@ -991,6 +1022,35 @@ class Round:
         update_state(state, outcome="blocked", reason=reason)
         self.receipt["blocked"].append({**self.summary(state), "reason": reason, **details})
 
+    def blocked_result(self, state: Dict[str, object], **diagnostics: object) -> bool:
+        """Record an explicit serial block and retire only its untouched Verify sidecar."""
+        reason = "child returned blocked"
+        details: Dict[str, object] = dict(diagnostics)
+        if state.get("mode") == "serial":
+            try:
+                task = isolation.block_serial_task(
+                    self.primary,
+                    str(state["task_file"]),
+                    str(state["task_id"]),
+                    str(state["base"]),
+                )
+            except STOP_ERRORS as error:
+                self.fail(state, f"{reason}; could not record blocked task: {error}")
+                return False
+            details["task"] = task
+            sidecar = state.get("sidecar")
+            if isinstance(sidecar, dict):
+                worktree = Path(str(sidecar["worktree"]))
+                branch = str(sidecar["branch"])
+                try:
+                    details["verify_cleanup"] = isolation.retire_unused_verify(
+                        self.primary, worktree, str(state["base"]), branch
+                    )
+                except STOP_ERRORS as error:
+                    reason += f"; Verify sidecar retained at {worktree}: {error}"
+        self.fail(state, reason, **details)
+        return False
+
     def classify(self, state: Dict[str, object]) -> bool:
         attempt_dir = Path(str(state["_path"])).parent
         if self.budgeted and not state.get("usage_recorded"):
@@ -1018,6 +1078,10 @@ class Round:
             update_state(state, outcome="question", question=unanswered[0], answered=False)
             self.receipt["questions"].append({**self.summary(state), "question": unanswered[0],
                                               "log_delta": delta.strip()})
+        elif verdict == "blocked" and named == str(state["task_id"]).lower():
+            return self.blocked_result(
+                state, stdout_tail=tail(message), log_delta=delta.strip()
+            )
         elif verdict != "ready" or named != str(state["task_id"]).lower():
             self.fail(state, "child returned blocked" if verdict == "blocked"
                       else "child returned no RESULT line", stdout_tail=tail(message),

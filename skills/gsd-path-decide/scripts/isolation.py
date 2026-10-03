@@ -1904,6 +1904,59 @@ def stamp_task_landed(task_path: Path, base: str) -> None:
     )
 
 
+def block_serial_task(
+    primary: Path, task_file: str, task_id: str, base: str
+) -> Dict[str, str]:
+    """Record an explicit blocked result on its still-active serial task."""
+    primary = require_directory(primary, "primary worktree")
+    if worktree_root(primary) != primary:
+        raise IsolationError(f"primary is not its Git root: {primary}")
+    normalized_task = relative_posix(task_file)
+    if not normalized_task.startswith(".project/tasks/"):
+        raise IsolationError("serial task file must stay under .project/tasks/")
+    task_id = validate_task_id(task_id)
+    expected_base = require_commit(primary, require_full_sha(base))
+    task_path = _real_file(primary, normalized_task, "serial task file")
+    text, mode = _read_task_text(task_path)
+    fields, error = task_frontmatter(text)
+    if error or fields is None:
+        raise IsolationError(error or "serial task frontmatter is unreadable")
+    if fields.get("id") != task_id:
+        raise IsolationError("serial task id changed before blocked result")
+    if fields.get("status") not in {"in-progress", "blocked"}:
+        raise IsolationError("serial task is no longer active")
+    if fields.get("base") != expected_base:
+        raise IsolationError("serial task base changed before blocked result")
+    if fields.get("task_branch") != "null":
+        raise IsolationError("serial task records a task branch")
+    recorded_worktree = fields.get("worktree")
+    if not isinstance(recorded_worktree, str) or Path(recorded_worktree).resolve() != primary:
+        raise IsolationError("serial task worktree changed before blocked result")
+
+    if fields.get("status") == "blocked":
+        return {"task_id": task_id, "task_file": normalized_task,
+                "base": expected_base, "status": "blocked"}
+
+    head, body = split_frontmatter(text)
+    replaced = False
+    lines = []
+    for line in head:
+        if _frontmatter_key(line) == "status":
+            if replaced:
+                raise IsolationError("serial task frontmatter repeats status")
+            replaced = True
+            lines.append("status: blocked")
+        else:
+            lines.append(line)
+    if not replaced:
+        raise IsolationError("serial task frontmatter is missing status")
+    _replace_regular_file(
+        task_path, ("---\n" + "\n".join(lines) + "\n---\n" + body).encode("utf-8"), mode
+    )
+    return {"task_id": task_id, "task_file": normalized_task,
+            "base": expected_base, "status": "blocked"}
+
+
 def _restore_landing_state(
     worktree: Path, task_path: Path, task_bytes: bytes, task_mode: int, index_tree: str
 ) -> None:
@@ -2561,6 +2614,40 @@ def _resume_task_error(
     return _retained_task_contract_error(current_text, isolate_text)
 
 
+def _serial_bookkeeping_error(primary: Path, base: str, head: str) -> Optional[str]:
+    """Prove that serial task history advanced only through linear .project commits."""
+    if base == head:
+        return None
+    if run_git(primary, "merge-base", "--is-ancestor", base, head).returncode != 0:
+        return "recorded base is not an ancestor of the current branch"
+    commits = git_output(
+        primary, "rev-list", "--first-parent", "--reverse", f"{base}..{head}"
+    ).splitlines()
+    previous = base
+    for commit in commits:
+        parents = git_output(primary, "rev-list", "--parents", "-n", "1", commit).split()
+        if len(parents) != 2 or parents[1] != previous:
+            return "history contains an unproven merge or commit sequence"
+        paths = git_output(
+            primary,
+            "diff-tree",
+            "--no-commit-id",
+            "--name-only",
+            "-r",
+            "--no-renames",
+            previous,
+            commit,
+        ).splitlines()
+        if not paths:
+            return "history contains an empty commit"
+        if any(path != ".project" and not path.startswith(".project/") for path in paths):
+            return "history contains changes outside .project"
+        previous = commit
+    if previous != head:
+        return "history does not prove a first-parent path from the recorded base"
+    return None
+
+
 MEMBER_RECORD_RE = re.compile(
     r"Task: (?P<task>\S+)\nBase: (?P<base>[0-9a-f]{40})\n"
     r"Member: (?P<member>\S+) (?P<landing>[0-9a-f]{40}) (?P<member_base>[0-9a-f]{40})"
@@ -2850,8 +2937,12 @@ def _recover_task(
                 )
             except IsolationError as error:
                 return result("block", reason=f"{status} task has invalid base: {error}")
-            if head != base:
-                return result("block", reason=f"{status} serial task advanced past its base")
+            advance_error = _serial_bookkeeping_error(primary, base, head)
+            if advance_error:
+                return result(
+                    "block",
+                    reason=f"{status} serial task advanced past its base: {advance_error}",
+                )
             primary_worktree, primary_error = _worktree_report(primary, primary, bound)
             if primary_error:
                 return result("block", reason=primary_error)
@@ -2865,6 +2956,15 @@ def _recover_task(
                 str(primary),
                 "null",
             )
+            if head != base and resume_error is None:
+                return result(
+                    "reconcile",
+                    base=base,
+                    reason=(
+                        "serial task advanced through .project bookkeeping; reconcile the "
+                        "attempt and any retained Verify sidecar before resetting it to pending"
+                    ),
+                )
         if resume_error:
             return result("block", reason=resume_error)
         return result("resume", base=base)
@@ -2893,8 +2993,12 @@ def _recover_task(
         if serial_retained:
             if str(fields.get("task_branch", "")) != "null":
                 return result("block", reason=f"{status} serial task records a task branch")
-            if run_git(primary, "merge-base", "--is-ancestor", base, head).returncode != 0:
-                return result("block", reason=f"{status} serial task base is not an ancestor")
+            advance_error = _serial_bookkeeping_error(primary, base, head)
+            if advance_error:
+                return result(
+                    "block",
+                    reason=f"{status} serial task advanced past its base: {advance_error}",
+                )
             primary_worktree, primary_error = _worktree_report(primary, primary, bound)
             if primary_error:
                 return result("block", reason=primary_error)
@@ -4382,6 +4486,54 @@ def retire(
         "reason": "removed",
         "worktree": str(resolved_worktree),
     }
+
+
+def retire_unused_verify(
+    primary: Path, worktree: Path, base: str, branch: str
+) -> Dict[str, object]:
+    """Retire a Verify sidecar only when it is provably untouched since creation."""
+    primary = require_directory(primary, "primary worktree")
+    if worktree_root(primary) != primary:
+        raise IsolationError(f"primary is not its Git root: {primary}")
+    if not branch.startswith(VERIFY_BRANCH_PREFIX):
+        raise IsolationError("unused Verify retirement requires a verify branch")
+    expected = _sidecar_path_for_branch(primary, branch)
+    resolved_worktree = worktree.resolve()
+    if resolved_worktree != expected:
+        raise IsolationError("unused Verify path differs from its branch")
+    expected_base = require_commit(primary, require_full_sha(base))
+
+    if os.path.lexists(worktree):
+        if worktree.is_symlink() or not worktree.is_dir() or worktree.resolve() != worktree:
+            raise IsolationError(f"unused Verify path is not an owned worktree: {worktree}")
+        if worktree_root(worktree) != worktree:
+            raise IsolationError(f"unused Verify path is not its Git root: {worktree}")
+        if common_git_dir(primary) != common_git_dir(worktree):
+            raise IsolationError("unused Verify sidecar belongs to another repository")
+        if require_attached(worktree) != branch:
+            raise IsolationError("unused Verify sidecar branch changed")
+        if current_sha(worktree) != expected_base:
+            raise IsolationError("unused Verify sidecar HEAD changed; preserving it")
+        dirty = git_output(
+            worktree,
+            "status",
+            "--porcelain",
+            "--untracked-files=all",
+            "--ignored=matching",
+        )
+        if dirty:
+            raise IsolationError("unused Verify sidecar has uncommitted files; preserving it")
+    else:
+        branch_head = run_git(
+            primary, "rev-parse", "--verify", "--quiet", f"refs/heads/{branch}"
+        )
+        if branch_head.returncode == 0 and branch_head.stdout.strip() != expected_base:
+            raise IsolationError("unused Verify branch HEAD changed; preserving it")
+        for registered_path, registered_branch in _registered_worktrees(primary).items():
+            if registered_branch == f"refs/heads/{branch}" and registered_path != expected:
+                raise IsolationError("unused Verify branch is checked out at another path")
+
+    return retire(primary, expected, branch, False)
 
 
 def parser() -> argparse.ArgumentParser:

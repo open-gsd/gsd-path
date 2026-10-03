@@ -4,6 +4,7 @@ import io
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -58,6 +59,12 @@ FAKE_CODER = textwrap.dedent(
     if mode == "questioncrash":
         task_path.write_bytes((text + "- 2026-09-07 — NEEDS-ORCHESTRATOR: which file? — readings: a, b\\n").encode("utf-8"))
         sys.exit(2)
+    if mode in ("blocked", "blockeddirty"):
+        if mode == "blockeddirty":
+            unexpected = Path(os.environ["FAKE_VERIFY_DIR"]) / "unexpected.txt"
+            unexpected.write_bytes(b"preserve this Verify output\\n")
+        print(f"RESULT: {task_id} blocked")
+        sys.exit(0)
     target = worktree / declared
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_bytes(("raise SystemExit(1)\\n" if mode == "badverify" else "print('hello')\\n").encode("utf-8"))
@@ -221,10 +228,12 @@ class DispatchDriverTests(unittest.TestCase):
         self.assertTrue(completed.stdout.strip(), completed.stderr)
         return json.loads(completed.stdout)
 
-    def round(self, root: Path, *extra: str, mode: str = "ready", wave: int = 1) -> dict:
+    def round(self, root: Path, *extra: str, mode: str = "ready", wave: int = 1,
+              **fake: str) -> dict:
         return self.driver(
             root, "round", "--wave", str(wave), "--child-command", f"{sys.executable} {root / 'fake_coder.py'}",
-            "--role-brief", str(ROLE_BRIEF), "--task-template", str(TASK_TEMPLATE), *extra, mode=mode,
+            "--role-brief", str(ROLE_BRIEF), "--task-template", str(TASK_TEMPLATE), *extra,
+            mode=mode, **fake,
         )
 
     def review(self, root: Path, *extra: str, verdict: str = "pass", wave: int = 1, cycle: int = 1) -> dict:
@@ -433,6 +442,142 @@ class DispatchDriverTests(unittest.TestCase):
         self.assertEqual(receipt["status"], "blocked", receipt)
         self.assertIn("no RESULT line", receipt["blocked"][0]["reason"])
         self.assertEqual(self.head(root), head)
+
+    def test_blocked_serial_task_checkpoint_and_retry_retires_verify_sidecar(self) -> None:
+        root = self.root
+        self.fixture(root, wave_t002=2)
+        receipt = self.round(root, "--wait", "60", mode="blocked")
+        self.assertEqual(receipt["status"], "blocked", receipt)
+        self.assertEqual(receipt["blocked"][0]["reason"], "child returned blocked")
+        self.assertIn("RESULT: T001 blocked", receipt["blocked"][0]["stdout_tail"])
+
+        task_path = root / ".project/tasks/T001-demo.md"
+        task_text = task_path.read_text(encoding="utf-8")
+        fields, error = dispatch_driver.isolation.task_frontmatter(task_text)
+        self.assertIsNone(error)
+        self.assertEqual(fields["status"], "blocked")
+        base = fields["base"]
+        verify_path = dispatch_driver.isolation.sidecar_root(
+            root.resolve(), "verify", "task-t001-verify"
+        )
+        self.assertFalse(verify_path.exists())
+        self.assertNotIn("gsd-path-verify/task-t001-verify", self.branches(root))
+
+        with task_path.open("a", encoding="utf-8") as log:
+            log.write("- orchestrator recorded the blocked attempt\n")
+        run_git(root, "add", ".project/tasks/T001-demo.md")
+        run_git(root, "commit", "-q", "-m", "build: record blocked task")
+        recovered = dispatch_driver.isolation.recover(root, Path(".project/tasks"))["tasks"][0]
+        self.assertEqual(recovered["verdict"], "reconcile", recovered)
+        self.assertEqual(recovered["base"], base)
+
+        blocked_round = self.round(root, "--wait", "60", mode="ready")
+        self.assertEqual(blocked_round["status"], "blocked", blocked_round)
+        self.assertNotIn("serial task advanced past its base", blocked_round["blocked"][0]["reason"])
+
+        task_text = task_path.read_text(encoding="utf-8")
+        for key, value in (("status", "pending"), ("agent", "null"),
+                           ("base", "null"), ("worktree", "null"), ("task_branch", "null")):
+            task_text = re.sub(rf"(?m)^{key}: .*?$", f"{key}: {value}", task_text, count=1)
+        task_path.write_bytes(task_text.encode("utf-8"))
+        run_git(root, "add", ".project/tasks/T001-demo.md")
+        run_git(root, "commit", "-q", "-m", "build: reset blocked task for retry")
+
+        retry = self.round(root, "--wait", "60", mode="ready")
+        self.assertEqual(retry["status"], "done", retry)
+        self.assertEqual([item["task"] for item in retry["landed"]], ["T001"])
+        self.assertFalse(verify_path.exists())
+
+    def test_blocked_serial_cleanup_replays_after_interruption(self) -> None:
+        root = self.root
+        self.fixture(root, wave_t002=2)
+        verify_path = dispatch_driver.isolation.sidecar_root(
+            root.resolve(), "verify", "task-t001-verify"
+        )
+        arguments = [
+            "round", "--wave", "1", "--wait", "60", "--child-command",
+            f"{sys.executable} {root / 'fake_coder.py'}", "--role-brief", str(ROLE_BRIEF),
+            "--task-template", str(TASK_TEMPLATE), "--repo", str(root),
+        ]
+        output = io.StringIO()
+        with mock.patch.object(
+            dispatch_driver.isolation,
+            "retire_unused_verify",
+            side_effect=KeyboardInterrupt,
+        ), mock.patch.dict(os.environ, {"FAKE_MODE": "blocked"}), self.holding_wrappers(), \
+                redirect_stdout(output), self.assertRaises(KeyboardInterrupt):
+            dispatch_driver.main(arguments)
+
+        task_path = root / ".project/tasks/T001-demo.md"
+        fields, error = dispatch_driver.isolation.task_frontmatter(
+            task_path.read_text(encoding="utf-8")
+        )
+        self.assertIsNone(error)
+        self.assertEqual(fields["status"], "blocked")
+        self.assertTrue(verify_path.is_dir())
+
+        replay = self.round(root, "--wait", "60", mode="blocked")
+
+        self.assertEqual(replay["status"], "blocked", replay)
+        self.assertIn("RESULT: T001 blocked", replay["blocked"][0]["stdout_tail"])
+        self.assertFalse(verify_path.exists())
+
+    def test_blocked_serial_cleanup_preserves_dirty_sidecar_and_repeats_reason(self) -> None:
+        root = self.root
+        self.fixture(root, wave_t002=2)
+        verify_path = dispatch_driver.isolation.sidecar_root(
+            root.resolve(), "verify", "task-t001-verify"
+        )
+        first = self.round(
+            root, "--wait", "60", mode="blockeddirty", FAKE_VERIFY_DIR=str(verify_path)
+        )
+        self.assertEqual(first["status"], "blocked", first)
+        self.assertIn(str(verify_path), first["blocked"][0]["reason"])
+        self.assertTrue((verify_path / "unexpected.txt").is_file())
+
+        replay = self.round(root, "--wait", "60", mode="ready")
+
+        self.assertEqual(replay["status"], "blocked", replay)
+        self.assertTrue(replay["blocked"][0]["reported"])
+        self.assertIn(str(verify_path), replay["blocked"][0]["reason"])
+        self.assertTrue((verify_path / "unexpected.txt").is_file())
+
+    def test_in_progress_serial_task_with_bookkeeping_advance_is_actionable(self) -> None:
+        root = self.root
+        self.fixture(root, wave_t002=2)
+        question = self.round(root, "--wait", "60", mode="question")
+        self.assertEqual(question["status"], "question", question)
+        task_path = root / ".project/tasks/T001-demo.md"
+        with task_path.open("a", encoding="utf-8") as log:
+            log.write("- orchestrator bookkeeping\n")
+        run_git(root, "add", ".project/tasks/T001-demo.md")
+        run_git(root, "commit", "-q", "-m", "build: record task bookkeeping")
+
+        receipt = self.round(root, "--wait", "60", mode="ready")
+
+        self.assertEqual(receipt["status"], "blocked", receipt)
+        self.assertIn("reconcile the attempt and any retained Verify sidecar", receipt["blocked"][0]["reason"])
+        diagnostic_command = re.search(
+            r"inventory it with `([^`]+)`", receipt["blocked"][0]["reason"]
+        )
+        self.assertIsNotNone(diagnostic_command, receipt["blocked"][0]["reason"])
+        self.assertEqual(
+            shlex.split(diagnostic_command.group(1)),
+            [
+                sys.executable,
+                "-B",
+                str((PROJECT_ROOT / "scripts/pipeline_diagnose.py").resolve()),
+                "diagnose",
+                "--repo",
+                str(root.resolve()),
+            ],
+        )
+        self.assertEqual(receipt["dispatched"], [])
+        self.assertEqual(receipt["landed"], [])
+        self.assertTrue(dispatch_driver.isolation.sidecar_root(
+            root.resolve(), "verify", "task-t001-verify"
+        ).is_dir())
+        self.assertIn("status: in-progress", task_path.read_text(encoding="utf-8"))
 
     def test_later_wave_blocks_while_an_earlier_wave_is_unfinished(self) -> None:
         root = self.root

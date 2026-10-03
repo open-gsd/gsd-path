@@ -1394,6 +1394,86 @@ class IsolationTests(unittest.TestCase):
             self.assertNotEqual(missing.returncode, 0)
             self.assertEqual(git(repo, "branch", "--show-current"), "gsd-path/M001")
 
+    def test_retire_unused_verify_preserves_uncommitted_sidecar_work(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            base = self.init_bound_repo(repo)
+            isolated = isolation.isolate_verify(repo, base, "blocked-task")
+            worktree = Path(isolated["worktree"])
+            unexpected = worktree / "unexpected.txt"
+            unexpected.write_bytes(b"preserve this\n")
+
+            with self.assertRaisesRegex(isolation.IsolationError, "uncommitted files; preserving it"):
+                isolation.retire_unused_verify(repo, worktree, base, isolated["branch"])
+
+            self.assertTrue(unexpected.is_file())
+            self.assertTrue(worktree.is_dir())
+            self.assertEqual(git(worktree, "rev-parse", "HEAD"), base)
+            self.assertEqual(
+                git(repo, "rev-parse", "refs/heads/gsd-path-verify/blocked-task"), base
+            )
+
+    def test_retire_unused_verify_preserves_advanced_head_and_ignored_files(self) -> None:
+        for kind in ("advanced", "ignored"):
+            with self.subTest(kind=kind), tempfile.TemporaryDirectory() as temporary:
+                repo = Path(temporary) / "repo"
+                repo.mkdir()
+                base = self.init_bound_repo(repo)
+                if kind == "ignored":
+                    self.write(repo, ".gitignore", "ignored.txt\n")
+                    git(repo, "add", ".gitignore")
+                    git(repo, "commit", "-q", "-m", "ignore Verify output")
+                    base = git(repo, "rev-parse", "HEAD")
+                isolated = isolation.isolate_verify(repo, base, f"blocked-{kind}")
+                worktree = Path(isolated["worktree"])
+                if kind == "advanced":
+                    self.write(worktree, ".project/unexpected.md", "preserve committed output\n")
+                    git(worktree, "add", ".project/unexpected.md")
+                    git(worktree, "commit", "-q", "-m", "unexpected Verify output")
+                    expected = "HEAD changed; preserving it"
+                else:
+                    self.write(worktree, "ignored.txt", "preserve ignored output\n")
+                    expected = "uncommitted files; preserving it"
+
+                with self.assertRaisesRegex(isolation.IsolationError, expected):
+                    isolation.retire_unused_verify(repo, worktree, base, isolated["branch"])
+
+                preserved = (worktree / ".project/unexpected.md" if kind == "advanced"
+                             else worktree / "ignored.txt")
+                self.assertTrue(preserved.is_file())
+                self.assertTrue(worktree.is_dir())
+
+    def test_retire_unused_verify_preserves_advanced_and_ignored_sidecar_work(self) -> None:
+        for kind in ("advanced", "ignored"):
+            with self.subTest(kind=kind), tempfile.TemporaryDirectory() as temporary:
+                repo = Path(temporary) / "repo"
+                repo.mkdir()
+                base = self.init_bound_repo(repo)
+                if kind == "ignored":
+                    self.write(repo, ".gitignore", "ignored.txt\n")
+                    git(repo, "add", ".gitignore")
+                    git(repo, "commit", "-q", "-m", "ignore Verify output")
+                    base = git(repo, "rev-parse", "HEAD")
+                isolated = isolation.isolate_verify(repo, base, f"blocked-{kind}")
+                worktree = Path(isolated["worktree"])
+                if kind == "advanced":
+                    self.write(worktree, ".project/unexpected.md", "preserve committed output\n")
+                    git(worktree, "add", ".project/unexpected.md")
+                    git(worktree, "commit", "-q", "-m", "unexpected Verify output")
+                    expected = "HEAD changed; preserving it"
+                else:
+                    self.write(worktree, "ignored.txt", "preserve ignored output\n")
+                    expected = "uncommitted files; preserving it"
+
+                with self.assertRaisesRegex(isolation.IsolationError, expected):
+                    isolation.retire_unused_verify(repo, worktree, base, isolated["branch"])
+
+                preserved = (worktree / ".project/unexpected.md" if kind == "advanced"
+                             else worktree / "ignored.txt")
+                self.assertTrue(preserved.is_file())
+                self.assertTrue(worktree.is_dir())
+
     def test_collect_artifact_copies_only_the_expected_real_file(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary) / "repo"
@@ -2911,6 +2991,71 @@ class RecoverTests(unittest.TestCase):
 
         self.assertEqual(report["verdict"], "block")
         self.assertIn("advanced past its base", report["reason"])
+
+    def test_serial_task_recovers_after_only_project_bookkeeping_commits(self) -> None:
+        for status, verdict in (("in-progress", "reconcile"), ("blocked", "reconcile")):
+            with self.subTest(status=status):
+                self.dispatch()
+                task_path = self.repo / ".project/tasks/T001.md"
+                text = task_path.read_text(encoding="utf-8")
+                if status == "blocked":
+                    text = text.replace("status: in-progress", "status: blocked", 1)
+                task_path.write_bytes((text + "- orchestrator bookkeeping\n").encode("utf-8"))
+                git(self.repo, "add", ".project/tasks/T001.md")
+                git(self.repo, "commit", "-q", "-m", "build: record task bookkeeping")
+
+                report = self.recover()
+
+                self.assertEqual(report["verdict"], verdict, report)
+                self.assertEqual(report["base"], self.base)
+                git(self.repo, "reset", "--hard", "-q", self.base)
+
+    def test_blocked_serial_task_recovery_rejects_product_commit(self) -> None:
+        self.write_task("blocked", self.base, agent="coder", worktree=str(self.repo.resolve()))
+        git(self.repo, "add", ".project/tasks/T001.md")
+        git(self.repo, "commit", "-q", "-m", "build: record blocked task")
+        original_product = (self.repo / "src/app.py").read_bytes()
+        (self.repo / "src/app.py").write_bytes(b"unexpected product change\n")
+        git(self.repo, "add", "src/app.py")
+        git(self.repo, "commit", "-q", "-m", "feat: unexpected product change")
+        (self.repo / "src/app.py").write_bytes(original_product)
+        git(self.repo, "add", "src/app.py")
+        git(self.repo, "commit", "-q", "-m", "revert: unexpected product change")
+
+        report = self.recover()
+
+        self.assertEqual(report["verdict"], "block")
+        self.assertIn("outside .project", report["reason"])
+
+    def test_blocked_serial_task_recovery_rejects_project_only_merge(self) -> None:
+        self.write_task("blocked", self.base, agent="coder", worktree=str(self.repo.resolve()))
+        git(self.repo, "add", ".project/tasks/T001.md")
+        git(self.repo, "commit", "-q", "-m", "build: record blocked task")
+        git(self.repo, "switch", "-q", "-c", "bookkeeping-side")
+        (self.repo / ".project/side.md").write_bytes(b"side bookkeeping\n")
+        git(self.repo, "add", ".project/side.md")
+        git(self.repo, "commit", "-q", "-m", "build: side bookkeeping")
+        git(self.repo, "switch", "-q", "gsd-path/M001")
+        (self.repo / ".project/main.md").write_bytes(b"main bookkeeping\n")
+        git(self.repo, "add", ".project/main.md")
+        git(self.repo, "commit", "-q", "-m", "build: main bookkeeping")
+        git(self.repo, "merge", "--no-ff", "-q", "bookkeeping-side", "-m", "build: merge bookkeeping")
+
+        report = self.recover()
+
+        self.assertEqual(report["verdict"], "block")
+        self.assertIn("unproven merge", report["reason"])
+
+    def test_blocked_serial_task_recovery_rejects_non_ancestor_base(self) -> None:
+        self.write_task("blocked", self.base, agent="coder", worktree=str(self.repo.resolve()))
+        tree = git(self.repo, "rev-parse", f"{self.base}^{{tree}}")
+        unrelated = git(self.repo, "commit-tree", tree, "-m", "unrelated history")
+        git(self.repo, "update-ref", "refs/heads/gsd-path/M001", unrelated, self.base)
+
+        report = self.recover()
+
+        self.assertEqual(report["verdict"], "block")
+        self.assertIn("not an ancestor", report["reason"])
 
     def test_parallel_resume_rejects_mismatched_dispatch_metadata(self) -> None:
         isolated = isolation.isolate_task(self.repo, self.base, "T001", 2)
