@@ -262,6 +262,14 @@ GIT_REASONS = {
     "clean": "git clean -f deletes untracked evidence and retained task worktrees",
     "push": "force pushes rewrite build-branch history the pipeline resumes from",
     "branch": "git branch -D destroys task branches the recovery protocol inspects",
+    "unresolved-target": (
+        "{action} needs a literal target the guard can resolve; name the branch, "
+        "ref, or registered worktree directly"
+    ),
+    "git-environment": (
+        "env changes Git's repository or alias configuration context; run the Git "
+        "command without resetting or unsetting Git-related environment variables"
+    ),
     "branch-move": (
         "git branch -m renames a branch the pipeline resumes by name "
         "(STATE.branch); create a new branch instead"
@@ -1800,21 +1808,28 @@ def has_short_option(arguments, option):
     )
 
 
-def git_alias(command, git_options):
-    result = subprocess.run(
-        ["git", *git_options, "config", "--get", f"alias.{command}"],
-        encoding="utf-8", errors="replace",
-        capture_output=True,
-        check=False,
-    )
-    if result.returncode == 1:
-        return None
-    if result.returncode != 0:
-        raise ValueError("git alias configuration cannot be validated")
-    alias = result.stdout.strip()
-    if not alias or alias.startswith("!"):
-        raise ValueError("git alias configuration cannot be validated")
-    return alias
+def git_alias(command, git_options, working_directories=None):
+    aliases = set()
+    for directory in working_directories or [os.getcwd()]:
+        result = subprocess.run(
+            ["git", *git_options, "config", "--get", f"alias.{command}"],
+            cwd=directory,
+            encoding="utf-8", errors="replace",
+            capture_output=True,
+            check=False,
+        )
+        if result.returncode == 1:
+            aliases.add(None)
+            continue
+        if result.returncode != 0:
+            raise ValueError("git alias configuration cannot be validated")
+        alias = result.stdout.strip()
+        if not alias or alias.startswith("!"):
+            raise ValueError("git alias configuration cannot be validated")
+        aliases.add(alias)
+    if len(aliases) > 1:
+        raise ValueError("git alias configuration is ambiguous across working directories")
+    return next(iter(aliases), None)
 
 
 def update_ref_deletes(arguments):
@@ -1841,16 +1856,680 @@ def update_ref_deletes(arguments):
     )
 
 
-def destructive_git_reason(tokens, resolved_aliases=frozenset()):
-    for segment in command_segments(tokens):
+PATH_OWNED_REF_PREFIXES = (
+    "gsd-path/",
+    "gsd-path-task/",
+    "gsd-path-verify/",
+    "gsd-path-integrate/",
+)
+
+
+def _ownership_scalar(raw, path, key):
+    value = raw.strip()
+    if not value:
+        return None
+    if value.startswith('"'):
+        quoted = re.match(r'^("(?:\\.|[^"\\])*\")(?:[ \t]+#.*)?$', value)
+        if quoted is None:
+            raise ValueError(f"{path.name} has an unreadable {key} value")
+        try:
+            value = json.loads(quoted.group(1))
+        except json.JSONDecodeError:
+            raise ValueError(f"{path.name} has an unreadable {key} value") from None
+        if not isinstance(value, str):
+            raise ValueError(f"{path.name} has a non-string {key} value")
+        return value or None
+    if value.startswith("'"):
+        quoted = re.fullmatch(r"'((?:[^']|'')*)'(?:[ \t]+#.*)?", value)
+        if quoted is None:
+            raise ValueError(f"{path.name} has an unreadable {key} value")
+        value = quoted.group(1).replace("''", "'")
+        return value or None
+    value = re.sub(r"[ \t]+#.*$", "", value).strip()
+    if not value or value.casefold() in {"null", "~", "none"}:
+        return None
+    if value.casefold() in {"true", "false", "yes", "no", "on", "off"} or re.fullmatch(
+        r"[-+]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][-+]?[0-9]+)?", value
+    ):
+        raise ValueError(f"{path.name} has a non-string {key} value")
+    if value[0] in "[{|>&*!" or ": " in value:
+        raise ValueError(f"{path.name} has a non-scalar {key} value")
+    return value
+
+
+def ownership_frontmatter(path, keys, *, missing_ok=False):
+    try:
+        metadata = path.lstat()
+    except FileNotFoundError:
+        if missing_ok and not os.path.lexists(path):
+            return {}
+        raise ValueError(f"{path.name} ownership metadata cannot be read") from None
+    except OSError as error:
+        raise ValueError(f"{path.name} ownership metadata cannot be read: {error}") from None
+    if not stat.S_ISREG(metadata.st_mode):
+        raise ValueError(f"{path.name} ownership metadata is not a regular file")
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeDecodeError) as error:
+        raise ValueError(f"{path.name} ownership metadata cannot be read: {error}") from None
+    if not lines or lines[0] != "---":
+        raise ValueError(f"{path.name} has no readable frontmatter")
+    try:
+        end = lines.index("---", 1)
+    except ValueError:
+        raise ValueError(f"{path.name} frontmatter is not terminated") from None
+
+    values = {}
+    pending_scalar = None
+    for line in lines[1:end]:
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        if line[0].isspace():
+            if pending_scalar is not None:
+                raise ValueError(
+                    f"{path.name} has a non-scalar {pending_scalar} value"
+                )
+            continue
+        pending_scalar = None
+        match = re.fullmatch(r"(?P<key>[A-Za-z_][A-Za-z0-9_-]*):(?P<value>.*)", line)
+        if match is None:
+            raise ValueError(f"{path.name} has unreadable frontmatter")
+        key = match.group("key")
+        if key not in keys:
+            continue
+        if key in values:
+            raise ValueError(f"{path.name} repeats ownership field {key}")
+        value = _ownership_scalar(match.group("value"), path, key)
+        values[key] = value
+        if value is None and not match.group("value").strip():
+            pending_scalar = key
+    return values
+
+
+def git_base_directories(git_options, working_directories):
+    """Resolve target paths from each shell cwd after Git's ordered ``-C`` options."""
+    result = []
+    for directory in working_directories or [os.getcwd()]:
+        current = Path(directory or os.getcwd()).resolve()
+        index = 0
+        while index < len(git_options):
+            option = git_options[index]
+            value = git_options[index + 1]
+            if option == "-C":
+                target = Path(value)
+                current = (target if target.is_absolute() else current / target).resolve()
+            index += 2
+        result.append(current)
+    return result
+
+
+def _git_output(git_options, directory, *arguments):
+    try:
+        result = subprocess.run(
+            ["git", *git_options, *arguments],
+            cwd=directory,
+            capture_output=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+        )
+    except OSError:
+        raise ValueError("git target repository cannot be resolved") from None
+    if result.returncode != 0:
+        raise ValueError("git target repository cannot be resolved")
+    return result.stdout
+
+
+def registered_worktree_records(output):
+    records = {}
+    for record in output.split("\0\0"):
+        fields = [field for field in record.split("\0") if field]
+        if not fields:
+            continue
+        paths = [field[len("worktree "):] for field in fields if field.startswith("worktree ")]
+        branches = [field[len("branch "):] for field in fields if field.startswith("branch ")]
+        if len(paths) != 1 or len(branches) > 1:
+            raise ValueError("registered worktree metadata cannot be resolved")
+        path = Path(paths[0])
+        if not path.is_absolute():
+            raise ValueError("registered worktree path is not absolute")
+        resolved = path.resolve()
+        if resolved in records:
+            raise ValueError("registered worktree metadata is ambiguous")
+        records[resolved] = branches[0] if branches else None
+    if not records:
+        raise ValueError("registered worktrees cannot be resolved")
+    return records
+
+
+def git_target_contexts(git_options, working_directories):
+    contexts = []
+    for directory, effective_directory in zip(
+        working_directories or [os.getcwd()],
+        git_base_directories(git_options, working_directories),
+    ):
+        root = Path(
+            _git_output(git_options, directory, "rev-parse", "--show-toplevel").strip()
+        ).resolve()
+        records = registered_worktree_records(
+            _git_output(
+                git_options, directory, "worktree", "list", "--porcelain", "-z"
+            )
+        )
+        if root not in records:
+            raise ValueError("git target repository worktree cannot be resolved")
+        common = Path(
+            _git_output(git_options, directory, "rev-parse", "--git-common-dir").strip()
+        )
+        if not common.is_absolute():
+            common = effective_directory / common
+        contexts.append(
+            {
+                "root": root,
+                "directory": directory,
+                "effective_directory": effective_directory,
+                "common": common.resolve(),
+                "git_options": list(git_options),
+                "worktrees": records,
+            }
+        )
+    return contexts
+
+
+def path_owned_records(roots):
+    branches, worktrees = set(), set()
+    for root in roots:
+        project = root / ".project"
+        if not os.path.lexists(project):
+            continue
+        if is_link_like(project) or not project.is_dir():
+            raise ValueError(".project ownership metadata cannot be resolved")
+        state = ownership_frontmatter(project / "STATE.md", {"branch"}, missing_ok=True)
+        if state.get("branch"):
+            branches.add(state["branch"])
+        task_files = []
+
+        def raise_walk_error(error):
+            raise error
+
+        try:
+            for directory, child_directories, filenames in os.walk(
+                project, onerror=raise_walk_error, followlinks=False
+            ):
+                if any(is_link_like(Path(directory) / name) for name in child_directories):
+                    raise ValueError("task ownership metadata contains a linked directory")
+                if Path(directory).name == "tasks":
+                    task_files.extend(
+                        Path(directory) / name
+                        for name in filenames
+                        if name.endswith(".md")
+                    )
+        except OSError as error:
+            raise ValueError(f"task ownership metadata cannot be listed: {error}") from None
+        task_files.sort()
+        for task in task_files:
+            fields = ownership_frontmatter(task, {"task_branch", "worktree"})
+            if fields.get("task_branch"):
+                branches.add(fields["task_branch"])
+            recorded = fields.get("worktree")
+            if recorded:
+                path = Path(recorded).expanduser()
+                if not path.is_absolute():
+                    path = root / path
+                try:
+                    worktrees.add(path.resolve())
+                except (OSError, RuntimeError):
+                    raise ValueError("task worktree ownership path cannot be resolved") from None
+    return branches, worktrees
+
+
+def ref_is_path_owned(name, owned_branches):
+    lowered = name.casefold()
+    if lowered.startswith("refs/gsd-path/"):
+        return True
+    short = name
+    if short.startswith("refs/heads/"):
+        short = short[len("refs/heads/"):]
+    elif short.startswith("heads/"):
+        short = short[len("heads/"):]
+    if short.casefold().startswith(PATH_OWNED_REF_PREFIXES):
+        return True
+
+    def canonical(value):
+        if value.startswith("refs/heads/"):
+            return value[len("refs/heads/"):]
+        if value.startswith("heads/"):
+            return value[len("heads/"):]
+        return value
+
+    return any(canonical(name) == canonical(branch) for branch in owned_branches)
+
+
+def _literal_target(value):
+    return bool(value) and not any(character in value for character in "*?[]{}~")
+
+
+def _positional_targets(arguments, options_with_values=()):
+    targets = []
+    after_separator = False
+    index = 0
+    while index < len(arguments):
+        argument = arguments[index]
+        if after_separator:
+            targets.append(argument)
+        elif argument == "--":
+            after_separator = True
+        elif argument.startswith("-"):
+            if argument in options_with_values:
+                index += 1
+        else:
+            targets.append(argument)
+        index += 1
+    return targets
+
+
+def _frontmatter_roots(contexts):
+    return {
+        path
+        for context in contexts
+        for path in context["worktrees"]
+    }
+
+
+def _git_refs(context):
+    output = _git_output(
+        context["git_options"],
+        context["directory"],
+        "for-each-ref",
+        "--format=%(refname)",
+    )
+    return {line for line in output.splitlines() if line}
+
+
+def _resolvable_branch_ref(target, refs):
+    if target.startswith("refs/heads/"):
+        candidate = target
+    elif target.startswith("refs/"):
+        return target if target in refs else None
+    else:
+        candidate = f"refs/heads/{target}"
+    return candidate if candidate in refs else None
+
+
+def _symbolic_ref_target(context, target):
+    try:
+        result = subprocess.run(
+            ["git", *context["git_options"], "symbolic-ref", "--quiet", target],
+            cwd=context["directory"],
+            capture_output=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+        )
+    except OSError:
+        raise ValueError("git ref target cannot be resolved") from None
+    if result.returncode == 1:
+        return None
+    if result.returncode != 0:
+        raise ValueError("git ref target cannot be resolved")
+    return result.stdout.strip()
+
+
+def _resolvable_update_ref(target, refs, context, no_deref):
+    candidate = target
+    if target not in refs and not target.startswith("refs/"):
+        short_candidate = f"refs/heads/{target}"
+        if short_candidate in refs:
+            candidate = short_candidate
+    symbolic = _symbolic_ref_target(context, candidate)
+    exists = candidate in refs or symbolic is not None
+    if not exists:
+        return None
+    if no_deref:
+        if not candidate.startswith("refs/"):
+            return None
+        return candidate
+    resolved = symbolic or candidate
+    return resolved if resolved in refs else None
+
+
+def _workspace_roots(contexts):
+    roots = [(Path.home() / ".gsd-path").resolve()]
+    configured = os.environ.get("GSD_PATH_WORKTREE_ROOT")
+    if configured:
+        configured_root = Path(configured).expanduser()
+        if not configured_root.is_absolute():
+            raise ValueError("GSD_PATH_WORKTREE_ROOT must be absolute")
+        roots.append(configured_root.resolve())
+    for common in {context["common"] for context in contexts}:
+        receipts = common / "gsd-path" / "workspaces"
+        if not os.path.lexists(receipts):
+            continue
+        if is_link_like(receipts) or not receipts.is_dir():
+            raise ValueError("pinned workspace receipts cannot be resolved")
+        try:
+            with os.scandir(receipts) as entries:
+                receipt_files = sorted(
+                    (Path(entry.path) for entry in entries if entry.name.endswith(".json")),
+                    key=lambda path: path.name,
+                )
+        except OSError as error:
+            raise ValueError(f"pinned workspace receipts cannot be listed: {error}") from None
+        for receipt in receipt_files:
+            try:
+                metadata = receipt.lstat()
+                if not stat.S_ISREG(metadata.st_mode):
+                    raise ValueError("receipt is not a regular file")
+                data = json.loads(receipt.read_text(encoding="utf-8"))
+            except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError):
+                raise ValueError(
+                    f"pinned workspace receipt cannot be read: {receipt.name}"
+                ) from None
+            if (
+                not isinstance(data, dict)
+                or not isinstance(data.get("primary"), str)
+                or not isinstance(data.get("root"), str)
+                or not Path(data["primary"]).is_absolute()
+                or not Path(data["root"]).is_absolute()
+            ):
+                raise ValueError(
+                    f"pinned workspace receipt is malformed: {receipt.name}"
+                )
+            roots.append(Path(data["root"]).resolve())
+    return roots
+
+
+def owned_target_reason(command, arguments, git_options, working_directories):
+    action = {
+        "branch": "git branch -D",
+        "update-ref": "git update-ref deletion",
+        "worktree": "git worktree remove --force",
+    }[command]
+    unresolved = GIT_REASONS["unresolved-target"].format(action=action)
+    contexts = git_target_contexts(git_options, working_directories)
+    branches, task_worktrees = path_owned_records(_frontmatter_roots(contexts))
+
+    if command == "branch":
+        targets = _positional_targets(
+            arguments,
+            {"--format", "--sort", "--color", "--contains", "--no-contains", "--merged", "--no-merged"},
+        )
+        if not targets or not all(_literal_target(target) for target in targets):
+            return unresolved
+        for target in targets:
+            for context in contexts:
+                ref = _resolvable_branch_ref(target, _git_refs(context))
+                if ref is None:
+                    return unresolved
+                if ref_is_path_owned(ref, branches):
+                    return GIT_REASONS["branch"]
+        return None
+
+    if command == "update-ref":
+        if any(argument.startswith("--stdin") for argument in arguments):
+            return unresolved
+        operands = []
+        index = 0
+        while index < len(arguments):
+            argument = arguments[index]
+            if argument in {"-m", "--message"}:
+                index += 2
+                continue
+            if argument.startswith("--message=") or argument.startswith("-"):
+                index += 1
+                continue
+            operands.append(argument)
+            index += 1
+        deletion_flag = "-d" in arguments or "--delete" in arguments
+        expected_counts = {1, 2} if deletion_flag else {2, 3}
+        if len(operands) not in expected_counts or not _literal_target(operands[0]):
+            return unresolved
+        if not deletion_flag and not (operands[1] == "" or not operands[1].strip("0")):
+            return unresolved
+        if deletion_flag and len(operands) == 2 and not _literal_target(operands[1]):
+            return unresolved
+        if not deletion_flag and len(operands) == 3 and not _literal_target(operands[2]):
+            return unresolved
+        no_deref = "--no-deref" in arguments
+        for context in contexts:
+            ref = _resolvable_update_ref(
+                operands[0], _git_refs(context), context, no_deref
+            )
+            if ref is None:
+                return unresolved
+            if ref_is_path_owned(ref, branches):
+                return GIT_REASONS["update-ref"]
+        return None
+
+    targets = _positional_targets(arguments[1:])
+    if len(targets) != 1 or not _literal_target(targets[0]):
+        return unresolved
+    recorded_paths = set(task_worktrees)
+    managed_roots = _workspace_roots(contexts)
+    for context in contexts:
+        target = Path(targets[0])
+        if not target.is_absolute():
+            target = context["effective_directory"] / target
+        resolved_target = None
+        try:
+            resolved_target = target.resolve(strict=True)
+        except (OSError, RuntimeError):
+            pass
+        registered = context["worktrees"]
+        if resolved_target is not None and resolved_target in registered:
+            matches = [resolved_target]
+        else:
+            suffix = tuple(part for part in Path(targets[0]).parts if part not in {"", "."})
+            matches = [
+                path for path in registered
+                if suffix and tuple(path.parts[-len(suffix):]) == suffix
+            ] if not Path(targets[0]).is_absolute() and ".." not in suffix else []
+        if len(matches) != 1:
+            return unresolved
+        resolved_target = matches[0]
+        if not resolved_target.is_dir():
+            return unresolved
+        branch = registered[resolved_target]
+        if (
+            "gsd-path" in str(resolved_target).casefold()
+            or resolved_target in recorded_paths
+            or (branch is not None and ref_is_path_owned(branch, branches))
+            or any(
+                resolved_target == root or resolved_target.is_relative_to(root)
+                for root in managed_roots
+            )
+        ):
+            return GIT_REASONS["worktree"]
+    return None
+
+
+def _path_has_symlink_component(value):
+    path = Path(value)
+    if not path.is_absolute():
+        path = Path.cwd() / path
+    current = Path(path.anchor)
+    for component in path.parts[1:]:
+        if component in {"", "."}:
+            continue
+        if component == "..":
+            current = current.parent
+            continue
+        current = current / component
+        try:
+            if os.path.lexists(current) and is_link_like(current):
+                return True
+        except OSError:
+            return True
+    return False
+
+
+def env_wrapper_changes_git_context(segment):
+    """Whether an env wrapper makes ownership or alias lookup context uncertain."""
+    index = 0
+    while index < len(segment) and SHELL_ASSIGNMENT_PATTERN.match(segment[index]):
+        index += 1
+    if index >= len(segment):
+        return False
+    executable = segment[index].replace("\\", "/").rsplit("/", 1)[-1].casefold()
+    if executable != "env":
+        return False
+
+    def affects_git_context(name):
+        folded = name.upper()
+        return folded.startswith("GIT_") or folded in {"HOME", "XDG_CONFIG_HOME"}
+
+    index += 1
+    while index < len(segment):
+        token = segment[index]
+        if token == "--":
+            return False
+        if token in {"-i", "--ignore-environment"}:
+            return True
+        if token.startswith("--unset="):
+            if affects_git_context(token.split("=", 1)[1]):
+                return True
+            index += 1
+            continue
+        if token in {"-u", "--unset"}:
+            if index + 1 >= len(segment):
+                return False
+            if affects_git_context(segment[index + 1]):
+                return True
+            index += 2
+            continue
+        if SHELL_ASSIGNMENT_PATTERN.match(token):
+            if affects_git_context(token.partition("=")[0]):
+                return True
+            index += 1
+            continue
+        option = token.split("=", 1)[0]
+        if option in ENV_OPTIONS_WITH_VALUES:
+            index += 1 if "=" in token else 2
+            continue
+        if option in ENV_OPTIONS_WITHOUT_VALUES:
+            index += 1
+            continue
+        if token.startswith("-"):
+            return False
+        return False
+    return False
+
+
+def ownership_cwd_is_uncertain(tokens, working_directories=None):
+    """Whether a scoped delete follows a cd whose shell control flow is unclear."""
+    conditional_words = SHELL_CONTROL_WORDS
+    cwd_wrappers = COMMAND_WRAPPERS | {"eval", "source", "."}
+    segments = []
+    current = []
+    separator = None
+    depth = 0
+    for token in tokens:
+        if token and set(token) <= set("|;&()\n\r"):
+            if current:
+                segments.append((current, separator, depth))
+                current = []
+            if "(" in token:
+                depth += token.count("(")
+            if ")" in token:
+                depth = max(0, depth - token.count(")"))
+            separator = token
+        else:
+            current.append(token)
+    if current:
+        segments.append((current, separator, depth))
+
+    uncertain = False
+    conditional = False
+    current_directories = list(working_directories or [os.getcwd()])
+    cdpath_ambiguous = bool(os.environ.get("CDPATH"))
+    initial_symlink = any(
+        _path_has_symlink_component(directory) for directory in current_directories
+    )
+    for index, (segment, previous_separator, group_depth) in enumerate(segments):
+        if env_wrapper_changes_git_context(segment):
+            return True
+        if any(token.casefold() in conditional_words for token in segment):
+            conditional = True
+        while segment and segment[0].casefold() in SHELL_CONTROL_WORDS:
+            segment = segment[1:]
+        invocation = command_invocation(segment)
+        if invocation is None:
+            continue
+        command, arguments = invocation
+        next_separator = (
+            segments[index + 1][1] if index + 1 < len(segments) else None
+        )
+        if any(token.partition("=")[0] == "CDPATH" for token in segment):
+            cdpath_ambiguous = True
+        if command == "export" and any(
+            token.partition("=")[0] == "CDPATH" for token in arguments
+        ):
+            cdpath_ambiguous = True
+        if command in DIRECTORY_CHANGE_COMMANDS:
+            target = directory_change_target(arguments)
+            if SHELL_PARAMETER_SYNTAX.search(target):
+                raise ValueError("cd target cannot be resolved by the guard")
+            absolute = is_absolute_path(target)
+            next_directories = (
+                [target]
+                if absolute
+                else [f"{directory}/{target}" for directory in current_directories]
+            )
+            if (
+                group_depth > 0
+                or previous_separator in {"&&", "||", "&"}
+                or next_separator in {"||", "&"}
+                or (previous_separator is not None and "|" in previous_separator)
+                or (next_separator is not None and "|" in next_separator)
+                or conditional
+                or (not absolute and cdpath_ambiguous)
+                or initial_symlink
+                or any(_path_has_symlink_component(path) for path in next_directories)
+            ):
+                uncertain = True
+            current_directories = next_directories
+            initial_symlink = False
+        if command in cwd_wrappers and index + 1 < len(segments):
+            uncertain = True
+        if uncertain and index + 1 < len(segments):
+            return True
+        if any(token.casefold() in {"fi", "done", "esac"} for token in segment):
+            conditional = False
+    return False
+
+
+def destructive_git_reason(
+    tokens,
+    resolved_aliases=frozenset(),
+    working_directories=None,
+    cwd_reliable=True,
+    git_context_reliable=True,
+):
+    cwd_reliable = cwd_reliable and not ownership_cwd_is_uncertain(
+        tokens, working_directories
+    )
+    for segment, directories in segment_directories(
+        tokens, working_directories or [os.getcwd()]
+    ):
+        segment_git_context_reliable = (
+            git_context_reliable and not env_wrapper_changes_git_context(segment)
+        )
         wrapped = wrapped_command_tokens(segment)
         if wrapped is not None:
-            reason = destructive_git_reason(wrapped, resolved_aliases)
+            reason = destructive_git_reason(
+                wrapped,
+                resolved_aliases,
+                directories,
+                cwd_reliable,
+                segment_git_context_reliable,
+            )
             if reason is not None:
                 return reason
         invocation = git_command(segment)
         if invocation is None:
             continue
+        if not segment_git_context_reliable:
+            return GIT_REASONS["git-environment"]
         command, arguments, git_options = invocation
         if command == "config":
             alias_indexes = [
@@ -1863,7 +2542,7 @@ def destructive_git_reason(tokens, resolved_aliases=frozenset()):
                     "git config alias.* defines an alias the guard cannot inspect; "
                     "run the underlying git command directly"
                 )
-        alias = git_alias(command, git_options)
+        alias = git_alias(command, git_options, directories)
         if alias is not None:
             if command in resolved_aliases:
                 raise ValueError(
@@ -1873,6 +2552,9 @@ def destructive_git_reason(tokens, resolved_aliases=frozenset()):
             reason = destructive_git_reason(
                 ["git", *git_options, *shell_tokens(alias), *arguments],
                 resolved_aliases | {command},
+                directories,
+                cwd_reliable,
+                segment_git_context_reliable,
             )
             if reason is not None:
                 return reason
@@ -1911,7 +2593,15 @@ def destructive_git_reason(tokens, resolved_aliases=frozenset()):
                 or has_short_option(arguments, "D")
             )
             if deletes and forces:
-                return GIT_REASONS[command]
+                if not cwd_reliable:
+                    return GIT_REASONS["unresolved-target"].format(
+                        action="git branch -D"
+                    )
+                reason = owned_target_reason(
+                    command, arguments, git_options, directories
+                )
+                if reason is not None:
+                    return reason
             if (
                 "--move" in arguments
                 or has_short_option(arguments, "m")
@@ -1920,10 +2610,26 @@ def destructive_git_reason(tokens, resolved_aliases=frozenset()):
                 return GIT_REASONS["branch-move"]
         if command == "update-ref":
             if update_ref_deletes(arguments):
-                return GIT_REASONS[command]
+                if not cwd_reliable:
+                    return GIT_REASONS["unresolved-target"].format(
+                        action="git update-ref deletion"
+                    )
+                reason = owned_target_reason(
+                    command, arguments, git_options, directories
+                )
+                if reason is not None:
+                    return reason
         if command == "worktree" and arguments[:1] == ["remove"]:
             if "--force" in arguments or has_short_option(arguments[1:], "f"):
-                return GIT_REASONS[command]
+                if not cwd_reliable:
+                    return GIT_REASONS["unresolved-target"].format(
+                        action="git worktree remove --force"
+                    )
+                reason = owned_target_reason(
+                    "worktree", arguments, git_options, directories
+                )
+                if reason is not None:
+                    return reason
         if command == "stash" and arguments[:1] in (["drop"], ["clear"]):
             return GIT_REASONS[command]
         if command in {"checkout", "restore"} and any(
@@ -2261,9 +2967,9 @@ def command_denial(command, working_directories, allow_destructive=True):
             archive_context and bundled_helper_invocation(command, tokens, working_directories)
         ):
             return ARCHIVE_REASON
-        reason = destructive_git_reason(tokens) or protected_shell_write_reason(
-            tokens, working_directories
-        )
+        reason = destructive_git_reason(
+            tokens, working_directories=working_directories
+        ) or protected_shell_write_reason(tokens, working_directories)
     except ValueError as error:
         raise ValueError(describe_substitutions(str(error), substitutions)) from None
     return reason and describe_substitutions(reason, substitutions)
