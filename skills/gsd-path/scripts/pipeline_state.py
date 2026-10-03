@@ -926,36 +926,13 @@ def _legacy_bind_next_landing(repo: Path, state: PipelineState) -> str:
     return landing
 
 
-def _bind_next_recovery(
+def _bind_next_journal_recovery(
     repo: Path,
     state: PipelineState,
+    path: Path,
+    transaction: dict[str, object],
+    current: Optional[str],
 ) -> Optional[dict[str, object]]:
-    journal_root = _git_path(repo, BIND_NEXT_JOURNAL_DIR)
-    if not journal_root.exists() and not journal_root.is_symlink():
-        return None
-    if journal_root.is_symlink() or not journal_root.is_dir():
-        raise PipelineStateError(f"bind-next journal root must be a real directory: {journal_root}")
-
-    matches: list[tuple[Path, dict[str, object]]] = []
-    for path in sorted(journal_root.glob("*.json")):
-        transaction = _read_json(path)
-        if transaction.get("schema") not in {
-            LEGACY_BIND_NEXT_JOURNAL_SCHEMA,
-            BIND_NEXT_JOURNAL_SCHEMA,
-        }:
-            raise PipelineStateError(f"bind-next journal has invalid schema: {path}")
-        if transaction.get("repo") != str(repo):
-            raise PipelineStateError(f"bind-next journal belongs to another worktree: {path}")
-        if transaction.get("previous_branch") == state.branch:
-            matches.append((path, transaction))
-    if not matches:
-        return None
-    if len(matches) != 1:
-        raise PipelineStateError("multiple bind-next journals claim the current STATE branch")
-    if state.phase != "shipped" or state.status != "done":
-        raise PipelineStateError("bind-next journal requires STATE shipped/done")
-
-    path, transaction = matches[0]
     required = (
         "branch",
         "previous_branch",
@@ -1037,7 +1014,32 @@ def _bind_next_recovery(
     if stage not in {"prepared", "switched", "retired"}:
         raise PipelineStateError("bind-next journal has invalid stage")
 
-    current = _current_branch(repo)
+    stale_retired = False
+    if stage == "retired":
+        target_ref = _run_git(
+            repo,
+            "show-ref",
+            "--verify",
+            "--quiet",
+            f"refs/heads/{branch}",
+            check=False,
+        )
+        if target_ref.returncode not in {0, 1}:
+            detail = (target_ref.stderr or target_ref.stdout).strip()
+            raise PipelineStateError(
+                f"could not check bind-next target branch {branch}: {detail}"
+            )
+        target_exists = target_ref.returncode == 0
+        stale_retired = current not in {previous, branch} or not target_exists
+    if stale_retired:
+        # If the completed target is gone while the previous branch is checked
+        # out, still prove that branch has not moved away from the recorded ship.
+        if current == previous:
+            head = _run_git(repo, "rev-parse", "HEAD").stdout.strip()
+            if head != ship:
+                raise PipelineStateError("bind-next previous branch is not at journal ship")
+        return None
+
     if current not in {previous, branch}:
         raise PipelineStateError("bind-next journal does not own the current branch")
     if current == previous and stage != "prepared":
@@ -1070,6 +1072,52 @@ def _bind_next_recovery(
         }
     )
     return result
+
+
+def _bind_next_recovery(
+    repo: Path,
+    state: PipelineState,
+) -> Optional[dict[str, object]]:
+    journal_root = _git_path(repo, BIND_NEXT_JOURNAL_DIR)
+    if not journal_root.exists() and not journal_root.is_symlink():
+        return None
+    if journal_root.is_symlink() or not journal_root.is_dir():
+        raise PipelineStateError(f"bind-next journal root must be a real directory: {journal_root}")
+
+    matches: list[tuple[Path, dict[str, object]]] = []
+    for path in sorted(journal_root.glob("*.json")):
+        transaction = _read_json(path)
+        if transaction.get("schema") not in {
+            LEGACY_BIND_NEXT_JOURNAL_SCHEMA,
+            BIND_NEXT_JOURNAL_SCHEMA,
+        }:
+            raise PipelineStateError(f"bind-next journal has invalid schema: {path}")
+        if transaction.get("repo") != str(repo):
+            raise PipelineStateError(f"bind-next journal belongs to another worktree: {path}")
+        if transaction.get("previous_branch") == state.branch:
+            matches.append((path, transaction))
+    if not matches:
+        return None
+    if state.phase != "shipped" or state.status != "done":
+        if len(matches) != 1:
+            raise PipelineStateError("multiple bind-next journals claim the current STATE branch")
+        raise PipelineStateError("bind-next journal requires STATE shipped/done")
+
+    current = _current_branch(repo)
+    recoveries: list[dict[str, object]] = []
+    for path, transaction in matches:
+        recovery = _bind_next_journal_recovery(
+            repo,
+            state,
+            path,
+            transaction,
+            current,
+        )
+        if recovery is not None:
+            recoveries.append(recovery)
+    if len(recoveries) > 1:
+        raise PipelineStateError("multiple bind-next journals claim the current STATE branch")
+    return recoveries[0] if recoveries else None
 
 
 def _pending_discussion_block(repo: Path, phase: Optional[str]) -> Optional[str]:

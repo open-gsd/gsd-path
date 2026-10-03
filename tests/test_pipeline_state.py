@@ -2352,6 +2352,176 @@ class PipelineStateTests(unittest.TestCase):
             self.assertEqual(status["git"]["dirty"], ["scratch.txt"])
             self.assertIsNotNone(status["journals"]["bind_next"])
 
+    def test_retired_bind_next_stale_journals_do_not_mask_current_recovery(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, integrate = self._promotion_repo(tmp, drift=False)
+            ship = run_git(repo, "rev-parse", "gsd-path/M001").stdout.strip()
+            run_git(repo, "switch", "-c", "gsd-path/M003", integrate)
+            for branch, stage in (("gsd-path/M002", "retired"), ("gsd-path/M003", "switched")):
+                pipeline_git._write_bind_next_journal(
+                    pipeline_git.bind_next_journal_path(repo, branch),
+                    {
+                        "schema": pipeline_git.BIND_NEXT_JOURNAL_SCHEMA,
+                        "repo": str(repo.resolve()),
+                        "branch": branch,
+                        "previous_branch": "gsd-path/M001",
+                        "ship": ship,
+                        "remote_default": "origin/main",
+                        "base": integrate,
+                        "landing": integrate,
+                        "stage": stage,
+                    },
+                )
+
+            routed = pipeline_state.route_state(repo)
+
+            self.assertEqual(routed["route"]["action"], "resume-next-handoff")
+            self.assertEqual(routed["route"]["branch"], "gsd-path/M003")
+
+            pipeline_git._write_bind_next_journal(
+                pipeline_git.bind_next_journal_path(repo, "gsd-path/M002"),
+                {
+                    "schema": pipeline_git.BIND_NEXT_JOURNAL_SCHEMA,
+                    "repo": str(repo.resolve()),
+                    "branch": "gsd-path/M002",
+                    "previous_branch": "gsd-path/M001",
+                    "ship": "0" * 40,
+                    "remote_default": "origin/main",
+                    "base": integrate,
+                    "landing": integrate,
+                    "stage": "retired",
+                },
+            )
+            with self.assertRaisesRegex(
+                pipeline_state.PipelineStateError,
+                "ship is not an existing full SHA",
+            ):
+                pipeline_state.route_state(repo)
+
+    def test_retired_bind_next_missing_target_on_previous_branch_is_stale(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, integrate = self._promotion_repo(tmp, drift=False)
+            ship = run_git(repo, "rev-parse", "gsd-path/M001").stdout.strip()
+            pipeline_git._write_bind_next_journal(
+                pipeline_git.bind_next_journal_path(repo, "gsd-path/M002"),
+                {
+                    "schema": pipeline_git.BIND_NEXT_JOURNAL_SCHEMA,
+                    "repo": str(repo.resolve()),
+                    "branch": "gsd-path/M002",
+                    "previous_branch": "gsd-path/M001",
+                    "ship": ship,
+                    "remote_default": "origin/main",
+                    "base": integrate,
+                    "landing": integrate,
+                    "stage": "retired",
+                },
+            )
+            run_git(repo, "switch", "gsd-path/M001")
+            with self.assertRaisesRegex(
+                pipeline_state.PipelineStateError,
+                "stage conflicts with previous branch",
+            ):
+                pipeline_state.route_state(repo)
+
+            run_git(repo, "branch", "-D", "gsd-path/M002")
+            routed = pipeline_state.route_state(repo)
+
+            self.assertEqual(routed["route"]["action"], "run-phase")
+            self.assertEqual(routed["route"]["phase"], "ship")
+            self.assertEqual(routed["route"]["mode"], "validate-integrated")
+
+            run_git(repo, "commit", "--allow-empty", "-m", "move previous branch")
+            with self.assertRaisesRegex(
+                pipeline_state.PipelineStateError,
+                "previous branch is not at journal ship",
+            ):
+                pipeline_state.route_state(repo)
+
+    def test_retired_bind_next_current_target_still_requires_journal_base(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, integrate = self._promotion_repo(tmp, drift=False)
+            ship = run_git(repo, "rev-parse", "gsd-path/M001").stdout.strip()
+            pipeline_git._write_bind_next_journal(
+                pipeline_git.bind_next_journal_path(repo, "gsd-path/M002"),
+                {
+                    "schema": pipeline_git.BIND_NEXT_JOURNAL_SCHEMA,
+                    "repo": str(repo.resolve()),
+                    "branch": "gsd-path/M002",
+                    "previous_branch": "gsd-path/M001",
+                    "ship": ship,
+                    "remote_default": "origin/main",
+                    "base": integrate,
+                    "landing": integrate,
+                    "stage": "retired",
+                },
+            )
+
+            routed = pipeline_state.route_state(repo)
+            self.assertEqual(routed["route"]["action"], "resume-next-handoff")
+            self.assertEqual(routed["route"]["branch"], "gsd-path/M002")
+
+            run_git(repo, "commit", "--allow-empty", "-m", "advance M002")
+            with self.assertRaisesRegex(
+                pipeline_state.PipelineStateError,
+                "target branch is not at journal base",
+            ):
+                pipeline_state.route_state(repo)
+
+    def test_bind_next_prepared_and_switched_journals_still_reject_wrong_branch(self) -> None:
+        for stage in ("prepared", "switched"):
+            with self.subTest(stage=stage), tempfile.TemporaryDirectory() as tmp:
+                repo, integrate = self._promotion_repo(tmp, drift=False)
+                ship = run_git(repo, "rev-parse", "gsd-path/M001").stdout.strip()
+                run_git(repo, "switch", "-c", "feature/elsewhere", integrate)
+                pipeline_git._write_bind_next_journal(
+                    pipeline_git.bind_next_journal_path(repo, "gsd-path/M002"),
+                    {
+                        "schema": pipeline_git.BIND_NEXT_JOURNAL_SCHEMA,
+                        "repo": str(repo.resolve()),
+                        "branch": "gsd-path/M002",
+                        "previous_branch": "gsd-path/M001",
+                        "ship": ship,
+                        "remote_default": "origin/main",
+                        "base": integrate,
+                        "landing": integrate,
+                        "stage": stage,
+                    },
+                )
+
+                with self.assertRaisesRegex(
+                    pipeline_state.PipelineStateError,
+                    "does not own the current branch",
+                ):
+                    pipeline_state.route_state(repo)
+
+    def test_multiple_prepared_bind_next_journals_still_fail_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, integrate = self._promotion_repo(tmp, drift=False)
+            ship = run_git(repo, "rev-parse", "gsd-path/M001").stdout.strip()
+            run_git(repo, "switch", "gsd-path/M001")
+            run_git(repo, "branch", "-D", "gsd-path/M002")
+            for branch in ("gsd-path/M002", "gsd-path/M003"):
+                pipeline_git._write_bind_next_journal(
+                    pipeline_git.bind_next_journal_path(repo, branch),
+                    {
+                        "schema": pipeline_git.BIND_NEXT_JOURNAL_SCHEMA,
+                        "repo": str(repo.resolve()),
+                        "branch": branch,
+                        "previous_branch": "gsd-path/M001",
+                        "ship": ship,
+                        "remote_default": "origin/main",
+                        "base": integrate,
+                        "landing": integrate,
+                        "stage": "prepared",
+                    },
+                )
+
+            with self.assertRaisesRegex(
+                pipeline_state.PipelineStateError,
+                "multiple bind-next journals claim",
+            ):
+                pipeline_state.route_state(repo)
+
     def test_promote_next_separates_landing_from_a_later_main_base(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             repo, landing = self._promotion_repo(tmp, drift=False)

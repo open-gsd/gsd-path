@@ -8,11 +8,13 @@ from pathlib import Path
 from unittest import mock
 
 from scripts import detect_project, pipeline_git, pipeline_state
+from tests import test_archive_milestone as archive_tests
 from tests._platform import requires_symlink
 
 
 ROOT = Path(__file__).resolve().parents[1]
 PIPELINE_GIT = ROOT / "scripts" / "pipeline_git.py"
+PIPELINE_STATE = ROOT / "scripts" / "pipeline_state.py"
 
 
 def run_git(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -458,6 +460,77 @@ class PipelineGitTests(unittest.TestCase):
                 json.loads(journal.read_text(encoding="utf-8"))["stage"],
                 "retired",
             )
+
+    def test_retired_bind_next_journal_is_ignored_by_cli_status_and_route_when_stale(self) -> None:
+        fixture = archive_tests.ArchiveMilestoneTests()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = root / "primary"
+            repo.mkdir()
+            remote = root / "origin.git"
+            fixture.make_publishable_bound_repo(repo, remote)
+            archive, ship = fixture.ship_bound(repo)
+            pushed = fixture.git(repo, "push", "-q", "origin", "gsd-path/M001")
+            self.assertEqual(pushed.returncode, 0, pushed.stderr)
+            integrate = fixture.integrate_bound(repo, archive, ship)
+            published_main = fixture.git(
+                repo, "push", "-q", "origin", f"{integrate}:refs/heads/main"
+            )
+            self.assertEqual(published_main.returncode, 0, published_main.stderr)
+            published_tag = fixture.git(
+                repo, "push", "-q", "origin", f"milestone/{archive}"
+            )
+            self.assertEqual(published_tag.returncode, 0, published_tag.stderr)
+
+            bound = pipeline_git.bind_next_milestone_branch(
+                repo,
+                "gsd-path/M002",
+                "gsd-path/M001",
+                ship,
+                "origin/main",
+                integrate,
+                integrate,
+            )
+            self.assertEqual(bound["status"], "bound")
+            self.assertEqual(
+                json.loads(
+                    pipeline_git.bind_next_journal_path(repo, "gsd-path/M002").read_text(
+                        encoding="utf-8"
+                    )
+                )["stage"],
+                "retired",
+            )
+            retry_route = pipeline_state.route_state(repo)
+            self.assertEqual(retry_route["route"]["action"], "resume-next-handoff")
+            self.assertEqual(retry_route["route"]["branch"], "gsd-path/M002")
+
+            run_git(repo, "branch", "-f", "main", integrate)
+            run_git(repo, "switch", "main")
+
+            def invoke(command: str) -> dict[str, object]:
+                result = subprocess.run(
+                    [sys.executable, "-B", str(PIPELINE_STATE), command, "--repo", str(repo)],
+                    capture_output=True,
+                    encoding="utf-8",
+                    errors="replace",
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                return json.loads(result.stdout)
+
+            for target_exists in (True, False):
+                with self.subTest(target_exists=target_exists):
+                    if not target_exists:
+                        run_git(repo, "branch", "-D", "gsd-path/M002")
+
+                    routed = invoke("route")
+                    status = invoke("status")
+
+                    self.assertEqual(routed["route"]["action"], "block")
+                    self.assertIn("current branch main != STATE.branch gsd-path/M001", routed["route"]["reason"])
+                    self.assertEqual(status["completion"]["status"], "verified")
+                    self.assertEqual(status["state"]["phase"], "shipped")
+                    self.assertEqual(status["state"]["status"], "done")
+                    self.assertIsNone(status["journals"]["bind_next"])
 
     def test_bind_next_migrates_legacy_journal_with_tag_landing(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
