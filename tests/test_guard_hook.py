@@ -82,6 +82,32 @@ class GuardHookTests(unittest.TestCase):
         self.assertEqual(status, 0, error)
         self.assertEqual(output, "")
 
+    def init_git_repo(self, root):
+        root.mkdir(parents=True, exist_ok=True)
+        subprocess.run(["git", "init", "-q", str(root)], check=True)
+        subprocess.run(["git", "config", "user.name", "Guard test"], cwd=root, check=True)
+        subprocess.run(
+            ["git", "config", "user.email", "guard-test@example.invalid"],
+            cwd=root,
+            check=True,
+        )
+        (root / "README.md").write_text("guard fixture\n", encoding="utf-8")
+        subprocess.run(["git", "add", "README.md"], cwd=root, check=True)
+        subprocess.run(["git", "commit", "-qm", "initial"], cwd=root, check=True)
+        return root
+
+    def git(self, root, *arguments):
+        return subprocess.run(
+            ["git", *arguments], cwd=root, check=True, capture_output=True,
+            encoding="utf-8", errors="replace",
+        )
+
+    def bash_in(self, root, command):
+        return {
+            "tool_name": "Bash",
+            "tool_input": {"command": command, "cwd": str(root)},
+        }
+
     def test_denies_edit_inside_archive(self):
         self.assert_denied(
             {
@@ -1194,6 +1220,353 @@ class GuardHookTests(unittest.TestCase):
                 self.assert_denied(
                     {"tool_name": "Bash", "tool_input": {"command": command}}
                 )
+
+    def test_allows_forced_delete_of_literal_non_path_branch_in_every_state(self):
+        for label, state in (
+            ("no-state", None),
+            ("active", "---\nphase: build\nbranch: bound\n---\n"),
+            ("shipped", "---\nphase: shipped\nbranch: bound\n---\n"),
+        ):
+            with self.subTest(state=label), tempfile.TemporaryDirectory() as temporary:
+                repo = self.init_git_repo(Path(temporary) / "repo")
+                self.git(repo, "branch", "ordinary")
+                if state is not None:
+                    project = repo / ".project"
+                    project.mkdir()
+                    (project / "STATE.md").write_text(state, encoding="utf-8")
+                self.assert_allowed(self.bash_in(repo, "git branch -D ordinary"))
+
+    def test_forced_branch_deletes_block_path_namespaces_and_recorded_branches(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = self.init_git_repo(Path(temporary) / "repo")
+            names = (
+                "gsd-path/M001",
+                "gsd-path-task/T001",
+                "gsd-path-verify/T001",
+                "gsd-path-integrate/T001",
+                "bound-without-marker",
+                "task/demo",
+                "ordinary",
+            )
+            for name in names:
+                self.git(repo, "branch", name)
+            project = repo / ".project"
+            tasks = project / "plan" / "tasks"
+            tasks.mkdir(parents=True)
+            (project / "STATE.md").write_text(
+                "---\nphase: build\nbranch: bound-without-marker\n---\n",
+                encoding="utf-8",
+            )
+            (tasks / "T001.md").write_text(
+                "---\ntask_branch: task/demo\nworktree: null\n---\n",
+                encoding="utf-8",
+            )
+            for flag, target in (
+                ("-D", "gsd-path/M001"),
+                ("-df", "gsd-path-task/T001"),
+                ("-fd", "gsd-path-verify/T001"),
+                ("--delete --force", "gsd-path-integrate/T001"),
+                ("-D", "bound-without-marker"),
+                ("-D", "task/demo"),
+                ("-D", "ordinary task/demo"),
+            ):
+                with self.subTest(flag=flag, target=target):
+                    self.assert_denied(
+                        self.bash_in(repo, f"git branch {flag} {target}")
+                    )
+
+    def test_non_path_update_ref_deletes_are_allowed_but_owned_refs_are_blocked(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = self.init_git_repo(Path(temporary) / "repo")
+            for name in ("ordinary", "bound-without-marker", "task/demo", "gsd-path/M001"):
+                self.git(repo, "branch", name)
+            project = repo / ".project"
+            tasks = project / "tasks"
+            tasks.mkdir(parents=True)
+            (project / "STATE.md").write_text(
+                "---\nphase: build\nbranch: bound-without-marker\n---\n",
+                encoding="utf-8",
+            )
+            (tasks / "T001.md").write_text(
+                "---\ntask_branch: task/demo\nworktree: null\n---\n",
+                encoding="utf-8",
+            )
+            self.git(repo, "update-ref", "refs/gsd-path/task-authorizations/T001", "HEAD")
+            self.git(
+                repo,
+                "symbolic-ref",
+                "refs/heads/path-alias",
+                "refs/heads/gsd-path/M001",
+            )
+            for command in (
+                "git update-ref -d refs/heads/ordinary",
+                "git update-ref -d refs/heads/ordinary HEAD",
+                "git update-ref refs/heads/ordinary " + "0" * 40 + " HEAD",
+            ):
+                with self.subTest(command=command):
+                    self.assert_allowed(self.bash_in(repo, command))
+            for ref in (
+                "refs/heads/bound-without-marker",
+                "refs/heads/task/demo",
+                "refs/heads/gsd-path/M001",
+                "refs/gsd-path/task-authorizations/T001",
+                "refs/heads/path-alias",
+            ):
+                with self.subTest(ref=ref):
+                    self.assert_denied(
+                        self.bash_in(repo, f"git update-ref -d {ref}")
+                    )
+            self.assert_allowed(
+                self.bash_in(repo, "git update-ref --no-deref -d refs/heads/path-alias")
+            )
+            self.assert_denied(
+                self.bash_in(
+                    repo,
+                    "git update-ref -d refs/heads/bound-without-marker HEAD",
+                )
+            )
+
+    def test_forced_worktree_remove_checks_registered_path_and_owner(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            repo = self.init_git_repo(root / "repo")
+            ordinary = root / "nested" / "ordinary-worktree"
+            ordinary.parent.mkdir()
+            self.git(repo, "worktree", "add", "-q", "-b", "ordinary-wt", str(ordinary))
+            self.assert_allowed(
+                self.bash_in(repo, "git worktree remove --force ordinary-worktree")
+            )
+            self.assert_denied(
+                self.bash_in(repo, "git worktree remove --force missing-worktree")
+            )
+
+            task_worktree = root / "recorded-task"
+            self.git(repo, "worktree", "add", "-q", "-b", "recorded-wt", str(task_worktree))
+            tasks = repo / ".project" / "tasks"
+            tasks.mkdir(parents=True)
+            (tasks / "T001.md").write_text(
+                f"---\ntask_branch: null\nworktree: {task_worktree}\n---\n",
+                encoding="utf-8",
+            )
+            self.assert_denied(
+                self.bash_in(repo, f"git worktree remove --force {task_worktree}")
+            )
+
+            managed = root / "managed-task"
+            self.git(repo, "worktree", "add", "-q", "-b", "gsd-path-task/T002", str(managed))
+            self.assert_denied(
+                self.bash_in(repo, f"git worktree remove -f -- {managed}")
+            )
+
+    def test_ownership_scope_uses_cd_and_git_c_repository_context(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            parent = Path(temporary)
+            owned = self.init_git_repo(parent / "owned")
+            unrelated = self.init_git_repo(parent / "unrelated")
+            self.git(owned, "branch", "same-name")
+            self.git(unrelated, "branch", "same-name")
+            project = owned / ".project"
+            project.mkdir()
+            (project / "STATE.md").write_text(
+                "---\nphase: build\nbranch: same-name\n---\n", encoding="utf-8"
+            )
+
+            self.assert_denied(self.bash_in(owned, "git branch -D same-name"))
+            self.assert_allowed(
+                self.bash_in(owned, "cd ../unrelated && git branch -D same-name")
+            )
+            self.assert_allowed(
+                self.bash_in(owned, "git -C ../unrelated branch -D same-name")
+            )
+            self.assert_allowed(
+                self.bash_in(owned, "git -C .. -C unrelated branch -D same-name")
+            )
+            self.assert_denied(
+                self.bash_in(
+                    parent,
+                    f"cd {owned} ; (cd {unrelated}) ; git branch -D same-name",
+                )
+            )
+            self.assert_denied(
+                self.bash_in(
+                    owned,
+                    f"cd {unrelated} ; (cd {owned}) ; git branch -D same-name",
+                )
+            )
+            self.assert_denied(
+                self.bash_in(
+                    owned,
+                    f"cd {owned} ; true || cd {unrelated} ; git branch -D same-name",
+                )
+            )
+            self.assert_denied(
+                self.bash_in(
+                    owned,
+                    f"cd {owned} ; if false; then cd {unrelated}; fi; "
+                    "git branch -D same-name",
+                )
+            )
+            self.assert_denied(
+                self.bash_in(
+                    owned,
+                    f"coproc cd {unrelated}; git branch -D same-name",
+                )
+            )
+            for command in (
+                f"eval 'cd {owned}'; git branch -D same-name",
+                f"command cd {owned}; git branch -D same-name",
+                f"builtin cd {owned}; git branch -D same-name",
+            ):
+                with self.subTest(command=command):
+                    self.assert_denied(self.bash_in(unrelated, command))
+            self.assert_denied(
+                self.bash_in(
+                    owned,
+                    f"cd {owned} ; cd {unrelated} & wait; "
+                    "git branch -D same-name",
+                )
+            )
+
+    def test_ownership_scoping_fails_closed_for_env_git_context_changes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            parent = Path(temporary)
+            owned = self.init_git_repo(parent / "owned")
+            unrelated = self.init_git_repo(parent / "unrelated")
+            self.git(owned, "branch", "ordinary")
+            self.git(unrelated, "branch", "ordinary")
+            self.git(unrelated, "config", "alias.retire", "branch -D ordinary")
+            project = owned / ".project"
+            project.mkdir()
+            (project / "STATE.md").write_text(
+                "---\nphase: build\nbranch: ordinary\n---\n", encoding="utf-8"
+            )
+
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "GIT_DIR": str(unrelated / ".git"),
+                    "GIT_WORK_TREE": str(unrelated),
+                },
+            ):
+                for command in (
+                    "env -i git branch -D ordinary",
+                    "env --ignore-environment git branch -D ordinary",
+                    "env -u GIT_DIR -u GIT_WORK_TREE git branch -D ordinary",
+                    "env --unset=GIT_DIR --unset GIT_WORK_TREE git branch -D ordinary",
+                    "env -u HOME git branch -D ordinary",
+                    "env --unset=XDG_CONFIG_HOME git branch -D ordinary",
+                    "env -i git retire ordinary",
+                ):
+                    with self.subTest(command=command):
+                        reason = guard_hook.command_denial(command, [str(owned)])
+                        self.assertIsNotNone(reason)
+
+    def test_env_config_unset_is_denied_before_alias_lookup(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            owned = self.init_git_repo(root / "owned")
+            self.git(owned, "branch", "ordinary")
+            project = owned / ".project"
+            tasks = project / "plan" / "tasks"
+            tasks.mkdir(parents=True)
+            (tasks / "T001.md").write_text(
+                "---\ntask_branch: ordinary\nworktree: null\n---\n",
+                encoding="utf-8",
+            )
+            home = root / "alias-home"
+            home.mkdir()
+            alias_config = home / ".gitconfig"
+            alias_config.write_text(
+                "[alias]\n\tretire2 = branch -D ordinary\n", encoding="utf-8"
+            )
+            empty_global = root / "empty-global"
+            empty_global.write_text("", encoding="utf-8")
+
+            with mock.patch.dict(
+                os.environ,
+                {"HOME": str(home), "GIT_CONFIG_GLOBAL": str(empty_global)},
+            ):
+                self.assertIsNone(
+                    guard_hook.git_alias("retire2", [], [str(owned)])
+                )
+                changed_environment = os.environ.copy()
+                changed_environment.pop("GIT_CONFIG_GLOBAL")
+                actual_alias = subprocess.run(
+                    ["git", "config", "--get", "alias.retire2"],
+                    cwd=owned,
+                    env=changed_environment,
+                    capture_output=True,
+                    encoding="utf-8",
+                    check=False,
+                )
+                self.assertEqual(0, actual_alias.returncode, actual_alias.stderr)
+                self.assertEqual("branch -D ordinary", actual_alias.stdout.strip())
+                reason = guard_hook.command_denial(
+                    "env -u GIT_CONFIG_GLOBAL git retire2 ordinary", [str(owned)]
+                )
+                self.assertIsNotNone(reason)
+
+    @requires_symlink
+    def test_ownership_scoping_fails_closed_for_symlink_cd_and_cdpath(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            parent = Path(temporary)
+            owned = self.init_git_repo(parent / "owned")
+            unrelated = self.init_git_repo(parent / "unrelated")
+            self.git(owned, "branch", "same-name")
+            self.git(unrelated, "branch", "same-name")
+            project = owned / ".project"
+            project.mkdir()
+            (project / "STATE.md").write_text(
+                "---\nphase: build\nbranch: same-name\n---\n", encoding="utf-8"
+            )
+
+            child = unrelated / "child"
+            child.mkdir()
+            (owned / "link").symlink_to(child, target_is_directory=True)
+            self.assert_denied(
+                self.bash_in(
+                    parent,
+                    f"cd {owned / 'link'}; cd ..; git branch -D same-name",
+                )
+            )
+
+            (unrelated / "owned").mkdir()
+            self.assert_denied(
+                self.bash_in(
+                    unrelated,
+                    f"CDPATH={parent} cd owned; git branch -D same-name",
+                )
+            )
+
+    def test_owned_delete_fails_closed_on_malformed_or_unreadable_metadata(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = self.init_git_repo(Path(temporary) / "repo")
+            self.git(repo, "branch", "ordinary")
+            project = repo / ".project"
+            project.mkdir()
+            (project / "STATE.md").write_text(
+                "---\nbranch: ordinary\nbranch: other\n---\n", encoding="utf-8"
+            )
+            self.assert_denied(self.bash_in(repo, "git branch -D ordinary"))
+
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = self.init_git_repo(Path(temporary) / "repo")
+            self.git(repo, "branch", "ordinary")
+            tasks = repo / ".project" / "plan" / "tasks"
+            tasks.mkdir(parents=True)
+            (tasks / "T001.md").write_text(
+                "---\ntask_branch: ordinary\nworktree: null\n---\n",
+                encoding="utf-8",
+            )
+            original_scandir = os.scandir
+
+            def hide_task_directory(path):
+                if Path(path) == tasks:
+                    raise PermissionError("task directory is unreadable")
+                return original_scandir(path)
+
+            with mock.patch.object(guard_hook.os, "scandir", side_effect=hide_task_directory):
+                self.assert_denied(self.bash_in(repo, "git branch -D ordinary"))
 
     def test_denies_powershell_archive_mutations(self):
         for command in (
