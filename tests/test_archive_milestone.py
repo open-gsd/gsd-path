@@ -3283,6 +3283,57 @@ Tasks reviewed: 1
             preflight = self.preflight(repo)
             self.assertEqual(preflight.returncode, 0, preflight.stderr)
 
+    def test_render_manifest_scans_matching_final_evidence_as_written(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            check = (
+                "`git diff --stat a1b2c3d e4f5a6b` then `cmp` of each fixture against "
+                "`tests/fixtures/<same basename>`; `npm run check:contract` in a sidecar"
+            )
+            archive = self.prepare_archive(repo)
+            final = archive / "review" / "FINAL.md"
+            final_text = final.read_text(encoding="utf-8")
+            self.assertIn("- **Check**: `python -m unittest`", final_text)
+            final.write_text(
+                final_text.replace("- **Check**: `python -m unittest`", f"- **Check**: {check}")
+                .replace("- **Reference**: tests", "- **Reference**: none"),
+                encoding="utf-8",
+            )
+            gap = archive / "review" / "final-gap-1.md"
+            gap_text = gap.read_text(encoding="utf-8")
+            self.assertIn("- **Check**: `python -m unittest`", gap_text)
+            gap.write_text(
+                gap_text.replace("- **Check**: `python -m unittest`", f"- **Check**: {check}")
+                .replace(
+                    "- **Reference**: `tests/test_archive_milestone.py`",
+                    "- **Reference**: none",
+                ),
+                encoding="utf-8",
+            )
+
+            rendered = self.render_manifest(repo)
+
+            self.assertEqual(rendered.returncode, 0, rendered.stderr)
+            manifest = archive / "MANIFEST.md"
+            manifest_text = manifest.read_text(encoding="utf-8")
+            stored_evidence = check.strip("`")
+            expected_row = f"| demo works | met | {stored_evidence} |"
+            self.assertIn(expected_row, manifest_text)
+            valid = self.preflight(repo)
+            self.assertEqual(valid.returncode, 0, valid.stderr)
+
+            manifest.write_text(
+                manifest_text.replace(expected_row, "| demo works | met | changed evidence |"),
+                encoding="utf-8",
+            )
+            rejected = self.preflight(repo)
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertIn(
+                "manifest success criteria do not match FINAL.md evidence in order",
+                rejected.stderr,
+            )
+
     def test_reviewed_head_must_match_preflight_head_and_ship_parent(self) -> None:
         for command in ("preflight", "validate"):
             with self.subTest(command=command), tempfile.TemporaryDirectory() as temporary_directory:

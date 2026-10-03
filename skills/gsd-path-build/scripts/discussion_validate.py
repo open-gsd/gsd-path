@@ -470,8 +470,12 @@ def completed_bullet_field(lines: Sequence[str], field: str, artifact: str) -> s
     matches = _common.find_review_bullet_field_values(lines, field)
     if len(matches) != 1:
         raise ArchiveError(f"{artifact} requires one completed {field} field")
-    value = matches[0].strip().strip("`")
-    if not value or archive_milestone.contains_placeholder(value):
+    raw_value = matches[0].strip()
+    value = raw_value.strip("`")
+    # Scan the value as written. Removing an outer backtick first can unbalance
+    # every code span after a leading or trailing one. contains_placeholder
+    # already handles a wholly quoted placeholder such as `<command>`.
+    if not value or archive_milestone.contains_placeholder(raw_value):
         raise ArchiveError(f"{artifact} requires one completed {field} field")
     return value
 
@@ -507,6 +511,12 @@ def archived_intent_criteria(archive: Path) -> dict[int, str]:
 
 
 def parse_final_review(archive: Path) -> tuple:
+    reviewed_head, criteria, _raw_evidence = _final_review(archive)
+    return reviewed_head, criteria
+
+
+def _final_review(archive: Path) -> tuple:
+    """Parse FINAL.md and retain evidence as written for placeholder scans."""
     if __package__:
         from . import check_handoffs
     else:
@@ -560,18 +570,21 @@ def parse_final_review(archive: Path) -> tuple:
 
     expected_fields = ("Verdict", "Check", "Observed", "Reference", "Finding", "Fix direction")
     criteria = []
+    raw_evidence = []
     for position, (heading_index, _, criterion) in enumerate(headings):
         section_start = heading_index + 1
         section_end = headings[position + 1][0] if position + 1 < len(headings) else criteria_end
         section = lines[section_start:section_end]
         values = {}
+        raw_values = {}
         for key in expected_fields:
             matches = _common.find_review_bullet_field_values(section, key)
             if len(matches) > 1:
                 raise ArchiveError(f"FINAL.md repeats {key} for {criterion}")
             if len(matches) != 1:
                 raise ArchiveError(f"FINAL.md criterion is incomplete: {criterion}")
-            values[key] = matches[0].strip().strip("`")
+            raw_values[key] = matches[0].strip()
+            values[key] = raw_values[key].strip("`")
         surface_values = [
             line.removeprefix("- **Surface**:").strip().strip("`")
             for line in lines[section_start:section_end]
@@ -591,18 +604,19 @@ def parse_final_review(archive: Path) -> tuple:
                     check_handoffs._surface_value(value, f"FINAL.md surface {field}")
                 except check_handoffs.HandoffError as error:
                     raise ArchiveError(str(error)) from error
-            elif not value or archive_milestone.contains_placeholder(value):
+            elif not value or archive_milestone.contains_placeholder(raw_values[field]):
                 raise ArchiveError(f"FINAL.md criterion is incomplete: {criterion}")
         if values["Verdict"] != "met":
             raise ArchiveError(f"FINAL.md criterion lacks passing evidence: {criterion}")
-        evidence = next(
-            (values[field] for field in ("Reference", "Check", "Observed") if values[field] != "none"),
+        evidence_field = next(
+            (field for field in ("Reference", "Check", "Observed") if values[field] != "none"),
             None,
         )
-        if evidence is None:
+        if evidence_field is None:
             raise ArchiveError(f"FINAL.md criterion lacks passing evidence: {criterion}")
-        criteria.append((criterion, "met", evidence))
-    return reviewed_head.lower(), criteria
+        criteria.append((criterion, "met", values[evidence_field]))
+        raw_evidence.append(raw_values[evidence_field])
+    return reviewed_head.lower(), criteria, raw_evidence
 
 
 def _member_heads(text: str, source: str) -> dict:
@@ -1248,7 +1262,7 @@ def validate_manifest(project: Path, archive: Path, state: PipelineState) -> tup
     if fields["Final verdict:"] != "all criteria met; project verify passed":
         raise ArchiveError("manifest final verdict does not record the passed final gate")
 
-    reviewed_head, final_criteria = parse_final_review(archive)
+    reviewed_head, final_criteria, final_raw_evidence = _final_review(archive)
     validate_gap_reviews(archive, reviewed_head)
     task_files, attested = archive_milestone.landed_task_evidence(project, archive / "tasks", reviewed_head)
     cycle_counts = review_cycle_counts(archive)
@@ -1292,14 +1306,23 @@ def validate_manifest(project: Path, archive: Path, state: PipelineState) -> tup
             continue
         criteria_rows.append(cells)
         criteria_line_indexes.add(index)
+
+    def evidence_as_written(position: int, row: Sequence[str]) -> str:
+        # Manifest evidence stores FINAL.md's normalized value. Scan the source
+        # text when the row matches, so its inner code spans stay balanced.
+        if position < len(final_criteria) and tuple(row) == tuple(final_criteria[position]):
+            return final_raw_evidence[position]
+        return row[2]
+
     if not criteria_rows or any(
         len(row) != 3
         or not row[0]
         or row[1] != "met"
         or not row[2]
         or row[2] == "none"
-        or any(archive_milestone.contains_placeholder(cell) for cell in row[1:])
-        for row in criteria_rows
+        or archive_milestone.contains_placeholder(row[1])
+        or archive_milestone.contains_placeholder(evidence_as_written(position, row))
+        for position, row in enumerate(criteria_rows)
     ):
         raise ArchiveError("manifest success-criteria rows are incomplete")
     if [tuple(row) for row in criteria_rows] != list(final_criteria):
