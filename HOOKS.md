@@ -146,7 +146,8 @@ See [UPDATE.md](UPDATE.md).
   source trees containing directory symlinks are denied; use literal directory
   paths and copy directory links separately
 - shell commands that reference the archive unless the whole command is a
-  recognized standalone read or a single-command invocation of the bundled
+  recognized standalone read, a pipeline in which each segment is a recognized
+  read, or a single-command invocation of the bundled
   `pipeline_state.py` / `archive_milestone.py` helper, resolved to a regular file
   inside the verified runtime selected by `.gsd-path/runtime.json` (legacy projects use `.gsd-path/runtime/` beside `guard_hook.py`
   in the repository layout), using exactly `python` or `python3` with optional
@@ -186,8 +187,7 @@ See [UPDATE.md](UPDATE.md).
   because git accepts abbreviated long options; in archive context the same
   prefix match applies to `--output`, `--ext-diff`, and `--textconv`. The
   exact read-only option `--text` is not an abbreviation and stays allowed. Any
-  other quoting construct in
-  the command (`$'...'`, `$"..."`, quotes inside `${...}`, quotes or
+  other quoting construct in the command (`$'...'`, `$"..."`, quotes inside `${...}`, quotes or
   backslashes in a comment, here-documents and here-strings) disables the
   exception, so every parameter in a git argument of that command is denied.
   The exception applies only to commands the guard parses directly, never

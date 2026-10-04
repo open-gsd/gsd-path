@@ -82,7 +82,8 @@ plan order above, which still keeps plan-invalidating risk in wave 1.
   held-out. Put each `judgment` prohibition's Must not and Detail in the
   owning task's Approach.
 - Make `files` exhaustive, including imports, routes, generated artifacts,
-  tests, and wiring. Require disjoint files for same-wave tasks.
+  tests, and wiring. Require disjoint files for same-wave tasks that are not
+  dependency-ordered.
 - Write an Interface contract in every task: `None` for independent tasks;
   for any tasks that exchange a symbol, signature, schema, endpoint, file
   format, or path, the exact shapes both sides code against — identical text
