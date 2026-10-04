@@ -2038,36 +2038,59 @@ class ShellToken(str):
 
 
 def double_quoted_markers(command):
-    """Return, for each parameter marker in order, whether double quotes enclose it."""
+    """Return, per parameter marker in order, whether plain double quotes enclose it.
+
+    None means the command uses quoting outside the plain constructs this scan
+    models (plain single quotes, plain double quotes, unquoted text), so no
+    marker in it can be proven quoted.
+    """
     flags = []
     quote = None
     comment = False
+    braces = 0
     previous = " "
     index = 0
     while index < len(command):
         character = command[index]
-        if quote == "'":
+        following = command[index + 1 : index + 2]
+        if comment:
+            if character in "\r\n":
+                comment = False
+            elif character in "'\"\\`":
+                return None
+        elif quote == "'":
             if character == "'":
                 quote = None
         elif character == "\\":
-            index += 1
-            if index < len(command) and command[index] in PARAMETER_MARKERS:
-                flags.append(quote == '"' and not comment)
+            if following and following in PARAMETER_MARKERS:
+                flags.append(quote == '"')
             previous = character
-            index += 1
+            index += 2
             continue
+        elif character == "`" or (character == "$" and following == "("):
+            return None
+        elif character == "$" and following == "{":
+            braces += 1
+        elif character == "}" and braces:
+            braces -= 1
+        elif character in "'\"" and braces:
+            return None
         elif character == '"':
             quote = None if quote else '"'
-        elif quote is None and character == "'":
-            quote = "'"
-        elif quote is None and character == "#" and previous in " \t\r\n;&|()":
-            # The lexer reads past a shell comment, so quotes after it prove nothing.
-            comment = True
+        elif quote is None:
+            if character == "'":
+                quote = "'"
+            elif character == "$" and following and following in "'\"":
+                return None
+            elif character == "<" and following == "<":
+                return None
+            elif character == "#" and previous in " \t\r\n;&|()<>":
+                comment = True
         if character in PARAMETER_MARKERS:
             flags.append(quote == '"' and not comment)
         previous = character
         index += 1
-    return flags
+    return flags if quote is None and not braces else None
 
 
 def parameters_double_quoted(token):
@@ -2102,7 +2125,7 @@ def shell_tokens(command):
     if not tokens:
         raise ValueError("shell command is empty")
     flags = double_quoted_markers(command)
-    if len(flags) != sum(
+    if flags is None or len(flags) != sum(
         character in PARAMETER_MARKERS for token in tokens for character in token
     ):
         return tokens
@@ -2353,9 +2376,9 @@ def git_command(segment, assignments=None):
     read_only_subcommands = ARCHIVE_READ_GIT_COMMANDS | CLOSED_READ_GIT_COMMANDS
     if subcommand in read_only_subcommands:
         # Read-only subcommands still write through --output. A parameter
-        # passes only inside double quotes, where its expansion stays one
-        # word; an unquoted one can word-split into an option, and command
-        # substitution output is never known.
+        # passes only inside plain double quotes, where its expansion stays
+        # one word; an unquoted one can word-split into an option, and
+        # command substitution output is never known.
         parameter_arguments = unproven_parameters
     if parameter_arguments:
         raise ValueError(
@@ -2662,8 +2685,10 @@ def bundled_helper_invocation(command, tokens, working_directories, helpers=PIPE
 
 
 def archive_command_is_read_only(
-    command, tokens, archive_context=False, git_commands=ARCHIVE_READ_GIT_COMMANDS
+    command, tokens, archive_context=False, git_commands=ARCHIVE_READ_GIT_COMMANDS,
+    source=None,
 ):
+    """`source` is the unexpanded (segment, assignments) whose tokens keep their quote flags."""
     if archive_context and AMBIGUOUS_SHELL_SYNTAX.search(command):
         return False
     if not archive_context:
@@ -2691,7 +2716,7 @@ def archive_command_is_read_only(
         return True
     if executable != "git":
         return False
-    git = git_command(tokens)
+    git = git_command(*(source or (tokens,)))
     if git is None:
         return False
     subcommand, git_arguments, _options = git
@@ -2703,7 +2728,7 @@ def archive_command_is_read_only(
     )
 
 
-def archive_write_attempt(segment):
+def archive_write_attempt(segment, source=None):
     """Whether a segment denied in archive context attempts a write there."""
     if any(
         token
@@ -2724,7 +2749,7 @@ def archive_write_attempt(segment):
         or any(argument.startswith("--in-place") for argument in arguments)
     ):
         return True
-    git = git_command(segment)
+    git = git_command(*(source or (segment,)))
     if git is None:
         return False
     subcommand, git_arguments, _options = git
@@ -2958,12 +2983,13 @@ def command_denial(command, working_directories, allow_destructive=True):
                 )
             )
             if not archive_command_is_read_only(
-                shlex.join(resolved_segment), resolved_segment, archive_context
+                shlex.join(resolved_segment), resolved_segment, archive_context,
+                source=(segment, assignments),
             ) and not (
                 archive_context
                 and bundled_helper
             ):
-                if archive_write_attempt(resolved_segment):
+                if archive_write_attempt(resolved_segment, (segment, assignments)):
                     return ARCHIVE_REASON
                 return ARCHIVE_UNPROVEN_READ_REASON
         reason = destructive_git_reason(tokens) or protected_shell_write_reason(

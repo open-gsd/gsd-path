@@ -2182,6 +2182,10 @@ class GuardHookTests(unittest.TestCase):
             't=abc; git log --format="$t %H"',
             'git show "HEAD:$f"',
             'git log --format="%H%n%s"',
+            '# note\ngit log --format="$t %H"',
+            'x=abc; cd .project/archive/001-mvp && git log --format="%H $x"',
+            'cd .project/archive/001-mvp && git log --format="%H $x"',
+            'cd .project/archive/001-mvp && git show "HEAD:$f"',
         ):
             with self.subTest(command=command):
                 self.assert_allowed(self.bash(command))
@@ -2201,6 +2205,16 @@ class GuardHookTests(unittest.TestCase):
             'git log --format=$t\\ %H',
             'git log "--format=$@ %H"',
             'git log # "\n git diff --format=$x "',
+            # Quoting outside plain single and double quotes disables the
+            # exception for the whole command, quoted parameters included.
+            "x='c --output=.project/archive/001-mvp/NOTE.md'; "
+            "git diff --no-index --src-prefix=a$'\\'''\"'$x\"'\"\\''' /dev/null f",
+            "git log --format=a$'\\'''\"'$x\"'\"\\'''",
+            "echo $'a'; git log --format=\"$t %H\"",
+            'echo $"a"; git log --format="$t %H"',
+            'git log --format="${t:-"a"} $x %H"',
+            "# it's\ngit log --format=\"$t %H\"",
+            'git log --format="$t %H" <<< "x"',
             "git diff --output=$f",
         )
         for command in unquoted:
