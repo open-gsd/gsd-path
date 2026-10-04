@@ -162,10 +162,11 @@ See [UPDATE.md](UPDATE.md).
 - deletion or move commands outside a single simple segment, including command
   chains, pipes, newlines, grouping, directory changes, and command substitution
 - deletion or move commands with any argument outside the literal-path character
-  set: ASCII letters, digits, `.`, `_`, `-`, and `/` (plus a drive prefix and
-  backslashes on Windows). One matching pair of surrounding quotes is allowed;
-  spaces, parameters, wildcards, braces, and tilde paths are denied even when
-  quoted. This also applies to `find -delete` and supported destructive aliases
+  set: ASCII letters, digits, `.`, `_`, `-`, `/`, and ASCII spaces inside one
+  shell unit (plus a drive prefix and backslashes on Windows). One matching
+  pair of surrounding quotes is allowed; parameters, wildcards, braces, and
+  tilde paths are denied even when quoted. This also applies to
+  `find -delete` and supported destructive aliases
 - destructive Git commands nested in supported shell and command wrappers
 - archive glob/brace expansions and execution-capable read options such as
   `rg --pre`

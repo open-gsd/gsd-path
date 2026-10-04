@@ -1309,6 +1309,74 @@ class GuardHookTests(unittest.TestCase):
             }
         )
 
+    def test_allows_pipelines_of_read_commands_in_archive_context(self):
+        for command in (
+            "cat NOTE.md | wc -l",
+            "cat NOTE.md | head -3 | tail -1",
+            "cat NOTE.md | grep -c x",
+        ):
+            with self.subTest(command=command):
+                self.assert_allowed(
+                    {
+                        "tool_name": "Bash",
+                        "tool_input": {
+                            "command": command,
+                            "cwd": ".project/archive/001-mvp",
+                        },
+                    }
+                )
+        for command in (
+            "cat NOTE.md | tee out.txt",
+            "python3 -",
+            "python3 - <<'EOF'\nprint(1)\nEOF",
+        ):
+            with self.subTest(command=command):
+                self.assert_denied(
+                    {
+                        "tool_name": "Bash",
+                        "tool_input": {
+                            "command": command,
+                            "cwd": ".project/archive/001-mvp",
+                        },
+                    }
+                )
+
+    def test_heredoc_body_does_not_flip_archive_context(self):
+        for command in (
+            "python3 - <<'EOF'\n# mention of .project/archive/001-mvp\nprint(1)\nEOF",
+            "bash -c 'cat <<EOF\nmention of .project/archive/001-mvp here\nEOF'",
+        ):
+            with self.subTest(command=command):
+                self.assert_allowed(self.bash(command))
+        self.assert_denied(
+            self.bash("bash -c 'echo broken > .project/archive/001-mvp/NOTE.md'")
+        )
+
+    def test_ssh_from_archive_cwd_is_denied_as_unproven_read(self):
+        status, _, error = run_guard(
+            {
+                "tool_name": "Bash",
+                "tool_input": {
+                    "command": "ssh host 'cat /etc/hosts'",
+                    "cwd": ".project/archive/001-mvp",
+                },
+            }
+        )
+        self.assertEqual(status, 2, error)
+        self.assertIn(guard_hook.ARCHIVE_UNPROVEN_READ_REASON, error)
+        self.assertNotIn(guard_hook.ARCHIVE_REASON, error)
+        status, _, error = run_guard(
+            {
+                "tool_name": "Bash",
+                "tool_input": {
+                    "command": "touch NOTE.md",
+                    "cwd": ".project/archive/001-mvp",
+                },
+            }
+        )
+        self.assertEqual(status, 2, error)
+        self.assertIn(guard_hook.ARCHIVE_REASON, error)
+
     def test_denies_ambiguous_archive_mutations(self):
         for command in (
             "rm .project/$(printf archive)/001-mvp/NOTE.md",
@@ -1509,7 +1577,6 @@ class GuardHookTests(unittest.TestCase):
                 'rm -rf .{project,unused}',
                 'rm -rf ~/x',
                 'rm -rf ~root/x',
-                'rm -rf "scratch folder"',
                 'rm -rf "scratch;other"',
                 'rm -rf ""',
                 "Remove-Item -Recurse -Force '.proj*'",
@@ -1532,6 +1599,7 @@ class GuardHookTests(unittest.TestCase):
                 "rm -rf './scratch/old-file.txt'",
                 'rm -rf scratch_123',
                 'rm -rf "scratch"',
+                'rm -rf "scratch folder"',
             )
             # Windows needs PATH (to find git) and SYSTEMROOT to start any process.
             kept = {name: os.environ[name] for name in ("PATH", "SYSTEMROOT") if os.name == "nt" and name in os.environ}
@@ -1544,6 +1612,24 @@ class GuardHookTests(unittest.TestCase):
                                 "tool_input": {"command": command},
                                 "cwd": str(repository),
                             })
+
+    def test_allows_quoted_spaces_in_destructive_paths(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            repository = Path(temporary).resolve()
+            (repository / ".project" / "archive" / "001-mvp").mkdir(parents=True)
+            (repository / "scratch folder").mkdir()
+            for command, assertion in (
+                ('rm -rf "scratch folder"', self.assert_allowed),
+                ('rm "$var/whatever"', self.assert_denied),
+                ('rm "scratch;other"', self.assert_denied),
+            ):
+                with self.subTest(command=command):
+                    assertion(
+                        {
+                            "tool_name": "Bash",
+                            "tool_input": {"command": command, "cwd": str(repository)},
+                        }
+                    )
 
     def test_destructive_commands_require_a_single_simple_segment(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -1597,7 +1683,28 @@ class GuardHookTests(unittest.TestCase):
                         })
 
     def test_denies_protected_write_after_parameter_directory_change(self):
-        self.assert_denied(self.bash("TARGET=.project; cd $TARGET; printf broken > STATE.md"))
+        # The expanded cd target is tracked, so the later write is still caught
+        # as a protected control write rather than by refusing the cd itself.
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "repo"
+            (root / ".project").mkdir(parents=True)
+            (root / ".project" / "STATE.md").write_bytes("owned\n".encode("utf-8"))
+            with (
+                mock.patch.object(guard_hook.os, "getcwd", return_value=str(root)),
+                mock.patch.object(guard_hook, "repository_root", return_value=root),
+            ):
+                self.assert_denied(
+                    self.bash("TARGET=.project; cd $TARGET; printf broken > STATE.md")
+                )
+
+    def test_allows_tracked_assignment_in_cd_target(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = shlex.quote(str(Path(temporary).resolve()))
+            self.assert_allowed(
+                self.bash(f'dir={directory} && cd "$dir" && git status')
+            )
+        self.assert_denied(self.bash('dir="a b"; cd "$dir" && git status'))
+        self.assert_denied(self.bash('cd "$unassigned" && git status'))
 
     def test_denies_deleting_archive_ancestor_on_windows(self):
         previous = Path.cwd()
@@ -2059,6 +2166,15 @@ class GuardHookTests(unittest.TestCase):
         ):
             with self.subTest(command=command):
                 self.assert_denied(self.bash(command))
+
+    def test_allows_parameters_in_read_only_git_arguments(self):
+        for command in (
+            'git log --format="$t %H"',
+            "git show HEAD:$f",
+        ):
+            with self.subTest(command=command):
+                self.assert_allowed(self.bash(command))
+        self.assert_denied(self.bash('git commit -m "$msg"'))
 
     def test_assignment_state_is_segment_local_and_last_value_wins(self):
         self.assert_denied(

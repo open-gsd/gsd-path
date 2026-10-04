@@ -121,6 +121,10 @@ ARCHIVE_REASON = (
     "committed GSD Path archives under .project/archive/ are read-only; "
     "only the bundled pipeline helpers may write there during a ship transaction"
 )
+ARCHIVE_UNPROVEN_READ_REASON = (
+    "commands run in archive context must be provably read-only; only "
+    "recognized read commands and the bundled pipeline helpers may run there"
+)
 DESTRUCTIVE_SHAPE_REASON = (
     "destructive commands must run alone with literal paths; split compound, "
     "substituted, or expanded destructive commands into single commands"
@@ -1176,10 +1180,10 @@ def directory_change_target(arguments):
     return operands[-1]
 
 
-def segment_directories(tokens, working_directories):
+def segment_directories(tokens, working_directories, contexts=None):
     """Yield each command segment with the working directories in effect for it."""
     current_directories = list(working_directories)
-    for segment in command_segments(tokens):
+    for position, segment in enumerate(command_segments(tokens)):
         yield segment, current_directories
         invocation = command_invocation(segment)
         if invocation is None:
@@ -1192,16 +1196,27 @@ def segment_directories(tokens, working_directories):
         if command not in DIRECTORY_CHANGE_COMMANDS:
             continue
         target = directory_change_target(arguments)
-        if SHELL_PARAMETER_SYNTAX.search(target):
+        assignments = None
+        if contexts is not None and position < len(contexts):
+            assignments = contexts[position]
+        expanded = expand_environment_parameters(target, assignments)
+        if SHELL_PARAMETER_SYNTAX.search(expanded) or CMD_PARAMETER_SYNTAX.search(expanded):
             raise ValueError(
                 f"cd target {target} cannot be resolved by the guard; "
                 "run that command first and cd to the literal result"
             )
-        if is_absolute_path(target):
-            current_directories = [target]
+        if (
+            (SHELL_PARAMETER_SYNTAX.search(target) or CMD_PARAMETER_SYNTAX.search(target))
+            and any(character.isspace() or character in "*?[]" for character in expanded)
+        ):
+            raise ValueError(
+                f"cd target {target} may split or glob; pass a literal path"
+            )
+        if is_absolute_path(expanded):
+            current_directories = [expanded]
         else:
             bases = current_directories or ["."]
-            current_directories = [f"{base}/{target}" for base in bases]
+            current_directories = [f"{base}/{expanded}" for base in bases]
 
 
 def command_can_destroy_files(invocation):
@@ -1217,9 +1232,11 @@ def command_can_destroy_files(invocation):
 def literal_path(operand):
     if len(operand) >= 2 and operand[0] in "\"'" and operand[-1] == operand[0]:
         operand = operand[1:-1]
-    pattern = r"[A-Za-z0-9._/-]+"
+    # A space is safe here: the operand is one shlex unit, so it cannot carry a
+    # second word; injection-relevant characters stay excluded.
+    pattern = r"[A-Za-z0-9._/ -]+"
     if os.name == "nt":
-        pattern = r"(?:[A-Za-z]:(?=[/\\]))?[A-Za-z0-9._/\\-]+"
+        pattern = r"(?:[A-Za-z]:(?=[/\\]))?[A-Za-z0-9._/\\ -]+"
     return operand if re.fullmatch(pattern, operand) is not None else None
 
 
@@ -1235,13 +1252,24 @@ def literal_destructive_operand(operand):
 def segment_references_archive(segment, directories, assignments=None):
     invocation = command_invocation(segment)
     ancestors = command_can_destroy_files(invocation)
-    operands = [expand_environment_parameters(token, assignments) for token in segment]
+    # A here-document body survives tokenization only inside a wrapped payload
+    # (bash -c '...'), where it is data, not commands; keep its text from
+    # flipping the segment into archive context.
+    def searchable(token):
+        return strip_heredoc_bodies(token) if "\n" in token else token
+
+    operands = [
+        expand_environment_parameters(searchable(token), assignments)
+        for token in segment
+    ]
     if ancestors:
         resolved = command_invocation(operands)
         operands = [literal_destructive_operand(operand) for operand in resolved[1]]
     if any(path_in_archive(operand, directories, ancestors) for operand in operands):
         return True
-    return unresolved_archive_expansion(" ".join(segment), assignments)
+    return unresolved_archive_expansion(
+        " ".join(searchable(token) for token in segment), assignments
+    )
 
 
 def copy_destinations(arguments, directories, assignments=None):
@@ -1701,7 +1729,7 @@ def shell_assignment_contexts(tokens, initial=None):
 def shell_segment_contexts(tokens, working_directories, initial=None):
     """Yield each segment with its working directory and prior shell variables."""
     contexts, _ = shell_assignment_contexts(tokens, initial)
-    segments = list(segment_directories(tokens, working_directories))
+    segments = list(segment_directories(tokens, working_directories, contexts))
     if len(segments) != len(contexts):
         raise ValueError("shell command segments cannot be aligned")
     for (segment, directories), assignments in zip(segments, contexts):
@@ -2067,7 +2095,14 @@ def xargs_command(arguments):
 
 
 def require_read_command(wrapper, wrapped):
-    if wrapped and not archive_command_is_read_only(" ".join(wrapped), wrapped, True):
+    segments = list(command_segments(wrapped))
+    if wrapped and (
+        not segments
+        or not all(
+            archive_command_is_read_only(shlex.join(segment), segment, True)
+            for segment in segments
+        )
+    ):
         raise ValueError(
             f"{wrapper} runs {wrapped[0]} on operands the guard cannot check; "
             f"only read commands may follow {wrapper}, or pass the paths as literals"
@@ -2148,6 +2183,7 @@ def git_command(segment, assignments=None):
     if executable not in {"git", "git.exe"}:
         return None
     resolved_arguments = []
+    parameter_arguments = []
     argument_index = 0
     while argument_index < len(arguments):
         argument = arguments[argument_index]
@@ -2187,10 +2223,7 @@ def git_command(segment, assignments=None):
             resolved_arguments.append(f"-C{expanded}")
         else:
             if SHELL_PARAMETER_SYNTAX.search(argument) or CMD_PARAMETER_SYNTAX.search(argument):
-                raise ValueError(
-                    f"git argument {argument} cannot be resolved by the guard; pass a "
-                    "literal value (for commit messages use -F <file>)"
-                )
+                parameter_arguments.append(argument)
             resolved_arguments.append(expand_environment_parameters(argument, assignments))
         argument_index += 1
     arguments = resolved_arguments
@@ -2225,7 +2258,16 @@ def git_command(segment, assignments=None):
             git_options.extend((option, str(value)))
     if index >= len(arguments):
         return None
-    return arguments[index].casefold(), arguments[index + 1:], git_options
+    subcommand = arguments[index].casefold()
+    read_only_subcommands = ARCHIVE_READ_GIT_COMMANDS | CLOSED_READ_GIT_COMMANDS
+    if parameter_arguments and subcommand not in read_only_subcommands:
+        # The scan exists for write-capable subcommands (commit messages, ref
+        # operands); read-only ones cannot mutate what the guard protects.
+        raise ValueError(
+            f"git argument {parameter_arguments[0]} cannot be resolved by the guard; "
+            "pass a literal value (for commit messages use -F <file>)"
+        )
+    return subcommand, arguments[index + 1:], git_options
 
 
 def wrapped_command_tokens(segment, expand_parameters=True):
@@ -2566,6 +2608,34 @@ def archive_command_is_read_only(
     )
 
 
+def archive_write_attempt(segment):
+    """Whether a segment denied in archive context attempts a write there."""
+    if any(
+        token and set(token) <= SHELL_WRITE_REDIRECTION_CHARS for token in segment
+    ):
+        return True
+    invocation = command_invocation(segment)
+    if invocation is None:
+        return False
+    executable, arguments = invocation
+    executable = executable.removesuffix(".exe")
+    if executable in SHELL_WRITE_COMMANDS:
+        return True
+    if executable in IN_PLACE_EDITORS and (
+        has_short_option(arguments, "i")
+        or any(argument.startswith("--in-place") for argument in arguments)
+    ):
+        return True
+    git = git_command(segment)
+    if git is None:
+        return False
+    subcommand, git_arguments, _options = git
+    return subcommand not in ARCHIVE_READ_GIT_COMMANDS or any(
+        token in GIT_READ_WRITE_OPTIONS or token.startswith("--output=")
+        for token in git_arguments
+    )
+
+
 def deny(reason):
     # One denial object per documented host schema: decision/reason (Grok,
     # Antigravity), permission + user/agentMessage (Cursor), permissionDecision
@@ -2795,7 +2865,9 @@ def command_denial(command, working_directories, allow_destructive=True):
                 archive_context
                 and bundled_helper
             ):
-                return ARCHIVE_REASON
+                if archive_write_attempt(resolved_segment):
+                    return ARCHIVE_REASON
+                return ARCHIVE_UNPROVEN_READ_REASON
         reason = destructive_git_reason(tokens) or protected_shell_write_reason(
             tokens, working_directories
         )
