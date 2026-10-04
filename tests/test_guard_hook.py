@@ -2293,6 +2293,15 @@ class GuardHookTests(unittest.TestCase):
             'git config core.fsmonitor 2 >/dev/null',
             # One token can become several git arguments, or two tokens
             # one: only plain literal words prove the read or set form.
+            # The subcommand word must be one literal word too.
+            'git {config,core.fsmonitor,/abs/h.sh}',
+            'git con\\\nfig core.fsmonitor /abs/h.sh',
+            'git --no-pager {config,core.fsmonitor,/abs/h.sh}',
+            "git con''fig core.fsmonitor /abs/h.sh",
+            # Comment text is no argument: a mode word in it proves nothing.
+            'git config core.fsmonitor /tmp/h.sh # --get',
+            'git config core.fsmonitor /tmp/h.sh #--get',
+            'git config --get core.fsmonitor # note',
             'git config {core.hooksPath,/tmp/hooks}',
             'git config core.hooksPath{,/tmp/hooks}',
             'git config {core.fsmonitor,/abs/h.sh}',
@@ -2434,6 +2443,11 @@ class GuardHookTests(unittest.TestCase):
             'git config user.name ""',
             "git config --get-regexp '^user\\.'",
             "git config \\\n  --get core.fsmonitor",
+            # A joined word in another command leaves this one literal.
+            "echo a\\\nb; git config user.name x",
+            "git config user.name '#x'",
+            "git \\\n  config --get user.name",
+            'git "config" --get user.name',
         ):
             with self.subTest(command=command):
                 self.assert_allowed(self.bash(command))

@@ -2178,7 +2178,7 @@ class ShellToken(str):
     `literal` is "bare" for a word written with no quote or escape, "quoted"
     for a word inside one pair of plain quotes, and None when the shell may
     build the word in another way (escapes, mixed quotes, a line continuation
-    that joins words).
+    in the word or one that joins it to the next word).
     """
 
     double_quoted = ()
@@ -2290,12 +2290,27 @@ def shell_tokens(command, direct=True):
     Only a directly parsed command keeps quote flags: an outer shell expands
     parameters before the inner parse, so inner quotes prove nothing.
     """
-    joined = any(
-        (match.group(1) or command[max(match.start() - 1, 0):match.start()].strip())
-        and command[match.end():match.end() + 1].strip()
-        for match in LINE_CONTINUATION.finditer(command)
-    )
-    command = strip_heredoc_bodies(LINE_CONTINUATION.sub(r"\1 ", command))
+    breaks = set()
+    if LINE_CONTINUATION.search(command):
+        mark = next(
+            character for character in map(chr, range(0xE000, 0xF900))
+            if character not in command
+        )
+        marked = strip_heredoc_bodies(
+            LINE_CONTINUATION.sub(lambda match: match.group(1) + mark, command)
+        )
+        command = strip_heredoc_bodies(LINE_CONTINUATION.sub(r"\1 ", command))
+        breaks = (
+            {index for index, character in enumerate(marked) if character == mark}
+            if marked.replace(mark, " ") == command
+            else None
+        )
+    else:
+        command = strip_heredoc_bodies(command)
+    joins = {
+        index for index in breaks or ()
+        if command[max(index - 1, 0):index].strip() and command[index + 1:index + 2].strip()
+    }
     lexer = shlex.shlex(command, posix=True, punctuation_chars="|;&()<>\n\r")
     lexer.whitespace = " \t"
     lexer.whitespace_split = True
@@ -2310,10 +2325,13 @@ def shell_tokens(command, direct=True):
             for quote in ("", "'", '"'):
                 start = end - len(token) - 2 * len(quote)
                 if (
-                    not joined
+                    breaks is not None
                     and start >= 0
                     and command[start:end] == quote + token + quote
                     and (start == 0 or command[start - 1] in " \t|;&()<>\n\r")
+                    and breaks.isdisjoint(range(start, end))
+                    and end not in joins
+                    and start - 1 not in joins
                 ):
                     literal = "quoted" if quote else "bare"
                     break
@@ -2618,13 +2636,24 @@ def git_command(segment, assignments=None):
             git_options.extend((option, str(value)))
     if index >= len(arguments):
         return None
+    subcommand_literal = getattr(arguments[index], "literal", "bare")
+    if subcommand_literal is None or (
+        subcommand_literal == "bare" and GIT_CONFIG_EXPANDING_WORD.search(arguments[index])
+    ):
+        raise ValueError(
+            f"git argument {arguments[index]} cannot be resolved by the guard; "
+            "pass a literal subcommand"
+        )
     subcommand = arguments[index].casefold()
     if subcommand == "config":
         for argument in arguments[index + 1:]:
             literal = getattr(argument, "literal", None)
             if not getattr(argument, "redirection", False) and (
                 literal is None
-                or (literal == "bare" and GIT_CONFIG_EXPANDING_WORD.search(argument))
+                or (
+                    literal == "bare"
+                    and (argument.startswith("#") or GIT_CONFIG_EXPANDING_WORD.search(argument))
+                )
             ):
                 raise ValueError(
                     f"git argument {argument} cannot be resolved by the guard; "

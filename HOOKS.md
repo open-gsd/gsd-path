@@ -203,8 +203,12 @@ See [UPDATE.md](UPDATE.md).
   Each `git config` argument must be a plain literal word, bare or in one
   pair of quotes: a backslash, mixed quotes, an unquoted glob (`*`, `?`, `[`),
   an unquoted brace list or range (`{a,b}`, `{1..3}`) or a line continuation
-  that joins two words is denied, because the shell can make a different
+  in the word or one that joins it to the next word is denied, because the shell can make a different
   argument list from it.
+  An unquoted word that starts with `#` among the `git config` arguments
+  is denied, because the shell reads it and the words after it as a comment.
+  The git subcommand word must be a plain literal word in each git command:
+  `git {config,...}` and a subcommand split by a line continuation are denied.
   `git config` section renames and removals (`--rename-section`,
   `--remove-section`) and `--edit` are denied, because a rename can move a
   key into an executed section and `--edit` starts an editor.
