@@ -484,6 +484,14 @@ def _same_directory(path: Path, expected: os.stat_result) -> bool:
     return stat.S_ISDIR(current.st_mode) and os.path.samestat(current, expected)
 
 
+def _long_path(absolute: str) -> str:
+    if absolute.startswith("\\\\?\\"):
+        return absolute
+    if absolute.startswith("\\\\"):
+        return "\\\\?\\UNC\\" + absolute[2:]
+    return "\\\\?\\" + absolute
+
+
 def _force_rmtree(path: Path) -> None:
     """Delete a sidecar tree directly, tolerating read-only files and long paths."""
     def _writable(function, target, _error):
@@ -491,7 +499,7 @@ def _force_rmtree(path: Path) -> None:
         function(target)
 
     # The \\?\ prefix sidesteps Windows MAX_PATH on deep sidecar trees.
-    target = Path(f"\\\\?\\{os.path.abspath(path)}") if os.name == "nt" else path
+    target = Path(_long_path(os.path.abspath(path))) if os.name == "nt" else path
     try:
         shutil.rmtree(target, onerror=_writable)
     except OSError as error:

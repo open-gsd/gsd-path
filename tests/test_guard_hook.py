@@ -1706,6 +1706,15 @@ class GuardHookTests(unittest.TestCase):
         self.assert_denied(self.bash('dir="a b"; cd "$dir" && git status'))
         self.assert_denied(self.bash('cd "$unassigned" && git status'))
 
+    def test_denies_cd_to_shell_maintained_directory_variables(self):
+        for command in (
+            'cd .project/archive/001-mvp && cd "$PWD" && touch NOTE.md',
+            "cd .project/archive/001-mvp && cd / && cd $OLDPWD && touch NOTE.md",
+            'PWD=/tmp; cd .project/archive/001-mvp && cd "$PWD" && touch NOTE.md',
+        ):
+            with self.subTest(command=command):
+                self.assert_denied(self.bash(command))
+
     def test_denies_deleting_archive_ancestor_on_windows(self):
         previous = Path.cwd()
         with tempfile.TemporaryDirectory() as temporary:
@@ -2175,6 +2184,14 @@ class GuardHookTests(unittest.TestCase):
             with self.subTest(command=command):
                 self.assert_allowed(self.bash(command))
         self.assert_denied(self.bash('git commit -m "$msg"'))
+        for command in (
+            "git diff --output=$f",
+            "git diff --output $f",
+            "git diff $o",
+            "git log -$o",
+        ):
+            with self.subTest(command=command):
+                self.assert_denied(self.bash(command))
 
     def test_assignment_state_is_segment_local_and_last_value_wins(self):
         self.assert_denied(

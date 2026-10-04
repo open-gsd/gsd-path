@@ -735,6 +735,17 @@ with publication_lock(Path(sys.argv[1]).parent, Path(sys.argv[1]).name):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.pin()["digest"], stock["digest"])
         self.assertEqual(self.pin()["provenance"], {"source": "npm @opengsd/gsd-path@1.4.1"})
+        # A plain source nested in an unrelated repository never records that repository's HEAD.
+        enclosing = self.root / "enclosing"
+        nested = enclosing / "node_modules" / "gsd-path"
+        shutil.copytree(plain, nested)
+        self.git("init", "-q", repo=enclosing)
+        self.git("-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-q",
+                 "--allow-empty", "-m", "unrelated", repo=enclosing)
+        result = self.runtime_command("--runtime-upgrade", nested, extra=[
+            "--runtime-provenance-source", "npm @opengsd/gsd-path@1.4.1"])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.pin()["provenance"], {"source": "npm @opengsd/gsd-path@1.4.1"})
 
     def test_reupgrade_without_provenance_flags_preserves_provenance(self):
         self.provision()

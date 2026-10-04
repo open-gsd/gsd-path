@@ -654,9 +654,7 @@ def _runtime_status(root: str) -> Optional[dict]:
     # status command does. Unmigrated projects keep the per-project runtime.
     launcher = Path(root) / ".gsd-path" / "status_runtime.py"
     if launcher.is_file():
-        payload = _run_status_command([sys.executable, "-B", str(launcher), "--repo", root])
-        if payload is not None:
-            return payload
+        return _run_status_command([sys.executable, "-B", str(launcher), "--repo", root])
     runtime = Path(root) / ".gsd-path" / "runtime" / "pipeline_state.py"
     if not runtime.is_file():
         return None

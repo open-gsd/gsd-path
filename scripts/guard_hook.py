@@ -255,6 +255,8 @@ NAMED_SHELL_PARAMETER_SYNTAX = re.compile(
 CMD_PARAMETER_SYNTAX = re.compile(
     r"%([A-Za-z_][A-Za-z0-9_]*)%|!([A-Za-z_][A-Za-z0-9_]*)!"
 )
+# The shell reassigns these on every cd, so a tracked value is stale.
+SHELL_DIRECTORY_VARIABLES = frozenset({"PWD", "OLDPWD"})
 DIRECTORY_CHANGE_COMMANDS = frozenset(
     {"cd", "chdir", "pushd", "set-location", "sl"}
 )
@@ -1196,10 +1198,14 @@ def segment_directories(tokens, working_directories, contexts=None):
         if command not in DIRECTORY_CHANGE_COMMANDS:
             continue
         target = directory_change_target(arguments)
-        assignments = None
+        tracked = {}
         if contexts is not None and position < len(contexts):
-            assignments = contexts[position]
-        expanded = expand_environment_parameters(target, assignments)
+            tracked = {
+                name: value
+                for name, value in contexts[position].items()
+                if name not in SHELL_DIRECTORY_VARIABLES
+            }
+        expanded = expand_environment_parameters(target, tracked, tracked_only=True)
         if SHELL_PARAMETER_SYNTAX.search(expanded) or CMD_PARAMETER_SYNTAX.search(expanded):
             raise ValueError(
                 f"cd target {target} cannot be resolved by the guard; "
@@ -1616,20 +1622,22 @@ def protected_shell_write_reason(tokens, working_directories):
     return None
 
 
-def environment_parameter_value(match, assignments):
+def environment_parameter_value(match, assignments, tracked_only=False):
     name = match.group(1) or match.group(2)
     if name.startswith(SUBSTITUTION_PLACEHOLDER):
         return match.group(0)  # command substitution output is never resolved
     if name in assignments:
         return assignments[name]
+    if tracked_only:
+        return match.group(0)
     return os.environ.get(name, match.group(0))
 
 
-def expand_environment_parameters(command, assignments=None):
+def expand_environment_parameters(command, assignments=None, tracked_only=False):
     values = assignments or {}
 
     def substitute(match):
-        return environment_parameter_value(match, values)
+        return environment_parameter_value(match, values, tracked_only)
 
     expanded = NAMED_SHELL_PARAMETER_SYNTAX.sub(substitute, command)
     return CMD_PARAMETER_SYNTAX.sub(substitute, expanded)
@@ -2184,6 +2192,7 @@ def git_command(segment, assignments=None):
         return None
     resolved_arguments = []
     parameter_arguments = []
+    write_capable_parameters = []
     argument_index = 0
     while argument_index < len(arguments):
         argument = arguments[argument_index]
@@ -2222,8 +2231,17 @@ def git_command(segment, assignments=None):
                 )
             resolved_arguments.append(f"-C{expanded}")
         else:
-            if SHELL_PARAMETER_SYNTAX.search(argument) or CMD_PARAMETER_SYNTAX.search(argument):
+            parameter = SHELL_PARAMETER_SYNTAX.search(argument) or CMD_PARAMETER_SYNTAX.search(argument)
+            if parameter:
                 parameter_arguments.append(argument)
+                literal = re.split(r"[$%!]", argument, maxsplit=1)[0]
+                if (
+                    not literal
+                    or (literal.startswith("-") and "=" not in literal)
+                    or literal.split("=", 1)[0] in GIT_READ_WRITE_OPTIONS
+                    or arguments[argument_index - 1] in GIT_READ_WRITE_OPTIONS
+                ):
+                    write_capable_parameters.append(argument)
             resolved_arguments.append(expand_environment_parameters(argument, assignments))
         argument_index += 1
     arguments = resolved_arguments
@@ -2260,9 +2278,11 @@ def git_command(segment, assignments=None):
         return None
     subcommand = arguments[index].casefold()
     read_only_subcommands = ARCHIVE_READ_GIT_COMMANDS | CLOSED_READ_GIT_COMMANDS
-    if parameter_arguments and subcommand not in read_only_subcommands:
-        # The scan exists for write-capable subcommands (commit messages, ref
-        # operands); read-only ones cannot mutate what the guard protects.
+    if subcommand in read_only_subcommands:
+        # Read-only subcommands still write through --output, so a parameter
+        # that can form an option or its value keeps the refusal.
+        parameter_arguments = write_capable_parameters
+    if parameter_arguments:
         raise ValueError(
             f"git argument {parameter_arguments[0]} cannot be resolved by the guard; "
             "pass a literal value (for commit messages use -F <file>)"

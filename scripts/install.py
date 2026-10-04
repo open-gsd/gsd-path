@@ -3291,19 +3291,18 @@ def _runtime_provenance(arguments, source_root: Path):
     Provenance is display/audit metadata on the runtime declaration only; it
     never joins the pinned digest or runtime validation.
     """
-    recorded = {key: value for key, value in {
-        "source": arguments.runtime_provenance_source,
-        "patch_ref": arguments.runtime_provenance_patch,
-        "note": arguments.runtime_provenance_note,
-    }.items() if value}
+    supplied = (arguments.runtime_provenance_source, arguments.runtime_provenance_patch,
+                arguments.runtime_provenance_note)
+    recorded = {key: value for key, value in zip(runtime_store.PROVENANCE_KEYS, supplied) if value}
     if not recorded:
         return None
     if "patch_ref" not in recorded:
         try:
-            head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=source_root,
+            head = subprocess.run(["git", "rev-parse", "--show-toplevel", "HEAD"], cwd=source_root,
                                   capture_output=True, encoding="utf-8", check=True)
-            if head.stdout.strip():
-                recorded["patch_ref"] = head.stdout.strip()
+            toplevel, _, sha = head.stdout.strip().partition("\n")
+            if sha and Path(toplevel).resolve() == Path(source_root).resolve():
+                recorded["patch_ref"] = sha
         except (OSError, subprocess.CalledProcessError):
             pass
     return recorded

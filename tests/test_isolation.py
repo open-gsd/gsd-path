@@ -44,6 +44,13 @@ def git(root: Path, *arguments: str) -> str:
 
 
 class IsolationTests(unittest.TestCase):
+    def test_long_path_prefix_handles_drive_unc_and_prefixed_roots(self):
+        self.assertEqual(isolation._long_path("C:\\work\\tree"), "\\\\?\\C:\\work\\tree")
+        self.assertEqual(
+            isolation._long_path("\\\\server\\share\\tree"), "\\\\?\\UNC\\server\\share\\tree"
+        )
+        self.assertEqual(isolation._long_path("\\\\?\\C:\\work\\tree"), "\\\\?\\C:\\work\\tree")
+
     def write(self, root: Path, relative: str, content: str) -> None:
         path = root / relative
         path.parent.mkdir(parents=True, exist_ok=True)

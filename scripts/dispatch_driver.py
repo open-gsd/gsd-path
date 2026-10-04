@@ -2036,7 +2036,7 @@ def fix_tasks(primary: Path, options: argparse.Namespace) -> Dict[str, object]:
         texts = contracts._task_texts(primary, options.project_dir)
         groups = {group["locator"]: group for group in findings["groups"]}
         today = now()[:10]
-        # Same-wave file overlap is forbidden, so repairs land in a newly appended wave.
+        # Unordered same-wave file overlap is rejected, so repairs land in a newly appended wave.
         plan_path = project / "plan/PLAN.md"
         plan_text = plan_path.read_text(encoding="utf-8")
         depths, waves = contracts._plan_waves(plan_text)

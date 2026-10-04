@@ -533,13 +533,14 @@ class DeclaredRuntimeTests(unittest.TestCase):
         self.assertEqual(status.workflow["state"], "unverified")
         self.assertEqual(status.health, "amber")
 
-    def test_failing_launcher_falls_back_to_legacy_runtime(self) -> None:
+    def test_failing_launcher_does_not_run_legacy_runtime(self) -> None:
         gsd = self.root / ".gsd-path"
         (gsd / "runtime").mkdir(parents=True)
         (gsd / "runtime" / "pipeline_state.py").write_bytes(RUNTIME_STUB.encode("utf-8"))
         (gsd / "status_runtime.py").write_bytes("raise SystemExit(2)\n".encode("utf-8"))
         status = probe.probe_project(self.root)
-        self.assertEqual(status.status_source, "runtime")
+        self.assertEqual(status.status_source, "parse-only")
+        self.assertEqual(status.workflow["state"], "unverified")
 
     def test_failing_launcher_without_legacy_fails_soft(self) -> None:
         gsd = self.root / ".gsd-path"

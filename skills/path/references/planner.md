@@ -38,8 +38,9 @@ the how.
    security-critical; `verify-only` suits polish and low-risk feature waves
    whose Verify commands meaningfully cover the criteria.
 
-Every dependency must be in an earlier wave or in the same wave with no file
-overlap. Produce an acyclic graph; same-wave chains execute in layers.
+Every dependency must be in an earlier wave or in the same wave. Same-wave
+tasks may share files only when one transitively depends on the other. Produce
+an acyclic graph; same-wave chains execute in layers.
 
 Declare a dependency only when something real crosses it: data — the dependent
 consumes a symbol, signature, schema, endpoint, file format, or path named in
