@@ -2311,6 +2311,150 @@ class IsolationTests(unittest.TestCase):
             self.assertFalse(source.exists())
 
 
+    def test_activate_refuses_serial_activation_while_parallel_worktree_is_live(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            base = self.init_bound_repo(repo)
+            pending = (
+                TASK_FILE.replace("status: in-progress", "status: pending")
+                .replace("agent: coder", "agent: null")
+                .replace("worktree: active", "worktree: null")
+                .replace("task_branch: active", "task_branch: null")
+            )
+            (repo / ".project" / "tasks" / "T001.md").write_bytes(
+                pending.encode("utf-8")
+            )
+            git(repo, "add", ".project/tasks/T001.md")
+            git(repo, "commit", "--amend", "-q", "--no-edit")
+            base = git(repo, "rev-parse", "HEAD")
+            isolated = isolation.isolate_task(repo, base, "T001", 2)
+            worktree = Path(isolated["worktree"])
+            isolation.activate_task(
+                worktree, base, "T001", "coder",
+                ".project/tasks/T001.md", "gsd-path-task/T001",
+            )
+
+            with self.assertRaisesRegex(
+                isolation.IsolationError, "active parallel worktree"
+            ):
+                isolation.activate_task(
+                    repo, base, "T001", "coder", ".project/tasks/T001.md", None
+                )
+
+    def test_serial_land_tolerates_primary_bookkeeping_dirt(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            base = self.init_bound_repo(repo)
+            self.write(repo, "src/app.py", "print('done')\n")
+            self.write(repo, ".project/tasks/T001.md", TASK_FILE + "- log\n")
+            self.write(repo, ".project/discuss/ANSWERS.md", "## A001\nruling\n")
+
+            result = isolation.land(
+                repo, repo, base, "T001", "add greeting",
+                ".project/tasks/T001.md", ["src/app.py"],
+            )
+
+            self.assertEqual(result["mode"], "serial")
+            changed = git(
+                repo, "show", "--name-only", "--format=", result["commit"]
+            ).split()
+            self.assertIn("src/app.py", changed)
+            self.assertNotIn(".project/discuss/ANSWERS.md", changed)
+            self.assertIn(
+                ".project/discuss/ANSWERS.md", isolation.uncommitted_paths(repo)
+            )
+
+    def test_serial_land_still_refuses_unrelated_project_dirt(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            base = self.init_bound_repo(repo)
+            self.write(repo, "src/app.py", "print('done')\n")
+            self.write(repo, ".project/tasks/T001.md", TASK_FILE + "- log\n")
+            self.write(repo, ".project/intent/INTENT.md", "scope\n")
+
+            with self.assertRaisesRegex(
+                isolation.IsolationError,
+                r"unexpected paths: \.project/intent/INTENT\.md; landing allows",
+            ):
+                isolation.land(
+                    repo, repo, base, "T001", "add greeting",
+                    ".project/tasks/T001.md", ["src/app.py"],
+                )
+
+    def test_ensure_verify_sidecar_recreates_a_deleted_sidecar(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            base = self.init_bound_repo(repo)
+            created = isolation.isolate_verify(repo, base, "task-t001-verify")
+            sidecar = Path(created["worktree"])
+            branch = str(created["branch"])
+            shutil.rmtree(sidecar)
+
+            ensured = isolation.ensure_verify_sidecar(repo, base, branch)
+
+            self.assertEqual(ensured["worktree"], str(sidecar))
+            self.assertEqual(git(sidecar, "branch", "--show-current"), branch)
+            self.assertEqual(git(sidecar, "rev-parse", "HEAD"), base)
+            reused = isolation.ensure_verify_sidecar(repo, base, branch)
+            self.assertEqual(reused["worktree"], str(sidecar))
+
+    def test_ensure_verify_sidecar_refuses_a_foreign_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            base = self.init_bound_repo(repo)
+            created = isolation.isolate_verify(repo, base, "task-t001-verify")
+            sidecar = Path(created["worktree"])
+            branch = str(created["branch"])
+            shutil.rmtree(sidecar)
+            sidecar.mkdir()
+            (sidecar / "keep.txt").write_bytes(b"user data\n")
+
+            with self.assertRaisesRegex(
+                isolation.IsolationError, "ownership changed"
+            ):
+                isolation.ensure_verify_sidecar(repo, base, branch)
+            self.assertTrue((sidecar / "keep.txt").exists())
+
+    def test_retire_removes_a_clean_sidecar_with_initialized_submodules(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            base = self.init_bound_repo(repo)
+            vendor = Path(temporary) / "vendor"
+            vendor.mkdir()
+            git(vendor, "init", "-b", "main")
+            git(vendor, "config", "user.email", "t@example.test")
+            git(vendor, "config", "user.name", "T")
+            (vendor / "lib.txt").write_bytes(b"lib\n")
+            git(vendor, "add", "lib.txt")
+            git(vendor, "commit", "-q", "-m", "lib")
+            created = isolation.isolate_verify(repo, base, "task-t001-verify")
+            sidecar = Path(created["worktree"])
+            git(sidecar, "-c", "protocol.file.allow=always",
+                "submodule", "add", str(vendor), "vendor/sub")
+            git(sidecar, "commit", "-q", "-m", "vendor the dependency")
+
+            refused = subprocess.run(
+                ("git", "-C", str(repo), "worktree", "remove", str(sidecar)),
+                capture_output=True, encoding="utf-8", errors="replace", check=False,
+            )
+            self.assertNotEqual(refused.returncode, 0, refused.stdout + refused.stderr)
+
+            result = isolation.retire(repo, sidecar, str(created["branch"]), False)
+
+            self.assertEqual(result["reason"], "removed")
+            self.assertFalse(sidecar.exists())
+            self.assertNotIn(
+                "gsd-path-verify/task-t001-verify",
+                git(repo, "for-each-ref", "--format=%(refname:short)", "refs/heads/"),
+            )
+
+
 class RecoverTests(unittest.TestCase):
     TASK = (
         "---\nid: T001\ntitle: add greeting\nwave: {wave}\ndeps: []\nstatus: {status}\n"

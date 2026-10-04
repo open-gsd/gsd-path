@@ -776,6 +776,35 @@ class DispatchDriverTests(unittest.TestCase):
         self.assertEqual(self.branches(root), ["gsd-path/M001"])
         self.assertIn("status: done", (root / ".project/tasks/T001-demo.md").read_text(encoding="utf-8"))
 
+    def test_finish_recreates_a_deleted_serial_verify_sidecar(self) -> None:
+        root = self.root
+        self.fixture(root, deps_t002="[T001]")
+        head = self.head(root)
+        subprocess.run([sys.executable, "-B", str(PROJECT_ROOT / "scripts/workflow_run.py"),
+                        "prepare-task", "--repo", str(root), "--expected-head", head,
+                        "--task-id", "T001", "--round-size", "1"], check=True, capture_output=True)
+        subprocess.run([sys.executable, "-B", str(PROJECT_ROOT / "scripts/isolation.py"),
+                        "activate-task", "--repo", str(root), "--base", head, "--task-id", "T001",
+                        "--agent", "build_t001", "--task-file", ".project/tasks/T001-demo.md"],
+                       check=True, capture_output=True)
+        (root / "src").mkdir()
+        (root / "src/app.py").write_bytes("print('hello')\n".encode("utf-8"))
+        task = root / ".project/tasks/T001-demo.md"
+        task.write_bytes((task.read_text(encoding="utf-8")
+                          + "- 2026-10-04 — implemented src/app.py; Verify pass\n").encode("utf-8"))
+        # The sidecar prepare-task created is deleted, stranding finish (issue #353).
+        sidecar = dispatch_driver.isolation.sidecar_root(root, "verify", "task-t001-verify")
+        shutil.rmtree(sidecar)
+
+        receipt = self.driver(root, "finish", "--task-id", "T001")
+
+        self.assertEqual(receipt["status"], "landed", receipt)
+        self.assertEqual(receipt["landed"][0]["mode"], "serial")
+        self.assertEqual(self.branches(root), ["gsd-path/M001"])
+        self.assertIn("status: done", task.read_text(encoding="utf-8"))
+        text = task.read_text(encoding="utf-8")
+        self.assertIn("orchestrator Verify (sidecar gsd-path-verify/task-t001-verify): pass", text)
+
     def test_finish_lands_natively_dispatched_parallel_tasks_from_their_isolates(self) -> None:
         root = self.root
         head = self.fixture(root)
