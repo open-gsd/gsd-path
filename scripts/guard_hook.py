@@ -245,6 +245,29 @@ GIT_PARAMETER_DENIED_OPTIONS = GIT_READ_WRITE_OPTIONS | {
 }
 
 
+# -c/--config keys whose value git executes as a program. A literal value is
+# as dangerous as a parameter here: git -c core.fsmonitor=<path> status runs
+# the configured program while the subcommand stays nominally read-only.
+GIT_EXECUTED_CONFIG_KEYS = frozenset({
+    "core.fsmonitor", "core.hookspath", "core.editor", "sequence.editor",
+    "core.sshcommand", "core.askpass", "core.pager", "interactive.difffilter",
+})
+GIT_EXECUTED_CONFIG_SECTIONS = {
+    "filter": (".clean", ".smudge", ".process", ".command"),
+    "diff": (".command", ".textconv", ".external"),
+    "merge": (".driver",),
+}
+
+
+def executed_config_key(key):
+    """Whether a -c/--config key's value is a program git runs."""
+    if key in GIT_EXECUTED_CONFIG_KEYS:
+        return True
+    section, _, remainder = key.partition(".")
+    suffixes = GIT_EXECUTED_CONFIG_SECTIONS.get(section, ())
+    return bool(remainder) and key.endswith(tuple(suffixes))
+
+
 # Real read-only git options that are a strict prefix of a denied option name.
 GIT_SAFE_PREFIX_OPTIONS = frozenset({"--text"})
 
@@ -2432,6 +2455,11 @@ def git_command(segment, assignments=None):
                 raise ValueError(
                     f"git -c {config_key} defines an alias the guard cannot inspect; "
                     "run the underlying git command directly"
+                )
+            if executed_config_key(config_key):
+                raise ValueError(
+                    f"git -c {config_key} configures a program git executes; "
+                    "the guard cannot allow it"
                 )
             if config_key == "clean.requireforce":
                 raise ValueError(

@@ -2256,6 +2256,18 @@ class GuardHookTests(unittest.TestCase):
             'read x < v.txt; git -c "diff.external=$x" diff',
             'read x < v.txt; git "-cdiff.external=$x" diff',
             'read x < v.txt; git -c "core.fsmonitor=$x" status',
+            # A literal value is just as dangerous: git executes the
+            # configured program while the subcommand stays read-only.
+            'git -c core.fsmonitor=/tmp/fsm-hook status .project/archive',
+            'cd .project/archive/001-mvp && git -c core.fsmonitor=/tmp/fsm-hook status',
+            'git -c core.hooksPath=/tmp/hooks status',
+            'git -c core.editor=/tmp/editor.sh log -1',
+            'git -c core.sshCommand=/tmp/ssh.sh ls-remote origin',
+            'git -c core.pager=/tmp/pager.sh log',
+            'git -c diff.my.textconv=/tmp/tc.sh log',
+            'git -c filter.driver.clean=/tmp/clean.sh show HEAD:file',
+            'git -c merge.rewriter.driver=/tmp/merge.sh merge topic',
+            'git --config-env=core.fsmonitor=FSM status',
             'git log --format="$x[@] %H"',
             "git diff --output=$f",
             # Unbraced zsh expansion flags match no parameter syntax, so an
@@ -2300,6 +2312,17 @@ class GuardHookTests(unittest.TestCase):
         ):
             with self.subTest(command=command):
                 self.assert_denied(self.bash(command))
+
+    def test_denies_executed_config_keys_but_allows_plain_settings(self):
+        # Only -c keys whose value git runs as a program are denied; ordinary
+        # settings keep working (see the literal-value cases in the test above).
+        for command in (
+            "git -c user.name=Test log -1",
+            "git -c core.autocrlf=false status",
+            'git -c "commit.gpgsign=false" log -1',
+        ):
+            with self.subTest(command=command):
+                self.assert_allowed(self.bash(command))
 
     def test_allows_literal_dollar_in_git_arguments(self):
         # A $ that starts no expansion (a regex anchor, a price) is inert text.
