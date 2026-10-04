@@ -2293,6 +2293,25 @@ class GuardHookTests(unittest.TestCase):
             'git config core.fsmonitor 2 >/dev/null',
             # One token can become several git arguments, or two tokens
             # one: only plain literal words prove the read or set form.
+            # A run of continuations joins the words on its two sides.
+            'git config core.fsmoni\\\n\\\ntor /abs/h.sh',
+            'git c\\\n\\\nonfig core.fsmonitor /abs/h.sh',
+            'git con\\\n\\\n\\\nfig core.fsmonitor /abs/h.sh',
+            'git con\\\r\nfig core.fsmonitor /abs/h.sh',
+            'git con\\\r\n\\\r\nfig core.fsmonitor /abs/h.sh',
+            # The value word of a git global option must be one word.
+            'git -c {core.fsmonitor=/abs/h.sh,status}',
+            'git -c{core.fsmonitor=/abs/h.sh,status}',
+            'git -c {a.b=c,config,core.fsmonitor,/abs/h.sh}',
+            'git -C {.,config,core.fsmonitor,/abs/h.sh}',
+            'git -C{.,config,core.fsmonitor,/abs/h.sh}',
+            'git --git-dir {.git,config,core.fsmonitor,/abs/h.sh}',
+            'git --git-dir={.git,config}',
+            'git --work-tree {.,config,core.fsmonitor,/abs/h.sh}',
+            'git --namespace {a,config,core.fsmonitor,/abs/h.sh}',
+            "git -c 'a.b=c'{,config,core.fsmonitor,/abs/h.sh}",
+            'git -c user.name=A\\ B log -1',
+            'git -C sub\\ dir status',
             # The subcommand word must be one literal word too.
             'git {config,core.fsmonitor,/abs/h.sh}',
             'git con\\\nfig core.fsmonitor /abs/h.sh',
@@ -2400,6 +2419,12 @@ class GuardHookTests(unittest.TestCase):
         # settings keep working (see the literal-value cases in the test above).
         for command in (
             "git -c user.name=Test log -1",
+            "git -c user.name='A B' log -1",
+            'git -c "user.name=A B" log -1',
+            "git -c user.name='{a,b} *' log -1",
+            'git -C . status',
+            'git -C "." status',
+            "git --git-dir=.git status",
             "git -c core.autocrlf=false status",
             'git -c "commit.gpgsign=false" log -1',
             # Disabling forms of a program key run no program.

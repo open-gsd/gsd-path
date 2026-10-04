@@ -209,6 +209,11 @@ See [UPDATE.md](UPDATE.md).
   is denied, because the shell reads it and the words after it as a comment.
   The git subcommand word must be a plain literal word in each git command:
   `git {config,...}` and a subcommand split by a line continuation are denied.
+  The value word of a git global option (`-c`, `-C`, `--git-dir`,
+  `--work-tree`, `--namespace`, `--config-env`) must resolve to one word: a
+  backslash, an unquoted glob or an unquoted brace list or range in it is
+  denied (`git -c {core.fsmonitor=/abs/h.sh,status}`). Plain quoted parts
+  pass (`git -c user.name='A B' log`).
   `git config` section renames and removals (`--rename-section`,
   `--remove-section`) and `--edit` are denied, because a rename can move a
   key into an executed section and `--edit` starts an editor.

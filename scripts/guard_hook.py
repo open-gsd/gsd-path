@@ -319,6 +319,8 @@ GIT_CONFIG_VALUE_OPTIONS = frozenset({
 GIT_CONFIG_EDIT_SHORT_OPTION = re.compile(r"-[A-Za-z]*e[A-Za-z]*")
 # An unquoted word the shell can turn into several arguments: a glob, or a
 # brace list or range.
+PLAIN_QUOTED_SEGMENT = re.compile(r"'[^']*'|\"[^\"]*\"")
+ANSI_QUOTE_START = re.compile(r"\$['\"]")
 GIT_CONFIG_EXPANDING_WORD = re.compile(r"[*?\[]|\{.*(?:,|\.\.)")
 
 
@@ -2176,9 +2178,10 @@ class ShellToken(str):
     ASCII file descriptor digit written against one (the 2 of 2>file, not of
     2 >file). zsh passes a longer or non-ASCII digit word on as an argument.
     `literal` is "bare" for a word written with no quote or escape, "quoted"
-    for a word inside one pair of plain quotes, and None when the shell may
-    build the word in another way (escapes, mixed quotes, a line continuation
-    in the word or one that joins it to the next word).
+    for a word inside one pair of plain quotes, "mixed" for plain quoted and
+    unquoted parts where no unquoted part can expand, and None when the shell
+    may build the word in another way (escapes, an expanding unquoted part, a
+    line continuation in the word or one that joins it to the next word).
     """
 
     double_quoted = ()
@@ -2307,21 +2310,48 @@ def shell_tokens(command, direct=True):
         )
     else:
         command = strip_heredoc_bodies(command)
-    joins = {
-        index for index in breaks or ()
-        if command[max(index - 1, 0):index].strip() and command[index + 1:index + 2].strip()
-    }
+    joins = set()
+    for index in breaks or ():
+        left, right = index - 1, index + 1
+        while left >= 0 and marked[left] == mark:
+            left -= 1
+        while right < len(marked) and marked[right] == mark:
+            right += 1
+        if left >= 0 and marked[left].strip() and marked[right:right + 1].strip():
+            joins.add(index)
     lexer = shlex.shlex(command, posix=True, punctuation_chars="|;&()<>\n\r")
     lexer.whitespace = " \t"
     lexer.whitespace_split = True
     lexer.commenters = ""
     tokens = []
+    previous_end = 0
     try:
         for token in lexer:
             end = lexer.instream.tell() - len(lexer._pushback_chars)
             if command[end - 1:end] in (" ", "\t"):
                 end -= 1
+            word_start = previous_end
+            while word_start < end and command[word_start] in " \t":
+                word_start += 1
+            previous_end = end
+            word = command[word_start:end]
             literal = None
+            if (
+                breaks is not None
+                and "\\" not in word
+                and not ANSI_QUOTE_START.search(word)
+                and breaks.isdisjoint(range(word_start, end))
+                and end not in joins
+                and word_start - 1 not in joins
+                and PLAIN_QUOTED_SEGMENT.sub(lambda match: match.group(0)[1:-1], word) == token
+            ):
+                unquoted = PLAIN_QUOTED_SEGMENT.sub("", word)
+                if (
+                    "'" not in unquoted
+                    and '"' not in unquoted
+                    and not GIT_CONFIG_EXPANDING_WORD.search(unquoted)
+                ):
+                    literal = "mixed"
             for quote in ("", "'", '"'):
                 start = end - len(token) - 2 * len(quote)
                 if (
@@ -2514,6 +2544,20 @@ def command_invocation(segment):
     return executable, arguments
 
 
+def require_resolved_git_word(word, mixed=True):
+    """Deny a git word the shell can turn into other or several arguments."""
+    literal = getattr(word, "literal", "bare")
+    if (
+        literal is None
+        or (literal == "mixed" and not mixed)
+        or (literal == "bare" and GIT_CONFIG_EXPANDING_WORD.search(word))
+    ):
+        raise ValueError(
+            f"git argument {word} cannot be resolved by the guard; "
+            "pass a literal value"
+        )
+
+
 def git_command(segment, assignments=None):
     invocation = command_invocation(segment)
     if invocation is None:
@@ -2531,6 +2575,7 @@ def git_command(segment, assignments=None):
         if argument == "-C" and argument_index + 1 < len(arguments):
             argument_index += 1
             directory = arguments[argument_index]
+            require_resolved_git_word(directory)
             expanded = expand_environment_parameters(directory, assignments)
             if (
                 SHELL_PARAMETER_SYNTAX.search(expanded)
@@ -2550,6 +2595,7 @@ def git_command(segment, assignments=None):
                 )
             resolved_arguments.extend((argument, expanded))
         elif attached_directory:
+            require_resolved_git_word(argument)
             directory = argument[2:]
             expanded = expand_environment_parameters(directory, assignments)
             if (
@@ -2608,8 +2654,10 @@ def git_command(segment, assignments=None):
         if option in GIT_GLOBAL_OPTIONS_WITH_VALUES and value is None:
             if index >= len(arguments):
                 raise ValueError(f"git option {option} lacks a value")
-            value = arguments[index]
+            value = token = arguments[index]
             index += 1
+        if option in GIT_GLOBAL_OPTIONS_WITH_VALUES and option != "-C":
+            require_resolved_git_word(token)
         if option in {"-c", "--config-env"}:
             config_key, _, config_value = str(value).partition("=")
             config_key = config_key.casefold()
@@ -2636,20 +2684,13 @@ def git_command(segment, assignments=None):
             git_options.extend((option, str(value)))
     if index >= len(arguments):
         return None
-    subcommand_literal = getattr(arguments[index], "literal", "bare")
-    if subcommand_literal is None or (
-        subcommand_literal == "bare" and GIT_CONFIG_EXPANDING_WORD.search(arguments[index])
-    ):
-        raise ValueError(
-            f"git argument {arguments[index]} cannot be resolved by the guard; "
-            "pass a literal subcommand"
-        )
+    require_resolved_git_word(arguments[index], mixed=False)
     subcommand = arguments[index].casefold()
     if subcommand == "config":
         for argument in arguments[index + 1:]:
             literal = getattr(argument, "literal", None)
             if not getattr(argument, "redirection", False) and (
-                literal is None
+                literal in (None, "mixed")
                 or (
                     literal == "bare"
                     and (argument.startswith("#") or GIT_CONFIG_EXPANDING_WORD.search(argument))
