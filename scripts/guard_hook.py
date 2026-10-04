@@ -325,9 +325,23 @@ def denied_git_config_argument(arguments):
     A section rename can carry a key into an executed section and --edit runs
     the editor, so both are denied outright. Otherwise only a set denies: an
     executed key with a value operand after it and no read or unset mode.
-    The tokens carry no quoting or adjacency, so a redirection is not told
-    apart from an operand: each token counts, which only fails closed.
+    Only a trailing redirection is dropped: the operator, its target and a
+    file descriptor digit written against it. A separate digit (5 >file) and a
+    quoted operator are operands.
     """
+    arguments = list(arguments)
+    while (
+        len(arguments) >= 2
+        and getattr(arguments[-2], "redirection", False)
+        and not arguments[-2].isdigit()
+    ):
+        del arguments[-2:]
+        if (
+            arguments
+            and getattr(arguments[-1], "redirection", False)
+            and arguments[-1].isdigit()
+        ):
+            del arguments[-1]
     separator = arguments.index("--") if "--" in arguments else len(arguments)
     options = arguments[:separator]
     for token in options:
@@ -2153,9 +2167,14 @@ PARAMETER_MARKERS = frozenset("$%!")
 
 
 class ShellToken(str):
-    """A token that keeps, per parameter marker character, whether double quotes enclosed it."""
+    """A token that keeps, per parameter marker character, whether double quotes enclosed it.
+
+    `redirection` is true for an unquoted redirection operator and for a file
+    descriptor digit written against one (the 2 of 2>file, not of 2 >file).
+    """
 
     double_quoted = ()
+    redirection = False
 
 
 def double_quoted_markers(command):
@@ -2267,8 +2286,29 @@ def shell_tokens(command, direct=True):
     lexer.whitespace = " \t"
     lexer.whitespace_split = True
     lexer.commenters = ""
+    tokens = []
     try:
-        tokens = list(lexer)
+        for token in lexer:
+            end = lexer.instream.tell() - len(lexer._pushback_chars)
+            if command[end - 1:end] in (" ", "\t"):
+                end -= 1
+            start = end - len(token)
+            before = command[start - 1:start] if start > 0 else ""
+            if command[start:end] == token and (
+                (
+                    set(token) <= SHELL_WRITE_REDIRECTION_CHARS
+                    and ("<" in token or ">" in token)
+                    and before != "\\"
+                )
+                or (
+                    token.isdigit()
+                    and command[end:end + 1] in ("<", ">")
+                    and (not before or before in " \t|;&()<>\n\r")
+                )
+            ):
+                token = ShellToken(token)
+                token.redirection = True
+            tokens.append(token)
     except ValueError as error:
         raise ValueError(
             f"shell command cannot be tokenized ({error}); balance the quotes "
@@ -2284,7 +2324,9 @@ def shell_tokens(command, direct=True):
     marked = []
     for token in tokens:
         count = sum(character in PARAMETER_MARKERS for character in token)
+        redirection = getattr(token, "redirection", False)
         token = ShellToken(token)
+        token.redirection = redirection
         token.double_quoted, flags = tuple(flags[:count]), flags[count:]
         marked.append(token)
     return marked
@@ -2504,7 +2546,8 @@ def git_command(segment, assignments=None):
                     or SUBSTITUTION_PLACEHOLDER in expanded
                 ):
                     unproven_parameters.append(argument)
-            resolved_arguments.append(expand_environment_parameters(argument, assignments))
+            expanded = expand_environment_parameters(argument, assignments)
+            resolved_arguments.append(argument if expanded == argument else expanded)
         argument_index += 1
     arguments = resolved_arguments
     index = 0

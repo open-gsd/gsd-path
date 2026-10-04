@@ -196,8 +196,9 @@ See [UPDATE.md](UPDATE.md).
   `core.hooksPath`, `include.path`, `includeIf.*.path`, `url.*.insteadOf`,
   `url.*.pushInsteadOf` — is denied with each value. `git config` is denied
   when it sets one of these keys; to read or unset the key stays allowed.
-  A redirection after the key counts as a value, so use an explicit mode
-  (`git config --get <key> 2>/dev/null`) when you redirect a read.
+  A redirection at the end of a read (`git config <key> 2>/dev/null`) is not
+  a value. A separate digit before a redirection (`5 >/dev/null`) and a quoted
+  operator are values, so they make a set.
   `git config` section renames and removals (`--rename-section`,
   `--remove-section`) and `--edit` are denied, because a rename can move a
   key into an executed section and `--edit` starts an editor.

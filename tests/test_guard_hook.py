@@ -2290,6 +2290,10 @@ class GuardHookTests(unittest.TestCase):
             # operator is a real value: both are a set.
             'git config core.hooksPath 5 >/dev/null',
             'git config core.hooksPath 5 >> log.txt',
+            'git config core.fsmonitor 2 >/dev/null',
+            'git config core.hooksPath 5 2>/dev/null',
+            "git config core.hooksPath '2'>/dev/null",
+            'git config core.hooksPath \\> x',
             'git config include.path 5 > /dev/null && git status',
             "git config core.hooksPath '>' x",
             # Signature verification runs the configured program in a read.
@@ -2378,6 +2382,15 @@ class GuardHookTests(unittest.TestCase):
             "git config unset core.fsmonitor",
             "git config --get core.fsmonitor",
             "git config core.fsmonitor",
+            # A redirection after a bare read is no value.
+            "git config core.fsmonitor 2>/dev/null",
+            "git config core.hooksPath 2>/dev/null || true",
+            "git config --global core.editor 2>/dev/null",
+            "git config gpg.program 2>/dev/null",
+            "git config core.fsmonitor >/dev/null",
+            "git config core.fsmonitor > out.txt",
+            "git config core.fsmonitor < /dev/null",
+            "git config core.fsmonitor >/dev/null 2>&1",
             "git config --get core.fsmonitor 2>/dev/null",
             "git config --get core.hooksPath 2>/dev/null || true",
             "git config --get-all core.hooksPath 2>&1",
