@@ -2236,6 +2236,17 @@ class GuardHookTests(unittest.TestCase):
                 )
             ),
             'git log --format="a ${=x}"',
+            # One word is enough where git runs the value as a command.
+            'read x < v.txt; git ls-remote --upload-pack="$x" .',
+            'read x < v.txt; git ls-remote --upload-pack "a $x" .',
+            'read x < v.txt; git ls-remote "--exec=$x" .',
+            'read x < v.txt; git ls-remote --exec "a $x" .',
+            'read x < v.txt; git ls-remote --receive-pack="$x" .',
+            'read x < v.txt; git ls-remote --receive-pack "a $x" .',
+            'read x < v.txt; git ls-remote "ext::$x"',
+            'read x < v.txt; git -c "diff.external=$x" diff',
+            'read x < v.txt; git "-cdiff.external=$x" diff',
+            'read x < v.txt; git -c "core.fsmonitor=$x" status',
             'git log --format="$x[@] %H"',
             "git diff --output=$f",
         )

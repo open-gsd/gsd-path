@@ -238,6 +238,11 @@ CLOSED_LISTING_GIT_OPTIONS = {
     "symbolic-ref": frozenset({"-q", "--quiet", "--short"}),
 }
 GIT_READ_WRITE_OPTIONS = frozenset({"--output", "--ext-diff", "--textconv"})
+# Options whose value git writes to or runs as a command: one unknown word is
+# already enough, so a parameter in or after them is never accepted.
+GIT_PARAMETER_DENIED_OPTIONS = GIT_READ_WRITE_OPTIONS | {
+    "--upload-pack", "--receive-pack", "--exec", "-c", "--config-env",
+}
 ARCHIVE_READ_EXECUTION_OPTIONS = {"rg": frozenset({"--pre"})}
 AMBIGUOUS_SHELL_SYNTAX = re.compile(r"[\r\n|;&<>`]|\$\(|@\(")
 SUBSTITUTION_PLACEHOLDER = "COMMAND_SUBSTITUTION_"
@@ -2347,8 +2352,10 @@ def git_command(segment, assignments=None):
                 if (
                     not literal
                     or (literal.startswith("-") and "=" not in literal)
-                    or literal.split("=", 1)[0] in GIT_READ_WRITE_OPTIONS
-                    or arguments[argument_index - 1] in GIT_READ_WRITE_OPTIONS
+                    or literal.split("=", 1)[0] in GIT_PARAMETER_DENIED_OPTIONS
+                    or arguments[argument_index - 1] in GIT_PARAMETER_DENIED_OPTIONS
+                    or (literal.startswith("-c") and literal != "-c")
+                    or "::" in literal
                     or not parameters_double_quoted(argument)
                     or SUBSTITUTION_PLACEHOLDER in argument
                     or SUBSTITUTION_PLACEHOLDER in expanded
