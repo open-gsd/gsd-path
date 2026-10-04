@@ -305,6 +305,75 @@ def git_option_in(token, options):
     if name.startswith("--") and len(name) > 2:
         return any(option.startswith(name) for option in options)
     return name in options
+GIT_CONFIG_READ_MODES = frozenset({
+    "--get", "--get-all", "--get-regexp", "--get-urlmatch", "--get-color",
+    "--get-colorbool", "-l", "--list", "--unset", "--unset-all",
+})
+GIT_CONFIG_READ_SUBCOMMANDS = frozenset({"get", "unset", "list"})
+GIT_CONFIG_DENIED_MODES = frozenset({"--rename-section", "--remove-section", "--edit"})
+GIT_CONFIG_DENIED_SUBCOMMANDS = frozenset({"rename-section", "remove-section", "edit"})
+GIT_CONFIG_VALUE_OPTIONS = frozenset({
+    "--file", "--blob", "--type", "--default", "--comment", "--value", "--url",
+})
+GIT_CONFIG_EDIT_SHORT_OPTION = re.compile(r"-[A-Za-z]*e[A-Za-z]*")
+
+
+def denied_git_config_argument(arguments):
+    """The git config argument that persists or runs a program git executes.
+
+    A section rename can carry a key into an executed section and --edit runs
+    the editor, so both are denied outright. Otherwise only a set denies: an
+    executed key with a value operand after it and no read or unset mode.
+    Redirections are dropped; a key hidden in one fails closed.
+    """
+    kept, redirected = [], []
+    index = 0
+    while index < len(arguments):
+        token = arguments[index]
+        if (
+            set(token) <= SHELL_WRITE_REDIRECTION_CHARS
+            and ("<" in token or ">" in token)
+        ):
+            if kept and kept[-1].isdigit():
+                redirected.append(kept.pop())
+            redirected.extend(arguments[index + 1:index + 2])
+            index += 2
+            continue
+        kept.append(token)
+        index += 1
+    separator = kept.index("--") if "--" in kept else len(kept)
+    options = kept[:separator]
+    for token in options:
+        if (
+            git_option_in(token, GIT_CONFIG_DENIED_MODES)
+            or GIT_CONFIG_EDIT_SHORT_OPTION.fullmatch(token)
+            or token.casefold() in GIT_CONFIG_DENIED_SUBCOMMANDS
+        ):
+            return token
+    for token in redirected:
+        if executed_config_key(token.casefold()):
+            return token
+    if options[:1] and options[0].casefold() in GIT_CONFIG_READ_SUBCOMMANDS:
+        return None
+    for position, token in enumerate(options):
+        # A mode word that is the value of the option before it is no mode.
+        if token in GIT_CONFIG_READ_MODES and not (
+            position
+            and (
+                options[position - 1] == "-f"
+                or git_option_in(options[position - 1], GIT_CONFIG_VALUE_OPTIONS)
+            )
+        ):
+            return None
+    operands = [
+        token for token in options if not token.startswith("-")
+    ] + kept[separator + 1:]
+    for token in operands[:-1]:
+        if executed_config_key(token.casefold()):
+            return token
+    return None
+
+
 ARCHIVE_READ_EXECUTION_OPTIONS = {"rg": frozenset({"--pre"})}
 AMBIGUOUS_SHELL_SYNTAX = re.compile(r"[\r\n|;&<>`]|\$\(|@\(")
 SUBSTITUTION_PLACEHOLDER = "COMMAND_SUBSTITUTION_"
@@ -2497,14 +2566,12 @@ def git_command(segment, assignments=None):
         return None
     subcommand = arguments[index].casefold()
     if subcommand == "config":
-        # A key followed by another argument is a set form; a key in last
-        # position only reads or unsets it.
-        for argument in arguments[index + 1:-1]:
-            if executed_config_key(argument.casefold()):
-                raise ValueError(
-                    f"git config {argument} persists a program git executes; "
-                    "the guard cannot allow it"
-                )
+        denied = denied_git_config_argument(arguments[index + 1:])
+        if denied is not None:
+            raise ValueError(
+                f"git config {denied} persists a program git executes; "
+                "the guard cannot allow it"
+            )
     read_only_subcommands = ARCHIVE_READ_GIT_COMMANDS | CLOSED_READ_GIT_COMMANDS
     if subcommand in read_only_subcommands:
         # Read-only subcommands still write through --output. A parameter

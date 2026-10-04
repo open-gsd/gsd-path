@@ -196,6 +196,9 @@ See [UPDATE.md](UPDATE.md).
   `core.hooksPath`, `include.path`, `includeIf.*.path`, `url.*.insteadOf`,
   `url.*.pushInsteadOf` — is denied with each value. `git config` is denied
   when it sets one of these keys; to read or unset the key stays allowed.
+  `git config` section renames and removals (`--rename-section`,
+  `--remove-section`) and `--edit` are denied, because a rename can move a
+  key into an executed section and `--edit` starts an editor.
   Command substitution output, a parameter that starts an
   argument, and a parameter in the value of an option that git writes to or
   runs as a command (`--output`, `--upload-pack`, `--receive-pack`, `--exec`,
