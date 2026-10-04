@@ -2299,12 +2299,19 @@ class GuardHookTests(unittest.TestCase):
             'git con\\\n\\\n\\\nfig core.fsmonitor /abs/h.sh',
             'git con\\\r\nfig core.fsmonitor /abs/h.sh',
             'git con\\\r\n\\\r\nfig core.fsmonitor /abs/h.sh',
-            # A program the guard does not model can run the git word in
-            # its arguments, so no git check would apply.
+            # A program that runs the command in its arguments hides git
+            # from the git checks.
             *(
                 f"{wrapper} git -c core.fsmonitor=/abs/h.sh status"
-                for wrapper in ("nice", "nohup", "timeout 5", "sudo", "noglob")
+                for wrapper in (
+                    "nice", "nohup", "timeout 5", "sudo", "sudo -u root", "watch",
+                    "stdbuf -o0", "setsid", "time -p", "env nice", "nice env",
+                    "nice command",
+                )
             ),
+            'nice -n 5 git status',
+            'nice ./git status',
+            'watch git status',
             'nice git status',
             'nice git config core.fsmonitor /abs/h.sh',
             'nice /usr/bin/git -c core.fsmonitor=/abs/h.sh status',
@@ -2457,6 +2464,20 @@ class GuardHookTests(unittest.TestCase):
             "env git status",
             "echo git",
             "grep -r git README.md",
+            # A program that only names git runs no git the guard could check.
+            "which git",
+            "type git",
+            "hash git",
+            "man git",
+            "whereis git",
+            "pgrep git",
+            "brew install git",
+            "apt-get install -y git",
+            "gh pr create --title git",
+            "gh repo clone cli/cli git",
+            "pytest tests/git",
+            "make git",
+            "time git status",
             "git -c credential.helper= ls-remote origin",
             "git config --get credential.helper",
             'git -C "." status',
