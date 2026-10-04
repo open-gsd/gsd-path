@@ -623,15 +623,12 @@ def tree_mtime(path: Union[str, Path]) -> Optional[float]:
     return latest
 
 
-def _runtime_status(root: str) -> Optional[dict]:
-    runtime = Path(root) / ".gsd-path" / "runtime" / "pipeline_state.py"
-    if not runtime.is_file():
-        return None
+def _run_status_command(command: List[str]) -> Optional[dict]:
     try:
         # The daemon's own interpreter: python3 is usually absent on Windows,
         # where process start and git are also slow enough to need the margin.
         result = subprocess_platform.run(
-            [sys.executable, "-B", str(runtime), "status", "--repo", root],
+            command,
             capture_output=True,
             encoding="utf-8",
             errors="replace",
@@ -649,6 +646,21 @@ def _runtime_status(root: str) -> Optional[dict]:
     if not isinstance(payload, dict) or payload.get("schema") != RUNTIME_STATUS_SCHEMA:
         return None
     return payload
+
+
+def _runtime_status(root: str) -> Optional[dict]:
+    # Current installs pin a shared runtime and proxy status through the
+    # project launcher, which resolves the declaration exactly like the
+    # status command does. Unmigrated projects keep the per-project runtime.
+    launcher = Path(root) / ".gsd-path" / "status_runtime.py"
+    if launcher.is_file():
+        payload = _run_status_command([sys.executable, "-B", str(launcher), "--repo", root])
+        if payload is not None:
+            return payload
+    runtime = Path(root) / ".gsd-path" / "runtime" / "pipeline_state.py"
+    if not runtime.is_file():
+        return None
+    return _run_status_command([sys.executable, "-B", str(runtime), "status", "--repo", root])
 
 
 def _activity_time(status: ProjectStatus) -> Optional[datetime]:
