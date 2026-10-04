@@ -257,6 +257,7 @@ GIT_EXECUTED_CONFIG_SECTIONS = {
     "diff": (".command", ".textconv", ".external"),
     "merge": (".driver",),
     "remote": (".uploadpack", ".receivepack"),
+    "gpg": (".program",),
 }
 # Keys whose value is a path or URL git loads code through: an included file
 # can set every key above, and a rewritten URL can retarget the transport.
@@ -324,34 +325,17 @@ def denied_git_config_argument(arguments):
     A section rename can carry a key into an executed section and --edit runs
     the editor, so both are denied outright. Otherwise only a set denies: an
     executed key with a value operand after it and no read or unset mode.
-    Redirections are dropped; a key hidden in one fails closed.
+    The tokens carry no quoting or adjacency, so a redirection is not told
+    apart from an operand: each token counts, which only fails closed.
     """
-    kept, redirected = [], []
-    index = 0
-    while index < len(arguments):
-        token = arguments[index]
-        if (
-            set(token) <= SHELL_WRITE_REDIRECTION_CHARS
-            and ("<" in token or ">" in token)
-        ):
-            if kept and kept[-1].isdigit():
-                redirected.append(kept.pop())
-            redirected.extend(arguments[index + 1:index + 2])
-            index += 2
-            continue
-        kept.append(token)
-        index += 1
-    separator = kept.index("--") if "--" in kept else len(kept)
-    options = kept[:separator]
+    separator = arguments.index("--") if "--" in arguments else len(arguments)
+    options = arguments[:separator]
     for token in options:
         if (
             git_option_in(token, GIT_CONFIG_DENIED_MODES)
             or GIT_CONFIG_EDIT_SHORT_OPTION.fullmatch(token)
             or token.casefold() in GIT_CONFIG_DENIED_SUBCOMMANDS
         ):
-            return token
-    for token in redirected:
-        if executed_config_key(token.casefold()):
             return token
     if options[:1] and options[0].casefold() in GIT_CONFIG_READ_SUBCOMMANDS:
         return None
@@ -367,7 +351,7 @@ def denied_git_config_argument(arguments):
             return None
     operands = [
         token for token in options if not token.startswith("-")
-    ] + kept[separator + 1:]
+    ] + arguments[separator + 1:]
     for token in operands[:-1]:
         if executed_config_key(token.casefold()):
             return token

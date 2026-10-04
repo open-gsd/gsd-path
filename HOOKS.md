@@ -188,7 +188,7 @@ See [UPDATE.md](UPDATE.md).
   `core.fsmonitor`, editors and pagers, `core.sshCommand`,
   `core.askPass`, `filter.*` clean/smudge/process, `diff.*`
   textconv/external/command, `merge.*` drivers, `core.gitProxy`,
-  `remote.*` uploadpack/receivepack — is denied with a literal
+  `remote.*` uploadpack/receivepack, `gpg.program` and `gpg.*.program` — is denied with a literal
   value as with a parameter, because git runs it during an otherwise
   read-only subcommand. A disabling form of such a key passes: the bare key,
   an empty value, or `false`. A `--config-env` form is always denied, because
@@ -196,6 +196,8 @@ See [UPDATE.md](UPDATE.md).
   `core.hooksPath`, `include.path`, `includeIf.*.path`, `url.*.insteadOf`,
   `url.*.pushInsteadOf` — is denied with each value. `git config` is denied
   when it sets one of these keys; to read or unset the key stays allowed.
+  A redirection after the key counts as a value, so use an explicit mode
+  (`git config --get <key> 2>/dev/null`) when you redirect a read.
   `git config` section renames and removals (`--rename-section`,
   `--remove-section`) and `--edit` are denied, because a rename can move a
   key into an executed section and `--edit` starts an editor.

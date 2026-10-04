@@ -2286,6 +2286,18 @@ class GuardHookTests(unittest.TestCase):
             'git config --add include.path /tmp/cfg',
             'git config set core.fsmonitor /tmp/h.sh',
             'git config core.fsmonitor /tmp/h.sh >/dev/null',
+            # A digit before a redirection is a real operand, and a quoted
+            # operator is a real value: both are a set.
+            'git config core.hooksPath 5 >/dev/null',
+            'git config core.hooksPath 5 >> log.txt',
+            'git config include.path 5 > /dev/null && git status',
+            "git config core.hooksPath '>' x",
+            # Signature verification runs the configured program in a read.
+            'git -c gpg.program=/tmp/h.sh log --show-signature',
+            'git -c gpg.ssh.program=/tmp/h.sh log --show-signature',
+            'git -c gpg.x509.program=/tmp/h.sh log --show-signature',
+            'git -c log.showSignature=true -c gpg.program=/tmp/h.sh log',
+            'git config gpg.program /tmp/h.sh',
             'git config >/dev/null core.fsmonitor /tmp/h.sh',
             'git config --replace-all core.fsmonitor /tmp/h.sh',
             'git config --type path core.fsmonitor /tmp/h.sh',
