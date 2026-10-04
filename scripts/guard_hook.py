@@ -2087,7 +2087,9 @@ def double_quoted_markers(command):
                 quote = None
         elif character == "\\":
             if following and following in PARAMETER_MARKERS:
-                flags.append(quote == '"')
+                # The shell executes the escaped marker as literal text; the
+                # token keeps the bare marker, so the pair is never provable.
+                flags.append(False)
             previous = character
             index += 2
             continue
@@ -2117,11 +2119,28 @@ def double_quoted_markers(command):
     return flags if quote is None and not braces else None
 
 
+def unrecognized_dollar(text):
+    """Whether a $-position is covered by no recognized parameter form.
+
+    Unbraced zsh expansion flags ($=x, $~x, $^x, $+x) match no parameter
+    syntax, so without this check they never enter the parameter proof at all
+    — while zsh word-splits them exactly like the forms the proof denies.
+    """
+    covered = {match.start() for match in SHELL_PARAMETER_SYNTAX.finditer(text)}
+    return any(
+        character == "$" and index not in covered
+        for index, character in enumerate(text)
+    )
+
+
 def parameters_double_quoted(token):
     """Whether every parameter in the token expands inside double quotes to one word.
 
     Only plain $name and ${name} qualify: flags, operators, subscripts,
     positional and special parameters can split even inside double quotes.
+    A backslash-escaped marker stays one flag short of proven: the shell
+    executes the literal text while the guard's token still shows the bare
+    marker, so nothing about its expansion is provable.
     """
     flags = getattr(token, "double_quoted", ())
     positions = [
@@ -2363,7 +2382,11 @@ def git_command(segment, assignments=None):
                 )
             resolved_arguments.append(f"-C{expanded}")
         else:
-            parameter = SHELL_PARAMETER_SYNTAX.search(argument) or CMD_PARAMETER_SYNTAX.search(argument)
+            parameter = (
+                SHELL_PARAMETER_SYNTAX.search(argument)
+                or CMD_PARAMETER_SYNTAX.search(argument)
+                or unrecognized_dollar(argument)
+            )
             if parameter:
                 parameter_arguments.append(argument)
                 literal = re.split(r"[$%!]", argument, maxsplit=1)[0]

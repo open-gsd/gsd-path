@@ -2258,6 +2258,19 @@ class GuardHookTests(unittest.TestCase):
             'read x < v.txt; git -c "core.fsmonitor=$x" status',
             'git log --format="$x[@] %H"',
             "git diff --output=$f",
+            # Unbraced zsh expansion flags match no parameter syntax, so an
+            # argument carrying one must still enter the parameter proof;
+            # zsh splits $=x exactly like the braced forms above.
+            *(
+                f'git log --format="{flag}"'
+                for flag in ("$=x", "$~x", "$^x", "$+x")
+            ),
+            'x="a --output=.project/archive/001-mvp/NOTE.md"; git log --format="$=x"',
+            'x="a --output=NOTE.md"; cd .project/archive/001-mvp && git log --format="$=x"',
+            # A backslash-escaped marker executes as literal text while the
+            # token keeps the bare marker, so the pair is never provable.
+            'git log --format="\\$t %H"',
+            't=hi; git log --format="\\$t %H"',
         )
         for command in unquoted:
             for prefix in ("", "cd .project/archive/001-mvp && "):

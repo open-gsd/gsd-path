@@ -178,8 +178,11 @@ See [UPDATE.md](UPDATE.md).
   quotes (`$x`, `HEAD:$f`, `--format=$x`, `"a b"$x`) is denied because its
   expansion can split into a write option such as `--output`. Every other
   parameter form (`${=x}`, `${(z)x}`, `${x:-y}`, `$x[@]`, `$1`, `$@`, `$*`,
-  `$#`) is denied even inside double quotes, because it can expand to more
-  than one word. Command substitution output, a parameter that starts an
+  `$#`, and the unbraced zsh flags `$=x`, `$~x`, `$^x`, `$+x`) is denied even
+  inside double quotes, because it can expand to more than one word; a
+  backslash-escaped marker (`"\$t"`) is likewise denied, because the shell
+  executes the literal text while the argument still shows the bare marker.
+  Command substitution output, a parameter that starts an
   argument, and a parameter in the value of an option that git writes to or
   runs as a command (`--output`, `--upload-pack`, `--receive-pack`, `--exec`,
   `-c`, `--config-env`, or a `<transport>::<address>` remote) are denied in
