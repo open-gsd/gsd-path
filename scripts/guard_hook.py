@@ -2192,7 +2192,7 @@ def git_command(segment, assignments=None):
         return None
     resolved_arguments = []
     parameter_arguments = []
-    write_capable_parameters = []
+    unproven_parameters = []
     argument_index = 0
     while argument_index < len(arguments):
         argument = arguments[argument_index]
@@ -2235,13 +2235,17 @@ def git_command(segment, assignments=None):
             if parameter:
                 parameter_arguments.append(argument)
                 literal = re.split(r"[$%!]", argument, maxsplit=1)[0]
+                expanded = expand_environment_parameters(argument, assignments)
                 if (
                     not literal
                     or (literal.startswith("-") and "=" not in literal)
                     or literal.split("=", 1)[0] in GIT_READ_WRITE_OPTIONS
                     or arguments[argument_index - 1] in GIT_READ_WRITE_OPTIONS
+                    or not any(character.isspace() for character in argument)
+                    or SUBSTITUTION_PLACEHOLDER in argument
+                    or SUBSTITUTION_PLACEHOLDER in expanded
                 ):
-                    write_capable_parameters.append(argument)
+                    unproven_parameters.append(argument)
             resolved_arguments.append(expand_environment_parameters(argument, assignments))
         argument_index += 1
     arguments = resolved_arguments
@@ -2279,9 +2283,11 @@ def git_command(segment, assignments=None):
     subcommand = arguments[index].casefold()
     read_only_subcommands = ARCHIVE_READ_GIT_COMMANDS | CLOSED_READ_GIT_COMMANDS
     if subcommand in read_only_subcommands:
-        # Read-only subcommands still write through --output, so a parameter
-        # that can form an option or its value keeps the refusal.
-        parameter_arguments = write_capable_parameters
+        # Read-only subcommands still write through --output. A parameter
+        # passes only inside a whitespace-bearing token, which the shell must
+        # have quote-grouped into one word; a bare one can word-split into an
+        # option, and command substitution output is never known.
+        parameter_arguments = unproven_parameters
     if parameter_arguments:
         raise ValueError(
             f"git argument {parameter_arguments[0]} cannot be resolved by the guard; "

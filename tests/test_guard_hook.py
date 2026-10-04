@@ -2179,16 +2179,28 @@ class GuardHookTests(unittest.TestCase):
     def test_allows_parameters_in_read_only_git_arguments(self):
         for command in (
             'git log --format="$t %H"',
-            "git show HEAD:$f",
+            't=abc; git log --format="$t %H"',
         ):
             with self.subTest(command=command):
                 self.assert_allowed(self.bash(command))
         self.assert_denied(self.bash('git commit -m "$msg"'))
+        # Deliberate fail-closed choice: an unquoted bare parameter operand
+        # stays denied, because its expansion word-splits and can add a write
+        # option such as --output.
         for command in (
             "git diff --output=$f",
             "git diff --output $f",
+            'git diff "--output=$f x"',
             "git diff $o",
             "git log -$o",
+            "git show HEAD:$f",
+            "git diff --format=$x",
+            "x='a --output=NOTE.md'; git diff --format=$x",
+            "cd .project/archive/001-mvp && x='a --output=NOTE.md'; git diff --format=$x",
+            "x='a --output=.project/archive/001-mvp/NOTE.md'; git diff --format=$x",
+            'x=$(cat /tmp/v); git diff --format=$x',
+            'x=$(cat /tmp/v); git log --format="$x %H"',
+            'git log --format="$(cat /tmp/v) %H"',
         ):
             with self.subTest(command=command):
                 self.assert_denied(self.bash(command))
