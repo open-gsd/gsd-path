@@ -185,11 +185,17 @@ See [UPDATE.md](UPDATE.md).
   The same four zsh flags are denied in a `git -C` directory. A literal `$`
   that starts no expansion (a regex anchor such as `--grep='fix$'`) passes.
   A `-c`/`--config` key whose value git executes as a program —
-  `core.fsmonitor`, `core.hooksPath`, editors and pagers, `core.sshCommand`,
+  `core.fsmonitor`, editors and pagers, `core.sshCommand`,
   `core.askPass`, `filter.*` clean/smudge/process, `diff.*`
-  textconv/external/command, `merge.*` drivers — is denied with a literal
+  textconv/external/command, `merge.*` drivers, `core.gitProxy`,
+  `remote.*` uploadpack/receivepack — is denied with a literal
   value as with a parameter, because git runs it during an otherwise
-  read-only subcommand.
+  read-only subcommand. A disabling form of such a key passes: the bare key,
+  an empty value, or `false`. A `--config-env` form is always denied, because
+  its value comes from the environment. A key through which git loads code —
+  `core.hooksPath`, `include.path`, `includeIf.*.path`, `url.*.insteadOf`,
+  `url.*.pushInsteadOf` — is denied with each value. `git config` is denied
+  when it sets one of these keys; to read or unset the key stays allowed.
   Command substitution output, a parameter that starts an
   argument, and a parameter in the value of an option that git writes to or
   runs as a command (`--output`, `--upload-pack`, `--receive-pack`, `--exec`,

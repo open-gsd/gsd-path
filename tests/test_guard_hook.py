@@ -2268,6 +2268,23 @@ class GuardHookTests(unittest.TestCase):
             'git -c filter.driver.clean=/tmp/clean.sh show HEAD:file',
             'git -c merge.rewriter.driver=/tmp/merge.sh merge topic',
             'git --config-env=core.fsmonitor=FSM status',
+            'git -c core.fsmonitor=true status',
+            'git --config-env=core.fsmonitor=FALSE_VALUE status',
+            # Keys that load code through a path or URL have no disabling value.
+            'git -c include.path=/tmp/cfg status',
+            'git -c includeIf.gitdir:/tmp/.path=/tmp/cfg status',
+            'git -c core.hooksPath= status',
+            'git -c remote.o.uploadpack=/tmp/h.sh ls-remote o',
+            'git -c remote.o.receivepack=/tmp/h.sh ls-remote o',
+            'git -c core.gitProxy=/tmp/h.sh ls-remote git://example.invalid/x',
+            'git -c url.x.insteadOf=y ls-remote x',
+            'git -c url.x.pushInsteadOf=y ls-remote x',
+            # The persisted form runs the program on each later plain git.
+            'git config core.fsmonitor /tmp/h.sh',
+            'git config core.fsmonitor /tmp/h.sh && git status',
+            'git config --local core.hooksPath /tmp/hooks',
+            'git config --add include.path /tmp/cfg',
+            'git config set core.fsmonitor /tmp/h.sh',
             'git log --format="$x[@] %H"',
             "git diff --output=$f",
             # Unbraced zsh expansion flags match no parameter syntax, so an
@@ -2320,6 +2337,16 @@ class GuardHookTests(unittest.TestCase):
             "git -c user.name=Test log -1",
             "git -c core.autocrlf=false status",
             'git -c "commit.gpgsign=false" log -1',
+            # Disabling forms of a program key run no program.
+            "git -c core.fsmonitor=false status",
+            "git -c core.fsmonitor=FALSE status",
+            "git -c core.fsmonitor status",
+            "git -c filter.lfs.smudge= -c filter.lfs.process= checkout main",
+            # Reading or unsetting a persisted key writes no program.
+            "git config --unset core.fsmonitor",
+            "git config unset core.fsmonitor",
+            "git config --get core.fsmonitor",
+            "git config user.name Test",
         ):
             with self.subTest(command=command):
                 self.assert_allowed(self.bash(command))

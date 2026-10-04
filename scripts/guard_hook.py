@@ -249,23 +249,43 @@ GIT_PARAMETER_DENIED_OPTIONS = GIT_READ_WRITE_OPTIONS | {
 # as dangerous as a parameter here: git -c core.fsmonitor=<path> status runs
 # the configured program while the subcommand stays nominally read-only.
 GIT_EXECUTED_CONFIG_KEYS = frozenset({
-    "core.fsmonitor", "core.hookspath", "core.editor", "sequence.editor",
-    "core.sshcommand", "core.askpass", "core.pager", "interactive.difffilter",
+    "core.fsmonitor", "core.editor", "sequence.editor", "core.sshcommand",
+    "core.askpass", "core.pager", "core.gitproxy", "interactive.difffilter",
 })
 GIT_EXECUTED_CONFIG_SECTIONS = {
     "filter": (".clean", ".smudge", ".process", ".command"),
     "diff": (".command", ".textconv", ".external"),
     "merge": (".driver",),
+    "remote": (".uploadpack", ".receivepack"),
 }
+# Keys whose value is a path or URL git loads code through: an included file
+# can set every key above, and a rewritten URL can retarget the transport.
+# No value of these is a disabling form.
+GIT_LOADED_CONFIG_KEYS = frozenset({"core.hookspath", "include.path"})
+GIT_LOADED_CONFIG_SECTIONS = {
+    "includeif": (".path",),
+    "url": (".insteadof", ".pushinsteadof"),
+}
+GIT_CONFIG_DISABLING_VALUES = frozenset({"", "false"})
+
+
+def config_key_in(key, keys, sections):
+    if key in keys:
+        return True
+    section, _, remainder = key.partition(".")
+    return bool(remainder) and key.endswith(tuple(sections.get(section, ())))
+
+
+def loaded_config_key(key):
+    """Whether a config key's value is a path or URL git loads code through."""
+    return config_key_in(key, GIT_LOADED_CONFIG_KEYS, GIT_LOADED_CONFIG_SECTIONS)
 
 
 def executed_config_key(key):
-    """Whether a -c/--config key's value is a program git runs."""
-    if key in GIT_EXECUTED_CONFIG_KEYS:
-        return True
-    section, _, remainder = key.partition(".")
-    suffixes = GIT_EXECUTED_CONFIG_SECTIONS.get(section, ())
-    return bool(remainder) and key.endswith(tuple(suffixes))
+    """Whether a config key's value is a program git runs or code it loads."""
+    return loaded_config_key(key) or config_key_in(
+        key, GIT_EXECUTED_CONFIG_KEYS, GIT_EXECUTED_CONFIG_SECTIONS
+    )
 
 
 # Real read-only git options that are a strict prefix of a denied option name.
@@ -2450,13 +2470,18 @@ def git_command(segment, assignments=None):
             value = arguments[index]
             index += 1
         if option in {"-c", "--config-env"}:
-            config_key = str(value).split("=", 1)[0].casefold()
+            config_key, _, config_value = str(value).partition("=")
+            config_key = config_key.casefold()
             if config_key.startswith("alias."):
                 raise ValueError(
                     f"git -c {config_key} defines an alias the guard cannot inspect; "
                     "run the underlying git command directly"
                 )
-            if executed_config_key(config_key):
+            if executed_config_key(config_key) and not (
+                option == "-c"
+                and not loaded_config_key(config_key)
+                and config_value.casefold() in GIT_CONFIG_DISABLING_VALUES
+            ):
                 raise ValueError(
                     f"git -c {config_key} configures a program git executes; "
                     "the guard cannot allow it"
@@ -2471,6 +2496,15 @@ def git_command(segment, assignments=None):
     if index >= len(arguments):
         return None
     subcommand = arguments[index].casefold()
+    if subcommand == "config":
+        # A key followed by another argument is a set form; a key in last
+        # position only reads or unsets it.
+        for argument in arguments[index + 1:-1]:
+            if executed_config_key(argument.casefold()):
+                raise ValueError(
+                    f"git config {argument} persists a program git executes; "
+                    "the guard cannot allow it"
+                )
     read_only_subcommands = ARCHIVE_READ_GIT_COMMANDS | CLOSED_READ_GIT_COMMANDS
     if subcommand in read_only_subcommands:
         # Read-only subcommands still write through --output. A parameter
