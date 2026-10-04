@@ -182,6 +182,8 @@ See [UPDATE.md](UPDATE.md).
   inside double quotes, because it can expand to more than one word; a
   backslash-escaped marker (`"\$t"`) is likewise denied, because the shell
   executes the literal text while the argument still shows the bare marker.
+  The same four zsh flags are denied in a `git -C` directory. A literal `$`
+  that starts no expansion (a regex anchor such as `--grep='fix$'`) passes.
   Command substitution output, a parameter that starts an
   argument, and a parameter in the value of an option that git writes to or
   runs as a command (`--output`, `--upload-pack`, `--receive-pack`, `--exec`,

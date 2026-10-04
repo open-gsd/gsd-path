@@ -2271,6 +2271,13 @@ class GuardHookTests(unittest.TestCase):
             # token keeps the bare marker, so the pair is never provable.
             'git log --format="\\$t %H"',
             't=hi; git log --format="\\$t %H"',
+            # The -C directory operand takes the same zsh flag check: zsh
+            # splits the value, which can carry a subcommand and --output.
+            *(
+                prefix + form
+                for prefix in ("", "x='. diff --output=.project/archive/001-mvp/N.md'; ")
+                for form in ("git -C $=x", "git -C$=x", 'git -C "$=x"')
+            ),
         )
         for command in unquoted:
             for prefix in ("", "cd .project/archive/001-mvp && "):
@@ -2291,6 +2298,39 @@ class GuardHookTests(unittest.TestCase):
             'x=$(cat /tmp/v); git log --format="$x %H"',
             'git log --format="$(cat /tmp/v) %H"',
         ):
+            with self.subTest(command=command):
+                self.assert_denied(self.bash(command))
+
+    def test_allows_literal_dollar_in_git_arguments(self):
+        # A $ that starts no expansion (a regex anchor, a price) is inert text.
+        for command in (
+            "git log --grep='fix$'",
+            "git grep -n 'foo$'",
+            "git log -G'foo$' --oneline",
+            "git commit -m 'costs 5$'",
+            "git branch --list 'feat$'",
+            "git config --get-regexp 'user\\..*$'",
+            "git log --format='%H$'",
+        ):
+            with self.subTest(command=command):
+                self.assert_allowed(self.bash(command))
+        # In archive cwd only the archive read commands pass; grep, commit,
+        # branch and config are denied there with or without a $.
+        for command in (
+            "git log --grep='fix$'",
+            "git log -G'foo$' --oneline",
+            "git log --format='%H$'",
+        ):
+            command = "cd .project/archive/001-mvp && " + command
+            with self.subTest(command=command):
+                self.assert_allowed(self.bash(command))
+        for command in (
+            "git grep -n foo",
+            "git commit -m costs",
+            "git branch --list feat",
+            "git config --get-regexp user",
+        ):
+            command = "cd .project/archive/001-mvp && " + command
             with self.subTest(command=command):
                 self.assert_denied(self.bash(command))
 

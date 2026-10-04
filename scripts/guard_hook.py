@@ -276,6 +276,7 @@ SHELL_PARAMETER_SYNTAX = re.compile(
 NAMED_SHELL_PARAMETER_SYNTAX = re.compile(
     r"\$(?:([A-Za-z_][A-Za-z0-9_]*)|\{([A-Za-z_][A-Za-z0-9_]*)\})"
 )
+ZSH_EXPANSION_FLAG_SYNTAX = re.compile(r"\$[=~^+]")
 CMD_PARAMETER_SYNTAX = re.compile(
     r"%([A-Za-z_][A-Za-z0-9_]*)%|!([A-Za-z_][A-Za-z0-9_]*)!"
 )
@@ -2119,18 +2120,14 @@ def double_quoted_markers(command):
     return flags if quote is None and not braces else None
 
 
-def unrecognized_dollar(text):
-    """Whether a $-position is covered by no recognized parameter form.
+def zsh_expansion_flag(text):
+    """Whether the text holds an unbraced zsh expansion flag ($=x, $~x, $^x, $+x).
 
-    Unbraced zsh expansion flags ($=x, $~x, $^x, $+x) match no parameter
-    syntax, so without this check they never enter the parameter proof at all
-    — while zsh word-splits them exactly like the forms the proof denies.
+    These match no parameter syntax, so without this check they never enter
+    the parameter proof at all — while zsh word-splits them exactly like the
+    forms the proof denies. Any other unmatched $ is inert literal text.
     """
-    covered = {match.start() for match in SHELL_PARAMETER_SYNTAX.finditer(text)}
-    return any(
-        character == "$" and index not in covered
-        for index, character in enumerate(text)
-    )
+    return ZSH_EXPANSION_FLAG_SYNTAX.search(text)
 
 
 def parameters_double_quoted(token):
@@ -2352,7 +2349,11 @@ def git_command(segment, assignments=None):
             argument_index += 1
             directory = arguments[argument_index]
             expanded = expand_environment_parameters(directory, assignments)
-            if SHELL_PARAMETER_SYNTAX.search(expanded) or CMD_PARAMETER_SYNTAX.search(expanded):
+            if (
+                SHELL_PARAMETER_SYNTAX.search(expanded)
+                or CMD_PARAMETER_SYNTAX.search(expanded)
+                or zsh_expansion_flag(expanded)
+            ):
                 raise ValueError(
                     f"git argument {directory} cannot be resolved by the guard; "
                     "pass a literal path"
@@ -2368,7 +2369,11 @@ def git_command(segment, assignments=None):
         elif attached_directory:
             directory = argument[2:]
             expanded = expand_environment_parameters(directory, assignments)
-            if SHELL_PARAMETER_SYNTAX.search(expanded) or CMD_PARAMETER_SYNTAX.search(expanded):
+            if (
+                SHELL_PARAMETER_SYNTAX.search(expanded)
+                or CMD_PARAMETER_SYNTAX.search(expanded)
+                or zsh_expansion_flag(expanded)
+            ):
                 raise ValueError(
                     f"git argument {directory} cannot be resolved by the guard; "
                     "pass a literal path"
@@ -2385,7 +2390,7 @@ def git_command(segment, assignments=None):
             parameter = (
                 SHELL_PARAMETER_SYNTAX.search(argument)
                 or CMD_PARAMETER_SYNTAX.search(argument)
-                or unrecognized_dollar(argument)
+                or zsh_expansion_flag(argument)
             )
             if parameter:
                 parameter_arguments.append(argument)
