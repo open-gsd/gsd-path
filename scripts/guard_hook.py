@@ -537,6 +537,23 @@ SED_SAFE_OPTIONS = frozenset(
     }
 )
 FIND_EXECUTION_ACTIONS = frozenset({"-exec", "-execdir", "-ok", "-okdir"})
+GIT_PROGRAMS = frozenset({"git", "git.exe"})
+# Programs the guard models: it knows whether and how each one runs a command
+# from its arguments. Any other program with a git word among its arguments
+# may run git in a way the guard cannot inspect.
+MODELED_PROGRAMS = (
+    GIT_PROGRAMS
+    | COMMAND_WRAPPERS
+    | POSIX_SHELL_WRAPPERS
+    | POWERSHELL_WRAPPERS
+    | XARGS_COMMANDS
+    | VARIABLE_COMMANDS
+    | ARCHIVE_READ_COMMANDS
+    | SHELL_WRITE_COMMANDS
+    | IN_PLACE_EDITORS
+    | DIRECTORY_CHANGE_COMMANDS
+    | {"cmd", "echo", "eval", "find", "printf"}
+)
 SHELL_CONTROL_WORDS = frozenset(
     {
         "!",
@@ -2541,6 +2558,19 @@ def command_invocation(segment):
             UNVALIDATED_EXECUTION_REASONS[executable].format(
                 executable=segment[index], argument=first_argument(arguments)
             )
+        )
+    if (
+        executable not in MODELED_PROGRAMS
+        and executable.removesuffix(".exe") not in MODELED_PROGRAMS
+        and any(
+            argument.replace("\\", "/").rsplit("/", 1)[-1].casefold() in GIT_PROGRAMS
+            for argument in arguments
+        )
+    ):
+        raise ValueError(
+            f"executable {segment[index]} cannot be resolved by the guard: it can "
+            f"run git in a way the guard cannot inspect; run git directly, without "
+            f"{segment[index]}"
         )
     return executable, arguments
 

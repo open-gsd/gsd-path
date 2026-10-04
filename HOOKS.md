@@ -210,6 +210,12 @@ See [UPDATE.md](UPDATE.md).
   is denied, because the shell reads it and the words after it as a comment.
   The git subcommand word must be a plain literal word in each git command:
   `git {config,...}` and a subcommand split by a line continuation are denied.
+  A program that the guard does not model (`nice`, `nohup`, `timeout`,
+  `sudo`, `noglob` and each other unknown program) is denied when one of its
+  arguments is the word `git`, because the guard cannot apply its git checks
+  behind it: run git directly. `command`, `builtin`, `exec`, `env`, the
+  shell wrappers and the read and write commands that the guard knows keep
+  their handling.
   Each git global option word, and the value word of `-c`, `-C`,
   `--git-dir`, `--work-tree`, `--namespace` and `--config-env`, must resolve
   to one word: a backslash, an unquoted glob or an unquoted brace list or

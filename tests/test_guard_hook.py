@@ -2299,6 +2299,17 @@ class GuardHookTests(unittest.TestCase):
             'git con\\\n\\\n\\\nfig core.fsmonitor /abs/h.sh',
             'git con\\\r\nfig core.fsmonitor /abs/h.sh',
             'git con\\\r\n\\\r\nfig core.fsmonitor /abs/h.sh',
+            # A program the guard does not model can run the git word in
+            # its arguments, so no git check would apply.
+            *(
+                f"{wrapper} git -c core.fsmonitor=/abs/h.sh status"
+                for wrapper in ("nice", "nohup", "timeout 5", "sudo", "noglob")
+            ),
+            'nice git status',
+            'nice git config core.fsmonitor /abs/h.sh',
+            'nice /usr/bin/git -c core.fsmonitor=/abs/h.sh status',
+            'timeout 5 git -c $x',
+            'command nice git status',
             # A parameter in a global option value is unresolved with or
             # without a visible subcommand: bash splits it into both.
             'read x < v.txt; git -c $x',
@@ -2439,6 +2450,13 @@ class GuardHookTests(unittest.TestCase):
             "git -c user.name='{a,b} *' log -1",
             'git -C . status',
             "git --no-pager log -1",
+            "nice make",
+            "sudo systemctl status",
+            "git status",
+            "command git status",
+            "env git status",
+            "echo git",
+            "grep -r git README.md",
             "git -c credential.helper= ls-remote origin",
             "git config --get credential.helper",
             'git -C "." status',
