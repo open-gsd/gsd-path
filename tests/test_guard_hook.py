@@ -2180,13 +2180,33 @@ class GuardHookTests(unittest.TestCase):
         for command in (
             'git log --format="$t %H"',
             't=abc; git log --format="$t %H"',
+            'git show "HEAD:$f"',
+            'git log --format="%H%n%s"',
         ):
             with self.subTest(command=command):
                 self.assert_allowed(self.bash(command))
         self.assert_denied(self.bash('git commit -m "$msg"'))
-        # Deliberate fail-closed choice: an unquoted bare parameter operand
+        # Deliberate fail-closed choice: a parameter outside double quotes
         # stays denied, because its expansion word-splits and can add a write
         # option such as --output.
+        unquoted = (
+            "git show HEAD:$f",
+            "git diff --format=$x",
+            "x='a --output=NOTE.md'; git diff --format=$x",
+            "x='c --output=.project/archive/001-mvp/NOTE.md'; git diff --format=\"a b\"$x",
+            'git diff --format="a b"$x',
+            'git diff "a b"$x',
+            'git log --format="a b"$1',
+            "git log --format='$t %H'",
+            'git log --format=$t\\ %H',
+            'git log "--format=$@ %H"',
+            'git log # "\n git diff --format=$x "',
+            "git diff --output=$f",
+        )
+        for command in unquoted:
+            for prefix in ("", "cd .project/archive/001-mvp && "):
+                with self.subTest(command=prefix + command):
+                    self.assert_denied(self.bash(prefix + command))
         for command in (
             "git diff --output=$f",
             "git diff --output $f",

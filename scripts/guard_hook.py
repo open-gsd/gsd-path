@@ -2028,6 +2028,64 @@ def decode_patch_path(raw_path, strip_prefix):
     return path
 
 
+PARAMETER_MARKERS = frozenset("$%!")
+
+
+class ShellToken(str):
+    """A token that keeps, per parameter marker character, whether double quotes enclosed it."""
+
+    double_quoted = ()
+
+
+def double_quoted_markers(command):
+    """Return, for each parameter marker in order, whether double quotes enclose it."""
+    flags = []
+    quote = None
+    comment = False
+    previous = " "
+    index = 0
+    while index < len(command):
+        character = command[index]
+        if quote == "'":
+            if character == "'":
+                quote = None
+        elif character == "\\":
+            index += 1
+            if index < len(command) and command[index] in PARAMETER_MARKERS:
+                flags.append(quote == '"' and not comment)
+            previous = character
+            index += 1
+            continue
+        elif character == '"':
+            quote = None if quote else '"'
+        elif quote is None and character == "'":
+            quote = "'"
+        elif quote is None and character == "#" and previous in " \t\r\n;&|()":
+            # The lexer reads past a shell comment, so quotes after it prove nothing.
+            comment = True
+        if character in PARAMETER_MARKERS:
+            flags.append(quote == '"' and not comment)
+        previous = character
+        index += 1
+    return flags
+
+
+def parameters_double_quoted(token):
+    """Whether every parameter in the token expands inside double quotes to one word."""
+    flags = getattr(token, "double_quoted", ())
+    positions = [
+        index for index, character in enumerate(token) if character in PARAMETER_MARKERS
+    ]
+    if len(flags) != len(positions):
+        return False
+    quoted = dict(zip(positions, flags))
+    return all(
+        quoted[match.start()] and quoted.get(match.end() - 1, True) and "@" not in match.group(0)
+        for syntax in (SHELL_PARAMETER_SYNTAX, CMD_PARAMETER_SYNTAX)
+        for match in syntax.finditer(token)
+    )
+
+
 def shell_tokens(command):
     command = strip_heredoc_bodies(LINE_CONTINUATION.sub(r"\1 ", command))
     lexer = shlex.shlex(command, posix=True, punctuation_chars="|;&()<>\n\r")
@@ -2043,7 +2101,18 @@ def shell_tokens(command):
         ) from None
     if not tokens:
         raise ValueError("shell command is empty")
-    return tokens
+    flags = double_quoted_markers(command)
+    if len(flags) != sum(
+        character in PARAMETER_MARKERS for token in tokens for character in token
+    ):
+        return tokens
+    marked = []
+    for token in tokens:
+        count = sum(character in PARAMETER_MARKERS for character in token)
+        token = ShellToken(token)
+        token.double_quoted, flags = tuple(flags[:count]), flags[count:]
+        marked.append(token)
+    return marked
 
 
 def command_segments(tokens):
@@ -2241,7 +2310,7 @@ def git_command(segment, assignments=None):
                     or (literal.startswith("-") and "=" not in literal)
                     or literal.split("=", 1)[0] in GIT_READ_WRITE_OPTIONS
                     or arguments[argument_index - 1] in GIT_READ_WRITE_OPTIONS
-                    or not any(character.isspace() for character in argument)
+                    or not parameters_double_quoted(argument)
                     or SUBSTITUTION_PLACEHOLDER in argument
                     or SUBSTITUTION_PLACEHOLDER in expanded
                 ):
@@ -2284,9 +2353,9 @@ def git_command(segment, assignments=None):
     read_only_subcommands = ARCHIVE_READ_GIT_COMMANDS | CLOSED_READ_GIT_COMMANDS
     if subcommand in read_only_subcommands:
         # Read-only subcommands still write through --output. A parameter
-        # passes only inside a whitespace-bearing token, which the shell must
-        # have quote-grouped into one word; a bare one can word-split into an
-        # option, and command substitution output is never known.
+        # passes only inside double quotes, where its expansion stays one
+        # word; an unquoted one can word-split into an option, and command
+        # substitution output is never known.
         parameter_arguments = unproven_parameters
     if parameter_arguments:
         raise ValueError(

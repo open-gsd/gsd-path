@@ -168,13 +168,15 @@ See [UPDATE.md](UPDATE.md).
   tilde paths are denied even when quoted. This also applies to
   `find -delete` and supported destructive aliases
 - destructive Git commands nested in supported shell and command wrappers
-- Git arguments that contain a shell parameter. The one exception is a
-  read-only subcommand (`status`, `log`, `diff`, `show`, and the other
-  inspection commands) with the parameter inside a quote-grouped argument
-  that contains whitespace, such as `git log --format="$t %H"`. A bare
-  parameter operand (`$x`, `HEAD:$f`, `--format=$x`) is denied because its
-  expansion can split into a write option such as `--output`; command
-  substitution output and `--output` values are denied in every form
+- Git arguments that contain a shell parameter. Parameters are accepted only
+  inside double-quoted spans of read-only subcommands (`status`, `log`,
+  `diff`, `show`, and the other inspection commands), such as
+  `git log --format="$t %H"` or `git show "HEAD:$f"`, because only double
+  quoting prevents word-splitting into options. A parameter outside double
+  quotes (`$x`, `HEAD:$f`, `--format=$x`, `"a b"$x`) is denied because its
+  expansion can split into a write option such as `--output`; `"$@"`,
+  command substitution output, a parameter that starts an argument, and
+  `--output` values are denied in every form
 - archive glob/brace expansions and execution-capable read options such as
   `rg --pre`
 - direct write, edit, and patch tool calls targeting `.project/STATE.md`,
