@@ -184,7 +184,8 @@ See [UPDATE.md](UPDATE.md).
   `-c`, `--config-env`, or a `<transport>::<address>` remote) are denied in
   every form. These option names match by prefix (`--upload-pa`, `--exe`),
   because git accepts abbreviated long options; in archive context the same
-  prefix match applies to `--output`, `--ext-diff`, and `--textconv`. Any
+  prefix match applies to `--output`, `--ext-diff`, and `--textconv`. The
+  exact read-only option `--text` is not an abbreviation and stays allowed. Any
   other quoting construct in
   the command (`$'...'`, `$"..."`, quotes inside `${...}`, quotes or
   backslashes in a comment, here-documents and here-strings) disables the

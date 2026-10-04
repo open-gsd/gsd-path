@@ -245,13 +245,20 @@ GIT_PARAMETER_DENIED_OPTIONS = GIT_READ_WRITE_OPTIONS | {
 }
 
 
+# Real read-only git options that are a strict prefix of a denied option name.
+GIT_SAFE_PREFIX_OPTIONS = frozenset({"--text"})
+
+
 def git_option_in(token, options):
     """Whether a token names one of the options, by full name or any long-option prefix.
 
     git accepts each unique prefix of a long option; matching every prefix is
-    stricter than git and so only fails closed.
+    stricter than git and so only fails closed. A prefix that is itself the
+    exact name of a read-only option is that option, not an abbreviation.
     """
     name = token.split("=", 1)[0]
+    if name in GIT_SAFE_PREFIX_OPTIONS and name not in options:
+        return False
     if name.startswith("--") and len(name) > 2:
         return any(option.startswith(name) for option in options)
     return name in options

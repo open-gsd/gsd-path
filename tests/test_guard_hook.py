@@ -2282,12 +2282,24 @@ class GuardHookTests(unittest.TestCase):
                 self.assert_denied(self.bash(command))
 
     def test_denies_abbreviated_git_write_options_in_archive_context(self):
-        for option in ("--ext-diff", "--ext-d", "--textc", "--output=NOTE.md"):
+        for option in (
+            "--ext-diff", "--ext-d", "--textconv", "--textc", "--tex", "--te",
+            "--output=NOTE.md",
+        ):
             with self.subTest(option=option):
                 self.assert_denied(
                     self.bash(f"cd .project/archive/001-mvp && git diff {option}")
                 )
-        self.assert_allowed(self.bash("cd .project/archive/001-mvp && git diff --stat"))
+        for command in (
+            "cd .project/archive/001-mvp && git diff --stat",
+            "cd .project/archive/001-mvp && git diff --text",
+            "cd .project/archive/001-mvp && git log --text -1",
+            "cd .project/archive/001-mvp && git show --text HEAD",
+            "git diff --text .project/archive/001-mvp/plan/PLAN.md",
+            "git log --text -- .project/archive/001-mvp/plan/PLAN.md",
+        ):
+            with self.subTest(command=command):
+                self.assert_allowed(self.bash(command))
 
     def test_assignment_state_is_segment_local_and_last_value_wins(self):
         self.assert_denied(
