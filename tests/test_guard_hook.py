@@ -2299,6 +2299,21 @@ class GuardHookTests(unittest.TestCase):
             'git con\\\n\\\n\\\nfig core.fsmonitor /abs/h.sh',
             'git con\\\r\nfig core.fsmonitor /abs/h.sh',
             'git con\\\r\n\\\r\nfig core.fsmonitor /abs/h.sh',
+            # A parameter in a global option value is unresolved with or
+            # without a visible subcommand: bash splits it into both.
+            'read x < v.txt; git -c $x',
+            'git -c $x',
+            'git --git-dir $x',
+            'git --git-dir=$x',
+            # Each global option word must be one word.
+            'git -{p,c} core.fsmonitor=/abs/h.sh status',
+            'X=/abs/h.sh git --{no-pager,config-env=core.fsmonitor=X} status',
+            'git --no-pager{,} -c core.fsmonitor=/abs/h.sh status',
+            'git --no-\\\npager {config,core.fsmonitor,/abs/h.sh}',
+            # git runs a credential helper when a remote asks for credentials.
+            'git -c credential.helper=/abs/h.sh ls-remote http://127.0.0.1:8080/x.git',
+            'git -c credential.https://x.helper=/abs/h.sh ls-remote origin',
+            'git config credential.helper /abs/h.sh',
             # The value word of a git global option must be one word.
             'git -c {core.fsmonitor=/abs/h.sh,status}',
             'git -c{core.fsmonitor=/abs/h.sh,status}',
@@ -2423,6 +2438,9 @@ class GuardHookTests(unittest.TestCase):
             'git -c "user.name=A B" log -1',
             "git -c user.name='{a,b} *' log -1",
             'git -C . status',
+            "git --no-pager log -1",
+            "git -c credential.helper= ls-remote origin",
+            "git config --get credential.helper",
             'git -C "." status',
             "git --git-dir=.git status",
             "git -c core.autocrlf=false status",

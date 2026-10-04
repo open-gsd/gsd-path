@@ -188,7 +188,8 @@ See [UPDATE.md](UPDATE.md).
   `core.fsmonitor`, editors and pagers, `core.sshCommand`,
   `core.askPass`, `filter.*` clean/smudge/process, `diff.*`
   textconv/external/command, `merge.*` drivers, `core.gitProxy`,
-  `remote.*` uploadpack/receivepack, `gpg.program` and `gpg.*.program` — is denied with a literal
+  `remote.*` uploadpack/receivepack, `gpg.program` and `gpg.*.program`, `credential.helper` and
+  `credential.*.helper` — is denied with a literal
   value as with a parameter, because git runs it during an otherwise
   read-only subcommand. A disabling form of such a key passes: the bare key,
   an empty value, or `false`. A `--config-env` form is always denied, because
@@ -209,10 +210,12 @@ See [UPDATE.md](UPDATE.md).
   is denied, because the shell reads it and the words after it as a comment.
   The git subcommand word must be a plain literal word in each git command:
   `git {config,...}` and a subcommand split by a line continuation are denied.
-  The value word of a git global option (`-c`, `-C`, `--git-dir`,
-  `--work-tree`, `--namespace`, `--config-env`) must resolve to one word: a
-  backslash, an unquoted glob or an unquoted brace list or range in it is
-  denied (`git -c {core.fsmonitor=/abs/h.sh,status}`). Plain quoted parts
+  Each git global option word, and the value word of `-c`, `-C`,
+  `--git-dir`, `--work-tree`, `--namespace` and `--config-env`, must resolve
+  to one word: a backslash, an unquoted glob or an unquoted brace list or
+  range in it is denied (`git -c {core.fsmonitor=/abs/h.sh,status}`,
+  `git -{p,c} core.fsmonitor=/abs/h.sh status`). A parameter in such a value
+  is denied also when no subcommand follows (`git -c $x`). Plain quoted parts
   pass (`git -c user.name='A B' log`).
   `git config` section renames and removals (`--rename-section`,
   `--remove-section`) and `--edit` are denied, because a rename can move a

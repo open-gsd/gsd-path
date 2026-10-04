@@ -258,6 +258,7 @@ GIT_EXECUTED_CONFIG_SECTIONS = {
     "merge": (".driver",),
     "remote": (".uploadpack", ".receivepack"),
     "gpg": (".program",),
+    "credential": (".helper",),
 }
 # Keys whose value is a path or URL git loads code through: an included file
 # can set every key above, and a rewritten URL can retarget the transport.
@@ -2651,13 +2652,15 @@ def git_command(segment, assignments=None):
             option = token.split("=", 1)[0]
             value = token.split("=", 1)[1] if "=" in token else None
         index += 1
+        if option != "-C":
+            require_resolved_git_word(token)
         if option in GIT_GLOBAL_OPTIONS_WITH_VALUES and value is None:
             if index >= len(arguments):
                 raise ValueError(f"git option {option} lacks a value")
-            value = token = arguments[index]
+            value = arguments[index]
+            if option != "-C":
+                require_resolved_git_word(value)
             index += 1
-        if option in GIT_GLOBAL_OPTIONS_WITH_VALUES and option != "-C":
-            require_resolved_git_word(token)
         if option in {"-c", "--config-env"}:
             config_key, _, config_value = str(value).partition("=")
             config_key = config_key.casefold()
@@ -2683,6 +2686,11 @@ def git_command(segment, assignments=None):
         if option in GIT_GLOBAL_OPTIONS_WITH_VALUES:
             git_options.extend((option, str(value)))
     if index >= len(arguments):
+        if parameter_arguments:
+            raise ValueError(
+                f"git argument {parameter_arguments[0]} cannot be resolved by the guard; "
+                "pass a literal value (for commit messages use -F <file>)"
+            )
         return None
     require_resolved_git_word(arguments[index], mixed=False)
     subcommand = arguments[index].casefold()
