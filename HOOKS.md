@@ -211,12 +211,12 @@ See [UPDATE.md](UPDATE.md).
   The git subcommand word must be a plain literal word in each git command:
   `git {config,...}` and a subcommand split by a line continuation are denied.
   A program that runs the command in its arguments (`nice`, `nohup`,
-  `timeout`, `sudo`, `watch`, `time` with options, `stdbuf`, `setsid`) is
-  denied when one of its arguments is the word `git`, because the guard
-  cannot apply its git checks behind it: run git directly. Other programs
-  that only name git (`which git`, `brew install git`) pass. The check reads
-  literal words only: `nice sh -c 'git ...'`, a parameter or a glob in place
-  of the `git` word, and other command runners are not covered.
+  `timeout`, `sudo`, `watch`, `time`, `env`, `stdbuf`, `setsid`) is
+  unwrapped: the guard skips the options of the program and checks the
+  command that it runs, so `nice git -c core.fsmonitor=/abs/h.sh status` is
+  denied by the git rule and `sudo apt install git` passes. Other command
+  runners (`doas`, `ionice`, `noglob`) are not unwrapped, and `watch` with
+  the command in one quoted word is not checked.
   Each git global option word, and the value word of `-c`, `-C`,
   `--git-dir`, `--work-tree`, `--namespace` and `--config-env`, must resolve
   to one word: a backslash, an unquoted glob or an unquoted brace list or

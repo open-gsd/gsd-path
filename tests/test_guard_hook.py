@@ -2299,24 +2299,24 @@ class GuardHookTests(unittest.TestCase):
             'git con\\\n\\\n\\\nfig core.fsmonitor /abs/h.sh',
             'git con\\\r\nfig core.fsmonitor /abs/h.sh',
             'git con\\\r\n\\\r\nfig core.fsmonitor /abs/h.sh',
-            # A program that runs the command in its arguments hides git
-            # from the git checks.
+            # The guard checks the command that a command runner runs.
             *(
                 f"{wrapper} git -c core.fsmonitor=/abs/h.sh status"
                 for wrapper in (
-                    "nice", "nohup", "timeout 5", "sudo", "sudo -u root", "watch",
-                    "stdbuf -o0", "setsid", "time -p", "env nice", "nice env",
-                    "nice command",
+                    "nice", "nice -n 5", "nice -n5", "nice --adjustment=5", "nohup",
+                    "timeout 5", "timeout -s KILL 5", "timeout --signal=KILL 2.5s",
+                    "sudo", "sudo -u root", "sudo -Eu root", "sudo --user root",
+                    "sudo FOO=1", "watch", "watch -n 5", "stdbuf -o0", "stdbuf -o L",
+                    "setsid", "time -p", "env nice", "nice env", "nice command",
+                    "nice nohup", "/usr/bin/nice", "sudo.exe", "nice --",
                 )
             ),
-            'nice -n 5 git status',
-            'nice ./git status',
-            'watch git status',
-            'nice git status',
-            'nice git config core.fsmonitor /abs/h.sh',
+            "nice sh -c 'git -c core.fsmonitor=/abs/h.sh status'",
             'nice /usr/bin/git -c core.fsmonitor=/abs/h.sh status',
+            'nice git config core.fsmonitor /abs/h.sh',
             'timeout 5 git -c $x',
-            'command nice git status',
+            'timeout $t git status',
+            'sudo GIT_CONFIG_COUNT=1 git status',
             # A parameter in a global option value is unresolved with or
             # without a visible subcommand: bash splits it into both.
             'read x < v.txt; git -c $x',
@@ -2464,6 +2464,22 @@ class GuardHookTests(unittest.TestCase):
             "env git status",
             "echo git",
             "grep -r git README.md",
+            # A command runner denies nothing itself: its command is checked.
+            "nice git status",
+            "nice -n 5 git status",
+            "watch git status",
+            "command nice git status",
+            "timeout 5 git log -1",
+            "sudo apt install git",
+            "sudo apt-get install -y git",
+            "timeout 60 brew install git",
+            "sudo -u git psql",
+            "nice grep -r git README.md",
+            "sudo ls vendor/git",
+            "nohup npm run git",
+            "watch -n 5 which git",
+            "time -p grep git README.md",
+            "time -p make git",
             # A program that only names git runs no git the guard could check.
             "which git",
             "type git",

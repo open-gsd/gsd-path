@@ -537,12 +537,23 @@ SED_SAFE_OPTIONS = frozenset(
     }
 )
 FIND_EXECUTION_ACTIONS = frozenset({"-exec", "-execdir", "-ok", "-okdir"})
-GIT_PROGRAMS = frozenset({"git", "git.exe"})
-# Programs whose purpose is to run the command in their arguments. The guard
-# does not unwrap them, so its git checks cannot apply behind one.
-EXEC_PREFIX_PROGRAMS = frozenset(
-    {"nice", "nohup", "timeout", "sudo", "watch", "time", "env", "stdbuf", "setsid"}
-)
+# Programs that run the command in their arguments, with the options of each
+# that take a separate value. The guard checks the command they run.
+EXEC_PREFIX_VALUE_OPTIONS = {
+    "nice": frozenset({"-n", "--adjustment"}),
+    "nohup": frozenset(),
+    "setsid": frozenset(),
+    "stdbuf": frozenset({"-i", "-o", "-e", "--input", "--output", "--error"}),
+    "sudo": frozenset({
+        "-u", "-g", "-h", "-p", "-C", "-D", "-R", "-T", "-U", "-r", "-t",
+        "--user", "--group", "--host", "--prompt", "--close-from", "--chdir",
+        "--chroot", "--command-timeout", "--other-user", "--role", "--type",
+    }),
+    "time": frozenset({"-o", "-f", "--output", "--format"}),
+    "timeout": frozenset({"-s", "-k", "--signal", "--kill-after"}),
+    "watch": frozenset({"-n", "--interval"}),
+}
+TIMEOUT_DURATION = re.compile(r"\d+(?:\.\d+)?[smhd]?")
 SHELL_CONTROL_WORDS = frozenset(
     {
         "!",
@@ -2487,47 +2498,73 @@ def require_read_command(wrapper, wrapped):
 
 def command_invocation(segment):
     index = 0
-    while index < len(segment) and SHELL_ASSIGNMENT_PATTERN.match(segment[index]):
-        validate_shell_assignment(segment[index])
+    # The shell word `time` is already removed; its only option can remain.
+    while index < len(segment) and segment[index] == "-p":
         index += 1
-    if index >= len(segment):
-        return None
-    executable = segment[index].replace("\\", "/").rsplit("/", 1)[-1].casefold()
-    if executable == "env":
-        index += 1
-        while index < len(segment):
-            token = segment[index]
-            if token == "--":
-                index += 1
-                break
-            if SHELL_ASSIGNMENT_PATTERN.match(token):
-                validate_shell_assignment(token)
-                index += 1
-                continue
-            option = token.split("=", 1)[0]
-            if option in ENV_OPTIONS_WITHOUT_VALUES:
-                index += 1
-                continue
-            if option in ENV_OPTIONS_WITH_VALUES:
-                if option in {"-C", "--chdir"}:
-                    raise ValueError(
-                        f"env {option} changes the working directory the guard "
-                        "tracks; use cd with a literal path instead"
-                    )
-                index += 1
-                if "=" not in token:
-                    if index >= len(segment):
-                        raise ValueError(f"env {option} lacks a value")
+    while True:
+        while index < len(segment) and SHELL_ASSIGNMENT_PATTERN.match(segment[index]):
+            validate_shell_assignment(segment[index])
+            index += 1
+        if index >= len(segment):
+            return None
+        executable = segment[index].replace("\\", "/").rsplit("/", 1)[-1].casefold()
+        prefix = executable.removesuffix(".exe")
+        if executable == "env":
+            index += 1
+            while index < len(segment):
+                token = segment[index]
+                if token == "--":
                     index += 1
-                continue
-            if token.startswith("-"):
-                raise ValueError(
-                    f"env {token} cannot be validated; use env NAME=VALUE <command>"
-                )
+                    break
+                if SHELL_ASSIGNMENT_PATTERN.match(token):
+                    validate_shell_assignment(token)
+                    index += 1
+                    continue
+                option = token.split("=", 1)[0]
+                if option in ENV_OPTIONS_WITHOUT_VALUES:
+                    index += 1
+                    continue
+                if option in ENV_OPTIONS_WITH_VALUES:
+                    if option in {"-C", "--chdir"}:
+                        raise ValueError(
+                            f"env {option} changes the working directory the guard "
+                            "tracks; use cd with a literal path instead"
+                        )
+                    index += 1
+                    if "=" not in token:
+                        if index >= len(segment):
+                            raise ValueError(f"env {option} lacks a value")
+                        index += 1
+                    continue
+                if token.startswith("-"):
+                    raise ValueError(
+                        f"env {token} cannot be validated; use env NAME=VALUE <command>"
+                    )
+                break
+        elif prefix in EXEC_PREFIX_VALUE_OPTIONS:
+            value_options = EXEC_PREFIX_VALUE_OPTIONS[prefix]
+            index += 1
+            while index < len(segment):
+                token = segment[index]
+                if token == "--":
+                    index += 1
+                    break
+                if not token.startswith("-") or token == "-":
+                    break
+                index += 1
+                if "=" not in token and (
+                    token in value_options
+                    or (not token.startswith("--") and f"-{token[-1]}" in value_options)
+                ):
+                    index += 1
+            if (
+                prefix == "timeout"
+                and index < len(segment)
+                and TIMEOUT_DURATION.fullmatch(segment[index])
+            ):
+                index += 1
+        else:
             break
-    if index >= len(segment):
-        return None
-    executable = segment[index].replace("\\", "/").rsplit("/", 1)[-1].casefold()
     arguments = segment[index + 1 :]
     if SHELL_PARAMETER_SYNTAX.search(executable):
         raise ValueError(
@@ -2547,17 +2584,6 @@ def command_invocation(segment):
             UNVALIDATED_EXECUTION_REASONS[executable].format(
                 executable=segment[index], argument=first_argument(arguments)
             )
-        )
-    if (
-        executable in EXEC_PREFIX_PROGRAMS or executable.startswith("-")
-    ) and any(
-        argument.replace("\\", "/").rsplit("/", 1)[-1].casefold() in GIT_PROGRAMS
-        for argument in arguments
-    ):
-        raise ValueError(
-            f"executable {segment[index]} cannot be resolved by the guard: it can "
-            f"run git in a way the guard cannot inspect; run git directly, without "
-            f"{segment[index]}"
         )
     return executable, arguments
 
