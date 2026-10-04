@@ -243,6 +243,18 @@ GIT_READ_WRITE_OPTIONS = frozenset({"--output", "--ext-diff", "--textconv"})
 GIT_PARAMETER_DENIED_OPTIONS = GIT_READ_WRITE_OPTIONS | {
     "--upload-pack", "--receive-pack", "--exec", "-c", "--config-env",
 }
+
+
+def git_option_in(token, options):
+    """Whether a token names one of the options, by full name or any long-option prefix.
+
+    git accepts each unique prefix of a long option; matching every prefix is
+    stricter than git and so only fails closed.
+    """
+    name = token.split("=", 1)[0]
+    if name.startswith("--") and len(name) > 2:
+        return any(option.startswith(name) for option in options)
+    return name in options
 ARCHIVE_READ_EXECUTION_OPTIONS = {"rg": frozenset({"--pre"})}
 AMBIGUOUS_SHELL_SYNTAX = re.compile(r"[\r\n|;&<>`]|\$\(|@\(")
 SUBSTITUTION_PLACEHOLDER = "COMMAND_SUBSTITUTION_"
@@ -2352,8 +2364,8 @@ def git_command(segment, assignments=None):
                 if (
                     not literal
                     or (literal.startswith("-") and "=" not in literal)
-                    or literal.split("=", 1)[0] in GIT_PARAMETER_DENIED_OPTIONS
-                    or arguments[argument_index - 1] in GIT_PARAMETER_DENIED_OPTIONS
+                    or git_option_in(literal, GIT_PARAMETER_DENIED_OPTIONS)
+                    or git_option_in(arguments[argument_index - 1], GIT_PARAMETER_DENIED_OPTIONS)
                     or (literal.startswith("-c") and literal != "-c")
                     or "::" in literal
                     or not parameters_double_quoted(argument)
@@ -2746,8 +2758,7 @@ def archive_command_is_read_only(
     if subcommand not in git_commands:
         return False
     return not any(
-        token in GIT_READ_WRITE_OPTIONS or token.startswith("--output=")
-        for token in git_arguments
+        git_option_in(token, GIT_READ_WRITE_OPTIONS) for token in git_arguments
     )
 
 
@@ -2777,8 +2788,7 @@ def archive_write_attempt(segment, source=None):
         return False
     subcommand, git_arguments, _options = git
     return subcommand not in ARCHIVE_READ_GIT_COMMANDS or any(
-        token in GIT_READ_WRITE_OPTIONS or token.startswith("--output=")
-        for token in git_arguments
+        git_option_in(token, GIT_READ_WRITE_OPTIONS) for token in git_arguments
     )
 
 

@@ -2244,6 +2244,15 @@ class GuardHookTests(unittest.TestCase):
             'read x < v.txt; git ls-remote --receive-pack="$x" .',
             'read x < v.txt; git ls-remote --receive-pack "a $x" .',
             'read x < v.txt; git ls-remote "ext::$x"',
+            # git accepts each unique prefix of a long option name.
+            'read x < v.txt; git ls-remote --upload-pa="a $x" .',
+            "read x < v.txt; git ls-remote --upl=$x .",
+            'read x < v.txt; git ls-remote "--upl=$x" .',
+            'read x < v.txt; git ls-remote --upload-pac "a $x" .',
+            "read x < v.txt; git ls-remote --exe=$x .",
+            'read x < v.txt; git ls-remote "--exe=a $x" .',
+            'read x < v.txt; git ls-remote "--receive-p=a $x" .',
+            'git diff "--outpu=a $f"',
             'read x < v.txt; git -c "diff.external=$x" diff',
             'read x < v.txt; git "-cdiff.external=$x" diff',
             'read x < v.txt; git -c "core.fsmonitor=$x" status',
@@ -2271,6 +2280,14 @@ class GuardHookTests(unittest.TestCase):
         ):
             with self.subTest(command=command):
                 self.assert_denied(self.bash(command))
+
+    def test_denies_abbreviated_git_write_options_in_archive_context(self):
+        for option in ("--ext-diff", "--ext-d", "--textc", "--output=NOTE.md"):
+            with self.subTest(option=option):
+                self.assert_denied(
+                    self.bash(f"cd .project/archive/001-mvp && git diff {option}")
+                )
+        self.assert_allowed(self.bash("cd .project/archive/001-mvp && git diff --stat"))
 
     def test_assignment_state_is_segment_local_and_last_value_wins(self):
         self.assert_denied(

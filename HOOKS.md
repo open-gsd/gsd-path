@@ -182,7 +182,10 @@ See [UPDATE.md](UPDATE.md).
   argument, and a parameter in the value of an option that git writes to or
   runs as a command (`--output`, `--upload-pack`, `--receive-pack`, `--exec`,
   `-c`, `--config-env`, or a `<transport>::<address>` remote) are denied in
-  every form. Any other quoting construct in
+  every form. These option names match by prefix (`--upload-pa`, `--exe`),
+  because git accepts abbreviated long options; in archive context the same
+  prefix match applies to `--output`, `--ext-diff`, and `--textconv`. Any
+  other quoting construct in
   the command (`$'...'`, `$"..."`, quotes inside `${...}`, quotes or
   backslashes in a comment, here-documents and here-strings) disables the
   exception, so every parameter in a git argument of that command is denied.
