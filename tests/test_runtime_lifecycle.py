@@ -66,10 +66,10 @@ class RuntimeLifecycleTests(unittest.TestCase):
         py_compile.compile(str(poison_source), cfile=str(cache), doraise=True)
         return cache, marker
 
-    def runtime_command(self, option, source=SOURCE):
+    def runtime_command(self, option, source=SOURCE, extra=()):
         return subprocess.run(
             [sys.executable, "-B", str(SOURCE / "scripts/install.py"),
-             option, "--project", str(self.repo), "--source-root", str(source)],
+             option, "--project", str(self.repo), "--source-root", str(source), *extra],
             capture_output=True, encoding="utf-8", errors="replace",
         )
 
@@ -709,6 +709,77 @@ with publication_lock(Path(sys.argv[1]).parent, Path(sys.argv[1]).name):
         result = self.runtime_command("--runtime-restore")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(declaration.read_bytes(), original)
+
+    def test_upgrade_records_provenance_without_changing_digest(self):
+        self.provision()
+        stock = self.pin()
+        result = self.runtime_command("--runtime-upgrade", extra=[
+            "--runtime-provenance-source", "1.4.1-hotfix",
+            "--runtime-provenance-note", "owner-approved one-line hotfix"])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        upgraded = self.pin()
+        # Same source with or without provenance pins the same digest.
+        self.assertEqual(upgraded["digest"], stock["digest"])
+        self.assertEqual(upgraded["provenance"]["source"], "1.4.1-hotfix")
+        self.assertEqual(upgraded["provenance"]["note"], "owner-approved one-line hotfix")
+        # A git source root auto-records its HEAD as the patch reference.
+        self.assertEqual(upgraded["provenance"]["patch_ref"], self.git("rev-parse", "HEAD", repo=SOURCE))
+        # Provenance is metadata only: stock validation still accepts the runtime.
+        self.assertTrue(install.status_runtime.resolve_runtime(self.repo).is_dir())
+        # A plain package source (not a git checkout) silently skips the auto patch_ref.
+        plain = self.root / "plain-source"
+        shutil.copytree(SOURCE / "scripts", plain / "scripts", ignore=shutil.ignore_patterns("__pycache__"))
+        shutil.copy2(SOURCE / "package.json", plain / "package.json")
+        result = self.runtime_command("--runtime-upgrade", plain, extra=[
+            "--runtime-provenance-source", "npm @opengsd/gsd-path@1.4.1"])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.pin()["digest"], stock["digest"])
+        self.assertEqual(self.pin()["provenance"], {"source": "npm @opengsd/gsd-path@1.4.1"})
+
+    def test_reupgrade_without_provenance_flags_preserves_provenance(self):
+        self.provision()
+        result = self.runtime_command("--runtime-upgrade", extra=[
+            "--runtime-provenance-source", "1.4.1-hotfix",
+            "--runtime-provenance-note", "owner-approved one-line hotfix"])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        recorded = self.pin()["provenance"]
+        result = self.runtime_command("--runtime-upgrade")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.pin()["provenance"], recorded)
+
+    def test_declaration_with_provenance_validates_as_stock(self):
+        self.provision()
+        pin = self.pin()
+        pin["provenance"] = {"source": "1.4.1-hotfix", "patch_ref": "0" * 40,
+                             "note": "owner hotfix", "reviewed_by": "jane"}
+        declaration = self.repo / ".gsd-path/runtime.json"
+        declaration.write_bytes(json.dumps(pin).encode("utf-8"))
+        loaded = install.status_runtime.declaration(self.repo)
+        self.assertEqual(loaded["provenance"], pin["provenance"])
+        self.assertEqual(loaded["digest"], pin["digest"])
+        self.assertTrue(install.status_runtime.resolve_runtime(self.repo).is_dir())
+        result = subprocess.run(
+            [sys.executable, "-B", str(self.repo / ".gsd-path/status_runtime.py"),
+             "--repo", str(self.repo), "--runtime-path"],
+            capture_output=True, encoding="utf-8", errors="replace",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(Path(result.stdout.strip()),
+                         self.home / ".gsd-path/runtimes" / pin["digest"])
+
+    def test_provenance_never_bypasses_digest_validation(self):
+        self.provision()
+        pin = self.pin()
+        # Garbage inner keys stay loadable display metadata.
+        pin["provenance"] = {"source": 1, "patch_ref": [], "garbage": {"nested": True}}
+        declaration = self.repo / ".gsd-path/runtime.json"
+        declaration.write_bytes(json.dumps(pin).encode("utf-8"))
+        self.assertEqual(install.status_runtime.declaration(self.repo)["provenance"], pin["provenance"])
+        # A wrong digest still fails stock validation regardless of provenance.
+        pin["digest"] = "0" * 64
+        declaration.write_bytes(json.dumps(pin).encode("utf-8"))
+        with self.assertRaisesRegex(ValueError, "unavailable or invalid"):
+            install.status_runtime.resolve_runtime(self.repo)
 
     def test_hook_preview_rejects_same_foreign_guard_as_apply(self):
         directory = self.repo / ".gsd-path"

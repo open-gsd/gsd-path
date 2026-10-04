@@ -3283,6 +3283,32 @@ def install(
     return results
 
 
+def _runtime_provenance(arguments, source_root: Path):
+    """Owner-recorded provenance from --runtime-provenance-* upgrade flags.
+
+    When the supplied source root is a git checkout and no patch reference
+    was given, its HEAD sha is recorded with one best-effort rev-parse.
+    Provenance is display/audit metadata on the runtime declaration only; it
+    never joins the pinned digest or runtime validation.
+    """
+    recorded = {key: value for key, value in {
+        "source": arguments.runtime_provenance_source,
+        "patch_ref": arguments.runtime_provenance_patch,
+        "note": arguments.runtime_provenance_note,
+    }.items() if value}
+    if not recorded:
+        return None
+    if "patch_ref" not in recorded:
+        try:
+            head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=source_root,
+                                  capture_output=True, encoding="utf-8", check=True)
+            if head.stdout.strip():
+                recorded["patch_ref"] = head.stdout.strip()
+        except (OSError, subprocess.CalledProcessError):
+            pass
+    return recorded
+
+
 def parser() -> argparse.ArgumentParser:
     argument_parser = argparse.ArgumentParser(description=__doc__)
     for target in TARGETS:
@@ -3299,6 +3325,9 @@ def parser() -> argparse.ArgumentParser:
     runtime_actions = argument_parser.add_mutually_exclusive_group()
     for action in ("restore", "upgrade", "migrate"):
         runtime_actions.add_argument(f"--runtime-{action}", action="store_true")
+    argument_parser.add_argument("--runtime-provenance-source")
+    argument_parser.add_argument("--runtime-provenance-patch")
+    argument_parser.add_argument("--runtime-provenance-note")
     argument_parser.add_argument("--hooks", action="store_true")
     argument_parser.add_argument("--hooks-init", action="store_true")
     argument_parser.add_argument("--hooks-refresh", action="store_true")
@@ -3347,11 +3376,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if runtime_action:
         if project is None:
             argument_parser.error(f"--runtime-{runtime_action} requires --project")
+        provenance = _runtime_provenance(arguments, source_root)
+        if provenance is not None and runtime_action != "upgrade":
+            argument_parser.error("--runtime-provenance-* requires --runtime-upgrade")
         try:
             _validate_project_git_root(project)
             locks, created = ([], []) if arguments.dry_run else _acquire_install_locks([project / HOOKS_DIRECTORY])
             try:
-                pin = runtime_store.operate(source_root, project, runtime_action, dry_run=arguments.dry_run)
+                pin = runtime_store.operate(source_root, project, runtime_action,
+                                            dry_run=arguments.dry_run, provenance=provenance)
             finally:
                 _release_install_locks(locks, created)
             print(f"runtime: {runtime_action} {pin['version']} ({pin['digest']})"
