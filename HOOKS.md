@@ -200,6 +200,11 @@ See [UPDATE.md](UPDATE.md).
   a value. A separate digit before a redirection (`5 >/dev/null`), a word of two
   or more digits (`12>/dev/null`) and a quoted operator are values, so they
   make a set.
+  Each `git config` argument must be a plain literal word, bare or in one
+  pair of quotes: a backslash, mixed quotes, an unquoted glob (`*`, `?`, `[`),
+  an unquoted brace list or range (`{a,b}`, `{1..3}`) or a line continuation
+  that joins two words is denied, because the shell can make a different
+  argument list from it.
   `git config` section renames and removals (`--rename-section`,
   `--remove-section`) and `--edit` are denied, because a rename can move a
   key into an executed section and `--edit` starts an editor.

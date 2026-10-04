@@ -2291,6 +2291,21 @@ class GuardHookTests(unittest.TestCase):
             'git config core.hooksPath 5 >/dev/null',
             'git config core.hooksPath 5 >> log.txt',
             'git config core.fsmonitor 2 >/dev/null',
+            # One token can become several git arguments, or two tokens
+            # one: only plain literal words prove the read or set form.
+            'git config {core.hooksPath,/tmp/hooks}',
+            'git config core.hooksPath{,/tmp/hooks}',
+            'git config {core.fsmonitor,/abs/h.sh}',
+            'git config {--add,core.fsmonitor,/abs/h.sh}',
+            'git config core.fsmoni\\\ntor /tmp/h.sh',
+            'git config "core.fsmoni\\\ntor" /tmp/h.sh',
+            'git config core.hooksPath\\ x',
+            'git config user.name Jeremy\\ M',
+            "git config --get core.fsmoni''tor",
+            'git config --get-regexp core.*',
+            'git config --get core.[f]smonitor',
+            'git config user.{name,email}',
+            'git config branch.{1..3}.merge',
             # zsh reads one ASCII digit as a file descriptor; a longer or
             # non-ASCII digit word is the value.
             'git config core.hooksPath 12>/dev/null',
@@ -2411,6 +2426,14 @@ class GuardHookTests(unittest.TestCase):
             "git config -l > config.txt",
             "git config list",
             "git config user.name Test",
+            # Plain quoted words are literal, with the characters in them.
+            'git config user.name "Test User"',
+            "git config user.name 'Test {a,b} *'",
+            "git config --get 'core.fsmonitor'",
+            'git config --get "core.hooksPath" 2>/dev/null',
+            'git config user.name ""',
+            "git config --get-regexp '^user\\.'",
+            "git config \\\n  --get core.fsmonitor",
         ):
             with self.subTest(command=command):
                 self.assert_allowed(self.bash(command))

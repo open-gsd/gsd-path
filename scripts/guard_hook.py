@@ -317,6 +317,9 @@ GIT_CONFIG_VALUE_OPTIONS = frozenset({
     "--file", "--blob", "--type", "--default", "--comment", "--value", "--url",
 })
 GIT_CONFIG_EDIT_SHORT_OPTION = re.compile(r"-[A-Za-z]*e[A-Za-z]*")
+# An unquoted word the shell can turn into several arguments: a glob, or a
+# brace list or range.
+GIT_CONFIG_EXPANDING_WORD = re.compile(r"[*?\[]|\{.*(?:,|\.\.)")
 
 
 def denied_git_config_argument(arguments):
@@ -2172,10 +2175,15 @@ class ShellToken(str):
     `redirection` is true for an unquoted redirection operator and for one
     ASCII file descriptor digit written against one (the 2 of 2>file, not of
     2 >file). zsh passes a longer or non-ASCII digit word on as an argument.
+    `literal` is "bare" for a word written with no quote or escape, "quoted"
+    for a word inside one pair of plain quotes, and None when the shell may
+    build the word in another way (escapes, mixed quotes, a line continuation
+    that joins words).
     """
 
     double_quoted = ()
     redirection = False
+    literal = None
 
 
 def double_quoted_markers(command):
@@ -2282,6 +2290,11 @@ def shell_tokens(command, direct=True):
     Only a directly parsed command keeps quote flags: an outer shell expands
     parameters before the inner parse, so inner quotes prove nothing.
     """
+    joined = any(
+        (match.group(1) or command[max(match.start() - 1, 0):match.start()].strip())
+        and command[match.end():match.end() + 1].strip()
+        for match in LINE_CONTINUATION.finditer(command)
+    )
     command = strip_heredoc_bodies(LINE_CONTINUATION.sub(r"\1 ", command))
     lexer = shlex.shlex(command, posix=True, punctuation_chars="|;&()<>\n\r")
     lexer.whitespace = " \t"
@@ -2293,9 +2306,20 @@ def shell_tokens(command, direct=True):
             end = lexer.instream.tell() - len(lexer._pushback_chars)
             if command[end - 1:end] in (" ", "\t"):
                 end -= 1
+            literal = None
+            for quote in ("", "'", '"'):
+                start = end - len(token) - 2 * len(quote)
+                if (
+                    not joined
+                    and start >= 0
+                    and command[start:end] == quote + token + quote
+                    and (start == 0 or command[start - 1] in " \t|;&()<>\n\r")
+                ):
+                    literal = "quoted" if quote else "bare"
+                    break
             start = end - len(token)
             before = command[start - 1:start] if start > 0 else ""
-            if command[start:end] == token and (
+            redirection = command[start:end] == token and (
                 (
                     set(token) <= SHELL_WRITE_REDIRECTION_CHARS
                     and ("<" in token or ">" in token)
@@ -2307,9 +2331,10 @@ def shell_tokens(command, direct=True):
                     and command[end:end + 1] in ("<", ">")
                     and (not before or before in " \t|;&()<>\n\r")
                 )
-            ):
-                token = ShellToken(token)
-                token.redirection = True
+            )
+            token = ShellToken(token)
+            token.redirection = redirection
+            token.literal = literal
             tokens.append(token)
     except ValueError as error:
         raise ValueError(
@@ -2326,9 +2351,9 @@ def shell_tokens(command, direct=True):
     marked = []
     for token in tokens:
         count = sum(character in PARAMETER_MARKERS for character in token)
-        redirection = getattr(token, "redirection", False)
+        redirection, literal = token.redirection, token.literal
         token = ShellToken(token)
-        token.redirection = redirection
+        token.redirection, token.literal = redirection, literal
         token.double_quoted, flags = tuple(flags[:count]), flags[count:]
         marked.append(token)
     return marked
@@ -2595,6 +2620,16 @@ def git_command(segment, assignments=None):
         return None
     subcommand = arguments[index].casefold()
     if subcommand == "config":
+        for argument in arguments[index + 1:]:
+            literal = getattr(argument, "literal", None)
+            if not getattr(argument, "redirection", False) and (
+                literal is None
+                or (literal == "bare" and GIT_CONFIG_EXPANDING_WORD.search(argument))
+            ):
+                raise ValueError(
+                    f"git argument {argument} cannot be resolved by the guard; "
+                    "pass a literal value"
+                )
         denied = denied_git_config_argument(arguments[index + 1:])
         if denied is not None:
             raise ValueError(
