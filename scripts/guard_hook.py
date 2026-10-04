@@ -2169,8 +2169,9 @@ PARAMETER_MARKERS = frozenset("$%!")
 class ShellToken(str):
     """A token that keeps, per parameter marker character, whether double quotes enclosed it.
 
-    `redirection` is true for an unquoted redirection operator and for a file
-    descriptor digit written against one (the 2 of 2>file, not of 2 >file).
+    `redirection` is true for an unquoted redirection operator and for one
+    ASCII file descriptor digit written against one (the 2 of 2>file, not of
+    2 >file). zsh passes a longer or non-ASCII digit word on as an argument.
     """
 
     double_quoted = ()
@@ -2301,7 +2302,8 @@ def shell_tokens(command, direct=True):
                     and before != "\\"
                 )
                 or (
-                    token.isdigit()
+                    len(token) == 1
+                    and token in "0123456789"
                     and command[end:end + 1] in ("<", ">")
                     and (not before or before in " \t|;&()<>\n\r")
                 )

@@ -2291,6 +2291,12 @@ class GuardHookTests(unittest.TestCase):
             'git config core.hooksPath 5 >/dev/null',
             'git config core.hooksPath 5 >> log.txt',
             'git config core.fsmonitor 2 >/dev/null',
+            # zsh reads one ASCII digit as a file descriptor; a longer or
+            # non-ASCII digit word is the value.
+            'git config core.hooksPath 12>/dev/null',
+            'git config core.hooksPath 12>/dev/null && git commit -m x',
+            'git config core.hooksPath \u0663>/dev/null',
+            'git config core.hooksPath \u00b2>/dev/null',
             'git config core.hooksPath 5 2>/dev/null',
             "git config core.hooksPath '2'>/dev/null",
             'git config core.hooksPath \\> x',

@@ -197,8 +197,9 @@ See [UPDATE.md](UPDATE.md).
   `url.*.pushInsteadOf` — is denied with each value. `git config` is denied
   when it sets one of these keys; to read or unset the key stays allowed.
   A redirection at the end of a read (`git config <key> 2>/dev/null`) is not
-  a value. A separate digit before a redirection (`5 >/dev/null`) and a quoted
-  operator are values, so they make a set.
+  a value. A separate digit before a redirection (`5 >/dev/null`), a word of two
+  or more digits (`12>/dev/null`) and a quoted operator are values, so they
+  make a set.
   `git config` section renames and removals (`--rename-section`,
   `--remove-section`) and `--edit` are denied, because a rename can move a
   key into an executed section and `--edit` starts an editor.
