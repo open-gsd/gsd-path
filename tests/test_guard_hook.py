@@ -2181,6 +2181,7 @@ class GuardHookTests(unittest.TestCase):
             'git log --format="$t %H"',
             't=abc; git log --format="$t %H"',
             'git show "HEAD:$f"',
+            'git show "HEAD:${f}"',
             'git log --format="%H%n%s"',
             '# note\ngit log --format="$t %H"',
             'x=abc; cd .project/archive/001-mvp && git log --format="%H $x"',
@@ -2224,6 +2225,18 @@ class GuardHookTests(unittest.TestCase):
             'eval "git log --format=\\"a $1\\""',
             "bash -c 'git log --format=\"$t %H\"'",
             'powershell -Command git log "--format=$t %H"',
+            # Only plain $name and ${name} are single-word: zsh flags and
+            # array or positional forms split even inside double quotes.
+            *(
+                "x='c --output=.project/archive/001-mvp/NOTE.md'; "
+                f'git diff --no-index "--src-prefix=a {form}" /dev/null f'
+                for form in (
+                    "${=x}", "${(s: :)x}", "${(z)x}", "${(f)x}", "$x[@]",
+                    "$argv[@]", "${x[@]}", "${x:-b}", "$1", "$*", "$#", "$t $=x",
+                )
+            ),
+            'git log --format="a ${=x}"',
+            'git log --format="$x[@] %H"',
             "git diff --output=$f",
         )
         for command in unquoted:

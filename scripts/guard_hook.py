@@ -2094,7 +2094,11 @@ def double_quoted_markers(command):
 
 
 def parameters_double_quoted(token):
-    """Whether every parameter in the token expands inside double quotes to one word."""
+    """Whether every parameter in the token expands inside double quotes to one word.
+
+    Only plain $name and ${name} qualify: flags, operators, subscripts,
+    positional and special parameters can split even inside double quotes.
+    """
     flags = getattr(token, "double_quoted", ())
     positions = [
         index for index, character in enumerate(token) if character in PARAMETER_MARKERS
@@ -2102,8 +2106,15 @@ def parameters_double_quoted(token):
     if len(flags) != len(positions):
         return False
     quoted = dict(zip(positions, flags))
+    plain = {
+        match.start(): match.end() for match in NAMED_SHELL_PARAMETER_SYNTAX.finditer(token)
+    }
+    if any(
+        character == "$" and index not in plain for index, character in enumerate(token)
+    ) or any(token[end : end + 1] == "[" for end in plain.values()):
+        return False
     return all(
-        quoted[match.start()] and quoted.get(match.end() - 1, True) and "@" not in match.group(0)
+        quoted[match.start()] and quoted.get(match.end() - 1, True)
         for syntax in (SHELL_PARAMETER_SYNTAX, CMD_PARAMETER_SYNTAX)
         for match in syntax.finditer(token)
     )
