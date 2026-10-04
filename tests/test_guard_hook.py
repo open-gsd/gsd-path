@@ -2215,6 +2215,15 @@ class GuardHookTests(unittest.TestCase):
             'git log --format="${t:-"a"} $x %H"',
             "# it's\ngit log --format=\"$t %H\"",
             'git log --format="$t %H" <<< "x"',
+            # A wrapped string is parsed by a second shell after the outer
+            # one expands parameters, so its inner quotes prove nothing.
+            'read x < v.txt; eval "git diff --src-prefix=\\"a $x\\""',
+            'read x < v.txt; bash -c "git diff --src-prefix=\\"a $x\\""',
+            'read x < v.txt; sh -c "git log --format=\\"a $x\\""',
+            'eval "git status \\"a $x\\""',
+            'eval "git log --format=\\"a $1\\""',
+            "bash -c 'git log --format=\"$t %H\"'",
+            'powershell -Command git log "--format=$t %H"',
             "git diff --output=$f",
         )
         for command in unquoted:

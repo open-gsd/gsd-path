@@ -179,7 +179,10 @@ See [UPDATE.md](UPDATE.md).
   `--output` values are denied in every form. Any other quoting construct in
   the command (`$'...'`, `$"..."`, quotes inside `${...}`, quotes or
   backslashes in a comment, here-documents and here-strings) disables the
-  exception, so every parameter in a git argument of that command is denied
+  exception, so every parameter in a git argument of that command is denied.
+  The exception applies only to commands the guard parses directly, never
+  inside wrapped shell strings (`eval`, `bash -c`, `sh -c`, PowerShell or
+  `cmd` command strings), where the outer shell expands the parameter first
 - archive glob/brace expansions and execution-capable read options such as
   `rg --pre`
 - direct write, edit, and patch tool calls targeting `.project/STATE.md`,

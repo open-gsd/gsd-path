@@ -2109,7 +2109,12 @@ def parameters_double_quoted(token):
     )
 
 
-def shell_tokens(command):
+def shell_tokens(command, direct=True):
+    """Tokenize a command; `direct` is False for a string that a second shell parses.
+
+    Only a directly parsed command keeps quote flags: an outer shell expands
+    parameters before the inner parse, so inner quotes prove nothing.
+    """
     command = strip_heredoc_bodies(LINE_CONTINUATION.sub(r"\1 ", command))
     lexer = shlex.shlex(command, posix=True, punctuation_chars="|;&()<>\n\r")
     lexer.whitespace = " \t"
@@ -2124,7 +2129,7 @@ def shell_tokens(command):
         ) from None
     if not tokens:
         raise ValueError("shell command is empty")
-    flags = double_quoted_markers(command)
+    flags = double_quoted_markers(command) if direct else None
     if flags is None or len(flags) != sum(
         character in PARAMETER_MARKERS for token in tokens for character in token
     ):
@@ -2394,7 +2399,7 @@ def wrapped_command_tokens(segment, expand_parameters=True):
         return None
     executable, arguments = invocation
     if executable == "eval":
-        return shell_tokens(" ".join(arguments)) if arguments else None
+        return shell_tokens(" ".join(arguments), direct=False) if arguments else None
     if executable in COMMAND_WRAPPERS:
         if executable == "command" and arguments[:1] in (["-v"], ["-V"]):
             return None
@@ -2419,7 +2424,7 @@ def wrapped_command_tokens(segment, expand_parameters=True):
                             executable=executable, option=argument
                         )
                     )
-                return shell_tokens(arguments[index + 1])
+                return shell_tokens(arguments[index + 1], direct=False)
         raise ValueError(SHELL_FILE_REASON.format(executable=executable))
     if executable in POWERSHELL_WRAPPERS or executable in {"cmd", "cmd.exe"}:
         switches = {"-c", "-command", "/c", "/k"}
@@ -2438,8 +2443,8 @@ def wrapped_command_tokens(segment, expand_parameters=True):
                         for argument in payload
                     ]
                 if len(payload) == 1:
-                    return shell_tokens(payload[0])
-                return payload
+                    return shell_tokens(payload[0], direct=False)
+                return [str(argument) for argument in payload]
         raise ValueError(SHELL_FILE_REASON.format(executable=executable))
     return None
 
@@ -2528,7 +2533,7 @@ def destructive_git_reason(
                     "git command directly"
                 )
             reason = destructive_git_reason(
-                ["git", *git_options, *shell_tokens(alias), *arguments],
+                ["git", *git_options, *shell_tokens(alias, direct=False), *arguments],
                 resolved_aliases | {command},
                 assignments,
             )
