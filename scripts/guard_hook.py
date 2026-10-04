@@ -2611,7 +2611,10 @@ def archive_command_is_read_only(
 def archive_write_attempt(segment):
     """Whether a segment denied in archive context attempts a write there."""
     if any(
-        token and set(token) <= SHELL_WRITE_REDIRECTION_CHARS for token in segment
+        token
+        and (set(token) <= SHELL_WRITE_REDIRECTION_CHARS
+             or re.fullmatch(r"\d*[<>]+&?", token))
+        for token in segment
     ):
         return True
     invocation = command_invocation(segment)

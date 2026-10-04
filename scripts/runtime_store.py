@@ -239,10 +239,12 @@ def operate(source, project, action, *, dry_run=False, provenance=None):
     if action == "upgrade":
         previous = status_runtime.declaration(project)
         pin = publish(source, dry_run=dry_run)
-        # Explicit provenance replaces the recorded object; an upgrade without
-        # new provenance carries the owner's existing entry forward instead of
-        # wiping it. Metadata only — it never changes the pinned digest.
-        if provenance is None:
+        # Explicit provenance replaces the recorded object. Without new flags,
+        # an existing entry carries forward only while the pinned digest is
+        # unchanged — a different source drops stale hotfix metadata instead
+        # of stamping it onto bytes it no longer describes. Metadata only —
+        # it never changes the pinned digest.
+        if provenance is None and previous.get("digest") == pin["digest"]:
             provenance = previous.get("provenance")
         if provenance:
             pin = {**pin, "provenance": provenance}

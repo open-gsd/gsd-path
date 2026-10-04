@@ -747,6 +747,26 @@ with publication_lock(Path(sys.argv[1]).parent, Path(sys.argv[1]).name):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.pin()["provenance"], recorded)
 
+    def test_upgrade_to_a_different_source_drops_stale_provenance(self):
+        source = self.root / "hotfix-source"
+        shutil.copytree(SOURCE / "scripts", source / "scripts", ignore=shutil.ignore_patterns("__pycache__"))
+        shutil.copy2(SOURCE / "package.json", source / "package.json")
+        hotfixed = source / "scripts/isolation.py"
+        hotfixed.write_bytes(hotfixed.read_text(encoding="utf-8").replace(
+            "class IsolationError(RuntimeError):",
+            "# owner-approved hotfix\nclass IsolationError(RuntimeError):").encode("utf-8"))
+        self.provision()
+        result = self.runtime_command("--runtime-upgrade", source=source, extra=[
+            "--runtime-provenance-source", "1.4.1-hotfix",
+            "--runtime-provenance-note", "owner one-line hotfix"])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("provenance", self.pin())
+        # Different bytes without new flags drop the stale hotfix record
+        # instead of stamping it onto a runtime it no longer describes.
+        result = self.runtime_command("--runtime-upgrade")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("provenance", self.pin())
+
     def test_declaration_with_provenance_validates_as_stock(self):
         self.provision()
         pin = self.pin()

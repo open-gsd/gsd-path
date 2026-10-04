@@ -1940,7 +1940,8 @@ def retire_member(coordinator: Path, member: str, archive_path: str, reviewed_he
     for kind, ref in (("push", bound_ref), ("push", "refs/heads/main"), ("push", f"refs/tags/{tag_name}"),
                       ("delete", bound_ref)):
         members.clear_authorization(checkout, project, kind, ref)
-    # Milestone end: forget the pinned placement so a new root can apply next milestone.
+    # The last sidecar retires here at milestone end; isolation's retires also
+    # release the pin whenever the workspace is idle, so a new root can apply.
     with contextlib.suppress(ValueError, OSError):
         worktree_paths.release_workspace(checkout)
     return {"member": member, "retired": bound}

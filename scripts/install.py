@@ -3373,12 +3373,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     )
     runtime_action = next((action for action in ("restore", "upgrade", "migrate")
                            if getattr(arguments, "runtime_" + action)), None)
+    provenance = _runtime_provenance(arguments, source_root)
+    if provenance is not None and runtime_action != "upgrade":
+        argument_parser.error("--runtime-provenance-* requires --runtime-upgrade")
     if runtime_action:
         if project is None:
             argument_parser.error(f"--runtime-{runtime_action} requires --project")
-        provenance = _runtime_provenance(arguments, source_root)
-        if provenance is not None and runtime_action != "upgrade":
-            argument_parser.error("--runtime-provenance-* requires --runtime-upgrade")
         try:
             _validate_project_git_root(project)
             locks, created = ([], []) if arguments.dry_run else _acquire_install_locks([project / HOOKS_DIRECTORY])

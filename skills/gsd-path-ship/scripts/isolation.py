@@ -492,7 +492,10 @@ def _force_rmtree(path: Path) -> None:
 
     # The \\?\ prefix sidesteps Windows MAX_PATH on deep sidecar trees.
     target = Path(f"\\\\?\\{os.path.abspath(path)}") if os.name == "nt" else path
-    shutil.rmtree(target, onerror=_writable)
+    try:
+        shutil.rmtree(target, onerror=_writable)
+    except OSError as error:
+        raise IsolationError(f"could not delete {path}: {error}") from error
 
 
 def _remove_worktree(primary: Path, destination: Path, force: bool) -> None:
@@ -501,8 +504,11 @@ def _remove_worktree(primary: Path, destination: Path, force: bool) -> None:
     git refuses to remove worktrees whose submodules were ever initialized, and
     forced removal can still fail deleting deep trees (Windows "Directory not
     empty"). A dirty sidecar keeps git's refusal unless `force`, so forced
-    retries only run for a provably clean tree.
+    retries only run for a provably clean tree. The direct-delete fallback runs
+    only for git's tree-deletion failures, so any other git error leaves the
+    sidecar intact for diagnosis.
     """
+    tree_delete_failure = ("failed to delete", "directory not empty", "permission denied")
 
     def failure(*flags: str) -> str:
         result = run_git(primary, "worktree", "remove", *flags, str(destination))
@@ -521,7 +527,9 @@ def _remove_worktree(primary: Path, destination: Path, force: bool) -> None:
         detail = failure("--force")
         if not detail:
             return
-    if destination.is_dir():
+    if destination.is_dir() and any(
+        marker in detail.lower() for marker in tree_delete_failure
+    ):
         _force_rmtree(destination)
         detail = failure("--force")
     if detail and not destination.is_dir():
