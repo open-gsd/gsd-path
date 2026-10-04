@@ -9,6 +9,7 @@ sys.dont_write_bytecode = True
 
 import json
 import re
+import contextlib
 from pathlib import Path, PurePosixPath
 from typing import Optional
 
@@ -1939,6 +1940,9 @@ def retire_member(coordinator: Path, member: str, archive_path: str, reviewed_he
     for kind, ref in (("push", bound_ref), ("push", "refs/heads/main"), ("push", f"refs/tags/{tag_name}"),
                       ("delete", bound_ref)):
         members.clear_authorization(checkout, project, kind, ref)
+    # Milestone end: forget the pinned placement so a new root can apply next milestone.
+    with contextlib.suppress(ValueError, OSError):
+        worktree_paths.release_workspace(checkout)
     return {"member": member, "retired": bound}
 
 

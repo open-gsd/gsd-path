@@ -702,14 +702,14 @@ def finish_task(primary: Path, state: Dict[str, object]) -> Dict[str, object]:
     if not command:
         raise DriverStop("task has no Verify command", task=task_id)
     if state["mode"] == "serial":
-        # ponytail: sidecar reproduction is git plumbing that belongs in isolation.py as the
-        # inverse of clean_verify; lift it there when a second caller appears.
         sidecar = state["sidecar"]
-        sidecar_path = Path(str(sidecar["worktree"]))
+        ensured = isolation.ensure_verify_sidecar(primary, base, str(sidecar["branch"]))
+        sidecar_path = Path(str(ensured["worktree"]))
         tree = snapshot_tree(primary)
-        isolation.git_output(sidecar_path, "read-tree", "-u", "--reset", tree)
-        if isolation.git_output(sidecar_path, "write-tree") != tree:
-            raise DriverStop("sidecar reproduction differs from the primary task diff", task=task_id)
+        try:
+            isolation.reproduce_verify_sidecar(sidecar_path, tree)
+        except isolation.IsolationError as error:
+            raise DriverStop(str(error), task=task_id) from error
         execution = run_verify(command, sidecar_path)
         location = f"sidecar {sidecar['branch']}"
         isolation.clean_verify(primary, sidecar_path, base, str(sidecar["branch"]))
