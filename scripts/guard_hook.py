@@ -559,8 +559,21 @@ EXEC_PREFIX_FILE_OPTIONS = {
     "time": frozenset({"-o", "--output"}),
     "watch": frozenset({"-s", "--shotsdir"}),
 }
+# The short option letters of each runner that take no value.
+EXEC_PREFIX_FLAG_LETTERS = {
+    "nice": "",
+    "nohup": "",
+    "setsid": "cfw",
+    "stdbuf": "",
+    "sudo": "AbBEHiKklnNPSsVv",
+    "time": "ahlpqvV",
+    "timeout": "fpv",
+    "watch": "bcCdegprtwx",
+}
 EXEC_PREFIX_INTERVAL_OPTIONS = frozenset({"-n", "--interval"})
-RUNNER_DURATION = re.compile(r"(?:\d+(?:\.\d*)?|\.\d+)[smhd]?")
+RUNNER_DURATION = re.compile(
+    r"(?:(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?|inf(?:inity)?)[smhd]?", re.IGNORECASE
+)
 SHELL_CONTROL_WORDS = frozenset(
     {
         "!",
@@ -2503,16 +2516,47 @@ def require_read_command(wrapper, wrapped):
         )
 
 
-def runner_option_in(token, options):
-    """Whether a runner option word names one of the options.
+def runner_value_option(prefix, token):
+    """The option in a runner option word whose value is the next word, if any.
 
-    A long option matches by each prefix, as getopt accepts it; a short
-    cluster matches when its last letter is the option.
+    Raises for an option that writes, edits or enters a file or directory. A
+    long option matches by each prefix, as getopt accepts it. A short word is
+    read as getopt reads it: flag letters, then the first value option letter,
+    whose value is the rest of the word or, with no rest, the next word.
     """
-    name = token.split("=", 1)[0]
-    if name.startswith("--"):
-        return any(option.startswith(name) for option in options)
-    return f"-{name[-1]}" in options
+    value_options = EXEC_PREFIX_VALUE_OPTIONS[prefix]
+    file_options = EXEC_PREFIX_FILE_OPTIONS.get(prefix, frozenset())
+    denial = ValueError(
+        f"{prefix} {token} writes, edits or enters a file or directory that the "
+        "guard cannot check; run the command without this option and redirect "
+        "its output instead"
+    )
+    if token.startswith("--"):
+        name = token.split("=", 1)[0]
+        if any(option.startswith(name) for option in file_options):
+            raise denial
+        option = next((option for option in value_options if option.startswith(name)), None)
+        return option if "=" not in token else None
+    for position, letter in enumerate(token[1:], start=1):
+        option = f"-{letter}"
+        if option in file_options:
+            raise denial
+        if option in value_options:
+            return option if position == len(token) - 1 else None
+        if letter not in EXEC_PREFIX_FLAG_LETTERS[prefix]:
+            return None
+    return None
+
+
+def nonliteral_runner_option(token):
+    literal = getattr(token, "literal", "bare")
+    return (
+        SHELL_PARAMETER_SYNTAX.search(token)
+        or CMD_PARAMETER_SYNTAX.search(token)
+        or zsh_expansion_flag(token)
+        or literal is None
+        or (literal == "bare" and GIT_CONFIG_EXPANDING_WORD.search(token))
+    )
 
 
 def unresolved_runner_word(token):
@@ -2576,8 +2620,6 @@ def command_invocation(segment, unwrap_runners=True):
                     )
                 break
         elif unwrap_runners and prefix in EXEC_PREFIX_VALUE_OPTIONS:
-            value_options = EXEC_PREFIX_VALUE_OPTIONS[prefix]
-            file_options = EXEC_PREFIX_FILE_OPTIONS.get(prefix, frozenset())
             index += 1
             while index < len(segment):
                 token = segment[index]
@@ -2587,28 +2629,17 @@ def command_invocation(segment, unwrap_runners=True):
                 if not token.startswith("-") or token == "-":
                     break
                 index += 1
-                short_cluster = not token.startswith("--")
-                if unresolved_runner_word(token):
+                if nonliteral_runner_option(token):
                     raise ValueError(
                         f"{prefix} option {token} cannot be resolved by the guard; "
                         f"{prefix} options must be literal words"
                     )
-                if runner_option_in(token, file_options) or (
-                    short_cluster
-                    and any(f"-{letter}" in file_options for letter in token[1:])
-                ):
-                    raise ValueError(
-                        f"{prefix} {token} writes, edits or enters a file or directory "
-                        "that the guard cannot check; run the command without this "
-                        "option and redirect its output instead"
-                    )
-                if "=" in token or not runner_option_in(token, value_options):
+                option = runner_value_option(prefix, token)
+                if option is None or index >= len(segment):
                     continue
-                if index >= len(segment):
-                    raise ValueError(f"{prefix} option {token} lacks a value")
                 value = segment[index]
                 index += 1
-                if runner_option_in(token, EXEC_PREFIX_INTERVAL_OPTIONS) and prefix == "watch":
+                if prefix == "watch" and option in EXEC_PREFIX_INTERVAL_OPTIONS:
                     if not RUNNER_DURATION.fullmatch(value):
                         raise ValueError(
                             f"watch interval {value} cannot be resolved by the guard; "

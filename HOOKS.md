@@ -218,8 +218,10 @@ See [UPDATE.md](UPDATE.md).
   option that writes, edits or enters a file or directory by itself is
   denied (`time -o`, `sudo -e`, `sudo -D`, `sudo -R`, `watch -s`). The
   `timeout` duration and the `watch` interval must be literal numbers, and
-  each other runner option must be a literal word or a parameter in double
-  quotes. With an archive working directory a command runner is not
+  each runner option word must be a literal word; only a separate option
+  value can be a parameter in double quotes (`sudo -u "$USER" ls`). A short
+  option word is read as getopt reads it, so the attached value in
+  `sudo -upostgres psql` is not taken as more options. With an archive working directory a command runner is not
   unwrapped and is denied as an unknown program. Other command
   runners (`doas`, `ionice`, `noglob`) are not unwrapped, and `watch` with
   the command in one quoted word is not checked.
