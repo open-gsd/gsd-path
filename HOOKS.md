@@ -214,7 +214,13 @@ See [UPDATE.md](UPDATE.md).
   `timeout`, `sudo`, `watch`, `time`, `env`, `stdbuf`, `setsid`) is
   unwrapped: the guard skips the options of the program and checks the
   command that it runs, so `nice git -c core.fsmonitor=/abs/h.sh status` is
-  denied by the git rule and `sudo apt install git` passes. Other command
+  denied by the git rule and `sudo apt install git` passes. A runner
+  option that writes, edits or enters a file or directory by itself is
+  denied (`time -o`, `sudo -e`, `sudo -D`, `sudo -R`, `watch -s`). The
+  `timeout` duration and the `watch` interval must be literal numbers, and
+  each other runner option must be a literal word or a parameter in double
+  quotes. With an archive working directory a command runner is not
+  unwrapped and is denied as an unknown program. Other command
   runners (`doas`, `ionice`, `noglob`) are not unwrapped, and `watch` with
   the command in one quoted word is not checked.
   Each git global option word, and the value word of `-c`, `-C`,

@@ -545,15 +545,22 @@ EXEC_PREFIX_VALUE_OPTIONS = {
     "setsid": frozenset(),
     "stdbuf": frozenset({"-i", "-o", "-e", "--input", "--output", "--error"}),
     "sudo": frozenset({
-        "-u", "-g", "-h", "-p", "-C", "-D", "-R", "-T", "-U", "-r", "-t",
-        "--user", "--group", "--host", "--prompt", "--close-from", "--chdir",
-        "--chroot", "--command-timeout", "--other-user", "--role", "--type",
+        "-u", "-g", "-h", "-p", "-C", "-T", "-U", "-r", "-t",
+        "--user", "--group", "--host", "--prompt", "--close-from",
+        "--command-timeout", "--other-user", "--role", "--type",
     }),
-    "time": frozenset({"-o", "-f", "--output", "--format"}),
+    "time": frozenset({"-f", "--format"}),
     "timeout": frozenset({"-s", "-k", "--signal", "--kill-after"}),
-    "watch": frozenset({"-n", "--interval"}),
+    "watch": frozenset({"-n", "-q", "--interval", "--equexit"}),
 }
-TIMEOUT_DURATION = re.compile(r"\d+(?:\.\d+)?[smhd]?")
+# Runner options that write, edit or enter a file or directory by themselves.
+EXEC_PREFIX_FILE_OPTIONS = {
+    "sudo": frozenset({"-e", "-D", "-R", "--edit", "--chdir", "--chroot"}),
+    "time": frozenset({"-o", "--output"}),
+    "watch": frozenset({"-s", "--shotsdir"}),
+}
+EXEC_PREFIX_INTERVAL_OPTIONS = frozenset({"-n", "--interval"})
+RUNNER_DURATION = re.compile(r"(?:\d+(?:\.\d*)?|\.\d+)[smhd]?")
 SHELL_CONTROL_WORDS = frozenset(
     {
         "!",
@@ -2496,10 +2503,31 @@ def require_read_command(wrapper, wrapped):
         )
 
 
-def command_invocation(segment):
+def runner_option_in(token, options):
+    """Whether a runner option word names one of the options.
+
+    A long option matches by each prefix, as getopt accepts it; a short
+    cluster matches when its last letter is the option.
+    """
+    name = token.split("=", 1)[0]
+    if name.startswith("--"):
+        return any(option.startswith(name) for option in options)
+    return f"-{name[-1]}" in options
+
+
+def unresolved_runner_word(token):
+    return (
+        SHELL_PARAMETER_SYNTAX.search(token)
+        or CMD_PARAMETER_SYNTAX.search(token)
+        or zsh_expansion_flag(token)
+    ) and not parameters_double_quoted(token)
+
+
+def command_invocation(segment, unwrap_runners=True):
+    """`unwrap_runners` is False where a command runner itself must be judged."""
     index = 0
     # The shell word `time` is already removed; its only option can remain.
-    while index < len(segment) and segment[index] == "-p":
+    while unwrap_runners and index < len(segment) and segment[index] == "-p":
         index += 1
     while True:
         while index < len(segment) and SHELL_ASSIGNMENT_PATTERN.match(segment[index]):
@@ -2540,9 +2568,16 @@ def command_invocation(segment):
                     raise ValueError(
                         f"env {token} cannot be validated; use env NAME=VALUE <command>"
                     )
+                if SHELL_PARAMETER_SYNTAX.search(token) or zsh_expansion_flag(token):
+                    raise ValueError(
+                        f"env word {token} cannot be resolved by the guard; env "
+                        "assignments must be literal NAME=VALUE words and the "
+                        "program a literal name"
+                    )
                 break
-        elif prefix in EXEC_PREFIX_VALUE_OPTIONS:
+        elif unwrap_runners and prefix in EXEC_PREFIX_VALUE_OPTIONS:
             value_options = EXEC_PREFIX_VALUE_OPTIONS[prefix]
+            file_options = EXEC_PREFIX_FILE_OPTIONS.get(prefix, frozenset())
             index += 1
             while index < len(segment):
                 token = segment[index]
@@ -2552,16 +2587,44 @@ def command_invocation(segment):
                 if not token.startswith("-") or token == "-":
                     break
                 index += 1
-                if "=" not in token and (
-                    token in value_options
-                    or (not token.startswith("--") and f"-{token[-1]}" in value_options)
+                short_cluster = not token.startswith("--")
+                if unresolved_runner_word(token):
+                    raise ValueError(
+                        f"{prefix} option {token} cannot be resolved by the guard; "
+                        f"{prefix} options must be literal words"
+                    )
+                if runner_option_in(token, file_options) or (
+                    short_cluster
+                    and any(f"-{letter}" in file_options for letter in token[1:])
                 ):
-                    index += 1
-            if (
-                prefix == "timeout"
-                and index < len(segment)
-                and TIMEOUT_DURATION.fullmatch(segment[index])
-            ):
+                    raise ValueError(
+                        f"{prefix} {token} writes, edits or enters a file or directory "
+                        "that the guard cannot check; run the command without this "
+                        "option and redirect its output instead"
+                    )
+                if "=" in token or not runner_option_in(token, value_options):
+                    continue
+                if index >= len(segment):
+                    raise ValueError(f"{prefix} option {token} lacks a value")
+                value = segment[index]
+                index += 1
+                if runner_option_in(token, EXEC_PREFIX_INTERVAL_OPTIONS) and prefix == "watch":
+                    if not RUNNER_DURATION.fullmatch(value):
+                        raise ValueError(
+                            f"watch interval {value} cannot be resolved by the guard; "
+                            "the interval must be a literal number"
+                        )
+                elif unresolved_runner_word(value):
+                    raise ValueError(
+                        f"{prefix} option value {value} cannot be resolved by the "
+                        f"guard; {prefix} option values must be literal words"
+                    )
+            if prefix == "timeout" and index < len(segment):
+                if not RUNNER_DURATION.fullmatch(segment[index]):
+                    raise ValueError(
+                        f"timeout duration {segment[index]} cannot be resolved by the "
+                        "guard; the duration must be a literal number"
+                    )
                 index += 1
         else:
             break
@@ -3077,7 +3140,7 @@ def archive_command_is_read_only(
         return False
     if not archive_context:
         return True
-    invocation = command_invocation(tokens)
+    invocation = command_invocation(tokens, unwrap_runners=False)
     if invocation is None:
         return True
     executable, arguments = invocation
