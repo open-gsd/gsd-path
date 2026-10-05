@@ -188,6 +188,7 @@ See [UPDATE.md](UPDATE.md).
   `core.fsmonitor`, editors and pagers, `core.sshCommand`,
   `core.askPass`, `filter.*` clean/smudge/process, `diff.*`
   textconv/external/command, `merge.*` drivers, `core.gitProxy`,
+  `interactive.diffFilter`,
   `remote.*` uploadpack/receivepack, `gpg.program` and `gpg.*.program`, `credential.helper` and
   `credential.*.helper`, each `pager.<cmd>` key — is denied with a literal
   value as with a parameter, because git runs it during an otherwise
