@@ -189,7 +189,7 @@ See [UPDATE.md](UPDATE.md).
   `core.askPass`, `filter.*` clean/smudge/process, `diff.*`
   textconv/external/command, `merge.*` drivers, `core.gitProxy`,
   `remote.*` uploadpack/receivepack, `gpg.program` and `gpg.*.program`, `credential.helper` and
-  `credential.*.helper` — is denied with a literal
+  `credential.*.helper`, each `pager.<cmd>` key — is denied with a literal
   value as with a parameter, because git runs it during an otherwise
   read-only subcommand. A disabling form of such a key passes: the bare key,
   an empty value, or `false`. A `--config-env` form is always denied, because

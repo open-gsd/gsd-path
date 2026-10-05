@@ -259,6 +259,7 @@ GIT_EXECUTED_CONFIG_SECTIONS = {
     "remote": (".uploadpack", ".receivepack"),
     "gpg": (".program",),
     "credential": (".helper",),
+    "pager": ("",),
 }
 # Keys whose value is a path or URL git loads code through: an included file
 # can set every key above, and a rewritten URL can retarget the transport.
