@@ -12,7 +12,7 @@ import tempfile
 import textwrap
 import time
 import unittest
-from contextlib import ExitStack, contextmanager, redirect_stdout
+from contextlib import ExitStack, contextmanager, redirect_stderr, redirect_stdout
 from pathlib import Path
 from typing import Iterator
 from unittest import mock
@@ -163,6 +163,50 @@ class DispatchDriverTests(unittest.TestCase):
         self.root = Path(temporary.name) / "repo"
         self.root.mkdir()
 
+    def test_default_resource_uses_packaged_bundle_and_installed_skill_resources(self) -> None:
+        names = (
+            "references/coder.md",
+            "references/reviewer.md",
+            "templates/task.md",
+            "templates/wave-review.md",
+            "templates/wave-panel.md",
+            "templates/skeptic.md",
+        )
+        for name in names:
+            self.assertEqual(dispatch_driver.default_resource(name),
+                             (PROJECT_ROOT / "skills/gsd-path" / name).resolve())
+
+        installed_driver = PROJECT_ROOT / "skills/gsd-path-build/scripts/dispatch_driver.py"
+        with mock.patch.object(dispatch_driver, "__file__", str(installed_driver)):
+            for name in names:
+                self.assertEqual(dispatch_driver.default_resource(name),
+                                 (installed_driver.parent.parent / name).resolve())
+
+        package = self.root / "package"
+        package_driver = package / "scripts/dispatch_driver.py"
+        package_driver.parent.mkdir(parents=True)
+        package_driver.touch()
+        canonical = package / "skills/gsd-path"
+        coder = canonical / "references/coder.md"
+        coder.parent.mkdir(parents=True)
+        coder.touch()
+        with mock.patch.object(dispatch_driver, "__file__", str(package_driver)):
+            self.assertEqual(dispatch_driver.default_resource("references/coder.md"), coder.resolve())
+            self.assertIsNone(dispatch_driver.default_resource("references/reviewer.md"))
+
+    def test_require_files_preserves_explicit_override_and_rejects_missing_path(self) -> None:
+        custom = self.root / "custom.md"
+        custom.write_text("custom resource\n", encoding="utf-8")
+        parser = argparse.ArgumentParser()
+        arguments = argparse.Namespace(role_brief=custom)
+        dispatch_driver.require_files(parser, arguments, "role_brief")
+        self.assertEqual(arguments.role_brief, custom.resolve())
+
+        missing = self.root / "missing.md"
+        arguments = argparse.Namespace(role_brief=missing)
+        with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            dispatch_driver.require_files(parser, arguments, "role_brief")
+
     def head(self, root: Path) -> str:
         return run_git(root, "rev-parse", "HEAD").stdout.strip()
 
@@ -229,42 +273,50 @@ class DispatchDriverTests(unittest.TestCase):
         return json.loads(completed.stdout)
 
     def round(self, root: Path, *extra: str, mode: str = "ready", wave: int = 1,
-              **fake: str) -> dict:
+              default_resources: bool = False, **fake: str) -> dict:
+        resources = ([] if default_resources else
+                     ["--role-brief", str(ROLE_BRIEF), "--task-template", str(TASK_TEMPLATE)])
         return self.driver(
             root, "round", "--wave", str(wave), "--child-command", f"{sys.executable} {root / 'fake_coder.py'}",
-            "--role-brief", str(ROLE_BRIEF), "--task-template", str(TASK_TEMPLATE), *extra,
+            *resources, *extra,
             mode=mode, **fake,
         )
 
-    def review(self, root: Path, *extra: str, verdict: str = "pass", wave: int = 1, cycle: int = 1) -> dict:
+    def review(self, root: Path, *extra: str, verdict: str = "pass", wave: int = 1, cycle: int = 1,
+               default_resources: bool = False) -> dict:
         env = dict(os.environ, FAKE_REVIEW=verdict)
+        resources = ([] if default_resources else
+                     ["--role-brief", str(PROJECT_ROOT / "skills/gsd-path-build/references/reviewer.md"),
+                      "--template", str(PROJECT_ROOT / "skills/gsd-path-build/templates/wave-review.md")])
         completed = subprocess.run(
             [sys.executable, "-B", str(SCRIPT), "review", "--wave", str(wave), "--cycle", str(cycle),
              "--child-command", f"{sys.executable} {root / 'fake_reviewer.py'}",
-             "--role-brief", str(PROJECT_ROOT / "skills/gsd-path-build/references/reviewer.md"),
-             "--template", str(PROJECT_ROOT / "skills/gsd-path-build/templates/wave-review.md"),
-             *extra, "--repo", str(root)], capture_output=True, encoding="utf-8", errors="replace", env=env)
+             *resources, *extra, "--repo", str(root)], capture_output=True, encoding="utf-8", errors="replace", env=env)
         self.assertTrue(completed.stdout.strip(), completed.stderr)
         return json.loads(completed.stdout)
 
-    def panel(self, root: Path, *extra: str, advertised: str = "gpt-6-astra,claude-opus") -> dict:
+    def panel(self, root: Path, *extra: str, advertised: str = "gpt-6-astra,claude-opus",
+              default_resources: bool = False) -> dict:
+        resources = ([] if default_resources else
+                     ["--role-brief", str(PROJECT_ROOT / "skills/gsd-path-build/references/reviewer.md"),
+                      "--template", str(PROJECT_ROOT / "skills/gsd-path-build/templates/wave-panel.md")])
         completed = subprocess.run(
             [sys.executable, "-B", str(SCRIPT), "panel", "--wave", "1", "--cycle", "1",
              "--child-command", f"{sys.executable} {root / 'fake_panelist.py'} {{model}}",
              "--advertised", advertised, "--parent-slug", "claude-opus",
-             "--role-brief", str(PROJECT_ROOT / "skills/gsd-path-build/references/reviewer.md"),
-             "--template", str(PROJECT_ROOT / "skills/gsd-path-build/templates/wave-panel.md"),
-             *extra, "--repo", str(root)], capture_output=True, encoding="utf-8", errors="replace")
+             *resources, *extra, "--repo", str(root)], capture_output=True, encoding="utf-8", errors="replace")
         self.assertTrue(completed.stdout.strip(), completed.stderr)
         return json.loads(completed.stdout)
 
-    def skeptics(self, root: Path, *extra: str, verdict: str = "stands") -> dict:
+    def skeptics(self, root: Path, *extra: str, verdict: str = "stands",
+                 default_resources: bool = False) -> dict:
+        resources = ([] if default_resources else
+                     ["--role-brief", str(PROJECT_ROOT / "skills/gsd-path-build/references/reviewer.md"),
+                      "--template", str(PROJECT_ROOT / "skills/gsd-path-build/templates/skeptic.md")])
         return self.driver(
             root, "skeptics", "--wave", "1", "--cycle", "1",
             "--child-command", f"{sys.executable} {root / 'fake_skeptic.py'}",
-            "--role-brief", str(PROJECT_ROOT / "skills/gsd-path-build/references/reviewer.md"),
-            "--template", str(PROJECT_ROOT / "skills/gsd-path-build/templates/skeptic.md"),
-            *extra, FAKE_SKEPTIC=verdict)
+            *resources, *extra, FAKE_SKEPTIC=verdict)
 
     def set_deep_review_with_skeptics(self, root: Path) -> None:
         plan = root / ".project/plan/PLAN.md"
@@ -1171,7 +1223,7 @@ class DispatchDriverTests(unittest.TestCase):
         self.fixture(root)
         self.assertEqual(self.round(root, "--wait", "60")["status"], "done")
         head = self.head(root)
-        receipt = self.review(root, "--wait", "60")
+        receipt = self.review(root, "--wait", "60", default_resources=True)
         self.assertEqual(receipt["status"], "pass", receipt)
         self.assertEqual(receipt["depth"], "full")
         self.assertEqual(receipt["base"], head)
@@ -1182,7 +1234,7 @@ class DispatchDriverTests(unittest.TestCase):
         self.assertEqual(self.subjects(root)[0], "build: record wave 1 cycle 1 review")
         self.assertEqual(run_git(root, "status", "--porcelain").stdout, "")
         self.assertEqual(self.branches(root), ["gsd-path/M001"])
-        again = self.review(root, "--wait", "60")
+        again = self.review(root, "--wait", "60", default_resources=True)
         self.assertEqual(again["status"], "pass", again)
         self.assertIsNone(again["checkpoint"])
 
@@ -1631,7 +1683,7 @@ class DispatchDriverTests(unittest.TestCase):
         self.assertTrue(locators, review["findings"])
         self.assertEqual(self.driver(root, "fix-tasks", "--wave", "1", "--cycle", "1")["escalation"],
                          ["skeptic_groups"])
-        receipt = self.skeptics(root, "--wait", "60")
+        receipt = self.skeptics(root, "--wait", "60", default_resources=True)
         self.assertEqual(receipt["status"], "done", receipt)
         self.assertEqual({key: item["verdict"] for key, item in receipt["skeptics"].items()},
                          {locator: "stands" for locator in locators})
@@ -1678,7 +1730,7 @@ class DispatchDriverTests(unittest.TestCase):
     def test_round_enters_build_from_plan_done_and_checkpoints_the_transition(self) -> None:
         root = self.root
         self.fixture(root, state=("plan", "done"))
-        receipt = self.round(root, "--wait", "60")
+        receipt = self.round(root, "--wait", "60", default_resources=True)
         self.assertEqual(receipt["status"], "done", receipt)
         self.assertEqual(self.state(root), "build/active")
         self.assertIn("build: start milestone", self.subjects(root))
@@ -1850,7 +1902,7 @@ class DispatchDriverTests(unittest.TestCase):
         self.assertEqual(review["status"], "pass", review)
         self.assertTrue(review["panel_required"])
         self.assertIsNone(review.get("checkpoint"))
-        receipt = self.panel(root, "--wait", "60")
+        receipt = self.panel(root, "--wait", "60", default_resources=True)
         self.assertEqual(receipt["status"], "pass", receipt)
         self.assertEqual(receipt["families"]["gpt"]["slug"], "gpt-6-astra")
         self.assertTrue((root / ".project/review/wave-1.cycle1.panel.gpt.md").is_file())

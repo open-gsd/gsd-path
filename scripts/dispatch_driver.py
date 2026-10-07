@@ -2286,7 +2286,11 @@ def positive_int(value: str) -> int:
 
 
 def default_resource(name: str) -> Optional[Path]:
-    candidate = Path(__file__).resolve().parent.parent / name
+    script_root = Path(__file__).resolve().parent.parent
+    candidate = script_root / name
+    if candidate.is_file():
+        return candidate
+    candidate = script_root / "skills" / "gsd-path" / name
     return candidate if candidate.is_file() else None
 
 
