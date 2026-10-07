@@ -15,6 +15,7 @@ import hashlib
 import io
 import json
 import shlex
+import shutil
 import os
 import re
 import stat
@@ -169,6 +170,12 @@ def sidecar_root(primary: Path, kind: str, name: str, *, pin: bool = False) -> P
         return worktree_paths.worktree_path(primary, kind, name, pin=pin)
     except (ValueError, OSError) as error:
         raise IsolationError(str(error)) from error
+
+
+def release_workspace_quietly(primary: Path) -> None:
+    """Best-effort placement hygiene after a sidecar retires; never blocks landing."""
+    with contextlib.suppress(ValueError, OSError):
+        worktree_paths.release_workspace(primary)
 
 
 def validate_task_id(task_id: str) -> str:
@@ -477,6 +484,70 @@ def _same_directory(path: Path, expected: os.stat_result) -> bool:
     return stat.S_ISDIR(current.st_mode) and os.path.samestat(current, expected)
 
 
+def _long_path(absolute: str) -> str:
+    if absolute.startswith("\\\\?\\"):
+        return absolute
+    if absolute.startswith("\\\\"):
+        return "\\\\?\\UNC\\" + absolute[2:]
+    return "\\\\?\\" + absolute
+
+
+def _force_rmtree(path: Path) -> None:
+    """Delete a sidecar tree directly, tolerating read-only files and long paths."""
+    def _writable(function, target, _error):
+        os.chmod(target, stat.S_IWRITE)
+        function(target)
+
+    # The \\?\ prefix sidesteps Windows MAX_PATH on deep sidecar trees.
+    target = Path(_long_path(os.path.abspath(path))) if os.name == "nt" else path
+    try:
+        shutil.rmtree(target, onerror=_writable)
+    except OSError as error:
+        raise IsolationError(f"could not delete {path}: {error}") from error
+
+
+def _remove_worktree(primary: Path, destination: Path, force: bool) -> None:
+    """Remove a sidecar worktree, tolerating populated submodules and locked trees.
+
+    git refuses to remove worktrees whose submodules were ever initialized, and
+    forced removal can still fail deleting deep trees (Windows "Directory not
+    empty"). A dirty sidecar keeps git's refusal unless `force`, so forced
+    retries only run for a provably clean tree. The direct-delete fallback runs
+    only for git's tree-deletion failures, so any other git error leaves the
+    sidecar intact for diagnosis.
+    """
+    tree_delete_failure = ("failed to delete", "directory not empty", "permission denied")
+
+    def failure(*flags: str) -> str:
+        result = run_git(primary, "worktree", "remove", *flags, str(destination))
+        return (result.stderr or result.stdout).strip() if result.returncode else ""
+
+    detail = failure("--force") if force else failure()
+    if not detail:
+        return
+    if not force and destination.is_dir():
+        status = run_git(
+            destination, "status", "--porcelain", "--untracked-files=all"
+        )
+        if status.returncode != 0 or status.stdout.strip():
+            raise IsolationError(detail or "git worktree remove failed")
+        run_git(destination, "submodule", "deinit", "--all", "--force")
+        detail = failure("--force")
+        if not detail:
+            return
+    if destination.is_dir() and any(
+        marker in detail.lower() for marker in tree_delete_failure
+    ):
+        _force_rmtree(destination)
+        detail = failure("--force")
+    if detail and not destination.is_dir():
+        pruned = run_git(primary, "worktree", "prune")
+        if pruned.returncode == 0:
+            detail = ""
+    if detail or destination.is_dir() or destination.resolve() in _registered_worktrees(primary):
+        raise IsolationError(detail or "git worktree remove failed")
+
+
 def _cleanup_reserved_worktree(
     primary: Path,
     branch: str,
@@ -762,9 +833,7 @@ def retire_member_task(
     if destination.resolve() in registered:
         if registered[destination.resolve()] != ref:
             raise IsolationError(f"member task sidecar is on another branch: {destination}")
-        removed = run_git(checkout, "worktree", "remove", *(("--force",) if force else ()), str(destination))
-        if removed.returncode != 0:
-            raise IsolationError((removed.stderr or removed.stdout).strip() or "git worktree remove failed")
+        _remove_worktree(checkout, destination, force)
     authorization = run_git(checkout, "update-ref", "-d", member_task_authorization_ref(project, task_id))
     if authorization.returncode != 0:
         raise IsolationError((authorization.stderr or authorization.stdout).strip() or "git update-ref failed")
@@ -772,6 +841,7 @@ def retire_member_task(
         deleted = run_git(checkout, "update-ref", "-d", ref, tip.stdout.strip())
         if deleted.returncode != 0:
             raise IsolationError((deleted.stderr or deleted.stdout).strip() or "git update-ref failed")
+    release_workspace_quietly(checkout)
     return copy_rejected
 
 
@@ -1392,8 +1462,9 @@ def retire_member_verify(created: Dict[str, Dict[str, str]]) -> None:
     """Remove the member siblings of a coordinator verify sidecar; they hold no output."""
     for record in reversed(list(created.values())):
         checkout, destination, branch = _member_verify_sidecar(record)
-        git_output(checkout, "worktree", "remove", "--force", str(destination))
+        _remove_worktree(checkout, destination, True)
         git_output(checkout, "branch", "-D", branch)
+        release_workspace_quietly(checkout)
 
 
 def check_member_verify(created: Dict[str, Dict[str, str]]) -> None:
@@ -1423,6 +1494,89 @@ def clean_verify(primary: Path, worktree: Path, base: str, branch: str) -> Dict[
     git_output(worktree, "restore", "--source=HEAD", "--staged", "--worktree", "--", ".")
     removed = git_output(worktree, "clean", "-fdx", "--", ".")
     return {"worktree": str(worktree), "branch": branch, "base": expected, "removed": removed}
+
+
+def ensure_verify_sidecar(primary: Path, base: str, branch: str) -> Dict[str, object]:
+    """Return the named verify sidecar, recreating it when it is missing.
+
+    Finish needs the sidecar prepare-task created. A deleted sidecar must be
+    rebuildable from the recorded base without a clean primary: the serial
+    task's own product changes are exactly the tree finish reproduces next,
+    so this must not reuse isolate_verify's clean-tree gate.
+    """
+    primary = require_directory(primary, "primary worktree")
+    if worktree_root(primary) != primary:
+        raise IsolationError(f"primary is not its Git root: {primary}")
+    resolved_base = require_commit(primary, require_full_sha(base))
+    if not branch.startswith(VERIFY_BRANCH_PREFIX):
+        raise IsolationError("verify sidecar reproduction requires a verify branch")
+    destination = _sidecar_path_for_branch(primary, branch)
+    ref = f"refs/heads/{branch}"
+    registered = _registered_worktrees(primary)
+    if destination.is_symlink() or (destination.exists() and not destination.is_dir()):
+        raise IsolationError(f"worktree path already exists: {destination}")
+    if destination.is_dir():
+        try:
+            # A leftover empty directory (a half-deleted sidecar) clears;
+            # anything non-empty must be the sidecar itself.
+            destination.rmdir()
+        except OSError:
+            try:
+                same = (
+                    worktree_root(destination) == destination
+                    and destination.resolve() in registered
+                    and registered[destination.resolve()] == ref
+                    and common_git_dir(destination) == common_git_dir(primary)
+                )
+            except IsolationError:
+                same = False
+            if not same:
+                raise IsolationError(
+                    f"verify sidecar ownership changed: {destination}"
+                ) from None
+            if (
+                require_attached(destination) != branch
+                or current_sha(destination) != resolved_base
+            ):
+                raise IsolationError(f"verify sidecar HEAD changed: {destination}")
+            return {
+                "base": resolved_base,
+                "branch": branch,
+                "kind": "verify",
+                "mode": "sidecar",
+                "worktree": str(destination),
+            }
+    if destination.resolve() in registered:
+        cleared = run_git(primary, "worktree", "remove", str(destination))
+        if cleared.returncode != 0:
+            run_git(primary, "worktree", "prune")
+            if destination.resolve() in _registered_worktrees(primary):
+                raise IsolationError(
+                    (cleared.stderr or cleared.stdout).strip()
+                    or "could not clear stale worktree registration"
+                )
+    existing = run_git(primary, "show-ref", "--verify", "--quiet", ref)
+    if existing.returncode == 0:
+        deleted = run_git(primary, "update-ref", "-d", ref)
+        if deleted.returncode != 0:
+            raise IsolationError(
+                (deleted.stderr or deleted.stdout).strip() or "git update-ref failed"
+            )
+    create_named_worktree(primary, branch, destination, resolved_base)
+    return {
+        "base": resolved_base,
+        "branch": branch,
+        "kind": "verify",
+        "mode": "sidecar",
+        "worktree": str(destination),
+    }
+
+
+def reproduce_verify_sidecar(sidecar_path: Path, tree: str) -> None:
+    """Copy the primary's current task tree into the verify sidecar (clean_verify's inverse)."""
+    git_output(sidecar_path, "read-tree", "-u", "--reset", tree)
+    if git_output(sidecar_path, "write-tree") != tree:
+        raise IsolationError("sidecar reproduction differs from the primary task diff")
 
 
 def _split_paths(block: str) -> Set[str]:
@@ -1537,14 +1691,24 @@ def _commit_pending(
 
 
 def validate_allowed_changes(
-    repo: Path, base: str, pending: Set[str], allowed: Set[str]
+    repo: Path,
+    base: str,
+    pending: Set[str],
+    allowed: Set[str],
+    tolerated: Set[str] = frozenset(),
 ) -> None:
-    if not pending:
+    # Tolerated paths (primary bookkeeping) may stay uncommitted; the next
+    # `.project` checkpoint commits them.
+    landing = pending - tolerated
+    if not landing:
         raise IsolationError("no changes to land")
-    since_base = committed_paths_since(repo, base) | pending
+    since_base = committed_paths_since(repo, base) | landing
     unexpected = sorted(path for path in since_base if path not in allowed)
     if unexpected:
-        raise IsolationError("unexpected paths: " + ", ".join(unexpected))
+        raise IsolationError(
+            "unexpected paths: " + ", ".join(unexpected)
+            + "; landing allows only the task file and its declared files"
+        )
 def _clean_blob_oid(repo: Path, path: str, text: str, *, write: bool) -> str:
     arguments = ["hash-object"]
     if write:
@@ -1564,21 +1728,23 @@ def commit_allowed_changes(
     subject: str,
     allowed: Set[str],
     body: str,
+    tolerated: Set[str] = frozenset(),
 ) -> tuple[str, str, Dict[str, Optional[tuple[str, str]]]]:
     require_attached(repo)
     pending = uncommitted_paths(repo)
-    validate_allowed_changes(repo, base, pending, allowed)
+    validate_allowed_changes(repo, base, pending, allowed, tolerated)
+    staging = pending - tolerated
     reset = run_git(repo, "reset", "-q", "HEAD")
     if reset.returncode != 0:
         raise IsolationError("could not clear the index before landing")
-    for path in sorted(pending):
+    for path in sorted(staging):
         added = run_git(repo, "add", "-A", "--", path)
         if added.returncode != 0:
             raise IsolationError(f"could not stage {path}")
     staged = _split_paths(
         git_output(repo, "diff", "--cached", "--name-only", "--relative")
     )
-    if staged != pending:
+    if staged != staging:
         raise IsolationError("staged paths do not match the uncommitted change set")
     verified_tree = git_output(repo, "write-tree")
     verified_delta = _tree_delta(repo, base, verified_tree)
@@ -1724,6 +1890,17 @@ def activate_task(
     if task_branch is None:
         if branch.startswith(TASK_BRANCH_PREFIX):
             raise IsolationError("parallel task activation requires --task-branch")
+        live = [
+            path
+            for path, ref in _registered_worktrees(worktree).items()
+            if ref == f"refs/heads/{task_branch_name(task_id)}"
+            and path != worktree
+        ]
+        if live:
+            raise IsolationError(
+                "task has an active parallel worktree; serial activation in "
+                f"another worktree is refused (activate {live[0]} with --task-branch)"
+            )
     elif task_branch != task_branch_name(task_id) or branch != task_branch:
         raise IsolationError("task activation branch does not match the task worktree")
     normalized_task = relative_posix(task_file)
@@ -1991,7 +2168,12 @@ def _restore_rejected_commit(
 
 
 def _stamp_and_commit(
-    worktree: Path, base: str, subject: str, task_file: str, allowed: Set[str]
+    worktree: Path,
+    base: str,
+    subject: str,
+    task_file: str,
+    allowed: Set[str],
+    tolerated: Set[str] = frozenset(),
 ) -> tuple[str, Dict[str, Optional[tuple[str, str]]]]:
     task_path = worktree / task_file
     task_text, task_mode = _read_task_text(task_path)
@@ -2012,14 +2194,14 @@ def _stamp_and_commit(
     pending = uncommitted_paths(worktree)
     if stamped != task_bytes:
         pending.add(task_file)
-    validate_allowed_changes(worktree, base, pending, allowed)
+    validate_allowed_changes(worktree, base, pending, allowed, tolerated)
     original_head = current_sha(worktree)
     index_tree = git_output(worktree, "write-tree")
     try:
         _replace_regular_file(task_path, stamped, task_mode)
-        body = task_commit_body(task_file, uncommitted_paths(worktree), base)
+        body = task_commit_body(task_file, uncommitted_paths(worktree) - tolerated, base)
         commit, verified_tree, verified_delta = commit_allowed_changes(
-            worktree, base, subject, allowed, body
+            worktree, base, subject, allowed, body, tolerated
         )
         proof_error = _landing_commit_proof_error(
             worktree,
@@ -2097,6 +2279,7 @@ def land(
             subject,
             relative_posix(task_file),
             allowed,
+            BOOKKEEPING_PATHS,
         )
         return {
             "bound_branch": bound,
@@ -2391,7 +2574,7 @@ def _landing_retry_error(
     if task_file not in pending:
         return "interrupted landing does not retain the task change"
     try:
-        validate_allowed_changes(repo, base, pending, contract_paths)
+        validate_allowed_changes(repo, base, pending, contract_paths, BOOKKEEPING_PATHS)
     except IsolationError as validation_error:
         return str(validation_error)
     return None
@@ -4430,6 +4613,7 @@ def retire(
                             or f"could not delete {branch}"
                         )
                 branch_retired = True
+        release_workspace_quietly(primary)
         return {
             "bound_branch": bound,
             "branch": branch,
@@ -4463,22 +4647,13 @@ def retire(
             raise IsolationError(
                 "worktree is dirty; pass --force only from the retry-retirement path"
             )
-    remove = run_git(
-        primary,
-        "worktree",
-        "remove",
-        *(("--force",) if force else ()),
-        str(resolved_worktree),
-    )
-    if remove.returncode != 0:
-        raise IsolationError(
-            (remove.stderr or remove.stdout).strip() or "git worktree remove failed"
-        )
+    _remove_worktree(primary, resolved_worktree, force)
     deleted = run_git(primary, "branch", "-D", retire_branch)
     if deleted.returncode != 0:
         raise IsolationError(
             (deleted.stderr or deleted.stdout).strip() or f"could not delete {retire_branch}"
         )
+    release_workspace_quietly(primary)
     return {
         "bound_branch": bound,
         "branch": retire_branch,

@@ -1811,6 +1811,118 @@ Surfaces: none
                 )
             check_handoffs.validate_plan(root)
 
+    def test_plan_allows_same_wave_overlap_between_dependency_ordered_tasks(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_plan_handoff(root)
+            self.write_plan_coverage(
+                root,
+                task_rows=(
+                    "| T001 | Demo task T001 | — | src/app.py |\n"
+                    "| T002 | Demo task T002 | T001 | src/app.py |\n"
+                ),
+            )
+            self.write_coverage_task(root, "T001", "- SC1", files="src/app.py")
+            self.write_coverage_task(
+                root,
+                "T002",
+                "- SC2",
+                acceptance="1. The demo test suite is green.",
+                deps="[T001]",
+                files="src/app.py",
+            )
+
+            result = check_handoffs.validate_plan(root)
+
+            self.assertEqual(result["tasks"], 2)
+
+    def test_plan_allows_same_wave_overlap_across_a_dependency_chain(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_plan_handoff(root)
+            self.write_plan_coverage(
+                root,
+                task_rows=(
+                    "| T001 | Demo task T001 | — | src/app.py |\n"
+                    "| T002 | Demo task T002 | T001 | tests/test_app.py |\n"
+                    "| T003 | Demo task T003 | T002 | src/app.py |\n"
+                ),
+            )
+            self.write_coverage_task(root, "T001", "- SC1", files="src/app.py")
+            self.write_coverage_task(
+                root,
+                "T002",
+                "- SC2",
+                acceptance="1. The demo test suite is green.",
+                deps="[T001]",
+            )
+            self.write_coverage_task(
+                root,
+                "T003",
+                "- None",
+                deps="[T002]",
+                files="src/app.py",
+            )
+
+            result = check_handoffs.validate_plan(root)
+
+            self.assertEqual(result["tasks"], 3)
+
+    def test_plan_rejects_same_wave_overlap_without_a_dependency_path(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_plan_handoff(root)
+            self.write_plan_coverage(
+                root,
+                task_rows=(
+                    "| T001 | Demo task T001 | — | src/app.py |\n"
+                    "| T002 | Demo task T002 | T001 | tests/test_app.py |\n"
+                    "| T003 | Demo task T003 | — | src/app.py |\n"
+                ),
+            )
+            self.write_coverage_task(root, "T001", "- SC1", files="src/app.py")
+            self.write_coverage_task(
+                root,
+                "T002",
+                "- SC2",
+                acceptance="1. The demo test suite is green.",
+                deps="[T001]",
+            )
+            self.write_coverage_task(root, "T003", "- None", files="src/app.py")
+
+            with self.assertRaises(check_handoffs.HandoffError) as failure:
+                check_handoffs.validate_plan(root)
+            self.assertIn("same-wave file overlap between T001 and T003", str(failure.exception))
+
+    def test_plan_rejects_a_later_wave_dependency(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_plan_handoff(root)
+            self.write_plan_coverage(
+                root,
+                task_rows=(
+                    "| T002 | Demo task T002 | T001 | tests/test_app.py |\n"
+                    "\n## Wave 2 — coverage\n\n"
+                    "Goal: Cover the demo behavior.\n"
+                    "Review depth: full\n\n"
+                    "| Task | Title | Deps | Files |\n"
+                    "|------|-------|------|-------|\n"
+                    "| T001 | Demo task T001 | — | src/app.py |"
+                ),
+            )
+            self.write_coverage_task(root, "T001", "- SC1", wave=2)
+            self.write_coverage_task(
+                root,
+                "T002",
+                "- SC2",
+                acceptance="1. The demo test suite is green.",
+                deps="[T001]",
+            )
+
+            with self.assertRaises(check_handoffs.HandoffError) as failure:
+                check_handoffs.validate_plan(root)
+            self.assertIn("depends on later-wave T001", str(failure.exception))
+
     def test_plan_rejects_dependency_cycles(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

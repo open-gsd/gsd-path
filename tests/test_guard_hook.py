@@ -1309,6 +1309,74 @@ class GuardHookTests(unittest.TestCase):
             }
         )
 
+    def test_allows_pipelines_of_read_commands_in_archive_context(self):
+        for command in (
+            "cat NOTE.md | wc -l",
+            "cat NOTE.md | head -3 | tail -1",
+            "cat NOTE.md | grep -c x",
+        ):
+            with self.subTest(command=command):
+                self.assert_allowed(
+                    {
+                        "tool_name": "Bash",
+                        "tool_input": {
+                            "command": command,
+                            "cwd": ".project/archive/001-mvp",
+                        },
+                    }
+                )
+        for command in (
+            "cat NOTE.md | tee out.txt",
+            "python3 -",
+            "python3 - <<'EOF'\nprint(1)\nEOF",
+        ):
+            with self.subTest(command=command):
+                self.assert_denied(
+                    {
+                        "tool_name": "Bash",
+                        "tool_input": {
+                            "command": command,
+                            "cwd": ".project/archive/001-mvp",
+                        },
+                    }
+                )
+
+    def test_heredoc_body_does_not_flip_archive_context(self):
+        for command in (
+            "python3 - <<'EOF'\n# mention of .project/archive/001-mvp\nprint(1)\nEOF",
+            "bash -c 'cat <<EOF\nmention of .project/archive/001-mvp here\nEOF'",
+        ):
+            with self.subTest(command=command):
+                self.assert_allowed(self.bash(command))
+        self.assert_denied(
+            self.bash("bash -c 'echo broken > .project/archive/001-mvp/NOTE.md'")
+        )
+
+    def test_ssh_from_archive_cwd_is_denied_as_unproven_read(self):
+        status, _, error = run_guard(
+            {
+                "tool_name": "Bash",
+                "tool_input": {
+                    "command": "ssh host 'cat /etc/hosts'",
+                    "cwd": ".project/archive/001-mvp",
+                },
+            }
+        )
+        self.assertEqual(status, 2, error)
+        self.assertIn(guard_hook.ARCHIVE_UNPROVEN_READ_REASON, error)
+        self.assertNotIn(guard_hook.ARCHIVE_REASON, error)
+        status, _, error = run_guard(
+            {
+                "tool_name": "Bash",
+                "tool_input": {
+                    "command": "touch NOTE.md",
+                    "cwd": ".project/archive/001-mvp",
+                },
+            }
+        )
+        self.assertEqual(status, 2, error)
+        self.assertIn(guard_hook.ARCHIVE_REASON, error)
+
     def test_denies_ambiguous_archive_mutations(self):
         for command in (
             "rm .project/$(printf archive)/001-mvp/NOTE.md",
@@ -1509,7 +1577,6 @@ class GuardHookTests(unittest.TestCase):
                 'rm -rf .{project,unused}',
                 'rm -rf ~/x',
                 'rm -rf ~root/x',
-                'rm -rf "scratch folder"',
                 'rm -rf "scratch;other"',
                 'rm -rf ""',
                 "Remove-Item -Recurse -Force '.proj*'",
@@ -1532,6 +1599,7 @@ class GuardHookTests(unittest.TestCase):
                 "rm -rf './scratch/old-file.txt'",
                 'rm -rf scratch_123',
                 'rm -rf "scratch"',
+                'rm -rf "scratch folder"',
             )
             # Windows needs PATH (to find git) and SYSTEMROOT to start any process.
             kept = {name: os.environ[name] for name in ("PATH", "SYSTEMROOT") if os.name == "nt" and name in os.environ}
@@ -1544,6 +1612,24 @@ class GuardHookTests(unittest.TestCase):
                                 "tool_input": {"command": command},
                                 "cwd": str(repository),
                             })
+
+    def test_allows_quoted_spaces_in_destructive_paths(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            repository = Path(temporary).resolve()
+            (repository / ".project" / "archive" / "001-mvp").mkdir(parents=True)
+            (repository / "scratch folder").mkdir()
+            for command, assertion in (
+                ('rm -rf "scratch folder"', self.assert_allowed),
+                ('rm "$var/whatever"', self.assert_denied),
+                ('rm "scratch;other"', self.assert_denied),
+            ):
+                with self.subTest(command=command):
+                    assertion(
+                        {
+                            "tool_name": "Bash",
+                            "tool_input": {"command": command, "cwd": str(repository)},
+                        }
+                    )
 
     def test_destructive_commands_require_a_single_simple_segment(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -1597,7 +1683,37 @@ class GuardHookTests(unittest.TestCase):
                         })
 
     def test_denies_protected_write_after_parameter_directory_change(self):
-        self.assert_denied(self.bash("TARGET=.project; cd $TARGET; printf broken > STATE.md"))
+        # The expanded cd target is tracked, so the later write is still caught
+        # as a protected control write rather than by refusing the cd itself.
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "repo"
+            (root / ".project").mkdir(parents=True)
+            (root / ".project" / "STATE.md").write_bytes("owned\n".encode("utf-8"))
+            with (
+                mock.patch.object(guard_hook.os, "getcwd", return_value=str(root)),
+                mock.patch.object(guard_hook, "repository_root", return_value=root),
+            ):
+                self.assert_denied(
+                    self.bash("TARGET=.project; cd $TARGET; printf broken > STATE.md")
+                )
+
+    def test_allows_tracked_assignment_in_cd_target(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = shlex.quote(str(Path(temporary).resolve()))
+            self.assert_allowed(
+                self.bash(f'dir={directory} && cd "$dir" && git status')
+            )
+        self.assert_denied(self.bash('dir="a b"; cd "$dir" && git status'))
+        self.assert_denied(self.bash('cd "$unassigned" && git status'))
+
+    def test_denies_cd_to_shell_maintained_directory_variables(self):
+        for command in (
+            'cd .project/archive/001-mvp && cd "$PWD" && touch NOTE.md',
+            "cd .project/archive/001-mvp && cd / && cd $OLDPWD && touch NOTE.md",
+            'PWD=/tmp; cd .project/archive/001-mvp && cd "$PWD" && touch NOTE.md',
+        ):
+            with self.subTest(command=command):
+                self.assert_denied(self.bash(command))
 
     def test_denies_deleting_archive_ancestor_on_windows(self):
         previous = Path.cwd()
@@ -2059,6 +2175,507 @@ class GuardHookTests(unittest.TestCase):
         ):
             with self.subTest(command=command):
                 self.assert_denied(self.bash(command))
+
+    def test_allows_parameters_in_read_only_git_arguments(self):
+        for command in (
+            'git log --format="$t %H"',
+            't=abc; git log --format="$t %H"',
+            'git show "HEAD:$f"',
+            'git show "HEAD:${f}"',
+            'git log --format="%H%n%s"',
+            '# note\ngit log --format="$t %H"',
+            'x=abc; cd .project/archive/001-mvp && git log --format="%H $x"',
+            'cd .project/archive/001-mvp && git log --format="%H $x"',
+            'cd .project/archive/001-mvp && git show "HEAD:$f"',
+        ):
+            with self.subTest(command=command):
+                self.assert_allowed(self.bash(command))
+        self.assert_denied(self.bash('git commit -m "$msg"'))
+        # Deliberate fail-closed choice: a parameter outside double quotes
+        # stays denied, because its expansion word-splits and can add a write
+        # option such as --output.
+        unquoted = (
+            "git show HEAD:$f",
+            "git diff --format=$x",
+            "x='a --output=NOTE.md'; git diff --format=$x",
+            "x='c --output=.project/archive/001-mvp/NOTE.md'; git diff --format=\"a b\"$x",
+            'git diff --format="a b"$x',
+            'git diff "a b"$x',
+            'git log --format="a b"$1',
+            "git log --format='$t %H'",
+            'git log --format=$t\\ %H',
+            'git log "--format=$@ %H"',
+            'git log # "\n git diff --format=$x "',
+            # Quoting outside plain single and double quotes disables the
+            # exception for the whole command, quoted parameters included.
+            "x='c --output=.project/archive/001-mvp/NOTE.md'; "
+            "git diff --no-index --src-prefix=a$'\\'''\"'$x\"'\"\\''' /dev/null f",
+            "git log --format=a$'\\'''\"'$x\"'\"\\'''",
+            "echo $'a'; git log --format=\"$t %H\"",
+            'echo $"a"; git log --format="$t %H"',
+            'git log --format="${t:-"a"} $x %H"',
+            "# it's\ngit log --format=\"$t %H\"",
+            'git log --format="$t %H" <<< "x"',
+            # A wrapped string is parsed by a second shell after the outer
+            # one expands parameters, so its inner quotes prove nothing.
+            'read x < v.txt; eval "git diff --src-prefix=\\"a $x\\""',
+            'read x < v.txt; bash -c "git diff --src-prefix=\\"a $x\\""',
+            'read x < v.txt; sh -c "git log --format=\\"a $x\\""',
+            'eval "git status \\"a $x\\""',
+            'eval "git log --format=\\"a $1\\""',
+            "bash -c 'git log --format=\"$t %H\"'",
+            'powershell -Command git log "--format=$t %H"',
+            # Only plain $name and ${name} are single-word: zsh flags and
+            # array or positional forms split even inside double quotes.
+            *(
+                "x='c --output=.project/archive/001-mvp/NOTE.md'; "
+                f'git diff --no-index "--src-prefix=a {form}" /dev/null f'
+                for form in (
+                    "${=x}", "${(s: :)x}", "${(z)x}", "${(f)x}", "$x[@]",
+                    "$argv[@]", "${x[@]}", "${x:-b}", "$1", "$*", "$#", "$t $=x",
+                )
+            ),
+            'git log --format="a ${=x}"',
+            # One word is enough where git runs the value as a command.
+            'read x < v.txt; git ls-remote --upload-pack="$x" .',
+            'read x < v.txt; git ls-remote --upload-pack "a $x" .',
+            'read x < v.txt; git ls-remote "--exec=$x" .',
+            'read x < v.txt; git ls-remote --exec "a $x" .',
+            'read x < v.txt; git ls-remote --receive-pack="$x" .',
+            'read x < v.txt; git ls-remote --receive-pack "a $x" .',
+            'read x < v.txt; git ls-remote "ext::$x"',
+            # git accepts each unique prefix of a long option name.
+            'read x < v.txt; git ls-remote --upload-pa="a $x" .',
+            "read x < v.txt; git ls-remote --upl=$x .",
+            'read x < v.txt; git ls-remote "--upl=$x" .',
+            'read x < v.txt; git ls-remote --upload-pac "a $x" .',
+            "read x < v.txt; git ls-remote --exe=$x .",
+            'read x < v.txt; git ls-remote "--exe=a $x" .',
+            'read x < v.txt; git ls-remote "--receive-p=a $x" .',
+            'git diff "--outpu=a $f"',
+            'read x < v.txt; git -c "diff.external=$x" diff',
+            'read x < v.txt; git "-cdiff.external=$x" diff',
+            'read x < v.txt; git -c "core.fsmonitor=$x" status',
+            # A literal value is just as dangerous: git executes the
+            # configured program while the subcommand stays read-only.
+            'git -c core.fsmonitor=/tmp/fsm-hook status .project/archive',
+            'cd .project/archive/001-mvp && git -c core.fsmonitor=/tmp/fsm-hook status',
+            'git -c core.hooksPath=/tmp/hooks status',
+            'git -c core.editor=/tmp/editor.sh log -1',
+            'git -c core.sshCommand=/tmp/ssh.sh ls-remote origin',
+            'git -c core.pager=/tmp/pager.sh log',
+            'git -c diff.my.textconv=/tmp/tc.sh log',
+            'git -c filter.driver.clean=/tmp/clean.sh show HEAD:file',
+            'git -c merge.rewriter.driver=/tmp/merge.sh merge topic',
+            'git --config-env=core.fsmonitor=FSM status',
+            'git -c core.fsmonitor=true status',
+            'git --config-env=core.fsmonitor=FALSE_VALUE status',
+            # Keys that load code through a path or URL have no disabling value.
+            'git -c include.path=/tmp/cfg status',
+            'git -c includeIf.gitdir:/tmp/.path=/tmp/cfg status',
+            'git -c core.hooksPath= status',
+            'git -c remote.o.uploadpack=/tmp/h.sh ls-remote o',
+            'git -c remote.o.receivepack=/tmp/h.sh ls-remote o',
+            'git -c core.gitProxy=/tmp/h.sh ls-remote git://example.invalid/x',
+            'git -c url.x.insteadOf=y ls-remote x',
+            'git -c url.x.pushInsteadOf=y ls-remote x',
+            # The persisted form runs the program on each later plain git.
+            'git config core.fsmonitor /tmp/h.sh',
+            'git config core.fsmonitor /tmp/h.sh && git status',
+            'git config --local core.hooksPath /tmp/hooks',
+            'git config --add include.path /tmp/cfg',
+            'git config set core.fsmonitor /tmp/h.sh',
+            'git config core.fsmonitor /tmp/h.sh >/dev/null',
+            # A digit before a redirection is a real operand, and a quoted
+            # operator is a real value: both are a set.
+            'git config core.hooksPath 5 >/dev/null',
+            'git config core.hooksPath 5 >> log.txt',
+            'git config core.fsmonitor 2 >/dev/null',
+            # One token can become several git arguments, or two tokens
+            # one: only plain literal words prove the read or set form.
+            # A run of continuations joins the words on its two sides.
+            'git config core.fsmoni\\\n\\\ntor /abs/h.sh',
+            'git c\\\n\\\nonfig core.fsmonitor /abs/h.sh',
+            'git con\\\n\\\n\\\nfig core.fsmonitor /abs/h.sh',
+            'git con\\\r\nfig core.fsmonitor /abs/h.sh',
+            'git con\\\r\n\\\r\nfig core.fsmonitor /abs/h.sh',
+            # The guard checks the command that a command runner runs.
+            *(
+                f"{wrapper} git -c core.fsmonitor=/abs/h.sh status"
+                for wrapper in (
+                    "nice", "nice -n 5", "nice -n5", "nice --adjustment=5", "nohup",
+                    "timeout 5", "timeout -s KILL 5", "timeout --signal=KILL 2.5s",
+                    "sudo", "sudo -u root", "sudo -Eu root", "sudo --user root",
+                    "sudo FOO=1", "watch", "watch -n 5", "stdbuf -o0", "stdbuf -o L",
+                    "setsid", "time -p", "env nice", "nice env", "nice command",
+                    "nice nohup", "/usr/bin/nice", "sudo.exe", "nice --",
+                )
+            ),
+            # A runner option that writes or edits a file is not skipped.
+            'nice time -o .project/archive/001-mvp/N ls',
+            'env time -o .project/archive/001-mvp/N ls',
+            '/usr/bin/time -o .project/archive/001-mvp/N ls',
+            'timeout 5 time -o .project/archive/001-mvp/N ls',
+            'nice time --output=.project/archive/001-mvp/N ls',
+            'nice time --outp .project/archive/001-mvp/N ls',
+            'nice time -ao .project/archive/001-mvp/N ls',
+            'nice time -o .project/archive/001-mvp/N git status',
+            'sudo -e cat .project/archive/001-mvp/plan/PLAN.md',
+            'sudo --edit .project/archive/001-mvp/plan/PLAN.md',
+            'sudo -D .project/archive/001-mvp touch N',
+            'watch -s .project/archive/001-mvp ls',
+            'nice time -oN ls',
+            'nice time -pao N ls',
+            # A runner option word that is not literal can spell a file option.
+            'read x < v.txt; nice /usr/bin/time "-$x" ls',
+            'read x < v.txt; nice time "-$x" git status',
+            'read x < v.txt; sudo "-$x" touch N',
+            'watch --interval="$t" ls',
+            'nice time -\\o N ls',
+            'sudo -{u,e} root ls',
+            # An attached short option value is no more options, and the next
+            # word is the command.
+            'sudo -uroot git -c core.fsmonitor=/abs/h.sh status',
+            'sudo -hlocalhost git -c core.fsmonitor=/abs/h.sh status',
+            'sudo -uroot git config core.fsmonitor /abs/h.sh',
+            'sudo -Eu root git -c core.fsmonitor=/abs/h.sh status',
+            'nice -n5 git -c core.fsmonitor=/abs/h.sh status',
+            'timeout infinity git -c core.fsmonitor=/abs/h.sh status',
+            # A runner operand must be a literal word.
+            'timeout "$T" make',
+            'timeout ${T:-5} make',
+            'timeout five make',
+            'watch -n $t ls',
+            'nice -n $n git status',
+            'sudo -u $u ls',
+            'env $A=1 git status',
+            'nice $CMD',
+            'timeout .5 git -c core.fsmonitor=/abs/h.sh status',
+            'watch -q 3 git -c core.fsmonitor=/abs/h.sh status',
+            'nice --adj 5 git -c core.fsmonitor=/abs/h.sh status',
+            "nice sh -c 'git -c core.fsmonitor=/abs/h.sh status'",
+            'nice /usr/bin/git -c core.fsmonitor=/abs/h.sh status',
+            'nice git config core.fsmonitor /abs/h.sh',
+            'timeout 5 git -c $x',
+            'timeout $t git status',
+            'sudo GIT_CONFIG_COUNT=1 git status',
+            # A parameter in a global option value is unresolved with or
+            # without a visible subcommand: bash splits it into both.
+            'read x < v.txt; git -c $x',
+            'git -c $x',
+            'git --git-dir $x',
+            'git --git-dir=$x',
+            # Each global option word must be one word.
+            'git -{p,c} core.fsmonitor=/abs/h.sh status',
+            'X=/abs/h.sh git --{no-pager,config-env=core.fsmonitor=X} status',
+            'git --no-pager{,} -c core.fsmonitor=/abs/h.sh status',
+            'git --no-\\\npager {config,core.fsmonitor,/abs/h.sh}',
+            # git runs a pager.<cmd> value that is no boolean as the pager.
+            'git -c "pager.status=touch .project/archive/001-mvp/N" status',
+            'git -c pager.log=/abs/h.sh log',
+            'git -c PAGER.LOG=/abs/h.sh log',
+            'git -c pager.log=cat log',
+            'git config pager.log /abs/h.sh',
+            # git runs a credential helper when a remote asks for credentials.
+            'git -c credential.helper=/abs/h.sh ls-remote http://127.0.0.1:8080/x.git',
+            'git -c credential.https://x.helper=/abs/h.sh ls-remote origin',
+            'git config credential.helper /abs/h.sh',
+            # The value word of a git global option must be one word.
+            'git -c {core.fsmonitor=/abs/h.sh,status}',
+            'git -c{core.fsmonitor=/abs/h.sh,status}',
+            'git -c {a.b=c,config,core.fsmonitor,/abs/h.sh}',
+            'git -C {.,config,core.fsmonitor,/abs/h.sh}',
+            'git -C{.,config,core.fsmonitor,/abs/h.sh}',
+            'git --git-dir {.git,config,core.fsmonitor,/abs/h.sh}',
+            'git --git-dir={.git,config}',
+            'git --work-tree {.,config,core.fsmonitor,/abs/h.sh}',
+            'git --namespace {a,config,core.fsmonitor,/abs/h.sh}',
+            "git -c 'a.b=c'{,config,core.fsmonitor,/abs/h.sh}",
+            'git -c user.name=A\\ B log -1',
+            'git -C sub\\ dir status',
+            # The subcommand word must be one literal word too.
+            'git {config,core.fsmonitor,/abs/h.sh}',
+            'git con\\\nfig core.fsmonitor /abs/h.sh',
+            'git --no-pager {config,core.fsmonitor,/abs/h.sh}',
+            "git con''fig core.fsmonitor /abs/h.sh",
+            # Comment text is no argument: a mode word in it proves nothing.
+            'git config core.fsmonitor /tmp/h.sh # --get',
+            'git config core.fsmonitor /tmp/h.sh #--get',
+            'git config --get core.fsmonitor # note',
+            'git config {core.hooksPath,/tmp/hooks}',
+            'git config core.hooksPath{,/tmp/hooks}',
+            'git config {core.fsmonitor,/abs/h.sh}',
+            'git config {--add,core.fsmonitor,/abs/h.sh}',
+            'git config core.fsmoni\\\ntor /tmp/h.sh',
+            'git config "core.fsmoni\\\ntor" /tmp/h.sh',
+            'git config core.hooksPath\\ x',
+            'git config user.name Jeremy\\ M',
+            "git config --get core.fsmoni''tor",
+            'git config --get-regexp core.*',
+            'git config --get core.[f]smonitor',
+            'git config user.{name,email}',
+            'git config branch.{1..3}.merge',
+            # zsh reads one ASCII digit as a file descriptor; a longer or
+            # non-ASCII digit word is the value.
+            'git config core.hooksPath 12>/dev/null',
+            'git config core.hooksPath 12>/dev/null && git commit -m x',
+            'git config core.hooksPath \u0663>/dev/null',
+            'git config core.hooksPath \u00b2>/dev/null',
+            'git config core.hooksPath 5 2>/dev/null',
+            "git config core.hooksPath '2'>/dev/null",
+            'git config core.hooksPath \\> x',
+            'git config include.path 5 > /dev/null && git status',
+            "git config core.hooksPath '>' x",
+            # Signature verification runs the configured program in a read.
+            'git -c gpg.program=/tmp/h.sh log --show-signature',
+            'git -c gpg.ssh.program=/tmp/h.sh log --show-signature',
+            'git -c gpg.x509.program=/tmp/h.sh log --show-signature',
+            'git -c log.showSignature=true -c gpg.program=/tmp/h.sh log',
+            'git config gpg.program /tmp/h.sh',
+            'git config >/dev/null core.fsmonitor /tmp/h.sh',
+            'git config --replace-all core.fsmonitor /tmp/h.sh',
+            'git config --type path core.fsmonitor /tmp/h.sh',
+            # A mode word that git reads as a value or operand is no read mode.
+            'git config --file --get core.fsmonitor /tmp/h.sh',
+            'git config --global set core.fsmonitor /tmp/h.sh',
+            'git config core.fsmonitor /tmp/h.sh -- --get',
+            # A section rename can carry a key into an executed section, and
+            # --edit launches the editor.
+            'git config foo.fsmonitor /tmp/h.sh && git config --rename-section foo core',
+            'git config --rename-section foo core',
+            'git config --rename-sec foo core',
+            'git config rename-section foo core',
+            'git config --remove-section foo',
+            'git config remove-section foo',
+            'git config --edit',
+            'git config --global -e',
+            'git config edit',
+            'git log --format="$x[@] %H"',
+            "git diff --output=$f",
+            # Unbraced zsh expansion flags match no parameter syntax, so an
+            # argument carrying one must still enter the parameter proof;
+            # zsh splits $=x exactly like the braced forms above.
+            *(
+                f'git log --format="{flag}"'
+                for flag in ("$=x", "$~x", "$^x", "$+x")
+            ),
+            'x="a --output=.project/archive/001-mvp/NOTE.md"; git log --format="$=x"',
+            'x="a --output=NOTE.md"; cd .project/archive/001-mvp && git log --format="$=x"',
+            # A backslash-escaped marker executes as literal text while the
+            # token keeps the bare marker, so the pair is never provable.
+            'git log --format="\\$t %H"',
+            't=hi; git log --format="\\$t %H"',
+            # The -C directory operand takes the same zsh flag check: zsh
+            # splits the value, which can carry a subcommand and --output.
+            *(
+                prefix + form
+                for prefix in ("", "x='. diff --output=.project/archive/001-mvp/N.md'; ")
+                for form in ("git -C $=x", "git -C$=x", 'git -C "$=x"')
+            ),
+        )
+        for command in unquoted:
+            for prefix in ("", "cd .project/archive/001-mvp && "):
+                with self.subTest(command=prefix + command):
+                    self.assert_denied(self.bash(prefix + command))
+        for command in (
+            "git diff --output=$f",
+            "git diff --output $f",
+            'git diff "--output=$f x"',
+            "git diff $o",
+            "git log -$o",
+            "git show HEAD:$f",
+            "git diff --format=$x",
+            "x='a --output=NOTE.md'; git diff --format=$x",
+            "cd .project/archive/001-mvp && x='a --output=NOTE.md'; git diff --format=$x",
+            "x='a --output=.project/archive/001-mvp/NOTE.md'; git diff --format=$x",
+            'x=$(cat /tmp/v); git diff --format=$x',
+            'x=$(cat /tmp/v); git log --format="$x %H"',
+            'git log --format="$(cat /tmp/v) %H"',
+        ):
+            with self.subTest(command=command):
+                self.assert_denied(self.bash(command))
+
+    def test_denies_executed_config_keys_but_allows_plain_settings(self):
+        # Only -c keys whose value git runs as a program are denied; ordinary
+        # settings keep working (see the literal-value cases in the test above).
+        for command in (
+            "git -c user.name=Test log -1",
+            "git -c user.name='A B' log -1",
+            'git -c "user.name=A B" log -1',
+            "git -c user.name='{a,b} *' log -1",
+            'git -C . status',
+            "git --no-pager log -1",
+            "nice make",
+            "sudo systemctl status",
+            "git status",
+            "command git status",
+            "env git status",
+            "echo git",
+            "grep -r git README.md",
+            # A command runner denies nothing itself: its command is checked.
+            "nice make",
+            "timeout 5 npm test",
+            "timeout .5 make",
+            "sudo -E -u root ls",
+            'sudo -u "$USER" ls',
+            "sudo -upostgres psql",
+            "sudo -u postgres psql",
+            "sudo -udeploy ls",
+            "sudo -ujenkins make",
+            "sudo -uDeploy ls",
+            "sudo -h",
+            "nice -n",
+            "timeout infinity make",
+            "timeout 1e3 make",
+            "nohup npm run build",
+            "time -p make",
+            "nice time -p make",
+            "sudo --preserve-env=PATH make install",
+            "stdbuf -oL -eL python3 x.py",
+            "watch -n 2 ls",
+            "nice git status",
+            "nice -n 5 git status",
+            "watch git status",
+            "command nice git status",
+            "timeout 5 git log -1",
+            "sudo apt install git",
+            "sudo apt-get install -y git",
+            "timeout 60 brew install git",
+            "sudo -u git psql",
+            "nice grep -r git README.md",
+            "sudo ls vendor/git",
+            "nohup npm run git",
+            "watch -n 5 which git",
+            "time -p grep git README.md",
+            "time -p make git",
+            # A program that only names git runs no git the guard could check.
+            "which git",
+            "type git",
+            "hash git",
+            "man git",
+            "whereis git",
+            "pgrep git",
+            "brew install git",
+            "apt-get install -y git",
+            "gh pr create --title git",
+            "gh repo clone cli/cli git",
+            "pytest tests/git",
+            "make git",
+            "time git status",
+            "git -c credential.helper= ls-remote origin",
+            "git -c pager.status=false status",
+            "git -c pager.log=false log -1",
+            "git -c pager.diff=FALSE diff",
+            "git -c pager.log= log -1",
+            "git config pager.log",
+            "git -c core.pagerx=1 status",
+            "git config --get credential.helper",
+            'git -C "." status',
+            "git --git-dir=.git status",
+            "git -c core.autocrlf=false status",
+            'git -c "commit.gpgsign=false" log -1',
+            # Disabling forms of a program key run no program.
+            "git -c core.fsmonitor=false status",
+            "git -c core.fsmonitor=FALSE status",
+            "git -c core.fsmonitor status",
+            "git -c filter.lfs.smudge= -c filter.lfs.process= checkout main",
+            # Reading or unsetting a persisted key writes no program.
+            "git config --unset core.fsmonitor",
+            "git config unset core.fsmonitor",
+            "git config --get core.fsmonitor",
+            "git config core.fsmonitor",
+            # A redirection after a bare read is no value.
+            "git config core.fsmonitor 2>/dev/null",
+            "git config core.hooksPath 2>/dev/null || true",
+            "git config --global core.editor 2>/dev/null",
+            "git config gpg.program 2>/dev/null",
+            "git config core.fsmonitor >/dev/null",
+            "git config core.fsmonitor > out.txt",
+            "git config core.fsmonitor < /dev/null",
+            "git config core.fsmonitor >/dev/null 2>&1",
+            "git config --get core.fsmonitor 2>/dev/null",
+            "git config --get core.hooksPath 2>/dev/null || true",
+            "git config --get-all core.hooksPath 2>&1",
+            "git config get core.editor 2>/dev/null",
+            "git config --get core.fsmonitor --show-origin",
+            "git config --get-urlmatch core.fsmonitor https://x",
+            "git config --global --get core.editor",
+            "git config --unset core.fsmonitor 2>/dev/null",
+            "git config --unset-all core.fsmonitor",
+            "git config unset core.fsmonitor 2>/dev/null",
+            "git config --list",
+            "git config -l > config.txt",
+            "git config list",
+            "git config user.name Test",
+            # Plain quoted words are literal, with the characters in them.
+            'git config user.name "Test User"',
+            "git config user.name 'Test {a,b} *'",
+            "git config --get 'core.fsmonitor'",
+            'git config --get "core.hooksPath" 2>/dev/null',
+            'git config user.name ""',
+            "git config --get-regexp '^user\\.'",
+            "git config \\\n  --get core.fsmonitor",
+            # A joined word in another command leaves this one literal.
+            "echo a\\\nb; git config user.name x",
+            "git config user.name '#x'",
+            "git \\\n  config --get user.name",
+            'git "config" --get user.name',
+        ):
+            with self.subTest(command=command):
+                self.assert_allowed(self.bash(command))
+
+    def test_allows_literal_dollar_in_git_arguments(self):
+        # A $ that starts no expansion (a regex anchor, a price) is inert text.
+        for command in (
+            "git log --grep='fix$'",
+            "git grep -n 'foo$'",
+            "git log -G'foo$' --oneline",
+            "git commit -m 'costs 5$'",
+            "git branch --list 'feat$'",
+            "git config --get-regexp 'user\\..*$'",
+            "git log --format='%H$'",
+        ):
+            with self.subTest(command=command):
+                self.assert_allowed(self.bash(command))
+        # In archive cwd only the archive read commands pass; grep, commit,
+        # branch and config are denied there with or without a $.
+        for command in (
+            "git log --grep='fix$'",
+            "git log -G'foo$' --oneline",
+            "git log --format='%H$'",
+        ):
+            command = "cd .project/archive/001-mvp && " + command
+            with self.subTest(command=command):
+                self.assert_allowed(self.bash(command))
+        for command in (
+            "git grep -n foo",
+            "git commit -m costs",
+            "git branch --list feat",
+            "git config --get-regexp user",
+        ):
+            command = "cd .project/archive/001-mvp && " + command
+            with self.subTest(command=command):
+                self.assert_denied(self.bash(command))
+
+    def test_denies_abbreviated_git_write_options_in_archive_context(self):
+        for option in (
+            "--ext-diff", "--ext-d", "--textconv", "--textc", "--tex", "--te",
+            "--output=NOTE.md",
+        ):
+            with self.subTest(option=option):
+                self.assert_denied(
+                    self.bash(f"cd .project/archive/001-mvp && git diff {option}")
+                )
+        for command in (
+            "cd .project/archive/001-mvp && git diff --stat",
+            "cd .project/archive/001-mvp && git diff --text",
+            "cd .project/archive/001-mvp && git log --text -1",
+            "cd .project/archive/001-mvp && git show --text HEAD",
+            "git diff --text .project/archive/001-mvp/plan/PLAN.md",
+            "git log --text -- .project/archive/001-mvp/plan/PLAN.md",
+        ):
+            with self.subTest(command=command):
+                self.assert_allowed(self.bash(command))
 
     def test_assignment_state_is_segment_local_and_last_value_wins(self):
         self.assert_denied(

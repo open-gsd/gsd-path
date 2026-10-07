@@ -255,6 +255,7 @@ def check_member(
     coordinator_name: str,
     checkout: Path,
     recorded_remote: Optional[str] = None,
+    refuse_reserved_refs: bool = True,
 ) -> str:
     """Refuse a checkout that cannot join; return its origin URL."""
     if checkout.is_symlink() or not checkout.is_dir():
@@ -294,13 +295,14 @@ def check_member(
             raise MembersError(f"member STATE.md is unreadable: {error}") from error
         if state.milestone is not None and (state.phase, state.status) != ("shipped", "done"):
             raise MembersError(f"member has an active milestone: {state.milestone}")
-    prefixes = member_ref_prefixes(coordinator_name) + tuple(
-        "refs/remotes/origin/" + branch.format(coordinator_name) for branch in MEMBER_BRANCH_FORMATS
-    )
-    refs = _git(checkout, "for-each-ref", "--format=%(refname)").splitlines()
-    colliding = [ref for ref in refs if ref.startswith(prefixes)]
-    if colliding:
-        raise MembersError("member refs collide with coordinator names: " + ", ".join(colliding))
+    if refuse_reserved_refs:
+        prefixes = member_ref_prefixes(coordinator_name) + tuple(
+            "refs/remotes/origin/" + branch.format(coordinator_name) for branch in MEMBER_BRANCH_FORMATS
+        )
+        refs = _git(checkout, "for-each-ref", "--format=%(refname)").splitlines()
+        colliding = [ref for ref in refs if ref.startswith(prefixes)]
+        if colliding:
+            raise MembersError("member refs collide with coordinator names: " + ", ".join(colliding))
     return remote
 
 
@@ -620,7 +622,7 @@ def validate_members(repo: Path) -> list[dict[str, str]]:
     members = read_members(root)
     for member in members:
         checkout = Path(member["checkout"])
-        check_member(root, state.project, checkout, member["remote"])
+        check_member(root, state.project, checkout, member["remote"], refuse_reserved_refs=False)
         try:
             role = member_role(checkout)
         except MembersError as error:
@@ -639,7 +641,7 @@ def repair_members(repo: Path) -> list[dict[str, str]]:
     members = read_members(root)
     for member in members:
         checkout = Path(member["checkout"])
-        check_member(root, state.project, checkout, member["remote"])
+        check_member(root, state.project, checkout, member["remote"], refuse_reserved_refs=False)
         _refuse_foreign_marker(checkout.resolve(), root, state.project, member["name"])
     for member in members:
         checkout = Path(member["checkout"]).resolve()

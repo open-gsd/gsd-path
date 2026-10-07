@@ -1,5 +1,7 @@
+import hashlib
 import json
 import os
+import shutil
 import sys
 import tempfile
 import unittest
@@ -9,6 +11,8 @@ from types import SimpleNamespace
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "daemon"))
+
+SOURCE = Path(__file__).resolve().parents[1]
 
 from gsd_daemon import probe
 from gsd_daemon.model import ProjectStatus
@@ -101,6 +105,18 @@ print(json.dumps({
 }))
 """
 
+LAUNCHER_RUNTIME_STUB = """import json
+print(json.dumps({
+    "schema": "gsd-path/status/v1",
+    "state": {"project": "demo", "milestone": "demo-ms", "phase": "build",
+              "status": "active", "branch": "gsd-path/M001"},
+    "route": {},
+    "git": {"branch": "gsd-path/M001", "head": "def456", "dirty": False},
+    "pending_answers": [{"id": "Q001"}],
+    "next_skill": "gsd-path-ship",
+}))
+"""
+
 
 def make_task(project_dir: Path, task_id: str, slug: str, wave: int, status: str,
               title: str = None, files=("src/a.py",)) -> Path:
@@ -145,6 +161,31 @@ def make_project(root: Path, state: str = STATE_FULL, with_next: bool = True) ->
         (project_dir / "next").mkdir(exist_ok=True)
         (project_dir / "next" / "STATE.md").write_bytes(NEXT_STATE.encode("utf-8"))
     return root
+
+
+def make_declared_runtime(root: Path, home: Path) -> None:
+    """Pinned-runtime install shape: shared store + declaration + real launcher.
+
+    The store's pipeline_state is a payload stub; everything between it and
+    the daemon (runtime.json resolution, manifest validation, the subprocess
+    hop) is the real installed launcher from scripts/status_runtime.py.
+    """
+    stub = LAUNCHER_RUNTIME_STUB.encode("utf-8")
+    manifest = {"version": "test",
+                "files": {"pipeline_state.py": hashlib.sha256(stub).hexdigest()}}
+    digest = hashlib.sha256(
+        json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+    runtime = home / ".gsd-path" / "runtimes" / digest
+    runtime.mkdir(parents=True)
+    (runtime / "pipeline_state.py").write_bytes(stub)
+    (runtime / "manifest.json").write_bytes(
+        (json.dumps(manifest, indent=2, sort_keys=True) + "\n").encode("utf-8"))
+    gsd = root / ".gsd-path"
+    gsd.mkdir(parents=True, exist_ok=True)
+    (gsd / "runtime.json").write_bytes(
+        (json.dumps({"schema": "gsd-path/runtime/v1", "version": "test", "digest": digest},
+                    sort_keys=True) + "\n").encode("utf-8"))
+    shutil.copyfile(SOURCE / "scripts" / "status_runtime.py", gsd / "status_runtime.py")
 
 
 class ParseStateTests(unittest.TestCase):
@@ -456,6 +497,58 @@ class ProbeProjectTests(unittest.TestCase):
         status = probe.probe_project(self.root)
         restored = ProjectStatus.from_dict(json.loads(json.dumps(status.to_dict(), sort_keys=True)))
         self.assertEqual(restored.to_dict(), status.to_dict())
+
+
+class DeclaredRuntimeTests(unittest.TestCase):
+    """The project launcher is the probe's first hop for pinned-runtime projects."""
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        base = Path(self.tmp.name).resolve()
+        self.root = base / "demo"
+        self.home = base / "home"
+        self.home.mkdir()
+        make_project(self.root)
+        environment = mock.patch.dict(os.environ, {"HOME": str(self.home),
+                                                   "USERPROFILE": str(self.home)})
+        environment.start()
+        self.addCleanup(environment.stop)
+
+    def test_launcher_payload_enriches_projection(self) -> None:
+        make_declared_runtime(self.root, self.home)
+        status = probe.probe_project(self.root)
+        self.assertEqual(status.status_source, "runtime")
+        self.assertEqual(status.workflow, {"state": "active", "label": "In build"})
+        self.assertEqual(status.project, "demo")
+        self.assertEqual(status.branch, "gsd-path/M001")
+        self.assertEqual(status.git["head"], "def456")
+        self.assertEqual(status.next_skill, "gsd-path-ship")
+
+    def test_unavailable_runtime_store_fails_soft(self) -> None:
+        make_declared_runtime(self.root, self.home)
+        shutil.rmtree(self.home / ".gsd-path" / "runtimes")
+        status = probe.probe_project(self.root)
+        self.assertEqual(status.status_source, "parse-only")
+        self.assertEqual(status.workflow["state"], "unverified")
+        self.assertEqual(status.health, "amber")
+
+    def test_failing_launcher_does_not_run_legacy_runtime(self) -> None:
+        gsd = self.root / ".gsd-path"
+        (gsd / "runtime").mkdir(parents=True)
+        (gsd / "runtime" / "pipeline_state.py").write_bytes(RUNTIME_STUB.encode("utf-8"))
+        (gsd / "status_runtime.py").write_bytes("raise SystemExit(2)\n".encode("utf-8"))
+        status = probe.probe_project(self.root)
+        self.assertEqual(status.status_source, "parse-only")
+        self.assertEqual(status.workflow["state"], "unverified")
+
+    def test_failing_launcher_without_legacy_fails_soft(self) -> None:
+        gsd = self.root / ".gsd-path"
+        gsd.mkdir(parents=True)
+        (gsd / "status_runtime.py").write_bytes("raise SystemExit(2)\n".encode("utf-8"))
+        status = probe.probe_project(self.root)
+        self.assertEqual(status.status_source, "parse-only")
+        self.assertEqual(status.workflow["state"], "unverified")
 
 
 WAVE_REVIEW = """# Review — wave 1, cycle 1

@@ -146,7 +146,8 @@ See [UPDATE.md](UPDATE.md).
   source trees containing directory symlinks are denied; use literal directory
   paths and copy directory links separately
 - shell commands that reference the archive unless the whole command is a
-  recognized standalone read or a single-command invocation of the bundled
+  recognized standalone read, a pipeline in which each segment is a recognized
+  read, or a single-command invocation of the bundled
   `pipeline_state.py` / `archive_milestone.py` helper, resolved to a regular file
   inside the verified runtime selected by `.gsd-path/runtime.json` (legacy projects use `.gsd-path/runtime/` beside `guard_hook.py`
   in the repository layout), using exactly `python` or `python3` with optional
@@ -162,11 +163,93 @@ See [UPDATE.md](UPDATE.md).
 - deletion or move commands outside a single simple segment, including command
   chains, pipes, newlines, grouping, directory changes, and command substitution
 - deletion or move commands with any argument outside the literal-path character
-  set: ASCII letters, digits, `.`, `_`, `-`, and `/` (plus a drive prefix and
-  backslashes on Windows). One matching pair of surrounding quotes is allowed;
-  spaces, parameters, wildcards, braces, and tilde paths are denied even when
-  quoted. This also applies to `find -delete` and supported destructive aliases
+  set: ASCII letters, digits, `.`, `_`, `-`, `/`, and ASCII spaces inside one
+  shell unit (plus a drive prefix and backslashes on Windows). One matching
+  pair of surrounding quotes is allowed; parameters, wildcards, braces, and
+  tilde paths are denied even when quoted. This also applies to
+  `find -delete` and supported destructive aliases
 - destructive Git commands nested in supported shell and command wrappers
+- Git arguments that contain a shell parameter. Only plain `$name` and
+  `${name}` expansions pass, and only inside plain double-quoted spans of
+  read-only subcommands (`status`, `log`, `diff`, `show`, and the other
+  inspection commands) that the guard parses directly, such as
+  `git log --format="$t %H"` or `git show "HEAD:$f"`, because only double
+  quoting prevents word-splitting into options. A parameter outside double
+  quotes (`$x`, `HEAD:$f`, `--format=$x`, `"a b"$x`) is denied because its
+  expansion can split into a write option such as `--output`. Every other
+  parameter form (`${=x}`, `${(z)x}`, `${x:-y}`, `$x[@]`, `$1`, `$@`, `$*`,
+  `$#`, and the unbraced zsh flags `$=x`, `$~x`, `$^x`, `$+x`) is denied even
+  inside double quotes, because it can expand to more than one word; a
+  backslash-escaped marker (`"\$t"`) is likewise denied, because the shell
+  executes the literal text while the argument still shows the bare marker.
+  The same four zsh flags are denied in a `git -C` directory. A literal `$`
+  that starts no expansion (a regex anchor such as `--grep='fix$'`) passes.
+  A `-c`/`--config` key whose value git executes as a program —
+  `core.fsmonitor`, editors and pagers, `core.sshCommand`,
+  `core.askPass`, `filter.*` clean/smudge/process, `diff.*`
+  textconv/external/command, `merge.*` drivers, `core.gitProxy`,
+  `interactive.diffFilter`,
+  `remote.*` uploadpack/receivepack, `gpg.program` and `gpg.*.program`, `credential.helper` and
+  `credential.*.helper`, each `pager.<cmd>` key — is denied with a literal
+  value as with a parameter, because git runs it during an otherwise
+  read-only subcommand. A disabling form of such a key passes: the bare key,
+  an empty value, or `false`. A `--config-env` form is always denied, because
+  its value comes from the environment. A key through which git loads code —
+  `core.hooksPath`, `include.path`, `includeIf.*.path`, `url.*.insteadOf`,
+  `url.*.pushInsteadOf` — is denied with each value. `git config` is denied
+  when it sets one of these keys; to read or unset the key stays allowed.
+  A redirection at the end of a read (`git config <key> 2>/dev/null`) is not
+  a value. A separate digit before a redirection (`5 >/dev/null`), a word of two
+  or more digits (`12>/dev/null`) and a quoted operator are values, so they
+  make a set.
+  Each `git config` argument must be a plain literal word, bare or in one
+  pair of quotes: a backslash, mixed quotes, an unquoted glob (`*`, `?`, `[`),
+  an unquoted brace list or range (`{a,b}`, `{1..3}`) or a line continuation
+  in the word or one that joins it to the next word is denied, because the shell can make a different
+  argument list from it.
+  An unquoted word that starts with `#` among the `git config` arguments
+  is denied, because the shell reads it and the words after it as a comment.
+  The git subcommand word must be a plain literal word in each git command:
+  `git {config,...}` and a subcommand split by a line continuation are denied.
+  A program that runs the command in its arguments (`nice`, `nohup`,
+  `timeout`, `sudo`, `watch`, `time`, `env`, `stdbuf`, `setsid`) is
+  unwrapped: the guard skips the options of the program and checks the
+  command that it runs, so `nice git -c core.fsmonitor=/abs/h.sh status` is
+  denied by the git rule and `sudo apt install git` passes. A runner
+  option that writes, edits or enters a file or directory by itself is
+  denied (`time -o`, `sudo -e`, `sudo -D`, `sudo -R`, `watch -s`). The
+  `timeout` duration and the `watch` interval must be literal numbers, and
+  each runner option word must be a literal word; only a separate option
+  value can be a parameter in double quotes (`sudo -u "$USER" ls`). A short
+  option word is read as getopt reads it, so the attached value in
+  `sudo -upostgres psql` is not taken as more options. With an archive working directory a command runner is not
+  unwrapped and is denied as an unknown program. Other command
+  runners (`doas`, `ionice`, `noglob`) are not unwrapped, and `watch` with
+  the command in one quoted word is not checked.
+  Each git global option word, and the value word of `-c`, `-C`,
+  `--git-dir`, `--work-tree`, `--namespace` and `--config-env`, must resolve
+  to one word: a backslash, an unquoted glob or an unquoted brace list or
+  range in it is denied (`git -c {core.fsmonitor=/abs/h.sh,status}`,
+  `git -{p,c} core.fsmonitor=/abs/h.sh status`). A parameter in such a value
+  is denied also when no subcommand follows (`git -c $x`). Plain quoted parts
+  pass (`git -c user.name='A B' log`).
+  `git config` section renames and removals (`--rename-section`,
+  `--remove-section`) and `--edit` are denied, because a rename can move a
+  key into an executed section and `--edit` starts an editor.
+  Command substitution output, a parameter that starts an
+  argument, and a parameter in the value of an option that git writes to or
+  runs as a command (`--output`, `--upload-pack`, `--receive-pack`, `--exec`,
+  `-c`, `--config-env`, or a `<transport>::<address>` remote) are denied in
+  every form. These option names match by prefix (`--upload-pa`, `--exe`),
+  because git accepts abbreviated long options; in archive context the same
+  prefix match applies to `--output`, `--ext-diff`, and `--textconv`. The
+  exact read-only option `--text` is not an abbreviation and stays allowed. Any
+  other quoting construct in the command (`$'...'`, `$"..."`, quotes inside `${...}`, quotes or
+  backslashes in a comment, here-documents and here-strings) disables the
+  exception, so every parameter in a git argument of that command is denied.
+  The exception applies only to commands the guard parses directly, never
+  inside wrapped shell strings (`eval`, `bash -c`, `sh -c`, PowerShell or
+  `cmd` command strings), where the outer shell expands the parameter first
 - archive glob/brace expansions and execution-capable read options such as
   `rg --pre`
 - direct write, edit, and patch tool calls targeting `.project/STATE.md`,

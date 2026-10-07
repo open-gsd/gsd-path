@@ -1386,6 +1386,20 @@ def _task_deps(task_text: str, task_id: str) -> List[str]:
     return _inline_ids(rendered, "T", f"{task_id} deps")
 
 
+def _dependency_reachable(graph: Dict[str, List[str]], start: str, target: str) -> bool:
+    seen: Set[str] = set()
+    pending = list(graph[start])
+    while pending:
+        task_id = pending.pop()
+        if task_id in seen:
+            continue
+        if task_id == target:
+            return True
+        seen.add(task_id)
+        pending.extend(graph[task_id])
+    return False
+
+
 def _canonical_repo_path(value: str, label: str) -> str:
     cleaned = value.strip().strip("`\"'")
     path = PurePosixPath(cleaned)
@@ -1507,6 +1521,12 @@ def _validate_task_graph(
                 if (
                     _task_scalar(tasks[left], left, "status") == "done"
                     and _task_scalar(tasks[right], right, "status") == "done"
+                ):
+                    continue
+                # Dependency-ordered tasks serialize safely; only unordered
+                # same-wave overlap races on a shared file.
+                if _dependency_reachable(graph, left, right) or _dependency_reachable(
+                    graph, right, left
                 ):
                     continue
                 raise HandoffError(

@@ -27,6 +27,15 @@ RUNTIME_FILES = (
 )
 GUARDS = ("guard_hook.py", "git_guard.py")
 
+# Optional owner-recorded provenance on .gsd-path/runtime.json declarations,
+# e.g. {"source": "<npm version or package id>", "patch_ref": "<commit sha
+# or patch list>", "note": "<owner label>"}. Provenance is display/audit
+# metadata ONLY: it never joins the hashed manifest input (manifest_digest
+# covers exactly {"version", "files"}), never acts as an alternate accepted
+# digest, and never bypasses or weakens validate_runtime. A declaration
+# without provenance is stock and stays exactly as valid as one with it.
+PROVENANCE_KEYS = ("source", "patch_ref", "note")
+
 # Access denied and sharing violation: on Windows a scanner or indexer that
 # briefly opens a freshly written file blocks renaming the directory holding it.
 _WINDOWS_BUSY_ERRORS = (5, 32)
@@ -220,7 +229,7 @@ def recover_migration(project):
     journal.unlink()
 
 
-def operate(source, project, action, *, dry_run=False):
+def operate(source, project, action, *, dry_run=False, provenance=None):
     if project.is_symlink() or (project / ".gsd-path").is_symlink():
         raise ValueError("unsafe project runtime directory")
     if action == "restore":
@@ -228,8 +237,17 @@ def operate(source, project, action, *, dry_run=False):
         publish(source, expected=pin, dry_run=dry_run, repair=True)
         return pin
     if action == "upgrade":
-        status_runtime.declaration(project)
+        previous = status_runtime.declaration(project)
         pin = publish(source, dry_run=dry_run)
+        # Explicit provenance replaces the recorded object. Without new flags,
+        # an existing entry carries forward only while the pinned digest is
+        # unchanged — a different source drops stale hotfix metadata instead
+        # of stamping it onto bytes it no longer describes. Metadata only —
+        # it never changes the pinned digest.
+        if provenance is None and previous.get("digest") == pin["digest"]:
+            provenance = previous.get("provenance")
+        if provenance:
+            pin = {**pin, "provenance": provenance}
         if not dry_run:
             launcher = project / ".gsd-path/status_runtime.py"
             # Exact bytes: read_text() would turn CRLF into LF, leaving the

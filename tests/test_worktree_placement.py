@@ -62,6 +62,26 @@ class WorktreePlacementTests(unittest.TestCase):
             isolation.retire(self.repo, Path(task["worktree"]), task["task_branch"], False)
         self.assertEqual(test_isolation.git(self.repo, "rev-parse", "HEAD"), self.base)
 
+    def test_release_workspace_lets_a_new_root_apply_after_retirement(self):
+        task = isolation.isolate_task(self.repo, self.base, "T001", 2)
+        path = Path(task["worktree"])
+        kept = isolation.isolate_task(self.repo, self.base, "T002", 2)
+        isolation.retire(self.repo, path, task["task_branch"], False)
+
+        # A remaining sidecar keeps the pin.
+        moved = self.root / "moved"
+        with mock.patch.dict(os.environ, {"GSD_PATH_WORKTREE_ROOT": str(moved)}):
+            self.assertEqual(
+                isolation.sidecar_root(self.repo, "task", "T003"),
+                Path(kept["worktree"]).parent / "T003",
+            )
+        isolation.retire(self.repo, Path(kept["worktree"]), kept["task_branch"], False)
+
+        # Once the last sidecar retires, the new root applies again.
+        with mock.patch.dict(os.environ, {"GSD_PATH_WORKTREE_ROOT": str(moved)}):
+            fresh = isolation.isolate_task(self.repo, self.base, "T003", 2)
+        self.assertTrue(Path(fresh["worktree"]).is_relative_to(moved), fresh["worktree"])
+
     def test_rejects_managed_root_in_own_primary_or_linked_checkout(self):
         linked = self.root / "linked"
         test_isolation.git(self.repo, "worktree", "add", "-b", "other", str(linked), self.base)

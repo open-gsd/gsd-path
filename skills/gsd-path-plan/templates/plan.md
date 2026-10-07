@@ -47,8 +47,8 @@ Goal: <the end-to-end slice that runs>
 Review depth: <full | deep | verify-only>
 
 <!-- More waves: features by dependency, then polish. Rules:
-     - deps only in earlier waves, or same wave with no file overlap
-     - no two same-wave tasks share files
+     - deps only in earlier waves or the same wave
+     - same-wave tasks share files only when one transitively depends on the other
      - nothing from INTENT.md scope-out appears anywhere -->
 
 ## Surface contract

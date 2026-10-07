@@ -247,8 +247,10 @@ resolved Git common directory and primary path, so separate clones and
 primary folders do not share a location.
 
 The first allocation pins the workspace location in
-`<git-common-dir>/gsd-path/workspaces/<workspace-id>.json`. Later environment
-changes do not move it. Existing sibling worktrees remain at their original
+`<git-common-dir>/gsd-path/workspaces/<workspace-id>.json`. Environment
+changes do not move it while a linked worktree remains. When a sidecar is
+retired and no linked worktree remains, Path removes the pin, and the next
+allocation reads `GSD_PATH_WORKTREE_ROOT` again. Existing sibling worktrees remain at their original
 paths and retain the same recovery and cleanup checks. These folders contain
 active work and evidence; they are not a disposable cache. Relocation needs
 a separate migration; do not edit placement records or move folders manually.
@@ -396,6 +398,14 @@ Skill/plugin updates and `--hooks-refresh` retain the selected runtime. Use
 the supplied package's runtime and its compatible status launcher. Review those
 configuration changes before committing them. Existing versions remain available
 for other projects and branches.
+
+To record where a patched runtime came from, add `--runtime-provenance-source`,
+`--runtime-provenance-patch`, or `--runtime-provenance-note` to
+`--runtime-upgrade`. The values are written to the `provenance` object
+(`source`, `patch_ref`, `note`) in `.gsd-path/runtime.json`. Without a patch
+value, a source root that is a Git checkout records its `HEAD` commit. A later
+upgrade without these flags keeps the object only when the digest is unchanged.
+Provenance is a record only; it does not change the digest or runtime validation.
 
 A new machine needs the selected runtime installed before status and guards can
 run. `gsd-path --runtime-restore --project /absolute/project --source-root

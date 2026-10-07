@@ -121,6 +121,10 @@ ARCHIVE_REASON = (
     "committed GSD Path archives under .project/archive/ are read-only; "
     "only the bundled pipeline helpers may write there during a ship transaction"
 )
+ARCHIVE_UNPROVEN_READ_REASON = (
+    "commands run in archive context must be provably read-only; only "
+    "recognized read commands and the bundled pipeline helpers may run there"
+)
 DESTRUCTIVE_SHAPE_REASON = (
     "destructive commands must run alone with literal paths; split compound, "
     "substituted, or expanded destructive commands into single commands"
@@ -234,6 +238,147 @@ CLOSED_LISTING_GIT_OPTIONS = {
     "symbolic-ref": frozenset({"-q", "--quiet", "--short"}),
 }
 GIT_READ_WRITE_OPTIONS = frozenset({"--output", "--ext-diff", "--textconv"})
+# Options whose value git writes to or runs as a command: one unknown word is
+# already enough, so a parameter in or after them is never accepted.
+GIT_PARAMETER_DENIED_OPTIONS = GIT_READ_WRITE_OPTIONS | {
+    "--upload-pack", "--receive-pack", "--exec", "-c", "--config-env",
+}
+
+
+# -c/--config keys whose value git executes as a program. A literal value is
+# as dangerous as a parameter here: git -c core.fsmonitor=<path> status runs
+# the configured program while the subcommand stays nominally read-only.
+GIT_EXECUTED_CONFIG_KEYS = frozenset({
+    "core.fsmonitor", "core.editor", "sequence.editor", "core.sshcommand",
+    "core.askpass", "core.pager", "core.gitproxy", "interactive.difffilter",
+})
+GIT_EXECUTED_CONFIG_SECTIONS = {
+    "filter": (".clean", ".smudge", ".process", ".command"),
+    "diff": (".command", ".textconv", ".external"),
+    "merge": (".driver",),
+    "remote": (".uploadpack", ".receivepack"),
+    "gpg": (".program",),
+    "credential": (".helper",),
+    "pager": ("",),
+}
+# Keys whose value is a path or URL git loads code through: an included file
+# can set every key above, and a rewritten URL can retarget the transport.
+# No value of these is a disabling form.
+GIT_LOADED_CONFIG_KEYS = frozenset({"core.hookspath", "include.path"})
+GIT_LOADED_CONFIG_SECTIONS = {
+    "includeif": (".path",),
+    "url": (".insteadof", ".pushinsteadof"),
+}
+GIT_CONFIG_DISABLING_VALUES = frozenset({"", "false"})
+
+
+def config_key_in(key, keys, sections):
+    if key in keys:
+        return True
+    section, _, remainder = key.partition(".")
+    return bool(remainder) and key.endswith(tuple(sections.get(section, ())))
+
+
+def loaded_config_key(key):
+    """Whether a config key's value is a path or URL git loads code through."""
+    return config_key_in(key, GIT_LOADED_CONFIG_KEYS, GIT_LOADED_CONFIG_SECTIONS)
+
+
+def executed_config_key(key):
+    """Whether a config key's value is a program git runs or code it loads."""
+    return loaded_config_key(key) or config_key_in(
+        key, GIT_EXECUTED_CONFIG_KEYS, GIT_EXECUTED_CONFIG_SECTIONS
+    )
+
+
+# Real read-only git options that are a strict prefix of a denied option name.
+GIT_SAFE_PREFIX_OPTIONS = frozenset({"--text"})
+
+
+def git_option_in(token, options):
+    """Whether a token names one of the options, by full name or any long-option prefix.
+
+    git accepts each unique prefix of a long option; matching every prefix is
+    stricter than git and so only fails closed. A prefix that is itself the
+    exact name of a read-only option is that option, not an abbreviation.
+    """
+    name = token.split("=", 1)[0]
+    if name in GIT_SAFE_PREFIX_OPTIONS and name not in options:
+        return False
+    if name.startswith("--") and len(name) > 2:
+        return any(option.startswith(name) for option in options)
+    return name in options
+GIT_CONFIG_READ_MODES = frozenset({
+    "--get", "--get-all", "--get-regexp", "--get-urlmatch", "--get-color",
+    "--get-colorbool", "-l", "--list", "--unset", "--unset-all",
+})
+GIT_CONFIG_READ_SUBCOMMANDS = frozenset({"get", "unset", "list"})
+GIT_CONFIG_DENIED_MODES = frozenset({"--rename-section", "--remove-section", "--edit"})
+GIT_CONFIG_DENIED_SUBCOMMANDS = frozenset({"rename-section", "remove-section", "edit"})
+GIT_CONFIG_VALUE_OPTIONS = frozenset({
+    "--file", "--blob", "--type", "--default", "--comment", "--value", "--url",
+})
+GIT_CONFIG_EDIT_SHORT_OPTION = re.compile(r"-[A-Za-z]*e[A-Za-z]*")
+# An unquoted word the shell can turn into several arguments: a glob, or a
+# brace list or range.
+PLAIN_QUOTED_SEGMENT = re.compile(r"'[^']*'|\"[^\"]*\"")
+ANSI_QUOTE_START = re.compile(r"\$['\"]")
+GIT_CONFIG_EXPANDING_WORD = re.compile(r"[*?\[]|\{.*(?:,|\.\.)")
+
+
+def denied_git_config_argument(arguments):
+    """The git config argument that persists or runs a program git executes.
+
+    A section rename can carry a key into an executed section and --edit runs
+    the editor, so both are denied outright. Otherwise only a set denies: an
+    executed key with a value operand after it and no read or unset mode.
+    Only a trailing redirection is dropped: the operator, its target and a
+    file descriptor digit written against it. A separate digit (5 >file) and a
+    quoted operator are operands.
+    """
+    arguments = list(arguments)
+    while (
+        len(arguments) >= 2
+        and getattr(arguments[-2], "redirection", False)
+        and not arguments[-2].isdigit()
+    ):
+        del arguments[-2:]
+        if (
+            arguments
+            and getattr(arguments[-1], "redirection", False)
+            and arguments[-1].isdigit()
+        ):
+            del arguments[-1]
+    separator = arguments.index("--") if "--" in arguments else len(arguments)
+    options = arguments[:separator]
+    for token in options:
+        if (
+            git_option_in(token, GIT_CONFIG_DENIED_MODES)
+            or GIT_CONFIG_EDIT_SHORT_OPTION.fullmatch(token)
+            or token.casefold() in GIT_CONFIG_DENIED_SUBCOMMANDS
+        ):
+            return token
+    if options[:1] and options[0].casefold() in GIT_CONFIG_READ_SUBCOMMANDS:
+        return None
+    for position, token in enumerate(options):
+        # A mode word that is the value of the option before it is no mode.
+        if token in GIT_CONFIG_READ_MODES and not (
+            position
+            and (
+                options[position - 1] == "-f"
+                or git_option_in(options[position - 1], GIT_CONFIG_VALUE_OPTIONS)
+            )
+        ):
+            return None
+    operands = [
+        token for token in options if not token.startswith("-")
+    ] + arguments[separator + 1:]
+    for token in operands[:-1]:
+        if executed_config_key(token.casefold()):
+            return token
+    return None
+
+
 ARCHIVE_READ_EXECUTION_OPTIONS = {"rg": frozenset({"--pre"})}
 AMBIGUOUS_SHELL_SYNTAX = re.compile(r"[\r\n|;&<>`]|\$\(|@\(")
 SUBSTITUTION_PLACEHOLDER = "COMMAND_SUBSTITUTION_"
@@ -248,9 +393,12 @@ SHELL_PARAMETER_SYNTAX = re.compile(
 NAMED_SHELL_PARAMETER_SYNTAX = re.compile(
     r"\$(?:([A-Za-z_][A-Za-z0-9_]*)|\{([A-Za-z_][A-Za-z0-9_]*)\})"
 )
+ZSH_EXPANSION_FLAG_SYNTAX = re.compile(r"\$[=~^+]")
 CMD_PARAMETER_SYNTAX = re.compile(
     r"%([A-Za-z_][A-Za-z0-9_]*)%|!([A-Za-z_][A-Za-z0-9_]*)!"
 )
+# The shell reassigns these on every cd, so a tracked value is stale.
+SHELL_DIRECTORY_VARIABLES = frozenset({"PWD", "OLDPWD"})
 DIRECTORY_CHANGE_COMMANDS = frozenset(
     {"cd", "chdir", "pushd", "set-location", "sl"}
 )
@@ -390,6 +538,43 @@ SED_SAFE_OPTIONS = frozenset(
     }
 )
 FIND_EXECUTION_ACTIONS = frozenset({"-exec", "-execdir", "-ok", "-okdir"})
+# Programs that run the command in their arguments, with the options of each
+# that take a separate value. The guard checks the command they run.
+EXEC_PREFIX_VALUE_OPTIONS = {
+    "nice": frozenset({"-n", "--adjustment"}),
+    "nohup": frozenset(),
+    "setsid": frozenset(),
+    "stdbuf": frozenset({"-i", "-o", "-e", "--input", "--output", "--error"}),
+    "sudo": frozenset({
+        "-u", "-g", "-h", "-p", "-C", "-T", "-U", "-r", "-t",
+        "--user", "--group", "--host", "--prompt", "--close-from",
+        "--command-timeout", "--other-user", "--role", "--type",
+    }),
+    "time": frozenset({"-f", "--format"}),
+    "timeout": frozenset({"-s", "-k", "--signal", "--kill-after"}),
+    "watch": frozenset({"-n", "-q", "--interval", "--equexit"}),
+}
+# Runner options that write, edit or enter a file or directory by themselves.
+EXEC_PREFIX_FILE_OPTIONS = {
+    "sudo": frozenset({"-e", "-D", "-R", "--edit", "--chdir", "--chroot"}),
+    "time": frozenset({"-o", "--output"}),
+    "watch": frozenset({"-s", "--shotsdir"}),
+}
+# The short option letters of each runner that take no value.
+EXEC_PREFIX_FLAG_LETTERS = {
+    "nice": "",
+    "nohup": "",
+    "setsid": "cfw",
+    "stdbuf": "",
+    "sudo": "AbBEHiKklnNPSsVv",
+    "time": "ahlpqvV",
+    "timeout": "fpv",
+    "watch": "bcCdegprtwx",
+}
+EXEC_PREFIX_INTERVAL_OPTIONS = frozenset({"-n", "--interval"})
+RUNNER_DURATION = re.compile(
+    r"(?:(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?|inf(?:inity)?)[smhd]?", re.IGNORECASE
+)
 SHELL_CONTROL_WORDS = frozenset(
     {
         "!",
@@ -1176,10 +1361,10 @@ def directory_change_target(arguments):
     return operands[-1]
 
 
-def segment_directories(tokens, working_directories):
+def segment_directories(tokens, working_directories, contexts=None):
     """Yield each command segment with the working directories in effect for it."""
     current_directories = list(working_directories)
-    for segment in command_segments(tokens):
+    for position, segment in enumerate(command_segments(tokens)):
         yield segment, current_directories
         invocation = command_invocation(segment)
         if invocation is None:
@@ -1192,16 +1377,31 @@ def segment_directories(tokens, working_directories):
         if command not in DIRECTORY_CHANGE_COMMANDS:
             continue
         target = directory_change_target(arguments)
-        if SHELL_PARAMETER_SYNTAX.search(target):
+        tracked = {}
+        if contexts is not None and position < len(contexts):
+            tracked = {
+                name: value
+                for name, value in contexts[position].items()
+                if name not in SHELL_DIRECTORY_VARIABLES
+            }
+        expanded = expand_environment_parameters(target, tracked, tracked_only=True)
+        if SHELL_PARAMETER_SYNTAX.search(expanded) or CMD_PARAMETER_SYNTAX.search(expanded):
             raise ValueError(
                 f"cd target {target} cannot be resolved by the guard; "
                 "run that command first and cd to the literal result"
             )
-        if is_absolute_path(target):
-            current_directories = [target]
+        if (
+            (SHELL_PARAMETER_SYNTAX.search(target) or CMD_PARAMETER_SYNTAX.search(target))
+            and any(character.isspace() or character in "*?[]" for character in expanded)
+        ):
+            raise ValueError(
+                f"cd target {target} may split or glob; pass a literal path"
+            )
+        if is_absolute_path(expanded):
+            current_directories = [expanded]
         else:
             bases = current_directories or ["."]
-            current_directories = [f"{base}/{target}" for base in bases]
+            current_directories = [f"{base}/{expanded}" for base in bases]
 
 
 def command_can_destroy_files(invocation):
@@ -1217,9 +1417,11 @@ def command_can_destroy_files(invocation):
 def literal_path(operand):
     if len(operand) >= 2 and operand[0] in "\"'" and operand[-1] == operand[0]:
         operand = operand[1:-1]
-    pattern = r"[A-Za-z0-9._/-]+"
+    # A space is safe here: the operand is one shlex unit, so it cannot carry a
+    # second word; injection-relevant characters stay excluded.
+    pattern = r"[A-Za-z0-9._/ -]+"
     if os.name == "nt":
-        pattern = r"(?:[A-Za-z]:(?=[/\\]))?[A-Za-z0-9._/\\-]+"
+        pattern = r"(?:[A-Za-z]:(?=[/\\]))?[A-Za-z0-9._/\\ -]+"
     return operand if re.fullmatch(pattern, operand) is not None else None
 
 
@@ -1235,13 +1437,24 @@ def literal_destructive_operand(operand):
 def segment_references_archive(segment, directories, assignments=None):
     invocation = command_invocation(segment)
     ancestors = command_can_destroy_files(invocation)
-    operands = [expand_environment_parameters(token, assignments) for token in segment]
+    # A here-document body survives tokenization only inside a wrapped payload
+    # (bash -c '...'), where it is data, not commands; keep its text from
+    # flipping the segment into archive context.
+    def searchable(token):
+        return strip_heredoc_bodies(token) if "\n" in token else token
+
+    operands = [
+        expand_environment_parameters(searchable(token), assignments)
+        for token in segment
+    ]
     if ancestors:
         resolved = command_invocation(operands)
         operands = [literal_destructive_operand(operand) for operand in resolved[1]]
     if any(path_in_archive(operand, directories, ancestors) for operand in operands):
         return True
-    return unresolved_archive_expansion(" ".join(segment), assignments)
+    return unresolved_archive_expansion(
+        " ".join(searchable(token) for token in segment), assignments
+    )
 
 
 def copy_destinations(arguments, directories, assignments=None):
@@ -1588,20 +1801,22 @@ def protected_shell_write_reason(tokens, working_directories):
     return None
 
 
-def environment_parameter_value(match, assignments):
+def environment_parameter_value(match, assignments, tracked_only=False):
     name = match.group(1) or match.group(2)
     if name.startswith(SUBSTITUTION_PLACEHOLDER):
         return match.group(0)  # command substitution output is never resolved
     if name in assignments:
         return assignments[name]
+    if tracked_only:
+        return match.group(0)
     return os.environ.get(name, match.group(0))
 
 
-def expand_environment_parameters(command, assignments=None):
+def expand_environment_parameters(command, assignments=None, tracked_only=False):
     values = assignments or {}
 
     def substitute(match):
-        return environment_parameter_value(match, values)
+        return environment_parameter_value(match, values, tracked_only)
 
     expanded = NAMED_SHELL_PARAMETER_SYNTAX.sub(substitute, command)
     return CMD_PARAMETER_SYNTAX.sub(substitute, expanded)
@@ -1701,7 +1916,7 @@ def shell_assignment_contexts(tokens, initial=None):
 def shell_segment_contexts(tokens, working_directories, initial=None):
     """Yield each segment with its working directory and prior shell variables."""
     contexts, _ = shell_assignment_contexts(tokens, initial)
-    segments = list(segment_directories(tokens, working_directories))
+    segments = list(segment_directories(tokens, working_directories, contexts))
     if len(segments) != len(contexts):
         raise ValueError("shell command segments cannot be aligned")
     for (segment, directories), assignments in zip(segments, contexts):
@@ -1992,14 +2207,222 @@ def decode_patch_path(raw_path, strip_prefix):
     return path
 
 
-def shell_tokens(command):
-    command = strip_heredoc_bodies(LINE_CONTINUATION.sub(r"\1 ", command))
+PARAMETER_MARKERS = frozenset("$%!")
+
+
+class ShellToken(str):
+    """A token that keeps, per parameter marker character, whether double quotes enclosed it.
+
+    `redirection` is true for an unquoted redirection operator and for one
+    ASCII file descriptor digit written against one (the 2 of 2>file, not of
+    2 >file). zsh passes a longer or non-ASCII digit word on as an argument.
+    `literal` is "bare" for a word written with no quote or escape, "quoted"
+    for a word inside one pair of plain quotes, "mixed" for plain quoted and
+    unquoted parts where no unquoted part can expand, and None when the shell
+    may build the word in another way (escapes, an expanding unquoted part, a
+    line continuation in the word or one that joins it to the next word).
+    """
+
+    double_quoted = ()
+    redirection = False
+    literal = None
+
+
+def double_quoted_markers(command):
+    """Return, per parameter marker in order, whether plain double quotes enclose it.
+
+    None means the command uses quoting outside the plain constructs this scan
+    models (plain single quotes, plain double quotes, unquoted text), so no
+    marker in it can be proven quoted.
+    """
+    flags = []
+    quote = None
+    comment = False
+    braces = 0
+    previous = " "
+    index = 0
+    while index < len(command):
+        character = command[index]
+        following = command[index + 1 : index + 2]
+        if comment:
+            if character in "\r\n":
+                comment = False
+            elif character in "'\"\\`":
+                return None
+        elif quote == "'":
+            if character == "'":
+                quote = None
+        elif character == "\\":
+            if following and following in PARAMETER_MARKERS:
+                # The shell executes the escaped marker as literal text; the
+                # token keeps the bare marker, so the pair is never provable.
+                flags.append(False)
+            previous = character
+            index += 2
+            continue
+        elif character == "`" or (character == "$" and following == "("):
+            return None
+        elif character == "$" and following == "{":
+            braces += 1
+        elif character == "}" and braces:
+            braces -= 1
+        elif character in "'\"" and braces:
+            return None
+        elif character == '"':
+            quote = None if quote else '"'
+        elif quote is None:
+            if character == "'":
+                quote = "'"
+            elif character == "$" and following and following in "'\"":
+                return None
+            elif character == "<" and following == "<":
+                return None
+            elif character == "#" and previous in " \t\r\n;&|()<>":
+                comment = True
+        if character in PARAMETER_MARKERS:
+            flags.append(quote == '"' and not comment)
+        previous = character
+        index += 1
+    return flags if quote is None and not braces else None
+
+
+def zsh_expansion_flag(text):
+    """Whether the text holds an unbraced zsh expansion flag ($=x, $~x, $^x, $+x).
+
+    These match no parameter syntax, so without this check they never enter
+    the parameter proof at all — while zsh word-splits them exactly like the
+    forms the proof denies. Any other unmatched $ is inert literal text.
+    """
+    return ZSH_EXPANSION_FLAG_SYNTAX.search(text)
+
+
+def parameters_double_quoted(token):
+    """Whether every parameter in the token expands inside double quotes to one word.
+
+    Only plain $name and ${name} qualify: flags, operators, subscripts,
+    positional and special parameters can split even inside double quotes.
+    A backslash-escaped marker stays one flag short of proven: the shell
+    executes the literal text while the guard's token still shows the bare
+    marker, so nothing about its expansion is provable.
+    """
+    flags = getattr(token, "double_quoted", ())
+    positions = [
+        index for index, character in enumerate(token) if character in PARAMETER_MARKERS
+    ]
+    if len(flags) != len(positions):
+        return False
+    quoted = dict(zip(positions, flags))
+    plain = {
+        match.start(): match.end() for match in NAMED_SHELL_PARAMETER_SYNTAX.finditer(token)
+    }
+    if any(
+        character == "$" and index not in plain for index, character in enumerate(token)
+    ) or any(token[end : end + 1] == "[" for end in plain.values()):
+        return False
+    return all(
+        quoted[match.start()] and quoted.get(match.end() - 1, True)
+        for syntax in (SHELL_PARAMETER_SYNTAX, CMD_PARAMETER_SYNTAX)
+        for match in syntax.finditer(token)
+    )
+
+
+def shell_tokens(command, direct=True):
+    """Tokenize a command; `direct` is False for a string that a second shell parses.
+
+    Only a directly parsed command keeps quote flags: an outer shell expands
+    parameters before the inner parse, so inner quotes prove nothing.
+    """
+    breaks = set()
+    if LINE_CONTINUATION.search(command):
+        mark = next(
+            character for character in map(chr, range(0xE000, 0xF900))
+            if character not in command
+        )
+        marked = strip_heredoc_bodies(
+            LINE_CONTINUATION.sub(lambda match: match.group(1) + mark, command)
+        )
+        command = strip_heredoc_bodies(LINE_CONTINUATION.sub(r"\1 ", command))
+        breaks = (
+            {index for index, character in enumerate(marked) if character == mark}
+            if marked.replace(mark, " ") == command
+            else None
+        )
+    else:
+        command = strip_heredoc_bodies(command)
+    joins = set()
+    for index in breaks or ():
+        left, right = index - 1, index + 1
+        while left >= 0 and marked[left] == mark:
+            left -= 1
+        while right < len(marked) and marked[right] == mark:
+            right += 1
+        if left >= 0 and marked[left].strip() and marked[right:right + 1].strip():
+            joins.add(index)
     lexer = shlex.shlex(command, posix=True, punctuation_chars="|;&()<>\n\r")
     lexer.whitespace = " \t"
     lexer.whitespace_split = True
     lexer.commenters = ""
+    tokens = []
+    previous_end = 0
     try:
-        tokens = list(lexer)
+        for token in lexer:
+            end = lexer.instream.tell() - len(lexer._pushback_chars)
+            if command[end - 1:end] in (" ", "\t"):
+                end -= 1
+            word_start = previous_end
+            while word_start < end and command[word_start] in " \t":
+                word_start += 1
+            previous_end = end
+            word = command[word_start:end]
+            literal = None
+            if (
+                breaks is not None
+                and "\\" not in word
+                and not ANSI_QUOTE_START.search(word)
+                and breaks.isdisjoint(range(word_start, end))
+                and end not in joins
+                and word_start - 1 not in joins
+                and PLAIN_QUOTED_SEGMENT.sub(lambda match: match.group(0)[1:-1], word) == token
+            ):
+                unquoted = PLAIN_QUOTED_SEGMENT.sub("", word)
+                if (
+                    "'" not in unquoted
+                    and '"' not in unquoted
+                    and not GIT_CONFIG_EXPANDING_WORD.search(unquoted)
+                ):
+                    literal = "mixed"
+            for quote in ("", "'", '"'):
+                start = end - len(token) - 2 * len(quote)
+                if (
+                    breaks is not None
+                    and start >= 0
+                    and command[start:end] == quote + token + quote
+                    and (start == 0 or command[start - 1] in " \t|;&()<>\n\r")
+                    and breaks.isdisjoint(range(start, end))
+                    and end not in joins
+                    and start - 1 not in joins
+                ):
+                    literal = "quoted" if quote else "bare"
+                    break
+            start = end - len(token)
+            before = command[start - 1:start] if start > 0 else ""
+            redirection = command[start:end] == token and (
+                (
+                    set(token) <= SHELL_WRITE_REDIRECTION_CHARS
+                    and ("<" in token or ">" in token)
+                    and before != "\\"
+                )
+                or (
+                    len(token) == 1
+                    and token in "0123456789"
+                    and command[end:end + 1] in ("<", ">")
+                    and (not before or before in " \t|;&()<>\n\r")
+                )
+            )
+            token = ShellToken(token)
+            token.redirection = redirection
+            token.literal = literal
+            tokens.append(token)
     except ValueError as error:
         raise ValueError(
             f"shell command cannot be tokenized ({error}); balance the quotes "
@@ -2007,7 +2430,20 @@ def shell_tokens(command):
         ) from None
     if not tokens:
         raise ValueError("shell command is empty")
-    return tokens
+    flags = double_quoted_markers(command) if direct else None
+    if flags is None or len(flags) != sum(
+        character in PARAMETER_MARKERS for token in tokens for character in token
+    ):
+        return tokens
+    marked = []
+    for token in tokens:
+        count = sum(character in PARAMETER_MARKERS for character in token)
+        redirection, literal = token.redirection, token.literal
+        token = ShellToken(token)
+        token.redirection, token.literal = redirection, literal
+        token.double_quoted, flags = tuple(flags[:count]), flags[count:]
+        marked.append(token)
+    return marked
 
 
 def command_segments(tokens):
@@ -2067,56 +2503,163 @@ def xargs_command(arguments):
 
 
 def require_read_command(wrapper, wrapped):
-    if wrapped and not archive_command_is_read_only(" ".join(wrapped), wrapped, True):
+    segments = list(command_segments(wrapped))
+    if wrapped and (
+        not segments
+        or not all(
+            archive_command_is_read_only(shlex.join(segment), segment, True)
+            for segment in segments
+        )
+    ):
         raise ValueError(
             f"{wrapper} runs {wrapped[0]} on operands the guard cannot check; "
             f"only read commands may follow {wrapper}, or pass the paths as literals"
         )
 
 
-def command_invocation(segment):
+def runner_value_option(prefix, token):
+    """The option in a runner option word whose value is the next word, if any.
+
+    Raises for an option that writes, edits or enters a file or directory. A
+    long option matches by each prefix, as getopt accepts it. A short word is
+    read as getopt reads it: flag letters, then the first value option letter,
+    whose value is the rest of the word or, with no rest, the next word.
+    """
+    value_options = EXEC_PREFIX_VALUE_OPTIONS[prefix]
+    file_options = EXEC_PREFIX_FILE_OPTIONS.get(prefix, frozenset())
+    denial = ValueError(
+        f"{prefix} {token} writes, edits or enters a file or directory that the "
+        "guard cannot check; run the command without this option and redirect "
+        "its output instead"
+    )
+    if token.startswith("--"):
+        name = token.split("=", 1)[0]
+        if any(option.startswith(name) for option in file_options):
+            raise denial
+        option = next((option for option in value_options if option.startswith(name)), None)
+        return option if "=" not in token else None
+    for position, letter in enumerate(token[1:], start=1):
+        option = f"-{letter}"
+        if option in file_options:
+            raise denial
+        if option in value_options:
+            return option if position == len(token) - 1 else None
+        if letter not in EXEC_PREFIX_FLAG_LETTERS[prefix]:
+            return None
+    return None
+
+
+def nonliteral_runner_option(token):
+    literal = getattr(token, "literal", "bare")
+    return (
+        SHELL_PARAMETER_SYNTAX.search(token)
+        or CMD_PARAMETER_SYNTAX.search(token)
+        or zsh_expansion_flag(token)
+        or literal is None
+        or (literal == "bare" and GIT_CONFIG_EXPANDING_WORD.search(token))
+    )
+
+
+def unresolved_runner_word(token):
+    return (
+        SHELL_PARAMETER_SYNTAX.search(token)
+        or CMD_PARAMETER_SYNTAX.search(token)
+        or zsh_expansion_flag(token)
+    ) and not parameters_double_quoted(token)
+
+
+def command_invocation(segment, unwrap_runners=True):
+    """`unwrap_runners` is False where a command runner itself must be judged."""
     index = 0
-    while index < len(segment) and SHELL_ASSIGNMENT_PATTERN.match(segment[index]):
-        validate_shell_assignment(segment[index])
+    # The shell word `time` is already removed; its only option can remain.
+    while unwrap_runners and index < len(segment) and segment[index] == "-p":
         index += 1
-    if index >= len(segment):
-        return None
-    executable = segment[index].replace("\\", "/").rsplit("/", 1)[-1].casefold()
-    if executable == "env":
-        index += 1
-        while index < len(segment):
-            token = segment[index]
-            if token == "--":
-                index += 1
-                break
-            if SHELL_ASSIGNMENT_PATTERN.match(token):
-                validate_shell_assignment(token)
-                index += 1
-                continue
-            option = token.split("=", 1)[0]
-            if option in ENV_OPTIONS_WITHOUT_VALUES:
-                index += 1
-                continue
-            if option in ENV_OPTIONS_WITH_VALUES:
-                if option in {"-C", "--chdir"}:
+    while True:
+        while index < len(segment) and SHELL_ASSIGNMENT_PATTERN.match(segment[index]):
+            validate_shell_assignment(segment[index])
+            index += 1
+        if index >= len(segment):
+            return None
+        executable = segment[index].replace("\\", "/").rsplit("/", 1)[-1].casefold()
+        prefix = executable.removesuffix(".exe")
+        if executable == "env":
+            index += 1
+            while index < len(segment):
+                token = segment[index]
+                if token == "--":
+                    index += 1
+                    break
+                if SHELL_ASSIGNMENT_PATTERN.match(token):
+                    validate_shell_assignment(token)
+                    index += 1
+                    continue
+                option = token.split("=", 1)[0]
+                if option in ENV_OPTIONS_WITHOUT_VALUES:
+                    index += 1
+                    continue
+                if option in ENV_OPTIONS_WITH_VALUES:
+                    if option in {"-C", "--chdir"}:
+                        raise ValueError(
+                            f"env {option} changes the working directory the guard "
+                            "tracks; use cd with a literal path instead"
+                        )
+                    index += 1
+                    if "=" not in token:
+                        if index >= len(segment):
+                            raise ValueError(f"env {option} lacks a value")
+                        index += 1
+                    continue
+                if token.startswith("-"):
                     raise ValueError(
-                        f"env {option} changes the working directory the guard "
-                        "tracks; use cd with a literal path instead"
+                        f"env {token} cannot be validated; use env NAME=VALUE <command>"
+                    )
+                if SHELL_PARAMETER_SYNTAX.search(token) or zsh_expansion_flag(token):
+                    raise ValueError(
+                        f"env word {token} cannot be resolved by the guard; env "
+                        "assignments must be literal NAME=VALUE words and the "
+                        "program a literal name"
+                    )
+                break
+        elif unwrap_runners and prefix in EXEC_PREFIX_VALUE_OPTIONS:
+            index += 1
+            while index < len(segment):
+                token = segment[index]
+                if token == "--":
+                    index += 1
+                    break
+                if not token.startswith("-") or token == "-":
+                    break
+                index += 1
+                if nonliteral_runner_option(token):
+                    raise ValueError(
+                        f"{prefix} option {token} cannot be resolved by the guard; "
+                        f"{prefix} options must be literal words"
+                    )
+                option = runner_value_option(prefix, token)
+                if option is None or index >= len(segment):
+                    continue
+                value = segment[index]
+                index += 1
+                if prefix == "watch" and option in EXEC_PREFIX_INTERVAL_OPTIONS:
+                    if not RUNNER_DURATION.fullmatch(value):
+                        raise ValueError(
+                            f"watch interval {value} cannot be resolved by the guard; "
+                            "the interval must be a literal number"
+                        )
+                elif unresolved_runner_word(value):
+                    raise ValueError(
+                        f"{prefix} option value {value} cannot be resolved by the "
+                        f"guard; {prefix} option values must be literal words"
+                    )
+            if prefix == "timeout" and index < len(segment):
+                if not RUNNER_DURATION.fullmatch(segment[index]):
+                    raise ValueError(
+                        f"timeout duration {segment[index]} cannot be resolved by the "
+                        "guard; the duration must be a literal number"
                     )
                 index += 1
-                if "=" not in token:
-                    if index >= len(segment):
-                        raise ValueError(f"env {option} lacks a value")
-                    index += 1
-                continue
-            if token.startswith("-"):
-                raise ValueError(
-                    f"env {token} cannot be validated; use env NAME=VALUE <command>"
-                )
+        else:
             break
-    if index >= len(segment):
-        return None
-    executable = segment[index].replace("\\", "/").rsplit("/", 1)[-1].casefold()
     arguments = segment[index + 1 :]
     if SHELL_PARAMETER_SYNTAX.search(executable):
         raise ValueError(
@@ -2140,6 +2683,20 @@ def command_invocation(segment):
     return executable, arguments
 
 
+def require_resolved_git_word(word, mixed=True):
+    """Deny a git word the shell can turn into other or several arguments."""
+    literal = getattr(word, "literal", "bare")
+    if (
+        literal is None
+        or (literal == "mixed" and not mixed)
+        or (literal == "bare" and GIT_CONFIG_EXPANDING_WORD.search(word))
+    ):
+        raise ValueError(
+            f"git argument {word} cannot be resolved by the guard; "
+            "pass a literal value"
+        )
+
+
 def git_command(segment, assignments=None):
     invocation = command_invocation(segment)
     if invocation is None:
@@ -2148,6 +2705,8 @@ def git_command(segment, assignments=None):
     if executable not in {"git", "git.exe"}:
         return None
     resolved_arguments = []
+    parameter_arguments = []
+    unproven_parameters = []
     argument_index = 0
     while argument_index < len(arguments):
         argument = arguments[argument_index]
@@ -2155,8 +2714,13 @@ def git_command(segment, assignments=None):
         if argument == "-C" and argument_index + 1 < len(arguments):
             argument_index += 1
             directory = arguments[argument_index]
+            require_resolved_git_word(directory)
             expanded = expand_environment_parameters(directory, assignments)
-            if SHELL_PARAMETER_SYNTAX.search(expanded) or CMD_PARAMETER_SYNTAX.search(expanded):
+            if (
+                SHELL_PARAMETER_SYNTAX.search(expanded)
+                or CMD_PARAMETER_SYNTAX.search(expanded)
+                or zsh_expansion_flag(expanded)
+            ):
                 raise ValueError(
                     f"git argument {directory} cannot be resolved by the guard; "
                     "pass a literal path"
@@ -2170,9 +2734,14 @@ def git_command(segment, assignments=None):
                 )
             resolved_arguments.extend((argument, expanded))
         elif attached_directory:
+            require_resolved_git_word(argument)
             directory = argument[2:]
             expanded = expand_environment_parameters(directory, assignments)
-            if SHELL_PARAMETER_SYNTAX.search(expanded) or CMD_PARAMETER_SYNTAX.search(expanded):
+            if (
+                SHELL_PARAMETER_SYNTAX.search(expanded)
+                or CMD_PARAMETER_SYNTAX.search(expanded)
+                or zsh_expansion_flag(expanded)
+            ):
                 raise ValueError(
                     f"git argument {directory} cannot be resolved by the guard; "
                     "pass a literal path"
@@ -2186,12 +2755,29 @@ def git_command(segment, assignments=None):
                 )
             resolved_arguments.append(f"-C{expanded}")
         else:
-            if SHELL_PARAMETER_SYNTAX.search(argument) or CMD_PARAMETER_SYNTAX.search(argument):
-                raise ValueError(
-                    f"git argument {argument} cannot be resolved by the guard; pass a "
-                    "literal value (for commit messages use -F <file>)"
-                )
-            resolved_arguments.append(expand_environment_parameters(argument, assignments))
+            parameter = (
+                SHELL_PARAMETER_SYNTAX.search(argument)
+                or CMD_PARAMETER_SYNTAX.search(argument)
+                or zsh_expansion_flag(argument)
+            )
+            if parameter:
+                parameter_arguments.append(argument)
+                literal = re.split(r"[$%!]", argument, maxsplit=1)[0]
+                expanded = expand_environment_parameters(argument, assignments)
+                if (
+                    not literal
+                    or (literal.startswith("-") and "=" not in literal)
+                    or git_option_in(literal, GIT_PARAMETER_DENIED_OPTIONS)
+                    or git_option_in(arguments[argument_index - 1], GIT_PARAMETER_DENIED_OPTIONS)
+                    or (literal.startswith("-c") and literal != "-c")
+                    or "::" in literal
+                    or not parameters_double_quoted(argument)
+                    or SUBSTITUTION_PLACEHOLDER in argument
+                    or SUBSTITUTION_PLACEHOLDER in expanded
+                ):
+                    unproven_parameters.append(argument)
+            expanded = expand_environment_parameters(argument, assignments)
+            resolved_arguments.append(argument if expanded == argument else expanded)
         argument_index += 1
     arguments = resolved_arguments
     index = 0
@@ -2204,17 +2790,31 @@ def git_command(segment, assignments=None):
             option = token.split("=", 1)[0]
             value = token.split("=", 1)[1] if "=" in token else None
         index += 1
+        if option != "-C":
+            require_resolved_git_word(token)
         if option in GIT_GLOBAL_OPTIONS_WITH_VALUES and value is None:
             if index >= len(arguments):
                 raise ValueError(f"git option {option} lacks a value")
             value = arguments[index]
+            if option != "-C":
+                require_resolved_git_word(value)
             index += 1
         if option in {"-c", "--config-env"}:
-            config_key = str(value).split("=", 1)[0].casefold()
+            config_key, _, config_value = str(value).partition("=")
+            config_key = config_key.casefold()
             if config_key.startswith("alias."):
                 raise ValueError(
                     f"git -c {config_key} defines an alias the guard cannot inspect; "
                     "run the underlying git command directly"
+                )
+            if executed_config_key(config_key) and not (
+                option == "-c"
+                and not loaded_config_key(config_key)
+                and config_value.casefold() in GIT_CONFIG_DISABLING_VALUES
+            ):
+                raise ValueError(
+                    f"git -c {config_key} configures a program git executes; "
+                    "the guard cannot allow it"
                 )
             if config_key == "clean.requireforce":
                 raise ValueError(
@@ -2224,8 +2824,47 @@ def git_command(segment, assignments=None):
         if option in GIT_GLOBAL_OPTIONS_WITH_VALUES:
             git_options.extend((option, str(value)))
     if index >= len(arguments):
+        if parameter_arguments:
+            raise ValueError(
+                f"git argument {parameter_arguments[0]} cannot be resolved by the guard; "
+                "pass a literal value (for commit messages use -F <file>)"
+            )
         return None
-    return arguments[index].casefold(), arguments[index + 1:], git_options
+    require_resolved_git_word(arguments[index], mixed=False)
+    subcommand = arguments[index].casefold()
+    if subcommand == "config":
+        for argument in arguments[index + 1:]:
+            literal = getattr(argument, "literal", None)
+            if not getattr(argument, "redirection", False) and (
+                literal in (None, "mixed")
+                or (
+                    literal == "bare"
+                    and (argument.startswith("#") or GIT_CONFIG_EXPANDING_WORD.search(argument))
+                )
+            ):
+                raise ValueError(
+                    f"git argument {argument} cannot be resolved by the guard; "
+                    "pass a literal value"
+                )
+        denied = denied_git_config_argument(arguments[index + 1:])
+        if denied is not None:
+            raise ValueError(
+                f"git config {denied} persists a program git executes; "
+                "the guard cannot allow it"
+            )
+    read_only_subcommands = ARCHIVE_READ_GIT_COMMANDS | CLOSED_READ_GIT_COMMANDS
+    if subcommand in read_only_subcommands:
+        # Read-only subcommands still write through --output. A parameter
+        # passes only inside plain double quotes, where its expansion stays
+        # one word; an unquoted one can word-split into an option, and
+        # command substitution output is never known.
+        parameter_arguments = unproven_parameters
+    if parameter_arguments:
+        raise ValueError(
+            f"git argument {parameter_arguments[0]} cannot be resolved by the guard; "
+            "pass a literal value (for commit messages use -F <file>)"
+        )
+    return subcommand, arguments[index + 1:], git_options
 
 
 def wrapped_command_tokens(segment, expand_parameters=True):
@@ -2234,7 +2873,7 @@ def wrapped_command_tokens(segment, expand_parameters=True):
         return None
     executable, arguments = invocation
     if executable == "eval":
-        return shell_tokens(" ".join(arguments)) if arguments else None
+        return shell_tokens(" ".join(arguments), direct=False) if arguments else None
     if executable in COMMAND_WRAPPERS:
         if executable == "command" and arguments[:1] in (["-v"], ["-V"]):
             return None
@@ -2259,7 +2898,7 @@ def wrapped_command_tokens(segment, expand_parameters=True):
                             executable=executable, option=argument
                         )
                     )
-                return shell_tokens(arguments[index + 1])
+                return shell_tokens(arguments[index + 1], direct=False)
         raise ValueError(SHELL_FILE_REASON.format(executable=executable))
     if executable in POWERSHELL_WRAPPERS or executable in {"cmd", "cmd.exe"}:
         switches = {"-c", "-command", "/c", "/k"}
@@ -2278,8 +2917,8 @@ def wrapped_command_tokens(segment, expand_parameters=True):
                         for argument in payload
                     ]
                 if len(payload) == 1:
-                    return shell_tokens(payload[0])
-                return payload
+                    return shell_tokens(payload[0], direct=False)
+                return [str(argument) for argument in payload]
         raise ValueError(SHELL_FILE_REASON.format(executable=executable))
     return None
 
@@ -2368,7 +3007,7 @@ def destructive_git_reason(
                     "git command directly"
                 )
             reason = destructive_git_reason(
-                ["git", *git_options, *shell_tokens(alias), *arguments],
+                ["git", *git_options, *shell_tokens(alias, direct=False), *arguments],
                 resolved_aliases | {command},
                 assignments,
             )
@@ -2525,13 +3164,15 @@ def bundled_helper_invocation(command, tokens, working_directories, helpers=PIPE
 
 
 def archive_command_is_read_only(
-    command, tokens, archive_context=False, git_commands=ARCHIVE_READ_GIT_COMMANDS
+    command, tokens, archive_context=False, git_commands=ARCHIVE_READ_GIT_COMMANDS,
+    source=None,
 ):
+    """`source` is the unexpanded (segment, assignments) whose tokens keep their quote flags."""
     if archive_context and AMBIGUOUS_SHELL_SYNTAX.search(command):
         return False
     if not archive_context:
         return True
-    invocation = command_invocation(tokens)
+    invocation = command_invocation(tokens, unwrap_runners=False)
     if invocation is None:
         return True
     executable, arguments = invocation
@@ -2554,15 +3195,44 @@ def archive_command_is_read_only(
         return True
     if executable != "git":
         return False
-    git = git_command(tokens)
+    git = git_command(*(source or (tokens,)))
     if git is None:
         return False
     subcommand, git_arguments, _options = git
     if subcommand not in git_commands:
         return False
     return not any(
-        token in GIT_READ_WRITE_OPTIONS or token.startswith("--output=")
-        for token in git_arguments
+        git_option_in(token, GIT_READ_WRITE_OPTIONS) for token in git_arguments
+    )
+
+
+def archive_write_attempt(segment, source=None):
+    """Whether a segment denied in archive context attempts a write there."""
+    if any(
+        token
+        and (set(token) <= SHELL_WRITE_REDIRECTION_CHARS
+             or re.fullmatch(r"\d*[<>]+&?", token))
+        for token in segment
+    ):
+        return True
+    invocation = command_invocation(segment)
+    if invocation is None:
+        return False
+    executable, arguments = invocation
+    executable = executable.removesuffix(".exe")
+    if executable in SHELL_WRITE_COMMANDS:
+        return True
+    if executable in IN_PLACE_EDITORS and (
+        has_short_option(arguments, "i")
+        or any(argument.startswith("--in-place") for argument in arguments)
+    ):
+        return True
+    git = git_command(*(source or (segment,)))
+    if git is None:
+        return False
+    subcommand, git_arguments, _options = git
+    return subcommand not in ARCHIVE_READ_GIT_COMMANDS or any(
+        git_option_in(token, GIT_READ_WRITE_OPTIONS) for token in git_arguments
     )
 
 
@@ -2790,12 +3460,15 @@ def command_denial(command, working_directories, allow_destructive=True):
                 )
             )
             if not archive_command_is_read_only(
-                shlex.join(resolved_segment), resolved_segment, archive_context
+                shlex.join(resolved_segment), resolved_segment, archive_context,
+                source=(segment, assignments),
             ) and not (
                 archive_context
                 and bundled_helper
             ):
-                return ARCHIVE_REASON
+                if archive_write_attempt(resolved_segment, (segment, assignments)):
+                    return ARCHIVE_REASON
+                return ARCHIVE_UNPROVEN_READ_REASON
         reason = destructive_git_reason(tokens) or protected_shell_write_reason(
             tokens, working_directories
         )

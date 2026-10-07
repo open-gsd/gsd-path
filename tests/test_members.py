@@ -225,6 +225,21 @@ class MemberTests(unittest.TestCase):
         result = self.add("web", member)
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_validate_and_repair_allow_refs_path_created_during_build(self) -> None:
+        member = self.joined()
+        git(member, "branch", "gsd-path/acme-M001")
+        git(member, "branch", "gsd-path-task/acme-T001")
+        git(member, "tag", "milestone/acme-001-demo")
+        for command in ("validate", "repair"):
+            result = self.run_members(command)
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_add_still_refuses_refs_path_creates_on_members(self) -> None:
+        member = self.make_member("web")
+        git(member, "branch", "gsd-path/acme-M001")
+        git(member, "tag", "milestone/acme-001-demo")
+        self.assert_refused(self.add("web", member), "collide with coordinator")
+
     def test_add_refuses_during_build_and_ship(self) -> None:
         member = self.make_member("web")
         for phase in ("build", "ship"):

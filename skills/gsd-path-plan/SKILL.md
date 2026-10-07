@@ -115,9 +115,10 @@ as stated in Lookahead mode.
      In patch mode, tasks already `done` keep their landed metadata; only
      the appended patch tasks must start clean.
    - Require every dependency id to exist, forbid later-wave dependencies,
-     detect cycles, and forbid file overlap between planned tasks in the same
-     wave. Same-wave dependency chains are allowed only when their files do
-     not overlap; the build executes them in dependency layers.
+     detect cycles, and forbid unordered file overlap between planned tasks
+     in the same wave. Same-wave tasks may share files only when one
+     transitively depends on the other through `deps`; the build executes
+     them in dependency layers.
    - Reject a declared dependency that carries neither data nor a prerequisite
      effect. A `deps` edge is valid only when the dependent consumes a symbol,
      signature, schema, endpoint, file format, or path named in that

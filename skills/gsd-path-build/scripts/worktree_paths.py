@@ -103,6 +103,33 @@ def _workspace(primary: Path, pin: bool) -> Path:
     return workspace
 
 
+def release_workspace(primary: Path) -> bool:
+    """Forget the pinned placement receipt once no linked worktrees remain.
+
+    Lets GSD_PATH_WORKTREE_ROOT (or a new default) apply again at the next
+    milestone's first allocation. Returns True when a receipt was removed;
+    any remaining linked worktree (including one only still registered) keeps
+    the pin.
+    """
+    primary = primary.resolve()
+    common = Path(_git(primary, "rev-parse", "--git-common-dir"))
+    common = (primary / common).resolve()
+    receipt = common / "gsd-path" / "workspaces" / f"{_identity(primary)}.json"
+    if not receipt.is_file():
+        return False
+    output, nul_separated = _worktree_list_porcelain(primary)
+    records = output.split("\0\0") if nul_separated else [
+        block for block in output.strip().split("\n\n") if block.strip()
+    ]
+    for record in records:
+        fields = record.split("\0") if nul_separated else record.splitlines()
+        for field in fields:
+            if field.startswith("worktree ") and Path(field[len("worktree "):]).resolve() != primary:
+                return False
+    receipt.unlink()
+    return True
+
+
 def worktree_path(primary: Path, kind: str, name: str, *, pin: bool = False) -> Path:
     primary = primary.resolve()
     if kind not in {"task", "verify", "integrate", "bound"} or not name or Path(name).name != name or name in {".", ".."}:
