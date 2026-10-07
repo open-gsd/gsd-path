@@ -4,7 +4,7 @@
   "run_id": "01a11799-214e-7842-a8a4-5deb783ab171",
   "result": "pass",
   "step": "install",
-  "command": "n o d e ' ' / U s e r s / j e r e m y m c s p a d d e n / e v a l u a t i o n s / g s d - p a t h - r e l e a s e - 2 0 2 6 - 1 0 - 0 7 - c a b 2 4 a 7 8 / g r o k / p l u g i n / s c r i p t s / i n s t a l l . m j s ' ' - - g r o k ' ' - - l o c a l ' ' - - p r o j e c t ' ' / U s e r s / j e r e m y m c s p a d d e n / e v a l u a t i o n s / g s d - p a t h - r e l e a s e - 2 0 2 6 - 1 0 - 0 7 - c a b 2 4 a 7 8 / g r o k / q u i c k / r e p o ' ' - - h o o k s ' ' - - n o - c o l o r",
+  "command": "node /Users/jeremymcspadden/evaluations/gsd-path-release-2026-10-07-cab24a78/grok/plugin/scripts/install.mjs --grok --local --project /Users/jeremymcspadden/evaluations/gsd-path-release-2026-10-07-cab24a78/grok/quick/repo --hooks --no-color",
   "output": "\u2726 GSD Path installer v1.4.0\n  project install into /Users/jeremymcspadden/evaluations/gsd-path-release-2026-10-07-cab24a78/grok/quick/repo\n\n  \u2713 grok: installed 16 skills to /Users/jeremymcspadden/evaluations/gsd-path-release-2026-10-07-cab24a78/grok/quick/repo/.grok/skills\n  \u2713 project: copied AGENTS.md, WORKFLOW.md, .gsd-path/status_runtime.py, .gsd-path/runtime.json, .gsd-path/guard_hook.py, .gsd-path/git_guard.py, .git/hooks/pre-commit, .git/hooks/commit-msg, .git/hooks/pre-push to /Users/jeremymcspadden/evaluations/gsd-path-release-2026-10-07-cab24a78/grok/quick/repo\n\n  Done. Restart active agent sessions, then invoke the router explicitly.",
   "host_version": "Grok CLI 1.0.46",
   "install_root": ".grok/skills",

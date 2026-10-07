@@ -73,6 +73,11 @@ step usage; the available stream is retained without inventing a total.
 - Grok surfaced ambiguity in "repository root" for project Verify. The evaluator
   confirmed the canonical sidecar root; the helper and its recorded result
   were left unchanged.
+- The Codex, Cursor, Grok, Kimi and OpenCode `install.json` receipts first
+  recorded `command` with one character per token. Each was corrected to the
+  exact `command` value in that host's retained native driver record
+  (`<host>/quick/install.json`). No install was run again and no other field
+  changed.
 
 Every host stopped at owner gates and before archive manifest rendering. Each
 manifest binds a real completed native coder child to its task and landing.
