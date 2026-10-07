@@ -1,17 +1,17 @@
 {
   "schema": "gsd-path/live-step-evidence/v1",
   "host": "opencode",
-  "run_id": "ses_f0fce4c38ffeHJCuaACqSHlp8J",
+  "run_id": "ses_ee8546bedffenon7ITDcHmpKAC",
   "result": "pass",
   "step": "integration",
-  "command": "python3 -B /Users/jeremymcspadden/.gsd-path/runtimes/be5a45e54aceb02b95ac1d23d52a19a56bcd981f5980ddc6445e5c5797930c67/archive_milestone.py integrate --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.4.0-6d3e38ed/opencode/quick/repo --slug extend-count-cli",
-  "output": "{\"archive\": \".project/archive/001-extend-count-cli\", \"base\": \"6c8ff613eb1318254a3308d3b4736bf6052dc2f6\", \"commit\": \"321fc2ebf3f9edad745539f5bb8a1967c025ffdd\", \"integrate\": \"6c8ff613eb1318254a3308d3b4736bf6052dc2f6\", \"landing\": \"6c8ff613eb1318254a3308d3b4736bf6052dc2f6\", \"mode\": \"direct\", \"tag\": \"milestone/001-extend-count-cli\"}",
+  "command": "RT=/Users/jeremymcspadden/evaluations/gsd-path-release-2026-10-07-cab24a78/opencode/quick/repo; RUN=/Users/jeremymcspadden/.gsd-path/runtimes/60d19647df3d499a320970dc6300fd9c339021f7f11375160d63047d6cf6f290; python3 /Users/jeremymcspadden/evaluations/gsd-path-release-2026-10-07-cab24a78/opencode/plugin/tests/evaluate_codex.py activity --arm /Users/jeremymcspadden/evaluations/gsd-path-release-2026-10-07-cab24a78/opencode/quick --category verification -- python3 -B $RUN/archive_milestone.py integrate --repo $RT --slug count-cli; echo \"integrate exit: $?\"",
+  "output": "{\"archive\": \".project/archive/001-count-cli\", \"base\": \"f1d7f58fef744af7c2b13dc30585c2e483cac3e5\", \"commit\": \"98a46d2afaa004d9620aa3a21e03798cfca09335\", \"integrate\": \"f1d7f58fef744af7c2b13dc30585c2e483cac3e5\", \"landing\": \"f1d7f58fef744af7c2b13dc30585c2e483cac3e5\", \"mode\": \"direct\", \"tag\": \"milestone/001-count-cli\"}\nintegrate exit: 0\n",
   "fixture_bundle": "opencode/fixture.bundle",
-  "run_manifest": ".project/archive/001-extend-count-cli/trust-run-manifest.json",
-  "ship_commit": "321fc2ebf3f9edad745539f5bb8a1967c025ffdd",
+  "run_manifest": ".project/archive/001-count-cli/trust-run-manifest.json",
+  "ship_commit": "98a46d2afaa004d9620aa3a21e03798cfca09335",
   "bound_branch": "gsd-path/M001",
   "default_branch": "main",
-  "pre_integration_default_commit": "7ecd4c9fce639770c5bb82be15a1fc5dbeeaea2c",
-  "integration_commit": "6c8ff613eb1318254a3308d3b4736bf6052dc2f6",
-  "milestone_tag": "milestone/001-extend-count-cli"
+  "pre_integration_default_commit": "77c301682029423f5f861f8e6a9467f73049e453",
+  "integration_commit": "f1d7f58fef744af7c2b13dc30585c2e483cac3e5",
+  "milestone_tag": "milestone/001-count-cli"
 }

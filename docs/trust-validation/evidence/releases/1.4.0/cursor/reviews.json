@@ -1,11 +1,11 @@
 {
   "schema": "gsd-path/live-step-evidence/v1",
   "host": "cursor",
-  "run_id": "cursor-1.4.0-6d3e38e",
+  "run_id": "bf267870-bd1c-4b10-be7a-deda8c7c69f4",
   "result": "pass",
   "step": "reviews",
-  "command": "cd /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.4.0-6d3e38ed/cursor/quick/repo && python3 -B /Users/jeremymcspadden/.gsd-path/runtimes/be5a45e54aceb02b95ac1d23d52a19a56bcd981f5980ddc6445e5c5797930c67/check_handoffs.py wave --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.4.0-6d3e38ed/cursor/quick/repo --review .project/review/wave-1.cycle1.md",
-  "output": "# Review \u2014 wave 1, cycle 1\n\nReviewed HEAD: f0c42d001a465f07e52b86dde49edb5f933a19de\nReview scope: final\n\nWave verdict: pass\n# Final Review \u2014 reused full wave\n\nReviewed HEAD: ed9d40b932cc689d0df2fbb158e92ff5626fe731\nOverall verdict: pass\nSource review: .project/review/wave-1.cycle1.md\nSource commit: f0c42d001a465f07e52b86dde49edb5f933a19de",
-  "wave_review_artifact": ".project/archive/001-widget-cli-json/review/wave-1.cycle1.md",
-  "final_review_artifact": ".project/archive/001-widget-cli-json/review/FINAL.md"
+  "command": "python3 -B /Users/jeremymcspadden/evaluations/gsd-path-release-2026-10-07-cab24a78/cursor/quick/repo/.cursor/skills/gsd-path/scripts/workflow_run.py prepare-final --repo /Users/jeremymcspadden/evaluations/gsd-path-release-2026-10-07-cab24a78/cursor/quick/repo --expected-head e46c85118eb6079910b3735ee239a68540673081",
+  "output": "# Review \u2014 wave 1, cycle 1\n\nReviewed HEAD: 34990fa420eb5ca757566451a241e730aa0ad892\nReview scope: final\nWave verdict: pass\nCycle: 1\n# Final Review \u2014 widget count\n\n<!-- Authorship and evidence reuse follow the ship phase contract. Each INTENT.md success\n     criterion appears exactly once and carries checked evidence. A criterion\n     listed in PLAN.md's Surface contract also names its Surface, and its\n     Check is the walkthrough performed \u2014 never internal test output. Embedded",
+  "wave_review_artifact": ".project/archive/001-widget-count/review/wave-1.cycle1.md",
+  "final_review_artifact": ".project/archive/001-widget-count/review/FINAL.md"
 }

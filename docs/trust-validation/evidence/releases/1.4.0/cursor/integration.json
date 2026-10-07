@@ -1,17 +1,17 @@
 {
   "schema": "gsd-path/live-step-evidence/v1",
   "host": "cursor",
-  "run_id": "cursor-1.4.0-6d3e38e",
+  "run_id": "bf267870-bd1c-4b10-be7a-deda8c7c69f4",
   "result": "pass",
   "step": "integration",
-  "command": "python3 -B /Users/jeremymcspadden/.gsd-path/runtimes/be5a45e54aceb02b95ac1d23d52a19a56bcd981f5980ddc6445e5c5797930c67/archive_milestone.py validate-integrated --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.4.0-6d3e38ed/cursor/quick/repo --slug widget-cli-json",
-  "output": "{\"archive\": \".project/archive/001-widget-cli-json\", \"base\": \"888cc4bda67beaec5bbe176a88bb481defa21066\", \"commit\": \"ca97f2b5e74ddc8d76ace74f83761a099bf43c34\", \"integrate\": \"888cc4bda67beaec5bbe176a88bb481defa21066\", \"landing\": \"888cc4bda67beaec5bbe176a88bb481defa21066\", \"mode\": \"direct\", \"tag\": \"milestone/001-widget-cli-json\"}",
+  "command": "python3 -B /Users/jeremymcspadden/.gsd-path/runtimes/60d19647df3d499a320970dc6300fd9c339021f7f11375160d63047d6cf6f290/archive_milestone.py integrate --repo /Users/jeremymcspadden/evaluations/gsd-path-release-2026-10-07-cab24a78/cursor/quick/repo --slug widget-count",
+  "output": "{\"archive\": \".project/archive/001-widget-count\", \"base\": \"cfff3491b3e6e11ff41173eb865e670c8261ca9c\", \"commit\": \"ec2112488a12a263e3b8f8eed62d05ba03a554ed\", \"integrate\": \"cfff3491b3e6e11ff41173eb865e670c8261ca9c\", \"landing\": \"cfff3491b3e6e11ff41173eb865e670c8261ca9c\", \"mode\": \"direct\", \"tag\": \"milestone/001-widget-count\"}\n",
   "fixture_bundle": "cursor/fixture.bundle",
-  "run_manifest": ".project/archive/001-widget-cli-json/trust-run-manifest.json",
-  "ship_commit": "ca97f2b5e74ddc8d76ace74f83761a099bf43c34",
+  "run_manifest": ".project/archive/001-widget-count/trust-run-manifest.json",
+  "ship_commit": "ec2112488a12a263e3b8f8eed62d05ba03a554ed",
   "bound_branch": "gsd-path/M001",
   "default_branch": "main",
-  "pre_integration_default_commit": "f15b6b80f7f4258e097359453fe6cfea1d0b87d1",
-  "integration_commit": "888cc4bda67beaec5bbe176a88bb481defa21066",
-  "milestone_tag": "milestone/001-widget-cli-json"
+  "pre_integration_default_commit": "cec6f357a30c5e47bc3f8d7ec3498389a40cb8e6",
+  "integration_commit": "cfff3491b3e6e11ff41173eb865e670c8261ca9c",
+  "milestone_tag": "milestone/001-widget-count"
 }

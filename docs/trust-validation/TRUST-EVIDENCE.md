@@ -1,6 +1,6 @@
 # GSD Path — Trust Evidence Log
 
-Current release evidence: [1.4.0 candidate](#release-evidence-2026-09-30--140).
+Current release evidence: [1.4.0 candidate](#release-evidence-2026-10-07--140).
 Earlier sections remain historical observations.
 
 **Date:** 2026-08-05 (reconciled 2026-08-11 — dispatch-smoke rows downgraded; see notes)  
@@ -276,19 +276,21 @@ not grant publication authority.
 
 ---
 
-## Release evidence (2026-09-30 — 1.4.0)
+## Release evidence (2026-09-30 — 1.4.0, historical)
 
 Candidate: `6d3e38ed525831217cf7d4790674feebd8afc75f`, frozen from main after
 PRs #240 (native member-task retry) and #241 (version 1.4.0). Codex, Claude
-Code, Grok, OpenCode, Antigravity, Cursor, and Kimi have validated
-current-candidate receipts under `evidence/releases/1.4.0/` and pass the
-external counter CLI oracle 6/6. See [HOST-MATRIX.md](HOST-MATRIX.md) for each
-receipt.
+Code, Grok, OpenCode, Antigravity, Cursor, and Kimi had validated receipts
+for that candidate under `evidence/releases/1.4.0/` and passed the external
+counter CLI oracle 6/6. The 2026-10-07 evaluation below replaced those
+receipts and fixture bundles in place. The `6d3e38e` files are in Git history
+at commit `cab24a78d31ba41d9d1b357dd72aeae00775ef2d`.
+[HOST-MATRIX.md](HOST-MATRIX.md) now links the current receipts.
 
 Each receipt binds a native child to the landed task, isolated Task Verify,
 review, committed archive, local-origin integration, and Git guard results.
-Claude Code and Cursor also passed fresh native guard probes. No attempt was
-invalid and no candidate defect was found.
+Claude Code and Cursor also passed fresh native guard probes. No attempt in
+this evaluation was invalid and no candidate defect was found.
 
 Muse Code was not evaluated: the Muse delegation adapter was added from live
 tool schemas; no recorded live release evidence yet. It is excluded from the
@@ -305,3 +307,38 @@ by owner ruling. [Run notes](evidence/releases/1.4.0/notes/RUNS.md) list gate
 corrections, token usage, and hardening gaps. The complete `verify:release`
 gate is required before publication; receipts do not grant publication
 authority.
+
+---
+
+## Release evidence (2026-10-07 — 1.4.0)
+
+Candidate: `cab24a78d31ba41d9d1b357dd72aeae00775ef2d`, the exact commit from
+[Release run 37660774035](https://github.com/open-gsd/gsd-path/actions/runs/37660774035/job/112927439045),
+which failed its trust evidence gate. Codex, Claude Code, Grok, OpenCode,
+Antigravity, Cursor, and Kimi have validated current-candidate receipts under
+`evidence/releases/1.4.0/`. A fresh clone of each local origin `main` passed
+the external counter CLI oracle 6/6, 42/42 in total. See
+[HOST-MATRIX.md](HOST-MATRIX.md) for each receipt.
+
+Each receipt binds a native child to the landed task, isolated Task Verify,
+review, committed archive, local-origin integration, and Git guard results.
+Claude Code and Cursor also passed native guard probes. No candidate defect
+was found and the candidate source did not change during the runs.
+
+One attempt was invalid. The first OpenCode attempt inherited the source
+checkout in `PWD` and stalled on an external-directory permission. It is
+preserved separately and is not passing proof; the passing OpenCode run used a
+fresh fixture. Cursor's parent changed a wave review's `Reviewed HEAD`; ship
+approval was withheld until the native reviewer restored the reviewed commit
+and an independent native final review passed. Five install receipts (Codex,
+Cursor, Grok, Kimi, OpenCode) first recorded the install command with one
+character per token. They were corrected to the command in each native driver
+install record; no install was run again.
+
+GitHub Copilot CLI, Muse Code, Qwen, Kiro, and Zed stay excluded from the
+live-check scope, as in the 2026-09-30 entry. Exclusion is not a live-test
+pass. Owner ruling on output tokens: "allow and record"; overages did not stop
+the runs. [Run notes](evidence/releases/1.4.0/notes/RUNS.md) list token usage
+and scopes, the invalid attempt, and all corrections. The complete
+`verify:release` gate is required before publication; receipts do not grant
+publication authority.

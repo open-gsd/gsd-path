@@ -1,14 +1,14 @@
 {
   "schema": "gsd-path/live-step-evidence/v1",
   "host": "cursor",
-  "run_id": "cursor-1.4.0-6d3e38e",
+  "run_id": "bf267870-bd1c-4b10-be7a-deda8c7c69f4",
   "result": "pass",
   "step": "install",
-  "command": "node /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.4.0-6d3e38ed/cursor/plugin/scripts/install.mjs --cursor --local --project /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.4.0-6d3e38ed/cursor/quick/repo --hooks --no-color",
-  "output": "\u2726 GSD Path installer v1.4.0\n  project install into /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.4.0-6d3e38ed/cursor/quick/repo\n\n  \u2713 cursor: installed 16 skills to /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.4.0-6d3e38ed/cursor/quick/repo/.cursor/skills and custom subagent to /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.4.0-6d3e38ed/cursor/quick/repo/.cursor/agents/gsd-path.md\n  \u2713 project: copied AGENTS.md, WORKFLOW.md, .gsd-path/status_runtime.py, .gsd-path/runtime.json, .gsd-path/guard_hook.py, .gsd-path/git_guard.py, .cursor/hooks.json, .git/hooks/pre-commit, .git/hooks/commit-msg, .git/hooks/pre-push to /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.4.0-6d3e38ed/cursor/quick/repo\n\n  Done. Restart active agent sessions, then invoke the router explicitly.",
-  "host_version": "2026.09.28-64d2043",
+  "command": "node /Users/jeremymcspadden/evaluations/gsd-path-release-2026-10-07-cab24a78/cursor/plugin/scripts/install.mjs --cursor --local --project /Users/jeremymcspadden/evaluations/gsd-path-release-2026-10-07-cab24a78/cursor/quick/repo --hooks --no-color",
+  "output": "\u2726 GSD Path installer v1.4.0\n  project install into /Users/jeremymcspadden/evaluations/gsd-path-release-2026-10-07-cab24a78/cursor/quick/repo\n\n  \u2713 cursor: installed 16 skills to /Users/jeremymcspadden/evaluations/gsd-path-release-2026-10-07-cab24a78/cursor/quick/repo/.cursor/skills and custom subagent to /Users/jeremymcspadden/evaluations/gsd-path-release-2026-10-07-cab24a78/cursor/quick/repo/.cursor/agents/gsd-path.md\n  \u2713 project: copied AGENTS.md, WORKFLOW.md, .gsd-path/status_runtime.py, .gsd-path/runtime.json, .gsd-path/guard_hook.py, .gsd-path/git_guard.py, .cursor/hooks.json, .git/hooks/pre-commit, .git/hooks/commit-msg, .git/hooks/pre-push to /Users/jeremymcspadden/evaluations/gsd-path-release-2026-10-07-cab24a78/cursor/quick/repo\n\n  Done. Restart active agent sessions, then invoke the router explicitly.",
+  "host_version": "Cursor CLI 2026.10.01-e373342",
   "install_root": ".cursor/skills",
-  "candidate": "6d3e38ed525831217cf7d4790674feebd8afc75f",
+  "candidate": "cab24a78d31ba41d9d1b357dd72aeae00775ef2d",
   "package_version": "1.4.0",
   "exit_code": 0
 }

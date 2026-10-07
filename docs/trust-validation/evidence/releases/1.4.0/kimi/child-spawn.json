@@ -1,7 +1,7 @@
 {
   "schema": "gsd-path/live-step-evidence/v1",
   "host": "kimi",
-  "run_id": "session_d18b29e3-f78f-4471-a748-f1d4228f390a",
+  "run_id": "session_639870b3-33bf-4092-bb5e-440ea16a5445",
   "result": "pass",
   "step": "child-spawn",
   "command": "Agent",
@@ -12,25 +12,25 @@
     "child_id": "build_T001",
     "status": "completed",
     "child_api": "Agent",
-    "run": "run-20260930T030819792427Z",
-    "session_id": "session_d18b29e3-f78f-4471-a748-f1d4228f390a",
+    "run": "run-20261007T184829750561Z",
+    "session_id": "session_639870b3-33bf-4092-bb5e-440ea16a5445",
     "tool_call": {
-      "id": "tool_1JXirvr8V7ztce09DivIegRi",
+      "id": "tool_MoPoxsfdUWmWtqLvnRLZqJiX",
       "input": {
         "description": "build_T001",
         "subagent_type": "coder"
       },
-      "prompt_sha256": "75460b4714a58123d87d665985d398af8f19bfbfd32ceb1587e8a408dbf106d8"
+      "prompt_sha256": "ead6cb0e8e3a18ae99ae01331010926f16fe519096620bbf50c1a04f939aee94"
     },
     "tool_result": {
       "agent_id": "agent-2",
       "actual_subagent_type": "coder",
       "status": "completed",
       "stop_reason": "completed",
-      "content": "agent_id: agent-2\nactual_subagent_type: coder\nstatus: completed\nstop_reason: completed\n\n[summary]\nT001 \u2014 `ready`. Verify `python3 test_count.py -v`: Ran 13 tests in 0.223s \u2014 OK (real-CLI subprocess tests, exact bytes/stderr/exit codes for AC1\u2013AC6). Contract implemented: `int()` parsing preserved, strict shape (one optional count, `--json` either position), errors exit non-zero with stderr message and no traceback.\n\nChanged paths:\n- `count.py`\n- `test_count.py` (new)\n- `.project/tasks/T001-strict-widget-cli.md` (Log append only)\n\nRESULT: T001 ready\n\nresume_hint: Continue with Agent(resume=\"agent-2\", prompt=\"...\"). Use agent_id only; do not set subagent_type. The subagent retains its prior context; redo any unfinished tool call if its result was lost."
+      "content": "agent_id: agent-2\nactual_subagent_type: coder\nstatus: completed\nstop_reason: completed\n\n[summary]\nready \u2014 Implemented SC1\u2013SC5: rewrote `count.py` (hand-rolled argv parsing, `--json` idempotent either position, `int()`-exact count acceptance, clean stderr/exit-2 errors, no tracebacks) and added `tests/test_count_cli.py` (14 real-CLI subprocess tests incl. held-out E2/E3); Verify `python3 tests/test_count_cli.py` passes (14/14).\n\nChanged paths:\n- `count.py`\n- `tests/test_count_cli.py`\n- `.project/tasks/T001-count-cli-contract.md` (Log append only)\n\nRESULT: T001 ready\n\nresume_hint: Continue with Agent(resume=\"agent-2\", prompt=\"...\"). Use agent_id only; do not set subagent_type. The subagent retains its prior context; redo any unfinished tool call if its result was lost."
     },
     "session_store": {
-      "state": "session_d18b29e3-f78f-4471-a748-f1d4228f390a",
+      "state": "session_639870b3-33bf-4092-bb5e-440ea16a5445",
       "type": "sub",
       "labels": {
         "parentAgentId": "main",

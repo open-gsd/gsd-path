@@ -3,7 +3,7 @@ schema: gsd-path/live-evidence/v1
 host: claude
 package: 1.4.0
 pipeline: gsd-path/v2
-candidate: 6d3e38ed525831217cf7d4790674feebd8afc75f
+candidate: cab24a78d31ba41d9d1b357dd72aeae00775ef2d
 verdict: pass
 child_spawn: pass
 state: pass
@@ -17,15 +17,15 @@ guard_tier: native-fail-closed
 
 # Live milestone evidence — claude
 
-Full quick-lane milestone run by the pinned candidate on a fresh fixture; evaluator-driven owner gates. Run directory: `/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.4.0-6d3e38ed/claude`.
+Full quick-lane milestone run by the pinned candidate on a fresh fixture; evaluator-driven owner gates. Run directory: `/Users/jeremymcspadden/evaluations/gsd-path-release-2026-10-07-cab24a78/claude`.
 
 ## Environment
 
-- Host and CLI version: 2.1.284 (Claude Code)
-- Operator: release evidence evaluator
-- Date: 2026-09-29
-- Fixture repository: /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.4.0-6d3e38ed/claude/quick/repo
-- Child-agent API used: Agent (description build_T001)
+- Host and CLI version: Claude Code 2.1.284
+- Operator: local release evaluator
+- Date: 2026-10-07
+- Fixture repository: /Users/jeremymcspadden/evaluations/gsd-path-release-2026-10-07-cab24a78/claude/quick/repo
+- Child-agent API used: Agent (description build_t001)
 
 ## Evidence
 
