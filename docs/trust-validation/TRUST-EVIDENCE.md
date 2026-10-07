@@ -1,6 +1,6 @@
 # GSD Path — Trust Evidence Log
 
-Current release evidence: [1.4.0 candidate](#release-evidence-2026-09-30--140).
+Current release evidence: [1.4.0 candidate](#release-evidence-2026-10-07--140).
 Earlier sections remain historical observations.
 
 **Date:** 2026-08-05 (reconciled 2026-08-11 — dispatch-smoke rows downgraded; see notes)  
