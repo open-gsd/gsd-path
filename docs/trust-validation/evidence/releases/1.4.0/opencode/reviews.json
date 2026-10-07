@@ -1,11 +1,11 @@
 {
   "schema": "gsd-path/live-step-evidence/v1",
   "host": "opencode",
-  "run_id": "ses_f0fce4c38ffeHJCuaACqSHlp8J",
+  "run_id": "ses_ee8546bedffenon7ITDcHmpKAC",
   "result": "pass",
   "step": "reviews",
-  "command": "OpenCode task: review_wave_1_cycle_1",
-  "output": "# Review \u2014 wave 1, cycle 1\n\nReviewed HEAD: e0c99474a49c9babf5a47b16e1925f535fe46e0c\nReview scope: final\n\nWave verdict: pass\n# Final Review \u2014 reused full wave\n\nReviewed HEAD: 4b1dd9fd51df3802bc87569bb895918bbd928986\nOverall verdict: pass\nSource review: .project/review/wave-1.cycle1.md\nSource commit: e0c99474a49c9babf5a47b16e1925f535fe46e0c",
-  "wave_review_artifact": ".project/archive/001-extend-count-cli/review/wave-1.cycle1.md",
-  "final_review_artifact": ".project/archive/001-extend-count-cli/review/FINAL.md"
+  "command": "RT=/Users/jeremymcspadden/evaluations/gsd-path-release-2026-10-07-cab24a78/opencode/quick/repo; python3 /Users/jeremymcspadden/evaluations/gsd-path-release-2026-10-07-cab24a78/opencode/plugin/tests/evaluate_codex.py activity --arm /Users/jeremymcspadden/evaluations/gsd-path-release-2026-10-07-cab24a78/opencode/quick --category verification -- python3 -B $RT/.opencode/skills/gsd-path/scripts/workflow_run.py prepare-final --repo $RT --expected-head 46eb3fc2d876520d41ade0b6c8f6bf40025a6148 > /tmp/prepare-final-2.json 2>/tmp/prepare-final-2.err; echo \"exit: $?\"; cat /tmp/prepare-final-2.err; python3 -c \"\nimport json\nd = json.load(open('/tmp/prepare-final-2.json'))\nprint('status:', d['status'])\nfor s in d.get('steps', []):\n    r = s.get('result') or {}\n    final = r.get('final') if isinstance(r, dict) else None\n    if final is not None:\n        print('FINAL:', json.dumps(final))\n    elif s['script'] == 'lean_verification.py':\n        v = r.get('verification', {})\n        print('verify reused:', v.get('reused'), '| executed:', 'execution' in v and v.get('execution', {}).get('exit_code'))\n    print('-', s['script'], s['exit_code'])\n\"; echo \"--- ledger lines:\"; wc -l < $RT/.project/build/verify-ledger.jsonl; ls /Users/jeremymcspadden/.gsd-path/projects/b5e8dae23b37d8a7c5e2bcb73e1540d400dee87f5ea6001051452f01ac242f64/89d9db9fd7f752218794ad94f66fb26fea96a8b2d71deced2f9d5d4c11874861/verify/ 2>/dev/null",
+  "output": "# Review \u2014 wave 1, cycle 1\n\nReviewed HEAD: 5b39e3316c253e964118316733ec53ccc1528d48\nReview scope: final\n\nWave verdict: pass\n# Final Review \u2014 repo (count-cli)\n\n<!-- Quick lane, one full wave with final scope reviewed in wave-1.cycle1.md\n     (pass): this final integration review re-performed the PLAN.md Surface\n     contract Walkthrough on the running CLI in the supplied verify sidecar\n     at the reviewed HEAD and graded INTENT.md SC1\u2013SC4. Recorded evidence",
+  "wave_review_artifact": ".project/archive/001-count-cli/review/wave-1.cycle1.md",
+  "final_review_artifact": ".project/archive/001-count-cli/review/FINAL.md"
 }

@@ -1,17 +1,17 @@
 {
   "schema": "gsd-path/live-step-evidence/v1",
   "host": "grok",
-  "run_id": "01a0f031-e8e3-73e1-ad75-f32822a81a85",
+  "run_id": "01a11799-214e-7842-a8a4-5deb783ab171",
   "result": "pass",
   "step": "integration",
-  "command": "python3 -B /Users/jeremymcspadden/.gsd-path/runtimes/be5a45e54aceb02b95ac1d23d52a19a56bcd981f5980ddc6445e5c5797930c67/archive_milestone.py integrate --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.4.0-6d3e38ed/grok/quick/repo --slug widget-count",
-  "output": "{\"archive\": \".project/archive/001-widget-count\", \"base\": \"6b3f0d48dabbcacf03d54d0efea74ad1987abfab\", \"commit\": \"f52fe7e2cdf74875675fdfd00a28c3701bc47763\", \"integrate\": \"6b3f0d48dabbcacf03d54d0efea74ad1987abfab\", \"landing\": \"6b3f0d48dabbcacf03d54d0efea74ad1987abfab\", \"mode\": \"direct\", \"tag\": \"milestone/001-widget-count\"}",
+  "command": "REPO=\"/Users/jeremymcspadden/evaluations/gsd-path-release-2026-10-07-cab24a78/grok/quick/repo\"\nRT=\"/Users/jeremymcspadden/.gsd-path/runtimes/60d19647df3d499a320970dc6300fd9c339021f7f11375160d63047d6cf6f290\"\npython3 - <<PY\nimport sys\nsys.path.insert(0, \"$RT\")\nimport integration\nfrom pathlib import Path\nbranch, worktree = integration.integration_names(Path(\"$REPO\"), \"001-widget-count\", pin=True)\nprint(\"integration_branch\", branch)\nprint(\"integration_worktree\", worktree)\nPY\necho \"COMMAND: python3 -B $RT/archive_milestone.py integrate --repo $REPO --slug widget-count\"\npython3 -B \"$RT/archive_milestone.py\" integrate --repo \"$REPO\" --slug widget-count\necho \"INTEGRATE_EXIT=$?\"",
+  "output": "integration_branch gsd-path-integrate/M001\nintegration_worktree /Users/jeremymcspadden/.gsd-path/projects/1ab97bb8a6d2ccc80d093f123d790aa3e8371fda4f8915954c1f7ba4eb8da540/0c480c4cc207ed3acbe48b721495a1228cdd5c70c1fd4360e9c464412f87b6db/integrate/M001\nCOMMAND: python3 -B /Users/jeremymcspadden/.gsd-path/runtimes/60d19647df3d499a320970dc6300fd9c339021f7f11375160d63047d6cf6f290/archive_milestone.py integrate --repo /Users/jeremymcspadden/evaluations/gsd-path-release-2026-10-07-cab24a78/grok/quick/repo --slug widget-count\n{\"archive\": \".project/archive/001-widget-count\", \"base\": \"1bf94f096cb143bf9f9e5afdcd21da716e11b183\", \"commit\": \"a840c2d7b5488f18181250d98909d39c785a2926\", \"integrate\": \"1bf94f096cb143bf9f9e5afdcd21da716e11b183\", \"landing\": \"1bf94f096cb143bf9f9e5afdcd21da716e11b183\", \"mode\": \"direct\", \"tag\": \"milestone/001-widget-count\"}\nINTEGRATE_EXIT=0\n",
   "fixture_bundle": "grok/fixture.bundle",
   "run_manifest": ".project/archive/001-widget-count/trust-run-manifest.json",
-  "ship_commit": "f52fe7e2cdf74875675fdfd00a28c3701bc47763",
+  "ship_commit": "a840c2d7b5488f18181250d98909d39c785a2926",
   "bound_branch": "gsd-path/M001",
   "default_branch": "main",
-  "pre_integration_default_commit": "ad284f9c22b9ae6e7cccfdabe05ec490281f173f",
-  "integration_commit": "6b3f0d48dabbcacf03d54d0efea74ad1987abfab",
+  "pre_integration_default_commit": "5fb5fb652dad805363d4b773c9931a1c2c402868",
+  "integration_commit": "1bf94f096cb143bf9f9e5afdcd21da716e11b183",
   "milestone_tag": "milestone/001-widget-count"
 }

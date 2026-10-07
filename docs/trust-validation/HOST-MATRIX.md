@@ -7,22 +7,22 @@ and required live-check scope.
 The historical results below do not define the current required host set;
 see [Live-check scope](TRUST-VALIDATION-SPEC.md#live-check-scope).
 
-Release 1.4.0 uses frozen candidate `6d3e38ed525831217cf7d4790674feebd8afc75f`
-from main on 2026-09-30, after PRs #240 and #241. Every host in the release
+Release 1.4.0 uses frozen candidate `cab24a78d31ba41d9d1b357dd72aeae00775ef2d`
+from main on 2026-10-07, matching the failed Release run 37660774035. Every host in the release
 scope has a validated full-milestone receipt and a passing external CLI
 acceptance check. The complete release gate remains required before
 publication; see the [release contract](../../RELEASE.md#release-contract).
 
 | Host | Install | Native guard installed | Full live milestone | Candidate result |
 |---|---|---|---|---|
-| Codex | automated | git-only tier: the `--ignore-user-config` harness run has no native hook, so Git hooks carry it | [codex.md](evidence/releases/1.4.0/codex.md) | **pass** on `6d3e38e` |
-| Claude Code | automated | fail-closed project hook + Git hooks | [claude.md](evidence/releases/1.4.0/claude.md) | **pass** on `6d3e38e` |
-| Grok | automated | not installed; Git hooks | [grok.md](evidence/releases/1.4.0/grok.md) | **pass** on `6d3e38e` |
-| OpenCode | automated | not installed; Git hooks | [opencode.md](evidence/releases/1.4.0/opencode.md) | **pass** on `6d3e38e` |
+| Codex | automated | git-only tier: the `--ignore-user-config` harness run has no native hook, so Git hooks carry it | [codex.md](evidence/releases/1.4.0/codex.md) | **pass** on `cab24a7` |
+| Claude Code | automated | fail-closed project hook + Git hooks | [claude.md](evidence/releases/1.4.0/claude.md) | **pass** on `cab24a7` |
+| Grok | automated | not installed; Git hooks | [grok.md](evidence/releases/1.4.0/grok.md) | **pass** on `cab24a7` |
+| OpenCode | automated | not installed; Git hooks | [opencode.md](evidence/releases/1.4.0/opencode.md) | **pass** on `cab24a7` |
 | GitHub Copilot CLI | automated | not installed; Git hooks | not run: account quota exhausted | excluded at the maintainer's request until restored |
-| Antigravity CLI | automated | not installed; Git hooks | [antigravity.md](evidence/releases/1.4.0/antigravity.md) | **pass** on `6d3e38e` |
-| Cursor | automated | fail-closed project hook + Git hooks | [cursor.md](evidence/releases/1.4.0/cursor.md) | **pass** on `6d3e38e` |
-| Kimi Code | automated | not installed; Git hooks | [kimi.md](evidence/releases/1.4.0/kimi.md) | **pass** on `6d3e38e` |
+| Antigravity CLI | automated | not installed; Git hooks | [antigravity.md](evidence/releases/1.4.0/antigravity.md) | **pass** on `cab24a7` |
+| Cursor | automated | fail-closed project hook + Git hooks | [cursor.md](evidence/releases/1.4.0/cursor.md) | **pass** on `cab24a7` |
+| Kimi Code | automated | not installed; Git hooks | [kimi.md](evidence/releases/1.4.0/kimi.md) | **pass** on `cab24a7` |
 | Qwen Code | automated | not installed; Git hooks | not run (API credits) | excluded at the maintainer's request |
 | Zed | automated | no native hook API; Git hooks | not run (API credits) | excluded at the maintainer's request |
 | Kiro | automated | not installed; Git hooks | not run (API credits) | excluded at the maintainer's request |

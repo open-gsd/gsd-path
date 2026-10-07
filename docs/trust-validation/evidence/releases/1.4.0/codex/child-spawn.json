@@ -1,7 +1,7 @@
 {
   "schema": "gsd-path/live-step-evidence/v1",
   "host": "codex",
-  "run_id": "codex-1.4.0-6d3e38e-20260930",
+  "run_id": "01a11799-2353-7f63-9118-bd9931cbd4dd",
   "result": "pass",
   "step": "child-spawn",
   "command": "collaboration.spawn_agent",
@@ -12,7 +12,7 @@
     "child_id": "build_t001",
     "status": "completed",
     "spawn_call": {
-      "call_id": "call_hO4OcddipNWM81BYr6JioLQC",
+      "call_id": "call_z3aFNIH3T2P1GLzbw0l74y9r",
       "name": "spawn_agent",
       "namespace": "collaboration",
       "arguments": {
@@ -26,7 +26,7 @@
       {
         "agent_name": "/root/build_t001",
         "agent_status": {
-          "completed": "T001 ready. Verify: `python3 -B tests/test_count_cli.py` passed all 6 tests; `git diff --check` passed.\nChanged: `count.py`, `tests/test_count_cli.py`, `.project/tasks/T001-widget-counter-cli.md` (Log only).\nRESULT: T001 ready"
+          "completed": "T001 ready. Static syntax checks and `git diff --check` passed; task Verify awaits the parent\u2019s isolated sidecar.\nChanged: `count.py`, `tests/test_count_cli.py`, `.project/tasks/T001-widget-counter-cli.md` (Log only).\nNative session: `01a117ab-86ca-7871-82d2-fc012f9e4046`.\nRESULT: T001 ready"
         }
       }
     ]

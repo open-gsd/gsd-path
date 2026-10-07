@@ -1,11 +1,11 @@
 {
   "schema": "gsd-path/live-step-evidence/v1",
   "host": "antigravity",
-  "run_id": "62b3d759-8739-4173-a919-17610373dfa8",
+  "run_id": "f3439947-2d8b-4303-9f8d-1c3564c36b99",
   "result": "pass",
   "step": "worktrees",
   "command": "git worktree list --porcelain",
-  "output": "worktree /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.4.0-6d3e38ed/antigravity/quick/repo\nHEAD 9f6bbfdccedb81422ede7ab125e1831ffd0cfb48\nbranch refs/heads/gsd-path/M001\n",
-  "primary_worktree": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.4.0-6d3e38ed/antigravity/quick/repo",
-  "integration_worktree": "/Users/jeremymcspadden/.gsd-path/projects/c3f4f7d1c5976ef2ffdddba45eb265fd7164d6a51ae5c382e4afce465ab16378/e33c11a86a303c199995633aa1150495d2d1d9f135fd58564334668999655f4c/integrate/M001"
+  "output": "worktree /Users/jeremymcspadden/evaluations/gsd-path-release-2026-10-07-cab24a78/antigravity/quick/repo\nHEAD 27a8eff18ed47d16cdfc1d567bb7c1c994b0c3ed\nbranch refs/heads/gsd-path/M001\n",
+  "primary_worktree": "/Users/jeremymcspadden/evaluations/gsd-path-release-2026-10-07-cab24a78/antigravity/quick/repo",
+  "integration_worktree": "/Users/jeremymcspadden/.gsd-path/projects/8096268dd7da8689898b98c54ac914680716cc414bdfbdea6c40b5b27e236927/c25f58645fb157f4a451cdc5896b24b1bbb455f3f932fd75155d92f0c5ab3823/integrate/M001"
 }

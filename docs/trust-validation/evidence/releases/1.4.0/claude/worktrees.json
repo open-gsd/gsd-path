@@ -1,11 +1,11 @@
 {
   "schema": "gsd-path/live-step-evidence/v1",
   "host": "claude",
-  "run_id": "c385d8e8-816c-411a-a0a8-871180edb217",
+  "run_id": "3a69bedd-8103-4274-9175-70bc14faf786",
   "result": "pass",
   "step": "worktrees",
   "command": "git worktree list --porcelain",
-  "output": "worktree /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.4.0-6d3e38ed/claude/quick/repo\nHEAD 10e0317d41f10211860e948b6a263f624e9ae057\nbranch refs/heads/gsd-path/M001\n",
-  "primary_worktree": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.4.0-6d3e38ed/claude/quick/repo",
-  "integration_worktree": "/Users/jeremymcspadden/.gsd-path/projects/430cedb13aac8525a7f53222806fdf63b5759670e54aa19cacf276ba1621f828/5db397a664091e28692414f9d953302e43540096461cc042da2814ca3a64c817/integrate/M001"
+  "output": "worktree /Users/jeremymcspadden/evaluations/gsd-path-release-2026-10-07-cab24a78/claude/quick/repo\nHEAD 694be5cec2e9058e42ceae2ab0ecea1ff9ab270f\nbranch refs/heads/gsd-path/M001\n",
+  "primary_worktree": "/Users/jeremymcspadden/evaluations/gsd-path-release-2026-10-07-cab24a78/claude/quick/repo",
+  "integration_worktree": "/Users/jeremymcspadden/.gsd-path/projects/74717497c7aebc47919a60097e75acf9ed29f93cb3ae172cc995de65c5c07fb7/05e9a1ce8ed34adc9b64e8a53e9e33c31484d8840de8080ce834ae86048ba4b0/integrate/M001"
 }

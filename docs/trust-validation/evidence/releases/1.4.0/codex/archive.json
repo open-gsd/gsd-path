@@ -1,11 +1,11 @@
 {
   "schema": "gsd-path/live-step-evidence/v1",
   "host": "codex",
-  "run_id": "codex-1.4.0-6d3e38e-20260930",
+  "run_id": "01a11799-2353-7f63-9118-bd9931cbd4dd",
   "result": "pass",
   "step": "archive",
-  "command": "/bin/zsh -lc 'python3 -B /Users/jeremymcspadden/.gsd-path/runtimes/be5a45e54aceb02b95ac1d23d52a19a56bcd981f5980ddc6445e5c5797930c67/archive_milestone.py validate --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.4.0-6d3e38ed/codex/quick/repo'",
-  "output": "{\"archive\": \".project/archive/001-widget-counter-cli\", \"commit\": \"8beb182e0adb42580a93f476831182d00fb2c543\"}",
-  "archive_path": ".project/archive/001-widget-counter-cli",
+  "command": "/bin/zsh -lc 'python3 /Users/jeremymcspadden/evaluations/gsd-path-release-2026-10-07-cab24a78/codex/plugin/tests/evaluate_codex.py activity --arm /Users/jeremymcspadden/evaluations/gsd-path-release-2026-10-07-cab24a78/codex/quick --category verification -- python3 -B /Users/jeremymcspadden/.gsd-path/runtimes/60d19647df3d499a320970dc6300fd9c339021f7f11375160d63047d6cf6f290/archive_milestone.py validate --repo /Users/jeremymcspadden/evaluations/gsd-path-release-2026-10-07-cab24a78/codex/quick/repo > .git/gsd-path/release-evidence/01a11799-2353-7f63-9118-bd9931cbd4dd/archive-validate.json\ncat .git/gsd-path/release-evidence/01a11799-2353-7f63-9118-bd9931cbd4dd/archive-validate.json'",
+  "output": "{\"archive\": \".project/archive/001-widget-counter-json\", \"commit\": \"adaeab4873033d2e6a6cfcc2c839b047e6cf2ada\"}\n",
+  "archive_path": ".project/archive/001-widget-counter-json",
   "validation_exit_code": 0
 }

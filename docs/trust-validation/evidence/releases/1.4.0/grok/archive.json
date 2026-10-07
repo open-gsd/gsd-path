@@ -1,11 +1,11 @@
 {
   "schema": "gsd-path/live-step-evidence/v1",
   "host": "grok",
-  "run_id": "01a0f031-e8e3-73e1-ad75-f32822a81a85",
+  "run_id": "01a11799-214e-7842-a8a4-5deb783ab171",
   "result": "pass",
   "step": "archive",
-  "command": "python3 -B /Users/jeremymcspadden/.gsd-path/runtimes/be5a45e54aceb02b95ac1d23d52a19a56bcd981f5980ddc6445e5c5797930c67/archive_milestone.py validate --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.4.0-6d3e38ed/grok/quick/repo",
-  "output": "{\"archive\": \".project/archive/001-widget-count\", \"commit\": \"f52fe7e2cdf74875675fdfd00a28c3701bc47763\"}",
+  "command": "REPO=\"/Users/jeremymcspadden/evaluations/gsd-path-release-2026-10-07-cab24a78/grok/quick/repo\"\nRT=\"/Users/jeremymcspadden/.gsd-path/runtimes/60d19647df3d499a320970dc6300fd9c339021f7f11375160d63047d6cf6f290\"\necho \"COMMAND: python3 -B $RT/archive_milestone.py validate --repo $REPO\"\npython3 -B \"$RT/archive_milestone.py\" validate --repo \"$REPO\"\necho \"VALIDATE_EXIT=$?\"",
+  "output": "COMMAND: python3 -B /Users/jeremymcspadden/.gsd-path/runtimes/60d19647df3d499a320970dc6300fd9c339021f7f11375160d63047d6cf6f290/archive_milestone.py validate --repo /Users/jeremymcspadden/evaluations/gsd-path-release-2026-10-07-cab24a78/grok/quick/repo\n{\"archive\": \".project/archive/001-widget-count\", \"commit\": \"a840c2d7b5488f18181250d98909d39c785a2926\"}\nVALIDATE_EXIT=0\n",
   "archive_path": ".project/archive/001-widget-count",
   "validation_exit_code": 0
 }

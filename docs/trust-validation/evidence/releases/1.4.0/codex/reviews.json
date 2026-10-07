@@ -1,11 +1,11 @@
 {
   "schema": "gsd-path/live-step-evidence/v1",
   "host": "codex",
-  "run_id": "codex-1.4.0-6d3e38e-20260930",
+  "run_id": "01a11799-2353-7f63-9118-bd9931cbd4dd",
   "result": "pass",
   "step": "reviews",
-  "command": "/bin/zsh -lc 'python3 -B /Users/jeremymcspadden/.gsd-path/runtimes/be5a45e54aceb02b95ac1d23d52a19a56bcd981f5980ddc6445e5c5797930c67/check_handoffs.py wave --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.4.0-6d3e38ed/codex/quick/repo --review .project/review/wave-1.cycle1.md\npython3 -B /Users/jeremymcspadden/.gsd-path/runtimes/be5a45e54aceb02b95ac1d23d52a19a56bcd981f5980ddc6445e5c5797930c67/discussion_records.py pending --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.4.0-6d3e38ed/codex/quick/repo'",
-  "output": "# Review \u2014 wave 1, cycle 1\n\nWave verdict: pass\nCycle: 1\nDepth: full\nTasks reviewed: 1\n# Final Review \u2014 reused full wave\n\nReviewed HEAD: c0dff3687308e5a5530a1c88bc36123d3fc8d6c5\nOverall verdict: pass\nSource review: .project/review/wave-1.cycle1.md\nSource commit: 7f781f6885055fc16ca4bab6c4e9fc81aa91c9c9",
-  "wave_review_artifact": ".project/archive/001-widget-counter-cli/review/wave-1.cycle1.md",
-  "final_review_artifact": ".project/archive/001-widget-counter-cli/review/FINAL.md"
+  "command": "/bin/zsh -lc 'python3 -B .agents/skills/gsd-path/scripts/workflow_run.py prepare-final --repo \"$PWD\" --expected-head 0110c2a72b4f2fee627e531317705580d0c9af14 > .git/gsd-path/release-evidence/01a11799-2353-7f63-9118-bd9931cbd4dd/prepare-final-first.json\ncat .git/gsd-path/release-evidence/01a11799-2353-7f63-9118-bd9931cbd4dd/prepare-final-first.json'",
+  "output": "# Review \u2014 wave 1, cycle 1\n\nReviewed HEAD: 0e198fe554bc17ba8ca8b15e3e34f4ec9d740e79\nReview scope: final\nWave verdict: pass\nCycle: 1\n# Final Review \u2014 reused full wave\n\nReviewed HEAD: 0110c2a72b4f2fee627e531317705580d0c9af14\nOverall verdict: pass\nSource review: .project/review/wave-1.cycle1.md\nSource commit: 0e198fe554bc17ba8ca8b15e3e34f4ec9d740e79",
+  "wave_review_artifact": ".project/archive/001-widget-counter-json/review/wave-1.cycle1.md",
+  "final_review_artifact": ".project/archive/001-widget-counter-json/review/FINAL.md"
 }
