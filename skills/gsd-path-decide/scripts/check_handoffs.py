@@ -34,9 +34,10 @@ DISPATCH_PATTERN = re.compile(
     r"→ (?P<output>[^—]+) — (?P<reason>.+)$"
 )
 QUESTION_PATTERN = re.compile(
-    r"^- `\[RESEARCH\] (?P<question>[^`]+)` → "
+    r"^- (?P<fence>`+)(?!`)(?P<body>.+?)(?<!`)(?P=fence)(?!`) → "
     r"(?P<dimensions>`[^`,\s]+`(?:,\s*`[^`,\s]+`)*)$"
 )
+QUESTION_PREFIX = "[RESEARCH] "
 FINDING_PATTERN = re.compile(r"^### (?P<id>P\d{3}) — (?P<title>.+)$")
 CRITERION_LOCATOR_PATTERN = re.compile(r"^SC[1-9]\d*$")
 COMMENT_PATTERN = re.compile(r"<!--.*?-->", re.DOTALL)
@@ -407,10 +408,25 @@ def _research_assignments(section: str) -> List[Tuple[str, List[str]]]:
         match = QUESTION_PATTERN.fullmatch(line)
         if match is None:
             raise HandoffError("RESEARCH.md has a malformed question assignment")
+        body = match.group("body")
+        fence_length = len(match.group("fence"))
+        if any(len(run) == fence_length for run in re.findall(r"`+", body)):
+            raise HandoffError("RESEARCH.md has a malformed question assignment")
+        if (
+            body.startswith(" ")
+            and body.endswith(" ")
+            and body.strip(" ")
+        ):
+            body = body[1:-1]
+        if not body.startswith(QUESTION_PREFIX):
+            raise HandoffError("RESEARCH.md has a malformed question assignment")
+        question = body[len(QUESTION_PREFIX) :]
+        if not question:
+            raise HandoffError("RESEARCH.md has a malformed question assignment")
         dimensions = re.findall(r"`([^`]+)`", match.group("dimensions"))
         if len(dimensions) != len(set(dimensions)):
             raise HandoffError("RESEARCH.md repeats a target in a question assignment")
-        assignments.append((match.group("question").strip(), dimensions))
+        assignments.append((question, dimensions))
     return assignments
 
 

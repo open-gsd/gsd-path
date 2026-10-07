@@ -6,6 +6,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Optional, Tuple
 
 from scripts import check_handoffs
 
@@ -213,6 +214,35 @@ Intent: `{project_dir}/intent/INTENT.md`
         for dimension in dispatched_dimensions:
             self.write_evidence(root, dimension, questions=questions)
 
+    def write_research_assignment_case(
+        self,
+        root: Path,
+        questions: Tuple[str, ...],
+        assignments: Tuple[str, ...],
+        target: str = "domain",
+        evidence_questions: Optional[Tuple[str, ...]] = None,
+    ) -> None:
+        self.write_state(root, "research", "active")
+        self.write_intent(
+            root,
+            "".join(f"- [RESEARCH] {question}\n" for question in questions),
+        )
+        self.write_research_handoff(root)
+        handoff_path = root / ".project/research/RESEARCH.md"
+        handoff = handoff_path.read_text(encoding="utf-8")
+        before, marker, _after = handoff.partition("## Question assignments\n")
+        self.assertTrue(marker)
+        rows = "".join(f"- {assignment} → `{target}`\n" for assignment in assignments)
+        handoff_path.write_text(
+            before + marker + rows,
+            encoding="utf-8",
+        )
+        self.write_evidence(
+            root,
+            "domain",
+            questions=questions if evidence_questions is None else evidence_questions,
+        )
+
     def write_custom_only_research_handoff(self, root: Path) -> None:
         self.write(
             root,
@@ -380,6 +410,145 @@ Intent: `.project/intent/INTENT.md`
                 "dispatched pitfalls has no assigned research question",
             ):
                 check_handoffs.validate_research(root)
+
+    def test_research_handoff_accepts_single_and_longer_question_code_spans(self) -> None:
+        cases = (
+            (
+                "Which domain applies?",
+                "`[RESEARCH] Which domain applies?`",
+            ),
+            (
+                "Does `Widget` and `sample.json` match?",
+                "`` [RESEARCH] Does `Widget` and `sample.json` match? ``",
+            ),
+            (
+                "Does `Widget`, ``raw``, and `sample.json` match?",
+                "``` [RESEARCH] Does `Widget`, ``raw``, and `sample.json` match? ```",
+            ),
+            (
+                "Does this marker end in a backtick `",
+                "`` [RESEARCH] Does this marker end in a backtick ` ``",
+            ),
+        )
+        for question, assignment in cases:
+            with self.subTest(question=question), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                self.write_research_assignment_case(root, (question,), (assignment,))
+
+                result = check_handoffs.validate_research(root)
+
+                self.assertEqual(result["questions"], 1)
+                self.assertEqual(result["dispatched"], ["domain"])
+
+    def test_research_handoff_rejects_invalid_question_code_spans(self) -> None:
+        question = "Which domain applies?"
+        cases = (
+            # Opening and closing delimiters must each be one maximal, equal run.
+            (question, "``[RESEARCH] Which domain applies?```"),
+            (question, "```[RESEARCH] Which domain applies?``"),
+            # A body run matching the delimiter length cannot occur inside the span.
+            (
+                "Does the ``raw`` token work?",
+                "`` [RESEARCH] Does the ``raw`` token work? ``",
+            ),
+            # Padding is removed only as a pair, once at each edge.
+            (question, "`` [RESEARCH] Which domain applies?``"),
+            (question, "``[RESEARCH] Which domain applies? ``"),
+            (question, "``  [RESEARCH] Which domain applies?  ``"),
+            (question, "``[RESEARCH] Which domain applies?  ``"),
+            # The body must begin with the required marker, and its question must
+            # retain exact identity with the approved intent.
+            (question, "`` [RESEARCH]Which domain applies? ``"),
+            (question, "`` [RESEARCH] Which other domain applies? ``"),
+        )
+        for intent_question, assignment in cases:
+            with self.subTest(assignment=assignment), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                self.write_research_assignment_case(
+                    root, (intent_question,), (assignment,)
+                )
+
+                with self.assertRaises(check_handoffs.HandoffError):
+                    check_handoffs.validate_research(root)
+
+    def test_research_handoff_rejects_multiline_question_assignments(self) -> None:
+        question = "Which domain applies?"
+        assignment = "`` [RESEARCH] Which domain applies?\n``"
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_research_assignment_case(root, (question,), (assignment,))
+
+            with self.assertRaises(check_handoffs.HandoffError):
+                check_handoffs.validate_research(root)
+
+    def test_research_handoff_preserves_question_assignment_identity_checks(self) -> None:
+        question = "Which domain applies?"
+        assignment = "`` [RESEARCH] Which domain applies? ``"
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_research_assignment_case(
+                root,
+                (question, question),
+                (assignment, assignment),
+            )
+
+            with self.assertRaisesRegex(check_handoffs.HandoffError, "repeats a question assignment"):
+                check_handoffs.validate_research(root)
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_research_assignment_case(
+                root,
+                (question,),
+                (assignment,),
+                target="stack",
+            )
+
+            with self.assertRaisesRegex(check_handoffs.HandoffError, "must target a dispatched dimension"):
+                check_handoffs.validate_research(root)
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_research_assignment_case(
+                root,
+                (question,),
+                (assignment,),
+            )
+            evidence = root / ".project/research/evidence-domain.md"
+            evidence.write_text(
+                evidence.read_text(encoding="utf-8").replace(
+                    f"- {question} → The evidence answers this with the cited source.\n",
+                    "",
+                ),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(check_handoffs.HandoffError, "answers do not match"):
+                check_handoffs.validate_research(root)
+
+    def test_backtick_question_can_target_multiple_dispatched_dimensions(self) -> None:
+        question = "Does `Widget` and ``raw`` match?"
+        assignment = (
+            "- ``` [RESEARCH] Does `Widget` and ``raw`` match? ``` "
+            "→ `stack`, `pitfalls`"
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_dimension_assignment_case(
+                root,
+                (assignment,),
+                questions=(question,),
+            )
+
+            result = check_handoffs.validate_research(root)
+
+            self.assertEqual(result["dispatched"], ["pitfalls", "stack"])
+            self.assertEqual(result["questions"], 1)
+            for dimension in ("stack", "pitfalls"):
+                evidence = (root / f".project/research/evidence-{dimension}.md").read_text(
+                    encoding="utf-8"
+                )
+                self.assertIn(f"Questions assigned: {question}", evidence)
 
     def test_research_can_skip_every_settled_dimension(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
