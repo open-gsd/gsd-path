@@ -7,8 +7,11 @@ and required live-check scope.
 The historical results below do not define the current required host set;
 see [Live-check scope](TRUST-VALIDATION-SPEC.md#live-check-scope).
 
-Release 1.4.0 uses frozen candidate `cab24a78d31ba41d9d1b357dd72aeae00775ef2d`
-from main on 2026-10-07, matching the failed Release run 37660774035. Every host in the release
+Release 1.5.0 uses frozen candidate `cab24a78d31ba41d9d1b357dd72aeae00775ef2d`
+from main on 2026-10-07. Its receipts were recorded as package 1.4.0 before the
+version change and stay in `evidence/releases/1.4.0/`; a version-only change
+does not invalidate them. The published 1.4.0 used candidate
+`6d3e38ed525831217cf7d4790674feebd8afc75f`; tag `v1.4.0` has its receipts. Every host in the release
 scope has a validated full-milestone receipt and a passing external CLI
 acceptance check. The complete release gate remains required before
 publication; see the [release contract](../../RELEASE.md#release-contract).
