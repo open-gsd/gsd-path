@@ -77,6 +77,29 @@ setups (Husky and friends) and linked worktrees (where `.git` is a file).
 Every selected host requires an initialized repository with a resolvable hooks
 directory; otherwise installation stops before writing.
 
+### Existing Git hooks
+
+A repository can already have its own `pre-commit`, `commit-msg`, or `pre-push`
+hook.
+
+- **In the repository's own `.git/hooks`:** the installer keeps your hook as
+  `<hook>.gsd-path-chained` and writes the guard hook in its place. The guard
+  runs first. Your hook runs after it, with the same arguments and the same
+  `pre-push` input, only when the guard accepts. If the installation fails,
+  your hook is put back unchanged.
+- **In a `core.hooksPath` directory (for example Husky) or a linked worktree:**
+  the installer stops with `cannot chain` and changes nothing. That directory
+  can be tracked or shared, so a rename there reaches other clones. Rename your
+  hook to `<hook>.gsd-path-chained` yourself, then rerun the installer. Commit
+  the rename when the directory is tracked.
+- **`<hook>.gsd-path-chained` already exists beside a foreign hook:** the
+  installer stops. Decide which of the two files you want to keep.
+
+Git hooks are local to a clone. A bot that merges on the server, such as
+Renovate, never runs them, and its commits on the default branch do not
+disturb milestone validation. A merge request can still conflict when the bot
+and the milestone change the same file; Path does not resolve that conflict.
+
 Git hooks work for **any** agent that commits. Native guard wiring denies a tool
 call when its event is malformed or the guard cannot validate it.
 
@@ -366,6 +389,7 @@ not intercept subagent tools — treat coverage as orchestrator-level.
 | `ship:` commit blocked with `app.py` staged | Ship commits may only touch `.project/` |
 | Tool denied editing archive | Pre-tool guard — use active paths, not archive |
 | Hook not running in Cursor | Run `--hooks-refresh-full --cursor --project /path/to/repo` |
+| Installer stops with `cannot chain` | See [existing Git hooks](#existing-git-hooks): rename your hook to `<hook>.gsd-path-chained`, or remove the stale chained file, then rerun |
 | `--hooks-refresh` rejects an unmanaged guard | Move the foreign guard aside, then rerun refresh; use `--hooks-init` if guards are wanted |
 | Runtime missing, invalid, or legacy | Follow [runtime restoration or migration](DOCS.md#project-runtime-versions) |
 

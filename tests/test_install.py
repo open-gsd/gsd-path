@@ -13,7 +13,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from scripts import install
+from scripts import _common, install
 from tests._platform import posix_permissions_only, requires_symlink
 
 
@@ -2061,6 +2061,182 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(1, status)
         self.assertIn("--hooks requires --project", error)
         self.assertFalse(target.exists())
+
+    def foreign_hook_project(self, hooks_path=".git/hooks"):
+        """A real repository whose own pre-push and commit-msg hooks record their input."""
+        project = self.root / "foreign-hook-project"
+        project.mkdir()
+        subprocess.run(["git", "init", "-q", os.fspath(project)], check=True, capture_output=True)
+        hooks = project / hooks_path
+        hooks.mkdir(parents=True, exist_ok=True)
+        originals = {
+            "pre-push": '#!/bin/sh\ncat > "$PWD/user-pre-push-stdin"\nprintf %s "$*" > "$PWD/user-pre-push-args"\n',
+            "commit-msg": '#!/bin/sh\nprintf %s "$1" > "$PWD/user-commit-msg-args"\n',
+        }
+        for name, body in originals.items():
+            (hooks / name).write_bytes(body.encode("utf-8"))
+            (hooks / name).chmod(0o755)
+        return project, hooks, originals
+
+    def hooks_command(self, command, project):
+        return self.run_main(
+            [command, "--claude", "--project", str(project), "--source-root", str(self.source)]
+        )
+
+    def run_hook(self, project, hook, *arguments, stdin=""):
+        return subprocess.run(
+            [_common.find_bash() if os.name == "nt" else "/bin/sh", os.fspath(hook), *arguments],
+            cwd=os.fspath(project), input=stdin,
+            capture_output=True, encoding="utf-8", errors="replace", check=False,
+        )
+
+    def test_hooks_init_chains_foreign_git_hooks_and_runs_them_after_the_guard(self):
+        project, hooks, originals = self.foreign_hook_project()
+
+        status, _, error = self.hooks_command("--hooks-init", project)
+
+        self.assertEqual(0, status, error)
+        for name, body in originals.items():
+            chained = hooks / f"{name}.gsd-path-chained"
+            self.assertEqual(body, chained.read_text(encoding="utf-8"))
+            self.assertTrue(os.access(chained, os.X_OK))
+            self.assertTrue(install._is_managed_git_hook(hooks / name))
+        # The guard has its own tests; here it is a boundary that accepts.
+        (project / install.HOOKS_DIRECTORY / "git_guard.py").write_bytes(
+            f"# {install.GUARD_MARKER}\n".encode("utf-8")
+        )
+        update = "refs/heads/a 1111 refs/heads/a 2222\n"
+        pushed = self.run_hook(project, hooks / "pre-push", "origin", "url", stdin=update)
+        self.assertEqual(0, pushed.returncode, pushed.stderr)
+        self.assertEqual(update, (project / "user-pre-push-stdin").read_text(encoding="utf-8"))
+        self.assertEqual("origin url", (project / "user-pre-push-args").read_text(encoding="utf-8"))
+        committed = self.run_hook(project, hooks / "commit-msg", "MSGFILE")
+        self.assertEqual(0, committed.returncode, committed.stderr)
+        self.assertEqual("MSGFILE", (project / "user-commit-msg-args").read_text(encoding="utf-8"))
+
+    def test_chained_git_hook_does_not_run_when_the_guard_refuses(self):
+        project, hooks, _ = self.foreign_hook_project()
+        status, _, error = self.hooks_command("--hooks-init", project)
+        self.assertEqual(0, status, error)
+        (project / install.HOOKS_DIRECTORY / "git_guard.py").write_bytes(
+            f"# {install.GUARD_MARKER}\nraise SystemExit(1)\n".encode("utf-8")
+        )
+
+        for name, arguments in (("pre-push", ("origin", "url")), ("commit-msg", ("MSGFILE",))):
+            with self.subTest(hook=name):
+                result = self.run_hook(project, hooks / name, *arguments, stdin="x\n")
+                self.assertEqual(1, result.returncode)
+        self.assertEqual([], sorted(path.name for path in project.glob("user-*")))
+
+    def test_hooks_refresh_keeps_one_chained_git_hook(self):
+        project, hooks, originals = self.foreign_hook_project()
+        status, _, error = self.hooks_command("--hooks-init", project)
+        self.assertEqual(0, status, error)
+        installed = (hooks / "pre-push").read_bytes()
+
+        status, _, error = self.hooks_command("--hooks-refresh-full", project)
+
+        self.assertEqual(0, status, error)
+        self.assertEqual(installed, (hooks / "pre-push").read_bytes())
+        self.assertEqual(
+            sorted(["commit-msg", "commit-msg.gsd-path-chained", "pre-commit",
+                    "pre-push", "pre-push.gsd-path-chained"]),
+            sorted(path.name for path in hooks.iterdir() if not path.name.endswith(".sample")),
+        )
+        self.assertEqual(
+            originals["pre-push"],
+            (hooks / "pre-push.gsd-path-chained").read_text(encoding="utf-8"),
+        )
+        _, report, _ = self.run_main(
+            ["--doctor", "--claude", "--claude-root", str(self.root / "empty-skills"),
+             "--source-root", str(self.source), "--project", str(project)]
+        )
+        self.assertNotIn("is stale", report)
+        # Without its chained file the same hook no longer matches what doctor expects.
+        (hooks / "pre-push.gsd-path-chained").unlink()
+        _, report, _ = self.run_main(
+            ["--doctor", "--claude", "--claude-root", str(self.root / "empty-skills"),
+             "--source-root", str(self.source), "--project", str(project)]
+        )
+        self.assertIn("pre-push is stale", report)
+
+    def test_first_project_install_with_hooks_chains_a_foreign_git_hook(self):
+        project, hooks, originals = self.foreign_hook_project()
+
+        status, _, error = self.run_main(
+            ["--claude", "--claude-root", str(self.root / "skills"), "--project", str(project),
+             "--hooks", "--source-root", str(self.source)]
+        )
+
+        self.assertEqual(0, status, error)
+        self.assertEqual(
+            originals["pre-push"],
+            (hooks / "pre-push.gsd-path-chained").read_text(encoding="utf-8"),
+        )
+        self.assertEqual(
+            install.pre_push_hook(install._required_python_runtime("test"), True),
+            (hooks / "pre-push").read_text(encoding="utf-8"),
+        )
+        self.assertEqual(
+            install.pre_commit_hook(install._required_python_runtime("test")),
+            (hooks / "pre-commit").read_text(encoding="utf-8"),
+        )
+
+    def test_failed_install_restores_foreign_git_hooks(self):
+        project, hooks, originals = self.foreign_hook_project()
+
+        with mock.patch.object(install, "_apply_git_attributes", side_effect=OSError("disk full")):
+            with self.assertRaisesRegex(OSError, "disk full"):
+                self.hooks_command("--hooks-init", project)
+
+        self.assertEqual(
+            {name: body.encode("utf-8") for name, body in originals.items()},
+            {path.name: path.read_bytes() for path in hooks.iterdir()
+             if not path.name.endswith(".sample")},
+        )
+        self.assertTrue(os.access(hooks / "pre-push", os.X_OK))
+
+    def test_hooks_init_refuses_to_chain_over_an_existing_chained_hook(self):
+        project, hooks, originals = self.foreign_hook_project()
+        (hooks / "pre-push.gsd-path-chained").write_bytes(b"#!/bin/sh\nexit 0\n")
+
+        status, _, error = self.hooks_command("--hooks-init", project)
+
+        self.assertEqual(1, status)
+        self.assertIn("cannot chain", error)
+        self.assertEqual(originals["pre-push"], (hooks / "pre-push").read_text(encoding="utf-8"))
+        self.assertEqual(originals["commit-msg"], (hooks / "commit-msg").read_text(encoding="utf-8"))
+        self.assertFalse((hooks / "commit-msg.gsd-path-chained").exists())
+
+    def test_hooks_init_refuses_to_chain_in_a_custom_hooks_directory(self):
+        project, hooks, originals = self.foreign_hook_project(".husky")
+        subprocess.run(
+            ["git", "-C", os.fspath(project), "config", "core.hooksPath", ".husky"],
+            check=True, capture_output=True,
+        )
+
+        status, _, error = self.hooks_command("--hooks-init", project)
+
+        self.assertEqual(1, status)
+        self.assertIn("cannot chain", error)
+        self.assertIn("core.hooksPath", error)
+        self.assertEqual(
+            {name: body.encode("utf-8") for name, body in originals.items()},
+            {path.name: path.read_bytes() for path in hooks.iterdir()},
+        )
+
+        # The documented manual step: the owner renames the tracked hooks.
+        for name in originals:
+            (hooks / name).rename(hooks / f"{name}.gsd-path-chained")
+        status, _, error = self.hooks_command("--hooks-init", project)
+
+        self.assertEqual(0, status, error)
+        (project / install.HOOKS_DIRECTORY / "git_guard.py").write_bytes(
+            f"# {install.GUARD_MARKER}\n".encode("utf-8")
+        )
+        committed = self.run_hook(project, hooks / "commit-msg", "MSGFILE")
+        self.assertEqual(0, committed.returncode, committed.stderr)
+        self.assertEqual("MSGFILE", (project / "user-commit-msg-args").read_text(encoding="utf-8"))
 
     def test_hooks_init_adds_guards_without_changing_existing_contracts(self):
         project = self.root / "existing-project"
