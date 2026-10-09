@@ -5464,6 +5464,22 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
             self.assertEqual(validated.returncode, 0, validated.stderr)
             self.assertEqual(json.loads(self.integrate(repo).stdout), payload)
 
+            # The next milestone binds at the same recorded default branch.
+            bound = self.run_command(
+                sys.executable, str(ARCHIVE_SCRIPT.with_name("pipeline_git.py")), "bind-next",
+                "--repo", str(repo), "--branch", "gsd-path/M002",
+                "--previous-branch", "gsd-path/M001", "--ship", ship_sha,
+                "--remote-default", "origin/master", "--base", merge_sha,
+                "--landing", merge_sha,
+                cwd=PROJECT_ROOT,
+            )
+            self.assertEqual(bound.returncode, 0, bound.stderr)
+            self.assertEqual(
+                self.git(repo, "branch", "--show-current").stdout.strip(), "gsd-path/M002"
+            )
+            self.assertEqual(self.git(repo, "rev-parse", "HEAD").stdout.strip(), merge_sha)
+            self.assertEqual(pipeline_state.load_state(repo)[0].default_branch, "master")
+
     def test_integrate_rejects_origin_head_that_differs_from_state_default(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
