@@ -57,16 +57,14 @@ class CoreMigrationTests(unittest.TestCase):
              f"refs/remotes/origin/{branch}"], check=True, capture_output=True,
         )
 
-    def test_preview_and_prepare_reject_a_remote_default_other_than_main(self):
+    def test_preview_and_prepare_accept_a_remote_default_other_than_main(self):
         self.set_remote_default("master")
         output = self.root / "bundle"
         for command, args in (("preview", ()), ("prepare", ("--output", str(output)))):
             with self.subTest(command=command):
                 result = self.run_command(command, *args)
-                self.assertEqual(result.returncode, 1)
-                self.assertEqual(result.stdout, "")
-                self.assertIn("remote default must be origin/main, got origin/master", result.stderr)
-        self.assertFalse(output.exists())
+                self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(output.exists())
 
     def test_preview_accepts_main_as_remote_default(self):
         self.set_remote_default("main")

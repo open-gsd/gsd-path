@@ -56,6 +56,7 @@ def state_text(
     integration_default=None,
     integration=None,
     integration_source=None,
+    default_branch=None,
 ) -> str:
     integration_fields = ""
     if integration_default is not None:
@@ -64,6 +65,8 @@ def state_text(
         integration_fields += f"integration: {integration}\n"
     if integration_source is not None:
         integration_fields += f"integration_source: {integration_source}\n"
+    if default_branch is not None:
+        integration_fields += f"default_branch: {default_branch}\n"
     return (
         "---\n"
         "pipeline: gsd-path/v2\n"
@@ -210,6 +213,71 @@ class PipelineStateTests(unittest.TestCase):
 
             self.assertEqual(state.integration_default, "direct")
             self.assertEqual(state.integration, "direct")
+
+    def load_text(self, repo: Path, text: str) -> pipeline_state.PipelineState:
+        run_git(repo, "init", "-b", "main")
+        (repo / ".project").mkdir()
+        (repo / ".project" / "STATE.md").write_bytes(text.encode("utf-8"))
+        return pipeline_state.load_state(repo)[0]
+
+    def test_state_without_default_branch_means_main(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            state = self.load_text(Path(tmp), state_text())
+
+            self.assertEqual(state.default_branch, "main")
+
+    def test_state_reads_recorded_default_branch(self) -> None:
+        for name in ("master", "release/trunk", "häuptling"):
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as tmp:
+                state = self.load_text(Path(tmp), state_text(default_branch=name))
+
+                self.assertEqual(state.default_branch, name)
+
+    def test_state_rejects_unusable_default_branch(self) -> None:
+        for name in ("gsd-path/M001", "gsd-path-integrate/M001", "-main", "a..b",
+                     "main.lock", "main/", "null", "ma:in"):
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as tmp:
+                with self.assertRaisesRegex(
+                    pipeline_state.PipelineStateError, "invalid default_branch"
+                ):
+                    self.load_text(Path(tmp), state_text(default_branch=name))
+
+    def test_status_state_object_keeps_the_closed_field_set(self) -> None:
+        # guard_hook, install and the daemon probe reject any other field set.
+        import guard_hook
+
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            self.load_text(repo, state_text(
+                integration_default="direct", integration="direct",
+                integration_source="default", default_branch="master",
+            ))
+
+            routed = pipeline_state.route_state(repo)
+
+            self.assertEqual(set(routed["state"]), set(guard_hook.STATUS_STATE_FIELDS))
+
+    def test_transition_keeps_and_cannot_set_default_branch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            run_git(repo, "init", "-b", "gsd-path/M001")
+            (repo / ".project").mkdir()
+            path = repo / ".project" / "STATE.md"
+            path.write_bytes(state_text(
+                phase="plan", status="active", branch="gsd-path/M001",
+                default_branch="master",
+            ).encode("utf-8"))
+            expected = {"phase": "plan", "status": "active",
+                        "branch": "gsd-path/M001", "archive": None}
+
+            with self.assertRaisesRegex(pipeline_state.PipelineStateError, "unsupported"):
+                pipeline_state.transition_state(
+                    repo, expected, {"default_branch": "main"}, "plan — retarget"
+                )
+            pipeline_state.transition_state(repo, expected, {"status": "blocked"}, "plan — blocked")
+
+            self.assertIn("status: blocked\n", path.read_text(encoding="utf-8"))
+            self.assertEqual(pipeline_state.load_state(repo)[0].default_branch, "master")
 
     def test_state_accepts_explicit_pull_request_integration(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

@@ -173,9 +173,14 @@ class PipelineState:
     integration_default: str
     integration: str
     integration_source: str
+    default_branch: str = "main"
 
     def json(self) -> dict[str, Optional[str]]:
-        return asdict(self)
+        # ponytail: default_branch stays out of this payload; guard_hook, install
+        # and the daemon probe accept only the closed STATE_FIELDS set.
+        payload = asdict(self)
+        del payload["default_branch"]
+        return payload
 
 
 @dataclass(frozen=True)
@@ -290,7 +295,7 @@ def _bound_branch_number(value: str) -> Optional[int]:
 def _state_from_text(text: str, label: str = "STATE.md") -> PipelineState:
     values = _parse_frontmatter(text, label)
     missing = [field for field in LEGACY_STATE_FIELDS if field not in values]
-    extra = sorted(set(values) - set(STATE_FIELDS))
+    extra = sorted(set(values) - set(STATE_FIELDS) - {"default_branch"})
     if missing:
         raise PipelineStateError(f"{label} is missing fields: {', '.join(missing)}")
     if extra:
@@ -322,6 +327,7 @@ def _state_from_text(text: str, label: str = "STATE.md") -> PipelineState:
         integration_default=integration_default,
         integration=integration,
         integration_source=integration_source,
+        default_branch=values.get("default_branch", "main"),
     )
     _validate_state_values(state, label)
     return state
@@ -354,6 +360,10 @@ def _validate_state_values(state: PipelineState, label: str) -> None:
     ):
         raise PipelineStateError(
             f"{label} default-sourced integration must match integration_default"
+        )
+    if not _common.valid_default_branch(state.default_branch):
+        raise PipelineStateError(
+            f"{label} has invalid default_branch: {state.default_branch}"
         )
     if state.branch is not None and _bound_branch_number(state.branch) is None:
         raise PipelineStateError(f"{label} has invalid branch: {state.branch}")

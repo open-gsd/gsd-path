@@ -13,6 +13,7 @@ archive: null       # persisted archive transaction path; never recomputed
 integration_default: direct # direct | pull-request | external-landing; project setting
 integration: direct # current milestone; may override the default before build
 integration_source: default # default | milestone; preserves override provenance
+default_branch: main # origin default branch; initialization records it once, nothing changes it
 ---
 
 # Project State
