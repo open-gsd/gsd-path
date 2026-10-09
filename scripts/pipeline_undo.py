@@ -861,7 +861,7 @@ def classify_undo(repo: Path) -> dict[str, object]:
             [f"an in-progress helper journal exists ({names}); resume that transaction first"]
         )
     if git.get("ancestor_of_origin_main"):
-        return _blocked(["HEAD is an ancestor of origin/main; undo would rewrite shipped history"])
+        return _blocked(["HEAD is an ancestor of the origin default branch; undo would rewrite shipped history"])
 
     product = _product_dirty(dirty)
     if product:
@@ -1081,7 +1081,7 @@ def _require_unpublished_reset(repo: Path, expected_branch: str) -> None:
     if git.get("published"):
         raise UndoError("HEAD became published on its recorded remote branch")
     if git.get("ancestor_of_origin_main"):
-        raise UndoError("HEAD became published through origin/main")
+        raise UndoError("HEAD became published through the origin default branch")
 
 
 def _remove_untracked_tree(repo: Path, relative: str) -> None:

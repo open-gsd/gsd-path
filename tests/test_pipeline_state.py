@@ -56,6 +56,7 @@ def state_text(
     integration_default=None,
     integration=None,
     integration_source=None,
+    default_branch=None,
 ) -> str:
     integration_fields = ""
     if integration_default is not None:
@@ -64,6 +65,8 @@ def state_text(
         integration_fields += f"integration: {integration}\n"
     if integration_source is not None:
         integration_fields += f"integration_source: {integration_source}\n"
+    if default_branch is not None:
+        integration_fields += f"default_branch: {default_branch}\n"
     return (
         "---\n"
         "pipeline: gsd-path/v2\n"
@@ -210,6 +213,75 @@ class PipelineStateTests(unittest.TestCase):
 
             self.assertEqual(state.integration_default, "direct")
             self.assertEqual(state.integration, "direct")
+
+    def load_text(self, repo: Path, text: str) -> pipeline_state.PipelineState:
+        run_git(repo, "init", "-b", "main")
+        (repo / ".project").mkdir()
+        (repo / ".project" / "STATE.md").write_bytes(text.encode("utf-8"))
+        return pipeline_state.load_state(repo)[0]
+
+    def test_state_without_default_branch_means_main(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            state = self.load_text(Path(tmp), state_text())
+
+            self.assertEqual(state.default_branch, "main")
+
+    def test_state_reads_recorded_default_branch(self) -> None:
+        for name in ("master", "release/trunk", "häuptling"):
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as tmp:
+                state = self.load_text(Path(tmp), state_text(default_branch=name))
+
+                self.assertEqual(state.default_branch, name)
+
+    def test_state_rejects_unusable_default_branch(self) -> None:
+        for name in ("gsd-path/M001", "gsd-path-integrate/M001", "-main", "a..b",
+                     "main.lock", "main/", "null", "ma:in"):
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as tmp:
+                with self.assertRaisesRegex(
+                    pipeline_state.PipelineStateError, "invalid default_branch"
+                ):
+                    self.load_text(Path(tmp), state_text(default_branch=name))
+
+    def test_status_state_object_keeps_the_closed_field_set(self) -> None:
+        # guard_hook, install and the daemon probe reject any other field set.
+        import guard_hook
+
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            self.load_text(repo, state_text(
+                integration_default="direct", integration="direct",
+                integration_source="default", default_branch="master",
+            ))
+
+            routed = pipeline_state.route_state(repo)
+
+            self.assertEqual(set(routed["state"]), set(guard_hook.STATUS_STATE_FIELDS))
+            # The router reads the recorded default branch beside the state object.
+            self.assertEqual(routed["default_branch"], "master")
+            self.assertEqual(pipeline_state.status_state(repo)["default_branch"], "master")
+            self.assertEqual(pipeline_state.validate_state(repo)["default_branch"], "master")
+
+    def test_transition_keeps_and_cannot_set_default_branch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            run_git(repo, "init", "-b", "gsd-path/M001")
+            (repo / ".project").mkdir()
+            path = repo / ".project" / "STATE.md"
+            path.write_bytes(state_text(
+                phase="plan", status="active", branch="gsd-path/M001",
+                default_branch="master",
+            ).encode("utf-8"))
+            expected = {"phase": "plan", "status": "active",
+                        "branch": "gsd-path/M001", "archive": None}
+
+            with self.assertRaisesRegex(pipeline_state.PipelineStateError, "unsupported"):
+                pipeline_state.transition_state(
+                    repo, expected, {"default_branch": "main"}, "plan — retarget"
+                )
+            pipeline_state.transition_state(repo, expected, {"status": "blocked"}, "plan — blocked")
+
+            self.assertIn("status: blocked\n", path.read_text(encoding="utf-8"))
+            self.assertEqual(pipeline_state.load_state(repo)[0].default_branch, "master")
 
     def test_state_accepts_explicit_pull_request_integration(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -2091,12 +2163,16 @@ class PipelineStateTests(unittest.TestCase):
         pull_request: bool = False,
         member_task: bool = False,
         context_repo_example: bool = False,
+        default: str = "main",
+        next_default=None,
     ) -> tuple[Path, str]:
+        # `default` other than main is recorded in STATE as initialize does it.
+        recorded = None if default == "main" else default
         repo = Path(tmp) / "repo"
         remote = Path(tmp) / "origin.git"
         if pull_request:
-            run_git(Path(tmp), "init", "--bare", "-b", "main", str(remote))
-        run_git(Path(tmp), "init", "-b", "main", str(repo))
+            run_git(Path(tmp), "init", "--bare", "-b", default, str(remote))
+        run_git(Path(tmp), "init", "-b", default, str(repo))
         run_git(repo, "config", "user.name", "GSD Path Test")
         run_git(repo, "config", "user.email", "test@example.com")
         if pull_request:
@@ -2115,6 +2191,7 @@ class PipelineStateTests(unittest.TestCase):
                 phase="build",
                 status="active",
                 branch="gsd-path/M001",
+                default_branch=recorded,
             ).encode("utf-8"),
         )
         (project / "ROADMAP.md").write_bytes(roadmap_text().encode("utf-8"))
@@ -2125,6 +2202,7 @@ class PipelineStateTests(unittest.TestCase):
                 status="active" if next_phase == "plan" and next_status == "done" else next_status,
                 integration_default="pull-request" if pull_request else None,
                 integration="pull-request" if pull_request else None,
+                default_branch=next_default if next_default else recorded,
             ).encode("utf-8"),
         )
         (project / "next" / "tasks" / "T001-base.md").write_bytes(
@@ -2213,6 +2291,7 @@ class PipelineStateTests(unittest.TestCase):
                 archive=".project/archive/001-first/",
                 integration_default="pull-request" if pull_request else None,
                 integration="pull-request" if pull_request else None,
+                default_branch=recorded,
             ).encode("utf-8"),
         )
         run_git(repo, "add", "-A", "--", ".project", "app.py")
@@ -2222,14 +2301,14 @@ class PipelineStateTests(unittest.TestCase):
             "-m",
             "ship: M001 — first",
         )
-        run_git(repo, "switch", "main")
+        run_git(repo, "switch", default)
         run_git(
             repo,
             "merge",
             "--no-ff",
             "gsd-path/M001",
             "-m",
-            "integrate: M001 — merge gsd-path/M001 into main",
+            f"integrate: M001 — merge gsd-path/M001 into {default}",
         )
         integrate = run_git(repo, "rev-parse", "HEAD").stdout.strip()
         run_git(
@@ -2252,9 +2331,9 @@ class PipelineStateTests(unittest.TestCase):
             "refs/remotes/origin/tags/milestone/001-first",
             tag_object,
         )
-        run_git(repo, "update-ref", "refs/remotes/origin/main", integrate)
+        run_git(repo, "update-ref", f"refs/remotes/origin/{default}", integrate)
         if pull_request:
-            run_git(repo, "push", "origin", "main", "milestone/001-first")
+            run_git(repo, "push", "origin", default, "milestone/001-first")
         run_git(repo, "switch", "-c", "gsd-path/M002")
         return repo, integrate
 
@@ -2867,6 +2946,41 @@ class PipelineStateTests(unittest.TestCase):
                     "gsd-path/M002",
                     integrate,
                 )
+
+    def test_promote_next_promotes_at_the_default_branch_state_records(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, integrate = self._promotion_repo(tmp, drift=False, default="master")
+
+            git = pipeline_state.status_state(repo)["git"]
+            self.assertEqual(git["origin_main"], integrate)
+            self.assertTrue(git["ancestor_of_origin_main"])
+
+            result = state_promote.promote_next(repo, "second", "gsd-path/M002", integrate)
+
+            self.assertEqual(result["base"], integrate)
+            state = pipeline_state.load_state(repo)[0]
+            self.assertEqual(state.milestone, "second")
+            self.assertEqual(state.default_branch, "master")
+
+    def test_promote_next_rejects_lookahead_with_another_default_branch(self) -> None:
+        for default, next_default, lookahead in (("master", "main", "main"), ("main", "master", "master")):
+            with self.subTest(default=default), tempfile.TemporaryDirectory() as tmp:
+                repo, integrate = self._promotion_repo(
+                    tmp, drift=False, default=default, next_default=next_default
+                )
+                self.assertEqual(
+                    pipeline_state.load_state(repo, ".project/next")[0].default_branch, lookahead
+                )
+                head = run_git(repo, "rev-parse", "HEAD").stdout.strip()
+
+                with self.assertRaisesRegex(
+                    pipeline_state.PipelineStateError,
+                    f"lookahead default_branch does not match the active project: "
+                    f"copy `default_branch: {default}`",
+                ):
+                    state_promote.promote_next(repo, "second", "gsd-path/M002", integrate)
+
+                self.assertEqual(run_git(repo, "rev-parse", "HEAD").stdout.strip(), head)
 
     def test_promote_next_rejects_lookahead_from_another_project(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

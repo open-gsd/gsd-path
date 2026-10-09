@@ -310,8 +310,10 @@ The persisted `STATE.archive` field is the transaction identity.
    milestone is not shipped until integration below passes.
 7. Integrate only after the postcommit `validate` passes, with the recorded
    ship commit and exact reviewed HEAD unchanged. Run `python3 <absolute archive_milestone.py> integrate --repo <root> --slug <STATE.milestone>`.
-   This helper validates the ship commit, fetches origin, requires remote
-   default `main`, and follows the locked `STATE.integration` mode:
+   This helper validates the ship commit, fetches origin, requires the remote
+   default to equal STATE `default_branch` (`main` when the field is absent),
+   and follows the locked `STATE.integration` mode. `main` and `origin/main`
+   below mean that recorded branch:
 
    - `direct` owns the resumable merge transaction. It creates the canonical
      named integration worktree, performs the hook-verified `--no-ff` merge,

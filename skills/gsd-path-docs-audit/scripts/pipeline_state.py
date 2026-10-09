@@ -173,9 +173,14 @@ class PipelineState:
     integration_default: str
     integration: str
     integration_source: str
+    default_branch: str = "main"
 
     def json(self) -> dict[str, Optional[str]]:
-        return asdict(self)
+        # ponytail: default_branch stays out of this payload; guard_hook, install
+        # and the daemon probe accept only the closed STATE_FIELDS set.
+        payload = asdict(self)
+        del payload["default_branch"]
+        return payload
 
 
 @dataclass(frozen=True)
@@ -290,7 +295,7 @@ def _bound_branch_number(value: str) -> Optional[int]:
 def _state_from_text(text: str, label: str = "STATE.md") -> PipelineState:
     values = _parse_frontmatter(text, label)
     missing = [field for field in LEGACY_STATE_FIELDS if field not in values]
-    extra = sorted(set(values) - set(STATE_FIELDS))
+    extra = sorted(set(values) - set(STATE_FIELDS) - {"default_branch"})
     if missing:
         raise PipelineStateError(f"{label} is missing fields: {', '.join(missing)}")
     if extra:
@@ -322,6 +327,7 @@ def _state_from_text(text: str, label: str = "STATE.md") -> PipelineState:
         integration_default=integration_default,
         integration=integration,
         integration_source=integration_source,
+        default_branch=values.get("default_branch", "main"),
     )
     _validate_state_values(state, label)
     return state
@@ -354,6 +360,10 @@ def _validate_state_values(state: PipelineState, label: str) -> None:
     ):
         raise PipelineStateError(
             f"{label} default-sourced integration must match integration_default"
+        )
+    if not _common.valid_default_branch(state.default_branch):
+        raise PipelineStateError(
+            f"{label} has invalid default_branch: {state.default_branch}"
         )
     if state.branch is not None and _bound_branch_number(state.branch) is None:
         raise PipelineStateError(f"{label} has invalid branch: {state.branch}")
@@ -416,6 +426,7 @@ def validate_state(repo: Path, project_dir: str = ".project") -> dict[str, objec
         "status": "valid",
         "path": str(path),
         "state": state.json(),
+        "default_branch": state.default_branch,
     }
 
 
@@ -698,8 +709,10 @@ def status_state(repo: Path, project_dir: str = ".project") -> dict[str, object]
         if branch
         else None
     )
+    # The key keeps its name for status consumers; the ref follows STATE.
+    default_branch = load_state(resolved, project_dir)[0].default_branch
     origin_main = (
-        _optional_rev(resolved, "refs/remotes/origin/main") if has_git else None
+        _optional_rev(resolved, f"refs/remotes/origin/{default_branch}") if has_git else None
     )
     pending, pending_error = _pending_answers(resolved)
     lookahead = resolved / ".project" / "next"
@@ -722,6 +735,7 @@ def status_state(repo: Path, project_dir: str = ".project") -> dict[str, object]
         "advance": False,
         "completion": completion,
         "state": state,
+        "default_branch": default_branch,
         "route": route,
         "path": str(_track_root(resolved, project_dir) / "STATE.md"),
         "git": {
@@ -881,7 +895,12 @@ def _route_result(
         route["phase"] = phase
     if mode is not None:
         route["mode"] = mode
-    return {"schema": ROUTE_SCHEMA, "state": state.json(), "route": route}
+    return {
+        "schema": ROUTE_SCHEMA,
+        "state": state.json(),
+        "default_branch": state.default_branch,
+        "route": route,
+    }
 
 
 def _legacy_bind_next_landing(repo: Path, state: PipelineState) -> str:
@@ -1009,7 +1028,7 @@ def _bind_next_journal_recovery(
         raise PipelineStateError("bind-next journal landing does not contain ship")
     if not _is_ancestor(repo, landing, base):
         raise PipelineStateError("bind-next journal landing is not an ancestor of base")
-    if transaction["remote_default"] != "origin/main":
+    if transaction["remote_default"] != f"origin/{state.default_branch}":
         raise PipelineStateError("bind-next journal has invalid remote default")
     if stage not in {"prepared", "switched", "retired"}:
         raise PipelineStateError("bind-next journal has invalid stage")

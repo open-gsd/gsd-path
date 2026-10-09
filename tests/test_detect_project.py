@@ -94,23 +94,49 @@ class DetectProjectTests(unittest.TestCase):
              "--require-git"], cwd=repo, capture_output=True, encoding="utf-8", errors="replace",
         )
 
-    def test_initialize_rejects_remote_default_other_than_main_without_state(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            repo = Path(temporary)
-            result = self.initialize_with_remote_default(repo, "master")
-            self.assertEqual(result.returncode, 2, result.stdout)
-            payload = json.loads(result.stdout)
-            self.assertIn("remote default must be origin/main, got origin/master", payload["error"])
-            self.assertFalse(payload["wrote_state"])
-            self.assertFalse((repo / ".project").exists())
+    def recorded_default(self, repo: Path) -> str:
+        self.assertTrue((repo / ".project" / "STATE.md").is_file())
+        return pipeline_state.load_state(repo)[0].default_branch
 
-    def test_initialize_accepts_main_as_remote_default(self) -> None:
+    def test_initialize_records_remote_default_other_than_main(self) -> None:
+        for branch in ("master", "release/trunk"):
+            with self.subTest(branch=branch), tempfile.TemporaryDirectory() as temporary:
+                repo = Path(temporary)
+                result = self.initialize_with_remote_default(repo, branch)
+                self.assertEqual(result.returncode, 0, result.stdout)
+                self.assertTrue(json.loads(result.stdout)["wrote_state"])
+                self.assertEqual(self.recorded_default(repo), branch)
+
+    def test_initialize_records_main_as_remote_default(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary)
             result = self.initialize_with_remote_default(repo, "main")
             self.assertEqual(result.returncode, 0, result.stdout)
             self.assertTrue(json.loads(result.stdout)["wrote_state"])
-            self.assertTrue((repo / ".project" / "STATE.md").is_file())
+            self.assertEqual(self.recorded_default(repo), "main")
+
+    def test_initialize_records_main_when_origin_head_is_unset(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            self.git(repo, "init", "-q", "-b", "master")
+            result = subprocess.run(
+                [sys.executable, str(SCRIPT), "initialize", "--repo", str(repo),
+                 "--template", str(ROOT / "skills/gsd-path/templates/state.md"),
+                 "--require-git"], cwd=repo, capture_output=True, encoding="utf-8", errors="replace",
+            )
+            self.assertEqual(result.returncode, 0, result.stdout)
+            self.assertEqual(self.recorded_default(repo), "main")
+
+    def test_initialize_refuses_a_default_branch_state_cannot_hold(self) -> None:
+        for branch in ("gsd-path/M001", "we#ird"):
+            with self.subTest(branch=branch), tempfile.TemporaryDirectory() as temporary:
+                repo = Path(temporary)
+                result = self.initialize_with_remote_default(repo, branch)
+                self.assertEqual(result.returncode, 2, result.stdout)
+                payload = json.loads(result.stdout)
+                self.assertIn(f"origin default branch {branch!r} cannot be recorded", payload["error"])
+                self.assertFalse(payload["wrote_state"])
+                self.assertFalse((repo / ".project").exists())
 
     def test_empty_directory_is_greenfield(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -2707,6 +2733,31 @@ Integrated: null
                     "origin/main",
                     True,
                 )
+
+    def test_fetched_base_selection_accepts_any_recordable_default_branch(self) -> None:
+        for name in ("master", "release+1", "häuptling"):
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as temporary:
+                repo = Path(temporary)
+                integrate = self.setup_repo(repo)
+                subprocess.run(
+                    ["git", "update-ref", f"refs/remotes/origin/{name}", integrate],
+                    cwd=repo, check=True, capture_output=True,
+                )
+
+                result = promote_lookahead.select_fetched_base(
+                    repo, integrate, f"origin/{name}", True
+                )
+
+                self.assertEqual(result["base"], integrate)
+
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            integrate = self.setup_repo(repo)
+            for name in ("origin/gsd-path/M001", "origin/a..b", "upstream/main", "origin/-x"):
+                with self.subTest(name=name), self.assertRaisesRegex(
+                    promote_lookahead.LookaheadError, "remote default must be an origin branch"
+                ):
+                    promote_lookahead.select_fetched_base(repo, integrate, name, True)
 
     def test_roadmap_snapshot_is_created_once_and_reused(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

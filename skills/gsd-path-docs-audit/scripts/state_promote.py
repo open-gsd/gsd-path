@@ -377,17 +377,22 @@ def _prepare_promotion(
     head = pipeline_state._run_git(repo, "rev-parse", "HEAD").stdout.strip()
     if head != base:
         raise PipelineStateError(f"promotion must start at base SHA: {head} != {base}")
-    remote = pipeline_state._run_git(repo, "rev-parse", "--verify", "origin/main^{commit}").stdout.strip()
+    active_state, active_text, _ = pipeline_state.load_state(repo)
+    remote_default = f"origin/{active_state.default_branch}"
+    remote = pipeline_state._run_git(
+        repo, "rev-parse", "--verify", f"{remote_default}^{{commit}}"
+    ).stdout.strip()
     if remote != base:
         raise PipelineStateError(
-            f"base SHA is not current origin/main: {base} != {remote}"
+            f"base SHA is not current {remote_default}: {base} != {remote}"
         )
     if not pipeline_state._is_ancestor(repo, landing, base):
-        raise PipelineStateError("landing is not an ancestor of the current main base")
+        raise PipelineStateError(
+            f"landing is not an ancestor of the current {active_state.default_branch} base"
+        )
     if pipeline_state._run_git(repo, "status", "--porcelain", "--untracked-files=all").stdout:
         raise PipelineStateError("promotion must start from a clean worktree")
 
-    active_state, active_text, _ = pipeline_state.load_state(repo)
     if active_state.phase != "shipped" or active_state.status != "done":
         raise PipelineStateError("promotion requires active STATE shipped/done")
     if active_state.milestone is None:
@@ -455,6 +460,12 @@ def _prepare_promotion(
     if next_state.integration_default != active_state.integration_default:
         raise PipelineStateError(
             "lookahead integration_default does not match the active project"
+        )
+    if next_state.default_branch != active_state.default_branch:
+        raise PipelineStateError(
+            "lookahead default_branch does not match the active project: copy "
+            f"`default_branch: {active_state.default_branch}` from .project/STATE.md "
+            "into .project/next/STATE.md"
         )
     if next_state.milestone != milestone:
         raise PipelineStateError(

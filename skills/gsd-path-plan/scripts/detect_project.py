@@ -1291,10 +1291,17 @@ def project_slug(root: Path) -> str:
     return slug or "project"
 
 
-def filled_state_template(template: str, slug: str, phase: str) -> str:
+def filled_state_template(
+    template: str, slug: str, phase: str, default_branch: str = "main"
+) -> str:
     if "<slug>" not in template:
         raise DetectError("state template missing slug placeholder")
     text = template.replace("<slug>", slug)
+    text, count = re.subn(
+        r"(?m)^default_branch: main\b", lambda _: f"default_branch: {default_branch}", text, count=1
+    )
+    if count != 1:
+        raise DetectError("state template missing default_branch: main line")
     text, count = re.subn(r"(?m)^phase: define\b", f"phase: {phase}", text, count=1)
     if count != 1:
         raise DetectError("state template missing phase: define line")
@@ -2030,9 +2037,14 @@ def initialize(
         )
         if git.returncode != 0 or git.stdout.strip() != "true":
             return {**payload, "route": "setup-repository", "wrote_state": False}
-        unsupported = _common.remote_default_error(root)
-        if unsupported:
-            return {**payload, "wrote_state": False, "error": unsupported}
+    default_branch = _common.origin_default_branch(root)
+    if not _common.valid_default_branch(default_branch):
+        return {**payload, "wrote_state": False, "error": (
+            f"origin default branch {default_branch!r} cannot be recorded in STATE.md: "
+            "it is a GSD Path reserved name or it has a character that STATE frontmatter "
+            "cannot hold. Rename the default branch, then run "
+            "`git remote set-head origin --auto`."
+        )}
     expected = "inspect" if payload["verdict"] == "brownfield" else "define"
     if phase is None:
         phase = expected
@@ -2046,7 +2058,7 @@ def initialize(
         return payload
     write_state_anchored(
         root,
-        filled_state_template(raw, project_slug(root), phase),
+        filled_state_template(raw, project_slug(root), phase, default_branch),
         root_status,
         project_status,
     )

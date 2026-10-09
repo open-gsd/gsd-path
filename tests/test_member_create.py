@@ -241,6 +241,17 @@ class MemberCreateTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0)
         self.assertEqual(result.stdout.strip(), "github.com")
 
+    def test_create_refuses_coordinator_whose_default_branch_is_not_main(self) -> None:
+        path = self.coordinator / ".project" / "STATE.md"
+        path.write_text(
+            path.read_text(encoding="utf-8").replace("\n---\n", "\ndefault_branch: master\n---\n", 1),
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(members.MembersError, "multi-repo projects support only `main`"):
+            self.create()
+        self.assertEqual(self.calls, [])
+        self.assertFalse(self.checkout.exists())
+
     def test_deleted_main_is_not_reused_from_stale_tracking_ref(self) -> None:
         self.gh("repo", "create", "acme/web", "--private", "--add-readme")
         git(self.base, "clone", "-q", URL, str(self.checkout))

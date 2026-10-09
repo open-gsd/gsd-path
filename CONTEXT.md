@@ -62,8 +62,11 @@ commits for that milestone live here. It is never the GitHub default.
 _Avoid_: feature branch, worktree branch, `gsd-path/<project-slug>`
 
 **Default branch**:
-The repository's remote default, required to be `main`. New repositories keep
-GitHub's `main`, and ship integrates onto it.
+The repository's remote default, with any name. Initialization records the
+name one time in STATE `default_branch`; a STATE file without the field means
+`main`. Ship integrates onto it. New repositories that Path creates keep
+GitHub's `main`. A multi-repo project supports only `main`, for its members
+and its coordinator.
 _Avoid_: production branch
 
 **Shipped**:

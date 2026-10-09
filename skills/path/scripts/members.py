@@ -78,6 +78,15 @@ def _coordinator(repo: Path) -> tuple[Path, pipeline_state.PipelineState]:
     return root, state
 
 
+def _require_main_coordinator(state: pipeline_state.PipelineState) -> None:
+    # ponytail: members stay main-only; issue #372 tracks other default branches.
+    if state.default_branch != "main":
+        raise MembersError(
+            "multi-repo projects support only `main` as the coordinator default branch, "
+            f"got `{state.default_branch}` (STATE default_branch)"
+        )
+
+
 def _remote_identity(remote: str) -> Optional[tuple[str, str]]:
     match = GITHUB_REMOTE_RE.fullmatch(remote)
     if match is None:
@@ -482,6 +491,7 @@ def render(members: Sequence[dict[str, str]]) -> str:
 
 def add_member(repo: Path, name: str, checkout: Path, integration: str) -> list[dict[str, str]]:
     root, state = _coordinator(repo)
+    _require_main_coordinator(state)
     if state.phase in {"build", "ship"}:
         raise MembersError("members change only at a milestone boundary, not during build or ship")
     if not NAME_RE.fullmatch(name):
@@ -522,6 +532,7 @@ def create_member(repo: Path, name: str, checkout: Path, integration: str, githu
     A journal in the coordinator Git directory keeps the approved target before any
     external action; a rerun resumes each step and never creates a second repo."""
     root, state = _coordinator(repo)
+    _require_main_coordinator(state)
     if state.phase in {"build", "ship"}:
         raise MembersError("members change only at a milestone boundary, not during build or ship")
     if not NAME_RE.fullmatch(name) or not re.fullmatch(r"[A-Za-z0-9-]+/[A-Za-z0-9._-]+", github):
@@ -620,6 +631,8 @@ def create_member(repo: Path, name: str, checkout: Path, integration: str, githu
 def validate_members(repo: Path) -> list[dict[str, str]]:
     root, state = _coordinator(repo)
     members = read_members(root)
+    if members:
+        _require_main_coordinator(state)
     for member in members:
         checkout = Path(member["checkout"])
         check_member(root, state.project, checkout, member["remote"], refuse_reserved_refs=False)

@@ -179,6 +179,21 @@ selects a milestone branch.
      `define/active`; report that no brownfield signal fired, and route to
      the bundled [define contract](DEFINE.md).
 
+## Default branch
+
+`initialize` records the default branch of `origin` one time, as STATE
+`default_branch`. It reads the local `refs/remotes/origin/HEAD`; when that ref
+is unset it records `main`. When the repository has an `origin`, run
+`git remote set-head origin --auto` before `initialize`, so that the record is
+the default branch of the forge. A STATE file without the field means `main`.
+
+`<default_branch>` in the commands below is the `default_branch` value in the
+`validate`, `route`, and `status` JSON, beside `state`. Never edit the field,
+and never take the name from a later `origin/HEAD` lookup. When a helper
+reports that the remote default differs from the recorded one, stop and report
+it. A project with members supports only `main`: the member repositories and
+the coordinator.
+
 ## Integration choice
 
 New state uses the user shipping default (built-in: `direct`) for
@@ -328,7 +343,7 @@ promotion, `resume-next-handoff` resumes the verified `bind-next` transaction,
 `resume-undo` invokes `$gsd-path-undo` with the returned kind and expected HEAD,
 `block` stops with the returned reason. `bind-initial`
 means initialization is complete and phase work must wait for the initial
-router binding: resolve the exact fetched `origin/main` SHA, call `bind-initial` as
+router binding: resolve the exact fetched `origin/<default_branch>` SHA, call `bind-initial` as
 above with `route.branch`, then persist its returned branch with
 `pipeline_state.py transition` using the route result's `state` phase and status plus its
 null branch and archive as expected fields. Set `--set-branch` to the helper's
@@ -400,7 +415,9 @@ template](templates/state.md) with `pipeline: gsd-path/v2`, `phase:
 inspect`, `status: active`, the selector's exact returned `milestone` slug as
 `milestone`, `branch: null`, and `archive: null`. Copy the active project's
 `integration_default` into both integration mode fields and set
-`integration_source: default`. Then follow the bundled
+`integration_source: default`. Set `default_branch` to the active project's
+value; when the active STATE.md has no `default_branch` line, delete that line
+from the new file. Then follow the bundled
 phase contracts in their Lookahead mode — inspect, define (milestone +
 brownfield), research (only when the entry lists open questions), decide, and
 plan — rooted at `.project/next/`.
@@ -424,14 +441,14 @@ bundled integration check (`validate-integrated`); pending integration routes
 back to ship, never here. Preserve the previous archive path, ship SHA,
 integration SHA, and build branch in the state Log. Before fetching or binding
 the next program branch, fetch origin and resolve the exact current
-`origin/main` SHA. For a program roadmap, resolve the branch from that exact
+`origin/<default_branch>` SHA. For a program roadmap, resolve the branch from that exact
 fetched commit through the bundled helper. With a saved lookahead track, run:
 
 ```text
 python3 <absolute-bundled-promote-lookahead.py> select-base \
   --repo <absolute-primary-root> \
-  --base <exact-origin-main-sha> \
-  --remote-default origin/main \
+  --base <exact-remote-default-sha> \
+  --remote-default origin/<default_branch> \
   --lookahead
 ```
 
@@ -440,8 +457,8 @@ Without a saved lookahead track, run:
 ```text
 python3 <absolute-bundled-promote-lookahead.py> select-base \
   --repo <absolute-primary-root> \
-  --base <exact-origin-main-sha> \
-  --remote-default origin/main
+  --base <exact-remote-default-sha> \
+  --remote-default origin/<default_branch>
 ```
 
 When the helper returns `status: complete`, report program completion and stop;
@@ -457,8 +474,8 @@ python3 <absolute-bundled-pipeline-git.py> bind-next \
   --branch <selected-branch> \
   --previous-branch <STATE.branch> \
   --ship <exact-ship-sha> \
-  --remote-default origin/main \
-  --base <exact-origin-main-sha> \
+  --remote-default origin/<default_branch> \
+  --base <exact-remote-default-sha> \
   --landing <validate-integrated-landing-sha>
 ```
 
@@ -472,7 +489,7 @@ topology before accepting the missing branch.
 The helper requires the previous branch, while it still exists locally, to
 remain at the ship SHA, proves the ship commit is integrated into the exact
 base, rejects local or remote branch collisions,
-and switches the clean primary worktree without tracking main. It then
+and switches the clean primary worktree without tracking the default branch. It then
 retires the integrated previous branch — deleted locally and on origin; the
 ship commit stays reachable from the integration merge and its tag. Repeating the
 same command while the new branch is current at the unchanged base is the
@@ -489,7 +506,7 @@ Log, then:
     --repo <absolute-primary-root> \
     --milestone <next-slug> \
     --branch gsd-path/M00N \
-    --base <exact-current-origin-main-sha> \
+    --base <exact-current-remote-default-sha> \
     --landing <exact-milestone-merge-sha>
   ```
 

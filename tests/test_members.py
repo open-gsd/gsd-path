@@ -128,6 +128,34 @@ class MemberTests(unittest.TestCase):
         self.assert_refused(self.add("web", self.make_member("web", default="develop")),
                             "remote default must be main")
 
+    def record_coordinator_default(self, name: str) -> None:
+        path = self.coordinator / ".project" / "STATE.md"
+        text = path.read_text(encoding="utf-8")
+        path.write_bytes(text.replace("\n---\n", f"\ndefault_branch: {name}\n---\n", 1).encode("utf-8"))
+        commit_all(self.coordinator, "record default branch")
+
+    def test_add_refuses_coordinator_whose_default_branch_is_not_main(self) -> None:
+        self.record_coordinator_default("master")
+
+        # A single-repo project with this default still validates.
+        validated = self.run_members("validate")
+        self.assertEqual(validated.returncode, 0, validated.stderr)
+        self.assertEqual(json.loads(validated.stdout), {"members": []})
+
+        self.assert_refused(
+            self.add("web", self.make_member("web")),
+            "multi-repo projects support only `main` as the coordinator default branch, got `master`",
+        )
+
+    def test_validate_refuses_members_under_coordinator_whose_default_branch_is_not_main(self) -> None:
+        self.assertEqual(self.add("web", self.make_member("web")).returncode, 0)
+        self.record_coordinator_default("master")
+
+        result = self.run_members("validate")
+
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        self.assertIn("multi-repo projects support only `main`", result.stderr)
+
     def test_add_refuses_origin_outside_github(self) -> None:
         member = self.make_member("web", remote="https://gitlab.com/acme/web.git")
         self.assert_refused(self.add("web", member), "GitHub.com origin")

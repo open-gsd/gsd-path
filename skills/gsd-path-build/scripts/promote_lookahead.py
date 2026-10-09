@@ -198,10 +198,10 @@ def select_fetched_base(
     use_lookahead: bool,
 ) -> dict:
     root = repo.resolve()
-    if not re.fullmatch(r"origin/[A-Za-z0-9][A-Za-z0-9._/-]*", remote_default):
+    if not remote_default.startswith("origin/") or not _common.valid_default_branch(
+        remote_default.removeprefix("origin/")
+    ):
         raise LookaheadError("remote default must be an origin branch")
-    if ".." in remote_default or "//" in remote_default:
-        raise LookaheadError("remote default is invalid")
     resolved = subprocess.run(
         ["git", "-C", str(root), "rev-parse", "--verify", f"{remote_default}^{{commit}}"],
         capture_output=True,

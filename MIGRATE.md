@@ -12,13 +12,16 @@ plans do not become passed Path gates.
 
 ## Requirements
 
-- The default branch of `origin` must be `main`. `migrate_core.py preview` and
-  `prepare` stop with `remote default must be origin/main` for any other name,
-  and so does Path initialization. Rename the default branch before you start.
+- The default branch of `origin` can have any name, for example `master`.
+  Path initialization records it in `.project/STATE.md` as `default_branch`
+  and ships onto it. Run `git remote set-head origin --auto` before the first
+  Path run: an unset `origin/HEAD` records `main`. See
+  [default branch](WORKFLOW.md#default-branch). A multi-repo project supports
+  only `main`.
 - Pull-request shipping supports GitHub.com only. On GitLab, Gitea, or GitHub
   Enterprise Server, ship with `direct`, or with
-  [`external-landing`](WORKFLOW.md#integration) when `main` accepts merge
-  requests only.
+  [`external-landing`](WORKFLOW.md#integration) when the default branch
+  accepts merge requests only.
 
 ## Start
 

@@ -12,9 +12,11 @@ Supported first-release hosts: Claude Code and Codex. Handle plugin and
 standalone skill installations separately; a plugin toggle does not remove
 manually registered hooks or globally installed skills.
 
-Path requires `main` as the default branch of `origin`. The helper's `preview`
-and `prepare` commands stop when the recorded remote default has another name;
-report that error and stop before any capture, IMPORT.md, or hook work.
+Path ships onto the default branch of `origin`, with any name. The router
+records that name in STATE `default_branch` at initialization; the helper's
+`preview` and `prepare` commands do not check it. Before the router
+initializes the project, run `git remote set-head origin --auto` so that the
+record is correct. A multi-repo project supports only `main`.
 Pull-request shipping supports GitHub.com only. For any other host, tell the
 user that the project ships with `direct` or `external-landing`.
 
