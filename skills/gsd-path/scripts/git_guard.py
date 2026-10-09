@@ -22,6 +22,7 @@ try:
     from isolation import BOOKKEEPING_PREFIXES, NULL_SHA, _landing_state, task_frontmatter
     from pipeline_git import is_ship_subject, ship_body_matches, ship_commit_body, task_commit_body
     from pipeline_state import _completion_status
+    from _common import valid_default_branch
     import members
 except ImportError as error:  # pragma: no cover - broken install
     print(
@@ -240,7 +241,10 @@ def frontmatter_of(content, label):
 
 
 def strict_ship_state(state, archive):
-    fields = frozenset(state)
+    # default_branch is optional beside each accepted field set.
+    if "default_branch" in state and not valid_default_branch(state["default_branch"]):
+        return False
+    fields = frozenset(state) - {"default_branch"}
     if fields not in {
         frozenset(LEGACY_STATE_FIELDS),
         frozenset(INTEGRATION_STATE_FIELDS),
@@ -641,7 +645,20 @@ def abandon_contract_violations(subject, body, abandon):
     return []
 
 
+def recorded_default_branch():
+    """STATE default_branch in the worktree; None when unrecorded or unreadable."""
+    try:
+        content = (repo_root() / ".project" / "STATE.md").read_text(encoding="utf-8")
+        name = frontmatter_of(content, "STATE.md").get("default_branch", "")
+    except (OSError, ValueError, subprocess.CalledProcessError):
+        return None
+    return name if valid_default_branch(name) else None
+
+
 def default_branch():
+    recorded = recorded_default_branch()
+    if recorded:
+        return recorded
     origin_head = subprocess.run(
         ["git", "symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"],
         capture_output=True,

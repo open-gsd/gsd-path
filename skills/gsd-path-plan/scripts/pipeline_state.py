@@ -708,8 +708,10 @@ def status_state(repo: Path, project_dir: str = ".project") -> dict[str, object]
         if branch
         else None
     )
+    # The key keeps its name for status consumers; the ref follows STATE.
+    default_branch = load_state(resolved, project_dir)[0].default_branch
     origin_main = (
-        _optional_rev(resolved, "refs/remotes/origin/main") if has_git else None
+        _optional_rev(resolved, f"refs/remotes/origin/{default_branch}") if has_git else None
     )
     pending, pending_error = _pending_answers(resolved)
     lookahead = resolved / ".project" / "next"

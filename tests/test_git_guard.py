@@ -352,6 +352,36 @@ class GitGuardEndToEndTests(unittest.TestCase):
         result = self.run_guard("ship: M002 — next", body)
         self.assertEqual(0, result.returncode, result.stderr)
 
+    def test_ship_accepts_state_that_records_the_default_branch(self) -> None:
+        self.git("branch", "-m", "gsd-path/M002")
+        archived = self.repo / ".project" / "archive" / "002-next"
+        archived.mkdir()
+        (archived / "MANIFEST.md").write_bytes("manifest\n".encode("utf-8"))
+        state_path = self.repo / ".project" / "STATE.md"
+
+        def stage(default_branch):
+            state_path.write_bytes(
+                "---\npipeline: gsd-path/v2\nproject: demo\nmilestone: next\n"
+                "phase: shipped\nstatus: done\nbranch: gsd-path/M002\n"
+                "archive: .project/archive/002-next\n"
+                "integration_default: direct\nintegration: direct\n"
+                "integration_source: default\n"
+                f"default_branch: {default_branch}\n---\n".encode("utf-8"),
+            )
+            self.git("add", "-A", ".project")
+
+        body = f"Archive: .project/archive/002-next\nReviewed-HEAD: {self.head()}"
+        for default_branch in ("master", "main", "release/trunk"):
+            with self.subTest(default_branch=default_branch):
+                stage(default_branch)
+                result = self.run_guard("ship: M002 — next", body)
+                self.assertEqual(0, result.returncode, result.stderr)
+
+        stage("gsd-path/M002")
+        result = self.run_guard("ship: M002 — next", body)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("not the strict shipped transaction", result.stderr)
+
     def test_blocks_malformed_or_duplicate_ship_commits(self):
         self.git("branch", "-m", "gsd-path/M002")
         archive = self.repo / ".project/archive/002-next"
@@ -488,16 +518,36 @@ class GitGuardEndToEndTests(unittest.TestCase):
         self.git("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/develop")
         self.assert_integration_merge_allowed("develop")
 
-    def assert_integration_merge_allowed(self, default):
+    def test_integration_merge_honors_the_default_branch_state_records(self):
+        # STATE wins over a origin/HEAD that moved after initialization.
+        self.git("config", "init.defaultBranch", "main")
+        self.git("update-ref", "refs/remotes/origin/develop", "HEAD")
+        self.git("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/develop")
+        self.assert_integration_merge_allowed("master", "default_branch: master\n")
+
+    def test_integration_merge_into_another_branch_than_state_records_is_refused(self):
+        self.git("config", "init.defaultBranch", "main")
+        self.git("update-ref", "refs/remotes/origin/develop", "HEAD")
+        self.git("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/develop")
+        result = self.integration_merge("develop", "default_branch: master\n")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("into master", result.stderr)
+
+    def assert_integration_merge_allowed(self, default, state_extra=""):
+        result = self.integration_merge(default, state_extra)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue((self.repo / ".project/archive/002-next").is_dir())
+
+    def integration_merge(self, default, state_extra=""):
         self.git("branch", "-m", default)
         self.git("checkout", "-q", "-b", "gsd-path/M002")
         archive = self.repo / ".project/archive/002-next"
         archive.mkdir()
         (archive / "MANIFEST.md").write_bytes("manifest\n".encode("utf-8"))
         (self.repo / ".project/STATE.md").write_bytes(
-            "---\npipeline: gsd-path/v2\nproject: demo\nmilestone: next\n"
+            ("---\npipeline: gsd-path/v2\nproject: demo\nmilestone: next\n"
             "phase: shipped\nstatus: done\nbranch: gsd-path/M002\n"
-            "archive: .project/archive/002-next\n---\n".encode("utf-8"),
+            f"archive: .project/archive/002-next\n{state_extra}---\n").encode("utf-8"),
         )
         self.git("add", "-A")
         self.commit("ship: M002 — next")
@@ -505,7 +555,7 @@ class GitGuardEndToEndTests(unittest.TestCase):
         self.git("checkout", "-q", "-b", "gsd-path-integrate/M002")
         self.install_hooks()
 
-        result = subprocess.run(
+        return subprocess.run(
             [
                 "git",
                 "-c",
@@ -522,9 +572,6 @@ class GitGuardEndToEndTests(unittest.TestCase):
             capture_output=True,
             encoding="utf-8", errors="replace",
         )
-
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertTrue(archive.is_dir())
 
     def test_hooks_allow_a_canonical_milestone_abandon_commit(self):
         self.git("branch", "-m", "gsd-path/M002")
