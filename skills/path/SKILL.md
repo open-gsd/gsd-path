@@ -269,8 +269,8 @@ integration ancestry, cleanliness, and journal ownership before continuing.
 After it returns, continue the state transition or lookahead promotion below.
 Do not reconstruct this classification from Git output or Log prose.
 When the route returns `allow_remote_absent: true`, also pass
-`--allow-missing-previous`; this is valid only because a merged PR may have
-auto-deleted the published bound branch.
+`--allow-missing-previous`; this is valid only because the forge may have
+auto-deleted the published bound branch after the merge.
 
 Before ordinary routing, inspect `STATE.archive`.
 
@@ -463,10 +463,11 @@ python3 <absolute-bundled-pipeline-git.py> bind-next \
 ```
 
 Add `--allow-missing-previous` when `validate-integrated` returned
-`mode: pull-request` and `origin/<STATE.branch>` is absent. GitHub may delete
-that head branch after merge; the local branch and exact ship SHA still bind
-the handoff. The helper independently verifies the published pull-request
-milestone tag and merge topology before accepting the missing branch.
+`mode: pull-request` or `mode: external-landing` and `origin/<STATE.branch>`
+is absent. The forge may delete that source branch after merge; the local
+branch and exact ship SHA still bind the handoff. The helper independently
+verifies the published milestone tag for `STATE.integration` and the merge
+topology before accepting the missing branch.
 
 The helper requires the previous branch, while it still exists locally, to
 remain at the ship SHA, proves the ship commit is integrated into the exact

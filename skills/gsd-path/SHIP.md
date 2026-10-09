@@ -352,10 +352,9 @@ The persisted `STATE.archive` field is the transaction identity.
      **Next** that the user must open a merge request from `branch` to `main`
      in their own forge and merge it with a merge commit. The merge commit
      message must be exactly `merge_subject`, a blank line, then `merge_body`;
-     show both values verbatim in a code block. Also tell the user to keep the
-     source branch after the merge, because the next milestone handoff
-     requires it on origin. Stop this ship invocation; Path never opens or
-     merges the request. On rerun after the merge, the helper requires exactly
+     show both values verbatim in a code block. Stop this ship invocation;
+     Path never opens or merges the request. The forge may delete the source
+     branch after the merge. On rerun after the merge, the helper requires exactly
      one commit with that subject on `origin/main` first-parent history, that
      exact body, and two parents with the ship commit as second parent. It
      then writes and pushes the annotated milestone tag containing the ship

@@ -578,9 +578,9 @@ and requires the remote default to be `main`. It then follows the locked mode:
   the required merge subject and body. You open the merge request in your
   forge (for example with `glab`), let your pipeline run, and merge it with a
   merge commit that has exactly that message. Do not squash, rebase, or
-  fast-forward, and keep the source branch: the next milestone handoff
-  requires it on origin. On the next ship invocation, Path validates the
-  two-parent merge on `main` and creates the annotated milestone tag.
+  fast-forward. Your forge may delete the source branch after the merge. On
+  the next ship invocation, Path validates the two-parent merge on `main` and
+  creates the annotated milestone tag.
 
 Ship leaves the primary worktree and `STATE.branch` on the shipped local
 `gsd-path/M00N`; the router owns the later branch handoff. NNN always comes
