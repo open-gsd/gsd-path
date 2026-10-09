@@ -19,11 +19,11 @@ proof and each host's guard tier.
 **Latest npm release:** [@opengsd/gsd-path@1.5.0](https://www.npmjs.com/package/@opengsd/gsd-path/v/1.5.0) — [release notes](CHANGELOG.md#150---2026-10-09)
 
 **Recent highlights**
-- record runtime hotfix provenance on the declaration
-- add signed self-update
-- add the Skills, Stats, Settings, and Environment pages and the setup wizard
-- register the hosts, project operation, and env routes
-- add project setup operations for the app
+- Define records the owner's ruling on each edge case and prohibition; plan and final review enforce them
+- `external-landing` integration mode: ship without GitHub API calls and merge on any forge
+- Muse Code is a supported host
+- `--runtime-upgrade` can record where a patched runtime came from
+- Fixes for dispatch, multi-repo members, Windows and WSL, and stricter guard checks of Git commands
 
 <!-- /release-docs -->
 
