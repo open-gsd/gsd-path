@@ -31,10 +31,12 @@ test-only changes are not listed; the Git history has them.
 - **Muse Code host.** `--muse` installs the skills to `~/.agents/skills`;
   invoke them with `/path` or `/gsd-path`. Muse Code has no live release
   evidence yet; see the host trust matrix.
-- **Runtime hotfix provenance.** `--runtime-upgrade` accepts
-  `--runtime-provenance-source`, `--runtime-provenance-patch`, and
-  `--runtime-provenance-note` to record where a patched runtime came from. The
-  record does not change the digest or the runtime validation (#353).
+- **Runtime hotfix provenance.** The Python installer
+  (`python3 scripts/install.py`) accepts `--runtime-provenance-source`,
+  `--runtime-provenance-patch`, and `--runtime-provenance-note` with
+  `--runtime-upgrade` to record where a patched runtime came from. The
+  `gsd-path` command does not accept these flags. The record does not change
+  the digest or the runtime validation (#353).
 
 ### Changed
 - A plan can send an intent correction back to define (#271).

@@ -22,7 +22,7 @@ proof and each host's guard tier.
 - Define records the owner's ruling on each edge case and prohibition; plan and final review enforce them
 - `external-landing` integration mode: ship without GitHub API calls and merge on any forge
 - Muse Code is a supported host
-- `--runtime-upgrade` can record where a patched runtime came from
+- `--runtime-upgrade` with the Python installer can record where a patched runtime came from
 - Fixes for dispatch, multi-repo members, Windows and WSL, and stricter guard checks of Git commands
 
 <!-- /release-docs -->
