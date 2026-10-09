@@ -85,6 +85,33 @@ class DetectProjectTests(unittest.TestCase):
             self.assertEqual(repo.stat().st_ino, identity)
             self.assertEqual(list(repo.iterdir()), [])
 
+    def initialize_with_remote_default(self, repo: Path, branch: str) -> subprocess.CompletedProcess[str]:
+        self.git(repo, "init", "-q")
+        self.git(repo, "symbolic-ref", "refs/remotes/origin/HEAD", f"refs/remotes/origin/{branch}")
+        return subprocess.run(
+            [sys.executable, str(SCRIPT), "initialize", "--repo", str(repo),
+             "--template", str(ROOT / "skills/gsd-path/templates/state.md"),
+             "--require-git"], cwd=repo, capture_output=True, encoding="utf-8", errors="replace",
+        )
+
+    def test_initialize_rejects_remote_default_other_than_main_without_state(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            result = self.initialize_with_remote_default(repo, "master")
+            self.assertEqual(result.returncode, 2, result.stdout)
+            payload = json.loads(result.stdout)
+            self.assertIn("remote default must be origin/main, got origin/master", payload["error"])
+            self.assertFalse(payload["wrote_state"])
+            self.assertFalse((repo / ".project").exists())
+
+    def test_initialize_accepts_main_as_remote_default(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            result = self.initialize_with_remote_default(repo, "main")
+            self.assertEqual(result.returncode, 0, result.stdout)
+            self.assertTrue(json.loads(result.stdout)["wrote_state"])
+            self.assertTrue((repo / ".project" / "STATE.md").is_file())
+
     def test_empty_directory_is_greenfield(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary)

@@ -328,7 +328,11 @@ approve **Archive and ship**, the archive transaction begins:
 
 Direct integration is the project default. Before build, ask the router to set
 `pull-request` as the project default or as an override for the current
-milestone. The setting locks when build starts.
+milestone. The setting locks when build starts. When origin is not GitHub.com
+and `main` accepts merge requests only, set `external-landing`: Path publishes
+the milestone branch, you merge it in your own forge with the merge message
+that Path returns, and Path then validates the merge and tags it. See
+[integration](WORKFLOW.md#integration).
 
 After `validate-integrated` passes, the next milestone starts clean on a new
 `gsd-path/M00N` cut from `origin/main`. Invoke the router again; brownfield

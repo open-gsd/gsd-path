@@ -190,7 +190,7 @@ helper; never edit these fields by hand:
 python3 <absolute-bundled-pipeline-state.py> configure-integration \
   --repo <absolute-root> \
   --scope <default-or-milestone> \
-  --mode <direct-or-pull-request>
+  --mode <direct|pull-request|external-landing>
 ```
 
 `default` changes the project setting and changes the current milestone only

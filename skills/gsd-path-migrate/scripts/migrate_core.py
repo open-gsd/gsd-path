@@ -10,6 +10,8 @@ import shutil
 import stat
 import sys
 
+import _common
+
 
 def hook_inventory(settings):
     if settings.is_symlink() or not settings.is_file():
@@ -144,6 +146,9 @@ def main():
         if args.repo is None:
             raise ValueError("preview and prepare require --repo")
         repo = args.repo.resolve(strict=True)
+        unsupported = _common.remote_default_error(repo)
+        if unsupported:
+            raise ValueError(unsupported)
         files = snapshot(repo)
         manifest = {
             "schema": "gsd-path/core-migration/v1",

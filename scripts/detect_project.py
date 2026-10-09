@@ -2030,6 +2030,9 @@ def initialize(
         )
         if git.returncode != 0 or git.stdout.strip() != "true":
             return {**payload, "route": "setup-repository", "wrote_state": False}
+        unsupported = _common.remote_default_error(root)
+        if unsupported:
+            return {**payload, "wrote_state": False, "error": unsupported}
     expected = "inspect" if payload["verdict"] == "brownfield" else "define"
     if phase is None:
         phase = expected

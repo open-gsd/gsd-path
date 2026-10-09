@@ -38,8 +38,8 @@ bundles this file; spawned agents follow their role brief instead.
   the lookahead planning track for the next milestone; it follows the same
   marker rule, owns no task frontmatter, and never binds a branch.
 - STATE.integration_default is the project closeout choice and
-  STATE.integration is the current milestone choice. Both are `direct` or
-  `pull-request`; STATE.integration_source is `default` or `milestone` and
+  STATE.integration is the current milestone choice. Both are `direct`,
+  `pull-request`, or `external-landing`; STATE.integration_source is `default` or `milestone` and
   preserves explicit override provenance. Older v2 state defaults to `direct`,
   and modes may be changed only through `pipeline_state.py
   configure-integration` before build. A next milestone resets its current

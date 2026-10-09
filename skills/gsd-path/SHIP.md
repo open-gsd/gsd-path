@@ -344,6 +344,23 @@ The persisted `STATE.archive` field is the transaction identity.
      landing SHA. A closed unmerged PR, squash, rebase, merge queue, moved
      head, duplicate PR, or non-GitHub.com origin blocks. The remote bound
      branch may be absent after a valid merge because GitHub may auto-delete it.
+   - `external-landing` is for an origin where Path cannot open the review
+     itself, such as GitLab, Gitea, or GitHub Enterprise Server. It needs no
+     forge CLI. The helper publishes the bound branch at the exact ship commit,
+     never pushes `main`, and returns `status: awaiting-merge` with `branch`,
+     `merge_subject`, and `merge_body`. Present **Outcome**, and state in
+     **Next** that the user must open a merge request from `branch` to `main`
+     in their own forge and merge it with a merge commit. The merge commit
+     message must be exactly `merge_subject`, a blank line, then `merge_body`;
+     show both values verbatim in a code block. Also tell the user to keep the
+     source branch after the merge, because the next milestone handoff
+     requires it on origin. Stop this ship invocation; Path never opens or
+     merges the request. On rerun after the merge, the helper requires exactly
+     one commit with that subject on `origin/main` first-parent history, that
+     exact body, and two parents with the ship commit as second parent. It
+     then writes and pushes the annotated milestone tag containing the ship
+     SHA and landing SHA. A squash, rebase, fast-forward, or different merge
+     message blocks.
 
    A passing run returns the same proof exposed by `validate-integrated`.
    A non-zero result blocks; rerun the exact `integrate` command to resume a
@@ -354,7 +371,7 @@ The persisted `STATE.archive` field is the transaction identity.
    continuing. Never merge into or re-ship the closed branch.
    For a later validation recheck with origin network access, run
    `python3 <absolute archive_milestone.py> validate-integrated --repo <root> --slug <STATE.milestone>`.
-   Both integration modes refresh the remote-default and mirrored milestone-tag
+   All integration modes refresh the remote-default and mirrored milestone-tag
    refs when an `origin` remote exists. Without that remote, validation resolves
    the existing remote-default refs locally, preserving offline direct-mode
    fixtures. PR mode also revalidates the PR identity, state, merge provenance,

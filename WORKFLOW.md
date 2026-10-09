@@ -548,7 +548,7 @@ receives merges or back-merges, and the default checkout is never entered;
 the local default branch ref may lag origin, which is harmless because
 binding resolves remote SHAs. `STATE.integration_default` stores the project
 choice and `STATE.integration` stores the current milestone choice. Both are
-`direct` or `pull-request`; they may change only before build, and the current
+`direct`, `pull-request`, or `external-landing`; they may change only before build, and the current
 milestone resets to the project default at the next handoff. Older v2 state
 without these fields means `direct`. `STATE.integration_source` is `default` or
 `milestone` so an explicit override remains distinct when its value happens to
@@ -571,6 +571,16 @@ and requires the remote default to be `main`. It then follows the locked mode:
   never enables auto-merge or merges the PR. After validation, Path creates the
   annotated milestone tag. The [ship contract](skills/gsd-path-ship/SKILL.md)
   owns the candidate, provenance, topology, publication, and recovery rules.
+- `external-landing` is for an origin that is not GitHub.com, such as GitLab,
+  Gitea, or GitHub Enterprise Server, where a merge request is the only route
+  to `main`. It needs no forge CLI. Path publishes the bound branch at the
+  exact ship commit, does not push `main`, and returns `awaiting-merge` with
+  the required merge subject and body. You open the merge request in your
+  forge (for example with `glab`), let your pipeline run, and merge it with a
+  merge commit that has exactly that message. Do not squash, rebase, or
+  fast-forward, and keep the source branch: the next milestone handoff
+  requires it on origin. On the next ship invocation, Path validates the
+  two-parent merge on `main` and creates the annotated milestone tag.
 
 Ship leaves the primary worktree and `STATE.branch` on the shipped local
 `gsd-path/M00N`; the router owns the later branch handoff. NNN always comes

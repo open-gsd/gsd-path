@@ -12,6 +12,12 @@ Supported first-release hosts: Claude Code and Codex. Handle plugin and
 standalone skill installations separately; a plugin toggle does not remove
 manually registered hooks or globally installed skills.
 
+Path requires `main` as the default branch of `origin`. The helper's `preview`
+and `prepare` commands stop when the recorded remote default has another name;
+report that error and stop before any capture, IMPORT.md, or hook work.
+Pull-request shipping supports GitHub.com only. For any other host, tell the
+user that the project ships with `direct` or `external-landing`.
+
 This skill prepares an import. The Path router owns initialization and branch
 binding; define owns intent approval. Migration does not copy Core phase
 positions into Path state or turn Core test results into Path gate receipts.
