@@ -363,7 +363,7 @@ def _remote_branch_exists(repo: Path, branch: str) -> bool:
     return _remote_ref_sha(repo, f"refs/heads/{branch}") is not None
 
 
-def _pull_request_tag_fields(repo: Path, ref: str) -> dict[str, str]:
+def _milestone_tag_fields(repo: Path, ref: str) -> dict[str, str]:
     tag_type = _run_git(repo, "cat-file", "-t", ref, check=False)
     if tag_type.returncode != 0 or tag_type.stdout.strip() != "tag":
         return {}
@@ -373,7 +373,7 @@ def _pull_request_tag_fields(repo: Path, ref: str) -> dict[str, str]:
         match = re.fullmatch(r"(Mode|Pull-Request|Ship|Landing): (.+)", line)
         if match:
             if match.group(1) in fields:
-                raise PipelineGitError("pull-request milestone tag repeats metadata")
+                raise PipelineGitError("milestone tag repeats metadata")
             fields[match.group(1)] = match.group(2)
     return fields
 
@@ -404,7 +404,15 @@ def _validated_shipped_state(repo: Path) -> dict[str, object]:
     return state
 
 
-def _require_pull_request_integration_proof(
+# Metadata a published milestone tag must carry, per integration mode, before
+# bind-next accepts a previous bound branch that the forge deleted on merge.
+TAG_PROOF_FIELDS = {
+    "pull-request": {"Mode", "Pull-Request", "Ship", "Landing"},
+    "external-landing": {"Mode", "Ship", "Landing"},
+}
+
+
+def _require_tag_integration_proof(
     repo: Path,
     ship: str,
     base: str,
@@ -415,8 +423,11 @@ def _require_pull_request_integration_proof(
         raise PipelineGitError("bind-next requires shipped/done state")
     if state.get("branch") != previous_branch:
         raise PipelineGitError("shipped state does not name the previous branch")
-    if state.get("integration") != "pull-request":
-        raise PipelineGitError("shipped integration mode is not pull-request")
+    mode = state.get("integration")
+    if mode not in TAG_PROOF_FIELDS:
+        raise PipelineGitError(
+            "shipped integration mode is not pull-request or external-landing"
+        )
     archive = state.get("archive")
     if not isinstance(archive, str):
         raise PipelineGitError("shipped state does not name an archive")
@@ -427,24 +438,23 @@ def _require_pull_request_integration_proof(
     ):
         raise PipelineGitError("shipped archive does not match the previous branch")
     ref = f"refs/tags/milestone/{match.group(1)}"
-    fields = _pull_request_tag_fields(repo, ref)
-    if set(fields) != {"Mode", "Pull-Request", "Ship", "Landing"}:
-        raise PipelineGitError("pull-request integration proof is incomplete")
-    if fields["Mode"] != "pull-request" or fields["Ship"] != ship:
-        raise PipelineGitError("pull-request integration proof does not match shipped state")
-    pull_request = fields["Pull-Request"]
-    if re.fullmatch(
+    fields = _milestone_tag_fields(repo, ref)
+    if set(fields) != TAG_PROOF_FIELDS[mode]:
+        raise PipelineGitError(f"{mode} integration proof is incomplete")
+    if fields["Mode"] != mode or fields["Ship"] != ship:
+        raise PipelineGitError(f"{mode} integration proof does not match shipped state")
+    if mode == "pull-request" and re.fullmatch(
         r"https://github\.com/[^/]+/[^/]+/pull/[1-9][0-9]*",
-        pull_request,
+        fields["Pull-Request"],
     ) is None:
         raise PipelineGitError("pull-request integration proof has an invalid PR URL")
     landing = fields["Landing"]
     if re.fullmatch(r"[0-9a-f]{40}", landing) is None:
-        raise PipelineGitError("pull-request integration proof has an invalid landing")
+        raise PipelineGitError(f"{mode} integration proof has an invalid landing")
     local_object = _run_git(repo, "rev-parse", ref).stdout.strip()
     local_target = _run_git(repo, "rev-parse", f"{ref}^{{commit}}").stdout.strip()
     if local_target != landing:
-        raise PipelineGitError("pull-request integration tag does not point at landing")
+        raise PipelineGitError(f"{mode} integration tag does not point at landing")
     remote = _run_git(
         repo,
         "ls-remote",
@@ -456,14 +466,14 @@ def _require_pull_request_integration_proof(
         check=False,
     )
     if remote.returncode != 0:
-        raise PipelineGitError("pull-request integration tag is not published")
+        raise PipelineGitError(f"{mode} integration tag is not published")
     rows = dict(
         line.split("\t", 1)[::-1]
         for line in remote.stdout.splitlines()
         if "\t" in line
     )
     if rows != {ref: local_object, f"{ref}^{{}}": landing}:
-        raise PipelineGitError("published pull-request integration tag differs")
+        raise PipelineGitError(f"published {mode} integration tag differs")
     parents = _run_git(
         repo,
         "rev-list",
@@ -473,11 +483,11 @@ def _require_pull_request_integration_proof(
         landing,
     ).stdout.split()
     if len(parents) != 3 or parents[2] != ship:
-        raise PipelineGitError("pull-request integration proof has invalid merge topology")
+        raise PipelineGitError(f"{mode} integration proof has invalid merge topology")
     first_parent = _run_git(repo, "rev-list", "--first-parent", base).stdout.splitlines()
     if landing not in first_parent:
         raise PipelineGitError(
-            "pull-request integration landing is not on main first-parent history"
+            f"{mode} integration landing is not on main first-parent history"
         )
     return landing
 
@@ -821,7 +831,7 @@ def bind_next_milestone_branch(
         detail = landing_integrated.stderr.strip() or landing_integrated.stdout.strip()
         raise PipelineGitError(f"could not verify integrated branch: {detail}")
     if allow_remote_absent:
-        proven_landing = _require_pull_request_integration_proof(
+        proven_landing = _require_tag_integration_proof(
             repo,
             ship_sha,
             base_sha,
@@ -829,7 +839,7 @@ def bind_next_milestone_branch(
         )
         if proven_landing != landing_sha:
             raise PipelineGitError(
-                "validated landing does not match pull-request integration proof"
+                "validated landing does not match the milestone tag integration proof"
             )
 
     symbolic_branch = _run_git(

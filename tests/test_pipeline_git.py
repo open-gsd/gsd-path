@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from scripts import detect_project, pipeline_git, pipeline_state
+from scripts import detect_project, integration, pipeline_git, pipeline_state
 from tests import test_archive_milestone as archive_tests
 from tests._platform import requires_symlink
 
@@ -21,6 +21,82 @@ def run_git(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         ["git", "-C", str(repo), *args],
         check=True,
+        capture_output=True,
+        encoding="utf-8", errors="replace",
+    )
+
+
+def ship_then_forge_deletes_branch(tmp: str, mode: str) -> tuple[Path, Path, str, str]:
+    """Ship M001 in `mode`, merge it on main, and delete origin/gsd-path/M001."""
+    origin = Path(tmp) / "origin.git"
+    main = Path(tmp) / "repo"
+    primary = Path(tmp) / "repo-gsd-path"
+    run_git(Path(tmp), "init", "--bare", "-b", "main", str(origin))
+    run_git(Path(tmp), "init", "-b", "main", str(main))
+    run_git(main, "config", "user.name", "GSD Path Test")
+    run_git(main, "config", "user.email", "test@example.com")
+    (main / "product.txt").write_bytes("base\n".encode("utf-8"))
+    run_git(main, "add", "product.txt")
+    run_git(main, "commit", "-m", "base")
+    run_git(main, "remote", "add", "origin", str(origin))
+    run_git(main, "push", "-u", "origin", "main")
+    run_git(main, "worktree", "add", "-b", "gsd-path/M001", str(primary), "main")
+    project = primary / ".project"
+    project.mkdir()
+    (project / "STATE.md").write_bytes(
+        "---\n"
+        "pipeline: gsd-path/v2\n"
+        "project: demo\n"
+        "milestone: first\n"
+        "phase: shipped\n"
+        "status: done\n"
+        "branch: gsd-path/M001\n"
+        "archive: .project/archive/001-first/\n"
+        f"integration_default: {mode}\n"
+        f"integration: {mode}\n"
+        "integration_source: default\n"
+        "---\n\n# Project State\n\n## Log\n".encode("utf-8"),
+    )
+    run_git(primary, "add", ".project/STATE.md")
+    run_git(primary, "commit", "-m", "ship: M001 — first")
+    ship = run_git(primary, "rev-parse", "HEAD").stdout.strip()
+    run_git(primary, "push", "origin", "gsd-path/M001")
+    run_git(main, "merge", "--no-ff", "gsd-path/M001", "-m", "forge merge")
+    landing = run_git(main, "rev-parse", "HEAD").stdout.strip()
+    run_git(main, "push", "origin", "main")
+    run_git(main, "push", "origin", "--delete", "gsd-path/M001")
+    return main, primary, ship, landing
+
+
+def publish_milestone_tag(main: Path, message: str, landing: str) -> None:
+    run_git(main, "tag", "-a", "-m", message, "milestone/001-first", landing)
+    run_git(main, "push", "origin", "milestone/001-first")
+
+
+def bind_next_after_missing_previous(
+    primary: Path, ship: str, landing: str
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [
+            sys.executable,
+            str(PIPELINE_GIT),
+            "bind-next",
+            "--repo",
+            str(primary),
+            "--branch",
+            "gsd-path/M002",
+            "--previous-branch",
+            "gsd-path/M001",
+            "--ship",
+            ship,
+            "--remote-default",
+            "origin/main",
+            "--base",
+            landing,
+            "--landing",
+            landing,
+            "--allow-missing-previous",
+        ],
         capture_output=True,
         encoding="utf-8", errors="replace",
     )
@@ -952,6 +1028,85 @@ class PipelineGitTests(unittest.TestCase):
 
             self.assertEqual(result.returncode, 1)
             self.assertIn("shipped integration mode is not pull-request", result.stderr)
+
+    def test_bind_next_accepts_external_landing_tag_after_forge_deletes_branch(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            main, primary, ship, landing = ship_then_forge_deletes_branch(
+                tmp, "external-landing"
+            )
+
+            untagged = bind_next_after_missing_previous(primary, ship, landing)
+            self.assertEqual(untagged.returncode, 1)
+            self.assertIn(
+                "external-landing integration proof is incomplete", untagged.stderr
+            )
+
+            publish_milestone_tag(
+                main,
+                integration.external_landing_tag_message("001-first", ship, landing),
+                landing,
+            )
+            result = bind_next_after_missing_previous(primary, ship, landing)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(json.loads(result.stdout)["status"], "bound")
+            self.assertEqual(
+                run_git(primary, "branch", "--show-current").stdout.strip(),
+                "gsd-path/M002",
+            )
+            self.assertEqual(
+                run_git(primary, "rev-parse", "HEAD").stdout.strip(), landing
+            )
+            retired_local = subprocess.run(
+                ["git", "-C", str(primary), "show-ref", "--verify", "--quiet",
+                 "refs/heads/gsd-path/M001"],
+                capture_output=True,
+                encoding="utf-8", errors="replace",
+            )
+            self.assertEqual(retired_local.returncode, 1, "gsd-path/M001 not retired")
+
+    def test_bind_next_rejects_milestone_tag_that_does_not_prove_state_mode(
+        self,
+    ) -> None:
+        other_sha = "0" * 40
+        cases = {
+            "tag names another ship": (
+                "external-landing",
+                lambda ship, landing: integration.external_landing_tag_message(
+                    "001-first", other_sha, landing
+                ),
+                "external-landing integration proof does not match shipped state",
+            ),
+            "tag names another mode": (
+                "external-landing",
+                lambda ship, landing: integration.external_landing_tag_message(
+                    "001-first", ship, landing
+                ).replace("Mode: external-landing", "Mode: pull-request"),
+                "external-landing integration proof does not match shipped state",
+            ),
+            "external-landing tag under pull-request state": (
+                "pull-request",
+                lambda ship, landing: integration.external_landing_tag_message(
+                    "001-first", ship, landing
+                ),
+                "pull-request integration proof is incomplete",
+            ),
+        }
+        for name, (mode, tag_message, expected) in cases.items():
+            with self.subTest(name), tempfile.TemporaryDirectory() as tmp:
+                main, primary, ship, landing = ship_then_forge_deletes_branch(tmp, mode)
+                publish_milestone_tag(main, tag_message(ship, landing), landing)
+
+                result = bind_next_after_missing_previous(primary, ship, landing)
+
+                self.assertEqual(result.returncode, 1, result.stdout)
+                self.assertIn(expected, result.stderr)
+                self.assertEqual(
+                    run_git(primary, "branch", "--show-current").stdout.strip(),
+                    "gsd-path/M001",
+                )
 
     def test_bind_next_retires_previous_branch_on_origin(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
