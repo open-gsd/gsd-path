@@ -426,6 +426,7 @@ def validate_state(repo: Path, project_dir: str = ".project") -> dict[str, objec
         "status": "valid",
         "path": str(path),
         "state": state.json(),
+        "default_branch": state.default_branch,
     }
 
 
@@ -734,6 +735,7 @@ def status_state(repo: Path, project_dir: str = ".project") -> dict[str, object]
         "advance": False,
         "completion": completion,
         "state": state,
+        "default_branch": default_branch,
         "route": route,
         "path": str(_track_root(resolved, project_dir) / "STATE.md"),
         "git": {
@@ -893,7 +895,12 @@ def _route_result(
         route["phase"] = phase
     if mode is not None:
         route["mode"] = mode
-    return {"schema": ROUTE_SCHEMA, "state": state.json(), "route": route}
+    return {
+        "schema": ROUTE_SCHEMA,
+        "state": state.json(),
+        "default_branch": state.default_branch,
+        "route": route,
+    }
 
 
 def _legacy_bind_next_landing(repo: Path, state: PipelineState) -> str:

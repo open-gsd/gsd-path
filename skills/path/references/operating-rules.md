@@ -90,6 +90,11 @@ bundles this file; spawned agents follow their role brief instead.
   branch — either Path's direct merge or a Path-owned PR merged by the user.
   The bound branch never receives merges or back-merges and is never the
   GitHub default.
+- The default branch is the one that STATE `default_branch` records at
+  initialization; a STATE file without the field means `main`. `main` and
+  `origin/main` in these rules mean that branch. Never change the record and
+  never take the name from a later `origin/HEAD` lookup. A project with
+  members supports only `main`.
 - After initialization writes STATE.md, and before entering the first pipeline
   phase in an existing Git repository, the router calls
   `scripts/pipeline_git.py bind-initial` with the selected M00N and exact

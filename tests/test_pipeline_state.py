@@ -256,6 +256,10 @@ class PipelineStateTests(unittest.TestCase):
             routed = pipeline_state.route_state(repo)
 
             self.assertEqual(set(routed["state"]), set(guard_hook.STATUS_STATE_FIELDS))
+            # The router reads the recorded default branch beside the state object.
+            self.assertEqual(routed["default_branch"], "master")
+            self.assertEqual(pipeline_state.status_state(repo)["default_branch"], "master")
+            self.assertEqual(pipeline_state.validate_state(repo)["default_branch"], "master")
 
     def test_transition_keeps_and_cannot_set_default_branch(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

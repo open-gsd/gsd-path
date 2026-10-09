@@ -161,7 +161,8 @@ Owned state routes by STATE.md without rerunning the helper. Reserve `classify`
 for read-only inspection; do not re-derive a verdict from a directory listing.
 
 For a newly initialized existing Git repository, the state router returns
-`bind-initial` while `STATE.branch` is null. The router fetches `origin/main`,
+`bind-initial` while `STATE.branch` is null. The router fetches the recorded
+[default branch](#default-branch) (`origin/main` in this document),
 runs `pipeline_git.py bind-initial` with that exact SHA, and records the
 returned `gsd-path/M00N` binding through `pipeline_state.py transition` before
 entering inspect or define. Build consumes this binding and never creates or
@@ -540,6 +541,33 @@ the subject and field body defined by its canonical phase contract; task-land
 fields live only in the
 [build contract](skills/gsd-path-build/SKILL.md).
 
+### Default branch
+
+Path ships onto the default branch of `origin`. The name is not fixed.
+`detect_project.py initialize` reads the local `refs/remotes/origin/HEAD` one
+time and records the name in `STATE.md` as `default_branch`; an unset
+`origin/HEAD` records `main`. Run `git remote set-head origin --auto` before
+the first Path run so that the record is the default branch of the forge. A
+`STATE.md` without the field means `main`, so older projects do not change.
+
+This document writes `main` and `origin/main` for the recorded default branch.
+In a project that records `master`, read them as `master` and `origin/master`:
+the integration merge subject ends with `into master`, and the user's merge
+request in `external-landing` mode targets `master`.
+
+The record does not change after initialization. Bind, integrate, validate,
+promotion, and the git guard read it. When the forge default no longer agrees
+with the record, integration stops with `remote default must be <recorded>`.
+A lookahead `next/STATE.md` must carry the same `default_branch` as the active
+state, or promotion stops. Names in the reserved `gsd-path/`,
+`gsd-path-integrate/`, and `gsd-path-task/` namespaces, and names with `#` or
+a quote character, cannot be recorded.
+
+Not supported: a multi-repo project supports only `main`, for each member
+repository and for the coordinator. `members.py add`, `create`, and `validate`
+stop for a coordinator with another default branch. A new repository that
+Path creates uses `main`.
+
 ### Integration
 
 After the postcommit validator passes, ship performs integration — the only
@@ -555,7 +583,8 @@ without these fields means `direct`. `STATE.integration_source` is `default` or
 match the project default.
 
 Ship fetches origin, refreshes `origin/HEAD`, mirrors published milestone tags,
-and requires the remote default to be `main`. It then follows the locked mode:
+and requires the remote default to be the recorded
+[default branch](#default-branch). It then follows the locked mode:
 
 - `direct` creates a temporary named worktree (`gsd-path-integrate/M00N`) at
   the fetched remote-default SHA and merges the ship commit with `--no-ff`

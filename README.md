@@ -120,11 +120,13 @@ contain newer changes.
 
 1. Open your project folder in your coding-agent host. Existing repositories
    need Git; GitHub repository creation and pull-request operations also need
-   an authenticated GitHub CLI (`gh`). The default branch of `origin` must be
-   `main`; Path stops at initialization for any other name. Pull-request
+   an authenticated GitHub CLI (`gh`). The default branch of `origin` can have
+   any name: Path records it at initialization and ships onto it. This guide
+   calls it `main`; see [default branch](WORKFLOW.md#default-branch). A
+   multi-repo project supports only `main`. Pull-request
    shipping supports GitHub.com only. On GitLab, Gitea, or GitHub Enterprise
    Server, use the [`external-landing` mode](WORKFLOW.md#integration) when
-   `main` accepts merge requests only.
+   the default branch accepts merge requests only.
 2. Start or reload the host session so it discovers the installed skills.
 3. Invoke `$path` in Codex, or `/path` on slash-command hosts. The router
    identifies the project and guides you through the required inputs and approvals.

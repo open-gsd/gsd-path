@@ -2734,6 +2734,31 @@ Integrated: null
                     True,
                 )
 
+    def test_fetched_base_selection_accepts_any_recordable_default_branch(self) -> None:
+        for name in ("master", "release+1", "häuptling"):
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as temporary:
+                repo = Path(temporary)
+                integrate = self.setup_repo(repo)
+                subprocess.run(
+                    ["git", "update-ref", f"refs/remotes/origin/{name}", integrate],
+                    cwd=repo, check=True, capture_output=True,
+                )
+
+                result = promote_lookahead.select_fetched_base(
+                    repo, integrate, f"origin/{name}", True
+                )
+
+                self.assertEqual(result["base"], integrate)
+
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            integrate = self.setup_repo(repo)
+            for name in ("origin/gsd-path/M001", "origin/a..b", "upstream/main", "origin/-x"):
+                with self.subTest(name=name), self.assertRaisesRegex(
+                    promote_lookahead.LookaheadError, "remote default must be an origin branch"
+                ):
+                    promote_lookahead.select_fetched_base(repo, integrate, name, True)
+
     def test_roadmap_snapshot_is_created_once_and_reused(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
