@@ -26,25 +26,27 @@ def run_git(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
-def ship_then_forge_deletes_branch(tmp: str, mode: str) -> tuple[Path, Path, str, str]:
-    """Ship M001 in `mode`, merge it on main, and delete origin/gsd-path/M001."""
+def ship_then_forge_deletes_branch(
+    tmp: str, mode: str, default: str = "main"
+) -> tuple[Path, Path, str, str]:
+    """Ship M001 in `mode`, merge it on the default branch, and delete origin/gsd-path/M001."""
     origin = Path(tmp) / "origin.git"
     main = Path(tmp) / "repo"
     primary = Path(tmp) / "repo-gsd-path"
-    run_git(Path(tmp), "init", "--bare", "-b", "main", str(origin))
-    run_git(Path(tmp), "init", "-b", "main", str(main))
+    run_git(Path(tmp), "init", "--bare", "-b", default, str(origin))
+    run_git(Path(tmp), "init", "-b", default, str(main))
     run_git(main, "config", "user.name", "GSD Path Test")
     run_git(main, "config", "user.email", "test@example.com")
     (main / "product.txt").write_bytes("base\n".encode("utf-8"))
     run_git(main, "add", "product.txt")
     run_git(main, "commit", "-m", "base")
     run_git(main, "remote", "add", "origin", str(origin))
-    run_git(main, "push", "-u", "origin", "main")
-    run_git(main, "worktree", "add", "-b", "gsd-path/M001", str(primary), "main")
+    run_git(main, "push", "-u", "origin", default)
+    run_git(main, "worktree", "add", "-b", "gsd-path/M001", str(primary), default)
     project = primary / ".project"
     project.mkdir()
     (project / "STATE.md").write_bytes(
-        "---\n"
+        ("---\n"
         "pipeline: gsd-path/v2\n"
         "project: demo\n"
         "milestone: first\n"
@@ -55,7 +57,8 @@ def ship_then_forge_deletes_branch(tmp: str, mode: str) -> tuple[Path, Path, str
         f"integration_default: {mode}\n"
         f"integration: {mode}\n"
         "integration_source: default\n"
-        "---\n\n# Project State\n\n## Log\n".encode("utf-8"),
+        + ("" if default == "main" else f"default_branch: {default}\n")
+        + "---\n\n# Project State\n\n## Log\n").encode("utf-8"),
     )
     run_git(primary, "add", ".project/STATE.md")
     run_git(primary, "commit", "-m", "ship: M001 — first")
@@ -63,7 +66,7 @@ def ship_then_forge_deletes_branch(tmp: str, mode: str) -> tuple[Path, Path, str
     run_git(primary, "push", "origin", "gsd-path/M001")
     run_git(main, "merge", "--no-ff", "gsd-path/M001", "-m", "forge merge")
     landing = run_git(main, "rev-parse", "HEAD").stdout.strip()
-    run_git(main, "push", "origin", "main")
+    run_git(main, "push", "origin", default)
     run_git(main, "push", "origin", "--delete", "gsd-path/M001")
     return main, primary, ship, landing
 
@@ -74,7 +77,7 @@ def publish_milestone_tag(main: Path, message: str, landing: str) -> None:
 
 
 def bind_next_after_missing_previous(
-    primary: Path, ship: str, landing: str
+    primary: Path, ship: str, landing: str, remote_default: str = "origin/main"
 ) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [
@@ -90,7 +93,7 @@ def bind_next_after_missing_previous(
             "--ship",
             ship,
             "--remote-default",
-            "origin/main",
+            remote_default,
             "--base",
             landing,
             "--landing",
@@ -102,18 +105,18 @@ def bind_next_after_missing_previous(
     )
 
 
-def make_remote_repo(tmp: str) -> tuple[Path, Path, str]:
+def make_remote_repo(tmp: str, default: str = "main") -> tuple[Path, Path, str]:
     origin = Path(tmp) / "origin.git"
     repo = Path(tmp) / "repo"
-    run_git(Path(tmp), "init", "--bare", "-b", "main", str(origin))
-    run_git(Path(tmp), "init", "-b", "main", str(repo))
+    run_git(Path(tmp), "init", "--bare", "-b", default, str(origin))
+    run_git(Path(tmp), "init", "-b", default, str(repo))
     run_git(repo, "config", "user.name", "GSD Path Test")
     run_git(repo, "config", "user.email", "test@example.com")
     (repo / "product.txt").write_bytes("base\n".encode("utf-8"))
     run_git(repo, "add", "product.txt")
     run_git(repo, "commit", "-m", "base")
     run_git(repo, "remote", "add", "origin", str(origin))
-    run_git(repo, "push", "-u", "origin", "main")
+    run_git(repo, "push", "-u", "origin", default)
     return origin, repo, run_git(repo, "rev-parse", "HEAD").stdout.strip()
 
 
@@ -329,6 +332,87 @@ class PipelineGitTests(unittest.TestCase):
             retry = subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace")
             self.assertEqual(retry.returncode, 0, retry.stderr)
             self.assertEqual(json.loads(retry.stdout)["status"], "already-bound")
+
+    def bind_initial(self, repo: Path, remote_default: str, base: str):
+        return subprocess.run(
+            [sys.executable, str(PIPELINE_GIT), "bind-initial", "--repo", str(repo),
+             "--branch", "gsd-path/M001", "--remote-default", remote_default, "--base", base],
+            capture_output=True, encoding="utf-8", errors="replace",
+        )
+
+    def test_bind_initial_binds_at_the_default_branch_state_records(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            _, repo, base = make_remote_repo(tmp, "master")
+            run_git(repo, "remote", "set-head", "origin", "master")
+            detect_project.initialize(repo, ROOT / "skills/gsd-path/templates/state.md")
+            self.assertEqual(pipeline_state.load_state(repo)[0].default_branch, "master")
+
+            wrong = self.bind_initial(repo, "origin/main", base)
+            self.assertEqual(wrong.returncode, 1)
+            self.assertIn("remote default must be origin/master, got origin/main", wrong.stderr)
+            self.assertEqual(run_git(repo, "branch", "--show-current").stdout.strip(), "master")
+
+            result = self.bind_initial(repo, "origin/master", base)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(json.loads(result.stdout)["status"], "bound")
+            self.assertEqual(
+                run_git(repo, "branch", "--show-current").stdout.strip(), "gsd-path/M001"
+            )
+            self.assertEqual(run_git(repo, "rev-parse", "HEAD").stdout.strip(), base)
+
+    def test_bind_initial_treats_state_without_default_branch_as_main(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            _, repo, base = make_remote_repo(tmp)
+            run_git(repo, "push", "origin", "main:master")
+            run_git(repo, "fetch", "origin")
+            detect_project.initialize(repo, ROOT / "skills/gsd-path/templates/state.md")
+            path = repo / ".project/STATE.md"
+            legacy = "".join(
+                line for line in path.read_text(encoding="utf-8").splitlines(keepends=True)
+                if not line.startswith("default_branch:")
+            )
+            path.write_bytes(legacy.encode("utf-8"))
+            self.assertNotIn("default_branch", legacy)
+
+            wrong = self.bind_initial(repo, "origin/master", base)
+            self.assertEqual(wrong.returncode, 1)
+            self.assertIn("remote default must be origin/main, got origin/master", wrong.stderr)
+
+            result = self.bind_initial(repo, "origin/main", base)
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_bind_next_binds_from_the_default_branch_state_records(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            main, primary, ship, landing = ship_then_forge_deletes_branch(
+                tmp, "external-landing", "master"
+            )
+            publish_milestone_tag(
+                main,
+                integration.external_landing_tag_message("001-first", ship, landing),
+                landing,
+            )
+            run_git(primary, "fetch", "origin")
+
+            wrong = bind_next_after_missing_previous(primary, ship, landing, "origin/main")
+            self.assertEqual(wrong.returncode, 1)
+            self.assertIn("remote default must be origin/master, got origin/main", wrong.stderr)
+
+            result = bind_next_after_missing_previous(primary, ship, landing, "origin/master")
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(json.loads(result.stdout)["status"], "bound")
+            self.assertEqual(
+                run_git(primary, "branch", "--show-current").stdout.strip(), "gsd-path/M002"
+            )
+            self.assertEqual(run_git(primary, "rev-parse", "HEAD").stdout.strip(), landing)
+            # The bind-next journal names origin/master; status must accept it.
+            status = subprocess.run(
+                [sys.executable, str(PIPELINE_GIT.with_name("pipeline_state.py")),
+                 "status", "--repo", str(primary)],
+                capture_output=True, encoding="utf-8", errors="replace",
+            )
+            self.assertEqual(status.returncode, 0, status.stderr)
 
     def test_bind_initial_rejects_dirty_or_stale_worktree(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

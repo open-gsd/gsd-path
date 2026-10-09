@@ -1019,7 +1019,7 @@ def _bind_next_journal_recovery(
         raise PipelineStateError("bind-next journal landing does not contain ship")
     if not _is_ancestor(repo, landing, base):
         raise PipelineStateError("bind-next journal landing is not an ancestor of base")
-    if transaction["remote_default"] != "origin/main":
+    if transaction["remote_default"] != f"origin/{state.default_branch}":
         raise PipelineStateError("bind-next journal has invalid remote default")
     if stage not in {"prepared", "switched", "retired"}:
         raise PipelineStateError("bind-next journal has invalid stage")
