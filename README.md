@@ -16,14 +16,14 @@ Support means the installer and dispatch contract exist. See the
 proof and each host's guard tier.
 
 <!-- release-docs -->
-**Latest npm release:** [@opengsd/gsd-path@1.4.0](https://www.npmjs.com/package/@opengsd/gsd-path/v/1.4.0) — [release notes](CHANGELOG.md#140---2026-09-30)
+**Latest npm release:** [@opengsd/gsd-path@1.5.0](https://www.npmjs.com/package/@opengsd/gsd-path/v/1.5.0) — [release notes](CHANGELOG.md#150---2026-10-09)
 
 **Recent highlights**
-- key verify ledger rows by repo and fail closed on member drift (S3d)
-- guard coders in member sidecars with coordinator host hooks (S3c3b2)
-- dispatch and land member tasks in build rounds (S3c3b1)
-- activate member tasks with a live copy in the member sidecar (S3c3a)
-- prove landed member tasks from record and member landing (S3c2b)
+- record runtime hotfix provenance on the declaration
+- add signed self-update
+- add the Skills, Stats, Settings, and Environment pages and the setup wizard
+- register the hosts, project operation, and env routes
+- add project setup operations for the app
 
 <!-- /release-docs -->
 
