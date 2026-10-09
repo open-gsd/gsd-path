@@ -97,8 +97,9 @@ test-only changes are not listed; the Git history has them.
 ### Security
 - The guard refuses `git -c` and `git config` keys whose value Git runs as a
   program, such as `core.fsmonitor`, `core.hooksPath`, editors, pagers,
-  `core.sshCommand`, and credential helpers. It also refuses Git behind a
-  wrapper program that it does not know.
+  `core.sshCommand`, and credential helpers. It also applies these checks to
+  the command that a command runner runs: `nice`, `nohup`, `timeout`, `sudo`,
+  `watch`, `time`, `env`, `stdbuf`, and `setsid`.
 - Windows: project detection reads evidence through pinned handles, so a
   replaced parent junction cannot redirect it (#203).
 
