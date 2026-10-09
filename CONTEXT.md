@@ -26,11 +26,14 @@ _Avoid_: release, GitHub Release, lightweight tag
 The two-parent merge that puts the ship commit onto the remote default `main`.
 In `direct` mode, Path creates it with subject
 `integrate: M00N — merge gsd-path/M00N into main`. In `pull-request` mode,
-GitHub creates it after a user merges the Path-owned PR.
+GitHub creates it after a user merges the Path-owned PR. In `external-landing`
+mode, the user's forge creates it after the user merges their own merge request
+with the merge message that Path returns.
 _Avoid_: ship, land (unless you mean this)
 
 **Integration mode**:
-The closeout path selected before build: `direct` or `pull-request`.
+The closeout path selected before build: `direct`, `pull-request`, or
+`external-landing`.
 `STATE.integration_default` is the project setting and `STATE.integration` is
 the locked choice for the current milestone. `STATE.integration_source` records
 whether that choice follows the default or is an explicit milestone override.
@@ -48,7 +51,8 @@ _Avoid_: pointer (bare)
 
 **GitHub remote**:
 `origin` whose host is github.com or GitHub Enterprise Server. Pull-request
-integration currently supports GitHub.com only.
+integration currently supports GitHub.com only. Every other host, including
+GitLab and Gitea, uses `direct` or `external-landing`.
 _Avoid_: GitHub (bare, unless you mean the host family), github.com (unless you
 mean that host only)
 

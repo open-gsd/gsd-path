@@ -3825,6 +3825,35 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
             )
             self.assertNotEqual(self.git(remote, "show-ref", "--tags", "--quiet").returncode, 0)
 
+    def test_external_landing_waiting_result_names_the_accepted_merge_message(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            repo = root / "primary"
+            repo.mkdir()
+            remote = root / "origin.git"
+            self.make_publishable_bound_repo(repo, remote)
+            self.enable_external_landing_integration(repo)
+            archive_name, ship_sha = self.ship_canonical_bound(repo)
+
+            waiting = integration.integrate(repo, "demo")
+            self.assertEqual(waiting["status"], "awaiting-merge")
+
+            # Merge exactly as the forge would, with only the text Path returned.
+            merge_sha = self.integrate_bound(
+                repo,
+                archive_name,
+                ship_sha,
+                tag=False,
+                subject=waiting["merge_subject"],
+                body=waiting["merge_body"],
+            )
+            self.git(repo, "push", "-q", "origin", f"{merge_sha}:refs/heads/main")
+
+            result = integration.integrate(repo, "demo")
+
+            self.assertEqual(result["mode"], "external-landing")
+            self.assertEqual(result["landing"], merge_sha)
+
     def test_external_landing_resume_after_external_merge(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)

@@ -1075,6 +1075,11 @@ def integrate_external_landing(
             "mode": "external-landing",
             "archive": archive_path,
             "commit": ship_commit,
+            "branch": bound_branch,
+            "merge_subject": integrate_subject(archive_name, default_name),
+            "merge_body": integrate_commit_body(
+                archive_path, ship_commit, default_name, bound_branch
+            ),
         }
     if contains_ship.returncode != 0:
         archive_milestone.require_git_success(

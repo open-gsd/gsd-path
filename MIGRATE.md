@@ -10,6 +10,16 @@ selected project. Core history stays in `.planning/`; Path creates its own
 `.project/` state through the normal router. Core phase positions and completed
 plans do not become passed Path gates.
 
+## Requirements
+
+- The default branch of `origin` must be `main`. `migrate_core.py preview` and
+  `prepare` stop with `remote default must be origin/main` for any other name,
+  and so does Path initialization. Rename the default branch before you start.
+- Pull-request shipping supports GitHub.com only. On GitLab, Gitea, or GitHub
+  Enterprise Server, ship with `direct`, or with
+  [`external-landing`](WORKFLOW.md#integration) when `main` accepts merge
+  requests only.
+
 ## Start
 
 Install or update GSD Path using [the install guide](QUICK.md). In the Core

@@ -161,6 +161,19 @@ def project_ignore_error(repo: Path) -> Optional[str]:
             + ". Anchor the product rule (for example `/build/`) in a task that owns it.")
 
 
+def remote_default_error(repo: Path) -> Optional[str]:
+    """Why the recorded origin default branch is unsupported, or None."""
+    # ponytail: reads the local origin/HEAD only, so an unset or stale ref
+    # passes here; bind-initial owns the fetched check.
+    result = run_git(repo, "symbolic-ref", "--short", "refs/remotes/origin/HEAD")
+    remote_default = result.stdout.strip()
+    if result.returncode != 0 or remote_default == "origin/main":
+        return None
+    return (f"remote default must be origin/main, got {remote_default}. "
+            "GSD Path supports only `main` as the default branch: rename it, or run "
+            "`git remote set-head origin --auto` when origin already uses `main`.")
+
+
 def section_body(text: str, heading: str) -> Optional[str]:
     """The text under `## <heading>` up to the next `## `, or None when absent."""
     match = re.search(
